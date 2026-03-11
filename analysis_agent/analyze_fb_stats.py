@@ -139,12 +139,16 @@ def enrich_structure(df: pd.DataFrame) -> pd.DataFrame:
 
     df["Country Final"] = df["Country"]
 
+    # Rule: Offer is always taken from column Ad Asset.
+    df["Offer"] = df["Ad Asset"].fillna("").astype(str).str.strip()
+
     return df
 
 
 def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
     group_cols = [
         "Country Final",
+        "Offer",
         "Device",
         "Interest",
         "Age",
@@ -197,6 +201,7 @@ def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
 
 def format_combo_row(row: pd.Series) -> str:
     country = str(row.get("Country Final") or "").upper()
+    offer = str(row.get("Offer") or "").strip() or "—"
     device = row.get("Device") or "ALL"
     interest = row.get("Interest") or "Wide"
     age = row.get("Age") or "ALL"
@@ -207,7 +212,7 @@ def format_combo_row(row: pd.Series) -> str:
     category = row.get("Category", "Strong")
     category_label = "Strong" if category == "Strong" else "Interesting"
 
-    combo_line = f"{country} - {device} + {interest} + {age} + {creative} + {text_segment}"
+    combo_line = f"{country} [{offer}] - {device} + {interest} + {age} + {creative} + {text_segment}"
 
     deposits = int(row.get("Deposits") or 0)
     leads = int(row.get("Leads") or 0)
@@ -333,6 +338,105 @@ def print_cm_breakdown_for_country(df: pd.DataFrame, country_code: str) -> None:
     print(sep)
 
 
+def print_offer_comparison_and_top_campaigns(
+    df: pd.DataFrame, combos: pd.DataFrame, country_name: str, top_n: int = 2
+) -> None:
+    """Сравнение по офферам для страны и рекомендация топ-N кампаний на каждый оффер."""
+    country_lower = str(country_name).strip().lower()
+    df_country = df[df["Country Final"].astype(str).str.strip().str.lower() == country_lower]
+    if df_country.empty:
+        print(f"No data for country {country_name}.")
+        return
+
+    # Таблица по офферам
+    by_offer = (
+        df_country.groupby("Offer", dropna=False)
+        .agg(
+            Deposits=("# FTDs", "sum"),
+            Leads=("# Leads", "sum"),
+            Spend=("$ Spend", "sum"),
+            Net=("$ Net", "sum"),
+        )
+        .reset_index()
+    )
+    by_offer["Offer"] = by_offer["Offer"].fillna("").astype(str).str.strip()
+    by_offer["CPL"] = by_offer["Spend"] / by_offer["Leads"].replace(0, pd.NA)
+    by_offer["CPA"] = by_offer["Spend"] / by_offer["Deposits"].replace(0, pd.NA)
+    by_offer["CR"] = (by_offer["Deposits"] / by_offer["Leads"].replace(0, pd.NA)) * 100.0
+    by_offer["ROI"] = by_offer["Net"] / by_offer["Spend"].replace(0, pd.NA)
+    by_offer = by_offer.sort_values(by=["Net", "Deposits"], ascending=[False, False])
+
+    cols = ["Offer", "Deposits", "Leads", "Spend", "Net", "CPL", "CPA", "CR%", "ROI"]
+    widths = [18, 9, 7, 12, 12, 8, 10, 7, 6]
+    sep = "+" + "+".join("-" * w for w in widths) + "+"
+    fmt = "|" + "|".join(f" {{:<{w}}} " for w in widths) + "|"
+
+    print()
+    print(f"Offer comparison for {country_name}:")
+    print(sep)
+    print(fmt.format(*cols))
+    print(sep)
+    for _, row in by_offer.iterrows():
+        offer = (str(row.get("Offer") or "").strip() or "—")[:18]
+        deposits = int(row.get("Deposits") or 0)
+        leads = int(row.get("Leads") or 0)
+        spend = float(row.get("Spend") or 0.0)
+        net = float(row.get("Net") or 0.0)
+        cpl_val = row.get("CPL")
+        cpl = f"${float(cpl_val):.2f}" if pd.notna(cpl_val) else "-"
+        cpa_val = row.get("CPA")
+        cpa_str = f"${float(cpa_val):.2f}" if pd.notna(cpa_val) else "-"
+        cr_val = row.get("CR")
+        cr = f"{float(cr_val):.2f}" if pd.notna(cr_val) else "-"
+        roi_val = row.get("ROI")
+        roi = f"{float(roi_val):.2f}" if pd.notna(roi_val) else "-"
+        print(fmt.format(offer, str(deposits), str(leads), f"${spend:,.2f}", f"${net:,.2f}", cpl, cpa_str, cr, roi))
+    print(sep)
+
+    # Топ-N кампаний на каждый оффер (из combos)
+    combos_country = combos[
+        combos["Country Final"].astype(str).str.strip().str.lower() == country_lower
+    ].copy()
+    if combos_country.empty:
+        print(f"No qualifying combos for {country_name} to recommend.")
+        return
+
+    combos_country["Offer"] = combos_country["Offer"].fillna("").astype(str).str.strip()
+    offers_in_combos = sorted(combos_country["Offer"].unique())
+    print()
+    print(f"Recommendation: open top {top_n} campaigns per offer for {country_name}:")
+    print("-" * 60)
+    for offer in offers_in_combos:
+        combo_offer = combos_country[combos_country["Offer"] == offer].copy()
+        combo_offer = combo_offer.sort_values(
+            by=["ROI", "Deposits", "CR"], ascending=[False, False, False]
+        )
+        top = combo_offer.head(top_n)
+        if top.empty:
+            continue
+        offer_display = offer if offer else "—"
+        print(f"\n  Offer: {offer_display}")
+        for i, (_, row) in enumerate(top.iterrows(), 1):
+            device = row.get("Device")
+            device = "ALL" if device is None or (isinstance(device, float) and pd.isna(device)) else str(device).strip()
+            interest = row.get("Interest")
+            interest = "Wide" if interest is None or (isinstance(interest, float) and pd.isna(interest)) else str(interest).strip()
+            age = row.get("Age")
+            age = "ALL" if age is None or (isinstance(age, float) and pd.isna(age)) else str(age).strip()
+            creative = row.get("Creative") or "—"
+            if isinstance(creative, float) and pd.isna(creative):
+                creative = "—"
+            creative = str(creative).strip()
+            text_seg = row.get("TextSegment") or "—"
+            if isinstance(text_seg, float) and pd.isna(text_seg):
+                text_seg = "—"
+            text_seg = str(text_seg).strip()
+            roi_val = row.get("ROI")
+            roi_s = f"ROI {roi_val:.2f}" if pd.notna(roi_val) else ""
+            deposits = int(row.get("Deposits") or 0)
+            print(f"    {i}. {device} + {interest} + {age} + {creative} + {text_seg}  |  Deposits: {deposits}  {roi_s}")
+
+
 def main() -> None:
     excel_path = EXCEL_PATH_DEFAULT
     if not os.path.exists(excel_path):
@@ -367,6 +471,9 @@ def main() -> None:
     )
     for country in all_countries:
         print_cm_breakdown_for_country(df, country)
+
+    # Сравнение по офферам в Мексике и рекомендация по 2 кампании на каждый оффер
+    print_offer_comparison_and_top_campaigns(df, combos, "Mexico", top_n=2)
 
 
 if __name__ == "__main__":
