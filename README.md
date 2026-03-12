@@ -17,23 +17,30 @@ pip install -r requirements.txt
 
 Скрипт читает Excel-файл с колонками: **Country**, **Account Alias**, **Adset Name**, **Ad Title**, **# Leads**, **# FTDs**, **$ Spend**, **CM**, **Ad Asset**, **$ Net**.
 
-**Путь к файлу:** сначала берётся из переменной окружения **`FB_STATS_EXCEL`**. Если она не задана — используется путь по умолчанию в коде (`EXCEL_PATH_DEFAULT` в `analyze_fb_stats.py`). Так у каждого может быть свой файл без правок в репозитории.
+**Путь к файлу:** сначала берётся из переменной окружения **`FB_STATS_EXCEL`**. Если она не задана — используется значение по умолчанию из `config/paths.py`. Так у каждого может быть свой файл без правок в репозитории.
 
 Пример (PowerShell, одна сессия):
 ```powershell
+cd fb_agents
 $env:FB_STATS_EXCEL = "C:\Users\YourName\Desktop\my_data.xlsx"
-python analyze_fb_stats.py
+python run.py
 ```
 
 **Правило:** оффер (Offer) всегда берётся из колонки **Ad Asset**.
 
 ## Запуск
 
-Из корня проекта:
+Из **корня проекта** (`fb_agents`):
 
 ```powershell
-cd fb_agents\analysis_agent
-python analyze_fb_stats.py
+cd fb_agents
+python run.py
+```
+
+Либо напрямую скрипт (тоже из корня проекта):
+
+```powershell
+python src/analysis_agent/analyze_fb_stats.py
 ```
 
 Вывод в консоль: комбо по странам (Strong/Interesting), разбивка по CM по каждой стране, сравнение по офферам и топ-кампании на каждый оффер **по всем странам** (или по одной при указании `--country`).
@@ -50,30 +57,34 @@ python analyze_fb_stats.py
 Примеры:
 
 ```powershell
+# Из корня fb_agents
 # Отчёт по офферам по всем странам (по умолчанию), топ-2 на оффер
-python analyze_fb_stats.py
+python run.py
 
 # Только Ecuador для блока по офферам
-python analyze_fb_stats.py --country Ecuador
+python run.py --country Ecuador
 
 # Все страны, топ-3 кампании на оффер
-python analyze_fb_stats.py --top 3
+python run.py --top 3
 
-# Указать свой Excel и сохранить отчёт в файл
-python analyze_fb_stats.py --excel C:\data\stats.xlsx --output report.txt
+# Указать свой Excel и сохранить отчёт в output/
+python run.py --excel C:\data\stats.xlsx --output output/report.txt
 
 # Справка по параметрам
-python analyze_fb_stats.py --help
+python run.py --help
 ```
 
 ## Структура
 
-- `analysis_agent/analyze_fb_stats.py` — основной скрипт анализа.
-- `analysis_agent/` — сгенерированные отчёты (например `CM_report_tables.md`, `report_cm_by_country.txt`) при сохранении в файл.
-- `docs/` — инструкции по Git и сохранению прогресса.
+- `run.py` — запуск из корня проекта.
+- `config/paths.py` — путь к Excel по умолчанию и логика переменной окружения.
+- `src/analysis_agent/analyze_fb_stats.py` — основной скрипт анализа.
+- `output/` — сгенерированные отчёты (при `--output output/файл.txt`); в `.gitignore` для тяжёлых файлов.
+- `docs/` — инструкции по Git, сохранению прогресса, ROADMAP.
+- `analysis_agent/` — старые срезы отчётов (при желании можно перенести в `output/`).
 
 ## Отчёты
 
 - **Комбо по странам** — лучшие связки (страна, устройство, интерес, возраст, креатив, текст) с метриками.
 - **CM по странам** — таблица по каждому кампайн-менеджеру: Deposits, Leads, Spend, Net, CPL, CPA, CR%, ROI.
-- **Мексика по офферам** — сравнение офферов (из Ad Asset) и рекомендация топ-2 кампаний на каждый оффер.
+- **По офферам по странам** — сравнение офферов (из Ad Asset) и рекомендация топ-N кампаний на каждый оффер (по умолчанию все страны).

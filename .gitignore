@@ -6,6 +6,10 @@ __pycache__/
 venv/
 env/
 
+# Generated reports (optional: commit sample reports if needed)
+output/*.txt
+output/*.md
+
 # Excel temp / личные данные (раскомментируй, если не хочешь коммитить xlsx)
 # *.xlsx
 

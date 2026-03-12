@@ -4,17 +4,20 @@ def report():
 import argparse
 import os
 import sys
+from pathlib import Path
 from typing import Optional, Tuple
+
+# При прямом запуске скрипта из корня (python src/analysis_agent/analyze_fb_stats.py) нужен путь к проекту
+_proj_root = Path(__file__).resolve().parents[2]
+if str(_proj_root) not in sys.path:
+    sys.path.insert(0, str(_proj_root))
 
 import pandas as pd
 
+from config.paths import get_excel_path
 
-EXCEL_PATH_DEFAULT = r"C:\Users\EvgeniSedin\Desktop\cursor example.xlsx"
 USE_LATEST_DATE_ONLY = False
-
-# Путь к Excel: сначала из переменной окружения FB_STATS_EXCEL, иначе — значение по умолчанию выше
-def _get_excel_path() -> str:
-    return os.environ.get("FB_STATS_EXCEL", "").strip() or EXCEL_PATH_DEFAULT
+_get_excel_path = get_excel_path
 
 
 TEXT_DICTIONARY = {
@@ -544,4 +547,3 @@ if __name__ == "__main__":
         top_n=args.top,
         output_path=args.output,
     )
-
