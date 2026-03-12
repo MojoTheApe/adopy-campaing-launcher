@@ -1,7 +1,9 @@
 def report():
     print("выдай мне отчет")
 
+import argparse
 import os
+import sys
 from typing import Optional, Tuple
 
 import pandas as pd
@@ -9,6 +11,10 @@ import pandas as pd
 
 EXCEL_PATH_DEFAULT = r"C:\Users\EvgeniSedin\Desktop\cursor example.xlsx"
 USE_LATEST_DATE_ONLY = False
+
+# Путь к Excel: сначала из переменной окружения FB_STATS_EXCEL, иначе — значение по умолчанию выше
+def _get_excel_path() -> str:
+    return os.environ.get("FB_STATS_EXCEL", "").strip() or EXCEL_PATH_DEFAULT
 
 
 TEXT_DICTIONARY = {
@@ -437,45 +443,105 @@ def print_offer_comparison_and_top_campaigns(
             print(f"    {i}. {device} + {interest} + {age} + {creative} + {text_seg}  |  Deposits: {deposits}  {roi_s}")
 
 
-def main() -> None:
-    excel_path = EXCEL_PATH_DEFAULT
+def main(
+    excel_path: Optional[str] = None,
+    country_offer: str = "all",
+    top_n: int = 2,
+    output_path: Optional[str] = None,
+) -> None:
+    excel_path = excel_path or _get_excel_path()
     if not os.path.exists(excel_path):
         raise FileNotFoundError(f"Excel file not found: {excel_path}")
 
-    df = pd.read_excel(excel_path)
+    def run() -> None:
+        df = pd.read_excel(excel_path)
 
-    required_cols = [
-        "Country",
-        "Account Alias",
-        "Adset Name",
-        "Ad Title",
-        "# Leads",
-        "# FTDs",
-        "$ Spend",
-        "CM",
-        "Ad Asset",
-        "$ Net",
-    ]
-    missing = [c for c in required_cols if c not in df.columns]
-    if missing:
-        raise ValueError(f"Missing expected columns in Excel: {missing}")
+        required_cols = [
+            "Country",
+            "Account Alias",
+            "Adset Name",
+            "Ad Title",
+            "# Leads",
+            "# FTDs",
+            "$ Spend",
+            "CM",
+            "Ad Asset",
+            "$ Net",
+        ]
+        missing = [c for c in required_cols if c not in df.columns]
+        if missing:
+            raise ValueError(f"Missing expected columns in Excel: {missing}")
 
-    df = compute_metrics(df)
-    df = enrich_structure(df)
-    combos = aggregate_combos(df)
-    print_report(combos)
+        df = compute_metrics(df)
+        df = enrich_structure(df)
+        combos = aggregate_combos(df)
+        print_report(combos)
 
-    all_countries = sorted(
-        c for c in df["Country Final"].dropna().astype(str).unique()
-        if c.strip() and c != "nan"
+        all_countries = sorted(
+            c for c in df["Country Final"].dropna().astype(str).unique()
+            if c.strip() and c != "nan"
+        )
+        for c in all_countries:
+            print_cm_breakdown_for_country(df, c)
+
+        # Отчёт по офферам: по умолчанию для всех стран; при указании --country — только для неё
+        if country_offer.strip().lower() == "all":
+            for c in all_countries:
+                print_offer_comparison_and_top_campaigns(df, combos, c, top_n=top_n)
+        else:
+            print_offer_comparison_and_top_campaigns(df, combos, country_offer, top_n=top_n)
+
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as f:
+            old_stdout = sys.stdout
+            sys.stdout = f
+            try:
+                run()
+            finally:
+                sys.stdout = old_stdout
+        print(f"Report saved to {output_path}", file=sys.stderr)
+    else:
+        run()
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="FB campaigns analysis: combos by country, CM breakdown, offer comparison."
     )
-    for country in all_countries:
-        print_cm_breakdown_for_country(df, country)
-
-    # Сравнение по офферам в Мексике и рекомендация по 2 кампании на каждый оффер
-    print_offer_comparison_and_top_campaigns(df, combos, "Mexico", top_n=2)
+    parser.add_argument(
+        "--excel", "-e",
+        type=str,
+        default=None,
+        help="Path to Excel file (overrides FB_STATS_EXCEL env and default)",
+    )
+    parser.add_argument(
+        "--country", "-c",
+        type=str,
+        default="all",
+        help="Country for offer comparison and top campaigns, or 'all' for every country (default: all)",
+    )
+    parser.add_argument(
+        "--top", "-t",
+        type=int,
+        default=2,
+        help="Number of top campaigns per offer to recommend (default: 2)",
+    )
+    parser.add_argument(
+        "--output", "-o",
+        type=str,
+        default=None,
+        metavar="FILE",
+        help="Save full report to FILE instead of printing to console",
+    )
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    main()
+    args = _parse_args()
+    main(
+        excel_path=args.excel,
+        country_offer=args.country,
+        top_n=args.top,
+        output_path=args.output,
+    )
 
