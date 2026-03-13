@@ -86,22 +86,28 @@ python run_jira_from_accounts.py
 
 Опции: `--excel путь/к/файлу.xlsx`, `--dry-run` (только список без браузера), `--api` (создание через Jira API; Excel не меняется), `--pause` (пауза после каждого аккаунта; по умолчанию открываются все вкладки сразу — например 5 аккаунтов → 5 вкладок Jira).
 
-Переменные **`JIRA_EMAIL`** и **`JIRA_API_TOKEN`** нужны только при запуске с **`--api`**. Инструкция по токену — в **docs/agent5_accounts_jira.md**.
+**Учётные данные:** создай в папке `fb_agents` файл **`.env`** (скопируй из `.env.example`), пропиши `JIRA_EMAIL` и `JIRA_API_TOKEN` — скрипт подхватит их сам. Либо задавай переменные в терминале перед запуском. Инструкция по токену — в **docs/agent5_accounts_jira.md**.  
+**Важно:** если Jira возвращает 403 «IP not in allowlist» — попроси админа Jira добавить твой IP в список разрешённых.
+
+Удобный запуск: двойной клик по **`run_jira_api.bat`** (создаёт задачи через API; нужен настроенный `.env`).
 
 Подробное описание правил и полей Jira — в **docs/agent5_accounts_jira.md**.
 
 ---
 
-## Структура
+## Структура проекта (конструкция агентов)
 
-- `run.py` — запуск из корня проекта (агент анализа).
-- `run_jira_from_accounts.py` — запуск агента 5 (аккаунты → Jira).
-- `config/paths.py` — путь к Excel по умолчанию и логика переменной окружения.
-- `src/analysis_agent/analyze_fb_stats.py` — основной скрипт анализа.
-- `src/jira_agent/jira_from_accounts.py` — создание задач в Jira из Accounts.
-- `output/` — сгенерированные отчёты (при `--output output/файл.txt`); в `.gitignore` для тяжёлых файлов.
-- `docs/` — инструкции по Git, сохранению прогресса, ROADMAP, описание агента 5 (**docs/agent5_accounts_jira.md**).
-- `analysis_agent/` — старые срезы отчётов (при желании можно перенести в `output/`).
+| Компонент | Назначение |
+|-----------|------------|
+| **run.py** | Запуск агента анализа (п.1–4): отчёты по странам, CM, офферы, связки. |
+| **run_jira_from_accounts.py** | Запуск **агента 5**: аккаунты из Upluad FB.xlsx → задачи в Jira (Summary, Description по правилам трёх листов), Labels Limited_QA, Team Media. |
+| **run_jira_api.bat** | Удобный запуск агента 5 с `--api` (двойной клик; нужен `.env` с JIRA_EMAIL и JIRA_API_TOKEN). |
+| **.env** / **.env.example** | Учётные данные для Jira API (`.env` в git не попадает). |
+| **config/paths.py** | Пути к Excel (FB_STATS_EXCEL, UPLOAD_FB_EXCEL). |
+| **src/analysis_agent/** | Агент анализа (комбо, CM, офферы). |
+| **src/jira_agent/** | Агент 5: сборка текста задачи из Accounts + Main + LP's, создание через Jira API. |
+| **output/** | Сгенерированные отчёты и `jira_task_paste.txt`. |
+| **docs/** | ROADMAP, AGENTS_MASTER_PLAN, agent5_accounts_jira.md, КАК_НАЧАТЬ_РАБОТУ, Git. |
 
 ## Отчёты
 

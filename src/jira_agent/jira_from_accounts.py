@@ -5,6 +5,7 @@ By default opens each task in browser for you to paste and publish; optional --a
 """
 from __future__ import annotations
 
+import base64
 import os
 import re
 import sys
@@ -15,6 +16,13 @@ from pathlib import Path
 _proj_root = Path(__file__).resolve().parents[2]
 if str(_proj_root) not in sys.path:
     sys.path.insert(0, str(_proj_root))
+
+# Load .env from project root so JIRA_EMAIL / JIRA_API_TOKEN need not be set each time
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_proj_root / ".env")
+except ImportError:
+    pass
 
 from openpyxl import load_workbook
 
@@ -35,9 +43,7 @@ ACCOUNTS_LINK = "Link"
 ACCOUNTS_DOMAIN = "Domain"
 SHEET_ACCOUNTS = "Accounts"
 SHEET_MAIN = "Main"
-# Description: columns in Main to concatenate (1-based); if empty, use template from Accounts
-MAIN_DESC_START_COL = 6
-MAIN_DESC_END_COL = 30
+SHEET_LPS = "LP's"
 
 
 def _col_index_by_header(ws, header_name: str, row: int = 1) -> int | None:
@@ -74,43 +80,99 @@ def _brand_for_country(country_code: str) -> str:
 
 def _build_summary(account: str, asset: str, country_code: str) -> str:
     brand = _brand_for_country(country_code)
-    return f"{brand} - {asset} LPs for {account} - {country_code} - Media"
+    asset_clean = (asset or "").strip()
+    # Avoid "... Lp's for LPs for" — drop trailing " for" / " Lp's for" from asset
+    for suffix in (" Lp's for", " LPs for", " for"):
+        if asset_clean.endswith(suffix):
+            asset_clean = asset_clean[:-len(suffix)].strip() or asset_clean
+            break
+    # Avoid "Brand - Brand - ..." if Asset already starts with brand
+    if asset_clean and asset_clean.upper().startswith((brand + " - ").upper()):
+        effective_asset = asset_clean
+    else:
+        effective_asset = f"{brand} - {asset_clean}" if asset_clean else brand
+    account_clean = (account or "").strip()
+    # Avoid "LPs for LPs for ..." if Account already starts with that
+    # Strip "LPs for " / "Lp's for " prefix if present (any whitespace)
+    for prefix in ("LPs for ", "Lp's for ", "LPS FOR ", "lps for "):
+        if account_clean.startswith(prefix):
+            account_clean = account_clean[len(prefix):].strip() or account_clean
+            break
+    return f"{effective_asset} LPs for {account_clean} - {country_code} - Media"
 
 
-def _description_from_main_row(ws_main, data_row: int, start_col: int = MAIN_DESC_START_COL, end_col: int = MAIN_DESC_END_COL) -> str:
-    """Build description by concatenating cells in Main row from start_col to end_col."""
-    parts = []
-    for col in range(start_col, min(end_col + 1, ws_main.max_column + 1)):
-        val = ws_main.cell(row=data_row, column=col).value
-        if val is not None and str(val).strip():
-            parts.append(str(val).strip())
-    return "\n\n".join(parts) if parts else ""
+def _normalize_asset_for_lookup(asset: str) -> str:
+    """Normalize asset string for matching LP's Brand offer (strip trailing ' for' etc.)."""
+    s = (asset or "").strip()
+    for suffix in (" Lp's for", " LPs for", " for"):
+        if s.endswith(suffix):
+            s = s[:-len(suffix)].strip() or s
+            break
+    return s
+
+
+def _lookup_lps(ws_lps, asset: str) -> tuple[str, str, str]:
+    """Look up LP's sheet by Asset (Brand offer). Returns (lp_url, stock, country). Col 1=Brand offer, 4=Lp's, 5=Stock, 3=Country 1."""
+    lp_url, stock, country = "", "", ""
+    if ws_lps is None or ws_lps.max_row < 2:
+        return lp_url, stock, country
+    asset_norm = _normalize_asset_for_lookup(asset)
+    asset_upper = asset_norm.upper()
+    for row in range(2, ws_lps.max_row + 1):
+        brand_offer = (ws_lps.cell(row=row, column=1).value or "")
+        brand_str = str(brand_offer).strip()
+        if not brand_str or not asset_norm:
+            continue
+        brand_norm = _normalize_asset_for_lookup(brand_str)
+        # Match like VLOOKUP: normalized Asset equals normalized Brand offer, or one starts with the other
+        if brand_norm.upper() == asset_upper or brand_norm.upper().startswith(asset_upper) or asset_upper.startswith(brand_norm.upper()):
+            lp_url = str(ws_lps.cell(row=row, column=4).value or "").strip()
+            stock = str(ws_lps.cell(row=row, column=5).value or "").strip()
+            country = str(ws_lps.cell(row=row, column=3).value or "").strip()
+            break
+    return lp_url, stock, country
+
+
+def _build_description_from_sheets(account: str, domain: str, asset: str, country_code: str, ws_lps) -> str:
+    """
+    Build Jira Description by repeating the same logic as the three tabs (Accounts, Main, LP's).
+    Order and blocks match Main columns 7–30.
+    """
+    lp_url, stock, country = _lookup_lps(ws_lps, asset)
+    if not country and country_code:
+        country = country_code
+    domain = (domain or "").strip()
+    account = (account or "").strip()
+    # Replicate Main structure: Scope, LP URL, Requested domain, Account, https://lpa.+domain, steps, Meta title, Default, Feature, Stock name, Country
+    parts = [
+        "Scope",
+        "",
+        "Please duplicate this page:",
+        lp_url,
+        "Requested domain",
+        account,
+        "https://lpa." + domain if domain else "https://",
+        "Step 1: Stepfooter",
+        "https://" + domain if domain else "",
+        "Meta title: " + (domain or ""),
+        "Default",
+        "Feature: " + (domain or ""),
+        "default GIF Thank you pop up",
+        "Stock name: " + stock,
+        "Country: " + country,
+    ]
+    return "\n".join(p for p in parts if p is not None and str(p).strip())
 
 
 def _description_fallback(account: str, asset: str, domain: str, country_code: str) -> str:
     """Fallback description when no matching Main row."""
     return (
-        f"Scope\n\nPlease duplicate this page.\n\n"
+        f"Scope\nPlease duplicate this page.\n"
         f"Account: {account}\n"
         f"Asset: {asset}\n"
         f"Country code: {country_code}\n"
         f"Requested domain: {domain or '—'}\n"
     )
-
-
-def _main_account_col(ws_main) -> int | None:
-    """Find 1-based column index of Account in Main (row 1)."""
-    return _col_index_by_header(ws_main, ACCOUNTS_ACCOUNT) or _col_index_by_header(ws_main, "Account name") or 1
-
-
-def _find_main_row_for_account(ws_main, account: str) -> int | None:
-    """Return 1-based row index in Main where first column (or Account column) equals account, else None."""
-    account_col = _main_account_col(ws_main)
-    for row in range(2, ws_main.max_row + 1):
-        val = ws_main.cell(row=row, column=account_col).value
-        if val is not None and str(val).strip() == str(account).strip():
-            return row
-    return None
 
 
 def _jira_description_to_adf(text: str) -> dict:
@@ -129,7 +191,14 @@ def _jira_description_to_adf(text: str) -> dict:
     return {"type": "doc", "version": 1, "content": content}
 
 
-def _get_team_field_id(auth: tuple, headers: dict) -> str | None:
+def _jira_auth_headers(email: str, token: str) -> dict:
+    """Build Authorization header with UTF-8 so .env with any encoding/BOM works."""
+    credentials = (email + ":" + token).encode("utf-8")
+    b64 = base64.b64encode(credentials).decode("ascii")
+    return {"Authorization": "Basic " + b64}
+
+
+def _get_team_field_id(headers: dict) -> str | None:
     """Resolve Team (migrated) field id from Jira. Returns customfield_XXXXX or None."""
     env_id = (os.environ.get("JIRA_TEAM_FIELD_ID") or "").strip()
     if env_id:
@@ -138,7 +207,6 @@ def _get_team_field_id(auth: tuple, headers: dict) -> str | None:
         import requests
         r = requests.get(
             f"{JIRA_BASE_URL.rstrip('/')}/rest/api/3/field",
-            auth=auth,
             headers=headers,
             timeout=15,
         )
@@ -160,8 +228,8 @@ def _create_jira_issue(summary: str, description: str, brand: str) -> str | None
     Create Jira issue via REST API. Returns issue key (e.g. MAR-38467) or None on failure.
     Uses JIRA_EMAIL and JIRA_API_TOKEN from environment.
     """
-    token = (os.environ.get("JIRA_API_TOKEN") or "").strip()
-    email = (os.environ.get("JIRA_EMAIL") or "").strip()
+    token = (os.environ.get("JIRA_API_TOKEN") or "").strip().strip("\ufeff")
+    email = (os.environ.get("JIRA_EMAIL") or "").strip().strip("\ufeff")
     if not token or not email:
         print("JIRA_API_TOKEN and JIRA_EMAIL must be set in environment.", file=sys.stderr)
         return None
@@ -173,8 +241,8 @@ def _create_jira_issue(summary: str, description: str, brand: str) -> str | None
         return None
 
     url = f"{JIRA_BASE_URL.rstrip('/')}/rest/api/3/issue"
-    auth = (email, token)
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    headers.update(_jira_auth_headers(email, token))
 
     payload = {
         "fields": {
@@ -186,11 +254,11 @@ def _create_jira_issue(summary: str, description: str, brand: str) -> str | None
         }
     }
     # Team (migrated) = Media. Resolve field id from API or JIRA_TEAM_FIELD_ID env.
-    team_field_id = _get_team_field_id(auth, headers)
+    team_field_id = _get_team_field_id(headers)
     if team_field_id:
         payload["fields"][team_field_id] = {"value": "Media"}
 
-    resp = requests.post(url, json=payload, auth=auth, headers=headers, timeout=30)
+    resp = requests.post(url, json=payload, headers=headers, timeout=30)
     if resp.status_code != 201:
         print(f"Jira API error {resp.status_code}: {resp.text}", file=sys.stderr)
         return None
@@ -256,14 +324,28 @@ def run(
         print(f"Excel file not found: {path}", file=sys.stderr)
         return 1
 
+    if use_api:
+        email = (os.environ.get("JIRA_EMAIL") or "").strip()
+        token = (os.environ.get("JIRA_API_TOKEN") or "").strip()
+        if not email or not token:
+            print("For --api you need JIRA_EMAIL and JIRA_API_TOKEN.", file=sys.stderr)
+            print("(Check: is .env in the fb_agents folder? Run: python -m pip install python-dotenv)", file=sys.stderr)
+            print("  Option 1: create .env in the project folder with:", file=sys.stderr)
+            print("    JIRA_EMAIL=your@email.com", file=sys.stderr)
+            print("    JIRA_API_TOKEN=your_token", file=sys.stderr)
+            print("  Then run: python -m pip install python-dotenv", file=sys.stderr)
+            print("  Option 2: in the terminal before running:", file=sys.stderr)
+            print('    $env:JIRA_EMAIL="your@email.com"; $env:JIRA_API_TOKEN="token"; python run_jira_from_accounts.py --api', file=sys.stderr)
+            return 1
+        print("Jira API: creating tasks from Excel...")
+
     wb = load_workbook(path, read_only=False, keep_vba=True)
     if SHEET_ACCOUNTS not in wb.sheetnames:
         print(f"Sheet '{SHEET_ACCOUNTS}' not found.", file=sys.stderr)
         return 1
     ws_acc = wb[SHEET_ACCOUNTS]
-    # Main: read with data_only=True so we get computed values (text), not formulas (=VLOOKUP etc.)
     wb_values = load_workbook(path, read_only=False, data_only=True)
-    ws_main = wb_values[SHEET_MAIN] if SHEET_MAIN in wb_values.sheetnames else (wb[SHEET_MAIN] if SHEET_MAIN in wb.sheetnames else None)
+    ws_lps = wb_values[SHEET_LPS] if SHEET_LPS in wb_values.sheetnames else None
 
     col_account = _col_index_by_header(ws_acc, ACCOUNTS_ACCOUNT)
     col_asset = _col_index_by_header(ws_acc, ACCOUNTS_ASSET)
@@ -297,13 +379,8 @@ def run(
         summary = _build_summary(account, asset, country_code)
         brand = _brand_for_country(country_code)
 
-        if ws_main:
-            main_row = _find_main_row_for_account(ws_main, account)
-            if main_row is not None:
-                description = _description_from_main_row(ws_main, main_row)
-            else:
-                description = _description_fallback(account, asset, domain, country_code)
-        else:
+        description = _build_description_from_sheets(account, domain, asset, country_code, ws_lps)
+        if not description.strip():
             description = _description_fallback(account, asset, domain, country_code)
 
         if dry_run:
@@ -362,6 +439,12 @@ def run(
 
     if dry_run and count > 0:
         print(f"[DRY RUN] {count} task(s).")
+
+    if use_api and not dry_run:
+        if count == 0:
+            print("No tasks created. (All rows have Link filled or Asset empty? Run with --dry-run to list rows.)")
+        else:
+            print(f"Done. Created {count} task(s).")
 
     return 0
 
