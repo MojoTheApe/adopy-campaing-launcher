@@ -5,7 +5,7 @@
 ## Требования
 
 - Python 3.x
-- Зависимости: `pandas`, `openpyxl` (см. `requirements.txt`)
+- Зависимости: `pandas`, `openpyxl`, `requests` (см. `requirements.txt`)
 
 Установка:
 
@@ -74,13 +74,33 @@ python run.py --excel C:\data\stats.xlsx --output output/report.txt
 python run.py --help
 ```
 
+## Агент 5: аккаунты → Jira
+
+Отдельный агент по строкам из **Upluad FB.xlsx** (лист Accounts: пустой **Link** и заполненный **Asset**) **составляет** задачу (Summary + Description) и по умолчанию **открывает в браузере** страницу создания задачи — ты вставляешь данные и публикуешь сам. Один аккаунт — одна задача.
+
+**Запуск (из корня проекта):**
+
+```powershell
+python run_jira_from_accounts.py
+```
+
+Опции: `--excel путь/к/файлу.xlsx`, `--dry-run` (только список без браузера), `--api` (создание через Jira API; Excel не меняется), `--pause` (пауза после каждого аккаунта; по умолчанию открываются все вкладки сразу — например 5 аккаунтов → 5 вкладок Jira).
+
+Переменные **`JIRA_EMAIL`** и **`JIRA_API_TOKEN`** нужны только при запуске с **`--api`**. Инструкция по токену — в **docs/agent5_accounts_jira.md**.
+
+Подробное описание правил и полей Jira — в **docs/agent5_accounts_jira.md**.
+
+---
+
 ## Структура
 
-- `run.py` — запуск из корня проекта.
+- `run.py` — запуск из корня проекта (агент анализа).
+- `run_jira_from_accounts.py` — запуск агента 5 (аккаунты → Jira).
 - `config/paths.py` — путь к Excel по умолчанию и логика переменной окружения.
 - `src/analysis_agent/analyze_fb_stats.py` — основной скрипт анализа.
+- `src/jira_agent/jira_from_accounts.py` — создание задач в Jira из Accounts.
 - `output/` — сгенерированные отчёты (при `--output output/файл.txt`); в `.gitignore` для тяжёлых файлов.
-- `docs/` — инструкции по Git, сохранению прогресса, ROADMAP.
+- `docs/` — инструкции по Git, сохранению прогресса, ROADMAP, описание агента 5 (**docs/agent5_accounts_jira.md**).
 - `analysis_agent/` — старые срезы отчётов (при желании можно перенести в `output/`).
 
 ## Отчёты
