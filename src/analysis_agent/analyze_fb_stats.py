@@ -3,6 +3,7 @@ def report():
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
@@ -191,6 +192,36 @@ def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
         )
         grouped = grouped.merge(top_titles, on=group_cols, how="left")
 
+    if "CM" in df.columns and "Account Alias" in df.columns:
+        by_cm_acc = (
+            df.groupby(group_cols + ["CM", "Account Alias"], dropna=False)
+            .agg(FTDs=("# FTDs", "sum"))
+            .reset_index()
+        )
+        if not by_cm_acc.empty:
+            idx = by_cm_acc.groupby(group_cols)["FTDs"].idxmax()
+            top_ca = by_cm_acc.loc[idx, group_cols + ["CM", "Account Alias"]].rename(
+                columns={"CM": "TopCM", "Account Alias": "TopAccount"}
+            ).reset_index(drop=True)
+
+            def _row_key(r: pd.Series, cols: list) -> str:
+                parts = []
+                for c in cols:
+                    v = r.get(c)
+                    if v is None or (isinstance(v, float) and pd.isna(v)) or (isinstance(v, str) and str(v).strip().lower() == "nan"):
+                        parts.append("__NA__")
+                    else:
+                        parts.append(str(v).strip())
+                return "_".join(parts)
+
+            grouped["_mk"] = grouped[group_cols].apply(lambda r: _row_key(r, group_cols), axis=1)
+            top_ca["_mk"] = top_ca[group_cols].apply(lambda r: _row_key(r, group_cols), axis=1)
+            grouped = grouped.merge(
+                top_ca[["_mk", "TopCM", "TopAccount"]],
+                on="_mk",
+                how="left",
+            ).drop(columns=["_mk"], errors="ignore")
+
     grouped["CPL"] = grouped["Spend"] / grouped["Leads"].replace(0, pd.NA)
     grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
     grouped["CR"] = (grouped["Deposits"] / grouped["Leads"].replace(0, pd.NA)) * 100.0
@@ -202,8 +233,14 @@ def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
     mask_interesting = (grouped["Deposits"] == 1) & (grouped["CR"] > 5.0) & (grouped["ROI"] > 1.0)
     grouped.loc[mask_strong, "Category"] = "Strong"
     grouped.loc[mask_interesting, "Category"] = "Interesting"
+    mask_problematic = (
+        grouped["Interest"].isna()
+        | grouped["Age"].isna()
+        | (grouped["Creative"].isna())
+    )
+    grouped.loc[mask_problematic, "Category"] = "Problematic"
 
-    grouped = grouped[grouped["Category"].isin(["Strong", "Interesting"])]
+    grouped = grouped[grouped["Category"].isin(["Strong", "Interesting", "Problematic"])]
 
     return grouped
 
@@ -279,6 +316,185 @@ def print_report(combos: pd.DataFrame) -> None:
 
         for _, row in top_n.iterrows():
             print(format_combo_row(row))
+
+
+def _strip_date_from_display(s: str) -> str:
+    """Убрать дату вида DD.MM.YYYY из строки для вывода (дата открытия кампании не показываем)."""
+    if not s or not isinstance(s, str):
+        return s
+    s = re.sub(r"\s*\d{1,2}\.\d{1,2}\.\d{4}\s*", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def print_short_report(combos: pd.DataFrame, top_per_country: int = 2, df: Optional[pd.DataFrame] = None) -> None:
+    """Короткий отчёт: топ N связок по каждой стране; проблемные — отдельной категорией с CM и аккаунтом."""
+    if combos.empty:
+        print("No qualifying combos found.")
+        return
+    countries = sorted(
+        {c for c in combos["Country Final"].fillna("").unique() if str(c).strip() != ""}
+    )
+    col_country = 22
+    col_offer = 22
+    col_combo = 44
+    col_type = 12
+    col_dep = 8
+    col_roi = 8
+    rows = []
+    for country in countries:
+        country_df = combos[combos["Country Final"] == country].copy()
+        strong = country_df[country_df["Category"] == "Strong"].copy()
+        interesting = country_df[country_df["Category"] == "Interesting"].copy()
+        strong = strong.sort_values(by=["Deposits", "CR", "Profit"], ascending=[False, False, False])
+        interesting = interesting.sort_values(by=["CR", "Profit"], ascending=[False, False])
+        combined = pd.concat([strong, interesting], ignore_index=True)
+        top = combined.head(top_per_country)
+        for i, (_, row) in enumerate(top.iterrows(), 1):
+            offer = str(row.get("Offer") or "").strip() or "—"
+            device = str(row.get("Device") or "ALL").strip()[:8]
+            interest = _strip_date_from_display(str(row.get("Interest") or "Wide").strip())[:12]
+            age = _strip_date_from_display(str(row.get("Age") or "ALL").strip())[:8]
+            creative = str(row.get("Creative") or "—").strip()[:16]
+            combo_str = f"{device} + {interest} + {age} + {creative}"
+            cat = str(row.get("Category", ""))
+            dep = int(row.get("Deposits") or 0)
+            roi_val = row.get("ROI")
+            roi_s = f"{roi_val:.2f}" if pd.notna(roi_val) else "—"
+            rows.append((country[:col_country], str(i), offer[:col_offer], combo_str[:col_combo], cat[:col_type], str(dep), roi_s))
+    if rows:
+        sep = "+" + "-" * (col_country + 2) + "+" + "-" * 4 + "+" + "-" * (col_offer + 2) + "+" + "-" * (col_combo + 2) + "+" + "-" * (col_type + 2) + "+" + "-" * (col_dep + 2) + "+" + "-" * (col_roi + 2) + "+"
+        fmt = "| {:<%d} | {:>2} | {:<%d} | {:<%d} | {:<%d} | {:>%d} | {:>%d} |" % (col_country, col_offer, col_combo, col_type, col_dep, col_roi)
+        print("\n" + sep)
+        print(fmt.format("Country", "#", "Offer", "Targeting + Creative", "Type", "Dep", "ROI"))
+        print(sep)
+        for r in rows:
+            print(fmt.format(r[0], r[1], r[2], r[3], r[4], r[5], r[6]))
+        print(sep)
+
+    problematic = combos[combos["Category"] == "Problematic"].copy()
+    if problematic.empty:
+        return
+    problematic = problematic[problematic["Deposits"].fillna(0) > 0]
+    if problematic.empty:
+        return
+    problematic = problematic.sort_values(
+        by=["Country Final", "Deposits", "ROI"],
+        ascending=[True, False, False],
+    )
+    col_cm = 18
+    col_acc = 28
+    sep2 = "+" + "-" * (col_country + 2) + "+" + "-" * (col_offer + 2) + "+" + "-" * (col_combo + 2) + "+" + "-" * (col_cm + 2) + "+" + "-" * (col_acc + 2) + "+" + "-" * (col_dep + 2) + "+"
+    fmt2 = "| {:<%d} | {:<%d} | {:<%d} | {:<%d} | {:<%d} | {:>%d} |" % (col_country, col_offer, col_combo, col_cm, col_acc, col_dep)
+    print("\n--- Problematic (nan in Interest/Age/Creative) — CM and Account ---\n")
+    print(sep2)
+    print(fmt2.format("Country", "Offer", "Targeting + Creative", "CM", "Account", "Dep"))
+    print(sep2)
+    group_cols = ["Country Final", "Offer", "Device", "Interest", "Age", "Creative", "TextSegment"]
+    for _, row in problematic.iterrows():
+        country = str(row.get("Country Final") or "")[:col_country]
+        offer = str(row.get("Offer") or "—")[:col_offer]
+        device = str(row.get("Device") or "ALL").strip()[:8]
+        interest = _strip_date_from_display(str(row.get("Interest") or "").strip())[:12]
+        age = _strip_date_from_display(str(row.get("Age") or "").strip())[:8]
+        creative = str(row.get("Creative") or "—").strip()[:16]
+        combo_str = f"{device} + {interest} + {age} + {creative}"[:col_combo]
+        cm_val = row.get("TopCM")
+        acc_val = row.get("TopAccount")
+        if df is not None and ("CM" in df.columns and "Account Alias" in df.columns):
+            mask = _combo_match_mask(df, row, group_cols)
+            if mask.any():
+                sub = df.loc[mask]
+                top_idx = sub["# FTDs"].idxmax()
+                cm_val = sub.loc[top_idx, "CM"]
+                acc_val = sub.loc[top_idx, "Account Alias"]
+        cm = (str(cm_val)[:col_cm] if cm_val is not None and pd.notna(cm_val) and str(cm_val).strip().lower() != "nan" else "—")
+        acc = (str(acc_val)[:col_acc] if acc_val is not None and pd.notna(acc_val) and str(acc_val).strip().lower() != "nan" else "—")
+        dep = int(row.get("Deposits") or 0)
+        print(fmt2.format(country, offer, combo_str, cm, acc, dep))
+    print(sep2)
+
+
+def _is_problematic(row: pd.Series) -> bool:
+    """Связка проблемная, если в полях есть nan (название кампании будет кривое)."""
+    for key in ("Interest", "Age", "Creative"):
+        val = row.get(key)
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return True
+        if str(val).strip().lower() == "nan":
+            return True
+    return False
+
+
+def _combo_match_mask(df: pd.DataFrame, row: pd.Series, group_cols: list) -> pd.Series:
+    """Маска строк df, совпадающих с комбо row по group_cols."""
+    mask = pd.Series(True, index=df.index)
+    for col in group_cols:
+        if col not in df.columns:
+            continue
+        rv = row.get(col)
+        if rv is None or (isinstance(rv, float) and pd.isna(rv)):
+            mask &= df[col].isna()
+        else:
+            mask &= (df[col] == rv)
+    return mask
+
+
+def print_problematic_combos_with_titles(
+    combos: pd.DataFrame,
+    top_per_country: int = 2,
+    df: Optional[pd.DataFrame] = None,
+) -> None:
+    """Проблематичные названия кампаний (с nan и т.п.), под каждым — название объявления и CM."""
+    if combos.empty:
+        print("No combos.")
+        return
+    group_cols = ["Country Final", "Offer", "Device", "Interest", "Age", "Creative", "TextSegment"]
+    countries = sorted(
+        {c for c in combos["Country Final"].fillna("").unique() if str(c).strip() != ""}
+    )
+    found_any = False
+    all_cms: list = []
+    for country in countries:
+        country_df = combos[combos["Country Final"] == country].copy()
+        strong = country_df[country_df["Category"] == "Strong"].copy()
+        interesting = country_df[country_df["Category"] == "Interesting"].copy()
+        strong = strong.sort_values(by=["Deposits", "CR", "Profit"], ascending=[False, False, False])
+        interesting = interesting.sort_values(by=["CR", "Profit"], ascending=[False, False])
+        combined = pd.concat([strong, interesting], ignore_index=True)
+        top = combined.head(top_per_country)
+        for _, row in top.iterrows():
+            if not _is_problematic(row):
+                continue
+            found_any = True
+            offer = str(row.get("Offer") or "").strip() or "—"
+            device = str(row.get("Device") or "ALL").strip()
+            interest = _strip_date_from_display(str(row.get("Interest") or "").strip())
+            age = _strip_date_from_display(str(row.get("Age") or "").strip())
+            creative = str(row.get("Creative") or "").strip()
+            name = f"{country} | {offer} | {device} + {interest} + {age} + {creative}"
+            print(name)
+            dep = int(row.get("Deposits") or 0)
+            leads = int(row.get("Leads") or 0)
+            print(f"  Deposits: {dep}, Leads: {leads}")
+            title = row.get("TopAdTitle")
+            title_str = str(title).strip() if isinstance(title, str) and title else (str(title) if title is not None else "")
+            print(f"  Ad title: {title_str}")
+            if df is not None and "CM" in df.columns:
+                mask = _combo_match_mask(df, row, group_cols)
+                if mask.any():
+                    cms = df.loc[mask, "CM"].dropna().unique().tolist()
+                    all_cms.extend(cms)
+                    cm_str = ", ".join(str(c) for c in cms) if cms else "—"
+                    print(f"  CM: {cm_str}")
+            print()
+    if found_any and all_cms:
+        unique_cms = sorted(set(all_cms))
+        if len(unique_cms) == 1:
+            print(f"(All errors above: CM {unique_cms[0]})")
+        else:
+            print(f"(CMs with errors: {', '.join(unique_cms)})")
+    if not found_any:
+        print("No problematic combos (with nan in Interest/Age/Creative).")
 
 
 def print_cm_breakdown_for_country(df: pd.DataFrame, country_code: str) -> None:
@@ -451,6 +667,8 @@ def main(
     country_offer: str = "all",
     top_n: int = 2,
     output_path: Optional[str] = None,
+    short_report: bool = False,
+    problematic_report: bool = False,
 ) -> None:
     excel_path = excel_path or _get_excel_path()
     if not os.path.exists(excel_path):
@@ -478,6 +696,12 @@ def main(
         df = compute_metrics(df)
         df = enrich_structure(df)
         combos = aggregate_combos(df)
+        if short_report:
+            print_short_report(combos, top_per_country=top_n, df=df)
+            return
+        if problematic_report:
+            print_problematic_combos_with_titles(combos, top_per_country=top_n, df=df)
+            return
         print_report(combos)
 
         all_countries = sorted(
@@ -536,6 +760,16 @@ def _parse_args() -> argparse.Namespace:
         metavar="FILE",
         help="Save full report to FILE instead of printing to console",
     )
+    parser.add_argument(
+        "--short", "-s",
+        action="store_true",
+        help="Short report: top N combos per country only (N from --top, default 2)",
+    )
+    parser.add_argument(
+        "--problematic", "-p",
+        action="store_true",
+        help="List problematic campaign names (with nan) and ad titles under each, for manual fix",
+    )
     return parser.parse_args()
 
 
@@ -546,4 +780,6 @@ if __name__ == "__main__":
         country_offer=args.country,
         top_n=args.top,
         output_path=args.output,
+        short_report=getattr(args, "short", False),
+        problematic_report=getattr(args, "problematic", False),
     )

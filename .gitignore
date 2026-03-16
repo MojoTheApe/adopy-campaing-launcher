@@ -25,3 +25,6 @@ output/*.md
 # OS
 .DS_Store
 Thumbs.db
+
+# Excel lock/temp files
+output/~$*

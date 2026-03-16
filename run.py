@@ -17,4 +17,6 @@ if __name__ == "__main__":
         country_offer=args.country,
         top_n=args.top,
         output_path=args.output,
+        short_report=getattr(args, "short", False),
+        problematic_report=getattr(args, "problematic", False),
     )
