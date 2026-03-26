@@ -110,6 +110,7 @@ def run(
     account: str,
     output_path: str,
     country_filter: str = "all",
+    asset_filter: str = "",
     top_n: int = 10,
     save_plan_csv: str | None = None,
 ) -> None:
@@ -139,6 +140,18 @@ def run(
                 print(f"No combos for country '{want}'. Using top combos from all countries.", file=sys.stderr)
             else:
                 combos = combos_filtered
+        if asset_filter and asset_filter.strip():
+            sub = asset_filter.strip()
+            combos_af = combos[
+                combos["Offer"].astype(str).str.contains(sub, case=False, na=False)
+            ]
+            if len(combos_af) == 0:
+                print(
+                    f"No combos for offer matching '{sub}'. Using combos without offer filter.",
+                    file=sys.stderr,
+                )
+            else:
+                combos = combos_af
         combos = combos.sort_values(
             by=["Category", "Deposits", "ROI"],
             ascending=[True, False, False],
@@ -177,7 +190,12 @@ def main():
     parser.add_argument("--upload-excel", "-u", default=None, help="Path to Upluad FB.xlsx (default: config)")
     parser.add_argument("--account", "-a", required=True, help="Account name for upload (e.g. FacebookUL574 EC Fav)")
     parser.add_argument("--output", "-o", default=None, help="Output upload Excel path (default: output/upload_from_analysis.xlsx)")
-    parser.add_argument("--country", "-c", default="all", help="Filter combos by country code (default: all)")
+    parser.add_argument("--country", "-c", default="all", help="Filter combos by country name (e.g. Chile) (default: all)")
+    parser.add_argument(
+        "--asset",
+        default="",
+        help="Filter combos by substring in Offer / Ad Asset (e.g. Mercado Libre)",
+    )
     parser.add_argument("--top", "-t", type=int, default=10, help="Max combos to include (default: 10)")
     parser.add_argument("--plan-csv", default=None, help="Optional: save intermediate plan CSV")
     args = parser.parse_args()
@@ -192,6 +210,7 @@ def main():
         account=args.account.strip(),
         output_path=output_path,
         country_filter=args.country or "all",
+        asset_filter=(args.asset or "").strip(),
         top_n=max(1, args.top),
         save_plan_csv=(args.plan_csv or "").strip() or None,
     )

@@ -1,0 +1,10 @@
+{
+  "_description": "Правила, по которым скрипт анализа (run.py) читает Excel. Меняйте этот файл и перезапускайте анализ. Это не промпт нейросети — это конфиг для Python.",
+  "text_segments": {
+    "pro": ["pro", "pro_new", "professional", "pro_v2"],
+    "reg": ["reg", "registration", "easy_reg"],
+    "learn": ["learn", "learning", "learn_new", "education"]
+  },
+  "text_segment_fallback": "OTHER",
+  "_text_segments_help": "Колонка Ad Title приводится к lower case; если в тексте есть подстрока из списка — берётся ключ (PRO, REG, LEARN). Иначе — fallback."
+}

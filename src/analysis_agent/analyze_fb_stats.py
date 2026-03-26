@@ -1,6 +1,3 @@
-def report():
-    print("выдай мне отчет")
-
 import argparse
 import os
 import re
@@ -15,26 +12,24 @@ if str(_proj_root) not in sys.path:
 
 import pandas as pd
 
+from config.analysis_rules import get_text_segment_dictionary, get_text_segment_fallback
 from config.paths import get_excel_path
 
 USE_LATEST_DATE_ONLY = False
 _get_excel_path = get_excel_path
 
 
-TEXT_DICTIONARY = {
-    "pro": ["pro", "pro_new", "professional", "pro_v2"],
-    "reg": ["reg", "registration", "easy_reg"],
-    "learn": ["learn", "learning", "learn_new", "education"],
-}
-
-
-def normalize_text_segment(ad_title: str) -> str:
-    text = (ad_title or "").lower()
-    for segment, variants in TEXT_DICTIONARY.items():
+def normalize_text_segment(ad_title) -> str:
+    """Классификация текста объявления: правила в config/analysis_reading_rules.json (ключ text_segments)."""
+    # FIX A: guard against float/None input (NaN in Ad Title column)
+    if ad_title is None or (isinstance(ad_title, float) and pd.isna(ad_title)):
+        return get_text_segment_fallback()
+    text = str(ad_title).lower()
+    for segment, variants in get_text_segment_dictionary().items():
         for v in variants:
             if v in text:
                 return segment.upper()
-    return "OTHER"
+    return get_text_segment_fallback()
 
 
 def parse_adset_name(adset_name: str) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
@@ -54,11 +49,27 @@ def parse_adset_name(adset_name: str) -> Tuple[Optional[str], Optional[str], Opt
     country = parts[0] if len(parts) > 0 else None
     device = parts[2] if len(parts) > 2 else None
 
+    # FIX C: detect whether parts[3] is a pure creative-type token (VID/VIDEO/IMAGE/IMG/…)
+    # If so, use only 1 slot for creative and shift interest/age left by 1.
+    # This handles the common format: COUNTRY_OFFER_DEVICE_CREATIVETYPE_INTEREST_AGE_DATE
+    _PURE_CREATIVE_PREFIXES = ("vid", "video", "image", "images", "img", "photo", "creativ")
+    _p3 = parts[3].lower().replace(" ", "") if len(parts) > 3 else ""
+    _pure_creative = any(_p3.startswith(pfx) for pfx in _PURE_CREATIVE_PREFIXES)
+
     creative_raw = ""
-    if len(parts) > 4:
-        creative_raw = f"{parts[3]}_{parts[4]}"
-    elif len(parts) > 3:
-        creative_raw = parts[3]
+    if _pure_creative:
+        # 1-slot creative: COUNTRY_OFFER_DEVICE_CREATIVE_INTEREST_AGE[_DATE]
+        creative_raw = parts[3] if len(parts) > 3 else ""
+        interest = parts[4] if len(parts) > 4 else None
+        age = parts[5] if len(parts) > 5 else None
+    else:
+        # 2-slot creative (original): COUNTRY_OFFER_DEVICE_CREATIVE_SUBTYPE_INTEREST_AGE
+        if len(parts) > 4:
+            creative_raw = f"{parts[3]}_{parts[4]}"
+        elif len(parts) > 3:
+            creative_raw = parts[3]
+        interest = parts[5] if len(parts) > 5 else None
+        age = parts[6] if len(parts) > 6 else None
 
     creative_type = None
     creative_number = None
@@ -70,11 +81,10 @@ def parse_adset_name(adset_name: str) -> Tuple[Optional[str], Optional[str], Opt
             creative_type = "VIDEO"
         else:
             creative_type = "OTHER"
-        digits = "".join(ch for ch in lower if ch.isdigit())
+        # FIX D: limit creative_number to 5 digits max to avoid date/ID garbage
+        digits = "".join(ch for ch in lower if ch.isdigit())[:5]
         creative_number = digits or None
 
-    interest = parts[5] if len(parts) > 5 else None
-    age = parts[6] if len(parts) > 6 else None
 
     creative_label = None
     if creative_type and creative_number:
@@ -136,7 +146,8 @@ def enrich_structure(df: pd.DataFrame) -> pd.DataFrame:
         else:
             creative_type = "OTHER"
 
-        digits = "".join(ch for ch in joined if ch.isdigit())
+        # FIX D (fill_creative_from_asset): limit to 5 digits to avoid garbage from dates/IDs in title
+        digits = "".join(ch for ch in joined if ch.isdigit())[:5]
         creative_number = digits or None
 
         if creative_type and creative_number:
@@ -238,7 +249,8 @@ def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
         | grouped["Age"].isna()
         | (grouped["Creative"].isna())
     )
-    grouped.loc[mask_problematic, "Category"] = "Problematic"
+    # FIX B: Problematic must NOT overwrite Strong/Interesting — only mark combos that are still "Other"
+    grouped.loc[mask_problematic & (grouped["Category"] == "Other"), "Category"] = "Problematic"
 
     grouped = grouped[grouped["Category"].isin(["Strong", "Interesting", "Problematic"])]
 
@@ -256,7 +268,9 @@ def format_combo_row(row: pd.Series) -> str:
 
     line_header = f"{country} ({country})"
     category = row.get("Category", "Strong")
-    category_label = "Strong" if category == "Strong" else "Interesting"
+    # FIX E: show correct label for all categories (not just Strong/Interesting)
+    _label_map = {"Strong": "Strong", "Interesting": "Interesting", "Problematic": "Problematic"}
+    category_label = _label_map.get(category, str(category))
 
     combo_line = f"{country} [{offer}] - {device} + {interest} + {age} + {creative} + {text_segment}"
 
