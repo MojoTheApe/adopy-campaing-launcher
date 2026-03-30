@@ -47,5 +47,40 @@ def get_text_segment_fallback() -> str:
     return "OTHER"
 
 
+def get_device_keywords() -> Dict[str, List[str]]:
+    """Словарь: тип девайса → список ключевых слов (lower case) для поиска в Adset Name."""
+    raw = _load_raw()
+    kw = raw.get("device_keywords")
+    if isinstance(kw, dict) and kw:
+        out: Dict[str, List[str]] = {}
+        for k, v in kw.items():
+            if isinstance(v, list):
+                out[str(k)] = [str(x).lower() for x in v]
+        if out:
+            return out
+    return {"all": ["all"], "ios": ["ios"]}
+
+
+def get_age_range() -> tuple:
+    """Допустимый диапазон возраста в Adset Name: (min, max)."""
+    raw = _load_raw()
+    rng = raw.get("age_range")
+    if isinstance(rng, dict):
+        mn = rng.get("min")
+        mx = rng.get("max")
+        if isinstance(mn, int) and isinstance(mx, int):
+            return (mn, mx)
+    return (18, 65)
+
+
+def get_creative_skip_prefixes() -> List[str]:
+    """Префиксы частей Adset Name, относящихся к креативу (пропускаются при поиске Interest)."""
+    raw = _load_raw()
+    prfx = raw.get("creative_skip_prefixes")
+    if isinstance(prfx, list) and prfx:
+        return [str(x).lower() for x in prfx]
+    return ["vid", "video", "image", "images", "img", "photo", "creativ"]
+
+
 def rules_file_path() -> Path:
     return _RULES_PATH

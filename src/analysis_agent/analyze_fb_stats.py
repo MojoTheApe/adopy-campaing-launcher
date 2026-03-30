@@ -12,7 +12,13 @@ if str(_proj_root) not in sys.path:
 
 import pandas as pd
 
-from config.analysis_rules import get_text_segment_dictionary, get_text_segment_fallback
+from config.analysis_rules import (
+    get_age_range,
+    get_creative_skip_prefixes,
+    get_device_keywords,
+    get_text_segment_dictionary,
+    get_text_segment_fallback,
+)
 from config.paths import get_excel_path
 
 USE_LATEST_DATE_ONLY = False
@@ -32,67 +38,92 @@ def normalize_text_segment(ad_title) -> str:
     return get_text_segment_fallback()
 
 
-def parse_adset_name(adset_name: str) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
-    """
-    Expected pattern (can be partially missing):
-    0: Country (MX, CL, ...)
-    1: Offer (MZ, AMZ, Amazon, ...)
-    2: Device/OS (All, IOS, AND, DESKTOP, ...)
-    3-4: Creative pattern, e.g. Images_134, Image 134, video17
-    5: Interest (Luxury, Reading, Trading, FX, GMBL, Stockmarket, Wide, HNW, ...)
-    6: Age (40, 40+, 25-40, ...)
+def parse_adset_name(
+    adset_name: str,
+    device_kw: dict,
+    age_min: int,
+    age_max: int,
+    creative_prefixes: list,
+) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """Parse Adset Name to extract Country Code (display), Device, Interest, Age.
+
+    Format: CountryCode_OfferName_Device_Creative[_CreativeNum]_Interest_Age[_Date]
+    Country (full name) and Offer are taken from dedicated columns.
+    Creative is taken from Ad Title column as-is.
+    CountryCode (position 0) is extracted only for display purposes (e.g. MX, GCC, CL).
+
+    Algorithm:
+    1. Country code: parts[0] (2-3 letter code for display only).
+    2. Find Device: first part matching a device keyword (e.g. "all", "ios").
+    3. After Device, find Age: first numeric part in [age_min, age_max] (optionally with "+").
+    4. Interest: non-creative, non-numeric parts between Device and Age.
+       Creative parts = those starting with a creative prefix or being purely numeric.
+
+    Returns: (country_code, device, interest, age)
     """
     if not isinstance(adset_name, str):
-        return None, None, None, None, None
+        return None, None, None, None
 
     parts = [p.strip() for p in adset_name.split("_") if p.strip()]
-    country = parts[0] if len(parts) > 0 else None
-    device = parts[2] if len(parts) > 2 else None
 
-    # FIX C: detect whether parts[3] is a pure creative-type token (VID/VIDEO/IMAGE/IMG/…)
-    # If so, use only 1 slot for creative and shift interest/age left by 1.
-    # This handles the common format: COUNTRY_OFFER_DEVICE_CREATIVETYPE_INTEREST_AGE_DATE
-    _PURE_CREATIVE_PREFIXES = ("vid", "video", "image", "images", "img", "photo", "creativ")
-    _p3 = parts[3].lower().replace(" ", "") if len(parts) > 3 else ""
-    _pure_creative = any(_p3.startswith(pfx) for pfx in _PURE_CREATIVE_PREFIXES)
+    # Country code is always the first token (2-3 letters like MX, CL, GCC, UAE)
+    country_code: Optional[str] = parts[0].upper() if parts else None
 
-    creative_raw = ""
-    if _pure_creative:
-        # 1-slot creative: COUNTRY_OFFER_DEVICE_CREATIVE_INTEREST_AGE[_DATE]
-        creative_raw = parts[3] if len(parts) > 3 else ""
-        interest = parts[4] if len(parts) > 4 else None
-        age = parts[5] if len(parts) > 5 else None
-    else:
-        # 2-slot creative (original): COUNTRY_OFFER_DEVICE_CREATIVE_SUBTYPE_INTEREST_AGE
-        if len(parts) > 4:
-            creative_raw = f"{parts[3]}_{parts[4]}"
-        elif len(parts) > 3:
-            creative_raw = parts[3]
-        interest = parts[5] if len(parts) > 5 else None
-        age = parts[6] if len(parts) > 6 else None
+    # Build a flat lookup: keyword → canonical label
+    device_lookup: dict = {}
+    for label, keywords in device_kw.items():
+        for kw in keywords:
+            device_lookup[kw.lower()] = label
 
-    creative_type = None
-    creative_number = None
-    if creative_raw:
-        lower = creative_raw.lower().replace(" ", "")
-        if "image" in lower or "images" in lower:
-            creative_type = "IMAGE"
-        elif "video" in lower:
-            creative_type = "VIDEO"
-        else:
-            creative_type = "OTHER"
-        # FIX D: limit creative_number to 5 digits max to avoid date/ID garbage
-        digits = "".join(ch for ch in lower if ch.isdigit())[:5]
-        creative_number = digits or None
+    # Step 1: find Device
+    device: Optional[str] = None
+    device_idx: int = -1
+    for i, p in enumerate(parts):
+        canonical = device_lookup.get(p.lower())
+        if canonical is not None:
+            device = canonical
+            device_idx = i
+            break
 
+    if device_idx == -1:
+        return country_code, None, None, None
 
-    creative_label = None
-    if creative_type and creative_number:
-        creative_label = f"{creative_type}#{creative_number}"
-    elif creative_type:
-        creative_label = creative_type
+    remaining = parts[device_idx + 1:]
 
-    return country, device, interest, age, creative_label
+    # Step 2: find Age — first numeric-like part in range
+    age: Optional[str] = None
+    age_idx: int = -1
+    for i, p in enumerate(remaining):
+        p_clean = p.rstrip("+")
+        if p_clean.isdigit():
+            n = int(p_clean)
+            if age_min <= n <= age_max:
+                age = p
+                age_idx = i
+                break
+
+    # Step 3: find Interest — parts between creative section and Age
+    parts_before_age = remaining[:age_idx] if age_idx != -1 else remaining
+
+    interest_parts: list = []
+    in_creative_phase = True
+    for p in parts_before_age:
+        p_lower = p.lower()
+        # Skip date-like tokens anywhere (e.g. "28.03", "15.01.2024")
+        if "." in p:
+            continue
+        if in_creative_phase:
+            is_creative_part = (
+                any(p_lower.startswith(pfx) for pfx in creative_prefixes)
+                or p.isdigit()
+            )
+            if is_creative_part:
+                continue
+            in_creative_phase = False
+        interest_parts.append(p)
+
+    interest = "_".join(interest_parts) if interest_parts else None
+    return country_code, device, interest, age
 
 
 def compute_metrics(df: pd.DataFrame) -> pd.DataFrame:
@@ -121,46 +152,27 @@ def compute_metrics(df: pd.DataFrame) -> pd.DataFrame:
 def enrich_structure(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
-    parsed = df["Adset Name"].apply(parse_adset_name)
-    df["Parsed Country"] = parsed.apply(lambda x: x[0])
+    # Read parsing config once (not per-row) for efficiency
+    device_kw = get_device_keywords()
+    age_min, age_max = get_age_range()
+    creative_prefixes = get_creative_skip_prefixes()
+
+    parsed = df["Adset Name"].apply(
+        lambda x: parse_adset_name(x, device_kw, age_min, age_max, creative_prefixes)
+    )
+    df["Country Code"] = parsed.apply(lambda x: x[0])
     df["Device"] = parsed.apply(lambda x: x[1])
     df["Interest"] = parsed.apply(lambda x: x[2])
     df["Age"] = parsed.apply(lambda x: x[3])
-    df["Creative"] = parsed.apply(lambda x: x[4])
 
-    def fill_creative_from_asset(row: pd.Series) -> str:
-        if row.get("Creative"):
-            return row["Creative"]
-
-        ad_title = str(row.get("Ad Title") or "")
-        if not ad_title:
-            return row.get("Creative")
-
-        joined = ad_title.lower().replace(" ", "")
-
-        creative_type = None
-        if "image" in joined or "images" in joined:
-            creative_type = "IMAGE"
-        elif "video" in joined:
-            creative_type = "VIDEO"
-        else:
-            creative_type = "OTHER"
-
-        # FIX D (fill_creative_from_asset): limit to 5 digits to avoid garbage from dates/IDs in title
-        digits = "".join(ch for ch in joined if ch.isdigit())[:5]
-        creative_number = digits or None
-
-        if creative_type and creative_number:
-            return f"{creative_type}#{creative_number}"
-        return creative_type
-
-    df["Creative"] = df.apply(fill_creative_from_asset, axis=1)
+    # Creative = full Ad Title as-is (includes creative identifier + ad copy text)
+    df["Creative"] = df["Ad Title"].fillna("").astype(str).str.strip()
 
     df["TextSegment"] = df["Ad Title"].apply(normalize_text_segment)
 
     df["Country Final"] = df["Country"]
 
-    # Rule: Offer is always taken from column Ad Asset.
+    # Offer is always taken from Ad Asset column
     df["Offer"] = df["Ad Asset"].fillna("").astype(str).str.strip()
 
     return df
@@ -187,6 +199,16 @@ def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
         )
         .reset_index()
     )
+
+    # Attach Country Code (short display code from Adset Name position 0, e.g. MX, CL, GCC)
+    if "Country Code" in df.columns:
+        code_map = (
+            df[["Country Final", "Country Code"]]
+            .dropna(subset=["Country Code"])
+            .drop_duplicates("Country Final")
+            .set_index("Country Final")["Country Code"]
+        )
+        grouped["Country Code"] = grouped["Country Final"].map(code_map)
 
     detail_group_cols = group_cols + ["Ad Title"]
     detail = (
@@ -240,61 +262,53 @@ def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
     grouped["ROI"] = grouped["Net"] / grouped["Spend"].replace(0, pd.NA)
 
     grouped["Category"] = "Other"
-    mask_strong = (grouped["Deposits"] >= 2) & (grouped["ROI"] > 1.0)
-    mask_interesting = (grouped["Deposits"] == 1) & (grouped["CR"] > 5.0) & (grouped["ROI"] > 1.0)
+    # STRONG: 2+ deposits, sorted by best CR
+    mask_strong = grouped["Deposits"] >= 2
+    # INTERESTING: 1 deposit + CR above 5%
+    mask_interesting = (grouped["Deposits"] == 1) & (grouped["CR"] > 5.0)
     grouped.loc[mask_strong, "Category"] = "Strong"
     grouped.loc[mask_interesting, "Category"] = "Interesting"
-    mask_problematic = (
-        grouped["Interest"].isna()
-        | grouped["Age"].isna()
-        | (grouped["Creative"].isna())
-    )
-    # FIX B: Problematic must NOT overwrite Strong/Interesting — only mark combos that are still "Other"
-    grouped.loc[mask_problematic & (grouped["Category"] == "Other"), "Category"] = "Problematic"
 
-    grouped = grouped[grouped["Category"].isin(["Strong", "Interesting", "Problematic"])]
+    grouped = grouped[grouped["Category"].isin(["Strong", "Interesting"])]
 
     return grouped
 
 
 def format_combo_row(row: pd.Series) -> str:
-    country = str(row.get("Country Final") or "").upper()
-    offer = str(row.get("Offer") or "").strip() or "—"
-    device = row.get("Device") or "ALL"
-    interest = row.get("Interest") or "Wide"
-    age = row.get("Age") or "ALL"
-    creative = row.get("Creative") or "CREATIVE"
-    text_segment = row.get("TextSegment") or "TEXT"
+    country = str(row.get("Country Final") or "").strip()
+    country_code_raw = row.get("Country Code")
+    country_code = (
+        str(country_code_raw).strip()
+        if country_code_raw and str(country_code_raw).strip().lower() not in ("", "nan")
+        else country.upper()
+    )
+    device = str(row.get("Device") or "ALL").strip()
+    interest = str(row.get("Interest") or "Wide").strip()
+    age = str(row.get("Age") or "ALL").strip()
+    creative = str(row.get("Creative") or "—").strip()
+    text_segment = str(row.get("TextSegment") or "OTHER").strip()
 
-    line_header = f"{country} ({country})"
-    category = row.get("Category", "Strong")
-    # FIX E: show correct label for all categories (not just Strong/Interesting)
-    _label_map = {"Strong": "Strong", "Interesting": "Interesting", "Problematic": "Problematic"}
-    category_label = _label_map.get(category, str(category))
+    category = str(row.get("Category", "Strong"))
+    category_label = "Strong" if category == "Strong" else "Interesting"
 
-    combo_line = f"{country} [{offer}] - {device} + {interest} + {age} + {creative} + {text_segment}"
+    line_header = f"{country} ({country_code})"
+    combo_line = f"{country_code} - {device} + {interest} + {age} + {creative} | {text_segment}"
 
     deposits = int(row.get("Deposits") or 0)
     leads = int(row.get("Leads") or 0)
-    cpl = float(row.get("CPL") or 0.0)
+    cpl_val = row.get("CPL")
+    cpl = float(cpl_val) if pd.notna(cpl_val) else 0.0
     cpa_val = row.get("CPA")
     cpa = float(cpa_val) if pd.notna(cpa_val) else 0.0
-    cr = float(row.get("CR") or 0.0)
+    cr_val = row.get("CR")
+    cr = float(cr_val) if pd.notna(cr_val) else 0.0
 
     stats_line = f"Stats: Deposits: {deposits} | Leads: {leads} | CPL: ${cpl:.2f} | CPA: ${cpa:.2f} | CR: {cr:.2f}%"
-
-    extra_line = ""
-    if "#" not in str(creative):
-        top_title = row.get("TopAdTitle")
-        top_title_deps = row.get("TopAdTitleDeposits")
-        if isinstance(top_title, str) and top_title.strip():
-            deps_from_title = int(top_title_deps or 0)
-            extra_line = f"\nAd Title: {top_title} | Deposits from this title: {deps_from_title}"
 
     return f"""{line_header}
 [{category_label}]
 {combo_line}
-{stats_line}{extra_line}
+{stats_line}
 """
 
 
@@ -385,58 +399,7 @@ def print_short_report(combos: pd.DataFrame, top_per_country: int = 2, df: Optio
             print(fmt.format(r[0], r[1], r[2], r[3], r[4], r[5], r[6]))
         print(sep)
 
-    problematic = combos[combos["Category"] == "Problematic"].copy()
-    if problematic.empty:
-        return
-    problematic = problematic[problematic["Deposits"].fillna(0) > 0]
-    if problematic.empty:
-        return
-    problematic = problematic.sort_values(
-        by=["Country Final", "Deposits", "ROI"],
-        ascending=[True, False, False],
-    )
-    col_cm = 18
-    col_acc = 28
-    sep2 = "+" + "-" * (col_country + 2) + "+" + "-" * (col_offer + 2) + "+" + "-" * (col_combo + 2) + "+" + "-" * (col_cm + 2) + "+" + "-" * (col_acc + 2) + "+" + "-" * (col_dep + 2) + "+"
-    fmt2 = "| {:<%d} | {:<%d} | {:<%d} | {:<%d} | {:<%d} | {:>%d} |" % (col_country, col_offer, col_combo, col_cm, col_acc, col_dep)
-    print("\n--- Problematic (nan in Interest/Age/Creative) — CM and Account ---\n")
-    print(sep2)
-    print(fmt2.format("Country", "Offer", "Targeting + Creative", "CM", "Account", "Dep"))
-    print(sep2)
-    group_cols = ["Country Final", "Offer", "Device", "Interest", "Age", "Creative", "TextSegment"]
-    for _, row in problematic.iterrows():
-        country = str(row.get("Country Final") or "")[:col_country]
-        offer = str(row.get("Offer") or "—")[:col_offer]
-        device = str(row.get("Device") or "ALL").strip()[:8]
-        interest = _strip_date_from_display(str(row.get("Interest") or "").strip())[:12]
-        age = _strip_date_from_display(str(row.get("Age") or "").strip())[:8]
-        creative = str(row.get("Creative") or "—").strip()[:16]
-        combo_str = f"{device} + {interest} + {age} + {creative}"[:col_combo]
-        cm_val = row.get("TopCM")
-        acc_val = row.get("TopAccount")
-        if df is not None and ("CM" in df.columns and "Account Alias" in df.columns):
-            mask = _combo_match_mask(df, row, group_cols)
-            if mask.any():
-                sub = df.loc[mask]
-                top_idx = sub["# FTDs"].idxmax()
-                cm_val = sub.loc[top_idx, "CM"]
-                acc_val = sub.loc[top_idx, "Account Alias"]
-        cm = (str(cm_val)[:col_cm] if cm_val is not None and pd.notna(cm_val) and str(cm_val).strip().lower() != "nan" else "—")
-        acc = (str(acc_val)[:col_acc] if acc_val is not None and pd.notna(acc_val) and str(acc_val).strip().lower() != "nan" else "—")
-        dep = int(row.get("Deposits") or 0)
-        print(fmt2.format(country, offer, combo_str, cm, acc, dep))
-    print(sep2)
 
-
-def _is_problematic(row: pd.Series) -> bool:
-    """Связка проблемная, если в полях есть nan (название кампании будет кривое)."""
-    for key in ("Interest", "Age", "Creative"):
-        val = row.get(key)
-        if val is None or (isinstance(val, float) and pd.isna(val)):
-            return True
-        if str(val).strip().lower() == "nan":
-            return True
-    return False
 
 
 def _combo_match_mask(df: pd.DataFrame, row: pd.Series, group_cols: list) -> pd.Series:
@@ -453,62 +416,6 @@ def _combo_match_mask(df: pd.DataFrame, row: pd.Series, group_cols: list) -> pd.
     return mask
 
 
-def print_problematic_combos_with_titles(
-    combos: pd.DataFrame,
-    top_per_country: int = 2,
-    df: Optional[pd.DataFrame] = None,
-) -> None:
-    """Проблематичные названия кампаний (с nan и т.п.), под каждым — название объявления и CM."""
-    if combos.empty:
-        print("No combos.")
-        return
-    group_cols = ["Country Final", "Offer", "Device", "Interest", "Age", "Creative", "TextSegment"]
-    countries = sorted(
-        {c for c in combos["Country Final"].fillna("").unique() if str(c).strip() != ""}
-    )
-    found_any = False
-    all_cms: list = []
-    for country in countries:
-        country_df = combos[combos["Country Final"] == country].copy()
-        strong = country_df[country_df["Category"] == "Strong"].copy()
-        interesting = country_df[country_df["Category"] == "Interesting"].copy()
-        strong = strong.sort_values(by=["Deposits", "CR", "Profit"], ascending=[False, False, False])
-        interesting = interesting.sort_values(by=["CR", "Profit"], ascending=[False, False])
-        combined = pd.concat([strong, interesting], ignore_index=True)
-        top = combined.head(top_per_country)
-        for _, row in top.iterrows():
-            if not _is_problematic(row):
-                continue
-            found_any = True
-            offer = str(row.get("Offer") or "").strip() or "—"
-            device = str(row.get("Device") or "ALL").strip()
-            interest = _strip_date_from_display(str(row.get("Interest") or "").strip())
-            age = _strip_date_from_display(str(row.get("Age") or "").strip())
-            creative = str(row.get("Creative") or "").strip()
-            name = f"{country} | {offer} | {device} + {interest} + {age} + {creative}"
-            print(name)
-            dep = int(row.get("Deposits") or 0)
-            leads = int(row.get("Leads") or 0)
-            print(f"  Deposits: {dep}, Leads: {leads}")
-            title = row.get("TopAdTitle")
-            title_str = str(title).strip() if isinstance(title, str) and title else (str(title) if title is not None else "")
-            print(f"  Ad title: {title_str}")
-            if df is not None and "CM" in df.columns:
-                mask = _combo_match_mask(df, row, group_cols)
-                if mask.any():
-                    cms = df.loc[mask, "CM"].dropna().unique().tolist()
-                    all_cms.extend(cms)
-                    cm_str = ", ".join(str(c) for c in cms) if cms else "—"
-                    print(f"  CM: {cm_str}")
-            print()
-    if found_any and all_cms:
-        unique_cms = sorted(set(all_cms))
-        if len(unique_cms) == 1:
-            print(f"(All errors above: CM {unique_cms[0]})")
-        else:
-            print(f"(CMs with errors: {', '.join(unique_cms)})")
-    if not found_any:
-        print("No problematic combos (with nan in Interest/Age/Creative).")
 
 
 def print_cm_breakdown_for_country(df: pd.DataFrame, country_code: str) -> None:
@@ -682,7 +589,6 @@ def main(
     top_n: int = 2,
     output_path: Optional[str] = None,
     short_report: bool = False,
-    problematic_report: bool = False,
 ) -> None:
     excel_path = excel_path or _get_excel_path()
     if not os.path.exists(excel_path):
@@ -712,9 +618,6 @@ def main(
         combos = aggregate_combos(df)
         if short_report:
             print_short_report(combos, top_per_country=top_n, df=df)
-            return
-        if problematic_report:
-            print_problematic_combos_with_titles(combos, top_per_country=top_n, df=df)
             return
         print_report(combos)
 
@@ -779,11 +682,6 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Short report: top N combos per country only (N from --top, default 2)",
     )
-    parser.add_argument(
-        "--problematic", "-p",
-        action="store_true",
-        help="List problematic campaign names (with nan) and ad titles under each, for manual fix",
-    )
     return parser.parse_args()
 
 
@@ -795,5 +693,4 @@ if __name__ == "__main__":
         top_n=args.top,
         output_path=args.output,
         short_report=getattr(args, "short", False),
-        problematic_report=getattr(args, "problematic", False),
     )
