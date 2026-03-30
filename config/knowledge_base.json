@@ -1,0 +1,1307 @@
+{
+  "targets": {
+    "EF": {
+      "label": "Elite Forex / Exchange",
+      "aliases": [
+        "elite_forex",
+        "eliteforex",
+        "ef_target",
+        "exchange",
+        "forex_elite"
+      ],
+      "fb_interest": "exchange-traded fund, High-net-worth individual, Stock market, Wealth management",
+      "audience": "финансово грамотные, знают трейдинг; знают что такое форекс",
+      "top_countries": [
+        "KW",
+        "BH",
+        "UAE",
+        "OM",
+        "QA"
+      ],
+      "notes": "Один из лучших таргетов для Gulf. Высокий CPA, высокое качество депозита."
+    },
+    "EF+": {
+      "label": "Elite Forex Extended",
+      "aliases": [
+        "efplus",
+        "ef_plus",
+        "ef+_target"
+      ],
+      "fb_interest": "Exchange trading + investing + stock market",
+      "audience": "расширенная EF-аудитория со смежными финансовыми интересами",
+      "top_countries": [
+        "KW",
+        "BH",
+        "UAE"
+      ],
+      "notes": "Менее горячая, но шире охват чем EF."
+    },
+    "HV": {
+      "label": "High Value",
+      "aliases": [
+        "highvalue",
+        "high_value",
+        "hval",
+        "high value",
+        "hi_val"
+      ],
+      "fb_interest": "Investing, Wealth management, Financial planning",
+      "audience": "состоятельные пользователи, интересующиеся инвестициями и управлением капиталом",
+      "top_countries": [
+        "MX",
+        "CL",
+        "CO",
+        "UAE"
+      ],
+      "notes": "Лучше всего работает в LATAM с офферами Amazon и AI Trader."
+    },
+    "HNW": {
+      "label": "High Net Worth",
+      "aliases": [
+        "high_net_worth",
+        "highnetworth",
+        "hnw_target"
+      ],
+      "fb_interest": "Frequent international travelers, Frequent Travelers, Business class, Business travel, First class travel, Luxury Resorts, Yacht club, Yachting",
+      "audience": "Ultra-HNW клиенты; богатые, с опытом инвестиций",
+      "top_countries": [
+        "UAE",
+        "KW",
+        "QA"
+      ],
+      "notes": "Нишевый, маленький охват."
+    },
+    "FX": {
+      "label": "Forex (Generic)",
+      "aliases": [
+        "forex",
+        "fx_target",
+        "foreks",
+        "fx/ios"
+      ],
+      "fb_interest": "Forex trading, Currency trading",
+      "audience": "интересующиеся форексом, включая новичков",
+      "top_countries": [
+        "BH",
+        "UAE",
+        "KW",
+        "OM"
+      ],
+      "notes": "Более широкий и дешёвый чем EF. Альтернатива EF в Gulf-странах."
+    },
+    "Trading": {
+      "label": "Trading (Generic)",
+      "aliases": [
+        "trade",
+        "trading_target",
+        "trader"
+      ],
+      "fb_interest": "Day trading, Trading strategy, Algorithmic trading, Swing trading, Retail foreign exchange trading, XTB Online Trading, High-frequency trading, Forex Online Trading, Online Trading Academy",
+      "audience": "активные трейдеры, интересующиеся акциями и криптой",
+      "top_countries": [
+        "GT",
+        "EC",
+        "MX",
+        "CL"
+      ],
+      "notes": "Хорошо работает в Центральной Америке."
+    },
+    "SM": {
+      "label": "Stock Market",
+      "aliases": [
+        "stockmarket",
+        "stock_market",
+        "stocks",
+        "stock"
+      ],
+      "fb_interest": "Stock market, Wall Street, Investing",
+      "audience": "пользователи, интересующиеся фондовым рынком США",
+      "top_countries": [
+        "MX",
+        "CL",
+        "CO",
+        "AR"
+      ],
+      "notes": "Финансовая аудитория с фокусом на акции."
+    },
+    "Day": {
+      "label": "Day Trading",
+      "aliases": [
+        "daytrading",
+        "day_trading",
+        "day_trade",
+        "daytrade"
+      ],
+      "fb_interest": "Swing trading, Stock market index, Financial market, Day trading, Stock exchange, FxPro, Forex signal, Passive income, MetaTrader 4, CMC Markets, Foreign exchange market, Stock market, FXCM, Interactive Brokers, Stock market index future, Algorithmic trading, EToro, E-Trade, Stock Market Learning, Alpari Group, Plus500, Return on investment, High-frequency trading",
+      "audience": "дэй-трейдеры, ищущие быстрый доход от торговли",
+      "top_countries": [
+        "MX",
+        "CL"
+      ],
+      "notes": "Узкая ниша внутри Trading."
+    },
+    "IPO": {
+      "label": "IPO Interest",
+      "aliases": [
+        "ipo_target",
+        "ipo_interest"
+      ],
+      "fb_interest": "IPO, Initial public offering, Stock market investing",
+      "audience": "инвесторы, следящие за размещениями акций",
+      "top_countries": [
+        "MX",
+        "CL",
+        "CO"
+      ],
+      "notes": "Ситуативный таргет, активируется при хайпе вокруг IPO."
+    },
+    "Wide": {
+      "label": "Wide / Broad Audience",
+      "aliases": [
+        "broad",
+        "wide_audience",
+        "no_interest",
+        "all_interests",
+        "open"
+      ],
+      "fb_interest": "Inclusion: Interests: Luxury Watches, Nintendo, Horse care, All-news radio, Swing trading, Business school, Asos, Seed accelerator, Vocational education, Forex Club, Real estate investment trust, Balenciaga, Alternative Investment Market, Luxury Shop, Luxury Travel, Roblox, GQ, Video game publisher, Coaching, Trading strategy, Business education, Show jumping, Investment banking, E-books, First class travel, Financial market, Investopedia, Day trading, Quality of life, TechRadar, MMORPG, Stock exchange, Kickstarter, Luxury, FxPro, Alternative investment, National Cutting Horse Association, Investment club, Personal finance, High-frequency trading, Luxury Bags, Creative real estate investing, Forex Bank, Mobile game, Call of Duty, Investment trust, Gucci, Fidelity Investments, OzForex, Motivation, News magazine, American Quarter Horse, Khan Academy, InstaForex, Luxury box, Ubisoft, The Luxury Collection, PlayStation, News broadcasting, Epic Games, Financial adviser, FEI World Equestrian Games, H&M, Journalism, Prada, Literature, Edward Jones Investments, Health & wellness, Shopping, Forex signal, Exchange-traded fund, Strategy video game, Marie Claire, Chanel, Venture capital, Passive income, Stanford University, Property investment club, Current events, Investment management, Streetwear, Private equity, Horse training, Forex CFDs Signal, Nordstrom, Angel investor, Alexander McQueen, CMC Markets, forex trader, Investment strategy, Real estate development, Forex Signals, Initial public offering, Online newspaper, Online shopping, Foreign exchange market, Fashion accessories, Stock market, Forex Factory, Louis Vuitton, FXCM, League of Legends, Local news, Luxury Resorts, Luxury Store, Investment, Luxury Lifestyle, Investment company, Sofitel, Real estate appraisal, Investec, Self-confidence, Algorithmic trading, Self-esteem, Versace, Twitch, Real estate investing, Books, Wealth management, Master class, Forex Online Trading, Emotional intelligence, IOS, Bottega Veneta, Luxury Travel Advisor, Digital Trends, EToro, Udemy, Gadget, Real estate, Net-a-Porter, E-Trade, Horse & Rider, Investor, XForex, Gourmet, Breaking news, Easy forex, Luxury yacht, Private equity fund, Personal development, Personal luxury car, News media, Technology, Newspapers, Luxury vehicle, TechCrunch, VentureBeat, Travel, Massive open online course, Retail foreign exchange trading, Online Trading Academy, Alpari Group, Coursera, Fortnite, High-net-worth individual, Luxury goods, Well-being, EdX, Destinology - Luxury Holidays, Profit Forex Signal, Plus500, Return on investment, Skillshare, Farfetch, XTB Online Trading, FOREX.com, United States colleges and universities, United States business schools, Esports teams, Real estate marketing and coaching, Video game related content, Educational resources, MT5.com - Forex Traders Community or iFOREX",
+      "audience": "все пользователи в выбранных демографических рамках",
+      "top_countries": [
+        "GT",
+        "EC",
+        "CO"
+      ],
+      "notes": "FB ML оптимизирует. При достаточном бюджете и пикселе даёт лучший CPL."
+    },
+    "PF": {
+      "label": "Personal Finance",
+      "aliases": [
+        "personal_finance",
+        "personalfinance",
+        "finance",
+        "pfinance"
+      ],
+      "fb_interest": "Foreign exchange market, Investor, Investment, personal finance",
+      "audience": "люди, заинтересованные в личных финансах и экономии",
+      "top_countries": [
+        "MX",
+        "CL",
+        "GT"
+      ],
+      "notes": "Более низкая осведомлённость о трейдинге, чем HV/EF."
+    },
+    "CCorg": {
+      "label": "CC Organic",
+      "aliases": [
+        "cc_org",
+        "cc-org",
+        "ccorganic",
+        "cc_organic"
+      ],
+      "fb_interest": "Broad или специфично по офферу",
+      "audience": "ретаргетинг или lookalike от органических пользователей",
+      "top_countries": [
+        "MX",
+        "UAE",
+        "BH"
+      ],
+      "notes": "Ретаргетинг / LAL. Используется с CC-офферами."
+    },
+    "dtml": {
+      "label": "DTML Remarketing",
+      "aliases": [
+        "DTML",
+        "retargeting",
+        "remarketing",
+        "dtml_target"
+      ],
+      "fb_interest": "Ретаргетинг",
+      "audience": "пользователи, посещавшие сайт или взаимодействовавшие с рекламой",
+      "top_countries": [
+        "CL",
+        "MX",
+        "CO"
+      ],
+      "notes": "Dynamic/retargeting remarketing logic."
+    },
+    "Blue": {
+      "label": "Blue Collar",
+      "aliases": [
+        "blue_collar",
+        "bluecollar",
+        "blue_target",
+        "worker"
+      ],
+      "fb_interest": "Manual workers, Construction, Manufacturing",
+      "audience": "рабочий класс, ищущий дополнительный доход",
+      "top_countries": [
+        "MX",
+        "GT",
+        "EC"
+      ],
+      "notes": "Высокий объём лидов, но низкое качество. ROI обычно отрицательный."
+    },
+    "single": {
+      "label": "Single Interest",
+      "aliases": [
+        "single_interest",
+        "mono",
+        "solo"
+      ],
+      "fb_interest": "Одиночный интерес (без комбинирования)",
+      "audience": "моноинтерес без расширения",
+      "top_countries": [],
+      "notes": "Тестовый таргет для изолированных интересов."
+    },
+    "Luxury": {
+      "label": "Luxury",
+      "aliases": [],
+      "fb_interest": "Luxury Watches, Luxury Shop, Luxury Travel, First class travel, Luxury, Luxury Bags, Luxury box, The Luxury Collection, Shopping, Luxury Resorts, Luxury Store, Luxury Lifestyle, Sofitel, Luxury Travel Advisor, Gourmet, Luxury yacht, Personal luxury car, Luxury vehicle, Travel, Luxury goods, Destinology - Luxury Holidays, Destination Luxury or Luxury Lodge Holiday, Behaviors: Frequent Travelers, Frequent international travelers or People who prefer high-value goods in UAE",
+      "audience": "Люкс-аудитория: путешественники, покупатели премиум-товаров; акцент на Gulf (UAE, KW, QA)",
+      "top_countries": [],
+      "notes": "Behaviors включают Frequent Travelers и People who prefer high-value goods in UAE. Хорошо работает для Gulf-офферов."
+    },
+    "Reading": {
+      "label": "Reading",
+      "aliases": [],
+      "fb_interest": "All-news radio, E-books, News magazine, News broadcasting, Literature, Online newspaper, Local news, Books, Breaking news, News media, Newspapers, Current events, Journalism",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Hobbies": {
+      "label": "Hobbies",
+      "aliases": [],
+      "fb_interest": "Interests: Adventure travel, Acting, Vacations, Singing, Community issues, Gardening, Ecotourism, Mountains, Car rentals, Trucks, Crafts, Rabbits, Electric vehicle, Furniture, Volunteering, Painting, Performing arts, Cats, Fish, Automobiles, Fine art, Minivans, Air travel, Cruises, Home improvement, Birds, Current events, Guitar, SUVs, Dogs, Home Appliances, Motorcycles, Nature (science), Reptiles, Drums, RVs, Horses, Charity and causes, Dance, Lakes, Tourism, Beaches, Scooters, Pet food, Do it yourself (DIY), Hotels, Writing, Politics, Law, Sculpture, Hybrids, Drawing, Photography, Theme parks or Boats",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Investment Plus": {
+      "label": "Investment Plus",
+      "aliases": [],
+      "fb_interest": "Real estate investment trust, Alternative Investment Market, Investment banking, Investopedia, Alternative investment, Investment club, Creative real estate investing, Investment trust, Fidelity Investments, Financial adviser, Edward Jones Investments, Property investment club, Investment management, Private equity, Investment strategy, Investment, Investment company, Investec, Real estate investing, Investor, Return on investment, XP Investimentos or Investing.com",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "sport": {
+      "label": "sport",
+      "aliases": [],
+      "fb_interest": "UEFA Champions League, Lionel Messi, La Liga, Liverpool F.C., Real Madrid C.F., Cristiano Ronaldo, FC Barcelona, FIFA World Cup, Sports, Physical fitness, Premier League, UEFA Europa League, FIFA, Football, Neymar, UEFA, Ligue 1, Physical exercise or Manchester City F.C., Behaviors: Soccer fans (moderate content engagement) or Soccer fans (high content engagement)",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "InvestmentPlus latam": {
+      "label": "InvestmentPlus latam",
+      "aliases": [],
+      "fb_interest": "Real estate investment trust, Alternative Investment Market, Investment banking, Investopedia, Alternative investment, Investment club, Creative real estate investing, Investment trust, Fidelity Investments, Financial adviser, Edward Jones Investments, Property investment club, Investment management, Private equity, Angel investor, Investment strategy, Investment, Investment company, Investec, Real estate investing, Investor, Return on investment, XP Investimentos, Investing.com",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "reading latam": {
+      "label": "reading latam",
+      "aliases": [],
+      "fb_interest": "All-news radio, E-books, ESPNews, Opera News, News magazine, Sport (Spanish newspaper), News broadcasting, Record (newspaper), Online newspaper, Local news, Books, International News Service v. Associated Press, Science News, Breaking news, News media, Newspapers, Sporting News",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Gambling AR com": {
+      "label": "Gambling AR com",
+      "aliases": [],
+      "fb_interest": "Interests: Sky Betting and Gaming, Betfred, Gambling, Sports betting, Online poker, Paddy Power, Lottery, Online gambling, Sportingbet, Bwin.Party Digital Entertainment, Full Tilt Poker, World Poker Tour, Slot machine, Bookmaker, William Hill (bookmaker), Casino games, Betfair, Poker tournament, Coral, Casino, Ladbrokes, Betsson, Bet365, Sportsbet.com.au or Tipico, 888 Holdings",
+      "audience": "Гемблинг-аудитория, настроенная для AR (Argentina) и .com аккаунтов",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Sport AR com": {
+      "label": "Sport AR com",
+      "aliases": [],
+      "fb_interest": "Interests: CBSSports.com, Sports, NBC Sports, Cue sports, ESPNcricinfo, NDTV, Sporting News, Fox Sports, Fox Sports 1 or 247Sports.com, Behaviors: Sports page admins, Employers: FOX Sports",
+      "audience": "Спортивная аудитория для AR (Argentina) и .com аккаунтов",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Foreign ex": {
+      "label": "Foreign ex",
+      "aliases": [],
+      "fb_interest": "Foreign exchange market, Forex signal, forex trader, Forex Club, Forex Signals, Easy forex, Forex Bank, Forex Online Trading, Forex Factory, Profit Forex Signal, FOREX.com, Forex CFDs Signal, MT5.com - Forex Traders Community, FxPro, iFOREX, XForex, OzForex, InstaForex",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "GMBL": {
+      "label": "GMBL",
+      "aliases": [],
+      "fb_interest": "Sky Betting and Gaming, Betfred, Gambling, Sports betting, Online poker, Paddy Power, Lottery, Online gambling, Sportingbet, Bwin.Party Digital Entertainment, Slot machine, Bookmaker, Casino games, Unibet, Betfair, Casino, Ladbrokes, Betsson, Bet365, Sportsbet.com.au or Tipico",
+      "audience": "Любители азартных игр, ставок на спорт, онлайн-казино; применяется для всех стран",
+      "top_countries": [],
+      "notes": "Широкий гемблинг-таргет. Использовать осторожно — требует одобрения FB для гемблинг-офферов."
+    },
+    "competators investment mix": {
+      "label": "competators investment mix",
+      "aliases": [],
+      "fb_interest": "Interests: Swing trading, Trading strategy, Financial market, Day trading, Stock exchange, Finance, Alternative investment, Financial services, Passive income, Investment management, MetaTrader 4, Stock, Investment strategy, Investment, EToro, E-Trade, Investor, Plus500, Return on investment, Investing.com",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Stockmarket": {
+      "label": "Stockmarket",
+      "aliases": [],
+      "fb_interest": "Foreign exchange market, Investor, Stock exchange, Stock market",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "PO": {
+      "label": "PO",
+      "aliases": [],
+      "fb_interest": "Initial Public Offering, Venture Capital, Angel Investor, Investment Banking, Private Equity fund",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Luxury2": {
+      "label": "Luxury2",
+      "aliases": [],
+      "fb_interest": "Horse care, Arabian horse, Property investment trust, Show jumping, National Cutting Horse Association, Horse tack, Cross-country equestrianism, American Quarter Horse, FEI World Equestrian Games, Horse & Hound, Horse breeding, Horse training, Horse show, Horse trainer, Endurance riding, Arabian Ranches Golf Club, Horse & Rider, Horse racing (sport), Falconry, Horseback riding (horse sport), Equestrian facility, World Arabian Horse Organization",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Tech": {
+      "label": "Tech",
+      "aliases": [],
+      "fb_interest": "Andreessen Horowitz, Digital Trends, Gadget, Kickstarter, Seed accelerator, TechCrunch, TechRadar, VentureBeat, Technology",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "OnlineEducation": {
+      "label": "OnlineEducation",
+      "aliases": [],
+      "fb_interest": "Business education, Coaching, Coursera, EdX, Emotional intelligence",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Wellbeing": {
+      "label": "Wellbeing",
+      "aliases": [],
+      "fb_interest": "Well-being, Quality of life, Quality of life, Self-confidence, Self-knowledge, Self-esteem, Personal development, Personal development, Health & wellness, Emotional intelligence, Coaching",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Lux": {
+      "label": "Lux",
+      "aliases": [],
+      "fb_interest": "Gucci, Louis Vuitton, Chanel, Dior, Prada, Balenciaga, Versace, Bottega Veneta, Off-White, Alexander McQueen, Zara, H&M, Mango, Shein, ASOS, Net-a-Porter, Farfetch, Revolve, Fashion Nova, Nordstrom, Online shopping, Fashion accessories, Streetwear, Luxury goods, High-end fashion, Personal stylists, Fashion magazines, Fashion shows, Beauty and cosmetics, Luxury lifestyle, Instagram influencers, Fashion photography, Travel and lifestyle bloggers, Vogue, Harper’s Bazaar, GQ, Glamour, Marie Claire",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "OnlineGaming": {
+      "label": "OnlineGaming",
+      "aliases": [],
+      "fb_interest": "Blizzard Entertainment, Call of Duty, Epic Games, FIFA, Fortnite, Gamer, Grand Theft Auto, Grand Theft Auto V, League of Legends, MMORPG, MMORPG, Nintendo, PC Gamer, PlayStation, PlayStation 4, PlayStation Network, PlayStation Store, Roblox, Rockstar Games, Twitch, Ubisoft, Video game developer, Xbox, Xbox One, Esports teams, Strategy video game, Video game publisher, Video game related content, Online games, Video games",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Current Events": {
+      "label": "Current Events",
+      "aliases": [],
+      "fb_interest": "Local news, Current events",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Gos": {
+      "label": "Gos",
+      "aliases": [],
+      "fb_interest": "Celebrity, Celebrity Gossip, Celebrity News, Entertainment Weekly, Internet celebrity, The Hollywood Gossip, Music",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "HedgeFund": {
+      "label": "HedgeFund",
+      "aliases": [],
+      "fb_interest": "Asset management, Investment management, Mutual fund, Private equity, Private equity fund, Private equity real estate, Venture capital, Venture capital financing",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "ES": {
+      "label": "ES",
+      "aliases": [],
+      "fb_interest": "Engaged Shoppers, Online shoppers, People who have made online purchases, Shopping and fashion buyers, Frequent online buyers, High value goods buyers, Credit card users, Debit card users, Mobile payment users, In-app purchasers, Facebook Payments users, PayPal users, Apple Pay users, Google Pay users, Amazon, AliExpress, eBay, Etsy, Shopify, Zalando, ASOS, Online banking, Digital wallets, Subscription services, SaaS products, Streaming services (Netflix, Spotify)",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Main 1": {
+      "label": "Main 1",
+      "aliases": [],
+      "fb_interest": "Swing trading, Stock market index, Electronic trading platform, Trading strategy, Financial market, Money, Day trading, Stock exchange, Finance, FxPro, Personal finance, Technical analysis, Market trend, Forex signal, Passive income, Investment management, MetaTrader 4, Stock, Investment strategy, Foreign exchange market, Stock market, FXCM, Investment, Interactive Brokers, Algorithmic trading, Wealth, EToro, E-Trade, Investor, Income, Online Trading Academy, Plus500, Return on investment, Forex Trader",
+      "audience": "AI-сгенерированный таргет внутри FB аккаунта — не используется в ручном анализе",
+      "top_countries": [],
+      "notes": "Составлен автоматически Facebook Advantage+ или вручную через AI. Пока не классифицируем."
+    },
+    "Main 2": {
+      "label": "Main 2",
+      "aliases": [],
+      "fb_interest": "Financial market, Investopedia, MarketWatch, Motivation, NASDAQ, Investment management, Investment strategy, Investor, Motivational speaking, Investing.com, Investor, Motivational speaker, Investor Relations, Investment Consultant, Investment Analyst",
+      "audience": "AI-сгенерированный таргет внутри FB аккаунта — не используется в ручном анализе",
+      "top_countries": [],
+      "notes": "Составлен автоматически Facebook Advantage+ или вручную через AI. Пока не классифицируем."
+    },
+    "TRDEZ": {
+      "label": "TRDEZ",
+      "aliases": [],
+      "fb_interest": "Trading strategy, Day trading, FxPro, CMC Markets, FXCM, EToro, E-Trade, Plus500",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Mix": {
+      "label": "Mix",
+      "aliases": [],
+      "fb_interest": "Investment banking, Asset management, Private banking, Private equity, Wealth management, Personal finance [AND] Frequent international travelers, Business class, Business jet, FirstClass, Horse racing, Luxury, Luxury Resorts, Luxury vehicle, Yacht club",
+      "audience": "Комбо: финансы + премиум-образ жизни. AND-логика (Narrow Further): финансовые интересы И путешествия/люкс",
+      "top_countries": [],
+      "notes": "V в Google Sheet = Narrow Further (Define Further) в FB — аудитория должна соответствовать ОБЕИМ группам."
+    },
+    "Mix2": {
+      "label": "Mix2",
+      "aliases": [],
+      "fb_interest": "Investment banking, Asset management, Private banking, Private equity, Wealth management, Personal finance [AND] All-news radio, E-books, News magazine, News broadcasting, Online newspaper, Local news, Books, Breaking news, News media, Newspapers, Sporting News",
+      "audience": "Комбо: финансы + читатели новостей. AND-логика: финансовые интересы И медиа/новости",
+      "top_countries": [],
+      "notes": "V в Google Sheet = Narrow Further (Define Further) в FB — аудитория должна соответствовать ОБЕИМ группам."
+    }
+  },
+  "offers": {
+    "Amazon": {
+      "label": "Trade Amazon Stocks",
+      "language": [
+        "ES",
+        "AR"
+      ],
+      "top_countries": [
+        "MX",
+        "CL",
+        "CO",
+        "AR"
+      ],
+      "audience": "розничные инвесторы, знакомые с брендом Amazon",
+      "usp": "Покупай акции Amazon — бренд, которому доверяют все",
+      "notes": "Массовый оффер, работает с широкой аудиторией за счёт узнаваемости бренда.",
+      "lp_urls": [
+        "https://lpa.justhappywhistle.com/maz_21701_es_mx_jhn/",
+        "https://lpa.reviewtechdesk.com/amz_new_es_lp_rtd",
+        "https://test.tlpdaisy.com/amz_8_xxx",
+        "https://lpa.read-itnowbest.com/amz_29959_es_lp_rib",
+        "https://lpa.articleguidehub.com/ait_rbt_5_es_lp_agh",
+        "https://lpa.readme-up-spt.com/zma_8315_es_sv_lp_rut",
+        "https://lpa.reviewmediabasezone.com/amz_7844_9_es_lp_rmb",
+        "https://lpa.discoverflowdesk.com/amz_5738_l1_es_mx_lp_dfd"
+      ]
+    },
+    "AI Trader": {
+      "label": "AI Trading Assistant",
+      "language": [
+        "ES",
+        "EN"
+      ],
+      "top_countries": [
+        "MX",
+        "UAE",
+        "CL",
+        "CO"
+      ],
+      "audience": "технологически ориентированные, интересующиеся пассивным доходом",
+      "usp": "Алгоритм торгует вместо вас — пассивный доход от ИИ",
+      "notes": "Растёт на волне хайпа вокруг ИИ. Хорошо цепляет в футуристических креативах.",
+      "lp_urls": [
+        "https://lpr.webblogrise.com/ait_vid_ar_lp_wbr",
+        "https://lpa.discover-web-dailly.com/ait_ai12_ar_dwd",
+        "https://test.tlpdaisy.com/ait_trd_ae_xxx",
+        "https://lpa.web-smartradius.com/trd_383_es_lp_wsr",
+        "https://lpa.news-portalline.com/ait_v_2_es_lp_npl",
+        "https://lpa.readanddiscoverzones.com/aitr_999_es_adz",
+        "https://test.tlpdaisy.com/ait_2_new8_es_lp_xxx",
+        "https://test.tlpdaisy.com/ait_2_vid_es_lp_xxx",
+        "https://lpa.readcenterblog.com/ait_vid_es_lp_rcg",
+        "https://lpa.webpilotzon.com/ait_555_es_wpz",
+        "https://test.tlpdaisy.com/ait_1_new8_es_lp_xxx",
+        "https://test.tlpdaisy.com/ait_1_vid_es_lp_xxx",
+        "https://lpa.newshivefind.com/aitr1_es_lat_nhf",
+        "https://test.tlpdaisy.com/ait_es_gif_8_xxx",
+        "https://test.tlpdaisy.com/ait_rbt_5_es_lp_xxx",
+        "https://test.tlpdaisy.com/ait_345_1_es_lp_xxx",
+        "https://lpa.reviewshubspotzone.com/ait_c_es_lp_rhs",
+        "https://lpa.news-visionpoint.com/ait_m_es_lp_nvp",
+        "https://test.tlpdaisy.com/ait_l_es_lp_xxx",
+        "https://test.tlpdaisy.com/aitr_ar_lp",
+        "https://test.tlpdaisy.com/aitr_4_ar_tlp",
+        "https://test.tlpdaisy.com/aitr_3_ar_tlp",
+        "https://lpa.readchainmode.com/ait_ec_8_rcn",
+        "https://test.tlpdaisy.com/gpt_gt_8_xxx",
+        "https://lpa.news-portalline.com/gpt_es_mx_npl",
+        "https://lpa.readcloudx.com/aitr_3_tbl_es_rxc",
+        "https://lpa.websolutionlaunch.com/aitr1_es_lat_wls",
+        "https://lpa.articleandread.com/ait_1_es_lat_add",
+        "https://lpa.focusarticlesline.com/ait_new8_es_lp_fla",
+        "https://lpa.articleandread.com/ait_3_tbl_es_add"
+      ]
+    },
+    "Salik": {
+      "label": "Salik UAE Investment",
+      "language": [
+        "AR",
+        "EN"
+      ],
+      "top_countries": [
+        "UAE"
+      ],
+      "audience": "жители ОАЭ, знакомые с брендом Salik",
+      "usp": "Инвестируй в Salik — местная компания на Dubai Financial Market",
+      "notes": "Гео-специфичный оффер. Работает только в ОАЭ.",
+      "lp_urls": [
+        "https://lpa.reviewnewsblog.com/zzsa_7787_3_ar_fm_rng/",
+        "https://test.tlpdaisy.com/slk_999_xxx",
+        "https://test.tlpdaisy.com/slk_1_4_ar_lp_xxx",
+        "https://test.tlpdaisy.com/slk_n_ar_lp_xxx",
+        "https://test.tlpdaisy.com/slk_n2_ar_lp_xxx",
+        "https://test.tlpdaisy.com/slk_n3_ar_lp_xxx",
+        "https://test.tlpdaisy.com/slk_8_cl_xxx",
+        "https://test.tlpdaisy.com/slk_1_1_ar_lp_xxx",
+        "https://test.tlpdaisy.com/slk_1_2_ar_lp_xxx",
+        "https://test.tlpdaisy.com/slk_1_5_ar_lp_xxx",
+        "https://test.tlpdaisy.com/slk_1_3_ar_lp_xxx",
+        "https://test.tlpdaisy.com/slk_1_6_ar_lp_xxx"
+      ]
+    },
+    "Banco Industrial": {
+      "label": "Banco Industrial Guatemala",
+      "language": [
+        "ES"
+      ],
+      "top_countries": [
+        "GT"
+      ],
+      "audience": "клиенты банков Гватемалы, доверяющие традиционным институтам",
+      "usp": "Инвестируй через надёжный банк — Banco Industrial",
+      "notes": "Сильный бренд в Гватемале. Комбинировать с FX/Trading таргетами.",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/bni_258_xxx",
+        "https://lpr.newtechreach.com/qlnd_7910_1_es_gt_ntr"
+      ]
+    },
+    "Favorita": {
+      "label": "Corporación La Favorita Ecuador",
+      "language": [
+        "ES"
+      ],
+      "top_countries": [
+        "EC"
+      ],
+      "audience": "жители Эквадора, знакомые с супермаркетами Favorita/Supermaxi",
+      "usp": "Инвестируй в компанию, которая уже в каждом доме",
+      "notes": "Местный бренд. EC показал ROI 36x в лучших кампаниях.",
+      "lp_urls": [
+        "https://lpr.viewnewstrove.com/ccf_2_es_lp_vns",
+        "https://test.tlpdaisy.com/fvrt_8_xxx"
+      ]
+    },
+    "CCorg": {
+      "label": "CC Organic / Crypto",
+      "language": [
+        "EN",
+        "ES"
+      ],
+      "top_countries": [
+        "MX",
+        "UAE",
+        "BH"
+      ],
+      "audience": "крипто-энтузиасты, аудитория Bitcoin/Altcoins",
+      "usp": "Торгуй криптой на надёжной платформе",
+      "notes": "Используется с EF и Trading таргетами.",
+      "lp_urls": []
+    },
+    "Cib": {
+      "label": "Cib",
+      "language": "35",
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": "",
+      "lp_urls": [
+        "https://trk.terracottawakto.com/BqQ4wYgz?fbclid={fbclid}&utm_campaign={{campaign.name}}&utm_source={{site_source_name}}&utm_placement={{placement}}&campaign_id={{campaign.id}}&adset_id={{adset.id}}&ad_id={{ad.id}}&adset_name={{adset.name}}&ad_name={{ad.name}}"
+      ]
+    },
+    "Trade GPT": {
+      "label": "Trade GPT",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/tgp_ar_dr2_lp_xxx",
+        "https://test.tlpdaisy.com/tgp_ar_dr3_lp_xxx",
+        "https://lpa.redlinkerzone.com/tgp_gcc_1_lp_rkn",
+        "https://lpa.readwebstack.com/tgp_ar_2_lp_rws",
+        "https://lpa.readwebstack.com/tgp_ar_lp_rws",
+        "https://test.tlpdaisy.com/tgp_sp_oph_lp_xxx",
+        "https://test.tlpdaisy.com/trd_ec_88_xxx",
+        "https://lpr.varietyhorizon.com/tgp_ar_lp_vah",
+        "https://lpr.promotion-nesthub.com/tgp_gcc_1_lp_pnb",
+        "https://test.tlpdaisy.com/tgp_sp_gb_lp_xxx",
+        "https://test.tlpdaisy.com/tgp_c1_ar_xxx",
+        "https://test.tlpdaisy.com/tgp_c2_ar_xxx",
+        "https://test.tlpdaisy.com/tgp_c3_ar_xxx",
+        "https://lpa.newsreviewarticles.com/tgp_es_4_lat_lp_nra",
+        "https://lpa.readcenterblog.com/tgp_ar_2_lp_rcg",
+        "https://lpa.webarticleaccess.com/tgp_es_4_lat_lp_was"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "NVIDIA": {
+      "label": "NVIDIA",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/nvd_n_ar_lp_xxx",
+        "https://test.tlpdaisy.com/nvd_ar_fm_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Quantum AI": {
+      "label": "Quantum AI",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/qtai_n_ar_lp_xxx",
+        "https://test.tlpdaisy.com/qtai_ar_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Adnoc": {
+      "label": "Adnoc",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/adnc_258_xxx",
+        "https://lpr.webnewsource.com/nc_ar_fm_wne",
+        "https://test.tlpdaisy.com/adnc_b_ar_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "AES": {
+      "label": "AES",
+      "lp_urls": [
+        "https://lpa.newsupdatefeed.com/esaaa_8_nuf/"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Ai Chat Trader": {
+      "label": "Ai Chat Trader",
+      "lp_urls": [
+        "https://ai-chatrade.com/home2-ar",
+        "https://ai-chatrade.com/home-ar"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "AIT AR": {
+      "label": "AIT AR",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/ait_cg_ar_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Alec": {
+      "label": "Alec",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/aec_2_ar_lp_xxx",
+        "https://test.tlpdaisy.com/aec_1c_ar_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Aluar": {
+      "label": "Aluar",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/alr_es_8_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "DU": {
+      "label": "DU",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/dud_s_1_ar_lp_xxx",
+        "https://test.tlpdaisy.com/dud_l_ar_lp_xxx",
+        "https://test.tlpdaisy.com/dud_s_2_ar_lp_xxx",
+        "https://test.tlpdaisy.com/dud_s_3_ar_lp_xxx",
+        "https://test.tlpdaisy.com/dud_s_4_ar_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "HCI": {
+      "label": "HCI",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/hci_ar_fm_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Banco Azul": {
+      "label": "Banco Azul",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/baz_388_xxx",
+        "https://lpr.designinvestcircle.com/baz_es_lp_dii",
+        "https://lpa.readmediadirect.com/baz_2_es_lp_rmd"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "BCP": {
+      "label": "BCP",
+      "lp_urls": [
+        "https://lpa.insightdaily-team.com/cbpp_7227_1_es_lp_idt",
+        "https://lpa.newsreader-zone.com/cbpp_7730_1_es_lat_lp_nrn"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Bimbo": {
+      "label": "Bimbo",
+      "lp_urls": [
+        "https://lpa.cognoversezone.com/bmb_7878_3_es_mx_cze",
+        "https://lpa.quick-new-advisory.com/bmb_clc_ec_lp_qna"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Doctor": {
+      "label": "Doctor",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/ar_dr_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "YPF": {
+      "label": "YPF",
+      "lp_urls": [
+        "https://lpa.webarticleaccess.com/yfp_2_es_lp_was"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Establishment Labs": {
+      "label": "Establishment Labs",
+      "lp_urls": [
+        "https://lpa.infoblogreportr.com/esl_4_es_lat_ibr",
+        "https://lpa.infoblogreportr.com/esl_2_es_lat_ibr",
+        "https://lpa.infoblogreportr.com/esl_1_es_lat_ibr"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "FAB": {
+      "label": "FAB",
+      "lp_urls": [
+        "https://lpr.techdomain-zone.com/tcbm_ar_fm_tdz"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Gold": {
+      "label": "Gold",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/gold_ar_lp_xxx",
+        "https://test.tlpdaisy.com/gold_ar_lp_tlp",
+        "https://lpa.read-wisetrack.com/gld_es_1_rtw"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Jumbo": {
+      "label": "Jumbo",
+      "lp_urls": [
+        "https://lpa.designpeakzon.com/jum_es_2_lp_dzp",
+        "https://lpa.designpeakzon.com/jum_es_1_lp_dzp",
+        "https://test.tlpdaisy.com/jbm_es_clc_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "KPC": {
+      "label": "KPC",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/cpk_ar_1_tlp",
+        "https://test.tlpdaisy.com/cpk_ar_2_tlp"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Lulu": {
+      "label": "Lulu",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/lul_ar_1_lp_xxx",
+        "https://test.tlpdaisy.com/lul_ar_3_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Mercado Libre": {
+      "label": "Mercado Libre",
+      "lp_urls": [
+        "https://lpr.mediaarticlebox.com/mrcd_21701_es_mab"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "PDO": {
+      "label": "PDO",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/odp_ar_1_tlp",
+        "https://test.tlpdaisy.com/odp_ar_2_tlp",
+        "https://test.tlpdaisy.com/odp_ar_fm_tlp"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "QIB": {
+      "label": "QIB",
+      "lp_urls": [
+        "https://lpr.latestsmartupdate.com/hvab_q_ar_lsu"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Stargate AR": {
+      "label": "Stargate AR",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/strt_ar_lp_xxx",
+        "https://test.tlpdaisy.com/strt_1_ar_lp_xxx",
+        "https://test.tlpdaisy.com/strt_2_ar_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Open AI": {
+      "label": "Open AI",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/opa_b_ar_lp_xxx",
+        "https://test.tlpdaisy.com/opa_d_1_ar_lp_xxx",
+        "https://test.tlpdaisy.com/opa_d_2_ar_lp_xxx",
+        "https://test.tlpdaisy.com/opa_w_1_ar_lp_xxx",
+        "https://test.tlpdaisy.com/opa_m_2_ar_lp_xxx",
+        "https://test.tlpdaisy.com/opa_l_1_ar_lp_xxx",
+        "https://test.tlpdaisy.com/opa_l_2_ar_lp_xxx",
+        "https://test.tlpdaisy.com/opa_a1_w_es_lp_xxx",
+        "https://lpa.onewebinsight.com/opa_a2_m_es_lp_owi",
+        "https://test.tlpdaisy.com/opa_b1_m_es_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Ziyad Atharwa": {
+      "label": "Ziyad Atharwa",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/zia_ar_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Al Ansari": {
+      "label": "Al Ansari",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/react_aea_8131",
+        "https://test.tlpdaisy.com/alas_en_lp",
+        "https://test.tlpdaisy.com/aea_ar_fm_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "EPAM": {
+      "label": "EPAM",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/epam_es_xxx",
+        "https://test.tlpdaisy.com/epam_es_v1_xxx",
+        "https://test.tlpdaisy.com/epam_es_v2_xxx",
+        "https://test.tlpdaisy.com/epam_es_v3_xxx",
+        "https://test.tlpdaisy.com/epam_es_v4_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Grupo Nutresa": {
+      "label": "Grupo Nutresa",
+      "lp_urls": [
+        "https://lpa.discoverlinemore.com/tsbc_es_dlm/",
+        "https://lpa.newspottrend.com/cib_es_co_nsd"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "TradeGPT": {
+      "label": "TradeGPT",
+      "lp_urls": [
+        "https://lpa.articleflowweb.com/aitr_4_es_lat_afw",
+        "https://lpa.meredy-zoom.com/tgp_pt_2_lp_mz",
+        "https://lpa.newspot-zone.com/tgp_en_4_lat_lp_npz",
+        "https://lpa.bloginsightzone.com/ai_en_v1_bze",
+        "https://lpa.newsreviewarticles.com/tgp_es_4_lat_lp_nra"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Bancolombia": {
+      "label": "Bancolombia",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/bcol_258_xxx",
+        "https://lpa.columnlink.com/bcol_es_co_lp_clk",
+        "https://test.tlpdaisy.com/bnc_388_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Avianca": {
+      "label": "Avianca",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/avc_es_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "GEB": {
+      "label": "GEB",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/geb_es_v3_1_fm_xxx",
+        "https://test.tlpdaisy.com/geb_es_p2_1_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Rappi": {
+      "label": "Rappi",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/rpp_1_es_lp_xxx",
+        "https://test.tlpdaisy.com/rpp_2_es_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Ecopetrol": {
+      "label": "Ecopetrol",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/eptr_es_co_8_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Grupo Aval": {
+      "label": "Grupo Aval",
+      "lp_urls": [
+        "https://lpa.toparticlesway.com/zvsk_2_es_lp_taw"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "SQM": {
+      "label": "SQM",
+      "lp_urls": [
+        "https://lpa.bloggtracks.com/sqm_lat_cl_btk"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Cervesaria Nacional": {
+      "label": "Cervesaria Nacional",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/crv_vid_es_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Banco De Guatemala": {
+      "label": "Banco De Guatemala",
+      "lp_urls": [
+        "https://lpa.techflowdesk.com/qigp_es_lp_tfd",
+        "https://lpa.techdigestview.com/bngt_7189_1_es_gt_lp_tdv"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Boubyan Bank": {
+      "label": "Boubyan Bank",
+      "lp_urls": [
+        "https://lpa.newsblogfactor.com/boub_7787_3_ar_fm_nbf",
+        "https://test.tlpdaisy.com/boub_2_fm_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Banorte": {
+      "label": "Banorte",
+      "lp_urls": [
+        "https://lpa.read-itnowbest.com/zvsz_21701_es_mx_rib",
+        "https://lpa.mediastory-tone.com/bnr_6813_es_lp_mst",
+        "https://lpa.read-itnowbest.com/bnr_c_lp_rib"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Liva": {
+      "label": "Liva",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/lvi_fm_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Holcim": {
+      "label": "Holcim",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/hlcm_es_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Enel": {
+      "label": "Enel",
+      "lp_urls": [
+        "https://lpa.newsinsightline.com/nel_co_8_lp_nil"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Al Salam Bank": {
+      "label": "Al Salam Bank",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/slbk_2_fm_xxx",
+        "https://test.tlpdaisy.com/slbk_1_fm_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Herdez": {
+      "label": "Herdez",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/hrdz_es_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Trade Vector AI": {
+      "label": "Trade Vector AI",
+      "lp_urls": [
+        "https://lpr.blognewschain.com/ait_tva_l1_ar_lp_bgc"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Finance Eagle": {
+      "label": "Finance Eagle",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/fie_2_lp_xxx",
+        "https://test.tlpdaisy.com/fie_a_ar_lp_xxx",
+        "https://test.tlpdaisy.com/fie_d_ar_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "AAY": {
+      "label": "AAY",
+      "lp_urls": [
+        "https://lpr.discoverwebcore.com/acd_ar_fm_dwc"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Quatar Energy": {
+      "label": "Quatar Energy",
+      "lp_urls": [
+        "https://test.tlpdaisy.com/qten_l_ar_lp_xxx",
+        "https://lpa.articleresearchzone.com/qtre_ar_fm_cze"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Amzon": {
+      "label": "Amzon",
+      "lp_urls": [
+        "https://lpa.toolcloudscope.com/amz_26725_es_4_lat_tcs"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    }
+  }
+}

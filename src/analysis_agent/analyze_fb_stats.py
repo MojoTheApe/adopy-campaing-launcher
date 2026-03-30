@@ -20,6 +20,11 @@ from config.analysis_rules import (
     get_text_segment_fallback,
 )
 from config.paths import get_excel_path
+from src.knowledge_agent.knowledge_base import (
+    format_target_context_line,
+    resolve_target_code,
+    log_unknown_target,
+)
 
 USE_LATEST_DATE_ONLY = False
 _get_excel_path = get_excel_path
@@ -182,7 +187,28 @@ def enrich_structure(df: pd.DataFrame) -> pd.DataFrame:
     # Offer is always taken from Ad Asset column
     df["Offer"] = df["Ad Asset"].fillna("").astype(str).str.strip()
 
+    # Log any Interest values not found in Knowledge Base
+    _log_unknown_interests(df)
+
     return df
+
+
+def _log_unknown_interests(df: pd.DataFrame) -> None:
+    """Проверить все уникальные значения Interest против KB и залогировать неизвестные."""
+    if "Interest" not in df.columns or "Adset Name" not in df.columns:
+        return
+    skip_values = {"", "nan", "none", "wide"}
+    unique_interests = (
+        df["Interest"].dropna().astype(str).str.strip().unique()
+    )
+    for interest in unique_interests:
+        if interest.lower() in skip_values:
+            continue
+        if resolve_target_code(interest) is None:
+            # Find an example adset name for context
+            example_rows = df[df["Interest"].astype(str).str.strip() == interest]["Adset Name"]
+            source = str(example_rows.iloc[0]) if not example_rows.empty else ""
+            log_unknown_target(interest, source=source)
 
 
 def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
@@ -281,7 +307,7 @@ def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
-def format_combo_row(row: pd.Series) -> str:
+def format_combo_row(row: pd.Series, with_context: bool = False) -> str:
     country = str(row.get("Country Final") or "").strip()
     country_code_raw = row.get("Country Code")
     country_code = (
@@ -312,14 +338,20 @@ def format_combo_row(row: pd.Series) -> str:
 
     stats_line = f"Stats: Deposits: {deposits} | Leads: {leads} | CPL: ${cpl:.2f} | CPA: ${cpa:.2f} | CR: {cr:.2f}%"
 
+    context_line = ""
+    if with_context:
+        ctx = format_target_context_line(interest)
+        if ctx:
+            context_line = f"\n{ctx}"
+
     return f"""{line_header}
 [{category_label}]
 {combo_line}
-{stats_line}
+{stats_line}{context_line}
 """
 
 
-def print_report(combos: pd.DataFrame) -> None:
+def print_report(combos: pd.DataFrame, with_context: bool = False) -> None:
     if combos.empty:
         print("No qualifying combos found based on current rules.")
         return
@@ -350,7 +382,7 @@ def print_report(combos: pd.DataFrame) -> None:
             continue
 
         for _, row in top_n.iterrows():
-            print(format_combo_row(row))
+            print(format_combo_row(row, with_context=with_context))
 
 
 def _strip_date_from_display(s: str) -> str:
@@ -596,6 +628,7 @@ def main(
     top_n: int = 2,
     output_path: Optional[str] = None,
     short_report: bool = False,
+    with_context: bool = False,
 ) -> None:
     excel_path = excel_path or _get_excel_path()
     if not os.path.exists(excel_path):
@@ -626,7 +659,7 @@ def main(
         if short_report:
             print_short_report(combos, top_per_country=top_n, df=df)
             return
-        print_report(combos)
+        print_report(combos, with_context=with_context)
 
         all_countries = sorted(
             c for c in df["Country Final"].dropna().astype(str).unique()
@@ -689,6 +722,12 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Short report: top N combos per country only (N from --top, default 2)",
     )
+    parser.add_argument(
+        "--with-context",
+        action="store_true",
+        dest="with_context",
+        help="Show target context from Knowledge Base below each combo stats line",
+    )
     return parser.parse_args()
 
 
@@ -700,4 +739,5 @@ if __name__ == "__main__":
         top_n=args.top,
         output_path=args.output,
         short_report=getattr(args, "short", False),
+        with_context=getattr(args, "with_context", False),
     )
