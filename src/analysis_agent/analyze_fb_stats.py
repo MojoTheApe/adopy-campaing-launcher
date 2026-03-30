@@ -86,19 +86,26 @@ def parse_adset_name(
             break
 
     if device_idx == -1:
-        return country_code, None, None, None
+        # Fallback: no explicit Device keyword found — assume "all" and parse from
+        # after the offer token (position 1), so creative/interest/age can still be extracted.
+        device = "all"
+        device_idx = 1  # skip CountryCode (0) and OfferName (1)
 
     remaining = parts[device_idx + 1:]
 
-    # Step 2: find Age — first numeric-like part in range
+    # Step 2: find Age — first part whose digit content falls in [age_min, age_max].
+    # Handles plain "25", "35+", and prefixed forms like "I35" or "A40".
     age: Optional[str] = None
     age_idx: int = -1
     for i, p in enumerate(remaining):
-        p_clean = p.rstrip("+")
-        if p_clean.isdigit():
-            n = int(p_clean)
+        if "." in p:
+            continue
+        p_digits = "".join(ch for ch in p if ch.isdigit())
+        if p_digits:
+            n = int(p_digits)
             if age_min <= n <= age_max:
-                age = p
+                # Keep the original token as Age label (e.g. "35+"), normalise prefixed forms
+                age = p_digits if not p.rstrip("+").isdigit() else p
                 age_idx = i
                 break
 
