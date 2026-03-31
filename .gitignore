@@ -21,6 +21,7 @@ output/*.md
 
 # Secrets (never commit)
 .env
+config/google_credentials.json
 
 # OS
 .DS_Store
