@@ -1,9 +1,15 @@
 # Landing Pages
 
 Авто-генерируется скриптом `scripts/parse_landing_pages.py`.
-_Последний запуск: 2026-03-31 21:05_
+_Последний запуск: 2026-03-31 22:28_
 
-**Сводка:** OK: 179 | Broken: 0 | Без URL: 2
+**Сводка:** OK: 189 | Broken: 1 | Без URL: 2
+
+## ⚠ Broken URLs (требуют замены)
+
+- **AI Trader**: `https://lpa.articleguidehub.com/ait_rbt_5_es_lp_agh` — Connection error: HTTPSConnectionPool(host='lpa.articleguidehub.com', port=443): Max retries exceeded with url: /ait_rbt_5_es_lp_agh (Caused by NameResolutionError("HTTPSConnection(host='lpa.articleguidehub.com', port=443): Failed to resolve 'lpa.articleguidehub.com' ([Errno 11001] getaddrinfo failed)"))
+
+---
 
 ## Amazon
 
@@ -35,13 +41,6 @@ _Последний запуск: 2026-03-31 21:05_
 - **Meta description:** Read It Now Best
 - **CTA:** Empezar ahora
 
-### `https://test.tlpdaisy.com/ait_rbt_5_es_lp_xxx`
-
-- **Статус:** OK (HTTP 200)
-- **Title:** TEST domain
-- **Meta description:** TEST domain
-- **CTA:** Comenzar ahora
-
 ### `https://lpa.readme-up-spt.com/zma_8315_es_sv_lp_rut`
 
 - **Статус:** OK (HTTP 200)
@@ -62,6 +61,20 @@ _Последний запуск: 2026-03-31 21:05_
 - **Title:** Review Tech Desk
 - **Meta description:** Review Tech Desk
 - **CTA:** Comenzar
+
+### `https://lpa.fusionboardview.com/amz_26725_es_4_lat_fbv`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** Fusion Board View
+- **Meta description:** Fusion Board View
+- **CTA:** Obtener información
+
+### `https://test.tlpdaisy.com/ait_rbt_5_es_lp_xxx`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Comenzar ahora
 
 ---
 ## AI Trader
@@ -191,6 +204,13 @@ _Последний запуск: 2026-03-31 21:05_
 - **Meta description:** TEST domain
 - **CTA:** Comenzar ahora
 
+### `https://test.tlpdaisy.com/ait_cg_ar_lp_xxx`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** متابعة
+
 ### `https://test.tlpdaisy.com/aitr_ar_lp`
 
 - **Статус:** OK (HTTP 200)
@@ -229,6 +249,11 @@ _Последний запуск: 2026-03-31 21:05_
 - **Title:** News Portal Line
 - **Meta description:** News Portal Line
 - **CTA:** Empezar
+
+### `https://lpa.articleguidehub.com/ait_rbt_5_es_lp_agh`
+
+- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.articleguidehub.com', port=443): Max retries exceeded with url: /ait_rbt_5_es_lp_agh (Caused by NameResolutionError("HTTPSConnection(host='lpa.articleguidehub.com', port=443): Failed to resolve 'lpa.articleguidehub.com' ([Errno 11001] getaddrinfo failed)"))
+- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
 
 ### `https://lpa.groupmax-mrs.com/aitr_3_tbl_es_gfg`
 
@@ -511,6 +536,30 @@ _LP URLs не настроены_
 - **Meta description:** Web Data Insight
 - **CTA:** ¡Sí, me gustaría probar el poder de la IA combinado con el comercio!
 
+### `https://lpa.articleflowweb.com/aitr_4_es_lat_afw`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** articleflowweb.com
+
+### `https://test.tlpdaisy.com/ewys_2_pt_r_sss`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Vamos começar
+
+### `https://test.tlpdaisy.com/quat_en_4_lp_tlp`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Sign up
+
+### `https://lpa.bloginsightzone.com/ai_en_v1_bze`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** bloginsightzone.com
+
 ---
 ## NVIDIA
 
@@ -569,6 +618,20 @@ _LP URLs не настроены_
 - **Meta description:** TEST domain
 - **CTA:** ابدأ الآن
 
+### `https://test.tlpdaisy.com/adnc_n_ar_lp_xxx`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** ابدأ الآن
+
+### `https://test.tlpdaisy.com/adnc_n2_ar_lp_xxx`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** ابدأ الآن
+
 ---
 ## AES
 
@@ -591,16 +654,6 @@ _LP URLs не настроены_
 
 - **Статус:** OK (HTTP 200)
 - **Title:** ai-chatrade.com
-
----
-## AIT AR
-
-### `https://test.tlpdaisy.com/ait_cg_ar_lp_xxx`
-
-- **Статус:** OK (HTTP 200)
-- **Title:** TEST domain
-- **Meta description:** TEST domain
-- **CTA:** متابعة
 
 ---
 ## Alec
@@ -1406,5 +1459,32 @@ _LP URLs не настроены_
 - **Title:** Fusion Board View
 - **Meta description:** Fusion Board View
 - **CTA:** Obtener información
+
+---
+## Grupo Herdez
+
+### `https://test.tlpdaisy.com/hrdz_es_lp_xxx`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Solicitar información
+
+---
+## Qatar Energy
+
+### `https://test.tlpdaisy.com/qten_l_ar_lp_xxx`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** استثمر الآن
+
+### `https://lpa.readtechfocus.com/qtre_ar_fm_rtf`
+
+- **Статус:** OK (HTTP 200)
+- **Title:** Read Tech Focus
+- **Meta description:** Read Tech Focus
+- **CTA:** سجل هنا
 
 ---

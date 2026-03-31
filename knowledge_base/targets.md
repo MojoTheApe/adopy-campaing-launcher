@@ -257,7 +257,7 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ---
 ## OnlineGaming — OnlineGaming
 
-- **FB Interest:** Blizzard Entertainment, Call of Duty, Epic Games, FIFA, Fortnite, Gamer, Grand Theft Auto, Grand Theft Auto V, League of Legends, MMORPG, MMORPG, Nintendo, PC Gamer, PlayStation, PlayStation 4, PlayStation Network, PlayStation Store, Roblox, Rockstar Games, Twitch, Ubisoft, Video game developer, Xbox, Xbox One, Esports teams, Strategy video game, Video game publisher, Video game related content, Online games, Video games
+- **FB Interest:** Blizzard Entertainment, Call of Duty, Epic Games, FIFA, Fortnite, Gamer, Grand Theft Auto, Grand Theft Auto [AND], League of Legends, MMORPG, MMORPG, Nintendo, PC Gamer, PlayStation, PlayStation 4, PlayStation Network, PlayStation Store, Roblox, Rockstar Games, Twitch, Ubisoft, Video game developer, Xbox, Xbox One, Esports teams, Strategy video game, Video game publisher, Video game related content, Online games, Video games
 - **Аудитория:** —
 
 ---
@@ -314,8 +314,50 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ---
 ## Mix2 — Mix2
 
-- **FB Interest:** Investment banking, Asset management, Private banking, Private equity, Wealth management, Personal finance [AND] All-news radio, E-books, News magazine, News broadcasting, Online newspaper, Local news, Books, Breaking news, News media, Newspapers, Sporting News
+- **FB Interest:** Investment banking, Asset management, Private banking, Private equity, Wealth management, Investment banking, Personal finance [AND] All-news radio, E-books, ESPNews, Opera News, News magazine, Sport (Spanish newspaper), News broadcasting, Record (newspaper), Online newspaper, Local news, Books, International News Service v. Associated Press, Science News, Breaking news, News media, Newspapers, Sporting News
 - **Аудитория:** Комбо: финансы + читатели новостей. AND-логика: финансовые интересы И медиа/новости
 - **Примечание:** V в Google Sheet = Narrow Further (Define Further) в FB — аудитория должна соответствовать ОБЕИМ группам.
+
+---
+## Mix1 — Mix1
+
+- **FB Interest:** Investment banking, Asset management, Private banking, Private equity, Wealth management, Investment banking, Personal finance [AND] Frequent international travelers, Business class, Business jet, FirstClass, Horse racing, Luxury, Luxury Resorts, Luxury vehicle, Yacht club
+- **Аудитория:** —
+
+---
+## MIX3 — MIX3
+
+- **FB Interest:** Investment banking, Asset management, Private banking, Private equity, Wealth management, Investment banking, Personal finance [AND] Swing trading, Stock market index, Financial market, Day trading, Stock exchange, FxPro, Forex signal, Passive income, MetaTrader 4, CMC Markets, Foreign exchange market, Stock market, FXCM, Interactive Brokers, Stock market index future, Algorithmic trading, EToro, E-Trade, Stock Market Learning, Alpari Group, Plus500, Return on investment, High-frequency trading
+- **Аудитория:** —
+
+---
+## MIX4: — MIX4:
+
+- **FB Interest:** Investment banking, Asset management, Private banking, Private equity, Wealth management, Investment banking, Personal finance [AND] Sky Betting and Gaming, Betfred, Gambling, Sports betting, Online poker, Paddy Power, Lottery, Online gambling, Sportingbet, Bwin.Party Digital Entertainment, Slot machine, Bookmaker, Casino games, Unibet, Betfair, Casino, Ladbrokes, Betsson, Bet365, Sportsbet.com.au or Tipico
+- **Аудитория:** —
+
+---
+## MIX5: — MIX5:
+
+- **FB Interest:** Day trading, Trading strategy, Algorithmic trading, Swing trading, Retail foreign exchange trading, XTB Online Trading, High-frequency trading, Forex Online Trading, Online Trading Academy
+- **Аудитория:** —
+
+---
+## MIXEZ — MIXEZ
+
+- **FB Interest:** Trading strategy, Day trading, FxPro, CMC Markets, FXCM, EToro, E-Trade, Plus500
+- **Аудитория:** —
+
+---
+## Foreign exchange market, Investor, Stock exchange, Stock market — Foreign exchange market, Investor, Stock exchange, Stock market
+
+- **FB Interest:** MIX 7
+- **Аудитория:** —
+
+---
+## All-news radio, E-books, News magazine, News broadcasting, Literature, Online newspaper, Local news, Books, Breaking news, News media, Newspapers, Current events, Journalism — All-news radio, E-books, News magazine, News broadcasting, Literature, Online newspaper, Local news, Books, Breaking news, News media, Newspapers, Current events, Journalism
+
+- **FB Interest:** Wealth Managment
+- **Аудитория:** —
 
 ---
