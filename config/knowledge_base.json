@@ -503,14 +503,19 @@
       "usp": "Покупай акции Amazon — бренд, которому доверяют все",
       "notes": "Массовый оффер, работает с широкой аудиторией за счёт узнаваемости бренда.",
       "lp_urls": [
-        "https://lpa.tech-focuszone.com/maz_21701_es_mx_uoz",
-        "https://test.tlpdaisy.com/amz_new_es_lp_xxx",
+        "https://lpa.justhappywhistle.com/maz_21701_es_mx_jhn/",
+        "https://lpa.reviewtechdesk.com/amz_new_es_lp_rtd",
         "https://test.tlpdaisy.com/amz_8_xxx",
         "https://lpa.read-itnowbest.com/amz_29959_es_lp_rib",
-        "https://test.tlpdaisy.com/ait_rbt_5_es_lp_xxx",
         "https://lpa.readme-up-spt.com/zma_8315_es_sv_lp_rut",
-        "https://lpa.researchlayerflow.com/amz_7844_9_es_lp_rly",
-        "https://lpa.reviewtechdek.com/amz_5738_l1_es_mx_lp_rtd"
+        "https://lpa.reviewmediabasezone.com/amz_7844_9_es_lp_rmb",
+        "https://lpa.discoverflowdesk.com/amz_5738_l1_es_mx_lp_dfd",
+        "https://lpa.toolcloudscope.com/amz_26725_es_4_lat_tcs"
+      ],
+      "aliases": [
+        "Amazon Native Test",
+        "Amz test 17.02",
+        "SuccessFX - Amazon"
       ]
     },
     "AI Trader": {
@@ -529,36 +534,57 @@
       "usp": "Алгоритм торгует вместо вас — пассивный доход от ИИ",
       "notes": "Растёт на волне хайпа вокруг ИИ. Хорошо цепляет в футуристических креативах.",
       "lp_urls": [
-        "https://test.tlpdaisy.com/ait_vid_ar_lp_xxx",
-        "https://test.tlpdaisy.com/ait_ai12_ar_xxx",
+        "https://lpr.webblogrise.com/ait_vid_ar_lp_wbr",
+        "https://lpa.discover-web-dailly.com/ait_ai12_ar_dwd",
         "https://test.tlpdaisy.com/ait_trd_ae_xxx",
         "https://lpa.web-smartradius.com/trd_383_es_lp_wsr",
         "https://lpa.news-portalline.com/ait_v_2_es_lp_npl",
-        "https://lpa.articlemodel.com/aitr_999_es_aml",
+        "https://lpa.readanddiscoverzones.com/aitr_999_es_adz",
         "https://test.tlpdaisy.com/ait_2_new8_es_lp_xxx",
         "https://test.tlpdaisy.com/ait_2_vid_es_lp_xxx",
-        "https://lpa.news-portalline.com/ait_vid_es_lp_npl",
-        "https://lpa.readmatrixflow.com/ait_555_es_rmf",
+        "https://lpa.readcenterblog.com/ait_vid_es_lp_rcg",
+        "https://lpa.webpilotzon.com/ait_555_es_wpz",
         "https://test.tlpdaisy.com/ait_1_new8_es_lp_xxx",
         "https://test.tlpdaisy.com/ait_1_vid_es_lp_xxx",
-        "https://lpa.blogvector-mootion.com/aitr1_es_lat_bvm",
+        "https://lpa.newshivefind.com/aitr1_es_lat_nhf",
         "https://test.tlpdaisy.com/ait_es_gif_8_xxx",
         "https://test.tlpdaisy.com/ait_rbt_5_es_lp_xxx",
         "https://test.tlpdaisy.com/ait_345_1_es_lp_xxx",
-        "https://test.tlpdaisy.com/ait_c_es_lp_xxx",
+        "https://lpa.reviewshubspotzone.com/ait_c_es_lp_rhs",
         "https://lpa.news-visionpoint.com/ait_m_es_lp_nvp",
         "https://test.tlpdaisy.com/ait_l_es_lp_xxx",
+        "https://test.tlpdaisy.com/ait_cg_ar_lp_xxx",
         "https://test.tlpdaisy.com/aitr_ar_lp",
         "https://test.tlpdaisy.com/aitr_4_ar_tlp",
         "https://test.tlpdaisy.com/aitr_3_ar_tlp",
         "https://lpa.readchainmode.com/ait_ec_8_rcn",
         "https://test.tlpdaisy.com/gpt_gt_8_xxx",
         "https://lpa.news-portalline.com/gpt_es_mx_npl",
-        "https://lpa.groupmax-mrs.com/aitr_3_tbl_es_gfg",
-        "https://lpa.blogvector-mootion.com/aitr1_es_lat_bvm",
+        "https://lpa.articleguidehub.com/ait_rbt_5_es_lp_agh",
+        "https://lpa.readcloudx.com/aitr_3_tbl_es_rxc",
+        "https://lpa.websolutionlaunch.com/aitr1_es_lat_wls",
         "https://lpa.articleandread.com/ait_1_es_lat_add",
         "https://lpa.focusarticlesline.com/ait_new8_es_lp_fla",
         "https://lpa.articleandread.com/ait_3_tbl_es_add"
+      ],
+      "aliases": [
+        "Ait AR",
+        "AI Trader AR",
+        "Ai trader Latam",
+        "AI Trader Dec 25",
+        "AI Trader ES left",
+        "AI Trader ES Long",
+        "AI Trader ES right",
+        "AI Trader test 12.01",
+        "AI Trader Testimonials",
+        "AI Trader AR Test 06.01",
+        "Ait 29.01",
+        "AR AI Trader Text",
+        "EC AI Trader Robot",
+        "GT AI Trader Robot",
+        "MX AI Trader Robot",
+        "ES Ai trader 09.02 Test",
+        "SuccessFX - AI Trader ES Long"
       ]
     },
     "Salik": {
@@ -574,7 +600,7 @@
       "usp": "Инвестируй в Salik — местная компания на Dubai Financial Market",
       "notes": "Гео-специфичный оффер. Работает только в ОАЭ.",
       "lp_urls": [
-        "https://lpr.blogmatrixhubzone.com/slk_7787_3_ar_fm_bmh",
+        "https://lpa.reviewnewsblog.com/zzsa_7787_3_ar_fm_rng/",
         "https://test.tlpdaisy.com/slk_999_xxx",
         "https://test.tlpdaisy.com/slk_1_4_ar_lp_xxx",
         "https://test.tlpdaisy.com/slk_n_ar_lp_xxx",
@@ -586,6 +612,13 @@
         "https://test.tlpdaisy.com/slk_1_5_ar_lp_xxx",
         "https://test.tlpdaisy.com/slk_1_3_ar_lp_xxx",
         "https://test.tlpdaisy.com/slk_1_6_ar_lp_xxx"
+      ],
+      "aliases": [
+        "Salik News",
+        "Salik test 20.01",
+        "Salik 04.02 test 1",
+        "Salik 04.02 test 2",
+        "Salik 04.02 test 3"
       ]
     },
     "Banco Industrial": {
@@ -601,7 +634,10 @@
       "notes": "Сильный бренд в Гватемале. Комбинировать с FX/Trading таргетами.",
       "lp_urls": [
         "https://test.tlpdaisy.com/bni_258_xxx",
-        "https://lpa.newshorizonlab.com/bni_7910_1_es_gt_nhl"
+        "https://lpr.newtechreach.com/qlnd_7910_1_es_gt_ntr"
+      ],
+      "aliases": [
+        "Banco industrial Flag"
       ]
     },
     "Favorita": {
@@ -616,9 +652,10 @@
       "usp": "Инвестируй в компанию, которая уже в каждом доме",
       "notes": "Местный бренд. EC показал ROI 36x в лучших кампаниях.",
       "lp_urls": [
-        "https://lpr.circlecloudflow.com/fvrt_2_es_lp_ccf",
+        "https://lpr.viewnewstrove.com/ccf_2_es_lp_vns",
         "https://test.tlpdaisy.com/fvrt_8_xxx"
-      ]
+      ],
+      "aliases": []
     },
     "CCorg": {
       "label": "CC Organic / Crypto",
@@ -652,26 +689,47 @@
       "lp_urls": [
         "https://test.tlpdaisy.com/tgp_ar_dr2_lp_xxx",
         "https://test.tlpdaisy.com/tgp_ar_dr3_lp_xxx",
-        "https://test.tlpdaisy.com/pgt_c92_ar_1_lp_sss",
-        "https://lpr.web-starterspot.com/tgp_ar_2_lp_wst",
-        "https://test.tlpdaisy.com/tgp_ar_lp_xxx",
+        "https://lpa.redlinkerzone.com/tgp_gcc_1_lp_rkn",
+        "https://lpa.readwebstack.com/tgp_ar_2_lp_rws",
+        "https://lpa.readwebstack.com/tgp_ar_lp_rws",
         "https://test.tlpdaisy.com/tgp_sp_oph_lp_xxx",
         "https://test.tlpdaisy.com/trd_ec_88_xxx",
-        "https://test.tlpdaisy.com/tgp_ar_lp_xxx",
-        "https://test.tlpdaisy.com/tgp_ar_lp_xxx",
+        "https://lpr.varietyhorizon.com/tgp_ar_lp_vah",
+        "https://lpr.promotion-nesthub.com/tgp_gcc_1_lp_pnb",
         "https://test.tlpdaisy.com/tgp_sp_gb_lp_xxx",
         "https://test.tlpdaisy.com/tgp_c1_ar_xxx",
         "https://test.tlpdaisy.com/tgp_c2_ar_xxx",
         "https://test.tlpdaisy.com/tgp_c3_ar_xxx",
         "https://lpa.newsreviewarticles.com/tgp_es_4_lat_lp_nra",
-        "https://lpr.web-starterspot.com/tgp_ar_2_lp_wst",
-        "https://lpa.webdatainsigt.com/tgp_es_4_lat_lp_wdi"
+        "https://lpa.readcenterblog.com/tgp_ar_2_lp_rcg",
+        "https://lpa.webarticleaccess.com/tgp_es_4_lat_lp_was",
+        "https://lpa.articleflowweb.com/aitr_4_es_lat_afw",
+        "https://lpa.meredy-zoom.com/tgp_pt_2_lp_mz",
+        "https://lpa.newspot-zone.com/tgp_en_4_lat_lp_npz",
+        "https://lpa.bloginsightzone.com/ai_en_v1_bze"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Trade GPT 4",
+        "Trade GPT EC",
+        "Trade GPT ARG",
+        "KW - Trade GPT",
+        "TradeGPT Doctor",
+        "AR -Trade GPT - $",
+        "Fxroad - TradeGPT",
+        "UAE - Trade GPT c1",
+        "UAE - Trade GPT c2",
+        "UAE - Trade GPT c3",
+        "UAE - Trade GPT c4",
+        "UAE -Trade GPT - AED",
+        "AR - $ Trade GPT Doctor",
+        "SuccessFX - Trade GPT 4",
+        "Latam - TradeGPT Ophelia"
+      ]
     },
     "NVIDIA": {
       "label": "NVIDIA",
@@ -683,7 +741,8 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Quantum AI": {
       "label": "Quantum AI",
@@ -695,31 +754,40 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Adnoc": {
       "label": "Adnoc",
       "lp_urls": [
         "https://test.tlpdaisy.com/adnc_258_xxx",
-        "https://lpr.blogmatrixhubzone.com/adnc_ar_fm_bmh",
-        "https://test.tlpdaisy.com/adnc_b_ar_lp_xxx"
+        "https://lpr.webnewsource.com/nc_ar_fm_wne",
+        "https://test.tlpdaisy.com/adnc_b_ar_lp_xxx",
+        "https://test.tlpdaisy.com/adnc_n_ar_lp_xxx",
+        "https://test.tlpdaisy.com/adnc_n2_ar_lp_xxx"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Adnoc Flag",
+        "Adnoc News",
+        "AR Adnoc News"
+      ]
     },
     "AES": {
       "label": "AES",
       "lp_urls": [
-        "https://lpa.toptech-key.com/esaaa_8_ttk"
+        "https://lpa.newsupdatefeed.com/esaaa_8_nuf/"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Ai Chat Trader": {
       "label": "Ai Chat Trader",
@@ -731,18 +799,8 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
-    },
-    "AIT AR": {
-      "label": "AIT AR",
-      "lp_urls": [
-        "https://test.tlpdaisy.com/ait_cg_ar_lp_xxx"
-      ],
-      "language": [],
-      "top_countries": [],
-      "audience": "",
-      "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Alec": {
       "label": "Alec",
@@ -754,7 +812,8 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Aluar": {
       "label": "Aluar",
@@ -765,7 +824,10 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Aluar ARG"
+      ]
     },
     "DU": {
       "label": "DU",
@@ -780,7 +842,11 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "AR - DU 1",
+        "AR - DU 2"
+      ]
     },
     "HCI": {
       "label": "HCI",
@@ -791,44 +857,52 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "AR -HCI Holding"
+      ]
     },
     "Banco Azul": {
       "label": "Banco Azul",
       "lp_urls": [
         "https://test.tlpdaisy.com/baz_388_xxx",
-        "https://test.tlpdaisy.com/baz_es_lp_xxx",
-        "https://test.tlpdaisy.com/baz_2_es_lp_xxx"
+        "https://lpr.designinvestcircle.com/baz_es_lp_dii",
+        "https://lpa.readmediadirect.com/baz_2_es_lp_rmd"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Banco Azul Flag"
+      ]
     },
     "BCP": {
       "label": "BCP",
       "lp_urls": [
-        "https://lpa.news-readerzone.com/cbpp_7227_1_es_lp_nrn",
-        "https://lpa.zone-tech-insight.com/cbpp_7730_1_es_lat_lp_zti"
+        "https://lpa.insightdaily-team.com/cbpp_7227_1_es_lp_idt",
+        "https://lpa.newsreader-zone.com/cbpp_7730_1_es_lat_lp_nrn"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Bimbo": {
       "label": "Bimbo",
       "lp_urls": [
-        "https://test.tlpdaisy.com/react_bmo_7878_test",
+        "https://lpa.cognoversezone.com/bmb_7878_3_es_mx_cze",
         "https://lpa.quick-new-advisory.com/bmb_clc_ec_lp_qna"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Doctor": {
       "label": "Doctor",
@@ -839,18 +913,22 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "YPF": {
       "label": "YPF",
       "lp_urls": [
-        "https://lpa.systemtracknode.com/yfp_2_es_lp_stn"
+        "https://lpa.webarticleaccess.com/yfp_2_es_lp_was"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "ES ARG YPF"
+      ]
     },
     "Establishment Labs": {
       "label": "Establishment Labs",
@@ -863,44 +941,53 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "FAB": {
       "label": "FAB",
       "lp_urls": [
-        "https://lpr.read-masteryzone.com/tcbm_ar_fm_rzm"
+        "https://lpr.techdomain-zone.com/tcbm_ar_fm_tdz"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Fab"
+      ]
     },
     "Gold": {
       "label": "Gold",
       "lp_urls": [
         "https://test.tlpdaisy.com/gold_ar_lp_xxx",
-        "https://test.tlpdaisy.com/gold_ar_lp_xxx",
+        "https://test.tlpdaisy.com/gold_ar_lp_tlp",
         "https://lpa.read-wisetrack.com/gld_es_1_rtw"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Gold AR",
+        "SuccessFX - Gold"
+      ]
     },
     "Jumbo": {
       "label": "Jumbo",
       "lp_urls": [
-        "https://lpa.blogreadmod.com/jum_es_2_lp_bem",
-        "https://lpa.articlebase-x.com/jum_es_1_lp_abx",
+        "https://lpa.designpeakzon.com/jum_es_2_lp_dzp",
+        "https://lpa.designpeakzon.com/jum_es_1_lp_dzp",
         "https://test.tlpdaisy.com/jbm_es_clc_lp_xxx"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "KPC": {
       "label": "KPC",
@@ -912,7 +999,8 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Lulu": {
       "label": "Lulu",
@@ -924,18 +1012,20 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Mercado Libre": {
       "label": "Mercado Libre",
       "lp_urls": [
-        "https://lpa.webtrendvision.com/mrcd_21701_es_wtv"
+        "https://lpr.mediaarticlebox.com/mrcd_21701_es_mab"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "PDO": {
       "label": "PDO",
@@ -948,18 +1038,20 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "QIB": {
       "label": "QIB",
       "lp_urls": [
-        "https://lpr.webreviewjump.com/ibq_q_ar_wrj"
+        "https://lpr.latestsmartupdate.com/hvab_q_ar_lsu"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Stargate AR": {
       "label": "Stargate AR",
@@ -972,7 +1064,8 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Open AI": {
       "label": "Open AI",
@@ -992,7 +1085,13 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "UAE - Open AI Chip",
+        "UAE -Open AI Black - AED",
+        "UAE -Open AI White - AED",
+        "UAE -Open AI Person - AED"
+      ]
     },
     "Ziyad Atharwa": {
       "label": "Ziyad Atharwa",
@@ -1003,7 +1102,8 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Al Ansari": {
       "label": "Al Ansari",
@@ -1016,7 +1116,10 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Al Ansari AR"
+      ]
     },
     "EPAM": {
       "label": "EPAM",
@@ -1031,19 +1134,25 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Equity - EPAM"
+      ]
     },
     "Grupo Nutresa": {
       "label": "Grupo Nutresa",
       "lp_urls": [
-        "https://lpa.discoverreader.com/nut_es_dre",
-        "https://lpa.blogcirclecore.com/nut_es_co_bcc"
+        "https://lpa.discoverlinemore.com/tsbc_es_dlm/",
+        "https://lpa.newspottrend.com/cib_es_co_nsd"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Equity - Grupo Nutresa"
+      ]
     },
     "TradeGPT": {
       "label": "TradeGPT",
@@ -1064,14 +1173,19 @@
       "label": "Bancolombia",
       "lp_urls": [
         "https://test.tlpdaisy.com/bcol_258_xxx",
-        "https://test.tlpdaisy.com/bcol_es_co_lp_xxx",
+        "https://lpa.columnlink.com/bcol_es_co_lp_clk",
         "https://test.tlpdaisy.com/bnc_388_xxx"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "SuccessFX - Bancolombia",
+        "SuccessFX - Bancolombia New",
+        "Success FX - Bancolombia Flag"
+      ]
     },
     "Avianca": {
       "label": "Avianca",
@@ -1082,7 +1196,10 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "SuccessFX - Avianca"
+      ]
     },
     "GEB": {
       "label": "GEB",
@@ -1094,7 +1211,10 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "SuccessFX - GEB"
+      ]
     },
     "Rappi": {
       "label": "Rappi",
@@ -1106,7 +1226,10 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "SuccessFX - Rappi"
+      ]
     },
     "Ecopetrol": {
       "label": "Ecopetrol",
@@ -1117,29 +1240,38 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "SuccessFX - Ecopetrol"
+      ]
     },
     "Grupo Aval": {
       "label": "Grupo Aval",
       "lp_urls": [
-        "https://lpa.discoverblogzone.com/gav_2_es_lp_dbz"
+        "https://lpa.toparticlesway.com/zvsk_2_es_lp_taw"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "SuccessFX - Grupo Aval"
+      ]
     },
     "SQM": {
       "label": "SQM",
       "lp_urls": [
-        "https://lpa.articleviewtool.com/sqm_lat_cl_avt"
+        "https://lpa.bloggtracks.com/sqm_lat_cl_btk"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "SQL"
+      ]
     },
     "Cervesaria Nacional": {
       "label": "Cervesaria Nacional",
@@ -1150,41 +1282,52 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Cervesaria Nacional test"
+      ]
     },
     "Banco De Guatemala": {
       "label": "Banco De Guatemala",
-      "lp_urls": [],
+      "lp_urls": [
+        "https://lpa.techflowdesk.com/qigp_es_lp_tfd",
+        "https://lpa.techdigestview.com/bngt_7189_1_es_gt_lp_tdv"
+      ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Boubyan Bank": {
       "label": "Boubyan Bank",
       "lp_urls": [
-        "https://lpr.webreviewjump.com/boub_7787_3_ar_fm_wrj",
+        "https://lpa.newsblogfactor.com/boub_7787_3_ar_fm_nbf",
         "https://test.tlpdaisy.com/boub_2_fm_xxx"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Boubyan Bank KW"
+      ]
     },
     "Banorte": {
       "label": "Banorte",
       "lp_urls": [
-        "https://lpa.newslinehubzone.com/mrcd_21701_es_nlh",
-        "https://test.tlpdaisy.com/react_bnr_6813",
+        "https://lpa.read-itnowbest.com/zvsz_21701_es_mx_rib",
+        "https://lpa.mediastory-tone.com/bnr_6813_es_lp_mst",
         "https://lpa.read-itnowbest.com/bnr_c_lp_rib"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Liva": {
       "label": "Liva",
@@ -1195,7 +1338,8 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Holcim": {
       "label": "Holcim",
@@ -1206,18 +1350,22 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Enel": {
       "label": "Enel",
       "lp_urls": [
-        "https://test.tlpdaisy.com/nel_co_8_lp_xxx"
+        "https://lpa.newsinsightline.com/nel_co_8_lp_nil"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "SuccessFX - Enel"
+      ]
     },
     "Al Salam Bank": {
       "label": "Al Salam Bank",
@@ -1229,7 +1377,8 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Herdez": {
       "label": "Herdez",
@@ -1245,13 +1394,16 @@
     "Trade Vector AI": {
       "label": "Trade Vector AI",
       "lp_urls": [
-        "https://test.tlpdaisy.com/ait_tva_l1_ar_lp_xxx"
+        "https://lpr.blognewschain.com/ait_tva_l1_ar_lp_bgc"
       ],
       "language": [],
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": [
+        "Ait TVA Lp's"
+      ]
     },
     "Finance Eagle": {
       "label": "Finance Eagle",
@@ -1264,7 +1416,8 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "AAY": {
       "label": "AAY",
@@ -1275,7 +1428,8 @@
       "top_countries": [],
       "audience": "",
       "usp": "",
-      "notes": ""
+      "notes": "",
+      "aliases": []
     },
     "Quatar Energy": {
       "label": "Quatar Energy",
@@ -1293,6 +1447,31 @@
       "label": "Amzon",
       "lp_urls": [
         "https://lpa.fusionboardview.com/amz_26725_es_4_lat_fbv"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Grupo Herdez": {
+      "label": "Grupo Herdez",
+      "aliases": [],
+      "lp_urls": [
+        "https://test.tlpdaisy.com/hrdz_es_lp_xxx"
+      ],
+      "language": [],
+      "top_countries": [],
+      "audience": "",
+      "usp": "",
+      "notes": ""
+    },
+    "Qatar Energy": {
+      "label": "Qatar Energy",
+      "aliases": [],
+      "lp_urls": [
+        "https://test.tlpdaisy.com/qten_l_ar_lp_xxx",
+        "https://lpa.articleresearchzone.com/qtre_ar_fm_cze"
       ],
       "language": [],
       "top_countries": [],
