@@ -5,6 +5,12 @@ import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
+# Ensure UTF-8 output so Cyrillic KB context doesn't crash on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # При прямом запуске скрипта из корня (python src/analysis_agent/analyze_fb_stats.py) нужен путь к проекту
 _proj_root = Path(__file__).resolve().parents[2]
 if str(_proj_root) not in sys.path:
@@ -622,13 +628,14 @@ def print_offer_comparison_and_top_campaigns(
             print(f"    {i}. {device} + {interest} + {age} + {creative} + {text_seg}  |  Deposits: {deposits}  {roi_s}")
 
 
-def main(
+def main(  # noqa: PLR0913
     excel_path: Optional[str] = None,
     country_offer: str = "all",
     top_n: int = 2,
     output_path: Optional[str] = None,
     short_report: bool = False,
     with_context: bool = False,
+    asset_filter: Optional[str] = None,
 ) -> None:
     excel_path = excel_path or _get_excel_path()
     if not os.path.exists(excel_path):
@@ -636,6 +643,18 @@ def main(
 
     def run() -> None:
         df = pd.read_excel(excel_path)
+
+        if asset_filter:
+            mask = df["Ad Asset"].fillna("").astype(str).str.lower() == asset_filter.lower()
+            df_filtered = df[mask]
+            if df_filtered.empty:
+                print(f"[!] No rows found for asset '{asset_filter}'. Check the name.")
+                available = sorted(df["Ad Asset"].dropna().unique())
+                print(f"    Available assets: {', '.join(available)}")
+                return
+            print(f"[filter] Asset='{asset_filter}': {len(df_filtered)} rows\n")
+            df.__class__ = df_filtered.__class__
+            df = df_filtered
 
         required_cols = [
             "Country",
@@ -728,6 +747,12 @@ def _parse_args() -> argparse.Namespace:
         dest="with_context",
         help="Show target context from Knowledge Base below each combo stats line",
     )
+    parser.add_argument(
+        "--asset", "-a",
+        type=str,
+        default=None,
+        help="Filter by Ad Asset name (e.g. 'Adnoc', 'Amazon'). Case-insensitive.",
+    )
     return parser.parse_args()
 
 
@@ -740,4 +765,5 @@ if __name__ == "__main__":
         output_path=args.output,
         short_report=getattr(args, "short", False),
         with_context=getattr(args, "with_context", False),
+        asset_filter=getattr(args, "asset", None),
     )

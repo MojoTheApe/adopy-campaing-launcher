@@ -1,80 +1,25 @@
 # Landing Pages
 
 Авто-генерируется скриптом `scripts/parse_landing_pages.py`.
-_Последний запуск: 2026-03-31 01:31_
+_Последний запуск: 2026-03-31 21:05_
 
-**Сводка:** OK: 127 | Broken: 54 | Без URL: 1
-
-## ⚠ Broken URLs (требуют замены)
-
-- **Amazon**: `https://lpa.justhappywhistle.com/maz_21701_es_mx_jhn/` — HTTP 404
-- **Amazon**: `https://lpa.reviewtechdesk.com/amz_new_es_lp_rtd` — Connection error: HTTPSConnectionPool(host='lpa.reviewtechdesk.com', port=443): Max retries exceeded with url: /amz_new_es_lp_rtd (Caused by NameResolutionError("HTTPSConnection(host='lpa.reviewtechdesk.com', port=443): Failed to resolve 'lpa.reviewtechdesk.com' ([Errno 11001] getaddrinfo failed)"))
-- **Amazon**: `https://lpa.articleguidehub.com/ait_rbt_5_es_lp_agh` — Connection error: HTTPSConnectionPool(host='lpa.articleguidehub.com', port=443): Max retries exceeded with url: /ait_rbt_5_es_lp_agh (Caused by NameResolutionError("HTTPSConnection(host='lpa.articleguidehub.com', port=443): Failed to resolve 'lpa.articleguidehub.com' ([Errno 11001] getaddrinfo failed)"))
-- **Amazon**: `https://lpa.reviewmediabasezone.com/amz_7844_9_es_lp_rmb` — HTTP 404
-- **Amazon**: `https://lpa.discoverflowdesk.com/amz_5738_l1_es_mx_lp_dfd` — HTTP 404
-- **AI Trader**: `https://lpr.webblogrise.com/ait_vid_ar_lp_wbr` — HTTP 404
-- **AI Trader**: `https://lpa.discover-web-dailly.com/ait_ai12_ar_dwd` — HTTP 404
-- **AI Trader**: `https://lpa.readanddiscoverzones.com/aitr_999_es_adz` — Connection error: HTTPSConnectionPool(host='lpa.readanddiscoverzones.com', port=443): Max retries exceeded with url: /aitr_999_es_adz (Caused by NameResolutionError("HTTPSConnection(host='lpa.readanddiscoverzones.com', port=443): Failed to resolve 'lpa.readanddiscoverzones.com' ([Errno 11001] getaddrinfo failed)"))
-- **AI Trader**: `https://lpa.readcenterblog.com/ait_vid_es_lp_rcg` — HTTP 404
-- **AI Trader**: `https://lpa.webpilotzon.com/ait_555_es_wpz` — Connection error: HTTPSConnectionPool(host='lpa.webpilotzon.com', port=443): Max retries exceeded with url: /ait_555_es_wpz (Caused by NameResolutionError("HTTPSConnection(host='lpa.webpilotzon.com', port=443): Failed to resolve 'lpa.webpilotzon.com' ([Errno 11001] getaddrinfo failed)"))
-- **AI Trader**: `https://lpa.newshivefind.com/aitr1_es_lat_nhf` — Connection error: HTTPSConnectionPool(host='lpa.newshivefind.com', port=443): Max retries exceeded with url: /aitr1_es_lat_nhf (Caused by NameResolutionError("HTTPSConnection(host='lpa.newshivefind.com', port=443): Failed to resolve 'lpa.newshivefind.com' ([Errno 11001] getaddrinfo failed)"))
-- **AI Trader**: `https://lpa.reviewshubspotzone.com/ait_c_es_lp_rhs` — Connection error: HTTPSConnectionPool(host='lpa.reviewshubspotzone.com', port=443): Max retries exceeded with url: /ait_c_es_lp_rhs (Caused by NameResolutionError("HTTPSConnection(host='lpa.reviewshubspotzone.com', port=443): Failed to resolve 'lpa.reviewshubspotzone.com' ([Errno 11001] getaddrinfo failed)"))
-- **AI Trader**: `https://lpa.readcloudx.com/aitr_3_tbl_es_rxc` — HTTP 404
-- **AI Trader**: `https://lpa.websolutionlaunch.com/aitr1_es_lat_wls` — HTTP 404
-- **Salik**: `https://lpa.reviewnewsblog.com/zzsa_7787_3_ar_fm_rng/` — Connection error: HTTPSConnectionPool(host='lpa.reviewnewsblog.com', port=443): Max retries exceeded with url: /zzsa_7787_3_ar_fm_rng/ (Caused by NameResolutionError("HTTPSConnection(host='lpa.reviewnewsblog.com', port=443): Failed to resolve 'lpa.reviewnewsblog.com' ([Errno 11001] getaddrinfo failed)"))
-- **Banco Industrial**: `https://lpr.newtechreach.com/qlnd_7910_1_es_gt_ntr` — HTTP 404
-- **Favorita**: `https://lpr.viewnewstrove.com/ccf_2_es_lp_vns` — HTTP 404
-- **Trade GPT**: `https://lpa.redlinkerzone.com/tgp_gcc_1_lp_rkn` — HTTP 404
-- **Trade GPT**: `https://lpa.readwebstack.com/tgp_ar_2_lp_rws` — Connection error: HTTPSConnectionPool(host='lpa.readwebstack.com', port=443): Max retries exceeded with url: /tgp_ar_2_lp_rws (Caused by NameResolutionError("HTTPSConnection(host='lpa.readwebstack.com', port=443): Failed to resolve 'lpa.readwebstack.com' ([Errno 11001] getaddrinfo failed)"))
-- **Trade GPT**: `https://lpa.readwebstack.com/tgp_ar_lp_rws` — Connection error: HTTPSConnectionPool(host='lpa.readwebstack.com', port=443): Max retries exceeded with url: /tgp_ar_lp_rws (Caused by NameResolutionError("HTTPSConnection(host='lpa.readwebstack.com', port=443): Failed to resolve 'lpa.readwebstack.com' ([Errno 11001] getaddrinfo failed)"))
-- **Trade GPT**: `https://lpr.varietyhorizon.com/tgp_ar_lp_vah` — Connection error: HTTPSConnectionPool(host='lpr.varietyhorizon.com', port=443): Max retries exceeded with url: /tgp_ar_lp_vah (Caused by NameResolutionError("HTTPSConnection(host='lpr.varietyhorizon.com', port=443): Failed to resolve 'lpr.varietyhorizon.com' ([Errno 11001] getaddrinfo failed)"))
-- **Trade GPT**: `https://lpr.promotion-nesthub.com/tgp_gcc_1_lp_pnb` — Connection error: HTTPSConnectionPool(host='lpr.promotion-nesthub.com', port=443): Max retries exceeded with url: /tgp_gcc_1_lp_pnb (Caused by NameResolutionError("HTTPSConnection(host='lpr.promotion-nesthub.com', port=443): Failed to resolve 'lpr.promotion-nesthub.com' ([Errno 11001] getaddrinfo failed)"))
-- **Trade GPT**: `https://lpa.readcenterblog.com/tgp_ar_2_lp_rcg` — HTTP 404
-- **Trade GPT**: `https://lpa.webarticleaccess.com/tgp_es_4_lat_lp_was` — HTTP 404
-- **Adnoc**: `https://lpr.webnewsource.com/nc_ar_fm_wne` — Connection error: HTTPSConnectionPool(host='lpr.webnewsource.com', port=443): Max retries exceeded with url: /nc_ar_fm_wne (Caused by NameResolutionError("HTTPSConnection(host='lpr.webnewsource.com', port=443): Failed to resolve 'lpr.webnewsource.com' ([Errno 11001] getaddrinfo failed)"))
-- **AES**: `https://lpa.newsupdatefeed.com/esaaa_8_nuf/` — Connection error: HTTPSConnectionPool(host='lpa.newsupdatefeed.com', port=443): Max retries exceeded with url: /esaaa_8_nuf/ (Caused by NameResolutionError("HTTPSConnection(host='lpa.newsupdatefeed.com', port=443): Failed to resolve 'lpa.newsupdatefeed.com' ([Errno 11001] getaddrinfo failed)"))
-- **Banco Azul**: `https://lpr.designinvestcircle.com/baz_es_lp_dii` — Connection error: HTTPSConnectionPool(host='lpr.designinvestcircle.com', port=443): Max retries exceeded with url: /baz_es_lp_dii (Caused by NameResolutionError("HTTPSConnection(host='lpr.designinvestcircle.com', port=443): Failed to resolve 'lpr.designinvestcircle.com' ([Errno 11001] getaddrinfo failed)"))
-- **Banco Azul**: `https://lpa.readmediadirect.com/baz_2_es_lp_rmd` — Connection error: HTTPSConnectionPool(host='lpa.readmediadirect.com', port=443): Max retries exceeded with url: /baz_2_es_lp_rmd (Caused by NameResolutionError("HTTPSConnection(host='lpa.readmediadirect.com', port=443): Failed to resolve 'lpa.readmediadirect.com' ([Errno 11001] getaddrinfo failed)"))
-- **BCP**: `https://lpa.insightdaily-team.com/cbpp_7227_1_es_lp_idt` — Connection error: HTTPSConnectionPool(host='lpa.insightdaily-team.com', port=443): Max retries exceeded with url: /cbpp_7227_1_es_lp_idt (Caused by NameResolutionError("HTTPSConnection(host='lpa.insightdaily-team.com', port=443): Failed to resolve 'lpa.insightdaily-team.com' ([Errno 11001] getaddrinfo failed)"))
-- **BCP**: `https://lpa.newsreader-zone.com/cbpp_7730_1_es_lat_lp_nrn` — Connection error: HTTPSConnectionPool(host='lpa.newsreader-zone.com', port=443): Max retries exceeded with url: /cbpp_7730_1_es_lat_lp_nrn (Caused by NameResolutionError("HTTPSConnection(host='lpa.newsreader-zone.com', port=443): Failed to resolve 'lpa.newsreader-zone.com' ([Errno 11001] getaddrinfo failed)"))
-- **Bimbo**: `https://lpa.cognoversezone.com/bmb_7878_3_es_mx_cze` — HTTP 404
-- **YPF**: `https://lpa.webarticleaccess.com/yfp_2_es_lp_was` — HTTP 404
-- **FAB**: `https://lpr.techdomain-zone.com/tcbm_ar_fm_tdz` — HTTP 404
-- **Gold**: `https://test.tlpdaisy.com/gold_ar_lp_tlp` — HTTP 404
-- **Jumbo**: `https://lpa.designpeakzon.com/jum_es_2_lp_dzp` — Connection error: HTTPSConnectionPool(host='lpa.designpeakzon.com', port=443): Max retries exceeded with url: /jum_es_2_lp_dzp (Caused by NameResolutionError("HTTPSConnection(host='lpa.designpeakzon.com', port=443): Failed to resolve 'lpa.designpeakzon.com' ([Errno 11001] getaddrinfo failed)"))
-- **Jumbo**: `https://lpa.designpeakzon.com/jum_es_1_lp_dzp` — Connection error: HTTPSConnectionPool(host='lpa.designpeakzon.com', port=443): Max retries exceeded with url: /jum_es_1_lp_dzp (Caused by NameResolutionError("HTTPSConnection(host='lpa.designpeakzon.com', port=443): Failed to resolve 'lpa.designpeakzon.com' ([Errno 11001] getaddrinfo failed)"))
-- **Mercado Libre**: `https://lpr.mediaarticlebox.com/mrcd_21701_es_mab` — HTTP 404
-- **QIB**: `https://lpr.latestsmartupdate.com/hvab_q_ar_lsu` — Connection error: HTTPSConnectionPool(host='lpr.latestsmartupdate.com', port=443): Max retries exceeded with url: /hvab_q_ar_lsu (Caused by NameResolutionError("HTTPSConnection(host='lpr.latestsmartupdate.com', port=443): Failed to resolve 'lpr.latestsmartupdate.com' ([Errno 11001] getaddrinfo failed)"))
-- **Grupo Nutresa**: `https://lpa.discoverlinemore.com/tsbc_es_dlm/` — Connection error: HTTPSConnectionPool(host='lpa.discoverlinemore.com', port=443): Max retries exceeded with url: /tsbc_es_dlm/ (Caused by NameResolutionError("HTTPSConnection(host='lpa.discoverlinemore.com', port=443): Failed to resolve 'lpa.discoverlinemore.com' ([Errno 11001] getaddrinfo failed)"))
-- **Grupo Nutresa**: `https://lpa.newspottrend.com/cib_es_co_nsd` — Connection error: HTTPSConnectionPool(host='lpa.newspottrend.com', port=443): Max retries exceeded with url: /cib_es_co_nsd (Caused by NameResolutionError("HTTPSConnection(host='lpa.newspottrend.com', port=443): Failed to resolve 'lpa.newspottrend.com' ([Errno 11001] getaddrinfo failed)"))
-- **TradeGPT**: `https://lpa.meredy-zoom.com/tgp_pt_2_lp_mz` — Connection error: HTTPSConnectionPool(host='lpa.meredy-zoom.com', port=443): Max retries exceeded with url: /tgp_pt_2_lp_mz (Caused by NameResolutionError("HTTPSConnection(host='lpa.meredy-zoom.com', port=443): Failed to resolve 'lpa.meredy-zoom.com' ([Errno 11001] getaddrinfo failed)"))
-- **TradeGPT**: `https://lpa.newspot-zone.com/tgp_en_4_lat_lp_npz` — Connection error: HTTPSConnectionPool(host='lpa.newspot-zone.com', port=443): Max retries exceeded with url: /tgp_en_4_lat_lp_npz (Caused by NameResolutionError("HTTPSConnection(host='lpa.newspot-zone.com', port=443): Failed to resolve 'lpa.newspot-zone.com' ([Errno 11001] getaddrinfo failed)"))
-- **Bancolombia**: `https://lpa.columnlink.com/bcol_es_co_lp_clk` — Connection error: HTTPSConnectionPool(host='lpa.columnlink.com', port=443): Max retries exceeded with url: /bcol_es_co_lp_clk (Caused by NameResolutionError("HTTPSConnection(host='lpa.columnlink.com', port=443): Failed to resolve 'lpa.columnlink.com' ([Errno 11001] getaddrinfo failed)"))
-- **Grupo Aval**: `https://lpa.toparticlesway.com/zvsk_2_es_lp_taw` — HTTP 404
-- **SQM**: `https://lpa.bloggtracks.com/sqm_lat_cl_btk` — HTTP 404
-- **Banco De Guatemala**: `https://lpa.techflowdesk.com/qigp_es_lp_tfd` — HTTP 404
-- **Banco De Guatemala**: `https://lpa.techdigestview.com/bngt_7189_1_es_gt_lp_tdv` — HTTP 404
-- **Boubyan Bank**: `https://lpa.newsblogfactor.com/boub_7787_3_ar_fm_nbf` — HTTP 404
-- **Banorte**: `https://lpa.read-itnowbest.com/zvsz_21701_es_mx_rib` — HTTP 404
-- **Banorte**: `https://lpa.mediastory-tone.com/bnr_6813_es_lp_mst` — Connection error: HTTPSConnectionPool(host='lpa.mediastory-tone.com', port=443): Max retries exceeded with url: /bnr_6813_es_lp_mst (Caused by NameResolutionError("HTTPSConnection(host='lpa.mediastory-tone.com', port=443): Failed to resolve 'lpa.mediastory-tone.com' ([Errno 11001] getaddrinfo failed)"))
-- **Enel**: `https://lpa.newsinsightline.com/nel_co_8_lp_nil` — HTTP 404
-- **Trade Vector AI**: `https://lpr.blognewschain.com/ait_tva_l1_ar_lp_bgc` — HTTP 404
-- **Quatar Energy**: `https://lpa.articleresearchzone.com/qtre_ar_fm_cze` — Connection error: HTTPSConnectionPool(host='lpa.articleresearchzone.com', port=443): Max retries exceeded with url: /qtre_ar_fm_cze (Caused by NameResolutionError("HTTPSConnection(host='lpa.articleresearchzone.com', port=443): Failed to resolve 'lpa.articleresearchzone.com' ([Errno 11001] getaddrinfo failed)"))
-- **Amzon**: `https://lpa.toolcloudscope.com/amz_26725_es_4_lat_tcs` — HTTP 404
-
----
+**Сводка:** OK: 179 | Broken: 0 | Без URL: 2
 
 ## Amazon
 
-### `https://lpa.justhappywhistle.com/maz_21701_es_mx_jhn/`
+### `https://lpa.tech-focuszone.com/maz_21701_es_mx_uoz`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Tech Focus Zone
+- **Meta description:** Tech Focus Zone
+- **CTA:** Solicitar información
 
-### `https://lpa.reviewtechdesk.com/amz_new_es_lp_rtd`
+### `https://test.tlpdaisy.com/amz_new_es_lp_xxx`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.reviewtechdesk.com', port=443): Max retries exceeded with url: /amz_new_es_lp_rtd (Caused by NameResolutionError("HTTPSConnection(host='lpa.reviewtechdesk.com', port=443): Failed to resolve 'lpa.reviewtechdesk.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Empezar ahora
 
 ### `https://test.tlpdaisy.com/amz_8_xxx`
 
@@ -90,10 +35,12 @@ _Последний запуск: 2026-03-31 01:31_
 - **Meta description:** Read It Now Best
 - **CTA:** Empezar ahora
 
-### `https://lpa.articleguidehub.com/ait_rbt_5_es_lp_agh`
+### `https://test.tlpdaisy.com/ait_rbt_5_es_lp_xxx`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.articleguidehub.com', port=443): Max retries exceeded with url: /ait_rbt_5_es_lp_agh (Caused by NameResolutionError("HTTPSConnection(host='lpa.articleguidehub.com', port=443): Failed to resolve 'lpa.articleguidehub.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Comenzar ahora
 
 ### `https://lpa.readme-up-spt.com/zma_8315_es_sv_lp_rut`
 
@@ -102,28 +49,35 @@ _Последний запуск: 2026-03-31 01:31_
 - **Meta description:** Read Me Up Spot
 - **CTA:** Solicitar información
 
-### `https://lpa.reviewmediabasezone.com/amz_7844_9_es_lp_rmb`
+### `https://lpa.researchlayerflow.com/amz_7844_9_es_lp_rly`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Research Layer Flow
+- **Meta description:** Research Layer Flow
+- **CTA:** Registrarse
 
-### `https://lpa.discoverflowdesk.com/amz_5738_l1_es_mx_lp_dfd`
+### `https://lpa.reviewtechdek.com/amz_5738_l1_es_mx_lp_rtd`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Review Tech Desk
+- **Meta description:** Review Tech Desk
+- **CTA:** Comenzar
 
 ---
 ## AI Trader
 
-### `https://lpr.webblogrise.com/ait_vid_ar_lp_wbr`
+### `https://test.tlpdaisy.com/ait_vid_ar_lp_xxx`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** ابدأ الآن
 
-### `https://lpa.discover-web-dailly.com/ait_ai12_ar_dwd`
+### `https://test.tlpdaisy.com/ait_ai12_ar_xxx`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
 
 ### `https://test.tlpdaisy.com/ait_trd_ae_xxx`
 
@@ -144,10 +98,11 @@ _Последний запуск: 2026-03-31 01:31_
 - **Meta description:** News Portal Line
 - **CTA:** Comenzar ahora
 
-### `https://lpa.readanddiscoverzones.com/aitr_999_es_adz`
+### `https://lpa.articlemodel.com/aitr_999_es_aml`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.readanddiscoverzones.com', port=443): Max retries exceeded with url: /aitr_999_es_adz (Caused by NameResolutionError("HTTPSConnection(host='lpa.readanddiscoverzones.com', port=443): Failed to resolve 'lpa.readanddiscoverzones.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Article Model
+- **Meta description:** Article Model
 
 ### `https://test.tlpdaisy.com/ait_2_new8_es_lp_xxx`
 
@@ -162,15 +117,18 @@ _Последний запуск: 2026-03-31 01:31_
 - **Meta description:** TEST domain
 - **CTA:** Comenzar ahora
 
-### `https://lpa.readcenterblog.com/ait_vid_es_lp_rcg`
+### `https://lpa.news-portalline.com/ait_vid_es_lp_npl`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** News Portal Line
+- **Meta description:** News Portal Line
+- **CTA:** Comenzar ahora
 
-### `https://lpa.webpilotzon.com/ait_555_es_wpz`
+### `https://lpa.readmatrixflow.com/ait_555_es_rmf`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.webpilotzon.com', port=443): Max retries exceeded with url: /ait_555_es_wpz (Caused by NameResolutionError("HTTPSConnection(host='lpa.webpilotzon.com', port=443): Failed to resolve 'lpa.webpilotzon.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Read Matrix Flow
+- **Meta description:** Read Matrix Flow
 
 ### `https://test.tlpdaisy.com/ait_1_new8_es_lp_xxx`
 
@@ -185,10 +143,11 @@ _Последний запуск: 2026-03-31 01:31_
 - **Meta description:** TEST domain
 - **CTA:** Comenzar ahora
 
-### `https://lpa.newshivefind.com/aitr1_es_lat_nhf`
+### `https://lpa.blogvector-mootion.com/aitr1_es_lat_bvm`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.newshivefind.com', port=443): Max retries exceeded with url: /aitr1_es_lat_nhf (Caused by NameResolutionError("HTTPSConnection(host='lpa.newshivefind.com', port=443): Failed to resolve 'lpa.newshivefind.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Blog Vector Motion
+- **Meta description:** Blog Vector Motion
 
 ### `https://test.tlpdaisy.com/ait_es_gif_8_xxx`
 
@@ -211,10 +170,12 @@ _Последний запуск: 2026-03-31 01:31_
 - **Meta description:** TEST domain
 - **CTA:** Comenzar ahora
 
-### `https://lpa.reviewshubspotzone.com/ait_c_es_lp_rhs`
+### `https://test.tlpdaisy.com/ait_c_es_lp_xxx`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.reviewshubspotzone.com', port=443): Max retries exceeded with url: /ait_c_es_lp_rhs (Caused by NameResolutionError("HTTPSConnection(host='lpa.reviewshubspotzone.com', port=443): Failed to resolve 'lpa.reviewshubspotzone.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Comenzar ahora
 
 ### `https://lpa.news-visionpoint.com/ait_m_es_lp_nvp`
 
@@ -269,15 +230,17 @@ _Последний запуск: 2026-03-31 01:31_
 - **Meta description:** News Portal Line
 - **CTA:** Empezar
 
-### `https://lpa.readcloudx.com/aitr_3_tbl_es_rxc`
+### `https://lpa.groupmax-mrs.com/aitr_3_tbl_es_gfg`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Group Max Marketing
+- **Meta description:** Group Max Marketing
 
-### `https://lpa.websolutionlaunch.com/aitr1_es_lat_wls`
+### `https://lpa.blogvector-mootion.com/aitr1_es_lat_bvm`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Blog Vector Motion
+- **Meta description:** Blog Vector Motion
 
 ### `https://lpa.articleandread.com/ait_1_es_lat_add`
 
@@ -300,10 +263,12 @@ _Последний запуск: 2026-03-31 01:31_
 ---
 ## Salik
 
-### `https://lpa.reviewnewsblog.com/zzsa_7787_3_ar_fm_rng/`
+### `https://lpr.blogmatrixhubzone.com/slk_7787_3_ar_fm_bmh`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.reviewnewsblog.com', port=443): Max retries exceeded with url: /zzsa_7787_3_ar_fm_rng/ (Caused by NameResolutionError("HTTPSConnection(host='lpa.reviewnewsblog.com', port=443): Failed to resolve 'lpa.reviewnewsblog.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Blog Matrix Hub Zone
+- **Meta description:** Blog Matrix Hub Zone
+- **CTA:** ابدأ الآن
 
 ### `https://test.tlpdaisy.com/slk_999_xxx`
 
@@ -392,18 +357,22 @@ _Последний запуск: 2026-03-31 01:31_
 - **Meta description:** TEST domain
 - **CTA:** Obtener información
 
-### `https://lpr.newtechreach.com/qlnd_7910_1_es_gt_ntr`
+### `https://lpa.newshorizonlab.com/bni_7910_1_es_gt_nhl`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** News Horizon Lab
+- **Meta description:** News Horizon Lab
+- **CTA:** Obtener información
 
 ---
 ## Favorita
 
-### `https://lpr.viewnewstrove.com/ccf_2_es_lp_vns`
+### `https://lpr.circlecloudflow.com/fvrt_2_es_lp_ccf`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Circle Cloud Flow
+- **Meta description:** Circle Cloud Flow
+- **CTA:** Obtener información
 
 ### `https://test.tlpdaisy.com/fvrt_8_xxx`
 
@@ -444,20 +413,26 @@ _LP URLs не настроены_
 - **Meta description:** TEST domain
 - **CTA:** التقدم بطلب للحصول على TradeGPT
 
-### `https://lpa.redlinkerzone.com/tgp_gcc_1_lp_rkn`
+### `https://test.tlpdaisy.com/pgt_c92_ar_1_lp_sss`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** احصل على TradeGPT الآن
 
-### `https://lpa.readwebstack.com/tgp_ar_2_lp_rws`
+### `https://lpr.web-starterspot.com/tgp_ar_2_lp_wst`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.readwebstack.com', port=443): Max retries exceeded with url: /tgp_ar_2_lp_rws (Caused by NameResolutionError("HTTPSConnection(host='lpa.readwebstack.com', port=443): Failed to resolve 'lpa.readwebstack.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Web Starter Spot
+- **Meta description:** Web Starter Spot
+- **CTA:** نعم، أود تجربة قوة الذكاء الاصطناعي مع التداول!
 
-### `https://lpa.readwebstack.com/tgp_ar_lp_rws`
+### `https://test.tlpdaisy.com/tgp_ar_lp_xxx`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.readwebstack.com', port=443): Max retries exceeded with url: /tgp_ar_lp_rws (Caused by NameResolutionError("HTTPSConnection(host='lpa.readwebstack.com', port=443): Failed to resolve 'lpa.readwebstack.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** نعم، أود تجربة قوة الذكاء الاصطناعي مع التداول!
 
 ### `https://test.tlpdaisy.com/tgp_sp_oph_lp_xxx`
 
@@ -473,15 +448,19 @@ _LP URLs не настроены_
 - **Meta description:** TEST domain
 - **CTA:** Empezar
 
-### `https://lpr.varietyhorizon.com/tgp_ar_lp_vah`
+### `https://test.tlpdaisy.com/tgp_ar_lp_xxx`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpr.varietyhorizon.com', port=443): Max retries exceeded with url: /tgp_ar_lp_vah (Caused by NameResolutionError("HTTPSConnection(host='lpr.varietyhorizon.com', port=443): Failed to resolve 'lpr.varietyhorizon.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** نعم، أود تجربة قوة الذكاء الاصطناعي مع التداول!
 
-### `https://lpr.promotion-nesthub.com/tgp_gcc_1_lp_pnb`
+### `https://test.tlpdaisy.com/tgp_ar_lp_xxx`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpr.promotion-nesthub.com', port=443): Max retries exceeded with url: /tgp_gcc_1_lp_pnb (Caused by NameResolutionError("HTTPSConnection(host='lpr.promotion-nesthub.com', port=443): Failed to resolve 'lpr.promotion-nesthub.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** نعم، أود تجربة قوة الذكاء الاصطناعي مع التداول!
 
 ### `https://test.tlpdaisy.com/tgp_sp_gb_lp_xxx`
 
@@ -518,15 +497,19 @@ _LP URLs не настроены_
 - **Meta description:** News Review Articles
 - **CTA:** ¡Sí, me gustaría probar el poder de la IA combinado con el comercio!
 
-### `https://lpa.readcenterblog.com/tgp_ar_2_lp_rcg`
+### `https://lpr.web-starterspot.com/tgp_ar_2_lp_wst`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Web Starter Spot
+- **Meta description:** Web Starter Spot
+- **CTA:** نعم، أود تجربة قوة الذكاء الاصطناعي مع التداول!
 
-### `https://lpa.webarticleaccess.com/tgp_es_4_lat_lp_was`
+### `https://lpa.webdatainsigt.com/tgp_es_4_lat_lp_wdi`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Web Data Insight
+- **Meta description:** Web Data Insight
+- **CTA:** ¡Sí, me gustaría probar el poder de la IA combinado con el comercio!
 
 ---
 ## NVIDIA
@@ -572,10 +555,12 @@ _LP URLs не настроены_
 - **Meta description:** TEST domain
 - **CTA:** انضم إلينا اليوم
 
-### `https://lpr.webnewsource.com/nc_ar_fm_wne`
+### `https://lpr.blogmatrixhubzone.com/adnc_ar_fm_bmh`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpr.webnewsource.com', port=443): Max retries exceeded with url: /nc_ar_fm_wne (Caused by NameResolutionError("HTTPSConnection(host='lpr.webnewsource.com', port=443): Failed to resolve 'lpr.webnewsource.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Blog Matrix Hub Zone
+- **Meta description:** Blog Matrix Hub Zone
+- **CTA:** ابدأ الآن
 
 ### `https://test.tlpdaisy.com/adnc_b_ar_lp_xxx`
 
@@ -587,10 +572,12 @@ _LP URLs не настроены_
 ---
 ## AES
 
-### `https://lpa.newsupdatefeed.com/esaaa_8_nuf/`
+### `https://lpa.toptech-key.com/esaaa_8_ttk`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.newsupdatefeed.com', port=443): Max retries exceeded with url: /esaaa_8_nuf/ (Caused by NameResolutionError("HTTPSConnection(host='lpa.newsupdatefeed.com', port=443): Failed to resolve 'lpa.newsupdatefeed.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Top Tech Key
+- **Meta description:** Top Tech Key
+- **CTA:** Solicitar información
 
 ---
 ## Ai Chat Trader
@@ -700,36 +687,45 @@ _LP URLs не настроены_
 - **Meta description:** TEST domain
 - **CTA:** Obtener información
 
-### `https://lpr.designinvestcircle.com/baz_es_lp_dii`
+### `https://test.tlpdaisy.com/baz_es_lp_xxx`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpr.designinvestcircle.com', port=443): Max retries exceeded with url: /baz_es_lp_dii (Caused by NameResolutionError("HTTPSConnection(host='lpr.designinvestcircle.com', port=443): Failed to resolve 'lpr.designinvestcircle.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Invierte ahora
 
-### `https://lpa.readmediadirect.com/baz_2_es_lp_rmd`
+### `https://test.tlpdaisy.com/baz_2_es_lp_xxx`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.readmediadirect.com', port=443): Max retries exceeded with url: /baz_2_es_lp_rmd (Caused by NameResolutionError("HTTPSConnection(host='lpa.readmediadirect.com', port=443): Failed to resolve 'lpa.readmediadirect.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Invierte ahora
 
 ---
 ## BCP
 
-### `https://lpa.insightdaily-team.com/cbpp_7227_1_es_lp_idt`
+### `https://lpa.news-readerzone.com/cbpp_7227_1_es_lp_nrn`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.insightdaily-team.com', port=443): Max retries exceeded with url: /cbpp_7227_1_es_lp_idt (Caused by NameResolutionError("HTTPSConnection(host='lpa.insightdaily-team.com', port=443): Failed to resolve 'lpa.insightdaily-team.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** News Reader Zone
+- **Meta description:** News Reader Zone
+- **CTA:** OBTÉN INFORMACIÓN
 
-### `https://lpa.newsreader-zone.com/cbpp_7730_1_es_lat_lp_nrn`
+### `https://lpa.zone-tech-insight.com/cbpp_7730_1_es_lat_lp_zti`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.newsreader-zone.com', port=443): Max retries exceeded with url: /cbpp_7730_1_es_lat_lp_nrn (Caused by NameResolutionError("HTTPSConnection(host='lpa.newsreader-zone.com', port=443): Failed to resolve 'lpa.newsreader-zone.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Zone Tech Insight
+- **Meta description:** Zone Tech Insight
+- **CTA:** OBTÉN INFORMACIÓN
 
 ---
 ## Bimbo
 
-### `https://lpa.cognoversezone.com/bmb_7878_3_es_mx_cze`
+### `https://test.tlpdaisy.com/react_bmo_7878_test`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
 
 ### `https://lpa.quick-new-advisory.com/bmb_clc_ec_lp_qna`
 
@@ -751,10 +747,12 @@ _LP URLs не настроены_
 ---
 ## YPF
 
-### `https://lpa.webarticleaccess.com/yfp_2_es_lp_was`
+### `https://lpa.systemtracknode.com/yfp_2_es_lp_stn`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** System Track Node
+- **Meta description:** System Track Node
+- **CTA:** Únete al grupo
 
 ---
 ## Establishment Labs
@@ -777,10 +775,12 @@ _LP URLs не настроены_
 ---
 ## FAB
 
-### `https://lpr.techdomain-zone.com/tcbm_ar_fm_tdz`
+### `https://lpr.read-masteryzone.com/tcbm_ar_fm_rzm`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Read Mastery Zone
+- **Meta description:** Read Mastery Zone
+- **CTA:** ابدأ الآن
 
 ---
 ## Gold
@@ -792,10 +792,12 @@ _LP URLs не настроены_
 - **Meta description:** TEST domain
 - **CTA:** اضغط هنا اذا كنت ترغب بالتسجيل بالشركه
 
-### `https://test.tlpdaisy.com/gold_ar_lp_tlp`
+### `https://test.tlpdaisy.com/gold_ar_lp_xxx`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** اضغط هنا اذا كنت ترغب بالتسجيل بالشركه
 
 ### `https://lpa.read-wisetrack.com/gld_es_1_rtw`
 
@@ -807,15 +809,19 @@ _LP URLs не настроены_
 ---
 ## Jumbo
 
-### `https://lpa.designpeakzon.com/jum_es_2_lp_dzp`
+### `https://lpa.blogreadmod.com/jum_es_2_lp_bem`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.designpeakzon.com', port=443): Max retries exceeded with url: /jum_es_2_lp_dzp (Caused by NameResolutionError("HTTPSConnection(host='lpa.designpeakzon.com', port=443): Failed to resolve 'lpa.designpeakzon.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Blog Read Mode
+- **Meta description:** Blog Read Mode
+- **CTA:** Comienza Ahora
 
-### `https://lpa.designpeakzon.com/jum_es_1_lp_dzp`
+### `https://lpa.articlebase-x.com/jum_es_1_lp_abx`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.designpeakzon.com', port=443): Max retries exceeded with url: /jum_es_1_lp_dzp (Caused by NameResolutionError("HTTPSConnection(host='lpa.designpeakzon.com', port=443): Failed to resolve 'lpa.designpeakzon.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Article Base X
+- **Meta description:** Article Base X
+- **CTA:** Obtener información
 
 ### `https://test.tlpdaisy.com/jbm_es_clc_lp_xxx`
 
@@ -861,10 +867,12 @@ _LP URLs не настроены_
 ---
 ## Mercado Libre
 
-### `https://lpr.mediaarticlebox.com/mrcd_21701_es_mab`
+### `https://lpa.webtrendvision.com/mrcd_21701_es_wtv`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Web Trend Vision
+- **Meta description:** Web Trend Vision
+- **CTA:** Obtener información
 
 ---
 ## PDO
@@ -893,10 +901,12 @@ _LP URLs не настроены_
 ---
 ## QIB
 
-### `https://lpr.latestsmartupdate.com/hvab_q_ar_lsu`
+### `https://lpr.webreviewjump.com/ibq_q_ar_wrj`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpr.latestsmartupdate.com', port=443): Max retries exceeded with url: /hvab_q_ar_lsu (Caused by NameResolutionError("HTTPSConnection(host='lpr.latestsmartupdate.com', port=443): Failed to resolve 'lpr.latestsmartupdate.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Web Review Jump
+- **Meta description:** Web Review Jump
+- **CTA:** ابدأ الآن
 
 ---
 ## Stargate AR
@@ -1067,15 +1077,19 @@ _LP URLs не настроены_
 ---
 ## Grupo Nutresa
 
-### `https://lpa.discoverlinemore.com/tsbc_es_dlm/`
+### `https://lpa.discoverreader.com/nut_es_dre`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.discoverlinemore.com', port=443): Max retries exceeded with url: /tsbc_es_dlm/ (Caused by NameResolutionError("HTTPSConnection(host='lpa.discoverlinemore.com', port=443): Failed to resolve 'lpa.discoverlinemore.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Discover Readers
+- **Meta description:** Discover Readers
+- **CTA:** Únete al grupo
 
-### `https://lpa.newspottrend.com/cib_es_co_nsd`
+### `https://lpa.blogcirclecore.com/nut_es_co_bcc`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.newspottrend.com', port=443): Max retries exceeded with url: /cib_es_co_nsd (Caused by NameResolutionError("HTTPSConnection(host='lpa.newspottrend.com', port=443): Failed to resolve 'lpa.newspottrend.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Blog Circle Core
+- **Meta description:** Blog Circle Core
+- **CTA:** Solicitar información
 
 ---
 ## TradeGPT
@@ -1085,15 +1099,19 @@ _LP URLs не настроены_
 - **Статус:** OK (HTTP 200)
 - **Title:** articleflowweb.com
 
-### `https://lpa.meredy-zoom.com/tgp_pt_2_lp_mz`
+### `https://test.tlpdaisy.com/ewys_2_pt_r_sss`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.meredy-zoom.com', port=443): Max retries exceeded with url: /tgp_pt_2_lp_mz (Caused by NameResolutionError("HTTPSConnection(host='lpa.meredy-zoom.com', port=443): Failed to resolve 'lpa.meredy-zoom.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Vamos começar
 
-### `https://lpa.newspot-zone.com/tgp_en_4_lat_lp_npz`
+### `https://test.tlpdaisy.com/quat_en_4_lp_tlp`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.newspot-zone.com', port=443): Max retries exceeded with url: /tgp_en_4_lat_lp_npz (Caused by NameResolutionError("HTTPSConnection(host='lpa.newspot-zone.com', port=443): Failed to resolve 'lpa.newspot-zone.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Sign up
 
 ### `https://lpa.bloginsightzone.com/ai_en_v1_bze`
 
@@ -1117,10 +1135,12 @@ _LP URLs не настроены_
 - **Meta description:** TEST domain
 - **CTA:** Obtener información
 
-### `https://lpa.columnlink.com/bcol_es_co_lp_clk`
+### `https://test.tlpdaisy.com/bcol_es_co_lp_xxx`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.columnlink.com', port=443): Max retries exceeded with url: /bcol_es_co_lp_clk (Caused by NameResolutionError("HTTPSConnection(host='lpa.columnlink.com', port=443): Failed to resolve 'lpa.columnlink.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Solicitar información
 
 ### `https://test.tlpdaisy.com/bnc_388_xxx`
 
@@ -1186,18 +1206,22 @@ _LP URLs не настроены_
 ---
 ## Grupo Aval
 
-### `https://lpa.toparticlesway.com/zvsk_2_es_lp_taw`
+### `https://lpa.discoverblogzone.com/gav_2_es_lp_dbz`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Discover Blog Zone
+- **Meta description:** Discover Blog Zone
+- **CTA:** Obtener información
 
 ---
 ## SQM
 
-### `https://lpa.bloggtracks.com/sqm_lat_cl_btk`
+### `https://lpa.articleviewtool.com/sqm_lat_cl_avt`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Article View Tool
+- **Meta description:** Article View Tool
+- **CTA:** Descubre tus posibles ganancias a corto plazo
 
 ---
 ## Cervesaria Nacional
@@ -1212,23 +1236,17 @@ _LP URLs не настроены_
 ---
 ## Banco De Guatemala
 
-### `https://lpa.techflowdesk.com/qigp_es_lp_tfd`
-
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
-
-### `https://lpa.techdigestview.com/bngt_7189_1_es_gt_lp_tdv`
-
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+_LP URLs не настроены_
 
 ---
 ## Boubyan Bank
 
-### `https://lpa.newsblogfactor.com/boub_7787_3_ar_fm_nbf`
+### `https://lpr.webreviewjump.com/boub_7787_3_ar_fm_wrj`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Web Review Jump
+- **Meta description:** Web Review Jump
+- **CTA:** ابدأ الآن
 
 ### `https://test.tlpdaisy.com/boub_2_fm_xxx`
 
@@ -1240,15 +1258,19 @@ _LP URLs не настроены_
 ---
 ## Banorte
 
-### `https://lpa.read-itnowbest.com/zvsz_21701_es_mx_rib`
+### `https://lpa.newslinehubzone.com/mrcd_21701_es_nlh`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** News Line Hub Zone
+- **Meta description:** News Line Hub Zone
+- **CTA:** Obtener información
 
-### `https://lpa.mediastory-tone.com/bnr_6813_es_lp_mst`
+### `https://test.tlpdaisy.com/react_bnr_6813`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.mediastory-tone.com', port=443): Max retries exceeded with url: /bnr_6813_es_lp_mst (Caused by NameResolutionError("HTTPSConnection(host='lpa.mediastory-tone.com', port=443): Failed to resolve 'lpa.mediastory-tone.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Obtén información
 
 ### `https://lpa.read-itnowbest.com/bnr_c_lp_rib`
 
@@ -1280,10 +1302,12 @@ _LP URLs не настроены_
 ---
 ## Enel
 
-### `https://lpa.newsinsightline.com/nel_co_8_lp_nil`
+### `https://test.tlpdaisy.com/nel_co_8_lp_xxx`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** Comenzar
 
 ---
 ## Al Salam Bank
@@ -1315,10 +1339,12 @@ _LP URLs не настроены_
 ---
 ## Trade Vector AI
 
-### `https://lpr.blognewschain.com/ait_tva_l1_ar_lp_bgc`
+### `https://test.tlpdaisy.com/ait_tva_l1_ar_lp_xxx`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** TEST domain
+- **Meta description:** TEST domain
+- **CTA:** سجّل الآن
 
 ---
 ## Finance Eagle
@@ -1364,17 +1390,21 @@ _LP URLs не настроены_
 - **Meta description:** TEST domain
 - **CTA:** استثمر الآن
 
-### `https://lpa.articleresearchzone.com/qtre_ar_fm_cze`
+### `https://lpa.readtechfocus.com/qtre_ar_fm_rtf`
 
-- **Статус:** BROKEN — Connection error: HTTPSConnectionPool(host='lpa.articleresearchzone.com', port=443): Max retries exceeded with url: /qtre_ar_fm_cze (Caused by NameResolutionError("HTTPSConnection(host='lpa.articleresearchzone.com', port=443): Failed to resolve 'lpa.articleresearchzone.com' ([Errno 11001] getaddrinfo failed)"))
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Read Tech Focus
+- **Meta description:** Read Tech Focus
+- **CTA:** سجل هنا
 
 ---
 ## Amzon
 
-### `https://lpa.toolcloudscope.com/amz_26725_es_4_lat_tcs`
+### `https://lpa.fusionboardview.com/amz_26725_es_4_lat_fbv`
 
-- **Статус:** BROKEN — HTTP 404
-- **Действие:** Замени URL в Excel и запусти sync_offers + parse_lps повторно
+- **Статус:** OK (HTTP 200)
+- **Title:** Fusion Board View
+- **Meta description:** Fusion Board View
+- **CTA:** Obtener información
 
 ---
