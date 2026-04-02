@@ -1,0 +1,1 @@
+../artifacts/agents/architect.md

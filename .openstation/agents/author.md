@@ -1,0 +1,1 @@
+../artifacts/agents/author.md
