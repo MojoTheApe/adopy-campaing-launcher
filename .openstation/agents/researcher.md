@@ -1,1 +1,0 @@
-../artifacts/agents/researcher.md

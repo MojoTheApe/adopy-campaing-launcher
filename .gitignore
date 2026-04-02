@@ -26,11 +26,11 @@ config/google_credentials.json
 # Obsidian
 .obsidian/
 
-# OpenStation local state and logs
-.openstation/state.db
-.openstation/state.db-shm
-.openstation/state.db-wal
-.openstation/artifacts/logs/
+# OpenStation
+.openstation/
+
+# Claude Code
+.claude/
 
 # OS
 .DS_Store

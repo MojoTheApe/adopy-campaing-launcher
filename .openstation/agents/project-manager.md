@@ -1,1 +1,0 @@
-../artifacts/agents/project-manager.md
