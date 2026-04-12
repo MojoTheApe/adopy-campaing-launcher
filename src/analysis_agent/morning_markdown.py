@@ -15,9 +15,21 @@ def _esc(s: str) -> str:
 def _table(headers: List[str], rows: List[List[str]]) -> str:
     if not rows:
         return "_No data._"
-    h = "| " + " | ".join(_esc(x) for x in headers) + " |"
-    sep = "| " + " | ".join("---" for _ in headers) + " |"
-    body = ["| " + " | ".join(_esc(x) for x in row) + " |" for row in rows]
+    escaped_headers = [_esc(x) for x in headers]
+    escaped_rows = [[_esc(c) for c in row] for row in rows]
+    # Compute column widths for alignment
+    col_widths = [len(h) for h in escaped_headers]
+    for row in escaped_rows:
+        for i, cell in enumerate(row):
+            if i < len(col_widths):
+                col_widths[i] = max(col_widths[i], len(cell))
+    def _pad(cells: List[str]) -> str:
+        padded = [cells[i].ljust(col_widths[i]) if i < len(col_widths) else cells[i]
+                  for i in range(len(cells))]
+        return "| " + " | ".join(padded) + " |"
+    h = _pad(escaped_headers)
+    sep = "| " + " | ".join("-" * w for w in col_widths) + " |"
+    body = [_pad(row) for row in escaped_rows]
     return "\n".join([h, sep, *body])
 
 
@@ -47,11 +59,10 @@ def _render_cm_comparison(rows: List[Dict[str, Any]], my_cm: str) -> str:
             str(r["deposits"]),
             str(r["leads"]),
             _fmt_money(r["spend"]),
-            _fmt_money(r["net"]),
             cpa_s,
             _fmt_float(r["roi"]),
         ])
-    lines.append(_table(["CM", "Dep", "Leads", "Spend", "Net", "CPA", "ROI"], table_rows))
+    lines.append(_table(["CM", "Dep", "Leads", "Spend", "CPA", "ROI"], table_rows))
     return "\n".join(lines)
 
 
@@ -111,7 +122,7 @@ def _render_top_combos(combos: List[Dict[str, Any]]) -> str:
     for c in combos:
         roi_s = _fmt_float(c["roi"]) if c["roi"] else "—"
         cpa_s = _fmt_money(c["cpa"]) if c["cpa"] else "—"
-        combo_label = f"{c['device']} + {c['interest']} + {c['age']} + {c['creative'][:20]}"
+        combo_label = f"{c['device']} + {c['interest']} + {c['age']} + {c['creative'][:25]}"
         table_rows.append([
             c["category"],
             c["offer"][:15],
@@ -119,10 +130,9 @@ def _render_top_combos(combos: List[Dict[str, Any]]) -> str:
             str(c["deposits"]),
             cpa_s,
             roi_s,
-            c["top_account"][:20] if c["top_account"] else "—",
         ])
     lines.append(_table(
-        ["Type", "Offer", "Combo (device+interest+age+creative)", "Dep", "CPA", "ROI", "TopAccount"],
+        ["Type", "Offer", "Combo", "Dep", "CPA", "ROI"],
         table_rows,
     ))
     return "\n".join(lines)
@@ -170,7 +180,7 @@ def _render_creatives(rows: List[Dict[str, Any]]) -> str:
 
 def _render_ai_context(block: str) -> str:
     return "\n".join([
-        "### 6. Контекст для AI (скопируй в чат)",
+        "### 4. Контекст для AI (скопируй в чат)",
         "",
         "```",
         block,
@@ -180,7 +190,7 @@ def _render_ai_context(block: str) -> str:
 
 def _render_hypotheses(block: str) -> str:
     return "\n".join([
-        "### 7. Гипотезы (скопируй в чат)",
+        "### 5. Гипотезы (скопируй в чат)",
         "",
         "```",
         block,
@@ -189,7 +199,7 @@ def _render_hypotheses(block: str) -> str:
 
 
 def _render_account_statuses(account_rows: List[Dict[str, Any]]) -> str:
-    lines = ["### 8–9. Статусы аккаунтов", ""]
+    lines = ["### 6–7. Статусы аккаунтов", ""]
     if not account_rows:
         lines.append(
             "_GSheet account data not loaded. Set GSHEET_ACCOUNTS_ID in .env to enable._"
@@ -201,22 +211,20 @@ def _render_account_statuses(account_rows: List[Dict[str, Any]]) -> str:
         ready_s = "✅" if r["is_ready"] else "❌"
         to_do_s = r["to_do"] if r["to_do"] else "—"
         cost_s = r.get("cost", "") or "—"
-        ftds_s = r.get("ftds", "") or "—"
         stock_s = r.get("stock", "") or "—"
         table_rows.append([
             r["account_label"],
             cost_s,
-            ftds_s,
             stock_s,
             to_do_s,
             ready_s,
         ])
-    lines.append(_table(["Account", "Cost", "FTDs", "Asset", "To Do", "✓"], table_rows))
+    lines.append(_table(["Account", "Cost", "Asset", "To Do", "✓"], table_rows))
     return "\n".join(lines)
 
 
 def _render_close_recs(close_recs: Dict[str, List[Dict[str, Any]]]) -> str:
-    lines = ["### 10. Что закрыть (оптимизация)", ""]
+    lines = ["### 8. Что закрыть (оптимизация)", ""]
     any_data = any(v for v in close_recs.values())
     if not any_data:
         lines.append("_No ad sets with 0 FTD and notable spend — nothing to close._")
@@ -236,7 +244,7 @@ def _render_close_recs(close_recs: Dict[str, List[Dict[str, Any]]]) -> str:
 
 
 def _render_open_recs(open_recs: Dict[str, List[Dict[str, Any]]]) -> str:
-    lines = ["### 11. Что открыть (2 кампании на аккаунт)", ""]
+    lines = ["### 9. Что открыть (2 кампании на аккаунт)", ""]
     any_data = any(v for v in open_recs.values())
     if not any_data:
         lines.append("_No ready accounts or no combos to recommend._")
@@ -272,10 +280,6 @@ def _render_country_section(section: Dict[str, Any], my_cm: str) -> str:
         _render_trend(section.get("trend", {})),
         "",
         _render_top_combos(section.get("top_combos", [])),
-        "",
-        _render_targeting(section.get("targeting", [])),
-        "",
-        _render_creatives(section.get("creatives", [])),
         "",
         _render_ai_context(section.get("ai_context", "")),
         "",
