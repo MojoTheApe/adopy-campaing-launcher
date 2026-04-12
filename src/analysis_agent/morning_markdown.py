@@ -198,10 +198,20 @@ def _render_account_statuses(account_rows: List[Dict[str, Any]]) -> str:
 
     table_rows = []
     for r in account_rows:
-        ready_s = "✅ Ready" if r["is_ready"] else f"❌ {r['to_do'] or 'Disabled'}"
+        ready_s = "✅" if r["is_ready"] else "❌"
         to_do_s = r["to_do"] if r["to_do"] else "—"
-        table_rows.append([r["account_label"], to_do_s, ready_s])
-    lines.append(_table(["Account", "To Do", "Status"], table_rows))
+        cost_s = r.get("cost", "") or "—"
+        ftds_s = r.get("ftds", "") or "—"
+        stock_s = r.get("stock", "") or "—"
+        table_rows.append([
+            r["account_label"],
+            cost_s,
+            ftds_s,
+            stock_s,
+            to_do_s,
+            ready_s,
+        ])
+    lines.append(_table(["Account", "Cost", "FTDs", "Asset", "To Do", "✓"], table_rows))
     return "\n".join(lines)
 
 

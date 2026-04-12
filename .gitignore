@@ -22,6 +22,8 @@ output/*.md
 # Secrets (never commit)
 .env
 config/google_credentials.json
+config/oauth_client.json
+config/token_accounts.json
 
 # Obsidian
 .obsidian/

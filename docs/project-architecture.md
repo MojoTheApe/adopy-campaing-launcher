@@ -174,8 +174,8 @@ knowledge_base.json ◄── knowledge_base.py (Python API)
   Adset Name, Ad Title, # Leads, # FTDs, $ Spend, CM, Ad Asset, $ Net)
 - **Processing:** `compute_metrics` → `enrich_structure` → `aggregate_combos`
 - **Output:** DataFrame of combo rows categorized as Strong/Interesting,
-  plus console reports (`print_report`, `print_short_report`,
-  `print_cm_breakdown_for_country`, `print_offer_comparison_and_top_campaigns`)
+  plus Markdown report from `build_full_report_markdown` in
+  `report_markdown.py` (thin wrappers: `print_report`, `print_short_report`, etc.)
 - **CLI:** `python src/analysis_agent/analyze_fb_stats.py --excel <path>
   [--country <name>] [--top N] [--output FILE] [--short] [--with-context]
   [--asset <name>]`

@@ -1,9 +1,8 @@
 import argparse
 import os
-import re
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 # Ensure UTF-8 output so Cyrillic KB context doesn't crash on Windows
 if hasattr(sys.stdout, "reconfigure"):
@@ -27,10 +26,10 @@ from config.analysis_rules import (
 )
 from config.paths import get_excel_path
 from src.knowledge_agent.knowledge_base import (
-    format_target_context_line,
     resolve_target_code,
     log_unknown_target,
 )
+from src.analysis_agent.report_markdown import build_full_report_markdown
 
 USE_LATEST_DATE_ONLY = False
 _get_excel_path = get_excel_path
@@ -313,136 +312,16 @@ def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
-def format_combo_row(row: pd.Series, with_context: bool = False) -> str:
-    country = str(row.get("Country Final") or "").strip()
-    country_code_raw = row.get("Country Code")
-    country_code = (
-        str(country_code_raw).strip()
-        if country_code_raw and str(country_code_raw).strip().lower() not in ("", "nan")
-        else country.upper()
-    )
-    device = str(row.get("Device") or "ALL").strip()
-    interest = str(row.get("Interest") or "Wide").strip()
-    age = str(row.get("Age") or "ALL").strip()
-    creative = str(row.get("Creative") or "—").strip()
-    text_segment = str(row.get("TextSegment") or "OTHER").strip()
-
-    category = str(row.get("Category", "Strong"))
-    category_label = "Strong" if category == "Strong" else "Interesting"
-
-    line_header = f"{country} ({country_code})"
-    combo_line = f"{country_code} - {device} + {interest} + {age} + {creative} | {text_segment}"
-
-    deposits = int(row.get("Deposits") or 0)
-    leads = int(row.get("Leads") or 0)
-    cpl_val = row.get("CPL")
-    cpl = float(cpl_val) if pd.notna(cpl_val) else 0.0
-    cpa_val = row.get("CPA")
-    cpa = float(cpa_val) if pd.notna(cpa_val) else 0.0
-    cr_val = row.get("CR")
-    cr = float(cr_val) if pd.notna(cr_val) else 0.0
-
-    stats_line = f"Stats: Deposits: {deposits} | Leads: {leads} | CPL: ${cpl:.2f} | CPA: ${cpa:.2f} | CR: {cr:.2f}%"
-
-    context_line = ""
-    if with_context:
-        ctx = format_target_context_line(interest)
-        if ctx:
-            context_line = f"\n{ctx}"
-
-    return f"""{line_header}
-[{category_label}]
-{combo_line}
-{stats_line}{context_line}
-"""
-
-
 def print_report(combos: pd.DataFrame, with_context: bool = False) -> None:
-    if combos.empty:
-        print("No qualifying combos found based on current rules.")
-        return
+    from src.analysis_agent.report_markdown import render_combo_report_md
 
-    all_countries = sorted(
-        {c for c in combos["Country Final"].fillna("").unique() if str(c).strip() != ""}
-    )
-
-    for country in all_countries:
-        country_df = combos[combos["Country Final"] == country].copy()
-
-        strong = country_df[country_df["Category"] == "Strong"].copy()
-        interesting = country_df[country_df["Category"] == "Interesting"].copy()
-
-        strong = strong.sort_values(
-            by=["Deposits", "CR", "Profit"],
-            ascending=[False, False, False],
-        )
-        interesting = interesting.sort_values(
-            by=["CR", "Profit"],
-            ascending=[False, False],
-        )
-
-        combined = pd.concat([strong, interesting], ignore_index=True)
-        top_n = combined.head(3)
-
-        if top_n.empty:
-            continue
-
-        for _, row in top_n.iterrows():
-            print(format_combo_row(row, with_context=with_context))
-
-
-def _strip_date_from_display(s: str) -> str:
-    """Убрать дату вида DD.MM.YYYY из строки для вывода (дата открытия кампании не показываем)."""
-    if not s or not isinstance(s, str):
-        return s
-    s = re.sub(r"\s*\d{1,2}\.\d{1,2}\.\d{4}\s*", " ", s)
-    return re.sub(r"\s+", " ", s).strip()
+    print(render_combo_report_md(combos, with_context=with_context))
 
 
 def print_short_report(combos: pd.DataFrame, top_per_country: int = 2, df: Optional[pd.DataFrame] = None) -> None:
-    """Короткий отчёт: топ N связок по каждой стране; проблемные — отдельной категорией с CM и аккаунтом."""
-    if combos.empty:
-        print("No qualifying combos found.")
-        return
-    countries = sorted(
-        {c for c in combos["Country Final"].fillna("").unique() if str(c).strip() != ""}
-    )
-    col_country = 22
-    col_offer = 22
-    col_combo = 44
-    col_type = 12
-    col_dep = 8
-    col_roi = 8
-    rows = []
-    for country in countries:
-        country_df = combos[combos["Country Final"] == country].copy()
-        strong = country_df[country_df["Category"] == "Strong"].copy()
-        interesting = country_df[country_df["Category"] == "Interesting"].copy()
-        strong = strong.sort_values(by=["Deposits", "CR", "Profit"], ascending=[False, False, False])
-        interesting = interesting.sort_values(by=["CR", "Profit"], ascending=[False, False])
-        combined = pd.concat([strong, interesting], ignore_index=True)
-        top = combined.head(top_per_country)
-        for i, (_, row) in enumerate(top.iterrows(), 1):
-            offer = str(row.get("Offer") or "").strip() or "—"
-            device = str(row.get("Device") or "ALL").strip()[:8]
-            interest = _strip_date_from_display(str(row.get("Interest") or "Wide").strip())[:12]
-            age = _strip_date_from_display(str(row.get("Age") or "ALL").strip())[:8]
-            creative = str(row.get("Creative") or "—").strip()[:16]
-            combo_str = f"{device} + {interest} + {age} + {creative}"
-            cat = str(row.get("Category", ""))
-            dep = int(row.get("Deposits") or 0)
-            roi_val = row.get("ROI")
-            roi_s = f"{roi_val:.2f}" if pd.notna(roi_val) else "—"
-            rows.append((country[:col_country], str(i), offer[:col_offer], combo_str[:col_combo], cat[:col_type], str(dep), roi_s))
-    if rows:
-        sep = "+" + "-" * (col_country + 2) + "+" + "-" * 4 + "+" + "-" * (col_offer + 2) + "+" + "-" * (col_combo + 2) + "+" + "-" * (col_type + 2) + "+" + "-" * (col_dep + 2) + "+" + "-" * (col_roi + 2) + "+"
-        fmt = "| {:<%d} | {:>2} | {:<%d} | {:<%d} | {:<%d} | {:>%d} | {:>%d} |" % (col_country, col_offer, col_combo, col_type, col_dep, col_roi)
-        print("\n" + sep)
-        print(fmt.format("Country", "#", "Offer", "Targeting + Creative", "Type", "Dep", "ROI"))
-        print(sep)
-        for r in rows:
-            print(fmt.format(r[0], r[1], r[2], r[3], r[4], r[5], r[6]))
-        print(sep)
+    from src.analysis_agent.report_markdown import render_short_report_md
+
+    print(render_short_report_md(combos, top_per_country=top_per_country, df=df))
 
 
 
@@ -463,169 +342,64 @@ def _combo_match_mask(df: pd.DataFrame, row: pd.Series, group_cols: list) -> pd.
 
 
 
+def _merge_account_substrings(
+    accounts_csv: Optional[str], account_substr_repeat: Optional[List[str]]
+) -> Optional[List[str]]:
+    """Combine --accounts (comma-separated) and repeated --account-substr into one list."""
+    subs: List[str] = []
+    if accounts_csv:
+        subs.extend(s.strip() for s in accounts_csv.split(",") if s.strip())
+    if account_substr_repeat:
+        subs.extend(s.strip() for s in account_substr_repeat if s and str(s).strip())
+    return subs if subs else None
+
+
+def _parse_focus_countries(csv: Optional[str]) -> Optional[List[str]]:
+    """Comma-separated Country values from Excel (matched case-insensitively)."""
+    if not csv or not str(csv).strip():
+        return None
+    return [s.strip() for s in csv.split(",") if s.strip()]
+
+
+def filter_dataframe_by_focus_countries(df: pd.DataFrame, countries: List[str]) -> pd.DataFrame:
+    want = {c.strip().lower() for c in countries if c.strip()}
+    if not want:
+        return df
+    col = df["Country"].fillna("").astype(str).str.strip().str.lower()
+    return df[col.isin(want)].copy()
+
+
+def filter_dataframe_by_account_substrings(
+    df: pd.DataFrame, substrings: List[str]
+) -> pd.DataFrame:
+    """Keep rows where Account Alias contains any substring (case-insensitive, literal match)."""
+    col = df["Account Alias"].fillna("").astype(str)
+    mask = pd.Series(False, index=df.index)
+    for t in substrings:
+        mask |= col.str.contains(t, case=False, regex=False)
+    return df[mask].copy()
+
+
+def print_account_breakdown_for_country(df: pd.DataFrame, country_code: str) -> None:
+    from src.analysis_agent.report_markdown import render_account_breakdown_md
+
+    text = render_account_breakdown_md(df, country_code)
+    if text:
+        print(text)
+
+
 def print_cm_breakdown_for_country(df: pd.DataFrame, country_code: str) -> None:
-    df_country = df[df["Country Final"] == country_code].copy()
-    if df_country.empty:
-        print(f"No data for country {country_code}.")
-        return
+    from src.analysis_agent.report_markdown import render_cm_breakdown_md
 
-    grouped = (
-        df_country.groupby("CM", dropna=False)
-        .agg(
-            Deposits=("# FTDs", "sum"),
-            Leads=("# Leads", "sum"),
-            Spend=("$ Spend", "sum"),
-            Net=("$ Net", "sum"),
-        )
-        .reset_index()
-    )
-
-    grouped["CPL"] = grouped["Spend"] / grouped["Leads"].replace(0, pd.NA)
-    grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
-    grouped["CR"] = (grouped["Deposits"] / grouped["Leads"].replace(0, pd.NA)) * 100.0
-    grouped["ROI"] = grouped["Net"] / grouped["Spend"].replace(0, pd.NA)
-
-    grouped = grouped.sort_values(by=["Net", "Deposits"], ascending=[False, False])
-
-    country_display = "".join(c for c in str(country_code) if ord(c) < 128).strip() or "Unknown"
-    cols = ["CM", "Deposits", "Leads", "Spend", "Net", "CPL", "CPA", "CR%", "ROI"]
-    widths = [22, 9, 7, 12, 12, 8, 10, 7, 6]
-    sep = "+" + "+".join("-" * w for w in widths) + "+"
-    fmt = "|" + "|".join(f" {{:<{w}}} " for w in widths) + "|"
-
-    print()
-    print(f"CM breakdown for {country_display}:")
-    print(sep)
-    print(fmt.format(*cols))
-    print(sep)
-
-    for _, row in grouped.iterrows():
-        cm_name = str(row.get("CM") or "UNKNOWN_CM")[:22]
-        deposits = int(row.get("Deposits") or 0)
-        leads = int(row.get("Leads") or 0)
-        spend = float(row.get("Spend") or 0.0)
-        net = float(row.get("Net") or 0.0)
-        cpl_val = row.get("CPL")
-        cpl = float(cpl_val) if pd.notna(cpl_val) else 0.0
-        cpa_val = row.get("CPA")
-        cpa_str = f"${float(cpa_val):.2f}" if pd.notna(cpa_val) else "-"
-        cr_val = row.get("CR")
-        cr = float(cr_val) if pd.notna(cr_val) else 0.0
-        roi_val = row.get("ROI")
-        roi = float(roi_val) if pd.notna(roi_val) else 0.0
-        print(
-            fmt.format(
-                cm_name,
-                str(deposits),
-                str(leads),
-                f"${spend:,.2f}",
-                f"${net:,.2f}",
-                f"${cpl:.2f}",
-                cpa_str,
-                f"{cr:.2f}",
-                f"{roi:.2f}",
-            )
-        )
-    print(sep)
+    print(render_cm_breakdown_md(df, country_code))
 
 
 def print_offer_comparison_and_top_campaigns(
     df: pd.DataFrame, combos: pd.DataFrame, country_name: str, top_n: int = 2
 ) -> None:
-    """Сравнение по офферам для страны и рекомендация топ-N кампаний на каждый оффер."""
-    country_lower = str(country_name).strip().lower()
-    df_country = df[df["Country Final"].astype(str).str.strip().str.lower() == country_lower]
-    if df_country.empty:
-        print(f"No data for country {country_name}.")
-        return
+    from src.analysis_agent.report_markdown import render_offer_comparison_md
 
-    # Таблица по офферам
-    by_offer = (
-        df_country.groupby("Offer", dropna=False)
-        .agg(
-            Deposits=("# FTDs", "sum"),
-            Leads=("# Leads", "sum"),
-            Spend=("$ Spend", "sum"),
-            Net=("$ Net", "sum"),
-        )
-        .reset_index()
-    )
-    by_offer["Offer"] = by_offer["Offer"].fillna("").astype(str).str.strip()
-    by_offer["CPL"] = by_offer["Spend"] / by_offer["Leads"].replace(0, pd.NA)
-    by_offer["CPA"] = by_offer["Spend"] / by_offer["Deposits"].replace(0, pd.NA)
-    by_offer["CR"] = (by_offer["Deposits"] / by_offer["Leads"].replace(0, pd.NA)) * 100.0
-    by_offer["ROI"] = by_offer["Net"] / by_offer["Spend"].replace(0, pd.NA)
-    by_offer = by_offer.sort_values(by=["Net", "Deposits"], ascending=[False, False])
-
-    cols = ["Offer", "Deposits", "Leads", "Spend", "Net", "CPL", "CPA", "CR%", "ROI"]
-    widths = [18, 9, 7, 12, 12, 8, 10, 7, 6]
-    sep = "+" + "+".join("-" * w for w in widths) + "+"
-    fmt = "|" + "|".join(f" {{:<{w}}} " for w in widths) + "|"
-
-    print()
-    print(f"Offer comparison for {country_name}:")
-    print(sep)
-    print(fmt.format(*cols))
-    print(sep)
-    for _, row in by_offer.iterrows():
-        offer = (str(row.get("Offer") or "").strip() or "—")[:18]
-        deposits = int(row.get("Deposits") or 0)
-        leads = int(row.get("Leads") or 0)
-        spend = float(row.get("Spend") or 0.0)
-        net = float(row.get("Net") or 0.0)
-        cpl_val = row.get("CPL")
-        cpl = f"${float(cpl_val):.2f}" if pd.notna(cpl_val) else "-"
-        cpa_val = row.get("CPA")
-        cpa_str = f"${float(cpa_val):.2f}" if pd.notna(cpa_val) else "-"
-        cr_val = row.get("CR")
-        cr = f"{float(cr_val):.2f}" if pd.notna(cr_val) else "-"
-        roi_val = row.get("ROI")
-        roi = f"{float(roi_val):.2f}" if pd.notna(roi_val) else "-"
-        print(fmt.format(offer, str(deposits), str(leads), f"${spend:,.2f}", f"${net:,.2f}", cpl, cpa_str, cr, roi))
-    print(sep)
-
-    # Топ-N кампаний на каждый оффер (из combos)
-    combos_country = combos[
-        combos["Country Final"].astype(str).str.strip().str.lower() == country_lower
-    ].copy()
-    if combos_country.empty:
-        print(f"No qualifying combos for {country_name} to recommend.")
-        return
-
-    combos_country["Offer"] = combos_country["Offer"].fillna("").astype(str).str.strip()
-    offers_in_combos = sorted(combos_country["Offer"].unique())
-    print()
-    print(f"Recommendation: open top {top_n} campaigns per offer for {country_name}:")
-    print("-" * 60)
-    for offer in offers_in_combos:
-        combo_offer = combos_country[combos_country["Offer"] == offer].copy()
-        combo_offer = combo_offer.sort_values(
-            by=["ROI", "Deposits", "CR"], ascending=[False, False, False]
-        )
-        top = combo_offer.head(top_n)
-        if top.empty:
-            continue
-        offer_display = offer if offer else "—"
-        print(f"\n  Offer: {offer_display}")
-        for i, (_, row) in enumerate(top.iterrows(), 1):
-            device = row.get("Device")
-            device = "ALL" if device is None or (isinstance(device, float) and pd.isna(device)) else str(device).strip()
-            interest = row.get("Interest")
-            interest = "Wide" if interest is None or (isinstance(interest, float) and pd.isna(interest)) else str(interest).strip()
-            age = row.get("Age")
-            age = "ALL" if age is None or (isinstance(age, float) and pd.isna(age)) else str(age).strip()
-            creative = row.get("Creative") or "—"
-            if isinstance(creative, float) and pd.isna(creative):
-                creative = "—"
-            creative = str(creative).strip()
-            text_seg = row.get("TextSegment") or "—"
-            if isinstance(text_seg, float) and pd.isna(text_seg):
-                text_seg = "—"
-            text_seg = str(text_seg).strip()
-            roi_val = row.get("ROI")
-            roi_s = f"ROI {roi_val:.2f}" if pd.notna(roi_val) else ""
-            deposits = int(row.get("Deposits") or 0)
-            print(f"    {i}. {device} + {interest} + {age} + {creative} + {text_seg}  |  Deposits: {deposits}  {roi_s}")
+    print(render_offer_comparison_md(df, combos, country_name, top_n=top_n))
 
 
 def main(  # noqa: PLR0913
@@ -636,25 +410,89 @@ def main(  # noqa: PLR0913
     short_report: bool = False,
     with_context: bool = False,
     asset_filter: Optional[str] = None,
+    account_substrings: Optional[List[str]] = None,
+    focus_countries: Optional[List[str]] = None,
 ) -> None:
     excel_path = excel_path or _get_excel_path()
     if not os.path.exists(excel_path):
         raise FileNotFoundError(f"Excel file not found: {excel_path}")
 
-    def run() -> None:
+    filter_lines: List[str] = []
+
+    def build_report_text() -> str:
         df = pd.read_excel(excel_path)
 
         if asset_filter:
             mask = df["Ad Asset"].fillna("").astype(str).str.lower() == asset_filter.lower()
             df_filtered = df[mask]
             if df_filtered.empty:
-                print(f"[!] No rows found for asset '{asset_filter}'. Check the name.")
-                available = sorted(df["Ad Asset"].dropna().unique())
-                print(f"    Available assets: {', '.join(available)}")
-                return
-            print(f"[filter] Asset='{asset_filter}': {len(df_filtered)} rows\n")
-            df.__class__ = df_filtered.__class__
+                lines = [
+                    f"[!] No rows found for asset '{asset_filter}'. Check the name.",
+                    f"    Available assets: {', '.join(str(x) for x in sorted(df['Ad Asset'].dropna().unique()))}",
+                ]
+                return build_full_report_markdown(
+                    df.head(0),
+                    pd.DataFrame(),
+                    country_offer=country_offer,
+                    top_n=top_n,
+                    short_report=short_report,
+                    with_context=with_context,
+                    account_substrings=account_substrings,
+                    filter_preamble="\n".join(filter_lines + lines),
+                    source_excel_path=excel_path,
+                )
+            filter_lines.append(
+                f"[filter] Asset='{asset_filter}': {len(df_filtered)} rows"
+            )
             df = df_filtered
+
+        if account_substrings:
+            n_before = len(df)
+            df = filter_dataframe_by_account_substrings(df, account_substrings)
+            if df.empty:
+                lines = [
+                    "[!] No rows match account filter (Account Alias must contain one of: "
+                    f"{', '.join(account_substrings)}).",
+                ]
+                return build_full_report_markdown(
+                    df,
+                    pd.DataFrame(),
+                    country_offer=country_offer,
+                    top_n=top_n,
+                    short_report=short_report,
+                    with_context=with_context,
+                    account_substrings=account_substrings,
+                    filter_preamble="\n".join(filter_lines + lines),
+                    source_excel_path=excel_path,
+                )
+            filter_lines.append(
+                f"[filter] Account substrings ({len(account_substrings)} patterns): "
+                f"{n_before} -> {len(df)} rows"
+            )
+
+        if focus_countries:
+            n_before = len(df)
+            df = filter_dataframe_by_focus_countries(df, focus_countries)
+            if df.empty:
+                lines = [
+                    "[!] No rows left after --focus-countries filter "
+                    f"(expected Country in: {', '.join(focus_countries)}).",
+                ]
+                return build_full_report_markdown(
+                    df,
+                    pd.DataFrame(),
+                    country_offer=country_offer,
+                    top_n=top_n,
+                    short_report=short_report,
+                    with_context=with_context,
+                    account_substrings=account_substrings,
+                    filter_preamble="\n".join(filter_lines + lines),
+                    source_excel_path=excel_path,
+                )
+            filter_lines.append(
+                f"[filter] Focus countries ({len(focus_countries)}): "
+                f"{n_before} -> {len(df)} rows"
+            )
 
         required_cols = [
             "Country",
@@ -675,36 +513,27 @@ def main(  # noqa: PLR0913
         df = compute_metrics(df)
         df = enrich_structure(df)
         combos = aggregate_combos(df)
-        if short_report:
-            print_short_report(combos, top_per_country=top_n, df=df)
-            return
-        print_report(combos, with_context=with_context)
-
-        all_countries = sorted(
-            c for c in df["Country Final"].dropna().astype(str).unique()
-            if c.strip() and c != "nan"
+        preamble = "\n".join(filter_lines)
+        return build_full_report_markdown(
+            df,
+            combos,
+            country_offer=country_offer,
+            top_n=top_n,
+            short_report=short_report,
+            with_context=with_context,
+            account_substrings=account_substrings,
+            filter_preamble=preamble,
+            source_excel_path=excel_path,
         )
-        for c in all_countries:
-            print_cm_breakdown_for_country(df, c)
 
-        # Отчёт по офферам: по умолчанию для всех стран; при указании --country — только для неё
-        if country_offer.strip().lower() == "all":
-            for c in all_countries:
-                print_offer_comparison_and_top_campaigns(df, combos, c, top_n=top_n)
-        else:
-            print_offer_comparison_and_top_campaigns(df, combos, country_offer, top_n=top_n)
-
+    text = build_report_text()
     if output_path:
-        with open(output_path, "w", encoding="utf-8") as f:
-            old_stdout = sys.stdout
-            sys.stdout = f
-            try:
-                run()
-            finally:
-                sys.stdout = old_stdout
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
         print(f"Report saved to {output_path}", file=sys.stderr)
     else:
-        run()
+        print(text)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -753,11 +582,39 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Filter by Ad Asset name (e.g. 'Adnoc', 'Amazon'). Case-insensitive.",
     )
+    parser.add_argument(
+        "--accounts",
+        type=str,
+        default=None,
+        help="Comma-separated substrings: keep rows where Account Alias contains any (case-insensitive).",
+    )
+    parser.add_argument(
+        "--account-substr",
+        action="append",
+        default=None,
+        dest="account_substr",
+        metavar="SUBSTR",
+        help="Same as substring in --accounts; repeat flag for multiple patterns.",
+    )
+    parser.add_argument(
+        "--focus-countries",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated values of Excel column Country to keep (case-insensitive). "
+            "Use when the same Account Alias appears in multiple geos."
+        ),
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
+    acc_subs = _merge_account_substrings(
+        getattr(args, "accounts", None),
+        getattr(args, "account_substr", None),
+    )
+    fc = _parse_focus_countries(getattr(args, "focus_countries", None))
     main(
         excel_path=args.excel,
         country_offer=args.country,
@@ -766,4 +623,6 @@ if __name__ == "__main__":
         short_report=getattr(args, "short", False),
         with_context=getattr(args, "with_context", False),
         asset_filter=getattr(args, "asset", None),
+        account_substrings=acc_subs,
+        focus_countries=fc,
     )

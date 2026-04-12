@@ -6,6 +6,7 @@ Output: one .xlsx with one sheet per account, columns by name (same as Upluad FB
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import os
 import re
@@ -494,37 +495,52 @@ def write_upload_excel(sheets_data: dict[str, list[dict]], ref: dict, output_pat
     wb.save(output_path)
 
 
-def main():
-    import argparse
-    from config.paths import get_upload_fb_excel_path
+def build_upload_plan_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Agent 8: Build upload Excel from plan CSV")
-    parser.add_argument("plan", nargs="?", help="Path to plan CSV (columns: account, country, asset, os, creative, targeting, age, creative_number, date, copy)")
+    parser.add_argument(
+        "plan",
+        nargs="?",
+        help="Path to plan CSV (columns: account, country, asset, os, creative, targeting, age, creative_number, date, copy)",
+    )
     parser.add_argument("-o", "--output", default=None, help="Output .xlsx path (default: output/upload_plan.xlsx)")
     parser.add_argument("-e", "--excel", default=None, help="Path to Upluad FB.xlsx (default: config)")
-    args = parser.parse_args()
+    return parser
+
+
+def run_upload_plan_from_args(args: argparse.Namespace) -> int:
+    from config.paths import get_upload_fb_excel_path
+
     excel_path = (args.excel or "").strip() or get_upload_fb_excel_path()
     output_path = (args.output or "").strip() or str(_proj_root / "output" / "upload_plan.xlsx")
     if not args.plan:
         print("Usage: python -m src.upload_agent.build_upload_excel <plan.csv> [-o output.xlsx] [-e Upluad FB.xlsx]")
         print("Plan CSV columns:", ", ".join(PLAN_COLUMNS))
-        sys.exit(1)
+        return 1
     plan_path = args.plan
     if not os.path.isfile(plan_path):
         print(f"Plan file not found: {plan_path}")
-        sys.exit(1)
+        return 1
     print("Loading reference data from", excel_path)
     ref = load_reference_data(excel_path)
     print("Parsing plan", plan_path)
     combos = parse_plan_csv(plan_path)
     if not combos:
         print("No rows in plan (need 'account' column)")
-        sys.exit(1)
+        return 1
     by_account = group_plan_by_account(combos)
     print("Building sheets for", len(by_account), "account(s)")
     sheets_data = build_sheets(ref, by_account)
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     write_upload_excel(sheets_data, ref, output_path)
     print("Written:", output_path)
+    return 0
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_upload_plan_argument_parser().parse_args(argv)
+    code = run_upload_plan_from_args(args)
+    if code != 0:
+        sys.exit(code)
 
 
 if __name__ == "__main__":

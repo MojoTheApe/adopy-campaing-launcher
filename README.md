@@ -43,7 +43,22 @@ python run.py
 python src/analysis_agent/analyze_fb_stats.py
 ```
 
-Вывод в консоль: комбо по странам (Strong/Interesting), разбивка по CM по каждой стране, сравнение по офферам и топ-кампании на каждый оффер **по всем странам** (или по одной при указании `--country`).
+Вывод — **Markdown**: комбо по странам (Strong/Interesting), разбивка по CM, сравнение по офферам и топ-кампании на каждый оффер **по всем странам** (или по одной при указании `--country`). Тот же текст уходит в консоль или в файл с `-o`.
+
+### Быстрый полный отчёт в файл
+
+Одна команда, предсказуемый путь (удобно для Cursor / дашборда):
+
+```powershell
+cd fb_agents
+python run.py --country all --top 2 --output output/latest_analytics.md
+```
+
+Или обёртка (из корня репозитория):
+
+```powershell
+.\run_quick_analytics.ps1
+```
 
 ### Параметры командной строки (CLI)
 
@@ -137,7 +152,8 @@ python run_analysis_then_upload.py --account "FacebookUL574 EC Fav" [-e путь
 
 | Компонент | Назначение |
 |-----------|------------|
-| **run.py** | Запуск агента анализа (п.1–4): отчёты по странам, CM, офферы, связки. |
+| **run.py** | Запуск агента анализа (п.1–4): отчёты по странам, CM, офферы, связки (Markdown). Режимы и флаги: [`analysis_agent/ANALYSIS_AGENT_WORKFLOW.md`](analysis_agent/ANALYSIS_AGENT_WORKFLOW.md). |
+| **run_quick_analytics.ps1** | Полный прогон с записью в `output/latest_analytics.md` (см. § «Быстрый полный отчёт в файл»). |
 | **run_jira_from_accounts.py** | Запуск **агента 5**: аккаунты из Upluad FB.xlsx → задачи в Jira (Summary, Description по правилам трёх листов), Labels Limited_QA, Team Media. |
 | **run_upload_from_plan.py** | Запуск **агента 8**: план (CSV) → Excel с листами по аккаунтам под выгрузку в FB. |
 | **run_analysis_then_upload.py** | **Связка:** агент 1 (анализ) → комбо → агент 8 (аплоуд Excel). Один аккаунт, топ-N комбо. |

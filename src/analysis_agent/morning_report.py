@@ -534,23 +534,34 @@ def build_morning_report(
         want = country_filter.strip().lower()
         all_countries = [c for c in all_countries if c.strip().lower() == want]
 
-    # Build a lookup: account alias → rows from GSheet (for all countries)
-    # We map GSheet accounts to Excel countries by matching alias in df
+    # Country name → ISO-2 code mapping (extend as needed)
+    _COUNTRY_TO_CODE: Dict[str, str] = {
+        "mexico": "mx", "guatemala": "gt", "brazil": "br", "chile": "cl",
+        "colombia": "co", "peru": "pe", "argentina": "ar", "ecuador": "ec",
+        "venezuela": "ve", "bolivia": "bo", "paraguay": "py", "uruguay": "uy",
+        "bahrain": "bh", "uae": "ae", "united arab emirates": "ae",
+        "qatar": "qa", "oman": "om", "kuwait": "kw", "saudi arabia": "sa",
+        "nigeria": "ng", "kenya": "ke", "ghana": "gh", "south africa": "za",
+        "albania": "al", "morocco": "ma", "egypt": "eg",
+    }
+
     def _accounts_for_country(country: str) -> List[Dict[str, Any]]:
         """Find GSheet account rows relevant to this Excel country."""
-        # Get the set of Account Alias values that appear in this country's data
         aliases_in_country = set(
             df[df["Country Final"] == country]["Account Alias"]
             .dropna().astype(str).str.strip().unique()
         )
-        matched = [
-            r for r in account_rows
-            if r["alias"] in aliases_in_country
-        ]
-        if not matched and account_rows:
-            # Fallback: match by country_code prefix — GSheet col B (e.g. "MX")
-            # vs first two letters of country name
-            pass
+        # Determine the expected GSheet country_code for this Excel country
+        expected_code = _COUNTRY_TO_CODE.get(country.strip().lower(), "")
+        matched = []
+        for r in account_rows:
+            alias_ok = r["alias"] in aliases_in_country
+            code_ok = (
+                not expected_code  # unknown country — skip code check
+                or r.get("country_code", "").strip().lower() == expected_code
+            )
+            if alias_ok and code_ok:
+                matched.append(r)
         return matched
 
     country_sections = []

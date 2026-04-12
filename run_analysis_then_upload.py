@@ -182,7 +182,7 @@ def run(
     print(f"Upload Excel written: {output_path} ({len(plan_rows)} rows)", file=sys.stderr)
 
 
-def main():
+def build_bridge_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run analysis (Agent 1) then build upload Excel (Agent 8) from combos.",
     )
@@ -198,7 +198,11 @@ def main():
     )
     parser.add_argument("--top", "-t", type=int, default=10, help="Max combos to include (default: 10)")
     parser.add_argument("--plan-csv", default=None, help="Optional: save intermediate plan CSV")
-    args = parser.parse_args()
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_bridge_argument_parser().parse_args(argv)
 
     stats_excel = (args.excel or "").strip() or get_excel_path()
     upload_excel = (args.upload_excel or "").strip() or get_upload_fb_excel_path()
