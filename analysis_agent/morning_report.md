@@ -14,10 +14,10 @@
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend | CPA | ROI  |
-| ------------------ | --- | ----- | ----- | --- | ---- |
-| Evgeni Sedin ← YOU | 0   | 1     | $0.00 | —   | 0.00 |
-| Yotam Balteriski   | 0   | 1     | $0.00 | —   | 0.00 |
+| CM                 | Spend | Leads | Dep | CPL   | CPA | CR  | ROI  |
+| ------------------ | ----- | ----- | --- | ----- | --- | --- | ---- |
+| Evgeni Sedin ← YOU | $0.00 | 1     | 0   | $0.00 | —   | 0%  | 0.00 |
+| Yotam Balteriski   | $0.00 | 1     | 0   | $0.00 | —   | 0%  | 0.00 |
 
 ### 2. Тренд (последние дни)
 
@@ -64,12 +64,12 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend     | CPA       | ROI   |
-| ------------------ | --- | ----- | --------- | --------- | ----- |
-| Evgeni Sedin ← YOU | 0   | 1     | $76.25    | —         | -2.62 |
-| Gil Zangi          | 0   | 5     | $222.02   | —         | 0.00  |
-| Yotam Balteriski   | 0   | 1     | $233.26   | —         | 0.00  |
-| Dan Dicker         | 1   | 37    | $4,320.11 | $4,320.11 | -0.23 |
+| CM                 | Spend     | Leads | Dep | CPL      | CPA       | CR    | ROI   |
+| ------------------ | --------- | ----- | --- | -------- | --------- | ----- | ----- |
+| Evgeni Sedin ← YOU | $76.25    | 1     | 0   | $76.25   | —         | 0%    | -2.62 |
+| Gil Zangi          | $222.02   | 5     | 0   | $44.40   | —         | 0%    | 0.00  |
+| Yotam Balteriski   | $233.26   | 1     | 0   | $233.26  | —         | 0%    | 0.00  |
+| Dan Dicker         | $4,320.11 | 37    | 1   | $116.76  | $4,320.11 | 2.70% | -0.23 |
 
 ### 2. Тренд (последние дни)
 
@@ -156,12 +156,12 @@ _No ad sets with 0 FTD and notable spend — nothing to close._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend      | CPA       | ROI     |
-| ------------------ | --- | ----- | ---------- | --------- | ------- |
-| Evgeni Sedin ← YOU | 2   | 0     | $3.89      | $1.94     | -286.35 |
-| Gil Zangi          | 29  | 1103  | $18,594.60 | $641.19   | 1.26    |
-| Dan Dicker         | 19  | 658   | $12,431.87 | $654.31   | 0.65    |
-| Yotam Balteriski   | 5   | 505   | $5,769.09  | $1,153.82 | 0.20    |
+| CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR    | ROI     |
+| ------------------ | ---------- | ----- | --- | ------ | --------- | ----- | ------- |
+| Evgeni Sedin ← YOU | $3.89      | 0     | 2   | —      | $1.94     | —     | -286.35 |
+| Gil Zangi          | $18,594.60 | 1103  | 29  | $16.86 | $641.19   | 2.63% | 1.26    |
+| Dan Dicker         | $12,431.87 | 658   | 19  | $18.89 | $654.31   | 2.89% | 0.65    |
+| Yotam Balteriski   | $5,769.09  | 505   | 5   | $11.42 | $1,153.82 | 0.99% | 0.20    |
 
 ### 2. Тренд (последние дни)
 
@@ -261,12 +261,12 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend     | CPA       | ROI  |
-| ------------------ | --- | ----- | --------- | --------- | ---- |
-| Evgeni Sedin ← YOU | 0   | 0     | $0.00     | —         | 0.00 |
-| Gil Zangi          | 4   | 294   | $3,922.28 | $980.57   | 4.36 |
-| Dan Dicker         | 3   | 428   | $4,842.44 | $1,614.15 | 0.56 |
-| Yotam Balteriski   | 0   | 403   | $1,988.17 | —         | 0.76 |
+| CM                 | Spend     | Leads | Dep | CPL    | CPA       | CR    | ROI  |
+| ------------------ | --------- | ----- | --- | ------ | --------- | ----- | ---- |
+| Evgeni Sedin ← YOU | $0.00     | 0     | 0   | —      | —         | —     | 0.00 |
+| Gil Zangi          | $3,922.28 | 294   | 4   | $13.34 | $980.57   | 1.36% | 4.36 |
+| Dan Dicker         | $4,842.44 | 428   | 3   | $11.31 | $1,614.15 | 0.70% | 0.56 |
+| Yotam Balteriski   | $1,988.17 | 403   | 0   | $4.93  | —         | 0%    | 0.76 |
 
 ### 2. Тренд (последние дни)
 
@@ -347,9 +347,9 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM        | Dep | Leads | Spend | CPA | ROI  |
-| --------- | --- | ----- | ----- | --- | ---- |
-| Gil Zangi | 0   | 1     | $0.00 | —   | 0.00 |
+| CM        | Spend | Leads | Dep | CPL   | CPA | CR  | ROI  |
+| --------- | ----- | ----- | --- | ----- | --- | --- | ---- |
+| Gil Zangi | $0.00 | 1     | 0   | $0.00 | —   | 0%  | 0.00 |
 
 ### 2. Тренд (последние дни)
 
@@ -396,9 +396,9 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend | CPA | ROI  |
-| ------------------ | --- | ----- | ----- | --- | ---- |
-| Evgeni Sedin ← YOU | 0   | 1     | $0.00 | —   | 0.00 |
+| CM                 | Spend | Leads | Dep | CPL   | CPA | CR  | ROI  |
+| ------------------ | ----- | ----- | --- | ----- | --- | --- | ---- |
+| Evgeni Sedin ← YOU | $0.00 | 1     | 0   | $0.00 | —   | 0%  | 0.00 |
 
 ### 2. Тренд (последние дни)
 
@@ -449,12 +449,12 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend      | CPA       | ROI   |
-| ------------------ | --- | ----- | ---------- | --------- | ----- |
-| Evgeni Sedin ← YOU | 2   | 313   | $6,806.05  | $3,403.03 | 2.76  |
-| Yotam Balteriski   | 5   | 292   | $5,088.74  | $1,017.75 | 6.12  |
-| Gil Zangi          | 6   | 984   | $13,534.70 | $2,255.78 | 1.74  |
-| Dan Dicker         | 3   | 0     | $4.46      | $1.49     | 57.40 |
+| CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR    | ROI   |
+| ------------------ | ---------- | ----- | --- | ------ | --------- | ----- | ----- |
+| Evgeni Sedin ← YOU | $6,806.05  | 313   | 2   | $21.74 | $3,403.03 | 0.64% | 2.76  |
+| Yotam Balteriski   | $5,088.74  | 292   | 5   | $17.43 | $1,017.75 | 1.71% | 6.12  |
+| Gil Zangi          | $13,534.70 | 984   | 6   | $13.75 | $2,255.78 | 0.61% | 1.74  |
+| Dan Dicker         | $4.46      | 0     | 3   | —      | $1.49     | —     | 57.40 |
 
 ### 2. Тренд (последние дни)
 
@@ -564,9 +564,9 @@ Top creatives by deposits:
 
 ### 1. Evgeni vs команда
 
-| CM         | Dep | Leads | Spend | CPA | ROI  |
-| ---------- | --- | ----- | ----- | --- | ---- |
-| Dan Dicker | 0   | 0     | $0.00 | —   | 0.00 |
+| CM         | Spend | Leads | Dep | CPL | CPA | CR  | ROI  |
+| ---------- | ----- | ----- | --- | --- | --- | --- | ---- |
+| Dan Dicker | $0.00 | 0     | 0   | —   | —   | —   | 0.00 |
 
 ### 2. Тренд (последние дни)
 
@@ -613,12 +613,12 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend     | CPA       | ROI  |
-| ------------------ | --- | ----- | --------- | --------- | ---- |
-| Evgeni Sedin ← YOU | 1   | 259   | $3,214.39 | $3,214.39 | 4.69 |
-| Dan Dicker         | 2   | 247   | $4,536.98 | $2,268.49 | 3.11 |
-| Gil Zangi          | 0   | 0     | $0.00     | —         | 0.00 |
-| Yotam Balteriski   | 1   | 0     | $0.00     | —         | 0.00 |
+| CM                 | Spend     | Leads | Dep | CPL    | CPA       | CR    | ROI  |
+| ------------------ | --------- | ----- | --- | ------ | --------- | ----- | ---- |
+| Evgeni Sedin ← YOU | $3,214.39 | 259   | 1   | $12.41 | $3,214.39 | 0.39% | 4.69 |
+| Dan Dicker         | $4,536.98 | 247   | 2   | $18.37 | $2,268.49 | 0.81% | 3.11 |
+| Gil Zangi          | $0.00     | 0     | 0   | —      | —         | —     | 0.00 |
+| Yotam Balteriski   | $0.00     | 0     | 1   | —      | —         | —     | 0.00 |
 
 ### 2. Тренд (последние дни)
 
@@ -705,12 +705,12 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend     | CPA     | ROI   |
-| ------------------ | --- | ----- | --------- | ------- | ----- |
-| Evgeni Sedin ← YOU | 0   | 0     | $210.91   | —       | 0.00  |
-| Gil Zangi          | 0   | 0     | $0.00     | —       | 0.00  |
-| Yotam Balteriski   | 2   | 11    | $1,887.84 | $943.92 | 0.21  |
-| Dan Dicker         | 0   | 9     | $1,618.61 | —       | -0.01 |
+| CM                 | Spend     | Leads | Dep | CPL     | CPA     | CR     | ROI   |
+| ------------------ | --------- | ----- | --- | ------- | ------- | ------ | ----- |
+| Evgeni Sedin ← YOU | $210.91   | 0     | 0   | —       | —       | —      | 0.00  |
+| Gil Zangi          | $0.00     | 0     | 0   | —       | —       | —      | 0.00  |
+| Yotam Balteriski   | $1,887.84 | 11    | 2   | $171.62 | $943.92 | 18.18% | 0.21  |
+| Dan Dicker         | $1,618.61 | 9     | 0   | $179.85 | —       | 0%     | -0.01 |
 
 ### 2. Тренд (последние дни)
 
@@ -785,12 +785,12 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend      | CPA       | ROI  |
-| ------------------ | --- | ----- | ---------- | --------- | ---- |
-| Evgeni Sedin ← YOU | 5   | 326   | $6,280.84  | $1,256.17 | 0.49 |
-| Dan Dicker         | 6   | 656   | $8,232.20  | $1,372.03 | 2.39 |
-| Gil Zangi          | 17  | 2183  | $22,471.20 | $1,321.84 | 0.39 |
-| Yotam Balteriski   | 0   | 0     | $0.00      | —         | 0.00 |
+| CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR    | ROI  |
+| ------------------ | ---------- | ----- | --- | ------ | --------- | ----- | ---- |
+| Evgeni Sedin ← YOU | $6,280.84  | 326   | 5   | $19.27 | $1,256.17 | 1.53% | 0.49 |
+| Dan Dicker         | $8,232.20  | 656   | 6   | $12.55 | $1,372.03 | 0.91% | 2.39 |
+| Gil Zangi          | $22,471.20 | 2183  | 17  | $10.29 | $1,321.84 | 0.78% | 0.39 |
+| Yotam Balteriski   | $0.00      | 0     | 0   | —      | —         | —     | 0.00 |
 
 ### 2. Тренд (последние дни)
 
@@ -917,10 +917,10 @@ Top creatives by deposits:
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend     | CPA       | ROI  |
-| ------------------ | --- | ----- | --------- | --------- | ---- |
-| Evgeni Sedin ← YOU | 4   | 109   | $5,943.77 | $1,485.94 | 0.45 |
-| Yotam Balteriski   | 0   | 1     | $0.00     | —         | 0.00 |
+| CM                 | Spend     | Leads | Dep | CPL    | CPA       | CR    | ROI  |
+| ------------------ | --------- | ----- | --- | ------ | --------- | ----- | ---- |
+| Evgeni Sedin ← YOU | $5,943.77 | 109   | 4   | $54.53 | $1,485.94 | 3.67% | 0.45 |
+| Yotam Balteriski   | $0.00     | 1     | 0   | $0.00  | —         | 0%    | 0.00 |
 
 ### 2. Тренд (последние дни)
 
@@ -1029,10 +1029,10 @@ Top creatives by deposits:
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend | CPA | ROI  |
-| ------------------ | --- | ----- | ----- | --- | ---- |
-| Evgeni Sedin ← YOU | 0   | 0     | $2.55 | —   | 0.00 |
-| Gil Zangi          | 0   | 0     | $0.01 | —   | 0.00 |
+| CM                 | Spend | Leads | Dep | CPL | CPA | CR  | ROI  |
+| ------------------ | ----- | ----- | --- | --- | --- | --- | ---- |
+| Evgeni Sedin ← YOU | $2.55 | 0     | 0   | —   | —   | —   | 0.00 |
+| Gil Zangi          | $0.01 | 0     | 0   | —   | —   | —   | 0.00 |
 
 ### 2. Тренд (последние дни)
 
@@ -1083,12 +1083,12 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend  | CPA | ROI  |
-| ------------------ | --- | ----- | ------ | --- | ---- |
-| Evgeni Sedin ← YOU | 0   | 0     | $0.78  | —   | 0.00 |
-| Dan Dicker         | 0   | 0     | $11.47 | —   | 0.00 |
-| Gil Zangi          | 0   | 0     | $0.99  | —   | 0.00 |
-| Yotam Balteriski   | 0   | 0     | $0.40  | —   | 0.00 |
+| CM                 | Spend  | Leads | Dep | CPL | CPA | CR  | ROI  |
+| ------------------ | ------ | ----- | --- | --- | --- | --- | ---- |
+| Evgeni Sedin ← YOU | $0.78  | 0     | 0   | —   | —   | —   | 0.00 |
+| Dan Dicker         | $11.47 | 0     | 0   | —   | —   | —   | 0.00 |
+| Gil Zangi          | $0.99  | 0     | 0   | —   | —   | —   | 0.00 |
+| Yotam Balteriski   | $0.40  | 0     | 0   | —   | —   | —   | 0.00 |
 
 ### 2. Тренд (последние дни)
 
@@ -1135,11 +1135,11 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM               | Dep | Leads | Spend | CPA | ROI   |
-| ---------------- | --- | ----- | ----- | --- | ----- |
-| Gil Zangi        | 0   | 1     | $0.00 | —   | 0.00  |
-| Yotam Balteriski | 0   | 0     | $9.80 | —   | 0.00  |
-| Dan Dicker       | 0   | 1     | $3.75 | —   | -6.13 |
+| CM               | Spend | Leads | Dep | CPL   | CPA | CR  | ROI   |
+| ---------------- | ----- | ----- | --- | ----- | --- | --- | ----- |
+| Gil Zangi        | $0.00 | 1     | 0   | $0.00 | —   | 0%  | 0.00  |
+| Yotam Balteriski | $9.80 | 0     | 0   | —     | —   | —   | 0.00  |
+| Dan Dicker       | $3.75 | 1     | 0   | $3.75 | —   | 0%  | -6.13 |
 
 ### 2. Тренд (последние дни)
 
@@ -1186,12 +1186,12 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend     | CPA | ROI   |
-| ------------------ | --- | ----- | --------- | --- | ----- |
-| Evgeni Sedin ← YOU | 0   | 2     | $335.17   | —   | 0.00  |
-| Dan Dicker         | 0   | 1     | $308.40   | —   | 17.35 |
-| Gil Zangi          | 0   | 37    | $1,588.29 | —   | 0.00  |
-| Yotam Balteriski   | 0   | 3     | $1,297.89 | —   | 0.00  |
+| CM                 | Spend     | Leads | Dep | CPL      | CPA | CR  | ROI   |
+| ------------------ | --------- | ----- | --- | -------- | --- | --- | ----- |
+| Evgeni Sedin ← YOU | $335.17   | 2     | 0   | $167.59  | —   | 0%  | 0.00  |
+| Dan Dicker         | $308.40   | 1     | 0   | $308.40  | —   | 0%  | 17.35 |
+| Gil Zangi          | $1,588.29 | 37    | 0   | $42.93   | —   | 0%  | 0.00  |
+| Yotam Balteriski   | $1,297.89 | 3     | 0   | $432.63  | —   | 0%  | 0.00  |
 
 ### 2. Тренд (последние дни)
 
@@ -1255,12 +1255,12 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend     | CPA     | ROI  |
-| ------------------ | --- | ----- | --------- | ------- | ---- |
-| Evgeni Sedin ← YOU | 0   | 2     | $0.00     | —       | 0.00 |
-| Gil Zangi          | 6   | 141   | $3,059.76 | $509.96 | 0.49 |
-| Dan Dicker         | 0   | 60    | $877.75   | —       | 0.00 |
-| Yotam Balteriski   | 0   | 1     | $0.00     | —       | 0.00 |
+| CM                 | Spend     | Leads | Dep | CPL    | CPA     | CR    | ROI  |
+| ------------------ | --------- | ----- | --- | ------ | ------- | ----- | ---- |
+| Evgeni Sedin ← YOU | $0.00     | 2     | 0   | $0.00  | —       | 0%    | 0.00 |
+| Gil Zangi          | $3,059.76 | 141   | 6   | $21.70 | $509.96 | 4.26% | 0.49 |
+| Dan Dicker         | $877.75   | 60    | 0   | $14.63 | —       | 0%    | 0.00 |
+| Yotam Balteriski   | $0.00     | 1     | 0   | $0.00  | —       | 0%    | 0.00 |
 
 ### 2. Тренд (последние дни)
 
@@ -1344,12 +1344,12 @@ _No ready accounts or no combos to recommend._
 
 ### 1. Evgeni vs команда
 
-| CM                 | Dep | Leads | Spend      | CPA       | ROI   |
-| ------------------ | --- | ----- | ---------- | --------- | ----- |
-| Evgeni Sedin ← YOU | 3   | 193   | $7,982.63  | $2,660.88 | 5.28  |
-| Dan Dicker         | 4   | 116   | $14,300.27 | $3,575.07 | 0.80  |
-| Gil Zangi          | 5   | 357   | $34,910.49 | $6,982.10 | 0.14  |
-| Yotam Balteriski   | 0   | 92    | $9,042.13  | —         | -0.00 |
+| CM                 | Spend      | Leads | Dep | CPL     | CPA       | CR    | ROI   |
+| ------------------ | ---------- | ----- | --- | ------- | --------- | ----- | ----- |
+| Evgeni Sedin ← YOU | $7,982.63  | 193   | 3   | $41.36  | $2,660.88 | 1.55% | 5.28  |
+| Dan Dicker         | $14,300.27 | 116   | 4   | $123.28 | $3,575.07 | 3.45% | 0.80  |
+| Gil Zangi          | $34,910.49 | 357   | 5   | $97.79  | $6,982.10 | 1.40% | 0.14  |
+| Yotam Balteriski   | $9,042.13  | 92    | 0   | $98.28  | —         | 0%    | -0.00 |
 
 ### 2. Тренд (последние дни)
 
@@ -1437,7 +1437,7 @@ Top creatives by deposits:
 | Facebook_6218 UAE    | —     | tgpt        | Video selfie                                       | ❌ |
 | FacebookMKTO1239 UAE | $ 164 | tgpt        | Opened the acc - tgpt - reopen different creatives | ✅ |
 | FacebookMKTO1235 UAE | —     | ait         | Video selfie                                       | ❌ |
-| FacebookBD50 UAE     | —     | ait         | —                                                  | ✅ |
+| FacebookBD50 UAE     | —     | ait         | Video selfie                                       | ❌ |
 | FacebookMKTO1215 UAE | $ 239 | ait         | —                                                  | ✅ |
 
 ### 8. Что закрыть (оптимизация)
@@ -1447,12 +1447,6 @@ Top creatives by deposits:
 - UAE_tgpt_All_Images_HV_25_10.04  (Spend: $211.67, Leads: 1, FTDs: 0)
 - UAE_tgpt_All_Images_HNW_25_10.04  (Spend: $166.31, Leads: 0, FTDs: 0)
 - UAE_tgpt_All_Images_HV_25_07.04  (Spend: $92.07, Leads: 0, FTDs: 0)
-
-**FacebookBD50 UAE:**
-- UAE_Adc_IOS_Images1267_Day_25_05.04  (Spend: $68.70, Leads: 1, FTDs: 0)
-- UAE_Adc_IOS_Images1267_HV_25_05.04  (Spend: $65.69, Leads: 1, FTDs: 0)
-- GCC_Ait_All_Video_1570_EF_25_28.03  (Spend: $65.35, Leads: 3, FTDs: 0)
-- UAE_Adc_IOS_ImagesJS_Day_25_06.04  (Spend: $43.46, Leads: 2, FTDs: 0)
 
 **FacebookMKTO1215 UAE:**
 - GCC_Ait_All_Video_HV_30_08.04  (Spend: $345.51, Leads: 0, FTDs: 0)
@@ -1465,12 +1459,6 @@ Top creatives by deposits:
 ### 9. Что открыть (2 кампании на аккаунт)
 
 **FacebookMKTO1239 UAE:**
-  Campaign 1: `UAE_Adnoc_ALL_IPO_25`
-    Ad Set: all + IPO + 25 + 1267 2 - the app  [Interesting | 1 dep ROI 12.86]
-  Campaign 2: `UAE_Salik_ALL_mix_Reading_25+`
-    Ad Set: all + mix_Reading + 25+ + Image comp2212  [Interesting | 1 dep ROI 11.62]
-
-**FacebookBD50 UAE:**
   Campaign 1: `UAE_Adnoc_ALL_IPO_25`
     Ad Set: all + IPO + 25 + 1267 2 - the app  [Interesting | 1 dep ROI 12.86]
   Campaign 2: `UAE_Salik_ALL_mix_Reading_25+`
@@ -1489,11 +1477,11 @@ Top creatives by deposits:
 
 ### 1. Evgeni vs команда
 
-| CM               | Dep | Leads | Spend     | CPA       | ROI  |
-| ---------------- | --- | ----- | --------- | --------- | ---- |
-| Gil Zangi        | 3   | 120   | $2,209.80 | $736.60   | 0.47 |
-| Yotam Balteriski | 2   | 156   | $2,463.99 | $1,231.99 | 0.13 |
-| Dan Dicker       | 1   | 223   | $4,740.71 | $4,740.71 | 0.04 |
+| CM               | Spend     | Leads | Dep | CPL    | CPA       | CR    | ROI  |
+| ---------------- | --------- | ----- | --- | ------ | --------- | ----- | ---- |
+| Gil Zangi        | $2,209.80 | 120   | 3   | $18.42 | $736.60   | 2.50% | 0.47 |
+| Yotam Balteriski | $2,463.99 | 156   | 2   | $15.79 | $1,231.99 | 1.28% | 0.13 |
+| Dan Dicker       | $4,740.71 | 223   | 1   | $21.26 | $4,740.71 | 0.45% | 0.04 |
 
 ### 2. Тренд (последние дни)
 
