@@ -198,12 +198,15 @@ def _render_hypotheses(block: str) -> str:
     ])
 
 
-def _render_account_statuses(account_rows: List[Dict[str, Any]]) -> str:
+def _render_account_statuses(account_rows: List[Dict[str, Any]], has_gsheet: bool = False) -> str:
     lines = ["### 6–7. Статусы аккаунтов", ""]
     if not account_rows:
-        lines.append(
-            "_GSheet account data not loaded. Set GSHEET_ACCOUNTS_ID in .env to enable._"
-        )
+        if has_gsheet:
+            lines.append("_No accounts found for this country in the GSheet._")
+        else:
+            lines.append(
+                "_GSheet account data not loaded. Set GSHEET_ACCOUNTS_ID in .env to enable._"
+            )
         return "\n".join(lines)
 
     table_rows = []
@@ -270,7 +273,7 @@ def _render_open_recs(open_recs: Dict[str, List[Dict[str, Any]]]) -> str:
 
 # ── Country section ────────────────────────────────────────────────────────────
 
-def _render_country_section(section: Dict[str, Any], my_cm: str) -> str:
+def _render_country_section(section: Dict[str, Any], my_cm: str, has_gsheet: bool = False) -> str:
     country = section["country"]
     parts = [
         f"## Country: {country}",
@@ -285,7 +288,7 @@ def _render_country_section(section: Dict[str, Any], my_cm: str) -> str:
         "",
         _render_hypotheses(section.get("hypotheses", "")),
         "",
-        _render_account_statuses(section.get("account_rows", [])),
+        _render_account_statuses(section.get("account_rows", []), has_gsheet=has_gsheet),
         "",
         _render_close_recs(section.get("close_recs", {})),
         "",
@@ -327,7 +330,7 @@ def render_morning_report_md(report: Dict[str, Any]) -> str:
     ]
 
     for section in countries:
-        parts.append(_render_country_section(section, my_cm))
+        parts.append(_render_country_section(section, my_cm, has_gsheet=has_gsheet))
 
     if not countries:
         parts.append("_No country data found. Check Excel path and filters._")

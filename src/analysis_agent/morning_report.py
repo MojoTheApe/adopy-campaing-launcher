@@ -539,7 +539,7 @@ def build_morning_report(
         "mexico": "mx", "guatemala": "gt", "brazil": "br", "chile": "cl",
         "colombia": "co", "peru": "pe", "argentina": "ar", "ecuador": "ec",
         "venezuela": "ve", "bolivia": "bo", "paraguay": "py", "uruguay": "uy",
-        "bahrain": "bh", "uae": "ae", "united arab emirates": "ae",
+        "bahrain": "bh", "uae": "uae", "united arab emirates": "uae",
         "qatar": "qa", "oman": "om", "kuwait": "kw", "saudi arabia": "sa",
         "nigeria": "ng", "kenya": "ke", "ghana": "gh", "south africa": "za",
         "albania": "al", "morocco": "ma", "egypt": "eg",
