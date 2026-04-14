@@ -53,16 +53,23 @@ def _render_cm_comparison(rows: List[Dict[str, Any]], my_cm: str) -> str:
     for r in rows:
         marker = " ← YOU" if r.get("is_me") else ""
         cm = str(r["cm"])[:22] + marker
+        leads = r["leads"]
+        deposits = r["deposits"]
+        spend = r["spend"]
+        cpl_s = _fmt_money(spend / leads) if leads else "—"
         cpa_s = _fmt_money(r["cpa"]) if r["cpa"] else "—"
+        cr_s = f"{deposits / leads * 100:.1f}%" if leads else "—"
         table_rows.append([
             cm,
-            str(r["deposits"]),
-            str(r["leads"]),
-            _fmt_money(r["spend"]),
+            _fmt_money(spend),
+            str(leads),
+            str(deposits),
+            cpl_s,
             cpa_s,
+            cr_s,
             _fmt_float(r["roi"]),
         ])
-    lines.append(_table(["CM", "Dep", "Leads", "Spend", "CPA", "ROI"], table_rows))
+    lines.append(_table(["CM", "Spend", "Leads", "Dep", "CPL", "CPA", "CR", "ROI"], table_rows))
     return "\n".join(lines)
 
 
