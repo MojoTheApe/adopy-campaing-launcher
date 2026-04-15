@@ -546,21 +546,27 @@ def build_morning_report(
     }
 
     def _accounts_for_country(country: str) -> List[Dict[str, Any]]:
-        """Find GSheet account rows relevant to this Excel country."""
+        """Find GSheet account rows relevant to this Excel country.
+
+        An account is included if EITHER:
+          - Its alias appears in the Excel data for that country (ran campaigns there), OR
+          - Its GSheet country_code matches the known ISO-2 code for this country
+            (registered account that may not have Excel data yet).
+
+        Deduplication by alias ensures each account appears at most once per country.
+        """
         aliases_in_country = set(
             df[df["Country Final"] == country]["Account Alias"]
             .dropna().astype(str).str.strip().unique()
         )
-        # Determine the expected GSheet country_code for this Excel country
         expected_code = _COUNTRY_TO_CODE.get(country.strip().lower(), "")
+        seen: set = set()
         matched = []
         for r in account_rows:
             alias_ok = r["alias"] in aliases_in_country
-            code_ok = (
-                not expected_code  # unknown country — skip code check
-                or r.get("country_code", "").strip().lower() == expected_code
-            )
-            if alias_ok and code_ok:
+            code_ok = bool(expected_code) and r.get("country_code", "").strip().lower() == expected_code
+            if (alias_ok or code_ok) and r["alias"] not in seen:
+                seen.add(r["alias"])
                 matched.append(r)
         return matched
 
