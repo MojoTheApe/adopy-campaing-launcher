@@ -89,6 +89,39 @@ python run.py --excel C:\data\stats.xlsx --output output/report.txt
 python run.py --help
 ```
 
+## Утренний отчёт (Morning Report)
+
+Ежедневная сводка: сравнение CM, тренд по депозитам за N дней, топ-комбо, разбивка по таргетингу и креативам — всё по странам.
+
+**CLI (Markdown):**
+
+```bash
+python run_morning.py [-e path/to/stats.xlsx] [--cm "Evgeni Sedin"] [--trend-days 7] [--country UAE] [--no-gsheet] [-o output/morning.md]
+```
+
+- `-e` / `--excel` — путь к Excel (по умолчанию `FB_STATS_EXCEL`).
+- `--cm` — CM, чью строку подсвечивать в блоке сравнения (по умолчанию `MY_CM_NAME` из `.env` или `Evgeni Sedin`).
+- `--trend-days` — окно тренда в днях (по умолчанию 7).
+- `--country` — ограничить одной страной.
+- `--no-gsheet` — не читать Google Sheet со списком аккаунтов.
+- `-o` / `--output` — сохранить Markdown в файл.
+
+## Web UI (интерактивный дашборд)
+
+Тот же утренний отчёт в браузере с **drill-down**: по клику на любую строку (CM, тренд, топ-комбо, таргетинг, креативы) открываются исходные записи из Excel.
+
+**Запуск:**
+
+```bash
+pip install -r requirements.txt   # нужны fastapi, uvicorn, jinja2
+python serve.py                   # http://127.0.0.1:8000
+python serve.py --port 9000 --reload
+```
+
+- Данные и настройки — те же, что у `run_morning.py` (`FB_STATS_EXCEL`, GSheet, `.env`).
+- Отчёт кэшируется; кнопка **Refresh** (POST `/refresh`) пересобирает его из Excel.
+- По умолчанию слушает только `127.0.0.1` (однопользовательский режим).
+
 ## Агент 5: аккаунты → Jira
 
 Отдельный агент по строкам из **Upluad FB.xlsx** (лист Accounts: пустой **Link** и заполненный **Asset**) **составляет** задачу (Summary + Description) и по умолчанию **открывает в браузере** страницу создания задачи — ты вставляешь данные и публикуешь сам. Один аккаунт — одна задача.
@@ -154,6 +187,8 @@ python run_analysis_then_upload.py --account "FacebookUL574 EC Fav" [-e путь
 |-----------|------------|
 | **run.py** | Запуск агента анализа (п.1–4): отчёты по странам, CM, офферы, связки (Markdown). Режимы и флаги: [`analysis_agent/ANALYSIS_AGENT_WORKFLOW.md`](analysis_agent/ANALYSIS_AGENT_WORKFLOW.md). |
 | **run_quick_analytics.ps1** | Полный прогон с записью в `output/latest_analytics.md` (см. § «Быстрый полный отчёт в файл»). |
+| **run_morning.py** | Утренний отчёт (CM-сравнение, тренд, топ-комбо, таргетинг, креативы) в Markdown. |
+| **serve.py** | Web UI для утреннего отчёта: FastAPI + HTMX, drill-down по строкам (см. § «Web UI»). |
 | **run_jira_from_accounts.py** | Запуск **агента 5**: аккаунты из Upluad FB.xlsx → задачи в Jira (Summary, Description по правилам трёх листов), Labels Limited_QA, Team Media. |
 | **run_upload_from_plan.py** | Запуск **агента 8**: план (CSV) → Excel с листами по аккаунтам под выгрузку в FB. |
 | **run_analysis_then_upload.py** | **Связка:** агент 1 (анализ) → комбо → агент 8 (аплоуд Excel). Один аккаунт, топ-N комбо. |
