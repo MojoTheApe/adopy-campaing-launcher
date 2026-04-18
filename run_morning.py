@@ -43,10 +43,8 @@ try:
 except ImportError:
     pass
 
-from config.paths import get_excel_path
-from src.analysis_agent.gsheet_accounts import fetch_account_rows
-from src.analysis_agent.morning_report import build_morning_report
 from src.analysis_agent.morning_markdown import render_morning_report_md
+from src.analysis_agent.morning_service import load_morning_report
 
 _DEFAULT_OUTPUT = str(_root / "analysis_agent" / "morning_report.md")
 
@@ -94,31 +92,21 @@ def _parse_args() -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args() if argv is None else _parse_args()
 
-    excel_path = (args.excel or "").strip() or get_excel_path()
-    if not os.path.isfile(excel_path):
-        print(f"[run_morning] ERROR: Excel not found: {excel_path}", file=sys.stderr)
-        print("  Set FB_STATS_EXCEL in .env or pass -e path", file=sys.stderr)
+    print("[run_morning] Building report...", file=sys.stderr)
+    try:
+        report, _df, warnings = load_morning_report(
+            excel_path=args.excel,
+            my_cm=args.cm,
+            trend_days=args.trend_days,
+            country_filter=args.country,
+            skip_gsheet=args.no_gsheet,
+        )
+    except FileNotFoundError as e:
+        print(f"[run_morning] ERROR: {e}", file=sys.stderr)
         sys.exit(1)
 
-    my_cm = (args.cm or "").strip() or os.environ.get("MY_CM_NAME", "Evgeni Sedin").strip()
-
-    # ── Load Google Sheet account rows ─────────────────────────────────────────
-    account_rows: list = []
-    if not args.no_gsheet:
-        print("[run_morning] Reading Google Sheet accounts...", file=sys.stderr)
-        account_rows = fetch_account_rows(my_cm=my_cm)
-    else:
-        print("[run_morning] --no-gsheet: skipping GSheet read", file=sys.stderr)
-
-    # ── Build report model ─────────────────────────────────────────────────────
-    print(f"[run_morning] Analysing: {excel_path}", file=sys.stderr)
-    report = build_morning_report(
-        excel_path=excel_path,
-        account_rows=account_rows,
-        my_cm=my_cm,
-        trend_days=args.trend_days,
-        country_filter=args.country,
-    )
+    for w in warnings:
+        print(f"[run_morning] WARN: {w}", file=sys.stderr)
 
     # ── Render to Markdown ─────────────────────────────────────────────────────
     md = render_morning_report_md(report)

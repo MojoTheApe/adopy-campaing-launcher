@@ -25,7 +25,27 @@ from src.analysis_agent.analyze_fb_stats import (
     compute_metrics,
     enrich_structure,
 )
+from src.analysis_agent.section_filters import NA_SENTINEL
 from src.knowledge_agent.knowledge_base import format_target_context_line, get_all_targets
+
+
+def _key_value(v: Any) -> str:
+    """Coerce a row dimension value into the aggregate_key URL form.
+
+    Empty / NaN / 'nan' string become the NA_SENTINEL so drills can
+    round-trip back to the same group that pandas put NaN values in.
+    """
+    if v is None:
+        return NA_SENTINEL
+    try:
+        if pd.isna(v):
+            return NA_SENTINEL
+    except (TypeError, ValueError):
+        pass
+    s = str(v).strip()
+    if not s or s.lower() in ("nan", "none"):
+        return NA_SENTINEL
+    return s
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
@@ -85,6 +105,11 @@ def build_cm_comparison(df: pd.DataFrame, country: str, my_cm: str) -> List[Dict
                 "net": _safe_float(r.get("Net")),
                 "cpa": _safe_float(r.get("CPA")),
                 "roi": _safe_float(r.get("ROI")),
+                "aggregate_key": {
+                    "section": "cm_comparison",
+                    "country": country,
+                    "cm": _key_value(r.get("CM")),
+                },
             }
         )
     # Put my row first
@@ -152,13 +177,22 @@ def build_trend(
     merged["RecentDep"] = merged["RecentDep"].fillna(0).astype(int)
 
     def _row_to_dict(r) -> Dict[str, Any]:
+        full_creative = str(r.get("Creative") or "").strip()
         return {
             "offer": str(r.get("Offer") or "").strip(),
             "device": str(r.get("Device") or "all").strip(),
             "interest": str(r.get("Interest") or "").strip(),
-            "creative": str(r.get("Creative") or "").strip()[:40],
+            "creative": full_creative[:40],  # display: truncated to 40 chars
             "deposits_total": _safe_int(r.get("Deposits")),
             "deposits_recent": _safe_int(r.get("RecentDep")),
+            "aggregate_key": {
+                "section": "trend",
+                "country": country,
+                "offer": _key_value(r.get("Offer")),
+                "device": _key_value(r.get("Device")),
+                "interest": _key_value(r.get("Interest")),
+                "creative": _key_value(full_creative),  # FULL creative for drill match
+            },
         }
 
     for _, r in merged.iterrows():
@@ -215,6 +249,16 @@ def build_top_combos(combos: pd.DataFrame, country: str, top_n: int = 5) -> List
                 "cpa": _safe_float(r.get("CPA")),
                 "roi": _safe_float(r.get("ROI")),
                 "top_account": str(r.get("TopAccount") or "").strip(),
+                "aggregate_key": {
+                    "section": "top_combos",
+                    "country": country,
+                    "offer": _key_value(r.get("Offer")),
+                    "device": _key_value(r.get("Device")),
+                    "interest": _key_value(r.get("Interest")),
+                    "age": _key_value(r.get("Age")),
+                    "creative": _key_value(r.get("Creative")),
+                    "text_segment": _key_value(r.get("TextSegment")),
+                },
             }
         )
     return result
@@ -242,7 +286,8 @@ def build_targeting_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, 
 
     rows = []
     for _, r in grouped.iterrows():
-        interest = str(r.get("Interest") or "").strip()
+        interest_raw = r.get("Interest")
+        interest = str(interest_raw or "").strip()
         if not interest or interest.lower() == "nan":
             interest = "(unknown)"
         rows.append(
@@ -252,6 +297,11 @@ def build_targeting_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, 
                 "leads": _safe_int(r.get("Leads")),
                 "spend": _safe_float(r.get("Spend")),
                 "cpa": _safe_float(r.get("CPA")),
+                "aggregate_key": {
+                    "section": "targeting",
+                    "country": country,
+                    "bucket": _key_value(interest_raw),
+                },
             }
         )
     return rows
@@ -281,7 +331,8 @@ def build_creative_breakdown(
 
     rows = []
     for _, r in grouped.iterrows():
-        title = str(r.get("Ad Title") or "").strip()
+        title_raw = r.get("Ad Title")
+        title = str(title_raw or "").strip()
         if not title or title.lower() == "nan":
             title = "(no title)"
         rows.append(
@@ -291,6 +342,11 @@ def build_creative_breakdown(
                 "leads": _safe_int(r.get("Leads")),
                 "spend": _safe_float(r.get("Spend")),
                 "cpa": _safe_float(r.get("CPA")),
+                "aggregate_key": {
+                    "section": "creatives",
+                    "country": country,
+                    "creative": _key_value(title_raw),
+                },
             }
         )
     return rows
@@ -491,39 +547,50 @@ def build_country_section(
 # ── Main report builder ────────────────────────────────────────────────────────
 
 def build_morning_report(
-    excel_path: str,
-    account_rows: List[Dict[str, Any]],
+    excel_path: Optional[str] = None,
+    account_rows: Optional[List[Dict[str, Any]]] = None,
     *,
     my_cm: str = "Evgeni Sedin",
     trend_days: int = 7,
     country_filter: Optional[str] = None,
     top_combos_n: int = 5,
+    df: Optional[pd.DataFrame] = None,
 ) -> Dict[str, Any]:
-    """Load Excel and build the full MorningReport dict.
+    """Build the full MorningReport dict.
 
     Args:
-        excel_path: path to stats Excel (cursor example.xlsx)
-        account_rows: parsed rows from gsheet_accounts.fetch_account_rows()
-        my_cm: CM name to highlight in section 1
-        trend_days: window for section 2 trend
-        country_filter: if set, only include this country (None = all)
-        top_combos_n: max combos to show per country in section 3
+        excel_path: path to stats Excel (cursor example.xlsx). Required
+            unless `df` is given.
+        account_rows: parsed rows from gsheet_accounts.fetch_account_rows().
+            Pass [] for none.
+        my_cm: CM name to highlight in section 1.
+        trend_days: window for section 2 trend.
+        country_filter: if set, only include this country (None = all).
+        top_combos_n: max combos to show per country in section 3.
+        df: optional pre-loaded enriched DataFrame (post compute_metrics +
+            enrich_structure). When supplied, skips Excel I/O. Used by
+            morning_service to avoid double-parsing.
 
     Returns:
         MorningReport dict with keys: date, source_excel, my_cm, countries[].
     """
-    required_cols = [
-        "Country", "Account Alias", "Adset Name", "Ad Title",
-        "# Leads", "# FTDs", "$ Spend", "CM", "Ad Asset", "$ Net",
-    ]
+    if account_rows is None:
+        account_rows = []
 
-    df_raw = pd.read_excel(excel_path)
-    missing = [c for c in required_cols if c not in df_raw.columns]
-    if missing:
-        raise ValueError(f"Missing columns in Excel: {missing}")
+    if df is None:
+        if not excel_path:
+            raise ValueError("build_morning_report: excel_path or df required")
+        required_cols = [
+            "Country", "Account Alias", "Adset Name", "Ad Title",
+            "# Leads", "# FTDs", "$ Spend", "CM", "Ad Asset", "$ Net",
+        ]
+        df_raw = pd.read_excel(excel_path)
+        missing = [c for c in required_cols if c not in df_raw.columns]
+        if missing:
+            raise ValueError(f"Missing columns in Excel: {missing}")
+        df = compute_metrics(df_raw)
+        df = enrich_structure(df)
 
-    df = compute_metrics(df_raw)
-    df = enrich_structure(df)
     combos = aggregate_combos(df)
 
     all_countries = sorted(

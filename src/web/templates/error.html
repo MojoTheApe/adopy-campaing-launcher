@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>fb_agents — {{ title }}</title>
+  <style>
+    body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+           background: #0e1116; color: #d8dde3; padding: 2rem; max-width: 720px; }
+    h1 { color: #f78166; font-size: 1.4rem; margin-bottom: 1rem; }
+    pre { background: #161b22; padding: 1rem; border-radius: 6px;
+          white-space: pre-wrap; word-break: break-word; color: #c9d1d9; }
+    p.hint { color: #8b949e; margin-top: 1.5rem; font-size: 0.9rem; }
+    code { background: #161b22; padding: 0.1rem 0.3rem; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h1>{{ title }}</h1>
+  <pre>{{ message }}</pre>
+  <p class="hint">
+    Set <code>FB_STATS_EXCEL</code> in your shell or <code>.env</code>, place the file at
+    that path, and reload.
+  </p>
+</body>
+</html>

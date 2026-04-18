@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>fb_agents — Morning Report {{ report.date }}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.10"
+          integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
+          crossorigin="anonymous"></script>
+  <style>
+    :root {
+      --bg: #0e1116;
+      --bg-elev: #161b22;
+      --bg-hover: #1f2630;
+      --border: #2a3140;
+      --text: #d8dde3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --good: #3fb950;
+      --bad: #f85149;
+      --warn: #f0883e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1.5rem 2rem;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    header.page-header {
+      display: flex;
+      align-items: baseline;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    header.page-header h1 {
+      font-size: 1.2rem;
+      margin: 0;
+      color: var(--text);
+    }
+    header.page-header .meta { color: var(--muted); font-size: 0.85rem; }
+    header.page-header .meta strong { color: var(--text); font-weight: normal; }
+    form.refresh { margin-left: auto; }
+    form.refresh button {
+      background: var(--bg-elev);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.9rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.85rem;
+    }
+    form.refresh button:hover { background: var(--bg-hover); border-color: var(--accent); }
+
+    .warnings {
+      background: #2d2419;
+      border: 1px solid var(--warn);
+      color: #f0c674;
+      padding: 0.75rem 1rem;
+      border-radius: 4px;
+      margin-bottom: 1.5rem;
+    }
+    .warnings ul { margin: 0; padding-left: 1.2rem; }
+
+    h2.country {
+      font-size: 1.4rem;
+      color: var(--accent);
+      margin-top: 2.5rem;
+      margin-bottom: 0.5rem;
+      padding-bottom: 0.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h3.section {
+      font-size: 1rem;
+      color: var(--text);
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+      font-weight: normal;
+    }
+    h3.section .hint {
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-left: 0.5rem;
+      font-weight: normal;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 0.5rem;
+      background: var(--bg-elev);
+    }
+    th, td {
+      padding: 0.4rem 0.7rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--muted);
+      font-weight: normal;
+      background: var(--bg);
+      position: sticky;
+      top: 0;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    td.adset { font-size: 0.78rem; color: var(--muted); max-width: 320px;
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    td.date { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+    td.good { color: var(--good); }
+    td.bad  { color: var(--bad); }
+
+    tr.drillable { cursor: pointer; transition: background 0.08s; }
+    tr.drillable:hover { background: var(--bg-hover); }
+    tr.drillable td:first-child::before {
+      content: '▸ ';
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    tr.drill-detail { background: #0a0d12; }
+    tr.drill-detail td { padding: 0; border-bottom: 2px solid var(--accent); }
+    .drill-inner { padding: 0.75rem 1.5rem; }
+    .drill-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .drill-count { color: var(--muted); font-size: 0.85rem; }
+    .drill-close {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .drill-close:hover { color: var(--bad); border-color: var(--bad); }
+    table.drill-table { font-size: 0.82rem; background: transparent; }
+    table.drill-table th { background: transparent; font-size: 0.7rem; }
+    table.drill-table td { border-bottom: 1px solid #1a2030; }
+
+    pre.text-block {
+      background: var(--bg-elev);
+      padding: 0.75rem 1rem;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text);
+      font-size: 0.82rem;
+      margin: 0.5rem 0 1rem 0;
+    }
+    .me { color: var(--good); font-weight: bold; }
+    .roi-pos { color: var(--good); }
+    .roi-neg { color: var(--bad); }
+  </style>
+</head>
+<body>
+
+<header class="page-header">
+  <h1>Morning Report — {{ report.date }}</h1>
+  <span class="meta">CM: <strong>{{ report.my_cm }}</strong></span>
+  <span class="meta">Source: <strong>{{ report.source_excel }}</strong></span>
+  <span class="meta">Trend: <strong>{{ report.trend_days }}d</strong></span>
+  <span class="meta">Combos: <strong>{{ report.total_combos }}</strong></span>
+  {% if built_at %}<span class="meta">Built: <strong>{{ built_at }}</strong></span>{% endif %}
+  <form class="refresh" method="post" action="/refresh">
+    <button type="submit">Refresh</button>
+  </form>
+</header>
+
+{% if warnings %}
+<div class="warnings">
+  <ul>
+    {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% for c in report.countries %}
+<h2 class="country">{{ c.country }}</h2>
+
+{# ── Section 1: CM comparison ─────────────────────────────────────── #}
+<h3 class="section">1. CM Comparison <span class="hint">click row to drill into ads for that CM</span></h3>
+<table>
+  <thead><tr>
+    <th>CM</th>
+    <th class="num">Deposits</th>
+    <th class="num">Leads</th>
+    <th class="num">Spend</th>
+    <th class="num">Net</th>
+    <th class="num">CPA</th>
+    <th class="num">ROI</th>
+    <th></th>
+  </tr></thead>
+  <tbody>
+  {% for row in c.cm_comparison %}
+    <tr class="drillable"
+        hx-get="/details?{{ row.aggregate_key | agg_qs }}"
+        hx-target="closest tr"
+        hx-swap="afterend"
+        hx-trigger="click">
+      <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}</td>
+      <td class="num">{{ row.deposits }}</td>
+      <td class="num">{{ row.leads }}</td>
+      <td class="num">{{ '%.2f' % row.spend }}</td>
+      <td class="num">{{ '%.2f' % row.net }}</td>
+      <td class="num">{% if row.cpa %}{{ '%.2f' % row.cpa }}{% else %}—{% endif %}</td>
+      <td class="num {% if row.roi > 1 %}roi-pos{% elif row.roi and row.roi < 1 %}roi-neg{% endif %}">
+        {% if row.roi %}{{ '%.2f' % row.roi }}{% else %}—{% endif %}
+      </td>
+      <td></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{# ── Section 2: Trend ─────────────────────────────────────────────── #}
+{% if c.trend.has_date %}
+<h3 class="section">2. Recent Trend <span class="hint">{{ c.trend.period_label }} — click row to drill</span></h3>
+{% for label, key in [('Trending up', 'trending_up'), ('Stable', 'stable'), ('Trending down', 'trending_down')] %}
+  {% set rows = c.trend[key] %}
+  {% if rows %}
+    <h3 class="section" style="margin-top:0.8rem">↪ {{ label }} ({{ rows|length }})</h3>
+    <table>
+      <thead><tr>
+        <th>Offer</th>
+        <th>Device</th>
+        <th>Interest</th>
+        <th>Creative</th>
+        <th class="num">Total dep</th>
+        <th class="num">Recent dep</th>
+      </tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr class="drillable"
+            hx-get="/details?{{ row.aggregate_key | agg_qs }}"
+            hx-target="closest tr"
+            hx-swap="afterend"
+            hx-trigger="click">
+          <td>{{ row.offer or '—' }}</td>
+          <td>{{ row.device or '—' }}</td>
+          <td>{{ row.interest or '—' }}</td>
+          <td>{{ row.creative or '—' }}</td>
+          <td class="num">{{ row.deposits_total }}</td>
+          <td class="num">{{ row.deposits_recent }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endfor %}
+{% endif %}
+
+{# ── Section 3: Top combos ─────────────────────────────────────────── #}
+<h3 class="section">3. Top Combos <span class="hint">click row to drill into the matching ads</span></h3>
+<table>
+  <thead><tr>
+    <th>Offer</th>
+    <th>Device</th>
+    <th>Interest</th>
+    <th>Age</th>
+    <th>Creative</th>
+    <th>Cat</th>
+    <th class="num">Dep</th>
+    <th class="num">Leads</th>
+    <th class="num">Spend</th>
+  </tr></thead>
+  <tbody>
+  {% for row in c.top_combos %}
+    <tr class="drillable"
+        hx-get="/details?{{ row.aggregate_key | agg_qs }}"
+        hx-target="closest tr"
+        hx-swap="afterend"
+        hx-trigger="click">
+      <td>{{ row.offer or '—' }}</td>
+      <td>{{ row.device or '—' }}</td>
+      <td>{{ row.interest or '—' }}</td>
+      <td>{{ row.age or '—' }}</td>
+      <td class="adset">{{ row.creative or '—' }}</td>
+      <td>{{ row.category }}</td>
+      <td class="num">{{ row.deposits }}</td>
+      <td class="num">{{ row.leads }}</td>
+      <td class="num">{{ '%.2f' % row.spend }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{# ── Section 4: Targeting ──────────────────────────────────────────── #}
+{% if c.targeting %}
+<h3 class="section">4. Targeting Breakdown <span class="hint">click row to drill into ads in that interest bucket</span></h3>
+<table>
+  <thead><tr>
+    <th>Interest</th>
+    <th class="num">Deposits</th>
+    <th class="num">Leads</th>
+    <th class="num">Spend</th>
+    <th class="num">CPA</th>
+  </tr></thead>
+  <tbody>
+  {% for row in c.targeting %}
+    <tr class="drillable"
+        hx-get="/details?{{ row.aggregate_key | agg_qs }}"
+        hx-target="closest tr"
+        hx-swap="afterend"
+        hx-trigger="click">
+      <td>{{ row.interest }}</td>
+      <td class="num">{{ row.deposits }}</td>
+      <td class="num">{{ row.leads }}</td>
+      <td class="num">{{ '%.2f' % row.spend }}</td>
+      <td class="num">{% if row.cpa %}{{ '%.2f' % row.cpa }}{% else %}—{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{# ── Section 5: Creatives ──────────────────────────────────────────── #}
+{% if c.creatives %}
+<h3 class="section">5. Creative Breakdown <span class="hint">click row to drill into ads with that title</span></h3>
+<table>
+  <thead><tr>
+    <th>Ad title</th>
+    <th class="num">Deposits</th>
+    <th class="num">Leads</th>
+    <th class="num">Spend</th>
+    <th class="num">CPA</th>
+  </tr></thead>
+  <tbody>
+  {% for row in c.creatives %}
+    <tr class="drillable"
+        hx-get="/details?{{ row.aggregate_key | agg_qs }}"
+        hx-target="closest tr"
+        hx-swap="afterend"
+        hx-trigger="click">
+      <td>{{ row.ad_title }}</td>
+      <td class="num">{{ row.deposits }}</td>
+      <td class="num">{{ row.leads }}</td>
+      <td class="num">{{ '%.2f' % row.spend }}</td>
+      <td class="num">{% if row.cpa %}{{ '%.2f' % row.cpa }}{% else %}—{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{# ── Sections 6 & 7: AI text blocks (not drillable) ────────────────── #}
+{% if c.ai_context %}
+<h3 class="section">6. AI Context <span class="hint">paste into Cursor chat</span></h3>
+<pre class="text-block">{{ c.ai_context }}</pre>
+{% endif %}
+{% if c.hypotheses %}
+<h3 class="section">7. Hypotheses <span class="hint">paste into Cursor chat</span></h3>
+<pre class="text-block">{{ c.hypotheses }}</pre>
+{% endif %}
+
+{# ── Sections 8, 9, 10, 11: account/recs (already ad-level, no drill) #}
+{% if c.account_rows %}
+<h3 class="section">6–7. Account Statuses</h3>
+<table>
+  <thead><tr><th>Account</th><th>Cost</th><th>Asset</th><th>To Do</th><th>✓</th></tr></thead>
+  <tbody>
+  {% for r in c.account_rows %}
+    <tr>
+      <td>{{ r.account_label }}</td>
+      <td>{{ r.cost or '—' }}</td>
+      <td>{{ r.stock or '—' }}</td>
+      <td>{{ r.to_do or '—' }}</td>
+      <td>{% if r.is_ready %}✅{% else %}❌{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if c.close_recs %}
+{% set has_close = c.close_recs.values() | selectattr('0') | list %}
+{% if has_close %}
+<h3 class="section">8. Close Recommendations</h3>
+{% for label, recs in c.close_recs.items() %}
+  {% if recs %}
+    <p><strong>{{ label }}:</strong></p>
+    <ul>
+    {% for r in recs %}
+      <li>{{ r.adset_name[:60] }} — Spend: {{ '%.2f' % r.spend }}, Leads: {{ r.leads }}, FTDs: 0</li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+
+{% if c.open_recs %}
+{% set has_open = c.open_recs.values() | selectattr('0') | list %}
+{% if has_open %}
+<h3 class="section">9. Open Recommendations</h3>
+{% for label, recs in c.open_recs.items() %}
+  {% if recs %}
+    <p><strong>{{ label }}:</strong></p>
+    <ul>
+    {% for r in recs %}
+      <li>{{ r.summary if r.summary is defined else r }}</li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+
+{% endfor %}
+
+{% if not report.countries %}
+<p style="color: var(--muted)">No country data found. Check Excel path and filters.</p>
+{% endif %}
+
+</body>
+</html>

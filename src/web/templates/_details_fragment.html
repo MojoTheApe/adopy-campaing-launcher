@@ -1,0 +1,59 @@
+{#
+  HTML parsing rule: this template is HTMX-swapped as `afterend` of a
+  clickable <tr>. It MUST emit exactly ONE <tr> with ONE <td colspan="N">,
+  or the browser foster-parents it out of the table.
+#}
+<tr class="drill-detail">
+  <td colspan="{{ ncols }}">
+    <div class="drill-inner">
+      <div class="drill-header">
+        <span class="drill-count">
+          {% if rows %}
+            {{ rows|length }} underlying row{{ '' if rows|length == 1 else 's' }}
+          {% elif message %}
+            {{ message }}
+          {% else %}
+            (empty)
+          {% endif %}
+        </span>
+        <button type="button"
+                class="drill-close"
+                onclick="this.closest('tr.drill-detail').remove()">
+          ×
+        </button>
+      </div>
+      {% if rows %}
+        <table class="drill-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>CM</th>
+              <th>Adset</th>
+              <th>Ad title</th>
+              <th>Asset</th>
+              <th class="num">Spend</th>
+              <th class="num">Leads</th>
+              <th class="num">FTDs</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.account or '' }}</td>
+              <td>{{ r.cm or '' }}</td>
+              <td class="adset">{{ r.adset or '' }}</td>
+              <td>{{ r.ad_title or '' }}</td>
+              <td>{{ r.ad_asset or '' }}</td>
+              <td class="num">{{ '%.2f' % (r.spend or 0) }}</td>
+              <td class="num">{{ r.leads or 0 }}</td>
+              <td class="num {% if (r.ftds or 0) > 0 %}good{% endif %}">{{ r.ftds or 0 }}</td>
+              <td class="date">{{ r.date or '' }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </div>
+  </td>
+</tr>

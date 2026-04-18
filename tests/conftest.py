@@ -1,0 +1,141 @@
+"""Test fixtures for analysis_agent unit tests.
+
+Provides a synthetic enriched DataFrame (post compute_metrics + enrich_structure)
+plus a synthetic accounts list. Designed so:
+  - 2 countries (Mexico, Brazil) with non-trivial CM/offer/device/interest mixes
+  - At least one CM aggregate per country has 2+ deposits (Strong combo eligible)
+  - At least one combo has 1 deposit + CR > 5% (Interesting combo eligible)
+  - One row has NaN CM (tests the dropna=False group path)
+  - One row has NaN Interest (tests the (unknown) bucket)
+  - Dates span 14 days so trend windows have both recent and older data
+"""
+from __future__ import annotations
+
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+# Make project root importable
+_PROJ_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJ_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJ_ROOT))
+
+
+@pytest.fixture
+def enriched_df() -> pd.DataFrame:
+    """Return an enriched DataFrame as if compute_metrics + enrich_structure ran.
+
+    Schema mirrors what build_morning_report() consumes downstream.
+    """
+    today = datetime(2026, 4, 18)
+
+    def d(days_ago: int) -> datetime:
+        return today - timedelta(days=days_ago)
+
+    rows = [
+        # ── Mexico — Evgeni Sedin — trader_pro — all device — interest=trading ──
+        # 3 ads, 2 of them with 1 deposit each (Strong combo: 2+ deposits)
+        _row("Mexico", "MX-acc-1", "Evgeni Sedin", "trader_pro", "all", "trading",
+             "25", "Make money fast", 100, 1, 50.0, 80.0, d(0)),
+        _row("Mexico", "MX-acc-1", "Evgeni Sedin", "trader_pro", "all", "trading",
+             "25", "Make money fast", 90, 1, 45.0, 70.0, d(1)),
+        _row("Mexico", "MX-acc-1", "Evgeni Sedin", "trader_pro", "all", "trading",
+             "25", "Make money fast", 80, 0, 40.0, 0.0, d(2)),
+
+        # ── Mexico — Evgeni Sedin — trader_pro — ios device — interest=trading ──
+        # 1 ad, 1 deposit, high CR (Interesting combo: 1 deposit + CR > 5%)
+        _row("Mexico", "MX-acc-2", "Evgeni Sedin", "trader_pro", "ios", "trading",
+             "35+", "iOS exclusive offer", 10, 1, 30.0, 60.0, d(0)),
+
+        # ── Mexico — Other CM — crypto_invest — all device — interest=crypto ──
+        # 4 ads, total 3 deposits (Strong combo, contributes to "Other CM" aggregate)
+        _row("Mexico", "MX-acc-3", "Other CM", "crypto_invest", "all", "crypto",
+             "25", "Buy bitcoin now", 200, 2, 100.0, 150.0, d(1)),
+        _row("Mexico", "MX-acc-3", "Other CM", "crypto_invest", "all", "crypto",
+             "25", "Buy bitcoin now", 150, 1, 75.0, 80.0, d(3)),
+        _row("Mexico", "MX-acc-3", "Other CM", "crypto_invest", "all", "crypto",
+             "25", "Buy bitcoin now", 100, 0, 50.0, 0.0, d(8)),
+        _row("Mexico", "MX-acc-3", "Other CM", "crypto_invest", "all", "crypto",
+             "25", "Crypto for beginners", 50, 0, 25.0, 0.0, d(10)),
+
+        # ── Mexico — NaN CM — trader_pro — all device — interest=NaN ──
+        # 1 ad with NaN CM and NaN Interest (tests dropna=False + (unknown) bucket)
+        _row("Mexico", "MX-acc-4", None, "trader_pro", "all", None,
+             "25", "Generic offer", 30, 0, 15.0, 0.0, d(5)),
+
+        # ── Brazil — Evgeni Sedin — trader_pro — all device — interest=trading ──
+        # 2 ads, 1 deposit each (2 deposits → Strong)
+        _row("Brazil", "BR-acc-1", "Evgeni Sedin", "trader_pro", "all", "trading",
+             "25", "Brazilian special", 70, 1, 35.0, 50.0, d(0)),
+        _row("Brazil", "BR-acc-1", "Evgeni Sedin", "trader_pro", "all", "trading",
+             "25", "Brazilian special", 60, 1, 30.0, 45.0, d(2)),
+
+        # ── Brazil — Other CM — crypto_invest — ios device — interest=crypto ──
+        # 1 ad, 0 deposits (won't surface in combos but appears in CM aggregate)
+        _row("Brazil", "BR-acc-2", "Other CM", "crypto_invest", "ios", "crypto",
+             "35+", "Mobile crypto trading", 40, 0, 20.0, 0.0, d(7)),
+    ]
+    df = pd.DataFrame(rows)
+
+    # Compute the per-row metric columns the way compute_metrics does
+    df["CPL"] = df["$ Spend"] / df["# Leads"].replace(0, pd.NA)
+    df["CPA"] = df["$ Spend"] / df["# FTDs"].replace(0, pd.NA)
+    df["CR"] = (df["# FTDs"] / df["# Leads"].replace(0, pd.NA)) * 100.0
+    df["Profit"] = df["$ Net"] - df["$ Spend"]
+    df["ROI"] = df["$ Net"] / df["$ Spend"].replace(0, pd.NA)
+    return df
+
+
+@pytest.fixture
+def accounts_rows() -> list:
+    """Synthetic accounts list as returned by gsheet_accounts.fetch_account_rows()."""
+    return [
+        {
+            "alias": "MX-acc-1",
+            "account_label": "MX-acc-1",
+            "country_code": "mx",
+            "is_ready": True,
+            "to_do": "",
+            "cost": "100",
+            "stock": "5",
+        },
+        {
+            "alias": "BR-acc-1",
+            "account_label": "BR-acc-1",
+            "country_code": "br",
+            "is_ready": True,
+            "to_do": "",
+            "cost": "80",
+            "stock": "3",
+        },
+    ]
+
+
+def _row(country, alias, cm, offer, device, interest, age, ad_title,
+         leads, ftds, spend, net, date) -> dict:
+    """Build one fully-enriched row dict."""
+    return {
+        "Country": country,
+        "Country Final": country,
+        "Country Code": country[:2].upper(),
+        "Account Alias": alias,
+        "Adset Name": f"{country[:2].upper()}_{offer}_{device}_creative_{interest or 'wide'}_{age}",
+        "Ad Title": ad_title,
+        "Ad Asset": offer,
+        "# Leads": leads,
+        "# FTDs": ftds,
+        "$ Spend": spend,
+        "$ Net": net,
+        "CM": cm,
+        "Date": date,
+        # enrich_structure-derived columns
+        "Device": device,
+        "Interest": interest,
+        "Age": age,
+        "Creative": ad_title,
+        "TextSegment": ad_title.split()[0].lower() if ad_title else "",
+        "Offer": offer,
+    }
