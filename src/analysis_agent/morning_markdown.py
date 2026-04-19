@@ -73,6 +73,27 @@ def _render_cm_comparison(rows: List[Dict[str, Any]], my_cm: str) -> str:
     return "\n".join(lines)
 
 
+def _render_asset_summary(rows: List[Dict[str, Any]]) -> str:
+    if not rows:
+        return ""
+    table_rows = []
+    for r in rows:
+        leads = r["leads"]
+        deposits = r["deposits"]
+        cr_s = f"{deposits / leads * 100:.1f}%" if leads else "—"
+        table_rows.append([
+            _esc(r["offer"]),
+            _fmt_money(r["spend"]),
+            str(leads),
+            str(deposits),
+            _fmt_money(r["cpl"]) if r["cpl"] else "—",
+            _fmt_money(r["cpa"]) if r["cpa"] else "—",
+            cr_s,
+            _fmt_float(r["roi"]),
+        ])
+    return _table(["Asset (Offer)", "Spend", "Leads", "Dep", "CPL", "CPA", "CR", "ROI"], table_rows)
+
+
 def _render_trend(trend: Dict[str, Any]) -> str:
     lines = ["### 2. Тренд (последние дни)", ""]
     if not trend.get("has_date"):
@@ -127,19 +148,24 @@ def _render_top_combos(combos: List[Dict[str, Any]]) -> str:
 
     table_rows = []
     for c in combos:
+        quality = c.get("quality", "ok")
+        flag = " ✓" if quality == "ok" else " ⚠"
+        type_label = c["category"] + flag
         roi_s = _fmt_float(c["roi"]) if c["roi"] else "—"
         cpa_s = _fmt_money(c["cpa"]) if c["cpa"] else "—"
+        cpl_s = _fmt_money(c.get("cpl", 0)) if c.get("cpl") else "—"
         combo_label = f"{c['device']} + {c['interest']} + {c['age']} + {c['creative'][:25]}"
         table_rows.append([
-            c["category"],
+            type_label,
             c["offer"][:15],
             combo_label,
             str(c["deposits"]),
+            cpl_s,
             cpa_s,
             roi_s,
         ])
     lines.append(_table(
-        ["Type", "Offer", "Combo", "Dep", "CPA", "ROI"],
+        ["Type", "Offer", "Combo", "Dep", "CPL", "CPA", "ROI"],
         table_rows,
     ))
     return "\n".join(lines)
@@ -237,18 +263,31 @@ def _render_close_recs(close_recs: Dict[str, List[Dict[str, Any]]]) -> str:
     lines = ["### 8. Что закрыть (оптимизация)", ""]
     any_data = any(v for v in close_recs.values())
     if not any_data:
-        lines.append("_No ad sets with 0 FTD and notable spend — nothing to close._")
+        lines.append("_No ad sets to close — nothing exceeds benchmarks._")
         return "\n".join(lines)
 
     for acc_label, recs in close_recs.items():
         if not recs:
             continue
         lines.append(f"**{acc_label}:**")
+        lines.append("")
+        table_rows = []
         for r in recs:
-            lines.append(
-                f"- {r['adset_name'][:60]}  "
-                f"(Spend: {_fmt_money(r['spend'])}, Leads: {r['leads']}, FTDs: 0)"
-            )
+            cpl_s = _fmt_money(r["cpl"]) if r.get("cpl") else "—"
+            cpa_s = _fmt_money(r["cpa"]) if r.get("cpa") else "—"
+            table_rows.append([
+                r["adset_name"][:55],
+                _fmt_money(r["spend"]),
+                str(r["leads"]),
+                str(r["deposits"]),
+                cpl_s,
+                cpa_s,
+                r.get("reason", ""),
+            ])
+        lines.append(_table(
+            ["Ad Set", "Spend", "Leads", "FTDs", "CPL", "CPA", "Reason"],
+            table_rows,
+        ))
         lines.append("")
     return "\n".join(lines)
 
@@ -264,17 +303,27 @@ def _render_open_recs(open_recs: Dict[str, List[Dict[str, Any]]]) -> str:
         if not recs:
             continue
         lines.append(f"**{acc_label}:**")
+        lines.append("")
         for i, r in enumerate(recs, 1):
-            roi_s = f"ROI {r['roi']:.2f}" if r.get("roi") else ""
-            dep_s = f"{r['deposits']} dep"
-            cat = r.get("category", "")
+            quality = r.get("quality", "ok")
+            flag = " ✓" if quality == "ok" else " ⚠"
+            cat = r.get("category", "") + flag
+            argument = r.get("argument", "")
+            below = r.get("below_benchmark", False)
+            warn_note = "  ⚠ below benchmark" if below else ""
+
             lines.append(
                 f"  Campaign {i}: `{r['campaign_name']}`"
+                f"   [{r['targeting']} — {argument}]{warn_note}"
             )
-            lines.append(
-                f"    Ad Set: {r['adset_name']}  [{cat} | {dep_s} {roi_s}]"
-            )
-        lines.append("")
+            for cr in r.get("creatives", []):
+                roi_s = f", ROI {cr['roi']:.2f}" if cr.get("roi") else ""
+                dep_s = f"{cr['deposits']} dep" if cr["deposits"] else ""
+                note = f"  ({cr['note']})" if cr.get("note") else ""
+                parts = [s for s in [dep_s, roi_s.lstrip(", ")] if s]
+                stats = f"  ({', '.join(parts)})" if parts else ""
+                lines.append(f"    - {cr['name']}{stats}{note}")
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -286,6 +335,8 @@ def _render_country_section(section: Dict[str, Any], my_cm: str, has_gsheet: boo
         f"## Country: {country}",
         "",
         _render_cm_comparison(section.get("cm_comparison", []), my_cm),
+        "",
+        _render_asset_summary(section.get("asset_summary", [])),
         "",
         _render_trend(section.get("trend", {})),
         "",

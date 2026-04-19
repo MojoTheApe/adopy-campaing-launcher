@@ -27,6 +27,7 @@ from src.analysis_agent.analyze_fb_stats import (
 )
 from src.analysis_agent.section_filters import NA_SENTINEL
 from src.knowledge_agent.knowledge_base import format_target_context_line, get_all_targets
+from config.benchmarks import compute_country_medians, get_benchmark
 
 
 def _key_value(v: Any) -> str:
@@ -114,6 +115,46 @@ def build_cm_comparison(df: pd.DataFrame, country: str, my_cm: str) -> List[Dict
         )
     # Put my row first
     rows.sort(key=lambda x: (not x["is_me"], -x["net"]))
+    return rows
+
+
+# ── Section 1b: Asset (offer) summary ──────────────────────────────────────────
+
+def build_asset_summary(df: pd.DataFrame, country: str) -> List[Dict[str, Any]]:
+    """Short aggregate by Ad Asset (offer) for this country."""
+    df_c = df[df["Country Final"] == country]
+    if df_c.empty or "Offer" not in df_c.columns:
+        return []
+
+    grouped = (
+        df_c.groupby("Offer", dropna=False)
+        .agg(
+            Deposits=("# FTDs", "sum"),
+            Leads=("# Leads", "sum"),
+            Spend=("$ Spend", "sum"),
+            Net=("$ Net", "sum"),
+        )
+        .reset_index()
+    )
+    grouped["CPL"] = grouped["Spend"] / grouped["Leads"].replace(0, pd.NA)
+    grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
+    grouped["ROI"] = grouped["Net"] / grouped["Spend"].replace(0, pd.NA)
+    grouped = grouped.sort_values(["Deposits", "Spend"], ascending=[False, False])
+
+    rows = []
+    for _, r in grouped.iterrows():
+        offer = str(r.get("Offer") or "").strip()
+        if not offer or offer.lower() in ("nan", "none", "-"):
+            continue
+        rows.append({
+            "offer": offer,
+            "deposits": _safe_int(r.get("Deposits")),
+            "leads": _safe_int(r.get("Leads")),
+            "spend": _safe_float(r.get("Spend")),
+            "cpl": _safe_float(r.get("CPL")),
+            "cpa": _safe_float(r.get("CPA")),
+            "roi": _safe_float(r.get("ROI")),
+        })
     return rows
 
 
@@ -219,6 +260,25 @@ def build_trend(
 
 # ── Section 3: Top combos (from aggregate_combos output) ──────────────────────
 
+def _check_quality(combo: Dict[str, Any], bench: Dict[str, Any]) -> str:
+    """Return 'ok' if combo meets all benchmarks, 'warn' otherwise."""
+    cpl = combo.get("cpl", 0.0)
+    cpa = combo.get("cpa", 0.0)
+    cr = combo.get("cr", 0.0)
+
+    max_cpl = bench.get("max_cpl")
+    max_cpa = bench.get("max_cpa")
+    min_cr = bench.get("min_cr")
+
+    if max_cpl is not None and cpl > 0 and cpl > max_cpl:
+        return "warn"
+    if max_cpa is not None and cpa > 0 and cpa > max_cpa:
+        return "warn"
+    if min_cr is not None and cr < min_cr:
+        return "warn"
+    return "ok"
+
+
 def build_top_combos(combos: pd.DataFrame, country: str, top_n: int = 5) -> List[Dict[str, Any]]:
     """Return top N combos for country (Strong first, then Interesting)."""
     df_c = combos[combos["Country Final"] == country].copy()
@@ -235,32 +295,36 @@ def build_top_combos(combos: pd.DataFrame, country: str, top_n: int = 5) -> List
 
     result = []
     for _, r in top.iterrows():
-        result.append(
-            {
-                "offer": str(r.get("Offer") or "").strip(),
-                "device": str(r.get("Device") or "all").strip(),
-                "interest": str(r.get("Interest") or "").strip(),
-                "age": str(r.get("Age") or "").strip(),
-                "creative": str(r.get("Creative") or "").strip(),
-                "category": str(r.get("Category", "Strong")),
-                "deposits": _safe_int(r.get("Deposits")),
-                "leads": _safe_int(r.get("Leads")),
-                "spend": _safe_float(r.get("Spend")),
-                "cpa": _safe_float(r.get("CPA")),
-                "roi": _safe_float(r.get("ROI")),
-                "top_account": str(r.get("TopAccount") or "").strip(),
-                "aggregate_key": {
-                    "section": "top_combos",
-                    "country": country,
-                    "offer": _key_value(r.get("Offer")),
-                    "device": _key_value(r.get("Device")),
-                    "interest": _key_value(r.get("Interest")),
-                    "age": _key_value(r.get("Age")),
-                    "creative": _key_value(r.get("Creative")),
-                    "text_segment": _key_value(r.get("TextSegment")),
-                },
-            }
-        )
+        offer_str = str(r.get("Offer") or "").strip()
+        bench = get_benchmark(country, offer_str)
+        combo = {
+            "offer": offer_str,
+            "device": str(r.get("Device") or "all").strip(),
+            "interest": str(r.get("Interest") or "").strip(),
+            "age": str(r.get("Age") or "").strip(),
+            "creative": str(r.get("Creative") or "").strip(),
+            "category": str(r.get("Category", "Strong")),
+            "deposits": _safe_int(r.get("Deposits")),
+            "leads": _safe_int(r.get("Leads")),
+            "spend": _safe_float(r.get("Spend")),
+            "cpl": _safe_float(r.get("CPL")),
+            "cpa": _safe_float(r.get("CPA")),
+            "cr": _safe_float(r.get("CR")),
+            "roi": _safe_float(r.get("ROI")),
+            "top_account": str(r.get("TopAccount") or "").strip(),
+            "aggregate_key": {
+                "section": "top_combos",
+                "country": country,
+                "offer": _key_value(r.get("Offer")),
+                "device": _key_value(r.get("Device")),
+                "interest": _key_value(r.get("Interest")),
+                "age": _key_value(r.get("Age")),
+                "creative": _key_value(r.get("Creative")),
+                "text_segment": _key_value(r.get("TextSegment")),
+            },
+        }
+        combo["quality"] = _check_quality(combo, bench)
+        result.append(combo)
     return result
 
 
@@ -433,7 +497,7 @@ def build_close_recommendations(
     min_spend: float = 30.0,
     top_n: int = 5,
 ) -> List[Dict[str, Any]]:
-    """Ad sets with 0 FTD and notable spend — candidates to close."""
+    """Ad sets to close: Tier 1 (0 FTD + spend) and Tier 2 (above benchmark CPL/CPA)."""
     df_c = df[
         (df["Country Final"] == country)
         & (df["Account Alias"].fillna("").astype(str) == account_alias)
@@ -441,60 +505,342 @@ def build_close_recommendations(
     if df_c.empty:
         return []
 
-    grouped = (
-        df_c.groupby("Adset Name", dropna=False)
-        .agg(
-            Deposits=("# FTDs", "sum"),
-            Leads=("# Leads", "sum"),
-            Spend=("$ Spend", "sum"),
-        )
-        .reset_index()
-    )
+    group_cols = ["Adset Name"]
+    offer_col = "Offer" if "Offer" in df_c.columns else None
+
+    if offer_col:
+        group_cols.append(offer_col)
+
+    agg_dict = {
+        "# FTDs": ("# FTDs", "sum"),
+        "# Leads": ("# Leads", "sum"),
+        "$ Spend": ("$ Spend", "sum"),
+    }
+    grouped = df_c.groupby(group_cols, dropna=False).agg(**agg_dict).reset_index()
+    grouped.rename(columns={"# FTDs": "Deposits", "# Leads": "Leads", "$ Spend": "Spend"}, inplace=True)
+    grouped["CPL"] = grouped["Spend"] / grouped["Leads"].replace(0, pd.NA)
+    grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
+
+    results: List[Dict[str, Any]] = []
+
+    def _make_rec(r, reason: str) -> Dict[str, Any]:
+        deposits = _safe_int(r.get("Deposits"))
+        leads = _safe_int(r.get("Leads"))
+        spend = _safe_float(r.get("Spend"))
+        cpl = _safe_float(r.get("CPL"))
+        cpa = _safe_float(r.get("CPA"))
+        return {
+            "adset_name": str(r.get("Adset Name") or "").strip(),
+            "deposits": deposits,
+            "leads": leads,
+            "spend": spend,
+            "cpl": cpl,
+            "cpa": cpa,
+            "reason": reason,
+        }
+
+    # Tier 1: 0 FTDs + notable spend
     zero_ftd = grouped[(grouped["Deposits"] == 0) & (grouped["Spend"] >= min_spend)]
     zero_ftd = zero_ftd.sort_values("Spend", ascending=False).head(top_n)
+    for _, r in zero_ftd.iterrows():
+        results.append(_make_rec(r, "0 FTD"))
 
-    return [
-        {
-            "adset_name": str(r.get("Adset Name") or "").strip(),
-            "deposits": 0,
-            "leads": _safe_int(r.get("Leads")),
-            "spend": _safe_float(r.get("Spend")),
-        }
-        for _, r in zero_ftd.iterrows()
-    ]
+    # Tier 2: has FTDs but CPL or CPA exceed benchmark
+    has_ftd = grouped[(grouped["Deposits"] > 0) & (grouped["Spend"] >= min_spend)]
+    for _, r in has_ftd.iterrows():
+        offer = str(r.get("Offer") or "").strip() if offer_col else ""
+        bench = get_benchmark(country, offer or None)
+        cpl = _safe_float(r.get("CPL"))
+        cpa = _safe_float(r.get("CPA"))
+        reasons = []
+        if bench.get("max_cpl") and cpl > 0 and cpl > bench["max_cpl"]:
+            reasons.append(f"CPL > bench ${bench['max_cpl']:,.0f}")
+        if bench.get("max_cpa") and cpa > 0 and cpa > bench["max_cpa"]:
+            reasons.append(f"CPA > bench ${bench['max_cpa']:,.0f}")
+        if reasons:
+            results.append(_make_rec(r, "; ".join(reasons)))
+
+    results.sort(key=lambda x: -x["spend"])
+    return results[:top_n]
 
 
 # ── Section 11: Open 2 campaigns ──────────────────────────────────────────────
 
+# Short slugs used in real ad-set names for each Ad Asset (offer) value.
+_OFFER_ABBR: Dict[str, str] = {
+    "amazon": "Amz",
+    "ai trader": "Ait",
+    "ai trading": "Ait",
+    "al trading": "Alt",
+    "trader ai": "Trl",
+    "favorita": "Fav",
+    "corporación favorita": "Fav",
+    "corporacion favorita": "Fav",
+    "salik": "Slk",
+    "banco industrial": "Bid",
+    "banco g&t continental": "Bgt",
+    "bancolombia": "Bnc",
+    "mercado libre": "Ml",
+    "adnoc": "Adc",
+    "chatgpt": "Cgpt",
+    "chatgptplatform": "Cgpt",
+    "finance eagle": "Fe",
+    "aa acady": "Acd",
+    "al salam bank": "Asb",
+    "lulu retail": "Llu",
+    "fab": "Fab",
+    "qatar energy": "Qe",
+    "sqm": "Sqm",
+    "enel": "Enl",
+    "aramco": "Arm",
+    "holcim": "Hlc",
+    "lundin gold inc": "Lnd",
+    "zeon grow": "Zen",
+    "bimboa": "Bim",
+    "aes el salvador": "Aes",
+    "cervecería nacional": "Cvn",
+    "cerveceria nacional": "Cvn",
+    "grupo aval": "Gav",
+    "banorte": "Bnt",
+}
+
+
+def _offer_abbr(offer: str) -> str:
+    """Return short slug for offer name, e.g. 'AI Trader' → 'Ait'."""
+    key = (offer or "").strip().lower()
+    if key in _OFFER_ABBR:
+        return _OFFER_ABBR[key]
+    # Fallback: CamelCase first letters, max 4 chars
+    parts = offer.strip().split()
+    return "".join(w.capitalize() for w in parts)[:4] if parts else "Unk"
+
+
+def _creative_type(creative: str) -> str:
+    """Return 'Image' or 'Video' based on the creative/Ad Title value."""
+    return "Image" if (creative or "").strip().lower().startswith("image") else "Video"
+
+
+def _is_nan_val(v: Any) -> bool:
+    """True if the value is empty / nan / NA_SENTINEL."""
+    if v is None:
+        return True
+    s = str(v).strip().lower()
+    return s in ("", "nan", "none", NA_SENTINEL.lower())
+
+
+def _combo_passes_benchmark(combo: Dict[str, Any], bench: Dict[str, Any]) -> bool:
+    """True if combo meets all configured benchmarks."""
+    cpl = combo.get("cpl", 0.0)
+    cpa = combo.get("cpa", 0.0)
+    cr = combo.get("cr", 0.0)
+
+    max_cpl = bench.get("max_cpl")
+    max_cpa = bench.get("max_cpa")
+    min_cr = bench.get("min_cr")
+
+    if max_cpl is not None and cpl > 0 and cpl > max_cpl:
+        return False
+    if max_cpa is not None and cpa > 0 and cpa > max_cpa:
+        return False
+    if min_cr is not None and cr < min_cr:
+        return False
+    return True
+
+
+def _group_combos_by_targeting(
+    combos_df: pd.DataFrame, country: str
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Group all Strong/Interesting combos by interest, rank creatives within."""
+    df_c = combos_df[combos_df["Country Final"] == country].copy()
+    if df_c.empty:
+        return {}
+
+    qualified = df_c[df_c["Category"].isin(["Strong", "Interesting"])].copy()
+    if qualified.empty:
+        return {}
+
+    qualified = qualified.sort_values(
+        ["Deposits", "CR", "ROI"], ascending=[False, False, False]
+    )
+
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for _, r in qualified.iterrows():
+        interest = str(r.get("Interest") or "").strip()
+        if not interest or interest.lower() == "nan":
+            interest = "(unknown)"
+        entry = {
+            "offer": str(r.get("Offer") or "").strip(),
+            "device": str(r.get("Device") or "all").strip(),
+            "interest": interest,
+            "age": str(r.get("Age") or "").strip(),
+            "creative": str(r.get("Creative") or "").strip(),
+            "category": str(r.get("Category", "Strong")),
+            "deposits": _safe_int(r.get("Deposits")),
+            "leads": _safe_int(r.get("Leads")),
+            "spend": _safe_float(r.get("Spend")),
+            "cpl": _safe_float(r.get("CPL")),
+            "cpa": _safe_float(r.get("CPA")),
+            "cr": _safe_float(r.get("CR")),
+            "roi": _safe_float(r.get("ROI")),
+        }
+        groups.setdefault(interest, []).append(entry)
+    return groups
+
+
+def _get_running_interests(
+    df: pd.DataFrame, country: str, account_alias: str
+) -> set:
+    """Return set of Interest values already active on this account."""
+    mask = (
+        (df["Country Final"] == country)
+        & (df["Account Alias"].fillna("").astype(str) == account_alias)
+        & (df["$ Spend"] > 0)
+    )
+    if "Interest" not in df.columns:
+        return set()
+    vals = df.loc[mask, "Interest"].dropna().astype(str).str.strip().unique()
+    return {v for v in vals if v and v.lower() != "nan"}
+
+
 def build_open_recommendations(
-    top_combos: List[Dict[str, Any]],
+    combos_df: pd.DataFrame,
+    df: pd.DataFrame,
+    account_alias: str,
     account_label: str,
     country_code: str,
-    n: int = 2,
+    country_name: str,
+    medians: Dict[str, Any],
+    n_campaigns: int = 2,
+    n_creatives: int = 3,
 ) -> List[Dict[str, Any]]:
-    """Return up to n combos formatted as campaign open suggestions."""
-    recs = []
-    for combo in top_combos[:n]:
-        offer_slug = (combo["offer"] or "").replace(" ", "")[:12]
-        device = (combo["device"] or "all").upper()
-        interest = (combo["interest"] or "Wide")
-        creative = (combo["creative"] or "")[:20]
-        age = combo.get("age", "35")
+    """Return up to *n_campaigns* campaign recs, each with *n_creatives* ads.
 
-        campaign_name = f"{country_code}_{offer_slug}_{device}_{interest}_{age}"
-        adset_name = (
-            f"{combo['device']} + {interest} + {age} + {creative}"
+    Logic:
+    1. Group all qualified combos by targeting (interest).
+    2. Exclude targetings already running on this account.
+    3. Pick top targetings by total deposits; diversify offers if possible.
+    4. For each targeting, select top creatives; borrow from best group if < 3.
+    """
+    today = datetime.now().strftime("%d.%m")
+    groups = _group_combos_by_targeting(combos_df, country_name)
+    if not groups:
+        return []
+
+    running = _get_running_interests(df, country_name, account_alias)
+
+    # Score each targeting group by total deposits
+    scored: List[Dict[str, Any]] = []
+    for interest, combos in groups.items():
+        total_dep = sum(c["deposits"] for c in combos)
+        best_offer = combos[0]["offer"] if combos else ""
+        is_running = interest in running
+        scored.append({
+            "interest": interest,
+            "combos": combos,
+            "total_dep": total_dep,
+            "best_offer": best_offer,
+            "is_running": is_running,
+        })
+
+    scored.sort(key=lambda g: (-int(not g["is_running"]), -g["total_dep"]))
+
+    # Select campaigns: prefer not-running, diversify offers
+    selected: List[Dict[str, Any]] = []
+    used_offers: set = set()
+    # First pass: pick best non-running, one per offer
+    for g in scored:
+        if len(selected) >= n_campaigns:
+            break
+        if not g["is_running"] and g["best_offer"] not in used_offers:
+            selected.append(g)
+            used_offers.add(g["best_offer"])
+    # Second pass: fill remaining slots from non-running (any offer)
+    for g in scored:
+        if len(selected) >= n_campaigns:
+            break
+        if g not in selected and not g["is_running"]:
+            selected.append(g)
+    # Fallback: if still not enough, use running groups (scale-up)
+    for g in scored:
+        if len(selected) >= n_campaigns:
+            break
+        if g not in selected:
+            selected.append(g)
+
+    # Find overall best creative for borrowing
+    all_combos_flat = [c for cs in groups.values() for c in cs]
+    all_combos_flat.sort(key=lambda c: (-c["deposits"], -c["roi"]))
+    best_global_creative = all_combos_flat[0]["creative"] if all_combos_flat else ""
+
+    recs = []
+    for rank, grp in enumerate(selected):
+        interest = grp["interest"]
+        combos_list = grp["combos"]
+        total_dep = grp["total_dep"]
+        is_running = grp["is_running"]
+
+        # Determine primary offer and representative combo for campaign name
+        primary = combos_list[0]
+        offer = primary["offer"]
+        device_raw = primary["device"]
+        age_raw = primary["age"]
+
+        bench = get_benchmark(country_name, offer or None)
+        quality = _check_quality(primary, bench)
+
+        offer_part = _offer_abbr(offer)
+        device_part = device_raw.capitalize()
+        creative_type = _creative_type(primary["creative"])
+        age_part = f"_{age_raw}" if not _is_nan_val(age_raw) else ""
+
+        campaign_name = (
+            f"{country_code}_{offer_part}_{device_part}"
+            f"_{creative_type}_{interest}{age_part}_{today}"
         )
-        recs.append(
-            {
-                "campaign_name": campaign_name,
-                "adset_name": adset_name,
-                "offer": combo["offer"],
-                "category": combo["category"],
-                "deposits": combo["deposits"],
-                "roi": combo["roi"],
-            }
-        )
+
+        # Argument for why this targeting
+        if rank == 0:
+            argument = f"{total_dep} dep, best targeting"
+        elif grp["best_offer"] != selected[0]["best_offer"]:
+            argument = f"{total_dep} dep, diversification"
+        else:
+            argument = f"{total_dep} dep, 2nd best targeting"
+        if is_running:
+            argument += ", scale up"
+
+        # Pick top N creatives
+        creatives_out: List[Dict[str, Any]] = []
+        for c in combos_list[:n_creatives]:
+            creatives_out.append({
+                "name": c["creative"][:40],
+                "deposits": c["deposits"],
+                "roi": c["roi"],
+                "note": "",
+            })
+        # If fewer than n_creatives, borrow from best global
+        if len(creatives_out) < n_creatives and best_global_creative:
+            existing_names = {cr["name"] for cr in creatives_out}
+            if best_global_creative[:40] not in existing_names:
+                source_interest = all_combos_flat[0]["interest"]
+                creatives_out.append({
+                    "name": best_global_creative[:40],
+                    "deposits": all_combos_flat[0]["deposits"],
+                    "roi": all_combos_flat[0]["roi"],
+                    "note": f"test: best from {source_interest}",
+                })
+
+        recs.append({
+            "campaign_name": campaign_name,
+            "targeting": interest,
+            "offer": offer,
+            "category": primary["category"],
+            "quality": quality,
+            "total_deposits": total_dep,
+            "argument": argument,
+            "creatives": creatives_out,
+            "below_benchmark": quality == "warn",
+            "data_median_cpl": medians.get("median_cpl"),
+        })
     return recs
 
 
@@ -512,11 +858,9 @@ def build_country_section(
     top_combos = build_top_combos(combos, country)
     targeting = build_targeting_breakdown(df, country)
     creatives = build_creative_breakdown(df, country)
+    medians = compute_country_medians(df, country)
 
-    # GSheet rows for this country: match by country code (col B) or by account labels
-    # The country_code in GSheet (e.g. "MX") maps to Excel country names (e.g. "Mexico")
-    # We use account alias matching via the accounts list
-    country_accounts = account_rows  # already filtered to my CM; further filtered by caller
+    country_accounts = account_rows
 
     close_recs: Dict[str, List] = {}
     open_recs: Dict[str, List] = {}
@@ -526,12 +870,18 @@ def build_country_section(
             close_recs[acc["account_label"]] = build_close_recommendations(df, country, alias)
             cc = acc["country_code"] or country[:2].upper()
             open_recs[acc["account_label"]] = build_open_recommendations(
-                top_combos, acc["account_label"], cc
+                combos_df=combos, df=df,
+                account_alias=alias,
+                account_label=acc["account_label"],
+                country_code=cc,
+                country_name=country,
+                medians=medians,
             )
 
     return {
         "country": country,
         "cm_comparison": build_cm_comparison(df, country, my_cm),
+        "asset_summary": build_asset_summary(df, country),
         "trend": build_trend(df, country, trend_days),
         "top_combos": top_combos,
         "targeting": targeting,
@@ -539,8 +889,9 @@ def build_country_section(
         "ai_context": build_ai_context_block(country, top_combos),
         "hypotheses": build_hypotheses_block(country, top_combos, targeting, creatives),
         "account_rows": country_accounts,
-        "close_recs": close_recs,    # {account_label: [close_rec, ...]}
-        "open_recs": open_recs,       # {account_label: [open_rec, ...]}
+        "close_recs": close_recs,
+        "open_recs": open_recs,
+        "medians": medians,
     }
 
 

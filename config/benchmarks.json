@@ -1,0 +1,66 @@
+{
+  "defaults": {
+    "max_cpl": null,
+    "max_cpa": null,
+    "min_cr": 1.0
+  },
+  "countries": {
+    "Mexico": {
+      "max_cpl": 25,
+      "max_cpa": 1500,
+      "min_cr": 1.5,
+      "offers": {
+        "Amazon": { "max_cpl": 20 }
+      }
+    },
+    "Ecuador": {
+      "max_cpl": 20,
+      "max_cpa": 1000,
+      "min_cr": 2.0,
+      "offers": {
+        "Favorita": { "max_cpl": 18 },
+        "AI Trader": { "max_cpl": 15 }
+      }
+    },
+    "United Arab Emirates": {
+      "max_cpl": 80,
+      "max_cpa": 3000,
+      "offers": {
+        "Adnoc": { "max_cpl": 60 },
+        "Trader AI": { "max_cpl": 90 }
+      }
+    },
+    "Kuwait": {
+      "max_cpl": 100,
+      "max_cpa": 4000
+    },
+    "Oman": {
+      "max_cpl": 80,
+      "max_cpa": 3500
+    },
+    "Bahrain": {
+      "max_cpl": 80,
+      "max_cpa": 3000
+    },
+    "Qatar": {
+      "max_cpl": 100,
+      "max_cpa": 4000
+    },
+    "Saudi Arabia": {
+      "max_cpl": 50,
+      "max_cpa": 2500
+    },
+    "Guatemala": {
+      "max_cpl": 20,
+      "max_cpa": 1500
+    },
+    "Chile": {
+      "max_cpl": 30,
+      "max_cpa": 1500
+    },
+    "Colombia": {
+      "max_cpl": 25,
+      "max_cpa": 1500
+    }
+  }
+}
