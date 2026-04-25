@@ -139,6 +139,12 @@ def parse_adset_name(
             in_creative_phase = False
         interest_parts.append(p)
 
+    # Media-type suffixes can appear after the targeting token
+    # (e.g. Day_img). They describe creative format, not targeting.
+    media_type_tokens = {"img", "image", "images", "vid", "video", "videos", "photo"}
+    while interest_parts and interest_parts[-1].lower() in media_type_tokens:
+        interest_parts.pop()
+
     interest = "_".join(interest_parts) if interest_parts else None
     return country_code, device, interest, age
 
