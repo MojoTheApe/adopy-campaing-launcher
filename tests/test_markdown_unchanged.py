@@ -16,6 +16,7 @@ snapshot with:
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -71,6 +72,33 @@ def test_aggregate_key_not_in_rendered_markdown(
     md = render_morning_report_md(report)
     assert "aggregate_key" not in md
     assert "section=" not in md  # URL fragments must not appear either
+
+
+def test_report_static_copy_is_english(
+    enriched_df: pd.DataFrame, accounts_rows: list
+) -> None:
+    """Morning report labels should be English; source data stays unchanged."""
+    report = _build_report_from_fixture(enriched_df, accounts_rows)
+    md = render_morning_report_md(report)
+
+    assert "### 1. Evgeni vs Team" in md
+    assert "### 2. Trend (Recent Days)" in md
+    assert "### 8. What to Close (Optimization)" in md
+    assert "### 9. What to Open (2 Campaigns per Account)" in md
+
+    old_russian_labels = [
+        "команда",
+        "Тренд",
+        "Рабочие комбинации",
+        "Контекст для AI",
+        "Гипотезы",
+        "Статусы аккаунтов",
+        "Что закрыть",
+        "Что открыть",
+    ]
+    for label in old_russian_labels:
+        assert label not in md
+    assert re.search(r"[А-Яа-яЁё]", md) is None
 
 
 def test_markdown_matches_snapshot(

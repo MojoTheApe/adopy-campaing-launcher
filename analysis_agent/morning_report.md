@@ -1,9 +1,9 @@
-# Morning Report — 2026-04-25
+# Morning Report — 2026-04-30
 
 - **CM:** Evgeni Sedin
 - **Source:** `C:\Users\EvgeniSedin\Desktop\cursor example.xlsx`
 - **Trend window:** 7 days
-- **Qualifying combos:** 125
+- **Qualifying combos:** 151
 - **Google Sheet:** ✅ connected
 
 **How to use sections 6 & 7:**  Copy the code block into Cursor chat and ask your question.
@@ -12,39 +12,40 @@
 
 ## Country: Argentina
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
-| CM                 | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
-| ------------------ | ----- | ----- | --- | ----- | --- | ---- | ---- |
-| Evgeni Sedin ← YOU | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
-| Dan Dicker         | $0.00 | 0     | 1   | —     | —   | —    | 0.00 |
-| Yotam Balteriski   | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+| CM                 | Spend | Leads | Dep | CPL   | CPA | CR    | ROI  |
+| ------------------ | ----- | ----- | --- | ----- | --- | ----- | ---- |
+| Evgeni Sedin ← YOU | $0.00 | 1     | 0   | $0.00 | —   | 0.0%  | 0.00 |
+| Dan Dicker         | $0.00 | 2     | 1   | $0.00 | —   | 50.0% | 0.00 |
+| Yotam Balteriski   | $0.00 | 1     | 0   | $0.00 | —   | 0.0%  | 0.00 |
 
 | Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
 | ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
 | Mercado Libre | $0.00 | 0     | 1   | —   | —   | —    | 0.00 |
-| AI Trader     | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
+| AI Trader     | $0.00 | 2     | 0   | —   | —   | 0.0% | 0.00 |
 | Amazon        | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
+| Trader AI     | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 12 – Apr 18, 2026 (7d)**
+Period: **Apr 20 – Apr 26, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + Latam - Global - Glow113 - ios_SM - ES - Mercado libre - ARG - All + 1470  [Mercado Libre]  dep: 1
+**Stopped (had deposits, now 0):**
+- all + Latam - Global - Glow113 - ios_SM - ES - Mercado libre - ARG - All + 1470  [Mercado Libre]  total: 1, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Argentina
@@ -61,17 +62,15 @@ Top creatives by deposits:
   - 1470: 1 dep, $0 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account             | Cost  | Asset | To Do  | ✓ |
-| ------------------- | ----- | ----- | ------ | - |
-| FacebookMKTO1203 EC | $ 951 | —     | expand | ✅ |
+_No accounts found for this country in the GSheet._
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -79,48 +78,48 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Bahrain
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
-| CM                 | Spend     | Leads | Dep | CPL     | CPA       | CR   | ROI   |
-| ------------------ | --------- | ----- | --- | ------- | --------- | ---- | ----- |
-| Evgeni Sedin ← YOU | $76.25    | 1     | 0   | $76.25  | —         | 0.0% | -2.62 |
-| Dan Dicker         | $9,377.62 | 114   | 1   | $82.26  | $9,377.62 | 0.9% | 0.86  |
-| Yotam Balteriski   | $233.26   | 1     | 0   | $233.26 | —         | 0.0% | 0.00  |
-| Gil Zangi          | $222.02   | 5     | 0   | $44.40  | —         | 0.0% | -5.40 |
+| CM                 | Spend      | Leads | Dep | CPL     | CPA        | CR   | ROI   |
+| ------------------ | ---------- | ----- | --- | ------- | ---------- | ---- | ----- |
+| Evgeni Sedin ← YOU | $76.25     | 1     | 0   | $76.25  | —          | 0.0% | -2.62 |
+| Dan Dicker         | $10,828.86 | 127   | 1   | $85.27  | $10,828.86 | 0.8% | 0.98  |
+| Yotam Balteriski   | $233.26    | 1     | 0   | $233.26 | —          | 0.0% | 0.00  |
+| Gil Zangi          | $222.02    | 5     | 0   | $44.40  | —          | 0.0% | -5.40 |
 
 | Asset (Offer) | Spend     | Leads | Dep | CPL     | CPA       | CR   | ROI  |
 | ------------- | --------- | ----- | --- | ------- | --------- | ---- | ---- |
-| Salik         | $4,779.06 | 54    | 1   | $88.50  | $4,779.06 | 1.9% | 0.00 |
-| Trader AI     | $3,314.97 | 17    | 0   | $195.00 | —         | 0.0% | 2.29 |
+| Salik         | $5,737.76 | 65    | 1   | $88.27  | $5,737.76 | 1.5% | 0.00 |
+| Trader AI     | $3,806.03 | 19    | 0   | $200.32 | —         | 0.0% | 2.65 |
 | Adnoc         | $221.70   | 5     | 0   | $44.34  | —         | 0.0% | 0.00 |
 | AI Trader     | $33.64    | 0     | 0   | —       | —         | —    | 0.00 |
 | Al Salam Bank | $0.00     | 0     | 0   | —       | —         | —    | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
-**Остановились (были депозиты, сейчас 0):**
+**Stopped (had deposits, now 0):**
 - all + mix_Mix1 + Image dt2212  [Salik]  total: 1, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 | Type          | Offer | Combo                               | Dep | CPL    | CPA     | ROI  |
 | ------------- | ----- | ----------------------------------- | --- | ------ | ------- | ---- |
-| Interesting ✓ | Salik | all + mix_Mix1 + 25+ + Image dt2212 | 1   | $43.32 | $433.19 | 0.46 |
+| Interesting ✓ | Salik | all + mix_Mix1 + 25+ + Image dt2212 | 1   | $56.72 | $567.18 | 0.35 |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: Bahrain
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Interesting] all + mix_Mix1 + 25+ + Image dt2212  |  Offer: Salik  |  Dep: 1  |  ROI: 0.46
+1. [Interesting] all + mix_Mix1 + 25+ + Image dt2212  |  Offer: Salik  |  Dep: 1  |  ROI: 0.35
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Bahrain
@@ -132,46 +131,36 @@ Working combos:
   - all + mix_Mix1 + Image dt2212  [Interesting, 1 dep]
 
 Top targeting by deposits:
-  - mix_Mix1: 1 dep, $627 spend
+  - mix_Mix1: 1 dep, $1,038 spend
 
 Failing targeting (0 dep, notable spend):
-  - Mix_Reading: $1,594 spend, 0 dep
-  - mix_Reading: $1,250 spend, 0 dep
-  - Blue_Reading: $1,001 spend, 0 dep
+  - Mix_Reading: $1,617 spend, 0 dep
+  - mix_Reading: $1,512 spend, 0 dep
+  - Blue_mix: $1,135 spend, 0 dep
 
 Top creatives by deposits:
-  - Image dt2212: 1 dep, $2,618 spend
+  - Image dt2212: 1 dep, $2,972 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account             | Cost  | Asset | To Do                          | ✓ |
-| ------------------- | ----- | ----- | ------------------------------ | - |
-| FacebookBD50 SA     | —     | —     | rejected                       | ✅ |
-| FacebookMKTO1215 SA | $ 307 | Arc   | CPL low, try narrowing targets | ✅ |
+| Account         | Cost | Asset | To Do            | ✓ |
+| --------------- | ---- | ----- | ---------------- | - |
+| FacebookBD50 SA | —    | —     | Account Disabled | ❌ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
-**FacebookBD50 SA:**
-
-  Campaign 1: `SA_Slk_All_Image_mix_Mix1_25+_25.04`   [mix_Mix1 — 1 dep, best targeting]
-    - Image dt2212  (1 dep, ROI 0.46)
-
-**FacebookMKTO1215 SA:**
-
-  Campaign 1: `SA_Slk_All_Image_mix_Mix1_25+_25.04`   [mix_Mix1 — 1 dep, best targeting]
-    - Image dt2212  (1 dep, ROI 0.46)
-
+_No ready accounts or no combos to recommend._
 
 ---
 
 ## Country: Bolivia (Plurinational State of)
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM         | Spend | Leads | Dep | CPL | CPA | CR | ROI  |
 | ---------- | ----- | ----- | --- | --- | --- | -- | ---- |
@@ -179,23 +168,23 @@ _No ad sets to close — nothing exceeds benchmarks._
 
 
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
 Period: **Apr 15 – Apr 21, 2026 (7d)**
 
 _No combo-level trend data available._
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Bolivia (Plurinational State of)
@@ -206,15 +195,15 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
 _No accounts found for this country in the GSheet._
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -222,33 +211,34 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Brazil
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
-| CM         | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
-| ---------- | ----- | ----- | --- | ----- | --- | ---- | ---- |
-| Dan Dicker | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+| CM               | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
+| ---------------- | ----- | ----- | --- | ----- | --- | ---- | ---- |
+| Dan Dicker       | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+| Yotam Balteriski | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
 
 | Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
 | ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
-| Bancolombia   | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
+| Bancolombia   | $0.00 | 2     | 0   | —   | —   | 0.0% | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 14 – Apr 20, 2026 (7d)**
+Period: **Apr 18 – Apr 24, 2026 (7d)**
 
 _No combo-level trend data available._
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Brazil
@@ -259,15 +249,15 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
 _No accounts found for this country in the GSheet._
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -275,19 +265,19 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Chile
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
-| CM                 | Spend      | Leads | Dep | CPL    | CPA     | CR     | ROI     |
-| ------------------ | ---------- | ----- | --- | ------ | ------- | ------ | ------- |
-| Evgeni Sedin ← YOU | $3.89      | 1     | 4   | $3.89  | $0.97   | 400.0% | 3233.72 |
-| Gil Zangi          | $37,100.25 | 2369  | 72  | $15.66 | $515.28 | 3.0%   | 0.95    |
-| Dan Dicker         | $24,892.03 | 1384  | 44  | $17.99 | $565.73 | 3.2%   | 0.69    |
-| Yotam Balteriski   | $16,437.08 | 1133  | 17  | $14.51 | $966.89 | 1.5%   | 0.79    |
+| CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR     | ROI     |
+| ------------------ | ---------- | ----- | --- | ------ | --------- | ------ | ------- |
+| Evgeni Sedin ← YOU | $8.61      | 1     | 5   | $8.61  | $1.72     | 500.0% | 1483.76 |
+| Gil Zangi          | $48,399.70 | 2607  | 81  | $18.57 | $597.53   | 3.1%   | 0.90    |
+| Dan Dicker         | $31,163.58 | 1723  | 51  | $18.09 | $611.05   | 3.0%   | 0.63    |
+| Yotam Balteriski   | $21,803.46 | 1378  | 19  | $15.82 | $1,147.55 | 1.4%   | 0.85    |
 
 | Asset (Offer) | Spend      | Leads | Dep | CPL    | CPA     | CR   | ROI  |
 | ------------- | ---------- | ----- | --- | ------ | ------- | ---- | ---- |
-| Mercado Libre | $62,448.35 | 4264  | 113 | $14.65 | $552.64 | 2.7% | 0.88 |
-| AI Trader     | $13,734.33 | 482   | 17  | $28.49 | $807.90 | 3.5% | 0.26 |
+| Mercado Libre | $80,938.25 | 4930  | 126 | $16.42 | $642.37 | 2.6% | 0.87 |
+| AI Trader     | $17,983.19 | 638   | 23  | $28.19 | $781.88 | 3.6% | 0.22 |
 | SQM           | $0.00      | 0     | 3   | —      | —       | —    | 0.00 |
 | Al Trading    | $0.00      | 86    | 2   | —      | —       | 2.3% | 0.00 |
 | ChatGPT       | $0.00      | 0     | 2   | —      | —       | —    | 0.00 |
@@ -295,57 +285,57 @@ _No ready accounts or no combos to recommend._
 | Amazon        | $0.00      | 1     | 0   | —      | —       | 0.0% | 0.00 |
 | Bancolombia   | $0.00      | 3     | 0   | —      | —       | 0.0% | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + IPO + Video P.  [Mercado Libre]  dep: 6
-- all + HV_SM + Blue_Revolutionize  [ChatGPT]  dep: 1
+**New (all deposits from recent period):**
+- all + Blue_HV + Vid Blue - 1  [AI Trader]  dep: 1
+- all + Blue_HV + Vid Blue - 5t - 24.4  [AI Trader]  dep: 1
+- all + Blue_HV + Vid Blue - 6a  [AI Trader]  dep: 1
+- all + Blue_HV + Vid blue - 3  [AI Trader]  dep: 1
 - all + DT_IPO + Image dtml - pro - Copy  [Mercado Libre]  dep: 1
-- all + GMBL + Video L.  [Mercado Libre]  dep: 1
-- all + HV + 1407 1 - Text  [Mercado Libre]  dep: 1
 
-**Стабильные (депозиты и раньше, и сейчас):**
-- all + IPO + Video P  [Mercado Libre]  total: 21, recent: 6
-- all + HV + Video L  [Mercado Libre]  total: 11, recent: 5
-- all + ML_HV + Vid ML2  [Mercado Libre]  total: 7, recent: 5
-- all + Blue_HV + Vid Blue - 6t  [AI Trader]  total: 6, recent: 3
-- ios + HV|Trading_40-64_Nokit + ML2_Story3  [Mercado Libre]  total: 6, recent: 5
+**Stable (deposits before and now):**
+- all + IPO + Video P  [Mercado Libre]  total: 23, recent: 3
+- all + HV + Video L  [Mercado Libre]  total: 14, recent: 4
+- all + Blue_HV + Vid Blue - 6t  [AI Trader]  total: 8, recent: 2
+- all + HV + Video L.  [Mercado Libre]  total: 7, recent: 2
+- all + ML_HV + Vid ML2  [Mercado Libre]  total: 7, recent: 2
 
-**Остановились (были депозиты, сейчас 0):**
-- all + Trading + -  [Mercado Libre]  total: 6, recent: 0
+**Stopped (had deposits, now 0):**
+- ios + HV|Trading_40-64_Nokit + ML2_Story3  [Mercado Libre]  total: 6, recent: 0
+- all + Trading + Video P  [Mercado Libre]  total: 5, recent: 0
+- all + Blue_HV + Vid Blue - 5t  [AI Trader]  total: 4, recent: 0
+- all + HV + Video P.  [Mercado Libre]  total: 4, recent: 0
 - all + ML_HV + Vid ML1 - learn  [Mercado Libre]  total: 4, recent: 0
-- all + IPO + Video L  [Mercado Libre]  total: 3, recent: 0
-- all + Trading + Video P  [Mercado Libre]  total: 3, recent: 0
-- all + HV + ML_VID1_Pro  [Mercado Libre]  total: 2, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
-| Type     | Offer         | Combo                       | Dep | CPL    | CPA     | ROI  |
-| -------- | ------------- | --------------------------- | --- | ------ | ------- | ---- |
-| Strong ✓ | Mercado Libre | all + IPO + nan + Video P   | 21  | $22.63 | $464.42 | 1.51 |
-| Strong ✓ | Mercado Libre | all + HV + nan + Video L    | 11  | $20.28 | $796.62 | 0.20 |
-| Strong ✓ | Mercado Libre | all + ML_HV + 40+ + Vid ML2 | 7   | $12.28 | $482.44 | 0.20 |
-| Strong ✓ | Mercado Libre | all + IPO + nan + Video P.  | 6   | $17.17 | $326.31 | 0.29 |
-| Strong ✓ | Mercado Libre | all + Trading + nan + -     | 6   | —      | —       | —    |
+| Type     | Offer         | Combo                               | Dep | CPL    | CPA     | ROI  |
+| -------- | ------------- | ----------------------------------- | --- | ------ | ------- | ---- |
+| Strong ✓ | Mercado Libre | all + IPO + nan + Video P           | 23  | $22.47 | $436.74 | 1.71 |
+| Strong ✓ | Mercado Libre | all + HV + nan + Video L            | 14  | $20.78 | $737.66 | 0.25 |
+| Strong ✓ | AI Trader     | all + Blue_HV + 40+ + Vid Blue - 6t | 8   | $25.19 | $598.17 | 0.24 |
+| Strong ✓ | Mercado Libre | all + ML_HV + 40+ + Vid ML2         | 7   | $12.29 | $482.65 | 0.19 |
+| Strong ✓ | Mercado Libre | all + HV + nan + Video L.           | 7   | $18.27 | $848.45 | 0.10 |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: Chile
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + IPO + nan + Video P  |  Offer: Mercado Libre  |  Dep: 21  |  ROI: 1.51
-   → Target context: IPO Interest — инвесторы, следящие за размещениями акций
-2. [Strong] all + HV + nan + Video L  |  Offer: Mercado Libre  |  Dep: 11  |  ROI: 0.20
-   → Target context: High Value — состоятельные пользователи, интересующиеся инвестициями и управлением капиталом
-3. [Strong] all + ML_HV + 40+ + Vid ML2  |  Offer: Mercado Libre  |  Dep: 7  |  ROI: 0.20
+1. [Strong] all + IPO + nan + Video P  |  Offer: Mercado Libre  |  Dep: 23  |  ROI: 1.71
+   → Target context: IPO Interest — investors following stock listings and IPOs
+2. [Strong] all + HV + nan + Video L  |  Offer: Mercado Libre  |  Dep: 14  |  ROI: 0.25
+   → Target context: High Value — affluent users interested in investing and wealth management
+3. [Strong] all + Blue_HV + 40+ + Vid Blue - 6t  |  Offer: AI Trader  |  Dep: 8  |  ROI: 0.24
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Chile
@@ -354,124 +344,122 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
-  - all + IPO + Video P  [Strong, 21 dep]
-  - all + HV + Video L  [Strong, 11 dep]
-  - all + ML_HV + Vid ML2  [Strong, 7 dep]
+  - all + IPO + Video P  [Strong, 23 dep]
+  - all + HV + Video L  [Strong, 14 dep]
+  - all + Blue_HV + Vid Blue - 6t  [Strong, 8 dep]
 
 Top targeting by deposits:
-  - IPO: 34 dep, $19,632 spend
-  - HV: 28 dep, $20,904 spend
-  - ML_HV: 18 dep, $8,922 spend
-  - Blue_HV: 13 dep, $11,877 spend
-  - Trading: 13 dep, $1,789 spend
+  - IPO: 36 dep, $22,185 spend
+  - HV: 33 dep, $25,924 spend
+  - Blue_HV: 19 dep, $15,597 spend
+  - ML_HV: 18 dep, $10,723 spend
+  - Trading: 13 dep, $4,910 spend
 
 Failing targeting (0 dep, notable spend):
+  - HV|Daytrading_40-64_Nokit: $1,343 spend, 0 dep
+  - HV|TradingYB_40-64_Nokit: $958 spend, 0 dep
   - HV_40-64: $831 spend, 0 dep
-  - HV_TRD: $784 spend, 0 dep
-  - HV|TradingYB_40-64: $701 spend, 0 dep
 
 Top creatives by deposits:
-  - Video P: 24 dep, $11,755 spend
-  - Video L: 15 dep, $13,934 spend
-  - -: 11 dep, $0 spend
-  - Video P.: 10 dep, $3,650 spend
-  - ML2_Story3: 9 dep, $7,234 spend
+  - Video P: 29 dep, $13,869 spend
+  - Video L: 21 dep, $17,870 spend
+  - Video L.: 12 dep, $10,845 spend
+  - Video P.: 10 dep, $5,440 spend
+  - ML2_Story3: 9 dep, $7,397 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account             | Cost  | Asset | To Do  | ✓ |
-| ------------------- | ----- | ----- | ------ | - |
-| FacebookMKTO1203 EC | $ 951 | —     | expand | ✅ |
+| Account          | Cost  | Asset | To Do                       | ✓ |
+| ---------------- | ----- | ----- | --------------------------- | - |
+| FacebookSky24 MX | $ 151 | amz   | Creatives - 134+1163+ ccblc | ✅ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
-**FacebookMKTO1203 EC:**
+**FacebookSky24 MX:**
 
-  Campaign 1: `EC_Ml_All_Video_IPO_25.04`   [IPO — 30 dep, best targeting]
-    - Video P  (21 dep, ROI 1.51)
-    - Video P.  (6 dep, ROI 0.29)
-    - Video L  (3 dep, ROI 0.19)
+  Campaign 1: `MX_Ml_All_Video_IPO_30.04`   [IPO — 32 dep, best targeting]
+    - Video P  (23 dep, ROI 1.71)
+    - Video P.  (6 dep, ROI 0.22)
+    - Video L  (3 dep, ROI 0.68)
 
-  Campaign 2: `EC_Ait_All_Video_Blue_HV_40+_25.04`   [Blue_HV — 13 dep, diversification]
-    - Vid Blue - 6t  (6 dep, ROI 0.22)
-    - Vid Blue - 5t  (4 dep, ROI 0.14)
-    - Vid Blue - 5a  (3 dep, ROI 0.09)
+  Campaign 2: `MX_Ait_All_Video_Blue_HV_40+_30.04`   [Blue_HV — 16 dep, diversification]
+    - Vid Blue - 6t  (8 dep, ROI 0.24)
+    - Vid Blue - 5t  (4 dep, ROI 0.12)
+    - Vid Blue - 5a  (3 dep, ROI 0.08)
 
 
 ---
 
 ## Country: Colombia
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------------ | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
 | Evgeni Sedin ← YOU | $0.00      | 0     | 0   | —      | —         | —    | 0.00 |
-| Gil Zangi          | $8,522.58  | 537   | 12  | $15.87 | $710.22   | 2.2% | 3.75 |
-| Dan Dicker         | $15,848.39 | 956   | 12  | $16.58 | $1,320.70 | 1.3% | 1.34 |
-| Yotam Balteriski   | $6,912.76  | 728   | 6   | $9.50  | $1,152.13 | 0.8% | 0.56 |
+| Gil Zangi          | $10,786.45 | 621   | 14  | $17.37 | $770.46   | 2.3% | 4.62 |
+| Dan Dicker         | $19,963.85 | 1156  | 12  | $17.27 | $1,663.65 | 1.0% | 1.51 |
+| Yotam Balteriski   | $11,277.14 | 908   | 11  | $12.42 | $1,025.19 | 1.2% | 0.62 |
 
 | Asset (Offer) | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------- | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Bancolombia   | $30,506.84 | 1938  | 28  | $15.74 | $1,089.53 | 1.4% | 1.63 |
-| Mercado Libre | $774.77    | 283   | 2   | $2.74  | $387.38   | 0.7% | 1.29 |
+| Bancolombia   | $41,249.02 | 2401  | 34  | $17.18 | $1,213.21 | 1.4% | 1.86 |
+| Mercado Libre | $774.77    | 284   | 3   | $2.73  | $258.26   | 1.1% | 1.40 |
 | AI Trading    | $0.00      | 0     | 0   | —      | —         | —    | 0.00 |
 | Enel          | $0.00      | 0     | 0   | —      | —         | —    | 0.00 |
 | Grupo Aval    | $0.00      | 0     | 0   | —      | —         | —    | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + GMB + 1377_2_pro  [Bancolombia]  dep: 2
+**New (all deposits from recent period):**
+- all + GMB|TradingYB + 1377_2_Story1  [Bancolombia]  dep: 2
 - all + FX + 1377 3  [Bancolombia]  dep: 1
+- all + GMB + 1372 1  [Bancolombia]  dep: 1
+- all + GMBL + 1377_2_Learn  [Bancolombia]  dep: 1
 - all + GMBL + Vid2 - pro2  [Bancolombia]  dep: 1
-- all + GMB_1377 + Vid 3 - learn  [Bancolombia]  dep: 1
-- all + News + 1377 3  [Bancolombia]  dep: 1
 
-**Стабильные (депозиты и раньше, и сейчас):**
-- all + FX + 1372 1  [Bancolombia]  total: 3, recent: 1
-- all + gmb + Vid 3 - pro  [Bancolombia]  total: 3, recent: 1
-- all + GMB + 1377 3  [Bancolombia]  total: 2, recent: 1
+**Stable (deposits before and now):**
+- all + GMB + 1377_2_pro  [Bancolombia]  total: 2, recent: 1
 
-**Остановились (были депозиты, сейчас 0):**
+**Stopped (had deposits, now 0):**
+- all + FX + 1372 1  [Bancolombia]  total: 3, recent: 0
 - all + GMB + 1377 2  [Bancolombia]  total: 3, recent: 0
 - all + gmb + Vid 2 - pro2  [Bancolombia]  total: 3, recent: 0
-- all + BIC_mix1 + Image CCbic1 - pro+  [Bancolombia]  total: 1, recent: 0
-- all + GMB_1377 + Vid 2 - pro  [Bancolombia]  total: 1, recent: 0
-- all + Mix5 + 1377_2_Story1  [Bancolombia]  total: 1, recent: 0
+- all + gmb + Vid 3 - pro  [Bancolombia]  total: 3, recent: 0
+- all + GMB + 1377 3  [Bancolombia]  total: 2, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
-| Type     | Offer       | Combo                          | Dep | CPL    | CPA     | ROI    |
-| -------- | ----------- | ------------------------------ | --- | ------ | ------- | ------ |
-| Strong ✓ | Bancolombia | all + FX + nan + 1372 1        | 3   | $13.18 | $448.21 | 0.21   |
-| Strong ✓ | Bancolombia | all + gmb + 40+ + Vid 3 - pro  | 3   | $21.12 | $746.16 | 0.36   |
-| Strong ✓ | Bancolombia | all + GMB + nan + 1377 2       | 3   | $17.01 | $635.15 | -10.00 |
-| Strong ✓ | Bancolombia | all + gmb + 40+ + Vid 2 - pro2 | 3   | $15.29 | $810.13 | 0.20   |
-| Strong ✓ | Bancolombia | all + GMB + nan + 1377 3       | 2   | $13.37 | $421.31 | 1.85   |
+| Type     | Offer       | Combo                                    | Dep | CPL    | CPA     | ROI    |
+| -------- | ----------- | ---------------------------------------- | --- | ------ | ------- | ------ |
+| Strong ✓ | Bancolombia | all + FX + nan + 1372 1                  | 3   | $13.40 | $455.52 | 0.28   |
+| Strong ✓ | Bancolombia | all + gmb + 40+ + Vid 3 - pro            | 3   | $21.12 | $746.17 | 0.36   |
+| Strong ✓ | Bancolombia | all + GMB + nan + 1377 2                 | 3   | $17.01 | $635.15 | -10.01 |
+| Strong ✓ | Bancolombia | all + gmb + 40+ + Vid 2 - pro2           | 3   | $15.29 | $810.16 | 1.38   |
+| Strong ✓ | Bancolombia | all + GMB/TradingYB + 35 + 1377_2_Story1 | 2   | $19.01 | $551.19 | 0.36   |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: Colombia
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + FX + nan + 1372 1  |  Offer: Bancolombia  |  Dep: 3  |  ROI: 0.21
-   → Target context: Forex (Generic) — интересующиеся форексом, включая новичков
+1. [Strong] all + FX + nan + 1372 1  |  Offer: Bancolombia  |  Dep: 3  |  ROI: 0.28
+   → Target context: Forex (Generic) — users interested in forex, including beginners
 2. [Strong] all + gmb + 40+ + Vid 3 - pro  |  Offer: Bancolombia  |  Dep: 3  |  ROI: 0.36
-3. [Strong] all + GMB + nan + 1377 2  |  Offer: Bancolombia  |  Dep: 3  |  ROI: -10.00
+3. [Strong] all + GMB + nan + 1377 2  |  Offer: Bancolombia  |  Dep: 3  |  ROI: -10.01
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Colombia
@@ -485,34 +473,34 @@ Working combos:
   - all + GMB + 1377 2  [Strong, 3 dep]
 
 Top targeting by deposits:
-  - gmb: 8 dep, $7,923 spend
-  - GMB: 8 dep, $7,059 spend
-  - FX: 4 dep, $5,480 spend
+  - GMB: 9 dep, $8,947 spend
+  - gmb: 8 dep, $9,940 spend
+  - FX: 4 dep, $6,173 spend
+  - GMBL: 2 dep, $4,576 spend
   - GMB_1377: 2 dep, $2,298 spend
-  - TRD: 2 dep, $540 spend
 
 Failing targeting (0 dep, notable spend):
-  - BIC_gmb: $968 spend, 0 dep
+  - BIC_gmb: $1,073 spend, 0 dep
   - BIC_GMB: $755 spend, 0 dep
-  - BIC_fx: $642 spend, 0 dep
+  - Trading: $686 spend, 0 dep
 
 Top creatives by deposits:
   - 1377 2: 4 dep, $3,487 spend
-  - 1377 3: 4 dep, $2,306 spend
-  - Vid 2 - pro2: 3 dep, $3,164 spend
-  - Vid 3 - pro: 3 dep, $2,673 spend
-  - 1372 1: 3 dep, $2,310 spend
+  - 1377 3: 4 dep, $2,442 spend
+  - 1372 1: 4 dep, $2,415 spend
+  - Vid 2 - pro2: 3 dep, $3,876 spend
+  - 1377_2_Story1: 3 dep, $2,787 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
 _No accounts found for this country in the GSheet._
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -520,33 +508,35 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Costa Rica
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
-| CM        | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
-| --------- | ----- | ----- | --- | ----- | --- | ---- | ---- |
-| Gil Zangi | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+| CM         | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
+| ---------- | ----- | ----- | --- | ----- | --- | ---- | ---- |
+| Dan Dicker | $0.00 | 0     | 0   | —     | —   | —    | 0.00 |
+| Gil Zangi  | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
 
 | Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
 | ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
 | Favorita      | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
+| TikTok Trade  | $0.00 | 0     | 0   | —   | —   | —    | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Mar 31 – Apr 06, 2026 (7d)**
+Period: **Apr 18 – Apr 24, 2026 (7d)**
 
 _No combo-level trend data available._
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Costa Rica
@@ -557,15 +547,15 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
 _No accounts found for this country in the GSheet._
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -573,7 +563,7 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Dominican Republic
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
 | ------------------ | ----- | ----- | --- | ----- | --- | ---- | ---- |
@@ -583,23 +573,23 @@ _No ready accounts or no combos to recommend._
 | ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
 | Trader AI     | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
 Period: **Mar 26 – Apr 01, 2026 (7d)**
 
 _No combo-level trend data available._
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Dominican Republic
@@ -610,15 +600,15 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
 _No accounts found for this country in the GSheet._
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -626,77 +616,77 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Ecuador
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend      | Leads | Dep | CPL    | CPA     | CR   | ROI  |
 | ------------------ | ---------- | ----- | --- | ------ | ------- | ---- | ---- |
-| Evgeni Sedin ← YOU | $15,577.09 | 897   | 19  | $17.37 | $819.85 | 2.1% | 5.38 |
-| Yotam Balteriski   | $15,835.38 | 838   | 20  | $18.90 | $791.77 | 2.4% | 5.11 |
-| Gil Zangi          | $18,906.45 | 1374  | 23  | $13.76 | $822.02 | 1.7% | 1.70 |
-| Dan Dicker         | $5,555.90  | 214   | 16  | $25.96 | $347.24 | 7.5% | 0.53 |
+| Evgeni Sedin ← YOU | $21,933.08 | 1235  | 28  | $17.76 | $783.32 | 2.3% | 4.17 |
+| Yotam Balteriski   | $25,559.78 | 1415  | 31  | $18.06 | $824.51 | 2.2% | 4.74 |
+| Dan Dicker         | $10,345.15 | 380   | 23  | $27.22 | $449.79 | 6.1% | 3.39 |
+| Gil Zangi          | $27,916.16 | 1754  | 35  | $15.92 | $797.60 | 2.0% | 1.21 |
 
 | Asset (Offer)        | Spend      | Leads | Dep | CPL    | CPA     | CR   | ROI  |
 | -------------------- | ---------- | ----- | --- | ------ | ------- | ---- | ---- |
-| Favorita             | $37,274.64 | 2159  | 46  | $17.26 | $810.32 | 2.1% | 3.36 |
-| AI Trader            | $10,893.96 | 747   | 20  | $14.58 | $544.70 | 2.7% | 0.43 |
-| Lundin Gold Inc      | $6,629.92  | 384   | 11  | $17.27 | $602.72 | 2.9% | 0.23 |
-| Corporación Favorita | $0.00      | 0     | 1   | —      | —       | —    | 0.00 |
-| Al Trading           | $818.52    | 32    | 0   | $25.58 | —       | 0.0% | 0.00 |
+| Favorita             | $50,227.87 | 2780  | 64  | $18.07 | $784.81 | 2.3% | 3.17 |
+| AI Trader            | $20,396.03 | 1126  | 33  | $18.11 | $618.06 | 2.9% | 0.60 |
+| Lundin Gold Inc      | $13,929.02 | 844   | 17  | $16.50 | $819.35 | 2.0% | 0.15 |
+| Corporación Favorita | $0.00      | 0     | 2   | —      | —       | —    | 0.00 |
+| Al Trading           | $942.18    | 33    | 1   | $28.55 | $942.18 | 3.0% | 0.21 |
 | Amazon               | $0.00      | 1     | 0   | —      | —       | 0.0% | 0.00 |
 | Cervecería Nacional  | $0.00      | 0     | 0   | —      | —       | —    | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + DAY + LND2_Story1  [Lundin Gold Inc]  dep: 3
-- all + LND_Tradingz + Image LND 2 - pro  [Lundin Gold Inc]  dep: 3
-- all + Trading + 1319 3 - Pro  [Favorita]  dep: 2
-- all + Trading + 1979  [Favorita]  dep: 2
-- all + Trading + 509 3  [Favorita]  dep: 2
+**New (all deposits from recent period):**
+- all + Trading + 1979  [Favorita]  dep: 4
+- all + LND_Tradingz + LND 2 - Story 1  [Lundin Gold Inc]  dep: 2
+- all + Day + Blue 4  [AI Trader]  dep: 1
+- all + Day + Vid 1293 - text4  [AI Trader]  dep: 1
+- all + IPO + Blue - 780  [AI Trader]  dep: 1
 
-**Стабильные (депозиты и раньше, и сейчас):**
-- all + Day + Blue - Story1  [AI Trader]  total: 8, recent: 6
-- all + Trading + 1389 2  [Favorita]  total: 7, recent: 3
-- all + FX + 1319 3 - story 1  [Favorita]  total: 3, recent: 2
-- all + TRD + Blue_Story1  [AI Trader]  total: 2, recent: 1
-- all + FX + 1935 2  [Favorita]  total: 2, recent: 1
+**Stable (deposits before and now):**
+- all + Trading + 1389 2  [Favorita]  total: 10, recent: 3
+- all + Day + Blue - Story1  [AI Trader]  total: 9, recent: 2
+- all + FX + 1319 3 - story 1  [Favorita]  total: 5, recent: 2
+- all + Trading + 509 3  [Favorita]  total: 5, recent: 3
+- all + DAY + LND2_Story1  [Lundin Gold Inc]  total: 5, recent: 2
 
-**Остановились (были депозиты, сейчас 0):**
+**Stopped (had deposits, now 0):**
 - all + Trading + -  [Favorita]  total: 3, recent: 0
+- all + LND_Tradingz + Image LND 2 - pro  [Lundin Gold Inc]  total: 3, recent: 0
+- all + FX + 1935 2  [Favorita]  total: 2, recent: 0
 - all + FX + 1953 2  [Favorita]  total: 2, recent: 0
-- all + Trading + 1319 3  [Favorita]  total: 2, recent: 0
-- all + trading + 1319 3 - the app  [Favorita]  total: 2, recent: 0
-- all + Day + VideoBlue - 5  [AI Trader]  total: 1, recent: 0
+- all + SM|Reading + FAVCCblk_Story3  [Favorita]  total: 2, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
-| Type     | Offer           | Combo                                        | Dep | CPL    | CPA     | ROI  |
-| -------- | --------------- | -------------------------------------------- | --- | ------ | ------- | ---- |
-| Strong ✓ | AI Trader       | all + Day + 35 + Blue - Story1               | 8   | $10.39 | $255.75 | 0.86 |
-| Strong ⚠ | Favorita        | all + Trading + nan + 1389 2                 | 7   | $27.94 | $506.96 | 0.29 |
-| Strong ⚠ | Favorita        | all + FX + 35 + 1319 3 - story 1             | 3   | $21.67 | $101.11 | 0.99 |
-| Strong ⚠ | Lundin Gold Inc | all + LND_Tradingz + 35+ + Image LND 2 - pro | 3   | $22.79 | $296.23 | 0.34 |
-| Strong ⚠ | Lundin Gold Inc | all + DAY + 35 + LND2_Story1                 | 3   | $23.35 | $404.65 | 0.66 |
+| Type     | Offer           | Combo                            | Dep | CPL    | CPA       | ROI  |
+| -------- | --------------- | -------------------------------- | --- | ------ | --------- | ---- |
+| Strong ⚠ | Favorita        | all + Trading + nan + 1389 2     | 10  | $28.86 | $470.42   | 0.34 |
+| Strong ✓ | AI Trader       | all + Day + 35 + Blue - Story1   | 9   | $12.11 | $332.38   | 2.61 |
+| Strong ⚠ | Favorita        | all + FX + 35 + 1319 3 - story 1 | 5   | $19.78 | $221.51   | 0.53 |
+| Strong ⚠ | Lundin Gold Inc | all + DAY + 35 + LND2_Story1     | 5   | $24.28 | $461.28   | 0.43 |
+| Strong ⚠ | Favorita        | all + Trading + nan + 509 3      | 5   | $18.57 | $1,002.92 | 0.48 |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: Ecuador
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + Day + 35 + Blue - Story1  |  Offer: AI Trader  |  Dep: 8  |  ROI: 0.86
-   → Target context: Day Trading — дэй-трейдеры, ищущие быстрый доход от торговли
-2. [Strong] all + Trading + nan + 1389 2  |  Offer: Favorita  |  Dep: 7  |  ROI: 0.29
-   → Target context: Trading (Generic) — активные трейдеры, интересующиеся акциями и криптой
-3. [Strong] all + FX + 35 + 1319 3 - story 1  |  Offer: Favorita  |  Dep: 3  |  ROI: 0.99
-   → Target context: Forex (Generic) — интересующиеся форексом, включая новичков
+1. [Strong] all + Trading + nan + 1389 2  |  Offer: Favorita  |  Dep: 10  |  ROI: 0.34
+   → Target context: Trading (Generic) — active traders interested in stocks and crypto
+2. [Strong] all + Day + 35 + Blue - Story1  |  Offer: AI Trader  |  Dep: 9  |  ROI: 2.61
+   → Target context: Day Trading — day traders looking for quick trading income
+3. [Strong] all + FX + 35 + 1319 3 - story 1  |  Offer: Favorita  |  Dep: 5  |  ROI: 0.53
+   → Target context: Forex (Generic) — users interested in forex, including beginners
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Ecuador
@@ -705,99 +695,138 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
-  - all + Day + Blue - Story1  [Strong, 8 dep]
-  - all + Trading + 1389 2  [Strong, 7 dep]
-  - all + FX + 1319 3 - story 1  [Strong, 3 dep]
+  - all + Trading + 1389 2  [Strong, 10 dep]
+  - all + Day + Blue - Story1  [Strong, 9 dep]
+  - all + FX + 1319 3 - story 1  [Strong, 5 dep]
 
 Top targeting by deposits:
-  - Trading: 25 dep, $20,375 spend
-  - Day: 10 dep, $2,983 spend
-  - FX: 7 dep, $6,832 spend
-  - TRD: 6 dep, $4,389 spend
-  - DAY: 5 dep, $4,097 spend
+  - Trading: 39 dep, $30,479 spend
+  - Day: 14 dep, $5,427 spend
+  - FX: 10 dep, $9,770 spend
+  - DAY: 9 dep, $9,060 spend
+  - TRD: 7 dep, $4,433 spend
 
 Failing targeting (0 dep, notable spend):
   - TRD_40-64_Nokit: $1,118 spend, 0 dep
-  - Trade: $979 spend, 0 dep
-  - LND_Day: $935 spend, 0 dep
+  - Mix4: $780 spend, 0 dep
+  - LUG_Tradingz: $699 spend, 0 dep
 
 Top creatives by deposits:
-  - Blue - Story1: 8 dep, $2,079 spend
-  - 1389 2: 7 dep, $4,193 spend
-  - LND2_Story1: 4 dep, $1,660 spend
-  - Image LND 2 - pro: 3 dep, $1,710 spend
-  - Blue_Story3: 3 dep, $1,482 spend
+  - 1389 2: 10 dep, $5,406 spend
+  - Blue - Story1: 9 dep, $3,025 spend
+  - LND2_Story1: 6 dep, $3,089 spend
+  - 509 3: 5 dep, $5,187 spend
+  - 1979: 5 dep, $2,818 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account             | Cost  | Asset | To Do                                       | ✓ |
-| ------------------- | ----- | ----- | ------------------------------------------- | - |
-| Facebook_6226 EC    | —     | —     | Account Disabled                            | ❌ |
-| FacebookMKTO1211 EC | $ 0   | —     | 3 ads rejected - open no ketaro             | ✅ |
-| FacebookMKTO1298 EC | $ -   | —     | email authentification - no access to email | ✅ |
-| FacebookMKTO1203 EC | $ 951 | —     | expand                                      | ✅ |
-| FacebookMKTO1202 SA | —     | —     | Video Selfie                                | ❌ |
+| Account             | Cost  | Asset           | To Do                           | ✓ |
+| ------------------- | ----- | --------------- | ------------------------------- | - |
+| FacebookMKTO1308 EC | $ 72  | fav             | Profile replaced                | ✅ |
+| FacebookMKTO1321 EC | —     | Fav / Ai trader | Video selfie                    | ❌ |
+| FacebookMKTO1323 EC | —     | Fav / Ai trader | —                               | ✅ |
+| FacebookMKTO1211 EC | $ 529 | fav             | open LND / Fav 509              | ✅ |
+| FacebookMKTO1298 EC | $ 108 | fav             | open LND / Fav 509              | ✅ |
+| FacebookMKTO1202 KW | —     | Trl             | Email credentials added - check | ✅ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
-**FacebookMKTO1298 EC:**
+**FacebookMKTO1308 EC:**
 
-| Ad Set                             | Spend   | Leads | FTDs | CPL   | CPA | Reason |
-| ---------------------------------- | ------- | ----- | ---- | ----- | --- | ------ |
-| EC_LND_All_Images_LND_Day_35_20.04 | $414.38 | 66    | 0    | $6.28 | —   | 0 FTD  |
-
-**FacebookMKTO1203 EC:**
-
-| Ad Set                                | Spend     | Leads | FTDs | CPL    | CPA     | Reason          |
-| ------------------------------------- | --------- | ----- | ---- | ------ | ------- | --------------- |
-| EC_Fav_All_Video1319_FX_35_15.04      | $1,824.01 | 85    | 3    | $21.46 | $608.00 | CPL > bench $18 |
-| EC_Fav_All_Video1319_Trading_35_15.04 | $1,267.30 | 62    | 2    | $20.44 | $633.65 | CPL > bench $18 |
-| EC_Fav_All_Video1389_trading_35_05.04 | $1,172.63 | 25    | 0    | $46.91 | —       | 0 FTD           |
-| EC_Fav_All_Video1319_trading_35_05.04 | $1,073.76 | 53    | 2    | $20.26 | $536.88 | CPL > bench $18 |
-| EC_Fav_All_Video1389_Trading_35_17.04 | $908.79   | 37    | 0    | $24.56 | —       | 0 FTD           |
-
-
-### 9. Что открыть (2 кампании на аккаунт)
+| Ad Set                        | Spend   | Leads | FTDs | CPL    | CPA | Reason |
+| ----------------------------- | ------- | ----- | ---- | ------ | --- | ------ |
+| EC_Fav_All_Video_Day_35_27.04 | $367.94 | 12    | 0    | $30.66 | —   | 0 FTD  |
 
 **FacebookMKTO1211 EC:**
 
-  Campaign 1: `EC_Ait_All_Video_Day_35_25.04`   [Day — 8 dep, best targeting]
-    - Blue - Story1  (8 dep, ROI 0.86)
-
-  Campaign 2: `EC_Lnd_All_Image_LND_Tradingz_35+_25.04`   [LND_Tradingz — 5 dep, diversification]  ⚠ below benchmark
-    - Image LND 2 - pro  (3 dep, ROI 0.34)
-    - Image LND 2 - story3  (1 dep, ROI 0.51)
-    - LND 2 - Story 1  (1 dep, ROI 0.56)
+| Ad Set                                    | Spend     | Leads | FTDs | CPL    | CPA       | Reason                              |
+| ----------------------------------------- | --------- | ----- | ---- | ------ | --------- | ----------------------------------- |
+| EC_AIT_All_VideoBlue_Mix/Reading_35_25.04 | $1,057.41 | 25    | 1    | $42.30 | $1,057.41 | CPL > bench $15; CPA > bench $1,000 |
+| EC_AIT_All_VideoBlue_Day_35_24.04         | $784.66   | 12    | 0    | $65.39 | —         | 0 FTD                               |
+| EC_AIT_All_VideoBlue_IPO_35_25.04         | $699.44   | 24    | 1    | $29.14 | $699.44   | CPL > bench $15                     |
+| EC_AIT_All_VideoBlue_Trading_35_25.04     | $138.96   | 0     | 0    | —      | —         | 0 FTD                               |
 
 **FacebookMKTO1298 EC:**
 
-  Campaign 1: `EC_Fav_All_Video_Trading_25.04`   [Trading — 22 dep, best targeting]  ⚠ below benchmark
-    - 1389 2  (7 dep, ROI 0.29)
-    - -  (3 dep)
-    - 1979  (2 dep, ROI 0.47)
+| Ad Set                                 | Spend   | Leads | FTDs | CPL     | CPA | Reason |
+| -------------------------------------- | ------- | ----- | ---- | ------- | --- | ------ |
+| EC_LND_All_Images_LND_Day_35_20.04     | $414.43 | 66    | 0    | $6.28   | —   | 0 FTD  |
+| EC_Lnd_IOS_Image_LND_Tradingz_35_24.04 | $161.33 | 1     | 0    | $161.33 | —   | 0 FTD  |
 
-  Campaign 2: `EC_Ait_All_Video_Day_35_25.04`   [Day — 8 dep, diversification]
-    - Blue - Story1  (8 dep, ROI 0.86)
+**FacebookMKTO1202 KW:**
 
-**FacebookMKTO1203 EC:**
+| Ad Set                                | Spend   | Leads | FTDs | CPL     | CPA | Reason |
+| ------------------------------------- | ------- | ----- | ---- | ------- | --- | ------ |
+| EC_Ait_All_VideoBlue_Trading_40_03.04 | $279.21 | 1     | 0    | $279.21 | —   | 0 FTD  |
+| EC_Ait_All_VideoBlue_FXIOS_40_03.04   | $276.85 | 1     | 0    | $276.85 | —   | 0 FTD  |
 
-  Campaign 1: `EC_Lnd_All_Image_LND_Tradingz_35+_25.04`   [LND_Tradingz — 5 dep, best targeting]  ⚠ below benchmark
-    - Image LND 2 - pro  (3 dep, ROI 0.34)
-    - Image LND 2 - story3  (1 dep, ROI 0.51)
-    - LND 2 - Story 1  (1 dep, ROI 0.56)
 
-  Campaign 2: `EC_Ait_All_Video_TRD_40_25.04`   [TRD — 4 dep, diversification]  ⚠ below benchmark
-    - Blue_Story1  (2 dep, ROI 0.08)
+### 9. What to Open (2 Campaigns per Account)
+
+**FacebookMKTO1308 EC:**
+
+  Campaign 1: `EC_Fav_All_Video_FX_35_30.04`   [FX — 10 dep, best targeting]  ⚠ below benchmark
+    - 1319 3 - story 1  (5 dep, ROI 0.53)
+    - 1953 2  (2 dep, ROI 0.75)
+    - 1935 2  (2 dep, ROI 0.07)
+
+  Campaign 2: `EC_Lnd_All_Video_DAY_35_30.04`   [DAY — 7 dep, diversification]  ⚠ below benchmark
+    - LND2_Story1  (5 dep, ROI 0.43)
+    - Blue_Story3  (2 dep, ROI 0.21)
+    - 1389 2  (10 dep, ROI 0.34)  (test: best from Trading)
+
+**FacebookMKTO1323 EC:**
+
+  Campaign 1: `EC_Fav_All_Video_Trading_30.04`   [Trading — 35 dep, best targeting]  ⚠ below benchmark
+    - 1389 2  (10 dep, ROI 0.34)
+    - 509 3  (5 dep, ROI 0.48)
+    - 1979  (4 dep, ROI 0.16)
+
+  Campaign 2: `EC_Ait_All_Video_Day_35_30.04`   [Day — 9 dep, diversification]
+    - Blue - Story1  (9 dep, ROI 2.61)
+    - 1389 2  (10 dep, ROI 0.34)  (test: best from Trading)
+
+**FacebookMKTO1211 EC:**
+
+  Campaign 1: `EC_Lnd_All_Video_DAY_35_30.04`   [DAY — 7 dep, best targeting]  ⚠ below benchmark
+    - LND2_Story1  (5 dep, ROI 0.43)
+    - Blue_Story3  (2 dep, ROI 0.21)
+    - 1389 2  (10 dep, ROI 0.34)  (test: best from Trading)
+
+  Campaign 2: `EC_Ait_All_Video_TRD_40_30.04`   [TRD — 5 dep, diversification]
+    - Blue_Story1  (3 dep, ROI 0.21)
     - Blue_Story5  (1 dep, ROI 1.63)
     - Blue_Story3  (1 dep, ROI 0.36)
+
+**FacebookMKTO1298 EC:**
+
+  Campaign 1: `EC_Fav_All_Video_Trading_30.04`   [Trading — 35 dep, best targeting]  ⚠ below benchmark
+    - 1389 2  (10 dep, ROI 0.34)
+    - 509 3  (5 dep, ROI 0.48)
+    - 1979  (4 dep, ROI 0.16)
+
+  Campaign 2: `EC_Ait_All_Video_Day_35_30.04`   [Day — 9 dep, diversification]
+    - Blue - Story1  (9 dep, ROI 2.61)
+    - 1389 2  (10 dep, ROI 0.34)  (test: best from Trading)
+
+**FacebookMKTO1202 KW:**
+
+  Campaign 1: `KW_Fav_All_Video_FX_35_30.04`   [FX — 10 dep, best targeting]  ⚠ below benchmark
+    - 1319 3 - story 1  (5 dep, ROI 0.53)
+    - 1953 2  (2 dep, ROI 0.75)
+    - 1935 2  (2 dep, ROI 0.07)
+
+  Campaign 2: `KW_Ait_All_Video_Day_35_30.04`   [Day — 9 dep, diversification]
+    - Blue - Story1  (9 dep, ROI 2.61)
+    - 1389 2  (10 dep, ROI 0.34)  (test: best from Trading)
 
 
 ---
 
 ## Country: El Salvador
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend | Leads | Dep | CPL | CPA | CR | ROI  |
 | ------------------ | ----- | ----- | --- | --- | --- | -- | ---- |
@@ -810,25 +839,25 @@ Top creatives by deposits:
 | AES El Salvador | $0.00 | 0     | 0   | —   | —   | —  | 0.00 |
 | Holcim          | $0.00 | 0     | 0   | —   | —   | —  | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + Blue_FX/IOS + Vid blue - 6  [AI Trader]  dep: 1
+**Stopped (had deposits, now 0):**
+- all + Blue_FX/IOS + Vid blue - 6  [AI Trader]  total: 1, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: El Salvador
@@ -845,15 +874,15 @@ Top creatives by deposits:
   - Vid blue - 6: 1 dep, $0 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
 _No accounts found for this country in the GSheet._
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -861,48 +890,49 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Guatemala
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend     | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------------ | --------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Evgeni Sedin ← YOU | $3,707.91 | 302   | 3   | $12.28 | $1,235.97 | 1.0% | 5.48 |
+| Evgeni Sedin ← YOU | $3,707.91 | 302   | 4   | $12.28 | $926.98   | 1.3% | 5.51 |
 | Gil Zangi          | $0.00     | 0     | 0   | —      | —         | —    | 0.00 |
-| Dan Dicker         | $4,536.98 | 247   | 4   | $18.37 | $1,134.25 | 1.6% | 4.89 |
-| Yotam Balteriski   | $0.00     | 0     | 1   | —      | —         | —    | 0.00 |
+| Dan Dicker         | $4,536.98 | 247   | 4   | $18.37 | $1,134.25 | 1.6% | 5.07 |
+| Yotam Balteriski   | $0.00     | 0     | 2   | —      | —         | —    | 0.00 |
 
-| Asset (Offer)         | Spend     | Leads | Dep | CPL    | CPA       | CR   | ROI  |
-| --------------------- | --------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Banco Industrial      | $6,419.00 | 400   | 5   | $16.05 | $1,283.80 | 1.2% | 6.82 |
-| AI Trader             | $1,811.46 | 149   | 2   | $12.16 | $905.73   | 1.3% | 0.10 |
-| Banco G&T Continental | $0.00     | 0     | 1   | —      | —         | —    | 0.00 |
-| ChatGPT               | $0.00     | 0     | 0   | —      | —         | —    | 0.00 |
+| Asset (Offer)         | Spend     | Leads | Dep | CPL    | CPA     | CR   | ROI  |
+| --------------------- | --------- | ----- | --- | ------ | ------- | ---- | ---- |
+| Banco Industrial      | $6,419.00 | 400   | 7   | $16.05 | $917.00 | 1.8% | 7.05 |
+| AI Trader             | $1,811.46 | 149   | 2   | $12.16 | $905.73 | 1.3% | 0.10 |
+| Banco G&T Continental | $0.00     | 0     | 1   | —      | —       | —    | 0.00 |
+| ChatGPT               | $0.00     | 0     | 0   | —      | —       | —    | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + Daytrading_IOS + 1574 2  [AI Trader]  dep: 1
+**New (all deposits from recent period):**
+- all + Trading_IOS + 10 442 - ES 87 Percent Bancolo  [Banco Industrial]  dep: 1
+- ios + Investment|LUX + BiGem1_Simple2  [Banco Industrial]  dep: 1
 
-**Остановились (были депозиты, сейчас 0):**
+**Stopped (had deposits, now 0):**
 - all + Blue_Day + blue_ES Ai Trader The App  [AI Trader]  total: 1, recent: 0
+- all + Daytrading_IOS + 1574 2  [AI Trader]  total: 1, recent: 0
 - all + DT_FX/IOS + Image dt1 - learn  [Banco G&T Continental]  total: 1, recent: 0
 - all + FX/IOS + Image 10-442 - Maximize  [Banco Industrial]  total: 1, recent: 0
 - all + PF + Vid 1495 - learn  [Banco Industrial]  total: 1, recent: 0
-- all + Trading_IOS + 10 442 Learn how  [Banco Industrial]  total: 1, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Guatemala
@@ -913,11 +943,11 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 
 Top targeting by deposits:
+  - Trading_IOS: 2 dep, $374 spend
+  - Investment|LUX: 2 dep, $0 spend
   - FX/IOS: 1 dep, $1,019 spend
   - Tradingz: 1 dep, $973 spend
   - Blue_Day: 1 dep, $571 spend
-  - Trading_IOS: 1 dep, $374 spend
-  - DT_FX/IOS: 1 dep, $0 spend
 
 Failing targeting (0 dep, notable spend):
   - TradingPF: $1,681 spend, 0 dep
@@ -927,22 +957,32 @@ Failing targeting (0 dep, notable spend):
 Top creatives by deposits:
   - Image 2: 1 dep, $696 spend
   - blue_ES Ai Trader The App: 1 dep, $350 spend
+  - 10 442 - ES 87 Percent Bancolombia - Copy: 1 dep, $0 spend
   - 10 442 Learn how: 1 dep, $0 spend
   - 1495_RISK7: 1 dep, $0 spend
-  - 1574 2: 1 dep, $0 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account             | Cost | Asset | To Do                     | ✓ |
-| ------------------- | ---- | ----- | ------------------------- | - |
-| Facebook_8661 UAE   | —    | —     | video selfie              | ❌ |
-| FacebookUL643 UAE   | —    | —     | Salik rejected, try adnoc | ✅ |
-| FacebookMKTO1202 SA | —    | —     | Video Selfie              | ❌ |
+| Account             | Cost  | Asset | To Do                           | ✓ |
+| ------------------- | ----- | ----- | ------------------------------- | - |
+| FacebookMKTO1202 KW | —     | Trl   | Email credentials added - check | ✅ |
+| Facebook_8661 KW    | $ 418 | Trl   | Open new form                   | ✅ |
+| FacebookUL643 KW    | $ 466 | Trl   | Open new form                   | ✅ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
-**FacebookUL643 UAE:**
+**Facebook_8661 KW:**
+
+| Ad Set                                   | Spend   | Leads | FTDs | CPL    | CPA | Reason |
+| ---------------------------------------- | ------- | ----- | ---- | ------ | --- | ------ |
+| GT_Bid_All_Video442_PF_IOS_35_01.04      | $314.10 | 5     | 0    | $62.82 | —   | 0 FTD  |
+| GT_Bid_All_Video442_FX_IOS_35_01.04      | $265.23 | 4     | 0    | $66.31 | —   | 0 FTD  |
+| GT_Bid_All_Video_Trading_IOS_35_12.04    | $231.68 | 9     | 0    | $25.74 | —   | 0 FTD  |
+| GT_Bid_All_Video_IPO_IOS_35_12.04        | $224.20 | 6     | 0    | $37.37 | —   | 0 FTD  |
+| GT_Bid_All_Video442_Trading_IOS_35_03.04 | $91.91  | 2     | 0    | $45.95 | —   | 0 FTD  |
+
+**FacebookUL643 KW:**
 
 | Ad Set                                   | Spend     | Leads | FTDs | CPL    | CPA | Reason |
 | ---------------------------------------- | --------- | ----- | ---- | ------ | --- | ------ |
@@ -953,7 +993,61 @@ Top creatives by deposits:
 | GT_Bid_All_Video422_Trading_IOS_40_03.04 | $35.52    | 0     | 0    | —      | —   | 0 FTD  |
 
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
+
+_No ready accounts or no combos to recommend._
+
+---
+
+## Country: Indonesia
+
+### 1. Evgeni vs Team
+
+| CM         | Spend   | Leads | Dep | CPL | CPA | CR | ROI  |
+| ---------- | ------- | ----- | --- | --- | --- | -- | ---- |
+| Dan Dicker | $107.46 | 0     | 0   | —   | —   | —  | 0.00 |
+
+
+
+### 2. Trend (Recent Days)
+
+Period: **Apr 23 – Apr 29, 2026 (7d)**
+
+_No combo-level trend data available._
+
+### 3. Working Combos
+
+_No Strong/Interesting combos for this country._
+
+### 4. AI Context (copy into chat)
+
+```
+_No qualifying combos — nothing to explain._
+```
+
+### 5. Hypotheses (copy into chat)
+
+```
+Country: Indonesia
+
+Data summary for hypothesis generation (paste into Cursor chat and ask:
+'Based on this data, suggest 3 test hypotheses for new ad sets'):
+
+Working combos:
+
+Failing targeting (0 dep, notable spend):
+  - (unknown): $107 spend, 0 dep
+```
+
+### 6–7. Account Statuses
+
+_No accounts found for this country in the GSheet._
+
+### 8. What to Close (Optimization)
+
+_No ad sets to close — nothing exceeds benchmarks._
+
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -961,7 +1055,7 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Jordan
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM         | Spend | Leads | Dep | CPL | CPA | CR | ROI  |
 | ---------- | ----- | ----- | --- | --- | --- | -- | ---- |
@@ -969,23 +1063,23 @@ _No ready accounts or no combos to recommend._
 
 
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
 Period: **Apr 11 – Apr 17, 2026 (7d)**
 
 _No combo-level trend data available._
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Jordan
@@ -996,15 +1090,15 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
 _No accounts found for this country in the GSheet._
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -1012,14 +1106,14 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Kuwait
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
-| CM                 | Spend      | Leads | Dep | CPL     | CPA       | CR   | ROI  |
-| ------------------ | ---------- | ----- | --- | ------- | --------- | ---- | ---- |
-| Evgeni Sedin ← YOU | $7,249.06  | 58    | 1   | $124.98 | $7,249.06 | 1.7% | 0.02 |
-| Gil Zangi          | $12,673.42 | 719   | 10  | $17.63  | $1,267.34 | 1.4% | 0.60 |
-| Dan Dicker         | $16,895.17 | 384   | 7   | $44.00  | $2,413.60 | 1.8% | 0.14 |
-| Yotam Balteriski   | $9,254.70  | 62    | 2   | $149.27 | $4,627.35 | 3.2% | 0.04 |
+| CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
+| ------------------ | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
+| Evgeni Sedin ← YOU | $15,231.44 | 300   | 8   | $50.77 | $1,903.93 | 2.7% | 0.10 |
+| Gil Zangi          | $50,341.42 | 1741  | 43  | $28.92 | $1,170.73 | 2.5% | 0.64 |
+| Dan Dicker         | $29,647.72 | 972   | 20  | $30.50 | $1,482.39 | 2.1% | 0.29 |
+| Yotam Balteriski   | $17,152.49 | 279   | 5   | $61.48 | $3,430.50 | 1.8% | 0.23 |
 
 | Asset (Offer)   | Spend     | Leads | Dep | CPL     | CPA       | CR   | ROI  |
 | --------------- | --------- | ----- | --- | ------- | --------- | ---- | ---- |
@@ -1030,39 +1124,48 @@ _No ready accounts or no combos to recommend._
 | ChatGPT         | $0.00     | 0     | 0   | —       | —         | —    | 0.00 |
 | Finance Eagle   | $0.00     | 0     | 0   | —       | —         | —    | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + nan + -  [-]  dep: 18
+**New (all deposits from recent period):**
+- all + DAY + 1975_7  [-]  dep: 1
+- all + Day + 1975 25  [-]  dep: 1
+- all + Day + 1975 25 - Copy  [-]  dep: 1
+- all + Day + TR5  [-]  dep: 1
+- all + EFL + 1962 8  [-]  dep: 1
 
-**Остановились (были депозиты, сейчас 0):**
+**Stable (deposits before and now):**
+- all + nan + -  [-]  total: 66, recent: 56
+
+**Stopped (had deposits, now 0):**
 - all + MixRead + Blue_4  [Trader AI]  total: 1, recent: 0
 - all + Mix_25-45 + Blue  [Trader AI]  total: 1, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
-| Type          | Offer     | Combo                        | Dep | CPL    | CPA     | ROI  |
-| ------------- | --------- | ---------------------------- | --- | ------ | ------- | ---- |
-| Strong ✓      | -         | all + nan + nan + -          | 18  | —      | —       | —    |
-| Interesting ✓ | Trader AI | all + MixRead + 25 + Blue_4  | 1   | $40.82 | $40.82  | 4.41 |
-| Interesting ✓ | Trader AI | all + Mix_25-45 + nan + Blue | 1   | $66.62 | $199.86 | 1.00 |
+| Type          | Offer     | Combo                         | Dep | CPL     | CPA     | ROI  |
+| ------------- | --------- | ----------------------------- | --- | ------- | ------- | ---- |
+| Strong ✓      | -         | all + nan + nan + -           | 66  | —       | —       | —    |
+| Interesting ✓ | Trader AI | all + MixRead + 25 + Blue_4   | 1   | $40.82  | $40.82  | 4.41 |
+| Interesting ✓ | Trader AI | all + Mix_25-45 + nan + Blue  | 1   | $66.62  | $199.86 | 1.00 |
+| Interesting ⚠ | -         | all + EFL + nan + 1962 8      | 1   | $167.66 | $502.97 | 0.40 |
+| Interesting ✓ | -         | all + TRL_Day + 25+ + Image 1 | 1   | $16.55  | $182.08 | 0.30 |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: Kuwait
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + nan + nan + -  |  Offer: -  |  Dep: 18  |  ROI: 0.00
+1. [Strong] all + nan + nan + -  |  Offer: -  |  Dep: 66  |  ROI: 0.00
 2. [Interesting] all + MixRead + 25 + Blue_4  |  Offer: Trader AI  |  Dep: 1  |  ROI: 4.41
 3. [Interesting] all + Mix_25-45 + nan + Blue  |  Offer: Trader AI  |  Dep: 1  |  ROI: 1.00
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Kuwait
@@ -1071,178 +1174,214 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
-  - all + nan + -  [Strong, 18 dep]
+  - all + nan + -  [Strong, 66 dep]
   - all + MixRead + Blue_4  [Interesting, 1 dep]
   - all + Mix_25-45 + Blue  [Interesting, 1 dep]
 
 Top targeting by deposits:
-  - (unknown): 18 dep, $0 spend
-  - MixRead: 1 dep, $390 spend
-  - Mix_25-45: 1 dep, $221 spend
+  - (unknown): 66 dep, $0 spend
+  - Day: 3 dep, $21,946 spend
+  - TRL_Day: 2 dep, $4,245 spend
+  - Trading: 1 dep, $10,965 spend
+  - DAY: 1 dep, $2,499 spend
 
 Failing targeting (0 dep, notable spend):
-  - Day: $5,410 spend, 0 dep
-  - Reading: $4,354 spend, 0 dep
-  - Broad: $3,201 spend, 0 dep
+  - Reading: $9,081 spend, 0 dep
+  - GMBL: $8,320 spend, 0 dep
+  - TRL_Trading: $5,502 spend, 0 dep
 
 Top creatives by deposits:
-  - -: 18 dep, $0 spend
-  - Blue: 1 dep, $1,828 spend
-  - Blue_4: 1 dep, $169 spend
+  - -: 66 dep, $0 spend
+  - TR5: 1 dep, $11,868 spend
+  - 1975 25: 1 dep, $6,677 spend
+  - TR6: 1 dep, $3,751 spend
+  - 1962 8: 1 dep, $2,795 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account              | Cost  | Asset           | To Do                            | ✓ |
-| -------------------- | ----- | --------------- | -------------------------------- | - |
-| FacebookMKTO1209 UAE | —     | Slk             | Account Disabled                 | ❌ |
-| Facebook_8661 UAE    | —     | —               | video selfie                     | ❌ |
-| Facebook_6218 UAE    | —     | —               | video selfie                     | ❌ |
-| FacebookMKTO1260 UAE | $ 120 | adnoc/salik/ait | Adnoc 1 ad set approved - expand | ✅ |
-| FacebookMKTO1286 KW  | —     | —               | 2 ad sets                        | ✅ |
-| FacebookMKTO1287 KW  | —     | —               | 2 ad sets                        | ✅ |
-| FacebookBD50 SA      | —     | —               | rejected                         | ✅ |
-| FacebookMKTO1215 SA  | $ 307 | Arc             | CPL low, try narrowing targets   | ✅ |
+| Account              | Cost  | Asset           | To Do                           | ✓ |
+| -------------------- | ----- | --------------- | ------------------------------- | - |
+| Facebook_6218 UAE    | $ 465 | Tgpt/Slk        | Try Ai trader                   | ✅ |
+| FacebookMKTO1260 UAE | —     | adnoc/salik/ait | Video selfie                    | ❌ |
+| FacebookMKTO12015 KW | —     | —               | Account Disabled                | ❌ |
+| FacebookElf44 KW     | —     | —               | Account Disabled                | ❌ |
+| FacebookMKTO1287 KW  | —     | —               | Account Restricted              | ❌ |
+| FacebookMKTO1202 KW  | —     | Trl             | Email credentials added - check | ✅ |
+| Facebook_8661 KW     | $ 418 | Trl             | Open new form                   | ✅ |
+| Facebook662 KW       | $ 421 | Trl             | Open new form                   | ✅ |
+| FacebookUL643 KW     | $ 466 | Trl             | Open new form                   | ✅ |
+| FacebookMKTO1286 KW  | $ 680 | Trl             | expand                          | ✅ |
+| FacebookMKTO1209 SA  | —     | Arc             | Account Disabled                | ❌ |
+| FacebookBD50 SA      | —     | —               | Account Disabled                | ❌ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
+
+**Facebook_6218 UAE:**
+
+| Ad Set                                | Spend   | Leads | FTDs | CPL | CPA | Reason |
+| ------------------------------------- | ------- | ----- | ---- | --- | --- | ------ |
+| KW_UMM_All_Video_Broad_25_15.04       | $293.98 | 0     | 0    | —   | —   | 0 FTD  |
+| KW_UMM_All_Video_Mix/Reading_25_19.04 | $167.96 | 0     | 0    | —   | —   | 0 FTD  |
+| KW_UMM_All_Video_Mix_25_19.04         | $154.40 | 0     | 0    | —   | —   | 0 FTD  |
+| KW_UMM_All_Video_Reading_25_15.04     | $120.55 | 0     | 0    | —   | —   | 0 FTD  |
+
+**Facebook_8661 KW:**
+
+| Ad Set                                 | Spend   | Leads | FTDs | CPL | CPA | Reason |
+| -------------------------------------- | ------- | ----- | ---- | --- | --- | ------ |
+| KW_Trl_All_Videos_Trading_25_16.04     | $391.77 | 0     | 0    | —   | —   | 0 FTD  |
+| KW_Trl_All_VidImg_Mix/Reading_30_27.04 | $390.51 | 0     | 0    | —   | —   | 0 FTD  |
+| KW_Trl_All_VidImg_IPO_30_27.04         | $377.39 | 0     | 0    | —   | —   | 0 FTD  |
+| KW_Trl_All_Videos_Investment_25_16.04  | $332.61 | 0     | 0    | —   | —   | 0 FTD  |
+| KW_Trl_All_Videos_Mix/Read_25_19.04    | $147.79 | 0     | 0    | —   | —   | 0 FTD  |
+
+**Facebook662 KW:**
+
+| Ad Set                                       | Spend   | Leads | FTDs | CPL    | CPA | Reason |
+| -------------------------------------------- | ------- | ----- | ---- | ------ | --- | ------ |
+| KW_Trl_All_ImagesVideos_Mix/Day_30_28.04     | $258.75 | 3     | 0    | $86.25 | —   | 0 FTD  |
+| KW_Trl_All_ImagesVideos_Mix/Reading_30_28.04 | $234.89 | 4     | 0    | $58.72 | —   | 0 FTD  |
+
+**FacebookUL643 KW:**
+
+| Ad Set                                           | Spend   | Leads | FTDs | CPL     | CPA | Reason |
+| ------------------------------------------------ | ------- | ----- | ---- | ------- | --- | ------ |
+| KW_Trl_All_Images_Day_30_28.04 - IOS             | $245.58 | 1     | 0    | $245.58 | —   | 0 FTD  |
+| KW_Trl_All_Images_Mix/Reading_30_28.04 - IOS     | $232.22 | 1     | 0    | $232.22 | —   | 0 FTD  |
+| KW_Trl_All_Images_Mix/Reading_30_29.04 - IOS     | $57.73  | 0     | 0    | —       | —   | 0 FTD  |
+| KW_Trl_All_Images_SM_30_29.04 - IOS              | $47.13  | 0     | 0    | —       | —   | 0 FTD  |
+| KW_Trl_All_Images_OnlineEducation_30_29.04 - IOS | $39.64  | 0     | 0    | —       | —   | 0 FTD  |
 
 **FacebookMKTO1286 KW:**
 
-| Ad Set                               | Spend   | Leads | FTDs | CPL | CPA | Reason |
-| ------------------------------------ | ------- | ----- | ---- | --- | --- | ------ |
-| KW_Trl_All_Video_FX_30_16.04         | $653.74 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_All_Video_Targeting_30_19.04  | $439.31 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_All_Image_Trading_30_21.04    | $261.71 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_All_Image_FX_30_21.04         | $245.99 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_All_Video_Investment_30_16.04 | $189.74 | 0     | 0    | —   | —   | 0 FTD  |
-
-**FacebookMKTO1287 KW:**
-
-| Ad Set                               | Spend   | Leads | FTDs | CPL | CPA | Reason |
-| ------------------------------------ | ------- | ----- | ---- | --- | --- | ------ |
-| KW_Trl_All_Videos_SM_30_16.04        | $609.26 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_All_Videos_FX_30_19.04        | $387.43 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_All_Videos_GMBL_30_18.04      | $280.16 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_All_Videos_WellBeing_30_19.04 | $226.39 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_All_Videos_PF_30_18.04        | $150.21 | 0     | 0    | —   | —   | 0 FTD  |
-
-**FacebookBD50 SA:**
-
-| Ad Set                            | Spend   | Leads | FTDs | CPL | CPA | Reason |
-| --------------------------------- | ------- | ----- | ---- | --- | --- | ------ |
-| KW_TRL_All_Videos_FX/IOS_30_16.04 | $123.75 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_TRL_IOS_Videos_Broad_30_16.04  | $116.60 | 0     | 0    | —   | —   | 0 FTD  |
+| Ad Set                                | Spend     | Leads | FTDs | CPL     | CPA | Reason |
+| ------------------------------------- | --------- | ----- | ---- | ------- | --- | ------ |
+| KW_Trl_All_Image_Trading_30_21.04     | $1,324.10 | 8     | 0    | $165.51 | —   | 0 FTD  |
+| KW_Trl_All_Image_Mix_30_24.04         | $731.69   | 6     | 0    | $121.95 | —   | 0 FTD  |
+| KW_Trl_All_Video_FX_30_16.04          | $653.74   | 0     | 0    | —       | —   | 0 FTD  |
+| KW_Trl_All_Image_Mix/Reading_30_24.04 | $566.56   | 0     | 0    | —       | —   | 0 FTD  |
+| KW_Trl_All_Image_GMBL_30_26.04        | $516.10   | 15    | 0    | $34.41  | —   | 0 FTD  |
 
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
-**FacebookMKTO1260 UAE:**
+**Facebook_6218 UAE:**
 
-  Campaign 1: `UAE_-_All_Video_(unknown)_25.04`   [(unknown) — 18 dep, best targeting]
-    - -  (18 dep)
+  Campaign 1: `UAE_-_All_Video_(unknown)_30.04`   [(unknown) — 66 dep, best targeting]
+    - -  (66 dep)
 
-  Campaign 2: `UAE_Trl_All_Video_MixRead_25_25.04`   [MixRead — 1 dep, diversification]
+  Campaign 2: `UAE_Trl_All_Video_MixRead_25_30.04`   [MixRead — 1 dep, diversification]
     - Blue_4  (1 dep, ROI 4.41)
-    - -  (18 dep)  (test: best from (unknown))
+    - -  (66 dep)  (test: best from (unknown))
+
+**FacebookMKTO1202 KW:**
+
+  Campaign 1: `KW_-_All_Video_(unknown)_30.04`   [(unknown) — 66 dep, best targeting]
+    - -  (66 dep)
+
+  Campaign 2: `KW_Trl_All_Video_MixRead_25_30.04`   [MixRead — 1 dep, diversification]
+    - Blue_4  (1 dep, ROI 4.41)
+    - -  (66 dep)  (test: best from (unknown))
+
+**Facebook_8661 KW:**
+
+  Campaign 1: `KW_-_All_Video_(unknown)_30.04`   [(unknown) — 66 dep, best targeting]
+    - -  (66 dep)
+
+  Campaign 2: `KW_Trl_All_Video_MixRead_25_30.04`   [MixRead — 1 dep, diversification]
+    - Blue_4  (1 dep, ROI 4.41)
+    - -  (66 dep)  (test: best from (unknown))
+
+**Facebook662 KW:**
+
+  Campaign 1: `KW_-_All_Video_(unknown)_30.04`   [(unknown) — 66 dep, best targeting]
+    - -  (66 dep)
+
+  Campaign 2: `KW_Trl_All_Video_MixRead_25_30.04`   [MixRead — 1 dep, diversification]
+    - Blue_4  (1 dep, ROI 4.41)
+    - -  (66 dep)  (test: best from (unknown))
+
+**FacebookUL643 KW:**
+
+  Campaign 1: `KW_-_All_Video_(unknown)_30.04`   [(unknown) — 66 dep, best targeting]
+    - -  (66 dep)
+
+  Campaign 2: `KW_Trl_All_Video_MixRead_25_30.04`   [MixRead — 1 dep, diversification]
+    - Blue_4  (1 dep, ROI 4.41)
+    - -  (66 dep)  (test: best from (unknown))
 
 **FacebookMKTO1286 KW:**
 
-  Campaign 1: `KW_-_All_Video_(unknown)_25.04`   [(unknown) — 18 dep, best targeting]
-    - -  (18 dep)
+  Campaign 1: `KW_-_All_Video_(unknown)_30.04`   [(unknown) — 66 dep, best targeting]
+    - -  (66 dep)
 
-  Campaign 2: `KW_Trl_All_Video_MixRead_25_25.04`   [MixRead — 1 dep, diversification]
+  Campaign 2: `KW_Trl_All_Video_MixRead_25_30.04`   [MixRead — 1 dep, diversification]
     - Blue_4  (1 dep, ROI 4.41)
-    - -  (18 dep)  (test: best from (unknown))
-
-**FacebookMKTO1287 KW:**
-
-  Campaign 1: `KW_-_All_Video_(unknown)_25.04`   [(unknown) — 18 dep, best targeting]
-    - -  (18 dep)
-
-  Campaign 2: `KW_Trl_All_Video_MixRead_25_25.04`   [MixRead — 1 dep, diversification]
-    - Blue_4  (1 dep, ROI 4.41)
-    - -  (18 dep)  (test: best from (unknown))
-
-**FacebookBD50 SA:**
-
-  Campaign 1: `SA_-_All_Video_(unknown)_25.04`   [(unknown) — 18 dep, best targeting]
-    - -  (18 dep)
-
-  Campaign 2: `SA_Trl_All_Video_MixRead_25_25.04`   [MixRead — 1 dep, diversification]
-    - Blue_4  (1 dep, ROI 4.41)
-    - -  (18 dep)  (test: best from (unknown))
-
-**FacebookMKTO1215 SA:**
-
-  Campaign 1: `SA_-_All_Video_(unknown)_25.04`   [(unknown) — 18 dep, best targeting]
-    - -  (18 dep)
-
-  Campaign 2: `SA_Trl_All_Video_MixRead_25_25.04`   [MixRead — 1 dep, diversification]
-    - Blue_4  (1 dep, ROI 4.41)
-    - -  (18 dep)  (test: best from (unknown))
+    - -  (66 dep)  (test: best from (unknown))
 
 
 ---
 
 ## Country: Mexico
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------------ | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Evgeni Sedin ← YOU | $15,051.56 | 734   | 10  | $20.51 | $1,505.16 | 1.4% | 0.37 |
-| Gil Zangi          | $46,410.75 | 4255  | 41  | $10.91 | $1,131.97 | 1.0% | 0.56 |
-| Dan Dicker         | $18,405.35 | 1266  | 18  | $14.54 | $1,022.52 | 1.4% | 1.27 |
+| Evgeni Sedin ← YOU | $18,224.76 | 964   | 11  | $18.91 | $1,656.80 | 1.1% | 0.38 |
+| Gil Zangi          | $56,468.38 | 5170  | 52  | $10.92 | $1,085.93 | 1.0% | 0.54 |
+| Dan Dicker         | $23,954.61 | 1743  | 18  | $13.74 | $1,330.81 | 1.0% | 1.08 |
 | Yotam Balteriski   | $0.00      | 0     | 0   | —      | —         | —    | 0.00 |
 
 | Asset (Offer) | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------- | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Amazon        | $78,919.52 | 6220  | 66  | $12.69 | $1,195.75 | 1.1% | 0.68 |
+| Amazon        | $96,975.08 | 7623  | 78  | $12.72 | $1,243.27 | 1.0% | 0.64 |
 | AI Trader     | $0.00      | 0     | 2   | —      | —         | —    | 0.00 |
 | ChatGPT       | $0.00      | 0     | 1   | —      | —         | —    | 0.00 |
-| Chedraui      | $534.54    | 34    | 0   | $15.72 | —         | 0.0% | 0.00 |
+| Chedraui      | $1,213.61  | 253   | 0   | $4.80  | —         | 0.0% | 0.00 |
 | Bancolombia   | $75.38     | 0     | 0   | —      | —         | —    | 0.00 |
 | BIMBOA        | $0.00      | 0     | 0   | —      | —         | —    | 0.00 |
 | Banorte       | $0.00      | 0     | 0   | —      | —         | —    | 0.00 |
 | Favorita      | $0.00      | 1     | 0   | —      | —         | 0.0% | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + PF + 1982 2  [Amazon]  dep: 2
-- all + PF/IOS/HV + Vid 700 - pro  [Amazon]  dep: 2
-- all + HV + 1513 - Pro  [Amazon]  dep: 1
-- all + HV + CCBlack P  [Amazon]  dep: 1
-- all + PF + MZBOX  [Amazon]  dep: 1
+**New (all deposits from recent period):**
+- all + Day + 134 P  [Amazon]  dep: 1
+- all + HV + 1981 2  [Amazon]  dep: 1
+- all + InvestmentPlus + 700 2 P  [Amazon]  dep: 1
+- all + PF + 1892 2  [Amazon]  dep: 1
+- all + SM + 1981 1  [Amazon]  dep: 1
 
-**Стабильные (депозиты и раньше, и сейчас):**
-- all + SM + CCBlack L  [Amazon]  total: 14, recent: 4
-- all + PF + 700 2  [Amazon]  total: 8, recent: 3
-- all + SM + CCBlack P  [Amazon]  total: 7, recent: 1
-- all + HV + CCBlack L  [Amazon]  total: 4, recent: 1
+**Stable (deposits before and now):**
+- all + PF + 700 2  [Amazon]  total: 13, recent: 5
+- all + SM + CCBlack P  [Amazon]  total: 8, recent: 1
+- all + HV + 1513 - P  [Amazon]  total: 3, recent: 1
+- all + PF/IOS/HV + Vid 700 - pro  [Amazon]  total: 2, recent: 1
 - ios + HV + Image 134 - pro  [Amazon]  total: 2, recent: 1
 
-**Остановились (были депозиты, сейчас 0):**
+**Stopped (had deposits, now 0):**
+- all + SM + CCBlack L  [Amazon]  total: 14, recent: 0
+- all + HV + CCBlack L  [Amazon]  total: 4, recent: 0
 - all + HV + Image 134.jpg - ES Invest Like  [Amazon]  total: 3, recent: 0
-- all + HV + 1513 - P  [Amazon]  total: 2, recent: 0
+- all + PF + 1982 2  [Amazon]  total: 2, recent: 0
 - ios + Day + ccblc - pro  [Amazon]  total: 2, recent: 0
-- all + Blue_PF/IOS + Vid Blue - let  [AI Trader]  total: 1, recent: 0
-- all + Blue_SM + ES 780 AI Trader Chat GPT  [AI Trader]  total: 1, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 | Type     | Offer  | Combo                                     | Dep | CPL    | CPA       | ROI  |
 | -------- | ------ | ----------------------------------------- | --- | ------ | --------- | ---- |
-| Strong ⚠ | Amazon | all + SM + nan + CCBlack L                | 14  | $10.44 | $870.62   | 0.31 |
-| Strong ⚠ | Amazon | all + PF + nan + 700 2                    | 8   | $11.52 | $1,778.24 | 0.11 |
-| Strong ⚠ | Amazon | all + SM + nan + CCBlack P                | 7   | $9.69  | $1,216.86 | 0.18 |
+| Strong ⚠ | Amazon | all + SM + nan + CCBlack L                | 14  | $10.41 | $880.34   | 0.31 |
+| Strong ⚠ | Amazon | all + PF + nan + 700 2                    | 13  | $11.99 | $1,495.12 | 0.14 |
+| Strong ⚠ | Amazon | all + SM + nan + CCBlack P                | 8   | $9.68  | $1,065.08 | 0.23 |
 | Strong ⚠ | Amazon | all + HV + nan + CCBlack L                | 4   | $13.02 | $1,077.80 | 0.27 |
 | Strong ⚠ | Amazon | all + HV + 40 + Image 134.jpg - ES Invest | 3   | —      | —         | —    |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: Mexico
@@ -1250,14 +1389,14 @@ Country: Mexico
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
 1. [Strong] all + SM + nan + CCBlack L  |  Offer: Amazon  |  Dep: 14  |  ROI: 0.31
-   → Target context: Stock Market — пользователи, интересующиеся фондовым рынком США
-2. [Strong] all + PF + nan + 700 2  |  Offer: Amazon  |  Dep: 8  |  ROI: 0.11
-   → Target context: Personal Finance — люди, заинтересованные в личных финансах и экономии
-3. [Strong] all + SM + nan + CCBlack P  |  Offer: Amazon  |  Dep: 7  |  ROI: 0.18
-   → Target context: Stock Market — пользователи, интересующиеся фондовым рынком США
+   → Target context: Stock Market — users interested in the US stock market
+2. [Strong] all + PF + nan + 700 2  |  Offer: Amazon  |  Dep: 13  |  ROI: 0.14
+   → Target context: Personal Finance — people interested in personal finance and saving money
+3. [Strong] all + SM + nan + CCBlack P  |  Offer: Amazon  |  Dep: 8  |  ROI: 0.23
+   → Target context: Stock Market — users interested in the US stock market
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Mexico
@@ -1267,14 +1406,14 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 
 Working combos:
   - all + SM + CCBlack L  [Strong, 14 dep]
-  - all + PF + 700 2  [Strong, 8 dep]
-  - all + SM + CCBlack P  [Strong, 7 dep]
+  - all + PF + 700 2  [Strong, 13 dep]
+  - all + SM + CCBlack P  [Strong, 8 dep]
 
 Top targeting by deposits:
-  - SM: 22 dep, $24,278 spend
-  - HV: 17 dep, $17,691 spend
-  - PF: 14 dep, $21,561 spend
-  - Day: 2 dep, $4,402 spend
+  - SM: 24 dep, $28,181 spend
+  - PF: 20 dep, $30,307 spend
+  - HV: 19 dep, $20,392 spend
+  - Day: 3 dep, $4,402 spend
   - PF/IOS/HV: 2 dep, $0 spend
 
 Failing targeting (0 dep, notable spend):
@@ -1283,33 +1422,41 @@ Failing targeting (0 dep, notable spend):
   - CCorg_HV: $854 spend, 0 dep
 
 Top creatives by deposits:
-  - CCBlack L: 18 dep, $16,500 spend
-  - 700 2: 8 dep, $14,954 spend
-  - CCBlack P: 8 dep, $9,203 spend
+  - CCBlack L: 18 dep, $16,770 spend
+  - 700 2: 13 dep, $20,165 spend
+  - CCBlack P: 9 dep, $10,381 spend
   - Image 134 - pro: 3 dep, $2,676 spend
-  - Image 134.jpg - ES Invest Like a pro Amazon: 3 dep, $0 spend
+  - 1513 - P: 3 dep, $0 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account             | Cost  | Asset | To Do                           | ✓ |
-| ------------------- | ----- | ----- | ------------------------------- | - |
-| FacebookMKTO1299 MX | —     | —     | Account Disabled                | ❌ |
-| FacebookMKTO1296 MX | —     | —     | rejected - reopen Amz           | ✅ |
-| Facebook662 MX      | $ 288 | amz   | —                               | ✅ |
-| FacebookMKTO1211 EC | $ 0   | —     | 3 ads rejected - open no ketaro | ✅ |
+| Account             | Cost  | Asset | To Do                       | ✓ |
+| ------------------- | ----- | ----- | --------------------------- | - |
+| FacebookMKTO1296 MX | $ 143 | amz   | Creatives - 134+1163+ ccblc | ✅ |
+| FacebookSky24 MX    | $ 151 | amz   | Creatives - 134+1163+ ccblc | ✅ |
+| FacebookUL715 MX    | $ 187 | amz   | Creatives - 134+1163+ ccblc | ✅ |
+| FacebookMKTO1211 EC | $ 529 | fav   | open LND / Fav 509          | ✅ |
+| Facebook662 KW      | $ 421 | Trl   | Open new form               | ✅ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
-**Facebook662 MX:**
+**FacebookMKTO1296 MX:**
 
-| Ad Set                                                  | Spend     | Leads | FTDs | CPL    | CPA | Reason |
-| ------------------------------------------------------- | --------- | ----- | ---- | ------ | --- | ------ |
-| MX_Amz_IOS_VideoCCBMX_Amz_IOS_VideoCCBlc_Day_40_08.04NK | $2,350.32 | 118   | 0    | $19.92 | —   | 0 FTD  |
-| MX_Amz_IOS_image_Day_40_17.04NK                         | $1,844.92 | 69    | 0    | $26.74 | —   | 0 FTD  |
-| MX_Amz_IOS_VideoCCBlc_HV_40_01.04                       | $1,359.96 | 69    | 0    | $19.71 | —   | 0 FTD  |
-| MX_Amz_IOS_Video_SM_40_13.04NK                          | $1,248.32 | 51    | 0    | $24.48 | —   | 0 FTD  |
-| MX_Amz_IOS_VideoMZbox1_PF_40_15.04NK                    | $1,195.33 | 46    | 0    | $25.99 | —   | 0 FTD  |
+| Ad Set                              | Spend   | Leads | FTDs | CPL    | CPA | Reason |
+| ----------------------------------- | ------- | ----- | ---- | ------ | --- | ------ |
+| MX_Amz_All_Video1982_SM_35_26.04    | $401.82 | 26    | 0    | $15.45 | —   | 0 FTD  |
+| MX_Amz_All_Video_PF_35_24.04        | $184.88 | 13    | 0    | $14.22 | —   | 0 FTD  |
+| MX_Amz_All_Video_SM_35_24.04        | $171.68 | 14    | 0    | $12.26 | —   | 0 FTD  |
+| MX_Amz_All_Video1982_PF/HV_35_26.04 | $120.63 | 7     | 0    | $17.23 | —   | 0 FTD  |
+| MX_Amz_All_Video1982_PF_35_26.04    | $105.21 | 13    | 0    | $8.09  | —   | 0 FTD  |
+
+**FacebookSky24 MX:**
+
+| Ad Set                           | Spend  | Leads | FTDs | CPL    | CPA | Reason |
+| -------------------------------- | ------ | ----- | ---- | ------ | --- | ------ |
+| MX_Amz_All_Videos_PF/HV_35_29.04 | $74.48 | 8     | 0    | $9.31  | —   | 0 FTD  |
+| MX_Amz_All_Videos_SM/HV_35_29.04 | $71.08 | 3     | 0    | $23.69 | —   | 0 FTD  |
 
 **FacebookMKTO1211 EC:**
 
@@ -1321,40 +1468,72 @@ Top creatives by deposits:
 | MX_AMZ_All_VideoCCblc_HV_40_12.04  | $171.20 | 0     | 0    | —      | —   | 0 FTD  |
 | MX_AMZ_All_VideoCCblc_Day_40_12.04 | $165.62 | 0     | 0    | —      | —   | 0 FTD  |
 
+**Facebook662 KW:**
 
-### 9. Что открыть (2 кампании на аккаунт)
+| Ad Set                                                  | Spend     | Leads | FTDs | CPL    | CPA | Reason |
+| ------------------------------------------------------- | --------- | ----- | ---- | ------ | --- | ------ |
+| MX_Amz_IOS_VideoCCBMX_Amz_IOS_VideoCCBlc_Day_40_08.04NK | $2,350.32 | 118   | 0    | $19.92 | —   | 0 FTD  |
+| MX_Amz_IOS_image_Day_40_17.04NK                         | $1,845.17 | 69    | 0    | $26.74 | —   | 0 FTD  |
+| MX_Amz_IOS_VideoCCBlc_HV_40_01.04                       | $1,359.96 | 69    | 0    | $19.71 | —   | 0 FTD  |
+| MX_Amz_IOS_Video_SM_40_13.04NK                          | $1,248.36 | 51    | 0    | $24.48 | —   | 0 FTD  |
+| MX_Amz_IOS_VideoMZbox1_PF_40_15.04NK                    | $1,195.38 | 46    | 0    | $25.99 | —   | 0 FTD  |
+
+
+### 9. What to Open (2 Campaigns per Account)
 
 **FacebookMKTO1296 MX:**
 
-  Campaign 1: `MX_Amz_All_Video_SM_25.04`   [SM — 22 dep, best targeting]  ⚠ below benchmark
-    - CCBlack L  (14 dep, ROI 0.31)
-    - CCBlack P  (7 dep, ROI 0.18)
-    - 1983 1  (1 dep, ROI 2.27)
+  Campaign 1: `MX_Amz_Ios_Video_Day_40_30.04`   [Day — 2 dep, best targeting]
+    - ccblc - pro  (2 dep, ROI 0.35)
+    - CCBlack L  (14 dep, ROI 0.31)  (test: best from SM)
 
-  Campaign 2: `MX_Amz_All_Video_HV_25.04`   [HV — 14 dep, 2nd best targeting]  ⚠ below benchmark
-    - CCBlack L  (4 dep, ROI 0.27)
-    - Image 134.jpg - ES Invest Like a pro Ama  (3 dep)
-    - Image 134 - pro  (2 dep, ROI 0.36)
-
-**Facebook662 MX:**
-
-  Campaign 1: `MX_Amz_All_Video_PF/IOS/HV_40+_25.04`   [PF/IOS/HV — 2 dep, best targeting]  ⚠ below benchmark
+  Campaign 2: `MX_Amz_All_Video_PF/IOS/HV_40+_30.04`   [PF/IOS/HV — 2 dep, 2nd best targeting]  ⚠ below benchmark
     - Vid 700 - pro  (2 dep)
     - CCBlack L  (14 dep, ROI 0.31)  (test: best from SM)
 
-  Campaign 2: `MX_Amz_Ios_Video_CCblk_PF_40+_25.04`   [CCblk_PF — 1 dep, 2nd best targeting]  ⚠ below benchmark
-    - Vid CCblk - learn  (1 dep, ROI 0.77)
-    - CCBlack L  (14 dep, ROI 0.31)  (test: best from SM)
+**FacebookSky24 MX:**
+
+  Campaign 1: `MX_Amz_All_Video_SM_30.04`   [SM — 23 dep, best targeting]  ⚠ below benchmark
+    - CCBlack L  (14 dep, ROI 0.31)
+    - CCBlack P  (8 dep, ROI 0.23)
+    - 1983 1  (1 dep, ROI 2.15)
+
+  Campaign 2: `MX_Amz_All_Video_PF_30.04`   [PF — 17 dep, 2nd best targeting]  ⚠ below benchmark
+    - 700 2  (13 dep, ROI 0.14)
+    - 1982 2  (2 dep, ROI 0.83)
+    - MZBOX  (1 dep, ROI 5.86)
+
+**FacebookUL715 MX:**
+
+  Campaign 1: `MX_Amz_All_Video_SM_30.04`   [SM — 23 dep, best targeting]  ⚠ below benchmark
+    - CCBlack L  (14 dep, ROI 0.31)
+    - CCBlack P  (8 dep, ROI 0.23)
+    - 1983 1  (1 dep, ROI 2.15)
+
+  Campaign 2: `MX_Amz_All_Video_PF_30.04`   [PF — 17 dep, 2nd best targeting]  ⚠ below benchmark
+    - 700 2  (13 dep, ROI 0.14)
+    - 1982 2  (2 dep, ROI 0.83)
+    - MZBOX  (1 dep, ROI 5.86)
 
 **FacebookMKTO1211 EC:**
 
-  Campaign 1: `EC_Amz_All_Video_PF_25.04`   [PF — 12 dep, best targeting]  ⚠ below benchmark
-    - 700 2  (8 dep, ROI 0.11)
+  Campaign 1: `EC_Amz_All_Video_PF_30.04`   [PF — 17 dep, best targeting]  ⚠ below benchmark
+    - 700 2  (13 dep, ROI 0.14)
     - 1982 2  (2 dep, ROI 0.83)
-    - MZBOX  (1 dep, ROI 2.28)
+    - MZBOX  (1 dep, ROI 5.86)
 
-  Campaign 2: `EC_Amz_All_Video_PF/IOS/HV_40+_25.04`   [PF/IOS/HV — 2 dep, 2nd best targeting]  ⚠ below benchmark
+  Campaign 2: `EC_Amz_All_Video_PF/IOS/HV_40+_30.04`   [PF/IOS/HV — 2 dep, 2nd best targeting]  ⚠ below benchmark
     - Vid 700 - pro  (2 dep)
+    - CCBlack L  (14 dep, ROI 0.31)  (test: best from SM)
+
+**Facebook662 KW:**
+
+  Campaign 1: `KW_Amz_All_Video_PF/IOS/HV_40+_30.04`   [PF/IOS/HV — 2 dep, best targeting]  ⚠ below benchmark
+    - Vid 700 - pro  (2 dep)
+    - CCBlack L  (14 dep, ROI 0.31)  (test: best from SM)
+
+  Campaign 2: `KW_Amz_All_Video_InvestmentPlus_35_30.04`   [InvestmentPlus — 1 dep, 2nd best targeting]  ⚠ below benchmark
+    - 700 2 P  (1 dep, ROI 7.50)
     - CCBlack L  (14 dep, ROI 0.31)  (test: best from SM)
 
 
@@ -1362,43 +1541,41 @@ Top creatives by deposits:
 
 ## Country: Oman
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------------ | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Evgeni Sedin ← YOU | $12,016.36 | 172   | 5   | $69.86 | $2,403.27 | 2.9% | 0.33 |
+| Evgeni Sedin ← YOU | $12,016.36 | 172   | 5   | $69.86 | $2,403.27 | 2.9% | 0.35 |
 | Yotam Balteriski   | $0.00      | 1     | 0   | $0.00  | —         | 0.0% | 0.00 |
 
 | Asset (Offer)   | Spend     | Leads | Dep | CPL     | CPA       | CR   | ROI  |
 | --------------- | --------- | ----- | --- | ------- | --------- | ---- | ---- |
-| Trader AI       | $5,951.79 | 108   | 4   | $55.11  | $1,487.95 | 3.7% | 0.62 |
+| Trader AI       | $5,951.79 | 108   | 4   | $55.11  | $1,487.95 | 3.7% | 0.66 |
 | AI Trader       | $5,608.45 | 55    | 1   | $101.97 | $5,608.45 | 1.8% | 0.05 |
 | ChatGPTPlatform | $314.78   | 0     | 0   | —       | —         | —    | 0.00 |
 | Salik           | $141.31   | 10    | 0   | $14.13  | —         | 0.0% | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 15 – Apr 21, 2026 (7d)**
+Period: **Apr 21 – Apr 27, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + FX|IOS + Blue - AR45  [Trader AI]  dep: 1
-
-**Остановились (были депозиты, сейчас 0):**
+**Stopped (had deposits, now 0):**
 - all + InvestmentPlus + Blue - empty  [Trader AI]  total: 2, recent: 0
 - all + InvestmentPlus + Blue - empty  [AI Trader]  total: 1, recent: 0
+- all + FX|IOS + Blue - AR45  [Trader AI]  total: 1, recent: 0
 - all + Reading + Blue - text 1  [Trader AI]  total: 1, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 | Type          | Offer     | Combo                                    | Dep | CPL    | CPA     | ROI  |
 | ------------- | --------- | ---------------------------------------- | --- | ------ | ------- | ---- |
 | Strong ✓      | Trader AI | all + InvestmentPlus + 30 + Blue - empty | 2   | $38.48 | $423.30 | 3.97 |
-| Interesting ⚠ | Trader AI | all + FX/IOS + 30 + Blue - AR45          | 1   | $82.92 | $331.67 | 0.57 |
+| Interesting ⚠ | Trader AI | all + FX/IOS + 30 + Blue - AR45          | 1   | $82.92 | $331.67 | 1.17 |
 | Interesting ✓ | Trader AI | all + Reading + 30 + Blue - text 1       | 1   | $77.01 | $462.08 | 0.39 |
 | Interesting ✓ | AI Trader | all + InvestmentPlus + 30 + Blue - empty | 1   | $42.64 | $767.50 | 0.50 |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: Oman
@@ -1406,12 +1583,12 @@ Country: Oman
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
 1. [Strong] all + InvestmentPlus + 30 + Blue - empty  |  Offer: Trader AI  |  Dep: 2  |  ROI: 3.97
-2. [Interesting] all + FX|IOS + 30 + Blue - AR45  |  Offer: Trader AI  |  Dep: 1  |  ROI: 0.57
+2. [Interesting] all + FX|IOS + 30 + Blue - AR45  |  Offer: Trader AI  |  Dep: 1  |  ROI: 1.17
 3. [Interesting] all + Reading + 30 + Blue - text 1  |  Offer: Trader AI  |  Dep: 1  |  ROI: 0.39
    → Target context: Reading
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Oman
@@ -1440,37 +1617,53 @@ Top creatives by deposits:
   - Blue - AR45: 1 dep, $1,103 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account             | Cost  | Asset | To Do                          | ✓ |
-| ------------------- | ----- | ----- | ------------------------------ | - |
-| Facebook_8661 UAE   | —     | —     | video selfie                   | ❌ |
-| Facebook_6218 UAE   | —     | —     | video selfie                   | ❌ |
-| FacebookMKTO1215 SA | $ 307 | Arc   | CPL low, try narrowing targets | ✅ |
+| Account           | Cost  | Asset    | To Do         | ✓ |
+| ----------------- | ----- | -------- | ------------- | - |
+| Facebook_6218 UAE | $ 465 | Tgpt/Slk | Try Ai trader | ✅ |
+| Facebook_8661 KW  | $ 418 | Trl      | Open new form | ✅ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
-**FacebookMKTO1215 SA:**
+**Facebook_6218 UAE:**
 
-| Ad Set                             | Spend   | Leads | FTDs | CPL     | CPA | Reason |
-| ---------------------------------- | ------- | ----- | ---- | ------- | --- | ------ |
-| GCC_Ait_All_Video_HV_30_08.04      | $951.71 | 7     | 0    | $135.96 | —   | 0 FTD  |
-| GCC_Ait_All_Video_HV_30_08.04      | $861.67 | 23    | 0    | $37.46  | —   | 0 FTD  |
-| OM_Ait_All_Video_Reading_30_15.04  | $684.57 | 5     | 0    | $136.91 | —   | 0 FTD  |
-| GCC_Ait_All_Video_Reading_30_05.04 | $663.65 | 5     | 0    | $132.73 | —   | 0 FTD  |
-| OM_Ait_All_Video_Reading_30_15.04  | $640.41 | 6     | 0    | $106.74 | —   | 0 FTD  |
+| Ad Set                                              | Spend   | Leads | FTDs | CPL | CPA | Reason |
+| --------------------------------------------------- | ------- | ----- | ---- | --- | --- | ------ |
+| UAE_tgpt_All_VideoVid_lp_cgpt_OnlineGaming_25_07.04 | $159.69 | 0     | 0    | —   | —   | 0 FTD  |
+| UAE_Tgpt_All_VideoVid_lp_cgpt_HNW_25_07.04          | $155.09 | 0     | 0    | —   | —   | 0 FTD  |
+
+**Facebook_8661 KW:**
+
+| Ad Set                                | Spend   | Leads | FTDs | CPL     | CPA | Reason |
+| ------------------------------------- | ------- | ----- | ---- | ------- | --- | ------ |
+| GCC_Ait_All_Video_Investment_30_16.04 | $100.05 | 1     | 0    | $100.05 | —   | 0 FTD  |
+| GCC_Ait_All_Video_Investment_30_16.04 | $50.40  | 0     | 0    | —       | —   | 0 FTD  |
+| GCC_Ait_All_Video_IPO_30_17.04        | $46.94  | 0     | 0    | —       | —   | 0 FTD  |
+| GCC_Ait_All_Video_Mix_30_17.04        | $37.74  | 0     | 0    | —       | —   | 0 FTD  |
+| GCC_Ait_All_Video_IPO_30_17.04        | $30.21  | 0     | 0    | —       | —   | 0 FTD  |
 
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
-**FacebookMKTO1215 SA:**
+**Facebook_6218 UAE:**
 
-  Campaign 1: `SA_Trl_All_Video_InvestmentPlus_30_25.04`   [InvestmentPlus — 3 dep, best targeting, scale up]
+  Campaign 1: `UAE_Trl_All_Video_InvestmentPlus_30_30.04`   [InvestmentPlus — 3 dep, best targeting]
     - Blue - empty  (2 dep, ROI 3.97)
     - Blue - empty  (1 dep, ROI 0.50)
 
-  Campaign 2: `SA_Trl_All_Video_FX|IOS_30_25.04`   [FX|IOS — 1 dep, 2nd best targeting, scale up]  ⚠ below benchmark
-    - Blue - AR45  (1 dep, ROI 0.57)
+  Campaign 2: `UAE_Trl_All_Video_FX|IOS_30_30.04`   [FX|IOS — 1 dep, 2nd best targeting]  ⚠ below benchmark
+    - Blue - AR45  (1 dep, ROI 1.17)
+    - Blue - empty  (2 dep, ROI 3.97)  (test: best from InvestmentPlus)
+
+**Facebook_8661 KW:**
+
+  Campaign 1: `KW_Trl_All_Video_FX|IOS_30_30.04`   [FX|IOS — 1 dep, best targeting]  ⚠ below benchmark
+    - Blue - AR45  (1 dep, ROI 1.17)
+    - Blue - empty  (2 dep, ROI 3.97)  (test: best from InvestmentPlus)
+
+  Campaign 2: `KW_Trl_All_Video_Reading_30_30.04`   [Reading — 1 dep, 2nd best targeting]
+    - Blue - text 1  (1 dep, ROI 0.39)
     - Blue - empty  (2 dep, ROI 3.97)  (test: best from InvestmentPlus)
 
 
@@ -1478,11 +1671,11 @@ Top creatives by deposits:
 
 ## Country: Other
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend     | Leads | Dep | CPL | CPA | CR | ROI  |
 | ------------------ | --------- | ----- | --- | --- | --- | -- | ---- |
-| Evgeni Sedin ← YOU | $1,045.32 | 0     | 0   | —   | —   | —  | 0.00 |
+| Evgeni Sedin ← YOU | $1,637.83 | 0     | 0   | —   | —   | —  | 0.00 |
 | Dan Dicker         | $0.01     | 0     | 0   | —   | —   | —  | 0.00 |
 | Gil Zangi          | $0.01     | 0     | 0   | —   | —   | —  | 0.00 |
 
@@ -1493,23 +1686,23 @@ Top creatives by deposits:
 | Mercado Libre | $0.01     | 0     | 0   | —   | —   | —  | 0.00 |
 | Trader AI     | $0.01     | 0     | 0   | —   | —   | —  | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 14 – Apr 20, 2026 (7d)**
+Period: **Apr 22 – Apr 28, 2026 (7d)**
 
 _No combo-level trend data available._
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Other
@@ -1525,24 +1718,24 @@ Failing targeting (0 dep, notable spend):
   - OnlineEducation: $260 spend, 0 dep
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account              | Cost  | Asset | To Do                                     | ✓ |
-| -------------------- | ----- | ----- | ----------------------------------------- | - |
-| FacebookMKTO1235 UAE | $ 338 | ait   | Ait rejected, Salik no leads - reopen AIT | ✅ |
+| Account          | Cost  | Asset | To Do         | ✓ |
+| ---------------- | ----- | ----- | ------------- | - |
+| FacebookUL643 KW | $ 466 | Trl   | Open new form | ✅ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
-**FacebookMKTO1235 UAE:**
+**FacebookUL643 KW:**
 
-| Ad Set                                      | Spend   | Leads | FTDs | CPL | CPA | Reason |
-| ------------------------------------------- | ------- | ----- | ---- | --- | --- | ------ |
-| UAE_Slk_All_Images_Investment_30_15.04      | $496.28 | 0     | 0    | —   | —   | 0 FTD  |
-| UAE_Slk_All_Images_HNW_30_17.04             | $286.74 | 0     | 0    | —   | —   | 0 FTD  |
-| UAE_Slk_All_Images_OnlineEducation_30_17.04 | $259.75 | 0     | 0    | —   | —   | 0 FTD  |
+| Ad Set                                          | Spend   | Leads | FTDs | CPL | CPA | Reason |
+| ----------------------------------------------- | ------- | ----- | ---- | --- | --- | ------ |
+| KW_Trl_All_Images_Day_30_27.04 - IOS            | $255.29 | 0     | 0    | —   | —   | 0 FTD  |
+| KW_Trl_All_Images_InvestmentPlus_30_27.04 - IOS | $201.21 | 0     | 0    | —   | —   | 0 FTD  |
+| KW_Trl_All_Images_Mix/Reading_30_27.04 - IOS    | $136.01 | 0     | 0    | —   | —   | 0 FTD  |
 
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -1550,7 +1743,7 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Panama
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM         | Spend | Leads | Dep | CPL | CPA | CR | ROI  |
 | ---------- | ----- | ----- | --- | --- | --- | -- | ---- |
@@ -1560,25 +1753,25 @@ _No ready accounts or no combos to recommend._
 | ------------- | ----- | ----- | --- | --- | --- | -- | ---- |
 | AI Trader     | $0.00 | 0     | 1   | —   | —   | —  | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
 Period: **Apr 15 – Apr 21, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
+**New (all deposits from recent period):**
 - all + Blue_investment/IOS + Vid blue  [AI Trader]  dep: 1
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Panama
@@ -1595,15 +1788,15 @@ Top creatives by deposits:
   - Vid blue: 1 dep, $0 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
 _No accounts found for this country in the GSheet._
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -1611,34 +1804,34 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Paraguay
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend  | Leads | Dep | CPL | CPA | CR | ROI  |
 | ------------------ | ------ | ----- | --- | --- | --- | -- | ---- |
-| Evgeni Sedin ← YOU | $3.23  | 0     | 0   | —   | —   | —  | 0.00 |
+| Evgeni Sedin ← YOU | $9.82  | 0     | 0   | —   | —   | —  | 0.00 |
 | Dan Dicker         | $20.68 | 0     | 0   | —   | —   | —  | 0.00 |
 | Gil Zangi          | $10.98 | 0     | 0   | —   | —   | —  | 0.00 |
 | Yotam Balteriski   | $6.34  | 0     | 0   | —   | —   | —  | 0.00 |
 
 
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 21 – Apr 27, 2026 (7d)**
 
 _No combo-level trend data available._
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Paraguay
@@ -1649,23 +1842,22 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account              | Cost  | Asset           | To Do                                       | ✓ |
-| -------------------- | ----- | --------------- | ------------------------------------------- | - |
-| FacebookMKTO1298 EC  | $ -   | —               | email authentification - no access to email | ✅ |
-| FacebookMKTO1258 UAE | —     | arc             | Account Disabled                            | ❌ |
-| FacebookMKTO1259 UAE | —     | —               | Account Disabled                            | ❌ |
-| FacebookMKTO1260 UAE | $ 120 | adnoc/salik/ait | Adnoc 1 ad set approved - expand            | ✅ |
-| FacebookMKTO1235 UAE | $ 338 | ait             | Ait rejected, Salik no leads - reopen AIT   | ✅ |
-| FacebookMKTO1286 KW  | —     | —               | 2 ad sets                                   | ✅ |
-| FacebookMKTO1287 KW  | —     | —               | 2 ad sets                                   | ✅ |
+| Account              | Cost  | Asset           | To Do              | ✓ |
+| -------------------- | ----- | --------------- | ------------------ | - |
+| FacebookMKTO1308 EC  | $ 72  | fav             | Profile replaced   | ✅ |
+| FacebookMKTO1298 EC  | $ 108 | fav             | open LND / Fav 509 | ✅ |
+| FacebookMKTO1260 UAE | —     | adnoc/salik/ait | Video selfie       | ❌ |
+| FacebookMKTO1287 KW  | —     | —               | Account Restricted | ❌ |
+| FacebookMKTO1286 KW  | $ 680 | Trl             | expand             | ✅ |
+| FacebookMKTO1258 SA  | —     | Arc             | Account Disabled   | ❌ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -1673,38 +1865,39 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Peru
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend | Leads | Dep | CPL   | CPA | CR   | ROI   |
 | ------------------ | ----- | ----- | --- | ----- | --- | ---- | ----- |
-| Evgeni Sedin ← YOU | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00  |
-| Gil Zangi          | $3.36 | 1     | 0   | $3.36 | —   | 0.0% | 0.00  |
-| Yotam Balteriski   | $9.80 | 1     | 0   | $9.80 | —   | 0.0% | 0.00  |
+| Evgeni Sedin ← YOU | $0.00 | 2     | 0   | $0.00 | —   | 0.0% | 0.00  |
+| Gil Zangi          | $9.42 | 2     | 0   | $4.71 | —   | 0.0% | 0.00  |
+| Yotam Balteriski   | $9.80 | 2     | 0   | $4.90 | —   | 0.0% | 0.00  |
 | Dan Dicker         | $3.75 | 1     | 0   | $3.75 | —   | 0.0% | -6.13 |
 
 | Asset (Offer)   | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
 | --------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
-| AI Trader       | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
+| AI Trader       | $0.00 | 3     | 0   | —   | —   | 0.0% | 0.00 |
 | Amazon          | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
 | Lundin Gold Inc | $0.00 | 2     | 0   | —   | —   | 0.0% | 0.00 |
+| Mercado Libre   | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 16 – Apr 22, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
 _No combo-level trend data available._
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Peru
@@ -1715,17 +1908,18 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account             | Cost | Asset | To Do                                       | ✓ |
-| ------------------- | ---- | ----- | ------------------------------------------- | - |
-| FacebookMKTO1298 EC | $ -  | —     | email authentification - no access to email | ✅ |
+| Account             | Cost  | Asset | To Do              | ✓ |
+| ------------------- | ----- | ----- | ------------------ | - |
+| FacebookMKTO1211 EC | $ 529 | fav   | open LND / Fav 509 | ✅ |
+| FacebookMKTO1298 EC | $ 108 | fav   | open LND / Fav 509 | ✅ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -1733,14 +1927,14 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Qatar
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend     | Leads | Dep | CPL     | CPA       | CR   | ROI   |
 | ------------------ | --------- | ----- | --- | ------- | --------- | ---- | ----- |
 | Evgeni Sedin ← YOU | $335.17   | 2     | 0   | $167.59 | —         | 0.0% | 0.00  |
-| Dan Dicker         | $308.40   | 1     | 0   | $308.40 | —         | 0.0% | 60.31 |
+| Dan Dicker         | $308.40   | 1     | 0   | $308.40 | —         | 0.0% | 89.49 |
 | Yotam Balteriski   | $2,429.12 | 12    | 0   | $202.43 | —         | 0.0% | 0.00  |
-| Gil Zangi          | $1,588.29 | 37    | 1   | $42.93  | $1,588.29 | 2.7% | -0.01 |
+| Gil Zangi          | $3,828.64 | 70    | 1   | $54.69  | $3,828.64 | 1.4% | -0.00 |
 
 | Asset (Offer)   | Spend     | Leads | Dep | CPL     | CPA       | CR   | ROI   |
 | --------------- | --------- | ----- | --- | ------- | --------- | ---- | ----- |
@@ -1750,25 +1944,25 @@ _No ready accounts or no combos to recommend._
 | AI Trader       | $183.06   | 0     | 0   | —       | —         | —    | -0.55 |
 | ChatGPT         | $0.00     | 0     | 0   | —       | —         | —    | 0.00  |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + Trading1 + 1659 N5  [Trader AI]  dep: 1
+**Stopped (had deposits, now 0):**
+- all + Trading1 + 1659 N5  [Trader AI]  total: 1, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Qatar
@@ -1782,26 +1976,25 @@ Top targeting by deposits:
   - Trading1: 1 dep, $0 spend
 
 Failing targeting (0 dep, notable spend):
-  - Day: $1,583 spend, 0 dep
+  - Day: $2,148 spend, 0 dep
+  - Reading: $659 spend, 0 dep
   - Mix: $658 spend, 0 dep
-  - MixReading: $472 spend, 0 dep
 
 Top creatives by deposits:
   - 1659 N5: 1 dep, $0 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account             | Cost  | Asset | To Do                          | ✓ |
-| ------------------- | ----- | ----- | ------------------------------ | - |
-| FacebookBD50 SA     | —     | —     | rejected                       | ✅ |
-| FacebookMKTO1215 SA | $ 307 | Arc   | CPL low, try narrowing targets | ✅ |
+| Account         | Cost | Asset | To Do            | ✓ |
+| --------------- | ---- | ----- | ---------------- | - |
+| FacebookBD50 SA | —    | —     | Account Disabled | ❌ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 
@@ -1809,73 +2002,73 @@ _No ready accounts or no combos to recommend._
 
 ## Country: Saudi Arabia
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------------ | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Evgeni Sedin ← YOU | $1,010.02  | 139   | 0   | $7.27  | —         | 0.0% | 0.00 |
-| Gil Zangi          | $43,183.92 | 1046  | 39  | $41.28 | $1,107.28 | 3.7% | 0.82 |
-| Dan Dicker         | $5,917.79  | 310   | 5   | $19.09 | $1,183.56 | 1.6% | 0.39 |
-| Yotam Balteriski   | $1,375.46  | 184   | 1   | $7.48  | $1,375.46 | 0.5% | 0.15 |
+| Evgeni Sedin ← YOU | $1,554.58  | 175   | 0   | $8.88  | —         | 0.0% | 0.00 |
+| Gil Zangi          | $72,992.93 | 1453  | 47  | $50.24 | $1,553.04 | 3.2% | 0.73 |
+| Dan Dicker         | $8,722.40  | 370   | 11  | $23.57 | $792.95   | 3.0% | 0.95 |
+| Yotam Balteriski   | $1,375.48  | 185   | 1   | $7.44  | $1,375.48 | 0.5% | 0.13 |
 
 | Asset (Offer) | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------- | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Aramco        | $48,825.02 | 1533  | 44  | $31.85 | $1,109.66 | 2.9% | 0.74 |
-| Trader AI     | $1,926.11  | 107   | 1   | $18.00 | $1,926.11 | 0.9% | 0.81 |
+| Aramco        | $81,900.12 | 2032  | 58  | $40.31 | $1,412.07 | 2.9% | 0.72 |
+| Trader AI     | $2,006.84  | 112   | 1   | $17.92 | $2,006.84 | 0.9% | 1.52 |
 | Adnoc         | $141.26    | 26    | 0   | $5.43  | —         | 0.0% | 0.00 |
 | Salik         | $0.00      | 1     | 0   | —      | —         | 0.0% | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + GMBL + 1962 2  [Aramco]  dep: 5
-- all + FX + 1962 10  [Aramco]  dep: 2
-- all + IPO + 1962 12  [Aramco]  dep: 2
-- all + Day + 1962 1  [Aramco]  dep: 1
-- all + Day + 1962 15  [Aramco]  dep: 1
+**New (all deposits from recent period):**
+- all + Day + 1980 8  [Aramco]  dep: 1
+- all + IPO + 1962 10  [Aramco]  dep: 1
+- all + IPO + 1962 2  [Aramco]  dep: 1
+- all + IPO + 1980 1  [Aramco]  dep: 1
+- all + InvestmentPlus + 1962 12  [Aramco]  dep: 1
 
-**Стабильные (депозиты и раньше, и сейчас):**
-- all + Day + 1962 10  [Aramco]  total: 7, recent: 2
-- all + Day + 1962 18  [Aramco]  total: 4, recent: 3
-- all + GMBL + 1962 10  [Aramco]  total: 4, recent: 2
-- all + Day + 1962 12  [Aramco]  total: 3, recent: 2
+**Stable (deposits before and now):**
+- all + GMBL + 1962 2  [Aramco]  total: 5, recent: 1
+- all + Day + 1962 12  [Aramco]  total: 4, recent: 2
+- all + GMBL + 1962 10  [Aramco]  total: 4, recent: 1
+- all + Day + 1962 13  [Aramco]  total: 2, recent: 1
 
-**Остановились (были депозиты, сейчас 0):**
+**Stopped (had deposits, now 0):**
+- all + Day + 1962 10  [Aramco]  total: 7, recent: 0
+- all + Day + 1962 18  [Aramco]  total: 4, recent: 0
 - all + Day + 1962 2  [Aramco]  total: 2, recent: 0
-- all + Day + 1962 13  [Aramco]  total: 1, recent: 0
-- all + Day + 1962 6  [Aramco]  total: 1, recent: 0
-- all + FX + 1962 15  [Aramco]  total: 1, recent: 0
-- all + Reading + -  [Aramco]  total: 1, recent: 0
+- all + FX + 1962 10  [Aramco]  total: 2, recent: 0
+- all + IPO + 1962 12  [Aramco]  total: 2, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
-| Type     | Offer  | Combo                      | Dep | CPL    | CPA     | ROI  |
-| -------- | ------ | -------------------------- | --- | ------ | ------- | ---- |
-| Strong ✓ | Aramco | all + Day + nan + 1962 10  | 7   | $39.84 | $813.88 | 0.63 |
-| Strong ✓ | Aramco | all + GMBL + nan + 1962 2  | 5   | $42.39 | $568.05 | 3.17 |
-| Strong ✓ | Aramco | all + Day + nan + 1962 18  | 4   | $28.77 | $517.77 | 2.08 |
-| Strong ✓ | Aramco | all + GMBL + nan + 1962 10 | 4   | $32.77 | $835.63 | 0.39 |
-| Strong ⚠ | Aramco | all + Day + nan + 1962 12  | 3   | $54.92 | $805.43 | 2.31 |
+| Type     | Offer  | Combo                      | Dep | CPL    | CPA       | ROI  |
+| -------- | ------ | -------------------------- | --- | ------ | --------- | ---- |
+| Strong ✓ | Aramco | all + Day + nan + 1962 10  | 7   | $41.03 | $844.10   | 0.61 |
+| Strong ✓ | Aramco | all + GMBL + nan + 1962 2  | 5   | $48.16 | $664.66   | 2.41 |
+| Strong ⚠ | Aramco | all + Day + nan + 1962 12  | 4   | $77.33 | $1,256.69 | 1.11 |
+| Strong ✓ | Aramco | all + Day + nan + 1962 18  | 4   | $35.71 | $758.85   | 1.38 |
+| Strong ✓ | Aramco | all + GMBL + nan + 1962 10 | 4   | $38.04 | $1,017.52 | 0.27 |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: Saudi Arabia
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + Day + nan + 1962 10  |  Offer: Aramco  |  Dep: 7  |  ROI: 0.63
-   → Target context: Day Trading — дэй-трейдеры, ищущие быстрый доход от торговли
-2. [Strong] all + GMBL + nan + 1962 2  |  Offer: Aramco  |  Dep: 5  |  ROI: 3.17
-   → Target context: GMBL — Любители азартных игр, ставок на спорт, онлайн-казино; применяется для всех стран
-3. [Strong] all + Day + nan + 1962 18  |  Offer: Aramco  |  Dep: 4  |  ROI: 2.08
-   → Target context: Day Trading — дэй-трейдеры, ищущие быстрый доход от торговли
+1. [Strong] all + Day + nan + 1962 10  |  Offer: Aramco  |  Dep: 7  |  ROI: 0.61
+   → Target context: Day Trading — day traders looking for quick trading income
+2. [Strong] all + GMBL + nan + 1962 2  |  Offer: Aramco  |  Dep: 5  |  ROI: 2.41
+   → Target context: GMBL — gambling, sports betting, and online casino fans; applies across countries
+3. [Strong] all + Day + nan + 1962 12  |  Offer: Aramco  |  Dep: 4  |  ROI: 1.11
+   → Target context: Day Trading — day traders looking for quick trading income
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Saudi Arabia
@@ -1886,158 +2079,128 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
   - all + Day + 1962 10  [Strong, 7 dep]
   - all + GMBL + 1962 2  [Strong, 5 dep]
-  - all + Day + 1962 18  [Strong, 4 dep]
+  - all + Day + 1962 12  [Strong, 4 dep]
 
 Top targeting by deposits:
-  - Day: 21 dep, $20,479 spend
-  - GMBL: 10 dep, $10,773 spend
-  - FX: 5 dep, $3,043 spend
+  - Day: 26 dep, $29,210 spend
+  - GMBL: 12 dep, $17,984 spend
+  - IPO: 5 dep, $10,620 spend
+  - FX: 5 dep, $4,047 spend
   - Mix_Day: 3 dep, $1,774 spend
-  - IPO: 2 dep, $2,494 spend
 
 Failing targeting (0 dep, notable spend):
-  - Trading: $1,411 spend, 0 dep
-  - Blue_HV: $942 spend, 0 dep
-  - Foreign: $788 spend, 0 dep
+  - Trading: $2,002 spend, 0 dep
+  - Day4: $1,608 spend, 0 dep
+  - Day3: $1,297 spend, 0 dep
 
 Top creatives by deposits:
-  - 1962 10: 13 dep, $13,638 spend
-  - 1962 2: 8 dep, $5,257 spend
-  - 1962 12: 7 dep, $6,806 spend
-  - 1962 18: 4 dep, $3,482 spend
-  - 1962 15: 2 dep, $1,625 spend
+  - 1962 10: 14 dep, $20,009 spend
+  - 1962 12: 10 dep, $18,434 spend
+  - 1962 2: 9 dep, $6,953 spend
+  - 1962 18: 4 dep, $5,830 spend
+  - 1962 13: 2 dep, $2,596 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account              | Cost  | Asset | To Do                           | ✓ |
-| -------------------- | ----- | ----- | ------------------------------- | - |
-| FacebookMKTO1211 EC  | $ 0   | —     | 3 ads rejected - open no ketaro | ✅ |
-| FacebookMKTO1258 UAE | —     | arc   | Account Disabled                | ❌ |
-| FacebookMKTO1209 SA  | —     | Arc   | Account Disabled                | ❌ |
-| FacebookBD50 SA      | —     | —     | rejected                        | ✅ |
-| FacebookMKTO1202 SA  | —     | —     | Video Selfie                    | ❌ |
-| FacebookMKTO1215 SA  | $ 307 | Arc   | CPL low, try narrowing targets  | ✅ |
+| Account             | Cost  | Asset | To Do              | ✓ |
+| ------------------- | ----- | ----- | ------------------ | - |
+| FacebookMKTO1211 EC | $ 529 | fav   | open LND / Fav 509 | ✅ |
+| FacebookMKTO1209 SA | —     | Arc   | Account Disabled   | ❌ |
+| FacebookMKTO1258 SA | —     | Arc   | Account Disabled   | ❌ |
+| FacebookBD50 SA     | —     | —     | Account Disabled   | ❌ |
+| FacebookMKTO1202 SA | —     | —     | Video Selfie       | ❌ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
-**FacebookMKTO1215 SA:**
+_No ad sets to close — nothing exceeds benchmarks._
 
-| Ad Set                         | Spend   | Leads | FTDs | CPL    | CPA | Reason |
-| ------------------------------ | ------- | ----- | ---- | ------ | --- | ------ |
-| SA_Ait_All_Images_IPO_30_23.04 | $145.36 | 14    | 0    | $10.38 | —   | 0 FTD  |
-| SA_Ait_All_Images_FX_30_23.04  | $135.79 | 8     | 0    | $16.97 | —   | 0 FTD  |
-
-
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 **FacebookMKTO1211 EC:**
 
-  Campaign 1: `EC_Arm_All_Video_Day_25.04`   [Day — 17 dep, best targeting]
-    - 1962 10  (7 dep, ROI 0.63)
-    - 1962 18  (4 dep, ROI 2.08)
-    - 1962 12  (3 dep, ROI 2.31)
+  Campaign 1: `EC_Arm_All_Video_Day_30.04`   [Day — 23 dep, best targeting]
+    - 1962 10  (7 dep, ROI 0.61)
+    - 1962 12  (4 dep, ROI 1.11)
+    - 1962 18  (4 dep, ROI 1.38)
 
-  Campaign 2: `EC_Trl_Ios_Video_Blue_Day_25+_25.04`   [Blue_Day — 1 dep, diversification]
-    - Vid Blue - 1  (1 dep, ROI 6.76)
-    - 1962 10  (7 dep, ROI 0.63)  (test: best from Day)
-
-**FacebookBD50 SA:**
-
-  Campaign 1: `SA_Arm_All_Video_Day_25.04`   [Day — 17 dep, best targeting]
-    - 1962 10  (7 dep, ROI 0.63)
-    - 1962 18  (4 dep, ROI 2.08)
-    - 1962 12  (3 dep, ROI 2.31)
-
-  Campaign 2: `SA_Trl_Ios_Video_Blue_Day_25+_25.04`   [Blue_Day — 1 dep, diversification]
-    - Vid Blue - 1  (1 dep, ROI 6.76)
-    - 1962 10  (7 dep, ROI 0.63)  (test: best from Day)
-
-**FacebookMKTO1215 SA:**
-
-  Campaign 1: `SA_Arm_All_Video_Day_25.04`   [Day — 17 dep, best targeting]
-    - 1962 10  (7 dep, ROI 0.63)
-    - 1962 18  (4 dep, ROI 2.08)
-    - 1962 12  (3 dep, ROI 2.31)
-
-  Campaign 2: `SA_Trl_Ios_Video_Blue_Day_25+_25.04`   [Blue_Day — 1 dep, diversification]
-    - Vid Blue - 1  (1 dep, ROI 6.76)
-    - 1962 10  (7 dep, ROI 0.63)  (test: best from Day)
+  Campaign 2: `EC_Trl_Ios_Video_Blue_Day_25+_30.04`   [Blue_Day — 1 dep, diversification]
+    - Vid Blue - 1  (1 dep, ROI 13.23)
+    - 1962 10  (7 dep, ROI 0.61)  (test: best from Day)
 
 
 ---
 
 ## Country: United Arab Emirates
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend      | Leads | Dep | CPL     | CPA       | CR   | ROI   |
 | ------------------ | ---------- | ----- | --- | ------- | --------- | ---- | ----- |
-| Evgeni Sedin ← YOU | $17,298.27 | 307   | 9   | $56.35  | $1,922.03 | 2.9% | 3.55  |
-| Gil Zangi          | $32,389.10 | 357   | 6   | $90.73  | $5,398.18 | 1.7% | 0.84  |
-| Yotam Balteriski   | $19,643.42 | 184   | 5   | $106.76 | $3,928.68 | 2.7% | 0.06  |
-| Dan Dicker         | $20,142.92 | 168   | 6   | $119.90 | $3,357.15 | 3.6% | -3.41 |
+| Evgeni Sedin ← YOU | $20,814.34 | 443   | 10  | $46.98  | $2,081.43 | 2.3% | 2.86  |
+| Gil Zangi          | $34,208.72 | 396   | 6   | $86.39  | $5,701.45 | 1.5% | 1.53  |
+| Yotam Balteriski   | $24,560.00 | 227   | 5   | $108.19 | $4,912.00 | 2.2% | 0.09  |
+| Dan Dicker         | $28,551.07 | 235   | 6   | $121.49 | $4,758.51 | 2.6% | -2.29 |
 
 | Asset (Offer)   | Spend      | Leads | Dep | CPL     | CPA       | CR     | ROI   |
 | --------------- | ---------- | ----- | --- | ------- | --------- | ------ | ----- |
-| Adnoc           | $40,973.69 | 613   | 13  | $66.84  | $3,151.82 | 2.1%   | 1.13  |
-| Trader AI       | $22,173.93 | 180   | 7   | $123.19 | $3,167.70 | 3.9%   | 0.70  |
-| Salik           | $18,175.67 | 181   | 5   | $100.42 | $3,635.13 | 2.8%   | -5.19 |
-| Finance Eagle   | $478.92    | 1     | 1   | $478.92 | $478.92   | 100.0% | 73.56 |
-| ChatGPTPlatform | $2,569.96  | 14    | 0   | $183.57 | —         | 0.0%   | 0.00  |
-| AI Trader       | $1,704.81  | 7     | 0   | $243.54 | —         | 0.0%   | 0.00  |
+| Adnoc           | $46,688.28 | 797   | 14  | $58.58  | $3,334.88 | 1.8%   | 0.98  |
+| Trader AI       | $28,439.94 | 218   | 7   | $130.46 | $4,062.85 | 3.2%   | 0.98  |
+| Salik           | $21,945.40 | 204   | 5   | $107.58 | $4,389.08 | 2.5%   | -3.97 |
+| Finance Eagle   | $478.92    | 1     | 1   | $478.92 | $478.92   | 100.0% | 79.82 |
+| ChatGPTPlatform | $2,775.20  | 14    | 0   | $198.23 | —         | 0.0%   | 0.00  |
+| AI Trader       | $1,979.19  | 8     | 0   | $247.40 | —         | 0.0%   | 0.00  |
 | Zeon Grow       | $1,228.99  | 12    | 0   | $102.42 | —         | 0.0%   | 0.00  |
-| Capital Trading | $34.67     | 0     | 0   | —       | —         | —      | 0.00  |
-| Aramco          | $3.32      | 0     | 0   | —       | —         | —      | 0.00  |
+| Capital Trading | $53.77     | 0     | 0   | —       | —         | —      | 0.00  |
+| Aramco          | $3.32      | 1     | 0   | $3.32   | —         | 0.0%   | 0.00  |
 | AA Acady        | $0.00      | 0     | 0   | —       | —         | —      | 0.00  |
 | ChatGPT         | $0.00      | 0     | 0   | —       | —         | —      | 0.00  |
 | Etihad Airways  | $0.00      | 0     | 0   | —       | —         | —      | 0.00  |
 | FAB             | $0.00      | 0     | 0   | —       | —         | —      | 0.00  |
 | LuLu Retail     | $0.00      | 0     | 0   | —       | —         | —      | 0.00  |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 23 – Apr 29, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + Investment + 1267 - 2 - AR45  [Adnoc]  dep: 2
-- all + IPO + 1232 2 - empty  [Adnoc]  dep: 1
-- all + IPO + 1267 - 2 - empty  [Adnoc]  dep: 1
-- all + Investing + 1267 2  [Adnoc]  dep: 1
-- all + nan + -  [Adnoc]  dep: 1
+**New (all deposits from recent period):**
+- all + IPO + 1267 2  [Adnoc]  dep: 1
+- all + HV|Reading + dt2212_AR31  [Salik]  dep: 1
+- all + Cars + Blue_Story3  [Trader AI]  dep: 1
 
-**Остановились (были депозиты, сейчас 0):**
+**Stopped (had deposits, now 0):**
+- all + Investment + 1267 - 2 - AR45  [Adnoc]  total: 2, recent: 0
 - all + Day + 1267 8  [Adnoc]  total: 1, recent: 0
 - all + HV + 1267 2  [Adnoc]  total: 1, recent: 0
-- all + IPO + 1267 2 - the app  [Adnoc]  total: 1, recent: 0
-- all + Investing + 1232 1  [Adnoc]  total: 1, recent: 0
-- all + Investing + 1328 12  [Adnoc]  total: 1, recent: 0
+- all + IPO + 1232 2 - empty  [Adnoc]  total: 1, recent: 0
+- all + IPO + 1267 - 2 - empty  [Adnoc]  total: 1, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 | Type          | Offer     | Combo                                    | Dep | CPL     | CPA     | ROI   |
 | ------------- | --------- | ---------------------------------------- | --- | ------- | ------- | ----- |
-| Strong ✓      | Adnoc     | all + Investment + 25 + 1267 - 2 - AR45  | 2   | $28.26  | $42.39  | 4.40  |
+| Strong ✓      | Adnoc     | all + Investment + 25 + 1267 - 2 - AR45  | 2   | $28.26  | $42.39  | 3.74  |
 | Interesting ✓ | Adnoc     | all + IPO + 25 + 1267 2 - the app        | 1   | $32.48  | $64.97  | 32.71 |
-| Interesting ✓ | Salik     | all + mix_Reading + 25+ + Image comp2212 | 1   | $48.42  | $96.85  | 2.58  |
 | Interesting ⚠ | Trader AI | all + HV + 30 + Blue - the app -2        | 1   | $262.86 | $525.72 | 1.90  |
+| Interesting ⚠ | Salik     | all + mix_Reading + 25+ + Image comp2212 | 1   | $85.71  | $171.42 | 1.46  |
 | Interesting ✓ | Adnoc     | all + Investing + nan + 1232 1           | 1   | $46.40  | $92.80  | 0.65  |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: United Arab Emirates
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + Investment + 25 + 1267 - 2 - AR45  |  Offer: Adnoc  |  Dep: 2  |  ROI: 4.40
+1. [Strong] all + Investment + 25 + 1267 - 2 - AR45  |  Offer: Adnoc  |  Dep: 2  |  ROI: 3.74
 2. [Interesting] all + IPO + 25 + 1267 2 - the app  |  Offer: Adnoc  |  Dep: 1  |  ROI: 32.71
-   → Target context: IPO Interest — инвесторы, следящие за размещениями акций
-3. [Interesting] all + mix_Reading + 25+ + Image comp2212  |  Offer: Salik  |  Dep: 1  |  ROI: 2.58
+   → Target context: IPO Interest — investors following stock listings and IPOs
+3. [Interesting] all + HV + 30 + Blue - the app -2  |  Offer: Trader AI  |  Dep: 1  |  ROI: 1.90
+   → Target context: High Value — affluent users interested in investing and wealth management
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: United Arab Emirates
@@ -2048,201 +2211,207 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
   - all + Investment + 1267 - 2 - AR45  [Strong, 2 dep]
   - all + IPO + 1267 2 - the app  [Interesting, 1 dep]
-  - all + mix_Reading + Image comp2212  [Interesting, 1 dep]
+  - all + HV + Blue - the app -2  [Interesting, 1 dep]
 
 Top targeting by deposits:
-  - HV: 3 dep, $5,824 spend
+  - IPO: 4 dep, $4,614 spend
+  - Blue_mix: 3 dep, $7,008 spend
+  - HV: 3 dep, $6,206 spend
   - Investing: 3 dep, $5,126 spend
-  - Blue_mix: 3 dep, $4,834 spend
-  - IPO: 3 dep, $3,296 spend
-  - Investment: 2 dep, $2,242 spend
+  - Investment: 2 dep, $3,566 spend
 
 Failing targeting (0 dep, notable spend):
-  - GMBL: $3,553 spend, 0 dep
-  - Blue_Reading: $3,431 spend, 0 dep
+  - GMBL: $4,107 spend, 0 dep
+  - Blue_Reading: $3,889 spend, 0 dep
   - Trading: $2,731 spend, 0 dep
 
 Top creatives by deposits:
-  - 1267 2: 3 dep, $6,545 spend
+  - 1267 2: 4 dep, $7,841 spend
   - 1267 - 2 - AR45: 2 dep, $378 spend
-  - dt2212_AR31: 1 dep, $6,464 spend
-  - Vid blue - 6a: 1 dep, $2,232 spend
-  - 1328 12: 1 dep, $2,126 spend
+  - dt2212_AR31: 1 dep, $6,946 spend
+  - Vid blue - 6a: 1 dep, $2,315 spend
+  - Blue_Story1: 1 dep, $2,168 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
-| Account              | Cost  | Asset           | To Do                                     | ✓ |
-| -------------------- | ----- | --------------- | ----------------------------------------- | - |
-| FacebookMKTO1209 UAE | —     | Slk             | Account Disabled                          | ❌ |
-| FacebookMKTO1258 UAE | —     | arc             | Account Disabled                          | ❌ |
-| FacebookMKTO1259 UAE | —     | —               | Account Disabled                          | ❌ |
-| Facebook_8661 UAE    | —     | —               | video selfie                              | ❌ |
-| Facebook_6218 UAE    | —     | —               | video selfie                              | ❌ |
-| FacebookUL643 UAE    | —     | —               | Salik rejected, try adnoc                 | ✅ |
-| FacebookMKTO1260 UAE | $ 120 | adnoc/salik/ait | Adnoc 1 ad set approved - expand          | ✅ |
-| FacebookMKTO1235 UAE | $ 338 | ait             | Ait rejected, Salik no leads - reopen AIT | ✅ |
-| FacebookBD50 SA      | —     | —               | rejected                                  | ✅ |
-| FacebookMKTO1202 SA  | —     | —               | Video Selfie                              | ❌ |
-| FacebookMKTO1215 SA  | $ 307 | Arc             | CPL low, try narrowing targets            | ✅ |
+| Account              | Cost  | Asset           | To Do                           | ✓ |
+| -------------------- | ----- | --------------- | ------------------------------- | - |
+| Facebook_6218 UAE    | $ 465 | Tgpt/Slk        | Try Ai trader                   | ✅ |
+| FacebookMKTO1260 UAE | —     | adnoc/salik/ait | Video selfie                    | ❌ |
+| FacebookMKTO1202 KW  | —     | Trl             | Email credentials added - check | ✅ |
+| Facebook_8661 KW     | $ 418 | Trl             | Open new form                   | ✅ |
+| Facebook662 KW       | $ 421 | Trl             | Open new form                   | ✅ |
+| FacebookUL643 KW     | $ 466 | Trl             | Open new form                   | ✅ |
+| FacebookMKTO1209 SA  | —     | Arc             | Account Disabled                | ❌ |
+| FacebookMKTO1258 SA  | —     | Arc             | Account Disabled                | ❌ |
+| FacebookBD50 SA      | —     | —               | Account Disabled                | ❌ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
-**FacebookMKTO1260 UAE:**
+**Facebook_6218 UAE:**
 
-| Ad Set                                 | Spend   | Leads | FTDs | CPL     | CPA | Reason |
-| -------------------------------------- | ------- | ----- | ---- | ------- | --- | ------ |
-| UAE_Adc_All_Images_Investment_30_21_04 | $245.13 | 5     | 0    | $49.03  | —   | 0 FTD  |
-| UAE_Adc_All_Images_SM_30_19_04         | $120.11 | 1     | 0    | $120.11 | —   | 0 FTD  |
+| Ad Set                                                 | Spend   | Leads | FTDs | CPL     | CPA | Reason |
+| ------------------------------------------------------ | ------- | ----- | ---- | ------- | --- | ------ |
+| UAE_tgpt_All_VideoVid_lp_cgpt_OnlineGaming_25_07.04    | $394.80 | 4     | 0    | $98.70  | —   | 0 FTD  |
+| UAE_tgpt_All_Blue_HV_25_10.04                          | $170.62 | 0     | 0    | —       | —   | 0 FTD  |
+| UAE_Slk_All_Images_FX_25_29.04                         | $147.95 | 1     | 0    | $147.95 | —   | 0 FTD  |
+| UAE_tgpt_All_VideoVid_lp_cgpt_OnlineEducation_25_09.04 | $110.24 | 0     | 0    | —       | —   | 0 FTD  |
+| UAE_tgpt_All_VideoVid_lp_cgpt_HV_25_09.04              | $108.82 | 0     | 0    | —       | —   | 0 FTD  |
 
-**FacebookMKTO1235 UAE:**
+**FacebookMKTO1202 KW:**
 
 | Ad Set                                      | Spend   | Leads | FTDs | CPL     | CPA | Reason |
 | ------------------------------------------- | ------- | ----- | ---- | ------- | --- | ------ |
-| UAE_Slk_All_Images_Investment_30_15.04      | $225.05 | 0     | 0    | —       | —   | 0 FTD  |
-| GCC_Slk_All_Video_Day_30_09.04              | $195.89 | 1     | 0    | $195.89 | —   | 0 FTD  |
-| GCC_Slk_All_Video_HV_30_09.04               | $189.30 | 0     | 0    | —       | —   | 0 FTD  |
-| UAE_Slk_All_Images_OnlineEducation_30_17.04 | $184.87 | 2     | 0    | $92.43  | —   | 0 FTD  |
-| UAE_Slk_All_Images_HNW_30_17.04             | $122.66 | 0     | 0    | —       | —   | 0 FTD  |
+| UAE_Adc_All_Images_Investment_25_16.04      | $413.23 | 7     | 0    | $59.03  | —   | 0 FTD  |
+| UAE_Adc_All_Images_IPO_25_16.04             | $404.29 | 4     | 0    | $101.07 | —   | 0 FTD  |
+| UAE_Adc_All_Images_Mix_25_17.04             | $235.37 | 0     | 0    | —       | —   | 0 FTD  |
+| UAE_Adc_All_Images_OnlineEducation_25_17.04 | $234.21 | 0     | 0    | —       | —   | 0 FTD  |
 
-**FacebookBD50 SA:**
+**Facebook_8661 KW:**
 
-| Ad Set                              | Spend  | Leads | FTDs | CPL    | CPA | Reason |
-| ----------------------------------- | ------ | ----- | ---- | ------ | --- | ------ |
-| UAE_Adc_IOS_Images1267_Day_25_05.04 | $68.70 | 1     | 0    | $68.70 | —   | 0 FTD  |
-| UAE_Adc_IOS_Images1267_HV_25_05.04  | $65.69 | 1     | 0    | $65.69 | —   | 0 FTD  |
-| UAE_Adc_IOS_ImagesJS_Day_25_06.04   | $43.46 | 2     | 0    | $21.73 | —   | 0 FTD  |
-| GCC_Ait_All_Video_1570_EF_25_28.03  | $38.65 | 2     | 0    | $19.33 | —   | 0 FTD  |
+| Ad Set                                | Spend  | Leads | FTDs | CPL | CPA | Reason |
+| ------------------------------------- | ------ | ----- | ---- | --- | --- | ------ |
+| GCC_Ait_All_Video_Mix_30_17.04        | $48.12 | 0     | 0    | —   | —   | 0 FTD  |
+| GCC_Ait_All_Video_Investment_30_16.04 | $47.65 | 0     | 0    | —   | —   | 0 FTD  |
+| GCC_Ait_All_Video_IPO_30_17.04        | $41.43 | 0     | 0    | —   | —   | 0 FTD  |
+| GCC_Ait_All_Video_Mix_30_17.04        | $31.91 | 0     | 0    | —   | —   | 0 FTD  |
 
-**FacebookMKTO1215 SA:**
+**Facebook662 KW:**
 
-| Ad Set                             | Spend   | Leads | FTDs | CPL     | CPA     | Reason          |
-| ---------------------------------- | ------- | ----- | ---- | ------- | ------- | --------------- |
-| GCC_Ait_All_Video_HV_30_08.04      | $774.04 | 3     | 0    | $258.01 | —       | 0 FTD           |
-| GCC_Ait_All_Video_HV_30_08.04      | $597.97 | 2     | 1    | $298.99 | $597.97 | CPL > bench $90 |
-| GCC_Ait_All_Video_HNW_30_08.04     | $139.64 | 1     | 0    | $139.64 | —       | 0 FTD           |
-| GCC_Ait_All_Video_Reading_30_05.04 | $135.48 | 3     | 0    | $45.16  | —       | 0 FTD           |
-| GCC_Ait_All_Video_HNW_30_08.04     | $132.47 | 0     | 0    | —       | —       | 0 FTD           |
+| Ad Set                                                | Spend  | Leads | FTDs | CPL | CPA | Reason |
+| ----------------------------------------------------- | ------ | ----- | ---- | --- | --- | ------ |
+| KW_Trl_All_ImagesVideos_InvestmentPlus_30_29.04 - IOS | $71.24 | 0     | 0    | —   | —   | 0 FTD  |
+| KW_Trl_All_ImagesVideos_Day_30_29.04 - IOS            | $69.25 | 0     | 0    | —   | —   | 0 FTD  |
+
+**FacebookUL643 KW:**
+
+| Ad Set                         | Spend   | Leads | FTDs | CPL     | CPA | Reason |
+| ------------------------------ | ------- | ----- | ---- | ------- | --- | ------ |
+| UAE_Ait_All_Video_IPO_30_24.04 | $157.44 | 0     | 0    | —       | —   | 0 FTD  |
+| UAE_Ait_All_Video_HV_30_24.04  | $121.87 | 0     | 0    | —       | —   | 0 FTD  |
+| UAE_Ait_All_Video_HV_30_24.04  | $116.94 | 1     | 0    | $116.94 | —   | 0 FTD  |
+| UAE_Ait_All_Video_IPO_30_24.04 | $35.67  | 0     | 0    | —       | —   | 0 FTD  |
 
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
-**FacebookUL643 UAE:**
+**Facebook_6218 UAE:**
 
-  Campaign 1: `UAE_Adc_All_Video_IPO_25_25.04`   [IPO — 3 dep, best targeting]
+  Campaign 1: `UAE_Adc_All_Video_IPO_25_30.04`   [IPO — 3 dep, best targeting]
     - 1267 2 - the app  (1 dep, ROI 32.71)
     - 1267 - 2 - empty  (1 dep, ROI 4.77)
-    - 1232 2 - empty  (1 dep, ROI 0.57)
+    - 1232 2 - empty  (1 dep, ROI 0.52)
 
-  Campaign 2: `UAE_Trl_All_Video_HV_30_25.04`   [HV — 3 dep, diversification]  ⚠ below benchmark
+  Campaign 2: `UAE_Trl_All_Video_HV_30_30.04`   [HV — 3 dep, diversification]  ⚠ below benchmark
     - Blue - the app -2  (1 dep, ROI 1.90)
     - 1267 2  (1 dep, ROI -1.46)
     - 1267 2 - golden  (1 dep, ROI 0.45)
 
-**FacebookMKTO1260 UAE:**
+**FacebookMKTO1202 KW:**
 
-  Campaign 1: `UAE_Trl_All_Video_HV_30_25.04`   [HV — 3 dep, best targeting]  ⚠ below benchmark
+  Campaign 1: `KW_Trl_All_Video_HV_30_30.04`   [HV — 3 dep, best targeting]  ⚠ below benchmark
     - Blue - the app -2  (1 dep, ROI 1.90)
     - 1267 2  (1 dep, ROI -1.46)
     - 1267 2 - golden  (1 dep, ROI 0.45)
 
-  Campaign 2: `UAE_Adc_All_Video_Investing_25.04`   [Investing — 3 dep, diversification]
+  Campaign 2: `KW_Adc_All_Video_Investing_30.04`   [Investing — 3 dep, diversification]
     - 1232 1  (1 dep, ROI 0.65)
     - 1328 12  (1 dep)
     - 1267 2  (1 dep, ROI 0.18)
 
-**FacebookMKTO1235 UAE:**
+**Facebook_8661 KW:**
 
-  Campaign 1: `UAE_Adc_All_Video_IPO_25_25.04`   [IPO — 3 dep, best targeting]
+  Campaign 1: `KW_Trl_All_Video_HV_30_30.04`   [HV — 3 dep, best targeting]  ⚠ below benchmark
+    - Blue - the app -2  (1 dep, ROI 1.90)
+    - 1267 2  (1 dep, ROI -1.46)
+    - 1267 2 - golden  (1 dep, ROI 0.45)
+
+  Campaign 2: `KW_Adc_All_Video_Investing_30.04`   [Investing — 3 dep, diversification]
+    - 1232 1  (1 dep, ROI 0.65)
+    - 1328 12  (1 dep)
+    - 1267 2  (1 dep, ROI 0.18)
+
+**Facebook662 KW:**
+
+  Campaign 1: `KW_Adc_All_Video_IPO_25_30.04`   [IPO — 3 dep, best targeting]
     - 1267 2 - the app  (1 dep, ROI 32.71)
     - 1267 - 2 - empty  (1 dep, ROI 4.77)
-    - 1232 2 - empty  (1 dep, ROI 0.57)
+    - 1232 2 - empty  (1 dep, ROI 0.52)
 
-  Campaign 2: `UAE_Trl_All_Video_Blue_mix_25+_25.04`   [Blue_mix — 2 dep, diversification]  ⚠ below benchmark
-    - Vid blue - app  (1 dep, ROI 0.15)
-    - Vid blue - 6t  (1 dep, ROI 0.81)
-    - 1267 - 2 - AR45  (2 dep, ROI 4.40)  (test: best from Investment)
+  Campaign 2: `KW_Trl_All_Video_HV_30_30.04`   [HV — 3 dep, diversification]  ⚠ below benchmark
+    - Blue - the app -2  (1 dep, ROI 1.90)
+    - 1267 2  (1 dep, ROI -1.46)
+    - 1267 2 - golden  (1 dep, ROI 0.45)
 
-**FacebookBD50 SA:**
+**FacebookUL643 KW:**
 
-  Campaign 1: `SA_Adc_All_Video_IPO_25_25.04`   [IPO — 3 dep, best targeting]
-    - 1267 2 - the app  (1 dep, ROI 32.71)
-    - 1267 - 2 - empty  (1 dep, ROI 4.77)
-    - 1232 2 - empty  (1 dep, ROI 0.57)
+  Campaign 1: `KW_Adc_All_Video_Investing_30.04`   [Investing — 3 dep, best targeting]
+    - 1232 1  (1 dep, ROI 0.65)
+    - 1328 12  (1 dep)
+    - 1267 2  (1 dep, ROI 0.18)
 
-  Campaign 2: `SA_Trl_All_Video_Blue_mix_25+_25.04`   [Blue_mix — 2 dep, diversification]  ⚠ below benchmark
-    - Vid blue - app  (1 dep, ROI 0.15)
-    - Vid blue - 6t  (1 dep, ROI 0.81)
-    - 1267 - 2 - AR45  (2 dep, ROI 4.40)  (test: best from Investment)
-
-**FacebookMKTO1215 SA:**
-
-  Campaign 1: `SA_Adc_All_Video_IPO_25_25.04`   [IPO — 3 dep, best targeting]
-    - 1267 2 - the app  (1 dep, ROI 32.71)
-    - 1267 - 2 - empty  (1 dep, ROI 4.77)
-    - 1232 2 - empty  (1 dep, ROI 0.57)
-
-  Campaign 2: `SA_Trl_All_Video_Blue_mix_25+_25.04`   [Blue_mix — 2 dep, diversification]  ⚠ below benchmark
-    - Vid blue - app  (1 dep, ROI 0.15)
-    - Vid blue - 6t  (1 dep, ROI 0.81)
-    - 1267 - 2 - AR45  (2 dep, ROI 4.40)  (test: best from Investment)
+  Campaign 2: `KW_Trl_All_Video_Blue_mix_25+_30.04`   [Blue_mix — 2 dep, diversification]  ⚠ below benchmark
+    - Vid blue - 6t  (1 dep, ROI 0.57)
+    - Vid blue - app  (1 dep, ROI 0.08)
+    - 1267 - 2 - AR45  (2 dep, ROI 3.74)  (test: best from Investment)
 
 
 ---
 
 ## Country: Uruguay
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM               | Spend     | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ---------------- | --------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Gil Zangi        | $2,209.80 | 120   | 3   | $18.42 | $736.60   | 2.5% | 0.55 |
-| Dan Dicker       | $8,659.05 | 344   | 2   | $25.17 | $4,329.52 | 0.6% | 0.05 |
-| Yotam Balteriski | $5,506.51 | 259   | 2   | $21.26 | $2,753.26 | 0.8% | 0.05 |
+| Gil Zangi        | $2,209.80 | 120   | 4   | $18.42 | $552.45   | 3.3% | 0.64 |
+| Dan Dicker       | $8,660.31 | 344   | 2   | $25.18 | $4,330.15 | 0.6% | 0.04 |
+| Yotam Balteriski | $5,506.85 | 259   | 2   | $21.26 | $2,753.43 | 0.8% | 0.05 |
 
 | Asset (Offer) | Spend     | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------- | --------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Al Trading    | $5,723.75 | 230   | 5   | $24.89 | $1,144.75 | 2.2% | 0.21 |
+| Al Trading    | $5,725.01 | 230   | 6   | $24.89 | $954.17   | 2.6% | 0.25 |
 | Amazon        | $6,389.55 | 310   | 1   | $20.61 | $6,389.55 | 0.3% | 0.03 |
-| AI Trader     | $3,684.33 | 128   | 1   | $28.78 | $3,684.33 | 0.8% | 0.12 |
+| AI Trader     | $3,684.67 | 128   | 1   | $28.79 | $3,684.67 | 0.8% | 0.12 |
 | Mercado Libre | $577.24   | 55    | 0   | $10.50 | —         | 0.0% | 0.00 |
 
-### 2. Тренд (последние дни)
+### 2. Trend (Recent Days)
 
-Period: **Apr 17 – Apr 23, 2026 (7d)**
+Period: **Apr 21 – Apr 27, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
-- all + Blue_Day + Vid Blue - 6t  [Al Trading]  dep: 1
+**Stable (deposits before and now):**
+- all + Trading + Blue - Sleep  [Al Trading]  total: 3, recent: 1
 
-**Остановились (были депозиты, сейчас 0):**
-- all + Trading + Blue - Sleep  [Al Trading]  total: 2, recent: 0
+**Stopped (had deposits, now 0):**
 - all + InvestGen + 570_2  [AI Trader]  total: 1, recent: 0
+- all + Blue_Day + Vid Blue - 6t  [Al Trading]  total: 1, recent: 0
 - all + Day + Blue - Sleep  [Al Trading]  total: 1, recent: 0
 - all + Mix3 + aidt_Story1  [Al Trading]  total: 1, recent: 0
 - all + Trading + Vid 700 - simple2  [Amazon]  total: 1, recent: 0
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
 | Type          | Offer      | Combo                                   | Dep | CPL    | CPA     | ROI  |
 | ------------- | ---------- | --------------------------------------- | --- | ------ | ------- | ---- |
-| Strong ✓      | Al Trading | all + Trading + nan + Blue - Sleep      | 2   | $15.72 | $55.02  | 5.36 |
+| Strong ✓      | Al Trading | all + Trading + nan + Blue - Sleep      | 3   | $15.72 | $36.68  | 7.18 |
 | Interesting ✓ | Amazon     | all + Trading + 35+ + Vid 700 - simple2 | 1   | $21.37 | $320.60 | 0.62 |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: Uruguay
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + Trading + nan + Blue - Sleep  |  Offer: Al Trading  |  Dep: 2  |  ROI: 5.36
-   → Target context: Trading (Generic) — активные трейдеры, интересующиеся акциями и криптой
+1. [Strong] all + Trading + nan + Blue - Sleep  |  Offer: Al Trading  |  Dep: 3  |  ROI: 7.18
+   → Target context: Trading (Generic) — active traders interested in stocks and crypto
 2. [Interesting] all + Trading + 35+ + Vid 700 - simple2  |  Offer: Amazon  |  Dep: 1  |  ROI: 0.62
-   → Target context: Trading (Generic) — активные трейдеры, интересующиеся акциями и криптой
+   → Target context: Trading (Generic) — active traders interested in stocks and crypto
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Uruguay
@@ -2251,13 +2420,13 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
-  - all + Trading + Blue - Sleep  [Strong, 2 dep]
+  - all + Trading + Blue - Sleep  [Strong, 3 dep]
   - all + Trading + Vid 700 - simple2  [Interesting, 1 dep]
 
 Top targeting by deposits:
-  - Trading: 3 dep, $2,679 spend
+  - Trading: 4 dep, $2,679 spend
   - Day: 1 dep, $2,843 spend
-  - Blue_Day: 1 dep, $2,186 spend
+  - Blue_Day: 1 dep, $2,187 spend
   - InvestGen: 1 dep, $0 spend
   - Mix3: 1 dep, $0 spend
 
@@ -2267,22 +2436,22 @@ Failing targeting (0 dep, notable spend):
   - Blue_Trading: $1,018 spend, 0 dep
 
 Top creatives by deposits:
-  - Blue - Sleep: 3 dep, $1,455 spend
-  - Vid Blue - 6t: 1 dep, $1,961 spend
+  - Blue - Sleep: 4 dep, $1,455 spend
+  - Vid Blue - 6t: 1 dep, $1,962 spend
   - Vid 700 - simple2: 1 dep, $321 spend
   - 570_2: 1 dep, $0 spend
   - aidt_Story1: 1 dep, $0 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
 _No accounts found for this country in the GSheet._
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
 _No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 _No ready accounts or no combos to recommend._
 

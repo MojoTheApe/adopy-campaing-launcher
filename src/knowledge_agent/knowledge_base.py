@@ -239,7 +239,34 @@ def load_markdown_section(filename: str) -> str:
 
 # ── Formatting helpers ─────────────────────────────────────────────────────────
 
-def format_target_context_line(interest: str) -> Optional[str]:
+_TARGET_AUDIENCE_EN: Dict[str, str] = {
+    "EF": "financially literate users who understand trading and forex",
+    "EF+": "broader EF audience with adjacent finance interests",
+    "HV": "affluent users interested in investing and wealth management",
+    "HNW": "ultra-high-net-worth clients with investment experience",
+    "FX": "users interested in forex, including beginners",
+    "Trading": "active traders interested in stocks and crypto",
+    "SM": "users interested in the US stock market",
+    "Day": "day traders looking for quick trading income",
+    "IPO": "investors following stock listings and IPOs",
+    "Wide": "all users within the selected demographic boundaries",
+    "PF": "people interested in personal finance and saving money",
+    "CCorg": "retargeting or lookalike audience from organic users",
+    "dtml": "users who visited the site or interacted with ads",
+    "Blue": "working-class users looking for additional income",
+    "single": "single-interest audience without expansion",
+    "Luxury": "luxury audience: travelers and premium-goods buyers, focused on Gulf markets",
+    "Gambling AR com": "gambling audience configured for Argentina and .com accounts",
+    "Sport AR com": "sports audience configured for Argentina and .com accounts",
+    "GMBL": "gambling, sports betting, and online casino fans; applies across countries",
+}
+
+
+def _has_cyrillic(text: str) -> bool:
+    return any("а" <= ch.lower() <= "я" or ch in "Ёё" for ch in text)
+
+
+def format_target_context_line(interest: str, *, language: str = "source") -> Optional[str]:
     """Сформировать однострочный контекст таргета для вывода в отчёте.
 
     Использует resolve_target_code() для нормализации (поддерживает алиасы).
@@ -257,6 +284,10 @@ def format_target_context_line(interest: str) -> Optional[str]:
         return None
     label = ctx.get("label", interest)
     audience = ctx.get("audience", "")
+    if language == "en":
+        audience = _TARGET_AUDIENCE_EN.get(canonical or "", audience)
+        if _has_cyrillic(str(audience)):
+            audience = ""
     if audience:
         return f"Target context: {label} — {audience}"
     return f"Target context: {label}"

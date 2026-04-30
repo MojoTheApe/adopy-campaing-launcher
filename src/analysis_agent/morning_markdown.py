@@ -44,7 +44,7 @@ def _fmt_float(v: float, decimals: int = 2) -> str:
 # ── Section renderers ─────────────────────────────────────────────────────────
 
 def _render_cm_comparison(rows: List[Dict[str, Any]], my_cm: str) -> str:
-    lines = ["### 1. Evgeni vs команда", ""]
+    lines = ["### 1. Evgeni vs Team", ""]
     if not rows:
         lines.append("_No CM data for this country._")
         return "\n".join(lines)
@@ -95,7 +95,7 @@ def _render_asset_summary(rows: List[Dict[str, Any]]) -> str:
 
 
 def _render_trend(trend: Dict[str, Any]) -> str:
-    lines = ["### 2. Тренд (последние дни)", ""]
+    lines = ["### 2. Trend (Recent Days)", ""]
     if not trend.get("has_date"):
         lines.append("_Date column not found in Excel — trend analysis unavailable._")
         return "\n".join(lines)
@@ -108,7 +108,7 @@ def _render_trend(trend: Dict[str, Any]) -> str:
     stable = trend.get("stable", [])
 
     if up:
-        lines.append("**Новые (все депозиты из последнего периода):**")
+        lines.append("**New (all deposits from recent period):**")
         for e in up[:5]:
             lines.append(
                 f"- {e['device']} + {e['interest']} + {e['creative'][:30]}"
@@ -117,7 +117,7 @@ def _render_trend(trend: Dict[str, Any]) -> str:
         lines.append("")
 
     if stable:
-        lines.append("**Стабильные (депозиты и раньше, и сейчас):**")
+        lines.append("**Stable (deposits before and now):**")
         for e in stable[:5]:
             lines.append(
                 f"- {e['device']} + {e['interest']} + {e['creative'][:30]}"
@@ -126,7 +126,7 @@ def _render_trend(trend: Dict[str, Any]) -> str:
         lines.append("")
 
     if down:
-        lines.append("**Остановились (были депозиты, сейчас 0):**")
+        lines.append("**Stopped (had deposits, now 0):**")
         for e in down[:5]:
             lines.append(
                 f"- {e['device']} + {e['interest']} + {e['creative'][:30]}"
@@ -141,7 +141,7 @@ def _render_trend(trend: Dict[str, Any]) -> str:
 
 
 def _render_top_combos(combos: List[Dict[str, Any]]) -> str:
-    lines = ["### 3. Рабочие комбинации", ""]
+    lines = ["### 3. Working Combos", ""]
     if not combos:
         lines.append("_No Strong/Interesting combos for this country._")
         return "\n".join(lines)
@@ -172,7 +172,7 @@ def _render_top_combos(combos: List[Dict[str, Any]]) -> str:
 
 
 def _render_targeting(rows: List[Dict[str, Any]]) -> str:
-    lines = ["### 4. Таргетинг", ""]
+    lines = ["### 4. Targeting", ""]
     if not rows:
         lines.append("_No targeting data._")
         return "\n".join(lines)
@@ -192,7 +192,7 @@ def _render_targeting(rows: List[Dict[str, Any]]) -> str:
 
 
 def _render_creatives(rows: List[Dict[str, Any]]) -> str:
-    lines = ["### 5. Креативы", ""]
+    lines = ["### 5. Creatives", ""]
     if not rows:
         lines.append("_No creative data._")
         return "\n".join(lines)
@@ -213,7 +213,7 @@ def _render_creatives(rows: List[Dict[str, Any]]) -> str:
 
 def _render_ai_context(block: str) -> str:
     return "\n".join([
-        "### 4. Контекст для AI (скопируй в чат)",
+        "### 4. AI Context (copy into chat)",
         "",
         "```",
         block,
@@ -223,7 +223,7 @@ def _render_ai_context(block: str) -> str:
 
 def _render_hypotheses(block: str) -> str:
     return "\n".join([
-        "### 5. Гипотезы (скопируй в чат)",
+        "### 5. Hypotheses (copy into chat)",
         "",
         "```",
         block,
@@ -232,7 +232,7 @@ def _render_hypotheses(block: str) -> str:
 
 
 def _render_account_statuses(account_rows: List[Dict[str, Any]], has_gsheet: bool = False) -> str:
-    lines = ["### 6–7. Статусы аккаунтов", ""]
+    lines = ["### 6–7. Account Statuses", ""]
     if not account_rows:
         if has_gsheet:
             lines.append("_No accounts found for this country in the GSheet._")
@@ -260,7 +260,7 @@ def _render_account_statuses(account_rows: List[Dict[str, Any]], has_gsheet: boo
 
 
 def _render_close_recs(close_recs: Dict[str, List[Dict[str, Any]]]) -> str:
-    lines = ["### 8. Что закрыть (оптимизация)", ""]
+    lines = ["### 8. What to Close (Optimization)", ""]
     any_data = any(v for v in close_recs.values())
     if not any_data:
         lines.append("_No ad sets to close — nothing exceeds benchmarks._")
@@ -293,7 +293,7 @@ def _render_close_recs(close_recs: Dict[str, List[Dict[str, Any]]]) -> str:
 
 
 def _render_open_recs(open_recs: Dict[str, List[Dict[str, Any]]]) -> str:
-    lines = ["### 9. Что открыть (2 кампании на аккаунт)", ""]
+    lines = ["### 9. What to Open (2 Campaigns per Account)", ""]
     any_data = any(v for v in open_recs.values())
     if not any_data:
         lines.append("_No ready accounts or no combos to recommend._")

@@ -437,7 +437,7 @@ def build_ai_context_block(
             f"  |  Offer: {c['offer']}  |  Dep: {c['deposits']}  |  ROI: {_fmt(c['roi'])}"
         )
         # Pull target context from KB
-        ctx = format_target_context_line(c["interest"]) if c["interest"] else None
+        ctx = format_target_context_line(c["interest"], language="en") if c["interest"] else None
         if ctx:
             lines.append(f"   → {ctx}")
 

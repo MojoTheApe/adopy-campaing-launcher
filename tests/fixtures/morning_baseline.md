@@ -12,28 +12,33 @@
 
 ## Country: Brazil
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend  | Leads | Dep | CPL   | CPA    | CR   | ROI  |
 | ------------------ | ------ | ----- | --- | ----- | ------ | ---- | ---- |
 | Evgeni Sedin ← YOU | $65.00 | 130   | 2   | $0.50 | $32.50 | 1.5% | 1.46 |
 | Other CM           | $20.00 | 40    | 0   | $0.50 | —      | 0.0% | 0.00 |
 
-### 2. Тренд (последние дни)
+| Asset (Offer) | Spend  | Leads | Dep | CPL   | CPA    | CR   | ROI  |
+| ------------- | ------ | ----- | --- | ----- | ------ | ---- | ---- |
+| trader_pro    | $65.00 | 130   | 2   | $0.50 | $32.50 | 1.5% | 1.46 |
+| crypto_invest | $20.00 | 40    | 0   | $0.50 | —      | 0.0% | 0.00 |
+
+### 2. Trend (Recent Days)
 
 Period: **Apr 12 – Apr 18, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
+**New (all deposits from recent period):**
 - all + trading + Brazilian special  [trader_pro]  dep: 2
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
-| Type   | Offer      | Combo                                  | Dep | CPA    | ROI  |
-| ------ | ---------- | -------------------------------------- | --- | ------ | ---- |
-| Strong | trader_pro | all + trading + 25 + Brazilian special | 2   | $32.50 | 1.46 |
+| Type     | Offer      | Combo                                  | Dep | CPL   | CPA    | ROI  |
+| -------- | ---------- | -------------------------------------- | --- | ----- | ------ | ---- |
+| Strong ✓ | trader_pro | all + trading + 25 + Brazilian special | 2   | $0.50 | $32.50 | 1.46 |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: Brazil
@@ -41,10 +46,10 @@ Country: Brazil
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
 1. [Strong] all + trading + 25 + Brazilian special  |  Offer: trader_pro  |  Dep: 2  |  ROI: 1.46
-   → Target context: Trading (Generic) — активные трейдеры, интересующиеся акциями и криптой
+   → Target context: Trading (Generic) — active traders interested in stocks and crypto
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Brazil
@@ -62,33 +67,35 @@ Top creatives by deposits:
   - Brazilian special: 2 dep, $65 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
 | Account  | Cost | Asset | To Do | ✓ |
 | -------- | ---- | ----- | ----- | - |
 | MX-acc-1 | 100  | 5     | —     | ✅ |
 | BR-acc-1 | 80   | 3     | —     | ✅ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
-_No ad sets with 0 FTD and notable spend — nothing to close._
+_No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 **MX-acc-1:**
-  Campaign 1: `mx_trader_pro_ALL_trading_25`
-    Ad Set: all + trading + 25 + Brazilian special  [Strong | 2 dep ROI 1.46]
+
+  Campaign 1: `mx_Trad_All_Video_trading_25_30.04`   [trading — 2 dep, best targeting]
+    - Brazilian special  (2 dep, ROI 1.46)
 
 **BR-acc-1:**
-  Campaign 1: `br_trader_pro_ALL_trading_25`
-    Ad Set: all + trading + 25 + Brazilian special  [Strong | 2 dep ROI 1.46]
+
+  Campaign 1: `br_Trad_All_Video_trading_25_30.04`   [trading — 2 dep, best targeting, scale up]
+    - Brazilian special  (2 dep, ROI 1.46)
 
 
 ---
 
 ## Country: Mexico
 
-### 1. Evgeni vs команда
+### 1. Evgeni vs Team
 
 | CM                 | Spend   | Leads | Dep | CPL   | CPA    | CR   | ROI  |
 | ------------------ | ------- | ----- | --- | ----- | ------ | ---- | ---- |
@@ -96,25 +103,30 @@ _No ad sets with 0 FTD and notable spend — nothing to close._
 | Other CM           | $250.00 | 500   | 3   | $0.50 | $83.33 | 0.6% | 0.92 |
 | nan                | $15.00  | 30    | 0   | $0.50 | —      | 0.0% | 0.00 |
 
-### 2. Тренд (последние дни)
+| Asset (Offer) | Spend   | Leads | Dep | CPL   | CPA    | CR   | ROI  |
+| ------------- | ------- | ----- | --- | ----- | ------ | ---- | ---- |
+| crypto_invest | $250.00 | 500   | 3   | $0.50 | $83.33 | 0.6% | 0.92 |
+| trader_pro    | $180.00 | 310   | 3   | $0.58 | $60.00 | 1.0% | 1.17 |
+
+### 2. Trend (Recent Days)
 
 Period: **Apr 12 – Apr 18, 2026 (7d)**
 
-**Новые (все депозиты из последнего периода):**
+**New (all deposits from recent period):**
 - all + crypto + Buy bitcoin now  [crypto_invest]  dep: 3
 - all + trading + Make money fast  [trader_pro]  dep: 2
 - ios + trading + iOS exclusive offer  [trader_pro]  dep: 1
 
 
-### 3. Рабочие комбинации
+### 3. Working Combos
 
-| Type        | Offer         | Combo                                     | Dep | CPA    | ROI  |
-| ----------- | ------------- | ----------------------------------------- | --- | ------ | ---- |
-| Strong      | crypto_invest | all + crypto + 25 + Buy bitcoin now       | 3   | $75.00 | 1.02 |
-| Strong      | trader_pro    | all + trading + 25 + Make money fast      | 2   | $67.50 | 1.11 |
-| Interesting | trader_pro    | ios + trading + 35+ + iOS exclusive offer | 1   | $30.00 | 2.00 |
+| Type          | Offer         | Combo                                     | Dep | CPL   | CPA    | ROI  |
+| ------------- | ------------- | ----------------------------------------- | --- | ----- | ------ | ---- |
+| Strong ⚠      | crypto_invest | all + crypto + 25 + Buy bitcoin now       | 3   | $0.50 | $75.00 | 1.02 |
+| Strong ⚠      | trader_pro    | all + trading + 25 + Make money fast      | 2   | $0.50 | $67.50 | 1.11 |
+| Interesting ✓ | trader_pro    | ios + trading + 35+ + iOS exclusive offer | 1   | $3.00 | $30.00 | 2.00 |
 
-### 4. Контекст для AI (скопируй в чат)
+### 4. AI Context (copy into chat)
 
 ```
 Country: Mexico
@@ -123,12 +135,12 @@ Top combos (paste into Cursor chat and ask: 'Explain why these combos work and w
 
 1. [Strong] all + crypto + 25 + Buy bitcoin now  |  Offer: crypto_invest  |  Dep: 3  |  ROI: 1.02
 2. [Strong] all + trading + 25 + Make money fast  |  Offer: trader_pro  |  Dep: 2  |  ROI: 1.11
-   → Target context: Trading (Generic) — активные трейдеры, интересующиеся акциями и криптой
+   → Target context: Trading (Generic) — active traders interested in stocks and crypto
 3. [Interesting] ios + trading + 35+ + iOS exclusive offer  |  Offer: trader_pro  |  Dep: 1  |  ROI: 2.00
-   → Target context: Trading (Generic) — активные трейдеры, интересующиеся акциями и криптой
+   → Target context: Trading (Generic) — active traders interested in stocks and crypto
 ```
 
-### 5. Гипотезы (скопируй в чат)
+### 5. Hypotheses (copy into chat)
 
 ```
 Country: Mexico
@@ -151,30 +163,38 @@ Top creatives by deposits:
   - iOS exclusive offer: 1 dep, $30 spend
 ```
 
-### 6–7. Статусы аккаунтов
+### 6–7. Account Statuses
 
 | Account  | Cost | Asset | To Do | ✓ |
 | -------- | ---- | ----- | ----- | - |
 | MX-acc-1 | 100  | 5     | —     | ✅ |
 | BR-acc-1 | 80   | 3     | —     | ✅ |
 
-### 8. Что закрыть (оптимизация)
+### 8. What to Close (Optimization)
 
-_No ad sets with 0 FTD and notable spend — nothing to close._
+_No ad sets to close — nothing exceeds benchmarks._
 
-### 9. Что открыть (2 кампании на аккаунт)
+### 9. What to Open (2 Campaigns per Account)
 
 **MX-acc-1:**
-  Campaign 1: `mx_crypto_inves_ALL_crypto_25`
-    Ad Set: all + crypto + 25 + Buy bitcoin now  [Strong | 3 dep ROI 1.02]
-  Campaign 2: `mx_trader_pro_ALL_trading_25`
-    Ad Set: all + trading + 25 + Make money fast  [Strong | 2 dep ROI 1.11]
+
+  Campaign 1: `mx_Cryp_All_Video_crypto_25_30.04`   [crypto — 3 dep, best targeting]  ⚠ below benchmark
+    - Buy bitcoin now  (3 dep, ROI 1.02)
+
+  Campaign 2: `mx_Trad_All_Video_trading_25_30.04`   [trading — 3 dep, diversification, scale up]  ⚠ below benchmark
+    - Make money fast  (2 dep, ROI 1.11)
+    - iOS exclusive offer  (1 dep, ROI 2.00)
+    - Buy bitcoin now  (3 dep, ROI 1.02)  (test: best from crypto)
 
 **BR-acc-1:**
-  Campaign 1: `br_crypto_inves_ALL_crypto_25`
-    Ad Set: all + crypto + 25 + Buy bitcoin now  [Strong | 3 dep ROI 1.02]
-  Campaign 2: `br_trader_pro_ALL_trading_25`
-    Ad Set: all + trading + 25 + Make money fast  [Strong | 2 dep ROI 1.11]
+
+  Campaign 1: `br_Cryp_All_Video_crypto_25_30.04`   [crypto — 3 dep, best targeting]  ⚠ below benchmark
+    - Buy bitcoin now  (3 dep, ROI 1.02)
+
+  Campaign 2: `br_Trad_All_Video_trading_25_30.04`   [trading — 3 dep, diversification]  ⚠ below benchmark
+    - Make money fast  (2 dep, ROI 1.11)
+    - iOS exclusive offer  (1 dep, ROI 2.00)
+    - Buy bitcoin now  (3 dep, ROI 1.02)  (test: best from crypto)
 
 
 ---
