@@ -40,3 +40,8 @@ Thumbs.db
 
 # Excel lock/temp files
 output/~$*
+
+# Local SQLite (recreated at runtime)
+data/*.db
+data/*.db-shm
+data/*.db-wal

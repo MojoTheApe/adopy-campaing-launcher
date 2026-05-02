@@ -1,0 +1,23 @@
+---
+description: Marketing director Excel report — countries from cursor example, not a fixed list
+globs: analysis_agent/build_marketing_director_report.py,.cursor/commands/marketing-director-report.md
+alwaysApply: false
+---
+
+# Marketing director report — country coverage
+
+When building or discussing **`analysis_agent/build_marketing_director_report.py`** and **`Marketing_Director_Report*.xlsx`**:
+
+1. **Source of truth** for which geos appear is the FB stats workbook resolved by **`config.paths.get_excel_path()`** (default: **cursor example.xlsx**; override with env **`FB_STATS_EXCEL`**).
+
+2. **Do not assume a fixed list of countries.** The script loads that Excel, keeps rows in the **calendar month of the latest `Date`**, collects **every distinct non-empty `Country`** (trimmed), sorts them case-insensitively, and creates **one sheet per country** plus Read me and Summary.
+
+3. Each run **refreshes** `analysis_agent/_stats_doc_countries_lastmonth.xlsx` from the same slice (cache for other tools). Stale caches are not used for the country list.
+
+4. **Optional curated copy** for “top two combinations” lives in `TOP_COMBOS_RU` / `TOP_COMBOS_EN`; countries without entries get the generic fallback from `TOP.get(...)`.
+
+5. **Build command** (repo root `fb_agents`):
+
+   `python analysis_agent/build_marketing_director_report.py --lang both`
+
+6. If Excel is open and blocks overwrite, the script may leave `*_tmp.xlsx` or error — close the output files in Excel and retry.

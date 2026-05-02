@@ -25,6 +25,10 @@ from src.analysis_agent.analyze_fb_stats import (
     compute_metrics,
     enrich_structure,
 )
+from src.analysis_agent.gsheet_accounts import (
+    format_account_status_todo_cell,
+    is_omitted_from_account_statuses_table,
+)
 from src.analysis_agent.section_filters import NA_SENTINEL
 from src.knowledge_agent.knowledge_base import format_target_context_line, get_all_targets
 from config.benchmarks import compute_country_medians, get_benchmark
@@ -490,6 +494,23 @@ def build_hypotheses_block(
 
 # ── Section 10: Close recommendations ─────────────────────────────────────────
 
+def build_account_performance_summary(
+    df: pd.DataFrame,
+    country: str,
+    account_alias: str,
+) -> Dict[str, Any]:
+    """Aggregate full account performance for close recommendation context."""
+    df_c = df[
+        (df["Country Final"] == country)
+        & (df["Account Alias"].fillna("").astype(str) == account_alias)
+    ]
+    return {
+        "leads": _safe_int(df_c["# Leads"].sum()) if not df_c.empty else 0,
+        "deposits": _safe_int(df_c["# FTDs"].sum()) if not df_c.empty else 0,
+        "spend": _safe_float(df_c["$ Spend"].sum()) if not df_c.empty else 0.0,
+    }
+
+
 def build_close_recommendations(
     df: pd.DataFrame,
     country: str,
@@ -562,6 +583,21 @@ def build_close_recommendations(
 
     results.sort(key=lambda x: -x["spend"])
     return results[:top_n]
+
+
+def build_close_recommendation_summary(
+    account_summary: Dict[str, Any],
+    close_recs: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize full account totals beside only the ad sets recommended to close."""
+    return {
+        "account": account_summary,
+        "candidates": {
+            "leads": sum(_safe_int(r.get("leads")) for r in close_recs),
+            "deposits": sum(_safe_int(r.get("deposits")) for r in close_recs),
+            "spend": sum(_safe_float(r.get("spend")) for r in close_recs),
+        },
+    }
 
 
 # ── Section 11: Open 2 campaigns ──────────────────────────────────────────────
@@ -844,6 +880,47 @@ def build_open_recommendations(
     return recs
 
 
+def format_open_recommendations_for_status_table(
+    recs: List[Dict[str, Any]],
+    *,
+    max_campaigns: int = 2,
+) -> str:
+    """One-line summary of section 9 open recs for the Account Statuses table.
+
+    Same campaigns and first creative as section 9, compact form:
+    ``offer + targeting + creative`` per campaign, ``; `` between the two bundles.
+    Appends `` ⚠`` when the campaign is marked below benchmark (as in section 9).
+    """
+    if not recs:
+        return ""
+    parts: List[str] = []
+    for r in recs[:max_campaigns]:
+        offer = (r.get("offer") or "").strip() or "—"
+        tgt = (r.get("targeting") or "").strip() or "—"
+        creatives = r.get("creatives") or []
+        cr0 = creatives[0] if creatives else {}
+        cr_name = str(cr0.get("name", "")).strip() or "—"
+        warn = " ⚠" if r.get("below_benchmark") else ""
+        parts.append(f"{offer} + {tgt} + {cr_name}{warn}")
+    return "; ".join(parts)
+
+
+def _account_status_todo_display(
+    acc: Dict[str, Any],
+    open_recs_for_account: List[Dict[str, Any]],
+) -> str:
+    """To Do cell: mirror section 9 for ready accounts; GSheet for Video selfie / not ready."""
+    raw_todo = str(acc.get("to_do", "") or "")
+    if "video selfie" in raw_todo.lower():
+        return format_account_status_todo_cell(raw_todo, str(acc.get("to_do_extra", "") or ""))
+    if acc.get("is_ready"):
+        if open_recs_for_account:
+            return format_open_recommendations_for_status_table(open_recs_for_account)
+        # Section 9 omits accounts with no open recs — same here.
+        return "—"
+    return format_account_status_todo_cell(raw_todo, str(acc.get("to_do_extra", "") or ""))
+
+
 # ── Country section builder ────────────────────────────────────────────────────
 
 def build_country_section(
@@ -860,14 +937,25 @@ def build_country_section(
     creatives = build_creative_breakdown(df, country)
     medians = compute_country_medians(df, country)
 
-    country_accounts = account_rows
+    country_accounts = [
+        dict(acc) for acc in account_rows
+        if not is_omitted_from_account_statuses_table(acc.get("to_do", ""))
+    ]
 
     close_recs: Dict[str, List] = {}
+    close_summaries: Dict[str, Dict[str, Any]] = {}
     open_recs: Dict[str, List] = {}
     for acc in country_accounts:
         alias = acc["alias"]
         if acc["is_ready"]:
-            close_recs[acc["account_label"]] = build_close_recommendations(df, country, alias)
+            account_summary = build_account_performance_summary(df, country, alias)
+            account_close_recs = build_close_recommendations(df, country, alias)
+            close_recs[acc["account_label"]] = account_close_recs
+            if account_close_recs:
+                close_summaries[acc["account_label"]] = build_close_recommendation_summary(
+                    account_summary,
+                    account_close_recs,
+                )
             cc = acc["country_code"] or country[:2].upper()
             open_recs[acc["account_label"]] = build_open_recommendations(
                 combos_df=combos, df=df,
@@ -877,6 +965,13 @@ def build_country_section(
                 country_name=country,
                 medians=medians,
             )
+
+    for acc in country_accounts:
+        label = acc["account_label"]
+        acc["to_do_display"] = _account_status_todo_display(
+            acc,
+            open_recs.get(label, []),
+        )
 
     return {
         "country": country,
@@ -890,6 +985,7 @@ def build_country_section(
         "hypotheses": build_hypotheses_block(country, top_combos, targeting, creatives),
         "account_rows": country_accounts,
         "close_recs": close_recs,
+        "close_summaries": close_summaries,
         "open_recs": open_recs,
         "medians": medians,
     }
@@ -964,28 +1060,26 @@ def build_morning_report(
     }
 
     def _accounts_for_country(country: str) -> List[Dict[str, Any]]:
-        """Find GSheet account rows relevant to this Excel country.
+        """GSheet rows for this country only (column B country code must match).
 
-        An account is included if EITHER:
-          - Its alias appears in the Excel data for that country (ran campaigns there), OR
-          - Its GSheet country_code matches the known ISO-2 code for this country
-            (registered account that may not have Excel data yet).
-
-        Deduplication by alias ensures each account appears at most once per country.
+        Does not use Excel `Account Alias` to attach an account to a country — that caused
+        the same alias (e.g. reused across geo) to appear under the wrong country section.
         """
-        aliases_in_country = set(
-            df[df["Country Final"] == country]["Account Alias"]
-            .dropna().astype(str).str.strip().unique()
-        )
         expected_code = _COUNTRY_TO_CODE.get(country.strip().lower(), "")
+        if not expected_code:
+            return []
+
         seen: set = set()
-        matched = []
+        matched: List[Dict[str, Any]] = []
         for r in account_rows:
-            alias_ok = r["alias"] in aliases_in_country
-            code_ok = bool(expected_code) and r.get("country_code", "").strip().lower() == expected_code
-            if (alias_ok or code_ok) and r["alias"] not in seen:
-                seen.add(r["alias"])
-                matched.append(r)
+            row_code = str(r.get("country_code", "")).strip().lower()
+            if row_code != expected_code:
+                continue
+            alias = r["alias"]
+            if alias in seen:
+                continue
+            seen.add(alias)
+            matched.append(r)
         return matched
 
     country_sections = []

@@ -6,7 +6,7 @@
 - **Qualifying combos:** 4
 - **Google Sheet:** ✅ connected
 
-**How to use sections 6 & 7:**  Copy the code block into Cursor chat and ask your question.
+**How to use:** Paste the section **4–5** code blocks into chat for AI. Section **6–7** lists GSheet account statuses (see the legend under each country).
 
 ---
 
@@ -69,10 +69,12 @@ Top creatives by deposits:
 
 ### 6–7. Account Statuses
 
-| Account  | Cost | Asset | To Do | ✓ |
-| -------- | ---- | ----- | ----- | - |
-| MX-acc-1 | 100  | 5     | —     | ✅ |
-| BR-acc-1 | 80   | 3     | —     | ✅ |
+_6–7 **To Do** for ready accounts (✅) matches **section 9 What to Open**: `offer + targeting + creative` per campaign (first creative each), joined by `; `; trailing ` ⚠` = below benchmark. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+
+| Account  | Cost | Asset | To Do                                    | ✓ |
+| -------- | ---- | ----- | ---------------------------------------- | - |
+| MX-acc-1 | 100  | 5     | trader_pro + trading + Brazilian special | ✅ |
+| BR-acc-1 | 80   | 3     | trader_pro + trading + Brazilian special | ✅ |
 
 ### 8. What to Close (Optimization)
 
@@ -82,12 +84,12 @@ _No ad sets to close — nothing exceeds benchmarks._
 
 **MX-acc-1:**
 
-  Campaign 1: `mx_Trad_All_Video_trading_25_30.04`   [trading — 2 dep, best targeting]
+  Campaign 1: `mx_Trad_All_Video_trading_25_02.05`   [trading — 2 dep, best targeting]
     - Brazilian special  (2 dep, ROI 1.46)
 
 **BR-acc-1:**
 
-  Campaign 1: `br_Trad_All_Video_trading_25_30.04`   [trading — 2 dep, best targeting, scale up]
+  Campaign 1: `br_Trad_All_Video_trading_25_02.05`   [trading — 2 dep, best targeting, scale up]
     - Brazilian special  (2 dep, ROI 1.46)
 
 
@@ -165,10 +167,12 @@ Top creatives by deposits:
 
 ### 6–7. Account Statuses
 
-| Account  | Cost | Asset | To Do | ✓ |
-| -------- | ---- | ----- | ----- | - |
-| MX-acc-1 | 100  | 5     | —     | ✅ |
-| BR-acc-1 | 80   | 3     | —     | ✅ |
+_6–7 **To Do** for ready accounts (✅) matches **section 9 What to Open**: `offer + targeting + creative` per campaign (first creative each), joined by `; `; trailing ` ⚠` = below benchmark. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+
+| Account  | Cost | Asset | To Do                                                                                | ✓ |
+| -------- | ---- | ----- | ------------------------------------------------------------------------------------ | - |
+| MX-acc-1 | 100  | 5     | crypto_invest + crypto + Buy bitcoin now ⚠; trader_pro + trading + Make money fast ⚠ | ✅ |
+| BR-acc-1 | 80   | 3     | crypto_invest + crypto + Buy bitcoin now ⚠; trader_pro + trading + Make money fast ⚠ | ✅ |
 
 ### 8. What to Close (Optimization)
 
@@ -178,20 +182,20 @@ _No ad sets to close — nothing exceeds benchmarks._
 
 **MX-acc-1:**
 
-  Campaign 1: `mx_Cryp_All_Video_crypto_25_30.04`   [crypto — 3 dep, best targeting]  ⚠ below benchmark
+  Campaign 1: `mx_Cryp_All_Video_crypto_25_02.05`   [crypto — 3 dep, best targeting]  ⚠ below benchmark
     - Buy bitcoin now  (3 dep, ROI 1.02)
 
-  Campaign 2: `mx_Trad_All_Video_trading_25_30.04`   [trading — 3 dep, diversification, scale up]  ⚠ below benchmark
+  Campaign 2: `mx_Trad_All_Video_trading_25_02.05`   [trading — 3 dep, diversification, scale up]  ⚠ below benchmark
     - Make money fast  (2 dep, ROI 1.11)
     - iOS exclusive offer  (1 dep, ROI 2.00)
     - Buy bitcoin now  (3 dep, ROI 1.02)  (test: best from crypto)
 
 **BR-acc-1:**
 
-  Campaign 1: `br_Cryp_All_Video_crypto_25_30.04`   [crypto — 3 dep, best targeting]  ⚠ below benchmark
+  Campaign 1: `br_Cryp_All_Video_crypto_25_02.05`   [crypto — 3 dep, best targeting]  ⚠ below benchmark
     - Buy bitcoin now  (3 dep, ROI 1.02)
 
-  Campaign 2: `br_Trad_All_Video_trading_25_30.04`   [trading — 3 dep, diversification]  ⚠ below benchmark
+  Campaign 2: `br_Trad_All_Video_trading_25_02.05`   [trading — 3 dep, diversification]  ⚠ below benchmark
     - Make money fast  (2 dep, ROI 1.11)
     - iOS exclusive offer  (1 dep, ROI 2.00)
     - Buy bitcoin now  (3 dep, ROI 1.02)  (test: best from crypto)

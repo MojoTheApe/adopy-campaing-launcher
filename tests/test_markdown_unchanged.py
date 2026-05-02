@@ -30,6 +30,26 @@ from src.analysis_agent.morning_report import build_country_section
 SNAPSHOT_PATH = Path(__file__).parent / "fixtures" / "morning_baseline.md"
 
 
+@pytest.fixture(autouse=True)
+def _freeze_morning_report_clock_for_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`build_open_recommendations` embeds datetime.now() in campaign names — freeze for snapshots."""
+
+    class _Now:
+        def strftime(self, fmt: str) -> str:
+            if fmt == "%d.%m":
+                return "02.05"
+            if fmt == "%Y-%m-%d":
+                return "2026-04-18"
+            raise AssertionError(f"unexpected strftime format: {fmt!r}")
+
+    class _Datetime:
+        @staticmethod
+        def now():
+            return _Now()
+
+    monkeypatch.setattr("src.analysis_agent.morning_report.datetime", _Datetime)
+
+
 def _build_report_from_fixture(
     enriched_df: pd.DataFrame, accounts_rows: list
 ) -> dict:
@@ -99,6 +119,33 @@ def test_report_static_copy_is_english(
     for label in old_russian_labels:
         assert label not in md
     assert re.search(r"[А-Яа-яЁё]", md) is None
+
+
+def test_close_recs_show_account_and_candidate_totals(
+    enriched_df: pd.DataFrame, accounts_rows: list
+) -> None:
+    """Close tables should not look like full-account performance totals."""
+    extra = enriched_df.iloc[0].copy()
+    extra["Adset Name"] = "MX_zero_ftd_candidate"
+    extra["Ad Title"] = "Zero FTD candidate"
+    extra["Creative"] = "Zero FTD candidate"
+    extra["# Leads"] = 10
+    extra["# FTDs"] = 0
+    extra["$ Spend"] = 200.0
+    extra["$ Net"] = 0.0
+    extra["CPL"] = 20.0
+    extra["CPA"] = pd.NA
+    extra["CR"] = 0.0
+    extra["Profit"] = -200.0
+    extra["ROI"] = 0.0
+    df = pd.concat([enriched_df, pd.DataFrame([extra])], ignore_index=True)
+
+    report = _build_report_from_fixture(df, accounts_rows)
+    md = render_morning_report_md(report)
+
+    assert "Account total: 280 leads, 2 FTDs, $335.00 spend" in md
+    assert "Close candidates: 10 leads, 0 FTDs, $200.00 spend" in md
+    assert "MX_zero_ftd_candidate" in md
 
 
 def test_markdown_matches_snapshot(

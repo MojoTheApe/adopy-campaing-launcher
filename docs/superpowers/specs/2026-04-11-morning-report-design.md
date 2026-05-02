@@ -93,7 +93,7 @@ MY_CM_NAME=Evgeni Sedin                # your name as it appears in CM column
 
 ### Last-tab resolution
 
-When `GSHEET_ACCOUNTS_SHEET=auto_last`: call `spreadsheets.get()` → read `sheets[-1].properties.title`.
+When `GSHEET_ACCOUNTS_SHEET=auto_last`: call `spreadsheets.get()` → pick the sheet with the largest `properties.index` (UI left-to-right order), **not** `sheets[-1]` (API order is not guaranteed to match the UI).
 
 ### Column mapping
 
@@ -113,9 +113,10 @@ When `GSHEET_ACCOUNTS_SHEET=auto_last`: call `spreadsheets.get()` → read `shee
 | `Video Selfie` | `False` |
 | empty or any other value | `True` |
 
-### Row filtering
+### Country assignment (morning report §6–7 per Excel country)
 
-- Skip rows where col A is `Country`, `Total`, or similar totals-table headers
+Each GSheet row appears **only** under the country whose Excel name maps to the **same code as column B** on that row. Excel `Account Alias` is **not** used to attach a row to a country (avoids duplicate aliases across geos landing in the wrong section).
+
 - Skip rows where col C is empty
 
 ---

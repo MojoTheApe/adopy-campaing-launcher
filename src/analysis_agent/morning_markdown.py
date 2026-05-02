@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from src.analysis_agent.gsheet_accounts import format_account_status_todo_cell
+
 # ── Markdown helpers ───────────────────────────────────────────────────────────
 
 def _esc(s: str) -> str:
@@ -39,6 +41,16 @@ def _fmt_money(v: float) -> str:
 
 def _fmt_float(v: float, decimals: int = 2) -> str:
     return f"{v:.{decimals}f}"
+
+
+# Legend for editors: Upload FB / GSheet column K workflow (see gsheet_accounts module doc).
+_ACCOUNT_STATUSES_LEGEND = (
+    "_6–7 **To Do** for ready accounts (✅) matches **section 9 What to Open**: "
+    "`offer + targeting + creative` per campaign (first creative each), joined by `; `; "
+    "trailing ` ⚠` = below benchmark. If section 9 has nothing for that account, **To Do** is "
+    "**—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. "
+    "GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._"
+)
 
 
 # ── Section renderers ─────────────────────────────────────────────────────────
@@ -232,7 +244,7 @@ def _render_hypotheses(block: str) -> str:
 
 
 def _render_account_statuses(account_rows: List[Dict[str, Any]], has_gsheet: bool = False) -> str:
-    lines = ["### 6–7. Account Statuses", ""]
+    lines = ["### 6–7. Account Statuses", "", _ACCOUNT_STATUSES_LEGEND, ""]
     if not account_rows:
         if has_gsheet:
             lines.append("_No accounts found for this country in the GSheet._")
@@ -245,7 +257,12 @@ def _render_account_statuses(account_rows: List[Dict[str, Any]], has_gsheet: boo
     table_rows = []
     for r in account_rows:
         ready_s = "✅" if r["is_ready"] else "❌"
-        to_do_s = r["to_do"] if r["to_do"] else "—"
+        if "to_do_display" in r:
+            to_do_s = r["to_do_display"]
+        else:
+            to_do_s = format_account_status_todo_cell(
+                str(r.get("to_do", "")), str(r.get("to_do_extra", "") or ""),
+            )
         cost_s = r.get("cost", "") or "—"
         stock_s = r.get("stock", "") or "—"
         table_rows.append([
@@ -259,18 +276,39 @@ def _render_account_statuses(account_rows: List[Dict[str, Any]], has_gsheet: boo
     return "\n".join(lines)
 
 
-def _render_close_recs(close_recs: Dict[str, List[Dict[str, Any]]]) -> str:
+def _render_close_recs(
+    close_recs: Dict[str, List[Dict[str, Any]]],
+    close_summaries: Dict[str, Dict[str, Any]] | None = None,
+) -> str:
     lines = ["### 8. What to Close (Optimization)", ""]
     any_data = any(v for v in close_recs.values())
     if not any_data:
         lines.append("_No ad sets to close — nothing exceeds benchmarks._")
         return "\n".join(lines)
 
+    close_summaries = close_summaries or {}
     for acc_label, recs in close_recs.items():
         if not recs:
             continue
         lines.append(f"**{acc_label}:**")
         lines.append("")
+        summary = close_summaries.get(acc_label)
+        if summary:
+            account = summary.get("account", {})
+            candidates = summary.get("candidates", {})
+            lines.append(
+                "Account total: "
+                f"{account.get('leads', 0)} leads, "
+                f"{account.get('deposits', 0)} FTDs, "
+                f"{_fmt_money(account.get('spend', 0.0))} spend"
+            )
+            lines.append(
+                "Close candidates: "
+                f"{candidates.get('leads', 0)} leads, "
+                f"{candidates.get('deposits', 0)} FTDs, "
+                f"{_fmt_money(candidates.get('spend', 0.0))} spend"
+            )
+            lines.append("")
         table_rows = []
         for r in recs:
             cpl_s = _fmt_money(r["cpl"]) if r.get("cpl") else "—"
@@ -348,7 +386,10 @@ def _render_country_section(section: Dict[str, Any], my_cm: str, has_gsheet: boo
         "",
         _render_account_statuses(section.get("account_rows", []), has_gsheet=has_gsheet),
         "",
-        _render_close_recs(section.get("close_recs", {})),
+        _render_close_recs(
+            section.get("close_recs", {}),
+            section.get("close_summaries", {}),
+        ),
         "",
         _render_open_recs(section.get("open_recs", {})),
         "",
@@ -381,7 +422,8 @@ def render_morning_report_md(report: Dict[str, Any]) -> str:
         f"- **Qualifying combos:** {total_combos}",
         f"- **Google Sheet:** {gsheet_note}",
         "",
-        "**How to use sections 6 & 7:**  Copy the code block into Cursor chat and ask your question.",
+        "**How to use:** Paste the section **4–5** code blocks into chat for AI. "
+        "Section **6–7** lists GSheet account statuses (see the legend under each country).",
         "",
         "---",
         "",

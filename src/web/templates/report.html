@@ -378,7 +378,7 @@
       <td>{{ r.account_label }}</td>
       <td>{{ r.cost or '—' }}</td>
       <td>{{ r.stock or '—' }}</td>
-      <td>{{ r.to_do or '—' }}</td>
+      <td>{{ r.to_do_display }}</td>
       <td>{% if r.is_ready %}✅{% else %}❌{% endif %}</td>
     </tr>
   {% endfor %}

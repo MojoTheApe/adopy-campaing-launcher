@@ -2,7 +2,8 @@
 
 Environment variables (from .env):
     GSHEET_ACCOUNTS_ID      — Google Sheet ID from the spreadsheet URL
-    GSHEET_ACCOUNTS_SHEET   — Tab name, or "auto_last" to always use the rightmost tab
+    GSHEET_ACCOUNTS_SHEET   — Tab name, or "auto_last" for the **rightmost** tab
+                             (by `SheetProperties.index`, i.e. left-to-right order in the UI)
     MY_CM_NAME              — Your CM name as it appears in column A (default: Evgeni Sedin)
     GSHEET_OAUTH_CLIENT     — Path to OAuth client JSON (default: config/oauth_client.json)
     GSHEET_OAUTH_TOKEN      — Path to saved OAuth token (default: config/token_accounts.json)
@@ -16,7 +17,16 @@ Sheet layout (last/today's tab):
     Col A — CM name (campaign manager)
     Col B — Country code (e.g. MX, GT, EC)
     Col C — Account label  (e.g. "FacebookMKTO1211 MX")
-    Col J — To Do          (e.g. "Account Disabled", "Video Selfie", or empty = ready)
+    Col J — To Do          (e.g. "Account Disabled", "Video selfie", expand, or empty = ready)
+    Col K — Optional "2 bundles" line for the report: short `asset + targeting + creative`
+            pairs (after To Do text, shown as `To Do | …`). Fill after cross-checking the
+            **Upload FB** workbook (Desktop), tab **Account**: col **A** holds account id,
+            country, offer; col **D** must match the offer name; col **E** — if empty,
+            note a Jira task to provision the asset; if **E** has a link, list which two
+            bundles to open.
+
+    Rows whose To Do contains **Account Disabled** or **Account Restricted** are excluded
+    from the Morning Report "Account Statuses" table (not shown at all).
 
     The bottom of each tab also contains a totals table whose first cell starts
     with "Country" or "Total" — those rows are skipped automatically.
@@ -26,7 +36,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 _PROJ_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJ_ROOT) not in sys.path:
@@ -40,7 +50,18 @@ except ImportError:
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-_DISABLED_STATUSES = {"account disabled", "account restricted", "video selfie"}
+# Substrings: account not "ready" for open/close optimization (sections 8–9).
+_ACCOUNT_NOT_READY_SUBSTRINGS = (
+    "account disabled",
+    "account restricted",
+    "video selfie",
+)
+
+# Substrings: omit row entirely from section 6–7 Account Statuses table.
+_ACCOUNT_STATUS_OMIT_SUBSTRINGS = (
+    "account disabled",
+    "account restricted",
+)
 
 _TOTALS_HEADERS = {"country", "total", "totals", "cm", "sum"}
 
@@ -167,14 +188,24 @@ def _build_sheets_service(
     return _build_sheets_service_sa(credentials_path)
 
 
-def _get_last_tab_name(service, sheet_id: str) -> str:
-    """Return the title of the rightmost (last) tab in the spreadsheet."""
-    meta = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
-    sheets = meta.get("sheets", [])
+def _select_rightmost_sheet(
+    sheets: List[Dict[str, Any]],
+) -> Tuple[str, int]:
+    """Pick the UI-rightmost tab from `spreadsheets.get` → `sheets` (by max `properties.index`)."""
     if not sheets:
-        raise ValueError(f"No sheets found in spreadsheet {sheet_id}")
-    last = sheets[-1]
-    return last["properties"]["title"]
+        raise ValueError("No sheets in spreadsheet metadata")
+    rightmost = max(
+        sheets,
+        key=lambda s: int(s.get("properties", {}).get("index", 0)),
+    )
+    props = rightmost["properties"]
+    return str(props["title"]), int(props.get("index", 0))
+
+
+def _rightmost_tab_title_and_index(service, sheet_id: str) -> Tuple[str, int]:
+    """Title and index of the rightmost tab (see `_select_rightmost_sheet`)."""
+    meta = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+    return _select_rightmost_sheet(meta.get("sheets", []))
 
 
 def _fetch_range(service, sheet_id: str, sheet_name: str, range_notation: str) -> List[List[str]]:
@@ -215,8 +246,34 @@ def _account_alias_from_label(label: str) -> str:
     return label.strip()
 
 
+def _normalize_todo(t: str) -> str:
+    return (t or "").strip().lower()
+
+
+def _matches_any_substring(normalized: str, substrings: Tuple[str, ...]) -> bool:
+    return any(s in normalized for s in substrings)
+
+
+def is_omitted_from_account_statuses_table(to_do: str) -> bool:
+    """True if this account should not appear in the Morning Report section 6–7 table."""
+    return _matches_any_substring(_normalize_todo(to_do), _ACCOUNT_STATUS_OMIT_SUBSTRINGS)
+
+
+def format_account_status_todo_cell(to_do: str, extra: str) -> str:
+    """Format col J (+ optional col K) for Account Statuses (Markdown + HTML)."""
+    raw = (to_do or "").strip()
+    ext = (extra or "").strip()
+    if not raw:
+        return "—"
+    if "video selfie" in raw.lower():
+        return raw
+    if ext:
+        return f"{raw} | {ext}"
+    return raw
+
+
 def _is_ready(to_do: str) -> bool:
-    return to_do.strip().lower() not in _DISABLED_STATUSES
+    return not _matches_any_substring(_normalize_todo(to_do), _ACCOUNT_NOT_READY_SUBSTRINGS)
 
 
 def parse_account_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]:
@@ -231,11 +288,12 @@ def parse_account_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]:
         G (6) — Actual FTDs
         I (8) — Stock (asset/offer running)
         J (9) — To Do status
+        K (10)— Optional: two short bundles for §6–7 (`asset + targeting + creative; …`)
     """
     accounts: List[Dict[str, Any]] = []
     for row in raw_rows:
-        # Pad to at least 10 columns so index 9 (col J) is safe
-        padded = row + [""] * max(0, 10 - len(row))
+        # Pad to at least 11 columns so index 10 (col K) is safe
+        padded = row + [""] * max(0, 11 - len(row))
 
         col_a = padded[0].strip()
         col_b = padded[1].strip() if len(padded) > 1 else ""
@@ -245,6 +303,7 @@ def parse_account_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]:
         col_g = padded[6].strip() if len(padded) > 6 else ""   # Actual FTDs
         col_i = padded[8].strip() if len(padded) > 8 else ""   # Stock/Asset
         col_j = padded[9].strip() if len(padded) > 9 else ""   # To Do
+        col_k = padded[10].strip() if len(padded) > 10 else ""  # 2 bundles / offer check
 
         if not col_a or not col_c:
             continue
@@ -263,6 +322,7 @@ def parse_account_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]:
                 "ftds": col_g,
                 "stock": col_i,
                 "to_do": col_j,
+                "to_do_extra": col_k,
                 "is_ready": _is_ready(col_j),
             }
         )
@@ -286,7 +346,8 @@ def fetch_account_rows(
         my_cm: Your CM name to filter by (falls back to MY_CM_NAME env var; None = return all CMs).
 
     Returns:
-        List of dicts with keys: cm, country_code, account_label, alias, to_do, is_ready.
+        List of dicts with keys: cm, country_code, account_label, alias, to_do,
+        to_do_extra (col K, optional), is_ready.
         Returns empty list on any error (caller decides whether to continue without GSheet).
     """
     sid = sheet_id or os.environ.get("GSHEET_ACCOUNTS_ID", "").strip()
@@ -310,11 +371,14 @@ def fetch_account_rows(
 
     try:
         if sname.lower() == "auto_last":
-            sname = _get_last_tab_name(service, sid)
-            print(f"[gsheet_accounts] Using last tab: {sname!r}", file=sys.stderr)
+            sname, tab_index = _rightmost_tab_title_and_index(service, sid)
+            print(
+                f"[gsheet_accounts] Rightmost tab: {sname!r} (sheet index={tab_index})",
+                file=sys.stderr,
+            )
 
-        # Read columns A:J (10 columns) — enough to cover col J
-        raw = _fetch_range(service, sid, sname, "A:J")
+        # Read columns A:K (incl. optional col K for §6–7 To Do extensions)
+        raw = _fetch_range(service, sid, sname, "A:K")
         print(
             f"[gsheet_accounts] Fetched {len(raw)} rows from tab {sname!r}",
             file=sys.stderr,
