@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "python .cursor/hooks/knowledge_agent_morning_context.py",
+        "matcher": "UserPromptSubmit",
+        "timeout": 10,
+        "failClosed": false
+      }
+    ]
+  }
+}

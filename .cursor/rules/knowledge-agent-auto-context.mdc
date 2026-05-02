@@ -1,0 +1,16 @@
+---
+description: Automatically use Knowledge Agent context for morning report and brainstorming discussions
+alwaysApply: true
+---
+
+# Knowledge Agent Auto Context
+
+When the user discusses morning report, working/non-working combinations, offers, targets, creatives, ad texts, or brainstorming new materials:
+
+1. First read `output/context_packs/latest_auto_context.md` if it exists.
+2. Treat it as Knowledge Agent context generated from the user's latest prompt.
+3. Use it to explain offer meaning, target audience, creative context, known gaps, and next material ideas.
+4. If the file says no offer/country was detected, infer from the user's pasted text or ask one concise clarification.
+5. Do not ask the user to run `scripts/build_context_packs.py` unless the context file is missing or stale.
+
+This rule is for discussion and analysis only; do not modify the knowledge base unless the user asks.
