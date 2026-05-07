@@ -62,7 +62,20 @@ def test_format_open_recs_status_table_matches_section9_shape() -> None:
         },
     ]
     s = format_open_recommendations_for_status_table(recs)
-    assert s == "Amazon + Day + ccblc - pro; Amazon + PF/IOS/HV + Vid 700 - pro ⚠"
+    assert s == "Amz/Day/ccblc - pro; Amz/PF/IOS/HV/Vid 700 - pro⚠"
+
+
+def test_format_open_recs_truncates_long_labels() -> None:
+    recs = [
+        {
+            "offer": "Trader AI",
+            "targeting": "VeryLongTargetingNameHere",
+            "creatives": [{"name": "x" * 40}],
+            "below_benchmark": False,
+        },
+    ]
+    s = format_open_recommendations_for_status_table(recs, target_max=10, creative_max=12)
+    assert s == "Trl/VeryLongT…/xxxxxxxxxxx…"
 
 
 def test_parse_reads_column_k() -> None:

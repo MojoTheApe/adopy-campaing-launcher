@@ -262,6 +262,81 @@ def build_trend(
     return result
 
 
+def _creative_matches_trend_row(truncated: str, creative_full: str) -> bool:
+    """Trend rows store Creative truncated (~40 chars); match safely to full name."""
+    a = str(truncated or "").strip()
+    b = str(creative_full or "").strip()
+    if not a or not b:
+        return False
+    return b.startswith(a) or a.startswith(b[:40]) or a in b
+
+
+def _trend_entry_matches_combo(
+    entry: Dict[str, Any],
+    offer: str,
+    interest: str,
+    creative: str,
+) -> bool:
+    if str(entry.get("offer") or "").strip() != str(offer or "").strip():
+        return False
+    if str(entry.get("interest") or "").strip() != str(interest or "").strip():
+        return False
+    return _creative_matches_trend_row(str(entry.get("creative") or ""), creative)
+
+
+def _interest_trend_boost(trend: Optional[Dict[str, Any]], interest: str) -> int:
+    """Sort boost so §9 prefers interests that are strong in §2 (recent window)."""
+    if not trend or not trend.get("has_date"):
+        return 0
+    inter = str(interest or "").strip()
+    b = 0
+    for e in trend.get("stable", []):
+        if str(e.get("interest") or "").strip() == inter:
+            b += 50 + int(e.get("deposits_recent", 0) or 0) * 5
+    for e in trend.get("trending_up", []):
+        if str(e.get("interest") or "").strip() == inter:
+            b += 80 + int(e.get("deposits_recent", 0) or 0) * 8
+    for e in trend.get("trending_down", []):
+        if str(e.get("interest") or "").strip() == inter:
+            b -= 40
+    return b
+
+
+def _interest_trend_tags(trend: Optional[Dict[str, Any]], interest: str) -> List[str]:
+    """Short labels for §9 header, mirroring §2 buckets for this interest."""
+    if not trend or not trend.get("has_date"):
+        return []
+    inter = str(interest or "").strip()
+    tags: List[str] = []
+    if any(str(e.get("interest") or "").strip() == inter for e in trend.get("stable", [])):
+        tags.append("stable")
+    if any(str(e.get("interest") or "").strip() == inter for e in trend.get("trending_up", [])):
+        tags.append("heating up")
+    if any(str(e.get("interest") or "").strip() == inter for e in trend.get("trending_down", [])):
+        tags.append("stalled")
+    return tags
+
+
+def _creative_trend_note(
+    trend: Optional[Dict[str, Any]],
+    offer: str,
+    interest: str,
+    creative: str,
+) -> str:
+    """Append to creative line when this combo appears in §2 trend lists."""
+    if not trend or not trend.get("has_date"):
+        return ""
+    for label, key in (
+        ("stable + recent", "stable"),
+        ("all recent dep", "trending_up"),
+        ("stalled (recovery)", "trending_down"),
+    ):
+        for e in trend.get(key, []):
+            if _trend_entry_matches_combo(e, offer, interest, creative):
+                return f"trend: {label}"
+    return ""
+
+
 # ── Section 3: Top combos (from aggregate_combos output) ──────────────────────
 
 def _check_quality(combo: Dict[str, Any], bench: Dict[str, Any]) -> str:
@@ -504,10 +579,21 @@ def build_account_performance_summary(
         (df["Country Final"] == country)
         & (df["Account Alias"].fillna("").astype(str) == account_alias)
     ]
+    has_data = not df_c.empty
+    leads = _safe_int(df_c["# Leads"].sum()) if has_data else 0
+    deposits = _safe_int(df_c["# FTDs"].sum()) if has_data else 0
+    spend = _safe_float(df_c["$ Spend"].sum()) if has_data else 0.0
+    cpl = spend / leads if has_data and leads else None
+    cpa = spend / deposits if has_data and deposits else None
+    cr = (deposits / leads * 100.0) if has_data and leads else None
     return {
-        "leads": _safe_int(df_c["# Leads"].sum()) if not df_c.empty else 0,
-        "deposits": _safe_int(df_c["# FTDs"].sum()) if not df_c.empty else 0,
-        "spend": _safe_float(df_c["$ Spend"].sum()) if not df_c.empty else 0.0,
+        "has_data": has_data,
+        "leads": leads,
+        "deposits": deposits,
+        "spend": spend,
+        "cpl": cpl,
+        "cpa": cpa,
+        "cr": cr,
     }
 
 
@@ -604,6 +690,7 @@ def build_close_recommendation_summary(
 
 # Short slugs used in real ad-set names for each Ad Asset (offer) value.
 _OFFER_ABBR: Dict[str, str] = {
+    "amazon": "Amz",
     "amazon": "Amz",
     "ai trader": "Ait",
     "ai trading": "Ait",
@@ -746,6 +833,8 @@ def build_open_recommendations(
     country_code: str,
     country_name: str,
     medians: Dict[str, Any],
+    *,
+    trend: Optional[Dict[str, Any]] = None,
     n_campaigns: int = 2,
     n_creatives: int = 3,
 ) -> List[Dict[str, Any]]:
@@ -754,8 +843,10 @@ def build_open_recommendations(
     Logic:
     1. Group all qualified combos by targeting (interest).
     2. Exclude targetings already running on this account.
-    3. Pick top targetings by total deposits; diversify offers if possible.
+    3. Pick top targetings using deposits, **§2 trend boosts** (stable / heating up),
+       and de-prioritize stalled interests; diversify offers if possible.
     4. For each targeting, select top creatives; borrow from best group if < 3.
+    5. Label creatives that appear in §2 trend lists.
     """
     today = datetime.now().strftime("%d.%m")
     groups = _group_combos_by_targeting(combos_df, country_name)
@@ -776,9 +867,14 @@ def build_open_recommendations(
             "total_dep": total_dep,
             "best_offer": best_offer,
             "is_running": is_running,
+            "trend_boost": _interest_trend_boost(trend, interest),
         })
 
-    scored.sort(key=lambda g: (-int(not g["is_running"]), -g["total_dep"]))
+    scored.sort(key=lambda g: (
+        -int(not g["is_running"]),
+        -g["trend_boost"],
+        -g["total_dep"],
+    ))
 
     # Select campaigns: prefer not-running, diversify offers
     selected: List[Dict[str, Any]] = []
@@ -844,25 +940,37 @@ def build_open_recommendations(
         if is_running:
             argument += ", scale up"
 
+        trend_tags = _interest_trend_tags(trend, interest)
+        if trend_tags:
+            argument += f", trend: {', '.join(trend_tags)}"
+
         # Pick top N creatives
         creatives_out: List[Dict[str, Any]] = []
         for c in combos_list[:n_creatives]:
+            tnote = _creative_trend_note(trend, c["offer"], interest, c["creative"])
             creatives_out.append({
                 "name": c["creative"][:40],
                 "deposits": c["deposits"],
                 "roi": c["roi"],
-                "note": "",
+                "note": tnote,
             })
         # If fewer than n_creatives, borrow from best global
         if len(creatives_out) < n_creatives and best_global_creative:
             existing_names = {cr["name"] for cr in creatives_out}
             if best_global_creative[:40] not in existing_names:
                 source_interest = all_combos_flat[0]["interest"]
+                src = all_combos_flat[0]
+                borrow_note = f"test: best from {source_interest}"
+                t_extra = _creative_trend_note(
+                    trend, src["offer"], source_interest, best_global_creative,
+                )
+                if t_extra:
+                    borrow_note = f"{borrow_note}; {t_extra}"
                 creatives_out.append({
                     "name": best_global_creative[:40],
                     "deposits": all_combos_flat[0]["deposits"],
                     "roi": all_combos_flat[0]["roi"],
-                    "note": f"test: best from {source_interest}",
+                    "note": borrow_note,
                 })
 
         recs.append({
@@ -876,32 +984,47 @@ def build_open_recommendations(
             "creatives": creatives_out,
             "below_benchmark": quality == "warn",
             "data_median_cpl": medians.get("median_cpl"),
+            "trend_tags": trend_tags,
         })
     return recs
+
+
+def _ellipsis_short(text: str, max_len: int) -> str:
+    """Trim for narrow table cells; use ellipsis when truncated."""
+    s = (text or "").strip()
+    if max_len <= 1 or len(s) <= max_len:
+        return s
+    return s[: max_len - 1] + "…"
 
 
 def format_open_recommendations_for_status_table(
     recs: List[Dict[str, Any]],
     *,
     max_campaigns: int = 2,
+    target_max: int = 12,
+    creative_max: int = 16,
 ) -> str:
     """One-line summary of section 9 open recs for the Account Statuses table.
 
-    Same campaigns and first creative as section 9, compact form:
-    ``offer + targeting + creative`` per campaign, ``; `` between the two bundles.
-    Appends `` ⚠`` when the campaign is marked below benchmark (as in section 9).
+    Dense form for narrow cells: ``slug/target/creative`` per campaign
+    (``slug`` = `_offer_abbr`, same order and first creative as §9),
+    ``; `` between campaigns. Append ``⚠`` when below benchmark (no space).
     """
     if not recs:
         return ""
     parts: List[str] = []
     for r in recs[:max_campaigns]:
         offer = (r.get("offer") or "").strip() or "—"
+        abbr = _offer_abbr(offer) if offer != "—" else "—"
         tgt = (r.get("targeting") or "").strip() or "—"
         creatives = r.get("creatives") or []
         cr0 = creatives[0] if creatives else {}
         cr_name = str(cr0.get("name", "")).strip() or "—"
-        warn = " ⚠" if r.get("below_benchmark") else ""
-        parts.append(f"{offer} + {tgt} + {cr_name}{warn}")
+        warn = "⚠" if r.get("below_benchmark") else ""
+        parts.append(
+            f"{abbr}/{_ellipsis_short(tgt, target_max)}/"
+            f"{_ellipsis_short(cr_name, creative_max)}{warn}"
+        )
     return "; ".join(parts)
 
 
@@ -936,11 +1059,17 @@ def build_country_section(
     targeting = build_targeting_breakdown(df, country)
     creatives = build_creative_breakdown(df, country)
     medians = compute_country_medians(df, country)
+    trend_block = build_trend(df, country, trend_days)
 
     country_accounts = [
         dict(acc) for acc in account_rows
         if not is_omitted_from_account_statuses_table(acc.get("to_do", ""))
     ]
+
+    for acc in country_accounts:
+        acc["account_excel"] = build_account_performance_summary(
+            df, country, acc["alias"],
+        )
 
     close_recs: Dict[str, List] = {}
     close_summaries: Dict[str, Dict[str, Any]] = {}
@@ -964,6 +1093,7 @@ def build_country_section(
                 country_code=cc,
                 country_name=country,
                 medians=medians,
+                trend=trend_block,
             )
 
     for acc in country_accounts:
@@ -977,7 +1107,7 @@ def build_country_section(
         "country": country,
         "cm_comparison": build_cm_comparison(df, country, my_cm),
         "asset_summary": build_asset_summary(df, country),
-        "trend": build_trend(df, country, trend_days),
+        "trend": trend_block,
         "top_combos": top_combos,
         "targeting": targeting,
         "creatives": creatives,

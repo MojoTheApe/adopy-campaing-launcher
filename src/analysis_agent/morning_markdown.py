@@ -45,10 +45,13 @@ def _fmt_float(v: float, decimals: int = 2) -> str:
 
 # Legend for editors: Upload FB / GSheet column K workflow (see gsheet_accounts module doc).
 _ACCOUNT_STATUSES_LEGEND = (
-    "_6–7 **To Do** for ready accounts (✅) matches **section 9 What to Open**: "
-    "`offer + targeting + creative` per campaign (first creative each), joined by `; `; "
-    "trailing ` ⚠` = below benchmark. If section 9 has nothing for that account, **To Do** is "
-    "**—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. "
+    "_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export "
+    "(Excel). "
+    "6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative "
+    "each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; "
+    "trailing `⚠` = below benchmark. Full names are in §9. "
+    "If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the "
+    "GSheet note. Otherwise (not ready) uses col J/K. "
     "GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._"
 )
 
@@ -263,16 +266,47 @@ def _render_account_statuses(account_rows: List[Dict[str, Any]], has_gsheet: boo
             to_do_s = format_account_status_todo_cell(
                 str(r.get("to_do", "")), str(r.get("to_do_extra", "") or ""),
             )
-        cost_s = r.get("cost", "") or "—"
+        ex = r.get("account_excel") or {}
+        if ex.get("has_data"):
+            spend_s = _fmt_money(ex["spend"])
+            leads_s = str(ex["leads"])
+            ftds_s = str(ex["deposits"])
+            cpl_v = ex.get("cpl")
+            cpa_v = ex.get("cpa")
+            cr_v = ex.get("cr")
+            cpl_s = _fmt_money(cpl_v) if cpl_v is not None else "—"
+            cpa_s = _fmt_money(cpa_v) if cpa_v is not None else "—"
+            cr_s = f"{cr_v:.1f}%" if cr_v is not None else "—"
+        else:
+            spend_s = leads_s = ftds_s = cpl_s = cpa_s = cr_s = "—"
         stock_s = r.get("stock", "") or "—"
         table_rows.append([
             r["account_label"],
-            cost_s,
+            spend_s,
+            leads_s,
+            ftds_s,
+            cpl_s,
+            cpa_s,
+            cr_s,
             stock_s,
             to_do_s,
             ready_s,
         ])
-    lines.append(_table(["Account", "Cost", "Asset", "To Do", "✓"], table_rows))
+    lines.append(_table(
+        [
+            "Account",
+            "Spend",
+            "Leads",
+            "FTDs",
+            "CPL",
+            "CPA",
+            "CR",
+            "Asset",
+            "To Do",
+            "✓",
+        ],
+        table_rows,
+    ))
     return "\n".join(lines)
 
 

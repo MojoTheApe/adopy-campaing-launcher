@@ -283,9 +283,9 @@ def parse_account_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]:
         A (0) — CM name
         B (1) — Country code
         C (2) — Account label
-        D (3) — Cost (daily spend)
-        E (4) — Leads
-        G (6) — Actual FTDs
+        D (3) — Cost (daily spend snapshot in sheet)
+        E (4) — Leads (sheet snapshot)
+        G (6) — Actual FTDs (sheet snapshot)
         I (8) — Stock (asset/offer running)
         J (9) — To Do status
         K (10)— Optional: two short bundles for §6–7 (`asset + targeting + creative; …`)
@@ -346,8 +346,9 @@ def fetch_account_rows(
         my_cm: Your CM name to filter by (falls back to MY_CM_NAME env var; None = return all CMs).
 
     Returns:
-        List of dicts with keys: cm, country_code, account_label, alias, to_do,
-        to_do_extra (col K, optional), is_ready.
+        List of dicts with keys: cm, country_code, account_label, alias, cost,
+        leads, ftds, stock, to_do, to_do_extra (col K, optional),
+        is_ready.
         Returns empty list on any error (caller decides whether to continue without GSheet).
     """
     sid = sheet_id or os.environ.get("GSHEET_ACCOUNTS_ID", "").strip()
