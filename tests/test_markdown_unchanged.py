@@ -148,6 +148,37 @@ def test_close_recs_show_account_and_candidate_totals(
     assert "MX_zero_ftd_candidate" in md
 
 
+def test_working_combos_do_not_render_nan_age(
+    enriched_df: pd.DataFrame, accounts_rows: list
+) -> None:
+    """Missing age in a qualified combo should be omitted from display, not printed as nan."""
+    no_age = enriched_df.iloc[0].copy()
+    no_age["Offer"] = "age_missing_offer"
+    no_age["Ad Asset"] = "age_missing_offer"
+    no_age["Interest"] = "pf"
+    no_age["Age"] = pd.NA
+    no_age["Creative"] = "No age creative"
+    no_age["Ad Title"] = "No age creative"
+    no_age["TextSegment"] = "no"
+    no_age["# Leads"] = 2
+    no_age["# FTDs"] = 2
+    no_age["$ Spend"] = 20.0
+    no_age["$ Net"] = 40.0
+    no_age["CPL"] = 10.0
+    no_age["CPA"] = 10.0
+    no_age["CR"] = 100.0
+    no_age["Profit"] = 20.0
+    no_age["ROI"] = 2.0
+    df = pd.concat([enriched_df, pd.DataFrame([no_age])], ignore_index=True)
+
+    report = _build_report_from_fixture(df, accounts_rows)
+    md = render_morning_report_md(report)
+
+    assert " + nan + " not in md.lower()
+    assert "all + pf + No age creative" in md
+    assert "all + pf + nan + No age creative" not in md
+
+
 def test_markdown_matches_snapshot(
     enriched_df: pd.DataFrame, accounts_rows: list
 ) -> None:

@@ -53,6 +53,25 @@ def _key_value(v: Any) -> str:
     return s
 
 
+def _display_value(v: Any, default: str = "") -> str:
+    """Coerce row dimension values for human-readable report labels."""
+    if v is None:
+        return default
+    try:
+        if pd.isna(v):
+            return default
+    except (TypeError, ValueError):
+        pass
+    s = str(v).strip()
+    if not s or s.lower() in ("nan", "none"):
+        return default
+    return s
+
+
+def _combo_label(*parts: Any) -> str:
+    return " + ".join(p for p in (_display_value(part) for part in parts) if p)
+
+
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 def _safe_float(v) -> float:
@@ -222,11 +241,11 @@ def build_trend(
     merged["RecentDep"] = merged["RecentDep"].fillna(0).astype(int)
 
     def _row_to_dict(r) -> Dict[str, Any]:
-        full_creative = str(r.get("Creative") or "").strip()
+        full_creative = _display_value(r.get("Creative"))
         return {
-            "offer": str(r.get("Offer") or "").strip(),
-            "device": str(r.get("Device") or "all").strip(),
-            "interest": str(r.get("Interest") or "").strip(),
+            "offer": _display_value(r.get("Offer")),
+            "device": _display_value(r.get("Device"), "all"),
+            "interest": _display_value(r.get("Interest")),
             "creative": full_creative[:40],  # display: truncated to 40 chars
             "deposits_total": _safe_int(r.get("Deposits")),
             "deposits_recent": _safe_int(r.get("RecentDep")),
@@ -374,14 +393,14 @@ def build_top_combos(combos: pd.DataFrame, country: str, top_n: int = 5) -> List
 
     result = []
     for _, r in top.iterrows():
-        offer_str = str(r.get("Offer") or "").strip()
+        offer_str = _display_value(r.get("Offer"))
         bench = get_benchmark(country, offer_str)
         combo = {
             "offer": offer_str,
-            "device": str(r.get("Device") or "all").strip(),
-            "interest": str(r.get("Interest") or "").strip(),
-            "age": str(r.get("Age") or "").strip(),
-            "creative": str(r.get("Creative") or "").strip(),
+            "device": _display_value(r.get("Device"), "all"),
+            "interest": _display_value(r.get("Interest")),
+            "age": _display_value(r.get("Age")),
+            "creative": _display_value(r.get("Creative")),
             "category": str(r.get("Category", "Strong")),
             "deposits": _safe_int(r.get("Deposits")),
             "leads": _safe_int(r.get("Leads")),
@@ -390,7 +409,7 @@ def build_top_combos(combos: pd.DataFrame, country: str, top_n: int = 5) -> List
             "cpa": _safe_float(r.get("CPA")),
             "cr": _safe_float(r.get("CR")),
             "roi": _safe_float(r.get("ROI")),
-            "top_account": str(r.get("TopAccount") or "").strip(),
+            "top_account": _display_value(r.get("TopAccount")),
             "aggregate_key": {
                 "section": "top_combos",
                 "country": country,
@@ -512,7 +531,7 @@ def build_ai_context_block(
     ]
     for i, c in enumerate(top_combos[:3], 1):
         lines.append(
-            f"{i}. [{c['category']}] {c['device']} + {c['interest']} + {c['age']} + {c['creative']}"
+            f"{i}. [{c['category']}] {_combo_label(c['device'], c['interest'], c['age'], c['creative'])}"
             f"  |  Offer: {c['offer']}  |  Dep: {c['deposits']}  |  ROI: {_fmt(c['roi'])}"
         )
         # Pull target context from KB
@@ -540,7 +559,7 @@ def build_hypotheses_block(
     ]
     for c in top_combos[:3]:
         lines.append(
-            f"  - {c['device']} + {c['interest']} + {c['creative']}  [{c['category']}, {c['deposits']} dep]"
+            f"  - {_combo_label(c['device'], c['interest'], c['creative'])}  [{c['category']}, {c['deposits']} dep]"
         )
 
     top_targets = [t for t in targeting_rows if t["deposits"] > 0][:5]

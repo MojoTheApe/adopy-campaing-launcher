@@ -43,6 +43,10 @@ def _fmt_float(v: float, decimals: int = 2) -> str:
     return f"{v:.{decimals}f}"
 
 
+def _combo_label(*parts: Any) -> str:
+    return " + ".join(str(part).strip() for part in parts if str(part).strip())
+
+
 # Legend for editors: Upload FB / GSheet column K workflow (see gsheet_accounts module doc).
 _ACCOUNT_STATUSES_LEGEND = (
     "_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export "
@@ -169,7 +173,7 @@ def _render_top_combos(combos: List[Dict[str, Any]]) -> str:
         roi_s = _fmt_float(c["roi"]) if c["roi"] else "—"
         cpa_s = _fmt_money(c["cpa"]) if c["cpa"] else "—"
         cpl_s = _fmt_money(c.get("cpl", 0)) if c.get("cpl") else "—"
-        combo_label = f"{c['device']} + {c['interest']} + {c['age']} + {c['creative'][:25]}"
+        combo_label = _combo_label(c["device"], c["interest"], c["age"], c["creative"][:25])
         table_rows.append([
             type_label,
             c["offer"][:15],
