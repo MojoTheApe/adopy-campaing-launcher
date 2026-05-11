@@ -34,9 +34,9 @@ Period: **Apr 12 – Apr 18, 2026 (7d)**
 
 ### 3. Working Combos
 
-| Type     | Offer      | Combo                                  | Dep | CPL   | CPA    | ROI  |
-| -------- | ---------- | -------------------------------------- | --- | ----- | ------ | ---- |
-| Strong ✓ | trader_pro | all + trading + 25 + Brazilian special | 2   | $0.50 | $32.50 | 1.46 |
+| Type     | Offer    | Combo                              | Dep | CPL   | CPA    | ROI  |
+| -------- | -------- | ---------------------------------- | --- | ----- | ------ | ---- |
+| Strong ✓ | trader_… | all + trading + 25 + Brazilian sp… | 2   | $0.50 | $32.50 | 1.46 |
 
 ### 4. AI Context (copy into chat)
 
@@ -71,12 +71,18 @@ Top creatives by deposits:
 
 _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-| Account  | Spend  | Leads | FTDs | CPL   | CPA    | CR   | Asset | To Do                         | ✓ |
-| -------- | ------ | ----- | ---- | ----- | ------ | ---- | ----- | ----------------------------- | - |
-| MX-acc-1 | —      | —     | —    | —     | —      | —    | 5     | Trad/trading/Brazilian speci… | ✅ |
-| BR-acc-1 | $65.00 | 130   | 2    | $0.50 | $32.50 | 1.5% | 3     | Trad/trading/Brazilian speci… | ✅ |
+**MX-acc-1** ✅
+Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
+Status: 5
+To Do: Trad/trading/Brazilian speci…
 
-### 8. What to Close (Optimization)
+**BR-acc-1** ✅
+Perf: $65.00 spend / 130 leads / 2 FTDs / CPL $0.50 / CPA $32.50 / CR 1.5%
+Status: 3
+To Do: Trad/trading/Brazilian speci…
+
+
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 
@@ -122,11 +128,11 @@ Period: **Apr 12 – Apr 18, 2026 (7d)**
 
 ### 3. Working Combos
 
-| Type          | Offer         | Combo                                     | Dep | CPL   | CPA    | ROI  |
-| ------------- | ------------- | ----------------------------------------- | --- | ----- | ------ | ---- |
-| Strong ⚠      | crypto_invest | all + crypto + 25 + Buy bitcoin now       | 3   | $0.50 | $75.00 | 1.02 |
-| Strong ⚠      | trader_pro    | all + trading + 25 + Make money fast      | 2   | $0.50 | $67.50 | 1.11 |
-| Interesting ✓ | trader_pro    | ios + trading + 35+ + iOS exclusive offer | 1   | $3.00 | $30.00 | 2.00 |
+| Type     | Offer    | Combo                              | Dep | CPL   | CPA    | ROI  |
+| -------- | -------- | ---------------------------------- | --- | ----- | ------ | ---- |
+| Strong ⚠ | crypto_… | all + crypto + 25 + Buy bitcoin n… | 3   | $0.50 | $75.00 | 1.02 |
+| Strong ⚠ | trader_… | all + trading + 25 + Make money f… | 2   | $0.50 | $67.50 | 1.11 |
+| Int. ✓   | trader_… | ios + trading + 35+ + iOS exclusi… | 1   | $3.00 | $30.00 | 2.00 |
 
 ### 4. AI Context (copy into chat)
 
@@ -169,12 +175,18 @@ Top creatives by deposits:
 
 _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-| Account  | Spend   | Leads | FTDs | CPL   | CPA    | CR   | Asset | To Do                                                       | ✓ |
-| -------- | ------- | ----- | ---- | ----- | ------ | ---- | ----- | ----------------------------------------------------------- | - |
-| MX-acc-1 | $135.00 | 270   | 2    | $0.50 | $67.50 | 0.7% | 5     | Cryp/crypto/Buy bitcoin now⚠; Trad/trading/Make money fast⚠ | ✅ |
-| BR-acc-1 | —       | —     | —    | —     | —      | —    | 3     | Trad/trading/Make money fast⚠; Cryp/crypto/Buy bitcoin now⚠ | ✅ |
+**MX-acc-1** ✅
+Perf: $135.00 spend / 270 leads / 2 FTDs / CPL $0.50 / CPA $67.50 / CR 0.7%
+Status: 5
+To Do: Cryp/crypto/Buy bitcoin now⚠; Trad/trading/Make money fast⚠
 
-### 8. What to Close (Optimization)
+**BR-acc-1** ✅
+Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
+Status: 3
+To Do: Trad/trading/Make money fast⚠; Cryp/crypto/Buy bitcoin now⚠
+
+
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 

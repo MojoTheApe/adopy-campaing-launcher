@@ -60,7 +60,7 @@ _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Face
 
 _No accounts found for this country in the GSheet._
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 
@@ -113,7 +113,7 @@ _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Face
 
 _No accounts found for this country in the GSheet._
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 
@@ -163,13 +163,13 @@ Period: **May 04 – May 10, 2026 (7d)**
 
 ### 3. Working Combos
 
-| Type     | Offer         | Combo                               | Dep | CPL    | CPA       | ROI  |
-| -------- | ------------- | ----------------------------------- | --- | ------ | --------- | ---- |
-| Strong ⚠ | Mercado Libre | all + HV∩Day + Video P.             | 2   | $49.80 | $74.70    | 1.34 |
-| Strong ✓ | Mercado Libre | all + HV+IPO + Video P              | 2   | $11.51 | $63.31    | 1.58 |
-| Strong ✓ | Mercado Libre | all + HV + Video L.                 | 2   | $19.61 | $245.17   | 0.41 |
-| Strong ✓ | AI Trader     | all + Blue_HV + 40+ + Vid Blue - 5a | 2   | $21.80 | $991.79   | 0.18 |
-| Strong ⚠ | AI Trader     | all + Blue_HV + 40+ + Vid Blue - 6a | 2   | $22.13 | $2,035.88 | 0.05 |
+| Type     | Offer    | Combo                             | Dep | CPL    | CPA       | ROI  |
+| -------- | -------- | --------------------------------- | --- | ------ | --------- | ---- |
+| Strong ⚠ | Mercado… | all + HV∩Day + Video P.           | 2   | $49.80 | $74.70    | 1.34 |
+| Strong ✓ | Mercado… | all + HV+IPO + Video P            | 2   | $11.51 | $63.31    | 1.58 |
+| Strong ✓ | Mercado… | all + HV + Video L.               | 2   | $19.61 | $245.17   | 0.41 |
+| Strong ✓ | AI Trad… | all + Blue_HV + 40+ + Vid Blue -… | 2   | $21.80 | $991.79   | 0.18 |
+| Strong ⚠ | AI Trad… | all + Blue_HV + 40+ + Vid Blue -… | 2   | $22.13 | $2,035.88 | 0.05 |
 
 ### 4. AI Context (copy into chat)
 
@@ -221,36 +221,34 @@ Top creatives by deposits:
 
 _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-| Account             | Spend     | Leads | FTDs | CPL    | CPA | CR   | Asset                           | To Do                                                   | ✓ |
-| ------------------- | --------- | ----- | ---- | ------ | --- | ---- | ------------------------------- | ------------------------------------------------------- | - |
-| Facebook_2098 CL    | $211.05   | 0     | 0    | —      | —   | —    | the leads counted on today  - 7 | Ml/TradingYB/I…/ML12_Story3⚠; Ait/Blue_HV/Vid Blue - 5a | ✅ |
-| FacebookMKTO1328 CL | $1,754.14 | 97    | 0    | $18.08 | —   | 0.0% | —                               | Ml/TradingYB/I…/ML12_Story3⚠; Ml/HV+IPO/Video P         | ✅ |
+**Facebook_2098 CL** ✅
+Perf: $211.05 spend | 0 leads | 0 FTDs | CPL — | CPA — | CR —
+Status: the leads counted on today  - 7
+To Do: Ml/TradingYB/I…/ML12_Story3⚠; Ait/Blue_HV/Vid Blue - 5a
 
-### 8. What to Close (Optimization)
+**FacebookMKTO1328 CL** ✅
+Perf: $1,754.14 spend | 97 leads | 0 FTDs | CPL $18.08 | CPA — | CR 0.0%
+Status: —
+To Do: Ml/TradingYB/I…/ML12_Story3⚠; Ml/HV+IPO/Video P
 
-**Facebook_2098 CL:**
-
-Account total: 0 leads, 0 FTDs, $211.05 spend
-Close candidates: 0 leads, 0 FTDs, $211.05 spend
-
-| Ad Set                        | Spend   | Leads | FTDs | CPL | CPA | Reason |
-| ----------------------------- | ------- | ----- | ---- | --- | --- | ------ |
-| CL_ML_IOS_Images_Day_35_10.05 | $115.95 | 0     | 0    | —   | —   | 0 FTD  |
-| CL_ML_IOS_Images_IPO_35_10.05 | $95.10  | 0     | 0    | —   | —   | 0 FTD  |
+### 8. Optimization
 
 **FacebookMKTO1328 CL:**
 
-Account total: 97 leads, 0 FTDs, $1,754.14 spend
-Close candidates: 79 leads, 0 FTDs, $1,302.94 spend
+| Campaign                               | Spend   | Leads | FTDs | CPL    | CPA |
+| -------------------------------------- | ------- | ----- | ---- | ------ | --- |
+| CL_Ait_All_Video_Blue_IPO_40+_06.05    | $340.60 | 21    | 0    | $16.22 | —   |
+| CL_Ait_All_Video_Blue_IPO_40+_06.05    | $287.46 | 13    | 0    | $22.11 | —   |
+| CL_Ait_All_Video_Blue_Reading_40_07.05 | $231.76 | 17    | 0    | $13.63 | —   |
+| CL_Ait_All_Video_Blue_Mix_40_07.05     | $222.84 | 14    | 0    | $15.92 | —   |
+| CL_Ait_All_Video_Blue_Mix_40_07.05     | $220.28 | 14    | 0    | $15.73 | —   |
 
-| Ad Set                                 | Spend   | Leads | FTDs | CPL    | CPA | Reason |
-| -------------------------------------- | ------- | ----- | ---- | ------ | --- | ------ |
-| CL_Ait_All_Video_Blue_IPO_40+_06.05    | $340.60 | 21    | 0    | $16.22 | —   | 0 FTD  |
-| CL_Ait_All_Video_Blue_IPO_40+_06.05    | $287.46 | 13    | 0    | $22.11 | —   | 0 FTD  |
-| CL_Ait_All_Video_Blue_Reading_40_07.05 | $231.76 | 17    | 0    | $13.63 | —   | 0 FTD  |
-| CL_Ait_All_Video_Blue_Mix_40_07.05     | $222.84 | 14    | 0    | $15.92 | —   | 0 FTD  |
-| CL_Ait_All_Video_Blue_Mix_40_07.05     | $220.28 | 14    | 0    | $15.73 | —   | 0 FTD  |
+**Facebook_2098 CL:**
 
+| Campaign                      | Spend   | Leads | FTDs | CPL | CPA |
+| ----------------------------- | ------- | ----- | ---- | --- | --- |
+| CL_ML_IOS_Images_Day_35_10.05 | $115.95 | 0     | 0    | —   | —   |
+| CL_ML_IOS_Images_IPO_35_10.05 | $95.10  | 0     | 0    | —   | —   |
 
 ### 9. What to Open (2 Campaigns per Account)
 
@@ -311,13 +309,13 @@ Period: **May 04 – May 10, 2026 (7d)**
 
 ### 3. Working Combos
 
-| Type          | Offer         | Combo                                      | Dep | CPL    | CPA       | ROI  |
-| ------------- | ------------- | ------------------------------------------ | --- | ------ | --------- | ---- |
-| Strong ✓      | Mercado Libre | all + GMB/TradingYB + 35 + 2022_1_Story1   | 4   | $12.06 | $401.06   | 0.50 |
-| Strong ✓      | Bancolombia   | all + GMBL/Investment + 35 + 1377_2_Story3 | 3   | $17.52 | $1,173.73 | 0.22 |
-| Strong ✓      | Mercado Libre | ios + GMB/Investment + 35 + 2022_1_Story3  | 2   | $21.78 | $326.64   | 0.31 |
-| Strong ✓      | Bancolombia   | all + FX + 2000 1                          | 2   | $14.02 | $631.11   | 0.24 |
-| Interesting ⚠ | Bancolombia   | all + FX + 1377 2                          | 1   | $26.48 | $370.71   | 0.27 |
+| Type     | Offer    | Combo                              | Dep | CPL    | CPA       | ROI  |
+| -------- | -------- | ---------------------------------- | --- | ------ | --------- | ---- |
+| Strong ✓ | Mercado… | all + GMB/TradingYB + 35 + 2022_1… | 4   | $12.06 | $401.06   | 0.50 |
+| Strong ✓ | Bancolo… | all + GMBL/Investment + 35 + 1377… | 3   | $17.52 | $1,173.73 | 0.22 |
+| Strong ✓ | Mercado… | ios + GMB/Investment + 35 + 2022_… | 2   | $21.78 | $326.64   | 0.31 |
+| Strong ✓ | Bancolo… | all + FX + 2000 1                  | 2   | $14.02 | $631.11   | 0.24 |
+| Int. ⚠   | Bancolo… | all + FX + 1377 2                  | 1   | $26.48 | $370.71   | 0.27 |
 
 ### 4. AI Context (copy into chat)
 
@@ -370,7 +368,7 @@ _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Face
 
 _No accounts found for this country in the GSheet._
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 
@@ -425,7 +423,7 @@ _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Face
 
 _No accounts found for this country in the GSheet._
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 
@@ -473,13 +471,13 @@ Period: **May 04 – May 10, 2026 (7d)**
 
 ### 3. Working Combos
 
-| Type          | Offer           | Combo                                        | Dep | CPL    | CPA       | ROI  |
-| ------------- | --------------- | -------------------------------------------- | --- | ------ | --------- | ---- |
-| Strong ⚠      | Favorita        | all + Trading + 1319 3                       | 5   | $26.79 | $2,019.63 | 0.06 |
-| Strong ⚠      | Favorita        | all + Trading + 35+ + Vid 1 - learn          | 3   | $25.17 | $646.12   | 0.15 |
-| Strong ⚠      | Favorita        | all + Trading + 1389 2                       | 2   | $38.53 | $2,427.25 | 0.04 |
-| Interesting ⚠ | AI Trader       | all + TRDEZ + 35 + 2041_1_1_Story3           | 1   | $43.06 | $258.39   | 0.39 |
-| Interesting ⚠ | Lundin Gold Inc | ios + LND_Mix/Reading + 35 + LND 2 - Story 1 | 1   | $51.25 | $563.72   | 0.18 |
+| Type     | Offer    | Combo                              | Dep | CPL    | CPA       | ROI  |
+| -------- | -------- | ---------------------------------- | --- | ------ | --------- | ---- |
+| Strong ⚠ | Favorita | all + Trading + 1319 3             | 5   | $26.79 | $2,019.63 | 0.06 |
+| Strong ⚠ | Favorita | all + Trading + 35+ + Vid 1 - lea… | 3   | $25.17 | $646.12   | 0.15 |
+| Strong ⚠ | Favorita | all + Trading + 1389 2             | 2   | $38.53 | $2,427.25 | 0.04 |
+| Int. ⚠   | AI Trad… | all + TRDEZ + 35 + 2041_1_1_Story3 | 1   | $43.06 | $258.39   | 0.39 |
+| Int. ⚠   | Lundin…  | ios + LND_Mix/Reading + 35 + LND…  | 1   | $51.25 | $563.72   | 0.18 |
 
 ### 4. AI Context (copy into chat)
 
@@ -533,33 +531,31 @@ Top creatives by deposits:
 
 _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-| Account             | Spend   | Leads | FTDs | CPL     | CPA | CR   | Asset                     | To Do                                                         | ✓ |
-| ------------------- | ------- | ----- | ---- | ------- | --- | ---- | ------------------------- | ------------------------------------------------------------- | - |
-| FacebookMKTO1308 EC | $188.78 | 12    | 0    | $15.73  | —   | 0.0% | copy ai trader            | Ait/TRDEZ/2041_1_1_Story3⚠; Lnd/LND_Mix/Rea…/LND 2 - Story 1⚠ | ✅ |
-| FacebookMKTO1321 EC | $446.68 | 4     | 0    | $111.67 | —   | 0.0% | optimisation to lower CPL | Ait/TRDEZ/2041_1_1_Story3⚠; Lnd/LND_Mix/Rea…/LND 2 - Story 1⚠ | ✅ |
+**FacebookMKTO1308 EC** ✅
+Perf: $188.78 spend | 12 leads | 0 FTDs | CPL $15.73 | CPA — | CR 0.0%
+Status: copy ai trader
+To Do: Ait/TRDEZ/2041_1_1_Story3⚠; Lnd/LND_Mix/Rea…/LND 2 - Story 1⚠
 
-### 8. What to Close (Optimization)
+**FacebookMKTO1321 EC** ✅
+Perf: $446.68 spend | 4 leads | 0 FTDs | CPL $111.67 | CPA — | CR 0.0%
+Status: optimisation to lower CPL
+To Do: Ait/TRDEZ/2041_1_1_Story3⚠; Lnd/LND_Mix/Rea…/LND 2 - Story 1⚠
 
-**FacebookMKTO1308 EC:**
-
-Account total: 12 leads, 0 FTDs, $188.78 spend
-Close candidates: 12 leads, 0 FTDs, $188.60 spend
-
-| Ad Set                        | Spend   | Leads | FTDs | CPL    | CPA | Reason |
-| ----------------------------- | ------- | ----- | ---- | ------ | --- | ------ |
-| EC_Fav_All_Video_Day_35_27.04 | $188.60 | 12    | 0    | $15.72 | —   | 0 FTD  |
+### 8. Optimization
 
 **FacebookMKTO1321 EC:**
 
-Account total: 4 leads, 0 FTDs, $446.68 spend
-Close candidates: 4 leads, 0 FTDs, $433.93 spend
+| Campaign                          | Spend   | Leads | FTDs | CPL     | CPA |
+| --------------------------------- | ------- | ----- | ---- | ------- | --- |
+| EC_Ait_All_Video_Day_35_04.05     | $238.96 | 2     | 0    | $119.48 | —   |
+| EC_Ait_IOS_Video_trading_35_02.05 | $121.82 | 2     | 0    | $60.91  | —   |
+| EC_Ait_All_Video_trading_35_04.05 | $73.15  | 0     | 0    | —       | —   |
 
-| Ad Set                            | Spend   | Leads | FTDs | CPL     | CPA | Reason |
-| --------------------------------- | ------- | ----- | ---- | ------- | --- | ------ |
-| EC_Ait_All_Video_Day_35_04.05     | $238.96 | 2     | 0    | $119.48 | —   | 0 FTD  |
-| EC_Ait_IOS_Video_trading_35_02.05 | $121.82 | 2     | 0    | $60.91  | —   | 0 FTD  |
-| EC_Ait_All_Video_trading_35_04.05 | $73.15  | 0     | 0    | —       | —   | 0 FTD  |
+**FacebookMKTO1308 EC:**
 
+| Campaign                      | Spend   | Leads | FTDs | CPL    | CPA |
+| ----------------------------- | ------- | ----- | ---- | ------ | --- |
+| EC_Fav_All_Video_Day_35_27.04 | $188.60 | 12    | 0    | $15.72 | —   |
 
 ### 9. What to Open (2 Campaigns per Account)
 
@@ -631,7 +627,7 @@ _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Face
 
 _No accounts found for this country in the GSheet._
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 
@@ -681,13 +677,13 @@ Period: **May 04 – May 10, 2026 (7d)**
 
 ### 3. Working Combos
 
-| Type     | Offer | Combo                            | Dep | CPL     | CPA       | ROI  |
-| -------- | ----- | -------------------------------- | --- | ------- | --------- | ---- |
-| Strong ⚠ | -     | all + GMBL + 1975 25             | 4   | $172.31 | $947.72   | 0.47 |
-| Strong ⚠ | -     | all + Day + TR8                  | 4   | $128.81 | $966.05   | 0.21 |
-| Strong ⚠ | -     | all + Day + 1975 25 - Copy       | 4   | $100.87 | $781.70   | 0.27 |
-| Strong ⚠ | -     | all + Day + 1975 7               | 3   | $153.94 | $1,436.73 | 0.16 |
-| Strong ✓ | -     | all + GMBL + TR5                 | 3   | $97.46  | $1,072.05 | 0.42 |
+| Type     | Offer | Combo                      | Dep | CPL     | CPA       | ROI  |
+| -------- | ----- | -------------------------- | --- | ------- | --------- | ---- |
+| Strong ⚠ | -     | all + GMBL + 1975 25       | 4   | $172.31 | $947.72   | 0.47 |
+| Strong ⚠ | -     | all + Day + TR8            | 4   | $128.81 | $966.05   | 0.21 |
+| Strong ⚠ | -     | all + Day + 1975 25 - Copy | 4   | $100.87 | $781.70   | 0.27 |
+| Strong ⚠ | -     | all + Day + 1975 7         | 3   | $153.94 | $1,436.73 | 0.16 |
+| Strong ✓ | -     | all + GMBL + TR5           | 3   | $97.46  | $1,072.05 | 0.42 |
 
 ### 4. AI Context (copy into chat)
 
@@ -741,147 +737,159 @@ Top creatives by deposits:
 
 _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-| Account                           | Spend     | Leads | FTDs | CPL     | CPA     | CR   | Asset                                              | To Do                                              | ✓ |
-| --------------------------------- | --------- | ----- | ---- | ------- | ------- | ---- | -------------------------------------------------- | -------------------------------------------------- | - |
-| FacebookMKTO1202 KW               | $727.86   | 73    | 2    | $9.97   | $363.93 | 2.7% | Requires verification                              | -/GMBL/1975 25⚠; -/Mix_Mix_Tra…/Image 7            | ✅ |
-| FacebookMKTO1298 KW               | $348.75   | 3     | 0    | $116.25 | —       | 0.0% | rejected                                           | -/Reading/1975 25 - Copy 2; -/Mix_Mix_Tra…/Image 7 | ✅ |
-| FacebookMKTO1343 KW               | $0.00     | 63    | 0    | $0.00   | —       | 0.0% | —                                                  | -/Day/TR8⚠; -/Reading/1975 25 - Copy 2             | ✅ |
-| FacebookMKTO1323 KW               | $1,340.71 | 48    | 0    | $27.93  | —       | 0.0% | rejected                                           | -/Reading/1975 25 - Copy 2; -/GMBL/1975 25⚠        | ✅ |
-| Facebook_6218 KW 2300223387155936 | —         | —     | —    | —       | —       | —    | —                                                  | -/Day/TR8⚠; -/Reading/1975 25 - Copy 2             | ✅ |
-| Facebook662 KW                    | $357.82   | 0     | 0    | —       | —       | —    | Paynemt error                                      | -/Day/TR8⚠; -/Reading/1975 25 - Copy 2             | ✅ |
-| FacebookMKTO1286 KW               | $21.32    | 1     | 0    | $21.32  | —       | 0.0% | opened new page seems like no verification anymore | -/Day/TR8⚠; -/Reading/1975 25 - Copy 2             | ✅ |
+**FacebookMKTO1202 KW** ✅
+Perf: $727.86 spend | 73 leads | 2 FTDs | CPL $9.97 | CPA $363.93 | CR 2.7%
+Status: Requires verification
+To Do: Trl/GMBL/1975 25⚠; Trl/Mix_Mix_Tra…/Image 7
 
-### 8. What to Close (Optimization)
+**FacebookMKTO1298 KW** ✅
+Perf: $348.75 spend | 3 leads | 0 FTDs | CPL $116.25 | CPA — | CR 0.0%
+Status: rejected
+To Do: Trl/Reading/1975 25 - Copy 2; Trl/Mix_Mix_Tra…/Image 7
 
-**FacebookMKTO1202 KW:**
+**FacebookMKTO1343 KW** ✅
+Perf: $0.00 spend | 63 leads | 0 FTDs | CPL $0.00 | CPA — | CR 0.0%
+Status: —
+To Do: Trl/Day/TR8⚠; Trl/Reading/1975 25 - Copy 2
 
-Account total: 73 leads, 2 FTDs, $727.86 spend
-Close candidates: 45 leads, 0 FTDs, $498.23 spend
+**FacebookMKTO1323 KW** ✅
+Perf: $1,340.71 spend | 48 leads | 0 FTDs | CPL $27.93 | CPA — | CR 0.0%
+Status: rejected
+To Do: Trl/Reading/1975 25 - Copy 2; Trl/GMBL/1975 25⚠
 
-| Ad Set                                 | Spend   | Leads | FTDs | CPL    | CPA | Reason |
-| -------------------------------------- | ------- | ----- | ---- | ------ | --- | ------ |
-| KW_Trl_IOS_Images_IPO_30_05.05         | $142.57 | 16    | 0    | $8.91  | —   | 0 FTD  |
-| KW_Trl_IOS_Images_Mix/Reading_30_05.05 | $132.43 | 12    | 0    | $11.04 | —   | 0 FTD  |
-| KW_Trl_All_Images_Day_35_04.05         | $127.42 | 15    | 0    | $8.49  | —   | 0 FTD  |
-| KW_Trl_All_Images_Mix/Reading_35_04.05 | $95.81  | 2     | 0    | $47.91 | —   | 0 FTD  |
+**Facebook_6218 KW 2300223387155936** ✅
+Perf: — spend | — leads | — FTDs | CPL — | CPA — | CR —
+Status: —
+To Do: Trl/Day/TR8⚠; Trl/Reading/1975 25 - Copy 2
 
-**FacebookMKTO1298 KW:**
+**Facebook662 KW** ✅
+Perf: $357.82 spend | 0 leads | 0 FTDs | CPL — | CPA — | CR —
+Status: Paynemt error
+To Do: Trl/Day/TR8⚠; Trl/Reading/1975 25 - Copy 2
 
-Account total: 3 leads, 0 FTDs, $348.75 spend
-Close candidates: 0 leads, 0 FTDs, $348.24 spend
+**FacebookMKTO1286 KW** ✅
+Perf: $21.32 spend | 1 leads | 0 FTDs | CPL $21.32 | CPA — | CR 0.0%
+Status: opened new page seems like no verification anymore
+To Do: Trl/Day/TR8⚠; Trl/Reading/1975 25 - Copy 2
 
-| Ad Set                          | Spend   | Leads | FTDs | CPL | CPA | Reason |
-| ------------------------------- | ------- | ----- | ---- | --- | --- | ------ |
-| KW_ALG_All_Images_Day_25_07.05  | $217.50 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_ALG_All_Images_GMBL_25_07.05 | $130.74 | 0     | 0    | —   | —   | 0 FTD  |
+### 8. Optimization
 
 **FacebookMKTO1323 KW:**
 
-Account total: 48 leads, 0 FTDs, $1,340.71 spend
-Close candidates: 0 leads, 0 FTDs, $1,340.71 spend
+| Campaign                           | Spend   | Leads | FTDs | CPL | CPA |
+| ---------------------------------- | ------- | ----- | ---- | --- | --- |
+| KW_ALG_IOS_Images_Day_30_07.05     | $400.18 | 0     | 0    | —   | —   |
+| KW_ALG_IOS_Images_SM_30_07.05      | $393.18 | 0     | 0    | —   | —   |
+| KW_Trl_IOS_Images_IPO_30_07.05     | $391.31 | 0     | 0    | —   | —   |
+| KW_Trl_IOS_Images_Trading_30_07.05 | $156.04 | 0     | 0    | —   | —   |
 
-| Ad Set                             | Spend   | Leads | FTDs | CPL | CPA | Reason |
-| ---------------------------------- | ------- | ----- | ---- | --- | --- | ------ |
-| KW_ALG_IOS_Images_Day_30_07.05     | $400.18 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_ALG_IOS_Images_SM_30_07.05      | $393.18 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_IOS_Images_IPO_30_07.05     | $391.31 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_IOS_Images_Trading_30_07.05 | $156.04 | 0     | 0    | —   | —   | 0 FTD  |
+**FacebookMKTO1298 KW:**
+
+| Campaign                        | Spend   | Leads | FTDs | CPL | CPA |
+| ------------------------------- | ------- | ----- | ---- | --- | --- |
+| KW_ALG_All_Images_Day_25_07.05  | $217.50 | 0     | 0    | —   | —   |
+| KW_ALG_All_Images_GMBL_25_07.05 | $130.74 | 0     | 0    | —   | —   |
+
+**FacebookMKTO1202 KW:**
+
+| Campaign                               | Spend   | Leads | FTDs | CPL    | CPA |
+| -------------------------------------- | ------- | ----- | ---- | ------ | --- |
+| KW_Trl_IOS_Images_IPO_30_05.05         | $142.57 | 16    | 0    | $8.91  | —   |
+| KW_Trl_IOS_Images_Mix/Reading_30_05.05 | $132.43 | 12    | 0    | $11.04 | —   |
+| KW_Trl_All_Images_Day_35_04.05         | $127.42 | 15    | 0    | $8.49  | —   |
+| KW_Trl_All_Images_Mix/Reading_35_04.05 | $95.81  | 2     | 0    | $47.91 | —   |
 
 **Facebook662 KW:**
 
-Account total: 0 leads, 0 FTDs, $357.82 spend
-Close candidates: 0 leads, 0 FTDs, $357.82 spend
-
-| Ad Set                                       | Spend   | Leads | FTDs | CPL | CPA | Reason |
-| -------------------------------------------- | ------- | ----- | ---- | --- | --- | ------ |
-| KW_Trl_All_ImagesVideos_Mix/Reading_30_28.04 | $114.55 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_All_Images_Mix/Reading_30_30.04       | $109.06 | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_All_Images_Trading_30_30.04           | $87.10  | 0     | 0    | —   | —   | 0 FTD  |
-| KW_Trl_All_ImagesVideos_Mix/Day_30_28.04     | $47.11  | 0     | 0    | —   | —   | 0 FTD  |
-
+| Campaign                                     | Spend   | Leads | FTDs | CPL | CPA |
+| -------------------------------------------- | ------- | ----- | ---- | --- | --- |
+| KW_Trl_All_ImagesVideos_Mix/Reading_30_28.04 | $114.55 | 0     | 0    | —   | —   |
+| KW_Trl_All_Images_Mix/Reading_30_30.04       | $109.06 | 0     | 0    | —   | —   |
+| KW_Trl_All_Images_Trading_30_30.04           | $87.10  | 0     | 0    | —   | —   |
+| KW_Trl_All_ImagesVideos_Mix/Day_30_28.04     | $47.11  | 0     | 0    | —   | —   |
 
 ### 9. What to Open (2 Campaigns per Account)
 
 **FacebookMKTO1202 KW:**
 
-  Campaign 1: `KW_-_All_Video_GMBL_11.05`   [GMBL — 12 dep, best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
+  Campaign 1: `KW_Trl_All_Video_GMBL_11.05`   [GMBL — 12 dep, best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
     - 1975 25  (4 dep, ROI 0.47)  (trend: stable + recent)
     - TR5  (3 dep, ROI 0.42)  (trend: stable + recent)
     - 1962 8  (2 dep, ROI 0.07)  (trend: stalled (recovery))
 
-  Campaign 2: `KW_-_All_Image_Mix_Mix_Trading_25+_11.05`   [Mix_Mix_Trading — 3 dep, 2nd best targeting, trend: heating up]
+  Campaign 2: `KW_Trl_All_Image_Mix_Mix_Trading_25+_11.05`   [Mix_Mix_Trading — 3 dep, 2nd best targeting, trend: heating up]
     - Image 7  (2 dep, ROI 1.36)  (trend: all recent dep)
     - Image 2  (1 dep, ROI 0.54)  (trend: all recent dep)
     - 1975 25  (4 dep, ROI 0.47)  (test: best from GMBL; trend: stable + recent)
 
 **FacebookMKTO1298 KW:**
 
-  Campaign 1: `KW_-_All_Video_Reading_11.05`   [Reading — 3 dep, best targeting, trend: stable, heating up]
+  Campaign 1: `KW_Trl_All_Video_Reading_11.05`   [Reading — 3 dep, best targeting, trend: stable, heating up]
     - 1975 25 - Copy 2  (2 dep, ROI 0.59)  (trend: stable + recent)
     - 1_shop_1975 - AR Trolley Officially  (1 dep, ROI 2.55)  (trend: all recent dep)
     - 1975 25  (4 dep, ROI 0.47)  (test: best from GMBL; trend: stable + recent)
 
-  Campaign 2: `KW_-_All_Image_Mix_Mix_Trading_25+_11.05`   [Mix_Mix_Trading — 3 dep, 2nd best targeting, trend: heating up]
+  Campaign 2: `KW_Trl_All_Image_Mix_Mix_Trading_25+_11.05`   [Mix_Mix_Trading — 3 dep, 2nd best targeting, trend: heating up]
     - Image 7  (2 dep, ROI 1.36)  (trend: all recent dep)
     - Image 2  (1 dep, ROI 0.54)  (trend: all recent dep)
     - 1975 25  (4 dep, ROI 0.47)  (test: best from GMBL; trend: stable + recent)
 
 **FacebookMKTO1343 KW:**
 
-  Campaign 1: `KW_-_All_Video_Day_11.05`   [Day — 21 dep, best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
+  Campaign 1: `KW_Trl_All_Video_Day_11.05`   [Day — 21 dep, best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
     - TR8  (4 dep, ROI 0.21)  (trend: stable + recent)
     - 1975 25 - Copy  (4 dep, ROI 0.27)  (trend: stable + recent)
     - 1975 7  (3 dep, ROI 0.16)  (trend: stable + recent)
 
-  Campaign 2: `KW_-_All_Video_Reading_11.05`   [Reading — 3 dep, 2nd best targeting, trend: stable, heating up]
+  Campaign 2: `KW_Trl_All_Video_Reading_11.05`   [Reading — 3 dep, 2nd best targeting, trend: stable, heating up]
     - 1975 25 - Copy 2  (2 dep, ROI 0.59)  (trend: stable + recent)
     - 1_shop_1975 - AR Trolley Officially  (1 dep, ROI 2.55)  (trend: all recent dep)
     - 1975 25  (4 dep, ROI 0.47)  (test: best from GMBL; trend: stable + recent)
 
 **FacebookMKTO1323 KW:**
 
-  Campaign 1: `KW_-_All_Video_Reading_11.05`   [Reading — 3 dep, best targeting, trend: stable, heating up]
+  Campaign 1: `KW_Trl_All_Video_Reading_11.05`   [Reading — 3 dep, best targeting, trend: stable, heating up]
     - 1975 25 - Copy 2  (2 dep, ROI 0.59)  (trend: stable + recent)
     - 1_shop_1975 - AR Trolley Officially  (1 dep, ROI 2.55)  (trend: all recent dep)
     - 1975 25  (4 dep, ROI 0.47)  (test: best from GMBL; trend: stable + recent)
 
-  Campaign 2: `KW_-_All_Video_GMBL_11.05`   [GMBL — 12 dep, 2nd best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
+  Campaign 2: `KW_Trl_All_Video_GMBL_11.05`   [GMBL — 12 dep, 2nd best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
     - 1975 25  (4 dep, ROI 0.47)  (trend: stable + recent)
     - TR5  (3 dep, ROI 0.42)  (trend: stable + recent)
     - 1962 8  (2 dep, ROI 0.07)  (trend: stalled (recovery))
 
 **Facebook_6218 KW 2300223387155936:**
 
-  Campaign 1: `KW_-_All_Video_Day_11.05`   [Day — 21 dep, best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
+  Campaign 1: `KW_Trl_All_Video_Day_11.05`   [Day — 21 dep, best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
     - TR8  (4 dep, ROI 0.21)  (trend: stable + recent)
     - 1975 25 - Copy  (4 dep, ROI 0.27)  (trend: stable + recent)
     - 1975 7  (3 dep, ROI 0.16)  (trend: stable + recent)
 
-  Campaign 2: `KW_-_All_Video_Reading_11.05`   [Reading — 3 dep, 2nd best targeting, trend: stable, heating up]
+  Campaign 2: `KW_Trl_All_Video_Reading_11.05`   [Reading — 3 dep, 2nd best targeting, trend: stable, heating up]
     - 1975 25 - Copy 2  (2 dep, ROI 0.59)  (trend: stable + recent)
     - 1_shop_1975 - AR Trolley Officially  (1 dep, ROI 2.55)  (trend: all recent dep)
     - 1975 25  (4 dep, ROI 0.47)  (test: best from GMBL; trend: stable + recent)
 
 **Facebook662 KW:**
 
-  Campaign 1: `KW_-_All_Video_Day_11.05`   [Day — 21 dep, best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
+  Campaign 1: `KW_Trl_All_Video_Day_11.05`   [Day — 21 dep, best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
     - TR8  (4 dep, ROI 0.21)  (trend: stable + recent)
     - 1975 25 - Copy  (4 dep, ROI 0.27)  (trend: stable + recent)
     - 1975 7  (3 dep, ROI 0.16)  (trend: stable + recent)
 
-  Campaign 2: `KW_-_All_Video_Reading_11.05`   [Reading — 3 dep, 2nd best targeting, trend: stable, heating up]
+  Campaign 2: `KW_Trl_All_Video_Reading_11.05`   [Reading — 3 dep, 2nd best targeting, trend: stable, heating up]
     - 1975 25 - Copy 2  (2 dep, ROI 0.59)  (trend: stable + recent)
     - 1_shop_1975 - AR Trolley Officially  (1 dep, ROI 2.55)  (trend: all recent dep)
     - 1975 25  (4 dep, ROI 0.47)  (test: best from GMBL; trend: stable + recent)
 
 **FacebookMKTO1286 KW:**
 
-  Campaign 1: `KW_-_All_Video_Day_11.05`   [Day — 21 dep, best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
+  Campaign 1: `KW_Trl_All_Video_Day_11.05`   [Day — 21 dep, best targeting, trend: stable, heating up, stalled]  ⚠ below benchmark
     - TR8  (4 dep, ROI 0.21)  (trend: stable + recent)
     - 1975 25 - Copy  (4 dep, ROI 0.27)  (trend: stable + recent)
     - 1975 7  (3 dep, ROI 0.16)  (trend: stable + recent)
 
-  Campaign 2: `KW_-_All_Video_Reading_11.05`   [Reading — 3 dep, 2nd best targeting, trend: stable, heating up]
+  Campaign 2: `KW_Trl_All_Video_Reading_11.05`   [Reading — 3 dep, 2nd best targeting, trend: stable, heating up]
     - 1975 25 - Copy 2  (2 dep, ROI 0.59)  (trend: stable + recent)
     - 1_shop_1975 - AR Trolley Officially  (1 dep, ROI 2.55)  (trend: all recent dep)
     - 1975 25  (4 dep, ROI 0.47)  (test: best from GMBL; trend: stable + recent)
@@ -925,11 +933,11 @@ Period: **May 04 – May 10, 2026 (7d)**
 
 ### 3. Working Combos
 
-| Type     | Offer  | Combo                    | Dep | CPL    | CPA       | ROI  |
-| -------- | ------ | ------------------------ | --- | ------ | --------- | ---- |
-| Strong ⚠ | Amazon | all + PF + 700 2         | 6   | $15.49 | $1,624.31 | 0.12 |
-| Strong ⚠ | Amazon | all + SM + 1983 2        | 2   | $15.07 | $1,823.13 | 0.11 |
-| Strong ⚠ | Amazon | all + SM + CCBlack       | 2   | $9.43  | $1,221.26 | 0.16 |
+| Type     | Offer  | Combo              | Dep | CPL    | CPA       | ROI  |
+| -------- | ------ | ------------------ | --- | ------ | --------- | ---- |
+| Strong ⚠ | Amazon | all + PF + 700 2   | 6   | $15.49 | $1,624.31 | 0.12 |
+| Strong ⚠ | Amazon | all + SM + 1983 2  | 2   | $15.07 | $1,823.13 | 0.11 |
+| Strong ⚠ | Amazon | all + SM + CCBlack | 2   | $9.43  | $1,221.26 | 0.16 |
 
 ### 4. AI Context (copy into chat)
 
@@ -983,35 +991,33 @@ Top creatives by deposits:
 
 _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-| Account             | Spend     | Leads | FTDs | CPL    | CPA       | CR   | Asset | To Do                         | ✓ |
-| ------------------- | --------- | ----- | ---- | ------ | --------- | ---- | ----- | ----------------------------- | - |
-| FacebookMKTO1296 MX | $5,951.46 | 415   | 4    | $14.34 | $1,487.87 | 1.0% | —     | Amz/PF/700 2⚠; Amz/SM/1983 2⚠ | ✅ |
-| FacebookUL721 MX    | $1,641.32 | 198   | 2    | $8.29  | $820.66   | 1.0% | —     | Amz/PF/700 2⚠; Amz/SM/1983 2⚠ | ✅ |
+**FacebookMKTO1296 MX** ✅
+Perf: $5,951.46 spend | 415 leads | 4 FTDs | CPL $14.34 | CPA $1,487.87 | CR 1.0%
+Status: —
+To Do: Amz/PF/700 2⚠; Amz/SM/1983 2⚠
 
-### 8. What to Close (Optimization)
+**FacebookUL721 MX** ✅
+Perf: $1,641.32 spend | 198 leads | 2 FTDs | CPL $8.29 | CPA $820.66 | CR 1.0%
+Status: —
+To Do: Amz/PF/700 2⚠; Amz/SM/1983 2⚠
+
+### 8. Optimization
 
 **FacebookMKTO1296 MX:**
 
-Account total: 415 leads, 4 FTDs, $5,951.46 spend
-Close candidates: 199 leads, 1 FTDs, $2,911.62 spend
-
-| Ad Set                                       | Spend     | Leads | FTDs | CPL    | CPA       | Reason             |
-| -------------------------------------------- | --------- | ----- | ---- | ------ | --------- | ------------------ |
-| MX_Amz_IOS_Video1982_HV/Mix/Reading_35_02.05 | $1,580.03 | 101   | 1    | $15.64 | $1,580.03 | CPA > bench $1,500 |
-| MX_Amz_IOS_Video1983_mix10_35_03.05          | $1,010.96 | 56    | 0    | $18.05 | —         | 0 FTD              |
-| MX_Amz_All_Video1982_SM_35_26.04             | $320.63   | 42    | 0    | $7.63  | —         | 0 FTD              |
+| Campaign                                     | Spend     | Leads | FTDs | CPL    | CPA       |
+| -------------------------------------------- | --------- | ----- | ---- | ------ | --------- |
+| MX_Amz_IOS_Video1982_HV/Mix/Reading_35_02.05 | $1,580.03 | 101   | 1    | $15.64 | $1,580.03 |
+| MX_Amz_IOS_Video1983_mix10_35_03.05          | $1,010.96 | 56    | 0    | $18.05 | —         |
+| MX_Amz_All_Video1982_SM_35_26.04             | $320.63   | 42    | 0    | $7.63  | —         |
 
 **FacebookUL721 MX:**
 
-Account total: 198 leads, 2 FTDs, $1,641.32 spend
-Close candidates: 95 leads, 0 FTDs, $791.16 spend
-
-| Ad Set                                       | Spend   | Leads | FTDs | CPL    | CPA | Reason |
-| -------------------------------------------- | ------- | ----- | ---- | ------ | --- | ------ |
-| MX_Amz_IOS_Video1983_HV_35_07.05             | $532.34 | 40    | 0    | $13.31 | —   | 0 FTD  |
-| MX_Ait_All_Video_PF_35_05.05                 | $223.54 | 53    | 0    | $4.22  | —   | 0 FTD  |
-| MX_Amz_IOS_Video1983_InvestmentPlus_35_10.05 | $35.28  | 2     | 0    | $17.64 | —   | 0 FTD  |
-
+| Campaign                                     | Spend   | Leads | FTDs | CPL    | CPA |
+| -------------------------------------------- | ------- | ----- | ---- | ------ | --- |
+| MX_Amz_IOS_Video1983_HV_35_07.05             | $532.34 | 40    | 0    | $13.31 | —   |
+| MX_Ait_All_Video_PF_35_05.05                 | $223.54 | 53    | 0    | $4.22  | —   |
+| MX_Amz_IOS_Video1983_InvestmentPlus_35_10.05 | $35.28  | 2     | 0    | $17.64 | —   |
 
 ### 9. What to Open (2 Campaigns per Account)
 
@@ -1085,7 +1091,7 @@ _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Face
 
 _No accounts found for this country in the GSheet._
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 
@@ -1147,7 +1153,7 @@ _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Face
 
 _No accounts found for this country in the GSheet._
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 
@@ -1203,7 +1209,7 @@ _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Face
 
 _No accounts found for this country in the GSheet._
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 
@@ -1259,7 +1265,7 @@ _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Face
 
 _No accounts found for this country in the GSheet._
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 
@@ -1309,13 +1315,13 @@ Period: **May 04 – May 10, 2026 (7d)**
 
 ### 3. Working Combos
 
-| Type     | Offer     | Combo                                | Dep | CPL     | CPA       | ROI  |
-| -------- | --------- | ------------------------------------ | --- | ------- | --------- | ---- |
-| Strong ✓ | -         | all + -                              | 11  | —       | —         | —    |
-| Strong ⚠ | Trader AI | ios + Mix + 30 + Blue_1              | 2   | $178.82 | $178.82   | 2.10 |
-| Strong ⚠ | Trader AI | ios + Blue_GMBL + 30+ + Vid Blue - 3 | 2   | $54.21  | $54.21    | 1.84 |
-| Strong ⚠ | Trader AI | all + Day + 1723 - Text 7            | 2   | $126.27 | $757.61   | 0.13 |
-| Strong ⚠ | Trader AI | all + Day + 1723                     | 2   | $166.15 | $1,329.23 | 2.03 |
+| Type     | Offer   | Combo                             | Dep | CPL     | CPA       | ROI  |
+| -------- | ------- | --------------------------------- | --- | ------- | --------- | ---- |
+| Strong ✓ | -       | all + -                           | 11  | —       | —         | —    |
+| Strong ⚠ | Trader… | ios + Mix + 30 + Blue_1           | 2   | $178.82 | $178.82   | 2.10 |
+| Strong ⚠ | Trader… | ios + Blue_GMBL + 30+ + Vid Blue… | 2   | $54.21  | $54.21    | 1.84 |
+| Strong ⚠ | Trader… | all + Day + 1723 - Text 7         | 2   | $126.27 | $757.61   | 0.13 |
+| Strong ⚠ | Trader… | all + Day + 1723                  | 2   | $166.15 | $1,329.23 | 2.03 |
 
 ### 4. AI Context (copy into chat)
 
@@ -1367,21 +1373,18 @@ Top creatives by deposits:
 
 _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-| Account             | Spend   | Leads | FTDs | CPL | CPA | CR | Asset | To Do                                        | ✓ |
-| ------------------- | ------- | ----- | ---- | --- | --- | -- | ----- | -------------------------------------------- | - |
-| FacebookMKTO1343 SA | $300.31 | 0     | 0    | —   | —   | —  | —     | Trl/Blue_Day/Vid Blue - 6a⚠; Arm/IPO/2025 4⚠ | ✅ |
+**FacebookMKTO1343 SA** ✅
+Perf: $300.31 spend | 0 leads | 0 FTDs | CPL — | CPA — | CR —
+Status: —
+To Do: Trl/Blue_Day/Vid Blue - 6a⚠; Arm/IPO/2025 4⚠
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 **FacebookMKTO1343 SA:**
 
-Account total: 0 leads, 0 FTDs, $300.31 spend
-Close candidates: 0 leads, 0 FTDs, $252.30 spend
-
-| Ad Set                            | Spend   | Leads | FTDs | CPL | CPA | Reason |
-| --------------------------------- | ------- | ----- | ---- | --- | --- | ------ |
-| SA_Arm_All_Video_Trading_35_08.05 | $252.30 | 0     | 0    | —   | —   | 0 FTD  |
-
+| Campaign                          | Spend   | Leads | FTDs | CPL | CPA |
+| --------------------------------- | ------- | ----- | ---- | --- | --- |
+| SA_Arm_All_Video_Trading_35_08.05 | $252.30 | 0     | 0    | —   | —   |
 
 ### 9. What to Open (2 Campaigns per Account)
 
@@ -1431,11 +1434,11 @@ Period: **May 04 – May 10, 2026 (7d)**
 
 ### 3. Working Combos
 
-| Type          | Offer     | Combo                                     | Dep | CPL     | CPA     | ROI  |
-| ------------- | --------- | ----------------------------------------- | --- | ------- | ------- | ---- |
-| Interesting ⚠ | Trader AI | all + Day + 1723 - Text 3                 | 1   | $352.18 | $704.36 | 0.26 |
-| Interesting ⚠ | Adnoc     | all + mix_Day + 25+ + Image 2-1267        | 1   | $90.42  | $271.25 | 0.74 |
-| Interesting ✓ | Adnoc     | all + mix_GMBL + 25+ + Image 2-1267 - req | 1   | $40.55  | $162.21 | 1.23 |
+| Type   | Offer   | Combo                              | Dep | CPL     | CPA     | ROI  |
+| ------ | ------- | ---------------------------------- | --- | ------- | ------- | ---- |
+| Int. ⚠ | Trader… | all + Day + 1723 - Text 3          | 1   | $352.18 | $704.36 | 0.26 |
+| Int. ⚠ | Adnoc   | all + mix_Day + 25+ + Image 2-1267 | 1   | $90.42  | $271.25 | 0.74 |
+| Int. ✓ | Adnoc   | all + mix_GMBL + 25+ + Image 2-12… | 1   | $40.55  | $162.21 | 1.23 |
 
 ### 4. AI Context (copy into chat)
 
@@ -1483,11 +1486,12 @@ Top creatives by deposits:
 
 _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-| Account              | Spend | Leads | FTDs | CPL | CPA | CR | Asset              | To Do                                             | ✓ |
-| -------------------- | ----- | ----- | ---- | --- | --- | -- | ------------------ | ------------------------------------------------- | - |
-| FacebookMKTO1286 UAE | —     | —     | —    | —   | —   | —  | Email verification | Trl/Day/1723 - Text 3⚠; Adc/mix_Day/Image 2-1267⚠ | ✅ |
+**FacebookMKTO1286 UAE** ✅
+Perf: — spend | — leads | — FTDs | CPL — | CPA — | CR —
+Status: Email verification
+To Do: Trl/Day/1723 - Text 3⚠; Adc/mix_Day/Image 2-1267⚠
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 
@@ -1554,7 +1558,7 @@ _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Face
 
 _No accounts found for this country in the GSheet._
 
-### 8. What to Close (Optimization)
+### 8. Optimization
 
 _No ad sets to close — nothing exceeds benchmarks._
 

@@ -715,6 +715,7 @@ _OFFER_ABBR: Dict[str, str] = {
     "ai trading": "Ait",
     "al trading": "Alt",
     "trader ai": "Trl",
+    "trolley": "Trl",
     "favorita": "Fav",
     "corporación favorita": "Fav",
     "corporacion favorita": "Fav",
@@ -747,14 +748,27 @@ _OFFER_ABBR: Dict[str, str] = {
 }
 
 
-def _offer_abbr(offer: str) -> str:
+def _is_placeholder_offer(offer: str) -> bool:
+    return (offer or "").strip().lower() in ("", "-", "nan", "none", NA_SENTINEL.lower())
+
+
+def _offer_abbr(offer: str, country_name: str | None = None) -> str:
     """Return short slug for offer name, e.g. 'AI Trader' → 'Ait'."""
     key = (offer or "").strip().lower()
+    if _is_placeholder_offer(key) and (country_name or "").strip().lower() == "kuwait":
+        return "Trl"
     if key in _OFFER_ABBR:
         return _OFFER_ABBR[key]
     # Fallback: CamelCase first letters, max 4 chars
     parts = offer.strip().split()
     return "".join(w.capitalize() for w in parts)[:4] if parts else "Unk"
+
+
+def _display_offer(offer: Any, country_name: str | None = None) -> str:
+    offer_s = _display_value(offer)
+    if _is_placeholder_offer(offer_s) and (country_name or "").strip().lower() == "kuwait":
+        return "Trolley"
+    return offer_s
 
 
 def _creative_type(creative: str) -> str:
@@ -811,11 +825,11 @@ def _group_combos_by_targeting(
         if not interest or interest.lower() == "nan":
             interest = "(unknown)"
         entry = {
-            "offer": str(r.get("Offer") or "").strip(),
-            "device": str(r.get("Device") or "all").strip(),
+            "offer": _display_offer(r.get("Offer"), country),
+            "device": _display_value(r.get("Device"), "all"),
             "interest": interest,
-            "age": str(r.get("Age") or "").strip(),
-            "creative": str(r.get("Creative") or "").strip(),
+            "age": _display_value(r.get("Age")),
+            "creative": _display_value(r.get("Creative")),
             "category": str(r.get("Category", "Strong")),
             "deposits": _safe_int(r.get("Deposits")),
             "leads": _safe_int(r.get("Leads")),
@@ -939,7 +953,7 @@ def build_open_recommendations(
         bench = get_benchmark(country_name, offer or None)
         quality = _check_quality(primary, bench)
 
-        offer_part = _offer_abbr(offer)
+        offer_part = _offer_abbr(offer, country_name=country_name)
         device_part = device_raw.capitalize()
         creative_type = _creative_type(primary["creative"])
         age_part = f"_{age_raw}" if not _is_nan_val(age_raw) else ""

@@ -39,12 +39,31 @@ def _fmt_money(v: float) -> str:
     return f"${v:,.2f}"
 
 
+def _safe_money_sort_key(v: str) -> float:
+    try:
+        return float(str(v).replace("$", "").replace(",", ""))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _fmt_float(v: float, decimals: int = 2) -> str:
     return f"{v:.{decimals}f}"
 
 
 def _combo_label(*parts: Any) -> str:
     return " + ".join(str(part).strip() for part in parts if str(part).strip())
+
+
+def _ellipsis(s: Any, max_len: int) -> str:
+    text = str(s).strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
+
+
+def _compact_type_label(category: str, flag: str) -> str:
+    label = "Int." if category == "Interesting" else category
+    return label + flag
 
 
 # Legend for editors: Upload FB / GSheet column K workflow (see gsheet_accounts module doc).
@@ -169,14 +188,17 @@ def _render_top_combos(combos: List[Dict[str, Any]]) -> str:
     for c in combos:
         quality = c.get("quality", "ok")
         flag = " ✓" if quality == "ok" else " ⚠"
-        type_label = c["category"] + flag
+        type_label = _compact_type_label(c["category"], flag)
         roi_s = _fmt_float(c["roi"]) if c["roi"] else "—"
         cpa_s = _fmt_money(c["cpa"]) if c["cpa"] else "—"
         cpl_s = _fmt_money(c.get("cpl", 0)) if c.get("cpl") else "—"
-        combo_label = _combo_label(c["device"], c["interest"], c["age"], c["creative"][:25])
+        combo_label = _ellipsis(
+            _combo_label(c["device"], c["interest"], c["age"], c["creative"][:25]),
+            34,
+        )
         table_rows.append([
             type_label,
-            c["offer"][:15],
+            _ellipsis(c["offer"], 8),
             combo_label,
             str(c["deposits"]),
             cpl_s,
@@ -261,7 +283,6 @@ def _render_account_statuses(account_rows: List[Dict[str, Any]], has_gsheet: boo
             )
         return "\n".join(lines)
 
-    table_rows = []
     for r in account_rows:
         ready_s = "✅" if r["is_ready"] else "❌"
         if "to_do_display" in r:
@@ -284,33 +305,18 @@ def _render_account_statuses(account_rows: List[Dict[str, Any]], has_gsheet: boo
         else:
             spend_s = leads_s = ftds_s = cpl_s = cpa_s = cr_s = "—"
         stock_s = r.get("stock", "") or "—"
-        table_rows.append([
-            r["account_label"],
-            spend_s,
-            leads_s,
-            ftds_s,
-            cpl_s,
-            cpa_s,
-            cr_s,
-            stock_s,
-            to_do_s,
-            ready_s,
+        account = _esc(r["account_label"])
+        perf = (
+            f"{spend_s} spend | {leads_s} leads | {ftds_s} FTDs | "
+            f"CPL {cpl_s} | CPA {cpa_s} | CR {cr_s}"
+        )
+        lines.extend([
+            f"**{account}** {ready_s}",
+            f"Perf: {_esc(perf)}",
+            f"Status: {_esc(stock_s)}",
+            f"To Do: {_esc(to_do_s)}",
+            "",
         ])
-    lines.append(_table(
-        [
-            "Account",
-            "Spend",
-            "Leads",
-            "FTDs",
-            "CPL",
-            "CPA",
-            "CR",
-            "Asset",
-            "To Do",
-            "✓",
-        ],
-        table_rows,
-    ))
     return "\n".join(lines)
 
 
@@ -318,50 +324,36 @@ def _render_close_recs(
     close_recs: Dict[str, List[Dict[str, Any]]],
     close_summaries: Dict[str, Dict[str, Any]] | None = None,
 ) -> str:
-    lines = ["### 8. What to Close (Optimization)", ""]
+    lines = ["### 8. Optimization", ""]
     any_data = any(v for v in close_recs.values())
     if not any_data:
         lines.append("_No ad sets to close — nothing exceeds benchmarks._")
         return "\n".join(lines)
 
-    close_summaries = close_summaries or {}
     for acc_label, recs in close_recs.items():
         if not recs:
             continue
-        lines.append(f"**{acc_label}:**")
-        lines.append("")
-        summary = close_summaries.get(acc_label)
-        if summary:
-            account = summary.get("account", {})
-            candidates = summary.get("candidates", {})
-            lines.append(
-                "Account total: "
-                f"{account.get('leads', 0)} leads, "
-                f"{account.get('deposits', 0)} FTDs, "
-                f"{_fmt_money(account.get('spend', 0.0))} spend"
-            )
-            lines.append(
-                "Close candidates: "
-                f"{candidates.get('leads', 0)} leads, "
-                f"{candidates.get('deposits', 0)} FTDs, "
-                f"{_fmt_money(candidates.get('spend', 0.0))} spend"
-            )
-            lines.append("")
         table_rows = []
-        for r in recs:
+        sorted_recs = sorted(
+            recs,
+            key=lambda r: _safe_money_sort_key(_fmt_money(r["spend"])),
+            reverse=True,
+        )
+        for r in sorted_recs:
             cpl_s = _fmt_money(r["cpl"]) if r.get("cpl") else "—"
             cpa_s = _fmt_money(r["cpa"]) if r.get("cpa") else "—"
             table_rows.append([
-                r["adset_name"][:55],
+                r["adset_name"][:45],
                 _fmt_money(r["spend"]),
                 str(r["leads"]),
                 str(r["deposits"]),
                 cpl_s,
                 cpa_s,
-                r.get("reason", ""),
             ])
+        lines.append(f"**{acc_label}:**")
+        lines.append("")
         lines.append(_table(
-            ["Ad Set", "Spend", "Leads", "FTDs", "CPL", "CPA", "Reason"],
+            ["Campaign", "Spend", "Leads", "FTDs", "CPL", "CPA"],
             table_rows,
         ))
         lines.append("")

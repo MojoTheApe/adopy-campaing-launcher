@@ -23,7 +23,7 @@ import pandas as pd
 import pytest
 
 from src.analysis_agent.analyze_fb_stats import aggregate_combos
-from src.analysis_agent.morning_markdown import render_morning_report_md
+from src.analysis_agent.morning_markdown import _render_top_combos, render_morning_report_md
 from src.analysis_agent.morning_report import build_country_section
 
 
@@ -103,7 +103,7 @@ def test_report_static_copy_is_english(
 
     assert "### 1. Evgeni vs Team" in md
     assert "### 2. Trend (Recent Days)" in md
-    assert "### 8. What to Close (Optimization)" in md
+    assert "### 8. Optimization" in md
     assert "### 9. What to Open (2 Campaigns per Account)" in md
 
     old_russian_labels = [
@@ -121,10 +121,10 @@ def test_report_static_copy_is_english(
     assert re.search(r"[А-Яа-яЁё]", md) is None
 
 
-def test_close_recs_show_account_and_candidate_totals(
+def test_optimization_groups_compact_tables_by_account(
     enriched_df: pd.DataFrame, accounts_rows: list
 ) -> None:
-    """Close tables should not look like full-account performance totals."""
+    """Optimization should show compact spend-sorted campaign tables per account."""
     extra = enriched_df.iloc[0].copy()
     extra["Adset Name"] = "MX_zero_ftd_candidate"
     extra["Ad Title"] = "Zero FTD candidate"
@@ -143,9 +143,30 @@ def test_close_recs_show_account_and_candidate_totals(
     report = _build_report_from_fixture(df, accounts_rows)
     md = render_morning_report_md(report)
 
-    assert "Account total: 280 leads, 2 FTDs, $335.00 spend" in md
-    assert "Close candidates: 10 leads, 0 FTDs, $200.00 spend" in md
+    assert "### 8. Optimization" in md
+    assert "### 8. What to Close (Optimization)" not in md
+    assert "Account total:" not in md
+    assert "Close candidates:" not in md
+    assert "**MX-acc-1:**" in md
+    assert "| Campaign" in md
+    assert "| Leads" in md
+    assert "| FTDs" in md
+    assert "| Reason" not in md
     assert "MX_zero_ftd_candidate" in md
+
+
+def test_account_statuses_render_as_compact_cards(
+    enriched_df: pd.DataFrame, accounts_rows: list
+) -> None:
+    """Account statuses are action notes, so they should not render as a wide table."""
+    report = _build_report_from_fixture(enriched_df, accounts_rows)
+    md = render_morning_report_md(report)
+
+    assert "| Account" not in md
+    assert "**MX-acc-1** ✅" in md
+    assert "Perf: " in md
+    assert "Status: " in md
+    assert "To Do: " in md
 
 
 def test_working_combos_do_not_render_nan_age(
@@ -177,6 +198,29 @@ def test_working_combos_do_not_render_nan_age(
     assert " + nan + " not in md.lower()
     assert "all + pf + No age creative" in md
     assert "all + pf + nan + No age creative" not in md
+
+
+def test_working_combos_render_compact_labels() -> None:
+    md = _render_top_combos([
+        {
+            "quality": "warn",
+            "category": "Interesting",
+            "roi": 0.18,
+            "cpa": 563.72,
+            "cpl": 51.25,
+            "device": "ios",
+            "interest": "LND_Mix/Reading",
+            "age": "35",
+            "creative": "LND 2 - Story 1",
+            "offer": "Lundin Gold Inc",
+            "deposits": 1,
+        },
+    ])
+
+    assert "Interesting" not in md
+    assert "Lundin Gold Inc" not in md
+    assert "LND 2 - Story 1" not in md
+    assert "| Int. ⚠" in md
 
 
 def test_markdown_matches_snapshot(

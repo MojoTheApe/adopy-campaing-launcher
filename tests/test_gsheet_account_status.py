@@ -7,7 +7,10 @@ from src.analysis_agent.gsheet_accounts import (
     parse_account_rows,
     _select_rightmost_sheet,
 )
-from src.analysis_agent.morning_report import format_open_recommendations_for_status_table
+from src.analysis_agent.morning_report import (
+    _offer_abbr,
+    format_open_recommendations_for_status_table,
+)
 
 
 def test_omitted_statuses_not_in_table() -> None:
@@ -76,6 +79,10 @@ def test_format_open_recs_truncates_long_labels() -> None:
     ]
     s = format_open_recommendations_for_status_table(recs, target_max=10, creative_max=12)
     assert s == "Trl/VeryLongT…/xxxxxxxxxxx…"
+
+
+def test_kuwait_placeholder_offer_uses_trolley_slug() -> None:
+    assert _offer_abbr("-", country_name="Kuwait") == "Trl"
 
 
 def test_parse_reads_column_k() -> None:
