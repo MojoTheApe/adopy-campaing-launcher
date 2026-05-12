@@ -327,7 +327,7 @@ def _render_close_recs(
     lines = ["### 8. Optimization", ""]
     any_data = any(v for v in close_recs.values())
     if not any_data:
-        lines.append("_No ad sets to close — nothing exceeds benchmarks._")
+        lines.append("_No campaign spend found for ready accounts._")
         return "\n".join(lines)
 
     for acc_label, recs in close_recs.items():

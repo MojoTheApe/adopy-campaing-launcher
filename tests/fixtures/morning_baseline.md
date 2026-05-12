@@ -84,7 +84,12 @@ To Do: Trad/trading/Brazilian speci…
 
 ### 8. Optimization
 
-_No ad sets to close — nothing exceeds benchmarks._
+**BR-acc-1:**
+
+| Campaign                              | Spend  | Leads | FTDs | CPL   | CPA    |
+| ------------------------------------- | ------ | ----- | ---- | ----- | ------ |
+| BR_trader_pro_all_creative_trading_25 | $65.00 | 130   | 2    | $0.50 | $32.50 |
+
 
 ### 9. What to Open (2 Campaigns per Account)
 
@@ -188,7 +193,12 @@ To Do: Trad/trading/Make money fast⚠; Cryp/crypto/Buy bitcoin now⚠
 
 ### 8. Optimization
 
-_No ad sets to close — nothing exceeds benchmarks._
+**MX-acc-1:**
+
+| Campaign                              | Spend   | Leads | FTDs | CPL   | CPA    |
+| ------------------------------------- | ------- | ----- | ---- | ----- | ------ |
+| ME_trader_pro_all_creative_trading_25 | $135.00 | 270   | 2    | $0.50 | $67.50 |
+
 
 ### 9. What to Open (2 Campaigns per Account)
 

@@ -8,6 +8,7 @@ from src.analysis_agent.gsheet_accounts import (
     _select_rightmost_sheet,
 )
 from src.analysis_agent.morning_report import (
+    _display_offer,
     _offer_abbr,
     format_open_recommendations_for_status_table,
 )
@@ -81,8 +82,25 @@ def test_format_open_recs_truncates_long_labels() -> None:
     assert s == "Trl/VeryLongT…/xxxxxxxxxxx…"
 
 
-def test_kuwait_placeholder_offer_uses_trolley_slug() -> None:
-    assert _offer_abbr("-", country_name="Kuwait") == "Trl"
+def test_placeholder_offer_uses_trolley_slug_for_any_country() -> None:
+    assert _display_offer("-", country_name="Mexico") == "Trolley"
+    assert _offer_abbr("-", country_name="Mexico") == "Trl"
+
+
+def test_status_table_placeholder_offer_matches_section9_country_slug() -> None:
+    recs = [
+        {
+            "offer": "-",
+            "targeting": "Day",
+            "creatives": [{"name": "1975 25"}],
+            "below_benchmark": False,
+        },
+    ]
+
+    assert (
+        format_open_recommendations_for_status_table(recs, country_name="Mexico")
+        == "Trl/Day/1975 25"
+    )
 
 
 def test_parse_reads_column_k() -> None:

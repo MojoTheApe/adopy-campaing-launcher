@@ -166,8 +166,8 @@ def build_asset_summary(df: pd.DataFrame, country: str) -> List[Dict[str, Any]]:
 
     rows = []
     for _, r in grouped.iterrows():
-        offer = str(r.get("Offer") or "").strip()
-        if not offer or offer.lower() in ("nan", "none", "-"):
+        offer = _display_offer(r.get("Offer"), country)
+        if not offer:
             continue
         rows.append({
             "offer": offer,
@@ -243,7 +243,7 @@ def build_trend(
     def _row_to_dict(r) -> Dict[str, Any]:
         full_creative = _display_value(r.get("Creative"))
         return {
-            "offer": _display_value(r.get("Offer")),
+            "offer": _display_offer(r.get("Offer"), country),
             "device": _display_value(r.get("Device"), "all"),
             "interest": _display_value(r.get("Interest")),
             "creative": full_creative[:40],  # display: truncated to 40 chars
@@ -393,7 +393,7 @@ def build_top_combos(combos: pd.DataFrame, country: str, top_n: int = 5) -> List
 
     result = []
     for _, r in top.iterrows():
-        offer_str = _display_value(r.get("Offer"))
+        offer_str = _display_offer(r.get("Offer"), country)
         bench = get_benchmark(country, offer_str)
         combo = {
             "offer": offer_str,
@@ -620,10 +620,10 @@ def build_close_recommendations(
     df: pd.DataFrame,
     country: str,
     account_alias: str,
-    min_spend: float = 30.0,
-    top_n: int = 5,
+    min_spend: float = 0.0,
+    top_n: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    """Ad sets to close: Tier 1 (0 FTD + spend) and Tier 2 (above benchmark CPL/CPA)."""
+    """Campaign-level optimization rows for a ready account, sorted by spend."""
     df_c = df[
         (df["Country Final"] == country)
         & (df["Account Alias"].fillna("").astype(str) == account_alias)
@@ -647,9 +647,23 @@ def build_close_recommendations(
     grouped["CPL"] = grouped["Spend"] / grouped["Leads"].replace(0, pd.NA)
     grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
 
-    results: List[Dict[str, Any]] = []
+    def _optimization_reason(r) -> str:
+        deposits = _safe_int(r.get("Deposits"))
+        spend = _safe_float(r.get("Spend"))
+        if deposits == 0 and spend >= 30.0:
+            return "0 FTD"
+        offer = str(r.get("Offer") or "").strip() if offer_col else ""
+        bench = get_benchmark(country, offer or None)
+        cpl = _safe_float(r.get("CPL"))
+        cpa = _safe_float(r.get("CPA"))
+        reasons = []
+        if bench.get("max_cpl") and cpl > 0 and cpl > bench["max_cpl"]:
+            reasons.append(f"CPL > bench ${bench['max_cpl']:,.0f}")
+        if bench.get("max_cpa") and cpa > 0 and cpa > bench["max_cpa"]:
+            reasons.append(f"CPA > bench ${bench['max_cpa']:,.0f}")
+        return "; ".join(reasons)
 
-    def _make_rec(r, reason: str) -> Dict[str, Any]:
+    def _make_rec(r) -> Dict[str, Any]:
         deposits = _safe_int(r.get("Deposits"))
         leads = _safe_int(r.get("Leads"))
         spend = _safe_float(r.get("Spend"))
@@ -662,32 +676,13 @@ def build_close_recommendations(
             "spend": spend,
             "cpl": cpl,
             "cpa": cpa,
-            "reason": reason,
+            "reason": _optimization_reason(r),
         }
 
-    # Tier 1: 0 FTDs + notable spend
-    zero_ftd = grouped[(grouped["Deposits"] == 0) & (grouped["Spend"] >= min_spend)]
-    zero_ftd = zero_ftd.sort_values("Spend", ascending=False).head(top_n)
-    for _, r in zero_ftd.iterrows():
-        results.append(_make_rec(r, "0 FTD"))
-
-    # Tier 2: has FTDs but CPL or CPA exceed benchmark
-    has_ftd = grouped[(grouped["Deposits"] > 0) & (grouped["Spend"] >= min_spend)]
-    for _, r in has_ftd.iterrows():
-        offer = str(r.get("Offer") or "").strip() if offer_col else ""
-        bench = get_benchmark(country, offer or None)
-        cpl = _safe_float(r.get("CPL"))
-        cpa = _safe_float(r.get("CPA"))
-        reasons = []
-        if bench.get("max_cpl") and cpl > 0 and cpl > bench["max_cpl"]:
-            reasons.append(f"CPL > bench ${bench['max_cpl']:,.0f}")
-        if bench.get("max_cpa") and cpa > 0 and cpa > bench["max_cpa"]:
-            reasons.append(f"CPA > bench ${bench['max_cpa']:,.0f}")
-        if reasons:
-            results.append(_make_rec(r, "; ".join(reasons)))
-
-    results.sort(key=lambda x: -x["spend"])
-    return results[:top_n]
+    visible = grouped[grouped["Spend"] > min_spend].sort_values("Spend", ascending=False)
+    if top_n is not None:
+        visible = visible.head(top_n)
+    return [_make_rec(r) for _, r in visible.iterrows()]
 
 
 def build_close_recommendation_summary(
@@ -755,7 +750,7 @@ def _is_placeholder_offer(offer: str) -> bool:
 def _offer_abbr(offer: str, country_name: str | None = None) -> str:
     """Return short slug for offer name, e.g. 'AI Trader' → 'Ait'."""
     key = (offer or "").strip().lower()
-    if _is_placeholder_offer(key) and (country_name or "").strip().lower() == "kuwait":
+    if _is_placeholder_offer(key):
         return "Trl"
     if key in _OFFER_ABBR:
         return _OFFER_ABBR[key]
@@ -766,7 +761,7 @@ def _offer_abbr(offer: str, country_name: str | None = None) -> str:
 
 def _display_offer(offer: Any, country_name: str | None = None) -> str:
     offer_s = _display_value(offer)
-    if _is_placeholder_offer(offer_s) and (country_name or "").strip().lower() == "kuwait":
+    if _is_placeholder_offer(offer_s):
         return "Trolley"
     return offer_s
 
@@ -1033,6 +1028,7 @@ def _ellipsis_short(text: str, max_len: int) -> str:
 def format_open_recommendations_for_status_table(
     recs: List[Dict[str, Any]],
     *,
+    country_name: str | None = None,
     max_campaigns: int = 2,
     target_max: int = 12,
     creative_max: int = 16,
@@ -1048,7 +1044,7 @@ def format_open_recommendations_for_status_table(
     parts: List[str] = []
     for r in recs[:max_campaigns]:
         offer = (r.get("offer") or "").strip() or "—"
-        abbr = _offer_abbr(offer) if offer != "—" else "—"
+        abbr = _offer_abbr(offer, country_name=country_name) if offer != "—" else "—"
         tgt = (r.get("targeting") or "").strip() or "—"
         creatives = r.get("creatives") or []
         cr0 = creatives[0] if creatives else {}
@@ -1064,6 +1060,7 @@ def format_open_recommendations_for_status_table(
 def _account_status_todo_display(
     acc: Dict[str, Any],
     open_recs_for_account: List[Dict[str, Any]],
+    country_name: str | None = None,
 ) -> str:
     """To Do cell: mirror section 9 for ready accounts; GSheet for Video selfie / not ready."""
     raw_todo = str(acc.get("to_do", "") or "")
@@ -1071,7 +1068,10 @@ def _account_status_todo_display(
         return format_account_status_todo_cell(raw_todo, str(acc.get("to_do_extra", "") or ""))
     if acc.get("is_ready"):
         if open_recs_for_account:
-            return format_open_recommendations_for_status_table(open_recs_for_account)
+            return format_open_recommendations_for_status_table(
+                open_recs_for_account,
+                country_name=country_name,
+            )
         # Section 9 omits accounts with no open recs — same here.
         return "—"
     return format_account_status_todo_cell(raw_todo, str(acc.get("to_do_extra", "") or ""))
@@ -1134,6 +1134,7 @@ def build_country_section(
         acc["to_do_display"] = _account_status_todo_display(
             acc,
             open_recs.get(label, []),
+            country_name=country,
         )
 
     return {

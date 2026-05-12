@@ -138,7 +138,20 @@ def test_optimization_groups_compact_tables_by_account(
     extra["CR"] = 0.0
     extra["Profit"] = -200.0
     extra["ROI"] = 0.0
-    df = pd.concat([enriched_df, pd.DataFrame([extra])], ignore_index=True)
+    healthy = enriched_df.iloc[0].copy()
+    healthy["Adset Name"] = "MX_healthy_campaign_should_still_show"
+    healthy["Ad Title"] = "Healthy campaign"
+    healthy["Creative"] = "Healthy campaign"
+    healthy["# Leads"] = 10
+    healthy["# FTDs"] = 10
+    healthy["$ Spend"] = 20.0
+    healthy["$ Net"] = 200.0
+    healthy["CPL"] = 2.0
+    healthy["CPA"] = 2.0
+    healthy["CR"] = 100.0
+    healthy["Profit"] = 180.0
+    healthy["ROI"] = 10.0
+    df = pd.concat([enriched_df, pd.DataFrame([extra, healthy])], ignore_index=True)
 
     report = _build_report_from_fixture(df, accounts_rows)
     md = render_morning_report_md(report)
@@ -153,6 +166,7 @@ def test_optimization_groups_compact_tables_by_account(
     assert "| FTDs" in md
     assert "| Reason" not in md
     assert "MX_zero_ftd_candidate" in md
+    assert "MX_healthy_campaign_should_still_show" in md
 
 
 def test_account_statuses_render_as_compact_cards(
