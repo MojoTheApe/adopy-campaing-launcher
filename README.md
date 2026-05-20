@@ -181,6 +181,37 @@ python run_analysis_then_upload.py --account "FacebookUL574 EC Fav" [-e путь
 
 ---
 
+## Content Machine (Telegram)
+
+**Назначение:** отдельная ветка пайплайна — **стратегический контент-план недели** (брифы в SQLite) и далее сборка черновиков постов (агенты исследования, авторы, редактор, compliance) через оркестратор. Публикация в канал — через бот и планировщик из `run_content_machine.py bot`.
+
+**Планировщик (стратегия)** против **пайплайна черновика:** календарный агент ([`src/content_machine/agents/calendar_agent.py`](src/content_machine/agents/calendar_agent.py)) генерирует брифы с учётом столпов бренда и **недельного операторского ввода**. Остальная цепочка ([`src/content_machine/agents/orchestrator.py`](src/content_machine/agents/orchestrator.py)) уже превращает бриф в текст поста после `process`.
+
+**Недельный ввод:** JSON или YAML (`weekly_goals`, `required_coverage`, `forbidden_topics`, `max_offer_posts_per_day`, `max_offer_posts_per_week`, `exclude_dates`, `notes`). Пример: [`config/content_plan_week.example.json`](config/content_plan_week.example.json). Подключение:
+
+- переменная **`CM_WEEK_PLAN_PATH`** — путь к файлу;
+- или **`CM_WEEK_PLAN_JSON`** — объект в одной строке JSON.
+
+Даты из `exclude_dates` (ISO `YYYY-MM-DD`) в план **не попадают**.
+
+**Запуск плана (из корня `fb_agents`):**
+
+```powershell
+python run_content_machine.py plan
+python run_content_machine.py plan -c "акцент на волатильности"
+python run_content_machine.py plan -w config/content_plan_week.example.json
+```
+
+Флаг **`-w` / `--week-plan`** задаёт файл для этого запуска (имеет приоритет над `CM_WEEK_PLAN_*` в оркестраторе только если вы вызываете `plan` через CLI с этим флагом). Просмотр созданных брифов: `python run_content_machine.py list`.
+
+После согласования календаря: `python run_content_machine.py process` — прогон всех статусов **brief** через остальных агентов.
+
+**Проверки плана:** пустые темы, неизвестные значения enum из [`src/content_machine/schema.py`](src/content_machine/schema.py), два оффера `sales`/`copytrading_offer` подряд в один день, превышение дневного/недельного лимита коммерческих постов. При ошибках календарь **один раз** перезапрашивает модель для этого дня с текстом проблемы; оставшиеся нарушения пишутся в лог `WARNING`.
+
+Подробнее по ключам см. блок Content Machine в **`.env.example`**.
+
+---
+
 ## Структура проекта (конструкция агентов)
 
 | Компонент | Назначение |
@@ -192,6 +223,7 @@ python run_analysis_then_upload.py --account "FacebookUL574 EC Fav" [-e путь
 | **run_jira_from_accounts.py** | Запуск **агента 5**: аккаунты из Upluad FB.xlsx → задачи в Jira (Summary, Description по правилам трёх листов), Labels Limited_QA, Team Media. |
 | **run_upload_from_plan.py** | Запуск **агента 8**: план (CSV) → Excel с листами по аккаунтам под выгрузку в FB. |
 | **run_analysis_then_upload.py** | **Связка:** агент 1 (анализ) → комбо → агент 8 (аплоуд Excel). Один аккаунт, топ-N комбо. |
+| **run_content_machine.py** | Content Machine: `plan`, `process`, `bot`, `list`, очередь ревью, аналитика публикаций; см. § Content Machine. |
 | **run_jira_api.bat** | Удобный запуск агента 5 с `--api` (двойной клик; нужен `.env` с JIRA_EMAIL и JIRA_API_TOKEN). |
 | **.env** / **.env.example** | Учётные данные для Jira API (`.env` в git не попадает). |
 | **config/paths.py** | Пути к Excel (FB_STATS_EXCEL, UPLOAD_FB_EXCEL). |

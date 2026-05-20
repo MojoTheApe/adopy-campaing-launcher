@@ -8,9 +8,17 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Sequence
+from typing import TYPE_CHECKING
 
 from src.content_machine.agents import calendar_agent, compliance_agent, editor_agent
+from src.content_machine.agents import post_writer, research_agent, sales_copy
+from src.content_machine.config import ContentMachineConfig
+from src.content_machine.db import ContentDB
+from src.content_machine.policy.disclosures import DISCLOSURE_SEPARATOR, strip_disclosures_block
+from src.content_machine.schema import ContentItem, ContentStatus, ContentType
+
+if TYPE_CHECKING:
+    from src.content_machine.weekly_plan_input import WeeklyPlanInput
 from src.content_machine.agents import post_writer, research_agent, sales_copy
 from src.content_machine.config import ContentMachineConfig
 from src.content_machine.db import ContentDB
@@ -39,10 +47,21 @@ class Orchestrator:
         self,
         start_date: date | None = None,
         context: str = "",
+        weekly_plan: "WeeklyPlanInput | None" = None,
     ) -> list[ContentItem]:
         """Ask calendar agent for a week of briefs, persist them, return list."""
+        from src.content_machine.weekly_plan_input import WeeklyPlanInput, load_weekly_plan_input_from_env
+
+        wk = weekly_plan
+        if wk is None:
+            loaded = load_weekly_plan_input_from_env()
+            wk = loaded if loaded is not None else WeeklyPlanInput.empty()
+
         items = calendar_agent.generate_weekly_plan(
-            self.cfg.llm, start_date=start_date, context=context,
+            self.cfg.llm,
+            start_date=start_date,
+            context=context,
+            weekly=wk,
         )
         for item in items:
             self.db.save(item)

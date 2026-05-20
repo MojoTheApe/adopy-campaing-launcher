@@ -9,6 +9,7 @@ from src.analysis_agent.gsheet_accounts import (
 )
 from src.analysis_agent.morning_report import (
     _display_offer,
+    _creative_type_for_campaign,
     _offer_abbr,
     format_open_recommendations_for_status_table,
 )
@@ -101,6 +102,10 @@ def test_status_table_placeholder_offer_matches_section9_country_slug() -> None:
         format_open_recommendations_for_status_table(recs, country_name="Mexico")
         == "Trl/Day/1975 25"
     )
+
+
+def test_campaign_creative_type_is_mix_when_images_and_videos_are_selected() -> None:
+    assert _creative_type_for_campaign(["Image 7", "TR5", "Image 8"]) == "Mix"
 
 
 def test_parse_reads_column_k() -> None:

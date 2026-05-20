@@ -8,6 +8,7 @@ Usage (from repo root fb_agents):
 
     # Generate a weekly content plan (no bot needed)
     python run_content_machine.py plan
+    python run_content_machine.py plan -w config/content_plan_week.example.json
 
     # Process all pending briefs into drafts
     python run_content_machine.py process
@@ -76,10 +77,27 @@ def cmd_bot(args: argparse.Namespace) -> None:
 
 def cmd_plan(args: argparse.Namespace) -> None:
     """Generate a weekly content plan."""
+    from src.content_machine.weekly_plan_input import (
+        WeeklyPlanInput,
+        load_weekly_plan_input,
+        load_weekly_plan_input_from_env,
+    )
+
     cfg, db = _get_config_and_db()
     from src.content_machine.agents.orchestrator import Orchestrator
+
     orch = Orchestrator(cfg, db)
-    items = orch.generate_weekly_plan(context=args.context or "")
+
+    if getattr(args, "week_plan_file", None):
+        weekly = load_weekly_plan_input(args.week_plan_file)
+    else:
+        env_wk = load_weekly_plan_input_from_env()
+        weekly = env_wk if env_wk is not None else WeeklyPlanInput.empty()
+
+    items = orch.generate_weekly_plan(
+        context=args.context or "",
+        weekly_plan=weekly,
+    )
     print(f"\n✅ Created {len(items)} briefs:")
     for it in items:
         print(f"  [{it.calendar_slot}] {it.content_type:20s} {it.topic}")
@@ -192,6 +210,14 @@ def main() -> None:
 
     p_plan = sub.add_parser("plan", help="Generate weekly content plan")
     p_plan.add_argument("--context", "-c", default="", help="Extra context for planning")
+    p_plan.add_argument(
+        "--week-plan",
+        "-w",
+        dest="week_plan_file",
+        default=None,
+        metavar="PATH",
+        help="JSON or YAML file with weekly strategy (overrides CM_WEEK_PLAN_PATH / CM_WEEK_PLAN_JSON if set)",
+    )
 
     sub.add_parser("process", help="Process all pending briefs")
 

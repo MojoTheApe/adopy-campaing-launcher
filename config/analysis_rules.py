@@ -79,7 +79,7 @@ def get_creative_skip_prefixes() -> List[str]:
     prfx = raw.get("creative_skip_prefixes")
     if isinstance(prfx, list) and prfx:
         return [str(x).lower() for x in prfx]
-    return ["vid", "video", "image", "images", "img", "photo", "creativ"]
+    return ["vid", "video", "image", "images", "img", "photo", "creativ", "mix"]
 
 
 def rules_file_path() -> Path:

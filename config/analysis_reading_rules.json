@@ -7,7 +7,7 @@
   "_device_keywords_help": "Ключевые слова для определения типа девайса из Adset Name. 'all' = Mobile+Desktop, 'ios' = iPhone.",
   "age_range": { "min": 18, "max": 65 },
   "_age_range_help": "Диапазон допустимых значений возраста в Adset Name. Часть с числом вне диапазона игнорируется.",
-  "creative_skip_prefixes": ["vid", "video", "image", "images", "img", "photo", "creativ"],
+  "creative_skip_prefixes": ["vid", "video", "image", "images", "img", "photo", "creativ", "mix"],
   "_creative_skip_prefixes_help": "Части Adset Name, начинающиеся с этих префиксов, пропускаются при поиске Interest (они относятся к креативу). Чистые числа после Device также пропускаются.",
   "text_segments": {
     "pro": ["pro", "pro_new", "professional", "pro_v2"],

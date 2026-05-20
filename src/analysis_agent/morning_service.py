@@ -11,6 +11,7 @@ GSheet credential — the caller decides how to surface warnings.
 """
 from __future__ import annotations
 
+import concurrent.futures
 import os
 import sys
 from pathlib import Path
@@ -29,6 +30,7 @@ from src.analysis_agent.analyze_fb_stats import (
 )
 from src.analysis_agent.gsheet_accounts import fetch_account_rows
 from src.analysis_agent.morning_report import build_morning_report
+from src.analysis_agent.news_context import NewsFetcher, build_news_context
 
 
 def _resolve_excel_path(excel_path: Optional[str]) -> str:
@@ -67,6 +69,8 @@ def load_morning_report(
     trend_days: int = 7,
     country_filter: Optional[str] = None,
     skip_gsheet: bool = False,
+    with_news: bool = False,
+    news_fetcher: Optional[NewsFetcher] = None,
 ) -> Tuple[Dict[str, Any], pd.DataFrame, List[str]]:
     """Build the full morning report from current Excel + GSheet state.
 
@@ -113,6 +117,33 @@ def load_morning_report(
         trend_days=trend_days,
         country_filter=country_filter,
     )
+    if with_news:
+        sections = report.get("countries", [])
+        max_workers = max(1, int(os.environ.get("MORNING_NEWS_WORKERS", "6")))
+
+        def _load_country_news(section: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any] | None, str | None]:
+            country = section.get("country", "")
+            try:
+                assets = [row.get("offer", "") for row in section.get("asset_summary", [])]
+                news_context = build_news_context(
+                    country,
+                    assets,
+                    fetcher=news_fetcher,
+                )
+                return section, news_context, None
+            except Exception as e:  # noqa: BLE001 - report should degrade gracefully
+                return section, None, (
+                    f"News context unavailable for {country}: {type(e).__name__}: {e}"
+                )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_load_country_news, section) for section in sections]
+            for future in concurrent.futures.as_completed(futures):
+                section, news_context, warning = future.result()
+                if news_context is not None:
+                    section["news_context"] = news_context
+                if warning:
+                    warnings.append(warning)
     # Provide the source Excel path on the report for the renderer header.
     report["source_excel"] = resolved_excel
     return report, enriched_df, warnings

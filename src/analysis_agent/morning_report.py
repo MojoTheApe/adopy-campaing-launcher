@@ -94,6 +94,54 @@ def _fmt(v, fmt: str = ".2f") -> str:
     return format(f, fmt)
 
 
+# Excel ``Country Final`` (lower case) → canonical slug for matching GSheet col B.
+_EXCEL_COUNTRY_TO_GSHEET_CODE: Dict[str, str] = {
+    "mexico": "mx",
+    "guatemala": "gt",
+    "brazil": "br",
+    "chile": "cl",
+    "colombia": "co",
+    "peru": "pe",
+    "argentina": "ar",
+    "ecuador": "ec",
+    "venezuela": "ve",
+    "bolivia": "bo",
+    "paraguay": "py",
+    "uruguay": "uy",
+    "bahrain": "bh",
+    "uae": "uae",
+    "united arab emirates": "uae",
+    "qatar": "qa",
+    "oman": "om",
+    "kuwait": "kw",
+    "saudi arabia": "sa",
+    "nigeria": "ng",
+    "kenya": "ke",
+    "ghana": "gh",
+    "south africa": "za",
+    "albania": "al",
+    "morocco": "ma",
+    "egypt": "eg",
+}
+
+# Col B sometimes uses ISO alpha-2 instead of our slug (e.g. AE vs UAE).
+_GSHEET_COUNTRY_ISO2_ALIASES: Dict[str, str] = {
+    "ae": "uae",
+}
+
+
+def canonical_gsheet_country_code(raw: str) -> str:
+    """Normalize GSheet column B so it matches ``_EXCEL_COUNTRY_TO_GSHEET_CODE`` values."""
+    k = str(raw or "").strip().lower()
+    if not k:
+        return ""
+    if k in _GSHEET_COUNTRY_ISO2_ALIASES:
+        return _GSHEET_COUNTRY_ISO2_ALIASES[k]
+    if k in _EXCEL_COUNTRY_TO_GSHEET_CODE:
+        return _EXCEL_COUNTRY_TO_GSHEET_CODE[k]
+    return k
+
+
 # ── Section 1: CM comparison ───────────────────────────────────────────────────
 
 def build_cm_comparison(df: pd.DataFrame, country: str, my_cm: str) -> List[Dict[str, Any]]:
@@ -623,7 +671,12 @@ def build_close_recommendations(
     min_spend: float = 0.0,
     top_n: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    """Campaign-level optimization rows for a ready account, sorted by spend."""
+    """Campaign-level optimization rows for a ready account, sorted by spend.
+
+    Includes rows with leads or deposits even when spend is zero — exports sometimes
+    put account-level leads on ``Adset Name`` placeholders (``-`` / empty) with no spend,
+    while spend lives on named ad sets with blank lead counts.
+    """
     df_c = df[
         (df["Country Final"] == country)
         & (df["Account Alias"].fillna("").astype(str) == account_alias)
@@ -644,8 +697,20 @@ def build_close_recommendations(
     }
     grouped = df_c.groupby(group_cols, dropna=False).agg(**agg_dict).reset_index()
     grouped.rename(columns={"# FTDs": "Deposits", "# Leads": "Leads", "$ Spend": "Spend"}, inplace=True)
-    grouped["CPL"] = grouped["Spend"] / grouped["Leads"].replace(0, pd.NA)
-    grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
+
+    def _row_cpl_cpa(r) -> tuple[Optional[float], Optional[float]]:
+        deposits = _safe_int(r.get("Deposits"))
+        leads = _safe_int(r.get("Leads"))
+        spend = _safe_float(r.get("Spend"))
+        if leads > 0 and spend > 0:
+            cpl_v = spend / leads
+        else:
+            cpl_v = None
+        if deposits > 0 and spend > 0:
+            cpa_v = spend / deposits
+        else:
+            cpa_v = None
+        return cpl_v, cpa_v
 
     def _optimization_reason(r) -> str:
         deposits = _safe_int(r.get("Deposits"))
@@ -654,12 +719,11 @@ def build_close_recommendations(
             return "0 FTD"
         offer = str(r.get("Offer") or "").strip() if offer_col else ""
         bench = get_benchmark(country, offer or None)
-        cpl = _safe_float(r.get("CPL"))
-        cpa = _safe_float(r.get("CPA"))
+        cpl, cpa = _row_cpl_cpa(r)
         reasons = []
-        if bench.get("max_cpl") and cpl > 0 and cpl > bench["max_cpl"]:
+        if bench.get("max_cpl") and cpl is not None and cpl > bench["max_cpl"]:
             reasons.append(f"CPL > bench ${bench['max_cpl']:,.0f}")
-        if bench.get("max_cpa") and cpa > 0 and cpa > bench["max_cpa"]:
+        if bench.get("max_cpa") and cpa is not None and cpa > bench["max_cpa"]:
             reasons.append(f"CPA > bench ${bench['max_cpa']:,.0f}")
         return "; ".join(reasons)
 
@@ -667,8 +731,7 @@ def build_close_recommendations(
         deposits = _safe_int(r.get("Deposits"))
         leads = _safe_int(r.get("Leads"))
         spend = _safe_float(r.get("Spend"))
-        cpl = _safe_float(r.get("CPL"))
-        cpa = _safe_float(r.get("CPA"))
+        cpl, cpa = _row_cpl_cpa(r)
         return {
             "adset_name": str(r.get("Adset Name") or "").strip(),
             "deposits": deposits,
@@ -679,7 +742,10 @@ def build_close_recommendations(
             "reason": _optimization_reason(r),
         }
 
-    visible = grouped[grouped["Spend"] > min_spend].sort_values("Spend", ascending=False)
+    spend_ok = grouped["Spend"] > min_spend
+    leads_ok = grouped["Leads"].fillna(0) > 0
+    dep_ok = grouped["Deposits"].fillna(0) > 0
+    visible = grouped[spend_ok | leads_ok | dep_ok].sort_values("Spend", ascending=False)
     if top_n is not None:
         visible = visible.head(top_n)
     return [_make_rec(r) for _, r in visible.iterrows()]
@@ -771,6 +837,16 @@ def _creative_type(creative: str) -> str:
     return "Image" if (creative or "").strip().lower().startswith("image") else "Video"
 
 
+def _creative_type_for_campaign(creatives: List[str]) -> str:
+    """Return campaign creative type; Mix means selected ads include image and video."""
+    types = {_creative_type(c) for c in creatives if str(c or "").strip()}
+    if "Image" in types and "Video" in types:
+        return "Mix"
+    if "Image" in types:
+        return "Image"
+    return "Video"
+
+
 def _is_nan_val(v: Any) -> bool:
     """True if the value is empty / nan / NA_SENTINEL."""
     if v is None:
@@ -853,6 +929,270 @@ def _get_running_interests(
     return {v for v in vals if v and v.lower() != "nan"}
 
 
+# §9 strategy buckets — aligned with §2 Trend (Recent Days)
+OPEN_STRATEGY_LABELS: Dict[int, str] = {
+    1: "1 · trend + stable",
+    2: "2 · trend + variation",
+    3: "3 · trend + recovery",
+    4: "4 · test",
+}
+
+
+def _full_creative_from_trend(entry: Dict[str, Any]) -> str:
+    ak = entry.get("aggregate_key") or {}
+    cr = ak.get("creative")
+    if cr and str(cr).strip() not in ("", NA_SENTINEL):
+        return str(cr).strip()
+    return str(entry.get("creative") or "").strip()
+
+
+def _lookup_combo_in_groups(
+    groups: Dict[str, List[Dict[str, Any]]],
+    offer: str,
+    interest: str,
+    creative: str,
+) -> Optional[Dict[str, Any]]:
+    """Match a §2 trend row to a Strong/Interesting combo when possible."""
+    for combos in groups.values():
+        for c in combos:
+            if (
+                str(c.get("offer") or "").strip() == str(offer or "").strip()
+                and str(c.get("interest") or "").strip() == str(interest or "").strip()
+                and _creative_matches_trend_row(creative, str(c.get("creative") or ""))
+            ):
+                return c
+    return None
+
+
+def _combo_from_trend_entry(
+    entry: Dict[str, Any],
+    groups: Dict[str, List[Dict[str, Any]]],
+) -> Dict[str, Any]:
+    """Build a combo dict for §9 from a §2 trend row (enriched from groups when found)."""
+    offer = str(entry.get("offer") or "").strip()
+    interest = str(entry.get("interest") or "").strip()
+    creative = _full_creative_from_trend(entry)
+    found = _lookup_combo_in_groups(groups, offer, interest, creative)
+    if found:
+        return dict(found)
+    return {
+        "offer": offer,
+        "device": str(entry.get("device") or "all").strip() or "all",
+        "interest": interest,
+        "age": "",
+        "creative": creative,
+        "category": "Trend",
+        "deposits": _safe_int(entry.get("deposits_total")),
+        "leads": 0,
+        "spend": 0.0,
+        "cpl": 0.0,
+        "cpa": 0.0,
+        "cr": 0.0,
+        "roi": 0.0,
+    }
+
+
+def _variation_creatives_for_entry(
+    trend: Optional[Dict[str, Any]],
+    entry: Dict[str, Any],
+    groups: Dict[str, List[Dict[str, Any]]],
+    *,
+    max_extra: int = 2,
+) -> List[Dict[str, Any]]:
+    """Other hot creatives in the same interest (§2 trending_up) or same combo group."""
+    if not trend:
+        return []
+    interest = str(entry.get("interest") or "").strip()
+    offer = str(entry.get("offer") or "").strip()
+    primary_cr = _full_creative_from_trend(entry)
+    out: List[Dict[str, Any]] = []
+    seen = {primary_cr[:40]}
+
+    for e in trend.get("trending_up", []):
+        if str(e.get("interest") or "").strip() != interest:
+            continue
+        cr = _full_creative_from_trend(e)
+        key = cr[:40]
+        if key in seen:
+            continue
+        seen.add(key)
+        combo = _combo_from_trend_entry(e, groups)
+        tnote = _creative_trend_note(trend, combo["offer"], interest, cr)
+        note = "variation: same targeting, new creative"
+        if tnote:
+            note = f"{note}; {tnote}"
+        out.append({
+            "name": cr[:40],
+            "deposits": _safe_int(e.get("deposits_recent") or e.get("deposits_total")),
+            "roi": combo.get("roi", 0.0),
+            "note": note,
+        })
+        if len(out) >= max_extra:
+            break
+
+    if len(out) < max_extra and interest in groups:
+        for c in groups[interest]:
+            cr = str(c.get("creative") or "")
+            key = cr[:40]
+            if key in seen:
+                continue
+            if _creative_trend_note(trend, c["offer"], interest, cr) != "trend: all recent dep":
+                continue
+            seen.add(key)
+            out.append({
+                "name": cr[:40],
+                "deposits": c["deposits"],
+                "roi": c["roi"],
+                "note": "variation: scale sibling creative",
+            })
+            if len(out) >= max_extra:
+                break
+    return out
+
+
+def _recovery_creatives_for_entry(
+    trend: Optional[Dict[str, Any]],
+    entry: Dict[str, Any],
+    groups: Dict[str, List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    """Stopped combo + fresh creatives from the same interest/offer in §2 New."""
+    interest = str(entry.get("interest") or "").strip()
+    offer = str(entry.get("offer") or "").strip()
+    stale_cr = _full_creative_from_trend(entry)
+    combo = _combo_from_trend_entry(entry, groups)
+    creatives_out: List[Dict[str, Any]] = [{
+        "name": stale_cr[:40],
+        "deposits": _safe_int(entry.get("deposits_total")),
+        "roi": combo.get("roi", 0.0),
+        "note": "recovery: was working, refresh hook/creative",
+    }]
+    if trend:
+        for e in trend.get("trending_up", []):
+            if str(e.get("interest") or "").strip() != interest:
+                continue
+            if str(e.get("offer") or "").strip() != offer:
+                continue
+            cr = _full_creative_from_trend(e)
+            if _creative_matches_trend_row(stale_cr, cr):
+                continue
+            nc = _combo_from_trend_entry(e, groups)
+            creatives_out.append({
+                "name": cr[:40],
+                "deposits": _safe_int(e.get("deposits_recent")),
+                "roi": nc.get("roi", 0.0),
+                "note": "recovery: pair with new hot creative",
+            })
+            if len(creatives_out) >= 3:
+                break
+    return creatives_out
+
+
+def _pick_creatives_for_combo(
+    trend: Optional[Dict[str, Any]],
+    primary: Dict[str, Any],
+    siblings: List[Dict[str, Any]],
+    *,
+    n_creatives: int,
+    allow_stalled_borrow: bool,
+) -> List[Dict[str, Any]]:
+    """Select creatives; never pull stalled global winners into non-recovery slots."""
+    interest = str(primary.get("interest") or "").strip()
+    creatives_out: List[Dict[str, Any]] = []
+    for c in [primary, *siblings]:
+        if len(creatives_out) >= n_creatives:
+            break
+        cr = str(c.get("creative") or "")
+        key = cr[:40]
+        if any(x["name"] == key for x in creatives_out):
+            continue
+        tnote = _creative_trend_note(trend, c["offer"], interest, cr)
+        if not allow_stalled_borrow and tnote == "trend: stalled (recovery)":
+            continue
+        creatives_out.append({
+            "name": key,
+            "deposits": c.get("deposits", 0),
+            "roi": c.get("roi", 0.0),
+            "note": tnote,
+        })
+    return creatives_out
+
+
+def _assemble_open_campaign(
+    *,
+    strategy_type: int,
+    primary: Dict[str, Any],
+    combos_list: List[Dict[str, Any]],
+    total_dep: int,
+    is_running: bool,
+    country_code: str,
+    country_name: str,
+    today: str,
+    trend: Optional[Dict[str, Any]],
+    medians: Dict[str, Any],
+    creatives_out: List[Dict[str, Any]],
+    argument_suffix: str = "",
+) -> Dict[str, Any]:
+    """Build one §9 campaign recommendation dict."""
+    interest = str(primary.get("interest") or "").strip()
+    offer = str(primary.get("offer") or "").strip()
+    device_raw = primary.get("device") or "all"
+    age_raw = primary.get("age") or ""
+
+    bench = get_benchmark(country_name, offer or None)
+    quality = _check_quality(primary, bench)
+    offer_part = _offer_abbr(offer, country_name=country_name)
+    device_part = str(device_raw).capitalize()
+    age_part = f"_{age_raw}" if not _is_nan_val(age_raw) else ""
+
+    argument = f"{total_dep} dep"
+    if is_running:
+        argument += ", scale up"
+    if argument_suffix:
+        argument += f", {argument_suffix}"
+
+    trend_tags = _interest_trend_tags(trend, interest)
+    if trend_tags:
+        argument += f", trend: {', '.join(trend_tags)}"
+
+    creative_type = _creative_type_for_campaign([cr["name"] for cr in creatives_out])
+    campaign_name = (
+        f"{country_code}_{offer_part}_{device_part}"
+        f"_{creative_type}_{interest}{age_part}_{today}"
+    )
+
+    return {
+        "strategy_type": strategy_type,
+        "strategy_label": OPEN_STRATEGY_LABELS[strategy_type],
+        "campaign_name": campaign_name,
+        "targeting": interest,
+        "offer": offer,
+        "category": primary.get("category", "Strong"),
+        "quality": quality,
+        "total_deposits": total_dep,
+        "argument": argument,
+        "creatives": creatives_out,
+        "below_benchmark": quality == "warn",
+        "data_median_cpl": medians.get("median_cpl"),
+        "trend_tags": trend_tags,
+    }
+
+
+def open_recs_for_status_table(
+    recs: List[Dict[str, Any]],
+    *,
+    max_campaigns: int = 2,
+) -> List[Dict[str, Any]]:
+    """Pick §6–7 To Do campaigns: only strategies 1–2 (stable / new trend), never recovery."""
+    if not recs:
+        return []
+    order = {1: 0, 2: 1, 3: 2, 4: 3}
+    primary = sorted(
+        [r for r in recs if int(r.get("strategy_type") or 99) in (1, 2)],
+        key=lambda r: order.get(int(r.get("strategy_type") or 99), 99),
+    )
+    return primary[:max_campaigns]
+
+
 def build_open_recommendations(
     combos_df: pd.DataFrame,
     df: pd.DataFrame,
@@ -863,157 +1203,163 @@ def build_open_recommendations(
     medians: Dict[str, Any],
     *,
     trend: Optional[Dict[str, Any]] = None,
-    n_campaigns: int = 2,
     n_creatives: int = 3,
 ) -> List[Dict[str, Any]]:
-    """Return up to *n_campaigns* campaign recs, each with *n_creatives* ads.
+    """Return up to four §9 recommendations — one per strategy bucket (§2 Trend).
 
-    Logic:
-    1. Group all qualified combos by targeting (interest).
-    2. Exclude targetings already running on this account.
-    3. Pick top targetings using deposits, **§2 trend boosts** (stable / heating up),
-       and de-prioritize stalled interests; diversify offers if possible.
-    4. For each targeting, select top creatives; borrow from best group if < 3.
-    5. Label creatives that appear in §2 trend lists.
+    1. trend + stable — deposits before and now (§2 Stable + Strong combos)
+    2. trend + variation — §2 New (all recent dep) + sibling creatives
+    3. trend + recovery — §2 Stopped + fresh creatives from same interest
+    4. test — when no trend signal; best unexplored Strong/Interesting combo
     """
     today = datetime.now().strftime("%d.%m")
     groups = _group_combos_by_targeting(combos_df, country_name)
-    if not groups:
-        return []
-
     running = _get_running_interests(df, country_name, account_alias)
+    has_trend = bool(trend and trend.get("has_date"))
+    recs: List[Dict[str, Any]] = []
+    used_interests: set = set()
 
-    # Score each targeting group by total deposits
-    scored: List[Dict[str, Any]] = []
-    for interest, combos in groups.items():
-        total_dep = sum(c["deposits"] for c in combos)
-        best_offer = combos[0]["offer"] if combos else ""
-        is_running = interest in running
-        scored.append({
-            "interest": interest,
-            "combos": combos,
-            "total_dep": total_dep,
-            "best_offer": best_offer,
-            "is_running": is_running,
-            "trend_boost": _interest_trend_boost(trend, interest),
-        })
-
-    scored.sort(key=lambda g: (
-        -int(not g["is_running"]),
-        -g["trend_boost"],
-        -g["total_dep"],
-    ))
-
-    # Select campaigns: prefer not-running, diversify offers
-    selected: List[Dict[str, Any]] = []
-    used_offers: set = set()
-    # First pass: pick best non-running, one per offer
-    for g in scored:
-        if len(selected) >= n_campaigns:
-            break
-        if not g["is_running"] and g["best_offer"] not in used_offers:
-            selected.append(g)
-            used_offers.add(g["best_offer"])
-    # Second pass: fill remaining slots from non-running (any offer)
-    for g in scored:
-        if len(selected) >= n_campaigns:
-            break
-        if g not in selected and not g["is_running"]:
-            selected.append(g)
-    # Fallback: if still not enough, use running groups (scale-up)
-    for g in scored:
-        if len(selected) >= n_campaigns:
-            break
-        if g not in selected:
-            selected.append(g)
-
-    # Find overall best creative for borrowing
-    all_combos_flat = [c for cs in groups.values() for c in cs]
-    all_combos_flat.sort(key=lambda c: (-c["deposits"], -c["roi"]))
-    best_global_creative = all_combos_flat[0]["creative"] if all_combos_flat else ""
-
-    recs = []
-    for rank, grp in enumerate(selected):
-        interest = grp["interest"]
-        combos_list = grp["combos"]
-        total_dep = grp["total_dep"]
-        is_running = grp["is_running"]
-
-        # Determine primary offer and representative combo for campaign name
-        primary = combos_list[0]
-        offer = primary["offer"]
-        device_raw = primary["device"]
-        age_raw = primary["age"]
-
-        bench = get_benchmark(country_name, offer or None)
-        quality = _check_quality(primary, bench)
-
-        offer_part = _offer_abbr(offer, country_name=country_name)
-        device_part = device_raw.capitalize()
-        creative_type = _creative_type(primary["creative"])
-        age_part = f"_{age_raw}" if not _is_nan_val(age_raw) else ""
-
-        campaign_name = (
-            f"{country_code}_{offer_part}_{device_part}"
-            f"_{creative_type}_{interest}{age_part}_{today}"
+    def _append_rec(
+        strategy_type: int,
+        primary: Dict[str, Any],
+        combos_list: List[Dict[str, Any]],
+        *,
+        creatives_out: List[Dict[str, Any]],
+        argument_suffix: str,
+        allow_running: bool = False,
+    ) -> None:
+        interest = str(primary.get("interest") or "").strip()
+        if interest in used_interests:
+            return
+        if not allow_running and interest in running:
+            return
+        total_dep = sum(c["deposits"] for c in combos_list) or primary.get("deposits", 0)
+        if not creatives_out:
+            siblings = [c for c in combos_list if c is not primary]
+            creatives_out = _pick_creatives_for_combo(
+                trend,
+                primary,
+                siblings,
+                n_creatives=n_creatives,
+                allow_stalled_borrow=(strategy_type == 3),
+            )
+        if not creatives_out:
+            return
+        used_interests.add(interest)
+        recs.append(
+            _assemble_open_campaign(
+                strategy_type=strategy_type,
+                primary=primary,
+                combos_list=combos_list,
+                total_dep=int(total_dep),
+                is_running=interest in running,
+                country_code=country_code,
+                country_name=country_name,
+                today=today,
+                trend=trend,
+                medians=medians,
+                creatives_out=creatives_out,
+                argument_suffix=argument_suffix,
+            )
         )
 
-        # Argument for why this targeting
-        if rank == 0:
-            argument = f"{total_dep} dep, best targeting"
-        elif grp["best_offer"] != selected[0]["best_offer"]:
-            argument = f"{total_dep} dep, diversification"
-        else:
-            argument = f"{total_dep} dep, 2nd best targeting"
-        if is_running:
-            argument += ", scale up"
+    # 1 · trend + stable
+    if has_trend:
+        stable_entries = sorted(
+            trend.get("stable", []),
+            key=lambda e: (
+                -int(e.get("deposits_recent", 0) or 0),
+                -int(e.get("deposits_total", 0) or 0),
+            ),
+        )
+        for entry in stable_entries:
+            primary = _combo_from_trend_entry(entry, groups)
+            interest = str(primary.get("interest") or "").strip()
+            combos_list = sorted(
+                groups.get(interest, [primary]),
+                key=lambda c: (-int(c.get("deposits", 0)), -_safe_float(c.get("roi"))),
+            )
+            siblings = [c for c in combos_list if c is not primary]
+            creatives_out = _pick_creatives_for_combo(
+                trend, primary, siblings, n_creatives=n_creatives, allow_stalled_borrow=False,
+            )
+            _append_rec(
+                1, primary, combos_list, creatives_out=creatives_out,
+                argument_suffix="stable + ongoing deposits",
+                allow_running=True,
+            )
+            break
 
-        trend_tags = _interest_trend_tags(trend, interest)
-        if trend_tags:
-            argument += f", trend: {', '.join(trend_tags)}"
+    # 2 · trend + variation (§2 New)
+    if has_trend:
+        new_entries = sorted(
+            trend.get("trending_up", []),
+            key=lambda e: -int(e.get("deposits_recent", 0) or 0),
+        )
+        for entry in new_entries:
+            primary = _combo_from_trend_entry(entry, groups)
+            interest = str(primary.get("interest") or "").strip()
+            combos_list = groups.get(interest, [primary])
+            creatives_out = [{
+                "name": _full_creative_from_trend(entry)[:40],
+                "deposits": _safe_int(entry.get("deposits_recent")),
+                "roi": primary.get("roi", 0.0),
+                "note": "trend: all recent dep",
+            }]
+            creatives_out.extend(
+                _variation_creatives_for_entry(trend, entry, groups, max_extra=n_creatives - 1)
+            )
+            _append_rec(
+                2, primary, combos_list, creatives_out=creatives_out[:n_creatives],
+                argument_suffix="new trend — scale + variations",
+            )
+            break
 
-        # Pick top N creatives
-        creatives_out: List[Dict[str, Any]] = []
-        for c in combos_list[:n_creatives]:
-            tnote = _creative_trend_note(trend, c["offer"], interest, c["creative"])
-            creatives_out.append({
-                "name": c["creative"][:40],
-                "deposits": c["deposits"],
-                "roi": c["roi"],
-                "note": tnote,
+    # 3 · trend + recovery (§2 Stopped)
+    if has_trend:
+        stopped_entries = sorted(
+            trend.get("trending_down", []),
+            key=lambda e: -int(e.get("deposits_total", 0) or 0),
+        )
+        for entry in stopped_entries:
+            primary = _combo_from_trend_entry(entry, groups)
+            interest = str(primary.get("interest") or "").strip()
+            combos_list = groups.get(interest, [primary])
+            creatives_out = _recovery_creatives_for_entry(trend, entry, groups)[:n_creatives]
+            _append_rec(
+                3, primary, combos_list, creatives_out=creatives_out,
+                argument_suffix="recovery — was working, refresh",
+            )
+            break
+
+    # 4 · test — only when no trend window or nothing stable (bucket 1)
+    has_stable_rec = any(r.get("strategy_type") == 1 for r in recs)
+    if groups and (not has_trend or (has_trend and not has_stable_rec)):
+        scored: List[Dict[str, Any]] = []
+        for interest, combos in groups.items():
+            if interest in used_interests:
+                continue
+            total_dep = sum(c["deposits"] for c in combos)
+            boost = _interest_trend_boost(trend, interest) if has_trend else 0
+            scored.append({
+                "interest": interest,
+                "combos": combos,
+                "total_dep": total_dep,
+                "boost": boost,
+                "is_running": interest in running,
             })
-        # If fewer than n_creatives, borrow from best global
-        if len(creatives_out) < n_creatives and best_global_creative:
-            existing_names = {cr["name"] for cr in creatives_out}
-            if best_global_creative[:40] not in existing_names:
-                source_interest = all_combos_flat[0]["interest"]
-                src = all_combos_flat[0]
-                borrow_note = f"test: best from {source_interest}"
-                t_extra = _creative_trend_note(
-                    trend, src["offer"], source_interest, best_global_creative,
-                )
-                if t_extra:
-                    borrow_note = f"{borrow_note}; {t_extra}"
-                creatives_out.append({
-                    "name": best_global_creative[:40],
-                    "deposits": all_combos_flat[0]["deposits"],
-                    "roi": all_combos_flat[0]["roi"],
-                    "note": borrow_note,
-                })
+        scored.sort(key=lambda g: (-int(not g["is_running"]), -g["boost"], -g["total_dep"]))
+        for grp in scored:
+            combos_list = grp["combos"]
+            primary = combos_list[0]
+            siblings = combos_list[1:]
+            creatives_out = _pick_creatives_for_combo(
+                trend, primary, siblings, n_creatives=n_creatives, allow_stalled_borrow=False,
+            )
+            suffix = "explore — no clear trend" if not has_trend else "test — diversify"
+            _append_rec(4, primary, combos_list, creatives_out=creatives_out, argument_suffix=suffix)
+            break
 
-        recs.append({
-            "campaign_name": campaign_name,
-            "targeting": interest,
-            "offer": offer,
-            "category": primary["category"],
-            "quality": quality,
-            "total_deposits": total_dep,
-            "argument": argument,
-            "creatives": creatives_out,
-            "below_benchmark": quality == "warn",
-            "data_median_cpl": medians.get("median_cpl"),
-            "trend_tags": trend_tags,
-        })
     return recs
 
 
@@ -1069,7 +1415,7 @@ def _account_status_todo_display(
     if acc.get("is_ready"):
         if open_recs_for_account:
             return format_open_recommendations_for_status_table(
-                open_recs_for_account,
+                open_recs_for_status_table(open_recs_for_account),
                 country_name=country_name,
             )
         # Section 9 omits accounts with no open recs — same here.
@@ -1212,32 +1558,25 @@ def build_morning_report(
         want = country_filter.strip().lower()
         all_countries = [c for c in all_countries if c.strip().lower() == want]
 
-    # Country name → ISO-2 code mapping (extend as needed)
-    _COUNTRY_TO_CODE: Dict[str, str] = {
-        "mexico": "mx", "guatemala": "gt", "brazil": "br", "chile": "cl",
-        "colombia": "co", "peru": "pe", "argentina": "ar", "ecuador": "ec",
-        "venezuela": "ve", "bolivia": "bo", "paraguay": "py", "uruguay": "uy",
-        "bahrain": "bh", "uae": "uae", "united arab emirates": "uae",
-        "qatar": "qa", "oman": "om", "kuwait": "kw", "saudi arabia": "sa",
-        "nigeria": "ng", "kenya": "ke", "ghana": "gh", "south africa": "za",
-        "albania": "al", "morocco": "ma", "egypt": "eg",
-    }
-
     def _accounts_for_country(country: str) -> List[Dict[str, Any]]:
         """GSheet rows for this country only (column B country code must match).
 
         Does not use Excel `Account Alias` to attach an account to a country — that caused
         the same alias (e.g. reused across geo) to appear under the wrong country section.
+
+        Column B may be ISO codes (``KW``), short slugs (``uae``), or full names (``Kuwait``)
+        matching Excel ``Country Final`` spelling — see ``canonical_gsheet_country_code``.
         """
-        expected_code = _COUNTRY_TO_CODE.get(country.strip().lower(), "")
+        expected_code = _EXCEL_COUNTRY_TO_GSHEET_CODE.get(country.strip().lower(), "")
         if not expected_code:
             return []
 
         seen: set = set()
         matched: List[Dict[str, Any]] = []
         for r in account_rows:
-            row_code = str(r.get("country_code", "")).strip().lower()
-            if row_code != expected_code:
+            row_code_raw = str(r.get("country_code", "")).strip()
+            row_canonical = canonical_gsheet_country_code(row_code_raw)
+            if row_canonical != expected_code:
                 continue
             alias = r["alias"]
             if alias in seen:

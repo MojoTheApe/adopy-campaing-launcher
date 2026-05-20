@@ -91,16 +91,20 @@ To Do: Trad/trading/Brazilian speci…
 | BR_trader_pro_all_creative_trading_25 | $65.00 | 130   | 2    | $0.50 | $32.50 |
 
 
-### 9. What to Open (2 Campaigns per Account)
+### 9. What to Open (4 strategies per account)
+
+_Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
 **MX-acc-1:**
 
-  Campaign 1: `mx_Trad_All_Video_trading_25_02.05`   [trading — 2 dep, best targeting, trend: heating up]
+  **2 · trend + variation**
+  `mx_Trad_All_Video_trading_25_02.05`   [trading — 2 dep, new trend — scale + variations, trend: heating up]
     - Brazilian special  (2 dep, ROI 1.46)  (trend: all recent dep)
 
 **BR-acc-1:**
 
-  Campaign 1: `br_Trad_All_Video_trading_25_02.05`   [trading — 2 dep, best targeting, scale up, trend: heating up]
+  **2 · trend + variation**
+  `br_Trad_All_Video_trading_25_02.05`   [trading — 2 dep, scale up, new trend — scale + variations, trend: heating up]
     - Brazilian special  (2 dep, ROI 1.46)  (trend: all recent dep)
 
 
@@ -183,12 +187,12 @@ _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Face
 **MX-acc-1** ✅
 Perf: $135.00 spend / 270 leads / 2 FTDs / CPL $0.50 / CPA $67.50 / CR 0.7%
 Status: 5
-To Do: Cryp/crypto/Buy bitcoin now⚠; Trad/trading/Make money fast⚠
+To Do: Cryp/crypto/Buy bitcoin now⚠
 
 **BR-acc-1** ✅
 Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
 Status: 3
-To Do: Trad/trading/Make money fast⚠; Cryp/crypto/Buy bitcoin now⚠
+To Do: Cryp/crypto/Buy bitcoin now⚠
 
 
 ### 8. Optimization
@@ -200,27 +204,31 @@ To Do: Trad/trading/Make money fast⚠; Cryp/crypto/Buy bitcoin now⚠
 | ME_trader_pro_all_creative_trading_25 | $135.00 | 270   | 2    | $0.50 | $67.50 |
 
 
-### 9. What to Open (2 Campaigns per Account)
+### 9. What to Open (4 strategies per account)
+
+_Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
 **MX-acc-1:**
 
-  Campaign 1: `mx_Cryp_All_Video_crypto_25_02.05`   [crypto — 3 dep, best targeting, trend: heating up]  ⚠ below benchmark
+  **2 · trend + variation**
+  `mx_Cryp_All_Video_crypto_25_02.05`   [crypto — 3 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
     - Buy bitcoin now  (3 dep, ROI 1.02)  (trend: all recent dep)
 
-  Campaign 2: `mx_Trad_All_Video_trading_25_02.05`   [trading — 3 dep, diversification, scale up, trend: heating up]  ⚠ below benchmark
+  **4 · test**
+  `mx_Trad_All_Video_trading_25_02.05`   [trading — 3 dep, scale up, test — diversify, trend: heating up]  ⚠ below benchmark
     - Make money fast  (2 dep, ROI 1.11)  (trend: all recent dep)
     - iOS exclusive offer  (1 dep, ROI 2.00)  (trend: all recent dep)
-    - Buy bitcoin now  (3 dep, ROI 1.02)  (test: best from crypto; trend: all recent dep)
 
 **BR-acc-1:**
 
-  Campaign 1: `br_Trad_All_Video_trading_25_02.05`   [trading — 3 dep, best targeting, trend: heating up]  ⚠ below benchmark
+  **2 · trend + variation**
+  `br_Cryp_All_Video_crypto_25_02.05`   [crypto — 3 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
+    - Buy bitcoin now  (3 dep, ROI 1.02)  (trend: all recent dep)
+
+  **4 · test**
+  `br_Trad_All_Video_trading_25_02.05`   [trading — 3 dep, test — diversify, trend: heating up]  ⚠ below benchmark
     - Make money fast  (2 dep, ROI 1.11)  (trend: all recent dep)
     - iOS exclusive offer  (1 dep, ROI 2.00)  (trend: all recent dep)
-    - Buy bitcoin now  (3 dep, ROI 1.02)  (test: best from crypto; trend: all recent dep)
-
-  Campaign 2: `br_Cryp_All_Video_crypto_25_02.05`   [crypto — 3 dep, diversification, trend: heating up]  ⚠ below benchmark
-    - Buy bitcoin now  (3 dep, ROI 1.02)  (trend: all recent dep)
 
 
 ---

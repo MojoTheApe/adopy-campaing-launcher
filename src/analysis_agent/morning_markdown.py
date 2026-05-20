@@ -132,6 +132,30 @@ def _render_asset_summary(rows: List[Dict[str, Any]]) -> str:
     return _table(["Asset (Offer)", "Spend", "Leads", "Dep", "CPL", "CPA", "CR", "ROI"], table_rows)
 
 
+def _render_news_context(news_context: Dict[str, Any]) -> str:
+    lines = ["### 0. News Context", ""]
+    items = news_context.get("items") or []
+    reliable = [item for item in items if item.get("confidence") != "low"]
+    if not items or not reliable:
+        lines.append("_No reliable recent asset news found. Use evergreen angles from working combos._")
+        return "\n".join(lines)
+
+    for item in items:
+        lines.append(f"**{_esc(item.get('asset', ''))}**")
+        lines.append(f"- Signal: {_esc(item.get('signal', ''))}")
+        summary = item.get("summary")
+        if summary:
+            lines.append(f"- Why it matters: {_esc(summary)}")
+        fd = item.get("freshness_days")
+        if fd is not None:
+            lines.append(f"- Recency: ~{int(round(float(fd)))} days ago")
+        headline_angle = item.get("headline_angle")
+        if headline_angle:
+            lines.append(f"- Headline angle: {_esc(headline_angle)}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 def _render_trend(trend: Dict[str, Any]) -> str:
     lines = ["### 2. Trend (Recent Days)", ""]
     if not trend.get("has_date"):
@@ -320,6 +344,15 @@ def _render_account_statuses(account_rows: List[Dict[str, Any]], has_gsheet: boo
     return "\n".join(lines)
 
 
+def _optimization_campaign_cell(adset_name: str) -> str:
+    """Excel exports sometimes aggregate leads under ``Adset Name`` ``-`` with zero spend."""
+    s = str(adset_name or "").strip()
+    lower = s.lower()
+    if not s or s == "-" or lower in ("nan", "none"):
+        return "Account-level (no ad set in export)"
+    return s[:45]
+
+
 def _render_close_recs(
     close_recs: Dict[str, List[Dict[str, Any]]],
     close_summaries: Dict[str, Dict[str, Any]] | None = None,
@@ -343,7 +376,7 @@ def _render_close_recs(
             cpl_s = _fmt_money(r["cpl"]) if r.get("cpl") else "—"
             cpa_s = _fmt_money(r["cpa"]) if r.get("cpa") else "—"
             table_rows.append([
-                r["adset_name"][:45],
+                _optimization_campaign_cell(r["adset_name"]),
                 _fmt_money(r["spend"]),
                 str(r["leads"]),
                 str(r["deposits"]),
@@ -361,7 +394,13 @@ def _render_close_recs(
 
 
 def _render_open_recs(open_recs: Dict[str, List[Dict[str, Any]]]) -> str:
-    lines = ["### 9. What to Open (2 Campaigns per Account)", ""]
+    lines = [
+        "### 9. What to Open (4 strategies per account)",
+        "",
+        "_Aligned with §2 Trend: **1** stable · **2** new trend + variations · "
+        "**3** recovery (stopped) · **4** test when no stable trend._",
+        "",
+    ]
     any_data = any(v for v in open_recs.values())
     if not any_data:
         lines.append("_No ready accounts or no combos to recommend._")
@@ -372,16 +411,15 @@ def _render_open_recs(open_recs: Dict[str, List[Dict[str, Any]]]) -> str:
             continue
         lines.append(f"**{acc_label}:**")
         lines.append("")
-        for i, r in enumerate(recs, 1):
-            quality = r.get("quality", "ok")
-            flag = " ✓" if quality == "ok" else " ⚠"
-            cat = r.get("category", "") + flag
+        for r in recs:
+            strategy_label = r.get("strategy_label") or ""
             argument = r.get("argument", "")
             below = r.get("below_benchmark", False)
             warn_note = "  ⚠ below benchmark" if below else ""
 
+            lines.append(f"  **{strategy_label}**")
             lines.append(
-                f"  Campaign {i}: `{r['campaign_name']}`"
+                f"  `{r['campaign_name']}`"
                 f"   [{r['targeting']} — {argument}]{warn_note}"
             )
             for cr in r.get("creatives", []):
@@ -402,6 +440,13 @@ def _render_country_section(section: Dict[str, Any], my_cm: str, has_gsheet: boo
     parts = [
         f"## Country: {country}",
         "",
+    ]
+    if section.get("news_context"):
+        parts.extend([
+            _render_news_context(section.get("news_context", {})),
+            "",
+        ])
+    parts.extend([
         _render_cm_comparison(section.get("cm_comparison", []), my_cm),
         "",
         _render_asset_summary(section.get("asset_summary", [])),
@@ -425,7 +470,7 @@ def _render_country_section(section: Dict[str, Any], my_cm: str, has_gsheet: boo
         "",
         "---",
         "",
-    ]
+    ])
     return "\n".join(parts)
 
 

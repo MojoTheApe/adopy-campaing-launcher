@@ -15,7 +15,8 @@ Auth mode (auto-detected):
 
 Sheet layout (last/today's tab):
     Col A — CM name (campaign manager)
-    Col B — Country code (e.g. MX, GT, EC)
+    Col B — Country code (e.g. MX, GT, EC, KW) or the same spelling as Excel
+            ``Country`` / ``Country Final`` (e.g. ``Kuwait``, ``United Arab Emirates``)
     Col C — Account label  (e.g. "FacebookMKTO1211 MX")
     Col J — To Do          (e.g. "Account Disabled", "Video selfie", expand, or empty = ready)
     Col K — Optional "2 bundles" line for the report: short `asset + targeting + creative`

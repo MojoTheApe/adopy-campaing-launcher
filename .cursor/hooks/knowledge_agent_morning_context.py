@@ -72,6 +72,20 @@ RELEVANCE_MARKERS = (
     "таргет",
     "брейнсторм",
     "утрен",
+    "тренд",
+    "что открыть",
+    "секция 9",
+    "section 9",
+)
+
+SECTION_9_TREND_GUIDANCE = (
+    "## §9 What to Open vs §2 Trend\n\n"
+    "Section 9 outputs **four strategy slots** (same country as §2):\n"
+    "1. **trend + stable** — §2 Stable + Strong combos that keep depositing.\n"
+    "2. **trend + variation** — §2 New (all recent dep) + sibling creatives in that targeting.\n"
+    "3. **trend + recovery** — §2 Stopped + fresh hot creatives from the same interest.\n"
+    "4. **test** — only when there is no stable trend or no date window; not a substitute for New.\n"
+    "Do not scale §2 Stopped combos as primary opens; use slot 3 for refresh tests.\n"
 )
 
 
@@ -176,6 +190,8 @@ def _build_context(prompt: str) -> str:
         "# Knowledge Agent Auto Context",
         "",
         "Auto-generated because the user prompt looks related to morning report, working/non-working combos, creatives, offers, targets, or brainstorming.",
+        "",
+        SECTION_9_TREND_GUIDANCE,
         "",
     ]
 

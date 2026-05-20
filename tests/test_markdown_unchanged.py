@@ -104,7 +104,7 @@ def test_report_static_copy_is_english(
     assert "### 1. Evgeni vs Team" in md
     assert "### 2. Trend (Recent Days)" in md
     assert "### 8. Optimization" in md
-    assert "### 9. What to Open (2 Campaigns per Account)" in md
+    assert "### 9. What to Open (4 strategies per account)" in md
 
     old_russian_labels = [
         "команда",

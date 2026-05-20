@@ -18,6 +18,8 @@ Environment variables (.env):
     GSHEET_ACCOUNTS_ID      Google Sheet ID for accounts tab
     GSHEET_ACCOUNTS_SHEET   tab name or "auto_last" (default: auto_last)
     GOOGLE_CREDENTIALS_JSON path to service-account JSON (default: config/google_credentials.json)
+    MORNING_REPORT_WITH_NEWS  set to "1" to fetch news like --with-news
+    NEWS_MAX_AGE_DAYS         drop RSS/GDELT items older than this many days (default 7)
 """
 from __future__ import annotations
 
@@ -86,6 +88,12 @@ def _parse_args() -> argparse.Namespace:
         dest="no_gsheet",
         help="Skip Google Sheet read (sections 8-9 will be empty)",
     )
+    parser.add_argument(
+        "--with-news",
+        action="store_true",
+        dest="with_news",
+        help="Fetch asset news context and render section 0 per country",
+    )
     return parser.parse_args()
 
 
@@ -100,6 +108,7 @@ def main(argv: list[str] | None = None) -> None:
             trend_days=args.trend_days,
             country_filter=args.country,
             skip_gsheet=args.no_gsheet,
+            with_news=args.with_news or os.environ.get("MORNING_REPORT_WITH_NEWS") == "1",
         )
     except FileNotFoundError as e:
         print(f"[run_morning] ERROR: {e}", file=sys.stderr)
