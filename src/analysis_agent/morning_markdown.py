@@ -1,6 +1,6 @@
 """Render a MorningReport dict → Markdown string.
 
-All 11 sections per country, structured for easy morning reading in Cursor.
+All numbered sections per country (0–10), structured for easy morning reading in Cursor.
 """
 from __future__ import annotations
 
@@ -70,10 +70,10 @@ def _compact_type_label(category: str, flag: str) -> str:
 _ACCOUNT_STATUSES_LEGEND = (
     "_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export "
     "(Excel). "
-    "6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative "
-    "each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; "
-    "trailing `⚠` = below benchmark. Full names are in §9. "
-    "If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the "
+    "7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative "
+    "each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; "
+    "trailing `⚠` = below benchmark. Full names are in §10. "
+    "If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the "
     "GSheet note. Otherwise (not ready) uses col J/K. "
     "GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._"
 )
@@ -257,7 +257,7 @@ def _render_targeting(rows: List[Dict[str, Any]]) -> str:
 
 
 def _render_creatives(rows: List[Dict[str, Any]]) -> str:
-    lines = ["### 5. Creatives", ""]
+    lines = ["### 4. Creatives", ""]
     if not rows:
         lines.append("_No creative data._")
         return "\n".join(lines)
@@ -266,7 +266,7 @@ def _render_creatives(rows: List[Dict[str, Any]]) -> str:
     for r in rows:
         cpa_s = _fmt_money(r["cpa"]) if r["cpa"] else "—"
         table_rows.append([
-            r["ad_title"][:30],
+            _ellipsis(r.get("ad_title") or "", 72),
             str(r["deposits"]),
             str(r["leads"]),
             _fmt_money(r["spend"]),
@@ -278,7 +278,7 @@ def _render_creatives(rows: List[Dict[str, Any]]) -> str:
 
 def _render_ai_context(block: str) -> str:
     return "\n".join([
-        "### 4. AI Context (copy into chat)",
+        "### 5. AI Context (copy into chat)",
         "",
         "```",
         block,
@@ -288,7 +288,7 @@ def _render_ai_context(block: str) -> str:
 
 def _render_hypotheses(block: str) -> str:
     return "\n".join([
-        "### 5. Hypotheses (copy into chat)",
+        "### 6. Hypotheses (copy into chat)",
         "",
         "```",
         block,
@@ -297,7 +297,7 @@ def _render_hypotheses(block: str) -> str:
 
 
 def _render_account_statuses(account_rows: List[Dict[str, Any]], has_gsheet: bool = False) -> str:
-    lines = ["### 6–7. Account Statuses", "", _ACCOUNT_STATUSES_LEGEND, ""]
+    lines = ["### 7–8. Account Statuses", "", _ACCOUNT_STATUSES_LEGEND, ""]
     if not account_rows:
         if has_gsheet:
             lines.append("_No accounts found for this country in the GSheet._")
@@ -357,7 +357,7 @@ def _render_close_recs(
     close_recs: Dict[str, List[Dict[str, Any]]],
     close_summaries: Dict[str, Dict[str, Any]] | None = None,
 ) -> str:
-    lines = ["### 8. Optimization", ""]
+    lines = ["### 9. Optimization", ""]
     any_data = any(v for v in close_recs.values())
     if not any_data:
         lines.append("_No campaign spend found for ready accounts._")
@@ -386,7 +386,7 @@ def _render_close_recs(
         lines.append(f"**{acc_label}:**")
         lines.append("")
         lines.append(_table(
-            ["Campaign", "Spend", "Leads", "FTDs", "CPL", "CPA"],
+            ["Ad set name", "Spend", "Leads", "FTDs", "CPL", "CPA"],
             table_rows,
         ))
         lines.append("")
@@ -395,7 +395,7 @@ def _render_close_recs(
 
 def _render_open_recs(open_recs: Dict[str, List[Dict[str, Any]]]) -> str:
     lines = [
-        "### 9. What to Open (4 strategies per account)",
+        "### 10. What to Open (4 strategies per account)",
         "",
         "_Aligned with §2 Trend: **1** stable · **2** new trend + variations · "
         "**3** recovery (stopped) · **4** test when no stable trend._",
@@ -455,6 +455,8 @@ def _render_country_section(section: Dict[str, Any], my_cm: str, has_gsheet: boo
         "",
         _render_top_combos(section.get("top_combos", [])),
         "",
+        _render_creatives(section.get("creatives", [])),
+        "",
         _render_ai_context(section.get("ai_context", "")),
         "",
         _render_hypotheses(section.get("hypotheses", "")),
@@ -497,8 +499,9 @@ def render_morning_report_md(report: Dict[str, Any]) -> str:
         f"- **Qualifying combos:** {total_combos}",
         f"- **Google Sheet:** {gsheet_note}",
         "",
-        "**How to use:** Paste the section **4–5** code blocks into chat for AI. "
-        "Section **6–7** lists GSheet account statuses (see the legend under each country).",
+        "**How to use:** Section **4** lists top Ad Titles per country (deposits / spend). "
+        "Paste the section **5–6** code blocks into chat for AI. "
+        "Section **7–8** lists GSheet account statuses (see the legend under each country).",
         "",
         "---",
         "",

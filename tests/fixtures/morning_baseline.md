@@ -6,7 +6,7 @@
 - **Qualifying combos:** 4
 - **Google Sheet:** ✅ connected
 
-**How to use:** Paste the section **4–5** code blocks into chat for AI. Section **6–7** lists GSheet account statuses (see the legend under each country).
+**How to use:** Section **4** lists top Ad Titles per country (deposits / spend). Paste the section **5–6** code blocks into chat for AI. Section **7–8** lists GSheet account statuses (see the legend under each country).
 
 ---
 
@@ -38,7 +38,14 @@ Period: **Apr 12 – Apr 18, 2026 (7d)**
 | -------- | -------- | ---------------------------------- | --- | ----- | ------ | ---- |
 | Strong ✓ | trader_… | all + trading + 25 + Brazilian sp… | 2   | $0.50 | $32.50 | 1.46 |
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title              | Dep | Leads | Spend  | CPA    |
+| --------------------- | --- | ----- | ------ | ------ |
+| Brazilian special     | 2   | 130   | $65.00 | $32.50 |
+| Mobile crypto trading | 0   | 40    | $20.00 | —      |
+
+### 5. AI Context (copy into chat)
 
 ```
 Country: Brazil
@@ -49,7 +56,7 @@ Top combos (paste into Cursor chat and ask: 'Explain why these combos work and w
    → Target context: Trading (Generic) — active traders interested in stocks and crypto
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Brazil
@@ -67,9 +74,9 @@ Top creatives by deposits:
   - Brazilian special: 2 dep, $65 spend
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 **MX-acc-1** ✅
 Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
@@ -79,19 +86,19 @@ To Do: Trad/trading/Brazilian speci…
 **BR-acc-1** ✅
 Perf: $65.00 spend / 130 leads / 2 FTDs / CPL $0.50 / CPA $32.50 / CR 1.5%
 Status: 3
-To Do: Trad/trading/Brazilian speci…
+To Do: —
 
 
-### 8. Optimization
+### 9. Optimization
 
 **BR-acc-1:**
 
-| Campaign                              | Spend  | Leads | FTDs | CPL   | CPA    |
+| Ad set name                           | Spend  | Leads | FTDs | CPL   | CPA    |
 | ------------------------------------- | ------ | ----- | ---- | ----- | ------ |
 | BR_trader_pro_all_creative_trading_25 | $65.00 | 130   | 2    | $0.50 | $32.50 |
 
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -99,12 +106,6 @@ _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** r
 
   **2 · trend + variation**
   `mx_Trad_All_Video_trading_25_02.05`   [trading — 2 dep, new trend — scale + variations, trend: heating up]
-    - Brazilian special  (2 dep, ROI 1.46)  (trend: all recent dep)
-
-**BR-acc-1:**
-
-  **2 · trend + variation**
-  `br_Trad_All_Video_trading_25_02.05`   [trading — 2 dep, scale up, new trend — scale + variations, trend: heating up]
     - Brazilian special  (2 dep, ROI 1.46)  (trend: all recent dep)
 
 
@@ -143,7 +144,17 @@ Period: **Apr 12 – Apr 18, 2026 (7d)**
 | Strong ⚠ | trader_… | all + trading + 25 + Make money f… | 2   | $0.50 | $67.50 | 1.11 |
 | Int. ✓   | trader_… | ios + trading + 35+ + iOS exclusi… | 1   | $3.00 | $30.00 | 2.00 |
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title             | Dep | Leads | Spend   | CPA    |
+| -------------------- | --- | ----- | ------- | ------ |
+| Buy bitcoin now      | 3   | 450   | $225.00 | $75.00 |
+| Make money fast      | 2   | 270   | $135.00 | $67.50 |
+| iOS exclusive offer  | 1   | 10    | $30.00  | $30.00 |
+| Crypto for beginners | 0   | 50    | $25.00  | —      |
+| Generic offer        | 0   | 30    | $15.00  | —      |
+
+### 5. AI Context (copy into chat)
 
 ```
 Country: Mexico
@@ -157,7 +168,7 @@ Top combos (paste into Cursor chat and ask: 'Explain why these combos work and w
    → Target context: Trading (Generic) — active traders interested in stocks and crypto
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Mexico
@@ -180,9 +191,9 @@ Top creatives by deposits:
   - iOS exclusive offer: 1 dep, $30 spend
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 **MX-acc-1** ✅
 Perf: $135.00 spend / 270 leads / 2 FTDs / CPL $0.50 / CPA $67.50 / CR 0.7%
@@ -195,16 +206,16 @@ Status: 3
 To Do: Cryp/crypto/Buy bitcoin now⚠
 
 
-### 8. Optimization
+### 9. Optimization
 
 **MX-acc-1:**
 
-| Campaign                              | Spend   | Leads | FTDs | CPL   | CPA    |
+| Ad set name                           | Spend   | Leads | FTDs | CPL   | CPA    |
 | ------------------------------------- | ------- | ----- | ---- | ----- | ------ |
 | ME_trader_pro_all_creative_trading_25 | $135.00 | 270   | 2    | $0.50 | $67.50 |
 
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -213,11 +224,6 @@ _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** r
   **2 · trend + variation**
   `mx_Cryp_All_Video_crypto_25_02.05`   [crypto — 3 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
     - Buy bitcoin now  (3 dep, ROI 1.02)  (trend: all recent dep)
-
-  **4 · test**
-  `mx_Trad_All_Video_trading_25_02.05`   [trading — 3 dep, scale up, test — diversify, trend: heating up]  ⚠ below benchmark
-    - Make money fast  (2 dep, ROI 1.11)  (trend: all recent dep)
-    - iOS exclusive offer  (1 dep, ROI 2.00)  (trend: all recent dep)
 
 **BR-acc-1:**
 

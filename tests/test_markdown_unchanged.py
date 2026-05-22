@@ -103,8 +103,9 @@ def test_report_static_copy_is_english(
 
     assert "### 1. Evgeni vs Team" in md
     assert "### 2. Trend (Recent Days)" in md
-    assert "### 8. Optimization" in md
-    assert "### 9. What to Open (4 strategies per account)" in md
+    assert "### 4. Creatives" in md
+    assert "### 9. Optimization" in md
+    assert "### 10. What to Open (4 strategies per account)" in md
 
     old_russian_labels = [
         "команда",
@@ -156,12 +157,12 @@ def test_optimization_groups_compact_tables_by_account(
     report = _build_report_from_fixture(df, accounts_rows)
     md = render_morning_report_md(report)
 
-    assert "### 8. Optimization" in md
+    assert "### 9. Optimization" in md
     assert "### 8. What to Close (Optimization)" not in md
     assert "Account total:" not in md
     assert "Close candidates:" not in md
     assert "**MX-acc-1:**" in md
-    assert "| Campaign" in md
+    assert "| Ad set name" in md
     assert "| Leads" in md
     assert "| FTDs" in md
     assert "| Reason" not in md

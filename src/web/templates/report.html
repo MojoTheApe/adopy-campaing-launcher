@@ -328,9 +328,9 @@
 </table>
 {% endif %}
 
-{# ── Section 5: Creatives ──────────────────────────────────────────── #}
+{# ── Section 5: Creatives — always visible (matches Markdown §4 Creatives per country). #}
+<h3 class="section">5. Creative breakdown <span class="hint">Ad Title — click row to drill</span></h3>
 {% if c.creatives %}
-<h3 class="section">5. Creative Breakdown <span class="hint">click row to drill into ads with that title</span></h3>
 <table>
   <thead><tr>
     <th>Ad title</th>
@@ -355,6 +355,8 @@
   {% endfor %}
   </tbody>
 </table>
+{% else %}
+<p><em>No creative data.</em></p>
 {% endif %}
 
 {# ── Sections 6 & 7: AI text blocks (not drillable) ────────────────── #}
@@ -367,9 +369,9 @@
 <pre class="text-block">{{ c.hypotheses }}</pre>
 {% endif %}
 
-{# ── Sections 8, 9, 10, 11: account/recs (already ad-level, no drill) #}
+{# ── Sections 8–9: account / GSheet ───────────────────────────────────── #}
 {% if c.account_rows %}
-<h3 class="section">6–7. Account Statuses</h3>
+<h3 class="section">8–9. Account Statuses</h3>
 <table>
   <thead><tr><th>Account</th><th>Cost</th><th>Asset</th><th>To Do</th><th>✓</th></tr></thead>
   <tbody>
@@ -389,13 +391,13 @@
 {% if c.close_recs %}
 {% set has_close = c.close_recs.values() | selectattr('0') | list %}
 {% if has_close %}
-<h3 class="section">8. Close Recommendations</h3>
+<h3 class="section">10. Optimization</h3>
 {% for label, recs in c.close_recs.items() %}
   {% if recs %}
     <p><strong>{{ label }}:</strong></p>
     <ul>
     {% for r in recs %}
-      <li>{{ r.adset_name[:60] }} — Spend: {{ '%.2f' % r.spend }}, Leads: {{ r.leads }}, FTDs: 0</li>
+      <li>{{ r.adset_name[:60] }} — Spend: {{ '%.2f' % r.spend }}, Leads: {{ r.leads }}, FTDs: {{ r.deposits }}</li>
     {% endfor %}
     </ul>
   {% endif %}
@@ -406,7 +408,7 @@
 {% if c.open_recs %}
 {% set has_open = c.open_recs.values() | selectattr('0') | list %}
 {% if has_open %}
-<h3 class="section">9. Open Recommendations</h3>
+<h3 class="section">11. What to Open (4 strategies per account)</h3>
 {% for label, recs in c.open_recs.items() %}
   {% if recs %}
     <p><strong>{{ label }}:</strong></p>

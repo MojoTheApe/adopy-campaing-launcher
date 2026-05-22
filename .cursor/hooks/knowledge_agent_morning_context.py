@@ -74,13 +74,15 @@ RELEVANCE_MARKERS = (
     "утрен",
     "тренд",
     "что открыть",
+    "секция 10",
+    "section 10",
     "секция 9",
     "section 9",
 )
 
-SECTION_9_TREND_GUIDANCE = (
-    "## §9 What to Open vs §2 Trend\n\n"
-    "Section 9 outputs **four strategy slots** (same country as §2):\n"
+SECTION_10_TREND_GUIDANCE = (
+    "## §10 What to Open vs §2 Trend\n\n"
+    "Section 10 outputs **four strategy slots** (same country as §2):\n"
     "1. **trend + stable** — §2 Stable + Strong combos that keep depositing.\n"
     "2. **trend + variation** — §2 New (all recent dep) + sibling creatives in that targeting.\n"
     "3. **trend + recovery** — §2 Stopped + fresh hot creatives from the same interest.\n"
@@ -191,7 +193,7 @@ def _build_context(prompt: str) -> str:
         "",
         "Auto-generated because the user prompt looks related to morning report, working/non-working combos, creatives, offers, targets, or brainstorming.",
         "",
-        SECTION_9_TREND_GUIDANCE,
+        SECTION_10_TREND_GUIDANCE,
         "",
     ]
 

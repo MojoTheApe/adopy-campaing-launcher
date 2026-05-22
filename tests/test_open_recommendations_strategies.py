@@ -1,4 +1,4 @@
-"""§9 open recommendations must follow §2 trend buckets (4 strategies)."""
+"""§10 open recommendations must follow §2 trend buckets (4 strategies)."""
 from __future__ import annotations
 
 from datetime import datetime

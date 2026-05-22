@@ -1,8 +1,8 @@
-"""Build the MorningReport data model — 11 sections per country.
+"""Build the MorningReport data model — payloads per country for `morning_markdown`.
 
 Calls existing analysis pipeline (compute_metrics / enrich_structure / aggregate_combos)
-and adds new aggregations for sections 2 (trend), 4 (targeting), 5 (creatives),
-10 (close recs), 11 (open recs).
+and aggregates trend, targeting breakdown, creatives (by Ad Title / §4 in output),
+top combos, account statuses, close recs, and open recs.
 
 The result is a plain dict — no external rendering dependencies.
 """
@@ -352,7 +352,7 @@ def _trend_entry_matches_combo(
 
 
 def _interest_trend_boost(trend: Optional[Dict[str, Any]], interest: str) -> int:
-    """Sort boost so §9 prefers interests that are strong in §2 (recent window)."""
+    """Sort boost so §10 prefers interests that are strong in §2 (recent window)."""
     if not trend or not trend.get("has_date"):
         return 0
     inter = str(interest or "").strip()
@@ -370,7 +370,7 @@ def _interest_trend_boost(trend: Optional[Dict[str, Any]], interest: str) -> int
 
 
 def _interest_trend_tags(trend: Optional[Dict[str, Any]], interest: str) -> List[str]:
-    """Short labels for §9 header, mirroring §2 buckets for this interest."""
+    """Short labels for §10 header, mirroring §2 buckets for this interest."""
     if not trend or not trend.get("has_date"):
         return []
     inter = str(interest or "").strip()
@@ -664,6 +664,51 @@ def build_account_performance_summary(
     }
 
 
+def aggregate_adsets_merged_for_account(
+    df_c: pd.DataFrame,
+) -> pd.DataFrame:
+    """Roll up enriched Excel rows to **one row per Adset Name** for report tables.
+
+    Sums ``# FTDs``, ``# Leads``, ``$ Spend`` across all rows that share the same
+    ad set (even when ``Offer`` / ``Ad Asset`` differs row-to-row).
+
+    Adds ``Offer``: the offer value among sub-rows whose summed spend for that ad
+    set is highest (for benchmarks / notes). If the ``Offer`` column is missing,
+    the column is omitted from the result.
+
+    ``df_c`` must already be scoped (e.g. one country + one ``Account Alias``).
+    Used by Optimization (§9) Markdown/HTML and any future ad-set campaign views.
+    """
+    if df_c.empty:
+        cols = ["Adset Name", "Deposits", "Leads", "Spend"]
+        if "Offer" in df_c.columns:
+            cols.append("Offer")
+        return pd.DataFrame(columns=cols)
+
+    offer_col = "Offer" if "Offer" in df_c.columns else None
+
+    agg_dict = {
+        "# FTDs": ("# FTDs", "sum"),
+        "# Leads": ("# Leads", "sum"),
+        "$ Spend": ("$ Spend", "sum"),
+    }
+    grouped = df_c.groupby(["Adset Name"], dropna=False).agg(**agg_dict).reset_index()
+    grouped.rename(columns={"# FTDs": "Deposits", "# Leads": "Leads", "$ Spend": "Spend"}, inplace=True)
+
+    if offer_col:
+        spend_by_offer = (
+            df_c.groupby(["Adset Name", offer_col], dropna=False)["$ Spend"]
+            .sum()
+            .reset_index()
+        )
+        spend_by_offer = spend_by_offer.sort_values("$ Spend", ascending=False)
+        dominant = spend_by_offer.drop_duplicates(subset=["Adset Name"], keep="first")
+        dominant = dominant.rename(columns={offer_col: "Offer"})
+        grouped = grouped.merge(dominant[["Adset Name", "Offer"]], on="Adset Name", how="left")
+
+    return grouped
+
+
 def build_close_recommendations(
     df: pd.DataFrame,
     country: str,
@@ -672,6 +717,13 @@ def build_close_recommendations(
     top_n: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Campaign-level optimization rows for a ready account, sorted by spend.
+
+    One row per **Adset Name**: spend, leads and FTDs are summed across all rows
+    for that ad set (including rows that differ only in ``Offer`` / ``Ad Asset``),
+    so the table does not show duplicate ad-set names with split metrics.
+
+    For benchmark / reason text, the **Offer** on the row is the one with the largest
+    spend among sub-rows for that ad set (ties: first after sort).
 
     Includes rows with leads or deposits even when spend is zero — exports sometimes
     put account-level leads on ``Adset Name`` placeholders (``-`` / empty) with no spend,
@@ -684,19 +736,8 @@ def build_close_recommendations(
     if df_c.empty:
         return []
 
-    group_cols = ["Adset Name"]
     offer_col = "Offer" if "Offer" in df_c.columns else None
-
-    if offer_col:
-        group_cols.append(offer_col)
-
-    agg_dict = {
-        "# FTDs": ("# FTDs", "sum"),
-        "# Leads": ("# Leads", "sum"),
-        "$ Spend": ("$ Spend", "sum"),
-    }
-    grouped = df_c.groupby(group_cols, dropna=False).agg(**agg_dict).reset_index()
-    grouped.rename(columns={"# FTDs": "Deposits", "# Leads": "Leads", "$ Spend": "Spend"}, inplace=True)
+    grouped = aggregate_adsets_merged_for_account(df_c)
 
     def _row_cpl_cpa(r) -> tuple[Optional[float], Optional[float]]:
         deposits = _safe_int(r.get("Deposits"))
@@ -929,7 +970,7 @@ def _get_running_interests(
     return {v for v in vals if v and v.lower() != "nan"}
 
 
-# §9 strategy buckets — aligned with §2 Trend (Recent Days)
+# §10 strategy buckets — aligned with §2 Trend (Recent Days)
 OPEN_STRATEGY_LABELS: Dict[int, str] = {
     1: "1 · trend + stable",
     2: "2 · trend + variation",
@@ -968,7 +1009,7 @@ def _combo_from_trend_entry(
     entry: Dict[str, Any],
     groups: Dict[str, List[Dict[str, Any]]],
 ) -> Dict[str, Any]:
-    """Build a combo dict for §9 from a §2 trend row (enriched from groups when found)."""
+    """Build a combo dict for §10 from a §2 trend row (enriched from groups when found)."""
     offer = str(entry.get("offer") or "").strip()
     interest = str(entry.get("interest") or "").strip()
     creative = _full_creative_from_trend(entry)
@@ -1132,7 +1173,7 @@ def _assemble_open_campaign(
     creatives_out: List[Dict[str, Any]],
     argument_suffix: str = "",
 ) -> Dict[str, Any]:
-    """Build one §9 campaign recommendation dict."""
+    """Build one §10 campaign recommendation dict."""
     interest = str(primary.get("interest") or "").strip()
     offer = str(primary.get("offer") or "").strip()
     device_raw = primary.get("device") or "all"
@@ -1205,7 +1246,7 @@ def build_open_recommendations(
     trend: Optional[Dict[str, Any]] = None,
     n_creatives: int = 3,
 ) -> List[Dict[str, Any]]:
-    """Return up to four §9 recommendations — one per strategy bucket (§2 Trend).
+    """Return up to four §10 recommendations — one per strategy bucket (§2 Trend).
 
     1. trend + stable — deposits before and now (§2 Stable + Strong combos)
     2. trend + variation — §2 New (all recent dep) + sibling creatives
@@ -1379,10 +1420,10 @@ def format_open_recommendations_for_status_table(
     target_max: int = 12,
     creative_max: int = 16,
 ) -> str:
-    """One-line summary of section 9 open recs for the Account Statuses table.
+    """One-line summary of section 10 open recs for the Account Statuses table.
 
     Dense form for narrow cells: ``slug/target/creative`` per campaign
-    (``slug`` = `_offer_abbr`, same order and first creative as §9),
+    (``slug`` = `_offer_abbr`, same order and first creative as §10),
     ``; `` between campaigns. Append ``⚠`` when below benchmark (no space).
     """
     if not recs:
@@ -1408,7 +1449,7 @@ def _account_status_todo_display(
     open_recs_for_account: List[Dict[str, Any]],
     country_name: str | None = None,
 ) -> str:
-    """To Do cell: mirror section 9 for ready accounts; GSheet for Video selfie / not ready."""
+    """To Do cell: mirror section 10 for ready accounts; GSheet for Video selfie / not ready."""
     raw_todo = str(acc.get("to_do", "") or "")
     if "video selfie" in raw_todo.lower():
         return format_account_status_todo_cell(raw_todo, str(acc.get("to_do_extra", "") or ""))
@@ -1433,7 +1474,7 @@ def build_country_section(
     my_cm: str,
     trend_days: int = 7,
 ) -> Dict[str, Any]:
-    """Build all 11 sub-sections for one country."""
+    """Build all country sub-sections (rendered as §0–§10 in Markdown)."""
     top_combos = build_top_combos(combos, country)
     targeting = build_targeting_breakdown(df, country)
     creatives = build_creative_breakdown(df, country)
