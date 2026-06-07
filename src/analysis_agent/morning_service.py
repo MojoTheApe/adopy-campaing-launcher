@@ -128,6 +128,7 @@ def load_morning_report(
                 news_context = build_news_context(
                     country,
                     assets,
+                    top_combos=section.get("top_combos", []),
                     fetcher=news_fetcher,
                 )
                 return section, news_context, None

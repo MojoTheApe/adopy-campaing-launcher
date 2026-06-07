@@ -1,12 +1,12 @@
-# Morning Report — 2026-05-20
+# Morning Report — 2026-06-07
 
 - **CM:** Evgeni Sedin
 - **Source:** `C:\Users\EvgeniSedin\Desktop\cursor example.xlsx`
 - **Trend window:** 7 days
-- **Qualifying combos:** 144
+- **Qualifying combos:** 200
 - **Google Sheet:** ✅ connected
 
-**How to use:** Paste the section **4–5** code blocks into chat for AI. Section **6–7** lists GSheet account statuses (see the legend under each country).
+**How to use:** Section **4** lists top Ad Titles per country (deposits / spend). Paste the section **5–6** code blocks into chat for AI. Section **7–8** lists GSheet account statuses (see the legend under each country).
 
 ---
 
@@ -14,25 +14,40 @@
 
 ### 0. News Context
 
+**Trolley** _(theme: Trading + Day)_
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Query basis: top combos — Trading, Day
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
+
+**AI Trader**
+- Signal: recent coverage
+- Why it matters: La acción legal del regulador australiano hace que las acciones de Amazon caigan un 3,12% - Traders Union.
+- Recency: ~6 days ago
+- Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Argentina — stay factual, avoid hype.
+
 **Mercado Libre**
-- Signal: market move
-- Why it matters: MELI Stock Price, Quote & Chart / MERCADOLIBRE INC (NASDAQ:MELI) - ChartMill.
-- Recency: ~2 days ago
-- Headline angle: Connect Mercado Libre to market move in Argentina with a cautious, timely hook.
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
 
 ### 1. Evgeni vs Team
 
-| CM         | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
-| ---------- | ----- | ----- | --- | ----- | --- | ---- | ---- |
-| Dan Dicker | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+| CM               | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
+| ---------------- | ----- | ----- | --- | ----- | --- | ---- | ---- |
+| Dan Dicker       | $5.84 | 4     | 0   | $1.46 | —   | 0.0% | 0.00 |
+| Gil Zangi        | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+| Yotam Balteriski | $0.00 | 2     | 0   | $0.00 | —   | 0.0% | 0.00 |
 
 | Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
 | ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
-| Mercado Libre | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
+| Trolley       | $5.84 | 0     | 0   | —   | —   | —    | 0.00 |
+| AI Trader     | $0.00 | 5     | 0   | —   | —   | 0.0% | 0.00 |
+| Mercado Libre | $0.00 | 2     | 0   | —   | —   | 0.0% | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 11 – May 17, 2026 (7d)**
+Period: **May 29 – Jun 04, 2026 (7d)**
 
 _No combo-level trend data available._
 
@@ -40,13 +55,27 @@ _No combo-level trend data available._
 
 _No Strong/Interesting combos for this country._
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title          | Dep | Leads | Spend | CPA |
+| ----------------- | --- | ----- | ----- | --- |
+| New Engagement Ad | 0   | 0     | $3.14 | —   |
+| New Traffic Ad    | 0   | 0     | $2.70 | —   |
+| 2046 - Text 1     | 0   | 1     | $0.00 | —   |
+| Blue_Maximize     | 0   | 1     | $0.00 | —   |
+| Blue_Story3       | 0   | 1     | $0.00 | —   |
+| Image ML2 - pro3  | 0   | 1     | $0.00 | —   |
+| Vid Blue - 5a     | 0   | 1     | $0.00 | —   |
+| Vid Blue - 6a     | 0   | 1     | $0.00 | —   |
+| Vid ML1 - pro     | 0   | 1     | $0.00 | —   |
+
+### 5. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Argentina
@@ -57,17 +86,17 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -79,33 +108,34 @@ _No ready accounts or no combos to recommend._
 
 ### 0. News Context
 
-**Salik**
-- Signal: no strong fresh news found
-- Why it matters: No reliable recent asset news found.
-- Headline angle: Use evergreen angles from working combos rather than newsjacking.
-
 **AI Trader**
-- Signal: recent coverage
-- Why it matters: Formula 1 officially cancels Bahrain, Saudi Arabian grands prix amid regional tensions - Gulf Business.
-- Recency: ~6 days ago
+- Signal: local business story
+- Why it matters: Are AI Crypto Trading Bots Suitable for Crypto Beginners? BulkQuant Launches an Automated Crypto Trading App - markets.businessinsider.com.
+- Recency: ~1 days ago
 - Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Bahrain — stay factual, avoid hype.
 
-**Trolley**
+**Trolley** _(theme: Trading + Day)_
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Query basis: top combos — Trading, Day
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
+
+**Salik**
 - Signal: no strong fresh news found
 - Why it matters: No reliable recent asset news found.
 - Headline angle: Use evergreen angles from working combos rather than newsjacking.
 
 ### 1. Evgeni vs Team
 
-| CM         | Spend     | Leads | Dep | CPL    | CPA | CR   | ROI  |
-| ---------- | --------- | ----- | --- | ------ | --- | ---- | ---- |
-| Dan Dicker | $1,503.06 | 20    | 0   | $75.15 | —   | 0.0% | 0.00 |
+| CM         | Spend   | Leads | Dep | CPL    | CPA | CR   | ROI  |
+| ---------- | ------- | ----- | --- | ------ | --- | ---- | ---- |
+| Dan Dicker | $124.60 | 5     | 0   | $24.92 | —   | 0.0% | 0.00 |
 
-| Asset (Offer) | Spend     | Leads | Dep | CPL    | CPA | CR   | ROI  |
-| ------------- | --------- | ----- | --- | ------ | --- | ---- | ---- |
-| Salik         | $1,378.65 | 17    | 0   | $81.10 | —   | 0.0% | 0.00 |
-| Trader AI     | $121.65   | 3     | 0   | $40.55 | —   | 0.0% | 0.00 |
-| Trolley       | $2.76     | 0     | 0   | —      | —   | —    | 0.00 |
+| Asset (Offer) | Spend   | Leads | Dep | CPL    | CPA | CR   | ROI  |
+| ------------- | ------- | ----- | --- | ------ | --- | ---- | ---- |
+| Trader AI     | $121.84 | 3     | 0   | $40.61 | —   | 0.0% | 0.00 |
+| Trolley       | $2.76   | 0     | 0   | —      | —   | —    | 0.00 |
+| Salik         | $0.00   | 2     | 0   | —      | —   | 0.0% | 0.00 |
 
 ### 2. Trend (Recent Days)
 
@@ -117,13 +147,26 @@ _No combo-level trend data available._
 
 _No Strong/Interesting combos for this country._
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title       | Dep | Leads | Spend  | CPA |
+| -------------- | --- | ----- | ------ | --- |
+| Vid blue - app | 0   | 2     | $44.87 | —   |
+| Vid blue - 1   | 0   | 1     | $25.17 | —   |
+| Vid blue - 6t  | 0   | 0     | $22.69 | —   |
+| Vid blue - 5a  | 0   | 0     | $18.40 | —   |
+| Vid blue - 3   | 0   | 0     | $10.22 | —   |
+| Vid blue - 6a  | 0   | 0     | $2.76  | —   |
+| Vid blue - 5t  | 0   | 0     | $0.49  | —   |
+| -              | 0   | 2     | $0.00  | —   |
+
+### 5. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Bahrain
@@ -134,22 +177,20 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 
 Failing targeting (0 dep, notable spend):
-  - SM: $506 spend, 0 dep
-  - Reading: $449 spend, 0 dep
-  - (unknown): $374 spend, 0 dep
+  - Blue: $125 spend, 0 dep
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -165,18 +206,18 @@ _No reliable recent asset news found. Use evergreen angles from working combos._
 
 ### 1. Evgeni vs Team
 
-| CM               | Spend | Leads | Dep | CPL | CPA | CR | ROI  |
-| ---------------- | ----- | ----- | --- | --- | --- | -- | ---- |
-| Dan Dicker       | $4.83 | 0     | 0   | —   | —   | —  | 0.00 |
-| Yotam Balteriski | $0.47 | 0     | 0   | —   | —   | —  | 0.00 |
+| CM                 | Spend | Leads | Dep | CPL | CPA | CR | ROI  |
+| ------------------ | ----- | ----- | --- | --- | --- | -- | ---- |
+| Evgeni Sedin ← YOU | $0.06 | 0     | 0   | —   | —   | —  | 0.00 |
+| Dan Dicker         | $4.83 | 0     | 0   | —   | —   | —  | 0.00 |
 
 | Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR | ROI  |
 | ------------- | ----- | ----- | --- | --- | --- | -- | ---- |
-| Trolley       | $5.30 | 0     | 0   | —   | —   | —  | 0.00 |
+| Trolley       | $4.89 | 0     | 0   | —   | —   | —  | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 12 – May 18, 2026 (7d)**
+Period: **May 22 – May 28, 2026 (7d)**
 
 _No combo-level trend data available._
 
@@ -184,13 +225,21 @@ _No combo-level trend data available._
 
 _No Strong/Interesting combos for this country._
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title          | Dep | Leads | Spend | CPA |
+| ----------------- | --- | ----- | ----- | --- |
+| New Traffic Ad    | 0   | 0     | $2.86 | —   |
+| New Engagement Ad | 0   | 0     | $1.97 | —   |
+| -                 | 0   | 0     | $0.06 | —   |
+
+### 5. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Bolivia (Plurinational State of)
@@ -201,17 +250,89 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
+
+_Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
+
+_No ready accounts or no combos to recommend._
+
+---
+
+## Country: Brazil
+
+### 0. News Context
+
+**AI Trader**
+- Signal: market move
+- Why it matters: Intel, AMD stocks slide again in aftermath of Broadcom's weak outlook - TradingView.
+- Recency: ~2 days ago
+- Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Brazil — stay factual, avoid hype.
+
+### 1. Evgeni vs Team
+
+| CM               | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
+| ---------------- | ----- | ----- | --- | ----- | --- | ---- | ---- |
+| Gil Zangi        | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+| Yotam Balteriski | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+
+| Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
+| ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
+| AI Trader     | $0.00 | 2     | 0   | —   | —   | 0.0% | 0.00 |
+
+### 2. Trend (Recent Days)
+
+Period: **May 19 – May 25, 2026 (7d)**
+
+_No combo-level trend data available._
+
+### 3. Working Combos
+
+_No Strong/Interesting combos for this country._
+
+### 4. Creatives
+
+| Ad Title | Dep | Leads | Spend | CPA |
+| -------- | --- | ----- | ----- | --- |
+| -        | 0   | 2     | $0.00 | —   |
+
+### 5. AI Context (copy into chat)
+
+```
+_No qualifying combos — nothing to explain._
+```
+
+### 6. Hypotheses (copy into chat)
+
+```
+Country: Brazil
+
+Data summary for hypothesis generation (paste into Cursor chat and ask:
+'Based on this data, suggest 3 test hypotheses for new ad sets'):
+
+Working combos:
+```
+
+### 7–8. Account Statuses
+
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+
+_No accounts found for this country in the GSheet._
+
+### 9. Optimization
+
+_No campaign spend found for ready accounts._
+
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -223,84 +344,118 @@ _No ready accounts or no combos to recommend._
 
 ### 0. News Context
 
-**Mercado Libre**
-- Signal: earnings / financial update
-- Why it matters: MercadoLibre Q1 2026 Earnings: Revenue Beat, Margin Miss, and Market Reaction - News and Statistics - IndexBox.
-- Recency: ~2 days ago
-- Headline angle: Connect Mercado Libre to earnings / financial update in Chile with a cautious, timely hook.
+**Mercado Libre** _(combo: HV+Day)_
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Query basis: top combos — HV+Day (3 dep)
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
 
-**AI Trader**
-- Signal: earnings / financial update
-- Why it matters: Nvidia Earnings and Retail Reports: Key Events for the Week of May 19, 2026 - News and Statistics - IndexBox.
-- Recency: ~2 days ago
+**AI Trader** _(theme: HV+Trading + TRD)_
+- Signal: recent coverage
+- Why it matters: La acción legal del regulador australiano hace que las acciones de Amazon caigan un 3,12% - Traders Union.
+- Recency: ~6 days ago
+- Query basis: top combos — HV+Trading (6 dep), TRD (4 dep)
 - Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Chile — stay factual, avoid hype.
 
 **SQM**
-- Signal: recent coverage
-- Why it matters: Is Sociedad Química y Minera de Chile (NYSE:SQM) Still Attractive After Its 157% One-Year Surge? - simplywall.st.
-- Recency: ~6 days ago
-- Headline angle: Connect SQM to recent coverage in Chile with a cautious, timely hook.
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
 
 ### 1. Evgeni vs Team
 
 | CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------------ | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Evgeni Sedin ← YOU | $6,157.65  | 294   | 3   | $20.94 | $2,052.55 | 1.0% | 0.06 |
-| Gil Zangi          | $12,553.66 | 1100  | 21  | $11.41 | $597.79   | 1.9% | 0.15 |
-| Yotam Balteriski   | $12,557.41 | 477   | 7   | $26.33 | $1,793.92 | 1.5% | 0.09 |
-| Dan Dicker         | $17,525.75 | 815   | 11  | $21.50 | $1,593.25 | 1.3% | 0.06 |
+| Evgeni Sedin ← YOU | $10,519.93 | 669   | 10  | $15.72 | $1,051.99 | 1.5% | 0.09 |
+| Gil Zangi          | $16,892.25 | 1553  | 25  | $10.88 | $675.69   | 1.6% | 0.36 |
+| Yotam Balteriski   | $29,685.14 | 840   | 17  | $35.34 | $1,746.18 | 2.0% | 0.13 |
+| Dan Dicker         | $24,510.49 | 905   | 14  | $27.08 | $1,750.75 | 1.5% | 0.05 |
 
 | Asset (Offer) | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------- | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Mercado Libre | $25,082.44 | 1966  | 32  | $12.76 | $783.83   | 1.6% | 0.14 |
-| AI Trader     | $22,160.64 | 662   | 10  | $33.48 | $2,216.06 | 1.5% | 0.04 |
-| AI_Trader     | $774.64    | 42    | 0   | $18.44 | —         | 0.0% | 0.00 |
-| SQM           | $477.53    | 15    | 0   | $31.84 | —         | 0.0% | 0.00 |
-| Trolley       | $299.22    | 0     | 0   | —      | —         | —    | 0.00 |
+| Mercado Libre | $28,424.39 | 2206  | 37  | $12.89 | $768.23   | 1.7% | 0.29 |
+| AI Trader     | $49,450.47 | 1633  | 29  | $30.28 | $1,705.19 | 1.8% | 0.08 |
+| SQM           | $1,726.03  | 64    | 0   | $26.97 | —         | 0.0% | 0.00 |
+| AI_Trader     | $735.53    | 40    | 0   | $18.39 | —         | 0.0% | 0.00 |
+| Al Trading    | $370.89    | 0     | 0   | —      | —         | —    | 0.00 |
+| Trolley       | $336.01    | 0     | 0   | —      | —         | —    | 0.00 |
+| Codelco       | $335.86    | 23    | 0   | $14.60 | —         | 0.0% | 0.00 |
+| Banorte       | $228.63    | 0     | 0   | —      | —         | —    | 0.00 |
 | Bancolombia   | $0.00      | 1     | 0   | —      | —         | 0.0% | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 13 – May 19, 2026 (7d)**
+Period: **May 31 – Jun 06, 2026 (7d)**
 
 **New (all deposits from recent period):**
-- all + HV+Day + 2002 2  [Mercado Libre]  dep: 3
-- all + HV+Day + 2002 1  [Mercado Libre]  dep: 2
-- all + HV_Video_Blue_HV + Vid Blue - 5a  [AI Trader]  dep: 1
-- all + HV|TRD + W_2041_1_1  [AI Trader]  dep: 1
-- all + TRD/iOS + 2041_1_1_Theapp  [AI Trader]  dep: 1
+- all + Blue_Tradingz + Vid Blue - 6a  [AI Trader]  dep: 1
+- all + HV + Vid 1293y - app  [AI Trader]  dep: 1
+- all + HV + Vid Blue - Story1  [AI Trader]  dep: 1
+- all + HV+IPO + 2046 - Text 5  [AI Trader]  dep: 1
+- all + TRD + 2046_Story3  [AI Trader]  dep: 1
+
+**Stable (deposits before and now):**
+- all + TRD + Blue_Story3  [AI Trader]  total: 4, recent: 1
+- all + HV+Trading + 2046 - Text 1  [AI Trader]  total: 3, recent: 1
+- all + HV+Trading + 2046 - Text 3  [AI Trader]  total: 3, recent: 2
+- all + - + -  [Mercado Libre]  total: 2, recent: 1
 
 **Stopped (had deposits, now 0):**
+- all + HV+Day + 2002 2  [Mercado Libre]  total: 3, recent: 0
 - all + Blue_HV + Vid Blue - 5a  [AI Trader]  total: 2, recent: 0
-- all + Blue_HV + Vid Blue - 6a  [AI Trader]  total: 2, recent: 0
 - all + HV + Video L.  [Mercado Libre]  total: 2, recent: 0
-- all + HV+IPO + Video P  [Mercado Libre]  total: 2, recent: 0
-- all + HV∩Day + Video P.  [Mercado Libre]  total: 2, recent: 0
+- all + HV+Day + 2002 1  [Mercado Libre]  total: 2, recent: 0
+- all + HV+Day + Video P.  [Mercado Libre]  total: 2, recent: 0
 
 
 ### 3. Working Combos
 
-| Type     | Offer    | Combo                   | Dep | CPL    | CPA     | ROI  |
-| -------- | -------- | ----------------------- | --- | ------ | ------- | ---- |
-| Strong ✓ | Mercado… | all + HV+Day + 2002 2   | 3   | $7.41  | $123.42 | 0.81 |
-| Strong ⚠ | Mercado… | all + HV∩Day + Video P. | 2   | $49.80 | $74.70  | 1.26 |
-| Strong ✓ | Mercado… | all + HV+IPO + Video P  | 2   | $11.51 | $63.31  | 1.46 |
-| Strong ✓ | Mercado… | all + HV + Video L.     | 2   | $19.61 | $245.17 | 0.39 |
-| Strong ✓ | Mercado… | all + HV+Day + 2002 1   | 2   | $4.86  | $155.60 | 0.64 |
+| Type     | Offer    | Combo                            | Dep | CPL    | CPA       | ROI  |
+| -------- | -------- | -------------------------------- | --- | ------ | --------- | ---- |
+| Strong ⚠ | AI Trad… | all + TRD + 35 + Blue_Story3     | 4   | $35.84 | $1,003.47 | 0.25 |
+| Strong ✓ | AI Trad… | all + HV+Trading + 2046 - Text 1 | 3   | $11.83 | $165.69   | 0.58 |
+| Strong ✓ | Mercado… | all + HV+Day + 2002 2            | 3   | $7.41  | $123.42   | 0.81 |
+| Strong ✓ | AI Trad… | all + HV+Trading + 2046 - Text 3 | 3   | $6.33  | $135.04   | 1.23 |
+| Strong ✓ | Mercado… | all + - + -                      | 2   | —      | —         | —    |
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title       | Dep | Leads | Spend     | CPA       |
+| -------------- | --- | ----- | --------- | --------- |
+| 2002 2         | 5   | 126   | $897.30   | $179.46   |
+| Blue_Story3    | 4   | 153   | $5,567.71 | $1,391.93 |
+| 2046 - Text 3  | 4   | 85    | $619.40   | $154.85   |
+| Vid Blue - 5a  | 3   | 110   | $2,923.45 | $974.48   |
+| Video L.       | 3   | 162   | $2,630.89 | $876.96   |
+| 2046 - Text 1  | 3   | 132   | $1,967.77 | $655.92   |
+| -              | 3   | 275   | $10.05    | $3.35     |
+| Vid Blue - 6a  | 2   | 186   | $4,934.85 | $2,467.43 |
+| 2046 - Text 6  | 2   | 180   | $3,244.97 | $1,622.49 |
+| 2022_6_Pro     | 2   | 179   | $1,539.12 | $769.56   |
+| Video P.       | 2   | 94    | $1,168.03 | $584.01   |
+| 2002 1         | 2   | 172   | $923.71   | $461.86   |
+| ML 12 - Story3 | 2   | 4     | $129.88   | $64.94    |
+| Vid Blue - 6   | 1   | 66    | $2,796.85 | $2,796.85 |
+| 2046_Story3    | 1   | 43    | $2,288.70 | $2,288.70 |
+| 2046 - Text 5  | 1   | 97    | $1,363.99 | $1,363.99 |
+| W_2041_1_1     | 1   | 11    | $1,324.90 | $1,324.90 |
+| 2_2002 - pro   | 1   | 134   | $1,196.97 | $1,196.97 |
+| 2022_1_Story1  | 1   | 29    | $1,034.07 | $1,034.07 |
+| AIT6_Story1    | 1   | 12    | $903.09   | $903.09   |
+
+### 5. AI Context (copy into chat)
 
 ```
 Country: Chile
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + HV+Day + 2002 2  |  Offer: Mercado Libre  |  Dep: 3  |  ROI: 0.81
-2. [Strong] all + HV∩Day + Video P.  |  Offer: Mercado Libre  |  Dep: 2  |  ROI: 1.26
-3. [Strong] all + HV+IPO + Video P  |  Offer: Mercado Libre  |  Dep: 2  |  ROI: 1.46
+1. [Strong] all + TRD + 35 + Blue_Story3  |  Offer: AI Trader  |  Dep: 4  |  ROI: 0.25
+2. [Strong] all + HV+Trading + 2046 - Text 1  |  Offer: AI Trader  |  Dep: 3  |  ROI: 0.58
+3. [Strong] all + HV+Day + 2002 2  |  Offer: Mercado Libre  |  Dep: 3  |  ROI: 0.81
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Chile
@@ -309,177 +464,165 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
+  - all + TRD + Blue_Story3  [Strong, 4 dep]
+  - all + HV+Trading + 2046 - Text 1  [Strong, 3 dep]
   - all + HV+Day + 2002 2  [Strong, 3 dep]
-  - all + HV∩Day + Video P.  [Strong, 2 dep]
-  - all + HV+IPO + Video P  [Strong, 2 dep]
 
 Top targeting by deposits:
-  - Blue_HV: 7 dep, $10,964 spend
-  - HV+Day: 7 dep, $3,644 spend
-  - HV+IPO: 4 dep, $3,166 spend
-  - HV∩Day: 3 dep, $327 spend
-  - HV: 2 dep, $4,049 spend
+  - TRD: 10 dep, $10,290 spend
+  - HV+Trading: 9 dep, $6,303 spend
+  - HV: 8 dep, $12,866 spend
+  - HV+Day: 7 dep, $3,117 spend
+  - HV+IPO: 6 dep, $6,136 spend
 
 Failing targeting (0 dep, notable spend):
-  - HV|Investment: $2,243 spend, 0 dep
-  - HV/iOS: $719 spend, 0 dep
-  - Blue_IPO: $667 spend, 0 dep
+  - HV|Investment: $2,479 spend, 0 dep
+  - FX: $1,435 spend, 0 dep
+  - Blue_IPO/HV: $1,141 spend, 0 dep
 
 Top creatives by deposits:
-  - Video L.: 5 dep, $3,610 spend
   - 2002 2: 5 dep, $897 spend
-  - Vid Blue - 5a: 3 dep, $2,472 spend
-  - Video P.: 3 dep, $1,940 spend
-  - Video P: 3 dep, $532 spend
+  - Blue_Story3: 4 dep, $5,568 spend
+  - 2046 - Text 3: 4 dep, $619 spend
+  - Vid Blue - 5a: 3 dep, $2,923 spend
+  - Video L.: 3 dep, $2,631 spend
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-**FacebookSky29 CL** ✅
-Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
+**Facebook_3570 CL** ✅
+Perf: $693.87 spend / 37 leads / 0 FTDs / CPL $18.75 / CPA — / CR 0.0%
 Status: —
-To Do: Ml/HV+Day/2002 2
+To Do: Ait/HV+Trading/2046 - Text 3; Ait/Blue_Tradin…/Vid Blue - 6a⚠
 
-**FacebookMKTO1382 CL** ✅
+**FacebookDQ12 CL** ✅
+Perf: $418.15 spend / 15 leads / 0 FTDs / CPL $27.88 / CPA — / CR 0.0%
+Status: Expand ad + campaigns
+To Do: Ait/HV+Trading/2046 - Text 3; Ait/Blue_Tradin…/Vid Blue - 6a⚠
+
+**Facebook_3183A** ✅
+Perf: $1,028.39 spend / 29 leads / 2 FTDs / CPL $35.46 / CPA $514.20 / CR 6.9%
+Status: Ads account is not loading
+To Do: Ait/HV+Trading/2046 - Text 3; Ait/Blue_Tradin…/Vid Blue - 6a⚠
+
+**FacebookElf82 CL ML** ✅
 Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
-Status: —
-To Do: Ml/HV+Day/2002 2
+Status: Profile restricted
+To Do: Ait/HV+Trading/2046 - Text 3; Ait/Blue_Tradin…/Vid Blue - 6a⚠
 
-**FacebookElf71 CL** ✅
+**Facebook_8562 CL ML** ✅
 Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
-Status: —
-To Do: Ml/HV+Day/2002 2
-
-**Facebook_3159 CL** ✅
-Perf: $165.62 spend / 1 leads / 0 FTDs / CPL $165.62 / CPA — / CR 0.0%
-Status: Pay your current balance to keep ads running
-To Do: Ml/HV+Day/2002 2
-
-**FacebookMKTO1202 CL** ✅
-Perf: $848.28 spend / 22 leads / 0 FTDs / CPL $38.56 / CPA — / CR 0.0%
-Status: profile restricted
-To Do: Ml/HV+Day/2002 2
-
-**FacebookMKTO1321 CL** ✅
-Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
-Status: email needs email verification
-To Do: Ml/HV+Day/2002 2
-
-**Facebook_3562 CL** ✅
-Perf: $143.48 spend / 1 leads / 0 FTDs / CPL $143.48 / CPA — / CR 0.0%
-Status: Profile restricted - ads stopped
-To Do: Ml/HV+Day/2002 2
+Status: Account Restricted - Facebook_8562_61579151806239_Backup
+To Do: Ait/HV+Trading/2046 - Text 3; Ait/Blue_Tradin…/Vid Blue - 6a⚠
 
 
-### 8. Optimization
+### 9. Optimization
 
-**Facebook_3159 CL:**
+**Facebook_3570 CL:**
 
-| Campaign                           | Spend   | Leads | FTDs | CPL     | CPA |
-| ---------------------------------- | ------- | ----- | ---- | ------- | --- |
-| CL_Ait_IOS_Mix_HV_40_18.05         | $116.89 | 1     | 0    | $116.89 | —   |
-| CL_Ait_IOS_Mix_HV/Trading_40_18.05 | $48.73  | 0     | 0    | —       | —   |
+| Ad set name                         | Spend   | Leads | FTDs | CPL    | CPA |
+| ----------------------------------- | ------- | ----- | ---- | ------ | --- |
+| CL_ML_All_Mix_Day_35_01.06          | $351.35 | 19    | 0    | $18.49 | —   |
+| CL_ML_All_Mix_HV_35_01.06           | $342.52 | 16    | 0    | $21.41 | —   |
+| Account-level (no ad set in export) | $0.00   | 2     | 0    | —      | —   |
 
-**FacebookMKTO1202 CL:**
+**FacebookDQ12 CL:**
 
-| Campaign                          | Spend   | Leads | FTDs | CPL     | CPA |
-| --------------------------------- | ------- | ----- | ---- | ------- | --- |
-| CL_ML_All_Mix_HV/trading_35_15.05 | $306.17 | 12    | 0    | $25.51  | —   |
-| CL_ML_Mix_HV/Day_35_15.05         | $230.36 | 1     | 0    | $230.36 | —   |
-| CL_ML_All_Mix_Day_35_15.05        | $190.36 | 5     | 0    | $38.07  | —   |
-| CL_ML_Mix_HV/trading_35_15.05     | $117.17 | 4     | 0    | $29.29  | —   |
-| CL_ML_Mix_HV/Day_35_15.05         | $4.22   | 0     | 0    | —       | —   |
+| Ad set name                    | Spend   | Leads | FTDs | CPL    | CPA |
+| ------------------------------ | ------- | ----- | ---- | ------ | --- |
+| CL_ML_IOS_Mix_Reading_35_05.06 | $204.14 | 11    | 0    | $18.56 | —   |
+| CL_ML_IOS_Mix_Trading_35_05.06 | $94.60  | 2     | 0    | $47.30 | —   |
+| CL_ML_IOS_Mix_Day_35_06.06     | $68.26  | 1     | 0    | $68.26 | —   |
+| CL_ML_IOS_Mix_GMBL_35_06.06    | $51.15  | 1     | 0    | $51.15 | —   |
 
-**Facebook_3562 CL:**
+**Facebook_3183A:**
 
-| Campaign                       | Spend  | Leads | FTDs | CPL    | CPA |
-| ------------------------------ | ------ | ----- | ---- | ------ | --- |
-| CL_Ml_All_Mix_HV/Day_35_18.05  | $97.33 | 1     | 0    | $97.33 | —   |
-| CL_Ml_All_Mix_Trading_35_18.05 | $46.15 | 0     | 0    | —      | —   |
+| Ad set name                | Spend   | Leads | FTDs | CPL    | CPA     |
+| -------------------------- | ------- | ----- | ---- | ------ | ------- |
+| CL_ML_IOS_MIx_HV_35_01.06  | $549.36 | 16    | 1    | $34.34 | $549.36 |
+| CL_ML_IOS_MIx_Day_35_01.06 | $479.03 | 13    | 1    | $36.85 | $479.03 |
 
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
-**FacebookSky29 CL:**
+**Facebook_3570 CL:**
+
+  **1 · trend + stable**
+  `CL_Ait_All_Video_HV+Trading_07.06`   [HV+Trading — 8 dep, stable + ongoing deposits, trend: stable, stalled]
+    - 2046 - Text 3  (3 dep, ROI 1.23)  (trend: stable + recent)
+    - 2046 - Text 1  (3 dep, ROI 0.58)  (trend: stable + recent)
 
   **2 · trend + variation**
-  `CL_Ml_All_Video_HV+Day_20.05`   [HV+Day — 6 dep, new trend — scale + variations, trend: heating up, stalled]
-    - 2002 2  (3 dep, ROI 0.81)  (trend: all recent dep)
-    - 2002 1  (2 dep, ROI 0.64)  (variation: same targeting, new creative; trend: all recent dep)
+  `CL_Ait_All_Video_Blue_Tradingz_35+_07.06`   [Blue_Tradingz — 1 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
+    - Vid Blue - 6a  (1 dep, ROI 0.18)  (trend: all recent dep)
 
   **3 · trend + recovery**
-  `CL_Ait_All_Video_Blue_HV_40+_20.05`   [Blue_HV — 5 dep, recovery — was working, refresh, trend: stalled]
-    - Vid Blue - 5a  (2 dep, ROI 0.05)  (recovery: was working, refresh hook/creative)
+  `CL_Ml_All_Video_HV+Day_07.06`   [HV+Day — 7 dep, recovery — was working, refresh, trend: stalled]
+    - 2002 2  (3 dep, ROI 0.81)  (recovery: was working, refresh hook/creative)
 
-**FacebookMKTO1382 CL:**
+**FacebookDQ12 CL:**
+
+  **1 · trend + stable**
+  `CL_Ait_All_Video_HV+Trading_07.06`   [HV+Trading — 8 dep, stable + ongoing deposits, trend: stable, stalled]
+    - 2046 - Text 3  (3 dep, ROI 1.23)  (trend: stable + recent)
+    - 2046 - Text 1  (3 dep, ROI 0.58)  (trend: stable + recent)
 
   **2 · trend + variation**
-  `CL_Ml_All_Video_HV+Day_20.05`   [HV+Day — 6 dep, new trend — scale + variations, trend: heating up, stalled]
-    - 2002 2  (3 dep, ROI 0.81)  (trend: all recent dep)
-    - 2002 1  (2 dep, ROI 0.64)  (variation: same targeting, new creative; trend: all recent dep)
+  `CL_Ait_All_Video_Blue_Tradingz_35+_07.06`   [Blue_Tradingz — 1 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
+    - Vid Blue - 6a  (1 dep, ROI 0.18)  (trend: all recent dep)
 
   **3 · trend + recovery**
-  `CL_Ait_All_Video_Blue_HV_40+_20.05`   [Blue_HV — 5 dep, recovery — was working, refresh, trend: stalled]
-    - Vid Blue - 5a  (2 dep, ROI 0.05)  (recovery: was working, refresh hook/creative)
+  `CL_Ml_All_Video_HV+Day_07.06`   [HV+Day — 7 dep, recovery — was working, refresh, trend: stalled]
+    - 2002 2  (3 dep, ROI 0.81)  (recovery: was working, refresh hook/creative)
 
-**FacebookElf71 CL:**
+**Facebook_3183A:**
+
+  **1 · trend + stable**
+  `CL_Ait_All_Video_HV+Trading_07.06`   [HV+Trading — 8 dep, stable + ongoing deposits, trend: stable, stalled]
+    - 2046 - Text 3  (3 dep, ROI 1.23)  (trend: stable + recent)
+    - 2046 - Text 1  (3 dep, ROI 0.58)  (trend: stable + recent)
 
   **2 · trend + variation**
-  `CL_Ml_All_Video_HV+Day_20.05`   [HV+Day — 6 dep, new trend — scale + variations, trend: heating up, stalled]
-    - 2002 2  (3 dep, ROI 0.81)  (trend: all recent dep)
-    - 2002 1  (2 dep, ROI 0.64)  (variation: same targeting, new creative; trend: all recent dep)
+  `CL_Ait_All_Video_Blue_Tradingz_35+_07.06`   [Blue_Tradingz — 1 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
+    - Vid Blue - 6a  (1 dep, ROI 0.18)  (trend: all recent dep)
 
   **3 · trend + recovery**
-  `CL_Ait_All_Video_Blue_HV_40+_20.05`   [Blue_HV — 5 dep, recovery — was working, refresh, trend: stalled]
-    - Vid Blue - 5a  (2 dep, ROI 0.05)  (recovery: was working, refresh hook/creative)
+  `CL_Ml_All_Video_HV+Day_07.06`   [HV+Day — 7 dep, recovery — was working, refresh, trend: stalled]
+    - 2002 2  (3 dep, ROI 0.81)  (recovery: was working, refresh hook/creative)
 
-**Facebook_3159 CL:**
+**FacebookElf82 CL ML:**
+
+  **1 · trend + stable**
+  `CL_Ait_All_Video_HV+Trading_07.06`   [HV+Trading — 8 dep, stable + ongoing deposits, trend: stable, stalled]
+    - 2046 - Text 3  (3 dep, ROI 1.23)  (trend: stable + recent)
+    - 2046 - Text 1  (3 dep, ROI 0.58)  (trend: stable + recent)
 
   **2 · trend + variation**
-  `CL_Ml_All_Video_HV+Day_20.05`   [HV+Day — 6 dep, new trend — scale + variations, trend: heating up, stalled]
-    - 2002 2  (3 dep, ROI 0.81)  (trend: all recent dep)
-    - 2002 1  (2 dep, ROI 0.64)  (variation: same targeting, new creative; trend: all recent dep)
+  `CL_Ait_All_Video_Blue_Tradingz_35+_07.06`   [Blue_Tradingz — 1 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
+    - Vid Blue - 6a  (1 dep, ROI 0.18)  (trend: all recent dep)
 
   **3 · trend + recovery**
-  `CL_Ait_All_Video_Blue_HV_40+_20.05`   [Blue_HV — 5 dep, recovery — was working, refresh, trend: stalled]
-    - Vid Blue - 5a  (2 dep, ROI 0.05)  (recovery: was working, refresh hook/creative)
+  `CL_Ml_All_Video_HV+Day_07.06`   [HV+Day — 7 dep, recovery — was working, refresh, trend: stalled]
+    - 2002 2  (3 dep, ROI 0.81)  (recovery: was working, refresh hook/creative)
 
-**FacebookMKTO1202 CL:**
+**Facebook_8562 CL ML:**
+
+  **1 · trend + stable**
+  `CL_Ait_All_Video_HV+Trading_07.06`   [HV+Trading — 8 dep, stable + ongoing deposits, trend: stable, stalled]
+    - 2046 - Text 3  (3 dep, ROI 1.23)  (trend: stable + recent)
+    - 2046 - Text 1  (3 dep, ROI 0.58)  (trend: stable + recent)
 
   **2 · trend + variation**
-  `CL_Ml_All_Video_HV+Day_20.05`   [HV+Day — 6 dep, new trend — scale + variations, trend: heating up, stalled]
-    - 2002 2  (3 dep, ROI 0.81)  (trend: all recent dep)
-    - 2002 1  (2 dep, ROI 0.64)  (variation: same targeting, new creative; trend: all recent dep)
+  `CL_Ait_All_Video_Blue_Tradingz_35+_07.06`   [Blue_Tradingz — 1 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
+    - Vid Blue - 6a  (1 dep, ROI 0.18)  (trend: all recent dep)
 
   **3 · trend + recovery**
-  `CL_Ait_All_Video_Blue_HV_40+_20.05`   [Blue_HV — 5 dep, recovery — was working, refresh, trend: stalled]
-    - Vid Blue - 5a  (2 dep, ROI 0.05)  (recovery: was working, refresh hook/creative)
-
-**FacebookMKTO1321 CL:**
-
-  **2 · trend + variation**
-  `CL_Ml_All_Video_HV+Day_20.05`   [HV+Day — 6 dep, new trend — scale + variations, trend: heating up, stalled]
-    - 2002 2  (3 dep, ROI 0.81)  (trend: all recent dep)
-    - 2002 1  (2 dep, ROI 0.64)  (variation: same targeting, new creative; trend: all recent dep)
-
-  **3 · trend + recovery**
-  `CL_Ait_All_Video_Blue_HV_40+_20.05`   [Blue_HV — 5 dep, recovery — was working, refresh, trend: stalled]
-    - Vid Blue - 5a  (2 dep, ROI 0.05)  (recovery: was working, refresh hook/creative)
-
-**Facebook_3562 CL:**
-
-  **2 · trend + variation**
-  `CL_Ml_All_Video_HV+Day_20.05`   [HV+Day — 6 dep, new trend — scale + variations, trend: heating up, stalled]
-    - 2002 2  (3 dep, ROI 0.81)  (trend: all recent dep)
-    - 2002 1  (2 dep, ROI 0.64)  (variation: same targeting, new creative; trend: all recent dep)
-
-  **3 · trend + recovery**
-  `CL_Ait_All_Video_Blue_HV_40+_20.05`   [Blue_HV — 5 dep, recovery — was working, refresh, trend: stalled]
-    - Vid Blue - 5a  (2 dep, ROI 0.05)  (recovery: was working, refresh hook/creative)
+  `CL_Ml_All_Video_HV+Day_07.06`   [HV+Day — 7 dep, recovery — was working, refresh, trend: stalled]
+    - 2002 2  (3 dep, ROI 0.81)  (recovery: was working, refresh hook/creative)
 
 
 ---
@@ -489,16 +632,16 @@ _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** r
 ### 0. News Context
 
 **Mercado Libre**
-- Signal: recent coverage
-- Why it matters: Investors urged to watch MercadoLibre over NVIDIA amid AI hype and China risks. - Pluang.
-- Recency: ~5 days ago
-- Headline angle: Connect Mercado Libre to recent coverage in China with a cautious, timely hook.
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
 
-**Trolley**
-- Signal: recent coverage
-- Why it matters: Chinese automakers gain ground in South Africa as competitive pricing spurs demand - Reuters.
-- Recency: ~5 days ago
-- Headline angle: Connect Trolley to recent coverage in China with a cautious, timely hook.
+**Trolley** _(theme: Trading + Day)_
+- Signal: market move
+- Why it matters: LIVE Futures Trading – Real Setups, Live Traders & Market Insights / Tradeify TV / THURSDAY 4/2/26 Guide 428 Jun 1, 2026 - Portal CNJ.
+- Recency: ~6 days ago
+- Query basis: top combos — Trading, Day
+- Headline angle: Tie Trolley headlines to market move themes (Trading + Day) in China — stay factual, avoid hype.
 
 ### 1. Evgeni vs Team
 
@@ -521,13 +664,22 @@ _No combo-level trend data available._
 
 _No Strong/Interesting combos for this country._
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title      | Dep | Leads | Spend  | CPA |
+| ------------- | --- | ----- | ------ | --- |
+| 2049_1_Pro    | 0   | 0     | $36.83 | —   |
+| 2049_1_Learn  | 0   | 0     | $35.20 | —   |
+| 2049_1_Story1 | 0   | 0     | $5.92  | —   |
+| 2049_1_Story3 | 0   | 0     | $0.84  | —   |
+
+### 5. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: China
@@ -538,17 +690,17 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -560,82 +712,108 @@ _No ready accounts or no combos to recommend._
 
 ### 0. News Context
 
-**Bancolombia**
-- Signal: earnings / financial update
-- Why it matters: Bancolombia S.A. stock (US0594603039): Shares react to latest quarterly results and dividend update - AD HOC NEWS.
-- Recency: ~5 days ago
-- Headline angle: Connect Bancolombia to earnings / financial update in Colombia with a cautious, timely hook.
+**Bancolombia** _(combo: GMBL/Day/Swing + GMBL/Investment)_
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Query basis: top combos — GMBL/Day/Swing (4 dep), GMBL/Investment (3 dep)
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
 
-**Mercado Libre**
-- Signal: earnings / financial update
-- Why it matters: MercadoLibre Q1 2026 Earnings: Revenue Beat, Margin Miss, and Market Reaction - News and Statistics - IndexBox.
-- Recency: ~2 days ago
-- Headline angle: Connect Mercado Libre to earnings / financial update in Colombia with a cautious, timely hook.
+**Mercado Libre** _(combo: GMB/Investment)_
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Query basis: top combos — GMB/Investment (2 dep)
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
 
 **AI Trader**
-- Signal: earnings / financial update
-- Why it matters: Nvidia Earnings and Retail Reports: Key Events for the Week of May 19, 2026 - News and Statistics - IndexBox.
-- Recency: ~2 days ago
+- Signal: recent coverage
+- Why it matters: La acción legal del regulador australiano hace que las acciones de Amazon caigan un 3,12% - Traders Union.
+- Recency: ~6 days ago
 - Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Colombia — stay factual, avoid hype.
 
 ### 1. Evgeni vs Team
 
 | CM               | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ---------------- | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Yotam Balteriski | $11,713.51 | 961   | 15  | $12.19 | $780.90   | 1.6% | 0.34 |
-| Dan Dicker       | $10,914.59 | 584   | 5   | $18.69 | $2,182.92 | 0.9% | 0.11 |
-| Gil Zangi        | $9,511.46  | 750   | 8   | $12.68 | $1,188.93 | 1.1% | 0.09 |
+| Dan Dicker       | $15,729.77 | 923   | 16  | $17.04 | $983.11   | 1.7% | 0.17 |
+| Yotam Balteriski | $26,804.48 | 1006  | 16  | $26.64 | $1,675.28 | 1.6% | 0.08 |
+| Gil Zangi        | $9,281.23  | 728   | 8   | $12.75 | $1,160.15 | 1.1% | 0.17 |
+| Yinon Avraham    | $0.51      | 0     | 0   | —      | —         | —    | 0.00 |
 
 | Asset (Offer) | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------- | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Bancolombia   | $17,193.31 | 1207  | 15  | $14.24 | $1,146.22 | 1.2% | 0.16 |
-| Mercado Libre | $9,974.19  | 1026  | 12  | $9.72  | $831.18   | 1.2% | 0.33 |
-| AI Trader     | $4,939.24  | 62    | 1   | $79.67 | $4,939.24 | 1.6% | 0.02 |
-| Trolley       | $32.82     | 0     | 0   | —      | —         | —    | 0.00 |
+| Bancolombia   | $24,563.76 | 1452  | 25  | $16.92 | $982.55   | 1.7% | 0.15 |
+| Mercado Libre | $14,558.13 | 957   | 11  | $15.21 | $1,323.47 | 1.1% | 0.09 |
+| AI Trader     | $12,049.52 | 248   | 4   | $48.59 | $3,012.38 | 1.6% | 0.12 |
+| Trolley       | $644.58    | 0     | 0   | —      | —         | —    | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 13 – May 19, 2026 (7d)**
+Period: **May 31 – Jun 06, 2026 (7d)**
 
 **New (all deposits from recent period):**
-- all + FX + 1377 3  [Bancolombia]  dep: 3
-- all + GMBL + 2041_1_1_text6  [AI Trader]  dep: 1
-- all + GMB/Investment + Vid 2 - pro  [Bancolombia]  dep: 1
-- all + GMB/Investment + Vid 2 - pro3  [Bancolombia]  dep: 1
-- all + Trading + 2002 2  [Mercado Libre]  dep: 1
+- ios + GMBL|TradingYB + 2046_Maximize  [AI Trader]  dep: 1
+- all + FX + Vid1 - 2000 - pro1  [Bancolombia]  dep: 1
+- all + GMBL + Vid1 - 2000 - pro3  [Bancolombia]  dep: 1
+- all + GMBL/Investment + Vid 1-200 - pro3  [Bancolombia]  dep: 1
+- ios + GMBL|TradingYB + 2175_ML19_Pro  [Mercado Libre]  dep: 1
 
 **Stopped (had deposits, now 0):**
-- all + GMBL|Investment + 1377_2_Story3  [Bancolombia]  total: 4, recent: 0
-- all + GMB|TradingYB + -  [Mercado Libre]  total: 4, recent: 0
+- all + GMBL/Day/Swing + Vid 2 - pro3  [Bancolombia]  total: 4, recent: 0
+- all + FX + 1377 3  [Bancolombia]  total: 3, recent: 0
+- all + GMBL|Investment + 1377_2_Story3  [Bancolombia]  total: 3, recent: 0
+- all + GMBL + 2041_1_1_text6  [AI Trader]  total: 2, recent: 0
 - all + FX + 2000 1  [Bancolombia]  total: 2, recent: 0
-- ios + GMB|Investment + 2022_1_Story3  [Mercado Libre]  total: 2, recent: 0
-- all + FX + 1377 2  [Bancolombia]  total: 1, recent: 0
 
 
 ### 3. Working Combos
 
 | Type     | Offer    | Combo                              | Dep | CPL    | CPA       | ROI  |
 | -------- | -------- | ---------------------------------- | --- | ------ | --------- | ---- |
-| Strong ✓ | Mercado… | all + GMB/TradingYB + 35 + -       | 4   | —      | —         | —    |
-| Strong ✓ | Bancolo… | all + GMBL/Investment + 35 + 1377… | 4   | $16.60 | $1,137.23 | 0.33 |
-| Strong ✓ | Bancolo… | all + FX + 1377 3                  | 3   | $14.52 | $420.97   | 0.24 |
-| Strong ✓ | Mercado… | ios + GMB/Investment + 35 + 2022_… | 2   | $21.78 | $326.64   | 0.15 |
-| Strong ✓ | Bancolo… | all + FX + 2000 1                  | 2   | $12.36 | $982.26   | 0.15 |
+| Strong ✓ | Bancolo… | all + GMBL/Day/Swing + 35+ + Vid…  | 4   | $11.75 | $141.03   | 0.72 |
+| Strong ✓ | Bancolo… | all + FX + 1377 3                  | 3   | $14.52 | $420.97   | 0.85 |
+| Strong ✓ | Bancolo… | all + GMBL/Investment + 35 + 1377… | 3   | $16.05 | $1,011.34 | 0.25 |
+| Strong ✓ | Bancolo… | all + GMBL + 35 + 2175_BNC5_Story1 | 2   | $14.51 | $65.31    | 0.77 |
+| Strong ✓ | Mercado… | ios + GMB/Investment + 35 + 2022_… | 2   | $21.78 | $326.64   | 0.05 |
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title           | Dep | Leads | Spend     | CPA       |
+| ------------------ | --- | ----- | --------- | --------- |
+| Vid 2 - pro3       | 7   | 150   | $2,100.14 | $300.02   |
+| 1377_2_Story3      | 3   | 194   | $3,205.67 | $1,068.56 |
+| 1377 3             | 3   | 149   | $2,211.40 | $737.13   |
+| 2000 1             | 2   | 271   | $3,174.94 | $1,587.47 |
+| 2041_1_1_text6     | 2   | 42    | $1,981.44 | $990.72   |
+| 2022_1_Story1      | 2   | 129   | $1,622.79 | $811.39   |
+| 2022_1_Story3      | 2   | 38    | $839.03   | $419.51   |
+| 2175_BNC5_Story1   | 2   | 22    | $790.40   | $395.20   |
+| Vid 2 - pro        | 2   | 46    | $661.09   | $330.55   |
+| -                  | 2   | 118   | $363.75   | $181.88   |
+| 2046_Maximize      | 1   | 66    | $1,276.58 | $1,276.58 |
+| 2063_9_Story1      | 1   | 27    | $820.54   | $820.54   |
+| Vid1 - 2000 - pro3 | 1   | 71    | $661.80   | $661.80   |
+| 1377 2             | 1   | 17    | $426.18   | $426.18   |
+| 2002 2             | 1   | 23    | $354.11   | $354.11   |
+| Image 1 - 5        | 1   | 3     | $209.78   | $209.78   |
+| Vid ML1 - pro3     | 1   | 29    | $196.59   | $196.59   |
+| Vid 1-200 - pro3   | 1   | 15    | $150.18   | $150.18   |
+| Vid1 - 2000 - pro1 | 1   | 18    | $145.30   | $145.30   |
+| Vid 3 - story1     | 1   | 14    | $115.21   | $115.21   |
+
+### 5. AI Context (copy into chat)
 
 ```
 Country: Colombia
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + GMB|TradingYB + 35 + -  |  Offer: Mercado Libre  |  Dep: 4  |  ROI: 0.00
-2. [Strong] all + GMBL|Investment + 35 + 1377_2_Story3  |  Offer: Bancolombia  |  Dep: 4  |  ROI: 0.33
-3. [Strong] all + FX + 1377 3  |  Offer: Bancolombia  |  Dep: 3  |  ROI: 0.24
+1. [Strong] all + GMBL/Day/Swing + 35+ + Vid 2 - pro3  |  Offer: Bancolombia  |  Dep: 4  |  ROI: 0.72
+2. [Strong] all + FX + 1377 3  |  Offer: Bancolombia  |  Dep: 3  |  ROI: 0.85
    → Target context: Forex (Generic) — users interested in forex, including beginners
+3. [Strong] all + GMBL|Investment + 35 + 1377_2_Story3  |  Offer: Bancolombia  |  Dep: 3  |  ROI: 0.25
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Colombia
@@ -644,41 +822,41 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
-  - all + GMB|TradingYB + -  [Strong, 4 dep]
-  - all + GMBL|Investment + 1377_2_Story3  [Strong, 4 dep]
+  - all + GMBL/Day/Swing + Vid 2 - pro3  [Strong, 4 dep]
   - all + FX + 1377 3  [Strong, 3 dep]
+  - all + GMBL|Investment + 1377_2_Story3  [Strong, 3 dep]
 
 Top targeting by deposits:
-  - FX: 6 dep, $5,618 spend
-  - GMBL|Investment: 4 dep, $6,741 spend
-  - GMB|TradingYB: 4 dep, $617 spend
-  - GMBL: 3 dep, $3,081 spend
-  - GMB|Investment: 3 dep, $702 spend
+  - GMBL: 7 dep, $11,935 spend
+  - FX: 7 dep, $6,844 spend
+  - GMBL/Day/Swing: 5 dep, $1,935 spend
+  - GMBL|Investment: 3 dep, $7,537 spend
+  - GMBL/Investment: 3 dep, $3,219 spend
 
 Failing targeting (0 dep, notable spend):
-  - GMBL|TradingYB: $1,385 spend, 0 dep
-  - GMBL/Day/Swing: $725 spend, 0 dep
-  - GMBL/Investment: $683 spend, 0 dep
+  - GMB/Day/Swing: $574 spend, 0 dep
+  - Images_2047: $554 spend, 0 dep
+  - Images_2041: $545 spend, 0 dep
 
 Top creatives by deposits:
-  - -: 7 dep, $0 spend
-  - 1377_2_Story3: 5 dep, $4,549 spend
-  - 1377 3: 3 dep, $2,244 spend
-  - 2000 1: 2 dep, $3,177 spend
-  - 2022_1_Story3: 2 dep, $669 spend
+  - Vid 2 - pro3: 7 dep, $2,100 spend
+  - 1377_2_Story3: 3 dep, $3,206 spend
+  - 1377 3: 3 dep, $2,211 spend
+  - 2000 1: 2 dep, $3,175 spend
+  - 2041_1_1_text6: 2 dep, $1,981 spend
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -712,13 +890,28 @@ _No combo-level trend data available._
 
 _No Strong/Interesting combos for this country._
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title | Dep | Leads | Spend   | CPA |
+| -------- | --- | ----- | ------- | --- |
+| 8388 10  | 0   | 0     | $514.54 | —   |
+| 1759 6   | 0   | 0     | $182.25 | —   |
+| 1759 10  | 0   | 0     | $155.09 | —   |
+| 8214 2   | 0   | 0     | $77.98  | —   |
+| 8214 5   | 0   | 0     | $52.55  | —   |
+| 1759 8   | 0   | 0     | $24.31  | —   |
+| 8388 5   | 0   | 0     | $8.84   | —   |
+| 1759 5   | 0   | 0     | $0.09   | —   |
+| 1759 3   | 0   | 0     | $0.07   | —   |
+| -        | 0   | 89    | $0.00   | —   |
+
+### 5. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Costa Rica
@@ -734,17 +927,17 @@ Failing targeting (0 dep, notable spend):
   - Day: $338 spend, 0 dep
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -757,26 +950,27 @@ _No ready accounts or no combos to recommend._
 ### 0. News Context
 
 **AI Trader**
-- Signal: recent coverage
-- Why it matters: Exness Review 2026: Fees, Safety, Pros & Cons - Traders Union.
-- Recency: ~6 days ago
+- Signal: local business story
+- Why it matters: Are AI Crypto Trading Bots Suitable for Crypto Beginners? BulkQuant Launches an Automated Crypto Trading App - markets.businessinsider.com.
+- Recency: ~1 days ago
 - Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Dominican Republic — stay factual, avoid hype.
 
 ### 1. Evgeni vs Team
 
-| CM               | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
-| ---------------- | ----- | ----- | --- | ----- | --- | ---- | ---- |
-| Dan Dicker       | $0.00 | 3     | 0   | $0.00 | —   | 0.0% | 0.00 |
-| Yotam Balteriski | $0.00 | 2     | 0   | $0.00 | —   | 0.0% | 0.00 |
+| CM                 | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
+| ------------------ | ----- | ----- | --- | ----- | --- | ---- | ---- |
+| Evgeni Sedin ← YOU | $0.00 | 7     | 0   | $0.00 | —   | 0.0% | 0.00 |
+| Dan Dicker         | $0.00 | 12    | 0   | $0.00 | —   | 0.0% | 0.00 |
+| Yotam Balteriski   | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
 
 | Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
 | ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
-| AI Trader     | $0.00 | 4     | 0   | —   | —   | 0.0% | 0.00 |
+| AI Trader     | $0.00 | 19    | 0   | —   | —   | 0.0% | 0.00 |
 | Trader AI     | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 10 – May 16, 2026 (7d)**
+Period: **May 26 – Jun 01, 2026 (7d)**
 
 _No combo-level trend data available._
 
@@ -784,13 +978,29 @@ _No combo-level trend data available._
 
 _No Strong/Interesting combos for this country._
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title      | Dep | Leads | Spend | CPA |
+| ------------- | --- | ----- | ----- | --- |
+| -             | 0   | 1     | $0.00 | —   |
+| 1723_AR31     | 0   | 1     | $0.00 | —   |
+| 2046 the app  | 0   | 4     | $0.00 | —   |
+| Blue the app  | 0   | 3     | $0.00 | —   |
+| Image 1 - 5   | 0   | 2     | $0.00 | —   |
+| Image 1 - 6   | 0   | 1     | $0.00 | —   |
+| Vid Blue - 1  | 0   | 1     | $0.00 | —   |
+| Vid Blue - 3  | 0   | 1     | $0.00 | —   |
+| Vid Blue - 5a | 0   | 2     | $0.00 | —   |
+| Vid Blue - 6  | 0   | 2     | $0.00 | —   |
+| Vid Blue - 6a | 0   | 2     | $0.00 | —   |
+
+### 5. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Dominican Republic
@@ -801,17 +1011,17 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -823,16 +1033,17 @@ _No ready accounts or no combos to recommend._
 
 ### 0. News Context
 
+**AI Trader** _(theme: Day + TRDEZ)_
+- Signal: recent coverage
+- Why it matters: La acción legal del regulador australiano hace que las acciones de Amazon caigan un 3,12% - Traders Union.
+- Recency: ~6 days ago
+- Query basis: top combos — Day (33 dep), TRDEZ (2 dep)
+- Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Ecuador — stay factual, avoid hype.
+
 **Favorita**
 - Signal: no strong fresh news found
 - Why it matters: No reliable recent asset news found.
 - Headline angle: Use evergreen angles from working combos rather than newsjacking.
-
-**AI Trader**
-- Signal: recent coverage
-- Why it matters: Exness Review 2026: Fees, Safety, Pros & Cons - Traders Union.
-- Recency: ~6 days ago
-- Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Ecuador — stay factual, avoid hype.
 
 **Lundin Gold Inc**
 - Signal: no strong fresh news found
@@ -843,65 +1054,94 @@ _No ready accounts or no combos to recommend._
 
 | CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------------ | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Evgeni Sedin ← YOU | $9,531.82  | 338   | 3   | $28.20 | $3,177.27 | 0.9% | 0.31 |
-| Gil Zangi          | $35,487.84 | 1553  | 12  | $22.85 | $2,957.32 | 0.8% | 0.04 |
-| Dan Dicker         | $11,389.56 | 359   | 6   | $31.73 | $1,898.26 | 1.7% | 0.09 |
-| Yotam Balteriski   | $14,954.09 | 526   | 7   | $28.43 | $2,136.30 | 1.3% | 0.04 |
+| Evgeni Sedin ← YOU | $8,268.39  | 328   | 3   | $25.21 | $2,756.13 | 0.9% | 1.22 |
+| Gil Zangi          | $44,179.25 | 2433  | 36  | $18.16 | $1,227.20 | 1.5% | 0.11 |
+| Dan Dicker         | $15,814.75 | 607   | 9   | $26.05 | $1,757.19 | 1.5% | 0.09 |
+| Yotam Balteriski   | $18,738.03 | 587   | 8   | $31.92 | $2,342.25 | 1.4% | 0.04 |
 
 | Asset (Offer)   | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | --------------- | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Favorita        | $38,454.94 | 1741  | 16  | $22.09 | $2,403.43 | 0.9% | 0.06 |
-| AI Trader       | $14,871.37 | 367   | 8   | $40.52 | $1,858.92 | 2.2% | 0.05 |
-| Lundin Gold Inc | $9,176.44  | 457   | 3   | $20.08 | $3,058.81 | 0.7% | 0.03 |
-| AI_Trader       | $8,367.88  | 196   | 1   | $42.69 | $8,367.88 | 0.5% | 0.33 |
-| Mercado Libre   | $361.51    | 15    | 0   | $24.10 | —         | 0.0% | 0.00 |
-| Trolley         | $131.17    | 0     | 0   | —      | —         | —    | 0.00 |
+| AI Trader       | $50,057.92 | 2513  | 41  | $19.92 | $1,220.92 | 1.6% | 0.10 |
+| Favorita        | $23,724.16 | 952   | 12  | $24.92 | $1,977.01 | 1.3% | 0.07 |
+| Lundin Gold Inc | $4,002.29  | 213   | 2   | $18.79 | $2,001.14 | 0.9% | 0.05 |
+| AI_Trader       | $6,267.77  | 169   | 1   | $37.09 | $6,267.77 | 0.6% | 1.58 |
+| Mercado Libre   | $2,424.16  | 81    | 0   | $29.93 | —         | 0.0% | 0.00 |
+| Banco Guayaquil | $375.47    | 27    | 0   | $13.91 | —         | 0.0% | 0.00 |
+| Trolley         | $148.65    | 0     | 0   | —      | —         | —    | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 13 – May 19, 2026 (7d)**
+Period: **May 31 – Jun 06, 2026 (7d)**
 
 **New (all deposits from recent period):**
-- all + Day + 2046 - Text 4  [AI Trader]  dep: 1
-- all + Day + 2046 - Text 6  [AI Trader]  dep: 1
-- all + TRD + 2041_1_1_OneNight  [AI Trader]  dep: 1
-- all + Trading + Vid 1 - pro3  [Favorita]  dep: 1
-- all + Tradingz + Vid 3 - pro -3  [Favorita]  dep: 1
+- all + TRD + 2046_Maximize  [AI Trader]  dep: 1
+- ios + InvestmentPlus + 1319 - Calculate  [Favorita]  dep: 1
+
+**Stable (deposits before and now):**
+- all + Day + 2046 - Text 6  [AI Trader]  total: 14, recent: 7
+- all + Day + 2046 - Text 5  [AI Trader]  total: 11, recent: 6
+- all + Day + 2046 - Text 4  [AI Trader]  total: 5, recent: 1
+- all + Day + 2046 - Text 3  [AI Trader]  total: 3, recent: 2
 
 **Stopped (had deposits, now 0):**
-- all + Trading + 1319 3  [Favorita]  total: 5, recent: 0
-- all + Trading + Vid 1 - learn  [Favorita]  total: 3, recent: 0
 - all + TRDEZ + 2041_1_1_Story3  [AI Trader]  total: 2, recent: 0
-- all + Trading + 1389 2  [Favorita]  total: 2, recent: 0
-- all + Trading + 509 3  [Favorita]  total: 2, recent: 0
+- all + Trading + Vid 1 - learn  [Favorita]  total: 2, recent: 0
+- all + Blue_Tradingz + Vid Blue - 5a  [AI Trader]  total: 1, recent: 0
+- all + Day + Blue - One night google  [AI Trader]  total: 1, recent: 0
+- all + TRD + 2041_1_1_OneNight  [AI Trader]  total: 1, recent: 0
 
 
 ### 3. Working Combos
 
 | Type     | Offer    | Combo                              | Dep | CPL    | CPA       | ROI  |
 | -------- | -------- | ---------------------------------- | --- | ------ | --------- | ---- |
-| Strong ⚠ | Favorita | all + Trading + 1319 3             | 5   | $26.80 | $2,095.50 | 0.05 |
-| Strong ⚠ | Favorita | all + Trading + 35+ + Vid 1 - lea… | 3   | $23.97 | $870.90   | 0.22 |
+| Strong ✓ | AI Trad… | all + Day + 2046 - Text 6          | 14  | $13.67 | $632.51   | 0.18 |
+| Strong ⚠ | AI Trad… | all + Day + 2046 - Text 5          | 11  | $17.72 | $707.06   | 0.27 |
+| Strong ⚠ | AI Trad… | all + Day + 2046 - Text 4          | 5   | $17.25 | $1,014.03 | 0.12 |
+| Strong ⚠ | AI Trad… | all + Day + 2046 - Text 3          | 3   | $19.07 | $1,169.73 | 0.09 |
 | Strong ⚠ | AI Trad… | all + TRDEZ + 35 + 2041_1_1_Story3 | 2   | $53.36 | $320.14   | 0.14 |
-| Strong ⚠ | Favorita | all + Trading + 1389 2             | 2   | $38.69 | $2,572.75 | 0.04 |
-| Strong ⚠ | Favorita | all + Trading + 509 3              | 2   | $12.50 | $2,863.02 | 0.07 |
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title                               | Dep | Leads | Spend     | CPA       |
+| -------------------------------------- | --- | ----- | --------- | --------- |
+| 2046 - Text 6                          | 14  | 719   | $9,930.94 | $709.35   |
+| 2046 - Text 5                          | 11  | 448   | $7,910.08 | $719.10   |
+| 2046 - Text 4                          | 5   | 307   | $5,248.53 | $1,049.71 |
+| 2046 - Text 3                          | 3   | 191   | $3,622.36 | $1,207.45 |
+| Vid 1 - learn                          | 2   | 79    | $1,622.53 | $811.26   |
+| 2041_1_1_Story3                        | 2   | 17    | $1,309.14 | $654.57   |
+| Vid 3 - story1                         | 2   | 11    | $296.41   | $148.21   |
+| 509 3                                  | 1   | 136   | $4,461.84 | $4,461.84 |
+| 1319 3                                 | 1   | 140   | $3,672.58 | $3,672.58 |
+| 1389 2                                 | 1   | 62    | $2,759.99 | $2,759.99 |
+| 2046_Maximize                          | 1   | 123   | $1,993.43 | $1,993.43 |
+| Vid 3 - pro3                           | 1   | 74    | $1,556.61 | $1,556.61 |
+| 1_coolinggraphserver(1)_2041 - the app | 1   | 40    | $1,315.77 | $1,315.77 |
+| LND2_Learn                             | 1   | 69    | $1,058.26 | $1,058.26 |
+| Vid 3 - Story3                         | 1   | 46    | $1,050.92 | $1,050.92 |
+| Vid Blue - 5a                          | 1   | 20    | $582.13   | $582.13   |
+| 2041_1_1_OneNight                      | 1   | 6     | $390.13   | $390.13   |
+| Vid 1 - pro3                           | 1   | 15    | $379.56   | $379.56   |
+| 1319 - Calculate                       | 1   | 9     | $332.97   | $332.97   |
+| Vid 3 - pro -3                         | 1   | 13    | $239.63   | $239.63   |
+
+### 5. AI Context (copy into chat)
 
 ```
 Country: Ecuador
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + Trading + 1319 3  |  Offer: Favorita  |  Dep: 5  |  ROI: 0.05
-   → Target context: Trading (Generic) — active traders interested in stocks and crypto
-2. [Strong] all + Trading + 35+ + Vid 1 - learn  |  Offer: Favorita  |  Dep: 3  |  ROI: 0.22
-   → Target context: Trading (Generic) — active traders interested in stocks and crypto
-3. [Strong] all + TRDEZ + 35 + 2041_1_1_Story3  |  Offer: AI Trader  |  Dep: 2  |  ROI: 0.14
-   → Target context: TRDEZ
+1. [Strong] all + Day + 2046 - Text 6  |  Offer: AI Trader  |  Dep: 14  |  ROI: 0.18
+   → Target context: Day Trading — day traders looking for quick trading income
+2. [Strong] all + Day + 2046 - Text 5  |  Offer: AI Trader  |  Dep: 11  |  ROI: 0.27
+   → Target context: Day Trading — day traders looking for quick trading income
+3. [Strong] all + Day + 2046 - Text 4  |  Offer: AI Trader  |  Dep: 5  |  ROI: 0.12
+   → Target context: Day Trading — day traders looking for quick trading income
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Ecuador
@@ -910,109 +1150,231 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
-  - all + Trading + 1319 3  [Strong, 5 dep]
-  - all + Trading + Vid 1 - learn  [Strong, 3 dep]
-  - all + TRDEZ + 2041_1_1_Story3  [Strong, 2 dep]
+  - all + Day + 2046 - Text 6  [Strong, 14 dep]
+  - all + Day + 2046 - Text 5  [Strong, 11 dep]
+  - all + Day + 2046 - Text 4  [Strong, 5 dep]
 
 Top targeting by deposits:
-  - Trading: 15 dep, $32,334 spend
-  - TRDEZ: 3 dep, $4,354 spend
-  - Day: 3 dep, $2,887 spend
-  - Tradingz: 2 dep, $2,468 spend
-  - TRD: 2 dep, $1,197 spend
+  - Day: 36 dep, $31,070 spend
+  - Trading: 8 dep, $19,414 spend
+  - TRD: 4 dep, $5,679 spend
+  - TRDEZ: 3 dep, $6,305 spend
+  - Tradingz: 1 dep, $3,167 spend
 
 Failing targeting (0 dep, notable spend):
-  - FX: $8,809 spend, 0 dep
   - Trade: $1,928 spend, 0 dep
-  - IPO: $1,802 spend, 0 dep
+  - FX: $1,604 spend, 0 dep
+  - IPO: $1,596 spend, 0 dep
 
 Top creatives by deposits:
-  - 1319 3: 5 dep, $13,612 spend
-  - Vid 1 - learn: 3 dep, $2,613 spend
-  - 509 3: 2 dep, $7,660 spend
-  - 1389 2: 2 dep, $7,111 spend
-  - 2041_1_1_Story3: 2 dep, $1,309 spend
+  - 2046 - Text 6: 14 dep, $9,931 spend
+  - 2046 - Text 5: 11 dep, $7,910 spend
+  - 2046 - Text 4: 5 dep, $5,249 spend
+  - 2046 - Text 3: 3 dep, $3,622 spend
+  - Vid 1 - learn: 2 dep, $1,623 spend
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-**FacebookMKTO1287 EC** ✅
-Perf: $194.76 spend / 2 leads / 0 FTDs / CPL $97.38 / CPA — / CR 0.0%
-Status: 11 - expand(1 ad set 0 leads with spend, 1 with high cpl) try to find good targeting
-To Do: 
+**FacebookElf102 EC** ✅
+Perf: $269.90 spend / 9 leads / 0 FTDs / CPL $29.99 / CPA — / CR 0.0%
+Status: expand
+To Do: Ait/Day/2046 - Text 6; Ait/TRD/2046_Maximize⚠
 
-**FacebookMKTO1381 EC** ✅
-Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
-Status: —
-To Do: Ait/Day/2046 - Text 4⚠
+**FacebookUL772 EC** ✅
+Perf: $289.49 spend / 2 leads / 0 FTDs / CPL $144.75 / CPA — / CR 0.0%
+Status: optimisation
+To Do: Ait/Day/2046 - Text 6; Ait/TRD/2046_Maximize⚠
 
-**FacebookUL726 EC** ✅
-Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
-Status: —
-To Do: Ait/Day/2046 - Text 4⚠
+**FacebookMKTO1458 EC** ✅
+Perf: $249.80 spend / 11 leads / 0 FTDs / CPL $22.71 / CPA — / CR 0.0%
+Status: Payment error
+To Do: Ait/Day/2046 - Text 6; Ait/TRD/2046_Maximize⚠
 
+**FacebookMKTO1439 EC** ✅
+Perf: $91.80 spend / 3 leads / 0 FTDs / CPL $30.60 / CPA — / CR 0.0%
+Status: Payment errors for these accounts will be solved in the next minutes:
+To Do: Ait/Day/2046 - Text 6; Ait/TRD/2046_Maximize⚠
 
-### 8. Optimization
-
-**FacebookMKTO1287 EC:**
-
-| Campaign                    | Spend   | Leads | FTDs | CPL    | CPA |
-| --------------------------- | ------- | ----- | ---- | ------ | --- |
-| EC_Ait_All_Mix_Day_35_19.05 | $104.65 | 2     | 0    | $52.33 | —   |
-| EC_Ait_All_Mix_TRD_35_19.05 | $87.48  | 0     | 0    | —      | —   |
-| EC_Ait_All_Mix_Day_35_19.05 | $2.45   | 0     | 0    | —      | —   |
-| EC_Ait_All_Mix_TRD_35_19.05 | $0.18   | 0     | 0    | —      | —   |
+**FacebookMKTO1414 EC** ❌
+Perf: $566.68 spend / 10 leads / 0 FTDs / CPL $56.67 / CPA — / CR 0.0%
+Status: Video Selfie
+To Do: Video Selfie
 
 
-### 9. What to Open (4 strategies per account)
+### 9. Optimization
+
+**FacebookElf102 EC:**
+
+| Ad set name                     | Spend   | Leads | FTDs | CPL    | CPA |
+| ------------------------------- | ------- | ----- | ---- | ------ | --- |
+| EC_Ait_All_Mix_SM_35_04.06      | $163.18 | 6     | 0    | $27.20 | —   |
+| EC_Ait_All_Mix_Trading_35_04.06 | $99.87  | 3     | 0    | $33.29 | —   |
+| New Traffic Ad Set              | $3.91   | 0     | 0    | —      | —   |
+| New Engagement Ad Set           | $2.94   | 0     | 0    | —      | —   |
+
+**FacebookUL772 EC:**
+
+| Ad set name                    | Spend   | Leads | FTDs | CPL    | CPA |
+| ------------------------------ | ------- | ----- | ---- | ------ | --- |
+| EC_ML_All_Mix_IPO_35_05.06     | $146.96 | 0     | 0    | —      | —   |
+| EC_ML_All_Mix_Trading_35_05.06 | $142.53 | 2     | 0    | $71.27 | —   |
+
+**FacebookMKTO1458 EC:**
+
+| Ad set name                     | Spend   | Leads | FTDs | CPL    | CPA |
+| ------------------------------- | ------- | ----- | ---- | ------ | --- |
+| EC_Ait_All_Mix_SM_35_04.06      | $244.29 | 11    | 0    | $22.21 | —   |
+| EC_Ait_All_Mix_TradeEZ_35_04.06 | $5.51   | 0     | 0    | —      | —   |
+
+**FacebookMKTO1439 EC:**
+
+| Ad set name                     | Spend  | Leads | FTDs | CPL    | CPA |
+| ------------------------------- | ------ | ----- | ---- | ------ | --- |
+| EC_Fav_IOS_Mix_Trading_35_02.06 | $91.80 | 3     | 0    | $30.60 | —   |
+
+
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
-**FacebookMKTO1287 EC:**
+**FacebookElf102 EC:**
 
-  **3 · trend + recovery**
-  `EC_Fav_All_Video_Trading_20.05`   [Trading — 13 dep, recovery — was working, refresh, trend: heating up, stalled]  ⚠ below benchmark
-    - 1319 3  (5 dep, ROI 0.05)  (recovery: was working, refresh hook/creative)
-    - Vid 1 - pro3  (1 dep, ROI 0.34)  (recovery: pair with new hot creative)
-
-  **4 · test**
-  `EC_Fav_All_Video_Tradingz_35+_20.05`   [Tradingz — 1 dep, test — diversify, trend: heating up, stalled]  ⚠ below benchmark
-    - Vid 3 - pro -3  (1 dep, ROI 0.88)  (trend: all recent dep)
-
-**FacebookMKTO1381 EC:**
+  **1 · trend + stable**
+  `EC_Ait_All_Video_Day_07.06`   [Day — 36 dep, stable + ongoing deposits, trend: stable, stalled]
+    - 2046 - Text 6  (14 dep, ROI 0.18)  (trend: stable + recent)
+    - 2046 - Text 5  (11 dep, ROI 0.27)  (trend: stable + recent)
+    - 2046 - Text 4  (5 dep, ROI 0.12)  (trend: stable + recent)
 
   **2 · trend + variation**
-  `EC_Ait_All_Video_Day_20.05`   [Day — 3 dep, new trend — scale + variations, trend: heating up, stalled]  ⚠ below benchmark
-    - 2046 - Text 4  (1 dep, ROI 1.20)  (trend: all recent dep)
-    - 2046 - Text 6  (1 dep, ROI 1.29)  (variation: same targeting, new creative; trend: all recent dep)
+  `EC_Ait_All_Video_TRD_07.06`   [TRD — 3 dep, new trend — scale + variations, trend: heating up, stalled]  ⚠ below benchmark
+    - 2046_Maximize  (1 dep)  (trend: all recent dep)
 
   **3 · trend + recovery**
-  `EC_Fav_All_Video_Trading_20.05`   [Trading — 13 dep, recovery — was working, refresh, trend: heating up, stalled]  ⚠ below benchmark
-    - 1319 3  (5 dep, ROI 0.05)  (recovery: was working, refresh hook/creative)
-    - Vid 1 - pro3  (1 dep, ROI 0.34)  (recovery: pair with new hot creative)
+  `EC_Ait_All_Video_TRDEZ_35_07.06`   [TRDEZ — 2 dep, recovery — was working, refresh, trend: stalled]  ⚠ below benchmark
+    - 2041_1_1_Story3  (2 dep, ROI 0.14)  (recovery: was working, refresh hook/creative)
 
-  **4 · test**
-  `EC_Ait_All_Video_TRD_35_20.05`   [TRD — 2 dep, test — diversify, trend: heating up, stalled]  ⚠ below benchmark
-    - 2041_1_1_OneNight  (1 dep, ROI 0.85)  (trend: all recent dep)
+**FacebookUL772 EC:**
 
-**FacebookUL726 EC:**
+  **1 · trend + stable**
+  `EC_Ait_All_Video_Day_07.06`   [Day — 36 dep, stable + ongoing deposits, trend: stable, stalled]
+    - 2046 - Text 6  (14 dep, ROI 0.18)  (trend: stable + recent)
+    - 2046 - Text 5  (11 dep, ROI 0.27)  (trend: stable + recent)
+    - 2046 - Text 4  (5 dep, ROI 0.12)  (trend: stable + recent)
 
   **2 · trend + variation**
-  `EC_Ait_All_Video_Day_20.05`   [Day — 3 dep, new trend — scale + variations, trend: heating up, stalled]  ⚠ below benchmark
-    - 2046 - Text 4  (1 dep, ROI 1.20)  (trend: all recent dep)
-    - 2046 - Text 6  (1 dep, ROI 1.29)  (variation: same targeting, new creative; trend: all recent dep)
+  `EC_Ait_All_Video_TRD_07.06`   [TRD — 3 dep, new trend — scale + variations, trend: heating up, stalled]  ⚠ below benchmark
+    - 2046_Maximize  (1 dep)  (trend: all recent dep)
 
   **3 · trend + recovery**
-  `EC_Fav_All_Video_Trading_20.05`   [Trading — 13 dep, recovery — was working, refresh, trend: heating up, stalled]  ⚠ below benchmark
-    - 1319 3  (5 dep, ROI 0.05)  (recovery: was working, refresh hook/creative)
-    - Vid 1 - pro3  (1 dep, ROI 0.34)  (recovery: pair with new hot creative)
+  `EC_Ait_All_Video_TRDEZ_35_07.06`   [TRDEZ — 2 dep, recovery — was working, refresh, trend: stalled]  ⚠ below benchmark
+    - 2041_1_1_Story3  (2 dep, ROI 0.14)  (recovery: was working, refresh hook/creative)
 
-  **4 · test**
-  `EC_Ait_All_Video_TRD_35_20.05`   [TRD — 2 dep, test — diversify, trend: heating up, stalled]  ⚠ below benchmark
-    - 2041_1_1_OneNight  (1 dep, ROI 0.85)  (trend: all recent dep)
+**FacebookMKTO1458 EC:**
 
+  **1 · trend + stable**
+  `EC_Ait_All_Video_Day_07.06`   [Day — 36 dep, stable + ongoing deposits, trend: stable, stalled]
+    - 2046 - Text 6  (14 dep, ROI 0.18)  (trend: stable + recent)
+    - 2046 - Text 5  (11 dep, ROI 0.27)  (trend: stable + recent)
+    - 2046 - Text 4  (5 dep, ROI 0.12)  (trend: stable + recent)
+
+  **2 · trend + variation**
+  `EC_Ait_All_Video_TRD_07.06`   [TRD — 3 dep, new trend — scale + variations, trend: heating up, stalled]  ⚠ below benchmark
+    - 2046_Maximize  (1 dep)  (trend: all recent dep)
+
+  **3 · trend + recovery**
+  `EC_Ait_All_Video_TRDEZ_35_07.06`   [TRDEZ — 2 dep, recovery — was working, refresh, trend: stalled]  ⚠ below benchmark
+    - 2041_1_1_Story3  (2 dep, ROI 0.14)  (recovery: was working, refresh hook/creative)
+
+**FacebookMKTO1439 EC:**
+
+  **1 · trend + stable**
+  `EC_Ait_All_Video_Day_07.06`   [Day — 36 dep, stable + ongoing deposits, trend: stable, stalled]
+    - 2046 - Text 6  (14 dep, ROI 0.18)  (trend: stable + recent)
+    - 2046 - Text 5  (11 dep, ROI 0.27)  (trend: stable + recent)
+    - 2046 - Text 4  (5 dep, ROI 0.12)  (trend: stable + recent)
+
+  **2 · trend + variation**
+  `EC_Ait_All_Video_TRD_07.06`   [TRD — 3 dep, new trend — scale + variations, trend: heating up, stalled]  ⚠ below benchmark
+    - 2046_Maximize  (1 dep)  (trend: all recent dep)
+
+  **3 · trend + recovery**
+  `EC_Ait_All_Video_TRDEZ_35_07.06`   [TRDEZ — 2 dep, recovery — was working, refresh, trend: stalled]  ⚠ below benchmark
+    - 2041_1_1_Story3  (2 dep, ROI 0.14)  (recovery: was working, refresh hook/creative)
+
+
+---
+
+## Country: El Salvador
+
+### 0. News Context
+
+**AI Trader**
+- Signal: local business story
+- Why it matters: Are AI Crypto Trading Bots Suitable for Crypto Beginners? BulkQuant Launches an Automated Crypto Trading App - markets.businessinsider.com.
+- Recency: ~1 days ago
+- Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in El Salvador — stay factual, avoid hype.
+
+### 1. Evgeni vs Team
+
+| CM         | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
+| ---------- | ----- | ----- | --- | ----- | --- | ---- | ---- |
+| Dan Dicker | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+
+| Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
+| ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
+| AI Trader     | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
+
+### 2. Trend (Recent Days)
+
+Period: **May 15 – May 21, 2026 (7d)**
+
+_No combo-level trend data available._
+
+### 3. Working Combos
+
+_No Strong/Interesting combos for this country._
+
+### 4. Creatives
+
+| Ad Title     | Dep | Leads | Spend | CPA |
+| ------------ | --- | ----- | ----- | --- |
+| Vid Blue - 6 | 0   | 1     | $0.00 | —   |
+
+### 5. AI Context (copy into chat)
+
+```
+_No qualifying combos — nothing to explain._
+```
+
+### 6. Hypotheses (copy into chat)
+
+```
+Country: El Salvador
+
+Data summary for hypothesis generation (paste into Cursor chat and ask:
+'Based on this data, suggest 3 test hypotheses for new ad sets'):
+
+Working combos:
+```
+
+### 7–8. Account Statuses
+
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+
+_No accounts found for this country in the GSheet._
+
+### 9. Optimization
+
+_No campaign spend found for ready accounts._
+
+### 10. What to Open (4 strategies per account)
+
+_Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
+
+_No ready accounts or no combos to recommend._
 
 ---
 
@@ -1024,17 +1386,21 @@ _No reliable recent asset news found. Use evergreen angles from working combos._
 
 ### 1. Evgeni vs Team
 
-| CM         | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
-| ---------- | ----- | ----- | --- | ----- | --- | ---- | ---- |
-| Dan Dicker | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+| CM               | Spend     | Leads | Dep | CPL    | CPA | CR   | ROI  |
+| ---------------- | --------- | ----- | --- | ------ | --- | ---- | ---- |
+| Dan Dicker       | $0.00     | 2     | 0   | $0.00  | —   | 0.0% | 0.00 |
+| Yotam Balteriski | $1,413.05 | 69    | 0   | $20.48 | —   | 0.0% | 0.00 |
 
-| Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
-| ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
-| Amazon        | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
+| Asset (Offer)         | Spend     | Leads | Dep | CPL | CPA | CR   | ROI  |
+| --------------------- | --------- | ----- | --- | --- | --- | ---- | ---- |
+| Trolley               | $1,413.05 | 0     | 0   | —   | —   | —    | 0.00 |
+| AI Trader             | $0.00     | 1     | 0   | —   | —   | 0.0% | 0.00 |
+| Amazon                | $0.00     | 1     | 0   | —   | —   | 0.0% | 0.00 |
+| Banco Industrial Form | $0.00     | 69    | 0   | —   | —   | 0.0% | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 02 – May 08, 2026 (7d)**
+Period: **May 31 – Jun 06, 2026 (7d)**
 
 _No combo-level trend data available._
 
@@ -1042,13 +1408,36 @@ _No combo-level trend data available._
 
 _No Strong/Interesting combos for this country._
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title         | Dep | Leads | Spend   | CPA |
+| ---------------- | --- | ----- | ------- | --- |
+| 2175_BI4_Story3  | 0   | 9     | $199.55 | —   |
+| 1870_1_Learn     | 0   | 16    | $149.53 | —   |
+| 2175_BI4_Story1  | 0   | 5     | $140.10 | —   |
+| 2175_Story3      | 0   | 2     | $137.31 | —   |
+| 2175_BI4_Story5  | 0   | 0     | $135.92 | —   |
+| 2175_Monthly     | 0   | 7     | $132.59 | —   |
+| 1870_1_Pro       | 0   | 4     | $84.41  | —   |
+| 2175_BI_1_Story1 | 0   | 7     | $78.30  | —   |
+| 2175_BI_1_Learn  | 0   | 6     | $77.40  | —   |
+| 2175_Pro         | 0   | 4     | $76.84  | —   |
+| 1870_1_Story1    | 0   | 3     | $76.06  | —   |
+| 2175_Story1      | 0   | 3     | $50.61  | —   |
+| 2175_BI4_Story6  | 0   | 0     | $32.07  | —   |
+| 1870_1_Story3    | 0   | 2     | $29.89  | —   |
+| 2175_BI4_Learn   | 0   | 0     | $6.36   | —   |
+| 2175_BI4_Pro     | 0   | 1     | $6.11   | —   |
+| Vid 2 - learn    | 0   | 1     | $0.00   | —   |
+| Vid Blue - 6     | 0   | 1     | $0.00   | —   |
+
+### 5. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Guatemala
@@ -1057,19 +1446,103 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
+
+Failing targeting (0 dep, notable spend):
+  - TRD: $574 spend, 0 dep
+  - Sport: $306 spend, 0 dep
+  - GT_BI_iOS_VID_Mix_35_5.6: $179 spend, 0 dep
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
+
+_Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
+
+_No ready accounts or no combos to recommend._
+
+---
+
+## Country: Japan
+
+### 0. News Context
+
+**Trolley** _(theme: Trading + Day)_
+- Signal: recent coverage
+- Why it matters: LNG Japan/Korea Marker (Platts) BALMO Futures (Jun 26 D01) Trade Ideas — NYMEX:JKD01M2026 - TradingView.
+- Recency: ~6 days ago
+- Query basis: top combos — Trading, Day
+- Headline angle: Tie Trolley headlines to recent coverage themes (Trading + Day) in Japan — stay factual, avoid hype.
+
+### 1. Evgeni vs Team
+
+| CM        | Spend   | Leads | Dep | CPL | CPA | CR | ROI  |
+| --------- | ------- | ----- | --- | --- | --- | -- | ---- |
+| Gil Zangi | $269.76 | 0     | 0   | —   | —   | —  | 0.00 |
+
+| Asset (Offer) | Spend   | Leads | Dep | CPL | CPA | CR | ROI  |
+| ------------- | ------- | ----- | --- | --- | --- | -- | ---- |
+| Trolley       | $269.76 | 0     | 0   | —   | —   | —  | 0.00 |
+
+### 2. Trend (Recent Days)
+
+Period: **May 22 – May 28, 2026 (7d)**
+
+_No combo-level trend data available._
+
+### 3. Working Combos
+
+_No Strong/Interesting combos for this country._
+
+### 4. Creatives
+
+| Ad Title | Dep | Leads | Spend   | CPA |
+| -------- | --- | ----- | ------- | --- |
+| 2045 4   | 0   | 0     | $134.24 | —   |
+| 2045 5   | 0   | 0     | $74.82  | —   |
+| 2045 7   | 0   | 0     | $32.70  | —   |
+| 2045 8   | 0   | 0     | $28.00  | —   |
+
+### 5. AI Context (copy into chat)
+
+```
+_No qualifying combos — nothing to explain._
+```
+
+### 6. Hypotheses (copy into chat)
+
+```
+Country: Japan
+
+Data summary for hypothesis generation (paste into Cursor chat and ask:
+'Based on this data, suggest 3 test hypotheses for new ad sets'):
+
+Working combos:
+
+Failing targeting (0 dep, notable spend):
+  - InvestmentPlus: $164 spend, 0 dep
+  - Investment: $106 spend, 0 dep
+```
+
+### 7–8. Account Statuses
+
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+
+_No accounts found for this country in the GSheet._
+
+### 9. Optimization
+
+_No campaign spend found for ready accounts._
+
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -1081,92 +1554,112 @@ _No ready accounts or no combos to recommend._
 
 ### 0. News Context
 
-**Trolley**
-- Signal: recent coverage
-- Why it matters: Saudi Arabia and U.A.E. Carried Out Secret Attacks in Iran, U.S. Officials Say - The New York Times.
-- Recency: ~6 days ago
-- Headline angle: Connect Trolley to recent coverage in Kuwait with a cautious, timely hook.
-
-**AI Trader**
-- Signal: market move
-- Why it matters: Weekly market commentary - blackrock.com.
-- Recency: ~2 days ago
-- Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Kuwait — stay factual, avoid hype.
-
-**Boubyan Bank**
-- Signal: no strong fresh news found
-- Why it matters: No reliable recent asset news found.
-- Headline angle: Use evergreen angles from working combos rather than newsjacking.
+_No reliable recent asset news found. Use evergreen angles from working combos._
 
 ### 1. Evgeni vs Team
 
 | CM                 | Spend       | Leads | Dep | CPL     | CPA       | CR   | ROI  |
 | ------------------ | ----------- | ----- | --- | ------- | --------- | ---- | ---- |
-| Evgeni Sedin ← YOU | $28,347.98  | 627   | 13  | $45.21  | $2,180.61 | 2.1% | 0.25 |
-| Gil Zangi          | $196,682.41 | 1470  | 77  | $133.80 | $2,554.32 | 5.2% | 0.45 |
-| Dan Dicker         | $63,488.09  | 1062  | 23  | $59.78  | $2,760.35 | 2.2% | 0.20 |
-| Yotam Balteriski   | $50,353.06  | 621   | 12  | $81.08  | $4,196.09 | 1.9% | 0.08 |
+| Evgeni Sedin ← YOU | $101,058.86 | 1582  | 36  | $63.88  | $2,807.19 | 2.3% | 0.45 |
+| Dan Dicker         | $96,929.62  | 1352  | 18  | $71.69  | $5,384.98 | 1.3% | 2.77 |
+| Gil Zangi          | $237,366.92 | 1918  | 71  | $123.76 | $3,343.20 | 3.7% | 0.32 |
+| Yotam Balteriski   | $91,102.37  | 831   | 24  | $109.63 | $3,795.93 | 2.9% | 0.12 |
+| Yinon Avraham      | $62,260.82  | 783   | 10  | $79.52  | $6,226.08 | 1.3% | 0.03 |
 
-| Asset (Offer) | Spend       | Leads | Dep | CPL    | CPA       | CR   | ROI  |
-| ------------- | ----------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Trolley       | $338,525.45 | 3749  | 125 | $90.30 | $2,708.20 | 3.3% | 0.33 |
-| Trader AI     | $346.09     | 5     | 0   | $69.22 | —         | 0.0% | 0.00 |
-| Boubyan Bank  | $0.00       | 6     | 0   | —      | —         | 0.0% | 0.00 |
-| KSCC          | $0.00       | 2     | 0   | —      | —         | 0.0% | 0.00 |
-| Trolley       | $0.00       | 18    | 0   | —      | —         | 0.0% | 0.00 |
+| Asset (Offer)                     | Spend       | Leads | Dep | CPL     | CPA       | CR    | ROI  |
+| --------------------------------- | ----------- | ----- | --- | ------- | --------- | ----- | ---- |
+| Trolley                           | $588,232.73 | 2370  | 84  | $248.20 | $7,002.77 | 3.5%  | 0.57 |
+| Trolley Form                      | $0.00       | 1341  | 36  | —       | —         | 2.7%  | 0.00 |
+| Boubyan Bank Form                 | $0.00       | 1381  | 20  | —       | —         | 1.4%  | 0.00 |
+| Trolley E Form                    | $0.00       | 724   | 12  | —       | —         | 1.7%  | 0.00 |
+| Lulu Retail Form                  | $0.00       | 265   | 2   | —       | —         | 0.8%  | 0.00 |
+| Action Energy Form                | $0.00       | 10    | 1   | —       | —         | 10.0% | 0.00 |
+| Boubyan Bank                      | $0.00       | 19    | 1   | —       | —         | 5.3%  | 0.00 |
+| NBK Form                          | $0.00       | 48    | 1   | —       | —         | 2.1%  | 0.00 |
+| SpaceX Form                       | $0.00       | 10    | 1   | —       | —         | 10.0% | 0.00 |
+| Umm Al Hayman Form                | $0.00       | 29    | 1   | —       | —         | 3.4%  | 0.00 |
+| Trolley Kuwait                    | $485.86     | 0     | 0   | —       | —         | —     | 0.00 |
+| Adnoc Form                        | $0.00       | 70    | 0   | —       | —         | 0.0%  | 0.00 |
+| Gold Form                         | $0.00       | 5     | 0   | —       | —         | 0.0%  | 0.00 |
+| IPG Form                          | $0.00       | 3     | 0   | —       | —         | 0.0%  | 0.00 |
+| KSCC                              | $0.00       | 5     | 0   | —       | —         | 0.0%  | 0.00 |
+| Kuwait Petroleum Corporation Form | $0.00       | 58    | 0   | —       | —         | 0.0%  | 0.00 |
+| Qatar Energy Form                 | $0.00       | 3     | 0   | —       | —         | 0.0%  | 0.00 |
+| Tabby Form                        | $0.00       | 25    | 0   | —       | —         | 0.0%  | 0.00 |
+| Talabat Form                      | $0.00       | 24    | 0   | —       | —         | 0.0%  | 0.00 |
+| Trader AI                         | $0.00       | 1     | 0   | —       | —         | 0.0%  | 0.00 |
+| Trolley                           | $0.00       | 67    | 0   | —       | —         | 0.0%  | 0.00 |
+| Trolley English Form              | $0.00       | 8     | 0   | —       | —         | 0.0%  | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 13 – May 19, 2026 (7d)**
+Period: **May 31 – Jun 06, 2026 (7d)**
 
 **New (all deposits from recent period):**
-- all + BB_Day + Image BB2 - golden  [Trolley]  dep: 1
-- all + Cond_FX/iOS + 1975_6  [Trolley]  dep: 1
-- all + Day + 2048 3  [Trolley]  dep: 1
-- all + Day + Trolley_5 - AR Trolley Officia  [Trolley]  dep: 1
-- all + GMBL + TR9  [Trolley]  dep: 1
-
-**Stable (deposits before and now):**
-- all + Day + TR8  [Trolley]  total: 5, recent: 1
-- all + Trading + Image 7  [Trolley]  total: 4, recent: 1
-- all + Day + Image 8  [Trolley]  total: 2, recent: 1
-- all + GMBL + 2048 24  [Trolley]  total: 2, recent: 1
-- all + Luxury + TR6  [Trolley]  total: 2, recent: 1
+- all + - + -  [Trolley Form]  dep: 4
+- ios + KW_TRL_iOS_IMG_MIX_30_1.6 + 1975_6_Citizens  [Trolley Form]  dep: 4
+- all + Day + 2195 10  [Trolley E Form]  dep: 3
+- all + Reading + 2195 10  [Trolley E Form]  dep: 2
+- ios + InvestmentPlus + BB6 - AR BB For citizens  [Boubyan Bank Form]  dep: 1
 
 **Stopped (had deposits, now 0):**
-- all + Day + 1975 25  [Trolley]  total: 8, recent: 0
-- all + GMBL + 1962 8  [Trolley]  total: 6, recent: 0
-- all + GMBL + 1975 25  [Trolley]  total: 5, recent: 0
-- all + Day + 1975 25 - Copy  [Trolley]  total: 4, recent: 0
-- all + Day + Image 7-1975  [Trolley]  total: 4, recent: 0
+- all + Day + 1975 25  [Trolley]  total: 7, recent: 0
+- all + Reading + 1975 25 - Copy 2  [Trolley]  total: 5, recent: 0
+- all + Day + TR8  [Trolley]  total: 4, recent: 0
+- all + Trading + Image 7  [Trolley]  total: 4, recent: 0
+- ios + HNW + 5_man_ar_txt2 - AR KW BB1  [Boubyan Bank Form]  total: 4, recent: 0
 
 
 ### 3. Working Combos
 
-| Type     | Offer   | Combo                      | Dep | CPL     | CPA       | ROI  |
-| -------- | ------- | -------------------------- | --- | ------- | --------- | ---- |
-| Strong ✓ | Trolley | all + Day + 1975 25        | 8   | $97.88  | $1,994.28 | 0.42 |
-| Strong ⚠ | Trolley | all + GMBL + 1962 8        | 6   | $122.73 | $1,350.01 | 0.13 |
-| Strong ⚠ | Trolley | all + GMBL + 1975 25       | 5   | $165.56 | $1,059.57 | 0.33 |
-| Strong ⚠ | Trolley | all + Day + TR8            | 5   | $161.50 | $1,356.58 | 0.56 |
-| Strong ⚠ | Trolley | all + Day + 1975 25 - Copy | 4   | $104.47 | $888.01   | 0.40 |
+| Type     | Offer    | Combo                              | Dep | CPL     | CPA       | ROI  |
+| -------- | -------- | ---------------------------------- | --- | ------- | --------- | ---- |
+| Strong ⚠ | Trolley  | all + Day + 1975 25                | 7   | $177.32 | $1,798.51 | 0.17 |
+| Strong ✓ | Trolley  | all + Reading + 1975 25 - Copy 2   | 5   | $96.63  | $869.68   | 0.21 |
+| Strong ✓ | Trolley… | ios + KW_TRL_iOS_IMG_MIX_30_1.6 +… | 4   | —       | —         | —    |
+| Strong ⚠ | Trolley  | all + Day + TR8                    | 4   | $208.14 | $1,404.95 | 0.65 |
+| Strong ✓ | Boubyan… | ios + HNW + 25 + 5_man_ar_txt2 -…  | 4   | —       | —         | —    |
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title                       | Dep | Leads | Spend      | CPA       |
+| ------------------------------ | --- | ----- | ---------- | --------- |
+| 1975 25                        | 14  | 193   | $31,184.45 | $2,227.46 |
+| Image 7                        | 7   | 229   | $16,161.27 | $2,308.75 |
+| 2195 10                        | 7   | 277   | $8,257.01  | $1,179.57 |
+| -                              | 7   | 524   | $288.25    | $41.18    |
+| 1975 7                         | 6   | 92    | $20,547.58 | $3,424.60 |
+| TR8                            | 6   | 67    | $12,068.21 | $2,011.37 |
+| TR6                            | 5   | 48    | $11,121.26 | $2,224.25 |
+| 1975 25 - Copy 2               | 5   | 45    | $4,348.42  | $869.68   |
+| 5_man_ar_txt2 - AR KW BB1      | 5   | 110   | $2,348.79  | $469.76   |
+| 1975_6_Citizens                | 4   | 45    | $4,448.97  | $1,112.24 |
+| 1975_6                         | 3   | 111   | $13,165.30 | $4,388.43 |
+| 1962 8                         | 3   | 61    | $9,381.63  | $3,127.21 |
+| 2024 10                        | 3   | 55    | $6,756.70  | $2,252.23 |
+| 2048 24                        | 3   | 20    | $3,079.67  | $1,026.56 |
+| TR9                            | 3   | 17    | $3,001.55  | $1,000.52 |
+| TRLJSIMG2 - AR KW For citizens | 3   | 35    | $2,498.37  | $832.79   |
+| Image 2-2013                   | 3   | 82    | $2,469.27  | $823.09   |
+| 1975_1                         | 3   | 21    | $2,107.09  | $702.36   |
+| 2195 6                         | 3   | 118   | $2,065.11  | $688.37   |
+| TR5                            | 2   | 66    | $12,880.41 | $6,440.20 |
+
+### 5. AI Context (copy into chat)
 
 ```
 Country: Kuwait
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + Day + 1975 25  |  Offer: Trolley  |  Dep: 8  |  ROI: 0.42
+1. [Strong] all + Day + 1975 25  |  Offer: Trolley  |  Dep: 7  |  ROI: 0.17
    → Target context: Day Trading — day traders looking for quick trading income
-2. [Strong] all + GMBL + 1962 8  |  Offer: Trolley  |  Dep: 6  |  ROI: 0.13
-   → Target context: GMBL — gambling, sports betting, and online casino fans; applies across countries
-3. [Strong] all + GMBL + 1975 25  |  Offer: Trolley  |  Dep: 5  |  ROI: 0.33
-   → Target context: GMBL — gambling, sports betting, and online casino fans; applies across countries
+2. [Strong] all + Reading + 1975 25 - Copy 2  |  Offer: Trolley  |  Dep: 5  |  ROI: 0.21
+   → Target context: Reading
+3. [Strong] ios + KW_TRL_iOS_IMG_MIX_30_1.6 + 30 + 1975_6_Citizens  |  Offer: Trolley Form  |  Dep: 4  |  ROI: 0.00
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Kuwait
@@ -1175,225 +1668,267 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
-  - all + Day + 1975 25  [Strong, 8 dep]
-  - all + GMBL + 1962 8  [Strong, 6 dep]
-  - all + GMBL + 1975 25  [Strong, 5 dep]
+  - all + Day + 1975 25  [Strong, 7 dep]
+  - all + Reading + 1975 25 - Copy 2  [Strong, 5 dep]
+  - ios + KW_TRL_iOS_IMG_MIX_30_1.6 + 1975_6_Citizens  [Strong, 4 dep]
 
 Top targeting by deposits:
-  - Day: 44 dep, $100,281 spend
-  - GMBL: 24 dep, $53,700 spend
-  - Trading: 12 dep, $36,707 spend
-  - Reading: 9 dep, $30,065 spend
-  - Investment: 9 dep, $21,465 spend
+  - Day: 44 dep, $143,751 spend
+  - Reading: 27 dep, $93,952 spend
+  - GMBL: 22 dep, $81,478 spend
+  - Trading: 12 dep, $52,763 spend
+  - Investment: 9 dep, $26,765 spend
 
 Failing targeting (0 dep, notable spend):
-  - DAY: $3,192 spend, 0 dep
-  - TRD: $2,371 spend, 0 dep
-  - FX: $1,757 spend, 0 dep
+  - DAY/iOS: $6,548 spend, 0 dep
+  - DAY: $6,506 spend, 0 dep
+  - GMBL/iOS: $2,711 spend, 0 dep
 
 Top creatives by deposits:
-  - 1975 25: 18 dep, $38,207 spend
-  - TR5: 9 dep, $21,602 spend
-  - 1975 7: 7 dep, $18,943 spend
-  - TR6: 7 dep, $16,232 spend
-  - TR8: 7 dep, $15,732 spend
+  - 1975 25: 14 dep, $31,184 spend
+  - Image 7: 7 dep, $16,161 spend
+  - 2195 10: 7 dep, $8,257 spend
+  - -: 7 dep, $288 spend
+  - 1975 7: 6 dep, $20,548 spend
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
-
-**Facebook_6218 KW** ✅
-Perf: $8,815.15 spend / 197 leads / 5 FTDs / CPL $44.75 / CPA $1,763.03 / CR 2.5%
-Status: —
-To Do: Trl/Day/TR8⚠; Trl/BB_Day/Image BB2 - gol…
-
-**Facebook_5395 KW** ✅
-Perf: $0.00 spend / 3 leads / 1 FTDs / CPL $0.00 / CPA $0.00 / CR 33.3%
-Status: At leads 6 leads from new campaign are looks valid
-To Do: Trl/Day/TR8⚠; Trl/BB_Day/Image BB2 - gol…
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 **FacebookMKTO1372 KW** ✅
+Perf: $12,121.33 spend / 149 leads / 2 FTDs / CPL $81.35 / CPA $6,060.66 / CR 1.3%
+Status: Optimisation
+To Do: Trol/-/-
+
+**FacebookMKTO1438 KW** ✅
+Perf: $925.01 spend / 15 leads / 0 FTDs / CPL $61.67 / CPA — / CR 0.0%
+Status: Optimisation
+To Do: Trol/-/-
+
+**FacebookElf104 KW** ❌
 Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
+Status: Video selfie
+To Do: Video selfie
+
+**FacebookMKTO1459 KW** ✅
+Perf: $433.85 spend / 5 leads / 0 FTDs / CPL $86.77 / CPA — / CR 0.0%
+Status: expand
+To Do: Trol/-/-
+
+**FacebookElf106 KW** ✅
+Perf: $206.30 spend / 2 leads / 0 FTDs / CPL $103.15 / CPA — / CR 0.0%
+Status: expand
+To Do: Trol/-/-
+
+**Facebook_6990 KW** ✅
+Perf: $4,485.97 spend / 128 leads / 1 FTDs / CPL $35.05 / CPA $4,485.97 / CR 0.8%
+Status: Optimisation
+To Do: Trol/-/-
+
+**FacebookElf87 KW** ✅
+Perf: $3,406.27 spend / 39 leads / 0 FTDs / CPL $87.34 / CPA — / CR 0.0%
+Status: Optimisation
+To Do: Trol/-/-
+
+**FacebookDQ8 KW** ✅
+Perf: $3,441.96 spend / 63 leads / 4 FTDs / CPL $54.63 / CPA $860.49 / CR 6.3%
 Status: —
-To Do: Trl/Day/TR8⚠; Trl/BB_Day/Image BB2 - gol…
-
-**Facebook_5976 KW** ✅
-Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
-Status: Swich to conditional + add countries that we alowed to question 1 - UAE, SA, BH
-To Do: Trl/Day/TR8⚠; Trl/BB_Day/Image BB2 - gol…
-
-**Facebook_6879 KW** ✅
-Perf: $0.00 spend / 1 leads / 0 FTDs / CPL $0.00 / CPA — / CR 0.0%
-Status: 20 spend limit
-To Do: Trl/Day/TR8⚠; Trl/BB_Day/Image BB2 - gol…
-
-**Facebook_3449 KW** ✅
-Perf: $0.00 spend / 4 leads / 0 FTDs / CPL $0.00 / CPA — / CR 0.0%
-Status: Swich to conditional + add countries that we alowed to question 1 - UAE, SA, BH
-To Do: Trl/Day/TR8⚠; Trl/BB_Day/Image BB2 - gol…
-
-**FacebookMKTO1343 KW** ✅
-Perf: $4,175.65 spend / 122 leads / 0 FTDs / CPL $34.23 / CPA — / CR 0.0%
-Status: raise budget
-To Do: Trl/Day/TR8⚠; Trl/BB_Day/Image BB2 - gol…
+To Do: Trol/-/-
 
 
-### 8. Optimization
-
-**Facebook_6218 KW:**
-
-| Campaign                              | Spend     | Leads | FTDs | CPL     | CPA     |
-| ------------------------------------- | --------- | ----- | ---- | ------- | ------- |
-| KW_Trl_IOS_Image_Day_25_05.05         | $1,483.45 | 27    | 2    | $54.94  | $741.73 |
-| KW_Trl_IOS_Image_IPO_25_05.05         | $947.29   | 2     | 0    | $473.64 | —       |
-| KW_Trl_IOS_Image_Mix/Reading_25_05.05 | $789.32   | 14    | 0    | $56.38  | —       |
-| KW_Trl_IOS_Image_SM/Reading_25_06.05  | $722.95   | 9     | 0    | $80.33  | —       |
-| KW_Trl_IOS_Image_Trading_25_06.05     | $720.92   | 6     | 0    | $120.15 | —       |
-| KW_Trl_IOS_Video_Day_25_07.05         | $634.00   | 5     | 1    | $126.80 | $634.00 |
-| KW_Trl_IOS_Video_Mix_25_07.05         | $511.65   | 3     | 0    | $170.55 | —       |
-| KW_Trl_IOS_Mix_Reading_25_11.05       | $412.43   | 22    | 0    | $18.75  | —       |
-| KW_Trl_IOS_Mix_Day_25_11.05           | $391.94   | 24    | 0    | $16.33  | —       |
-| KW_Trl_IOS_Mix_Day_25_12.05           | $315.48   | 12    | 0    | $26.29  | —       |
-| KW_Trl_All_Video_FX_25_01.05          | $280.18   | 32    | 0    | $8.76   | —       |
-| KW_Trl_All_Video_MIX/Reading_25_29.04 | $278.95   | 30    | 1    | $9.30   | $278.95 |
-| KW_Trl_IOS_Image_mix10_25_01.05       | $229.74   | 0     | 0    | —       | —       |
-| KW_Trl_IOS_Mix_Investment_25_12.05    | $223.67   | 1     | 1    | $223.67 | $223.67 |
-| KW_Trl_IOS_Image_Reading_25_04.05     | $146.65   | 0     | 0    | —       | —       |
-| KW_Trl_IOS_Mix_FX_25_13.05            | $143.56   | 7     | 0    | $20.51  | —       |
-| KW_Trl_IOS_Image_Day_25_04.05         | $142.04   | 0     | 0    | —       | —       |
-| KW_Trl_IOS_Image_IPO/Reading_25_05.05 | $118.87   | 0     | 0    | —       | —       |
-| KW_Trl_All_Image_Gmbl_25_05.05        | $97.49    | 0     | 0    | —       | —       |
-| KW_Trl_All_Image_Day_25_05.05         | $95.78    | 1     | 0    | $95.78  | —       |
-| KW_Trl_IOS_Mix_TradeEZ_25_13.05       | $64.94    | 2     | 0    | $32.47  | —       |
-| KW_Trl_IOS_Mix_Mix/Reading_25_13.05   | $63.85    | 0     | 0    | —       | —       |
-
-**Facebook_5395 KW:**
-
-| Campaign                         | Spend | Leads | FTDs | CPL | CPA |
-| -------------------------------- | ----- | ----- | ---- | --- | --- |
-| KW_Trl_All_Mix_Day_30_18.05(ns)  | $0.00 | 1     | 1    | —   | —   |
-| KW_Trl_All_Mix_Day_30_18.05(ns)  | $0.00 | 1     | 0    | —   | —   |
-| KW_Trl_All_Mix_GMBL_30_18.05(ns) | $0.00 | 1     | 0    | —   | —   |
-
-**Facebook_6879 KW:**
-
-| Campaign                                  | Spend | Leads | FTDs | CPL | CPA |
-| ----------------------------------------- | ----- | ----- | ---- | --- | --- |
-| KW_Trl_All_Video_OnlineEducation_30_18.05 | $0.00 | 1     | 0    | —   | —   |
-
-**Facebook_3449 KW:**
-
-| Campaign                    | Spend | Leads | FTDs | CPL | CPA |
-| --------------------------- | ----- | ----- | ---- | --- | --- |
-| KW_BB_IOS_Mix_Day_25_19.05  | $0.00 | 1     | 0    | —   | —   |
-| KW_BB_IOS_Mix_HNW_25_19.05  | $0.00 | 1     | 0    | —   | —   |
-| KW_Trl_IOS_Mix_Day_25_18.05 | $0.00 | 1     | 0    | —   | —   |
-| KW_Trl_IOS_Mix_Day_25_18.05 | $0.00 | 1     | 0    | —   | —   |
-
-**FacebookMKTO1343 KW:**
-
-| Campaign                            | Spend     | Leads | FTDs | CPL     | CPA |
-| ----------------------------------- | --------- | ----- | ---- | ------- | --- |
-| KW_Trl_IOS_Mix_Mix/Reading_30_13.05 | $1,190.47 | 7     | 0    | $170.07 | —   |
-| KW_Trl_IOS_Mix_Day_30_13.05         | $1,183.39 | 20    | 0    | $59.17  | —   |
-| KW_Trl_IOS_Mix_Trading_30_16.05     | $691.29   | 10    | 0    | $69.13  | —   |
-| KW_Trl_IOS_Mix_Day_30_12.05         | $494.51   | 6     | 0    | $82.42  | —   |
-| KW_Trl_IOS_Mix_SM_30_12.05          | $471.83   | 8     | 0    | $58.98  | —   |
-| KW_Trl_IOS_Mix_Reading_30_16.05     | $144.16   | 4     | 0    | $36.04  | —   |
-| Account-level (no ad set in export) | $0.00     | 63    | 0    | —       | —   |
-| KW_Trl_IOS_Mix_Day_30_13.05         | $0.00     | 2     | 0    | —       | —   |
-| KW_Trl_IOS_Mix_Mix/Reading_30_13.05 | $0.00     | 1     | 0    | —       | —   |
-| KW_Trl_IOS_Mix_Trading_30_16.05     | $0.00     | 1     | 0    | —       | —   |
-
-
-### 9. What to Open (4 strategies per account)
-
-_Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
-
-**Facebook_6218 KW:**
-
-  **1 · trend + stable**
-  `KW_Trl_All_Mix_Day_20.05`   [Day — 41 dep, scale up, stable + ongoing deposits, trend: stable, heating up, stalled]  ⚠ below benchmark
-    - TR8  (5 dep, ROI 0.56)  (trend: stable + recent)
-    - Image 8  (2 dep, ROI 2.22)  (trend: stable + recent)
-    - 2048 3  (1 dep, ROI 1.08)  (trend: all recent dep)
-
-  **2 · trend + variation**
-  `KW_Trl_All_Image_BB_Day_30+_20.05`   [BB_Day — 1 dep, new trend — scale + variations, trend: heating up]
-    - Image BB2 - golden  (1 dep, ROI 51.93)  (trend: all recent dep)
-
-**Facebook_5395 KW:**
-
-  **1 · trend + stable**
-  `KW_Trl_All_Mix_Day_20.05`   [Day — 41 dep, stable + ongoing deposits, trend: stable, heating up, stalled]  ⚠ below benchmark
-    - TR8  (5 dep, ROI 0.56)  (trend: stable + recent)
-    - Image 8  (2 dep, ROI 2.22)  (trend: stable + recent)
-    - 2048 3  (1 dep, ROI 1.08)  (trend: all recent dep)
-
-  **2 · trend + variation**
-  `KW_Trl_All_Image_BB_Day_30+_20.05`   [BB_Day — 1 dep, new trend — scale + variations, trend: heating up]
-    - Image BB2 - golden  (1 dep, ROI 51.93)  (trend: all recent dep)
+### 9. Optimization
 
 **FacebookMKTO1372 KW:**
 
-  **1 · trend + stable**
-  `KW_Trl_All_Mix_Day_20.05`   [Day — 41 dep, stable + ongoing deposits, trend: stable, heating up, stalled]  ⚠ below benchmark
-    - TR8  (5 dep, ROI 0.56)  (trend: stable + recent)
-    - Image 8  (2 dep, ROI 2.22)  (trend: stable + recent)
-    - 2048 3  (1 dep, ROI 1.08)  (trend: all recent dep)
+| Ad set name                              | Spend     | Leads | FTDs | CPL     | CPA     |
+| ---------------------------------------- | --------- | ----- | ---- | ------- | ------- |
+| KW_BB_IOS_Images_Reading/SM_30_24.05cond | $1,602.96 | 20    | 2    | $80.15  | $801.48 |
+| KW_Trl_IOS_Mix_Reading_30_25.05          | $1,183.05 | 0     | 0    | —       | —       |
+| KW_BB_IOS_Images_InvestmentPlus_30_20.05 | $1,146.51 | 21    | 0    | $54.60  | —       |
+| KW_BB_IOS_Images_EF_30_20.05cond         | $832.35   | 12    | 0    | $69.36  | —       |
+| KW_BB_IOS_Images_Day_30_20.05cond        | $785.24   | 9     | 0    | $87.25  | —       |
+| KW_BB_IOS_Images_Reading_30_02.06        | $740.96   | 10    | 0    | $74.10  | —       |
+| KW_BB_IOS_Images_Investment_30_02.06     | $740.87   | 18    | 0    | $41.16  | —       |
+| KW_BB_IOS_Images_HNW_30_20.05            | $708.59   | 8     | 0    | $88.57  | —       |
+| KW_BB_IOS_Images_SM_30_24.05cond         | $631.06   | 10    | 0    | $63.11  | —       |
+| KW_BB_IOS_Images_GMBL_30_03.06           | $586.37   | 5     | 0    | $117.27 | —       |
+| KW_BB_IOS_Images_Reading_30_03.06        | $585.60   | 5     | 0    | $117.12 | —       |
+| KW_Trl_IOS_Mix_GMBL_30_28.05             | $476.93   | 0     | 0    | —       | —       |
+| KW_BB_IOS_Images_Reading_30_25.05        | $449.34   | 11    | 0    | $40.85  | —       |
+| KW_Trl_IOS_Mix_Reading_30_31.05          | $359.95   | 0     | 0    | —       | —       |
+| KW_Trl_IOS_Mix_GMBL_30_25.05             | $279.01   | 0     | 0    | —       | —       |
+| KW_Trl_IOS_Mix_Day_30_01.06              | $183.46   | 0     | 0    | —       | —       |
+| KW_Trl_IOS_Mix_OnlineGaming_30_28.05     | $167.48   | 0     | 0    | —       | —       |
+| KW_Trl_IOS_Mix_Day_30_02.06              | $142.57   | 0     | 0    | —       | —       |
+| KW_Trl_IOS_Mix_GMBL_30_01.06             | $138.14   | 0     | 0    | —       | —       |
+| KW_Trl_All_Mix_Reading_30_25.05          | $132.75   | 0     | 0    | —       | —       |
+| KW_Trl_IOS_Mix_Reading_30_02.06          | $119.42   | 0     | 0    | —       | —       |
+| KW_Trl_All_Mix_GMBL_30_25.05             | $118.38   | 0     | 0    | —       | —       |
+| KW_Trl_IOS_Mix_GMBL_30_31.05             | $10.34    | 0     | 0    | —       | —       |
+| Account-level (no ad set in export)      | $0.00     | 20    | 0    | —       | —       |
+
+**FacebookMKTO1438 KW:**
+
+| Ad set name                         | Spend   | Leads | FTDs | CPL    | CPA |
+| ----------------------------------- | ------- | ----- | ---- | ------ | --- |
+| KW_BB_IOS_Mix_Reading_25_04.06      | $255.30 | 3     | 0    | $85.10 | —   |
+| KW_BB_IOS_Mix_GMBL_25_04.06         | $240.47 | 7     | 0    | $34.35 | —   |
+| KW_Trl_IOS_Mix_GMBL_25_04.06        | $215.31 | 0     | 0    | —      | —   |
+| KW_Trl_IOS_Mix_Reading_25_04.06     | $213.93 | 0     | 0    | —      | —   |
+| Account-level (no ad set in export) | $0.00   | 5     | 0    | —      | —   |
+
+**FacebookMKTO1459 KW:**
+
+| Ad set name                         | Spend   | Leads | FTDs | CPL | CPA |
+| ----------------------------------- | ------- | ----- | ---- | --- | --- |
+| KW_Trl_IOS_Mix_ReadingEN_25_03.06   | $423.49 | 0     | 0    | —   | —   |
+| KW_Trl_IOS_Mix_GMBLEN_25_03.06      | $10.36  | 0     | 0    | —   | —   |
+| Account-level (no ad set in export) | $0.00   | 5     | 0    | —   | —   |
+
+**FacebookElf106 KW:**
+
+| Ad set name                         | Spend   | Leads | FTDs | CPL | CPA |
+| ----------------------------------- | ------- | ----- | ---- | --- | --- |
+| KW_Trl_IOS_MIX_GMBL_30_05.06        | $206.30 | 0     | 0    | —   | —   |
+| Account-level (no ad set in export) | $0.00   | 2     | 0    | —   | —   |
+
+**Facebook_6990 KW:**
+
+| Ad set name                         | Spend     | Leads | FTDs | CPL | CPA |
+| ----------------------------------- | --------- | ----- | ---- | --- | --- |
+| KW_Trl_IOS_Mix_GMBL_25_01.06        | $1,682.25 | 0     | 0    | —   | —   |
+| KW_Trl_IOS_Mix_Reading_25_01.06     | $1,640.99 | 0     | 0    | —   | —   |
+| KW_Trl_IOS_Mix_Trading_25_03.06     | $585.21   | 0     | 0    | —   | —   |
+| KW_Trl_IOS_Mix_Reading/SM_25_03.06  | $577.52   | 0     | 0    | —   | —   |
+| Account-level (no ad set in export) | $0.00     | 128   | 1    | —   | —   |
+
+**FacebookElf87 KW:**
+
+| Ad set name                         | Spend   | Leads | FTDs | CPL | CPA |
+| ----------------------------------- | ------- | ----- | ---- | --- | --- |
+| KW_Trl_IOS_Mix_Reading_25_01.06     | $805.13 | 0     | 0    | —   | —   |
+| KW_Trl_IOS_Mix_HNW_25_01.06         | $784.83 | 0     | 0    | —   | —   |
+| KW_Trl_IOS_Mix_HNW_25_02.06         | $676.04 | 0     | 0    | —   | —   |
+| KW_Trl_IOS_Mix_PF_25_03.06          | $517.13 | 0     | 0    | —   | —   |
+| KW_Trl_IOS_Mix_IPO_25_03.06         | $514.34 | 0     | 0    | —   | —   |
+| KW_Trl_IOS_Mix_Sport_25_02.06       | $108.80 | 0     | 0    | —   | —   |
+| Account-level (no ad set in export) | $0.00   | 39    | 0    | —   | —   |
+
+**FacebookDQ8 KW:**
+
+| Ad set name                           | Spend     | Leads | FTDs | CPL    | CPA     |
+| ------------------------------------- | --------- | ----- | ---- | ------ | ------- |
+| KW_BB_IOS_Mix_Reading_25_02.06        | $1,307.48 | 21    | 0    | $62.26 | —       |
+| KW_BB_IOS_Mix_InvestmentPlus_25_01.06 | $671.12   | 12    | 1    | $55.93 | $671.12 |
+| KW_Trl_IOS_Mix_Day_25_02.06           | $417.26   | 0     | 0    | —      | —       |
+| KW_Trl_IOS_Mix_GMBL_25_03.06          | $351.59   | 0     | 0    | —      | —       |
+| KW_Trl_IOS_Mix_Reading_25_03.06       | $279.44   | 0     | 0    | —      | —       |
+| KW_Trl_IOS_Mix_HNW_25_01.06           | $249.63   | 4     | 0    | $62.41 | —       |
+| KW_Trl_IOS_Mix_Reading_25_02.06       | $165.44   | 0     | 0    | —      | —       |
+| Account-level (no ad set in export)   | $0.00     | 26    | 3    | —      | —       |
+
+
+### 10. What to Open (4 strategies per account)
+
+_Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
+
+**FacebookMKTO1372 KW:**
 
   **2 · trend + variation**
-  `KW_Trl_All_Image_BB_Day_30+_20.05`   [BB_Day — 1 dep, new trend — scale + variations, trend: heating up]
-    - Image BB2 - golden  (1 dep, ROI 51.93)  (trend: all recent dep)
+  `KW_Trol_All_Video_-_07.06`   [- — 7 dep, new trend — scale + variations, trend: heating up, stalled]
+    - -  (4 dep)  (trend: all recent dep)
 
-**Facebook_5976 KW:**
+  **4 · test**
+  `KW_Trol_All_Video_MIX&Day_07.06`   [MIX&Day — 2 dep, test — diversify, trend: heating up]
+    - TRL-YA5  (1 dep)  (trend: all recent dep)
+    - 1975 25  (1 dep)  (trend: all recent dep)
 
-  **1 · trend + stable**
-  `KW_Trl_All_Mix_Day_20.05`   [Day — 41 dep, stable + ongoing deposits, trend: stable, heating up, stalled]  ⚠ below benchmark
-    - TR8  (5 dep, ROI 0.56)  (trend: stable + recent)
-    - Image 8  (2 dep, ROI 2.22)  (trend: stable + recent)
-    - 2048 3  (1 dep, ROI 1.08)  (trend: all recent dep)
-
-  **2 · trend + variation**
-  `KW_Trl_All_Image_BB_Day_30+_20.05`   [BB_Day — 1 dep, new trend — scale + variations, trend: heating up]
-    - Image BB2 - golden  (1 dep, ROI 51.93)  (trend: all recent dep)
-
-**Facebook_6879 KW:**
-
-  **1 · trend + stable**
-  `KW_Trl_All_Mix_Day_20.05`   [Day — 41 dep, stable + ongoing deposits, trend: stable, heating up, stalled]  ⚠ below benchmark
-    - TR8  (5 dep, ROI 0.56)  (trend: stable + recent)
-    - Image 8  (2 dep, ROI 2.22)  (trend: stable + recent)
-    - 2048 3  (1 dep, ROI 1.08)  (trend: all recent dep)
+**FacebookMKTO1438 KW:**
 
   **2 · trend + variation**
-  `KW_Trl_All_Image_BB_Day_30+_20.05`   [BB_Day — 1 dep, new trend — scale + variations, trend: heating up]
-    - Image BB2 - golden  (1 dep, ROI 51.93)  (trend: all recent dep)
+  `KW_Trol_All_Video_-_07.06`   [- — 7 dep, new trend — scale + variations, trend: heating up, stalled]
+    - -  (4 dep)  (trend: all recent dep)
 
-**Facebook_3449 KW:**
+  **3 · trend + recovery**
+  `KW_Trl_All_Video_Day_07.06`   [Day — 39 dep, recovery — was working, refresh, trend: heating up, stalled]  ⚠ below benchmark
+    - 1975 25  (7 dep, ROI 0.17)  (recovery: was working, refresh hook/creative)
 
-  **1 · trend + stable**
-  `KW_Trl_All_Mix_Day_20.05`   [Day — 41 dep, stable + ongoing deposits, trend: stable, heating up, stalled]  ⚠ below benchmark
-    - TR8  (5 dep, ROI 0.56)  (trend: stable + recent)
-    - Image 8  (2 dep, ROI 2.22)  (trend: stable + recent)
-    - 2048 3  (1 dep, ROI 1.08)  (trend: all recent dep)
+  **4 · test**
+  `KW_Trol_All_Video_MIX&Day_07.06`   [MIX&Day — 2 dep, test — diversify, trend: heating up]
+    - TRL-YA5  (1 dep)  (trend: all recent dep)
+    - 1975 25  (1 dep)  (trend: all recent dep)
 
-  **2 · trend + variation**
-  `KW_Trl_All_Image_BB_Day_30+_20.05`   [BB_Day — 1 dep, new trend — scale + variations, trend: heating up]
-    - Image BB2 - golden  (1 dep, ROI 51.93)  (trend: all recent dep)
-
-**FacebookMKTO1343 KW:**
-
-  **1 · trend + stable**
-  `KW_Trl_All_Mix_Day_20.05`   [Day — 41 dep, scale up, stable + ongoing deposits, trend: stable, heating up, stalled]  ⚠ below benchmark
-    - TR8  (5 dep, ROI 0.56)  (trend: stable + recent)
-    - Image 8  (2 dep, ROI 2.22)  (trend: stable + recent)
-    - 2048 3  (1 dep, ROI 1.08)  (trend: all recent dep)
+**FacebookMKTO1459 KW:**
 
   **2 · trend + variation**
-  `KW_Trl_All_Image_BB_Day_30+_20.05`   [BB_Day — 1 dep, new trend — scale + variations, trend: heating up]
-    - Image BB2 - golden  (1 dep, ROI 51.93)  (trend: all recent dep)
+  `KW_Trol_All_Video_-_07.06`   [- — 7 dep, new trend — scale + variations, trend: heating up, stalled]
+    - -  (4 dep)  (trend: all recent dep)
+
+  **3 · trend + recovery**
+  `KW_Trl_All_Video_Day_07.06`   [Day — 39 dep, recovery — was working, refresh, trend: heating up, stalled]  ⚠ below benchmark
+    - 1975 25  (7 dep, ROI 0.17)  (recovery: was working, refresh hook/creative)
+
+  **4 · test**
+  `KW_Trol_All_Video_MIX&Day_07.06`   [MIX&Day — 2 dep, test — diversify, trend: heating up]
+    - TRL-YA5  (1 dep)  (trend: all recent dep)
+    - 1975 25  (1 dep)  (trend: all recent dep)
+
+**FacebookElf106 KW:**
+
+  **2 · trend + variation**
+  `KW_Trol_All_Video_-_07.06`   [- — 7 dep, new trend — scale + variations, trend: heating up, stalled]
+    - -  (4 dep)  (trend: all recent dep)
+
+  **3 · trend + recovery**
+  `KW_Trl_All_Video_Day_07.06`   [Day — 39 dep, recovery — was working, refresh, trend: heating up, stalled]  ⚠ below benchmark
+    - 1975 25  (7 dep, ROI 0.17)  (recovery: was working, refresh hook/creative)
+
+  **4 · test**
+  `KW_Trol_All_Video_MIX&Day_07.06`   [MIX&Day — 2 dep, test — diversify, trend: heating up]
+    - TRL-YA5  (1 dep)  (trend: all recent dep)
+    - 1975 25  (1 dep)  (trend: all recent dep)
+
+**Facebook_6990 KW:**
+
+  **2 · trend + variation**
+  `KW_Trol_All_Video_-_07.06`   [- — 7 dep, new trend — scale + variations, trend: heating up, stalled]
+    - -  (4 dep)  (trend: all recent dep)
+
+  **3 · trend + recovery**
+  `KW_Trl_All_Video_Day_07.06`   [Day — 39 dep, recovery — was working, refresh, trend: heating up, stalled]  ⚠ below benchmark
+    - 1975 25  (7 dep, ROI 0.17)  (recovery: was working, refresh hook/creative)
+
+  **4 · test**
+  `KW_Trol_All_Video_MIX&Day_07.06`   [MIX&Day — 2 dep, test — diversify, trend: heating up]
+    - TRL-YA5  (1 dep)  (trend: all recent dep)
+    - 1975 25  (1 dep)  (trend: all recent dep)
+
+**FacebookElf87 KW:**
+
+  **2 · trend + variation**
+  `KW_Trol_All_Video_-_07.06`   [- — 7 dep, new trend — scale + variations, trend: heating up, stalled]
+    - -  (4 dep)  (trend: all recent dep)
+
+  **3 · trend + recovery**
+  `KW_Trl_All_Video_Day_07.06`   [Day — 39 dep, recovery — was working, refresh, trend: heating up, stalled]  ⚠ below benchmark
+    - 1975 25  (7 dep, ROI 0.17)  (recovery: was working, refresh hook/creative)
+
+  **4 · test**
+  `KW_Trol_All_Video_MIX&Day_07.06`   [MIX&Day — 2 dep, test — diversify, trend: heating up]
+    - TRL-YA5  (1 dep)  (trend: all recent dep)
+    - 1975 25  (1 dep)  (trend: all recent dep)
+
+**FacebookDQ8 KW:**
+
+  **2 · trend + variation**
+  `KW_Trol_All_Video_-_07.06`   [- — 7 dep, new trend — scale + variations, trend: heating up, stalled]
+    - -  (4 dep)  (trend: all recent dep)
+
+  **4 · test**
+  `KW_Trol_All_Video_MIX&Day_07.06`   [MIX&Day — 2 dep, test — diversify, trend: heating up]
+    - TRL-YA5  (1 dep)  (trend: all recent dep)
+    - 1975 25  (1 dep)  (trend: all recent dep)
 
 
 ---
@@ -1402,85 +1937,111 @@ _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** r
 
 ### 0. News Context
 
-**Amazon**
+**Amazon** _(combo: SM + PF)_
+- Signal: recent coverage
+- Why it matters: The New Tom Clancy Movie Leads Amazon Prime’s Most-Watched List of the Week - IMDb.
+- Recency: ~1 days ago
+- Query basis: top combos — SM (13 dep), PF (6 dep)
+- Headline angle: Connect Amazon to recent coverage in Mexico using combo interests (SM + PF) — stay factual, avoid hype.
+
+**AI Trader**
 - Signal: no strong fresh news found
 - Why it matters: No reliable recent asset news found.
 - Headline angle: Use evergreen angles from working combos rather than newsjacking.
 
-**AI Trader**
-- Signal: regulatory / risk story
-- Why it matters: Accival (Banamex) stock (MX01AC000006): Citi advances Banamex sale as Mexican retail bank reshaping - AD HOC NEWS.
-- Recency: ~0 days ago
-- Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Mexico — stay factual, avoid hype.
-
-**Mercado Libre**
-- Signal: recent coverage
-- Why it matters: Is MercadoLibre (MELI) Now An Opportunity After A 40% One-Year Share Price Slide? - simplywall.st.
-- Recency: ~3 days ago
-- Headline angle: Connect Mercado Libre to recent coverage in Mexico with a cautious, timely hook.
+**Banorte**
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
 
 ### 1. Evgeni vs Team
 
 | CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------------ | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Evgeni Sedin ← YOU | $14,630.56 | 1194  | 10  | $12.25 | $1,463.06 | 0.8% | 0.10 |
-| Gil Zangi          | $31,367.88 | 2597  | 22  | $12.08 | $1,425.81 | 0.8% | 0.25 |
-| Dan Dicker         | $13,501.24 | 904   | 4   | $14.94 | $3,375.31 | 0.4% | 0.08 |
+| Evgeni Sedin ← YOU | $23,640.08 | 1804  | 14  | $13.10 | $1,688.58 | 0.8% | 0.44 |
+| Gil Zangi          | $37,182.11 | 3374  | 28  | $11.02 | $1,327.93 | 0.8% | 0.44 |
+| Dan Dicker         | $24,231.06 | 1380  | 9   | $17.56 | $2,692.34 | 0.7% | 0.06 |
 
 | Asset (Offer) | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------- | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Amazon        | $58,351.51 | 4471  | 35  | $13.05 | $1,667.19 | 0.8% | 0.18 |
-| AI_Trader     | $588.07    | 128   | 1   | $4.59  | $588.07   | 0.8% | 0.00 |
-| Mercado Libre | $379.25    | 74    | 0   | $5.12  | —         | 0.0% | 0.00 |
-| AI Trader     | $178.59    | 22    | 0   | $8.12  | —         | 0.0% | 0.00 |
-| Trolley       | $2.26      | 0     | 0   | —      | —         | —    | 0.00 |
+| Amazon        | $82,366.00 | 6179  | 50  | $13.33 | $1,647.32 | 0.8% | 0.34 |
+| AI_Trader     | $486.79    | 115   | 1   | $4.23  | $486.79   | 0.9% | 0.00 |
+| AI Trader     | $1,100.32  | 142   | 0   | $7.75  | —         | 0.0% | 0.00 |
+| Banorte       | $1,090.59  | 122   | 0   | $8.94  | —         | 0.0% | 0.00 |
+| Trolley       | $9.55      | 0     | 0   | —      | —         | —    | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 13 – May 19, 2026 (7d)**
+Period: **May 31 – Jun 06, 2026 (7d)**
 
 **New (all deposits from recent period):**
-- all + PF + -  [Amazon]  dep: 1
-- all + PF + 1983 2  [Amazon]  dep: 1
-- all + PF + Vid2 - pro  [Amazon]  dep: 1
+- ios + Trading + Vid 1513 - pro1  [Amazon]  dep: 2
+- all + PH + CCblc - learn  [Amazon]  dep: 1
+- all + SM + CCblc - learn  [Amazon]  dep: 1
 
 **Stable (deposits before and now):**
-- all + SM + CCBlack  [Amazon]  total: 3, recent: 1
-- ios + HV + 1983 2 - P  [Amazon]  total: 2, recent: 1
+- all + SM + CCBlack  [Amazon]  total: 11, recent: 3
+- all + HV + 1513 P  [Amazon]  total: 5, recent: 3
 
 **Stopped (had deposits, now 0):**
-- all + PF + 700 2  [Amazon]  total: 9, recent: 0
+- all + PF + 700 2  [Amazon]  total: 6, recent: 0
 - all + HV+Day + 1983 1  [Amazon]  total: 2, recent: 0
-- all + SM + 1983 2  [Amazon]  total: 2, recent: 0
-- all +  + -  [Amazon]  total: 2, recent: 0
+- all + SM + 1513 - pro  [Amazon]  total: 2, recent: 0
 - all + SM + Blue - the app  [AI_Trader]  total: 1, recent: 0
+- all + - + -  [Amazon]  total: 1, recent: 0
 
 
 ### 3. Working Combos
 
-| Type     | Offer  | Combo                      | Dep | CPL    | CPA       | ROI  |
-| -------- | ------ | -------------------------- | --- | ------ | --------- | ---- |
-| Strong ⚠ | Amazon | all + PF + 700 2           | 9   | $15.38 | $1,158.67 | 0.44 |
-| Strong ⚠ | Amazon | all + SM + CCBlack         | 3   | $9.44  | $1,032.09 | 0.19 |
-| Strong ✓ | Amazon | all + -                    | 2   | —      | —         | —    |
-| Strong ⚠ | Amazon | ios + HV + 35 + 1983 2 - P | 2   | $14.02 | $1,163.86 | 0.23 |
-| Strong ⚠ | Amazon | all + HV+Day + 1983 1      | 2   | $12.35 | $1,587.05 | 0.13 |
+| Type     | Offer  | Combo                             | Dep | CPL    | CPA       | ROI  |
+| -------- | ------ | --------------------------------- | --- | ------ | --------- | ---- |
+| Strong ⚠ | Amazon | all + SM + CCBlack                | 11  | $8.89  | $629.51   | 0.34 |
+| Strong ✓ | Amazon | all + PF + 700 2                  | 6   | $16.09 | $1,042.93 | 1.36 |
+| Strong ⚠ | Amazon | all + HV + 1513 P                 | 5   | $9.77  | $721.32   | 0.47 |
+| Strong ⚠ | Amazon | ios + Trading + 40+ + Vid 1513 -… | 2   | $20.30 | $416.21   | 0.84 |
+| Strong ✓ | Amazon | all + SM + 35 + 1513 - pro        | 2   | $8.86  | $225.94   | 0.85 |
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title         | Dep | Leads | Spend      | CPA       |
+| ---------------- | --- | ----- | ---------- | --------- |
+| CCBlack          | 12  | 1260  | $11,351.23 | $945.94   |
+| 700 2            | 6   | 486   | $8,261.43  | $1,376.90 |
+| 1513 P           | 5   | 522   | $5,020.68  | $1,004.14 |
+| 1983 2 - P       | 3   | 309   | $4,411.35  | $1,470.45 |
+| 1513 - pro       | 3   | 243   | $2,778.06  | $926.02   |
+| 1983 1           | 2   | 494   | $6,033.19  | $3,016.60 |
+| 1983 2           | 2   | 395   | $5,065.35  | $2,532.68 |
+| CAC-700 - pro    | 2   | 139   | $1,847.66  | $923.83   |
+| CCblc - learn    | 2   | 60    | $949.79    | $474.89   |
+| Vid 1513 - pro1  | 2   | 42    | $899.76    | $449.88   |
+| Vid 1 - pro1     | 1   | 154   | $1,971.62  | $1,971.62 |
+| Vid CCblk - pro  | 1   | 89    | $1,777.29  | $1,777.29 |
+| Vid CCblk - calc | 1   | 86    | $1,676.82  | $1,676.82 |
+| 1983 2 - L       | 1   | 125   | $1,529.31  | $1,529.31 |
+| Vid 2 - pro3     | 1   | 83    | $1,427.18  | $1,427.18 |
+| 1893 - L         | 1   | 63    | $1,376.45  | $1,376.45 |
+| 1982 2 - P       | 1   | 89    | $1,151.12  | $1,151.12 |
+| Vid 2            | 1   | 63    | $1,030.21  | $1,030.21 |
+| Vid2 - pro       | 1   | 72    | $971.53    | $971.53   |
+| Vid 3            | 1   | 55    | $873.15    | $873.15   |
+
+### 5. AI Context (copy into chat)
 
 ```
 Country: Mexico
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + PF + 700 2  |  Offer: Amazon  |  Dep: 9  |  ROI: 0.44
-   → Target context: Personal Finance — people interested in personal finance and saving money
-2. [Strong] all + SM + CCBlack  |  Offer: Amazon  |  Dep: 3  |  ROI: 0.19
+1. [Strong] all + SM + CCBlack  |  Offer: Amazon  |  Dep: 11  |  ROI: 0.34
    → Target context: Stock Market — users interested in the US stock market
-3. [Strong] all + -  |  Offer: Amazon  |  Dep: 2  |  ROI: 0.00
+2. [Strong] all + PF + 700 2  |  Offer: Amazon  |  Dep: 6  |  ROI: 1.36
+   → Target context: Personal Finance — people interested in personal finance and saving money
+3. [Strong] all + HV + 1513 P  |  Offer: Amazon  |  Dep: 5  |  ROI: 0.47
+   → Target context: High Value — affluent users interested in investing and wealth management
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Mexico
@@ -1489,175 +2050,108 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
-  - all + PF + 700 2  [Strong, 9 dep]
-  - all + SM + CCBlack  [Strong, 3 dep]
-  - all + -  [Strong, 2 dep]
+  - all + SM + CCBlack  [Strong, 11 dep]
+  - all + PF + 700 2  [Strong, 6 dep]
+  - all + HV + 1513 P  [Strong, 5 dep]
 
 Top targeting by deposits:
-  - PF: 16 dep, $21,655 spend
-  - SM: 7 dep, $12,138 spend
-  - HV: 3 dep, $7,200 spend
-  - IPO: 3 dep, $2,765 spend
-  - HV+Day: 2 dep, $4,343 spend
+  - SM: 18 dep, $22,517 spend
+  - PF: 11 dep, $17,875 spend
+  - HV: 9 dep, $15,680 spend
+  - SM/IOS: 2 dep, $3,884 spend
+  - HV+Day: 2 dep, $3,578 spend
 
 Failing targeting (0 dep, notable spend):
-  - Investment/Swing/Day: $782 spend, 0 dep
-  - SM/Day/Swing: $765 spend, 0 dep
-  - CCblk_PF: $611 spend, 0 dep
+  - PF/IOS: $3,103 spend, 0 dep
+  - HV+Trading: $1,694 spend, 0 dep
+  - PF/HV/SM/IOS: $1,015 spend, 0 dep
 
 Top creatives by deposits:
-  - 700 2: 9 dep, $10,630 spend
-  - 1983 2: 4 dep, $7,019 spend
-  - 1983 2 - P: 4 dep, $5,590 spend
-  - CCBlack: 4 dep, $5,585 spend
-  - 1893 - L: 3 dep, $2,419 spend
+  - CCBlack: 12 dep, $11,351 spend
+  - 700 2: 6 dep, $8,261 spend
+  - 1513 P: 5 dep, $5,021 spend
+  - 1983 2 - P: 3 dep, $4,411 spend
+  - 1513 - pro: 3 dep, $2,778 spend
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-**Facebook_9861 MX** ✅
-Perf: $253.17 spend / 13 leads / 0 FTDs / CPL $19.47 / CPA — / CR 0.0%
+**Facebook_9002 MX** ✅
+Perf: $1,219.80 spend / 67 leads / 0 FTDs / CPL $18.21 / CPA — / CR 0.0%
 Status: expand
-To Do: Amz/SM/CCBlack⚠
+To Do: Amz/SM/CCBlack⚠; Amz/Trading/Vid 1513 - pro1⚠
 
-**Facebook_2015 MX** ✅
-Perf: $110.04 spend / 6 leads / 0 FTDs / CPL $18.34 / CPA — / CR 0.0%
-Status: proxy issue
-To Do: Amz/SM/CCBlack⚠
+**FacebookMKTO1483 MX** ✅
+Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
+Status: —
+To Do: Amz/SM/CCBlack⚠; Amz/Trading/Vid 1513 - pro1⚠
 
-**FacebookMKTO1321 MX** ✅
-Perf: $0.00 spend / 20 leads / 0 FTDs / CPL $0.00 / CPA — / CR 0.0%
-Status: expand
-To Do: Amz/SM/CCBlack⚠; Amz/PF/-⚠
-
-
-### 8. Optimization
-
-**Facebook_9861 MX:**
-
-| Campaign                     | Spend   | Leads | FTDs | CPL    | CPA |
-| ---------------------------- | ------- | ----- | ---- | ------ | --- |
-| MX_Amz_All_Video_PF_40_18.05 | $146.48 | 9     | 0    | $16.28 | —   |
-| MX_Amz_All_Video_HV_40_18.05 | $106.69 | 4     | 0    | $26.67 | —   |
-
-**Facebook_2015 MX:**
-
-| Campaign                     | Spend  | Leads | FTDs | CPL    | CPA |
-| ---------------------------- | ------ | ----- | ---- | ------ | --- |
-| MX_Amz_IOS_Video_HV_35_18.05 | $63.09 | 5     | 0    | $12.62 | —   |
-| MX_Amz_IOS_Video_PF_35_18.05 | $46.95 | 1     | 0    | $46.95 | —   |
-
-**FacebookMKTO1321 MX:**
-
-| Campaign                     | Spend | Leads | FTDs | CPL | CPA |
-| ---------------------------- | ----- | ----- | ---- | --- | --- |
-| MX_Amz_All_Video_HV_35_19.05 | $0.00 | 3     | 0    | —   | —   |
-| MX_Amz_All_Video_PF_35_19.05 | $0.00 | 9     | 0    | —   | —   |
-| MX_Amz_All_Video_SM_35_19.05 | $0.00 | 8     | 0    | —   | —   |
+**FacebookMKTO1484 MX** ✅
+Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
+Status: —
+To Do: Amz/SM/CCBlack⚠; Amz/Trading/Vid 1513 - pro1⚠
 
 
-### 9. What to Open (4 strategies per account)
+### 9. Optimization
+
+**Facebook_9002 MX:**
+
+| Ad set name                 | Spend   | Leads | FTDs | CPL     | CPA |
+| --------------------------- | ------- | ----- | ---- | ------- | --- |
+| MX_Amz_IOS_Mix_SM_35_03.06  | $415.62 | 24    | 0    | $17.32  | —   |
+| MX_Amz_IOS_Mix_HV_35_03.06  | $398.86 | 37    | 0    | $10.78  | —   |
+| MX_Ait_IOS_Mix_HV_35_01.06  | $282.09 | 5     | 0    | $56.42  | —   |
+| MX_Ait_IOS_Mix_Day_35_01.06 | $123.23 | 1     | 0    | $123.23 | —   |
+
+
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
-**Facebook_9861 MX:**
+**Facebook_9002 MX:**
 
   **1 · trend + stable**
-  `MX_Amz_All_Video_SM_20.05`   [SM — 5 dep, stable + ongoing deposits, trend: stable, stalled]  ⚠ below benchmark
-    - CCBlack  (3 dep, ROI 0.19)  (trend: stable + recent)
-
-**Facebook_2015 MX:**
-
-  **1 · trend + stable**
-  `MX_Amz_All_Video_SM_20.05`   [SM — 5 dep, stable + ongoing deposits, trend: stable, stalled]  ⚠ below benchmark
-    - CCBlack  (3 dep, ROI 0.19)  (trend: stable + recent)
-
-**FacebookMKTO1321 MX:**
-
-  **1 · trend + stable**
-  `MX_Amz_All_Video_SM_20.05`   [SM — 5 dep, stable + ongoing deposits, trend: stable, stalled]  ⚠ below benchmark
-    - CCBlack  (3 dep, ROI 0.19)  (trend: stable + recent)
+  `MX_Amz_All_Video_SM_07.06`   [SM — 13 dep, scale up, stable + ongoing deposits, trend: stable, heating up, stalled]  ⚠ below benchmark
+    - CCBlack  (11 dep, ROI 0.34)  (trend: stable + recent)
 
   **2 · trend + variation**
-  `MX_Amz_All_Video_PF_20.05`   [PF — 9 dep, new trend — scale + variations, trend: heating up, stalled]  ⚠ below benchmark
-    - -  (1 dep)  (trend: all recent dep)
-    - 1983 2  (1 dep)  (variation: same targeting, new creative; trend: all recent dep)
-    - Vid2 - pro  (1 dep)  (variation: same targeting, new creative; trend: all recent dep)
+  `MX_Amz_Ios_Video_Trading_40+_07.06`   [Trading — 2 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
+    - Vid 1513 - pro1  (2 dep, ROI 0.84)  (trend: all recent dep)
 
+  **3 · trend + recovery**
+  `MX_Amz_All_Video_PF_07.06`   [PF — 6 dep, recovery — was working, refresh, trend: stalled]
+    - 700 2  (6 dep, ROI 1.36)  (recovery: was working, refresh hook/creative)
 
----
+**FacebookMKTO1483 MX:**
 
-## Country: Oman
+  **1 · trend + stable**
+  `MX_Amz_All_Video_SM_07.06`   [SM — 13 dep, stable + ongoing deposits, trend: stable, heating up, stalled]  ⚠ below benchmark
+    - CCBlack  (11 dep, ROI 0.34)  (trend: stable + recent)
 
-### 0. News Context
+  **2 · trend + variation**
+  `MX_Amz_Ios_Video_Trading_40+_07.06`   [Trading — 2 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
+    - Vid 1513 - pro1  (2 dep, ROI 0.84)  (trend: all recent dep)
 
-**Salik**
-- Signal: no strong fresh news found
-- Why it matters: No reliable recent asset news found.
-- Headline angle: Use evergreen angles from working combos rather than newsjacking.
+  **3 · trend + recovery**
+  `MX_Amz_All_Video_PF_07.06`   [PF — 6 dep, recovery — was working, refresh, trend: stalled]
+    - 700 2  (6 dep, ROI 1.36)  (recovery: was working, refresh hook/creative)
 
-**AI Trader**
-- Signal: recent coverage
-- Why it matters: UAE weather alert: What to expect until the weekend - Gulf Business.
-- Recency: ~0 days ago
-- Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Oman — stay factual, avoid hype.
+**FacebookMKTO1484 MX:**
 
-### 1. Evgeni vs Team
+  **1 · trend + stable**
+  `MX_Amz_All_Video_SM_07.06`   [SM — 13 dep, stable + ongoing deposits, trend: stable, heating up, stalled]  ⚠ below benchmark
+    - CCBlack  (11 dep, ROI 0.34)  (trend: stable + recent)
 
-| CM               | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
-| ---------------- | ----- | ----- | --- | ----- | --- | ---- | ---- |
-| Dan Dicker       | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
-| Yotam Balteriski | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+  **2 · trend + variation**
+  `MX_Amz_Ios_Video_Trading_40+_07.06`   [Trading — 2 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
+    - Vid 1513 - pro1  (2 dep, ROI 0.84)  (trend: all recent dep)
 
-| Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
-| ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
-| Salik         | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
-| Trader AI     | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
+  **3 · trend + recovery**
+  `MX_Amz_All_Video_PF_07.06`   [PF — 6 dep, recovery — was working, refresh, trend: stalled]
+    - 700 2  (6 dep, ROI 1.36)  (recovery: was working, refresh hook/creative)
 
-### 2. Trend (Recent Days)
-
-Period: **Apr 29 – May 05, 2026 (7d)**
-
-_No combo-level trend data available._
-
-### 3. Working Combos
-
-_No Strong/Interesting combos for this country._
-
-### 4. AI Context (copy into chat)
-
-```
-_No qualifying combos — nothing to explain._
-```
-
-### 5. Hypotheses (copy into chat)
-
-```
-Country: Oman
-
-Data summary for hypothesis generation (paste into Cursor chat and ask:
-'Based on this data, suggest 3 test hypotheses for new ad sets'):
-
-Working combos:
-```
-
-### 6–7. Account Statuses
-
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
-
-_No accounts found for this country in the GSheet._
-
-### 8. Optimization
-
-_No campaign spend found for ready accounts._
-
-### 9. What to Open (4 strategies per account)
-
-_Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
-
-_No ready accounts or no combos to recommend._
 
 ---
 
@@ -1665,18 +2159,20 @@ _No ready accounts or no combos to recommend._
 
 ### 0. News Context
 
-**Trolley**
-- Signal: no strong fresh news found
-- Why it matters: No reliable recent asset news found.
-- Headline angle: Use evergreen angles from working combos rather than newsjacking.
+**Trolley** _(theme: Trading + Day)_
+- Signal: market move
+- Why it matters: LIVE Futures Trading – Real Setups, Live Traders & Market Insights / Tradeify TV / THURSDAY 4/2/26 Guide 428 Jun 1, 2026 - Portal CNJ.
+- Recency: ~6 days ago
+- Query basis: top combos — Trading, Day
+- Headline angle: Tie Trolley headlines to market move themes (Trading + Day) in Other — stay factual, avoid hype.
 
 **AI Trader**
-- Signal: recent coverage
-- Why it matters: Top 25 Generative AI Finance Use Cases in 2026 - AIMultiple.
-- Recency: ~6 days ago
+- Signal: local business story
+- Why it matters: Are AI Crypto Trading Bots Suitable for Crypto Beginners? BulkQuant Launches an Automated Crypto Trading App - markets.businessinsider.com.
+- Recency: ~1 days ago
 - Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Other — stay factual, avoid hype.
 
-**Aramco**
+**Banorte**
 - Signal: no strong fresh news found
 - Why it matters: No reliable recent asset news found.
 - Headline angle: Use evergreen angles from working combos rather than newsjacking.
@@ -1685,20 +2181,24 @@ _No ready accounts or no combos to recommend._
 
 | CM                 | Spend     | Leads | Dep | CPL | CPA | CR | ROI  |
 | ------------------ | --------- | ----- | --- | --- | --- | -- | ---- |
-| Evgeni Sedin ← YOU | $1,183.75 | 0     | 0   | —   | —   | —  | 0.00 |
-| Dan Dicker         | $1,122.56 | 0     | 0   | —   | —   | —  | 0.00 |
-| Gil Zangi          | $0.10     | 0     | 0   | —   | —   | —  | 0.00 |
+| Evgeni Sedin ← YOU | $510.25   | 0     | 0   | —   | —   | —  | 0.00 |
+| Dan Dicker         | $1,558.55 | 0     | 0   | —   | —   | —  | 0.00 |
+| Gil Zangi          | $2.87     | 0     | 0   | —   | —   | —  | 0.00 |
+| Yinon Avraham      | $0.27     | 0     | 0   | —   | —   | —  | 0.00 |
+| Yotam Balteriski   | $3,109.03 | 0     | 0   | —   | —   | —  | 0.00 |
 
 | Asset (Offer) | Spend     | Leads | Dep | CPL | CPA | CR | ROI  |
 | ------------- | --------- | ----- | --- | --- | --- | -- | ---- |
-| Trolley       | $1,385.10 | 0     | 0   | —   | —   | —  | 0.00 |
-| AI Trader     | $921.26   | 0     | 0   | —   | —   | —  | 0.00 |
-| Aramco        | $0.03     | 0     | 0   | —   | —   | —  | 0.00 |
+| Trolley       | $3,366.67 | 0     | 0   | —   | —   | —  | 0.00 |
+| AI Trader     | $1,814.12 | 0     | 0   | —   | —   | —  | 0.00 |
+| Banorte       | $0.14     | 0     | 0   | —   | —   | —  | 0.00 |
 | Mercado Libre | $0.02     | 0     | 0   | —   | —   | —  | 0.00 |
+| Aramco        | $0.01     | 0     | 0   | —   | —   | —  | 0.00 |
+| Favorita      | $0.01     | 0     | 0   | —   | —   | —  | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 13 – May 19, 2026 (7d)**
+Period: **May 31 – Jun 06, 2026 (7d)**
 
 _No combo-level trend data available._
 
@@ -1706,13 +2206,38 @@ _No combo-level trend data available._
 
 _No Strong/Interesting combos for this country._
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title              | Dep | Leads | Spend   | CPA |
+| --------------------- | --- | ----- | ------- | --- |
+| 2175_TRLY4_officially | 0   | 0     | $649.72 | —   |
+| 2175_TRLY4_Citizens   | 0   | 0     | $622.12 | —   |
+| 2175_TRLY4_Money      | 0   | 0     | $426.00 | —   |
+| 2175_TRLY4_AR45       | 0   | 0     | $353.66 | —   |
+| Image 1 - 6           | 0   | 0     | $340.03 | —   |
+| Image 1 - 5           | 0   | 0     | $312.37 | —   |
+| 2175_TRLY4_AR46       | 0   | 0     | $279.72 | —   |
+| Blue the app          | 0   | 0     | $255.94 | —   |
+| 2175_TRLY11_AR46      | 0   | 0     | $233.40 | —   |
+| 2046 the app          | 0   | 0     | $222.96 | —   |
+| Vid Blue - 6          | 0   | 0     | $202.99 | —   |
+| 2175_TRLY11_Decision  | 0   | 0     | $161.05 | —   |
+| Image 1 - 1           | 0   | 0     | $138.00 | —   |
+| 2175_TRLY4_Por Vida   | 0   | 0     | $133.89 | —   |
+| Vid Blue - 6a         | 0   | 0     | $123.02 | —   |
+| 2175_TRLY11_AR45      | 0   | 0     | $105.49 | —   |
+| Image 1 - 3           | 0   | 0     | $82.30  | —   |
+| Image 1 - 6a          | 0   | 0     | $75.09  | —   |
+| 2175_TRLY4_Decision   | 0   | 0     | $65.98  | —   |
+| 2175_TRLY11_Money     | 0   | 0     | $59.19  | —   |
+
+### 5. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Other
@@ -1723,22 +2248,93 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 Working combos:
 
 Failing targeting (0 dep, notable spend):
-  - (unknown): $1,611 spend, 0 dep
-  - SM: $593 spend, 0 dep
-  - GMBL: $66 spend, 0 dep
+  - DAY: $1,295 spend, 0 dep
+  - MixReading: $1,284 spend, 0 dep
+  - Images_2041: $530 spend, 0 dep
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
+
+_Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
+
+_No ready accounts or no combos to recommend._
+
+---
+
+## Country: Panama
+
+### 0. News Context
+
+**AI Trader**
+- Signal: local business story
+- Why it matters: Are AI Crypto Trading Bots Suitable for Crypto Beginners? BulkQuant Launches an Automated Crypto Trading App - markets.businessinsider.com.
+- Recency: ~1 days ago
+- Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Panama — stay factual, avoid hype.
+
+### 1. Evgeni vs Team
+
+| CM                 | Spend | Leads | Dep | CPL   | CPA | CR   | ROI  |
+| ------------------ | ----- | ----- | --- | ----- | --- | ---- | ---- |
+| Evgeni Sedin ← YOU | $0.00 | 1     | 0   | $0.00 | —   | 0.0% | 0.00 |
+
+| Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
+| ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
+| AI Trader     | $0.00 | 1     | 0   | —   | —   | 0.0% | 0.00 |
+
+### 2. Trend (Recent Days)
+
+Period: **May 31 – Jun 06, 2026 (7d)**
+
+_No combo-level trend data available._
+
+### 3. Working Combos
+
+_No Strong/Interesting combos for this country._
+
+### 4. Creatives
+
+| Ad Title      | Dep | Leads | Spend | CPA |
+| ------------- | --- | ----- | ----- | --- |
+| 2046 - story1 | 0   | 1     | $0.00 | —   |
+
+### 5. AI Context (copy into chat)
+
+```
+_No qualifying combos — nothing to explain._
+```
+
+### 6. Hypotheses (copy into chat)
+
+```
+Country: Panama
+
+Data summary for hypothesis generation (paste into Cursor chat and ask:
+'Based on this data, suggest 3 test hypotheses for new ad sets'):
+
+Working combos:
+```
+
+### 7–8. Account Statuses
+
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+
+_No accounts found for this country in the GSheet._
+
+### 9. Optimization
+
+_No campaign spend found for ready accounts._
+
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -1754,20 +2350,21 @@ _No reliable recent asset news found. Use evergreen angles from working combos._
 
 ### 1. Evgeni vs Team
 
-| CM                 | Spend | Leads | Dep | CPL | CPA | CR | ROI  |
-| ------------------ | ----- | ----- | --- | --- | --- | -- | ---- |
-| Evgeni Sedin ← YOU | $0.63 | 0     | 0   | —   | —   | —  | 0.00 |
-| Dan Dicker         | $2.12 | 0     | 0   | —   | —   | —  | 0.00 |
-| Gil Zangi          | $4.14 | 0     | 0   | —   | —   | —  | 0.00 |
-| Yotam Balteriski   | $2.04 | 0     | 0   | —   | —   | —  | 0.00 |
+| CM                 | Spend  | Leads | Dep | CPL | CPA | CR | ROI  |
+| ------------------ | ------ | ----- | --- | --- | --- | -- | ---- |
+| Evgeni Sedin ← YOU | $20.87 | 0     | 0   | —   | —   | —  | 0.00 |
+| Dan Dicker         | $23.44 | 0     | 0   | —   | —   | —  | 0.00 |
+| Gil Zangi          | $90.52 | 0     | 0   | —   | —   | —  | 0.00 |
+| Yinon Avraham      | $31.15 | 0     | 0   | —   | —   | —  | 0.00 |
+| Yotam Balteriski   | $57.74 | 0     | 0   | —   | —   | —  | 0.00 |
 
-| Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR | ROI  |
-| ------------- | ----- | ----- | --- | --- | --- | -- | ---- |
-| Trolley       | $8.93 | 0     | 0   | —   | —   | —  | 0.00 |
+| Asset (Offer) | Spend   | Leads | Dep | CPL | CPA | CR | ROI  |
+| ------------- | ------- | ----- | --- | --- | --- | -- | ---- |
+| Trolley       | $223.72 | 0     | 0   | —   | —   | —  | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 08 – May 14, 2026 (7d)**
+Period: **May 31 – Jun 06, 2026 (7d)**
 
 _No combo-level trend data available._
 
@@ -1775,13 +2372,22 @@ _No combo-level trend data available._
 
 _No Strong/Interesting combos for this country._
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title          | Dep | Leads | Spend   | CPA |
+| ----------------- | --- | ----- | ------- | --- |
+| New Traffic Ad    | 0   | 0     | $216.00 | —   |
+| New Traffic ad    | 0   | 0     | $5.47   | —   |
+| New Engagement Ad | 0   | 0     | $1.19   | —   |
+| New Engagement ad | 0   | 0     | $1.06   | —   |
+
+### 5. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Paraguay
@@ -1790,19 +2396,22 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
+
+Failing targeting (0 dep, notable spend):
+  - New Traffic Ad Set: $216 spend, 0 dep
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -1814,47 +2423,85 @@ _No ready accounts or no combos to recommend._
 
 ### 0. News Context
 
-**Trolley**
+**Alicorp Form**
 - Signal: no strong fresh news found
 - Why it matters: No reliable recent asset news found.
 - Headline angle: Use evergreen angles from working combos rather than newsjacking.
 
+**Trolley** _(theme: Trading + Day)_
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Query basis: top combos — Trading, Day
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
+
 **AI Trader**
-- Signal: earnings / financial update
-- Why it matters: Nvidia Earnings and Retail Reports: Key Events for the Week of May 19, 2026 - News and Statistics - IndexBox.
-- Recency: ~2 days ago
+- Signal: recent coverage
+- Why it matters: La acción legal del regulador australiano hace que las acciones de Amazon caigan un 3,12% - Traders Union.
+- Recency: ~6 days ago
 - Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Peru — stay factual, avoid hype.
 
 ### 1. Evgeni vs Team
 
-| CM                 | Spend   | Leads | Dep | CPL   | CPA | CR   | ROI  |
-| ------------------ | ------- | ----- | --- | ----- | --- | ---- | ---- |
-| Evgeni Sedin ← YOU | $2.16   | 1     | 0   | $2.16 | —   | 0.0% | 0.00 |
-| Dan Dicker         | $0.08   | 0     | 0   | —     | —   | —    | 0.00 |
-| Yotam Balteriski   | $563.59 | 106   | 0   | $5.32 | —   | 0.0% | 0.00 |
+| CM                 | Spend     | Leads | Dep | CPL    | CPA       | CR   | ROI  |
+| ------------------ | --------- | ----- | --- | ------ | --------- | ---- | ---- |
+| Evgeni Sedin ← YOU | $2.16     | 2     | 0   | $1.08  | —         | 0.0% | 0.00 |
+| Yotam Balteriski   | $3,043.89 | 542   | 2   | $5.62  | $1,521.94 | 0.4% | 0.07 |
+| Dan Dicker         | $10.53    | 0     | 0   | —      | —         | —    | 0.00 |
+| Gil Zangi          | $46.07    | 4     | 0   | $11.52 | —         | 0.0% | 0.00 |
+| Yinon Avraham      | $0.89     | 0     | 0   | —      | —         | —    | 0.00 |
 
-| Asset (Offer) | Spend   | Leads | Dep | CPL   | CPA | CR   | ROI  |
-| ------------- | ------- | ----- | --- | ----- | --- | ---- | ---- |
-| Trolley       | $565.83 | 106   | 0   | $5.34 | —   | 0.0% | 0.00 |
-| AI Trader     | $0.00   | 1     | 0   | —     | —   | 0.0% | 0.00 |
+| Asset (Offer) | Spend     | Leads | Dep | CPL    | CPA | CR   | ROI  |
+| ------------- | --------- | ----- | --- | ------ | --- | ---- | ---- |
+| Alicorp Form  | $0.00     | 422   | 2   | —      | —   | 0.5% | 0.00 |
+| Trolley       | $3,103.54 | 106   | 0   | $29.28 | —   | 0.0% | 0.00 |
+| AI Trader     | $0.00     | 7     | 0   | —      | —   | 0.0% | 0.00 |
+| Alicorp       | $0.00     | 13    | 0   | —      | —   | 0.0% | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 13 – May 19, 2026 (7d)**
+Period: **May 30 – Jun 05, 2026 (7d)**
 
-_No combo-level trend data available._
+**Stopped (had deposits, now 0):**
+- all + - + -  [Alicorp Form]  total: 1, recent: 0
+- ios + GMBL|TradingYB + Ali1_Learn  [Alicorp Form]  total: 1, recent: 0
+
 
 ### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title       | Dep | Leads | Spend   | CPA     |
+| -------------- | --- | ----- | ------- | ------- |
+| Ali1_Learn     | 1   | 35    | $105.04 | $105.04 |
+| -              | 1   | 415   | $50.51  | $50.51  |
+| 2051_21_Story1 | 0   | 0     | $901.09 | —       |
+| 2051_9_Story1  | 0   | 0     | $384.62 | —       |
+| 2051_10_Story1 | 0   | 0     | $318.95 | —       |
+| Ali2_Story3    | 0   | 32    | $229.64 | —       |
+| Ali2_Learn     | 0   | 26    | $204.72 | —       |
+| 2051_5         | 0   | 0     | $130.47 | —       |
+| 2051_10        | 0   | 0     | $120.94 | —       |
+| 2051_10_Learn  | 0   | 0     | $105.26 | —       |
+| Ali1_Pro       | 0   | 25    | $93.49  | —       |
+| 2051_16_Story1 | 0   | 0     | $85.54  | —       |
+| 2051_9_Story3  | 0   | 0     | $62.70  | —       |
+| 2051_25_Story1 | 0   | 0     | $60.13  | —       |
+| 2051_16        | 0   | 0     | $55.09  | —       |
+| 2051_9         | 0   | 0     | $39.12  | —       |
+| 2051_25        | 0   | 0     | $24.44  | —       |
+| Ali1_Story3    | 0   | 4     | $20.65  | —       |
+| 2051_5_Story1  | 0   | 0     | $19.22  | —       |
+| 2051_21        | 0   | 0     | $18.00  | —       |
+
+### 5. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Peru
@@ -1864,23 +2511,118 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 
 Working combos:
 
+Top targeting by deposits:
+  - GMBL|TradingYB: 1 dep, $342 spend
+  - -: 1 dep, $51 spend
+
 Failing targeting (0 dep, notable spend):
-  - GMBL|Investment: $343 spend, 0 dep
-  - TRDEZ|Investment: $140 spend, 0 dep
-  - TRD: $80 spend, 0 dep
+  - GMBL|Investment: $652 spend, 0 dep
+  - SM|PF: $577 spend, 0 dep
+  - GMBL|Investment_Cities: $457 spend, 0 dep
+
+Top creatives by deposits:
+  - Ali1_Learn: 1 dep, $105 spend
+  - -: 1 dep, $51 spend
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
+
+_Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
+
+_No ready accounts or no combos to recommend._
+
+---
+
+## Country: Qatar
+
+### 0. News Context
+
+**Trolley** _(theme: Trading + Day)_
+- Signal: recent coverage
+- Why it matters: German THE Natural Gas Daily Financial Futures (ICIS) (01 Jul 2026) Trade Ideas — ICEENDEX:TGN01N2026 - TradingView.
+- Recency: ~6 days ago
+- Query basis: top combos — Trading, Day
+- Headline angle: Tie Trolley headlines to recent coverage themes (Trading + Day) in Qatar — stay factual, avoid hype.
+
+**QIB Form**
+- Signal: recent coverage
+- Why it matters: QIB wins four top honours at Global Finance Awards 2026 - Qatar Tribune.
+- Recency: ~5 days ago
+- Headline angle: Connect QIB Form to recent coverage in Qatar with a cautious, timely hook.
+
+### 1. Evgeni vs Team
+
+| CM        | Spend   | Leads | Dep | CPL   | CPA | CR   | ROI  |
+| --------- | ------- | ----- | --- | ----- | --- | ---- | ---- |
+| Gil Zangi | $266.55 | 48    | 0   | $5.55 | —   | 0.0% | 0.00 |
+
+| Asset (Offer) | Spend   | Leads | Dep | CPL | CPA | CR   | ROI  |
+| ------------- | ------- | ----- | --- | --- | --- | ---- | ---- |
+| Trolley       | $266.55 | 0     | 0   | —   | —   | —    | 0.00 |
+| QIB Form      | $0.00   | 48    | 0   | —   | —   | 0.0% | 0.00 |
+
+### 2. Trend (Recent Days)
+
+Period: **May 22 – May 28, 2026 (7d)**
+
+_No combo-level trend data available._
+
+### 3. Working Combos
+
+_No Strong/Interesting combos for this country._
+
+### 4. Creatives
+
+| Ad Title | Dep | Leads | Spend   | CPA |
+| -------- | --- | ----- | ------- | --- |
+| 2071 19  | 0   | 45    | $241.13 | —   |
+| 2071 6   | 0   | 1     | $13.37  | —   |
+| 2071 1   | 0   | 2     | $10.38  | —   |
+| 2071 5   | 0   | 0     | $1.23   | —   |
+| 2071 12  | 0   | 0     | $0.44   | —   |
+
+### 5. AI Context (copy into chat)
+
+```
+_No qualifying combos — nothing to explain._
+```
+
+### 6. Hypotheses (copy into chat)
+
+```
+Country: Qatar
+
+Data summary for hypothesis generation (paste into Cursor chat and ask:
+'Based on this data, suggest 3 test hypotheses for new ad sets'):
+
+Working combos:
+
+Failing targeting (0 dep, notable spend):
+  - Day: $138 spend, 0 dep
+  - IPO: $128 spend, 0 dep
+```
+
+### 7–8. Account Statuses
+
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+
+_No accounts found for this country in the GSheet._
+
+### 9. Optimization
+
+_No campaign spend found for ready accounts._
+
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
@@ -1892,88 +2634,115 @@ _No ready accounts or no combos to recommend._
 
 ### 0. News Context
 
-**AI Trader**
-- Signal: recent coverage
-- Why it matters: Exness Review 2026: Fees, Safety, Pros & Cons - Traders Union.
-- Recency: ~6 days ago
+**AI Trader** _(theme: Day + HV/Investment)_
+- Signal: local business story
+- Why it matters: Are AI Crypto Trading Bots Suitable for Crypto Beginners? BulkQuant Launches an Automated Crypto Trading App - markets.businessinsider.com.
+- Recency: ~1 days ago
+- Query basis: top combos — Day (4 dep), HV/Investment (3 dep)
 - Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Saudi Arabia — stay factual, avoid hype.
 
-**Trolley**
+**Trolley** _(theme: Trading + Day)_
 - Signal: recent coverage
-- Why it matters: Saudi Arabia and U.A.E. Carried Out Secret Attacks in Iran, U.S. Officials Say - The New York Times.
-- Recency: ~6 days ago
-- Headline angle: Connect Trolley to recent coverage in Saudi Arabia with a cautious, timely hook.
+- Why it matters: Lucid Group, Inc. Trade Ideas — XETR:CH2 - TradingView.
+- Recency: ~0 days ago
+- Query basis: top combos — Trading, Day
+- Headline angle: Tie Trolley headlines to recent coverage themes (Trading + Day) in Saudi Arabia — stay factual, avoid hype.
 
-**Aramco**
-- Signal: earnings / financial update
-- Why it matters: Saudi Arabian Oil Co stock (SA14L0N27192): profits rise as Aramco boosts dividend and spending plan - AD HOC NEWS.
-- Recency: ~2 days ago
-- Headline angle: Connect Aramco to earnings / financial update in Saudi Arabia with a cautious, timely hook.
+**Aramco Form** _(combo: Reading)_
+- Signal: market move
+- Why it matters: Saudi Arabian Oil Co stock (SA14L0N27192): Aramco edges lower in Riyadh amid new supply contracts an - AD HOC NEWS.
+- Recency: ~6 days ago
+- Query basis: top combos — Reading (7 dep)
+- Headline angle: Connect Aramco Form to market move in Saudi Arabia using combo interests (Reading) — stay factual, avoid hype.
 
 ### 1. Evgeni vs Team
 
 | CM                 | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------------ | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Evgeni Sedin ← YOU | $3,791.28  | 108   | 2   | $35.10 | $1,895.64 | 1.9% | 0.05 |
-| Gil Zangi          | $74,851.18 | 1701  | 35  | $44.00 | $2,138.61 | 2.1% | 0.52 |
-| Dan Dicker         | $29,028.03 | 523   | 22  | $55.50 | $1,319.46 | 4.2% | 1.16 |
-| Yotam Balteriski   | $21,873.31 | 764   | 12  | $28.63 | $1,822.78 | 1.6% | 0.16 |
+| Evgeni Sedin ← YOU | $5,402.75  | 463   | 7   | $11.67 | $771.82   | 1.5% | 0.26 |
+| Gil Zangi          | $54,982.39 | 1748  | 35  | $31.45 | $1,570.93 | 2.0% | 1.39 |
+| Dan Dicker         | $24,425.94 | 497   | 13  | $49.15 | $1,878.92 | 2.6% | 0.93 |
+| Yotam Balteriski   | $21,656.10 | 824   | 13  | $26.28 | $1,665.85 | 1.6% | 0.41 |
+| Yinon Avraham      | $832.02    | 39    | 0   | $21.33 | —         | 0.0% | 0.00 |
 
 | Asset (Offer) | Spend      | Leads | Dep | CPL    | CPA       | CR   | ROI  |
 | ------------- | ---------- | ----- | --- | ------ | --------- | ---- | ---- |
-| Trader AI     | $60,593.82 | 1253  | 39  | $48.36 | $1,553.69 | 3.1% | 0.72 |
-| Trolley       | $39,103.91 | 1394  | 26  | $28.05 | $1,504.00 | 1.9% | 0.29 |
-| Aramco        | $28,828.73 | 425   | 6   | $67.83 | $4,804.79 | 1.4% | 0.72 |
-| AI Trader     | $1,017.34  | 23    | 0   | $44.23 | —         | 0.0% | 0.00 |
-| Salik         | $0.00      | 1     | 0   | —      | —         | 0.0% | 0.00 |
+| Trader AI     | $40,351.69 | 1013  | 27  | $39.83 | $1,494.51 | 2.7% | 0.69 |
+| Trolley       | $53,292.58 | 1312  | 23  | $40.62 | $2,317.07 | 1.8% | 1.36 |
+| Aramco Form   | $0.00      | 1042  | 15  | —      | —         | 1.4% | 0.00 |
+| Aramco        | $12,779.71 | 173   | 3   | $73.87 | $4,259.90 | 1.7% | 0.08 |
+| AI Trader     | $875.22    | 20    | 0   | $43.76 | —         | 0.0% | 0.00 |
+| Gold Form     | $0.00      | 11    | 0   | —      | —         | 0.0% | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 13 – May 19, 2026 (7d)**
+Period: **May 31 – Jun 06, 2026 (7d)**
 
 **New (all deposits from recent period):**
-- all + Day + Blue3  [Trader AI]  dep: 4
-- ios + Blue_Trading + Vid Blue - 3  [Trader AI]  dep: 2
-- ios + Day + Blue - Automate  [Trader AI]  dep: 1
+- ios + Sport + 1962_8_AR45  [Aramco Form]  dep: 1
 
 **Stable (deposits before and now):**
-- all +  + -  [Trolley]  total: 26, recent: 6
-- all + HV|Investment + 1723_AR31  [Trader AI]  total: 3, recent: 1
-- ios + Blue + Vid blue - 1  [Trader AI]  total: 2, recent: 1
-- ios + Blue_Trading + Vid Blue - 1  [Trader AI]  total: 2, recent: 1
+- all + Reading + 2025 23  [Aramco Form]  total: 4, recent: 1
+- ios + Day + 8_flagwaving_1962 - ar45  [Aramco Form]  total: 2, recent: 1
 
 **Stopped (had deposits, now 0):**
-- ios + Blue_Day + Vid Blue - 6a  [Trader AI]  total: 3, recent: 0
-- all + IPO + 2025 4  [Aramco]  total: 2, recent: 0
-- all + Day + 1723  [Trader AI]  total: 2, recent: 0
-- all + Day + 1723 - Text 7  [Trader AI]  total: 2, recent: 0
-- ios + Blue_GMBL + Vid Blue - 3  [Trader AI]  total: 2, recent: 0
+- all + - + -  [Trolley]  total: 23, recent: 0
+- all + Day + Blue3  [Trader AI]  total: 4, recent: 0
+- ios + Reading + 8_flagwaving_1962  [Aramco Form]  total: 3, recent: 0
+- all + HV|Investment + 1723_AR31  [Trader AI]  total: 3, recent: 0
+- all + GMBL + 2025 8  [Aramco Form]  total: 2, recent: 0
 
 
 ### 3. Working Combos
 
-| Type     | Offer   | Combo                              | Dep | CPL    | CPA       | ROI  |
-| -------- | ------- | ---------------------------------- | --- | ------ | --------- | ---- |
-| Strong ✓ | Trolley | all + -                            | 26  | —      | —         | —    |
-| Strong ✓ | Trader… | all + Day + 30 + Blue3             | 4   | $15.96 | $446.80   | 0.94 |
-| Strong ⚠ | Trader… | ios + Blue_Day + 30+ + Vid Blue -… | 3   | $63.12 | $1,030.96 | 2.11 |
-| Strong ✓ | Trader… | all + HV/Investment + 25 + 1723_A… | 3   | $30.16 | $784.16   | 0.15 |
-| Strong ⚠ | Trader… | ios + Blue_GMBL + 30+ + Vid Blue…  | 2   | $74.55 | $298.21   | 0.34 |
+| Type     | Offer   | Combo                              | Dep | CPL    | CPA     | ROI      |
+| -------- | ------- | ---------------------------------- | --- | ------ | ------- | -------- |
+| Strong ✓ | Trolley | all + - + -                        | 23  | $0.01  | $0.31   | 10184.64 |
+| Strong ✓ | Aramco… | all + Reading + 2025 23            | 4   | —      | —       | —        |
+| Strong ✓ | Trader… | all + Day + 30 + Blue3             | 4   | $15.96 | $446.80 | 2.04     |
+| Strong ✓ | Trader… | all + HV/Investment + 25 + 1723_A… | 3   | $31.31 | $772.39 | 0.13     |
+| Strong ✓ | Aramco… | ios + Reading + 30 + 8_flagwaving… | 3   | —      | —       | —        |
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title                 | Dep | Leads | Spend      | CPA       |
+| ------------------------ | --- | ----- | ---------- | --------- |
+| -                        | 24  | 1454  | $7.12      | $0.30     |
+| 2025 23                  | 5   | 114   | $10,917.28 | $2,183.46 |
+| Blue3                    | 4   | 114   | $1,888.77  | $472.19   |
+| Blue_1                   | 3   | 174   | $3,915.38  | $1,305.13 |
+| 1723_AR31                | 3   | 126   | $3,373.58  | $1,124.53 |
+| Vid Blue - 1             | 3   | 36    | $1,993.76  | $664.59   |
+| Vid Blue - 3             | 3   | 26    | $1,819.96  | $606.65   |
+| 8_flagwaving_1962        | 3   | 212   | $626.54    | $208.85   |
+| 1962 12                  | 2   | 34    | $7,137.82  | $3,568.91 |
+| Vid Blue - 6a            | 2   | 60    | $4,168.00  | $2,084.00 |
+| 8_flagwaving_1962 - ar45 | 2   | 117   | $905.66    | $452.83   |
+| 2025 8                   | 2   | 41    | $743.41    | $371.70   |
+| 2025 18                  | 1   | 103   | $6,600.64  | $6,600.64 |
+| 2025 9                   | 1   | 48    | $5,845.66  | $5,845.66 |
+| 2025 4                   | 1   | 101   | $4,742.37  | $4,742.37 |
+| Vid Blue - 6             | 1   | 36    | $2,081.73  | $2,081.73 |
+| 1962_8_AR45              | 1   | 100   | $1,342.31  | $1,342.31 |
+| Blue_5                   | 1   | 9     | $718.45    | $718.45   |
+| Vid blue - 1             | 1   | 18    | $701.69    | $701.69   |
+| Vid blue - 3             | 1   | 4     | $672.98    | $672.98   |
+
+### 5. AI Context (copy into chat)
 
 ```
 Country: Saudi Arabia
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Strong] all + -  |  Offer: Trolley  |  Dep: 26  |  ROI: 0.00
-2. [Strong] all + Day + 30 + Blue3  |  Offer: Trader AI  |  Dep: 4  |  ROI: 0.94
+1. [Strong] all + - + -  |  Offer: Trolley  |  Dep: 23  |  ROI: 10184.64
+2. [Strong] all + Reading + 2025 23  |  Offer: Aramco Form  |  Dep: 4  |  ROI: 0.00
+   → Target context: Reading
+3. [Strong] all + Day + 30 + Blue3  |  Offer: Trader AI  |  Dep: 4  |  ROI: 2.04
    → Target context: Day Trading — day traders looking for quick trading income
-3. [Strong] ios + Blue_Day + 30+ + Vid Blue - 6a  |  Offer: Trader AI  |  Dep: 3  |  ROI: 2.11
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Saudi Arabia
@@ -1982,68 +2751,67 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
-  - all + -  [Strong, 26 dep]
+  - all + - + -  [Strong, 23 dep]
+  - all + Reading + 2025 23  [Strong, 4 dep]
   - all + Day + Blue3  [Strong, 4 dep]
-  - ios + Blue_Day + Vid Blue - 6a  [Strong, 3 dep]
 
 Top targeting by deposits:
-  - (unknown): 31 dep, $7,105 spend
-  - Day: 11 dep, $26,093 spend
-  - Blue_Day: 10 dep, $10,922 spend
-  - Blue_Trading: 5 dep, $5,623 spend
-  - IPO: 3 dep, $17,077 spend
+  - -: 24 dep, $488 spend
+  - Reading: 8 dep, $14,534 spend
+  - Day: 7 dep, $17,600 spend
+  - Blue_Day: 6 dep, $8,347 spend
+  - GMBL: 4 dep, $13,321 spend
 
 Failing targeting (0 dep, notable spend):
-  - Reading: $11,441 spend, 0 dep
-  - Trading: $5,985 spend, 0 dep
-  - InvestmentPlus: $4,434 spend, 0 dep
+  - Trading: $3,465 spend, 0 dep
+  - Luxury: $1,570 spend, 0 dep
+  - HV|DAY: $1,408 spend, 0 dep
 
 Top creatives by deposits:
-  - -: 27 dep, $0 spend
-  - Vid Blue - 3: 5 dep, $2,198 spend
+  - -: 24 dep, $7 spend
+  - 2025 23: 5 dep, $10,917 spend
   - Blue3: 4 dep, $1,889 spend
-  - Vid Blue - 6a: 3 dep, $4,699 spend
-  - Blue_1: 3 dep, $4,527 spend
+  - Blue_1: 3 dep, $3,915 spend
+  - 1723_AR31: 3 dep, $3,374 spend
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-**FacebookMKTO1343 SA** ✅
-Perf: $934.59 spend / 35 leads / 1 FTDs / CPL $26.70 / CPA $934.59 / CR 2.9%
-Status: —
-To Do: Trl/—/-⚠
-
-
-### 8. Optimization
-
-**FacebookMKTO1343 SA:**
-
-| Campaign                          | Spend   | Leads | FTDs | CPL    | CPA     |
-| --------------------------------- | ------- | ----- | ---- | ------ | ------- |
-| SA_Ait_IOS_Video_Day_35_11.05     | $348.18 | 23    | 0    | $15.14 | —       |
-| SA_Arm_All_Video_Trading_35_08.05 | $252.32 | 0     | 0    | —      | —       |
-| SA_Ait_IOS_Video_GMBL_35_13.05    | $126.70 | 7     | 0    | $18.10 | —       |
-| SA_Ait_IOS_Video_Day_35_13.05     | $124.55 | 5     | 1    | $24.91 | $124.55 |
-| SA_Ait_IOS_Video_GMBL_35_11.05    | $34.62  | 0     | 0    | —      | —       |
-| SA_Arm_All_Video_Trading_35_10.05 | $25.50  | 0     | 0    | —      | —       |
-| SA_Arm_All_Video_Day_35_10.05     | $22.72  | 0     | 0    | —      | —       |
+**FacebookElf93** ✅
+Perf: $1,861.77 spend / 358 leads / 5 FTDs / CPL $5.20 / CPA $372.35 / CR 1.4%
+Status: stopped - page not connected
+To Do: Aram/Reading/2025 23; Aram/Sport/1962_8_AR45⚠
 
 
-### 9. What to Open (4 strategies per account)
+### 9. Optimization
+
+**FacebookElf93:**
+
+| Ad set name                     | Spend     | Leads | FTDs | CPL   | CPA     |
+| ------------------------------- | --------- | ----- | ---- | ----- | ------- |
+| SA_Arc_IOS_Mix_Day_30_29.05     | $1,179.17 | 146   | 2    | $8.08 | $589.59 |
+| SA_Arc_IOS_Mix_Reading_30_29.05 | $682.60   | 212   | 3    | $3.22 | $227.53 |
+
+
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
-**FacebookMKTO1343 SA:**
+**FacebookElf93:**
 
   **1 · trend + stable**
-  `SA_Trl_All_Video__20.05`   [ — 26 dep, stable + ongoing deposits, trend: stable, stalled]  ⚠ below benchmark
-    - -  (26 dep)  (trend: stable + recent)
+  `SA_Aram_All_Video_Reading_07.06`   [Reading — 7 dep, scale up, stable + ongoing deposits, trend: stable, stalled]
+    - 2025 23  (4 dep)  (trend: stable + recent)
+
+  **2 · trend + variation**
+  `SA_Aram_Ios_Video_Sport_07.06`   [Sport — 1 dep, new trend — scale + variations, trend: heating up]  ⚠ below benchmark
+    - 1962_8_AR45  (1 dep)  (trend: all recent dep)
 
   **3 · trend + recovery**
-  `SA_Trl_Ios_Video_Blue_Day_30+_20.05`   [Blue_Day — 9 dep, recovery — was working, refresh, trend: stalled]  ⚠ below benchmark
-    - Vid Blue - 6a  (3 dep, ROI 2.11)  (recovery: was working, refresh hook/creative)
+  `SA_Trl_All_Video_-_07.06`   [- — 24 dep, recovery — was working, refresh, trend: stalled]
+    - -  (23 dep, ROI 10184.64)  (recovery: was working, refresh hook/creative)
 
 
 ---
@@ -2052,77 +2820,94 @@ _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** r
 
 ### 0. News Context
 
-**Adnoc**
+**ADC Form**
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
+
+**Trolley** _(theme: Trading + Day)_
 - Signal: recent coverage
-- Why it matters: UAE crude oil pipeline bypassing Hormuz 50% complete, ADNOC says - Investing.com.
-- Recency: ~0 days ago
-- Headline angle: Connect Adnoc to recent coverage in United Arab Emirates with a cautious, timely hook.
+- Why it matters: Italian PSV Natural Gas Daily Financial Futures (ICIS) (01 Jul 2026) Trade Ideas — ICEENDEX:PSL01N2026 - TradingView.
+- Recency: ~6 days ago
+- Query basis: top combos — Trading, Day
+- Headline angle: Tie Trolley headlines to recent coverage themes (Trading + Day) in United Arab Emirates — stay factual, avoid hype.
 
 **AI Trader**
-- Signal: recent coverage
-- Why it matters: Forex Expo Dubai Moves Forward as Scheduled in September for Largest Regional Gathering - TradingView.
-- Recency: ~2 days ago
+- Signal: market move
+- Why it matters: How can retail investors buy shares in SpaceX's IPO? - Reuters.
+- Recency: ~0 days ago
 - Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in United Arab Emirates — stay factual, avoid hype.
-
-**Trolley**
-- Signal: recent coverage
-- Why it matters: Saudi Arabia and U.A.E. Carried Out Secret Attacks in Iran, U.S. Officials Say - The New York Times.
-- Recency: ~6 days ago
-- Headline angle: Connect Trolley to recent coverage in United Arab Emirates with a cautious, timely hook.
 
 ### 1. Evgeni vs Team
 
-| CM                 | Spend      | Leads | Dep | CPL     | CPA       | CR    | ROI  |
-| ------------------ | ---------- | ----- | --- | ------- | --------- | ----- | ---- |
-| Evgeni Sedin ← YOU | $2,808.06  | 41    | 0   | $68.49  | —         | 0.0%  | 0.00 |
-| Dan Dicker         | $6,019.41  | 71    | 2   | $84.78  | $3,009.70 | 2.8%  | 0.05 |
-| Gil Zangi          | $2,821.84  | 6     | 1   | $470.31 | $2,821.84 | 16.7% | 0.00 |
-| Yotam Balteriski   | $11,412.43 | 156   | 0   | $73.16  | —         | 0.0%  | 0.00 |
+| CM                 | Spend     | Leads | Dep | CPL    | CPA       | CR   | ROI  |
+| ------------------ | --------- | ----- | --- | ------ | --------- | ---- | ---- |
+| Evgeni Sedin ← YOU | $5,235.23 | 109   | 2   | $48.03 | $2,617.61 | 1.8% | 0.19 |
+| Dan Dicker         | $1,149.70 | 16    | 0   | $71.86 | —         | 0.0% | 0.00 |
+| Gil Zangi          | $17.86    | 1     | 0   | $17.86 | —         | 0.0% | 0.00 |
+| Yinon Avraham      | $401.14   | 0     | 0   | —      | —         | —    | 0.00 |
+| Yotam Balteriski   | $7,057.39 | 117   | 0   | $60.32 | —         | 0.0% | 0.00 |
 
-| Asset (Offer)   | Spend      | Leads | Dep | CPL     | CPA       | CR   | ROI  |
-| --------------- | ---------- | ----- | --- | ------- | --------- | ---- | ---- |
-| Adnoc           | $2,089.24  | 43    | 2   | $48.59  | $1,044.62 | 4.7% | 0.14 |
-| Trader AI       | $7,757.54  | 43    | 1   | $180.41 | $7,757.54 | 2.3% | 0.00 |
-| Trolley         | $11,561.92 | 174   | 0   | $66.45  | —         | 0.0% | 0.00 |
-| Salik           | $1,600.41  | 10    | 0   | $160.04 | —         | 0.0% | 0.00 |
-| ChatGPTPlatform | $52.63     | 0     | 0   | —       | —         | —    | 0.00 |
-| ADC             | $0.00      | 3     | 0   | —       | —         | 0.0% | 0.00 |
-| AI Trader       | $0.00      | 1     | 0   | —       | —         | 0.0% | 0.00 |
+| Asset (Offer)       | Spend      | Leads | Dep | CPL    | CPA | CR   | ROI  |
+| ------------------- | ---------- | ----- | --- | ------ | --- | ---- | ---- |
+| ADC Form            | $0.00      | 52    | 2   | —      | —   | 3.8% | 0.00 |
+| Trolley             | $13,216.49 | 158   | 0   | $83.65 | —   | 0.0% | 0.00 |
+| Trader AI           | $644.83    | 8     | 0   | $80.60 | —   | 0.0% | 0.00 |
+| ADC                 | $0.00      | 5     | 0   | —      | —   | 0.0% | 0.00 |
+| Adnoc Form          | $0.00      | 15    | 0   | —      | —   | 0.0% | 0.00 |
+| Etihad Airways Form | $0.00      | 3     | 0   | —      | —   | 0.0% | 0.00 |
+| Salik               | $0.00      | 2     | 0   | —      | —   | 0.0% | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 13 – May 19, 2026 (7d)**
+Period: **May 29 – Jun 04, 2026 (7d)**
 
 **Stopped (had deposits, now 0):**
-- all + Day + Image 2-1267  [Adnoc]  total: 1, recent: 0
-- all + GMBL + Image 2-1267 - req  [Adnoc]  total: 1, recent: 0
-- all + Day + 1723 - Text 3  [Trader AI]  total: 1, recent: 0
+- all + - + -  [ADC Form]  total: 2, recent: 0
 
 
 ### 3. Working Combos
 
-| Type   | Offer   | Combo                              | Dep | CPL     | CPA     | ROI  |
-| ------ | ------- | ---------------------------------- | --- | ------- | ------- | ---- |
-| Int. ⚠ | Trader… | all + Day + 1723 - Text 3          | 1   | $352.18 | $704.36 | —    |
-| Int. ⚠ | Adnoc   | all + Day + 25+ + Image 2-1267     | 1   | $90.42  | $271.25 | 0.37 |
-| Int. ✓ | Adnoc   | all + GMBL + 25+ + Image 2-1267 -… | 1   | $40.55  | $162.21 | 1.23 |
+| Type     | Offer    | Combo       | Dep | CPL | CPA | ROI |
+| -------- | -------- | ----------- | --- | --- | --- | --- |
+| Strong ✓ | ADC Form | all + - + - | 2   | —   | —   | —   |
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title              | Dep | Leads | Spend     | CPA |
+| --------------------- | --- | ----- | --------- | --- |
+| -                     | 2   | 97    | $0.00     | —   |
+| JT-ADC-3 - dividends  | 0   | 0     | $2,385.17 | —   |
+| Blue_6                | 0   | 34    | $2,314.70 | —   |
+| Blue_AR48             | 0   | 20    | $1,535.60 | —   |
+| 1723_AR45             | 0   | 33    | $1,502.26 | —   |
+| JT-ADC-2 - dividends  | 0   | 0     | $1,463.83 | —   |
+| Blue_AR45             | 0   | 11    | $813.49   | —   |
+| 1723_5                | 0   | 15    | $654.93   | —   |
+| ADN1 - dividend       | 0   | 11    | $446.97   | —   |
+| Image comp2212V1      | 0   | 5     | $329.80   | —   |
+| JS-ADC-13.- Dividends | 0   | 0     | $253.02   | —   |
+| 1232 1- Dividends     | 0   | 0     | $228.49   | —   |
+| Blue_AR46             | 0   | 3     | $168.41   | —   |
+| Vid blue - app        | 0   | 2     | $154.87   | —   |
+| 2194 2                | 0   | 0     | $147.96   | —   |
+| Image dt2212V1        | 0   | 0     | $126.86   | —   |
+| 2194 7                | 0   | 0     | $105.00   | —   |
+| Vid blue - 6t         | 0   | 0     | $98.99    | —   |
+| Image comp2212V2      | 0   | 2     | $95.95    | —   |
+| 2194 5                | 0   | 0     | $87.59    | —   |
+
+### 5. AI Context (copy into chat)
 
 ```
 Country: United Arab Emirates
 
 Top combos (paste into Cursor chat and ask: 'Explain why these combos work and what makes them strong'):
 
-1. [Interesting] all + Day + 1723 - Text 3  |  Offer: Trader AI  |  Dep: 1  |  ROI: 0.00
-   → Target context: Day Trading — day traders looking for quick trading income
-2. [Interesting] all + Day + 25+ + Image 2-1267  |  Offer: Adnoc  |  Dep: 1  |  ROI: 0.37
-   → Target context: Day Trading — day traders looking for quick trading income
-3. [Interesting] all + GMBL + 25+ + Image 2-1267 - req  |  Offer: Adnoc  |  Dep: 1  |  ROI: 1.23
-   → Target context: GMBL — gambling, sports betting, and online casino fans; applies across countries
+1. [Strong] all + - + -  |  Offer: ADC Form  |  Dep: 2  |  ROI: 0.00
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: United Arab Emirates
@@ -2131,64 +2916,35 @@ Data summary for hypothesis generation (paste into Cursor chat and ask:
 'Based on this data, suggest 3 test hypotheses for new ad sets'):
 
 Working combos:
-  - all + Day + 1723 - Text 3  [Interesting, 1 dep]
-  - all + Day + Image 2-1267  [Interesting, 1 dep]
-  - all + GMBL + Image 2-1267 - req  [Interesting, 1 dep]
+  - all + - + -  [Strong, 2 dep]
 
 Top targeting by deposits:
-  - Day: 2 dep, $4,670 spend
-  - GMBL: 1 dep, $1,804 spend
+  - -: 2 dep, $0 spend
 
 Failing targeting (0 dep, notable spend):
-  - (unknown): $5,293 spend, 0 dep
-  - TradingYB|HV: $2,077 spend, 0 dep
-  - DAY|HV: $1,353 spend, 0 dep
+  - TradingYB|HV: $1,897 spend, 0 dep
+  - MixReading: $1,644 spend, 0 dep
+  - Day: $1,317 spend, 0 dep
 
 Top creatives by deposits:
-  - Image 2-1267: 1 dep, $719 spend
-  - 1723 - Text 3: 1 dep, $704 spend
-  - Image 2-1267 - req: 1 dep, $357 spend
+  - -: 2 dep, $0 spend
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
-**FacebookMKTO1343 UAE** ✅
-Perf: $905.45 spend / 23 leads / 0 FTDs / CPL $39.37 / CPA — / CR 0.0%
-Status: expand
-To Do: —
+_No accounts found for this country in the GSheet._
 
-**FacebookMKTO1286 UAE** ✅
-Perf: — spend / — leads / — FTDs / CPL — / CPA — / CR —
-Status: Email verification
-To Do: 
+### 9. Optimization
 
+_No campaign spend found for ready accounts._
 
-### 8. Optimization
-
-**FacebookMKTO1343 UAE:**
-
-| Campaign                                      | Spend   | Leads | FTDs | CPL | CPA |
-| --------------------------------------------- | ------- | ----- | ---- | --- | --- |
-| UAE_Adc_IOS_Images_Trading_30_17.05           | $456.25 | 0     | 0    | —   | —   |
-| UAE_Adc_IOS_Images_Day/OnlineEducation_30_17. | $433.62 | 0     | 0    | —   | —   |
-| UAE_Adc_IOS_Images_GMBL_30_13.05              | $9.68   | 0     | 0    | —   | —   |
-| UAE_Adc_IOS_Images_Day_30_13.05               | $5.90   | 0     | 0    | —   | —   |
-| Account-level (no ad set in export)           | $0.00   | 3     | 0    | —   | —   |
-| Account-level (no ad set in export)           | $0.00   | 20    | 0    | —   | —   |
-
-
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 
-**FacebookMKTO1286 UAE:**
-
-  **3 · trend + recovery**
-  `UAE_Adc_All_Image_Day_25+_20.05`   [Day — 2 dep, recovery — was working, refresh, trend: stalled]  ⚠ below benchmark
-    - Image 2-1267  (1 dep, ROI 0.37)  (recovery: was working, refresh hook/creative)
-
+_No ready accounts or no combos to recommend._
 
 ---
 
@@ -2196,37 +2952,60 @@ _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** r
 
 ### 0. News Context
 
-_No reliable recent asset news found. Use evergreen angles from working combos._
+**Al Trading**
+- Signal: no strong fresh news found
+- Why it matters: No reliable recent asset news found.
+- Headline angle: Use evergreen angles from working combos rather than newsjacking.
+
+**AI Trader**
+- Signal: local business story
+- Why it matters: Are AI Crypto Trading Bots Suitable for Crypto Beginners? BulkQuant Launches an Automated Crypto Trading App - markets.businessinsider.com.
+- Recency: ~1 days ago
+- Headline angle: Tie AI Trader headlines to AI-assisted trading trends and platform news in Uruguay — stay factual, avoid hype.
 
 ### 1. Evgeni vs Team
 
 | CM        | Spend   | Leads | Dep | CPL   | CPA     | CR   | ROI  |
 | --------- | ------- | ----- | --- | ----- | ------- | ---- | ---- |
-| Gil Zangi | $242.90 | 29    | 1   | $8.38 | $242.90 | 3.4% | 0.82 |
+| Gil Zangi | $741.57 | 104   | 1   | $7.13 | $741.57 | 1.0% | 0.27 |
 
 | Asset (Offer) | Spend   | Leads | Dep | CPL   | CPA     | CR   | ROI  |
 | ------------- | ------- | ----- | --- | ----- | ------- | ---- | ---- |
 | Al Trading    | $242.90 | 29    | 1   | $8.38 | $242.90 | 3.4% | 0.82 |
+| AI Trader     | $498.67 | 75    | 0   | $6.65 | —       | 0.0% | 0.00 |
 
 ### 2. Trend (Recent Days)
 
-Period: **May 03 – May 09, 2026 (7d)**
+Period: **May 18 – May 24, 2026 (7d)**
 
-**New (all deposits from recent period):**
-- all + Trading + Blue - Sleep  [Al Trading]  dep: 1
+**Stopped (had deposits, now 0):**
+- all + Trading + Blue - Sleep  [Al Trading]  total: 1, recent: 0
 
 
 ### 3. Working Combos
 
 _No Strong/Interesting combos for this country._
 
-### 4. AI Context (copy into chat)
+### 4. Creatives
+
+| Ad Title      | Dep | Leads | Spend   | CPA     |
+| ------------- | --- | ----- | ------- | ------- |
+| Blue - Sleep  | 1   | 28    | $236.10 | $236.10 |
+| 2046 - Text 6 | 0   | 5     | $214.94 | —       |
+| 2046 - Text 5 | 0   | 9     | $143.04 | —       |
+| 2046 - Text 1 | 0   | 2     | $56.81  | —       |
+| 2046 - Text 4 | 0   | 3     | $50.36  | —       |
+| 2046 - Text 3 | 0   | 5     | $33.52  | —       |
+| Blue - 6      | 0   | 1     | $6.80   | —       |
+| -             | 0   | 51    | $0.00   | —       |
+
+### 5. AI Context (copy into chat)
 
 ```
 _No qualifying combos — nothing to explain._
 ```
 
-### 5. Hypotheses (copy into chat)
+### 6. Hypotheses (copy into chat)
 
 ```
 Country: Uruguay
@@ -2239,21 +3018,24 @@ Working combos:
 Top targeting by deposits:
   - Trading: 1 dep, $243 spend
 
+Failing targeting (0 dep, notable spend):
+  - Day: $499 spend, 0 dep
+
 Top creatives by deposits:
   - Blue - Sleep: 1 dep, $236 spend
 ```
 
-### 6–7. Account Statuses
+### 7–8. Account Statuses
 
-_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 6–7 **To Do** for ready accounts (✅) mirrors **section 9** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §9 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §9. If section 9 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
+_**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 _No accounts found for this country in the GSheet._
 
-### 8. Optimization
+### 9. Optimization
 
 _No campaign spend found for ready accounts._
 
-### 9. What to Open (4 strategies per account)
+### 10. What to Open (4 strategies per account)
 
 _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** recovery (stopped) · **4** test when no stable trend._
 

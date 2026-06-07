@@ -141,7 +141,12 @@ def _render_news_context(news_context: Dict[str, Any]) -> str:
         return "\n".join(lines)
 
     for item in items:
-        lines.append(f"**{_esc(item.get('asset', ''))}**")
+        asset_title = f"**{_esc(item.get('asset', ''))}**"
+        theme_label = item.get("theme_label")
+        if theme_label:
+            label_kind = "combo" if item.get("interest_source") == "combo" else "theme"
+            asset_title += f" _({label_kind}: {_esc(theme_label)})_"
+        lines.append(asset_title)
         lines.append(f"- Signal: {_esc(item.get('signal', ''))}")
         summary = item.get("summary")
         if summary:
@@ -149,6 +154,9 @@ def _render_news_context(news_context: Dict[str, Any]) -> str:
         fd = item.get("freshness_days")
         if fd is not None:
             lines.append(f"- Recency: ~{int(round(float(fd)))} days ago")
+        query_basis = item.get("query_basis")
+        if query_basis:
+            lines.append(f"- Query basis: {_esc(query_basis)}")
         headline_angle = item.get("headline_angle")
         if headline_angle:
             lines.append(f"- Headline angle: {_esc(headline_angle)}")
