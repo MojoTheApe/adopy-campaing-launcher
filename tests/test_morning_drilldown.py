@@ -58,6 +58,35 @@ def test_creatives_section_returns_rows(enriched_df: pd.DataFrame) -> None:
     assert len(rows) == 3
 
 
+def test_optimization_section_returns_rows_sorted_by_spend(enriched_df: pd.DataFrame) -> None:
+    rows = get_underlying_rows(
+        enriched_df,
+        section="optimization",
+        country="Mexico",
+        account="MX-acc-1",
+        adset="ME_trader_pro_all_creative_trading_25",
+    )
+    # Three Excel lines share one Ad Title — drill shows one aggregated row.
+    assert len(rows) == 1
+    assert rows[0]["ad_title"] == "Make money fast"
+    assert rows[0]["spend"] == pytest.approx(135.0)
+    assert rows[0]["leads"] == 270
+    assert rows[0]["ftds"] == 2
+
+
+def test_optimization_drill_dedupes_same_ad_title(enriched_df: pd.DataFrame) -> None:
+    rows = get_underlying_rows(
+        enriched_df,
+        section="optimization",
+        country="Mexico",
+        account="MX-acc-3",
+        adset="ME_crypto_invest_all_creative_crypto_25",
+    )
+    titles = [r["ad_title"] for r in rows]
+    assert len(titles) == len(set(titles))
+    assert "Buy bitcoin now" in titles
+
+
 # ── return shape ───────────────────────────────────────────────────────────────
 
 def test_return_columns_are_fixed(enriched_df: pd.DataFrame) -> None:

@@ -7,6 +7,7 @@ Three routes:
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict
@@ -34,8 +35,15 @@ def _aggregate_key_to_query(key: Dict[str, Any]) -> str:
     return urlencode({k: ("" if v is None else str(v)) for k, v in key.items()})
 
 
-# Expose the helper to Jinja2 via a custom filter
+def _anchor_slug(text: str) -> str:
+    """URL-safe slug for in-page anchors (e.g. 'Mexico' -> 'mexico')."""
+    slug = re.sub(r"[^a-z0-9]+", "-", str(text or "").strip().lower())
+    return slug.strip("-") or "unknown"
+
+
+# Expose helpers to Jinja2 via custom filters
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
+templates.env.filters["anchor_slug"] = _anchor_slug
 
 # Drill fragment column counts per section — keep in sync with report.html
 # table headers. The detail <td colspan> must match the parent table's
@@ -46,6 +54,7 @@ _NCOLS_BY_SECTION = {
     "top_combos": 9,      # offer, device, interest, age, creative, category, deposits, leads, spend
     "targeting": 5,       # interest, deposits, leads, spend, cpa
     "creatives": 5,       # ad_title, deposits, leads, spend, cpa
+    "optimization": 7,    # adset, spend, leads, ftds, cpl, cpa, reason
 }
 
 app = FastAPI(title="fb_agents — Morning Report")
@@ -90,7 +99,20 @@ async def details(request: Request) -> HTMLResponse:
     params = dict(request.query_params)
     section = params.pop("section", "")
     country = params.pop("country", "")
-    ncols = _NCOLS_BY_SECTION.get(section, 6)
+    # Drill-down is web-only and limited to §9 Optimization.
+    if section != "optimization":
+        ncols = 6
+        return templates.TemplateResponse(
+            "_details_fragment.html",
+            {
+                "request": request,
+                "rows": [],
+                "ncols": ncols,
+                "section": section,
+                "message": "Drill-down is only available in §9 Optimization.",
+            },
+        )
+    ncols = _NCOLS_BY_SECTION.get(section, 7)
 
     try:
         _report, df, _warnings = get_cached_report()
@@ -103,6 +125,7 @@ async def details(request: Request) -> HTMLResponse:
                 "request": request,
                 "rows": [],
                 "ncols": ncols,
+                "section": section,
                 "message": "Data unavailable. Reload the page.",
             },
         )
@@ -114,6 +137,7 @@ async def details(request: Request) -> HTMLResponse:
             "request": request,
             "rows": rows,
             "ncols": ncols,
+            "section": section,
             "message": "" if rows else "No matching rows.",
         },
     )

@@ -91,6 +91,8 @@ To Do: —
 
 ### 9. Optimization
 
+_Ad-level drill-down (Account → Ad set → Ad title): run `uvicorn src.web.app:app` and open the web dashboard._
+
 **BR-acc-1:**
 
 | Ad set name                           | Spend  | Leads | FTDs | CPL   | CPA    |
@@ -207,6 +209,8 @@ To Do: Cryp/crypto/Buy bitcoin now⚠
 
 
 ### 9. Optimization
+
+_Ad-level drill-down (Account → Ad set → Ad title): run `uvicorn src.web.app:app` and open the web dashboard._
 
 **MX-acc-1:**
 

@@ -365,7 +365,12 @@ def _render_close_recs(
     close_recs: Dict[str, List[Dict[str, Any]]],
     close_summaries: Dict[str, Dict[str, Any]] | None = None,
 ) -> str:
-    lines = ["### 9. Optimization", ""]
+    lines = [
+        "### 9. Optimization",
+        "",
+        "_Ad-level drill-down: double-click `start_dashboard.bat` or run `python serve.py` (opens http://127.0.0.1:9090/)._",
+        "",
+    ]
     any_data = any(v for v in close_recs.values())
     if not any_data:
         lines.append("_No campaign spend found for ready accounts._")

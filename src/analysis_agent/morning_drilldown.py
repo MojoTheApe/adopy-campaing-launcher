@@ -14,6 +14,7 @@ from src.analysis_agent.section_filters import (
     filter_cm_rows,
     filter_combo_rows,
     filter_creative_rows,
+    filter_optimization_rows,
     filter_targeting_rows,
     filter_trend_rows,
 )
@@ -28,6 +29,8 @@ DRILL_COLUMNS: List[str] = [
     "spend",
     "leads",
     "ftds",
+    "cpl",
+    "cpa",
     "cm",
     "date",
 ]
@@ -50,14 +53,25 @@ def _to_native(value: Any) -> Any:
 
 
 def _row_to_dict(row: pd.Series) -> Dict[str, Any]:
+    spend = _to_native(row.get("$ Spend"))
+    leads = _to_native(row.get("# Leads"))
+    ftds = _to_native(row.get("# FTDs"))
+    cpl = None
+    cpa = None
+    if isinstance(spend, (int, float)) and isinstance(leads, (int, float)) and leads > 0:
+        cpl = spend / leads
+    if isinstance(spend, (int, float)) and isinstance(ftds, (int, float)) and ftds > 0:
+        cpa = spend / ftds
     return {
         "account": _to_native(row.get("Account Alias")),
         "ad_title": _to_native(row.get("Ad Title")),
         "ad_asset": _to_native(row.get("Ad Asset")),
         "adset": _to_native(row.get("Adset Name")),
-        "spend": _to_native(row.get("$ Spend")),
-        "leads": _to_native(row.get("# Leads")),
-        "ftds": _to_native(row.get("# FTDs")),
+        "spend": spend,
+        "leads": leads,
+        "ftds": ftds,
+        "cpl": cpl,
+        "cpa": cpa,
         "cm": _to_native(row.get("CM")),
         "date": _to_native(row.get("Date")),
     }
@@ -99,9 +113,36 @@ def get_underlying_rows(
             filtered = filter_targeting_rows(df, country, kwargs["bucket"])
         elif section == "creatives":
             filtered = filter_creative_rows(df, country, kwargs["creative"])
+        elif section == "optimization":
+            filtered = filter_optimization_rows(
+                df, country, kwargs["account"], kwargs["adset"],
+            )
+            filtered = _aggregate_optimization_drill_rows(filtered)
         else:
             return []
     except KeyError:
         return []
 
     return [_row_to_dict(r) for _, r in filtered.iterrows()]
+
+
+def _aggregate_optimization_drill_rows(filtered: pd.DataFrame) -> pd.DataFrame:
+    """One drill row per (Ad Title, Ad Asset); sum metrics across duplicate Excel lines."""
+    if filtered.empty:
+        return filtered
+    grouped = (
+        filtered.groupby(["Ad Title", "Ad Asset"], dropna=False)
+        .agg(
+            **{
+                "# Leads": ("# Leads", "sum"),
+                "# FTDs": ("# FTDs", "sum"),
+                "$ Spend": ("$ Spend", "sum"),
+                "Account Alias": ("Account Alias", "first"),
+                "Adset Name": ("Adset Name", "first"),
+                "CM": ("CM", "first"),
+                "Date": ("Date", "max"),
+            }
+        )
+        .reset_index()
+    )
+    return grouped.sort_values("$ Spend", ascending=False)

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Launch the morning-report web UI on localhost.
 
-    python serve.py            # default 127.0.0.1:8000
-    python serve.py --port 9000
+    python serve.py                 # http://127.0.0.1:9090 + opens browser
+    python serve.py --port 8765
+    python serve.py --no-browser      # terminal only, no auto-open
 
 Reads FB_STATS_EXCEL + GSheet config from .env, same as run_morning.py.
 """
@@ -10,7 +11,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import socket
 import sys
+import threading
+import time
+import webbrowser
 from pathlib import Path
 
 _root = Path(__file__).resolve().parent
@@ -26,23 +31,74 @@ except ImportError:
 
 import uvicorn
 
+_DEFAULT_PORT = 9090
+
+
+def _pick_port(host: str, preferred: int, *, scan: int = 20) -> int:
+    """Return the first bindable port in [preferred .. preferred+scan)."""
+    for port in range(preferred, preferred + scan):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((host, port))
+            except OSError:
+                continue
+            return port
+    raise SystemExit(
+        f"[serve] No free port found near {preferred}. "
+        f"Try: python serve.py --port {preferred + scan}"
+    )
+
+
+def _schedule_browser_open(url: str, delay_s: float = 2.0) -> None:
+    def _open() -> None:
+        time.sleep(delay_s)
+        webbrowser.open(url)
+
+    threading.Thread(target=_open, daemon=True).start()
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run the fb_agents morning-report web UI on localhost."
+        description="Run the fb_agents morning-report web UI on localhost.",
     )
-    parser.add_argument("--host", default="127.0.0.1",
-                        help="Bind address (default: 127.0.0.1, single-user)")
-    parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--reload", action="store_true",
-                        help="Auto-reload on code change (dev)")
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind address (default: 127.0.0.1, single-user)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=_DEFAULT_PORT,
+        help=f"Preferred port (default: {_DEFAULT_PORT}; auto-picks next free)",
+    )
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Auto-reload on code change (dev; can fail on Windows if port busy)",
+    )
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Do not open the browser automatically",
+    )
     args = parser.parse_args()
 
-    print(f"[serve] http://{args.host}:{args.port}/", file=sys.stderr)
+    port = _pick_port(args.host, args.port)
+    url = f"http://{args.host}:{port}/"
+
+    print(f"[serve] Dashboard URL: {url}", file=sys.stderr)
+    print(f"[serve] Mexico Optimization: {url}#country-mexico-optimization", file=sys.stderr)
+    print("[serve] Press Ctrl+C to stop.", file=sys.stderr)
+
+    if not args.no_browser:
+        _schedule_browser_open(url)
+
     uvicorn.run(
         "src.web.app:app",
         host=args.host,
-        port=args.port,
+        port=port,
         reload=args.reload,
         log_level="info",
     )

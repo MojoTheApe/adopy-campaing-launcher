@@ -9,7 +9,7 @@
       <div class="drill-header">
         <span class="drill-count">
           {% if rows %}
-            {{ rows|length }} underlying row{{ '' if rows|length == 1 else 's' }}
+            {{ rows|length }} ad{{ '' if rows|length == 1 else 's' }}
           {% elif message %}
             {{ message }}
           {% else %}
@@ -26,6 +26,16 @@
         <table class="drill-table">
           <thead>
             <tr>
+              {% if section == 'optimization' %}
+              <th>Ad title</th>
+              <th>Asset</th>
+              <th class="num">Spend</th>
+              <th class="num">Leads</th>
+              <th class="num">FTDs</th>
+              <th class="num">CPL</th>
+              <th class="num">CPA</th>
+              <th>Date</th>
+              {% else %}
               <th>Account</th>
               <th>CM</th>
               <th>Adset</th>
@@ -35,11 +45,22 @@
               <th class="num">Leads</th>
               <th class="num">FTDs</th>
               <th>Date</th>
+              {% endif %}
             </tr>
           </thead>
           <tbody>
           {% for r in rows %}
             <tr>
+              {% if section == 'optimization' %}
+              <td>{{ r.ad_title or '' }}</td>
+              <td>{{ r.ad_asset or '' }}</td>
+              <td class="num">{{ '%.2f' % (r.spend or 0) }}</td>
+              <td class="num">{{ r.leads or 0 }}</td>
+              <td class="num {% if (r.ftds or 0) > 0 %}good{% endif %}">{{ r.ftds or 0 }}</td>
+              <td class="num">{% if r.cpl %}{{ '%.2f' % r.cpl }}{% else %}—{% endif %}</td>
+              <td class="num">{% if r.cpa %}{{ '%.2f' % r.cpa }}{% else %}—{% endif %}</td>
+              <td class="date">{{ r.date or '' }}</td>
+              {% else %}
               <td>{{ r.account or '' }}</td>
               <td>{{ r.cm or '' }}</td>
               <td class="adset">{{ r.adset or '' }}</td>
@@ -49,6 +70,7 @@
               <td class="num">{{ r.leads or 0 }}</td>
               <td class="num {% if (r.ftds or 0) > 0 %}good{% endif %}">{{ r.ftds or 0 }}</td>
               <td class="date">{{ r.date or '' }}</td>
+              {% endif %}
             </tr>
           {% endfor %}
           </tbody>

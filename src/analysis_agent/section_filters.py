@@ -7,7 +7,7 @@ the displayed aggregate stays consistent with the drilled rows.
 
 NA handling:
   pandas groupby(dropna=False) puts NaN into its own group. The display
-  layer renders NaN as "(unknown)" / "(no title)" / "". To round-trip
+  layer renders NaN as empty / "(no title)" / "". To round-trip
   through a URL unambiguously we use the literal string `__NA__` as the
   sentinel for "match rows where this column is NaN or empty".
 """
@@ -94,3 +94,21 @@ def filter_creative_rows(df: pd.DataFrame, country: str, creative: str) -> pd.Da
     """Rows aggregated by `build_creative_breakdown` (groupby Ad Title)."""
     mask = (df["Country Final"] == country) & _na_match(df["Ad Title"], creative)
     return df[mask]
+
+
+def filter_optimization_rows(
+    df: pd.DataFrame,
+    country: str,
+    account: str,
+    adset: str,
+) -> pd.DataFrame:
+    """Ad-level rows for one ad set within a ready account (§9 drill-down)."""
+    mask = (
+        (df["Country Final"] == country)
+        & (df["Account Alias"].fillna("").astype(str).str.strip() == str(account).strip())
+        & _na_match(df["Adset Name"], adset)
+    )
+    rows = df[mask]
+    if rows.empty or "$ Spend" not in rows.columns:
+        return rows
+    return rows.sort_values("$ Spend", ascending=False)

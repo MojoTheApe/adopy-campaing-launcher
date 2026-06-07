@@ -497,9 +497,7 @@ def build_targeting_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, 
     rows = []
     for _, r in grouped.iterrows():
         interest_raw = r.get("Interest")
-        interest = str(interest_raw or "").strip()
-        if not interest or interest.lower() == "nan":
-            interest = "(unknown)"
+        interest = _display_value(interest_raw)
         rows.append(
             {
                 "interest": interest,
@@ -773,14 +771,21 @@ def build_close_recommendations(
         leads = _safe_int(r.get("Leads"))
         spend = _safe_float(r.get("Spend"))
         cpl, cpa = _row_cpl_cpa(r)
+        adset_raw = r.get("Adset Name")
         return {
-            "adset_name": str(r.get("Adset Name") or "").strip(),
+            "adset_name": str(adset_raw or "").strip(),
             "deposits": deposits,
             "leads": leads,
             "spend": spend,
             "cpl": cpl,
             "cpa": cpa,
             "reason": _optimization_reason(r),
+            "aggregate_key": {
+                "section": "optimization",
+                "country": country,
+                "account": account_alias,
+                "adset": _key_value(adset_raw),
+            },
         }
 
     spend_ok = grouped["Spend"] > min_spend
@@ -933,9 +938,7 @@ def _group_combos_by_targeting(
 
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for _, r in qualified.iterrows():
-        interest = str(r.get("Interest") or "").strip()
-        if not interest or interest.lower() == "nan":
-            interest = "(unknown)"
+        interest = _display_value(r.get("Interest"))
         entry = {
             "offer": _display_offer(r.get("Offer"), country),
             "device": _display_value(r.get("Device"), "all"),

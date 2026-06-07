@@ -114,8 +114,14 @@ python run_morning.py [-e path/to/stats.xlsx] [--cm "Evgeni Sedin"] [--trend-day
 
 ```bash
 pip install -r requirements.txt   # нужны fastapi, uvicorn, jinja2
-python serve.py                   # http://127.0.0.1:8000
-python serve.py --port 9000 --reload
+
+# Самый простой запуск (двойной клик или из терминала):
+start_dashboard.bat               # откроет браузер на http://127.0.0.1:9090/
+
+# Или вручную:
+python serve.py                   # порт 9090, браузер откроется сам
+python serve.py --no-browser      # только терминал
+python serve.py --port 8765       # другой порт, если 9090 занят
 ```
 
 - Данные и настройки — те же, что у `run_morning.py` (`FB_STATS_EXCEL`, GSheet, `.env`).

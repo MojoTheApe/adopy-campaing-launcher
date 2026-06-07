@@ -51,6 +51,8 @@ def test_close_recs_keeps_account_level_leads_with_zero_spend() -> None:
     assert by_adset["-"]["spend"] == 0.0
     assert by_adset["-"]["cpl"] is None
     assert by_adset["KW_ALG_IOS_Images_Day_30_07.05"]["leads"] == 0
+    assert by_adset["KW_ALG_IOS_Images_Day_30_07.05"]["aggregate_key"]["section"] == "optimization"
+    assert by_adset["KW_ALG_IOS_Images_Day_30_07.05"]["aggregate_key"]["account"] == "FacebookMKTO1323"
 
 
 def test_close_recs_merges_same_adset_split_by_offer() -> None:

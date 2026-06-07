@@ -164,3 +164,22 @@ def test_filter_creative_rows_matches_aggregator(
     rows = filter_creative_rows(enriched_df, "Mexico", "Buy bitcoin now")
     assert int(rows["# FTDs"].sum()) == target["deposits"]
     assert rows["$ Spend"].sum() == pytest.approx(target["spend"])
+
+
+# ── filter_optimization_rows ───────────────────────────────────────────────────
+
+def test_filter_optimization_rows_returns_ad_level_rows(enriched_df: pd.DataFrame) -> None:
+    from src.analysis_agent.section_filters import filter_optimization_rows
+
+    adset = "ME_trader_pro_all_creative_trading_25"
+    rows = filter_optimization_rows(enriched_df, "Mexico", "MX-acc-1", adset)
+    assert len(rows) == 3
+    assert (rows["Adset Name"] == adset).all()
+    assert list(rows["$ Spend"]) == sorted(rows["$ Spend"], reverse=True)
+
+
+def test_filter_optimization_rows_unknown_adset_empty(enriched_df: pd.DataFrame) -> None:
+    from src.analysis_agent.section_filters import filter_optimization_rows
+
+    rows = filter_optimization_rows(enriched_df, "Mexico", "MX-acc-1", "nonexistent")
+    assert len(rows) == 0

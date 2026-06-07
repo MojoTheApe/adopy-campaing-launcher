@@ -165,6 +165,111 @@
     .me { color: var(--good); font-weight: bold; }
     .roi-pos { color: var(--good); }
     .roi-neg { color: var(--bad); }
+
+    nav.jump-nav {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding: 0.6rem 0.9rem;
+      margin-bottom: 1.25rem;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    }
+    nav.jump-nav label {
+      color: var(--muted);
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    nav.jump-nav select {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.3rem 0.5rem;
+      font-family: inherit;
+      font-size: 0.85rem;
+      max-width: 14rem;
+    }
+    nav.jump-nav button {
+      background: var(--bg);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.35rem 0.8rem;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.85rem;
+    }
+    nav.jump-nav button:hover { background: var(--bg-hover); border-color: var(--accent); }
+
+    h2.country, h3.section[id] {
+      scroll-margin-top: 4.5rem;
+    }
+    .country-toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.6rem;
+      margin: 0.25rem 0 1rem 0;
+      font-size: 0.78rem;
+    }
+    .country-toc a {
+      color: var(--muted);
+      text-decoration: none;
+      padding: 0.15rem 0.45rem;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+    }
+    .country-toc a:hover { color: var(--accent); border-color: var(--accent); }
+
+    .open-tree { margin: 0.5rem 0 1.5rem 0; }
+    .open-account {
+      margin-bottom: 1.25rem;
+      padding-left: 0;
+    }
+    .open-account-name {
+      color: var(--accent);
+      font-size: 0.95rem;
+      margin-bottom: 0.45rem;
+    }
+    .open-campaign {
+      margin: 0.35rem 0 0.65rem 1.25rem;
+      padding-left: 0.75rem;
+      border-left: 2px solid var(--border);
+    }
+    .open-adset {
+      color: var(--text);
+      font-size: 0.82rem;
+      margin-bottom: 0.25rem;
+      word-break: break-word;
+    }
+    .open-adset .hint {
+      display: block;
+      margin-top: 0.15rem;
+      font-size: 0.75rem;
+    }
+    .open-creatives {
+      list-style: none;
+      margin: 0.2rem 0 0 0.75rem;
+      padding: 0;
+    }
+    .open-creatives li {
+      color: var(--muted);
+      font-size: 0.8rem;
+      padding: 0.12rem 0;
+      word-break: break-word;
+    }
+    .open-creatives li::before {
+      content: '· ';
+      color: var(--border);
+    }
   </style>
 </head>
 <body>
@@ -189,11 +294,48 @@
 </div>
 {% endif %}
 
+{% if report.countries %}
+<nav class="jump-nav" aria-label="Jump to country and section">
+  <label>Country
+    <select id="jump-country">
+      {% for c in report.countries %}
+      <option value="{{ c.country | anchor_slug }}">{{ c.country }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Section
+    <select id="jump-section">
+      <option value="">— country top —</option>
+      <option value="cm">1. CM Comparison</option>
+      <option value="trend">2. Trend</option>
+      <option value="combos">3. Top Combos</option>
+      <option value="targeting">4. Targeting</option>
+      <option value="creatives">5. Creatives</option>
+      <option value="accounts">8–9. Accounts</option>
+      <option value="optimization">9. Optimization</option>
+      <option value="open">11. What to Open</option>
+    </select>
+  </label>
+  <button type="button" id="jump-go">Go</button>
+</nav>
+{% endif %}
+
 {% for c in report.countries %}
-<h2 class="country">{{ c.country }}</h2>
+{% set cid = c.country | anchor_slug %}
+<h2 class="country" id="country-{{ cid }}">{{ c.country }}</h2>
+<div class="country-toc">
+  <a href="#country-{{ cid }}-cm">§1 CM</a>
+  <a href="#country-{{ cid }}-trend">§2 Trend</a>
+  <a href="#country-{{ cid }}-combos">§3 Combos</a>
+  <a href="#country-{{ cid }}-targeting">§4 Targeting</a>
+  <a href="#country-{{ cid }}-creatives">§5 Creatives</a>
+  <a href="#country-{{ cid }}-accounts">§8–9 Accounts</a>
+  <a href="#country-{{ cid }}-optimization">§9 Optimization</a>
+  <a href="#country-{{ cid }}-open">§11 Open</a>
+</div>
 
 {# ── Section 1: CM comparison ─────────────────────────────────────── #}
-<h3 class="section">1. CM Comparison <span class="hint">click row to drill into ads for that CM</span></h3>
+<h3 class="section" id="country-{{ cid }}-cm">1. CM Comparison</h3>
 <table>
   <thead><tr>
     <th>CM</th>
@@ -207,11 +349,7 @@
   </tr></thead>
   <tbody>
   {% for row in c.cm_comparison %}
-    <tr class="drillable"
-        hx-get="/details?{{ row.aggregate_key | agg_qs }}"
-        hx-target="closest tr"
-        hx-swap="afterend"
-        hx-trigger="click">
+    <tr>
       <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
@@ -229,7 +367,7 @@
 
 {# ── Section 2: Trend ─────────────────────────────────────────────── #}
 {% if c.trend.has_date %}
-<h3 class="section">2. Recent Trend <span class="hint">{{ c.trend.period_label }} — click row to drill</span></h3>
+<h3 class="section" id="country-{{ cid }}-trend">2. Recent Trend <span class="hint">{{ c.trend.period_label }}</span></h3>
 {% for label, key in [('Trending up', 'trending_up'), ('Stable', 'stable'), ('Trending down', 'trending_down')] %}
   {% set rows = c.trend[key] %}
   {% if rows %}
@@ -245,11 +383,7 @@
       </tr></thead>
       <tbody>
       {% for row in rows %}
-        <tr class="drillable"
-            hx-get="/details?{{ row.aggregate_key | agg_qs }}"
-            hx-target="closest tr"
-            hx-swap="afterend"
-            hx-trigger="click">
+        <tr>
           <td>{{ row.offer or '—' }}</td>
           <td>{{ row.device or '—' }}</td>
           <td>{{ row.interest or '—' }}</td>
@@ -265,7 +399,7 @@
 {% endif %}
 
 {# ── Section 3: Top combos ─────────────────────────────────────────── #}
-<h3 class="section">3. Top Combos <span class="hint">click row to drill into the matching ads</span></h3>
+<h3 class="section" id="country-{{ cid }}-combos">3. Top Combos</h3>
 <table>
   <thead><tr>
     <th>Offer</th>
@@ -280,11 +414,7 @@
   </tr></thead>
   <tbody>
   {% for row in c.top_combos %}
-    <tr class="drillable"
-        hx-get="/details?{{ row.aggregate_key | agg_qs }}"
-        hx-target="closest tr"
-        hx-swap="afterend"
-        hx-trigger="click">
+    <tr>
       <td>{{ row.offer or '—' }}</td>
       <td>{{ row.device or '—' }}</td>
       <td>{{ row.interest or '—' }}</td>
@@ -301,7 +431,7 @@
 
 {# ── Section 4: Targeting ──────────────────────────────────────────── #}
 {% if c.targeting %}
-<h3 class="section">4. Targeting Breakdown <span class="hint">click row to drill into ads in that interest bucket</span></h3>
+<h3 class="section" id="country-{{ cid }}-targeting">4. Targeting Breakdown</h3>
 <table>
   <thead><tr>
     <th>Interest</th>
@@ -312,11 +442,7 @@
   </tr></thead>
   <tbody>
   {% for row in c.targeting %}
-    <tr class="drillable"
-        hx-get="/details?{{ row.aggregate_key | agg_qs }}"
-        hx-target="closest tr"
-        hx-swap="afterend"
-        hx-trigger="click">
+    <tr>
       <td>{{ row.interest }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
@@ -329,7 +455,7 @@
 {% endif %}
 
 {# ── Section 5: Creatives — always visible (matches Markdown §4 Creatives per country). #}
-<h3 class="section">5. Creative breakdown <span class="hint">Ad Title — click row to drill</span></h3>
+<h3 class="section" id="country-{{ cid }}-creatives">5. Creative breakdown</h3>
 {% if c.creatives %}
 <table>
   <thead><tr>
@@ -341,11 +467,7 @@
   </tr></thead>
   <tbody>
   {% for row in c.creatives %}
-    <tr class="drillable"
-        hx-get="/details?{{ row.aggregate_key | agg_qs }}"
-        hx-target="closest tr"
-        hx-swap="afterend"
-        hx-trigger="click">
+    <tr>
       <td>{{ row.ad_title }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
@@ -371,7 +493,7 @@
 
 {# ── Sections 8–9: account / GSheet ───────────────────────────────────── #}
 {% if c.account_rows %}
-<h3 class="section">8–9. Account Statuses</h3>
+<h3 class="section" id="country-{{ cid }}-accounts">8–9. Account Statuses</h3>
 <table>
   <thead><tr><th>Account</th><th>Cost</th><th>Asset</th><th>To Do</th><th>✓</th></tr></thead>
   <tbody>
@@ -391,15 +513,42 @@
 {% if c.close_recs %}
 {% set has_close = c.close_recs.values() | selectattr('0') | list %}
 {% if has_close %}
-<h3 class="section">10. Optimization</h3>
-{% for label, recs in c.close_recs.items() %}
+<h3 class="section" id="country-{{ cid }}-optimization">9. Optimization <span class="hint">click ad set row to drill into ads</span></h3>
+{% for label in c.close_recs.keys() | sort %}
+  {% set recs = c.close_recs[label] %}
   {% if recs %}
-    <p><strong>{{ label }}:</strong></p>
-    <ul>
-    {% for r in recs %}
-      <li>{{ r.adset_name[:60] }} — Spend: {{ '%.2f' % r.spend }}, Leads: {{ r.leads }}, FTDs: {{ r.deposits }}</li>
-    {% endfor %}
-    </ul>
+    <p><strong>{{ label }}</strong></p>
+    <table>
+      <thead><tr>
+        <th>Ad set name</th>
+        <th class="num">Spend</th>
+        <th class="num">Leads</th>
+        <th class="num">FTDs</th>
+        <th class="num">CPL</th>
+        <th class="num">CPA</th>
+        <th>Reason</th>
+      </tr></thead>
+      <tbody>
+      {% for r in recs | sort(attribute='spend', reverse=True) %}
+        <tr class="drillable"
+            data-drill="optimization"
+            {% if r.aggregate_key is defined %}
+            hx-get="/details?{{ r.aggregate_key | agg_qs }}"
+            hx-target="closest tr"
+            hx-swap="afterend"
+            hx-trigger="click"
+            {% endif %}>
+          <td class="adset">{{ r.adset_name[:60] }}</td>
+          <td class="num">{{ '%.2f' % r.spend }}</td>
+          <td class="num">{{ r.leads }}</td>
+          <td class="num {% if r.deposits == 0 and r.spend > 0 %}bad{% elif r.deposits > 0 %}good{% endif %}">{{ r.deposits }}</td>
+          <td class="num">{% if r.cpl %}{{ '%.2f' % r.cpl }}{% else %}—{% endif %}</td>
+          <td class="num">{% if r.cpa %}{{ '%.2f' % r.cpa }}{% else %}—{% endif %}</td>
+          <td class="{% if r.reason %}bad{% endif %}">{{ r.reason or '' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
   {% endif %}
 {% endfor %}
 {% endif %}
@@ -408,17 +557,29 @@
 {% if c.open_recs %}
 {% set has_open = c.open_recs.values() | selectattr('0') | list %}
 {% if has_open %}
-<h3 class="section">11. What to Open (4 strategies per account)</h3>
-{% for label, recs in c.open_recs.items() %}
+<h3 class="section" id="country-{{ cid }}-open">11. What to Open (4 strategies per account)</h3>
+<div class="open-tree">
+{% for acc_label in c.open_recs.keys() | sort %}
+  {% set recs = c.open_recs[acc_label] %}
   {% if recs %}
-    <p><strong>{{ label }}:</strong></p>
-    <ul>
-    {% for r in recs %}
-      <li>{{ r.summary if r.summary is defined else r }}</li>
+  <div class="open-account">
+    <div class="open-account-name">{{ acc_label }}</div>
+    {% for r in recs | sort(attribute='strategy_type') %}
+    <div class="open-campaign">
+      <div class="open-adset">{{ r.campaign_name }}</div>
+      {% if r.creatives %}
+      <ul class="open-creatives">
+        {% for cr in r.creatives %}
+        <li>{{ cr.name }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
     {% endfor %}
-    </ul>
+  </div>
   {% endif %}
 {% endfor %}
+</div>
 {% endif %}
 {% endif %}
 
@@ -427,6 +588,91 @@
 {% if not report.countries %}
 <p style="color: var(--muted)">No country data found. Check Excel path and filters.</p>
 {% endif %}
+
+<script>
+(function () {
+  function buildHash(countrySlug, sectionSlug) {
+    let hash = "#country-" + countrySlug;
+    if (sectionSlug) hash += "-" + sectionSlug;
+    return hash;
+  }
+
+  function parseHash(hash) {
+    if (!hash || hash.charAt(0) !== "#") return null;
+    const m = hash.match(/^#country-([a-z0-9-]+)(?:-([a-z0-9-]+))?$/);
+    if (!m) return null;
+    return { country: m[1], section: m[2] || "" };
+  }
+
+  function jumpToHash(hash, smooth) {
+    let el = document.querySelector(hash);
+    if (!el) {
+      const parsed = parseHash(hash);
+      if (parsed && parsed.section) {
+        el = document.querySelector("#country-" + parsed.country);
+        hash = "#country-" + parsed.country;
+      }
+    }
+    if (!el) return false;
+    el.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+    history.replaceState(null, "", hash);
+    syncNavFromHash(hash);
+    return true;
+  }
+
+  function syncNavFromHash(hash) {
+    const parsed = parseHash(hash);
+    const countrySel = document.getElementById("jump-country");
+    const sectionSel = document.getElementById("jump-section");
+    if (!parsed || !countrySel || !sectionSel) return;
+    if ([...countrySel.options].some((o) => o.value === parsed.country)) {
+      countrySel.value = parsed.country;
+    }
+    if ([...sectionSel.options].some((o) => o.value === parsed.section)) {
+      sectionSel.value = parsed.section;
+    }
+  }
+
+  const goBtn = document.getElementById("jump-go");
+  if (goBtn) {
+    goBtn.addEventListener("click", function () {
+      const country = document.getElementById("jump-country").value;
+      const section = document.getElementById("jump-section").value;
+      jumpToHash(buildHash(country, section), true);
+    });
+  }
+
+  document.querySelectorAll(".country-toc a").forEach(function (link) {
+    link.addEventListener("click", function (e) {
+      e.preventDefault();
+      jumpToHash(link.getAttribute("href"), true);
+    });
+  });
+
+  if (location.hash) {
+    jumpToHash(location.hash, false);
+  }
+})();
+
+(function () {
+  // §9 Optimization drill-down only: one open panel, toggle on repeat click.
+  document.body.addEventListener("htmx:beforeRequest", function (evt) {
+    const el = evt.detail.elt;
+    if (!el.matches || !el.matches('tr.drillable[data-drill="optimization"]')) {
+      return;
+    }
+    const openBelow = el.nextElementSibling;
+    if (openBelow && openBelow.classList.contains("drill-detail")) {
+      openBelow.remove();
+      evt.preventDefault();
+      return;
+    }
+    document.querySelectorAll("tr.drill-detail").forEach(function (row) {
+      row.remove();
+    });
+  });
+})();
+</script>
 
 </body>
 </html>
