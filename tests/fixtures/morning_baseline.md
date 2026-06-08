@@ -14,15 +14,15 @@
 
 ### 1. Evgeni vs Team
 
-| CM                 | Spend  | Leads | Dep | CPL   | CPA    | CR   | ROI  |
-| ------------------ | ------ | ----- | --- | ----- | ------ | ---- | ---- |
-| Evgeni Sedin ← YOU | $65.00 | 130   | 2   | $0.50 | $32.50 | 1.5% | 1.46 |
-| Other CM           | $20.00 | 40    | 0   | $0.50 | —      | 0.0% | 0.00 |
+| CM                 | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
+| ------------------ | ----- | ----- | --- | --- | --- | ---- | ---- |
+| Evgeni Sedin ← YOU | $65   | 130   | 2   | $1  | $33 | 1.5% | 1.46 |
+| Other CM           | $20   | 40    | 0   | $1  | —   | 0.0% | 0.00 |
 
-| Asset (Offer) | Spend  | Leads | Dep | CPL   | CPA    | CR   | ROI  |
-| ------------- | ------ | ----- | --- | ----- | ------ | ---- | ---- |
-| trader_pro    | $65.00 | 130   | 2   | $0.50 | $32.50 | 1.5% | 1.46 |
-| crypto_invest | $20.00 | 40    | 0   | $0.50 | —      | 0.0% | 0.00 |
+| Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
+| ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
+| trader_pro    | $65   | 130   | 2   | $1  | $33 | 1.5% | 1.46 |
+| crypto_invest | $20   | 40    | 0   | $1  | —   | 0.0% | 0.00 |
 
 ### 2. Trend (Recent Days)
 
@@ -34,16 +34,16 @@ Period: **Apr 12 – Apr 18, 2026 (7d)**
 
 ### 3. Working Combos
 
-| Type     | Offer    | Combo                              | Dep | CPL   | CPA    | ROI  |
-| -------- | -------- | ---------------------------------- | --- | ----- | ------ | ---- |
-| Strong ✓ | trader_… | all + trading + 25 + Brazilian sp… | 2   | $0.50 | $32.50 | 1.46 |
+| Type     | Offer    | Combo                              | Dep | CPL | CPA | ROI  |
+| -------- | -------- | ---------------------------------- | --- | --- | --- | ---- |
+| Strong ✓ | trader_… | all + trading + 25 + Brazilian sp… | 2   | $1  | $33 | 1.46 |
 
 ### 4. Creatives
 
-| Ad Title              | Dep | Leads | Spend  | CPA    |
-| --------------------- | --- | ----- | ------ | ------ |
-| Brazilian special     | 2   | 130   | $65.00 | $32.50 |
-| Mobile crypto trading | 0   | 40    | $20.00 | —      |
+| Ad Title              | Dep | Leads | Spend | CPA |
+| --------------------- | --- | ----- | ----- | --- |
+| Brazilian special     | 2   | 130   | $65   | $33 |
+| Mobile crypto trading | 0   | 40    | $20   | —   |
 
 ### 5. AI Context (copy into chat)
 
@@ -68,7 +68,7 @@ Working combos:
   - all + trading + Brazilian special  [Strong, 2 dep]
 
 Top targeting by deposits:
-  - trading: 2 dep, $65 spend
+  - Trading: 2 dep, $65 spend
 
 Top creatives by deposits:
   - Brazilian special: 2 dep, $65 spend
@@ -84,20 +84,20 @@ Status: 5
 To Do: Trad/trading/Brazilian speci…
 
 **BR-acc-1** ✅
-Perf: $65.00 spend / 130 leads / 2 FTDs / CPL $0.50 / CPA $32.50 / CR 1.5%
+Perf: $65 spend / 130 leads / 2 FTDs / CPL $1 / CPA $33 / CR 1.5%
 Status: 3
 To Do: —
 
 
 ### 9. Optimization
 
-_Ad-level drill-down (Account → Ad set → Ad title): run `uvicorn src.web.app:app` and open the web dashboard._
+_Ad-level drill-down: double-click `start_dashboard.bat` or run `python serve.py` (opens http://127.0.0.1:9090/)._
 
 **BR-acc-1:**
 
-| Ad set name                           | Spend  | Leads | FTDs | CPL   | CPA    |
-| ------------------------------------- | ------ | ----- | ---- | ----- | ------ |
-| BR_trader_pro_all_creative_trading_25 | $65.00 | 130   | 2    | $0.50 | $32.50 |
+| Ad set name                           | Spend | Leads | FTDs | CPL | CPA |
+| ------------------------------------- | ----- | ----- | ---- | --- | --- |
+| BR_trader_pro_all_creative_trading_25 | $65   | 130   | 2    | $1  | $33 |
 
 
 ### 10. What to Open (4 strategies per account)
@@ -117,16 +117,16 @@ _Aligned with §2 Trend: **1** stable · **2** new trend + variations · **3** r
 
 ### 1. Evgeni vs Team
 
-| CM                 | Spend   | Leads | Dep | CPL   | CPA    | CR   | ROI  |
-| ------------------ | ------- | ----- | --- | ----- | ------ | ---- | ---- |
-| Evgeni Sedin ← YOU | $165.00 | 280   | 3   | $0.59 | $55.00 | 1.1% | 1.27 |
-| Other CM           | $250.00 | 500   | 3   | $0.50 | $83.33 | 0.6% | 0.92 |
-| nan                | $15.00  | 30    | 0   | $0.50 | —      | 0.0% | 0.00 |
+| CM                 | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
+| ------------------ | ----- | ----- | --- | --- | --- | ---- | ---- |
+| Evgeni Sedin ← YOU | $165  | 280   | 3   | $1  | $55 | 1.1% | 1.27 |
+| Other CM           | $250  | 500   | 3   | $1  | $84 | 0.6% | 0.92 |
+| nan                | $15   | 30    | 0   | $1  | —   | 0.0% | 0.00 |
 
-| Asset (Offer) | Spend   | Leads | Dep | CPL   | CPA    | CR   | ROI  |
-| ------------- | ------- | ----- | --- | ----- | ------ | ---- | ---- |
-| crypto_invest | $250.00 | 500   | 3   | $0.50 | $83.33 | 0.6% | 0.92 |
-| trader_pro    | $180.00 | 310   | 3   | $0.58 | $60.00 | 1.0% | 1.17 |
+| Asset (Offer) | Spend | Leads | Dep | CPL | CPA | CR   | ROI  |
+| ------------- | ----- | ----- | --- | --- | --- | ---- | ---- |
+| crypto_invest | $250  | 500   | 3   | $1  | $84 | 0.6% | 0.92 |
+| trader_pro    | $180  | 310   | 3   | $1  | $60 | 1.0% | 1.17 |
 
 ### 2. Trend (Recent Days)
 
@@ -140,21 +140,21 @@ Period: **Apr 12 – Apr 18, 2026 (7d)**
 
 ### 3. Working Combos
 
-| Type     | Offer    | Combo                              | Dep | CPL   | CPA    | ROI  |
-| -------- | -------- | ---------------------------------- | --- | ----- | ------ | ---- |
-| Strong ⚠ | crypto_… | all + crypto + 25 + Buy bitcoin n… | 3   | $0.50 | $75.00 | 1.02 |
-| Strong ⚠ | trader_… | all + trading + 25 + Make money f… | 2   | $0.50 | $67.50 | 1.11 |
-| Int. ✓   | trader_… | ios + trading + 35+ + iOS exclusi… | 1   | $3.00 | $30.00 | 2.00 |
+| Type     | Offer    | Combo                              | Dep | CPL | CPA | ROI  |
+| -------- | -------- | ---------------------------------- | --- | --- | --- | ---- |
+| Strong ⚠ | crypto_… | all + crypto + 25 + Buy bitcoin n… | 3   | $1  | $75 | 1.02 |
+| Strong ⚠ | trader_… | all + trading + 25 + Make money f… | 2   | $1  | $68 | 1.11 |
+| Int. ✓   | trader_… | ios + trading + 35+ + iOS exclusi… | 1   | $3  | $30 | 2.00 |
 
 ### 4. Creatives
 
-| Ad Title             | Dep | Leads | Spend   | CPA    |
-| -------------------- | --- | ----- | ------- | ------ |
-| Buy bitcoin now      | 3   | 450   | $225.00 | $75.00 |
-| Make money fast      | 2   | 270   | $135.00 | $67.50 |
-| iOS exclusive offer  | 1   | 10    | $30.00  | $30.00 |
-| Crypto for beginners | 0   | 50    | $25.00  | —      |
-| Generic offer        | 0   | 30    | $15.00  | —      |
+| Ad Title             | Dep | Leads | Spend | CPA |
+| -------------------- | --- | ----- | ----- | --- |
+| Buy bitcoin now      | 3   | 450   | $225  | $75 |
+| Make money fast      | 2   | 270   | $135  | $68 |
+| iOS exclusive offer  | 1   | 10    | $30   | $30 |
+| Crypto for beginners | 0   | 50    | $25   | —   |
+| Generic offer        | 0   | 30    | $15   | —   |
 
 ### 5. AI Context (copy into chat)
 
@@ -184,8 +184,8 @@ Working combos:
   - ios + trading + iOS exclusive offer  [Interesting, 1 dep]
 
 Top targeting by deposits:
-  - crypto: 3 dep, $250 spend
-  - trading: 3 dep, $165 spend
+  - Crypto: 3 dep, $250 spend
+  - Trading: 3 dep, $165 spend
 
 Top creatives by deposits:
   - Buy bitcoin now: 3 dep, $225 spend
@@ -198,7 +198,7 @@ Top creatives by deposits:
 _**Spend / Leads / FTDs / CPL / CPA / CR** — full-account totals from the Facebook stats export (Excel). 7–8 **To Do** for ready accounts (✅) mirrors **section 10** (same two campaigns, first creative each): compact `slug/target/creative` with offer **slug** like §10 naming, `; ` between bundles; trailing `⚠` = below benchmark. Full names are in §10. If section 10 has nothing for that account, **To Do** is **—**. **Video selfie** keeps the GSheet note. Otherwise (not ready) uses col J/K. GSheet rows with **Account Disabled** or **Account Restricted** in col J are omitted._
 
 **MX-acc-1** ✅
-Perf: $135.00 spend / 270 leads / 2 FTDs / CPL $0.50 / CPA $67.50 / CR 0.7%
+Perf: $135 spend / 270 leads / 2 FTDs / CPL $1 / CPA $68 / CR 0.7%
 Status: 5
 To Do: Cryp/crypto/Buy bitcoin now⚠
 
@@ -210,13 +210,13 @@ To Do: Cryp/crypto/Buy bitcoin now⚠
 
 ### 9. Optimization
 
-_Ad-level drill-down (Account → Ad set → Ad title): run `uvicorn src.web.app:app` and open the web dashboard._
+_Ad-level drill-down: double-click `start_dashboard.bat` or run `python serve.py` (opens http://127.0.0.1:9090/)._
 
 **MX-acc-1:**
 
-| Ad set name                           | Spend   | Leads | FTDs | CPL   | CPA    |
-| ------------------------------------- | ------- | ----- | ---- | ----- | ------ |
-| ME_trader_pro_all_creative_trading_25 | $135.00 | 270   | 2    | $0.50 | $67.50 |
+| Ad set name                           | Spend | Leads | FTDs | CPL | CPA |
+| ------------------------------------- | ----- | ----- | ---- | --- | --- |
+| ME_trader_pro_all_creative_trading_25 | $135  | 270   | 2    | $1  | $68 |
 
 
 ### 10. What to Open (4 strategies per account)

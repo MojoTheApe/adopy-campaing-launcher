@@ -45,7 +45,7 @@ def test_top_combos_section_returns_rows(enriched_df: pd.DataFrame) -> None:
 def test_targeting_section_returns_rows(enriched_df: pd.DataFrame) -> None:
     rows = get_underlying_rows(
         enriched_df, section="targeting",
-        country="Mexico", bucket="trading",
+        country="Mexico", bucket="Trading",
     )
     assert len(rows) == 4
 

@@ -248,3 +248,44 @@ def test_open_section_renders_account_adset_ad_titles() -> None:
     open_block = html.split("11. What to Open", 1)[1]
     assert "strategy_type" not in open_block
     assert "'campaign_name'" not in open_block
+
+
+def test_web_targeting_table_renders_per_country(
+    enriched_df: pd.DataFrame,
+) -> None:
+    from src.analysis_agent.analyze_fb_stats import aggregate_combos
+    from src.analysis_agent.morning_report import build_country_section
+
+    combos = aggregate_combos(enriched_df)
+    countries = sorted(enriched_df["Country Final"].dropna().unique().tolist())
+    sections = [
+        build_country_section(
+            enriched_df, combos, country, [],
+            my_cm="Evgeni Sedin", trend_days=7,
+        )
+        for country in countries
+    ]
+    html = templates.env.get_template("report.html").render(
+        request=MagicMock(),
+        report={
+            "date": "2026-06-08",
+            "my_cm": "Evgeni Sedin",
+            "source_excel": "test.xlsx",
+            "trend_days": 7,
+            "total_combos": len(combos),
+            "countries": sections,
+        },
+        warnings=[],
+        built_at="2026-06-08",
+    )
+
+    for country in countries:
+        slug = _anchor_slug(country)
+        assert f'id="country-{slug}-targeting"' in html
+        block = html.split(f'id="country-{slug}-targeting"', 1)[1].split(
+            '<h2 class="country"', 1
+        )[0]
+        assert 'class="table-targeting"' in block
+        section = next(s for s in sections if s["country"] == country)
+        for row in section.get("targeting") or []:
+            assert row["interest"] in block

@@ -36,7 +36,9 @@ def _table(headers: List[str], rows: List[List[str]]) -> str:
 
 
 def _fmt_money(v: float) -> str:
-    return f"${v:,.2f}"
+    from src.analysis_agent.money_format import fmt_usd
+
+    return fmt_usd(v)
 
 
 def _safe_money_sort_key(v: str) -> float:
@@ -254,13 +256,13 @@ def _render_targeting(rows: List[Dict[str, Any]]) -> str:
     for r in rows:
         cpa_s = _fmt_money(r["cpa"]) if r["cpa"] else "—"
         table_rows.append([
-            r["interest"][:20],
+            _ellipsis(r.get("interest") or "", 16),
             str(r["deposits"]),
             str(r["leads"]),
             _fmt_money(r["spend"]),
             cpa_s,
         ])
-    lines.append(_table(["Interest", "Dep", "Leads", "Spend", "CPA"], table_rows))
+    lines.append(_table(["Target", "Dep", "Leads", "Spend", "CPA"], table_rows))
     return "\n".join(lines)
 
 

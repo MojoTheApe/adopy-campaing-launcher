@@ -13,11 +13,42 @@ NA handling:
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 
+from src.knowledge_agent.knowledge_base import get_target_context, resolve_target_code
+
 NA_SENTINEL = "__NA__"
+
+
+def interest_bucket_key(raw: Any) -> str:
+    """Stable targeting bucket for §4 aggregates (case + KB aliases)."""
+    if raw is None:
+        return NA_SENTINEL
+    try:
+        if pd.isna(raw):
+            return NA_SENTINEL
+    except (TypeError, ValueError):
+        pass
+    s = str(raw).strip()
+    if not s or s.lower() in ("nan", "none"):
+        return NA_SENTINEL
+    canonical = resolve_target_code(s)
+    if canonical:
+        return canonical
+    return s.lower()
+
+
+def interest_bucket_display(bucket_key: str) -> str:
+    """Compact human label for a merged targeting bucket."""
+    if bucket_key == NA_SENTINEL:
+        return "(unknown)"
+    if get_target_context(bucket_key):
+        return bucket_key
+    if bucket_key == bucket_key.lower() and bucket_key.isascii():
+        return bucket_key.title()
+    return bucket_key
 
 
 def _na_match(series: pd.Series, value: Optional[str]) -> pd.Series:
@@ -85,8 +116,11 @@ def filter_combo_rows(
 
 
 def filter_targeting_rows(df: pd.DataFrame, country: str, bucket: str) -> pd.DataFrame:
-    """Rows aggregated by `build_targeting_breakdown` (groupby Interest)."""
-    mask = (df["Country Final"] == country) & _na_match(df["Interest"], bucket)
+    """Rows aggregated by `build_targeting_breakdown` (merged interest buckets)."""
+    if "Interest" not in df.columns:
+        return df.iloc[0:0]
+    keys = df["Interest"].map(interest_bucket_key)
+    mask = (df["Country Final"] == country) & (keys == bucket)
     return df[mask]
 
 

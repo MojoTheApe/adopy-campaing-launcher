@@ -29,7 +29,12 @@ from src.analysis_agent.gsheet_accounts import (
     format_account_status_todo_cell,
     is_omitted_from_account_statuses_table,
 )
-from src.analysis_agent.section_filters import NA_SENTINEL
+from src.analysis_agent.money_format import fmt_usd
+from src.analysis_agent.section_filters import (
+    NA_SENTINEL,
+    interest_bucket_display,
+    interest_bucket_key,
+)
 from src.knowledge_agent.knowledge_base import format_target_context_line, get_all_targets
 from config.benchmarks import compute_country_medians, get_benchmark
 
@@ -477,13 +482,18 @@ def build_top_combos(combos: pd.DataFrame, country: str, top_n: int = 5) -> List
 # ── Section 4: Targeting breakdown ────────────────────────────────────────────
 
 def build_targeting_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, Any]]:
-    """Aggregate by Interest for this country."""
+    """Aggregate by normalized Interest bucket for this country.
+
+    Merges case variants (Day/day) and KB aliases into one row per target.
+    """
     df_c = df[df["Country Final"] == country].copy()
     if df_c.empty or "Interest" not in df_c.columns:
         return []
 
+    df_c["_interest_bucket"] = df_c["Interest"].map(interest_bucket_key)
+
     grouped = (
-        df_c.groupby("Interest", dropna=False)
+        df_c.groupby("_interest_bucket", dropna=False)
         .agg(
             Deposits=("# FTDs", "sum"),
             Leads=("# Leads", "sum"),
@@ -496,11 +506,10 @@ def build_targeting_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, 
 
     rows = []
     for _, r in grouped.iterrows():
-        interest_raw = r.get("Interest")
-        interest = _display_value(interest_raw)
+        bucket = str(r.get("_interest_bucket") or NA_SENTINEL)
         rows.append(
             {
-                "interest": interest,
+                "interest": interest_bucket_display(bucket),
                 "deposits": _safe_int(r.get("Deposits")),
                 "leads": _safe_int(r.get("Leads")),
                 "spend": _safe_float(r.get("Spend")),
@@ -508,7 +517,7 @@ def build_targeting_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, 
                 "aggregate_key": {
                     "section": "targeting",
                     "country": country,
-                    "bucket": _key_value(interest_raw),
+                    "bucket": bucket,
                 },
             }
         )
@@ -613,21 +622,21 @@ def build_hypotheses_block(
         lines.append("")
         lines.append("Top targeting by deposits:")
         for t in top_targets:
-            lines.append(f"  - {t['interest']}: {t['deposits']} dep, ${t['spend']:,.0f} spend")
+            lines.append(f"  - {t['interest']}: {t['deposits']} dep, {fmt_usd(t['spend'])} spend")
 
     zero_targets = [t for t in targeting_rows if t["deposits"] == 0 and t["spend"] > 50][:3]
     if zero_targets:
         lines.append("")
         lines.append("Failing targeting (0 dep, notable spend):")
         for t in zero_targets:
-            lines.append(f"  - {t['interest']}: ${t['spend']:,.0f} spend, 0 dep")
+            lines.append(f"  - {t['interest']}: {fmt_usd(t['spend'])} spend, 0 dep")
 
     top_creatives = [c for c in creative_rows if c["deposits"] > 0][:5]
     if top_creatives:
         lines.append("")
         lines.append("Top creatives by deposits:")
         for c in top_creatives:
-            lines.append(f"  - {c['ad_title']}: {c['deposits']} dep, ${c['spend']:,.0f} spend")
+            lines.append(f"  - {c['ad_title']}: {c['deposits']} dep, {fmt_usd(c['spend'])} spend")
 
     return "\n".join(lines)
 
@@ -761,9 +770,9 @@ def build_close_recommendations(
         cpl, cpa = _row_cpl_cpa(r)
         reasons = []
         if bench.get("max_cpl") and cpl is not None and cpl > bench["max_cpl"]:
-            reasons.append(f"CPL > bench ${bench['max_cpl']:,.0f}")
+            reasons.append(f"CPL > bench {fmt_usd(bench['max_cpl'])}")
         if bench.get("max_cpa") and cpa is not None and cpa > bench["max_cpa"]:
-            reasons.append(f"CPA > bench ${bench['max_cpa']:,.0f}")
+            reasons.append(f"CPA > bench {fmt_usd(bench['max_cpa'])}")
         return "; ".join(reasons)
 
     def _make_rec(r) -> Dict[str, Any]:

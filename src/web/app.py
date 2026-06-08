@@ -24,6 +24,7 @@ if str(_PROJ_ROOT) not in sys.path:
 
 from src.analysis_agent.morning_drilldown import get_underlying_rows
 from src.web.cache import cache_built_at, cache_clear, get_cached_report
+from src.analysis_agent.money_format import fmt_usd
 
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -44,6 +45,7 @@ def _anchor_slug(text: str) -> str:
 # Expose helpers to Jinja2 via custom filters
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
+templates.env.filters["fmt_usd"] = fmt_usd
 
 # Drill fragment column counts per section — keep in sync with report.html
 # table headers. The detail <td colspan> must match the parent table's

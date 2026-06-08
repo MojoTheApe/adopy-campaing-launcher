@@ -229,6 +229,25 @@
     }
     .country-toc a:hover { color: var(--accent); border-color: var(--accent); }
 
+    table.table-targeting {
+      font-size: 0.78rem;
+      margin-bottom: 0;
+    }
+    table.table-targeting th,
+    table.table-targeting td {
+      padding: 0.28rem 0.45rem;
+    }
+    table.table-targeting th {
+      font-size: 0.68rem;
+    }
+    table.table-targeting td.interest-cell {
+      max-width: 9rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    h3.section-targeting { margin-bottom: 0.35rem; }
+
     .open-tree { margin: 0.5rem 0 1.5rem 0; }
     .open-account {
       margin-bottom: 1.25rem;
@@ -324,14 +343,14 @@
 {% set cid = c.country | anchor_slug %}
 <h2 class="country" id="country-{{ cid }}">{{ c.country }}</h2>
 <div class="country-toc">
-  <a href="#country-{{ cid }}-cm">§1 CM</a>
-  <a href="#country-{{ cid }}-trend">§2 Trend</a>
-  <a href="#country-{{ cid }}-combos">§3 Combos</a>
-  <a href="#country-{{ cid }}-targeting">§4 Targeting</a>
-  <a href="#country-{{ cid }}-creatives">§5 Creatives</a>
-  <a href="#country-{{ cid }}-accounts">§8–9 Accounts</a>
-  <a href="#country-{{ cid }}-optimization">§9 Optimization</a>
-  <a href="#country-{{ cid }}-open">§11 Open</a>
+  <a href="#country-{{ cid }}-cm">1 CM</a>
+  <a href="#country-{{ cid }}-trend">2 Trend</a>
+  <a href="#country-{{ cid }}-combos">3 Combos</a>
+  <a href="#country-{{ cid }}-targeting">4 Targeting</a>
+  <a href="#country-{{ cid }}-creatives">5 Creatives</a>
+  <a href="#country-{{ cid }}-accounts">8–9 Accounts</a>
+  <a href="#country-{{ cid }}-optimization">9 Optimization</a>
+  <a href="#country-{{ cid }}-open">11 Open</a>
 </div>
 
 {# ── Section 1: CM comparison ─────────────────────────────────────── #}
@@ -353,9 +372,9 @@
       <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ '%.2f' % row.spend }}</td>
-      <td class="num">{{ '%.2f' % row.net }}</td>
-      <td class="num">{% if row.cpa %}{{ '%.2f' % row.cpa }}{% else %}—{% endif %}</td>
+      <td class="num">{{ row.spend | fmt_usd }}</td>
+      <td class="num">{{ row.net | fmt_usd }}</td>
+      <td class="num">{{ row.cpa | fmt_usd }}</td>
       <td class="num {% if row.roi > 1 %}roi-pos{% elif row.roi and row.roi < 1 %}roi-neg{% endif %}">
         {% if row.roi %}{{ '%.2f' % row.roi }}{% else %}—{% endif %}
       </td>
@@ -423,7 +442,7 @@
       <td>{{ row.category }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ '%.2f' % row.spend }}</td>
+      <td class="num">{{ row.spend | fmt_usd }}</td>
     </tr>
   {% endfor %}
   </tbody>
@@ -431,11 +450,11 @@
 
 {# ── Section 4: Targeting ──────────────────────────────────────────── #}
 {% if c.targeting %}
-<h3 class="section" id="country-{{ cid }}-targeting">4. Targeting Breakdown</h3>
-<table>
+<h3 class="section section-targeting" id="country-{{ cid }}-targeting">4. Targeting</h3>
+<table class="table-targeting">
   <thead><tr>
-    <th>Interest</th>
-    <th class="num">Deposits</th>
+    <th>Target</th>
+    <th class="num">Dep</th>
     <th class="num">Leads</th>
     <th class="num">Spend</th>
     <th class="num">CPA</th>
@@ -443,11 +462,11 @@
   <tbody>
   {% for row in c.targeting %}
     <tr>
-      <td>{{ row.interest }}</td>
+      <td class="interest-cell" title="{{ row.interest }}">{{ row.interest }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ '%.2f' % row.spend }}</td>
-      <td class="num">{% if row.cpa %}{{ '%.2f' % row.cpa }}{% else %}—{% endif %}</td>
+      <td class="num">{{ row.spend | fmt_usd }}</td>
+      <td class="num">{{ row.cpa | fmt_usd }}</td>
     </tr>
   {% endfor %}
   </tbody>
@@ -471,8 +490,8 @@
       <td>{{ row.ad_title }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ '%.2f' % row.spend }}</td>
-      <td class="num">{% if row.cpa %}{{ '%.2f' % row.cpa }}{% else %}—{% endif %}</td>
+      <td class="num">{{ row.spend | fmt_usd }}</td>
+      <td class="num">{{ row.cpa | fmt_usd }}</td>
     </tr>
   {% endfor %}
   </tbody>
@@ -500,7 +519,7 @@
   {% for r in c.account_rows %}
     <tr>
       <td>{{ r.account_label }}</td>
-      <td>{{ r.cost or '—' }}</td>
+      <td class="num">{{ r.cost | fmt_usd }}</td>
       <td>{{ r.stock or '—' }}</td>
       <td>{{ r.to_do_display }}</td>
       <td>{% if r.is_ready %}✅{% else %}❌{% endif %}</td>
@@ -539,11 +558,11 @@
             hx-trigger="click"
             {% endif %}>
           <td class="adset">{{ r.adset_name[:60] }}</td>
-          <td class="num">{{ '%.2f' % r.spend }}</td>
+          <td class="num">{{ r.spend | fmt_usd }}</td>
           <td class="num">{{ r.leads }}</td>
           <td class="num {% if r.deposits == 0 and r.spend > 0 %}bad{% elif r.deposits > 0 %}good{% endif %}">{{ r.deposits }}</td>
-          <td class="num">{% if r.cpl %}{{ '%.2f' % r.cpl }}{% else %}—{% endif %}</td>
-          <td class="num">{% if r.cpa %}{{ '%.2f' % r.cpa }}{% else %}—{% endif %}</td>
+          <td class="num">{{ r.cpl | fmt_usd }}</td>
+          <td class="num">{{ r.cpa | fmt_usd }}</td>
           <td class="{% if r.reason %}bad{% endif %}">{{ r.reason or '' }}</td>
         </tr>
       {% endfor %}
