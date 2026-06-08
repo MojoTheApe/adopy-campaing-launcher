@@ -1217,6 +1217,8 @@ def _assemble_open_campaign(
         "strategy_type": strategy_type,
         "strategy_label": OPEN_STRATEGY_LABELS[strategy_type],
         "campaign_name": campaign_name,
+        "device": str(device_raw),
+        "age": str(age_raw) if not _is_nan_val(age_raw) else "35",
         "targeting": interest,
         "offer": offer,
         "category": primary.get("category", "Strong"),

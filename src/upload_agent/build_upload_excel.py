@@ -352,7 +352,13 @@ def build_row(combo: dict, account_info: dict, ref: dict, header_names: list[str
     date_val = (combo.get(PLAN_DATE) or "").strip()
     copy_key = (combo.get(PLAN_COPY) or "").strip()
 
-    campaign_name = build_campaign_name(country, asset, os_val, creative, creative_number, targeting, age, date_val)
+    override_name = (combo.get("campaign_name") or combo.get("ad_set_name") or "").strip()
+    if override_name:
+        campaign_name = override_name
+    else:
+        campaign_name = build_campaign_name(
+            country, asset, os_val, creative, creative_number, targeting, age, date_val
+        )
     ad_copy = lookup_ad_copy(ref, copy_key)
     country_info = lookup_country(ref, country)
     creative_filename = lookup_creative_file(ref, creative, creative_number)

@@ -73,6 +73,7 @@ def _render_report() -> str:
         report=_MOCK_REPORT,
         warnings=[],
         built_at="2026-06-08",
+        upload_errors={},
     )
 
 
@@ -163,6 +164,7 @@ def test_optimization_drill_aggregate_keys_match_each_country(
         report=report,
         warnings=[],
         built_at="2026-06-08",
+        upload_errors={},
     )
 
     countries_with_drill = 0
@@ -234,11 +236,14 @@ def test_open_section_renders_account_adset_ad_titles() -> None:
         },
         warnings=[],
         built_at="2026-06-08",
+        upload_errors={},
     )
 
     assert 'class="open-tree"' in html
     assert 'class="open-account-name">MX-acc-1</div>' in html
     assert 'class="open-account-name">MX-acc-2</div>' in html
+    assert 'action="/build-upload"' in html
+    assert "Submit — MX-acc-1" in html
     assert html.index("MX-acc-1") < html.index("MX-acc-2")
     assert "MX_Amz_All_Mix_trading_25_08.06" in html
     assert "MX_Trl_Ios_Images_trading_35+_08.06" in html
@@ -277,6 +282,7 @@ def test_web_targeting_table_renders_per_country(
         },
         warnings=[],
         built_at="2026-06-08",
+        upload_errors={},
     )
 
     for country in countries:
