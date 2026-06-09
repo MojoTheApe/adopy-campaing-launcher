@@ -15,7 +15,8 @@ from typing import Any, Dict
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 # Make project root importable when invoked via `uvicorn src.web.app:app`
@@ -30,6 +31,8 @@ from src.analysis_agent.money_format import fmt_usd
 
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+_STATIC_DIR = Path(__file__).parent / "static"
+_FAVICON = _STATIC_DIR / "favicon.svg"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 
@@ -62,8 +65,14 @@ _NCOLS_BY_SECTION = {
 }
 
 app = FastAPI(title="fb_agents — Morning Report")
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 _MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> FileResponse:
+    return FileResponse(_FAVICON, media_type="image/svg+xml")
 
 
 def _render_report(
