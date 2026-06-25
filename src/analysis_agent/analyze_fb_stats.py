@@ -48,6 +48,52 @@ def normalize_text_segment(ad_title) -> str:
     return get_text_segment_fallback()
 
 
+_MEDIA_TYPE_TOKENS = frozenset(
+    {"img", "image", "images", "vid", "video", "videos", "photo", "mix"}
+)
+
+
+def _is_compound_targeting_token(token: str) -> bool:
+    """`|` marks two interests in one campaign (define further)."""
+    return "|" in token
+
+
+def _is_creative_skip_token(token: str, creative_prefixes: list) -> bool:
+    """Return True when an adset token is creative/media, not targeting."""
+    if _is_compound_targeting_token(token) or "/" in token:
+        return False
+
+    p_lower = token.lower()
+    if p_lower in _MEDIA_TYPE_TOKENS:
+        return True
+    if token.isdigit():
+        return True
+
+    for pfx in creative_prefixes:
+        if p_lower == pfx:
+            return True
+        if p_lower.startswith(pfx) and len(p_lower) == len(pfx):
+            return True
+        # Longer tokens like MixReading / Mix1 are unclear targeting — keep visible.
+        if p_lower.startswith(pfx) and len(p_lower) > len(pfx):
+            return False
+    return False
+
+
+def _fallback_interest(parts_before_age: list, adset_name: str) -> Optional[str]:
+    """When normal parsing finds nothing, keep raw tokens for manual cleanup."""
+    raw_parts = [p for p in parts_before_age if "." not in p]
+    while raw_parts and raw_parts[-1].lower() in _MEDIA_TYPE_TOKENS:
+        raw_parts.pop()
+    if raw_parts:
+        return "_".join(raw_parts)
+
+    name = str(adset_name or "").strip()
+    if name and name.lower() not in ("nan", "none"):
+        return name
+    return None
+
+
 def parse_adset_name(
     adset_name: str,
     device_kw: dict,
@@ -68,6 +114,8 @@ def parse_adset_name(
     3. After Device, find Age: first numeric part in [age_min, age_max] (optionally with "+").
     4. Interest: non-creative, non-numeric parts between Device and Age.
        Creative parts = those starting with a creative prefix or being purely numeric.
+       Tokens with `|` are compound targeting (define further) and are never skipped.
+       Unclear leftover tokens are kept as-is instead of becoming empty/unknown.
 
     Returns: (country_code, device, interest, age)
     """
@@ -125,27 +173,21 @@ def parse_adset_name(
     interest_parts: list = []
     in_creative_phase = True
     for p in parts_before_age:
-        p_lower = p.lower()
         # Skip date-like tokens anywhere (e.g. "28.03", "15.01.2024")
         if "." in p:
             continue
         if in_creative_phase:
-            is_creative_part = (
-                any(p_lower.startswith(pfx) for pfx in creative_prefixes)
-                or p.isdigit()
-            )
-            if is_creative_part:
+            if _is_creative_skip_token(p, creative_prefixes):
                 continue
             in_creative_phase = False
         interest_parts.append(p)
 
-    # Media-type suffixes can appear after the targeting token
-    # (e.g. Day_img). They describe creative format, not targeting.
-    media_type_tokens = {"img", "image", "images", "vid", "video", "videos", "photo", "mix"}
-    while interest_parts and interest_parts[-1].lower() in media_type_tokens:
+    while interest_parts and interest_parts[-1].lower() in _MEDIA_TYPE_TOKENS:
         interest_parts.pop()
 
     interest = "_".join(interest_parts) if interest_parts else None
+    if interest is None:
+        interest = _fallback_interest(parts_before_age, adset_name)
     return country_code, device, interest, age
 
 

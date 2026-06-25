@@ -199,7 +199,11 @@ def test_targeting_normalization_applies_to_every_country(
 ) -> None:
     """§4 targeting merge + filter must work per country, not only Mexico."""
     from src.analysis_agent.analyze_fb_stats import aggregate_combos
-    from src.analysis_agent.morning_report import build_country_section, build_targeting_breakdown
+    from src.analysis_agent.morning_report import (
+        build_country_section,
+        build_creative_breakdown,
+        build_targeting_breakdown,
+    )
 
     countries = sorted(enriched_df["Country Final"].dropna().unique().tolist())
     assert len(countries) >= 2
@@ -210,7 +214,12 @@ def test_targeting_normalization_applies_to_every_country(
         section = build_country_section(
             enriched_df, combos, country, [], my_cm="Evgeni Sedin", trend_days=7,
         )
-        assert section["targeting"] == aggs
+        assert section["targeting"] == [r for r in aggs if r["deposits"] > 0]
+        assert all(r["deposits"] > 0 for r in section["targeting"])
+
+        creatives_aggs = build_creative_breakdown(enriched_df, country)
+        assert section["creatives"] == [r for r in creatives_aggs if r["deposits"] > 0]
+        assert all(r["deposits"] > 0 for r in section["creatives"])
 
         labels_lower = [r["interest"].lower() for r in aggs]
         assert len(labels_lower) == len(set(labels_lower)), (

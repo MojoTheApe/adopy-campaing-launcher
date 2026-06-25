@@ -527,7 +527,7 @@ def build_targeting_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, 
 # ── Section 5: Creative breakdown ─────────────────────────────────────────────
 
 def build_creative_breakdown(
-    df: pd.DataFrame, country: str, top_n: int = 20
+    df: pd.DataFrame, country: str, top_n: int = 5
 ) -> List[Dict[str, Any]]:
     """Aggregate by Ad Title for this country. Returns top_n by deposits then spend."""
     df_c = df[df["Country Final"] == country].copy()
@@ -569,7 +569,167 @@ def build_creative_breakdown(
     return rows
 
 
-# ── Sections 6 & 7: Context blocks for AI ─────────────────────────────────────
+# ── Section 6: Creative Brief Prompt ─────────────────────────────────────────
+
+def build_creative_brief_prompt(
+    df: pd.DataFrame,
+    country: str,
+    top_combos: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Generate a creative brief prompt for the top creative of this country.
+
+    Uses KB audience lookup + stats only (no Vision API) so it's fast on page load.
+    Returns {"creative_name": str, "prompt": str} or empty dict if no data.
+    """
+    try:
+        from src.creative_agent.audience_builder import build_audience_profile, professional_ta_description
+        from src.creative_agent.stats_correlator import correlate
+        from src.creative_agent.prompt_generator import generate_brief
+        from src.creative_agent.creative_scanner import scan_file
+        from src.creative_agent.vision_analyzer import _empty_analysis
+    except ImportError:
+        return {}
+
+    # Pick best creative: top combo by deposits
+    if not top_combos:
+        return {}
+    best = top_combos[0]
+    creative_name = best.get("creative") or ""
+    interest = best.get("interest") or ""
+    text_segment = ""
+    offer = best.get("offer") or ""
+    device = best.get("device") or "all"
+    age = best.get("age") or ""
+
+    # Infer text_segment from df for this creative
+    if creative_name and "Ad Title" in df.columns and "TextSegment" in df.columns:
+        mask = (
+            (df["Country Final"] == country)
+            & (df["Ad Title"].fillna("").astype(str).str.strip() == creative_name.strip())
+        )
+        seg_vals = df.loc[mask, "TextSegment"].dropna()
+        if not seg_vals.empty:
+            text_segment = str(seg_vals.iloc[0]).strip()
+
+    # Minimal scan dict (no file on disk needed)
+    country_code = country[:2].upper() if country else ""
+    scan = {
+        "path": None, "filename": creative_name, "stem": creative_name,
+        "media_type": "image", "ext": ".jpg",
+        "country_code": country_code, "offer_raw": offer,
+        "device": device, "interest": interest,
+        "age": age, "text_segment": text_segment or "OTHER",
+    }
+
+    audience = build_audience_profile(interest, country_code)
+    stats = correlate(interest, text_segment or "OTHER", country_code)
+    vision = _empty_analysis("no-vision mode")
+
+    try:
+        result = generate_brief(scan, vision, stats, audience)
+        return {
+            "creative_name": creative_name,
+            "prompt": result.get("prompt", ""),
+        }
+    except Exception:
+        return {}
+
+
+# ── Section 6: Audience Portrait (removed) ────────────────────────────────────
+
+def build_audience_portrait(df: pd.DataFrame, country: str) -> Dict[str, Any]:
+    """Build Interest × TextSegment cross-analysis for audience portrait.
+
+    Returns:
+        {
+          "matrix":  list of {interest, text_segment, deposits, leads, spend, cpa}
+                     sorted by deposits desc (only rows with deposits > 0),
+          "gaps":    list of {interest, text_segment, hint}
+                     top interests × top text_segments that have never converted,
+        }
+    """
+    df_c = df[df["Country Final"] == country].copy()
+    empty: Dict[str, Any] = {"matrix": [], "gaps": []}
+
+    if df_c.empty:
+        return empty
+    if "Interest" not in df_c.columns or "TextSegment" not in df_c.columns:
+        return empty
+
+    df_valid = df_c[
+        df_c["Interest"].notna()
+        & df_c["TextSegment"].notna()
+        & (df_c["Interest"].astype(str).str.strip() != "")
+        & (df_c["TextSegment"].astype(str).str.strip() != "")
+        & (df_c["Interest"].astype(str).str.lower() != "nan")
+        & (df_c["TextSegment"].astype(str).str.lower() != "nan")
+    ].copy()
+
+    if df_valid.empty:
+        return empty
+
+    grouped = (
+        df_valid.groupby(["Interest", "TextSegment"], dropna=False)
+        .agg(
+            Deposits=("# FTDs", "sum"),
+            Leads=("# Leads", "sum"),
+            Spend=("$ Spend", "sum"),
+        )
+        .reset_index()
+    )
+    grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
+
+    matrix_rows = grouped.sort_values(
+        ["Deposits", "Spend"], ascending=[False, False]
+    )
+
+    matrix: List[Dict[str, Any]] = []
+    for _, r in matrix_rows.iterrows():
+        deps = _safe_int(r.get("Deposits"))
+        if deps == 0:
+            continue
+        matrix.append({
+            "interest": str(r["Interest"]).strip(),
+            "text_segment": str(r["TextSegment"]).strip(),
+            "deposits": deps,
+            "leads": _safe_int(r.get("Leads")),
+            "spend": _safe_float(r.get("Spend")),
+            "cpa": _safe_float(r.get("CPA")),
+        })
+
+    # Gaps: top-5 interests × top-5 text_segments that have no data together
+    top_interests = (
+        grouped.groupby("Interest")["Deposits"].sum()
+        .sort_values(ascending=False)
+        .head(5)
+        .index.tolist()
+    )
+    top_segments = (
+        grouped.groupby("TextSegment")["Deposits"].sum()
+        .sort_values(ascending=False)
+        .head(5)
+        .index.tolist()
+    )
+    existing = {
+        (str(r["Interest"]).strip(), str(r["TextSegment"]).strip())
+        for _, r in grouped.iterrows()
+        if _safe_int(r.get("Deposits")) > 0
+    }
+
+    gaps: List[Dict[str, Any]] = []
+    for interest in top_interests:
+        for segment in top_segments:
+            if (str(interest).strip(), str(segment).strip()) not in existing:
+                gaps.append({
+                    "interest": str(interest).strip(),
+                    "text_segment": str(segment).strip(),
+                    "hint": "not tested — top interest + top text type",
+                })
+
+    return {"matrix": matrix, "gaps": gaps}
+
+
+# ── Sections (legacy AI blocks — kept for markdown renderer) ───────────────────
 
 def build_ai_context_block(
     country: str, top_combos: List[Dict[str, Any]]
@@ -1490,8 +1650,10 @@ def build_country_section(
 ) -> Dict[str, Any]:
     """Build all country sub-sections (rendered as §0–§10 in Markdown)."""
     top_combos = build_top_combos(combos, country)
-    targeting = build_targeting_breakdown(df, country)
-    creatives = build_creative_breakdown(df, country)
+    targeting_all = build_targeting_breakdown(df, country)
+    targeting = [r for r in targeting_all if r.get("deposits", 0) > 0]
+    creatives_all = build_creative_breakdown(df, country)
+    creatives = [r for r in creatives_all if r.get("deposits", 0) > 0]
     medians = compute_country_medians(df, country)
     trend_block = build_trend(df, country, trend_days)
 
@@ -1547,7 +1709,7 @@ def build_country_section(
         "targeting": targeting,
         "creatives": creatives,
         "ai_context": build_ai_context_block(country, top_combos),
-        "hypotheses": build_hypotheses_block(country, top_combos, targeting, creatives),
+        "hypotheses": build_hypotheses_block(country, top_combos, targeting_all, creatives_all),
         "account_rows": country_accounts,
         "close_recs": close_recs,
         "close_summaries": close_summaries,

@@ -91,6 +91,7 @@ def get_underlying_rows(
     try:
         if section == "cm_comparison":
             filtered = filter_cm_rows(df, country, kwargs["cm"])
+            filtered = _aggregate_cm_drill_rows(filtered)
         elif section == "trend":
             filtered = filter_trend_rows(
                 df, country,
@@ -123,7 +124,57 @@ def get_underlying_rows(
     except KeyError:
         return []
 
+    if section == "cm_comparison":
+        return [_cm_row_to_dict(r) for _, r in filtered.iterrows()]
     return [_row_to_dict(r) for _, r in filtered.iterrows()]
+
+
+def _cm_row_to_dict(row: pd.Series) -> Dict[str, Any]:
+    """Convert an aggregated CM drill row (one adset) to a display dict."""
+    ftds = _to_native(row.get("# FTDs")) or 0
+    leads = _to_native(row.get("# Leads")) or 0
+    spend = _to_native(row.get("$ Spend")) or 0.0
+    cpa = _to_native(row.get("CPA"))
+    cpl = (spend / leads) if leads > 0 else None
+    return {
+        "account": _to_native(row.get("Account Alias")),
+        "adset": _to_native(row.get("Adset Name")),
+        "ad_asset": _to_native(row.get("Ad Asset")),
+        "ftds": ftds,
+        "leads": leads,
+        "spend": spend,
+        "cpa": cpa,
+        "cpl": cpl,
+        "cm": _to_native(row.get("CM")),
+        "date": _to_native(row.get("Date")),
+        "ad_title": None,
+    }
+
+
+def _aggregate_cm_drill_rows(filtered: pd.DataFrame) -> pd.DataFrame:
+    """One drill row per Adset Name for a CM; only adsets with FTDs > 0, sorted by FTDs desc."""
+    if filtered.empty:
+        return filtered
+
+    grouped = (
+        filtered.groupby("Adset Name", dropna=False)
+        .agg(
+            **{
+                "# FTDs": ("# FTDs", "sum"),
+                "# Leads": ("# Leads", "sum"),
+                "$ Spend": ("$ Spend", "sum"),
+                "Account Alias": ("Account Alias", "first"),
+                "CM": ("CM", "first"),
+                "Ad Asset": ("Ad Asset", "first"),
+                "Date": ("Date", "max"),
+            }
+        )
+        .reset_index()
+    )
+    # Keep only adsets with at least 1 deposit
+    grouped = grouped[grouped["# FTDs"] > 0]
+    grouped["CPA"] = grouped["$ Spend"] / grouped["# FTDs"].replace(0, pd.NA)
+    return grouped.sort_values("# FTDs", ascending=False)
 
 
 def _aggregate_optimization_drill_rows(filtered: pd.DataFrame) -> pd.DataFrame:

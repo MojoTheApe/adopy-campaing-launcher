@@ -89,7 +89,6 @@ def main() -> None:
     url = f"http://{args.host}:{port}/"
 
     print(f"[serve] Dashboard URL: {url}", file=sys.stderr)
-    print(f"[serve] Mexico Optimization: {url}#country-mexico-optimization", file=sys.stderr)
     print("[serve] Press Ctrl+C to stop.", file=sys.stderr)
 
     if not args.no_browser:

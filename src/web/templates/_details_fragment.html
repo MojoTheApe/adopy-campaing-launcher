@@ -9,7 +9,11 @@
       <div class="drill-header">
         <span class="drill-count">
           {% if rows %}
-            {{ rows|length }} ad{{ '' if rows|length == 1 else 's' }}
+            {% if section == 'cm_comparison' %}
+              {{ rows|length }} campaign{{ '' if rows|length == 1 else 's' }} with deposits
+            {% else %}
+              {{ rows|length }} ad{{ '' if rows|length == 1 else 's' }}
+            {% endif %}
           {% elif message %}
             {{ message }}
           {% else %}
@@ -35,6 +39,13 @@
               <th class="num">CPL</th>
               <th class="num">CPA</th>
               <th>Date</th>
+              {% elif section == 'cm_comparison' %}
+              <th>Campaign / Ad set</th>
+              <th>Account</th>
+              <th class="num">Dep</th>
+              <th class="num">Leads</th>
+              <th class="num">Spend</th>
+              <th class="num">CPA</th>
               {% else %}
               <th>Account</th>
               <th>CM</th>
@@ -50,7 +61,17 @@
           </thead>
           <tbody>
           {% for r in rows %}
-            <tr>
+            <tr
+              {% if section == 'cm_comparison' and r.adset %}
+              class="drillable"
+              data-drill="optimization"
+              hx-get="/details?section=optimization&country={{ country | urlencode }}&account={{ r.account | urlencode }}&adset={{ r.adset | urlencode }}&ncols=6"
+              hx-target="closest tr"
+              hx-swap="afterend"
+              hx-trigger="click"
+              style="cursor:pointer"
+              {% endif %}
+            >
               {% if section == 'optimization' %}
               <td>{{ r.ad_title or '' }}</td>
               <td>{{ r.ad_asset or '' }}</td>
@@ -60,6 +81,16 @@
               <td class="num">{{ r.cpl | fmt_usd }}</td>
               <td class="num">{{ r.cpa | fmt_usd }}</td>
               <td class="date">{{ r.date or '' }}</td>
+              {% elif section == 'cm_comparison' %}
+              <td class="adset" style="max-width:300px;word-break:break-word">
+                {{ r.adset or '' }}
+                {% if r.adset %}<span style="color:var(--muted);font-size:0.7rem;margin-left:4px">▸ ads</span>{% endif %}
+              </td>
+              <td>{{ r.account or '' }}</td>
+              <td class="num good">{{ r.ftds or 0 }}</td>
+              <td class="num">{{ r.leads or 0 }}</td>
+              <td class="num">{{ r.spend | fmt_usd }}</td>
+              <td class="num">{{ r.cpa | fmt_usd }}</td>
               {% else %}
               <td>{{ r.account or '' }}</td>
               <td>{{ r.cm or '' }}</td>

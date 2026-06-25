@@ -40,10 +40,9 @@ Period: **Apr 12 – Apr 18, 2026 (7d)**
 
 ### 4. Creatives
 
-| Ad Title              | Dep | Leads | Spend | CPA |
-| --------------------- | --- | ----- | ----- | --- |
-| Brazilian special     | 2   | 130   | $65   | $33 |
-| Mobile crypto trading | 0   | 40    | $20   | —   |
+| Ad Title          | Dep | Leads | Spend | CPA |
+| ----------------- | --- | ----- | ----- | --- |
+| Brazilian special | 2   | 130   | $65   | $33 |
 
 ### 5. AI Context (copy into chat)
 
@@ -148,13 +147,11 @@ Period: **Apr 12 – Apr 18, 2026 (7d)**
 
 ### 4. Creatives
 
-| Ad Title             | Dep | Leads | Spend | CPA |
-| -------------------- | --- | ----- | ----- | --- |
-| Buy bitcoin now      | 3   | 450   | $225  | $75 |
-| Make money fast      | 2   | 270   | $135  | $68 |
-| iOS exclusive offer  | 1   | 10    | $30   | $30 |
-| Crypto for beginners | 0   | 50    | $25   | —   |
-| Generic offer        | 0   | 30    | $15   | —   |
+| Ad Title            | Dep | Leads | Spend | CPA |
+| ------------------- | --- | ----- | ----- | --- |
+| Buy bitcoin now     | 3   | 450   | $225  | $75 |
+| Make money fast     | 2   | 270   | $135  | $68 |
+| iOS exclusive offer | 1   | 10    | $30   | $30 |
 
 ### 5. AI Context (copy into chat)
 

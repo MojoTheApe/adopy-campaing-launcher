@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -28,6 +29,11 @@ from src.analysis_agent.morning_drilldown import get_underlying_rows
 from src.campaign_bridge.assembly import assemble_account_upload
 from src.web.cache import cache_built_at, cache_clear, get_cached_report
 from src.analysis_agent.money_format import fmt_usd
+from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
+from src.creative_agent.audience_builder import build_audience_profile
+from src.creative_agent.stats_correlator import correlate
+from src.creative_agent.vision_analyzer import analyze as vision_analyze
+from src.creative_agent.prompt_generator import generate_brief
 
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -48,15 +54,18 @@ def _anchor_slug(text: str) -> str:
 
 
 # Expose helpers to Jinja2 via custom filters
+from urllib.parse import quote as _url_quote
+
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
 templates.env.filters["fmt_usd"] = fmt_usd
+templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")
 
 # Drill fragment column counts per section — keep in sync with report.html
 # table headers. The detail <td colspan> must match the parent table's
 # column count or the layout breaks.
 _NCOLS_BY_SECTION = {
-    "cm_comparison": 8,   # CM, deposits, leads, spend, net, cpa, roi, drill
+    "cm_comparison": 8,   # CM, Dep, Leads, Spend, Net, CPA, ROI, (drill col)
     "trend": 6,           # offer, device, interest, creative, deposits_total/recent
     "top_combos": 9,      # offer, device, interest, age, creative, category, deposits, leads, spend
     "targeting": 5,       # interest, deposits, leads, spend, cpa
@@ -147,8 +156,10 @@ async def details(request: Request) -> HTMLResponse:
     params = dict(request.query_params)
     section = params.pop("section", "")
     country = params.pop("country", "")
-    # Drill-down is web-only and limited to §9 Optimization.
-    if section != "optimization":
+    # Optional ncols override (used for nested drill-downs, e.g. ads inside CM campaigns)
+    ncols_override = params.pop("ncols", None)
+    _DRILL_ENABLED = {"optimization", "cm_comparison"}
+    if section not in _DRILL_ENABLED:
         ncols = 6
         return templates.TemplateResponse(
             "_details_fragment.html",
@@ -157,10 +168,10 @@ async def details(request: Request) -> HTMLResponse:
                 "rows": [],
                 "ncols": ncols,
                 "section": section,
-                "message": "Drill-down is only available in §9 Optimization.",
+                "message": "Drill-down not available for this section.",
             },
         )
-    ncols = _NCOLS_BY_SECTION.get(section, 7)
+    ncols = int(ncols_override) if ncols_override else _NCOLS_BY_SECTION.get(section, 7)
 
     try:
         _report, df, _warnings = get_cached_report()
@@ -186,6 +197,7 @@ async def details(request: Request) -> HTMLResponse:
             "rows": rows,
             "ncols": ncols,
             "section": section,
+            "country": country,
             "message": "" if rows else "No matching rows.",
         },
     )
@@ -197,6 +209,74 @@ async def refresh() -> RedirectResponse:
     follows the redirect and re-renders with fresh data."""
     cache_clear()
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.get("/brief", response_class=HTMLResponse)
+async def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
+    """Analyze a creative by name — search recursively in FB_CREATIVES_ROOT.
+
+    If found: run full analysis and render brief.
+    If not found: render upload form.
+    """
+    creative_name = creative.strip()
+    if not creative_name:
+        return templates.TemplateResponse(
+            "error.html",
+            {"request": request, "title": "No creative name", "message": "Pass ?creative=<name>"},
+        )
+
+    found_path = find_creative_file(creative_name)
+
+    if found_path is None:
+        # File not found — render upload form
+        return templates.TemplateResponse(
+            "brief.html",
+            {
+                "request": request,
+                "creative_name": creative_name,
+                "found": False,
+                "brief_md": "",
+                "prompt": "",
+                "error": "",
+            },
+        )
+
+    # File found — run analysis
+    try:
+        scan = scan_file(found_path)
+        audience = build_audience_profile(scan["interest"], scan["country_code"])
+        try:
+            _, cached_df, _ = get_cached_report()
+        except Exception:
+            cached_df = None
+        stats = correlate(scan["interest"], scan["text_segment"], scan["country_code"], df=cached_df)
+        vision = vision_analyze(found_path)
+        result = generate_brief(scan, vision, stats, audience)
+        return templates.TemplateResponse(
+            "brief.html",
+            {
+                "request": request,
+                "creative_name": creative_name,
+                "found": True,
+                "file_path": str(found_path),
+                "brief_md": result["markdown"],
+                "prompt": result["prompt"],
+                "scan": scan,
+                "error": "",
+            },
+        )
+    except Exception as e:
+        return templates.TemplateResponse(
+            "brief.html",
+            {
+                "request": request,
+                "creative_name": creative_name,
+                "found": False,
+                "brief_md": "",
+                "prompt": "",
+                "error": str(e),
+            },
+        )
 
 
 @app.post("/build-upload")

@@ -340,6 +340,68 @@
       color: #f88;
     }
     .upload-errors ul { margin: 0.25rem 0 0 1rem; padding: 0; }
+
+    /* ── §6 Creative Brief ── */
+    .brief-details { margin-top: 1.5rem; }
+    .brief-details > summary { list-style: none; }
+    .brief-details > summary::-webkit-details-marker { display: none; }
+    .brief-summary {
+      cursor: pointer;
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      padding: 0.45rem 0;
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+    }
+    .brief-summary:hover { color: var(--accent); }
+    .brief-toggle-label {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: normal;
+    }
+    details[open] .brief-toggle-label { content: 'свернуть ▴'; }
+    details.brief-details[open] .brief-toggle-label::before { content: 'свернуть ▴'; }
+    details.brief-details:not([open]) .brief-toggle-label::before { content: 'развернуть ▾'; }
+    .brief-toggle-label { font-size: 0; }  /* hide original text, use ::before */
+    .brief-toggle-label::before { font-size: 0.78rem; }
+    .brief-body {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      padding: 1rem;
+    }
+    .brief-prompt-wrap { position: relative; }
+    .brief-prompt-text {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.82rem;
+      color: var(--text);
+      line-height: 1.6;
+      padding-right: 5rem;
+    }
+    .brief-copy-btn {
+      position: absolute;
+      top: 0; right: 0;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 4px;
+      padding: 0.2rem 0.6rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .brief-copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .brief-copy-btn.copied { color: var(--good); border-color: var(--good); }
+    .brief-hint {
+      margin: 0.6rem 0 0;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
@@ -381,9 +443,9 @@
       <option value="combos">3. Top Combos</option>
       <option value="targeting">4. Targeting</option>
       <option value="creatives">5. Creatives</option>
-      <option value="accounts">8–9. Accounts</option>
-      <option value="optimization">9. Optimization</option>
-      <option value="open">11. What to Open</option>
+      <option value="accounts">6. Accounts</option>
+      <option value="optimization">7. Optimization</option>
+      <option value="open">8. What to Open</option>
     </select>
   </label>
   <button type="button" id="jump-go">Go</button>
@@ -399,9 +461,9 @@
   <a href="#country-{{ cid }}-combos">3 Combos</a>
   <a href="#country-{{ cid }}-targeting">4 Targeting</a>
   <a href="#country-{{ cid }}-creatives">5 Creatives</a>
-  <a href="#country-{{ cid }}-accounts">8–9 Accounts</a>
-  <a href="#country-{{ cid }}-optimization">9 Optimization</a>
-  <a href="#country-{{ cid }}-open">11 Open</a>
+  <a href="#country-{{ cid }}-accounts">6 Accounts</a>
+  <a href="#country-{{ cid }}-optimization">7 Optimization</a>
+  <a href="#country-{{ cid }}-open">8 Open</a>
 </div>
 
 {# ── Section 1: CM comparison ─────────────────────────────────────── #}
@@ -419,7 +481,14 @@
   </tr></thead>
   <tbody>
   {% for row in c.cm_comparison %}
-    <tr>
+    <tr class="{% if row.deposits > 0 %}drillable{% endif %}"
+        {% if row.deposits > 0 %}
+        data-drill="cm_comparison"
+        hx-get="/details?{{ row.aggregate_key | agg_qs }}"
+        hx-target="closest tr"
+        hx-swap="afterend"
+        hx-trigger="click"
+        {% endif %}>
       <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
@@ -429,7 +498,7 @@
       <td class="num {% if row.roi > 1 %}roi-pos{% elif row.roi and row.roi < 1 %}roi-neg{% endif %}">
         {% if row.roi %}{{ '%.2f' % row.roi }}{% else %}—{% endif %}
       </td>
-      <td></td>
+      <td style="color:var(--muted);font-size:0.75rem">{% if row.deposits > 0 %}▸{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>
@@ -551,19 +620,10 @@
 <p><em>No creative data.</em></p>
 {% endif %}
 
-{# ── Sections 6 & 7: AI text blocks (not drillable) ────────────────── #}
-{% if c.ai_context %}
-<h3 class="section">6. AI Context <span class="hint">paste into Cursor chat</span></h3>
-<pre class="text-block">{{ c.ai_context }}</pre>
-{% endif %}
-{% if c.hypotheses %}
-<h3 class="section">7. Hypotheses <span class="hint">paste into Cursor chat</span></h3>
-<pre class="text-block">{{ c.hypotheses }}</pre>
-{% endif %}
 
-{# ── Sections 8–9: account / GSheet ───────────────────────────────────── #}
+{# ── Section 6: Account Statuses ──────────────────────────────────────── #}
 {% if c.account_rows %}
-<h3 class="section" id="country-{{ cid }}-accounts">8–9. Account Statuses</h3>
+<h3 class="section" id="country-{{ cid }}-accounts">6. Account Statuses</h3>
 <table>
   <thead><tr><th>Account</th><th>Cost</th><th>Asset</th><th>To Do</th><th>✓</th></tr></thead>
   <tbody>
@@ -583,7 +643,7 @@
 {% if c.close_recs %}
 {% set has_close = c.close_recs.values() | selectattr('0') | list %}
 {% if has_close %}
-<h3 class="section" id="country-{{ cid }}-optimization">9. Optimization <span class="hint">click ad set row to drill into ads</span></h3>
+<h3 class="section" id="country-{{ cid }}-optimization">7. Optimization <span class="hint">click ad set row to drill into ads</span></h3>
 {% for label in c.close_recs.keys() | sort %}
   {% set recs = c.close_recs[label] %}
   {% if recs %}
@@ -627,7 +687,7 @@
 {% if c.open_recs %}
 {% set has_open = c.open_recs.values() | selectattr('0') | list %}
 {% if has_open %}
-<h3 class="section" id="country-{{ cid }}-open">11. What to Open (4 strategies per account)</h3>
+<h3 class="section" id="country-{{ cid }}-open">8. What to Open (4 strategies per account)</h3>
 <p class="hint" style="margin:0 0 0.75rem 0;font-size:0.78rem;color:var(--muted)">Select strategies, edit names, Submit builds Upload FB Excel (validated link &amp; creatives).</p>
 <div class="open-tree">
 {% for acc_label in c.open_recs.keys() | sort %}
@@ -743,23 +803,49 @@
 })();
 
 (function () {
-  // §9 Optimization drill-down only: one open panel, toggle on repeat click.
+  // Drill-down toggle for cm_comparison and optimization: one open panel per section.
   document.body.addEventListener("htmx:beforeRequest", function (evt) {
     const el = evt.detail.elt;
-    if (!el.matches || !el.matches('tr.drillable[data-drill="optimization"]')) {
+    const drill = el.getAttribute && el.getAttribute("data-drill");
+    if (!el.matches || !["optimization", "cm_comparison"].includes(drill)) {
       return;
     }
+    // Toggle: if the next sibling is already the open panel, close it and cancel.
     const openBelow = el.nextElementSibling;
     if (openBelow && openBelow.classList.contains("drill-detail")) {
       openBelow.remove();
       evt.preventDefault();
       return;
     }
-    document.querySelectorAll("tr.drill-detail").forEach(function (row) {
-      row.remove();
-    });
+    // Close other open panels only at the same nesting level.
+    const isNested = !!el.closest(".drill-inner");
+    if (isNested) {
+      // Only close sibling panels inside the same inner table.
+      const sameTable = el.closest("table");
+      if (sameTable) {
+        sameTable.querySelectorAll("tr.drill-detail").forEach(function (row) {
+          row.remove();
+        });
+      }
+    } else {
+      // Top-level: close all non-nested panels.
+      document.querySelectorAll("tr.drill-detail").forEach(function (row) {
+        if (!row.closest(".drill-inner")) row.remove();
+      });
+    }
   });
 })();
+
+// §6 Creative Brief copy button
+function copyBrief(btn) {
+  const pre = btn.parentElement.querySelector('.brief-prompt-text');
+  if (!pre) return;
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy prompt'; btn.classList.remove('copied'); }, 2000);
+  });
+}
 
 (function () {
   function syncSubmit(form) {
