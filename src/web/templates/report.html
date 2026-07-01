@@ -250,96 +250,217 @@
     h3.section-targeting { margin-bottom: 0.35rem; }
 
     .open-tree { margin: 0.5rem 0 1.5rem 0; }
-    .open-account {
-      margin-bottom: 1.25rem;
-      padding-left: 0;
-    }
     .open-account-name {
       color: var(--accent);
       font-size: 0.95rem;
-      margin-bottom: 0.45rem;
+      margin-bottom: 0.65rem;
     }
-    .open-campaign {
-      margin: 0.35rem 0 0.65rem 1.25rem;
-      padding-left: 0.75rem;
-      border-left: 2px solid var(--border);
-    }
-    .open-adset {
-      color: var(--text);
-      font-size: 0.82rem;
-      margin-bottom: 0.25rem;
-      word-break: break-word;
-    }
-    .open-adset .hint {
-      display: block;
-      margin-top: 0.15rem;
-      font-size: 0.75rem;
-    }
-    .open-creatives {
-      list-style: none;
-      margin: 0.2rem 0 0 0.75rem;
-      padding: 0;
-    }
-    .open-creatives li {
-      color: var(--muted);
-      font-size: 0.8rem;
-      padding: 0.12rem 0;
-      word-break: break-word;
-    }
-    .open-creatives li::before {
-      content: '· ';
-      color: var(--border);
-    }
-    .open-account-form { margin-bottom: 1.25rem; }
-    .open-strategy-pick {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.4rem;
-      margin-bottom: 0.35rem;
-      font-size: 0.78rem;
-      color: var(--muted);
-      cursor: pointer;
-    }
-    .open-strategy-pick input { margin-top: 0.15rem; }
-    .open-input-adset,
-    .open-input-title {
-      width: 100%;
-      max-width: 28rem;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: 0.8rem;
-      padding: 0.25rem 0.4rem;
-      border-radius: 3px;
-      font-family: inherit;
-    }
-    .open-input-adset { margin-bottom: 0.35rem; }
-    .open-input-title { margin: 0.1rem 0; }
-    .open-creatives li::before { content: none; }
+    .open-account-form { margin-bottom: 1.75rem; }
     .open-submit {
-      margin-top: 0.5rem;
-      padding: 0.35rem 0.75rem;
+      margin-top: 0.65rem;
+      padding: 0.35rem 0.9rem;
       background: var(--accent);
       color: var(--bg);
       border: none;
       border-radius: 4px;
-      font-size: 0.8rem;
+      font-size: 0.82rem;
+      font-family: inherit;
       cursor: pointer;
+      font-weight: bold;
     }
-    .open-submit:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
+    .open-submit:disabled { opacity: 0.4; cursor: not-allowed; }
     .upload-errors {
       margin-top: 0.5rem;
       padding: 0.5rem 0.65rem;
       border: 1px solid #c44;
       border-radius: 4px;
-      background: rgba(200, 68, 68, 0.12);
+      background: rgba(200,68,68,0.12);
       font-size: 0.78rem;
       color: #f88;
     }
     .upload-errors ul { margin: 0.25rem 0 0 1rem; padding: 0; }
+
+    /* Campaign Builder slots */
+    .cb-slots { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.65rem; }
+    .cb-slot {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.6rem 0.75rem 0.5rem;
+    }
+    .cb-slot-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.45rem;
+    }
+    .cb-slot-label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; flex: 1; }
+    .cb-remove-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      width: 1.4rem; height: 1.4rem;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      line-height: 1;
+      padding: 0;
+      font-family: inherit;
+    }
+    .cb-remove-btn:hover { color: var(--bad); border-color: var(--bad); }
+    .cb-fields {
+      display: grid;
+      grid-template-columns: 8rem 1fr;
+      gap: 0.3rem 0.5rem;
+      align-items: center;
+      font-size: 0.8rem;
+    }
+    .cb-label { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+    .cb-select, .cb-input {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.8rem;
+      padding: 0.25rem 0.4rem;
+      border-radius: 3px;
+      width: 100%;
+    }
+    .cb-select:focus, .cb-input:focus { outline: none; border-color: var(--accent); }
+    .cb-inline { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .cb-inline .cb-select, .cb-inline .cb-input { width: auto; }
+    .cb-input-sm { width: 4.5rem !important; }
+    .cb-radio-group { display: flex; gap: 0.75rem; }
+    .cb-radio-group label { display: flex; align-items: center; gap: 0.3rem; cursor: pointer; color: var(--text); }
+    .cb-name-input { font-size: 0.72rem; color: var(--muted); width: 100%; }
+    .cb-name-input:not([readonly]) { color: var(--text); }
+    .cb-add-btn {
+      background: transparent;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      border-radius: 4px;
+      padding: 0.3rem 0.75rem;
+      font-size: 0.78rem;
+      font-family: inherit;
+      cursor: pointer;
+      margin-top: 0.25rem;
+      display: inline-block;
+    }
+    .cb-add-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* Searchable select */
+    .cb-sel-wrap { position: relative; width: 100%; }
+    .cb-sel-text {
+      width: 100%;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.8rem;
+      padding: 0.25rem 1.4rem 0.25rem 0.4rem;
+      border-radius: 3px;
+      cursor: text;
+      box-sizing: border-box;
+    }
+    .cb-sel-text:focus { outline: none; border-color: var(--accent); }
+    .cb-sel-text::after { content: '▾'; }
+    .cb-sel-wrap::after {
+      content: '▾';
+      position: absolute;
+      right: 0.4rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 0.7rem;
+      pointer-events: none;
+    }
+    .cb-sel-dropdown {
+      position: absolute;
+      top: calc(100% + 2px);
+      left: 0;
+      right: 0;
+      max-height: 14rem;
+      overflow-y: auto;
+      background: var(--bg-elev);
+      border: 1px solid var(--accent);
+      border-radius: 3px;
+      z-index: 500;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    }
+    .cb-sel-opt {
+      padding: 0.28rem 0.55rem;
+      font-size: 0.78rem;
+      cursor: pointer;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cb-sel-opt:hover, .cb-sel-opt.cb-sel-focused { background: var(--bg-hover); color: var(--accent); }
+    .cb-sel-opt[data-val=""] { color: var(--muted); }
+    .cb-sel-opt[hidden] { display: none; }
+
+    /* Campaign name headline in slot */
+    .cb-slot-name {
+      font-size: 0.78rem;
+      color: var(--accent);
+      font-weight: bold;
+      padding: 0.2rem 0.75rem 0.35rem;
+      border-bottom: 1px solid var(--border);
+      min-height: 1.2rem;
+      word-break: break-all;
+      letter-spacing: 0.01em;
+    }
+    .cb-slot-name:empty::before { content: 'Campaign name will appear here'; color: var(--muted); font-weight: normal; }
+
+    .cb-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.6rem; }
+    .cb-preview-btn {
+      background: var(--bg-elev);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      border-radius: 4px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.82rem;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .cb-preview-btn:hover { background: var(--bg-hover); }
+    .cb-publish-btn {
+      background: var(--good);
+      border: none;
+      color: #0e1116;
+      border-radius: 4px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.82rem;
+      font-family: inherit;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .cb-publish-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .cb-publish-btn:not(:disabled):hover { filter: brightness(1.1); }
+    .cb-activate-label { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 0.3rem; cursor: pointer; }
+
+    .cb-preview-panel {
+      margin-top: 0.65rem;
+      font-size: 0.78rem;
+    }
+    .cb-preview-errors { color: var(--bad); font-size: 0.72rem; }
+
+    .cb-status-panel {
+      margin-top: 0.65rem;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.78rem;
+    }
+    .cb-status-title { color: var(--muted); font-size: 0.72rem; margin-bottom: 0.4rem; }
+    .cb-status-row { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.15rem 0; }
+    .cb-status-icon { width: 1.2rem; text-align: center; }
+    .cb-status-name { flex: 1; word-break: break-all; }
+    .cb-status-err { color: var(--bad); font-size: 0.72rem; margin-left: 1.7rem; }
+    .cb-status-id { color: var(--muted); font-size: 0.7rem; font-family: monospace; }
+    .cb-status-fatal { color: var(--bad); margin-top: 0.35rem; }
 
     /* ── §6 Creative Brief ── */
     .brief-details { margin-top: 1.5rem; }
@@ -402,6 +523,139 @@
       font-size: 0.78rem;
       color: var(--muted);
     }
+
+    /* ── Goals Progress Panel ── */
+    .goals-panel {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .goals-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.75rem;
+    }
+    .goals-grand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.9rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .goals-grand-label { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+    .goals-grand-count { font-size: 1rem; font-weight: bold; white-space: nowrap; min-width: 7rem; }
+    .goals-grand-pct   { font-size: 0.78rem; white-space: nowrap; }
+    .goals-markets {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    .goals-mkt-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.5rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .goals-mkt-name  { font-size: 0.82rem; font-weight: bold; min-width: 3.5rem; }
+    .goals-mkt-count { font-size: 0.78rem; white-space: nowrap; }
+    .goals-mkt-pct   { font-size: 0.72rem; white-space: nowrap; }
+    .goals-geos      { display: flex; flex-direction: column; gap: 0.28rem; }
+    .goals-geo-row {
+      display: grid;
+      grid-template-columns: 2.7rem 5rem 3.2rem 4rem 3.2rem 4rem;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      padding: 0.15rem 0;
+    }
+    .goals-geo-code { font-weight: bold; color: var(--accent); font-size: 0.75rem; }
+    .goals-geo-ftd  { font-variant-numeric: tabular-nums; font-size: 0.78rem; }
+    .goals-geo-cpa,
+    .goals-geo-cr,
+    .goals-geo-ld   { font-size: 0.74rem; text-align: right; white-space: nowrap; }
+    .goals-ok   { color: var(--good); }
+    .goals-fail { color: var(--bad); }
+    .goals-muted-val { color: var(--muted); }
+    .gpb-wrap { background: #1a2030; border-radius: 2px; overflow: hidden; flex: 1; }
+    .gpb-grand { height: 7px; }
+    .gpb-mkt   { height: 5px; }
+    .gpb-geo   { height: 3px; width: 100%; }
+    .gpb-fill  { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+
+    /* ── Per-country goals section ── */
+    .goals-country-section {
+      background: #0d1219;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 5px;
+      padding: 0.65rem 1rem;
+      margin: 0.5rem 0 1.25rem 0;
+    }
+    .goals-country-section-title {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      margin-bottom: 0.6rem;
+    }
+    .goals-country-metrics {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .gcs-metric-box {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      min-width: 4.5rem;
+    }
+    .gcs-metric-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .gcs-metric-main {
+      display: flex;
+      align-items: baseline;
+      gap: 0.3rem;
+    }
+    .gcs-metric-val {
+      font-size: 1rem;
+      font-weight: bold;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.2;
+    }
+    .gcs-metric-indicator {
+      font-size: 0.8rem;
+      font-weight: bold;
+    }
+    .gcs-metric-goal {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 0.1rem;
+    }
+    .gcs-metric-pct {
+      font-size: 0.72rem;
+      margin-top: 0.1rem;
+    }
+    .gcs-ftd-bar-wrap {
+      width: 100%;
+      height: 4px;
+      background: #1a2030;
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 0.2rem 0 0.1rem;
+    }
+    .gcs-ftd-bar-fill { height: 100%; border-radius: 2px; }
   </style>
 </head>
 <body>
@@ -452,11 +706,236 @@
 </nav>
 {% endif %}
 
+{# ── Goals Progress Panel ──────────────────────────────────────── #}
+<div id="goals-panel"></div>
+<script>
+(function () {
+  // ── Evgeni's personal goals ─────────────────────────────────────
+  var GOALS = {
+    GCC: {
+      total_ftd: 50,
+      geos: [
+        { code:"KW",  names:["Kuwait","KW"],                    ftd:15, cpa:3000, cr:3.0, ld:16 },
+        { code:"UAE", names:["UAE","United Arab Emirates","AE"], ftd:20, cpa:3000, cr:2.0, ld:33 },
+        { code:"SA",  names:["Saudi Arabia","SA"],               ftd:15, cpa:1500, cr:2.5, ld:19 }
+      ]
+    },
+    Latam: {
+      total_ftd: 140,
+      geos: [
+        { code:"CL", names:["Chile","CL"],    ftd:20, cpa:1000, cr:2.0, ld:32  },
+        { code:"CO", names:["Colombia","CO"],  ftd:40, cpa:1000, cr:1.3, ld:99  },
+        { code:"EC", names:["Ecuador","EC"],   ftd:40, cpa:1000, cr:2.0, ld:65  },
+        { code:"MX", names:["Mexico","MX"],    ftd:40, cpa:1000, cr:1.0, ld:129 }
+      ]
+    }
+  };
+  var GRAND_FTD = 190;
+  var TREND_DAYS = {{ report.trend_days | int }};
+
+  // ── Evgeni's actuals only (is_me rows) ──────────────────────────
+  var ACT_RAW = [
+    {% for c in report.countries %}{% set my = c.cm_comparison | selectattr('is_me') | list %}{n:"{{ c.country | replace('"', '\\"') }}",dep:{{ my|sum(attribute='deposits')|int }},leads:{{ my|sum(attribute='leads')|int }},spend:{{ my|sum(attribute='spend')|round(2) }}},
+    {% endfor %}
+  ];
+
+  var ACT = {};
+  for (var i = 0; i < ACT_RAW.length; i++) ACT[ACT_RAW[i].n.toLowerCase()] = ACT_RAW[i];
+
+  function getA(names) {
+    for (var j = 0; j < names.length; j++) { var a = ACT[names[j].toLowerCase()]; if (a) return a; }
+    return {dep:0, leads:0, spend:0};
+  }
+
+  // ── Find goal for a country by name ────────────────────────────
+  function findGeo(countryName) {
+    var cn = countryName.toLowerCase();
+    var mkts = Object.keys(GOALS);
+    for (var mi = 0; mi < mkts.length; mi++) {
+      var geos = GOALS[mkts[mi]].geos;
+      for (var gi = 0; gi < geos.length; gi++) {
+        var names = geos[gi].names;
+        for (var ni = 0; ni < names.length; ni++) {
+          if (names[ni].toLowerCase() === cn) return geos[gi];
+        }
+      }
+    }
+    return null;
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────
+  function pctColor(pct) {
+    return pct >= 80 ? 'var(--good)' : pct >= 40 ? 'var(--warn)' : 'var(--bad)';
+  }
+  function pBar(cls, actual, goal) {
+    if (!goal) return '<div class="gpb-wrap ' + cls + '"><div class="gpb-fill" style="width:0%;background:var(--border)"></div></div>';
+    var pct = Math.min(100, Math.round(actual / goal * 100));
+    return '<div class="gpb-wrap ' + cls + '"><div class="gpb-fill" style="width:' + pct + '%;background:' + pctColor(pct) + '"></div></div>';
+  }
+  function fmtCpa(spend, dep) {
+    if (!dep) return '—';
+    var v = spend / dep;
+    return v >= 1000 ? '$' + (v / 1000).toFixed(1) + 'k' : '$' + Math.round(v);
+  }
+  function fmtCr(dep, leads) {
+    if (!leads) return '—';
+    return (dep / leads * 100).toFixed(1) + '%';
+  }
+  function fmtLd(leads) {
+    if (!leads || !TREND_DAYS) return '—';
+    return (leads / TREND_DAYS).toFixed(1);
+  }
+  function okClass(ok) {
+    return ok === true ? 'goals-ok' : ok === false ? 'goals-fail' : 'goals-muted-val';
+  }
+
+  // ── Build global Goals Panel ─────────────────────────────────────
+  var h = '<div class="goals-panel">';
+  h += '<div class="goals-title">Evgeni — Goals Progress · FTDs / CPA / CR / Leads per Day</div>';
+
+  // Grand total bar
+  var totalDep = 0;
+  for (var i = 0; i < ACT_RAW.length; i++) totalDep += ACT_RAW[i].dep;
+  var totalPct = GRAND_FTD ? Math.min(100, Math.round(totalDep / GRAND_FTD * 100)) : 0;
+  var totalClr = pctColor(totalPct);
+  h += '<div class="goals-grand">'
+    + '<span class="goals-grand-label">Total FTDs</span>'
+    + '<span class="goals-grand-count" style="color:' + totalClr + '">' + totalDep + ' / ' + GRAND_FTD + '</span>'
+    + pBar('gpb-grand', totalDep, GRAND_FTD)
+    + '<span class="goals-grand-pct" style="color:' + totalClr + '">' + totalPct + '%</span>'
+    + '</div>';
+
+  h += '<div class="goals-markets">';
+  var markets = Object.keys(GOALS);
+  for (var mi = 0; mi < markets.length; mi++) {
+    var mktName = markets[mi];
+    var mkt = GOALS[mktName];
+    var mktDep = 0;
+    for (var gi = 0; gi < mkt.geos.length; gi++) { mktDep += getA(mkt.geos[gi].names).dep; }
+    var mPct = mkt.total_ftd ? Math.min(100, Math.round(mktDep / mkt.total_ftd * 100)) : 0;
+    var mClr = pctColor(mPct);
+
+    h += '<div class="goals-market">';
+    h += '<div class="goals-mkt-header">'
+      + '<span class="goals-mkt-name" style="color:' + mClr + '">' + mktName + '</span>'
+      + '<span class="goals-mkt-count" style="color:' + mClr + '">' + mktDep + ' / ' + mkt.total_ftd + '</span>'
+      + pBar('gpb-mkt', mktDep, mkt.total_ftd)
+      + '<span class="goals-mkt-pct" style="color:' + mClr + '">' + mPct + '%</span>'
+      + '</div>';
+
+    h += '<div class="goals-geos">';
+    // Column headers
+    h += '<div class="goals-geo-row" style="opacity:0.45;font-size:0.65rem">'
+      + '<span></span><span></span>'
+      + '<span style="text-align:right">FTDs</span>'
+      + '<span style="text-align:right">CPA</span>'
+      + '<span style="text-align:right">CR</span>'
+      + '<span style="text-align:right">L/Day</span>'
+      + '</div>';
+
+    for (var gi = 0; gi < mkt.geos.length; gi++) {
+      var g = mkt.geos[gi];
+      var a = getA(g.names);
+      var cpa = a.dep ? a.spend / a.dep : null;
+      var cr  = a.leads ? a.dep / a.leads * 100 : null;
+      var ld  = TREND_DAYS ? a.leads / TREND_DAYS : null;
+      var gPct = g.ftd ? Math.min(100, Math.round(a.dep / g.ftd * 100)) : null;
+      var gClr = gPct !== null ? pctColor(gPct) : 'var(--muted)';
+      var cpaOk = (cpa !== null && g.cpa) ? cpa <= g.cpa : null;
+      var crOk  = (cr  !== null && g.cr)  ? cr  >= g.cr  : null;
+      var ldOk  = (ld  !== null && g.ld)  ? ld  >= g.ld  : null;
+
+      h += '<div class="goals-geo-row">'
+        + '<span class="goals-geo-code">' + g.code + '</span>'
+        + '<div class="goals-geo-bar">' + (g.ftd ? pBar('gpb-geo', a.dep, g.ftd) : '') + '</div>'
+        + '<span class="goals-geo-ftd" style="color:' + gClr + '">' + a.dep + (g.ftd ? '/' + g.ftd : '') + '</span>'
+        + '<span class="goals-geo-cpa ' + okClass(cpaOk) + '" title="Goal ≤$' + g.cpa + '">' + fmtCpa(a.spend, a.dep) + '</span>'
+        + '<span class="goals-geo-cr '  + okClass(crOk)  + '" title="Goal ≥' + g.cr  + '%">' + fmtCr(a.dep, a.leads) + '</span>'
+        + '<span class="goals-geo-ld '  + okClass(ldOk)  + '" title="Goal ≥' + g.ld  + '/d">' + fmtLd(a.leads) + (g.ld ? '/' + g.ld : '') + '</span>'
+        + '</div>';
+    }
+    h += '</div></div>';
+  }
+  h += '</div></div>';
+  document.getElementById('goals-panel').innerHTML = h;
+
+  // ── Per-country goals section (first section inside each country) ──
+  document.querySelectorAll('h2.country').forEach(function (h2) {
+    var cName = h2.textContent.trim();
+    var g = findGeo(cName);
+    var a = ACT[cName.toLowerCase()] || {dep:0, leads:0, spend:0};
+
+    if (!g && !a.dep && !a.leads) return;
+
+    var cpa = a.dep   ? a.spend / a.dep        : null;
+    var cr  = a.leads ? a.dep / a.leads * 100  : null;
+    var ld  = TREND_DAYS ? a.leads / TREND_DAYS : null;
+
+    var ftdPct = (g && g.ftd) ? Math.min(100, Math.round(a.dep / g.ftd * 100)) : null;
+    var ftdClr = ftdPct !== null ? pctColor(ftdPct) : 'var(--muted)';
+
+    var cpaOk = g && cpa !== null ? cpa <= g.cpa : null;
+    var crOk  = g && cr  !== null ? cr  >= g.cr  : null;
+    var ldOk  = g && ld  !== null ? ld  >= g.ld  : null;
+
+    function metricBox(label, actual, goalLabel, ok, bar) {
+      var cls = okClass(ok);
+      var indicator = ok === true ? '✓' : ok === false ? '✗' : '';
+      var indicatorClr = ok === true ? 'var(--good)' : ok === false ? 'var(--bad)' : 'var(--muted)';
+      return '<div class="gcs-metric-box">'
+        + '<div class="gcs-metric-label">' + label + '</div>'
+        + '<div class="gcs-metric-main">'
+        +   '<span class="gcs-metric-val ' + cls + '">' + actual + '</span>'
+        +   (indicator ? '<span class="gcs-metric-indicator" style="color:' + indicatorClr + '">' + indicator + '</span>' : '')
+        + '</div>'
+        + (bar || '')
+        + (goalLabel ? '<div class="gcs-metric-goal">goal ' + goalLabel + '</div>' : '')
+        + '</div>';
+    }
+
+    function ftdBar(dep, ftdGoal) {
+      if (!ftdGoal) return '';
+      var pct = Math.min(100, Math.round(dep / ftdGoal * 100));
+      var clr = pctColor(pct);
+      return '<div class="gcs-ftd-bar-wrap"><div class="gcs-ftd-bar-fill" style="width:' + pct + '%;background:' + clr + '"></div></div>';
+    }
+
+    var block = '<div class="goals-country-section">'
+      + '<div class="goals-country-section-title">Evgeni — My Goals</div>'
+      + '<div class="goals-country-metrics">'
+      + metricBox(
+          'FTDs',
+          '<span style="color:' + ftdClr + '">' + a.dep + (g && g.ftd ? ' / ' + g.ftd : '') + '</span>',
+          g && g.ftd ? g.ftd + ' total' : null,
+          ftdPct !== null ? ftdPct >= 80 ? true : false : null,
+          g && g.ftd ? ftdBar(a.dep, g.ftd) + '<div class="gcs-metric-pct" style="color:' + ftdClr + '">' + (ftdPct||0) + '%</div>' : ''
+        )
+      + metricBox('CPA',    fmtCpa(a.spend, a.dep), g ? '≤$' + g.cpa  : null, cpaOk, null)
+      + metricBox('CR',     fmtCr(a.dep, a.leads),  g ? '≥' + g.cr + '%' : null, crOk,  null)
+      + metricBox('L/Day',  fmtLd(a.leads) + (g && g.ld ? '/' + g.ld : ''), g ? '≥' + g.ld + '/d' : null, ldOk, null)
+      + '</div>'
+      + '</div>';
+
+    // Insert AFTER country-toc, BEFORE first section (h3)
+    var cursor = h2.nextElementSibling;
+    while (cursor && !cursor.matches('h3.section, h3.section-targeting')) {
+      cursor = cursor.nextElementSibling;
+    }
+    if (cursor) {
+      cursor.insertAdjacentHTML('beforebegin', block);
+    } else {
+      h2.insertAdjacentHTML('afterend', block);
+    }
+  });
+})();
+</script>
+
 {% for c in report.countries %}
 {% set cid = c.country | anchor_slug %}
 <h2 class="country" id="country-{{ cid }}">{{ c.country }}</h2>
 <div class="country-toc">
   <a href="#country-{{ cid }}-cm">1 CM</a>
+  {% if c.asset_summary %}<a href="#country-{{ cid }}-assets">Assets</a>{% endif %}
   <a href="#country-{{ cid }}-trend">2 Trend</a>
   <a href="#country-{{ cid }}-combos">3 Combos</a>
   <a href="#country-{{ cid }}-targeting">4 Targeting</a>
@@ -504,10 +983,38 @@
   </tbody>
 </table>
 
+{# ── Section 1b: Asset summary ────────────────────────────────────── #}
+{% if c.asset_summary %}
+<h3 class="section" id="country-{{ cid }}-assets">Assets
+  <a href="/export/assets" style="margin-left:0.75rem;font-size:0.75rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0.15rem 0.5rem;text-decoration:none;" title="Download Excel">⬇ xlsx</a>
+</h3>
+<table>
+  <thead><tr>
+    <th>Asset</th>
+    <th class="num">Leads</th>
+    <th class="num">Deposits</th>
+    <th class="num">CR</th>
+    <th class="num">Player Value</th>
+  </tr></thead>
+  <tbody>
+  {% for row in c.asset_summary %}
+    {% set cr = (row.deposits / row.leads * 100) if row.leads > 0 else 0 %}
+    <tr>
+      <td>{{ row.offer }}</td>
+      <td class="num">{{ row.leads }}</td>
+      <td class="num">{{ row.deposits }}</td>
+      <td class="num">{{ '%.1f' % cr }}%</td>
+      <td class="num">{{ row.net | fmt_usd }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
 {# ── Section 2: Trend ─────────────────────────────────────────────── #}
 {% if c.trend.has_date %}
 <h3 class="section" id="country-{{ cid }}-trend">2. Recent Trend <span class="hint">{{ c.trend.period_label }}</span></h3>
-{% for label, key in [('Trending up', 'trending_up'), ('Stable', 'stable'), ('Trending down', 'trending_down')] %}
+{% for label, key in [('Trending up', 'trending_up'), ('Stable', 'stable')] %}
   {% set rows = c.trend[key] %}
   {% if rows %}
     <h3 class="section" style="margin-top:0.8rem">↪ {{ label }} ({{ rows|length }})</h3>
@@ -687,33 +1194,150 @@
 {% if c.open_recs %}
 {% set has_open = c.open_recs.values() | selectattr('0') | list %}
 {% if has_open %}
-<h3 class="section" id="country-{{ cid }}-open">8. What to Open (4 strategies per account)</h3>
-<p class="hint" style="margin:0 0 0.75rem 0;font-size:0.78rem;color:var(--muted)">Select strategies, edit names, Submit builds Upload FB Excel (validated link &amp; creatives).</p>
+<h3 class="section" id="country-{{ cid }}-open">8. Campaign Builder</h3>
+<p class="hint" style="margin:0 0 0.75rem 0;font-size:0.78rem;color:var(--muted)">Pick creative, copy and targeting from your Upload FB.xlsx — then Submit to download a ready Excel.</p>
 <div class="open-tree">
 {% for acc_label in c.open_recs.keys() | sort %}
   {% set recs = c.open_recs[acc_label] %}
   {% if recs %}
-  <form class="open-account-form" method="post" action="/build-upload" data-open-form>
+  {# Collect default asset from first rec for the Add Campaign button #}
+  {% set default_asset = recs[0].offer if recs else '' %}
+  <form class="open-account-form" method="post" action="/build-upload"
+        data-open-form
+        data-country="{{ c.country }}"
+        data-asset="{{ default_asset }}">
     <div class="open-account-name">{{ acc_label }}</div>
+    <div class="cb-slots">
+    {# Render one slot per creative suggestion across all recs #}
+    {% set ns = namespace(idx=0) %}
     {% for r in recs | sort(attribute='strategy_type') %}
-    <div class="open-campaign">
-      <label class="open-strategy-pick">
-        <input type="checkbox" name="strategy" value="{{ r.strategy_type }}" data-strategy-check>
-        <span>{{ r.strategy_label or r.strategy_type }}</span>
-      </label>
-      <input class="open-input-adset" type="text" name="campaign_name_{{ r.strategy_type }}" value="{{ r.campaign_name }}" title="Campaign / Ad Set name">
-      <ul class="open-creatives">
-        {% for i in range(3) %}
-        <li>
-          <input class="open-input-title" type="text" name="title_{{ r.strategy_type }}_{{ i }}" value="{% if r.creatives and r.creatives|length > i %}{{ r.creatives[i].name }}{% endif %}" placeholder="Ad title {{ i + 1 }}">
-        </li>
-        {% endfor %}
-      </ul>
-    </div>
+      {% set creatives = r.creatives if (r.creatives and r.creatives|length > 0) else [{'name': ''}] %}
+      {% for cr in creatives %}
+        {% set ctype = cr.name | creative_type %}
+        {% set cid   = cr.name | creative_id %}
+      {# Pre-compute selected creative label for display #}
+      {% set sel_creative_label = '' %}
+      {% if ctype == 'Video' %}
+        {% for vid in ref_options.video_files %}{% if vid.id == cid %}{% set sel_creative_label = vid.id ~ ' — ' ~ vid.filename %}{% endif %}{% endfor %}
+      {% else %}
+        {% for img in ref_options.image_files %}{% if img.id == cid %}{% set sel_creative_label = img.id ~ ' — ' ~ img.filename %}{% endif %}{% endfor %}
+      {% endif %}
+      {% set sel_targeting_label = r.targeting or '' %}
+      <div class="cb-slot" data-idx="{{ ns.idx }}">
+        <div class="cb-slot-header">
+          <span class="cb-slot-label">Campaign {{ ns.idx + 1 }}
+            {% if r.strategy_label %}<span style="color:var(--muted);font-weight:normal"> · {{ r.strategy_label }}</span>{% endif %}
+          </span>
+          <button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove">×</button>
+        </div>
+        <div class="cb-slot-name" data-name-display></div>
+        <div class="cb-fields">
+          <span class="cb-label">Creative type</span>
+          <div class="cb-radio-group">
+            <label><input type="radio" name="camp_{{ ns.idx }}_creative_type" value="Image" {% if ctype != 'Video' %}checked{% endif %} onchange="cbTypeChange(this)"> Image</label>
+            <label><input type="radio" name="camp_{{ ns.idx }}_creative_type" value="Video" {% if ctype == 'Video' %}checked{% endif %} onchange="cbTypeChange(this)"> Video</label>
+          </div>
+
+          <span class="cb-label">Creative file</span>
+          <div class="cb-sel-wrap cb-creative-sel-wrap">
+            <input type="text" class="cb-sel-text" placeholder="— search creative —"
+                   autocomplete="off" value="{{ sel_creative_label }}">
+            <div class="cb-sel-dropdown" hidden>
+              <div class="cb-sel-opt" data-val="" data-ctype="any">— select —</div>
+              {% for img in ref_options.image_files %}
+              <div class="cb-sel-opt" data-val="{{ img.id }}" data-ctype="Image"
+                   {% if ctype == 'Video' %}hidden{% endif %}>{{ img.id }} — {{ img.filename }}</div>
+              {% endfor %}
+              {% for vid in ref_options.video_files %}
+              <div class="cb-sel-opt" data-val="{{ vid.id }}" data-ctype="Video"
+                   {% if ctype != 'Video' %}hidden{% endif %}>{{ vid.id }} — {{ vid.filename }}</div>
+              {% endfor %}
+            </div>
+            <input type="hidden" name="camp_{{ ns.idx }}_creative_id" value="{{ cid }}">
+          </div>
+
+          <span class="cb-label">Ad copy</span>
+          <div class="cb-sel-wrap">
+            <input type="text" class="cb-sel-text" placeholder="— search copy —" autocomplete="off" value="">
+            <div class="cb-sel-dropdown" hidden>
+              <div class="cb-sel-opt" data-val="">— select —</div>
+              {% for copy_name in ref_options.ad_copies %}
+              <div class="cb-sel-opt" data-val="{{ copy_name }}">{{ copy_name }}</div>
+              {% endfor %}
+            </div>
+            <input type="hidden" name="camp_{{ ns.idx }}_copy" value="">
+          </div>
+
+          <span class="cb-label">Targeting</span>
+          <div class="cb-sel-wrap">
+            <input type="text" class="cb-sel-text" placeholder="— search targeting —"
+                   autocomplete="off" value="{{ sel_targeting_label }}">
+            <div class="cb-sel-dropdown" hidden>
+              <div class="cb-sel-opt" data-val="">— select —</div>
+              {% for t in ref_options.targetings %}
+              <div class="cb-sel-opt" data-val="{{ t }}" {% if t == sel_targeting_label %}class="cb-sel-active"{% endif %}>{{ t }}</div>
+              {% endfor %}
+            </div>
+            <input type="hidden" name="camp_{{ ns.idx }}_targeting" value="{{ sel_targeting_label }}">
+          </div>
+
+          <span class="cb-label">OS / Age / Budget</span>
+          <div class="cb-inline">
+            <div class="cb-sel-wrap" style="width:6.5rem">
+              <input type="text" class="cb-sel-text" placeholder="OS" autocomplete="off"
+                     value="{% if r.device == 'iOS' %}iOS{% elif r.device == 'Android' %}Android{% else %}All{% endif %}">
+              <div class="cb-sel-dropdown" hidden>
+                <div class="cb-sel-opt" data-val="All">All</div>
+                <div class="cb-sel-opt" data-val="iOS">iOS</div>
+                <div class="cb-sel-opt" data-val="Android">Android</div>
+              </div>
+              <input type="hidden" name="camp_{{ ns.idx }}_os"
+                     value="{% if r.device == 'iOS' %}iOS{% elif r.device == 'Android' %}Android{% else %}All{% endif %}">
+            </div>
+            <input type="number" name="camp_{{ ns.idx }}_age" class="cb-input cb-input-sm"
+                   value="{{ r.age or '35' }}" min="18" max="65"
+                   oninput="cbUpdateName(this.closest('.cb-slot'))">
+            <span style="color:var(--muted);font-size:0.72rem">$/day</span>
+            <input type="number" name="camp_{{ ns.idx }}_budget" class="cb-input cb-input-sm"
+                   value="" min="1" step="1" placeholder="50">
+          </div>
+
+          <span class="cb-label">Asset / Offer</span>
+          <input type="text" name="camp_{{ ns.idx }}_asset" class="cb-input"
+                 value="{{ r.offer or default_asset }}"
+                 oninput="cbUpdateName(this.closest('.cb-slot'))">
+
+          <input type="hidden" name="camp_{{ ns.idx }}_name" class="cb-name-hidden" value="">
+        </div>
+      </div>
+        {% set ns.idx = ns.idx + 1 %}
+      {% endfor %}
     {% endfor %}
+    </div>{# /cb-slots #}
+
+    <input type="hidden" name="camp_count" class="cb-count" value="{{ ns.idx }}">
     <input type="hidden" name="country" value="{{ c.country }}">
     <input type="hidden" name="account_label" value="{{ acc_label }}">
-    <button type="submit" class="open-submit" disabled>Submit — {{ acc_label }}</button>
+
+    <button type="button" class="cb-add-btn"
+            onclick="cbAddSlot(this.closest('form'))">+ Add Campaign</button>
+
+    <div class="cb-actions">
+      <button type="button" class="cb-preview-btn"
+              onclick="cbPreview(this.closest('form'))">Preview</button>
+      <button type="button" class="cb-publish-btn" disabled
+              onclick="cbPublish(this.closest('form'), false)">Publish via Multilogin</button>
+      <label class="cb-activate-label">
+        <input type="checkbox" class="cb-activate-check"> ACTIVE (spend immediately)
+      </label>
+    </div>
+
+    {# Preview result panel (hidden until Preview clicked) #}
+    <div class="cb-preview-panel" style="display:none"></div>
+
+    {# Publish status panel (hidden until Publish started) #}
+    <div class="cb-status-panel" style="display:none"></div>
+
     {% if upload_errors and upload_errors.get(c.country) and upload_errors[c.country].get(acc_label) %}
     <div class="upload-errors">
       <strong>Cannot build upload:</strong>
@@ -847,20 +1471,415 @@ function copyBrief(btn) {
   });
 }
 
+// ── Campaign Builder JS ───────────────────────────────────────────────
 (function () {
-  function syncSubmit(form) {
-    const btn = form.querySelector(".open-submit");
-    if (!btn) return;
-    const any = form.querySelector('[data-strategy-check]:checked');
-    btn.disabled = !any;
+  var REF = null;
+  try { REF = {{ ref_options_json | safe }}; } catch(e) {}
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+  function todayDDMM() {
+    var d = new Date();
+    return String(d.getDate()).padStart(2,'0') + '.' + String(d.getMonth()+1).padStart(2,'0');
   }
-  document.querySelectorAll("form[data-open-form]").forEach(function (form) {
-    form.querySelectorAll("[data-strategy-check]").forEach(function (cb) {
-      cb.addEventListener("change", function () { syncSubmit(form); });
+  function slugAsset(s) { return (s||'').replace(/\s+/g,''); }
+
+  function getHidden(slot, suffix) {
+    var idx = slot.dataset.idx;
+    return slot.querySelector('[name="camp_' + idx + '_' + suffix + '"]');
+  }
+  function getHiddenVal(slot, suffix) {
+    var el = getHidden(slot, suffix);
+    return el ? el.value : '';
+  }
+
+  // ── Campaign name ─────────────────────────────────────────────────────
+  window.cbUpdateName = function(slot) {
+    if (!slot) return;
+    var idx    = slot.dataset.idx;
+    var ctype  = (slot.querySelector('[name="camp_' + idx + '_creative_type"]:checked') || {}).value || 'Image';
+    var tgt    = getHiddenVal(slot, 'targeting');
+    var os     = getHiddenVal(slot, 'os');
+    var age    = (slot.querySelector('[name="camp_' + idx + '_age"]') || {}).value || '35';
+    var asset  = (slot.querySelector('[name="camp_' + idx + '_asset"]') || {}).value || '';
+    var form   = slot.closest('form');
+    var country = form ? ((form.querySelector('[name="country"]')||{}).value||'') : '';
+    var parts  = [country, slugAsset(asset), os||'All', ctype, tgt, age, todayDDMM()].filter(Boolean);
+    var name   = parts.join('_');
+    // Update hidden name input
+    var nameHidden = slot.querySelector('.cb-name-hidden');
+    if (nameHidden) nameHidden.value = name;
+    // Update visible name display
+    var nameDisplay = slot.querySelector('[data-name-display]');
+    if (nameDisplay) nameDisplay.textContent = name;
+  };
+
+  // ── Searchable select ─────────────────────────────────────────────────
+  function initCbSel(wrap) {
+    if (wrap._cbSelInit) return;
+    wrap._cbSelInit = true;
+    var textEl    = wrap.querySelector('.cb-sel-text');
+    var dropdown  = wrap.querySelector('.cb-sel-dropdown');
+    var hiddenEl  = wrap.querySelector('input[type="hidden"]');
+    if (!textEl || !dropdown || !hiddenEl) return;
+
+    function getOpts() { return dropdown.querySelectorAll('.cb-sel-opt'); }
+
+    function filterOpts(q) {
+      var lower = (q || '').toLowerCase();
+      getOpts().forEach(function(opt) {
+        // respect data-ctype hidden (for creative type filter)
+        if (opt.hasAttribute('hidden') && opt.dataset.ctypeHidden) return;
+        var txt = opt.textContent.toLowerCase();
+        var match = !lower || txt.indexOf(lower) >= 0;
+        opt.style.display = match ? '' : 'none';
+      });
+    }
+
+    function selectOpt(opt) {
+      var val = opt.dataset.val;
+      hiddenEl.value = val;
+      textEl.value   = val ? opt.textContent : '';
+      dropdown.hidden = true;
+      // trigger name update
+      var slot = wrap.closest('.cb-slot');
+      if (slot) cbUpdateName(slot);
+    }
+
+    function openDrop() {
+      filterOpts(textEl.value);
+      dropdown.hidden = false;
+    }
+
+    textEl.addEventListener('focus', function() { openDrop(); });
+    textEl.addEventListener('input', function() {
+      openDrop();
+      // If user clears the text, clear the hidden value
+      if (!textEl.value.trim()) hiddenEl.value = '';
     });
-    syncSubmit(form);
+    textEl.addEventListener('blur', function() {
+      setTimeout(function() { dropdown.hidden = true; }, 180);
+    });
+    textEl.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { dropdown.hidden = true; textEl.blur(); }
+    });
+
+    dropdown.addEventListener('mousedown', function(e) {
+      e.preventDefault(); // prevent blur
+      var opt = e.target.closest('.cb-sel-opt');
+      if (opt) selectOpt(opt);
+    });
+
+    // Init display from hidden value
+    var initVal = hiddenEl.value;
+    if (initVal) {
+      var found = dropdown.querySelector('[data-val="' + CSS.escape(initVal) + '"]');
+      if (found && !textEl.value) textEl.value = found.textContent;
+    }
+  }
+
+  function initAllSelects(root) {
+    (root || document).querySelectorAll('.cb-sel-wrap').forEach(initCbSel);
+  }
+
+  // ── Creative type toggle ──────────────────────────────────────────────
+  window.cbTypeChange = function(radio) {
+    var slot = radio.closest('.cb-slot');
+    if (!slot) return;
+    var isVideo = radio.value === 'Video';
+    // In searchable select: show/hide opts by data-ctype
+    slot.querySelectorAll('.cb-creative-sel-wrap .cb-sel-opt').forEach(function(opt) {
+      var ct = opt.dataset.ctype || 'any';
+      var hide = ct !== 'any' && ((isVideo && ct === 'Image') || (!isVideo && ct === 'Video'));
+      if (hide) {
+        opt.hidden = true;
+        opt.dataset.ctypeHidden = '1';
+      } else {
+        opt.hidden = false;
+        delete opt.dataset.ctypeHidden;
+      }
+    });
+    // Reset creative selection
+    var wrap = slot.querySelector('.cb-creative-sel-wrap');
+    if (wrap) {
+      var h = wrap.querySelector('input[type="hidden"]');
+      var t = wrap.querySelector('.cb-sel-text');
+      if (h) h.value = '';
+      if (t) t.value = '';
+    }
+    cbUpdateName(slot);
+  };
+
+  // ── Remove / Renumber ─────────────────────────────────────────────────
+  window.cbRemoveSlot = function(btn) {
+    var slot = btn.closest('.cb-slot');
+    if (!slot) return;
+    var form = slot.closest('form');
+    slot.remove();
+    if (form) { cbRenumber(form); cbUpdateCount(form); }
+  };
+
+  function cbRenumber(form) {
+    form.querySelectorAll('.cb-slot').forEach(function(slot, i) {
+      slot.dataset.idx = i;
+      var label = slot.querySelector('.cb-slot-label');
+      if (label) label.innerHTML = label.innerHTML.replace(/^Campaign \d+/, 'Campaign ' + (i + 1));
+      slot.querySelectorAll('[name]').forEach(function(el) {
+        el.name = el.name.replace(/^camp_\d+_/, 'camp_' + i + '_');
+      });
+      cbUpdateName(slot);
+    });
+  }
+
+  function cbUpdateCount(form) {
+    var c = form.querySelector('.cb-count');
+    if (c) c.value = form.querySelectorAll('.cb-slot').length;
+  }
+
+  // ── Build blank slot HTML (for + Add Campaign) ────────────────────────
+  function mkSel(idx, field, opts, placeholder) {
+    var optsHtml = '<div class="cb-sel-opt" data-val="">— select —</div>';
+    opts.forEach(function(o) {
+      var val = typeof o === 'string' ? o : o.id;
+      var lbl = typeof o === 'string' ? o : (o.id + ' — ' + o.filename);
+      optsHtml += '<div class="cb-sel-opt" data-val="' + val + '">' + lbl + '</div>';
+    });
+    return '<div class="cb-sel-wrap">' +
+      '<input type="text" class="cb-sel-text" placeholder="' + placeholder + '" autocomplete="off" value="">' +
+      '<div class="cb-sel-dropdown" hidden>' + optsHtml + '</div>' +
+      '<input type="hidden" name="camp_' + idx + '_' + field + '" value="">' +
+      '</div>';
+  }
+
+  function buildBlankSlotHTML(idx) {
+    var ref = REF || {ad_copies:[], image_files:[], video_files:[], targetings:[]};
+    var imgOpts = ref.image_files.map(function(f){ return '<div class="cb-sel-opt" data-val="'+f.id+'" data-ctype="Image">'+f.id+' — '+f.filename+'</div>'; }).join('');
+    var vidOpts = ref.video_files.map(function(f){ return '<div class="cb-sel-opt" data-val="'+f.id+'" data-ctype="Video" hidden>'+f.id+' — '+f.filename+'</div>'; }).join('');
+    var creativeSel = '<div class="cb-sel-wrap cb-creative-sel-wrap">' +
+      '<input type="text" class="cb-sel-text" placeholder="— search creative —" autocomplete="off" value="">' +
+      '<div class="cb-sel-dropdown" hidden>' +
+      '<div class="cb-sel-opt" data-val="" data-ctype="any">— select —</div>' + imgOpts + vidOpts + '</div>' +
+      '<input type="hidden" name="camp_' + idx + '_creative_id" value=""></div>';
+
+    return '<div class="cb-slot" data-idx="' + idx + '">' +
+      '<div class="cb-slot-header">' +
+      '<span class="cb-slot-label">Campaign ' + (idx+1) + '</span>' +
+      '<button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove">×</button>' +
+      '</div>' +
+      '<div class="cb-slot-name" data-name-display></div>' +
+      '<div class="cb-fields">' +
+      '<span class="cb-label">Creative type</span>' +
+      '<div class="cb-radio-group">' +
+      '<label><input type="radio" name="camp_'+idx+'_creative_type" value="Image" checked onchange="cbTypeChange(this)"> Image</label>' +
+      '<label><input type="radio" name="camp_'+idx+'_creative_type" value="Video" onchange="cbTypeChange(this)"> Video</label>' +
+      '</div>' +
+      '<span class="cb-label">Creative file</span>' + creativeSel +
+      '<span class="cb-label">Ad copy</span>' + mkSel(idx,'copy',ref.ad_copies,'— search copy —') +
+      '<span class="cb-label">Targeting</span>' + mkSel(idx,'targeting',ref.targetings,'— search targeting —') +
+      '<span class="cb-label">OS / Age / Budget</span>' +
+      '<div class="cb-inline">' + mkSel(idx,'os',['All','iOS','Android'],'OS') +
+      '<input type="number" name="camp_'+idx+'_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
+      '<span style="color:var(--muted);font-size:0.72rem">$/day</span>' +
+      '<input type="number" name="camp_'+idx+'_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50">' +
+      '</div>' +
+      '<span class="cb-label">Asset / Offer</span>' +
+      '<input type="text" name="camp_'+idx+'_asset" class="cb-input" value="" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
+      '<input type="hidden" name="camp_'+idx+'_name" class="cb-name-hidden" value="">' +
+      '</div></div>';
+  }
+
+  window.cbAddSlot = function(form) {
+    var container = form.querySelector('.cb-slots');
+    if (!container) return;
+    var idx = container.querySelectorAll('.cb-slot').length;
+    container.insertAdjacentHTML('beforeend', buildBlankSlotHTML(idx));
+    var newSlot = container.querySelector('.cb-slot[data-idx="' + idx + '"]');
+    if (newSlot) {
+      initAllSelects(newSlot);
+      var asset = form.dataset.asset || '';
+      var assetInput = newSlot.querySelector('[name="camp_' + idx + '_asset"]');
+      if (assetInput && asset) { assetInput.value = asset; }
+      cbUpdateName(newSlot);
+    }
+    cbUpdateCount(form);
+  };
+
+  // ── Init ─────────────────────────────────────────────────────────────
+  initAllSelects();
+  document.querySelectorAll('.cb-slot').forEach(function(slot) { cbUpdateName(slot); });
+  document.querySelectorAll('form[data-open-form]').forEach(function(form) {
+    form.addEventListener('submit', function() { cbUpdateCount(form); });
   });
 })();
+
+// ── Preview & Publish ─────────────────────────────────────────────────
+function cbCollectFormData(form) {
+  // Ensure every slot has a fresh name before we snapshot the FormData
+  form.querySelectorAll('.cb-slot').forEach(function(slot) { cbUpdateName(slot); });
+  cbUpdateCount(form);
+  return new FormData(form);
+}
+
+window.cbPreview = function(form) {
+  var panel = form.querySelector('.cb-preview-panel');
+  var publishBtn = form.querySelector('.cb-publish-btn');
+  if (!panel) return;
+  panel.style.display = 'block';
+  panel.innerHTML = '<span style="color:var(--muted)">Loading preview…</span>';
+  if (publishBtn) publishBtn.disabled = true;
+
+  var fd = cbCollectFormData(form);
+  fetch('/preview-publish', { method: 'POST', body: fd })
+    .then(function(r) {
+      if (!r.ok) {
+        return r.json().then(function(d) { return d; }, function() { return {error: 'Server error ' + r.status}; });
+      }
+      return r.json();
+    })
+    .then(function(data) {
+      if (!data) { panel.innerHTML = '<span class="cb-preview-errors">Empty response from server</span>'; return; }
+      if (data.error) {
+        var detail = data.detail ? '<pre style="font-size:0.65rem;color:var(--muted);white-space:pre-wrap;margin-top:0.4rem">' + data.detail + '</pre>' : '';
+        panel.innerHTML = '<span class="cb-preview-errors">⚠ ' + data.error + '</span>' + detail;
+        return;
+      }
+      var plan = data.plan || [];
+      var SKIP = ['errors', 'warnings'];
+      var hasErrors = plan.some(function(p) { return p.errors && p.errors.length; });
+
+      var html = '<strong style="font-size:0.8rem">Preview — ' + plan.length + ' campaign(s)</strong>';
+
+      plan.forEach(function(p, i) {
+        var hasErr = p.errors && p.errors.length;
+        var hasWarn = p.warnings && p.warnings.length;
+        var borderColor = hasErr ? 'var(--bad)' : 'var(--border)';
+        html += '<div style="margin-top:0.55rem;border:1px solid ' + borderColor + ';border-radius:4px;overflow:hidden">';
+        // Header
+        html += '<div style="background:var(--bg-hover);padding:0.3rem 0.6rem;display:flex;align-items:center;gap:0.5rem">';
+        html += '<span style="font-weight:bold;color:' + (hasErr ? 'var(--bad)' : 'var(--accent)') + '">';
+        html += (hasErr ? '❌' : '✓') + ' Campaign ' + (i + 1) + '</span>';
+        html += '<span style="font-size:0.72rem;color:var(--muted)">' + (p['Campaign Name'] || '') + '</span>';
+        html += '</div>';
+        // Two-column key/value grid
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0">';
+        var keys = Object.keys(p).filter(function(k) { return SKIP.indexOf(k) < 0; });
+        keys.forEach(function(k, ki) {
+          var v = p[k];
+          var isPath = k === 'Creative Path';
+          var isMissing = (v === '—' || v === '' || v == null);
+          var isError   = isPath && v && v.indexOf('NOT FOUND') >= 0;
+          var bg = ki % 4 < 2 ? 'var(--bg-elev)' : 'var(--bg)';
+          var valColor = isError ? 'var(--bad)' : (isMissing ? 'var(--muted)' : 'var(--text)');
+          html += '<div style="display:contents">';
+          html += '<div style="background:' + bg + ';padding:0.18rem 0.55rem;color:var(--muted);font-size:0.7rem;border-bottom:1px solid var(--border)">' + k + '</div>';
+          html += '<div style="background:' + bg + ';padding:0.18rem 0.55rem;color:' + valColor + ';font-size:0.72rem;border-bottom:1px solid var(--border);word-break:break-all">' + (v || '—') + '</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+        // Errors
+        if (hasErr) {
+          html += '<div style="padding:0.3rem 0.6rem;background:#1a0606">';
+          p.errors.forEach(function(e) {
+            html += '<div class="cb-preview-errors">⚠ ' + e + '</div>';
+          });
+          html += '</div>';
+        }
+        // Warnings
+        if (hasWarn) {
+          html += '<div style="padding:0.3rem 0.6rem;background:#1a1200">';
+          p.warnings.forEach(function(w) {
+            html += '<div style="color:var(--warn);font-size:0.72rem">⚡ ' + w + '</div>';
+          });
+          html += '</div>';
+        }
+        html += '</div>';
+      });
+
+      if (!hasErrors && plan.length > 0) {
+        if (publishBtn) publishBtn.disabled = false;
+        html += '<p style="color:var(--good);margin-top:0.5rem;font-size:0.75rem">✓ All campaigns valid — ready to publish</p>';
+      } else if (hasErrors) {
+        html += '<p style="color:var(--bad);margin-top:0.5rem;font-size:0.75rem">Fix errors above before publishing</p>';
+      }
+      panel.innerHTML = html;
+    })
+    .catch(function(e) {
+      panel.innerHTML = '<span class="cb-preview-errors">Request failed: ' + e.message + '</span>';
+    });
+};
+
+window.cbPublish = function(form, activate) {
+  var statusPanel = form.querySelector('.cb-status-panel');
+  var publishBtn  = form.querySelector('.cb-publish-btn');
+  var activateCheck = form.querySelector('.cb-activate-check');
+  if (!statusPanel) return;
+
+  var isActive = activateCheck ? activateCheck.checked : false;
+
+  statusPanel.style.display = 'block';
+  statusPanel.innerHTML = '<div class="cb-status-title">Publishing via Multilogin…</div>';
+  if (publishBtn) publishBtn.disabled = true;
+
+  var fd = cbCollectFormData(form);
+  fd.set('via_multilogin', '1');
+  fd.set('activate', isActive ? '1' : '0');
+
+  fetch('/publish-jobs', { method: 'POST', body: fd })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        statusPanel.innerHTML = '<span class="cb-status-fatal">Error: ' + data.error + '</span>';
+        return;
+      }
+      cbPollJob(data.job_id, statusPanel, publishBtn);
+    })
+    .catch(function(e) {
+      statusPanel.innerHTML = '<span class="cb-status-fatal">Request failed: ' + e.message + '</span>';
+    });
+};
+
+function cbPollJob(jobId, statusPanel, publishBtn) {
+  function renderStatus(job) {
+    var done = job.done_count || 0;
+    var total = job.total || 0;
+    var pct = total > 0 ? Math.round(done / total * 100) : 0;
+    var html = '<div class="cb-status-title">Publishing via Multilogin — ' + done + '/' + total + ' (' + pct + '%) ' + (job.status === 'done' ? '✓ done' : '⏳') + '</div>';
+    (job.results || []).forEach(function(r) {
+      var icon = r.success ? '✅' : '❌';
+      html += '<div class="cb-status-row">';
+      html += '<span class="cb-status-icon">' + icon + '</span>';
+      html += '<span class="cb-status-name">' + (r.campaign_name || '?') + '</span>';
+      if (r.success && r.campaign_id) {
+        html += '<span class="cb-status-id">campaign_id: ' + r.campaign_id + '</span>';
+      }
+      html += '</div>';
+      if (!r.success && r.error) {
+        html += '<div class="cb-status-err">' + r.error + '</div>';
+      }
+    });
+    (job.errors || []).forEach(function(e) {
+      html += '<div class="cb-status-fatal">Fatal: ' + e + '</div>';
+    });
+    return html;
+  }
+
+  function poll() {
+    fetch('/publish-jobs/' + jobId)
+      .then(function(r) { return r.json(); })
+      .then(function(job) {
+        statusPanel.innerHTML = renderStatus(job);
+        if (job.status !== 'done') {
+          setTimeout(poll, 2000);
+        } else {
+          if (publishBtn) publishBtn.disabled = false;
+        }
+      })
+      .catch(function(e) {
+        statusPanel.innerHTML += '<div class="cb-status-fatal">Polling error: ' + e.message + '</div>';
+        setTimeout(poll, 5000);
+      });
+  }
+  poll();
+}
 </script>
 
 </body>

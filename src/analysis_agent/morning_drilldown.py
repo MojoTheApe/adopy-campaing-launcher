@@ -172,7 +172,7 @@ def _aggregate_cm_drill_rows(filtered: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
     # Keep only adsets with at least 1 deposit
-    grouped = grouped[grouped["# FTDs"] > 0]
+    grouped = grouped[grouped["# FTDs"] > 0].copy()
     grouped["CPA"] = grouped["$ Spend"] / grouped["# FTDs"].replace(0, pd.NA)
     return grouped.sort_values("# FTDs", ascending=False)
 

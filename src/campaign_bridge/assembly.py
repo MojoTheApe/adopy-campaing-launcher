@@ -11,7 +11,7 @@ from openpyxl import Workbook
 
 from config.paths import get_upload_fb_excel_path
 from src.campaign_bridge.bundle import CampaignBundle
-from src.campaign_bridge.open_rec_mapper import open_rec_to_plan_rows
+from src.campaign_bridge.open_rec_mapper import open_rec_to_plan_rows, slot_to_plan_row
 from src.campaign_bridge.validation import resolve_account_sheet_name, validate_plan_rows
 from src.upload_agent.build_upload_excel import (
     build_row,
@@ -20,6 +20,50 @@ from src.upload_agent.build_upload_excel import (
     load_reference_data,
     sheet_name_safe,
 )
+
+
+def assemble_from_form_slots(
+    *,
+    country: str,
+    account_label: str,
+    slots: list[dict[str, Any]],
+    upload_fb_path: str | None = None,
+) -> tuple[list[str], bytes | None, str | None]:
+    """
+    Build a validated upload xlsx from campaign builder UI slots.
+
+    Returns (errors, xlsx_bytes, filename).
+    """
+    excel_path = (upload_fb_path or "").strip() or get_upload_fb_excel_path()
+    if not os.path.isfile(excel_path):
+        return [f"Upload FB workbook not found at {excel_path}"], None, None
+
+    try:
+        ref = load_reference_data(excel_path)
+    except Exception as exc:
+        return [f"Cannot read Upload FB workbook: {exc}"], None, None
+
+    plan_rows = [
+        slot_to_plan_row(s, account_label=account_label, country=country)
+        for s in slots
+    ]
+
+    errors = validate_plan_rows(ref, plan_rows, account_label=account_label)
+    if errors:
+        return errors, None, None
+
+    sheet_title = resolve_account_sheet_name(ref, account_label) or account_label
+    bundle = CampaignBundle(
+        account_sheet=sheet_title,
+        account_label=account_label,
+        country=country,
+        plan_rows=plan_rows,
+    )
+    xlsx_bytes = bundle.to_workbook_bytes(ref)
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", account_label).strip("_") or "account"
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"upload_{slug}_{stamp}.xlsx"
+    return [], xlsx_bytes, filename
 
 
 def find_open_rec(

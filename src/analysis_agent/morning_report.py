@@ -227,6 +227,7 @@ def build_asset_summary(df: pd.DataFrame, country: str) -> List[Dict[str, Any]]:
             "deposits": _safe_int(r.get("Deposits")),
             "leads": _safe_int(r.get("Leads")),
             "spend": _safe_float(r.get("Spend")),
+            "net": _safe_float(r.get("Net")),
             "cpl": _safe_float(r.get("CPL")),
             "cpa": _safe_float(r.get("CPA")),
             "roi": _safe_float(r.get("ROI")),
@@ -1718,6 +1719,52 @@ def build_country_section(
     }
 
 
+# ── Global accounts overview (cross-country summary) ──────────────────────────
+
+def build_accounts_overview(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Per-country summary: accounts used, leads, deposits, avg dep/account.
+
+    Only includes rows where Account Alias is not null.
+    Sorted by deposits descending.
+    """
+    if df.empty:
+        return []
+
+    df_acc = df[df["Account Alias"].notna()].copy()
+    if df_acc.empty:
+        return []
+
+    grouped = (
+        df_acc.groupby("Country Final", dropna=False)
+        .agg(
+            accounts=("Account Alias", "nunique"),
+            leads=("# Leads", "sum"),
+            deposits=("# FTDs", "sum"),
+            spend=("$ Spend", "sum"),
+        )
+        .reset_index()
+    )
+    grouped = grouped[grouped["Country Final"].notna()]
+    grouped = grouped[grouped["Country Final"].astype(str).str.strip() != ""]
+
+    rows = []
+    for _, r in grouped.iterrows():
+        accounts = int(r["accounts"])
+        deposits = _safe_int(r["deposits"])
+        avg = round(deposits / accounts, 2) if accounts > 0 else 0.0
+        rows.append({
+            "country": str(r["Country Final"]),
+            "accounts": accounts,
+            "leads": _safe_int(r["leads"]),
+            "deposits": deposits,
+            "avg_dep_per_account": avg,
+            "spend": _safe_float(r["spend"]),
+        })
+
+    rows.sort(key=lambda x: -x["deposits"])
+    return rows
+
+
 # ── Main report builder ────────────────────────────────────────────────────────
 
 def build_morning_report(
@@ -1818,4 +1865,5 @@ def build_morning_report(
         "countries": country_sections,
         "total_combos": len(combos),
         "has_gsheet": len(account_rows) > 0,
+        "accounts_overview": build_accounts_overview(df),
     }

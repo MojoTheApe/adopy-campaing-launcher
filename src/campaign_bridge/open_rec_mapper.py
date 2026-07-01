@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from src.upload_agent.build_upload_excel import (
@@ -48,6 +49,66 @@ def _normalize_age(age: str) -> str:
         return "35"
     digits = re.sub(r"[^\d]", "", a)
     return digits or "35"
+
+
+def _today_ddmm() -> str:
+    now = datetime.now(timezone.utc)
+    return now.strftime("%d.%m")
+
+
+def build_campaign_name_from_slot(slot: dict[str, Any]) -> str:
+    """Generate campaign name: Country_Asset_OS_CreativeType_Targeting_Age_DD.MM"""
+    parts = [
+        (slot.get("country") or "").strip(),
+        re.sub(r"\s+", "", (slot.get("asset") or "").strip()),
+        (slot.get("os") or "All").strip(),
+        (slot.get("creative_type") or "Image").strip(),
+        (slot.get("targeting") or "").strip(),
+        (slot.get("age") or "35").strip(),
+        _today_ddmm(),
+    ]
+    return "_".join(p for p in parts if p)
+
+
+def slot_to_plan_row(
+    slot: dict[str, Any],
+    *,
+    account_label: str,
+    country: str,
+) -> dict[str, str]:
+    """
+    Convert a campaign builder UI slot (from the dashboard form) to an Agent 8 plan row dict.
+
+    slot keys: name, creative_type, creative_id, creative_file, copy,
+               targeting, os, age, budget, asset
+    """
+    creative_type = (slot.get("creative_type") or "Image").strip()
+    creative_id = (slot.get("creative_id") or "").strip()
+    copy = (slot.get("copy") or "").strip()
+    targeting = (slot.get("targeting") or "").strip()
+    os_val = _normalize_os(str(slot.get("os") or "All"))
+    age = _normalize_age(str(slot.get("age") or "35"))
+    asset = (slot.get("asset") or "").strip()
+    budget = (slot.get("budget") or "").strip()
+    name = (slot.get("name") or "").strip()
+
+    row: dict[str, str] = {
+        PLAN_ACCOUNT: account_label,
+        PLAN_COUNTRY: country,
+        PLAN_ASSET: asset,
+        PLAN_OS: os_val,
+        PLAN_CREATIVE: creative_type,
+        PLAN_TARGETING: targeting,
+        PLAN_AGE: age,
+        PLAN_CREATIVE_NUMBER: creative_id,
+        PLAN_DATE: _today_ddmm(),
+        PLAN_COPY: copy,
+        "campaign_name": name,
+        "ad_set_name": name,
+    }
+    if budget:
+        row["campaign_daily_budget"] = budget
+    return row
 
 
 def open_rec_to_plan_rows(
