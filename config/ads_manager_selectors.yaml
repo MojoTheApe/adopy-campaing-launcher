@@ -1,0 +1,47 @@
+# Ads Manager UI selectors — update when Meta changes the interface.
+# Each key may be a CSS selector or "role=button[name='Create']" playwright-style hint.
+
+urls:
+  campaigns: "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act_id}"
+
+selectors:
+  create_button:
+    - "role=button[name=/Create/i]"
+    - "div[aria-label='Create']"
+    - "text=Create"
+  campaign_objective_leads:
+    - "text=Leads"
+    - "div[role='button']:has-text('Leads')"
+  continue_button:
+    - "role=button[name=/Continue/i]"
+    - "div[aria-label='Continue']"
+    - "text=Continue"
+  campaign_name_input:
+    - "input[placeholder*='Campaign name']"
+    - "label:has-text('Campaign name') >> .. >> input"
+  adset_name_input:
+    - "input[placeholder*='Ad set name']"
+    - "label:has-text('Ad set name') >> .. >> input"
+  budget_input:
+    - "input[placeholder*='budget']"
+    - "label:has-text('Daily budget') >> .. >> input"
+  publish_button:
+    - "role=button[name=/Publish/i]"
+    - "div[aria-label='Publish']"
+    - "text=Publish"
+  add_media_button:
+    - "text=Add media"
+    - "role=button[name=/Add media/i]"
+  primary_text_input:
+    - "textarea[placeholder*='Primary text']"
+    - "label:has-text('Primary text') >> .. >> textarea"
+  headline_input:
+    - "input[placeholder*='Headline']"
+    - "label:has-text('Headline') >> .. >> input"
+  add_ad_button:
+    - "text=Add another ad"
+    - "role=button[name=/Add/i]"
+
+timing:
+  navigation_timeout_ms: 90000
+  action_timeout_ms: 45000

@@ -3,6 +3,9 @@
 Keeps an in-memory dict of running/completed publish jobs.
 Each job runs in a daemon thread so the web server stays responsive.
 Progress is streamed by appending to job["results"] as campaigns complete.
+
+Default backend: RPA (Playwright + Ads Manager UI).
+Set FB_PUBLISH_BACKEND=api for legacy Marketing API path.
 """
 from __future__ import annotations
 
@@ -11,15 +14,18 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from config.paths import get_ad_account_map_path
 from src.campaign_bridge.dashboard_publisher import slots_to_publish_jobs
+from src.fb_ads_rpa.config import use_rpa_publish
+from src.fb_ads_rpa.draft import RpaPublishResult
+from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
 from src.meta_campaign_agent.campaign_builder import PublishJob
 from src.meta_campaign_agent.creative_uploader import CreativeUploader
 from src.meta_campaign_agent.meta_client import MetaGraphError, meta_client_from_env
 from src.meta_campaign_agent.meta_publisher import MetaPublisher, PublishResult
 from src.meta_campaign_agent.multilogin_launcher import MultiloginLauncherError
 from src.meta_campaign_agent.multilogin_session import MultiloginSession
-from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
-from config.paths import get_ad_account_map_path
 
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
@@ -45,6 +51,12 @@ def _job_result_from(job: PublishJob, result: PublishResult) -> dict[str, Any]:
     }
 
 
+def _job_result_from_rpa(result: RpaPublishResult) -> dict[str, Any]:
+    d = result.to_job_dict()
+    d["ts"] = _now_iso()
+    return d
+
+
 def create_job(
     account_label: str,
     country: str,
@@ -52,6 +64,7 @@ def create_job(
     *,
     via_multilogin: bool = True,
     activate: bool = False,
+    total: int | None = None,
 ) -> str:
     """Create a new publish job, store it, return its job_id."""
     job_id = str(uuid.uuid4())
@@ -62,13 +75,14 @@ def create_job(
             "country": country,
             "via_multilogin": via_multilogin,
             "activate": activate,
-            "status": "pending",  # pending → running → done | failed
+            "backend": "rpa" if use_rpa_publish() else "api",
+            "status": "pending",
             "created_at": _now_iso(),
             "started_at": None,
             "finished_at": None,
-            "results": [],          # appended as each campaign completes
-            "errors": [],           # fatal errors (e.g. ML profile failed)
-            "total": len(slots),
+            "results": [],
+            "errors": [],
+            "total": total if total is not None else len(slots),
             "done_count": 0,
         }
     return job_id
@@ -79,7 +93,7 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         job = _jobs.get(job_id)
         if job is None:
             return None
-        return dict(job)  # shallow copy is fine for reads
+        return dict(job)
 
 
 def _run_job(
@@ -96,17 +110,100 @@ def _run_job(
         _jobs[job_id]["status"] = "running"
         _jobs[job_id]["started_at"] = _now_iso()
 
-    def _append_result(res: dict[str, Any]) -> None:
-        with _jobs_lock:
-            _jobs[job_id]["results"].append(res)
-            _jobs[job_id]["done_count"] += 1
+    if use_rpa_publish():
+        _run_rpa(job_id, slots, account_label=account_label, country=country, activate=activate)
+        return
 
-    def _fatal(msg: str) -> None:
-        with _jobs_lock:
-            _jobs[job_id]["errors"].append(msg)
-            _jobs[job_id]["status"] = "done"
-            _jobs[job_id]["finished_at"] = _now_iso()
+    _run_api(job_id, slots, account_label=account_label, country=country, via_multilogin=via_multilogin, activate=activate)
 
+
+def _append_result(job_id: str, res: dict[str, Any]) -> None:
+    with _jobs_lock:
+        _jobs[job_id]["results"].append(res)
+        _jobs[job_id]["done_count"] += 1
+
+
+def _fatal(job_id: str, msg: str) -> None:
+    with _jobs_lock:
+        _jobs[job_id]["errors"].append(msg)
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["finished_at"] = _now_iso()
+
+
+def _finish(job_id: str) -> None:
+    with _jobs_lock:
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["finished_at"] = _now_iso()
+
+
+def _run_rpa(
+    job_id: str,
+    slots: list[dict[str, Any]],
+    *,
+    account_label: str,
+    country: str,
+    activate: bool,
+) -> None:
+    publisher = RpaPublisher(dry_run=False)
+    try:
+        drafts = publisher.build_drafts(
+            slots,
+            account_label=account_label,
+            country=country,
+            activate=activate,
+            preview_mode=False,
+        )
+    except Exception as e:
+        _fatal(job_id, f"Failed to build campaign drafts: {e}")
+        return
+
+    with _jobs_lock:
+        _jobs[job_id]["total"] = len(drafts)
+
+    if not drafts:
+        _fatal(job_id, "No campaigns to publish.")
+        return
+
+    ready: list[Any] = []
+    for draft in drafts:
+        if draft.errors:
+            _append_result(
+                _job_result_from_rpa(
+                    RpaPublishResult(
+                        campaign_name=draft.name,
+                        success=False,
+                        error="; ".join(draft.errors),
+                    )
+                )
+            )
+        else:
+            ready.append(draft)
+
+    if not ready:
+        _finish(job_id)
+        return
+
+    try:
+        for draft in ready:
+            result = publisher.publish_draft(draft)
+            _append_result(_job_result_from_rpa(result))
+    except Exception as e:
+        with _jobs_lock:
+            _jobs[job_id]["errors"].append(f"RPA error: {e}")
+    finally:
+        publisher.close()
+        _finish(job_id)
+
+
+def _run_api(
+    job_id: str,
+    slots: list[dict[str, Any]],
+    *,
+    account_label: str,
+    country: str,
+    via_multilogin: bool,
+    activate: bool,
+) -> None:
     try:
         jobs = slots_to_publish_jobs(
             slots,
@@ -115,14 +212,16 @@ def _run_job(
             activate=activate,
         )
     except Exception as e:
-        _fatal(f"Failed to build publish jobs: {e}")
+        _fatal(job_id, f"Failed to build publish jobs: {e}")
         return
 
     if not jobs:
-        _fatal("No campaigns to publish.")
+        _fatal(job_id, "No campaigns to publish.")
         return
 
-    # Filter jobs with pre-validation errors (still report them)
+    with _jobs_lock:
+        _jobs[job_id]["total"] = len(jobs)
+
     ready = []
     for job in jobs:
         if job.errors:
@@ -142,19 +241,15 @@ def _run_job(
             ready.append(job)
 
     if not ready:
-        with _jobs_lock:
-            _jobs[job_id]["status"] = "done"
-            _jobs[job_id]["finished_at"] = _now_iso()
+        _finish(job_id)
         return
 
     if via_multilogin:
-        _run_via_multilogin(job_id, ready, account_label, _append_result)
+        _run_via_multilogin(job_id, ready, account_label, lambda r: _append_result(job_id, r))
     else:
-        _run_direct(job_id, ready, _append_result)
+        _run_direct(job_id, ready, lambda r: _append_result(job_id, r))
 
-    with _jobs_lock:
-        _jobs[job_id]["status"] = "done"
-        _jobs[job_id]["finished_at"] = _now_iso()
+    _finish(job_id)
 
 
 def _run_direct(
@@ -184,8 +279,7 @@ def _run_via_multilogin(
     append_result: Any,
 ) -> None:
     """Publish jobs: start ML profile → Meta API via its proxy → stop profile."""
-    map_path = get_ad_account_map_path()
-    account_map = load_ad_account_map(map_path)
+    account_map = load_ad_account_map(get_ad_account_map_path())
     entry = resolve_account_entry(account_map, account_label)
 
     if not entry:
@@ -207,10 +301,8 @@ def _run_via_multilogin(
         err_msg = str(e)
         with _jobs_lock:
             _jobs[job_id]["errors"].append(f"Multilogin error: {err_msg}")
-        # Mark remaining jobs as failed
         done = len(_jobs[job_id]["results"]) if job_id in _jobs else 0
-        remaining = jobs[done:]
-        for job in remaining:
+        for job in jobs[done:]:
             append_result(
                 {
                     "campaign_name": job.campaign_name,

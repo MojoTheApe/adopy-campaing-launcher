@@ -32,6 +32,9 @@ from src.analysis_agent.morning_drilldown import get_underlying_rows
 from src.analysis_agent.morning_report import _my_cm_totals
 from src.campaign_bridge.assembly import assemble_account_upload, assemble_from_form_slots
 from src.campaign_bridge.dashboard_publisher import preview_jobs
+from src.fb_ads_rpa.config import use_rpa_publish
+from src.fb_ads_rpa.preview import preview_campaign_drafts
+from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.web.publish_jobs import get_job, start_job
 from src.web.cache import cache_built_at, cache_clear, get_cached_report
 from src.analysis_agent.money_format import fmt_usd
@@ -468,7 +471,17 @@ async def preview_publish(request: Request) -> JSONResponse:
     if not slots:
         return JSONResponse({"error": "No campaign slots found. Make sure the form has at least one campaign."})
     try:
-        plan = preview_jobs(slots, account_label=account_label, country=country)
+        if use_rpa_publish():
+            pub = RpaPublisher(dry_run=True)
+            drafts = pub.build_drafts(
+                slots,
+                account_label=account_label,
+                country=country,
+                preview_mode=True,
+            )
+            plan = preview_campaign_drafts(drafts)
+        else:
+            plan = preview_jobs(slots, account_label=account_label, country=country)
     except Exception as e:
         import traceback
         return JSONResponse({"error": str(e), "detail": traceback.format_exc()})
@@ -489,7 +502,20 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
         via_multilogin=via_ml,
         activate=activate,
     )
-    return JSONResponse({"job_id": job_id, "total": len(slots)})
+    if use_rpa_publish():
+        from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+
+        total = len(
+            slots_to_campaign_drafts(
+                slots,
+                account_label=account_label,
+                country=country,
+                activate=activate,
+            )
+        )
+    else:
+        total = len(slots)
+    return JSONResponse({"job_id": job_id, "total": total})
 
 
 @app.get("/publish-jobs/{job_id}")

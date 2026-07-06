@@ -1,0 +1,2 @@
+account_name,ad_account_id,page_id,multilogin_instance,folder_id,profile_id,proxy_type,proxy_host,proxy_port,proxy_user,proxy_pass
+FacebookUL574 EC Fav,act_1234567890,123456789012345,A,your-folder-uuid,your-profile-uuid,http,proxy.example.com,8080,user,pass
