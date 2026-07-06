@@ -93,7 +93,11 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         job = _jobs.get(job_id)
         if job is None:
             return None
-        return dict(job)
+        # Deep-copy mutable lists so callers see a stable snapshot
+        snap = dict(job)
+        snap["results"] = list(job["results"])
+        snap["errors"] = list(job["errors"])
+        return snap
 
 
 def _run_job(
@@ -168,13 +172,14 @@ def _run_rpa(
     for draft in drafts:
         if draft.errors:
             _append_result(
+                job_id,
                 _job_result_from_rpa(
                     RpaPublishResult(
                         campaign_name=draft.name,
                         success=False,
                         error="; ".join(draft.errors),
                     )
-                )
+                ),
             )
         else:
             ready.append(draft)
@@ -186,7 +191,7 @@ def _run_rpa(
     try:
         for draft in ready:
             result = publisher.publish_draft(draft)
-            _append_result(_job_result_from_rpa(result))
+            _append_result(job_id, _job_result_from_rpa(result))
     except Exception as e:
         with _jobs_lock:
             _jobs[job_id]["errors"].append(f"RPA error: {e}")
@@ -226,6 +231,7 @@ def _run_api(
     for job in jobs:
         if job.errors:
             _append_result(
+                job_id,
                 {
                     "campaign_name": job.campaign_name,
                     "success": False,
@@ -235,7 +241,7 @@ def _run_api(
                     "ad_id": None,
                     "error": "; ".join(job.errors),
                     "ts": _now_iso(),
-                }
+                },
             )
         else:
             ready.append(job)

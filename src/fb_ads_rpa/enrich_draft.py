@@ -12,6 +12,7 @@ from src.upload_agent.build_upload_excel import get_account_info, load_reference
 
 _ref_cache: dict | None = None
 _ref_cache_mtime: float = -1.0
+_ref_cache_lock = __import__("threading").Lock()
 
 
 def _get_ref(excel_path: str) -> dict:
@@ -20,15 +21,16 @@ def _get_ref(excel_path: str) -> dict:
         mtime = os.path.getmtime(excel_path)
     except OSError:
         return {}
-    if _ref_cache is not None and mtime == _ref_cache_mtime:
-        return _ref_cache
-    try:
-        ref = load_reference_data(excel_path)
-    except Exception as exc:
-        return {"_load_error": str(exc)}
-    _ref_cache = ref
-    _ref_cache_mtime = mtime
-    return ref
+    with _ref_cache_lock:
+        if _ref_cache is not None and mtime == _ref_cache_mtime:
+            return _ref_cache
+        try:
+            ref = load_reference_data(excel_path)
+        except Exception as exc:
+            return {"_load_error": str(exc)}
+        _ref_cache = ref
+        _ref_cache_mtime = mtime
+        return ref
 
 
 def enrich_campaign_drafts(
@@ -62,14 +64,16 @@ def enrich_campaign_drafts(
         if ref.get("_load_error"):
             draft.warnings.append(f"Upload FB.xlsx not loaded: {ref['_load_error']}")
         if not entry:
-            draft.errors.append("Account not in ad_account_map.csv")
-        if not entry or not entry.ad_account_id:
-            draft.errors.append("ad_account_id not mapped")
+            draft.errors.append("Account not in ad_account_map.csv — add row and re-run")
+            # remaining checks require entry; skip to avoid duplicate noise
+            continue
+        if not entry.ad_account_id:
+            draft.errors.append("ad_account_id not mapped in ad_account_map.csv")
         if not draft.link:
             draft.errors.append("Link empty in Upload FB Accounts sheet")
         if not draft.page_id:
             draft.errors.append("page_id missing in ad_account_map.csv")
-        if not entry or not entry.profile_id:
+        if not entry.profile_id:
             draft.errors.append("profile_id missing in ad_account_map.csv (browser session)")
 
         for ad_set in draft.ad_sets:

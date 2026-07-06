@@ -75,19 +75,24 @@ class MultiloginBrowserProvider:
         self._started_profile_id = started.profile_id
 
         if not started.port:
+            self.close(entry)
             raise MultiloginLauncherError("Multilogin start did not return debug port")
 
-        if started.ws_endpoint:
-            cdp = f"http://127.0.0.1:{started.port}{started.ws_endpoint}"
-        else:
-            cdp = f"http://127.0.0.1:{started.port}"
+        ws = started.ws_endpoint or ""
+        if ws and not ws.startswith("/"):
+            ws = f"/{ws}"
+        cdp = f"http://127.0.0.1:{started.port}{ws}"
 
-        return _connect_playwright(
-            cdp_url=cdp,
-            provider="multilogin",
-            debug_port=started.port,
-            ws_endpoint=started.ws_endpoint,
-        )
+        try:
+            return _connect_playwright(
+                cdp_url=cdp,
+                provider="multilogin",
+                debug_port=started.port,
+                ws_endpoint=started.ws_endpoint,
+            )
+        except Exception:
+            self.close(entry)
+            raise
 
     def close(self, entry: AccountMapEntry) -> None:
         if self._launcher and self._started_profile_id:

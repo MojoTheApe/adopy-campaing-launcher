@@ -27,16 +27,28 @@ def _selector_list(cfg: dict[str, Any], key: str) -> list[str]:
     return [str(s) for s in raw]
 
 
+def _parse_role_name(raw: str) -> re.Pattern[str]:
+    """Parse /pattern/flags or plain string into a regex for get_by_role name=."""
+    m = re.match(r"^/(.+)/([gimsuy]*)$", raw.strip())
+    if m:
+        pattern, flags_str = m.group(1), m.group(2)
+        flags = 0
+        if "i" in flags_str:
+            flags |= re.IGNORECASE
+        return re.compile(pattern, flags)
+    return re.compile(re.escape(raw.strip()), re.IGNORECASE)
+
+
 def _try_locator(page: Page, selector: str) -> Locator | None:
     if selector.startswith("role="):
         m = re.match(r"role=(\w+)\[name=([^\]]+)\]", selector)
         if m:
-            role, name = m.group(1), m.group(2)
-            loc = page.get_by_role(role, name=re.compile(name.strip("/"), re.I))
+            role, name_raw = m.group(1), m.group(2)
+            loc = page.get_by_role(role, name=_parse_role_name(name_raw))
             return loc.first if loc.count() else None
     if selector.startswith("text="):
         text = selector[5:]
-        loc = page.get_by_text(re.compile(text, re.I))
+        loc = page.get_by_text(re.compile(re.escape(text), re.I))
         return loc.first if loc.count() else None
     loc = page.locator(selector)
     return loc.first if loc.count() else None
@@ -178,16 +190,14 @@ class AdsManagerFlow:
         result: RpaPublishResult,
     ) -> None:
         sels = self.cfg.get("selectors") or {}
-        try:
-            _fill_first(
-                self.page,
-                _selector_list(sels, "campaign_name_input"),
-                draft.name,
-                timeout_ms=self.action_timeout,
-            )
-            result.steps_completed.append("campaign_name")
-        except AdsManagerFlowError:
-            pass
+        # Campaign name — critical; raise if selector not found (hard fail, not silent)
+        _fill_first(
+            self.page,
+            _selector_list(sels, "campaign_name_input"),
+            draft.name,
+            timeout_ms=self.action_timeout,
+        )
+        result.steps_completed.append("campaign_name")
 
         try:
             _fill_first(
@@ -198,7 +208,7 @@ class AdsManagerFlow:
             )
             result.steps_completed.append("adset_name")
         except AdsManagerFlowError:
-            pass
+            result.steps_completed.append("adset_name_skipped")
 
         if ad_set.daily_budget is not None:
             try:
@@ -210,7 +220,9 @@ class AdsManagerFlow:
                 )
                 result.steps_completed.append("daily_budget")
             except AdsManagerFlowError:
-                pass
+                result.steps_completed.append("daily_budget_skipped")
+        else:
+            result.steps_completed.append("daily_budget_not_set")
 
         self._shot("04_names_budget", result)
 
@@ -232,7 +244,8 @@ class AdsManagerFlow:
                     )
                     pause_medium()
                     result.steps_completed.append(f"add_ad_{idx + 1}")
-                except AdsManagerFlowError:
+                except AdsManagerFlowError as exc:
+                    result.steps_completed.append(f"add_ad_{idx + 1}_failed:{exc}")
                     break
 
             if dry_run:
