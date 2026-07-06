@@ -189,7 +189,13 @@ def _render_report(
 
 
 def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
-    """Parse campaign builder form (new slot-based format)."""
+    """Parse campaign builder form.
+
+    Each campaign card may contain multiple ad rows (camp_N_ad_M_*).
+    All ads from the same campaign share the same name → group into one CampaignDraft.
+    """
+    from datetime import date as _date
+
     country = (form.get("country") or "").strip()
     account_label = (form.get("account_label") or "").strip()
     try:
@@ -198,33 +204,55 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         camp_count = 0
 
     slots: list[dict] = []
+    ddmm = _date.today().strftime("%d.%m")
+    country_val = country.upper()
+
     for idx in range(camp_count):
-        creative_type = (form.get(f"camp_{idx}_creative_type") or "Image").strip()
-        targeting     = (form.get(f"camp_{idx}_targeting") or "").strip()
-        os_val        = (form.get(f"camp_{idx}_os") or "All").strip()
-        age_val       = (form.get(f"camp_{idx}_age") or "35").strip()
-        asset_val     = (form.get(f"camp_{idx}_asset") or "").strip().replace(" ", "")
-        country_val   = country.upper()
-        from datetime import date as _date
-        ddmm = _date.today().strftime("%d.%m")
-        auto_name     = "_".join(p for p in [country_val, asset_val, os_val, creative_type, targeting, age_val, ddmm] if p)
-        name = (form.get(f"camp_{idx}_name") or "").strip() or auto_name
+        targeting = (form.get(f"camp_{idx}_targeting") or "").strip()
+        os_val    = (form.get(f"camp_{idx}_os") or "All").strip()
+        age_val   = (form.get(f"camp_{idx}_age") or "35").strip()
+        asset_val = (form.get(f"camp_{idx}_asset") or "").strip().replace(" ", "")
+        budget    = (form.get(f"camp_{idx}_budget") or "").strip()
+        name      = (form.get(f"camp_{idx}_name") or "").strip()
+
+        try:
+            ad_count = int(form.get(f"camp_{idx}_ad_count") or 1)
+        except (TypeError, ValueError):
+            ad_count = 1
+
+        # Build auto-name from campaign-level fields if not set
+        if not name:
+            # Use first ad's creative type for name
+            first_ctype = (form.get(f"camp_{idx}_ad_0_creative_type") or "Image").strip()
+            name = "_".join(p for p in [country_val, asset_val, os_val, first_ctype, targeting, age_val, ddmm] if p)
         if not name:
             continue
-        slots.append(
-            {
-                "name": name,
-                "creative_type": (form.get(f"camp_{idx}_creative_type") or "Image").strip(),
-                "creative_id": (form.get(f"camp_{idx}_creative_id") or "").strip(),
-                "creative_file": (form.get(f"camp_{idx}_creative_file") or "").strip(),
-                "copy": (form.get(f"camp_{idx}_copy") or "").strip(),
-                "targeting": (form.get(f"camp_{idx}_targeting") or "").strip(),
-                "os": (form.get(f"camp_{idx}_os") or "All").strip(),
-                "age": (form.get(f"camp_{idx}_age") or "35").strip(),
-                "budget": (form.get(f"camp_{idx}_budget") or "").strip(),
-                "asset": (form.get(f"camp_{idx}_asset") or "").strip(),
-            }
-        )
+
+        for a_idx in range(ad_count):
+            creative_type = (form.get(f"camp_{idx}_ad_{a_idx}_creative_type") or "Image").strip()
+            creative_file = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file") or "").strip()
+            copy          = (form.get(f"camp_{idx}_ad_{a_idx}_copy") or "").strip()
+
+            # Legacy single-ad fallback (forms submitted before multi-ad upgrade)
+            if not creative_file and a_idx == 0:
+                creative_file = (form.get(f"camp_{idx}_creative_file") or "").strip()
+            if not copy and a_idx == 0:
+                copy = (form.get(f"camp_{idx}_copy") or "").strip()
+
+            slots.append(
+                {
+                    "name": name,
+                    "creative_type": creative_type,
+                    "creative_id": (form.get(f"camp_{idx}_creative_id") or "").strip(),
+                    "creative_file": creative_file,
+                    "copy": copy,
+                    "targeting": targeting,
+                    "os": os_val,
+                    "age": age_val,
+                    "budget": budget,
+                    "asset": asset_val,
+                }
+            )
     return country, account_label, slots
 
 

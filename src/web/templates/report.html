@@ -482,6 +482,75 @@
       display: inline-block;
     }
     .cb-add-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .cb-add-btn-sm {
+      background: transparent;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      border-radius: 3px;
+      padding: 0.18rem 0.55rem;
+      font-size: 0.72rem;
+      font-family: inherit;
+      cursor: pointer;
+      margin-top: 0.35rem;
+      display: inline-block;
+    }
+    .cb-add-btn-sm:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* Multi-ad rows */
+    .cb-ads-section { margin-top: 0.5rem; }
+    .cb-ads-divider {
+      font-size: 0.68rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.3rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .cb-ads-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .cb-ad-row {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.45rem 0.6rem 0.45rem 0.6rem;
+      margin-bottom: 0.3rem;
+      position: relative;
+    }
+    .cb-ad-row-header {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-bottom: 0.3rem;
+    }
+    .cb-ad-row-label { color: var(--muted); font-size: 0.68rem; font-weight: 600; flex: 1; }
+    .cb-remove-ad-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      width: 1.2rem; height: 1.2rem;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      line-height: 1;
+      padding: 0;
+      font-family: inherit;
+      opacity: 0.5;
+    }
+    .cb-ad-row:hover .cb-remove-ad-btn { opacity: 1; }
+    .cb-remove-ad-btn:hover { color: var(--bad); border-color: var(--bad); opacity: 1; }
+    .cb-ad-fields {
+      display: grid;
+      grid-template-columns: 7rem 1fr;
+      gap: 0.25rem 0.4rem;
+      align-items: center;
+      font-size: 0.78rem;
+    }
 
     /* Searchable select */
     .cb-sel-wrap { position: relative; width: 100%; }
@@ -1192,58 +1261,22 @@
         data-asset="{{ default_asset }}">
     <div class="open-account-name">{{ acc_label }}</div>
     <div class="cb-slots">
-    {# Render one slot per creative suggestion across all recs #}
+    {# One campaign card per rec; each creative becomes an ad row inside it #}
     {% set ns = namespace(idx=0) %}
     {% for r in recs | sort(attribute='strategy_type') %}
       {% set creatives = r.creatives if (r.creatives and r.creatives|length > 0) else [{'name': ''}] %}
-      {% for cr in creatives %}
-        {% set ctype = cr.name | creative_type %}
-        {% set creative_id = cr.name | creative_id %}
-      {# Pre-compute selected creative label for display #}
-      {% set sel_creative_label = '' %}
-      {% if ctype == 'Video' %}
-        {% for vid in ref_options.video_files %}{% if vid.id == creative_id %}{% set sel_creative_label = vid.id ~ ' — ' ~ vid.filename %}{% endif %}{% endfor %}
-      {% else %}
-        {% for img in ref_options.image_files %}{% if img.id == creative_id %}{% set sel_creative_label = img.id ~ ' — ' ~ img.filename %}{% endif %}{% endfor %}
-      {% endif %}
       {% set sel_targeting_label = r.targeting or '' %}
       <div class="cb-slot" data-idx="{{ ns.idx }}">
         <div class="cb-slot-header">
           <span class="cb-slot-label">Campaign {{ ns.idx + 1 }}
             {% if r.strategy_label %}<span style="color:var(--muted);font-weight:normal"> · {{ r.strategy_label }}</span>{% endif %}
           </span>
-          <button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove">×</button>
+          <button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>
         </div>
         <div class="cb-slot-name" data-name-display></div>
+
+        {# ── Campaign-level fields ── #}
         <div class="cb-fields">
-          <span class="cb-label">Creative type</span>
-          <div class="cb-radio-group">
-            <label><input type="radio" name="camp_{{ ns.idx }}_creative_type" value="Image" {% if ctype != 'Video' %}checked{% endif %} onchange="cbTypeChange(this)"> Image</label>
-            <label><input type="radio" name="camp_{{ ns.idx }}_creative_type" value="Video" {% if ctype == 'Video' %}checked{% endif %} onchange="cbTypeChange(this)"> Video</label>
-          </div>
-
-          <span class="cb-label">Creative file</span>
-          <div class="cb-sel-wrap cb-creative-sel-wrap" data-ctype="{{ ctype }}">
-            <input type="text" class="cb-sel-text cb-creative-search"
-                   placeholder="— type to search file —"
-                   autocomplete="off" value="{{ sel_creative_label }}"
-                   oninput="cbCreativeSearch(this)">
-            <div class="cb-sel-dropdown" hidden></div>
-            <input type="hidden" name="camp_{{ ns.idx }}_creative_file" value="{{ sel_creative_label }}">
-          </div>
-
-          <span class="cb-label">Ad copy</span>
-          <div class="cb-sel-wrap">
-            <input type="text" class="cb-sel-text" placeholder="— search copy —" autocomplete="off" value="">
-            <div class="cb-sel-dropdown" hidden>
-              <div class="cb-sel-opt" data-val="">— select —</div>
-              {% for copy_name in ref_options.ad_copies %}
-              <div class="cb-sel-opt" data-val="{{ copy_name }}">{{ copy_name }}</div>
-              {% endfor %}
-            </div>
-            <input type="hidden" name="camp_{{ ns.idx }}_copy" value="">
-          </div>
-
           <span class="cb-label">Targeting</span>
           <div class="cb-sel-wrap">
             <input type="text" class="cb-sel-text" placeholder="— search targeting —"
@@ -1285,9 +1318,53 @@
 
           <input type="hidden" name="camp_{{ ns.idx }}_name" class="cb-name-hidden" value="">
         </div>
+
+        {# ── Ad rows ── #}
+        <div class="cb-ads-section">
+          <div class="cb-ads-divider">Ads</div>
+          <div class="cb-ad-rows">
+            {% for cr in creatives %}
+            {% set ctype = cr.name | creative_type %}
+            <div class="cb-ad-row" data-ad-idx="{{ loop.index0 }}">
+              <div class="cb-ad-row-header">
+                <span class="cb-ad-row-label">Ad {{ loop.index }}</span>
+                <button type="button" class="cb-remove-ad-btn" onclick="cbRemoveAd(this)" title="Remove ad">×</button>
+              </div>
+              <div class="cb-ad-fields">
+                <span class="cb-label">Type</span>
+                <div class="cb-radio-group">
+                  <label><input type="radio" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_creative_type" value="Image" {% if ctype != 'Video' %}checked{% endif %} onchange="cbAdTypeChange(this)"> Image</label>
+                  <label><input type="radio" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_creative_type" value="Video" {% if ctype == 'Video' %}checked{% endif %} onchange="cbAdTypeChange(this)"> Video</label>
+                </div>
+                <span class="cb-label">File</span>
+                <div class="cb-sel-wrap cb-creative-sel-wrap" data-ctype="{{ ctype }}">
+                  <input type="text" class="cb-sel-text cb-creative-search"
+                         placeholder="— type to search file —"
+                         autocomplete="off" value=""
+                         oninput="cbCreativeSearch(this)">
+                  <div class="cb-sel-dropdown" hidden></div>
+                  <input type="hidden" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_creative_file" value="">
+                </div>
+                <span class="cb-label">Copy</span>
+                <div class="cb-sel-wrap">
+                  <input type="text" class="cb-sel-text" placeholder="— search copy —" autocomplete="off" value="">
+                  <div class="cb-sel-dropdown" hidden>
+                    <div class="cb-sel-opt" data-val="">— select —</div>
+                    {% for copy_name in ref_options.ad_copies %}
+                    <div class="cb-sel-opt" data-val="{{ copy_name }}">{{ copy_name }}</div>
+                    {% endfor %}
+                  </div>
+                  <input type="hidden" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_copy" value="">
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <input type="hidden" name="camp_{{ ns.idx }}_ad_count" class="cb-ad-count" value="{{ creatives|length }}">
+          <button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>
+        </div>
       </div>
-        {% set ns.idx = ns.idx + 1 %}
-      {% endfor %}
+      {% set ns.idx = ns.idx + 1 %}
     {% endfor %}
     </div>{# /cb-slots #}
 
@@ -1746,7 +1823,9 @@ function copyBrief(btn) {
   window.cbUpdateName = function(slot) {
     if (!slot) return;
     var idx    = slot.dataset.idx;
-    var ctype  = (slot.querySelector('[name="camp_' + idx + '_creative_type"]:checked') || {}).value || 'Image';
+    // Derive creative type from first ad row
+    var firstAdType = slot.querySelector('[name^="camp_' + idx + '_ad_0_creative_type"]:checked');
+    var ctype  = (firstAdType || {}).value || 'Image';
     var tgt    = getHiddenVal(slot, 'targeting');
     var os     = getHiddenVal(slot, 'os');
     var age    = (slot.querySelector('[name="camp_' + idx + '_age"]') || {}).value || '35';
@@ -1832,16 +1911,104 @@ function copyBrief(btn) {
     (root || document).querySelectorAll('.cb-sel-wrap:not(.cb-creative-sel-wrap)').forEach(initCbSel);
   }
 
-  // ── Creative type toggle ──────────────────────────────────────────────
+  // cbTypeChange kept for any legacy callers (no-op redirect)
   window.cbTypeChange = function(radio) {
+    cbAdTypeChange(radio);
     var slot = radio.closest('.cb-slot');
+    if (slot) cbUpdateName(slot);
+  };
+
+  // ── Ad row HTML builder ───────────────────────────────────────────────
+  function buildAdRowHTML(cIdx, aIdx) {
+    var ref = REF || {ad_copies:[]};
+    var pfx = 'camp_' + cIdx + '_ad_' + aIdx + '_';
+    var copiesHtml = '<div class="cb-sel-opt" data-val="">— select —</div>';
+    (ref.ad_copies || []).forEach(function(c) {
+      copiesHtml += '<div class="cb-sel-opt" data-val="' + c + '">' + c + '</div>';
+    });
+    return '<div class="cb-ad-row" data-ad-idx="' + aIdx + '">' +
+      '<div class="cb-ad-row-header">' +
+      '<span class="cb-ad-row-label">Ad ' + (aIdx + 1) + '</span>' +
+      '<button type="button" class="cb-remove-ad-btn" onclick="cbRemoveAd(this)" title="Remove ad">×</button>' +
+      '</div>' +
+      '<div class="cb-ad-fields">' +
+      '<span class="cb-label">Type</span>' +
+      '<div class="cb-radio-group">' +
+      '<label><input type="radio" name="' + pfx + 'creative_type" value="Image" checked onchange="cbAdTypeChange(this)"> Image</label>' +
+      '<label><input type="radio" name="' + pfx + 'creative_type" value="Video" onchange="cbAdTypeChange(this)"> Video</label>' +
+      '</div>' +
+      '<span class="cb-label">File</span>' +
+      '<div class="cb-sel-wrap cb-creative-sel-wrap" data-ctype="Image">' +
+      '<input type="text" class="cb-sel-text cb-creative-search" placeholder="— type to search file —" autocomplete="off" value="" oninput="cbCreativeSearch(this)">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="' + pfx + 'creative_file" value="">' +
+      '</div>' +
+      '<span class="cb-label">Copy</span>' +
+      '<div class="cb-sel-wrap">' +
+      '<input type="text" class="cb-sel-text" placeholder="— search copy —" autocomplete="off" value="">' +
+      '<div class="cb-sel-dropdown" hidden>' + copiesHtml + '</div>' +
+      '<input type="hidden" name="' + pfx + 'copy" value="">' +
+      '</div>' +
+      '</div></div>';
+  }
+
+  // ── Add / Remove ad within campaign ──────────────────────────────────
+  window.cbAddAd = function(btn) {
+    var slot = btn.closest('.cb-slot');
     if (!slot) return;
-    var ctype = radio.value; // 'Image' or 'Video'
-    // Update data-ctype on wrapper so cbCreativeSearch filters correctly
-    var wrap = slot.querySelector('.cb-creative-sel-wrap');
+    var cIdx = slot.dataset.idx;
+    var rows = slot.querySelectorAll('.cb-ad-row');
+    var aIdx = rows.length;
+    var container = slot.querySelector('.cb-ad-rows');
+    container.insertAdjacentHTML('beforeend', buildAdRowHTML(cIdx, aIdx));
+    var newRow = container.querySelector('.cb-ad-row[data-ad-idx="' + aIdx + '"]');
+    if (newRow) initAllSelects(newRow);
+    cbUpdateAdCount(slot);
+    cbUpdateAdLabels(slot);
+  };
+
+  window.cbRemoveAd = function(btn) {
+    var row = btn.closest('.cb-ad-row');
+    var slot = btn.closest('.cb-slot');
+    if (!row || !slot) return;
+    var rows = slot.querySelectorAll('.cb-ad-row');
+    if (rows.length <= 1) return; // keep at least 1
+    row.remove();
+    cbRenumberAds(slot);
+    cbUpdateAdCount(slot);
+    cbUpdateAdLabels(slot);
+  };
+
+  function cbRenumberAds(slot) {
+    var cIdx = slot.dataset.idx;
+    slot.querySelectorAll('.cb-ad-row').forEach(function(row, aIdx) {
+      row.dataset.adIdx = aIdx;
+      row.querySelectorAll('[name]').forEach(function(el) {
+        el.name = el.name.replace(/^camp_\d+_ad_\d+_/, 'camp_' + cIdx + '_ad_' + aIdx + '_');
+      });
+    });
+  }
+
+  function cbUpdateAdCount(slot) {
+    var c = slot.querySelector('.cb-ad-count');
+    if (c) c.value = slot.querySelectorAll('.cb-ad-row').length;
+  }
+
+  function cbUpdateAdLabels(slot) {
+    slot.querySelectorAll('.cb-ad-row').forEach(function(row, i) {
+      var lbl = row.querySelector('.cb-ad-row-label');
+      if (lbl) lbl.textContent = 'Ad ' + (i + 1);
+    });
+  }
+
+  // ── Ad type toggle (per-ad-row) ───────────────────────────────────────
+  window.cbAdTypeChange = function(radio) {
+    var row = radio.closest('.cb-ad-row');
+    if (!row) return;
+    var ctype = radio.value;
+    var wrap = row.querySelector('.cb-creative-sel-wrap');
     if (wrap) {
       wrap.dataset.ctype = ctype;
-      // Reset creative selection when type changes
       var h = wrap.querySelector('input[type="hidden"]');
       var t = wrap.querySelector('.cb-sel-text');
       var dd = wrap.querySelector('.cb-sel-dropdown');
@@ -1849,10 +2016,9 @@ function copyBrief(btn) {
       if (t) t.value = '';
       if (dd) dd.hidden = true;
     }
-    cbUpdateName(slot);
   };
 
-  // ── Remove / Renumber ─────────────────────────────────────────────────
+  // ── Remove campaign / Renumber ────────────────────────────────────────
   window.cbRemoveSlot = function(btn) {
     var slot = btn.closest('.cb-slot');
     if (!slot) return;
@@ -1863,11 +2029,13 @@ function copyBrief(btn) {
 
   function cbRenumber(form) {
     form.querySelectorAll('.cb-slot').forEach(function(slot, i) {
+      var oldIdx = slot.dataset.idx;
       slot.dataset.idx = i;
       var label = slot.querySelector('.cb-slot-label');
       if (label) label.innerHTML = label.innerHTML.replace(/^Campaign \d+/, 'Campaign ' + (i + 1));
+      // Rename camp_OLD_* → camp_NEW_* (covers both campaign and ad-row fields)
       slot.querySelectorAll('[name]').forEach(function(el) {
-        el.name = el.name.replace(/^camp_\d+_/, 'camp_' + i + '_');
+        el.name = el.name.replace(new RegExp('^camp_' + oldIdx + '_'), 'camp_' + i + '_');
       });
       cbUpdateName(slot);
     });
@@ -1878,53 +2046,48 @@ function copyBrief(btn) {
     if (c) c.value = form.querySelectorAll('.cb-slot').length;
   }
 
-  // ── Build blank slot HTML (for + Add Campaign) ────────────────────────
-  function mkSel(idx, field, opts, placeholder) {
+  // ── Build blank campaign slot ─────────────────────────────────────────
+  function mkSel(cIdx, field, opts, placeholder) {
     var optsHtml = '<div class="cb-sel-opt" data-val="">— select —</div>';
     opts.forEach(function(o) {
       var val = typeof o === 'string' ? o : o.id;
-      var lbl = typeof o === 'string' ? o : (o.id + ' — ' + o.filename);
+      var lbl = typeof o === 'string' ? o : o.id;
       optsHtml += '<div class="cb-sel-opt" data-val="' + val + '">' + lbl + '</div>';
     });
     return '<div class="cb-sel-wrap">' +
       '<input type="text" class="cb-sel-text" placeholder="' + placeholder + '" autocomplete="off" value="">' +
       '<div class="cb-sel-dropdown" hidden>' + optsHtml + '</div>' +
-      '<input type="hidden" name="camp_' + idx + '_' + field + '" value="">' +
+      '<input type="hidden" name="camp_' + cIdx + '_' + field + '" value="">' +
       '</div>';
   }
 
   function buildBlankSlotHTML(idx) {
     var ref = REF || {ad_copies:[], targetings:[]};
-    var creativeSel = '<div class="cb-sel-wrap cb-creative-sel-wrap" data-ctype="Image">' +
-      '<input type="text" class="cb-sel-text cb-creative-search" placeholder="— type to search file —" autocomplete="off" value="" oninput="cbCreativeSearch(this)">' +
-      '<div class="cb-sel-dropdown" hidden></div>' +
-      '<input type="hidden" name="camp_' + idx + '_creative_file" value=""></div>';
-
     return '<div class="cb-slot" data-idx="' + idx + '">' +
       '<div class="cb-slot-header">' +
-      '<span class="cb-slot-label">Campaign ' + (idx+1) + '</span>' +
-      '<button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove">×</button>' +
+      '<span class="cb-slot-label">Campaign ' + (idx + 1) + '</span>' +
+      '<button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>' +
       '</div>' +
       '<div class="cb-slot-name" data-name-display></div>' +
       '<div class="cb-fields">' +
-      '<span class="cb-label">Creative type</span>' +
-      '<div class="cb-radio-group">' +
-      '<label><input type="radio" name="camp_'+idx+'_creative_type" value="Image" checked onchange="cbTypeChange(this)"> Image</label>' +
-      '<label><input type="radio" name="camp_'+idx+'_creative_type" value="Video" onchange="cbTypeChange(this)"> Video</label>' +
-      '</div>' +
-      '<span class="cb-label">Creative file</span>' + creativeSel +
-      '<span class="cb-label">Ad copy</span>' + mkSel(idx,'copy',ref.ad_copies,'— search copy —') +
-      '<span class="cb-label">Targeting</span>' + mkSel(idx,'targeting',ref.targetings,'— search targeting —') +
+      '<span class="cb-label">Targeting</span>' + mkSel(idx, 'targeting', ref.targetings, '— search targeting —') +
       '<span class="cb-label">OS / Age / Budget</span>' +
-      '<div class="cb-inline">' + mkSel(idx,'os',['All','iOS','Android'],'OS') +
-      '<input type="number" name="camp_'+idx+'_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
+      '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS', 'Android'], 'OS') +
+      '<input type="number" name="camp_' + idx + '_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
       '<span style="color:var(--muted);font-size:0.72rem">$/day</span>' +
-      '<input type="number" name="camp_'+idx+'_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50">' +
+      '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50">' +
       '</div>' +
       '<span class="cb-label">Asset / Offer</span>' +
-      '<input type="text" name="camp_'+idx+'_asset" class="cb-input" value="" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
-      '<input type="hidden" name="camp_'+idx+'_name" class="cb-name-hidden" value="">' +
-      '</div></div>';
+      '<input type="text" name="camp_' + idx + '_asset" class="cb-input" value="" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
+      '<input type="hidden" name="camp_' + idx + '_name" class="cb-name-hidden" value="">' +
+      '</div>' +
+      '<div class="cb-ads-section">' +
+      '<div class="cb-ads-divider">Ads</div>' +
+      '<div class="cb-ad-rows">' + buildAdRowHTML(idx, 0) + '</div>' +
+      '<input type="hidden" name="camp_' + idx + '_ad_count" class="cb-ad-count" value="1">' +
+      '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>' +
+      '</div>' +
+      '</div>';
   }
 
   window.cbAddSlot = function(form) {
@@ -1945,9 +2108,16 @@ function copyBrief(btn) {
 
   // ── Init ─────────────────────────────────────────────────────────────
   initAllSelects();
-  document.querySelectorAll('.cb-slot').forEach(function(slot) { cbUpdateName(slot); });
+  document.querySelectorAll('.cb-slot').forEach(function(slot) {
+    cbUpdateAdCount(slot);
+    cbUpdateAdLabels(slot);
+    cbUpdateName(slot);
+  });
   document.querySelectorAll('form[data-open-form]').forEach(function(form) {
-    form.addEventListener('submit', function() { cbUpdateCount(form); });
+    form.addEventListener('submit', function() {
+      form.querySelectorAll('.cb-slot').forEach(function(slot) { cbUpdateAdCount(slot); });
+      cbUpdateCount(form);
+    });
   });
 })();
 
