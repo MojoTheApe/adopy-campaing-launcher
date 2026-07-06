@@ -42,6 +42,18 @@ selectors:
     - "text=Add another ad"
     - "role=button[name=/Add/i]"
 
+  # Detailed Targeting (Ad Set level)
+  detailed_targeting_input:
+    - "input[placeholder*='Add interests']"
+    - "input[placeholder*='interests, behaviors']"
+    - "div[aria-label*='Detailed targeting'] input"
+    - "div[aria-label*='detailed targeting'] input"
+  targeting_suggestion_item:
+    - "ul[role='listbox'] li:first-child"
+    - "div[role='option']:first-child"
+    - "[role='option']:first-child"
+    - "li[role='option']:first-child"
+
 timing:
   navigation_timeout_ms: 90000
   action_timeout_ms: 45000

@@ -495,6 +495,12 @@
       display: inline-block;
     }
     .cb-add-btn-sm:hover { color: var(--accent); border-color: var(--accent); }
+    .cb-targeting-hint {
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-top: 0.15rem;
+      opacity: 0.75;
+    }
 
     /* Multi-ad rows */
     .cb-ads-section { margin-top: 0.5rem; }
@@ -1278,16 +1284,16 @@
         {# ── Campaign-level fields ── #}
         <div class="cb-fields">
           <span class="cb-label">Targeting</span>
-          <div class="cb-sel-wrap">
-            <input type="text" class="cb-sel-text" placeholder="— search targeting —"
-                   autocomplete="off" value="{{ sel_targeting_label }}">
-            <div class="cb-sel-dropdown" hidden>
-              <div class="cb-sel-opt" data-val="">— select —</div>
-              {% for t in ref_options.targetings %}
-              <div class="cb-sel-opt" data-val="{{ t }}" {% if t == sel_targeting_label %}class="cb-sel-active"{% endif %}>{{ t }}</div>
-              {% endfor %}
-            </div>
-            <input type="hidden" name="camp_{{ ns.idx }}_targeting" value="{{ sel_targeting_label }}">
+          <div>
+            <input type="text"
+                   name="camp_{{ ns.idx }}_targeting"
+                   class="cb-input cb-targeting-input"
+                   value="{{ sel_targeting_label }}"
+                   placeholder="Amazon, Online Shopping, Finance"
+                   autocomplete="off"
+                   oninput="cbUpdateName(this.closest('.cb-slot'))"
+                   title="Comma-separated FB interest names — each will be typed into Detailed Targeting">
+            <div class="cb-targeting-hint">comma-separated FB interests, e.g. Amazon, Online Shopping</div>
           </div>
 
           <span class="cb-label">OS / Age / Budget</span>
@@ -1879,7 +1885,9 @@ function copyBrief(btn) {
     // Derive creative type from first ad row
     var firstAdType = slot.querySelector('[name^="camp_' + idx + '_ad_0_creative_type"]:checked');
     var ctype  = (firstAdType || {}).value || 'Image';
-    var tgt    = getHiddenVal(slot, 'targeting');
+    // For name: take only first targeting term (before first comma)
+    var tgtFull = getHiddenVal(slot, 'targeting');
+    var tgt     = (tgtFull || '').split(',')[0].trim();
     var os     = getHiddenVal(slot, 'os');
     var age    = (slot.querySelector('[name="camp_' + idx + '_age"]') || {}).value || '35';
     var asset  = (slot.querySelector('[name="camp_' + idx + '_asset"]') || {}).value || '';
@@ -2123,7 +2131,9 @@ function copyBrief(btn) {
       '</div>' +
       '<div class="cb-slot-name" data-name-display></div>' +
       '<div class="cb-fields">' +
-      '<span class="cb-label">Targeting</span>' + mkSel(idx, 'targeting', ref.targetings, '— search targeting —') +
+      '<span class="cb-label">Targeting</span>' +
+      '<div><input type="text" name="camp_' + idx + '_targeting" class="cb-input cb-targeting-input" value="" placeholder="Amazon, Online Shopping, Finance" autocomplete="off" oninput="cbUpdateName(this.closest(\'.cb-slot\'))" title="Comma-separated FB interest names">' +
+      '<div class="cb-targeting-hint">comma-separated FB interests</div></div>' +
       '<span class="cb-label">OS / Age / Budget</span>' +
       '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS', 'Android'], 'OS') +
       '<input type="number" name="camp_' + idx + '_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +

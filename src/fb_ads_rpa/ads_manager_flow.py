@@ -22,8 +22,9 @@ def _act_numeric(ad_account_id: str) -> str:
     return re.sub(r"^act_", "", (ad_account_id or "").strip())
 
 
-def _selector_list(cfg: dict[str, Any], key: str) -> list[str]:
-    raw = cfg.get("selectors", {}).get(key) or []
+def _selector_list(sels: dict[str, Any], key: str) -> list[str]:
+    """Return selector list for *key* from an already-extracted selectors dict."""
+    raw = sels.get(key) or []
     return [str(s) for s in raw]
 
 
@@ -183,6 +184,52 @@ class AdsManagerFlow:
 
         self._shot("03_wizard_started", result)
 
+    def _fill_detailed_targeting(
+        self,
+        ad_set: AdSetDraft,
+        result: RpaPublishResult,
+    ) -> None:
+        """Type each comma-separated targeting term into Detailed Targeting and select the first suggestion."""
+        raw = (ad_set.targeting_label or "").strip()
+        terms = [t.strip() for t in raw.split(",") if t.strip()]
+        if not terms:
+            result.steps_completed.append("targeting_empty_skipped")
+            return
+
+        sels = self.cfg.get("selectors") or {}
+        input_sels = _selector_list(sels, "detailed_targeting_input")
+        suggest_sels = _selector_list(sels, "targeting_suggestion_item")
+
+        if not input_sels:
+            result.steps_completed.append("targeting_no_selector_skipped")
+            return
+
+        for i, term in enumerate(terms):
+            label = f"targeting_{i + 1}"
+            try:
+                # Click the input, type the term
+                _fill_first(self.page, input_sels, term, timeout_ms=self.action_timeout)
+                pause_medium()
+
+                # Wait for suggestions and click the first one
+                if suggest_sels:
+                    _click_first(self.page, suggest_sels, timeout_ms=self.action_timeout)
+                    pause_short()
+                    result.steps_completed.append(f"{label}:{term}")
+                else:
+                    # No suggestion selector — accept with Enter as fallback
+                    self.page.keyboard.press("Enter")
+                    pause_short()
+                    result.steps_completed.append(f"{label}_enter:{term}")
+
+            except AdsManagerFlowError as exc:
+                result.steps_completed.append(f"{label}_failed:{term}")
+                self._shot(f"targeting_{i + 1}_fail", result)
+                # Continue with remaining terms rather than hard-failing
+                _ = exc
+
+        self._shot("05_targeting", result)
+
     def _fill_campaign_and_adset(
         self,
         draft: CampaignDraft,
@@ -226,6 +273,9 @@ class AdsManagerFlow:
 
         self._shot("04_names_budget", result)
 
+        # Detailed targeting — parse comma-separated terms
+        self._fill_detailed_targeting(ad_set, result)
+
     def _create_ads(
         self,
         ad_set: AdSetDraft,
@@ -261,7 +311,7 @@ class AdsManagerFlow:
 
             _fill_ad_copy(self.page, ad, sels, self.action_timeout)
             result.steps_completed.append(f"ad_{idx + 1}_copy")
-            self._shot(f"05_ad_{idx + 1}", result)
+            self._shot(f"06_ad_{idx + 1}", result)
 
     def _finish_publish(self, draft: CampaignDraft, result: RpaPublishResult, *, dry_run: bool) -> None:
         # DRAFT status → leave wizard open, don't click Publish
