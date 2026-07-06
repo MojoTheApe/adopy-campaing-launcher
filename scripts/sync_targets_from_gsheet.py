@@ -113,26 +113,31 @@ def fetch_sheet_values(
 def _normalize_interests_string(raw: str) -> str:
     """Нормализовать строку с FB-интересами.
 
-    Правило: одиночная буква V (на отдельной строке или окружённая запятыми/пробелами)
-    означает «Narrow Further» / «Define Further» в Detailed Targeting Facebook —
-    т.е. аудитория должна соответствовать ОБЕИМ группам интересов (AND-логика).
-    Заменяем V на читаемый маркер [AND].
+    AND-маркеры (все конвертируются в `|` для хранения в knowledge_base):
+      - Одиночная буква V (строка или среди запятых) — «Narrow Further» в Ads Manager
+      - Символ `|` — явный AND-разделитель
+      - Символ `\\` — то же что `|`, используется в некоторых отчётах
 
     Примеры:
-      "Finance, Investing, V, Luxury, Travel"  → "Finance, Investing [AND] Luxury, Travel"
-      "Finance\nV\nLuxury"                      → "Finance [AND] Luxury"
+      "Finance, Investing, V, Luxury"    → "Finance, Investing | Luxury"
+      "Finance\\nV\\nLuxury"              → "Finance | Luxury"
+      "Finance | Luxury"                  → "Finance | Luxury"  (без изменений)
+      "Finance\\\\Luxury"                → "Finance | Luxury"
     """
     import re
+    # Replace `\` (backslash) with `|` first
+    normalized = raw.replace("\\", "|")
     # Replace newline-V-newline patterns
-    normalized = re.sub(r'[\n\r]+\s*V\s*[\n\r]+', ' [AND] ', raw)
+    normalized = re.sub(r'[\n\r]+\s*V\s*[\n\r]+', ' | ', normalized)
     # Replace comma-space-V-space-comma patterns
-    normalized = re.sub(r',\s*V\s*,', ' [AND] ', normalized)
+    normalized = re.sub(r',\s*V\s*,', ' | ', normalized)
     # Replace trailing ", V" followed by newline or end
     normalized = re.sub(r',\s*V\s*$', '', normalized, flags=re.MULTILINE)
-    # Replace standalone " V " with " [AND] " (V surrounded by spaces/commas)
-    normalized = re.sub(r'(?<=[,\s])V(?=[,\s])', '[AND]', normalized)
-    # Clean up extra spaces and commas around [AND]
-    normalized = re.sub(r'\s*,\s*\[AND\]\s*,?\s*', ' [AND] ', normalized)
+    # Replace standalone " V " with " | " (V surrounded by spaces/commas)
+    normalized = re.sub(r'(?<=[,\s])V(?=[,\s])', '|', normalized)
+    # Clean up extra spaces and commas around |
+    normalized = re.sub(r'\s*,\s*\|\s*,?\s*', ' | ', normalized)
+    normalized = re.sub(r'\s*\|\s*', ' | ', normalized)
     normalized = re.sub(r'\s{2,}', ' ', normalized)
     return normalized.strip()
 
@@ -158,8 +163,16 @@ def parse_alternating_rows(rows: List[List[str]]) -> List[Tuple[str, List[str]]]
             pending_code = cell
         else:
             normalized = _normalize_interests_string(cell)
-            interests = [i.strip() for i in normalized.split(",") if i.strip()]
-            pairs.append((pending_code, interests))
+            # Split by `|` (AND-groups) then by comma within each group;
+            # reconstruct as flat comma list with ` | ` between groups
+            groups = [g.strip() for g in normalized.split("|")]
+            group_terms = [
+                ", ".join(t.strip() for t in g.split(",") if t.strip())
+                for g in groups if g.strip()
+            ]
+            # Store as "GroupA, termA2 | GroupB, termB2" — `|` separates AND-groups
+            joined = " | ".join(group_terms) if group_terms else ""
+            pairs.append((pending_code, [joined] if joined else []))
             pending_code = None
 
     if pending_code is not None:

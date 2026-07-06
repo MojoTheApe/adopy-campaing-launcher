@@ -120,6 +120,40 @@ def test_and_group_clicks_narrow_further():
     assert "targeting_g2_t1:Finance" in result.steps_completed
 
 
+def test_pipe_separator_equals_and():
+    """`|` in targeting string is treated as AND-group (Narrow further)."""
+    flow = _make_flow()
+    result = RpaPublishResult(campaign_name="T")
+
+    with patch("src.fb_ads_rpa.ads_manager_flow._fill_first") as mock_fill, \
+         patch("src.fb_ads_rpa.ads_manager_flow._click_first"), \
+         patch("src.fb_ads_rpa.ads_manager_flow.pause_medium"), \
+         patch("src.fb_ads_rpa.ads_manager_flow.pause_short"), \
+         patch.object(flow, "_shot"):
+        flow._fill_detailed_targeting(_ad_set("Amazon, Online Shopping | Finance"), result)
+
+    terms_filled = [c[0][2] for c in mock_fill.call_args_list]
+    assert terms_filled == ["Amazon", "Online Shopping", "Finance"]
+    assert "targeting_g2_narrow_further" in result.steps_completed
+
+
+def test_backslash_separator_equals_pipe():
+    """`\\` in targeting string normalizes to `|` (AND-group)."""
+    flow = _make_flow()
+    result = RpaPublishResult(campaign_name="T")
+
+    with patch("src.fb_ads_rpa.ads_manager_flow._fill_first") as mock_fill, \
+         patch("src.fb_ads_rpa.ads_manager_flow._click_first"), \
+         patch("src.fb_ads_rpa.ads_manager_flow.pause_medium"), \
+         patch("src.fb_ads_rpa.ads_manager_flow.pause_short"), \
+         patch.object(flow, "_shot"):
+        flow._fill_detailed_targeting(_ad_set(r"Amazon, Online Shopping\Finance"), result)
+
+    terms_filled = [c[0][2] for c in mock_fill.call_args_list]
+    assert terms_filled == ["Amazon", "Online Shopping", "Finance"]
+    assert "targeting_g2_narrow_further" in result.steps_completed
+
+
 def test_no_and_no_narrow_further():
     """Without [AND], narrow_further is never clicked."""
     flow = _make_flow()

@@ -53,9 +53,14 @@ _MEDIA_TYPE_TOKENS = frozenset(
 )
 
 
+def _normalize_targeting_sep(s: str) -> str:
+    """Normalize AND-group separators: both `\\` and `|` mean the same; display as `|`."""
+    return s.replace("\\", "|")
+
+
 def _is_compound_targeting_token(token: str) -> bool:
-    """`|` marks two interests in one campaign (define further)."""
-    return "|" in token
+    """`|` or `\\` marks two interests in one campaign (define further / narrow further)."""
+    return "|" in token or "\\" in token
 
 
 def _is_creative_skip_token(token: str, creative_prefixes: list) -> bool:
@@ -188,6 +193,9 @@ def parse_adset_name(
     interest = "_".join(interest_parts) if interest_parts else None
     if interest is None:
         interest = _fallback_interest(parts_before_age, adset_name)
+    # Normalize AND-separator: `\` → `|` for consistent display
+    if interest:
+        interest = _normalize_targeting_sep(interest)
     return country_code, device, interest, age
 
 

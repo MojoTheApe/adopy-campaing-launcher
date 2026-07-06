@@ -238,8 +238,13 @@ class AdsManagerFlow:
             result.steps_completed.append("targeting_no_selector_skipped")
             return
 
-        # Split into AND-groups (each group = one comma-separated block)
-        and_groups_raw = [g.strip() for g in re.split(r"\[AND\]", raw, flags=re.IGNORECASE) if g.strip()]
+        # Normalize: `\` → `|` then split by all AND-group separators: [AND], |, \
+        raw = raw.replace("\\", "|")
+        and_groups_raw = [
+            g.strip()
+            for g in re.split(r"\[AND\]|\|", raw, flags=re.IGNORECASE)
+            if g.strip()
+        ]
         # Filter groups to only those with at least one non-empty term
         and_groups = [g for g in and_groups_raw if any(t.strip() for t in g.split(","))]
         if not and_groups:
