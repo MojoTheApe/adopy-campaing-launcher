@@ -188,6 +188,73 @@ def _render_report(
     )
 
 
+_COUNTRY_CODES: dict[str, str] = {
+    "afghanistan": "AF", "albania": "AL", "algeria": "DZ", "angola": "AO",
+    "argentina": "AR", "armenia": "AM", "australia": "AU", "austria": "AT",
+    "azerbaijan": "AZ", "bahrain": "BH", "bangladesh": "BD", "belarus": "BY",
+    "belgium": "BE", "bolivia": "BO", "bolivia (plurinational state of)": "BO",
+    "bosnia and herzegovina": "BA", "botswana": "BW", "brazil": "BR",
+    "bulgaria": "BG", "cambodia": "KH", "cameroon": "CM", "canada": "CA",
+    "chile": "CL", "china": "CN", "colombia": "CO", "costa rica": "CR",
+    "croatia": "HR", "cuba": "CU", "czech republic": "CZ", "czechia": "CZ",
+    "denmark": "DK", "dominican republic": "DO", "ecuador": "EC", "egypt": "EG",
+    "el salvador": "SV", "ethiopia": "ET", "finland": "FI", "france": "FR",
+    "georgia": "GE", "germany": "DE", "ghana": "GH", "greece": "GR",
+    "guatemala": "GT", "honduras": "HN", "hungary": "HU", "india": "IN",
+    "indonesia": "ID", "iran": "IR", "iraq": "IQ", "ireland": "IE",
+    "israel": "IL", "italy": "IT", "ivory coast": "CI", "cote d'ivoire": "CI",
+    "jamaica": "JM", "japan": "JP", "jordan": "JO", "kazakhstan": "KZ",
+    "kenya": "KE", "kuwait": "KW", "kyrgyzstan": "KG", "laos": "LA",
+    "latvia": "LV", "lebanon": "LB", "libya": "LY", "lithuania": "LT",
+    "luxembourg": "LU", "malaysia": "MY", "mali": "ML", "mexico": "MX",
+    "moldova": "MD", "morocco": "MA", "mozambique": "MZ", "myanmar": "MM",
+    "namibia": "NA", "nepal": "NP", "netherlands": "NL", "new zealand": "NZ",
+    "nicaragua": "NI", "nigeria": "NG", "north korea": "KP", "norway": "NO",
+    "oman": "OM", "pakistan": "PK", "panama": "PA", "paraguay": "PY",
+    "peru": "PE", "philippines": "PH", "poland": "PL", "portugal": "PT",
+    "qatar": "QA", "romania": "RO", "russia": "RU", "russian federation": "RU",
+    "saudi arabia": "SA", "senegal": "SN", "serbia": "RS", "singapore": "SG",
+    "slovakia": "SK", "somalia": "SO", "south africa": "ZA",
+    "south korea": "KR", "republic of korea": "KR", "spain": "ES",
+    "sri lanka": "LK", "sudan": "SD", "sweden": "SE", "switzerland": "CH",
+    "syria": "SY", "syrian arab republic": "SY", "taiwan": "TW",
+    "tajikistan": "TJ", "tanzania": "TZ", "united republic of tanzania": "TZ",
+    "thailand": "TH", "tunisia": "TN", "turkey": "TR", "turkmenistan": "TM",
+    "ukraine": "UA", "united arab emirates": "AE", "united kingdom": "GB",
+    "united states": "US", "usa": "US", "uruguay": "UY", "uzbekistan": "UZ",
+    "venezuela": "VE", "venezuela (bolivarian republic of)": "VE",
+    "vietnam": "VN", "viet nam": "VN", "yemen": "YE", "zambia": "ZM",
+    "zimbabwe": "ZW",
+}
+
+
+def _country_code(name: str) -> str:
+    """Return 2-letter ISO code for a country name, or uppercase 2-char fallback."""
+    if not name:
+        return ""
+    s = name.strip()
+    if len(s) == 2 and s.isupper():
+        return s
+    return _COUNTRY_CODES.get(s.lower(), s.upper()[:2])
+
+
+def _abbrev_asset(s: str) -> str:
+    """3-letter asset abbreviation.
+
+    1 word  → first 3 chars          ('Amazon' → 'Ama')
+    2 words → first 2 of w1 + 1 of w2 ('Aramco Form' → 'ArF')
+    3+ words→ first letter of each    ('Zahab AI Form' → 'ZAF')
+    """
+    words = s.strip().split()
+    if not words:
+        return ""
+    if len(words) == 1:
+        return words[0][:3]
+    if len(words) == 2:
+        return words[0][:2] + words[1][:1]
+    return "".join(w[0] for w in words[:3])
+
+
 def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
     """Parse campaign builder form.
 
@@ -205,13 +272,13 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
 
     slots: list[dict] = []
     ddmm = _date.today().strftime("%d.%m")
-    country_val = country.upper()
+    country_val = _country_code(country)
 
     for idx in range(camp_count):
         targeting = (form.get(f"camp_{idx}_targeting") or "").strip()
         os_val    = (form.get(f"camp_{idx}_os") or "All").strip()
         age_val   = (form.get(f"camp_{idx}_age") or "35").strip()
-        asset_val = (form.get(f"camp_{idx}_asset") or "").strip().replace(" ", "")
+        asset_val = _abbrev_asset((form.get(f"camp_{idx}_asset") or "").strip())
         budget    = (form.get(f"camp_{idx}_budget") or "").strip()
         name      = (form.get(f"camp_{idx}_name") or "").strip()
 

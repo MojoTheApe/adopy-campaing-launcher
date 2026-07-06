@@ -124,7 +124,7 @@ def test_autoname_uses_first_ad_type():
             "camp_0_os": "All",
             "camp_0_age": "35",
             "camp_0_budget": "50",
-            "camp_0_asset": "Amz",
+            "camp_0_asset": "Amazon",
             "camp_0_ad_count": "1",
             "camp_0_ad_0_creative_type": "Video",
             "camp_0_ad_0_creative_file": "vid.mp4",
@@ -133,6 +133,29 @@ def test_autoname_uses_first_ad_type():
     )
     country, label, slots = _parse_build_upload_form(form)
     assert len(slots) == 1
-    assert "Video" in slots[0]["name"]
-    assert "MX" in slots[0]["name"]
-    assert "Amz" in slots[0]["name"]
+    name = slots[0]["name"]
+    assert "Video" in name
+    assert "MX" in name
+    assert "Ama" in name  # Amazon → 3-char abbreviation
+
+
+def test_country_code_and_asset_abbrev():
+    from src.web.app import _country_code, _abbrev_asset
+
+    # Country codes
+    assert _country_code("Mexico") == "MX"
+    assert _country_code("Ecuador") == "EC"
+    assert _country_code("Argentina") == "AR"
+    assert _country_code("Bolivia (Plurinational State of)") == "BO"
+    assert _country_code("El Salvador") == "SV"
+    assert _country_code("Dominican Republic") == "DO"
+    assert _country_code("MX") == "MX"  # already a code
+
+    # Asset abbreviations
+    assert _abbrev_asset("Amazon") == "Ama"
+    assert _abbrev_asset("Aramco") == "Ara"
+    assert _abbrev_asset("Aramco Form") == "ArF"
+    assert _abbrev_asset("AI Trader") == "AIT"
+    assert _abbrev_asset("Mercado Libre") == "MeL"
+    assert _abbrev_asset("Zahab AI Form") == "ZAF"
+    assert _abbrev_asset("Trolley Form") == "TrF"
