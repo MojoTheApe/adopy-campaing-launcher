@@ -1,0 +1,33 @@
+---
+description: Use Obsidian vault folder дешборд as long-term memory when working on the morning dashboard
+globs: src/web/**,serve.py,DESIGN.md,PRODUCT.md,start_dashboard.bat
+alwaysApply: false
+---
+
+# Dashboard Obsidian Memory
+
+When editing or discussing the **morning dashboard** (web UI, report template, serve, design docs):
+
+## Vault location
+
+- **Obsidian vault:** `C:\Users\EvgeniSedin\Desktop\Obsidian\Kuwait Forms`
+- **Dashboard memory folder:** `дешборд/` (full path: `...\Kuwait Forms\дешборд\`)
+
+## Before making changes
+
+1. Read `дешборд/00 - Индекс.md` for the note map.
+2. Read notes linked from the index that match the task (navigation, data sources, bugs, UX).
+3. Treat those notes as **project memory** — prefer documented decisions over re-discovering from scratch.
+4. If a note conflicts with current code, trust the code but flag the drift and offer to update Obsidian.
+
+## After significant changes
+
+Follow [[Протокол добавления заметок]] in Obsidian (`дешборд/Протокол добавления заметок.md`):
+
+- Update or create a note for architecture, data-format, or UX decisions.
+- Refresh the table in `00 - Индекс.md`.
+- Do **not** write secrets (tokens, cookies, credentials) into Obsidian.
+
+## Scope
+
+This rule complements `knowledge-agent-auto-context.mdc` (offers/combos/creatives). Obsidian `дешборд/` is for **dashboard product/engineering memory**; `output/context_packs/latest_auto_context.md` stays for campaign/marketing context.

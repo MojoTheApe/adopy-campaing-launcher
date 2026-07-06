@@ -9,7 +9,7 @@ import pandas as pd
 
 from src.analysis_agent.analyze_fb_stats import aggregate_combos
 from src.analysis_agent.morning_report import build_country_section
-from src.web.app import _anchor_slug, details, templates
+from src.web.app import _anchor_slug, _enrich_country_overview, details, templates
 
 _MOCK_REPORT = {
     "date": "2026-06-08",
@@ -68,9 +68,11 @@ _MOCK_REPORT = {
 
 
 def _render_report() -> str:
+    report = {**_MOCK_REPORT, "countries": [dict(c) for c in _MOCK_REPORT["countries"]]}
+    _enrich_country_overview(report)
     return templates.env.get_template("report.html").render(
         request=MagicMock(),
-        report=_MOCK_REPORT,
+        report=report,
         warnings=[],
         built_at="2026-06-08",
         upload_errors={},

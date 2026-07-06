@@ -149,6 +149,16 @@ def canonical_gsheet_country_code(raw: str) -> str:
 
 # ── Section 1: CM comparison ───────────────────────────────────────────────────
 
+def _my_cm_totals(cm_comparison: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Sum deposits, leads, spend for the current CM rows in section 1."""
+    my_rows = [r for r in cm_comparison if r.get("is_me")]
+    return {
+        "deposits": sum(int(r.get("deposits") or 0) for r in my_rows),
+        "leads": sum(int(r.get("leads") or 0) for r in my_rows),
+        "spend": sum(float(r.get("spend") or 0.0) for r in my_rows),
+    }
+
+
 def build_cm_comparison(df: pd.DataFrame, country: str, my_cm: str) -> List[Dict[str, Any]]:
     """Aggregate per CM for this country. Returns list of row dicts, my_cm first."""
     df_c = df[df["Country Final"] == country]
@@ -1701,9 +1711,14 @@ def build_country_section(
             country_name=country,
         )
 
+    cm_comparison = build_cm_comparison(df, country, my_cm)
+    my_totals = _my_cm_totals(cm_comparison)
+
     return {
         "country": country,
-        "cm_comparison": build_cm_comparison(df, country, my_cm),
+        "cm_comparison": cm_comparison,
+        "my_totals": my_totals,
+        "my_spend": my_totals["spend"],
         "asset_summary": build_asset_summary(df, country),
         "trend": trend_block,
         "top_combos": top_combos,

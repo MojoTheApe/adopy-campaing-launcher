@@ -29,6 +29,7 @@ if str(_PROJ_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJ_ROOT))
 
 from src.analysis_agent.morning_drilldown import get_underlying_rows
+from src.analysis_agent.morning_report import _my_cm_totals
 from src.campaign_bridge.assembly import assemble_account_upload, assemble_from_form_slots
 from src.campaign_bridge.dashboard_publisher import preview_jobs
 from src.web.publish_jobs import get_job, start_job
@@ -139,6 +140,15 @@ async def favicon() -> FileResponse:
     return FileResponse(_FAVICON, media_type="image/svg+xml")
 
 
+def _enrich_country_overview(report: Dict[str, Any]) -> None:
+    """Ensure per-country my_totals / my_spend for home overview (cached reports)."""
+    for country in report.get("countries", []):
+        if "my_totals" not in country:
+            country["my_totals"] = _my_cm_totals(country.get("cm_comparison", []))
+        if "my_spend" not in country:
+            country["my_spend"] = country["my_totals"]["spend"]
+
+
 def _render_report(
     request: Request,
     *,
@@ -159,6 +169,7 @@ def _render_report(
             status_code=200,
         )
 
+    _enrich_country_overview(report)
     ref_opts = _load_ref_options()
     return templates.TemplateResponse(
         "report.html",
