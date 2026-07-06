@@ -138,7 +138,7 @@ Authorization: Bearer <ваш_токен>
 **Вариант А — через дашборд** (рекомендуется):
 
 1. Откройте утренний отчёт.
-2. В разделе Campaign Builder найдите аккаунт с надписью **«✕ Missing: folder_id, profile_id»**.
+2. В разделе Campaign Builder найдите аккаунт с надписью **«X Missing: folder_id, profile_id»**.
 3. Заполните поля ввода и нажмите **Save config**.
 4. Данные сразу сохранятся в `config/ad_account_map.csv`.
 

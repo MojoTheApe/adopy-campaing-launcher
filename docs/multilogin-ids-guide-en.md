@@ -139,7 +139,7 @@ Copy the `profileID` of the correct profile → `profile_id`.
 Option A — paste directly into the **Campaign Builder** dashboard:
 
 1. Open the morning report dashboard.
-2. In the Campaign Builder section for the account that shows **"✕ Missing: folder_id, profile_id"**, fill in the input fields and click **Save config**.
+2. In the Campaign Builder section for the account that shows **"X Missing: folder_id, profile_id"**, fill in the input fields and click **Save config**.
 3. The values are saved to `config/ad_account_map.csv` immediately.
 
 Option B — edit `config/ad_account_map.csv` manually:
