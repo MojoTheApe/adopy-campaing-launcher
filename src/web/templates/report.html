@@ -1284,16 +1284,14 @@
         {# ── Campaign-level fields ── #}
         <div class="cb-fields">
           <span class="cb-label">Targeting</span>
-          <div>
-            <input type="text"
-                   name="camp_{{ ns.idx }}_targeting"
-                   class="cb-input cb-targeting-input"
-                   value="{{ sel_targeting_label }}"
-                   placeholder="Amazon, Online Shopping, Finance"
-                   autocomplete="off"
-                   oninput="cbUpdateName(this.closest('.cb-slot'))"
-                   title="Comma-separated FB interest names — each will be typed into Detailed Targeting">
-            <div class="cb-targeting-hint">comma-separated FB interests, e.g. Amazon, Online Shopping</div>
+          <div class="cb-sel-wrap cb-targeting-wrap">
+            <input type="text" class="cb-sel-text cb-targeting-search"
+                   placeholder="— search by code or interest —"
+                   autocomplete="off" value=""
+                   oninput="cbTargetingSearch(this)">
+            <div class="cb-sel-dropdown" hidden></div>
+            <input type="hidden" name="camp_{{ ns.idx }}_targeting" class="cb-targeting-hidden" value="{{ sel_targeting_label }}">
+            <div class="cb-targeting-hint" style="font-size:0.67rem;color:var(--muted);margin-top:0.15rem;word-break:break-word">{{ sel_targeting_label }}</div>
           </div>
 
           <span class="cb-label">OS / Age / Budget</span>
@@ -1885,9 +1883,9 @@ function copyBrief(btn) {
     // Derive creative type from first ad row
     var firstAdType = slot.querySelector('[name^="camp_' + idx + '_ad_0_creative_type"]:checked');
     var ctype  = (firstAdType || {}).value || 'Image';
-    // For name: take only first targeting term (before first comma)
-    var tgtFull = getHiddenVal(slot, 'targeting');
-    var tgt     = (tgtFull || '').split(',')[0].trim();
+    // For name: use targeting code (from search input), not the full fb_interest string
+    var tgtInput = slot.querySelector('.cb-targeting-search');
+    var tgt      = tgtInput ? tgtInput.value.trim() : getHiddenVal(slot, 'targeting').split(',')[0].trim();
     var os     = getHiddenVal(slot, 'os');
     var age    = (slot.querySelector('[name="camp_' + idx + '_age"]') || {}).value || '35';
     var asset  = (slot.querySelector('[name="camp_' + idx + '_asset"]') || {}).value || '';
@@ -1968,9 +1966,69 @@ function copyBrief(btn) {
   }
 
   function initAllSelects(root) {
-    // Skip .cb-creative-sel-wrap — it uses cbCreativeSearch, not the generic initCbSel
-    (root || document).querySelectorAll('.cb-sel-wrap:not(.cb-creative-sel-wrap)').forEach(initCbSel);
+    // Skip creative and targeting wrappers — they have their own JS handlers
+    (root || document).querySelectorAll('.cb-sel-wrap:not(.cb-creative-sel-wrap):not(.cb-targeting-wrap)').forEach(initCbSel);
   }
+
+  // ── Targeting code picker ─────────────────────────────────────────────
+  window.cbTargetingSearch = function(input) {
+    var wrap = input.closest('.cb-targeting-wrap');
+    if (!wrap) return;
+    var dropdown = wrap.querySelector('.cb-sel-dropdown');
+    var hidden   = wrap.querySelector('.cb-targeting-hidden');
+    var hint     = wrap.querySelector('.cb-targeting-hint');
+    var query    = input.value.trim().toLowerCase();
+
+    var targets = (REF && REF.targetings) ? REF.targetings : [];
+    var matches = targets.filter(function(t) {
+      if (!query) return true;
+      return t.code.toLowerCase().indexOf(query) >= 0 ||
+             (t.label || '').toLowerCase().indexOf(query) >= 0 ||
+             (t.fb_interest || '').toLowerCase().indexOf(query) >= 0;
+    }).slice(0, 50);
+
+    if (!matches.length && !query) {
+      dropdown.hidden = true;
+      return;
+    }
+
+    var html = matches.map(function(t) {
+      var preview = (t.fb_interest || '').slice(0, 60) + ((t.fb_interest || '').length > 60 ? '…' : '');
+      return '<div class="cb-sel-opt cb-targeting-opt" data-code="' + t.code + '" data-interest="' + (t.fb_interest || '') + '">' +
+        '<span style="font-weight:600">' + t.code + '</span>' +
+        (t.label && t.label !== t.code ? ' <span style="color:var(--muted)">(' + t.label + ')</span>' : '') +
+        '<br><span style="font-size:0.67rem;color:var(--muted)">' + preview + '</span>' +
+        '</div>';
+    }).join('');
+    if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);pointer-events:none">No targets found</div>';
+
+    dropdown.innerHTML = html;
+    dropdown.hidden = false;
+
+    dropdown.querySelectorAll('.cb-targeting-opt').forEach(function(opt) {
+      opt.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        var interest = opt.dataset.interest || '';
+        var code     = opt.dataset.code || '';
+        input.value  = code;
+        if (hidden) hidden.value = interest;
+        if (hint)   hint.textContent = interest;
+        dropdown.hidden = true;
+        var slot = wrap.closest('.cb-slot');
+        if (slot) cbUpdateName(slot);
+      });
+    });
+  };
+
+  // Close targeting dropdown on blur
+  document.addEventListener('focusout', function(e) {
+    var input = e.target;
+    if (!input.classList || !input.classList.contains('cb-targeting-search')) return;
+    setTimeout(function() {
+      var wrap = input.closest('.cb-targeting-wrap');
+      if (wrap) { var dd = wrap.querySelector('.cb-sel-dropdown'); if (dd) dd.hidden = true; }
+    }, 150);
+  });
 
   // cbTypeChange kept for any legacy callers (no-op redirect)
   window.cbTypeChange = function(radio) {
@@ -2132,8 +2190,12 @@ function copyBrief(btn) {
       '<div class="cb-slot-name" data-name-display></div>' +
       '<div class="cb-fields">' +
       '<span class="cb-label">Targeting</span>' +
-      '<div><input type="text" name="camp_' + idx + '_targeting" class="cb-input cb-targeting-input" value="" placeholder="Amazon, Online Shopping, Finance" autocomplete="off" oninput="cbUpdateName(this.closest(\'.cb-slot\'))" title="Comma-separated FB interest names">' +
-      '<div class="cb-targeting-hint">comma-separated FB interests</div></div>' +
+      '<div class="cb-sel-wrap cb-targeting-wrap">' +
+      '<input type="text" class="cb-sel-text cb-targeting-search" placeholder="— search by code or interest —" autocomplete="off" value="" oninput="cbTargetingSearch(this)">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="camp_' + idx + '_targeting" class="cb-targeting-hidden" value="">' +
+      '<div class="cb-targeting-hint" style="font-size:0.67rem;color:var(--muted);margin-top:0.15rem;word-break:break-word"></div>' +
+      '</div>' +
       '<span class="cb-label">OS / Age / Budget</span>' +
       '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS', 'Android'], 'OS') +
       '<input type="number" name="camp_' + idx + '_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +

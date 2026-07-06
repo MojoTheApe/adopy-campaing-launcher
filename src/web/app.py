@@ -58,26 +58,53 @@ _ref_opts_cache: dict | None = None
 _ref_opts_mtime: float = -1.0
 
 
+def _load_kb_targets() -> list[dict]:
+    """Load targeting codes + FB interests from config/knowledge_base.json.
+
+    Returns a list of dicts: [{code, label, fb_interest}, ...] sorted by code.
+    """
+    from pathlib import Path as _Path
+    kb_path = _Path(__file__).resolve().parents[2] / "config" / "knowledge_base.json"
+    if not kb_path.is_file():
+        return []
+    try:
+        with open(kb_path, encoding="utf-8") as f:
+            kb = json.load(f)
+    except Exception:
+        return []
+    targets = kb.get("targets") or {}
+    result = []
+    for code, entry in targets.items():
+        fb_interest = (entry.get("fb_interest") or "").strip()
+        label = (entry.get("label") or code).strip()
+        if fb_interest:
+            result.append({"code": code, "label": label, "fb_interest": fb_interest})
+    result.sort(key=lambda x: x["code"].lower())
+    return result
+
+
 def _load_ref_options() -> dict:
     """Load Upload FB.xlsx and return structured options for campaign builder dropdowns.
 
     Result is cached by file mtime to avoid slow xlsx re-reads on every request.
+    Targeting codes are loaded from knowledge_base.json (synced from Google Sheet).
     """
     global _ref_opts_cache, _ref_opts_mtime
     excel_path = get_upload_fb_excel_path()
     empty: dict = {"ad_copies": [], "image_files": [], "video_files": [], "targetings": []}
     if not os.path.isfile(excel_path):
-        return empty
+        result = {**empty, "targetings": _load_kb_targets()}
+        return result
     try:
         mtime = os.path.getmtime(excel_path)
     except OSError:
-        return empty
+        return {**empty, "targetings": _load_kb_targets()}
     if _ref_opts_cache is not None and mtime == _ref_opts_mtime:
         return _ref_opts_cache
     try:
         ref = load_reference_data(excel_path)
     except Exception:
-        return empty
+        return {**empty, "targetings": _load_kb_targets()}
     ad_copies = sorted(ref.get("ad_copy") or {})
     image_files = [
         {"id": k, "filename": v}
@@ -87,7 +114,15 @@ def _load_ref_options() -> dict:
         {"id": k, "filename": v}
         for k, v in sorted((ref.get("video_files") or {}).items(), key=lambda x: x[0])
     ]
-    targetings = sorted(ref.get("interests") or {})
+    # Prefer KB targets (from GSheet); fall back to Excel interests if KB empty
+    kb_targets = _load_kb_targets()
+    if kb_targets:
+        targetings = kb_targets
+    else:
+        targetings = [
+            {"code": t, "label": t, "fb_interest": t}
+            for t in sorted(ref.get("interests") or {})
+        ]
     result = {
         "ad_copies": ad_copies,
         "image_files": image_files,

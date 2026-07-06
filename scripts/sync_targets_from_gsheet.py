@@ -80,6 +80,20 @@ def _build_sheets_service(credentials_path: str):
     return build("sheets", "v4", credentials=creds)
 
 
+def resolve_sheet_name_by_gid(service, sheet_id: str, gid: int) -> str:
+    """Resolve a numeric sheet GID to its tab title using the Sheets API."""
+    meta = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+    for sheet in meta.get("sheets", []):
+        props = sheet.get("properties", {})
+        if props.get("sheetId") == gid:
+            return props["title"]
+    titles = [s["properties"]["title"] for s in meta.get("sheets", [])]
+    raise ValueError(
+        f"Sheet with gid={gid} not found in spreadsheet {sheet_id!r}.\n"
+        f"Available tabs: {titles}"
+    )
+
+
 def fetch_sheet_values(
     service, sheet_id: str, sheet_name: str
 ) -> List[List[str]]:
@@ -262,8 +276,14 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--sheet-name",
-        default=os.environ.get("GSHEET_TARGETS_SHEET", "Sheet1"),
-        help="Sheet tab name (default: Sheet1)",
+        default=os.environ.get("GSHEET_TARGETS_SHEET", ""),
+        help="Sheet tab name. Leave empty to auto-resolve via --gid",
+    )
+    parser.add_argument(
+        "--gid",
+        type=int,
+        default=int(os.environ.get("GSHEET_TARGETS_GID", "0") or 0),
+        help="Numeric sheet GID from URL (#gid=...). Used when --sheet-name is not set",
     )
     parser.add_argument(
         "--credentials",
@@ -290,9 +310,23 @@ def main() -> None:
         )
         sys.exit(1)
 
-    print(f"[sync_targets] Fetching sheet: {args.sheet_id!r} / {args.sheet_name!r}")
     service = _build_sheets_service(args.credentials)
-    rows = fetch_sheet_values(service, args.sheet_id, args.sheet_name)
+
+    sheet_name = args.sheet_name
+    if not sheet_name:
+        if args.gid:
+            print(f"[sync_targets] Resolving tab name for gid={args.gid} ...")
+            sheet_name = resolve_sheet_name_by_gid(service, args.sheet_id, args.gid)
+            print(f"[sync_targets] Resolved tab name: {sheet_name!r}")
+        else:
+            # Fall back to first sheet
+            meta = service.spreadsheets().get(spreadsheetId=args.sheet_id).execute()
+            sheets = meta.get("sheets", [])
+            sheet_name = sheets[0]["properties"]["title"] if sheets else "Sheet1"
+            print(f"[sync_targets] No tab name/gid specified, using first tab: {sheet_name!r}")
+
+    print(f"[sync_targets] Fetching sheet: {args.sheet_id!r} / {sheet_name!r}")
+    rows = fetch_sheet_values(service, args.sheet_id, sheet_name)
     print(f"[sync_targets] Got {len(rows)} rows from Sheet")
 
     sheet_pairs = parse_alternating_rows(rows)
