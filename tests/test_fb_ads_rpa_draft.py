@@ -32,7 +32,7 @@ def test_slots_group_into_one_campaign_with_two_ads():
     )
     assert len(drafts) == 1
     assert drafts[0].name == "MX_Test_A"
-    assert drafts[0].status == "PAUSED"
+    assert drafts[0].status == "DRAFT"
     assert len(drafts[0].ad_sets) == 1
     assert len(drafts[0].ad_sets[0].ads) == 2
     assert drafts[0].ad_sets[0].daily_budget == 15.0

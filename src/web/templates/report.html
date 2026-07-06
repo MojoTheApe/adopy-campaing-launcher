@@ -1223,21 +1223,13 @@
           </div>
 
           <span class="cb-label">Creative file</span>
-          <div class="cb-sel-wrap cb-creative-sel-wrap">
-            <input type="text" class="cb-sel-text" placeholder="— search creative —"
-                   autocomplete="off" value="{{ sel_creative_label }}">
-            <div class="cb-sel-dropdown" hidden>
-              <div class="cb-sel-opt" data-val="" data-ctype="any">— select —</div>
-              {% for img in ref_options.image_files %}
-              <div class="cb-sel-opt" data-val="{{ img.id }}" data-ctype="Image"
-                   {% if ctype == 'Video' %}hidden{% endif %}>{{ img.id }} — {{ img.filename }}</div>
-              {% endfor %}
-              {% for vid in ref_options.video_files %}
-              <div class="cb-sel-opt" data-val="{{ vid.id }}" data-ctype="Video"
-                   {% if ctype != 'Video' %}hidden{% endif %}>{{ vid.id }} — {{ vid.filename }}</div>
-              {% endfor %}
-            </div>
-            <input type="hidden" name="camp_{{ ns.idx }}_creative_id" value="{{ creative_id }}">
+          <div class="cb-sel-wrap cb-creative-sel-wrap" data-ctype="{{ ctype }}">
+            <input type="text" class="cb-sel-text cb-creative-search"
+                   placeholder="— type to search file —"
+                   autocomplete="off" value="{{ sel_creative_label }}"
+                   oninput="cbCreativeSearch(this)">
+            <div class="cb-sel-dropdown" hidden></div>
+            <input type="hidden" name="camp_{{ ns.idx }}_creative_file" value="{{ sel_creative_label }}">
           </div>
 
           <span class="cb-label">Ad copy</span>
@@ -1676,6 +1668,64 @@ function copyBrief(btn) {
   var REF = null;
   try { REF = {{ ref_options_json | safe }}; } catch(e) {}
 
+  // ── Creatives from folder (loaded once) ──────────────────────────────
+  var CREATIVES = [];  // [{filename, rel_path, folder, type}]
+  fetch('/api/creatives')
+    .then(function(r){ return r.json(); })
+    .then(function(d){ CREATIVES = d.files || []; })
+    .catch(function(){});
+
+  window.cbCreativeSearch = function(input) {
+    var wrap = input.closest('.cb-creative-sel-wrap');
+    if (!wrap) return;
+    var dropdown = wrap.querySelector('.cb-sel-dropdown');
+    var hidden   = wrap.querySelector('input[type="hidden"]');
+    var query    = input.value.trim().toLowerCase();
+    var ctype    = wrap.dataset.ctype || 'Image';
+    var isVideo  = ctype === 'Video';
+
+    // filter
+    var matches = CREATIVES.filter(function(f) {
+      if (isVideo && f.type !== 'Video') return false;
+      if (!isVideo && f.type !== 'Image') return false;
+      if (!query) return true;
+      return f.filename.toLowerCase().indexOf(query) >= 0;
+    }).slice(0, 60);
+
+    if (!matches.length && !query) {
+      dropdown.hidden = true;
+      return;
+    }
+
+    var html = matches.map(function(f) {
+      var label = f.folder ? f.filename + ' <span style="color:var(--muted);font-size:0.7rem">(' + f.folder + ')</span>' : f.filename;
+      return '<div class="cb-sel-opt" data-val="' + f.filename + '" style="font-size:0.72rem">' + label + '</div>';
+    }).join('');
+    if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:0.72rem;pointer-events:none">No files found</div>';
+
+    dropdown.innerHTML = html;
+    dropdown.hidden = false;
+
+    dropdown.querySelectorAll('.cb-sel-opt').forEach(function(opt) {
+      opt.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        var val = opt.dataset.val || '';
+        input.value = val;
+        if (hidden) hidden.value = val;
+        dropdown.hidden = true;
+        var slot = wrap.closest('.cb-slot');
+        if (slot) cbUpdateName(slot);
+      });
+    });
+  };
+
+  // close creative dropdown on blur
+  document.addEventListener('click', function(e) {
+    document.querySelectorAll('.cb-creative-sel-wrap .cb-sel-dropdown').forEach(function(d) {
+      if (!d.closest('.cb-creative-sel-wrap').contains(e.target)) d.hidden = true;
+    });
+  });
+
   // ── Helpers ──────────────────────────────────────────────────────────
   function todayDDMM() {
     var d = new Date();
@@ -1778,33 +1828,26 @@ function copyBrief(btn) {
   }
 
   function initAllSelects(root) {
-    (root || document).querySelectorAll('.cb-sel-wrap').forEach(initCbSel);
+    // Skip .cb-creative-sel-wrap — it uses cbCreativeSearch, not the generic initCbSel
+    (root || document).querySelectorAll('.cb-sel-wrap:not(.cb-creative-sel-wrap)').forEach(initCbSel);
   }
 
   // ── Creative type toggle ──────────────────────────────────────────────
   window.cbTypeChange = function(radio) {
     var slot = radio.closest('.cb-slot');
     if (!slot) return;
-    var isVideo = radio.value === 'Video';
-    // In searchable select: show/hide opts by data-ctype
-    slot.querySelectorAll('.cb-creative-sel-wrap .cb-sel-opt').forEach(function(opt) {
-      var ct = opt.dataset.ctype || 'any';
-      var hide = ct !== 'any' && ((isVideo && ct === 'Image') || (!isVideo && ct === 'Video'));
-      if (hide) {
-        opt.hidden = true;
-        opt.dataset.ctypeHidden = '1';
-      } else {
-        opt.hidden = false;
-        delete opt.dataset.ctypeHidden;
-      }
-    });
-    // Reset creative selection
+    var ctype = radio.value; // 'Image' or 'Video'
+    // Update data-ctype on wrapper so cbCreativeSearch filters correctly
     var wrap = slot.querySelector('.cb-creative-sel-wrap');
     if (wrap) {
+      wrap.dataset.ctype = ctype;
+      // Reset creative selection when type changes
       var h = wrap.querySelector('input[type="hidden"]');
       var t = wrap.querySelector('.cb-sel-text');
+      var dd = wrap.querySelector('.cb-sel-dropdown');
       if (h) h.value = '';
       if (t) t.value = '';
+      if (dd) dd.hidden = true;
     }
     cbUpdateName(slot);
   };
@@ -1851,14 +1894,11 @@ function copyBrief(btn) {
   }
 
   function buildBlankSlotHTML(idx) {
-    var ref = REF || {ad_copies:[], image_files:[], video_files:[], targetings:[]};
-    var imgOpts = ref.image_files.map(function(f){ return '<div class="cb-sel-opt" data-val="'+f.id+'" data-ctype="Image">'+f.id+' — '+f.filename+'</div>'; }).join('');
-    var vidOpts = ref.video_files.map(function(f){ return '<div class="cb-sel-opt" data-val="'+f.id+'" data-ctype="Video" hidden>'+f.id+' — '+f.filename+'</div>'; }).join('');
-    var creativeSel = '<div class="cb-sel-wrap cb-creative-sel-wrap">' +
-      '<input type="text" class="cb-sel-text" placeholder="— search creative —" autocomplete="off" value="">' +
-      '<div class="cb-sel-dropdown" hidden>' +
-      '<div class="cb-sel-opt" data-val="" data-ctype="any">— select —</div>' + imgOpts + vidOpts + '</div>' +
-      '<input type="hidden" name="camp_' + idx + '_creative_id" value=""></div>';
+    var ref = REF || {ad_copies:[], targetings:[]};
+    var creativeSel = '<div class="cb-sel-wrap cb-creative-sel-wrap" data-ctype="Image">' +
+      '<input type="text" class="cb-sel-text cb-creative-search" placeholder="— type to search file —" autocomplete="off" value="" oninput="cbCreativeSearch(this)">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="camp_' + idx + '_creative_file" value=""></div>';
 
     return '<div class="cb-slot" data-idx="' + idx + '">' +
       '<div class="cb-slot-header">' +

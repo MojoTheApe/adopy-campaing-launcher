@@ -78,18 +78,23 @@ def enrich_campaign_drafts(
 
         for ad_set in draft.ad_sets:
             for ad in ad_set.ads:
+                # If creative_filename was set directly from folder scan — skip Excel lookup
+                if not ad.creative_filename:
+                    if ref:
+                        ad.creative_filename = lookup_creative_file(ref, ad.creative_type, ad.creative_id) or ""
+                    if not ad.creative_filename:
+                        draft.errors.append(
+                            f"Creative file not mapped for {ad.creative_id or '?'} "
+                            f"(pick a file from the folder or set creative_id in Upload FB)"
+                        )
+
                 if ref:
-                    ad.creative_filename = lookup_creative_file(ref, ad.creative_type, ad.creative_id) or ""
                     copy = lookup_ad_copy(ref, ad.copy_name) if ad.copy_name else {}
                     ad.ad_title = (copy.get("title") or ad.copy_name or "").strip()
                     ad.ad_body = (copy.get("body") or "").strip()
                     ad.ad_link_description = (copy.get("link_description") or "").strip()
-                else:
-                    ad.creative_filename = ""
 
-                if not ad.creative_filename:
-                    draft.errors.append(f"Creative file not mapped for {ad.creative_id or ad.copy_name or '?'}")
-                elif not preview_mode:
+                if ad.creative_filename and not preview_mode:
                     try:
                         ad.creative_path = str(find_creative_file(root, ad.creative_filename))
                     except (CreativeNotFoundError, AmbiguousCreativeError, FileNotFoundError) as exc:

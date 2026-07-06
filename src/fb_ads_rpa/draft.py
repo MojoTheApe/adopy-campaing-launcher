@@ -51,13 +51,18 @@ class AdSetDraft:
 
 @dataclass
 class CampaignDraft:
-    """One campaign to create in Ads Manager UI."""
+    """One campaign to create in Ads Manager UI.
+
+    status values:
+      "DRAFT"  — fill wizard fully, do NOT click Publish (default)
+      "ACTIVE" — fill wizard, click Publish → live campaign
+    """
 
     name: str
     country: str
     account_label: str
     objective: str = "Leads"
-    status: str = "PAUSED"
+    status: str = "DRAFT"
     link: str = ""
     pixel_id: str = ""
     page_id: str | None = None

@@ -45,7 +45,7 @@ def slots_to_campaign_drafts(
             continue
         grouped.setdefault(name, []).append(slot)
 
-    status = "ACTIVE" if activate else "PAUSED"
+    status = "ACTIVE" if activate else "DRAFT"
     drafts: list[CampaignDraft] = []
 
     for campaign_name, group in grouped.items():
@@ -66,6 +66,8 @@ def slots_to_campaign_drafts(
             AdDraft(
                 creative_type=(s.get("creative_type") or "Image").strip(),
                 creative_id=(s.get("creative_id") or "").strip(),
+                # creative_file: direct filename from folder scan (bypasses Excel lookup)
+                creative_filename=(s.get("creative_file") or "").strip(),
                 copy_name=(s.get("copy") or "").strip(),
             )
             for s in group

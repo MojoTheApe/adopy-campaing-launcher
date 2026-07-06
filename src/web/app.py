@@ -45,7 +45,7 @@ from src.creative_agent.vision_analyzer import analyze as vision_analyze
 from src.creative_agent.prompt_generator import generate_brief
 from src.upload_agent.build_upload_excel import load_reference_data
 from src.campaign_bridge.open_rec_mapper import parse_creative_from_ad_title
-from config.paths import get_upload_fb_excel_path
+from config.paths import get_upload_fb_excel_path, get_creatives_root
 
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -457,6 +457,46 @@ async def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
 async def api_ref_data() -> JSONResponse:
     """Return ad copies, creatives, targetings from Upload FB.xlsx for campaign builder JS."""
     return JSONResponse(_load_ref_options())
+
+
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+_VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
+
+
+@app.get("/api/creatives")
+async def api_creatives() -> JSONResponse:
+    """Scan FB_CREATIVES_ROOT recursively and return all creative files.
+
+    Returns [{filename, rel_path, folder, type}] sorted by filename.
+    Used by Campaign Builder for direct file search (no Excel lookup).
+    """
+    root = Path(get_creatives_root())
+    if not root.is_dir():
+        return JSONResponse({"error": f"Creatives folder not found: {root}", "files": []})
+
+    files = []
+    for p in sorted(root.rglob("*")):
+        if not p.is_file():
+            continue
+        ext = p.suffix.lower()
+        if ext in _IMAGE_EXTS:
+            ftype = "Image"
+        elif ext in _VIDEO_EXTS:
+            ftype = "Video"
+        else:
+            continue
+        try:
+            rel = p.relative_to(root)
+        except ValueError:
+            rel = Path(p.name)
+        folder = str(rel.parent) if rel.parent != Path(".") else ""
+        files.append({
+            "filename": p.name,
+            "rel_path": str(rel).replace("\\", "/"),
+            "folder": folder.replace("\\", "/"),
+            "type": ftype,
+        })
+    return JSONResponse({"files": files})
 
 
 @app.post("/preview-publish")

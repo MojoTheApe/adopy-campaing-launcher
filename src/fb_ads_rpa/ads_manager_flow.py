@@ -232,6 +232,7 @@ class AdsManagerFlow:
         result: RpaPublishResult,
         *,
         dry_run: bool,
+        skip_creative_upload: bool = False,
     ) -> None:
         sels = self.cfg.get("selectors") or {}
         for idx, ad in enumerate(ad_set.ads):
@@ -252,16 +253,21 @@ class AdsManagerFlow:
                 result.steps_completed.append(f"ad_{idx + 1}_skipped_dry_run")
                 continue
 
-            _upload_creative(self.page, ad, sels, self.action_timeout)
-            result.steps_completed.append(f"ad_{idx + 1}_creative")
+            if skip_creative_upload:
+                result.steps_completed.append(f"ad_{idx + 1}_creative_skipped_manual")
+            else:
+                _upload_creative(self.page, ad, sels, self.action_timeout)
+                result.steps_completed.append(f"ad_{idx + 1}_creative")
+
             _fill_ad_copy(self.page, ad, sels, self.action_timeout)
             result.steps_completed.append(f"ad_{idx + 1}_copy")
             self._shot(f"05_ad_{idx + 1}", result)
 
     def _finish_publish(self, draft: CampaignDraft, result: RpaPublishResult, *, dry_run: bool) -> None:
-        if dry_run:
-            result.steps_completed.append("dry_run_stop_before_publish")
-            self._shot("99_dry_run", result)
+        # DRAFT status → leave wizard open, don't click Publish
+        if draft.status == "DRAFT" or dry_run:
+            result.steps_completed.append("left_as_draft_in_ads_manager")
+            self._shot("99_draft", result)
             return
 
         sels = self.cfg.get("selectors") or {}
@@ -279,14 +285,12 @@ class AdsManagerFlow:
             result.screenshot_paths.append(shot)
             raise AdsManagerFlowError(str(exc), screenshot=shot) from exc
 
-        if draft.status == "PAUSED":
-            result.steps_completed.append("note_set_paused_in_ui_if_available")
-
     def publish_campaign(
         self,
         draft: CampaignDraft,
         *,
         dry_run: bool = False,
+        skip_creative_upload: bool = False,
     ) -> RpaPublishResult:
         result = RpaPublishResult(campaign_name=draft.name)
         if draft.errors:
@@ -302,7 +306,12 @@ class AdsManagerFlow:
             self._goto_campaigns(draft, result)
             self._start_create_wizard(result)
             self._fill_campaign_and_adset(draft, ad_set, result)
-            self._create_ads(ad_set, result, dry_run=dry_run)
+            self._create_ads(
+                ad_set,
+                result,
+                dry_run=dry_run,
+                skip_creative_upload=skip_creative_upload,
+            )
             self._finish_publish(draft, result, dry_run=dry_run)
             result.success = True
         except (AdsManagerFlowError, PlaywrightTimeout) as exc:
