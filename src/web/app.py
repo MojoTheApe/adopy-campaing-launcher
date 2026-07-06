@@ -63,6 +63,66 @@ _ref_full_cache: dict | None = None
 _ref_full_mtime: float = -1.0
 
 
+def _write_link_to_excel(account_name: str, link: str) -> str | None:
+    """Write tracking link to Upload FB.xlsx → Accounts sheet → Link column.
+
+    Returns the matched account name if found, or None if not found.
+    Invalidates the in-memory ref cache so the next request picks up the new value.
+    """
+    from openpyxl import load_workbook as _lw
+
+    excel_path = get_upload_fb_excel_path()
+    if not os.path.isfile(excel_path):
+        return None
+
+    wb = _lw(excel_path, read_only=False, data_only=False)
+    if "Accounts" not in wb.sheetnames:
+        return None
+
+    ws = wb["Accounts"]
+
+    # Find columns
+    account_col = link_col = None
+    for col in range(1, ws.max_column + 1):
+        hdr = (ws.cell(row=1, column=col).value or "")
+        if str(hdr).strip().lower() == "account":
+            account_col = col
+        elif str(hdr).strip().lower() == "link":
+            link_col = col
+
+    if not account_col or not link_col:
+        return None
+
+    # Find matching row (case-insensitive, partial match same as get_account_info)
+    name_lower = account_name.strip().lower()
+    matched_row = None
+    matched_name = None
+    for r in range(2, ws.max_row + 1):
+        val = ws.cell(row=r, column=account_col).value
+        if val is None:
+            continue
+        key = str(val).strip()
+        if key.lower() == name_lower or name_lower in key.lower() or key.lower() in name_lower:
+            matched_row = r
+            matched_name = key
+            break
+
+    if matched_row is None:
+        return None
+
+    ws.cell(row=matched_row, column=link_col).value = link.strip() or None
+    wb.save(excel_path)
+
+    # Invalidate ref caches so the next dashboard load picks up the new link
+    global _ref_full_cache, _ref_full_mtime, _ref_opts_cache, _ref_opts_mtime
+    _ref_full_cache = None
+    _ref_full_mtime = -1.0
+    _ref_opts_cache = None
+    _ref_opts_mtime = -1.0
+
+    return matched_name
+
+
 def _load_draft_status() -> dict:
     """Load per-account draft-ready status from output/draft_status.json."""
     if not _DRAFT_STATUS_PATH.is_file():
@@ -107,7 +167,7 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
 
     result: dict[str, dict] = {}
     for label in account_labels:
-        # Link status from Upload FB
+        # Link from Upload FB Accounts sheet
         if ref:
             info = get_account_info(ref, label)
             link = (info.get("link") or "").strip()
@@ -791,6 +851,33 @@ async def account_map_patch(request: Request) -> JSONResponse:
         writer.writerows(rows)
 
     return JSONResponse({"ok": True, "saved": new_row["account_name"]})
+
+
+@app.post("/account-link-patch")
+async def account_link_patch(request: Request) -> JSONResponse:
+    """Write a tracking link directly to Upload FB.xlsx → Accounts sheet → Link column.
+
+    Body JSON: {account_name: str, link: str}
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    account_name = (data.get("account_name") or "").strip()
+    link = (data.get("link") or "").strip()
+    if not account_name:
+        return JSONResponse({"ok": False, "error": "account_name is required"}, status_code=400)
+
+    matched = _write_link_to_excel(account_name, link)
+    if matched is None:
+        excel_path = get_upload_fb_excel_path()
+        if not os.path.isfile(excel_path):
+            return JSONResponse({"ok": False, "error": "Upload FB.xlsx not found"}, status_code=404)
+        return JSONResponse({"ok": False, "error": f"Account '{account_name}' not found in Accounts sheet"}, status_code=404)
+
+    status = classify_link(link)
+    return JSONResponse({"ok": True, "account": matched, "link_status": status})
 
 
 @app.post("/preview-publish")

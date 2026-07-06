@@ -1328,18 +1328,17 @@
         <span class="cb-preflight-label">Tracking link</span>
         <div class="cb-preflight-val">
           {% if pf.link_status == 'tracking' %}
-            <span class="cb-pf-ok">✓ OK</span>
-            <input type="url" name="tracking_link" class="cb-input cb-input-url"
-                   value="{{ pf.link }}" placeholder="https://…" style="flex:1">
+            <span class="cb-pf-ok cb-link-status-badge">✓ Saved</span>
           {% elif pf.link_status == 'jira' %}
-            <span class="cb-pf-warn">⚠ Jira URL — replace with Keitaro tracking link</span>
-            <input type="url" name="tracking_link" class="cb-input cb-input-url cb-pf-missing"
-                   value="" placeholder="https://keitaro.example.com/…" style="flex:1">
+            <span class="cb-pf-warn cb-link-status-badge">⚠ Jira URL — replace</span>
           {% else %}
-            <span class="cb-pf-err">✕ Missing — paste tracking link</span>
-            <input type="url" name="tracking_link" class="cb-input cb-input-url cb-pf-missing"
-                   value="" placeholder="https://keitaro.example.com/…" style="flex:1">
+            <span class="cb-pf-err cb-link-status-badge">✕ Missing</span>
           {% endif %}
+          <input type="url" name="tracking_link" class="cb-input cb-input-url {% if pf.link_status != 'tracking' %}cb-pf-missing{% endif %}"
+                 value="{{ pf.link }}"
+                 placeholder="https://keitaro.example.com/…"
+                 style="flex:1"
+                 onblur="cbSaveTrackingLink(this, '{{ acc_label | e }}')">
         </div>
       </div>
 
@@ -2316,6 +2315,40 @@ function copyBrief(btn) {
       '</div>' +
       '</div>';
   }
+
+  // ── Tracking link auto-save (onblur → POST /account-link-patch) ──────
+  window.cbSaveTrackingLink = function(input, accountName) {
+    var link = input.value.trim();
+    var row = input.closest('.cb-preflight-row');
+    var badge = row ? row.querySelector('.cb-link-status-badge') : null;
+
+    if (!link) return; // don't save empty
+
+    fetch('/account-link-patch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_name: accountName, link: link }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        if (badge) {
+          badge.textContent = '✓ Saved to Upload FB';
+          badge.style.color = 'var(--good)';
+          badge.style.fontWeight = '600';
+        }
+        input.classList.remove('cb-pf-missing');
+      } else {
+        if (badge) {
+          badge.textContent = '✗ ' + (d.error || 'Save failed');
+          badge.style.color = 'var(--bad)';
+        }
+      }
+    })
+    .catch(function() {
+      if (badge) { badge.textContent = '✗ Network error'; badge.style.color = 'var(--bad)'; }
+    });
+  };
 
   // ── Account map save ──────────────────────────────────────────────────
   window.cbSaveAccountMap = function(btn, accountName) {
