@@ -141,23 +141,30 @@ def load_reference_data(excel_path: str):
     wb = load_workbook(excel_path, read_only=False, data_only=True)
     data = {}
 
-    # Accounts: Account -> {domain, pixel, link}
+    # Accounts: Account -> {domain, pixel, link, ad_account_id}
     if "Accounts" in wb.sheetnames:
         ws = wb["Accounts"]
-        account_col = _col_index_by_header(ws, "Account")
-        domain_col = _col_index_by_header(ws, "Domain")
-        pixel_col = _col_index_by_header(ws, "Pixel")
-        link_col = _col_index_by_header(ws, "Link")
+        account_col    = _col_index_by_header(ws, "Account")
+        domain_col     = _col_index_by_header(ws, "Domain")
+        pixel_col      = _col_index_by_header(ws, "Pixel")
+        link_col       = _col_index_by_header(ws, "Link")
+        act_id_col     = _col_index_by_header(ws, "Ad account ID")
         accounts = {}
         for r in range(2, ws.max_row + 1):
             acc = ws.cell(row=r, column=account_col).value if account_col else None
             if acc is None or not str(acc).strip():
                 continue
             key = str(acc).strip()
+            raw_act = ws.cell(row=r, column=act_id_col).value if act_id_col else None
+            act_id = str(raw_act).strip() if raw_act is not None else None
+            # Normalise: store without act_ prefix so consumers can add it themselves
+            if act_id and act_id.lower().startswith("act_"):
+                act_id = act_id[4:]
             accounts[key] = {
-                "domain": ws.cell(row=r, column=domain_col).value if domain_col else None,
-                "pixel": ws.cell(row=r, column=pixel_col).value if pixel_col else None,
-                "link": ws.cell(row=r, column=link_col).value if link_col else None,
+                "domain":         ws.cell(row=r, column=domain_col).value if domain_col else None,
+                "pixel":          ws.cell(row=r, column=pixel_col).value  if pixel_col  else None,
+                "link":           ws.cell(row=r, column=link_col).value   if link_col   else None,
+                "ad_account_id":  act_id or None,
             }
         data["accounts"] = accounts
     else:

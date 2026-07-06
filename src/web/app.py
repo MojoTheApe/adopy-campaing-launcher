@@ -167,17 +167,21 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
 
     result: dict[str, dict] = {}
     for label in account_labels:
-        # Link from Upload FB Accounts sheet
+        # Link + ad_account_id from Upload FB Accounts sheet
         if ref:
             info = get_account_info(ref, label)
             link = (info.get("link") or "").strip()
+            excel_act_id = (info.get("ad_account_id") or "").strip()
         else:
             link = ""
+            excel_act_id = ""
         link_status = classify_link(link)
 
         # Account map completeness
         entry = resolve_account_entry(account_map, label)
         missing: list[str] = []
+        prefill: dict[str, str] = {}  # pre-populate inputs from Excel values
+
         if not entry:
             missing = ["ad_account_id", "folder_id", "profile_id"]
         else:
@@ -188,11 +192,16 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
             if not (entry.profile_id or "").strip():
                 missing.append("profile_id")
 
+        # Pre-fill ad_account_id from Excel if it's missing from the map
+        if "ad_account_id" in missing and excel_act_id:
+            prefill["ad_account_id"] = excel_act_id
+
         result[label] = {
             "link": link,
             "link_status": link_status,
             "missing_map_fields": missing,
             "has_map_entry": entry is not None,
+            "prefill": prefill,
         }
     return result
 

@@ -1374,7 +1374,11 @@
           <div class="cb-map-field-row">
             <span class="cb-map-field-label">ad_account_id</span>
             <input type="text" class="cb-input cb-map-input" data-field="ad_account_id"
+                   value="{{ pf.prefill.get('ad_account_id', '') }}"
                    placeholder="e.g. 1234567890">
+            {% if pf.prefill.get('ad_account_id') %}
+            <span style="font-size:0.68rem;color:var(--muted);white-space:nowrap">from Upload FB</span>
+            {% endif %}
             <button type="button" class="cb-field-save-btn"
                     onclick="cbSaveOneMapField(this, '{{ acc_label | e }}', 'ad_account_id')">Save</button>
             <span class="cb-field-status"></span>
