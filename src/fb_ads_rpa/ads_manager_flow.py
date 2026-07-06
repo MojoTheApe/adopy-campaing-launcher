@@ -184,49 +184,90 @@ class AdsManagerFlow:
 
         self._shot("03_wizard_started", result)
 
+    def _fill_targeting_group(
+        self,
+        terms: list[str],
+        input_sels: list[str],
+        suggest_sels: list[str],
+        group_label: str,
+        result: RpaPublishResult,
+    ) -> None:
+        """Add one group of interest terms to the currently-active Detailed Targeting block."""
+        for i, term in enumerate(terms):
+            step = f"{group_label}_t{i + 1}"
+            try:
+                _fill_first(self.page, input_sels, term, timeout_ms=self.action_timeout)
+                pause_medium()
+
+                if suggest_sels:
+                    _click_first(self.page, suggest_sels, timeout_ms=self.action_timeout)
+                    pause_short()
+                    result.steps_completed.append(f"{step}:{term}")
+                else:
+                    self.page.keyboard.press("Enter")
+                    pause_short()
+                    result.steps_completed.append(f"{step}_enter:{term}")
+            except AdsManagerFlowError:
+                result.steps_completed.append(f"{step}_failed:{term}")
+                self._shot(f"{step}_fail", result)
+
     def _fill_detailed_targeting(
         self,
         ad_set: AdSetDraft,
         result: RpaPublishResult,
     ) -> None:
-        """Type each comma-separated targeting term into Detailed Targeting and select the first suggestion."""
+        """Fill Detailed Targeting; supports [AND] (Narrow further / Define Further) groups.
+
+        Format examples:
+          "Amazon, Online Shopping"              → one group, two interests
+          "Amazon, Online Shopping [AND] Finance" → two groups (AND logic / Narrow further)
+        The [AND] marker is written by sync_targets_from_gsheet.py from sheet rows
+        that contain a standalone "V" (Meta's visual AND separator).
+        """
         raw = (ad_set.targeting_label or "").strip()
-        terms = [t.strip() for t in raw.split(",") if t.strip()]
-        if not terms:
+        if not raw:
             result.steps_completed.append("targeting_empty_skipped")
             return
 
         sels = self.cfg.get("selectors") or {}
-        input_sels = _selector_list(sels, "detailed_targeting_input")
+        input_sels   = _selector_list(sels, "detailed_targeting_input")
         suggest_sels = _selector_list(sels, "targeting_suggestion_item")
+        narrow_sels  = _selector_list(sels, "narrow_further_button")
 
         if not input_sels:
             result.steps_completed.append("targeting_no_selector_skipped")
             return
 
-        for i, term in enumerate(terms):
-            label = f"targeting_{i + 1}"
-            try:
-                # Click the input, type the term
-                _fill_first(self.page, input_sels, term, timeout_ms=self.action_timeout)
-                pause_medium()
+        # Split into AND-groups (each group = one comma-separated block)
+        and_groups_raw = [g.strip() for g in re.split(r"\[AND\]", raw, flags=re.IGNORECASE) if g.strip()]
+        # Filter groups to only those with at least one non-empty term
+        and_groups = [g for g in and_groups_raw if any(t.strip() for t in g.split(","))]
+        if not and_groups:
+            result.steps_completed.append("targeting_empty_skipped")
+            return
 
-                # Wait for suggestions and click the first one
-                if suggest_sels:
-                    _click_first(self.page, suggest_sels, timeout_ms=self.action_timeout)
-                    pause_short()
-                    result.steps_completed.append(f"{label}:{term}")
+        for g_idx, group_raw in enumerate(and_groups):
+            terms = [t.strip() for t in group_raw.split(",") if t.strip()]
+            if not terms:
+                continue
+
+            group_label = f"targeting_g{g_idx + 1}"
+
+            # If this is a second (or later) group, click "Narrow further" first
+            if g_idx > 0:
+                if narrow_sels:
+                    try:
+                        _click_first(self.page, narrow_sels, timeout_ms=self.action_timeout)
+                        pause_medium()
+                        result.steps_completed.append(f"{group_label}_narrow_further")
+                    except AdsManagerFlowError:
+                        result.steps_completed.append(f"{group_label}_narrow_further_failed")
+                        self._shot(f"{group_label}_narrow_fail", result)
+                        # Still try to add interests into whatever input is active
                 else:
-                    # No suggestion selector — accept with Enter as fallback
-                    self.page.keyboard.press("Enter")
-                    pause_short()
-                    result.steps_completed.append(f"{label}_enter:{term}")
+                    result.steps_completed.append(f"{group_label}_no_narrow_selector")
 
-            except AdsManagerFlowError as exc:
-                result.steps_completed.append(f"{label}_failed:{term}")
-                self._shot(f"targeting_{i + 1}_fail", result)
-                # Continue with remaining terms rather than hard-failing
-                _ = exc
+            self._fill_targeting_group(terms, input_sels, suggest_sels, group_label, result)
 
         self._shot("05_targeting", result)
 

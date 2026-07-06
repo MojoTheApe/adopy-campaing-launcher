@@ -53,6 +53,14 @@ selectors:
     - "div[role='option']:first-child"
     - "[role='option']:first-child"
     - "li[role='option']:first-child"
+  # AND-logic: "Narrow further" / "Define Further" button (second interest group)
+  narrow_further_button:
+    - "text=Narrow further"
+    - "text=Define further"
+    - "text=Narrow audience"
+    - "role=button[name=/Narrow further/i]"
+    - "role=button[name=/Define further/i]"
+    - "div[aria-label*='Narrow further']"
 
 timing:
   navigation_timeout_ms: 90000
