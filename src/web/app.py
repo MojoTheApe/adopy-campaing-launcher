@@ -45,17 +45,96 @@ from src.creative_agent.vision_analyzer import analyze as vision_analyze
 from src.creative_agent.prompt_generator import generate_brief
 from src.upload_agent.build_upload_excel import load_reference_data
 from src.campaign_bridge.open_rec_mapper import parse_creative_from_ad_title
-from config.paths import get_upload_fb_excel_path, get_creatives_root
+from config.paths import get_upload_fb_excel_path, get_creatives_root, get_ad_account_map_path
+from src.campaign_bridge.link_validation import classify_link
+from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
 
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
 _FAVICON = _STATIC_DIR / "favicon.svg"
+_DRAFT_STATUS_PATH = _PROJ_ROOT / "output" / "draft_status.json"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 
 _ref_opts_cache: dict | None = None
 _ref_opts_mtime: float = -1.0
+_ref_full_cache: dict | None = None
+_ref_full_mtime: float = -1.0
+
+
+def _load_draft_status() -> dict:
+    """Load per-account draft-ready status from output/draft_status.json."""
+    if not _DRAFT_STATUS_PATH.is_file():
+        return {}
+    try:
+        with open(_DRAFT_STATUS_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _get_upload_ref_cached() -> dict:
+    """Return the full load_reference_data() result, cached by file mtime."""
+    global _ref_full_cache, _ref_full_mtime
+    excel_path = get_upload_fb_excel_path()
+    if not os.path.isfile(excel_path):
+        return {}
+    try:
+        mtime = os.path.getmtime(excel_path)
+    except OSError:
+        return {}
+    if _ref_full_cache is not None and mtime == _ref_full_mtime:
+        return _ref_full_cache
+    try:
+        ref = load_reference_data(excel_path)
+        _ref_full_cache = ref
+        _ref_full_mtime = mtime
+        return ref
+    except Exception:
+        return {}
+
+
+def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
+    """Return preflight info per account:
+    {acc_label: {link, link_status, missing_map_fields: [str], has_map_entry}}
+    """
+    from src.upload_agent.build_upload_excel import get_account_info
+
+    ref = _get_upload_ref_cached()
+    map_path = get_ad_account_map_path()
+    account_map = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+
+    result: dict[str, dict] = {}
+    for label in account_labels:
+        # Link status from Upload FB
+        if ref:
+            info = get_account_info(ref, label)
+            link = (info.get("link") or "").strip()
+        else:
+            link = ""
+        link_status = classify_link(link)
+
+        # Account map completeness
+        entry = resolve_account_entry(account_map, label)
+        missing: list[str] = []
+        if not entry:
+            missing = ["ad_account_id", "folder_id", "profile_id"]
+        else:
+            if not (entry.ad_account_id or "").strip():
+                missing.append("ad_account_id")
+            if not (entry.folder_id or "").strip():
+                missing.append("folder_id")
+            if not (entry.profile_id or "").strip():
+                missing.append("profile_id")
+
+        result[label] = {
+            "link": link,
+            "link_status": link_status,
+            "missing_map_fields": missing,
+            "has_map_entry": entry is not None,
+        }
+    return result
 
 
 def _load_kb_targets() -> list[dict]:
@@ -209,6 +288,17 @@ def _render_report(
 
     _enrich_country_overview(report)
     ref_opts = _load_ref_options()
+
+    # Collect all account labels from open_recs across all countries
+    all_account_labels: list[str] = []
+    for c in report.get("countries", []):
+        for label in (c.get("open_recs") or {}).keys():
+            if label not in all_account_labels:
+                all_account_labels.append(label)
+
+    account_preflight = _build_account_preflight(all_account_labels)
+    draft_status = _load_draft_status()
+
     return templates.TemplateResponse(
         "report.html",
         {
@@ -219,6 +309,9 @@ def _render_report(
             "upload_errors": upload_errors or {},
             "ref_options": ref_opts,
             "ref_options_json": json.dumps(ref_opts, ensure_ascii=False),
+            "account_preflight": account_preflight,
+            "account_preflight_json": json.dumps(account_preflight, ensure_ascii=False),
+            "draft_status": draft_status,
         },
     )
 
@@ -300,6 +393,7 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
 
     country = (form.get("country") or "").strip()
     account_label = (form.get("account_label") or "").strip()
+    tracking_link = (form.get("tracking_link") or "").strip()
     try:
         camp_count = int(form.get("camp_count") or 0)
     except (TypeError, ValueError):
@@ -353,6 +447,7 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     "age": age_val,
                     "budget": budget,
                     "asset": asset_val,
+                    "tracking_link": tracking_link,
                 }
             )
     return country, account_label, slots
@@ -627,6 +722,75 @@ async def api_creatives() -> JSONResponse:
             "type": ftype,
         })
     return JSONResponse({"files": files})
+
+
+@app.post("/account-map-patch")
+async def account_map_patch(request: Request) -> JSONResponse:
+    """Upsert a row in config/ad_account_map.csv with the provided account fields.
+
+    Body JSON: {account_name, ad_account_id, folder_id, profile_id, page_id?, multilogin_instance?}
+    Creates the CSV if it doesn't exist yet.
+    """
+    import csv as _csv
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    account_name = (data.get("account_name") or "").strip()
+    if not account_name:
+        return JSONResponse({"ok": False, "error": "account_name is required"}, status_code=400)
+
+    map_path = Path(get_ad_account_map_path())
+    _FIELDNAMES = [
+        "account_name", "ad_account_id", "page_id", "multilogin_instance",
+        "folder_id", "profile_id", "proxy_type", "proxy_host", "proxy_port",
+        "proxy_user", "proxy_pass",
+    ]
+
+    # Read existing rows
+    rows: list[dict] = []
+    if map_path.is_file():
+        with open(map_path, encoding="utf-8-sig", newline="") as f:
+            reader = _csv.DictReader(f)
+            rows = list(reader)
+
+    # Upsert: find existing row by account_name (case-insensitive) or append
+    name_lower = account_name.lower()
+    existing_idx: int | None = None
+    for i, row in enumerate(rows):
+        if (row.get("account_name") or "").strip().lower() == name_lower:
+            existing_idx = i
+            break
+
+    new_row: dict = {f: "" for f in _FIELDNAMES}
+    if existing_idx is not None:
+        new_row.update(rows[existing_idx])
+
+    new_row["account_name"] = account_name
+    for field in ("ad_account_id", "folder_id", "profile_id", "page_id", "multilogin_instance"):
+        val = (data.get(field) or "").strip()
+        if val:
+            new_row[field] = val
+
+    # Ensure act_ prefix
+    act = new_row.get("ad_account_id", "")
+    if act and not act.startswith("act_"):
+        new_row["ad_account_id"] = f"act_{act.lstrip('act_')}"
+
+    if existing_idx is not None:
+        rows[existing_idx] = new_row
+    else:
+        rows.append(new_row)
+
+    map_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(map_path, "w", encoding="utf-8", newline="") as f:
+        writer = _csv.DictWriter(f, fieldnames=_FIELDNAMES, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return JSONResponse({"ok": True, "saved": new_row["account_name"]})
 
 
 @app.post("/preview-publish")

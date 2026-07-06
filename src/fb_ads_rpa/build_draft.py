@@ -83,11 +83,13 @@ def slots_to_campaign_drafts(
             ads=ads,
         )
 
+        tracking_link = (first.get("tracking_link") or "").strip()
         draft = CampaignDraft(
             name=campaign_name,
             country=country,
             account_label=account_label,
             status=status,
+            link=tracking_link,
             ad_sets=[ad_set],
             warnings=warnings,
         )

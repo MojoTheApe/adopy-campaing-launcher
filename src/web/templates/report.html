@@ -409,6 +409,47 @@
     }
     .upload-errors ul { margin: 0.25rem 0 0 1rem; padding: 0; }
 
+    /* Draft-ready badge */
+    .cb-draft-badge {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      background: color-mix(in srgb, var(--good) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--good) 40%, transparent);
+      color: var(--good); border-radius: var(--radius-sm);
+      font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem;
+      margin-left: 0.6rem; vertical-align: middle; cursor: default;
+    }
+    .cb-draft-ts { color: var(--muted); font-weight: 400; font-size: 0.65rem; }
+
+    /* Pre-flight panel (link + account map) */
+    .cb-preflight {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.6rem 0.875rem;
+      margin-bottom: 0.75rem;
+      display: flex; flex-direction: column; gap: 0.45rem;
+    }
+    .cb-preflight-row { display: flex; align-items: flex-start; gap: 0.6rem; flex-wrap: wrap; }
+    .cb-preflight-label {
+      font-size: 0.7rem; font-weight: 600; color: var(--muted);
+      min-width: 6.5rem; padding-top: 0.25rem; flex-shrink: 0;
+    }
+    .cb-preflight-val { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; flex: 1; }
+    .cb-pf-ok   { font-size: 0.75rem; color: var(--good); font-weight: 600; white-space: nowrap; }
+    .cb-pf-warn { font-size: 0.75rem; color: var(--warn, #f59e0b); font-weight: 600; }
+    .cb-pf-err  { font-size: 0.75rem; color: var(--bad);  font-weight: 600; }
+    .cb-input-url { flex: 1; min-width: 16rem; max-width: 32rem; font-size: 0.78rem; }
+    .cb-pf-missing { border-color: color-mix(in srgb, var(--bad) 50%, var(--border)) !important; }
+    .cb-map-fields { gap: 0.4rem; }
+    .cb-map-input  { min-width: 13rem; font-size: 0.78rem; }
+    .cb-map-save-btn {
+      padding: 0.25rem 0.7rem; font-size: 0.75rem; font-family: inherit;
+      background: var(--accent); color: #fff; border: none;
+      border-radius: var(--radius-sm); cursor: pointer; font-weight: 500;
+    }
+    .cb-map-save-btn:hover { background: #1d4ed8; }
+    .cb-map-save-status { font-size: 0.75rem; }
+
     /* Campaign Builder slots */
     .cb-slots { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.65rem; }
     .cb-slot {
@@ -1259,13 +1300,74 @@
 {% for acc_label in c.open_recs.keys() | sort %}
   {% set recs = c.open_recs[acc_label] %}
   {% if recs %}
+  {# Preflight info for this account from backend #}
+  {% set pf = account_preflight.get(acc_label, {}) %}
+  {% set ds = draft_status.get(acc_label, {}) %}
   {# Collect default asset from first rec for the Add Campaign button #}
   {% set default_asset = recs[0].offer if recs else '' %}
   <form class="open-account-form" method="post" action="/build-upload"
         data-open-form
         data-country="{{ c.country }}"
         data-asset="{{ default_asset }}">
-    <div class="open-account-name">{{ acc_label }}</div>
+
+    {# ── Account header with draft-ready badge ── #}
+    <div class="open-account-name">
+      {{ acc_label }}
+      {% if ds %}
+        <span class="cb-draft-badge" title="{{ ds.campaign_names | join(', ') }}">
+          ✓ Draft ready · {{ ds.count }} campaign{{ 's' if ds.count != 1 else '' }}
+          <span class="cb-draft-ts">{{ ds.ts[:16].replace('T',' ') }} UTC</span>
+        </span>
+      {% endif %}
+    </div>
+
+    {# ── Pre-flight panel: link + account map ── #}
+    <div class="cb-preflight">
+      {# Tracking link row #}
+      <div class="cb-preflight-row">
+        <span class="cb-preflight-label">Tracking link</span>
+        <div class="cb-preflight-val">
+          {% if pf.link_status == 'tracking' %}
+            <span class="cb-pf-ok">✓ OK</span>
+            <input type="url" name="tracking_link" class="cb-input cb-input-url"
+                   value="{{ pf.link }}" placeholder="https://…" style="flex:1">
+          {% elif pf.link_status == 'jira' %}
+            <span class="cb-pf-warn">⚠ Jira URL — replace with Keitaro tracking link</span>
+            <input type="url" name="tracking_link" class="cb-input cb-input-url cb-pf-missing"
+                   value="" placeholder="https://keitaro.example.com/…" style="flex:1">
+          {% else %}
+            <span class="cb-pf-err">✕ Missing — paste tracking link</span>
+            <input type="url" name="tracking_link" class="cb-input cb-input-url cb-pf-missing"
+                   value="" placeholder="https://keitaro.example.com/…" style="flex:1">
+          {% endif %}
+        </div>
+      </div>
+
+      {# Account map row — only if fields are missing #}
+      {% if pf.missing_map_fields %}
+      <div class="cb-preflight-row cb-account-map-row" id="cb-map-row-{{ loop.index }}">
+        <span class="cb-preflight-label">Account config</span>
+        <div class="cb-preflight-val cb-map-fields">
+          <span class="cb-pf-err">✕ Missing: {{ pf.missing_map_fields | join(', ') }}</span>
+          {% if 'ad_account_id' in pf.missing_map_fields %}
+          <input type="text" class="cb-input cb-map-input" data-field="ad_account_id"
+                 placeholder="ad_account_id (e.g. 1234567890)" style="flex:1">
+          {% endif %}
+          {% if 'folder_id' in pf.missing_map_fields %}
+          <input type="text" class="cb-input cb-map-input" data-field="folder_id"
+                 placeholder="folder_id (Multilogin UUID)" style="flex:1">
+          {% endif %}
+          {% if 'profile_id' in pf.missing_map_fields %}
+          <input type="text" class="cb-input cb-map-input" data-field="profile_id"
+                 placeholder="profile_id (Multilogin UUID)" style="flex:1">
+          {% endif %}
+          <button type="button" class="cb-map-save-btn"
+                  onclick="cbSaveAccountMap(this, '{{ acc_label | e }}')">Save config</button>
+          <span class="cb-map-save-status" style="display:none"></span>
+        </div>
+      </div>
+      {% endif %}
+    </div>{# /cb-preflight #}
     <div class="cb-slots">
     {# One campaign card per rec; each creative becomes an ad row inside it #}
     {% set ns = namespace(idx=0) %}
@@ -2214,6 +2316,45 @@ function copyBrief(btn) {
       '</div>' +
       '</div>';
   }
+
+  // ── Account map save ──────────────────────────────────────────────────
+  window.cbSaveAccountMap = function(btn, accountName) {
+    var row = btn.closest('.cb-account-map-row');
+    var statusEl = row ? row.querySelector('.cb-map-save-status') : null;
+    var inputs = row ? row.querySelectorAll('.cb-map-input') : [];
+    var payload = { account_name: accountName };
+    inputs.forEach(function(inp) {
+      var field = inp.dataset.field;
+      var val = inp.value.trim();
+      if (field && val) payload[field] = val;
+    });
+
+    btn.disabled = true;
+    if (statusEl) { statusEl.style.display = 'inline'; statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)'; }
+
+    fetch('/account-map-patch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      btn.disabled = false;
+      if (d.ok) {
+        if (statusEl) { statusEl.textContent = '✓ Saved'; statusEl.style.color = 'var(--good)'; }
+        // Hide missing-field warning
+        var errSpan = row ? row.querySelector('.cb-pf-err') : null;
+        if (errSpan) errSpan.textContent = '✓ Config saved — refresh page to verify';
+        errSpan && (errSpan.style.color = 'var(--good)');
+      } else {
+        if (statusEl) { statusEl.textContent = '✗ ' + (d.error || 'Error'); statusEl.style.color = 'var(--bad)'; }
+      }
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      if (statusEl) { statusEl.textContent = '✗ Network error'; statusEl.style.color = 'var(--bad)'; }
+    });
+  };
 
   window.cbAddSlot = function(form) {
     var container = form.querySelector('.cb-slots');

@@ -132,12 +132,47 @@ def _fatal(job_id: str, msg: str) -> None:
         _jobs[job_id]["errors"].append(msg)
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["finished_at"] = _now_iso()
+        account_label = _jobs[job_id].get("account_label", "")
+        results = list(_jobs[job_id].get("results", []))
+    _write_draft_status(account_label, results)
+
+
+def _write_draft_status(account_label: str, results: list[dict]) -> None:
+    """Persist draft-ready status to output/draft_status.json."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    successful = [r["campaign_name"] for r in results if r.get("success")]
+    if not successful:
+        return
+    path = _Path("output/draft_status.json")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing: dict = {}
+        if path.is_file():
+            try:
+                with open(path, encoding="utf-8") as f:
+                    existing = _json.load(f)
+            except Exception:
+                existing = {}
+        existing[account_label] = {
+            "ts": _now_iso(),
+            "count": len(successful),
+            "campaign_names": successful,
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            _json.dump(existing, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass  # Non-fatal
 
 
 def _finish(job_id: str) -> None:
     with _jobs_lock:
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["finished_at"] = _now_iso()
+        account_label = _jobs[job_id].get("account_label", "")
+        results = list(_jobs[job_id].get("results", []))
+    _write_draft_status(account_label, results)
 
 
 def _run_rpa(
