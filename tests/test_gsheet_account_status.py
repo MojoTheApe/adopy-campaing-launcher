@@ -116,3 +116,32 @@ def test_parse_reads_column_k() -> None:
     assert len(rows) == 1
     assert rows[0]["to_do"] == "expand"
     assert rows[0]["to_do_extra"] == "A + T + C; A2 + T2 + C2"
+
+
+def test_parse_status_v2_daily_tab_layout() -> None:
+    raw = [
+        ["CM", "Country", "Account", " Cost ", "Leads", "CPL", "Cohort FTDs", "Stock", "Done Today", "Cap"],
+        ["Active", "MX", "FacebookElf162 MX", " $ 170 ", "8", "$21", "", "Amz", "Active - Expand", "900"],
+        ["Dead", "KW", "FacebookDQ83 KW", " $ 18 ", "0", "", "", "Trl", "Account Disabled", ""],
+        ["Total + Fees", "Fees", "1.12", "$597", "33", " $ 18.09 ", "0", "", "", "2400"],
+    ]
+    rows = parse_account_rows(raw)
+    assert len(rows) == 2
+    assert rows[0]["account_status"] == "Active"
+    assert rows[0]["cm"] == ""
+    assert rows[0]["country_code"] == "MX"
+    assert rows[0]["stock"] == "Amz"
+    assert rows[0]["to_do"] == "Active - Expand"
+    assert rows[1]["to_do"] == "Account Disabled"
+    assert rows[1]["is_ready"] is False
+
+
+def test_apply_cm_filter_status_v2_keeps_all_rows() -> None:
+    from src.analysis_agent.gsheet_accounts import _apply_cm_filter
+
+    rows = [
+        {"cm": "", "account_status": "Active", "country_code": "MX", "account_label": "FacebookElf162 MX"},
+    ]
+    out = _apply_cm_filter(rows, "Evgeni Sedin", "status_v2")
+    assert len(out) == 1
+    assert out[0]["cm"] == "Evgeni Sedin"

@@ -8,6 +8,12 @@
         "timeout": 10,
         "failClosed": false
       }
+    ],
+    "preToolUse": [
+      {
+        "command": "node \".cursor/skills/impeccable/scripts/hook-before-edit.mjs\"",
+        "timeout": 5
+      }
     ]
   }
 }

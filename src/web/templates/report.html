@@ -19,6 +19,13 @@
       --good: #3fb950;
       --bad: #f85149;
       --warn: #f0883e;
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --sidebar-w: 240px;
+      --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
     }
     * { box-sizing: border-box; }
     body {
@@ -26,9 +33,141 @@
       background: var(--bg);
       color: var(--text);
       margin: 0;
-      padding: 1.5rem 2rem;
+      padding: 0;
       font-size: 13px;
       line-height: 1.5;
+    }
+    .page-top {
+      padding: 1.25rem 1.5rem 0;
+    }
+    .dashboard-shell {
+      display: flex;
+      min-height: calc(100vh - 5rem);
+      align-items: stretch;
+    }
+    .sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      background: var(--bg-elev);
+      border-right: 1px solid var(--border);
+      padding: var(--space-md) 0;
+      position: sticky;
+      top: 0;
+      align-self: flex-start;
+      max-height: 100vh;
+      overflow-y: auto;
+    }
+    .sidebar-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      padding: 0.5rem 1rem 0.35rem;
+    }
+    .sidebar-link {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.82rem;
+      padding: 0.55rem var(--space-lg);
+      min-height: 44px;
+      cursor: pointer;
+    }
+    .sidebar-link:hover { background: var(--bg-hover); color: var(--accent); }
+    .sidebar-link:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    .sidebar-link.active {
+      background: var(--bg-hover);
+      color: var(--accent);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .sidebar-country-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: bold;
+      padding: 0.55rem var(--space-lg);
+      min-height: 44px;
+      cursor: pointer;
+    }
+    .sidebar-country-btn:hover { background: var(--bg-hover); color: var(--accent); }
+    .sidebar-country-btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    .sidebar-country.expanded .sidebar-country-btn {
+      color: var(--accent);
+      background: var(--bg-hover);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .sidebar-sections { display: none; padding-bottom: 0.25rem; }
+    .sidebar-country.expanded .sidebar-sections { display: block; }
+    .sidebar-sections .sidebar-link {
+      padding-left: 1.5rem;
+      font-size: 0.78rem;
+      font-weight: normal;
+    }
+    .main-content {
+      flex: 1;
+      min-width: 0;
+      padding: var(--space-lg) var(--space-xl) var(--space-xl);
+      overflow-y: auto;
+    }
+    @media (max-width: 860px) {
+      .dashboard-shell { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        max-height: none;
+        position: relative;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+      .main-content { padding: var(--space-lg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+    .view-panel { display: none; }
+    .view-panel.active { display: block; }
+    h2.view-title {
+      font-size: 1.2rem;
+      color: var(--accent);
+      margin: 0 0 1rem 0;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .home-overview { margin-top: 1.5rem; }
+    .home-overview h3 {
+      font-size: 0.9rem;
+      font-weight: normal;
+      margin: 0 0 0.6rem 0;
+      color: var(--muted);
+    }
+    .overview-row:hover td { background: var(--bg-hover); }
+    .overview-row:hover td:first-child { color: var(--accent); }
+    .empty-hint {
+      color: var(--muted);
+      margin: var(--space-sm) 0 var(--space-lg);
+      padding: var(--space-md);
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--space-xs);
+      font-size: 0.82rem;
+      line-height: 1.55;
     }
     header.page-header {
       display: flex;
@@ -58,6 +197,10 @@
       font-size: 0.85rem;
     }
     form.refresh button:hover { background: var(--bg-hover); border-color: var(--accent); }
+    form.refresh button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
 
     .warnings {
       background: #2d2419;
@@ -167,68 +310,7 @@
     .roi-pos { color: var(--good); }
     .roi-neg { color: var(--bad); }
 
-    nav.jump-nav {
-      position: sticky;
-      top: 0;
-      z-index: 200;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-      padding: 0.6rem 0.9rem;
-      margin-bottom: 1.25rem;
-      background: var(--bg-elev);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-    }
-    nav.jump-nav label {
-      color: var(--muted);
-      font-size: 0.8rem;
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-    }
-    nav.jump-nav select {
-      background: var(--bg);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 0.3rem 0.5rem;
-      font-family: inherit;
-      font-size: 0.85rem;
-      max-width: 14rem;
-    }
-    nav.jump-nav button {
-      background: var(--bg);
-      color: var(--accent);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 0.35rem 0.8rem;
-      cursor: pointer;
-      font-family: inherit;
-      font-size: 0.85rem;
-    }
-    nav.jump-nav button:hover { background: var(--bg-hover); border-color: var(--accent); }
-
-    h2.country, h3.section[id] {
-      scroll-margin-top: 4.5rem;
-    }
-    .country-toc {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.35rem 0.6rem;
-      margin: 0.25rem 0 1rem 0;
-      font-size: 0.78rem;
-    }
-    .country-toc a {
-      color: var(--muted);
-      text-decoration: none;
-      padding: 0.15rem 0.45rem;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-    }
-    .country-toc a:hover { color: var(--accent); border-color: var(--accent); }
+    h3.section { scroll-margin-top: 1rem; }
 
     table.table-targeting {
       font-size: 0.78rem;
@@ -587,13 +669,12 @@
     .gpb-grand { height: 7px; }
     .gpb-mkt   { height: 5px; }
     .gpb-geo   { height: 3px; width: 100%; }
-    .gpb-fill  { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+    .gpb-fill  { height: 100%; border-radius: 2px; transform-origin: left center; }
 
     /* ── Per-country goals section ── */
     .goals-country-section {
-      background: #0d1219;
+      background: color-mix(in srgb, var(--accent) 7%, #0d1219);
       border: 1px solid var(--border);
-      border-left: 3px solid var(--accent);
       border-radius: 5px;
       padding: 0.65rem 1rem;
       margin: 0.5rem 0 1.25rem 0;
@@ -655,11 +736,12 @@
       overflow: hidden;
       margin: 0.2rem 0 0.1rem;
     }
-    .gcs-ftd-bar-fill { height: 100%; border-radius: 2px; }
+    .gcs-ftd-bar-fill { height: 100%; border-radius: 2px; transform-origin: left center; }
   </style>
 </head>
 <body>
 
+<div class="page-top">
 <header class="page-header">
   <h1>Morning Report — {{ report.date }}</h1>
   <span class="meta">CM: <strong>{{ report.my_cm }}</strong></span>
@@ -679,274 +761,84 @@
   </ul>
 </div>
 {% endif %}
+</div>
 
 {% if report.countries %}
-<nav class="jump-nav" aria-label="Jump to country and section">
-  <label>Country
-    <select id="jump-country">
+<div class="dashboard-shell">
+<aside class="sidebar" aria-label="Dashboard navigation">
+  <div class="sidebar-label">Main</div>
+  <button type="button" class="sidebar-link sidebar-home active" data-view="home">Home</button>
+
+  <div class="sidebar-label">Countries</div>
+  {% for c in report.countries %}
+  {% set cid = c.country | anchor_slug %}
+  <div class="sidebar-country" data-country="{{ cid }}">
+    <button type="button" class="sidebar-country-btn" data-country="{{ cid }}">{{ c.country }}</button>
+    <div class="sidebar-sections">
+      <button type="button" class="sidebar-link" data-view="country-{{ cid }}-goals">My Goals</button>
+      <button type="button" class="sidebar-link" data-view="country-{{ cid }}-cm">1 CM</button>
+      {% if c.asset_summary %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-assets">1b Assets</button>{% endif %}
+      {% if c.trend.has_date %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-trend">2 Trend</button>{% endif %}
+      <button type="button" class="sidebar-link" data-view="country-{{ cid }}-combos">3 Combos</button>
+      {% if c.targeting %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-targeting">4 Targeting</button>{% endif %}
+      <button type="button" class="sidebar-link" data-view="country-{{ cid }}-creatives">5 Creatives</button>
+      {% if c.account_rows %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-accounts">6 Accounts</button>{% endif %}
+      <button type="button" class="sidebar-link" data-view="country-{{ cid }}-optimization">7 Optimization</button>
+      <button type="button" class="sidebar-link" data-view="country-{{ cid }}-open">8 Campaign Builder</button>
+    </div>
+  </div>
+  {% endfor %}
+</aside>
+
+<main class="main-content">
+
+{# ── Home view ─────────────────────────────────────────────────── #}
+<div id="view-home" class="view-panel active">
+  <div id="goals-panel"></div>
+  <div class="home-overview">
+    <h3>Countries overview</h3>
+    <table>
+      <thead><tr>
+        <th>Country</th>
+        <th class="num">Deposits</th>
+        <th class="num">Leads</th>
+        <th class="num">Spend</th>
+        <th class="num">CPA</th>
+        <th class="num">CR</th>
+      </tr></thead>
+      <tbody>
       {% for c in report.countries %}
-      <option value="{{ c.country | anchor_slug }}">{{ c.country }}</option>
+      {% set my = c.cm_comparison | selectattr('is_me') | list %}
+      {% set dep = my | sum(attribute='deposits') | int %}
+      {% set leads = my | sum(attribute='leads') | int %}
+      {% set spend = my | sum(attribute='spend') | float %}
+      {% set cid = c.country | anchor_slug %}
+        <tr class="overview-row" style="cursor:pointer" data-view="country-{{ cid }}-cm">
+          <td>{{ c.country }}</td>
+          <td class="num">{{ dep }}</td>
+          <td class="num">{{ leads }}</td>
+          <td class="num">{{ spend | fmt_usd }}</td>
+          <td class="num">{% if dep %}{{ (spend / dep) | fmt_usd }}{% else %}—{% endif %}</td>
+          <td class="num">{% if leads %}{{ '%.1f' % (dep / leads * 100) }}%{% else %}—{% endif %}</td>
+        </tr>
       {% endfor %}
-    </select>
-  </label>
-  <label>Section
-    <select id="jump-section">
-      <option value="">— country top —</option>
-      <option value="cm">1. CM Comparison</option>
-      <option value="trend">2. Trend</option>
-      <option value="combos">3. Top Combos</option>
-      <option value="targeting">4. Targeting</option>
-      <option value="creatives">5. Creatives</option>
-      <option value="accounts">6. Accounts</option>
-      <option value="optimization">7. Optimization</option>
-      <option value="open">8. What to Open</option>
-    </select>
-  </label>
-  <button type="button" id="jump-go">Go</button>
-</nav>
-{% endif %}
-
-{# ── Goals Progress Panel ──────────────────────────────────────── #}
-<div id="goals-panel"></div>
-<script>
-(function () {
-  // ── Evgeni's personal goals ─────────────────────────────────────
-  var GOALS = {
-    GCC: {
-      total_ftd: 50,
-      geos: [
-        { code:"KW",  names:["Kuwait","KW"],                    ftd:15, cpa:3000, cr:3.0, ld:16 },
-        { code:"UAE", names:["UAE","United Arab Emirates","AE"], ftd:20, cpa:3000, cr:2.0, ld:33 },
-        { code:"SA",  names:["Saudi Arabia","SA"],               ftd:15, cpa:1500, cr:2.5, ld:19 }
-      ]
-    },
-    Latam: {
-      total_ftd: 140,
-      geos: [
-        { code:"CL", names:["Chile","CL"],    ftd:20, cpa:1000, cr:2.0, ld:32  },
-        { code:"CO", names:["Colombia","CO"],  ftd:40, cpa:1000, cr:1.3, ld:99  },
-        { code:"EC", names:["Ecuador","EC"],   ftd:40, cpa:1000, cr:2.0, ld:65  },
-        { code:"MX", names:["Mexico","MX"],    ftd:40, cpa:1000, cr:1.0, ld:129 }
-      ]
-    }
-  };
-  var GRAND_FTD = 190;
-  var TREND_DAYS = {{ report.trend_days | int }};
-
-  // ── Evgeni's actuals only (is_me rows) ──────────────────────────
-  var ACT_RAW = [
-    {% for c in report.countries %}{% set my = c.cm_comparison | selectattr('is_me') | list %}{n:"{{ c.country | replace('"', '\\"') }}",dep:{{ my|sum(attribute='deposits')|int }},leads:{{ my|sum(attribute='leads')|int }},spend:{{ my|sum(attribute='spend')|round(2) }}},
-    {% endfor %}
-  ];
-
-  var ACT = {};
-  for (var i = 0; i < ACT_RAW.length; i++) ACT[ACT_RAW[i].n.toLowerCase()] = ACT_RAW[i];
-
-  function getA(names) {
-    for (var j = 0; j < names.length; j++) { var a = ACT[names[j].toLowerCase()]; if (a) return a; }
-    return {dep:0, leads:0, spend:0};
-  }
-
-  // ── Find goal for a country by name ────────────────────────────
-  function findGeo(countryName) {
-    var cn = countryName.toLowerCase();
-    var mkts = Object.keys(GOALS);
-    for (var mi = 0; mi < mkts.length; mi++) {
-      var geos = GOALS[mkts[mi]].geos;
-      for (var gi = 0; gi < geos.length; gi++) {
-        var names = geos[gi].names;
-        for (var ni = 0; ni < names.length; ni++) {
-          if (names[ni].toLowerCase() === cn) return geos[gi];
-        }
-      }
-    }
-    return null;
-  }
-
-  // ── Helpers ─────────────────────────────────────────────────────
-  function pctColor(pct) {
-    return pct >= 80 ? 'var(--good)' : pct >= 40 ? 'var(--warn)' : 'var(--bad)';
-  }
-  function pBar(cls, actual, goal) {
-    if (!goal) return '<div class="gpb-wrap ' + cls + '"><div class="gpb-fill" style="width:0%;background:var(--border)"></div></div>';
-    var pct = Math.min(100, Math.round(actual / goal * 100));
-    return '<div class="gpb-wrap ' + cls + '"><div class="gpb-fill" style="width:' + pct + '%;background:' + pctColor(pct) + '"></div></div>';
-  }
-  function fmtCpa(spend, dep) {
-    if (!dep) return '—';
-    var v = spend / dep;
-    return v >= 1000 ? '$' + (v / 1000).toFixed(1) + 'k' : '$' + Math.round(v);
-  }
-  function fmtCr(dep, leads) {
-    if (!leads) return '—';
-    return (dep / leads * 100).toFixed(1) + '%';
-  }
-  function fmtLd(leads) {
-    if (!leads || !TREND_DAYS) return '—';
-    return (leads / TREND_DAYS).toFixed(1);
-  }
-  function okClass(ok) {
-    return ok === true ? 'goals-ok' : ok === false ? 'goals-fail' : 'goals-muted-val';
-  }
-
-  // ── Build global Goals Panel ─────────────────────────────────────
-  var h = '<div class="goals-panel">';
-  h += '<div class="goals-title">Evgeni — Goals Progress · FTDs / CPA / CR / Leads per Day</div>';
-
-  // Grand total bar
-  var totalDep = 0;
-  for (var i = 0; i < ACT_RAW.length; i++) totalDep += ACT_RAW[i].dep;
-  var totalPct = GRAND_FTD ? Math.min(100, Math.round(totalDep / GRAND_FTD * 100)) : 0;
-  var totalClr = pctColor(totalPct);
-  h += '<div class="goals-grand">'
-    + '<span class="goals-grand-label">Total FTDs</span>'
-    + '<span class="goals-grand-count" style="color:' + totalClr + '">' + totalDep + ' / ' + GRAND_FTD + '</span>'
-    + pBar('gpb-grand', totalDep, GRAND_FTD)
-    + '<span class="goals-grand-pct" style="color:' + totalClr + '">' + totalPct + '%</span>'
-    + '</div>';
-
-  h += '<div class="goals-markets">';
-  var markets = Object.keys(GOALS);
-  for (var mi = 0; mi < markets.length; mi++) {
-    var mktName = markets[mi];
-    var mkt = GOALS[mktName];
-    var mktDep = 0;
-    for (var gi = 0; gi < mkt.geos.length; gi++) { mktDep += getA(mkt.geos[gi].names).dep; }
-    var mPct = mkt.total_ftd ? Math.min(100, Math.round(mktDep / mkt.total_ftd * 100)) : 0;
-    var mClr = pctColor(mPct);
-
-    h += '<div class="goals-market">';
-    h += '<div class="goals-mkt-header">'
-      + '<span class="goals-mkt-name" style="color:' + mClr + '">' + mktName + '</span>'
-      + '<span class="goals-mkt-count" style="color:' + mClr + '">' + mktDep + ' / ' + mkt.total_ftd + '</span>'
-      + pBar('gpb-mkt', mktDep, mkt.total_ftd)
-      + '<span class="goals-mkt-pct" style="color:' + mClr + '">' + mPct + '%</span>'
-      + '</div>';
-
-    h += '<div class="goals-geos">';
-    // Column headers
-    h += '<div class="goals-geo-row" style="opacity:0.45;font-size:0.65rem">'
-      + '<span></span><span></span>'
-      + '<span style="text-align:right">FTDs</span>'
-      + '<span style="text-align:right">CPA</span>'
-      + '<span style="text-align:right">CR</span>'
-      + '<span style="text-align:right">L/Day</span>'
-      + '</div>';
-
-    for (var gi = 0; gi < mkt.geos.length; gi++) {
-      var g = mkt.geos[gi];
-      var a = getA(g.names);
-      var cpa = a.dep ? a.spend / a.dep : null;
-      var cr  = a.leads ? a.dep / a.leads * 100 : null;
-      var ld  = TREND_DAYS ? a.leads / TREND_DAYS : null;
-      var gPct = g.ftd ? Math.min(100, Math.round(a.dep / g.ftd * 100)) : null;
-      var gClr = gPct !== null ? pctColor(gPct) : 'var(--muted)';
-      var cpaOk = (cpa !== null && g.cpa) ? cpa <= g.cpa : null;
-      var crOk  = (cr  !== null && g.cr)  ? cr  >= g.cr  : null;
-      var ldOk  = (ld  !== null && g.ld)  ? ld  >= g.ld  : null;
-
-      h += '<div class="goals-geo-row">'
-        + '<span class="goals-geo-code">' + g.code + '</span>'
-        + '<div class="goals-geo-bar">' + (g.ftd ? pBar('gpb-geo', a.dep, g.ftd) : '') + '</div>'
-        + '<span class="goals-geo-ftd" style="color:' + gClr + '">' + a.dep + (g.ftd ? '/' + g.ftd : '') + '</span>'
-        + '<span class="goals-geo-cpa ' + okClass(cpaOk) + '" title="Goal ≤$' + g.cpa + '">' + fmtCpa(a.spend, a.dep) + '</span>'
-        + '<span class="goals-geo-cr '  + okClass(crOk)  + '" title="Goal ≥' + g.cr  + '%">' + fmtCr(a.dep, a.leads) + '</span>'
-        + '<span class="goals-geo-ld '  + okClass(ldOk)  + '" title="Goal ≥' + g.ld  + '/d">' + fmtLd(a.leads) + (g.ld ? '/' + g.ld : '') + '</span>'
-        + '</div>';
-    }
-    h += '</div></div>';
-  }
-  h += '</div></div>';
-  document.getElementById('goals-panel').innerHTML = h;
-
-  // ── Per-country goals section (first section inside each country) ──
-  document.querySelectorAll('h2.country').forEach(function (h2) {
-    var cName = h2.textContent.trim();
-    var g = findGeo(cName);
-    var a = ACT[cName.toLowerCase()] || {dep:0, leads:0, spend:0};
-
-    if (!g && !a.dep && !a.leads) return;
-
-    var cpa = a.dep   ? a.spend / a.dep        : null;
-    var cr  = a.leads ? a.dep / a.leads * 100  : null;
-    var ld  = TREND_DAYS ? a.leads / TREND_DAYS : null;
-
-    var ftdPct = (g && g.ftd) ? Math.min(100, Math.round(a.dep / g.ftd * 100)) : null;
-    var ftdClr = ftdPct !== null ? pctColor(ftdPct) : 'var(--muted)';
-
-    var cpaOk = g && cpa !== null ? cpa <= g.cpa : null;
-    var crOk  = g && cr  !== null ? cr  >= g.cr  : null;
-    var ldOk  = g && ld  !== null ? ld  >= g.ld  : null;
-
-    function metricBox(label, actual, goalLabel, ok, bar) {
-      var cls = okClass(ok);
-      var indicator = ok === true ? '✓' : ok === false ? '✗' : '';
-      var indicatorClr = ok === true ? 'var(--good)' : ok === false ? 'var(--bad)' : 'var(--muted)';
-      return '<div class="gcs-metric-box">'
-        + '<div class="gcs-metric-label">' + label + '</div>'
-        + '<div class="gcs-metric-main">'
-        +   '<span class="gcs-metric-val ' + cls + '">' + actual + '</span>'
-        +   (indicator ? '<span class="gcs-metric-indicator" style="color:' + indicatorClr + '">' + indicator + '</span>' : '')
-        + '</div>'
-        + (bar || '')
-        + (goalLabel ? '<div class="gcs-metric-goal">goal ' + goalLabel + '</div>' : '')
-        + '</div>';
-    }
-
-    function ftdBar(dep, ftdGoal) {
-      if (!ftdGoal) return '';
-      var pct = Math.min(100, Math.round(dep / ftdGoal * 100));
-      var clr = pctColor(pct);
-      return '<div class="gcs-ftd-bar-wrap"><div class="gcs-ftd-bar-fill" style="width:' + pct + '%;background:' + clr + '"></div></div>';
-    }
-
-    var block = '<div class="goals-country-section">'
-      + '<div class="goals-country-section-title">Evgeni — My Goals</div>'
-      + '<div class="goals-country-metrics">'
-      + metricBox(
-          'FTDs',
-          '<span style="color:' + ftdClr + '">' + a.dep + (g && g.ftd ? ' / ' + g.ftd : '') + '</span>',
-          g && g.ftd ? g.ftd + ' total' : null,
-          ftdPct !== null ? ftdPct >= 80 ? true : false : null,
-          g && g.ftd ? ftdBar(a.dep, g.ftd) + '<div class="gcs-metric-pct" style="color:' + ftdClr + '">' + (ftdPct||0) + '%</div>' : ''
-        )
-      + metricBox('CPA',    fmtCpa(a.spend, a.dep), g ? '≤$' + g.cpa  : null, cpaOk, null)
-      + metricBox('CR',     fmtCr(a.dep, a.leads),  g ? '≥' + g.cr + '%' : null, crOk,  null)
-      + metricBox('L/Day',  fmtLd(a.leads) + (g && g.ld ? '/' + g.ld : ''), g ? '≥' + g.ld + '/d' : null, ldOk, null)
-      + '</div>'
-      + '</div>';
-
-    // Insert AFTER country-toc, BEFORE first section (h3)
-    var cursor = h2.nextElementSibling;
-    while (cursor && !cursor.matches('h3.section, h3.section-targeting')) {
-      cursor = cursor.nextElementSibling;
-    }
-    if (cursor) {
-      cursor.insertAdjacentHTML('beforebegin', block);
-    } else {
-      h2.insertAdjacentHTML('afterend', block);
-    }
-  });
-})();
-</script>
+      </tbody>
+    </table>
+  </div>
+</div>
 
 {% for c in report.countries %}
 {% set cid = c.country | anchor_slug %}
-<h2 class="country" id="country-{{ cid }}">{{ c.country }}</h2>
-<div class="country-toc">
-  <a href="#country-{{ cid }}-cm">1 CM</a>
-  {% if c.asset_summary %}<a href="#country-{{ cid }}-assets">Assets</a>{% endif %}
-  <a href="#country-{{ cid }}-trend">2 Trend</a>
-  <a href="#country-{{ cid }}-combos">3 Combos</a>
-  <a href="#country-{{ cid }}-targeting">4 Targeting</a>
-  <a href="#country-{{ cid }}-creatives">5 Creatives</a>
-  <a href="#country-{{ cid }}-accounts">6 Accounts</a>
-  <a href="#country-{{ cid }}-optimization">7 Optimization</a>
-  <a href="#country-{{ cid }}-open">8 Open</a>
+
+{# ── My Goals view ── #}
+<div id="view-country-{{ cid }}-goals" class="view-panel" data-country="{{ cid }}">
+  <h2 class="view-title">{{ c.country }}: My Goals</h2>
+  <div class="goals-country-slot" data-country-name="{{ c.country }}"></div>
 </div>
 
 {# ── Section 1: CM comparison ─────────────────────────────────────── #}
-<h3 class="section" id="country-{{ cid }}-cm">1. CM Comparison</h3>
+<div id="view-country-{{ cid }}-cm" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: CM Comparison</h2>
 <table>
   <thead><tr>
     <th>CM</th>
@@ -982,12 +874,14 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 
 {# ── Section 1b: Asset summary ────────────────────────────────────── #}
 {% if c.asset_summary %}
-<h3 class="section" id="country-{{ cid }}-assets">Assets
+<div id="view-country-{{ cid }}-assets" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: 1b Assets
   <a href="/export/assets" style="margin-left:0.75rem;font-size:0.75rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0.15rem 0.5rem;text-decoration:none;" title="Download Excel">⬇ xlsx</a>
-</h3>
+</h2>
 <table>
   <thead><tr>
     <th>Asset</th>
@@ -1009,11 +903,13 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% endif %}
 
 {# ── Section 2: Trend ─────────────────────────────────────────────── #}
 {% if c.trend.has_date %}
-<h3 class="section" id="country-{{ cid }}-trend">2. Recent Trend <span class="hint">{{ c.trend.period_label }}</span></h3>
+<div id="view-country-{{ cid }}-trend" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: Recent Trend <span class="hint">{{ c.trend.period_label }}</span></h2>
 {% for label, key in [('Trending up', 'trending_up'), ('Stable', 'stable')] %}
   {% set rows = c.trend[key] %}
   {% if rows %}
@@ -1042,10 +938,12 @@
     </table>
   {% endif %}
 {% endfor %}
+</div>
 {% endif %}
 
 {# ── Section 3: Top combos ─────────────────────────────────────────── #}
-<h3 class="section" id="country-{{ cid }}-combos">3. Top Combos</h3>
+<div id="view-country-{{ cid }}-combos" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: Top Combos</h2>
 <table>
   <thead><tr>
     <th>Offer</th>
@@ -1074,10 +972,12 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 
 {# ── Section 4: Targeting ──────────────────────────────────────────── #}
 {% if c.targeting %}
-<h3 class="section section-targeting" id="country-{{ cid }}-targeting">4. Targeting</h3>
+<div id="view-country-{{ cid }}-targeting" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: Targeting</h2>
 <table class="table-targeting">
   <thead><tr>
     <th>Target</th>
@@ -1098,10 +998,12 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% endif %}
 
-{# ── Section 5: Creatives — always visible (matches Markdown §4 Creatives per country). #}
-<h3 class="section" id="country-{{ cid }}-creatives">5. Creative breakdown</h3>
+{# ── Section 5: Creatives ──────────────────────────────────────────── #}
+<div id="view-country-{{ cid }}-creatives" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: Creative breakdown</h2>
 {% if c.creatives %}
 <table>
   <thead><tr>
@@ -1126,11 +1028,13 @@
 {% else %}
 <p><em>No creative data.</em></p>
 {% endif %}
+</div>
 
 
 {# ── Section 6: Account Statuses ──────────────────────────────────────── #}
 {% if c.account_rows %}
-<h3 class="section" id="country-{{ cid }}-accounts">6. Account Statuses</h3>
+<div id="view-country-{{ cid }}-accounts" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: Account Statuses</h2>
 <table>
   <thead><tr><th>Account</th><th>Cost</th><th>Asset</th><th>To Do</th><th>✓</th></tr></thead>
   <tbody>
@@ -1145,12 +1049,13 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% endif %}
 
-{% if c.close_recs %}
-{% set has_close = c.close_recs.values() | selectattr('0') | list %}
+{% set has_close = c.close_recs.values() | map('length') | sum > 0 if c.close_recs else false %}
+<div id="view-country-{{ cid }}-optimization" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: 7 Optimization <span class="hint">click ad set row to drill into ads</span></h2>
 {% if has_close %}
-<h3 class="section" id="country-{{ cid }}-optimization">7. Optimization <span class="hint">click ad set row to drill into ads</span></h3>
 {% for label in c.close_recs.keys() | sort %}
   {% set recs = c.close_recs[label] %}
   {% if recs %}
@@ -1188,13 +1093,15 @@
     </table>
   {% endif %}
 {% endfor %}
+{% else %}
+<p class="empty-hint">No ad sets to optimize. Account statuses were not loaded from GSheet for this country. Check the GSheet tab and press <strong>Refresh</strong>.</p>
 {% endif %}
-{% endif %}
+</div>
 
-{% if c.open_recs %}
-{% set has_open = c.open_recs.values() | selectattr('0') | list %}
+{% set has_open = c.open_recs.values() | map('length') | sum > 0 if c.open_recs else false %}
+<div id="view-country-{{ cid }}-open" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: 8 Campaign Builder</h2>
 {% if has_open %}
-<h3 class="section" id="country-{{ cid }}-open">8. Campaign Builder</h3>
 <p class="hint" style="margin:0 0 0.75rem 0;font-size:0.78rem;color:var(--muted)">Pick creative, copy and targeting from your Upload FB.xlsx — then Submit to download a ready Excel.</p>
 <div class="open-tree">
 {% for acc_label in c.open_recs.keys() | sort %}
@@ -1214,13 +1121,13 @@
       {% set creatives = r.creatives if (r.creatives and r.creatives|length > 0) else [{'name': ''}] %}
       {% for cr in creatives %}
         {% set ctype = cr.name | creative_type %}
-        {% set cid   = cr.name | creative_id %}
+        {% set creative_id = cr.name | creative_id %}
       {# Pre-compute selected creative label for display #}
       {% set sel_creative_label = '' %}
       {% if ctype == 'Video' %}
-        {% for vid in ref_options.video_files %}{% if vid.id == cid %}{% set sel_creative_label = vid.id ~ ' — ' ~ vid.filename %}{% endif %}{% endfor %}
+        {% for vid in ref_options.video_files %}{% if vid.id == creative_id %}{% set sel_creative_label = vid.id ~ ' — ' ~ vid.filename %}{% endif %}{% endfor %}
       {% else %}
-        {% for img in ref_options.image_files %}{% if img.id == cid %}{% set sel_creative_label = img.id ~ ' — ' ~ img.filename %}{% endif %}{% endfor %}
+        {% for img in ref_options.image_files %}{% if img.id == creative_id %}{% set sel_creative_label = img.id ~ ' — ' ~ img.filename %}{% endif %}{% endfor %}
       {% endif %}
       {% set sel_targeting_label = r.targeting or '' %}
       <div class="cb-slot" data-idx="{{ ns.idx }}">
@@ -1253,7 +1160,7 @@
                    {% if ctype != 'Video' %}hidden{% endif %}>{{ vid.id }} — {{ vid.filename }}</div>
               {% endfor %}
             </div>
-            <input type="hidden" name="camp_{{ ns.idx }}_creative_id" value="{{ cid }}">
+            <input type="hidden" name="camp_{{ ns.idx }}_creative_id" value="{{ creative_id }}">
           </div>
 
           <span class="cb-label">Ad copy</span>
@@ -1352,80 +1259,296 @@
   {% endif %}
 {% endfor %}
 </div>
+{% else %}
+<p class="empty-hint">No open recommendations. Account statuses were not loaded from GSheet for this country. Check the GSheet tab and press <strong>Refresh</strong>.</p>
 {% endif %}
-{% endif %}
+</div>
 
 {% endfor %}
 
+<script>
+(function () {
+  var GOALS = {
+    GCC: {
+      total_ftd: 50,
+      geos: [
+        { code:"KW",  names:["Kuwait","KW"],                    ftd:15, cpa:3000, cr:3.0, ld:16 },
+        { code:"UAE", names:["UAE","United Arab Emirates","AE"], ftd:20, cpa:3000, cr:2.0, ld:33 },
+        { code:"SA",  names:["Saudi Arabia","SA"],               ftd:15, cpa:1500, cr:2.5, ld:19 }
+      ]
+    },
+    Latam: {
+      total_ftd: 140,
+      geos: [
+        { code:"CL", names:["Chile","CL"],    ftd:20, cpa:1000, cr:2.0, ld:32  },
+        { code:"CO", names:["Colombia","CO"],  ftd:40, cpa:1000, cr:1.3, ld:99  },
+        { code:"EC", names:["Ecuador","EC"],   ftd:40, cpa:1000, cr:2.0, ld:65  },
+        { code:"MX", names:["Mexico","MX"],    ftd:40, cpa:1000, cr:1.0, ld:129 }
+      ]
+    }
+  };
+  var GRAND_FTD = 190;
+  var TREND_DAYS = {{ report.trend_days | int }};
+  var ACT_RAW = [
+    {% for c in report.countries %}{% set my = c.cm_comparison | selectattr('is_me') | list %}{n:"{{ c.country | replace('"', '\\"') }}",dep:{{ my|sum(attribute='deposits')|int }},leads:{{ my|sum(attribute='leads')|int }},spend:{{ my|sum(attribute='spend')|round(2) }}},
+    {% endfor %}
+  ];
+  var ACT = {};
+  for (var i = 0; i < ACT_RAW.length; i++) ACT[ACT_RAW[i].n.toLowerCase()] = ACT_RAW[i];
+
+  function getA(names) {
+    for (var j = 0; j < names.length; j++) { var a = ACT[names[j].toLowerCase()]; if (a) return a; }
+    return {dep:0, leads:0, spend:0};
+  }
+  function findGeo(countryName) {
+    var cn = countryName.toLowerCase();
+    var mkts = Object.keys(GOALS);
+    for (var mi = 0; mi < mkts.length; mi++) {
+      var geos = GOALS[mkts[mi]].geos;
+      for (var gi = 0; gi < geos.length; gi++) {
+        var names = geos[gi].names;
+        for (var ni = 0; ni < names.length; ni++) {
+          if (names[ni].toLowerCase() === cn) return geos[gi];
+        }
+      }
+    }
+    return null;
+  }
+  function pctColor(pct) {
+    return pct >= 80 ? 'var(--good)' : pct >= 40 ? 'var(--warn)' : 'var(--bad)';
+  }
+  function pBar(cls, actual, goal) {
+    if (!goal) return '<div class="gpb-wrap ' + cls + '"><div class="gpb-fill" style="transform:scaleX(0);background:var(--border)"></div></div>';
+    var pct = Math.min(100, Math.round(actual / goal * 100));
+    var scale = (pct / 100).toFixed(3);
+    return '<div class="gpb-wrap ' + cls + '"><div class="gpb-fill" style="transform:scaleX(' + scale + ');background:' + pctColor(pct) + '"></div></div>';
+  }
+  function fmtCpa(spend, dep) {
+    if (!dep) return '—';
+    var v = spend / dep;
+    return v >= 1000 ? '$' + (v / 1000).toFixed(1) + 'k' : '$' + Math.round(v);
+  }
+  function fmtCr(dep, leads) {
+    if (!leads) return '—';
+    return (dep / leads * 100).toFixed(1) + '%';
+  }
+  function fmtLd(leads) {
+    if (!leads || !TREND_DAYS) return '—';
+    return (leads / TREND_DAYS).toFixed(1);
+  }
+  function okClass(ok) {
+    return ok === true ? 'goals-ok' : ok === false ? 'goals-fail' : 'goals-muted-val';
+  }
+
+  var h = '<div class="goals-panel">';
+  h += '<div class="goals-title">Evgeni — Goals Progress · FTDs / CPA / CR / Leads per Day</div>';
+  var totalDep = 0;
+  for (var i = 0; i < ACT_RAW.length; i++) totalDep += ACT_RAW[i].dep;
+  var totalPct = GRAND_FTD ? Math.min(100, Math.round(totalDep / GRAND_FTD * 100)) : 0;
+  var totalClr = pctColor(totalPct);
+  h += '<div class="goals-grand">'
+    + '<span class="goals-grand-label">Total FTDs</span>'
+    + '<span class="goals-grand-count" style="color:' + totalClr + '">' + totalDep + ' / ' + GRAND_FTD + '</span>'
+    + pBar('gpb-grand', totalDep, GRAND_FTD)
+    + '<span class="goals-grand-pct" style="color:' + totalClr + '">' + totalPct + '%</span>'
+    + '</div>';
+  h += '<div class="goals-markets">';
+  var markets = Object.keys(GOALS);
+  for (var mi = 0; mi < markets.length; mi++) {
+    var mktName = markets[mi];
+    var mkt = GOALS[mktName];
+    var mktDep = 0;
+    for (var gi = 0; gi < mkt.geos.length; gi++) { mktDep += getA(mkt.geos[gi].names).dep; }
+    var mPct = mkt.total_ftd ? Math.min(100, Math.round(mktDep / mkt.total_ftd * 100)) : 0;
+    var mClr = pctColor(mPct);
+    h += '<div class="goals-market">';
+    h += '<div class="goals-mkt-header">'
+      + '<span class="goals-mkt-name" style="color:' + mClr + '">' + mktName + '</span>'
+      + '<span class="goals-mkt-count" style="color:' + mClr + '">' + mktDep + ' / ' + mkt.total_ftd + '</span>'
+      + pBar('gpb-mkt', mktDep, mkt.total_ftd)
+      + '<span class="goals-mkt-pct" style="color:' + mClr + '">' + mPct + '%</span>'
+      + '</div>';
+    h += '<div class="goals-geos">';
+    h += '<div class="goals-geo-row" style="opacity:0.45;font-size:0.65rem">'
+      + '<span></span><span></span>'
+      + '<span style="text-align:right">FTDs</span>'
+      + '<span style="text-align:right">CPA</span>'
+      + '<span style="text-align:right">CR</span>'
+      + '<span style="text-align:right">L/Day</span>'
+      + '</div>';
+    for (var gi = 0; gi < mkt.geos.length; gi++) {
+      var g = mkt.geos[gi];
+      var a = getA(g.names);
+      var cpa = a.dep ? a.spend / a.dep : null;
+      var cr  = a.leads ? a.dep / a.leads * 100 : null;
+      var ld  = TREND_DAYS ? a.leads / TREND_DAYS : null;
+      var gPct = g.ftd ? Math.min(100, Math.round(a.dep / g.ftd * 100)) : null;
+      var gClr = gPct !== null ? pctColor(gPct) : 'var(--muted)';
+      var cpaOk = (cpa !== null && g.cpa) ? cpa <= g.cpa : null;
+      var crOk  = (cr  !== null && g.cr)  ? cr  >= g.cr  : null;
+      var ldOk  = (ld  !== null && g.ld)  ? ld  >= g.ld  : null;
+      h += '<div class="goals-geo-row">'
+        + '<span class="goals-geo-code">' + g.code + '</span>'
+        + '<div class="goals-geo-bar">' + (g.ftd ? pBar('gpb-geo', a.dep, g.ftd) : '') + '</div>'
+        + '<span class="goals-geo-ftd" style="color:' + gClr + '">' + a.dep + (g.ftd ? '/' + g.ftd : '') + '</span>'
+        + '<span class="goals-geo-cpa ' + okClass(cpaOk) + '" title="Goal ≤$' + g.cpa + '">' + fmtCpa(a.spend, a.dep) + '</span>'
+        + '<span class="goals-geo-cr '  + okClass(crOk)  + '" title="Goal ≥' + g.cr  + '%">' + fmtCr(a.dep, a.leads) + '</span>'
+        + '<span class="goals-geo-ld '  + okClass(ldOk)  + '" title="Goal ≥' + g.ld  + '/d">' + fmtLd(a.leads) + (g.ld ? '/' + g.ld : '') + '</span>'
+        + '</div>';
+    }
+    h += '</div></div>';
+  }
+  h += '</div></div>';
+  document.getElementById('goals-panel').innerHTML = h;
+
+  document.querySelectorAll('.goals-country-slot').forEach(function (slot) {
+    var cName = slot.dataset.countryName;
+    if (!cName) return;
+    var g = findGeo(cName);
+    var a = ACT[cName.toLowerCase()] || {dep:0, leads:0, spend:0};
+    if (!g && !a.dep && !a.leads) {
+      slot.innerHTML = '<p class="empty-hint">No goal targets configured for this country.</p>';
+      return;
+    }
+    var cpa = a.dep ? a.spend / a.dep : null;
+    var cr  = a.leads ? a.dep / a.leads * 100 : null;
+    var ld  = TREND_DAYS ? a.leads / TREND_DAYS : null;
+    var ftdPct = (g && g.ftd) ? Math.min(100, Math.round(a.dep / g.ftd * 100)) : null;
+    var ftdClr = ftdPct !== null ? pctColor(ftdPct) : 'var(--muted)';
+    var cpaOk = g && cpa !== null ? cpa <= g.cpa : null;
+    var crOk  = g && cr  !== null ? cr  >= g.cr  : null;
+    var ldOk  = g && ld  !== null ? ld  >= g.ld  : null;
+    function metricBox(label, actual, goalLabel, ok, bar) {
+      var cls = okClass(ok);
+      var indicator = ok === true ? '✓' : ok === false ? '✗' : '';
+      var indicatorClr = ok === true ? 'var(--good)' : ok === false ? 'var(--bad)' : 'var(--muted)';
+      return '<div class="gcs-metric-box">'
+        + '<div class="gcs-metric-label">' + label + '</div>'
+        + '<div class="gcs-metric-main">'
+        +   '<span class="gcs-metric-val ' + cls + '">' + actual + '</span>'
+        +   (indicator ? '<span class="gcs-metric-indicator" style="color:' + indicatorClr + '">' + indicator + '</span>' : '')
+        + '</div>'
+        + (bar || '')
+        + (goalLabel ? '<div class="gcs-metric-goal">goal ' + goalLabel + '</div>' : '')
+        + '</div>';
+    }
+    function ftdBar(dep, ftdGoal) {
+      if (!ftdGoal) return '';
+      var pct = Math.min(100, Math.round(dep / ftdGoal * 100));
+      return '<div class="gcs-ftd-bar-wrap"><div class="gcs-ftd-bar-fill" style="transform:scaleX(' + (pct / 100).toFixed(3) + ');background:' + pctColor(pct) + '"></div></div>';
+    }
+    slot.innerHTML = '<div class="goals-country-section">'
+      + '<div class="goals-country-section-title">Evgeni — My Goals</div>'
+      + '<div class="goals-country-metrics">'
+      + metricBox('FTDs', '<span style="color:' + ftdClr + '">' + a.dep + (g && g.ftd ? ' / ' + g.ftd : '') + '</span>', g && g.ftd ? g.ftd + ' total' : null, ftdPct !== null ? ftdPct >= 80 : null, g && g.ftd ? ftdBar(a.dep, g.ftd) + '<div class="gcs-metric-pct" style="color:' + ftdClr + '">' + (ftdPct||0) + '%</div>' : '')
+      + metricBox('CPA', fmtCpa(a.spend, a.dep), g ? '≤$' + g.cpa : null, cpaOk, null)
+      + metricBox('CR', fmtCr(a.dep, a.leads), g ? '≥' + g.cr + '%' : null, crOk, null)
+      + metricBox('L/Day', fmtLd(a.leads) + (g && g.ld ? '/' + g.ld : ''), g ? '≥' + g.ld + '/d' : null, ldOk, null)
+      + '</div></div>';
+  });
+})();
+</script>
+
+</main>
+</div>
+{% endif %}
+
 {% if not report.countries %}
+<div class="page-top">
 <p style="color: var(--muted)">No country data found. Check Excel path and filters.</p>
+</div>
 {% endif %}
 
 <script>
 (function () {
-  function buildHash(countrySlug, sectionSlug) {
-    let hash = "#country-" + countrySlug;
-    if (sectionSlug) hash += "-" + sectionSlug;
-    return hash;
+  var panels = document.querySelectorAll('.view-panel');
+  var sidebarLinks = document.querySelectorAll('.sidebar-link[data-view]');
+  var countryBlocks = document.querySelectorAll('.sidebar-country');
+  var countryBtns = document.querySelectorAll('.sidebar-country-btn');
+
+  function viewHash(viewId) {
+    return viewId === 'home' ? '#home' : '#' + viewId;
   }
 
   function parseHash(hash) {
-    if (!hash || hash.charAt(0) !== "#") return null;
-    const m = hash.match(/^#country-([a-z0-9-]+)(?:-([a-z0-9-]+))?$/);
-    if (!m) return null;
-    return { country: m[1], section: m[2] || "" };
+    if (!hash || hash.charAt(0) !== '#') return { view: 'home' };
+    if (hash === '#home') return { view: 'home' };
+    var m = hash.match(/^#country-([a-z0-9-]+)-([a-z0-9-]+)$/);
+    if (m) return { view: 'country-' + m[1] + '-' + m[2], country: m[1] };
+    return { view: 'home' };
   }
 
-  function jumpToHash(hash, smooth) {
-    let el = document.querySelector(hash);
-    if (!el) {
-      const parsed = parseHash(hash);
-      if (parsed && parsed.section) {
-        el = document.querySelector("#country-" + parsed.country);
-        hash = "#country-" + parsed.country;
-      }
+  function expandCountry(countryId) {
+    countryBlocks.forEach(function (block) {
+      block.classList.toggle('expanded', block.dataset.country === countryId);
+    });
+  }
+
+  function collapseCountries() {
+    countryBlocks.forEach(function (block) { block.classList.remove('expanded'); });
+  }
+
+  function setActiveNav(viewId) {
+    sidebarLinks.forEach(function (link) {
+      link.classList.toggle('active', link.dataset.view === viewId);
+    });
+    document.querySelector('.sidebar-home')?.classList.toggle('active', viewId === 'home');
+  }
+
+  function showView(viewId, pushHash) {
+    var panel = document.getElementById('view-' + viewId);
+    if (!panel) return false;
+
+    panels.forEach(function (p) { p.classList.remove('active'); });
+    panel.classList.add('active');
+    setActiveNav(viewId);
+
+    if (viewId === 'home') {
+      collapseCountries();
+    } else {
+      var countryId = panel.dataset.country;
+      if (countryId) expandCountry(countryId);
     }
-    if (!el) return false;
-    el.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
-    history.replaceState(null, "", hash);
-    syncNavFromHash(hash);
+
+    if (pushHash !== false) {
+      history.replaceState(null, '', viewHash(viewId));
+    }
     return true;
   }
 
-  function syncNavFromHash(hash) {
-    const parsed = parseHash(hash);
-    const countrySel = document.getElementById("jump-country");
-    const sectionSel = document.getElementById("jump-section");
-    if (!parsed || !countrySel || !sectionSel) return;
-    if ([...countrySel.options].some((o) => o.value === parsed.country)) {
-      countrySel.value = parsed.country;
-    }
-    if ([...sectionSel.options].some((o) => o.value === parsed.section)) {
-      sectionSel.value = parsed.section;
-    }
-  }
-
-  const goBtn = document.getElementById("jump-go");
-  if (goBtn) {
-    goBtn.addEventListener("click", function () {
-      const country = document.getElementById("jump-country").value;
-      const section = document.getElementById("jump-section").value;
-      jumpToHash(buildHash(country, section), true);
-    });
-  }
-
-  document.querySelectorAll(".country-toc a").forEach(function (link) {
-    link.addEventListener("click", function (e) {
-      e.preventDefault();
-      jumpToHash(link.getAttribute("href"), true);
+  sidebarLinks.forEach(function (link) {
+    link.addEventListener('click', function () {
+      showView(link.dataset.view, true);
     });
   });
 
-  if (location.hash) {
-    jumpToHash(location.hash, false);
-  }
-})();
+  countryBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var countryId = btn.dataset.country;
+      expandCountry(countryId);
+      showView('country-' + countryId + '-cm', true);
+    });
+  });
 
+  document.querySelectorAll('.overview-row[data-view]').forEach(function (row) {
+    row.addEventListener('click', function () {
+      showView(row.dataset.view, true);
+    });
+  });
+
+  var initial = parseHash(location.hash);
+  if (!showView(initial.view, false)) {
+    showView('home', false);
+  }
+
+  window.addEventListener('hashchange', function () {
+    var parsed = parseHash(location.hash);
+    showView(parsed.view, false);
+  });
+})();
+</script>
+
+<script>
 (function () {
   // Drill-down toggle for cm_comparison and optimization: one open panel per section.
   document.body.addEventListener("htmx:beforeRequest", function (evt) {

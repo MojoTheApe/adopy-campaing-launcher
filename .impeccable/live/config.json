@@ -1,0 +1,8 @@
+{
+  "framework": "custom",
+  "devServerUrl": "http://127.0.0.1:9090/",
+  "files": [],
+  "commentSyntax": "html",
+  "cspChecked": true,
+  "notes": "Jinja template served by serve.py; use browser at dashboard URL for /impeccable live"
+}

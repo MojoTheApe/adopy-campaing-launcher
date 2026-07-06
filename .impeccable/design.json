@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-06T18:45:00+03:00",
+  "title": "Design System: fb_agents Morning Dashboard",
+  "extensions": {
+    "colorMeta": {
+      "bg": { "role": "neutral", "displayName": "Console Black", "canonical": "#0e1116" },
+      "accent": { "role": "primary", "displayName": "Signal Blue", "canonical": "#58a6ff" }
+    },
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "Nav and button hover, 150ms" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Refresh and form actions.",
+      "html": "<button class=\"ds-btn-secondary\" type=\"button\">Refresh</button>",
+      "css": ".ds-btn-secondary { background: #161b22; color: #d8dde3; border: 1px solid #2a3140; border-radius: 4px; padding: 6px 14px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease; } .ds-btn-secondary:hover { background: #1f2630; border-color: #58a6ff; } .ds-btn-secondary:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Shift Console",
+    "overview": "Dark terminal CM dashboard. Sidebar + single active view. Data density over decoration.",
+    "keyCharacteristics": ["Monospace", "Dark flat panels", "Semantic color only", "Tables not cards"],
+    "rules": [
+      { "name": "Restrained Accent Rule", "body": "Accent on ≤10% of screen.", "section": "colors" },
+      { "name": "Tabular Rule", "body": "Numeric columns use tabular-nums.", "section": "typography" }
+    ],
+    "dos": ["Use colon in view titles", "Show GSheet empty states"],
+    "donts": ["No side-tab borders on panels", "No width animation on bars", "No Inter re-skin"]
+  }
+}

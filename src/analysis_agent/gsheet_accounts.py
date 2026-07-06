@@ -14,17 +14,22 @@ Auth mode (auto-detected):
     Otherwise → service account via GOOGLE_CREDENTIALS_JSON.
 
 Sheet layout (last/today's tab):
-    Col A — CM name (campaign manager)
-    Col B — Country code (e.g. MX, GT, EC, KW) or the same spelling as Excel
-            ``Country`` / ``Country Final`` (e.g. ``Kuwait``, ``United Arab Emirates``)
-    Col C — Account label  (e.g. "FacebookMKTO1211 MX")
-    Col J — To Do          (e.g. "Account Disabled", "Video selfie", expand, or empty = ready)
-    Col K — Optional "2 bundles" line for the report: short `asset + targeting + creative`
-            pairs (after To Do text, shown as `To Do | …`). Fill after cross-checking the
-            **Upload FB** workbook (Desktop), tab **Account**: col **A** holds account id,
-            country, offer; col **D** must match the offer name; col **E** — if empty,
-            note a Jira task to provision the asset; if **E** has a link, list which two
-            bundles to open.
+
+    **Legacy tabs** — one row per account:
+        Col A — CM name (campaign manager)
+        Col B — Country code (e.g. MX, GT, EC, KW) or full country name
+        Col C — Account label  (e.g. "FacebookMKTO1211 MX")
+        Col J — To Do
+        Col K — Optional bundle hints
+
+    **Daily tabs (2026+, e.g. ``05.07``)** — country blocks with header row
+    ``CM | Country | Account | … | Stock | Done Today | Cap``:
+        Col A — Account bucket: Active / Dead / Issue / New (not CM name)
+        Col B — Country code
+        Col C — Account label
+        Col H — Stock (asset running)
+        Col I — Done Today / To Do
+        The whole tab is treated as belonging to ``MY_CM_NAME`` (no CM column).
 
     Rows whose To Do contains **Account Disabled** or **Account Restricted** are excluded
     from the Morning Report "Account Statuses" table (not shown at all).
@@ -65,6 +70,9 @@ _ACCOUNT_STATUS_OMIT_SUBSTRINGS = (
 )
 
 _TOTALS_HEADERS = {"country", "total", "totals", "cm", "sum"}
+
+# Daily tab (2026+): col A is account bucket (Active/Dead/Issue/New), not CM name.
+_ACCOUNT_STATUS_BUCKETS = frozenset({"active", "dead", "issue", "new"})
 
 _SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
@@ -277,20 +285,43 @@ def _is_ready(to_do: str) -> bool:
     return not _matches_any_substring(_normalize_todo(to_do), _ACCOUNT_NOT_READY_SUBSTRINGS)
 
 
+def _detect_sheet_layout(raw_rows: List[List[str]]) -> str:
+    """Return ``status_v2`` for the Active/Dead/Issue/New daily layout, else ``legacy``."""
+    for row in raw_rows[:40]:
+        padded = row + [""] * max(0, 11 - len(row))
+        if padded[0].strip().lower() != "cm":
+            continue
+        headers = [str(c or "").strip().lower() for c in padded]
+        if any("done today" in h for h in headers):
+            return "status_v2"
+    return "legacy"
+
+
+def _is_status_bucket(col_a: str) -> bool:
+    return col_a.strip().lower() in _ACCOUNT_STATUS_BUCKETS
+
+
+def _is_sheet_header_row(col_a: str, col_b: str) -> bool:
+    a = col_a.strip().lower()
+    b = col_b.strip().lower()
+    if a in _TOTALS_HEADERS:
+        return True
+    return a == "cm" and b in ("country", "")
+
+
 def parse_account_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]:
     """Parse raw sheet rows → list of account dicts.
 
-    Columns:
-        A (0) — CM name
-        B (1) — Country code
-        C (2) — Account label
-        D (3) — Cost (daily spend snapshot in sheet)
-        E (4) — Leads (sheet snapshot)
-        G (6) — Actual FTDs (sheet snapshot)
-        I (8) — Stock (asset/offer running)
-        J (9) — To Do status
-        K (10)— Optional: two short bundles for §6–7 (`asset + targeting + creative; …`)
+    Supports two layouts:
+
+    **Legacy** (col A = CM name):
+        A CM, B country, C account, D cost, E leads, G FTDs, I stock, J to-do, K extra
+
+    **status_v2** (2026 daily tab — col A = Active/Dead/Issue/New):
+        A status bucket, B country, C account, D cost, E leads, G cohort FTDs,
+        H stock, I done today / to-do, J cap, K optional extra
     """
+    layout = _detect_sheet_layout(raw_rows)
     accounts: List[Dict[str, Any]] = []
     for row in raw_rows:
         # Pad to at least 11 columns so index 10 (col K) is safe
@@ -299,22 +330,41 @@ def parse_account_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]:
         col_a = padded[0].strip()
         col_b = padded[1].strip() if len(padded) > 1 else ""
         col_c = padded[2].strip() if len(padded) > 2 else ""
-        col_d = padded[3].strip() if len(padded) > 3 else ""   # Cost
-        col_e = padded[4].strip() if len(padded) > 4 else ""   # Leads
-        col_g = padded[6].strip() if len(padded) > 6 else ""   # Actual FTDs
-        col_i = padded[8].strip() if len(padded) > 8 else ""   # Stock/Asset
-        col_j = padded[9].strip() if len(padded) > 9 else ""   # To Do
-        col_k = padded[10].strip() if len(padded) > 10 else ""  # 2 bundles / offer check
 
+        if _is_sheet_header_row(col_a, col_b):
+            continue
         if not col_a or not col_c:
             continue
         if _is_totals_row(col_a):
             continue
+        if layout == "status_v2" and not _is_status_bucket(col_a):
+            # Country subtotal rows reuse col A for ISO code (EC, KW, …).
+            continue
+
+        if layout == "status_v2" or _is_status_bucket(col_a):
+            col_d = padded[3].strip() if len(padded) > 3 else ""
+            col_e = padded[4].strip() if len(padded) > 4 else ""
+            col_g = padded[6].strip() if len(padded) > 6 else ""
+            col_i = padded[7].strip() if len(padded) > 7 else ""   # Stock
+            col_j = padded[8].strip() if len(padded) > 8 else ""   # Done Today / To Do
+            col_k = padded[10].strip() if len(padded) > 10 else ""
+            cm_name = ""
+            account_status = col_a
+        else:
+            col_d = padded[3].strip() if len(padded) > 3 else ""
+            col_e = padded[4].strip() if len(padded) > 4 else ""
+            col_g = padded[6].strip() if len(padded) > 6 else ""
+            col_i = padded[8].strip() if len(padded) > 8 else ""
+            col_j = padded[9].strip() if len(padded) > 9 else ""
+            col_k = padded[10].strip() if len(padded) > 10 else ""
+            cm_name = col_a
+            account_status = ""
 
         alias = _account_alias_from_label(col_c)
         accounts.append(
             {
-                "cm": col_a,
+                "cm": cm_name,
+                "account_status": account_status,
                 "country_code": col_b,
                 "account_label": col_c,
                 "alias": alias,
@@ -328,6 +378,46 @@ def parse_account_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]:
             }
         )
     return accounts
+
+
+def _apply_cm_filter(
+    rows: List[Dict[str, Any]],
+    cm_filter: str,
+    layout: str,
+) -> List[Dict[str, Any]]:
+    """Filter rows to one CM; status_v2 tabs have no CM column — keep all rows."""
+    if not cm_filter:
+        return rows
+
+    cm_first = cm_filter.strip().split()[0].lower() if cm_filter.strip() else ""
+    cm_full = cm_filter.strip().lower()
+
+    def _matches(row: Dict[str, Any]) -> bool:
+        cm = row.get("cm", "").strip().lower()
+        if not cm:
+            return False
+        return (
+            cm == cm_full
+            or cm.startswith(cm_first)
+            or cm_first.startswith(cm)
+        )
+
+    filtered = [r for r in rows if _matches(r)]
+    if filtered:
+        return filtered
+
+    # New daily sheet: col A is Active/Dead/Issue/New — whole tab belongs to MY_CM_NAME.
+    if layout == "status_v2" or any(r.get("account_status") for r in rows):
+        for row in rows:
+            row["cm"] = cm_filter
+        print(
+            f"[gsheet_accounts] Tab uses status buckets (Active/Dead/…) — "
+            f"assigned all {len(rows)} rows to CM {cm_filter!r}",
+            file=sys.stderr,
+        )
+        return rows
+
+    return filtered
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -390,21 +480,13 @@ def fetch_account_rows(
         return []
 
     rows = parse_account_rows(raw)
-
-    if cm_filter:
-        # Match by first word of CM name (sheet may store only first name like "Evgeni ")
-        cm_first = cm_filter.strip().split()[0].lower() if cm_filter.strip() else ""
-        cm_full = cm_filter.strip().lower()
-        rows = [
-            r for r in rows
-            if r["cm"].strip().lower() == cm_full
-            or r["cm"].strip().lower().startswith(cm_first)
-            or cm_first.startswith(r["cm"].strip().lower())
-        ]
+    layout = _detect_sheet_layout(raw)
+    rows = _apply_cm_filter(rows, cm_filter, layout)
 
     print(
         f"[gsheet_accounts] Parsed {len(rows)} account rows"
-        + (f" for CM '{cm_filter}'" if cm_filter else ""),
+        + (f" for CM '{cm_filter}'" if cm_filter else "")
+        + (f" (layout={layout})" if layout != "legacy" else ""),
         file=sys.stderr,
     )
     return rows
