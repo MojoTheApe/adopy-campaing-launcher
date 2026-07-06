@@ -17,16 +17,59 @@ Both are UUID strings like `550e8400-e29b-41d4-a716-446655440000`.
 
 ---
 
-## Method 1 — Multilogin App (Recommended)
+## Method 1 — Local API (Recommended, works in the desktop app)
 
-1. Open **Multilogin** desktop application.
+When Multilogin is running it exposes a local HTTP server on port **35000**.
+Open the URL directly in any browser — no authentication required.
+
+### Step 1: get all folders
+
+Paste this into your browser address bar:
+
+```
+http://localhost:35000/profile/folder
+```
+
+Response (JSON):
+```json
+{
+  "data": [
+    { "folderID": "550e8400-e29b-41d4-a716-446655440000", "name": "Facebook MX" },
+    { "folderID": "6ba7b810-9dad-11d1-80b4-00c04fd430c8", "name": "Facebook BR" }
+  ]
+}
+```
+
+Copy the `folderID` of the correct folder → that is your **`folder_id`**.
+
+### Step 2: get profiles inside that folder
+
+```
+http://localhost:35000/profile?folderID=<paste_folder_id_here>
+```
+
+Response:
+```json
+{
+  "data": [
+    { "profileID": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d", "name": "FB_MX_574" },
+    { "profileID": "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", "name": "FB_MX_575" }
+  ]
+}
+```
+
+Copy the `profileID` of the correct profile → that is your **`profile_id`**.
+
+---
+
+## Method 2 — Right-click in the app (may not be available)
+
+1. Open the **Multilogin** desktop application.
 2. In the left sidebar, find the folder that contains the Facebook account profile.
-3. **Right-click the folder name** → choose **"Copy folder ID"** (or hover — the UUID appears in the tooltip).
-4. Paste that as `folder_id`.
-5. **Right-click the profile** → choose **"Copy profile ID"**.
-6. Paste that as `profile_id`.
+3. **Right-click the folder name** → look for **"Copy folder ID"**.
+4. If the option is absent, use Method 1 (localhost API).
 
-> In older versions of the app the IDs are shown in the profile detail panel (click the profile → look for the UUID in the top bar or URL).
+> In some versions hovering over the folder name shows the UUID as a tooltip.
 
 ---
 
