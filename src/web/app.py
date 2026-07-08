@@ -676,6 +676,12 @@ async def refresh() -> RedirectResponse:
     """Force cache rebuild on next /. Redirects to / so the browser
     follows the redirect and re-renders with fresh data."""
     cache_clear()
+    # Also invalidate Upload FB.xlsx ref caches (tracking links, creatives, ad copies)
+    global _ref_full_cache, _ref_full_mtime, _ref_opts_cache, _ref_opts_mtime
+    _ref_full_cache = None
+    _ref_full_mtime = -1.0
+    _ref_opts_cache = None
+    _ref_opts_mtime = -1.0
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -992,3 +998,128 @@ async def build_upload(request: Request) -> Response:
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
+
+
+@app.post("/multilogin-signin")
+async def multilogin_signin(request: Request) -> JSONResponse:
+    """Sign in to Multilogin, return folders + profiles list.
+
+    Body JSON: {email, password, save_token?: bool}
+    Credentials are used for a single API call and never persisted.
+    If save_token is true, updates MULTILOGIN_AUTOMATION_TOKEN_A in .env.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    email = (data.get("email") or "").strip()
+    password = (data.get("password") or "").strip()
+    save_token = bool(data.get("save_token", True))
+    instance = (data.get("instance") or "A").strip().upper()
+    if instance not in ("A", "B"):
+        instance = "A"
+
+    if not email or not password:
+        return JSONResponse({"ok": False, "error": "email and password are required"}, status_code=400)
+
+    import requests as _req
+
+    MLX_API = "https://api.multilogin.com"
+    H = {"Accept": "application/json", "Content-Type": "application/json"}
+
+    # Step 1 — sign in
+    try:
+        r = _req.post(f"{MLX_API}/user/signin", headers=H, json={"email": email, "password": password}, timeout=20)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"Network error: {exc}"})
+
+    if r.status_code != 200:
+        body = r.json() if "application/json" in r.headers.get("content-type", "") else {}
+        msg = (body.get("status") or {}).get("message") or r.text[:200]
+        return JSONResponse({"ok": False, "error": f"Sign-in failed: {msg}"})
+
+    bearer = ((r.json().get("data") or {}).get("token") or "").strip()
+    if not bearer:
+        return JSONResponse({"ok": False, "error": "Sign-in returned no token"})
+
+    auth_h = {**H, "Authorization": f"Bearer {bearer}"}
+
+    # Step 2 — get automation token (1 month)
+    auto_token = ""
+    try:
+        r2 = _req.get(f"{MLX_API}/workspace/automation_token?expiration_period=1mo", headers=auth_h, timeout=20)
+        if r2.status_code == 200:
+            d2 = r2.json().get("data") or {}
+            auto_token = d2.get("token") or d2.get("automation_token") or ""
+    except Exception:
+        pass
+
+    working_token = auto_token or bearer
+
+    # Step 3 — save token to .env
+    env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
+    if save_token and auto_token:
+        env_path = _PROJ_ROOT / ".env"
+        try:
+            if env_path.is_file():
+                lines = env_path.read_text(encoding="utf-8").splitlines()
+                updated = False
+                for i, line in enumerate(lines):
+                    if line.startswith(f"{env_key}="):
+                        lines[i] = f"{env_key}={auto_token}"
+                        updated = True
+                        break
+                if not updated:
+                    lines.append(f"{env_key}={auto_token}")
+                env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+
+    auth_h2 = {**H, "Authorization": f"Bearer {working_token}"}
+
+    # Step 4 — list folders
+    folders: list[dict] = []
+    try:
+        rf = _req.get(f"{MLX_API}/workspace/folders", headers=auth_h2, timeout=20)
+        if rf.status_code == 200:
+            fd = rf.json().get("data") or {}
+            raw = fd.get("folders") if isinstance(fd, dict) else fd
+            folders = [
+                {"folder_id": f.get("folderID") or f.get("folder_id") or f.get("id") or "",
+                 "name": f.get("name") or f.get("folder_name") or ""}
+                for f in (raw if isinstance(raw, list) else [])
+            ]
+    except Exception:
+        pass
+
+    # Step 5 — list profiles
+    profiles: list[dict] = []
+    try:
+        rp = _req.post(
+            f"{MLX_API}/profile/search",
+            headers=auth_h2,
+            json={"limit": 200, "offset": 0, "search_text": ""},
+            timeout=20,
+        )
+        if rp.status_code == 200:
+            pd = rp.json().get("data") or {}
+            raw_p = pd.get("profiles") if isinstance(pd, dict) else pd
+            profiles = [
+                {
+                    "profile_id": p.get("profile_id") or p.get("uuid") or p.get("id") or "",
+                    "folder_id": p.get("folder_id") or p.get("folderID") or "",
+                    "name": p.get("name") or p.get("profile_name") or "",
+                }
+                for p in (raw_p if isinstance(raw_p, list) else [])
+            ]
+    except Exception:
+        pass
+
+    return JSONResponse({
+        "ok": True,
+        "instance": instance,
+        "token_saved": save_token and bool(auto_token),
+        "folders": folders,
+        "profiles": profiles,
+    })

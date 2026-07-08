@@ -191,8 +191,58 @@ class AdsManagerFlow:
         suggest_sels: list[str],
         group_label: str,
         result: RpaPublishResult,
+        *,
+        raw_group: str = "",
     ) -> None:
-        """Add one group of interest terms to the currently-active Detailed Targeting block."""
+        """Paste the full comma-separated targeting string at once into the targeting input.
+
+        Facebook Ads Manager accepts a comma-separated list pasted into the Detailed
+        Targeting field — it surfaces all matches simultaneously.  Pasting all terms at
+        once is both faster and more reliable than typing them one-by-one.
+
+        Falls back to the term-by-term approach if the paste path fails.
+        """
+        # Build the full group string (use raw_group if provided, else rejoin terms)
+        full_string = raw_group.strip() if raw_group.strip() else ", ".join(terms)
+
+        if not full_string:
+            return
+
+        # ── Try paste-all approach first ──────────────────────────────────────
+        try:
+            # Click the targeting input to focus it
+            loc = None
+            for sel in input_sels:
+                loc = _try_locator(self.page, sel)
+                if loc is not None:
+                    break
+            if loc is None:
+                raise AdsManagerFlowError("Targeting input not found")
+
+            loc.click(timeout=self.action_timeout)
+            pause_short()
+
+            # Set clipboard content and paste
+            self.page.evaluate(
+                "(text) => navigator.clipboard.writeText(text)",
+                full_string,
+            )
+            self.page.keyboard.press("Control+a")
+            self.page.keyboard.press("Control+v")
+            pause_medium()
+
+            # Give Facebook time to surface all suggestions, then press Enter to confirm
+            self.page.keyboard.press("Enter")
+            pause_medium()
+
+            result.steps_completed.append(f"{group_label}_paste_all:{len(terms)}_terms")
+            return
+
+        except Exception as exc:
+            result.steps_completed.append(f"{group_label}_paste_failed_fallback:{exc}")
+            self._shot(f"{group_label}_paste_fail", result)
+
+        # ── Fallback: enter terms one by one ──────────────────────────────────
         for i, term in enumerate(terms):
             step = f"{group_label}_t{i + 1}"
             try:
@@ -272,7 +322,10 @@ class AdsManagerFlow:
                 else:
                     result.steps_completed.append(f"{group_label}_no_narrow_selector")
 
-            self._fill_targeting_group(terms, input_sels, suggest_sels, group_label, result)
+            self._fill_targeting_group(
+                terms, input_sels, suggest_sels, group_label, result,
+                raw_group=group_raw,
+            )
 
         self._shot("05_targeting", result)
 

@@ -375,13 +375,25 @@
     }
     h3.section-targeting { margin-bottom: 0.35rem; }
 
-    .open-tree { margin: 0.5rem 0 1.5rem 0; }
-    .open-account-name {
-      color: var(--accent);
-      font-size: 0.95rem;
-      margin-bottom: 0.65rem;
+    .open-tree { margin: 0.5rem 0 1.5rem 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    /* Accordion account rows */
+    .cb-acc-row { border-bottom: 1px solid var(--border); }
+    .cb-acc-row:last-child { border-bottom: none; }
+    .cb-acc-header {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.55rem 0.85rem;
+      cursor: pointer; user-select: none;
+      background: var(--bg-elev);
+      transition: background 120ms;
     }
-    .open-account-form { margin-bottom: 1.75rem; }
+    .cb-acc-header:hover { background: var(--bg-hover); }
+    .cb-acc-chevron { font-size: 0.7rem; color: var(--muted); width: 0.9rem; flex-shrink: 0; }
+    .cb-acc-title { font-size: 0.88rem; font-weight: 600; color: var(--accent); flex: 1; }
+    .cb-acc-meta { display: flex; align-items: center; gap: 0.5rem; }
+    .cb-acc-body { display: none; padding: 0.85rem 0.85rem 1rem; border-top: 1px solid var(--border); background: var(--bg); }
+    .cb-acc-body.cb-acc-open { display: block; }
+    .open-account-name { display: none; }  /* replaced by cb-acc-header */
+    .open-account-form { margin-bottom: 0; }
     .open-submit {
       margin-top: 0.65rem;
       padding: 0.45rem 1rem;
@@ -467,6 +479,54 @@
       font-size: 0.7rem; color: var(--muted); font-weight: 600;
       min-width: 6.5rem; flex-shrink: 0;
     }
+
+    /* Multilogin connect panel */
+    .ml-connect-panel {
+      border: 1px solid var(--border); border-radius: 6px;
+      margin-bottom: 1rem; overflow: hidden;
+    }
+    .ml-connect-header {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.5rem 0.75rem; cursor: pointer;
+      background: var(--bg-elev); user-select: none;
+    }
+    .ml-connect-header:hover { background: var(--bg-hover); }
+    .ml-connect-title { font-size: 0.78rem; font-weight: 600; flex: 1; }
+    .ml-connect-icon { font-size: 0.85rem; }
+    .ml-connect-chevron { font-size: 0.7rem; color: var(--muted); }
+    .ml-connect-body { padding: 0.65rem 0.75rem; border-top: 1px solid var(--border); }
+    .ml-connect-fields {
+      display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
+    }
+    .ml-connect-fields .cb-input { width: 14rem; }
+    .ml-instance-toggle { display: flex; gap: 0; border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
+    .ml-inst-btn {
+      padding: 0.2rem 0.6rem; font-size: 0.72rem; font-weight: 600;
+      background: var(--bg-elev); color: var(--muted); border: none; cursor: pointer;
+    }
+    .ml-inst-btn + .ml-inst-btn { border-left: 1px solid var(--border); }
+    .ml-inst-btn.ml-inst-active { background: #1d4ed8; color: #fff; }
+    .ml-inst-btn:hover:not(.ml-inst-active) { background: var(--bg-hover); }
+    .ml-connect-btn {
+      padding: 0.25rem 0.75rem; font-size: 0.76rem; font-weight: 600;
+      background: #065f46; color: #fff; border: none; border-radius: 4px; cursor: pointer;
+    }
+    .ml-connect-btn:hover { background: #047857; }
+    .ml-connect-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .ml-profile-row {
+      display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.4rem;
+      border-radius: 3px; font-size: 0.72rem; cursor: pointer;
+    }
+    .ml-profile-row:hover { background: var(--bg-hover); }
+    .ml-profile-row .ml-profile-name { font-weight: 600; min-width: 12rem; }
+    .ml-profile-row .ml-profile-id { color: var(--muted); font-family: monospace; font-size: 0.68rem; }
+    .ml-profile-use-btn {
+      margin-left: auto; padding: 0.15rem 0.5rem; font-size: 0.68rem;
+      background: #1d4ed8; color: #fff; border: none; border-radius: 3px; cursor: pointer;
+      white-space: nowrap;
+    }
+    .ml-profile-use-btn:hover { background: #1e40af; }
+    .ml-acc-picker { font-size: 0.74rem; }
 
     /* Campaign Builder slots */
     .cb-slots { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.65rem; }
@@ -1312,6 +1372,36 @@
 {% set has_open = c.open_recs.values() | map('length') | sum > 0 if c.open_recs else false %}
 <div id="view-country-{{ cid }}-open" class="view-panel" data-country="{{ cid }}">
 <h2 class="view-title">{{ c.country }}: {{ n_builder }} Campaign Builder</h2>
+
+{# ── Multilogin connect panel ── #}
+<div class="ml-connect-panel" id="ml-connect-{{ cid }}">
+  <div class="ml-connect-header" onclick="mlTogglePanel('{{ cid }}')">
+    <span class="ml-connect-icon">🔑</span>
+    <span class="ml-connect-title">Multilogin — connect to get folder_id & profile_id</span>
+    <span class="ml-connect-chevron" id="ml-chevron-{{ cid }}">▸</span>
+  </div>
+  <div class="ml-connect-body" id="ml-body-{{ cid }}" style="display:none">
+    <p style="margin:0 0 0.6rem;font-size:0.75rem;color:var(--muted)">
+      Credentials are used for one sign-in request only and never saved to disk.
+      Token (1 month) is saved to <code>.env</code> so you don't need to re-enter next time.
+    </p>
+    <div class="ml-connect-fields">
+      <div class="ml-instance-toggle" id="ml-instance-{{ cid }}">
+        <button type="button" class="ml-inst-btn ml-inst-active" data-inst="A" onclick="mlSetInstance('{{ cid }}','A')">Instance A</button>
+        <button type="button" class="ml-inst-btn" data-inst="B" onclick="mlSetInstance('{{ cid }}','B')">Instance B</button>
+      </div>
+      <input type="email" id="ml-email-{{ cid }}" class="cb-input" placeholder="Multilogin email" autocomplete="username">
+      <input type="password" id="ml-pass-{{ cid }}" class="cb-input" placeholder="Multilogin password" autocomplete="current-password">
+      <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem">
+        <input type="checkbox" id="ml-save-{{ cid }}" checked> Save token to .env (1 month)
+      </label>
+      <button type="button" class="ml-connect-btn" onclick="mlSignin('{{ cid }}')">Connect</button>
+    </div>
+    <div id="ml-status-{{ cid }}" style="margin-top:0.5rem;font-size:0.74rem"></div>
+    <div id="ml-profiles-{{ cid }}" style="margin-top:0.6rem"></div>
+  </div>
+</div>
+
 {% if has_open %}
 <p class="hint" style="margin:0 0 0.75rem 0;font-size:0.78rem;color:var(--muted)">Pick creative, copy and targeting from your Upload FB.xlsx — then Submit to download a ready Excel.</p>
 <div class="open-tree">
@@ -1323,21 +1413,35 @@
   {% set ds = draft_status.get(acc_label, {}) %}
   {# Collect default asset from first rec for the Add Campaign button #}
   {% set default_asset = recs[0].offer if recs else '' %}
+  {% set acc_id = acc_label | replace(' ', '_') | replace('.', '_') %}
+
+  <div class="cb-acc-row">
+    {# ── Accordion header ── #}
+    <div class="cb-acc-header" onclick="cbToggleAcc('{{ acc_id }}')">
+      <span class="cb-acc-chevron" id="cb-chev-{{ acc_id }}">▸</span>
+      <span class="cb-acc-title">{{ acc_label }}</span>
+      <span class="cb-acc-meta">
+        {% if pf.missing_map_fields %}
+          <span class="cb-pf-err" style="font-size:0.7rem">⚠ missing: {{ pf.missing_map_fields | join(', ') }}</span>
+        {% else %}
+          <span style="font-size:0.7rem;color:var(--good)">✓ config ok</span>
+        {% endif %}
+        {% if ds %}
+          <span class="cb-draft-badge" title="{{ ds.campaign_names | join(', ') }}">
+            ✓ Draft ready · {{ ds.count }} campaign{{ 's' if ds.count != 1 else '' }}
+            <span class="cb-draft-ts">{{ ds.ts[:16].replace('T',' ') }} UTC</span>
+          </span>
+        {% endif %}
+        <span style="font-size:0.7rem;color:var(--muted)">{{ recs | length }} rec{{ 's' if recs|length != 1 else '' }}</span>
+      </span>
+    </div>
+
+    {# ── Accordion body ── #}
+    <div class="cb-acc-body" id="cb-body-{{ acc_id }}">
   <form class="open-account-form" method="post" action="/build-upload"
         data-open-form
         data-country="{{ c.country }}"
         data-asset="{{ default_asset }}">
-
-    {# ── Account header with draft-ready badge ── #}
-    <div class="open-account-name">
-      {{ acc_label }}
-      {% if ds %}
-        <span class="cb-draft-badge" title="{{ ds.campaign_names | join(', ') }}">
-          ✓ Draft ready · {{ ds.count }} campaign{{ 's' if ds.count != 1 else '' }}
-          <span class="cb-draft-ts">{{ ds.ts[:16].replace('T',' ') }} UTC</span>
-        </span>
-      {% endif %}
-    </div>
 
     {# ── Pre-flight panel: link + account map ── #}
     <div class="cb-preflight">
@@ -1362,14 +1466,12 @@
         </div>
       </div>
 
-      {# Account map rows — one per missing field #}
-      {% if pf.missing_map_fields %}
-      <div class="cb-preflight-row" style="align-items:flex-start">
-        <span class="cb-preflight-label" style="padding-top:0.2rem">Account config</span>
+      {# Account config row #}
+      <div class="cb-preflight-row" style="align-items:center">
+        <span class="cb-preflight-label">Account config</span>
         <div style="display:flex;flex-direction:column;gap:0.35rem;flex:1">
-          <span class="cb-pf-err" style="font-size:0.72rem">
-            Missing: {{ pf.missing_map_fields | join(', ') }} — saved to ad_account_map.csv
-          </span>
+
+          {# ad_account_id — manual input kept (not filled by Multilogin) #}
           {% if 'ad_account_id' in pf.missing_map_fields %}
           <div class="cb-map-field-row">
             <span class="cb-map-field-label">ad_account_id</span>
@@ -1384,29 +1486,22 @@
             <span class="cb-field-status"></span>
           </div>
           {% endif %}
-          {% if 'folder_id' in pf.missing_map_fields %}
-          <div class="cb-map-field-row">
-            <span class="cb-map-field-label">folder_id</span>
-            <input type="text" class="cb-input cb-map-input" data-field="folder_id"
-                   placeholder="Multilogin folder UUID">
-            <button type="button" class="cb-field-save-btn"
-                    onclick="cbSaveOneMapField(this, '{{ acc_label | e }}', 'folder_id')">Save</button>
-            <span class="cb-field-status"></span>
+
+          {# Multilogin IDs — set via Connect panel, not manual inputs #}
+          {% set ml_missing = pf.missing_map_fields | select('in', ['folder_id', 'profile_id']) | list %}
+          <div class="cb-map-field-row" id="cb-ml-status-{{ acc_id }}">
+            <span class="cb-map-field-label">Multilogin IDs</span>
+            {% if ml_missing %}
+              <span class="cb-pf-err" style="font-size:0.72rem">
+                ⚠ not configured — use "Connect" panel above, click <strong>Use</strong> next to a profile
+              </span>
+            {% else %}
+              <span class="cb-pf-ok" style="font-size:0.72rem">✓ folder_id &amp; profile_id set</span>
+            {% endif %}
           </div>
-          {% endif %}
-          {% if 'profile_id' in pf.missing_map_fields %}
-          <div class="cb-map-field-row">
-            <span class="cb-map-field-label">profile_id</span>
-            <input type="text" class="cb-input cb-map-input" data-field="profile_id"
-                   placeholder="Multilogin profile UUID">
-            <button type="button" class="cb-field-save-btn"
-                    onclick="cbSaveOneMapField(this, '{{ acc_label | e }}', 'profile_id')">Save</button>
-            <span class="cb-field-status"></span>
-          </div>
-          {% endif %}
+
         </div>
       </div>
-      {% endif %}
 
     </div>{# /cb-preflight #}
     <div class="cb-slots">
@@ -1549,6 +1644,8 @@
     </div>
     {% endif %}
   </form>
+    </div>{# /cb-acc-body #}
+  </div>{# /cb-acc-row #}
   {% endif %}
 {% endfor %}
 </div>
@@ -1884,6 +1981,209 @@ function copyBrief(btn) {
     btn.textContent = 'Copied!';
     btn.classList.add('copied');
     setTimeout(() => { btn.textContent = 'Copy prompt'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// ── Campaign Builder account accordion ───────────────────────────────
+function cbToggleAcc(accId) {
+  var body = document.getElementById('cb-body-' + accId);
+  var chev = document.getElementById('cb-chev-' + accId);
+  if (!body) return;
+  var open = body.classList.contains('cb-acc-open');
+  body.classList.toggle('cb-acc-open', !open);
+  if (chev) chev.textContent = open ? '▸' : '▾';
+}
+
+// ── Multilogin connect ────────────────────────────────────────────────
+var _mlInstance = {};  // cid → 'A' | 'B'
+
+function mlTogglePanel(cid) {
+  var body = document.getElementById('ml-body-' + cid);
+  var chevron = document.getElementById('ml-chevron-' + cid);
+  if (!body) return;
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (chevron) chevron.textContent = open ? '▸' : '▾';
+}
+
+function mlSetInstance(cid, inst) {
+  _mlInstance[cid] = inst;
+  var toggle = document.getElementById('ml-instance-' + cid);
+  if (!toggle) return;
+  toggle.querySelectorAll('.ml-inst-btn').forEach(function(btn) {
+    btn.classList.toggle('ml-inst-active', btn.dataset.inst === inst);
+  });
+}
+
+function mlSignin(cid) {
+  var instance = _mlInstance[cid] || 'A';
+  var email = (document.getElementById('ml-email-' + cid) || {}).value || '';
+  var pass  = (document.getElementById('ml-pass-' + cid) || {}).value || '';
+  var saveChk = document.getElementById('ml-save-' + cid);
+  var save  = saveChk ? saveChk.checked : true;
+  var status = document.getElementById('ml-status-' + cid);
+  var profilesDiv = document.getElementById('ml-profiles-' + cid);
+  var btn = document.querySelector('#ml-body-' + cid + ' .ml-connect-btn');
+
+  if (!email || !pass) {
+    if (status) status.innerHTML = '<span style="color:var(--bad)">Enter email and password.</span>';
+    return;
+  }
+  if (status) status.innerHTML = '<span style="color:var(--muted)">Connecting to Instance ' + instance + '…</span>';
+  if (btn) btn.disabled = true;
+
+  fetch('/multilogin-signin', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email: email, password: pass, save_token: save, instance: instance})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (btn) btn.disabled = false;
+    if (!data.ok) {
+      if (status) status.innerHTML = '<span style="color:var(--bad)">⚠ ' + (data.error || 'Unknown error') + '</span>';
+      return;
+    }
+    var saved = data.token_saved ? ' · token saved to .env (Instance ' + instance + ', 1 month)' : '';
+    if (status) status.innerHTML = '<span style="color:var(--good)">✓ Instance ' + instance + ' connected' + saved + '</span>';
+
+    // Clear password
+    var passEl = document.getElementById('ml-pass-' + cid);
+    if (passEl) passEl.value = '';
+
+    // Render profiles
+    if (!profilesDiv) return;
+    var profiles = data.profiles || [];
+    var folders  = data.folders  || [];
+    var folderMap = {};
+    folders.forEach(function(f) { folderMap[f.folder_id] = f.name; });
+
+    if (!profiles.length) {
+      profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">No profiles returned by Multilogin API for Instance ' + instance + '.</span>';
+      return;
+    }
+
+    var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.3rem">'
+      + profiles.length + ' profile(s) from Instance ' + instance
+      + ' — click "Use" to fill folder_id + profile_id</div>';
+    html += '<div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+    profiles.forEach(function(p) {
+      var folderName = folderMap[p.folder_id] || p.folder_id || '—';
+      html += '<div class="ml-profile-row">'
+        + '<span class="ml-profile-name">' + (p.name || '—') + '</span>'
+        + '<span class="ml-profile-id">folder: ' + folderName + '</span>'
+        + '<button class="ml-profile-use-btn" onclick="mlUseProfile(\''
+          + (p.folder_id||'') + '\',\'' + (p.profile_id||'') + '\',\'' + instance + '\',this)">'
+        + 'Use</button>'
+        + '</div>';
+    });
+    html += '</div>';
+    profilesDiv.innerHTML = html;
+  })
+  .catch(function(err) {
+    if (btn) btn.disabled = false;
+    if (status) status.innerHTML = '<span style="color:var(--bad)">Network error: ' + err + '</span>';
+  });
+}
+
+function mlUseProfile(folderId, profileId, instance, btn) {
+  if (!folderId || !profileId) return;
+  var inst = instance || 'A';
+
+  // Collect account names from the current page's Campaign Builder headers
+  var accTitles = Array.from(document.querySelectorAll('.cb-acc-title'))
+    .map(function(el) { return el.textContent.trim(); })
+    .filter(Boolean);
+
+  if (!accTitles.length) {
+    alert('No accounts found on this page.');
+    return;
+  }
+
+  if (accTitles.length === 1) {
+    _mlSaveIds(accTitles[0], folderId, profileId, inst, btn);
+    return;
+  }
+
+  // Multiple accounts — show inline picker next to the button
+  var existing = btn.parentNode.querySelector('.ml-acc-picker');
+  if (existing) { existing.remove(); return; }
+
+  var picker = document.createElement('div');
+  picker.className = 'ml-acc-picker';
+  picker.style.cssText = 'position:absolute;z-index:999;background:var(--bg-elev);border:1px solid var(--border);'
+    + 'border-radius:4px;padding:0.3rem 0;min-width:14rem;box-shadow:0 4px 12px rgba(0,0,0,.35)';
+
+  accTitles.forEach(function(accLabel) {
+    var item = document.createElement('div');
+    item.style.cssText = 'padding:0.3rem 0.7rem;cursor:pointer;font-size:0.74rem;';
+    item.textContent = accLabel;
+    item.onmouseenter = function() { item.style.background = 'var(--bg-hover)'; };
+    item.onmouseleave = function() { item.style.background = ''; };
+    item.onclick = function() {
+      picker.remove();
+      _mlSaveIds(accLabel, folderId, profileId, inst, btn);
+    };
+    picker.appendChild(item);
+  });
+
+  btn.style.position = 'relative';
+  btn.parentNode.style.position = 'relative';
+  btn.parentNode.appendChild(picker);
+
+  // Close on outside click
+  setTimeout(function() {
+    document.addEventListener('click', function closePicker(e) {
+      if (!picker.contains(e.target) && e.target !== btn) {
+        picker.remove();
+        document.removeEventListener('click', closePicker);
+      }
+    });
+  }, 50);
+}
+
+function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
+  if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.textContent = 'Saving…'; }
+
+  fetch('/account-map-patch', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      account_name: accLabel,
+      folder_id: folderId,
+      profile_id: profileId,
+      multilogin_instance: instance,
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = 'Use'; }
+    if (!data.ok) {
+      alert('Save failed: ' + (data.error || 'unknown error'));
+      return;
+    }
+    // Update all Multilogin status rows for this account
+    var accId = accLabel.replace(/[\s.]/g, '_');
+    var statusEl = document.getElementById('cb-ml-status-' + accId);
+    if (statusEl) {
+      statusEl.querySelector('.cb-pf-err, .cb-pf-ok, span').outerHTML =
+        '<span class="cb-pf-ok" style="font-size:0.72rem">✓ folder_id &amp; profile_id saved (Instance ' + instance + ')</span>';
+    }
+    // Update the accordion header badge
+    document.querySelectorAll('.cb-acc-title').forEach(function(el) {
+      if (el.textContent.trim() === accLabel) {
+        var meta = el.closest('.cb-acc-header').querySelector('.cb-pf-err');
+        if (meta) meta.outerHTML = '<span style="font-size:0.7rem;color:var(--good)">✓ config ok</span>';
+      }
+    });
+    // Flash confirmation in ML status line
+    document.querySelectorAll('[id^="ml-status-"]').forEach(function(s) {
+      s.innerHTML += ' <span style="color:var(--good)">· saved to ' + accLabel + ' ✓</span>';
+    });
+  })
+  .catch(function(e) {
+    if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = 'Use'; }
+    alert('Network error: ' + e.message);
   });
 }
 
