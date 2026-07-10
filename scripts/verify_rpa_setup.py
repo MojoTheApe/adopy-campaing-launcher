@@ -45,7 +45,9 @@ def main() -> int:
 
     try:
         from playwright.sync_api import sync_playwright
+        from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 
+        ensure_playwright_browsers_path()
         with sync_playwright() as p:
             b = p.chromium.launch(headless=True)
             b.close()

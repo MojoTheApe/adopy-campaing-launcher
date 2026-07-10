@@ -11,6 +11,7 @@ from typing import Any, Protocol
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
+from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 
 
 @dataclass
@@ -51,6 +52,7 @@ class BrowserProvider(Protocol):
 
 
 def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None) -> BrowserConnection:
+    ensure_playwright_browsers_path()
     pw = sync_playwright().start()
     browser = pw.chromium.connect_over_cdp(cdp_url)
     if browser.contexts:
@@ -437,6 +439,7 @@ class PlaywrightProfileProvider:
         self._kill_profile_browser(self._user_data_dir, profile_id)
         time.sleep(2)
 
+        ensure_playwright_browsers_path()
         self._playwright = sync_playwright().start()
         # launch_persistent_context opens Playwright's own Chromium with existing profile data
         context = self._playwright.chromium.launch_persistent_context(

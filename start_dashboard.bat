@@ -1,9 +1,9 @@
 @echo off
-title fb_agents Morning Dashboard
+title Adopy Campaigns Launcher
 cd /d "%~dp0"
 
 echo.
-echo  Morning Report Dashboard
+echo  Adopy Campaigns Launcher
 echo  ========================
 echo.
 

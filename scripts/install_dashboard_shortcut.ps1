@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Creates a "Morning Dashboard" shortcut on the desktop.
+    Creates an "Adopy Campaigns Launcher" shortcut on the desktop.
 
 .DESCRIPTION
     The shortcut runs start_dashboard.bat directly: opens a console window,
@@ -26,18 +26,27 @@ if (-not (Test-Path $DashboardBat)) {
     exit 1
 }
 
+if (-not (Test-Path $IcoFile)) {
+    Write-Error "ACL icon not found: $IcoFile`nRun: python scripts/convert_favicon_to_ico.py"
+    exit 1
+}
+
 # ── Create shortcut ──────────────────────────────────────────────────────────
 $DesktopPath  = [Environment]::GetFolderPath("Desktop")
-$ShortcutPath = Join-Path $DesktopPath "Morning Dashboard.lnk"
+$ShortcutPath = Join-Path $DesktopPath "Adopy Campaigns Launcher.lnk"
+$LegacyPath   = Join-Path $DesktopPath "Morning Dashboard.lnk"
+
+if (Test-Path $LegacyPath) {
+    Remove-Item -LiteralPath $LegacyPath -Force
+    Write-Host "  Removed legacy shortcut: Morning Dashboard.lnk" -ForegroundColor Yellow
+}
 
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
 $Shortcut.TargetPath       = $DashboardBat
 $Shortcut.WorkingDirectory = $ProjectRoot
-$Shortcut.Description      = "Open fb_agents Morning Dashboard in browser"
-if (Test-Path $IcoFile) {
-    $Shortcut.IconLocation = "$IcoFile,0"
-}
+$Shortcut.Description      = "Launch Adopy Campaigns Launcher (ACL)"
+$Shortcut.IconLocation     = (Resolve-Path $IcoFile).Path + ",0"
 $Shortcut.Save()
 
 Write-Host ""

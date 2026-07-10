@@ -93,10 +93,17 @@ class RpaPublisher:
             or "context or browser has been closed" in err
         )
 
+    def _open_multilogin_direct(self, entry, account_label: str) -> BrowserConnection:
+        from src.fb_ads_rpa.browser import MultiloginDirectCDPProvider
+
+        log.warning("Falling back to MultiloginDirectCDP (Mimic + CDP, no MLX API token).")
+        self._provider = MultiloginDirectCDPProvider()
+        return self._provider.open(entry, account_label)
+
     def _open_playwright_profile(self, entry, account_label: str) -> BrowserConnection:
         log.warning(
-            "Using PlaywrightProfileProvider — Playwright Chromium + MLX profile cookies "
-            "(no MLX API token required)."
+            "Using PlaywrightProfileProvider — vanilla Chromium + MLX profile cookies "
+            "(NOT Mimic/antidetect). Refresh MLX automation token to use Multilogin API."
         )
         self._provider = PlaywrightProfileProvider()
         return self._provider.open(entry, account_label)
@@ -110,22 +117,31 @@ class RpaPublisher:
         self._entry = entry
         try:
             self._conn = self._provider.open(entry, account_label)
+            log.info("Browser opened via %s", self._provider.__class__.__name__)
         except Exception as exc:
             err_str = str(exc)
-            # 401 → no MLX token. DirectCDP also fails Mimic license check — use Playwright profile.
+            self._reset_browser()
             if "401" in err_str or "Authorization" in err_str or "authorization" in err_str:
-                log.warning("MLX API returned 401 (token expired). Falling back to PlaywrightProfileProvider.")
-                self._reset_browser()
-                self._conn = self._open_playwright_profile(entry, account_label)
+                log.warning("MLX API returned 401 (token expired). Trying DirectCDP.")
+                try:
+                    self._conn = self._open_multilogin_direct(entry, account_label)
+                except Exception as direct_exc:
+                    log.warning("DirectCDP failed (%s). Falling back to PlaywrightProfile.", direct_exc)
+                    self._reset_browser()
+                    self._conn = self._open_playwright_profile(entry, account_label)
             elif (
                 "license check failed" in err_str.lower()
                 or "mimic browser exited" in err_str.lower()
                 or "econnrefused" in err_str.lower()
                 or self._browser_closed_error(exc)
             ):
-                log.warning("Browser launch failed (%s). Falling back to PlaywrightProfileProvider.", exc)
-                self._reset_browser()
-                self._conn = self._open_playwright_profile(entry, account_label)
+                log.warning("Multilogin launch failed (%s). Trying DirectCDP.", exc)
+                try:
+                    self._conn = self._open_multilogin_direct(entry, account_label)
+                except Exception as direct_exc:
+                    log.warning("DirectCDP failed (%s). Falling back to PlaywrightProfile.", direct_exc)
+                    self._reset_browser()
+                    self._conn = self._open_playwright_profile(entry, account_label)
             else:
                 raise
         return self._conn
@@ -174,9 +190,10 @@ class RpaPublisher:
             result.error = "🖐 Browser left open — select your Facebook Page and click Publish"
             # Keep success=True so the UI shows it as complete, not failed
         elif self.dry_run and result.success:
+            provider = getattr(self._conn, "provider", "unknown") if self._conn else "unknown"
             result.error = (
                 "🔬 Dry run complete — browser left open, Publish NOT clicked. "
-                "Check the form in Ads Manager."
+                f"Browser: {provider}. Check the form in Ads Manager."
             )
         return result
 

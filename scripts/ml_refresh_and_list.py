@@ -31,10 +31,11 @@ HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
 
 def signin(email: str, password: str) -> str:
     """Sign in and return a short-lived bearer token."""
+    password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
     r = requests.post(
         f"{MLX_API}/user/signin",
         headers=HEADERS,
-        json={"email": email, "password": password},
+        json={"email": email, "password": password_hash},
         timeout=30,
     )
     if r.status_code != 200:

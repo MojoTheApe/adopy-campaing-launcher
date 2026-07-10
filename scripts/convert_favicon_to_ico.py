@@ -1,4 +1,4 @@
-"""Generate assets/dashboard.ico from the pirate smiley design.
+"""Generate assets/dashboard.ico from the ACL launcher mark.
 
 Draws the icon programmatically with Pillow (no SVG renderer needed).
 Produces sizes 256, 48, 32, 16 packed into a single .ico file.
@@ -8,122 +8,115 @@ Usage:
 """
 from __future__ import annotations
 
-import math
+import os
+import shutil
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 _OUT = Path(__file__).resolve().parents[1] / "assets" / "dashboard.ico"
+_STATIC_ICO = Path(__file__).resolve().parents[1] / "src" / "web" / "static" / "favicon.ico"
 _SIZES = [256, 48, 32, 16]
 
+_BG_TOP = (0x1D, 0x4E, 0xD8)
+_BG_BOT = (0x43, 0x38, 0xCA)
+_GLOW = (0x38, 0xBD, 0xF8)
+_TEXT = (0xFF, 0xFF, 0xFF, 255)
+_LINE = (0x93, 0xC5, 0xFD, 115)
 
-def _draw_pirate(size: int) -> Image.Image:
+
+def _font(size: int, *, bold: bool = True) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    candidates = [
+        r"C:\Windows\Fonts\segoeuib.ttf" if bold else r"C:\Windows\Fonts\segoeui.ttf",
+        r"C:\Windows\Fonts\arialbd.ttf" if bold else r"C:\Windows\Fonts\arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    ]
+    px = max(8, int(size * 0.34))
+    for path in candidates:
+        if os.path.isfile(path):
+            try:
+                return ImageFont.truetype(path, px)
+            except OSError:
+                continue
+    return ImageFont.load_default()
+
+
+def _rounded_rect(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[float, float, float, float],
+    radius: float,
+    fill: tuple[int, ...],
+) -> None:
+    draw.rounded_rectangle(box, radius=radius, fill=fill)
+
+
+def _draw_acl(size: int) -> Image.Image:
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    s = size / 64.0  # scale factor from 64-px design
+    s = size / 64.0
 
-    # ── helpers ──────────────────────────────────────────────────────────
     def sc(v: float) -> float:
         return v * s
 
-    def xy(x: float, y: float) -> tuple[float, float]:
-        return sc(x), sc(y)
+    pad = sc(2)
+    _rounded_rect(
+        d,
+        (pad, pad, size - pad, size - pad),
+        sc(15),
+        _BG_TOP,
+    )
+    # simple vertical blend overlay for depth
+    overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    for row in range(size):
+        t = row / max(size - 1, 1)
+        color = tuple(
+            int(_BG_TOP[i] + (_BG_BOT[i] - _BG_TOP[i]) * t) for i in range(3)
+        ) + (255,)
+        od.line([(0, row), (size, row)], fill=color)
+    mask = Image.new("L", (size, size), 0)
+    md = ImageDraw.Draw(mask)
+    md.rounded_rectangle((pad, pad, size - pad, size - pad), radius=sc(15), fill=255)
+    img = Image.composite(overlay, img, mask)
+    d = ImageDraw.Draw(img)
 
-    def ellipse(cx: float, cy: float, rx: float, ry: float, **kw) -> None:
-        d.ellipse(
-            [xy(cx - rx, cy - ry), xy(cx + rx, cy + ry)],
-            **kw,
-        )
-
-    # ── crossed bones (background, drawn below face) ──────────────────
-    bone_fill = "#F5B800"
-    bone_out = "#D9A400"
-    # simulate two rotated rects as thick lines
-    for angle in (-24, 24):
-        rad = math.radians(angle)
-        cx, cy = 32, 57.25
-        half_w = 19  # half of width=38
-        dx = math.cos(rad) * half_w * s
-        dy = math.sin(rad) * half_w * s
-        d.line(
-            [(cx * s - dx, cy * s - dy), (cx * s + dx, cy * s + dy)],
-            fill=bone_fill,
-            width=max(2, int(sc(4.5))),
-        )
-    # four knob circles at bone ends
-    for cx, cy in [(15.5, 50.5), (48.5, 50.5), (15.5, 64), (48.5, 64)]:
-        ellipse(cx, cy, 3, 3, fill=bone_fill, outline=bone_out, width=max(1, int(sc(0.8))))
-
-    # ── face circle ──────────────────────────────────────────────────
-    face_top = "#FFE566"
-    face_bot = "#FFCC00"
-    # Pillow can't do linear gradients natively; blend row by row for large sizes
-    if size >= 48:
-        face_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        fd = ImageDraw.Draw(face_img)
-        r = sc(22)
-        cx, cy = sc(32), sc(21)
-        top_rgb = (0xFF, 0xE5, 0x66)
-        bot_rgb = (0xFF, 0xCC, 0x00)
-        # draw gradient by overlapping horizontal slices (cheap but effective)
-        for row in range(int(cy - r), int(cy + r) + 1):
-            t = (row - (cy - r)) / (2 * r) if r > 0 else 0
-            t = max(0.0, min(1.0, t))
-            color = tuple(int(top_rgb[i] + (bot_rgb[i] - top_rgb[i]) * t) for i in range(3)) + (255,)
-            chord_half = math.sqrt(max(0, r * r - (row - cy) ** 2))
-            fd.line([(cx - chord_half, row), (cx + chord_half, row)], fill=color)
-        # no-op filter pass (gradient already drawn row-by-row)
-        img.alpha_composite(face_img)
-        # outline
-        d2 = ImageDraw.Draw(img)
-        d2.ellipse(
-            [xy(32 - 22, 21 - 22), xy(32 + 22, 21 + 22)],
-            outline="#D9A400",
-            width=max(1, int(sc(1.5))),
-        )
-        d = d2
-    else:
-        ellipse(32, 21, 22, 22, fill=face_top, outline="#D9A400", width=max(1, int(sc(1.5))))
-
-    # ── left eye (open) ───────────────────────────────────────────────
-    ellipse(23, 18, 3.8, 4.8, fill="#5C3D00")
-
-    # ── eye patch (right eye) ─────────────────────────────────────────
-    # filled dark polygon approximating the SVG path
-    patch_pts = [
-        xy(32, 12), xy(39, 11), xy(44, 14), xy(46, 21),
-        xy(44, 27), xy(40, 30), xy(32, 29),
+    # launch chevron accent
+    glow_pts = [
+        (sc(44), sc(11)),
+        (sc(56), sc(23)),
+        (sc(48), sc(23)),
+        (sc(44), sc(19)),
     ]
-    d.polygon(patch_pts, fill="#2B1D0E")
-    # strap across forehead
-    d.line([xy(30, 14), xy(48, 8)], fill="#2B1D0E", width=max(1, int(sc(2.5))))
+    d.polygon(glow_pts, fill=_GLOW + (255,))
+    d.polygon([(sc(48), sc(23)), (sc(56), sc(23)), (sc(56), sc(31))], fill=(14, 165, 233, 140))
 
-    # ── smile ─────────────────────────────────────────────────────────
-    # approximate arc as polyline
-    pts = []
-    for i in range(21):
-        t = i / 20.0
-        x = 17 + t * (47 - 17)
-        # quadratic bezier: P0=(17,28), P1=(32,39), P2=(47,28)
-        bx = (1 - t) ** 2 * 17 + 2 * (1 - t) * t * 32 + t ** 2 * 47
-        by = (1 - t) ** 2 * 28 + 2 * (1 - t) * t * 39 + t ** 2 * 28
-        pts.append(xy(bx, by))
-    d.line(pts, fill="#5C3D00", width=max(1, int(sc(2.8))))
+    font = _font(size)
+    label = "ACL"
+    bbox = d.textbbox((0, 0), label, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    tx = (size - tw) / 2 - bbox[0]
+    ty = sc(41) - th / 2 - bbox[1]
+    d.text((tx, ty), label, font=font, fill=_TEXT)
+
+    d.line([(sc(16), sc(47)), (sc(48), sc(47))], fill=_LINE, width=max(1, int(sc(2))))
 
     return img
 
 
 def main() -> None:
-    frames = [_draw_pirate(sz) for sz in _SIZES]
+    frames = [_draw_acl(sz) for sz in _SIZES]
     _OUT.parent.mkdir(parents=True, exist_ok=True)
-    # Save as ICO; Pillow uses the first frame as reference
     frames[0].save(
         _OUT,
         format="ICO",
         sizes=[(sz, sz) for sz in _SIZES],
         append_images=frames[1:],
     )
+    shutil.copy2(_OUT, _STATIC_ICO)
     print(f"[convert] Saved {_OUT}  ({', '.join(str(s) for s in _SIZES)} px)")
+    print(f"[convert] Copied to {_STATIC_ICO}")
 
 
 if __name__ == "__main__":

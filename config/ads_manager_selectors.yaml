@@ -6,18 +6,34 @@ urls:
 
 selectors:
   create_button:
+    - "role=button[name=/^\\+?\\s*Create$/i]"
+    - "role=button[name=/^\\+?\\s*Crear$/i]"
     - "role=button[name=/Create/i]"
     - "role=button[name=/Crear/i]"
+    - "div[role='button']:has-text('+ Create')"
+    - "div[role='button']:has-text('+ Crear')"
+    - "button:has-text('+ Create')"
+    - "button:has-text('+ Crear')"
+    - "span:has-text('+ Create')"
+    - "span:has-text('+ Crear')"
+    - "text=+ Create"
+    - "text=+ Crear"
     - "div[aria-label='Create']"
     - "div[aria-label='Crear']"
-    - "text=Create"
-    - "text=Crear"
+    - "div[aria-label*='Create']"
+    - "div[aria-label*='Crear']"
   create_campaign_item:
     - "role=menuitem[name=/Campaign/i]"
     - "role=menuitem[name=/Campa/i]"
     - "text=Campaign"
     - "text=Campaña"
   campaign_objective_leads:
+    - "role=radio[name=/^Leads$/i]"
+    - "role=radio[name=/Clientes potenciales/i]"
+    - "div[role='radio']:has-text('Leads')"
+    - "div[role='radio']:has-text('Clientes potenciales')"
+    - "label:has-text('Leads')"
+    - "label:has-text('Clientes potenciales')"
     - "text=Leads"
     - "text=Clientes potenciales"
     - "div[role='button']:has-text('Leads')"
@@ -43,11 +59,76 @@ selectors:
     - "label:has-text('Campaign name') >> .. >> input"
     - "label:has-text('Nombre de la campaña') >> .. >> input"
   adset_name_input:
+    - "label=Ad set name"
+    - "label=/Nombre del conjunto/i"
+    - "role=textbox[name=/Ad set name/i]"
+    - "role=textbox[name=/Nombre del conjunto/i]"
+    - "placeholder=/Ad set name/i"
+    - "placeholder=/Nombre del conjunto/i"
+    - "input[aria-label*='Ad set name']"
+    - "input[aria-label*='Nombre del conjunto']"
     - "input[placeholder*='Ad set name']"
     - "label:has-text('Ad set name') >> .. >> input"
+    - "label:has-text('Nombre del conjunto') >> .. >> input"
   budget_input:
+    - "label=Daily budget"
+    - "label=/Presupuesto diario/i"
+    - "role=spinbutton[name=/Daily budget/i]"
+    - "role=spinbutton[name=/Presupuesto diario/i]"
+    - "input[aria-label*='Daily budget']"
+    - "input[aria-label*='Presupuesto diario']"
     - "input[placeholder*='budget']"
     - "label:has-text('Daily budget') >> .. >> input"
+    - "label:has-text('Presupuesto diario') >> .. >> input"
+  next_button:
+    - "role=button[name=/^Next$/i]"
+    - "role=button[name=/^Siguiente$/i]"
+    - "text=Next"
+    - "text=Siguiente"
+  ad_set_nav_item:
+    - "role=treeitem >> nth=1"
+    - "role=treeitem[name=/Ad set/i]"
+    - "role=treeitem[name=/Conjunto/i]"
+    - "role=button[name=/New Leads Ad Set/i]"
+    - "role=button[name=/Nuevo conjunto/i]"
+    - "text=/New Leads Ad Set/i"
+    - "text=/Nuevo conjunto/i"
+  audience_manual_options:
+    - "text=Switch to original audience options"
+    - "text=Cambiar a opciones de audiencia originales"
+    - "text=Show more options"
+    - "text=Mostrar más opciones"
+    - "role=button[name=/Edit audience/i]"
+    - "role=button[name=/Editar audiencia/i]"
+  conversion_location_single:
+    - "text=Single"
+    - "text=/Send people to one location/i"
+    - "text=/Enviar personas a una ubicación/i"
+  conversion_location_dropdown:
+    - "text=Website and instant forms"
+    - "text=Website and Instant Forms"
+    - "role=combobox[name=/Conversion location/i]"
+    - "role=button[name=/Website and instant forms/i]"
+  conversion_location_website:
+    - "role=option[name=/^Website$/i]"
+    - "role=menuitem[name=/^Website$/i]"
+    - "role=radio[name=/^Website$/i]"
+    - "role=radio[name=/^Sitio web$/i]"
+    - "label:has-text('Website')"
+    - "label:has-text('Sitio web')"
+    - "text=Website"
+    - "text=Sitio web"
+  conversion_event_dropdown:
+    - "role=combobox[name=/Conversion event/i]"
+    - "role=button[name=/Conversion event/i]"
+    - "text=Conversion event"
+    - "text=Evento de conversión"
+  conversion_event_lead:
+    - "role=option[name=/^Lead$/i]"
+    - "role=option[name=/^Leads$/i]"
+    - "role=menuitem[name=/^Lead$/i]"
+    - "text=Lead"
+    - "text=Leads"
   publish_button:
     - "role=button[name=/Publish/i]"
     - "div[aria-label='Publish']"
@@ -67,10 +148,16 @@ selectors:
 
   # Detailed Targeting (Ad Set level)
   detailed_targeting_input:
+    - "label=/Detailed targeting/i"
+    - "label=/Segmentación detallada/i"
     - "input[placeholder*='Add interests']"
     - "input[placeholder*='interests, behaviors']"
+    - "input[placeholder*='Añadir intereses']"
     - "div[aria-label*='Detailed targeting'] input"
     - "div[aria-label*='detailed targeting'] input"
+    - "div[aria-label*='Segmentación detallada'] input"
+    - "text=Detailed targeting >> .. >> input"
+    - "text=Segmentación detallada >> .. >> input"
   targeting_suggestion_item:
     - "ul[role='listbox'] li:first-child"
     - "div[role='option']:first-child"
@@ -84,6 +171,45 @@ selectors:
     - "role=button[name=/Narrow further/i]"
     - "role=button[name=/Define further/i]"
     - "div[aria-label*='Narrow further']"
+
+  # Audience — Locations
+  audience_location_input:
+    - "placeholder=/Add locations?/i"
+    - "placeholder=/Search locations?/i"
+    - "placeholder=/Enter a location/i"
+    - "placeholder=/Agregar ubicaciones?/i"
+    - "input[aria-label*='location']"
+    - "input[aria-label*='ubicacion']"
+
+  # Audience — Age
+  age_min_select:
+    - "select[aria-label*='Age min']"
+    - "select[aria-label*='Minimum age']"
+    - "[role=combobox][aria-label*='Age min']"
+  age_max_select:
+    - "select[aria-label*='Age max']"
+    - "select[aria-label*='Maximum age']"
+    - "[role=combobox][aria-label*='Age max']"
+
+  # Placements / Account controls
+  manual_placements_button:
+    - "role=radio[name=/Manual placements?/i]"
+    - "role=button[name=/Manual placements?/i]"
+    - "text=Manual placements"
+    - "text=Ubicaciones manuales"
+  device_mobile:
+    - "role=checkbox[name=/Mobile devices only/i]"
+    - "role=radio[name=/Mobile/i]"
+    - "text=Mobile devices only"
+  device_ios:
+    - "role=checkbox[name=/iOS/i]"
+    - "text=iOS"
+  device_android:
+    - "role=checkbox[name=/Android/i]"
+    - "text=Android"
+  device_desktop:
+    - "role=checkbox[name=/Desktop/i]"
+    - "text=Desktop"
 
 timing:
   navigation_timeout_ms: 90000

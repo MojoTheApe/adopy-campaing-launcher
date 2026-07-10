@@ -1,36 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Pirate smiley">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ACL">
   <defs>
-    <linearGradient id="face" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FFE566"/>
-      <stop offset="100%" stop-color="#FFCC00"/>
+    <linearGradient id="acl-bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#4338ca"/>
     </linearGradient>
-    <linearGradient id="bone" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFE566"/>
-      <stop offset="100%" stop-color="#F5B800"/>
+    <linearGradient id="acl-glow" x1="40" y1="8" x2="58" y2="26" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7dd3fc"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
     </linearGradient>
   </defs>
-
-  <!-- crossed bones — straight, narrower, more horizontal -->
-  <g fill="url(#bone)" stroke="#D9A400" stroke-width="1" stroke-linejoin="round">
-    <rect x="13" y="55" width="38" height="4.5" rx="2.25" transform="rotate(-24 32 57.25)"/>
-    <rect x="13" y="55" width="38" height="4.5" rx="2.25" transform="rotate(24 32 57.25)"/>
-    <circle cx="15.5" cy="50.5" r="3"/>
-    <circle cx="48.5" cy="50.5" r="3"/>
-    <circle cx="15.5" cy="64" r="3"/>
-    <circle cx="48.5" cy="64" r="3"/>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#acl-bg)"/>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="14.5" fill="none" stroke="#60a5fa" stroke-opacity="0.22" stroke-width="1"/>
+  <path d="M44 11 L56 23 L48 23 L44 19 Z" fill="url(#acl-glow)"/>
+  <path d="M48 23 L56 23 L56 31 L48 23 Z" fill="#0ea5e9" fill-opacity="0.55"/>
+  <g fill="#ffffff" font-family="Segoe UI, system-ui, sans-serif" font-weight="700" font-size="21" letter-spacing="-0.5">
+    <text x="32" y="41" text-anchor="middle">ACL</text>
   </g>
-
-  <!-- smiley face — larger -->
-  <circle cx="32" cy="21" r="22" fill="url(#face)" stroke="#D9A400" stroke-width="1.5"/>
-
-  <!-- left eye -->
-  <ellipse cx="23" cy="18" rx="3.8" ry="4.8" fill="#5C3D00"/>
-
-  <!-- eye patch -->
-  <path d="M32 12 C40 11 46 14 46 21 C46 27 40 30 32 29 Z" fill="#2B1D0E"/>
-  <path d="M32 12 C40 11 46 14 46 21" fill="none" stroke="#1A1208" stroke-width="1.2"/>
-  <path d="M30 14 L48 8" stroke="#2B1D0E" stroke-width="2.5" stroke-linecap="round"/>
-
-  <!-- smile -->
-  <path d="M17 28 Q32 39 47 28" fill="none" stroke="#5C3D00" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M16 47 H48" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" stroke-opacity="0.45"/>
 </svg>

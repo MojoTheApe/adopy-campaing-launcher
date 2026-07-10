@@ -29,6 +29,14 @@ try:
 except ImportError:
     pass
 
+from src.fb_ads_rpa.config import ensure_playwright_browsers_path
+
+ensure_playwright_browsers_path()
+
+from src.fb_ads_rpa.ads_manager_flow import RPA_FLOW_VERSION
+
+print(f"[serve] RPA flow version: {RPA_FLOW_VERSION}")
+
 import uvicorn
 
 _DEFAULT_PORT = 9090

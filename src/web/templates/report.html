@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-  <title>fb_agents — Morning Report {{ report.date }}</title>
+  <link rel="icon" href="/favicon.ico?v=acl" sizes="32x32">
+  <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
+  <title>Adopy Campaigns Launcher — {{ report.date }}</title>
   <script src="https://unpkg.com/htmx.org@1.9.10"
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
           crossorigin="anonymous"></script>
@@ -203,12 +204,39 @@
       margin-bottom: 1rem;
       padding-bottom: 1rem;
     }
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-width: 0;
+    }
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(29, 78, 216, 0.22);
+    }
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      min-width: 0;
+    }
     header.page-header h1 {
-      font-size: 1.125rem;
-      font-weight: 600;
+      font-size: 1.05rem;
+      font-weight: 650;
       margin: 0;
       color: var(--text);
-      letter-spacing: -0.02em;
+      letter-spacing: -0.025em;
+      line-height: 1.2;
+      text-wrap: balance;
+    }
+    .brand-date {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-weight: 500;
+      letter-spacing: 0.01em;
     }
     header.page-header .meta {
       color: var(--muted);
@@ -997,7 +1025,13 @@
 
 <div class="page-top">
 <header class="page-header">
-  <h1>Morning Report — {{ report.date }}</h1>
+  <div class="brand-lockup">
+    <img src="/static/logo.svg" alt="ACL" class="brand-logo" width="40" height="40">
+    <div class="brand-text">
+      <h1>Adopy Campaigns Launcher</h1>
+      <span class="brand-date">{{ report.date }}</span>
+    </div>
+  </div>
   <span class="meta">CM: <strong>{{ report.my_cm }}</strong></span>
   <span class="meta">Source: <strong>{{ report.source_excel }}</strong></span>
   <span class="meta">Trend: <strong>{{ report.trend_days }}d</strong></span>

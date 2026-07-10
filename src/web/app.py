@@ -53,6 +53,7 @@ from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
 _FAVICON = _STATIC_DIR / "favicon.svg"
+_FAVICON_ICO = _STATIC_DIR / "favicon.ico"
 _DRAFT_STATUS_PATH = _PROJ_ROOT / "output" / "draft_status.json"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
@@ -315,7 +316,7 @@ _NCOLS_BY_SECTION = {
     "optimization": 7,    # adset, spend, leads, ftds, cpl, cpa, reason
 }
 
-app = FastAPI(title="fb_agents — Morning Report")
+app = FastAPI(title="Adopy Campaigns Launcher")
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 _MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -323,6 +324,8 @@ _MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon() -> FileResponse:
+    if _FAVICON_ICO.is_file():
+        return FileResponse(_FAVICON_ICO, media_type="image/x-icon")
     return FileResponse(_FAVICON, media_type="image/svg+xml")
 
 
