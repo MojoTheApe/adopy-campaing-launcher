@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from playwright.sync_api import Locator, Page, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.pacing import pause_after_navigation, pause_medium, pause_short
@@ -40,49 +40,84 @@ def _parse_role_name(raw: str) -> re.Pattern[str]:
     return re.compile(re.escape(raw.strip()), re.IGNORECASE)
 
 
-def _try_locator(page: Page, selector: str) -> Locator | None:
+PageLike = Page | Frame
+
+
+def _ads_roots(page: Page) -> list[PageLike]:
+    """Search main page and embedded frames (Ads Manager sometimes nests UI)."""
+    roots: list[PageLike] = [page]
+    for frame in page.frames:
+        if frame != page.main_frame:
+            roots.append(frame)
+    return roots
+
+
+def _try_locator(root: PageLike, selector: str) -> Locator | None:
     if selector.startswith("role="):
         m = re.match(r"role=(\w+)\[name=([^\]]+)\]", selector)
         if m:
             role, name_raw = m.group(1), m.group(2)
-            loc = page.get_by_role(role, name=_parse_role_name(name_raw))
+            loc = root.get_by_role(role, name=_parse_role_name(name_raw))
             return loc.first if loc.count() else None
+    if selector.startswith("label="):
+        label_raw = selector[6:].strip()
+        if label_raw.startswith("/"):
+            loc = root.get_by_label(_parse_role_name(label_raw))
+        else:
+            loc = root.get_by_label(label_raw, exact=False)
+        return loc.first if loc.count() else None
+    if selector.startswith("placeholder="):
+        ph_raw = selector[12:].strip()
+        if ph_raw.startswith("/"):
+            loc = root.get_by_placeholder(_parse_role_name(ph_raw))
+        else:
+            loc = root.get_by_placeholder(ph_raw, exact=False)
+        return loc.first if loc.count() else None
     if selector.startswith("text="):
         text = selector[5:]
-        loc = page.get_by_text(re.compile(re.escape(text), re.I))
+        loc = root.get_by_text(re.compile(re.escape(text), re.I))
         return loc.first if loc.count() else None
-    loc = page.locator(selector)
+    loc = root.locator(selector)
     return loc.first if loc.count() else None
 
 
 def _click_first(page: Page, selectors: list[str], *, timeout_ms: int) -> None:
     last_err: Exception | None = None
-    for sel in selectors:
-        try:
-            loc = _try_locator(page, sel)
-            if loc is None:
-                continue
-            loc.click(timeout=timeout_ms)
-            pause_short()
-            return
-        except Exception as exc:
-            last_err = exc
+    per_try = max(3000, timeout_ms // max(len(selectors), 1))
+    for root in _ads_roots(page):
+        for sel in selectors:
+            try:
+                loc = _try_locator(root, sel)
+                if loc is None:
+                    loc = root.locator(sel).first
+                loc.wait_for(state="visible", timeout=per_try)
+                loc.scroll_into_view_if_needed(timeout=per_try)
+                loc.click(timeout=per_try)
+                pause_short()
+                return
+            except Exception as exc:
+                last_err = exc
     raise AdsManagerFlowError(f"Could not click any of: {selectors}") from last_err
 
 
 def _fill_first(page: Page, selectors: list[str], value: str, *, timeout_ms: int) -> None:
-    for sel in selectors:
-        try:
-            loc = _try_locator(page, sel)
-            if loc is None:
-                continue
-            loc.click(timeout=timeout_ms)
-            loc.fill(value, timeout=timeout_ms)
-            pause_short()
-            return
-        except Exception:
-            continue
-    raise AdsManagerFlowError(f"Could not fill {value!r} using: {selectors}")
+    last_err: Exception | None = None
+    per_try = max(3000, timeout_ms // max(len(selectors), 1))
+    for root in _ads_roots(page):
+        for sel in selectors:
+            try:
+                loc = _try_locator(root, sel)
+                if loc is None:
+                    loc = root.locator(sel).first
+                loc.wait_for(state="visible", timeout=per_try)
+                loc.scroll_into_view_if_needed(timeout=per_try)
+                loc.click(timeout=per_try)
+                loc.fill(value, timeout=per_try)
+                pause_short()
+                return
+            except Exception as exc:
+                last_err = exc
+    raise AdsManagerFlowError(f"Could not fill {value!r} using: {selectors}") from last_err
 
 
 def _upload_creative(page: Page, ad: AdDraft, selectors_cfg: dict[str, Any], timeout_ms: int) -> None:
@@ -162,6 +197,18 @@ class AdsManagerFlow:
         result.steps_completed.append("click_create")
         self._shot("02_create_clicked", result)
 
+        # Create may open a menu — pick "Campaign" if present
+        try:
+            _click_first(
+                self.page,
+                _selector_list(sels, "create_campaign_item"),
+                timeout_ms=8000,
+            )
+            result.steps_completed.append("click_create_campaign")
+            pause_medium()
+        except AdsManagerFlowError:
+            result.steps_completed.append("create_campaign_menu_skipped")
+
         try:
             _click_first(
                 self.page,
@@ -182,7 +229,99 @@ class AdsManagerFlow:
         except AdsManagerFlowError:
             pass
 
+        pause_medium()
+        self._wait_for_campaign_name_field(result)
         self._shot("03_wizard_started", result)
+
+    def _wait_for_campaign_name_field(self, result: RpaPublishResult) -> None:
+        """Wait until campaign creation form is visible (not still on list view)."""
+        sels = self.cfg.get("selectors") or {}
+        name_sels = _selector_list(sels, "campaign_name_input")
+        import time as _time
+
+        deadline = _time.time() + self.action_timeout / 1000
+        while _time.time() < deadline:
+            for root in _ads_roots(self.page):
+                for sel in name_sels:
+                    try:
+                        root.locator(sel).first.wait_for(state="visible", timeout=1500)
+                        result.steps_completed.append("wizard_form_ready")
+                        return
+                    except Exception:
+                        pass
+                for label_re in (
+                    re.compile(r"campaign name", re.I),
+                    re.compile(r"nombre de la campa", re.I),
+                ):
+                    try:
+                        root.get_by_label(label_re).first.wait_for(state="visible", timeout=1500)
+                        result.steps_completed.append("wizard_form_ready")
+                        return
+                    except Exception:
+                        pass
+            _time.sleep(0.4)
+        result.steps_completed.append("wizard_form_wait_timeout")
+
+    def _fill_campaign_name(self, draft: CampaignDraft, result: RpaPublishResult) -> None:
+        sels = self.cfg.get("selectors") or {}
+        selectors = _selector_list(sels, "campaign_name_input")
+        per_try = max(4000, self.action_timeout // max(len(selectors), 1))
+
+        for root in _ads_roots(self.page):
+            for sel in selectors:
+                try:
+                    loc = _try_locator(root, sel) or root.locator(sel).first
+                    loc.wait_for(state="visible", timeout=per_try)
+                    loc.scroll_into_view_if_needed(timeout=per_try)
+                    loc.click(timeout=per_try)
+                    loc.fill(draft.name, timeout=per_try)
+                    pause_short()
+                    result.steps_completed.append("campaign_name")
+                    return
+                except Exception:
+                    pass
+
+            for label_re in (
+                re.compile(r"^campaign name$", re.I),
+                re.compile(r"nombre de la campa", re.I),
+            ):
+                try:
+                    loc = root.get_by_label(label_re).first
+                    loc.wait_for(state="visible", timeout=per_try)
+                    loc.scroll_into_view_if_needed(timeout=per_try)
+                    loc.click(timeout=per_try)
+                    loc.fill(draft.name, timeout=per_try)
+                    pause_short()
+                    result.steps_completed.append("campaign_name")
+                    return
+                except Exception:
+                    pass
+
+            # Meta sometimes shows a clickable title instead of a visible input
+            for title_re in (
+                re.compile(r"new leads campaign", re.I),
+                re.compile(r"untitled campaign", re.I),
+                re.compile(r"nueva campa", re.I),
+            ):
+                try:
+                    title = root.get_by_text(title_re).first
+                    title.wait_for(state="visible", timeout=3000)
+                    title.click(timeout=3000)
+                    pause_short()
+                    inp = root.locator("input:focus, textarea:focus").first
+                    inp.fill(draft.name, timeout=per_try)
+                    pause_short()
+                    result.steps_completed.append("campaign_name_via_title_click")
+                    return
+                except Exception:
+                    pass
+
+        self._shot("04_campaign_name_fail", result)
+        raise AdsManagerFlowError(
+            f"Could not fill campaign name {draft.name!r}. "
+            f"Tried selectors: {selectors}. "
+            "Check screenshot — wizard may not have opened or UI language differs."
+        )
 
     def _fill_targeting_group(
         self,
@@ -336,14 +475,7 @@ class AdsManagerFlow:
         result: RpaPublishResult,
     ) -> None:
         sels = self.cfg.get("selectors") or {}
-        # Campaign name — critical; raise if selector not found (hard fail, not silent)
-        _fill_first(
-            self.page,
-            _selector_list(sels, "campaign_name_input"),
-            draft.name,
-            timeout_ms=self.action_timeout,
-        )
-        result.steps_completed.append("campaign_name")
+        self._fill_campaign_name(draft, result)
 
         try:
             _fill_first(

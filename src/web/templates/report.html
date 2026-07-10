@@ -1399,6 +1399,54 @@
     </div>
     <div id="ml-status-{{ cid }}" style="margin-top:0.5rem;font-size:0.74rem"></div>
     <div id="ml-profiles-{{ cid }}" style="margin-top:0.6rem"></div>
+
+    {# ── No-token mode info ── #}
+    <details style="margin-top:0.6rem" id="ml-direct-section-{{ cid }}">
+      <summary style="font-size:0.72rem;color:#4caf50;cursor:pointer;user-select:none;font-weight:600">
+        ✓ Без API-токена (только profile_id)
+      </summary>
+      <div style="margin-top:0.5rem;padding:0.5rem;background:#0a2a14;border-radius:6px;border:1px solid #1a5a2a">
+        <p style="font-size:0.72rem;color:#8fd4a0;margin:0 0 0.4rem">
+          Если automation token истёк (HTTP 401), RPA автоматически откроет
+          <strong>Playwright Chromium</strong> с cookies из MLX-профиля.
+          Нужен только <code>profile_id</code> в <code>ad_account_map.csv</code> —
+          <code>folder_id</code> и API-токен не обязательны.
+        </p>
+        <p style="font-size:0.72rem;color:#8fd4a0;margin:0">
+          Просто нажми <strong>Preview</strong> → <strong>Go Live</strong> / <strong>Dry Run</strong>.
+          Кнопка «Перезапустить браузер» больше не нужна.
+        </p>
+      </div>
+    </details>
+
+    {# ── Paste token directly (no password needed) ── #}
+    <details style="margin-top:0.6rem">
+      <summary style="font-size:0.72rem;color:var(--muted);cursor:pointer;user-select:none">
+        🔑 Вставить automation token напрямую (если нет пароля)
+      </summary>
+      <div style="margin-top:0.5rem">
+        <p style="font-size:0.71rem;color:var(--muted);margin:0 0 0.4rem">
+          Попроси у владельца воркспейса Multilogin X токен
+          (<strong>Settings → Automation → Generate Token</strong>) и вставь сюда.
+          Токен сохранится в <code>.env</code> и будет использоваться для запуска профилей.
+        </p>
+        <textarea id="ml-token-paste-{{ cid }}" rows="3"
+          placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9…"
+          style="width:100%;box-sizing:border-box;font-family:monospace;font-size:0.68rem;
+                 background:var(--bg);border:1px solid var(--border);border-radius:4px;
+                 color:var(--text);padding:0.3rem 0.45rem;resize:vertical"></textarea>
+        <div style="display:flex;gap:0.5rem;margin-top:0.35rem;align-items:center">
+          <button type="button" class="ml-connect-btn"
+                  style="padding:0.28rem 0.8rem;font-size:0.75rem"
+                  onclick="mlSaveToken('{{ cid }}')">💾 Сохранить токен</button>
+          <button type="button" class="ml-connect-btn"
+                  style="padding:0.28rem 0.8rem;font-size:0.75rem;background:var(--bg-hover)"
+                  onclick="mlTestToken('{{ cid }}')">🔍 Проверить + загрузить профили</button>
+          <span id="ml-token-status-{{ cid }}" style="font-size:0.72rem"></span>
+        </div>
+      </div>
+    </details>
+
   </div>
 </div>
 
@@ -1622,8 +1670,14 @@
               onclick="cbPreview(this.closest('form'))">Preview</button>
       <button type="button" class="cb-publish-btn" disabled
               onclick="cbPublish(this.closest('form'), false)">Publish via Multilogin</button>
+      <label class="cb-activate-label" title="🖐 Hand-off: RPA fills the form completely (creatives, copies, targeting), then disconnects — browser stays open so you can select the Facebook Page and click Publish manually.">
+        <input type="checkbox" class="cb-handoff-check" checked> 🖐 Hand-off (я выберу страницу и нажму Publish)
+      </label>
+      <label class="cb-activate-label" title="Dry Run: browser opens, fills the form, but skips creative upload and does NOT click Publish. Nothing is saved in Facebook.">
+        <input type="checkbox" class="cb-dryrun-check"> 🔬 Dry Run
+      </label>
       <label class="cb-activate-label">
-        <input type="checkbox" class="cb-activate-check"> ACTIVE (spend immediately)
+        <input type="checkbox" class="cb-activate-check"> ⚡ ACTIVE (go live)
       </label>
     </div>
 
@@ -1994,6 +2048,46 @@ function cbToggleAcc(accId) {
   if (chev) chev.textContent = open ? '▸' : '▾';
 }
 
+// ── Safety: generic confirm modal ────────────────────────────────────
+function _safeConfirm(title, bodyHtml, onConfirm, opts) {
+  opts = opts || {};
+  var danger = opts.danger || false;
+  var confirmLabel = opts.confirmLabel || 'Confirm';
+
+  var existing = document.getElementById('safe-confirm-modal');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'safe-confirm-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999;display:flex;align-items:center;justify-content:center';
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg-elev);border:1px solid '
+    + (danger ? 'var(--bad)' : 'var(--border)')
+    + ';border-radius:8px;padding:1.2rem 1.5rem;max-width:460px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,.65)';
+
+  box.innerHTML =
+    '<div style="font-size:0.88rem;font-weight:700;color:' + (danger ? 'var(--bad)' : 'var(--accent)') + ';margin-bottom:0.65rem">' + title + '</div>'
+    + '<div style="font-size:0.78rem;color:var(--text);line-height:1.6;margin-bottom:1rem">' + bodyHtml + '</div>'
+    + '<div style="display:flex;gap:0.55rem;justify-content:flex-end">'
+    + '<button id="sfc-cancel" style="padding:0.32rem 0.85rem;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text);cursor:pointer;font-size:0.77rem">Cancel</button>'
+    + '<button id="sfc-ok" style="padding:0.32rem 0.85rem;background:'
+    + (danger ? 'var(--bad)' : 'var(--accent)')
+    + ';border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.77rem;font-weight:700">' + confirmLabel + '</button>'
+    + '</div>';
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  function close() { overlay.remove(); }
+
+  box.querySelector('#sfc-cancel').onclick = close;
+  box.querySelector('#sfc-ok').onclick = function() { close(); onConfirm(); };
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
+  function onKey(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } }
+  document.addEventListener('keydown', onKey);
+}
+
 // ── Multilogin connect ────────────────────────────────────────────────
 var _mlInstance = {};  // cid → 'A' | 'B'
 
@@ -2059,26 +2153,48 @@ function mlSignin(cid) {
     folders.forEach(function(f) { folderMap[f.folder_id] = f.name; });
 
     if (!profiles.length) {
-      profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">No profiles returned by Multilogin API for Instance ' + instance + '.</span>';
+      var dbg = (data.debug || []).join(' | ');
+      profilesDiv.innerHTML = '<span style="color:var(--warn);font-size:0.73rem">'
+        + '⚠ Профили не найдены. Попробуй набрать имя профиля в поиске ниже.<br>'
+        + '<span style="color:var(--muted);font-size:0.68rem">debug: ' + dbg + '</span>'
+        + '</span>'
+        + '<div style="margin-top:0.5rem">'
+        + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Поиск профиля по имени (напр. FacebookUL869)…" style="width:100%;font-size:0.75rem">'
+        + '<button type="button" class="ml-connect-btn" style="margin-top:0.35rem;font-size:0.75rem" '
+        + 'onclick="mlSearchByTerm(\'' + cid + '\', \'' + instance + '\')">🔍 Найти</button>'
+        + '</div>';
       return;
     }
 
-    var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.3rem">'
+    // Pre-fill search box with first word of first CB account name (e.g. "FacebookUL869")
+    var firstAccTitle = ((document.querySelector('.cb-acc-title') || {}).textContent || '').split(' ')[0];
+    var searchId = 'ml-search-' + cid;
+
+    var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' profile(s) from Instance ' + instance
-      + ' — click "Use" to fill folder_id + profile_id</div>';
-    html += '<div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+      + ' — найди нужный и нажми Use</div>';
+    html += '<input id="' + searchId + '" type="text" placeholder="Фильтр по имени профиля…" value="'
+      + firstAccTitle.replace(/"/g, '&quot;') + '"'
+      + ' style="width:100%;box-sizing:border-box;margin-bottom:0.4rem;padding:0.28rem 0.5rem;'
+      + 'background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.75rem"'
+      + ' oninput="mlFilterProfiles(\'' + cid + '\')">';
+    html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
     profiles.forEach(function(p) {
       var folderName = folderMap[p.folder_id] || p.folder_id || '—';
-      html += '<div class="ml-profile-row">'
-        + '<span class="ml-profile-name">' + (p.name || '—') + '</span>'
+      var pName = (p.name || '—');
+      html += '<div class="ml-profile-row" data-pname="' + pName.toLowerCase() + '">'
+        + '<span class="ml-profile-name">' + pName + '</span>'
         + '<span class="ml-profile-id">folder: ' + folderName + '</span>'
         + '<button class="ml-profile-use-btn" onclick="mlUseProfile(\''
-          + (p.folder_id||'') + '\',\'' + (p.profile_id||'') + '\',\'' + instance + '\',this)">'
+          + (p.folder_id||'') + '\',\'' + (p.profile_id||'') + '\',\'' + instance + '\','
+          + JSON.stringify(pName) + ',this)">'
         + 'Use</button>'
         + '</div>';
     });
     html += '</div>';
     profilesDiv.innerHTML = html;
+    // Apply initial filter
+    mlFilterProfiles(cid);
   })
   .catch(function(err) {
     if (btn) btn.disabled = false;
@@ -2086,9 +2202,279 @@ function mlSignin(cid) {
   });
 }
 
-function mlUseProfile(folderId, profileId, instance, btn) {
+function mlManualSave(cid) {
+  var folderId   = (document.getElementById('ml-manual-folder-' + cid) || {}).value || '';
+  var profileId  = (document.getElementById('ml-manual-profile-' + cid) || {}).value || '';
+  var statusEl   = document.getElementById('ml-manual-status-' + cid);
+
+  folderId  = folderId.trim();
+  profileId = profileId.trim();
+
+  if (!folderId || !profileId) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Заполни оба поля</span>';
+    return;
+  }
+
+  // Validate UUID format (loosely)
+  var uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(folderId) || !uuidRe.test(profileId)) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--warn)">⚠ Не похоже на UUID — проверь значения</span>';
+  }
+
+  var accTitles = Array.from(document.querySelectorAll('.cb-acc-title'))
+    .map(function(el) { return el.textContent.trim(); })
+    .filter(Boolean);
+
+  if (!accTitles.length) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Аккаунты не найдены на странице</span>';
+    return;
+  }
+
+  function doSave(accLabel) {
+    var bodyHtml =
+      'Аккаунт: <strong style="color:var(--accent)">' + accLabel + '</strong><br><br>'
+      + '<span style="color:var(--muted);font-size:0.71rem">'
+      + 'folder_id: ' + folderId + '<br>'
+      + 'profile_id: ' + profileId
+      + '</span><br><br>'
+      + '<span style="color:var(--warn);font-size:0.74rem">⚠ Перезапишет текущие IDs в ad_account_map.csv</span>';
+    _safeConfirm('Сохранить IDs вручную?', bodyHtml, function() {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Сохраняю…</span>';
+      _mlSaveIds(accLabel, folderId, profileId, 'A', null);
+      // Show success after short delay
+      setTimeout(function() {
+        if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Сохранено для ' + accLabel + '</span>';
+      }, 800);
+    }, { confirmLabel: 'Сохранить' });
+  }
+
+  if (accTitles.length === 1) {
+    doSave(accTitles[0]);
+    return;
+  }
+
+  // Multiple accounts — inline picker
+  var btn = document.querySelector('#ml-manual-status-' + cid);
+  var existing = document.getElementById('ml-manual-acc-picker-' + cid);
+  if (existing) { existing.remove(); return; }
+
+  var picker = document.createElement('div');
+  picker.id = 'ml-manual-acc-picker-' + cid;
+  picker.style.cssText = 'display:inline-block;position:relative;z-index:999';
+
+  var inner = document.createElement('div');
+  inner.style.cssText = 'position:absolute;left:0;top:0;background:var(--bg-elev);border:1px solid var(--border);'
+    + 'border-radius:4px;padding:0.3rem 0;min-width:14rem;box-shadow:0 4px 12px rgba(0,0,0,.35)';
+
+  accTitles.forEach(function(accLabel) {
+    var item = document.createElement('div');
+    item.style.cssText = 'padding:0.3rem 0.7rem;cursor:pointer;font-size:0.74rem;';
+    item.textContent = accLabel;
+    item.onmouseenter = function() { item.style.background = 'var(--bg-hover)'; };
+    item.onmouseleave = function() { item.style.background = ''; };
+    item.onclick = function() { picker.remove(); doSave(accLabel); };
+    inner.appendChild(item);
+  });
+
+  picker.appendChild(inner);
+  var statusParent = document.getElementById('ml-manual-status-' + cid);
+  if (statusParent) statusParent.after(picker);
+
+  setTimeout(function() {
+    document.addEventListener('click', function closePicker(e) {
+      if (!picker.contains(e.target)) {
+        picker.remove();
+        document.removeEventListener('click', closePicker);
+      }
+    });
+  }, 50);
+}
+
+function mlSearchByTerm(cid, instance) {
+  var input = document.getElementById('ml-search-manual-' + cid);
+  var term = input ? input.value.trim() : '';
+  if (!term) { alert('Введи поисковый запрос'); return; }
+  var profilesDiv = document.getElementById('ml-profiles-' + cid);
+  var statusEl = document.getElementById('ml-status-' + cid);
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Ищу "' + term + '"…</span>';
+
+  // Re-use last successful token from .env via a separate search call
+  fetch('/multilogin-search', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({search_text: term, instance: instance})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.ok) {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + (data.error || 'Ошибка') + '</span>';
+      return;
+    }
+    var profiles = data.profiles || [];
+    var folders  = data.folders  || [];
+    var folderMap = {};
+    folders.forEach(function(f) { folderMap[f.folder_id] = f.name; });
+    if (!profiles.length) {
+      if (profilesDiv) profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">По запросу "' + term + '" ничего не найдено.</span>';
+      return;
+    }
+    // Render same profile list as main signin
+    var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
+      + profiles.length + ' результат(ов) по "' + term + '"</div>';
+    html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+    profiles.forEach(function(p) {
+      var folderName = folderMap[p.folder_id] || p.folder_id || '—';
+      var pName = (p.name || '—');
+      html += '<div class="ml-profile-row" data-pname="' + pName.toLowerCase() + '">'
+        + '<span class="ml-profile-name">' + pName + '</span>'
+        + '<span class="ml-profile-id">folder: ' + folderName + '</span>'
+        + '<button class="ml-profile-use-btn" onclick="mlUseProfile(\''
+          + (p.folder_id||'') + '\',\'' + (p.profile_id||'') + '\',\'' + instance + '\','
+          + JSON.stringify(pName) + ',this)">'
+        + 'Use</button>'
+        + '</div>';
+    });
+    html += '</div>';
+    if (profilesDiv) profilesDiv.innerHTML = html;
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ найдено ' + profiles.length + '</span>';
+  })
+  .catch(function(e) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + e.message + '</span>';
+  });
+}
+
+function mlStartDirect(cid) {
+  var inputEl  = document.getElementById('ml-direct-account-' + cid);
+  var statusEl = document.getElementById('ml-direct-status-' + cid);
+  var accountLabel = inputEl ? inputEl.value.trim() : '';
+  if (!accountLabel) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Введи имя аккаунта</span>';
+    return;
+  }
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Перезапускаю браузер…</span>';
+  fetch('/multilogin-start-direct', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({account_label: accountLabel})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      if (statusEl) statusEl.innerHTML =
+        '<span style="color:#4caf50">✓ Запущен — CDP: ' + (d.cdp_url || '') + '</span>';
+    } else {
+      if (statusEl) statusEl.innerHTML =
+        '<span style="color:var(--bad)">⚠ ' + (d.error || 'ошибка') + '</span>';
+    }
+  })
+  .catch(function(e) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + e.message + '</span>';
+  });
+}
+
+function mlSaveToken(cid) {
+  var ta = document.getElementById('ml-token-paste-' + cid);
+  var statusEl = document.getElementById('ml-token-status-' + cid);
+  var token = ta ? ta.value.trim() : '';
+  if (!token) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Вставь токен</span>'; return; }
+  var instance = _mlInstance[cid] || 'A';
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Сохраняю…</span>';
+  fetch('/multilogin-save-token', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token: token, instance: instance})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Токен сохранён в .env</span>';
+    } else {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + (d.error || 'Ошибка') + '</span>';
+    }
+  })
+  .catch(function(e) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + e.message + '</span>'; });
+}
+
+function mlTestToken(cid) {
+  var ta = document.getElementById('ml-token-paste-' + cid);
+  var statusEl = document.getElementById('ml-token-status-' + cid);
+  var token = ta ? ta.value.trim() : '';
+  var instance = _mlInstance[cid] || 'A';
+  if (!token) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Вставь токен</span>'; return; }
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Сохраняю и проверяю…</span>';
+  fetch('/multilogin-save-token', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token: token, instance: instance})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (!d.ok) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + (d.error||'Ошибка') + '</span>'; return; }
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Токен сохранён — загружаю профили…</span>';
+    return fetch('/multilogin-search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({search_text: '', instance: instance})
+    });
+  })
+  .then(function(r) { if (r) return r.json(); })
+  .then(function(data) {
+    if (!data) return;
+    var profilesDiv = document.getElementById('ml-profiles-' + cid);
+    if (!data.ok) {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + (data.error||'Ошибка при проверке токена') + '</span>';
+      return;
+    }
+    var profiles = data.profiles || [];
+    var folders  = data.folders  || [];
+    var folderMap = {};
+    folders.forEach(function(f) { folderMap[f.folder_id] = f.name; });
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Токен рабочий — ' + profiles.length + ' профиль(ей) загружено</span>';
+    if (!profiles.length) {
+      if (profilesDiv) profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">Профили не найдены (проверь workspace).</span>';
+      return;
+    }
+    var firstAccTitle = ((document.querySelector('.cb-acc-title')||{}).textContent||'').split(' ')[0];
+    var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
+      + profiles.length + ' profile(s) — найди нужный и нажми Use</div>';
+    html += '<input type="text" placeholder="Фильтр…" value="' + firstAccTitle.replace(/"/g,'&quot;') + '"'
+      + ' id="ml-search-' + cid + '"'
+      + ' style="width:100%;box-sizing:border-box;margin-bottom:0.4rem;padding:0.28rem 0.5rem;'
+      + 'background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.75rem"'
+      + ' oninput="mlFilterProfiles(\'' + cid + '\')">';
+    html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+    profiles.forEach(function(p) {
+      var folderName = folderMap[p.folder_id] || p.folder_id || '—';
+      var pName = (p.name || '—');
+      html += '<div class="ml-profile-row" data-pname="' + pName.toLowerCase() + '">'
+        + '<span class="ml-profile-name">' + pName + '</span>'
+        + '<span class="ml-profile-id">folder: ' + folderName + '</span>'
+        + '<button class="ml-profile-use-btn" onclick="mlUseProfile(\''
+          + (p.folder_id||'') + '\',\'' + (p.profile_id||'') + '\',\'' + instance + '\','
+          + JSON.stringify(pName) + ',this)">Use</button>'
+        + '</div>';
+    });
+    html += '</div>';
+    if (profilesDiv) profilesDiv.innerHTML = html;
+    mlFilterProfiles(cid);
+  })
+  .catch(function(e) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + e.message + '</span>'; });
+}
+
+function mlFilterProfiles(cid) {
+  var input = document.getElementById('ml-search-' + cid);
+  var list  = document.getElementById('ml-profile-list-' + cid);
+  if (!input || !list) return;
+  var q = input.value.trim().toLowerCase();
+  list.querySelectorAll('.ml-profile-row').forEach(function(row) {
+    row.style.display = (!q || row.dataset.pname.indexOf(q) >= 0) ? '' : 'none';
+  });
+}
+
+function mlUseProfile(folderId, profileId, instance, profileName, btn) {
   if (!folderId || !profileId) return;
   var inst = instance || 'A';
+  var pName = profileName || '?';
 
   // Collect account names from the current page's Campaign Builder headers
   var accTitles = Array.from(document.querySelectorAll('.cb-acc-title'))
@@ -2100,12 +2486,26 @@ function mlUseProfile(folderId, profileId, instance, btn) {
     return;
   }
 
+  function confirmAndSave(accLabel) {
+    var bodyHtml =
+      'ML-профиль: <strong style="color:var(--accent)">' + pName + '</strong><br>'
+      + 'FB-аккаунт: <strong style="color:var(--accent)">' + accLabel + '</strong><br><br>'
+      + '<span style="color:var(--muted);font-size:0.71rem">'
+      + 'folder_id: ' + folderId + '<br>'
+      + 'profile_id: ' + profileId
+      + '</span><br><br>'
+      + '<span style="color:var(--warn);font-size:0.74rem">⚠ Это перезапишет текущие IDs в config/ad_account_map.csv</span>';
+    _safeConfirm('Привязать профиль к аккаунту?', bodyHtml, function() {
+      _mlSaveIds(accLabel, folderId, profileId, inst, btn);
+    }, { confirmLabel: 'Сохранить' });
+  }
+
   if (accTitles.length === 1) {
-    _mlSaveIds(accTitles[0], folderId, profileId, inst, btn);
+    confirmAndSave(accTitles[0]);
     return;
   }
 
-  // Multiple accounts — show inline picker next to the button
+  // Multiple accounts — show inline picker, then confirm
   var existing = btn.parentNode.querySelector('.ml-acc-picker');
   if (existing) { existing.remove(); return; }
 
@@ -2122,7 +2522,7 @@ function mlUseProfile(folderId, profileId, instance, btn) {
     item.onmouseleave = function() { item.style.background = ''; };
     item.onclick = function() {
       picker.remove();
-      _mlSaveIds(accLabel, folderId, profileId, inst, btn);
+      confirmAndSave(accLabel);
     };
     picker.appendChild(item);
   });
@@ -2131,7 +2531,6 @@ function mlUseProfile(folderId, profileId, instance, btn) {
   btn.parentNode.style.position = 'relative';
   btn.parentNode.appendChild(picker);
 
-  // Close on outside click
   setTimeout(function() {
     document.addEventListener('click', function closePicker(e) {
       if (!picker.contains(e.target) && e.target !== btn) {
@@ -2208,12 +2607,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var ctype    = wrap.dataset.ctype || 'Image';
     var isVideo  = ctype === 'Video';
 
-    // filter
+    // filter — search both by filename and rel_path
     var matches = CREATIVES.filter(function(f) {
       if (isVideo && f.type !== 'Video') return false;
       if (!isVideo && f.type !== 'Image') return false;
       if (!query) return true;
-      return f.filename.toLowerCase().indexOf(query) >= 0;
+      return f.filename.toLowerCase().indexOf(query) >= 0
+          || (f.rel_path && f.rel_path.toLowerCase().indexOf(query) >= 0);
     }).slice(0, 60);
 
     if (!matches.length && !query) {
@@ -2221,9 +2621,19 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       return;
     }
 
+    // Detect duplicate basenames so we can store rel_path for disambiguation
+    var basenameCounts = {};
+    matches.forEach(function(f) {
+      basenameCounts[f.filename.toLowerCase()] = (basenameCounts[f.filename.toLowerCase()] || 0) + 1;
+    });
+
     var html = matches.map(function(f) {
-      var label = f.folder ? f.filename + ' <span style="color:var(--muted);font-size:0.7rem">(' + f.folder + ')</span>' : f.filename;
-      return '<div class="cb-sel-opt" data-val="' + f.filename + '" style="font-size:0.72rem">' + label + '</div>';
+      var isDup = basenameCounts[f.filename.toLowerCase()] > 1;
+      var val   = isDup ? f.rel_path : f.filename;
+      var label = isDup
+        ? f.filename + ' <span style="color:var(--accent);font-size:0.68rem">(' + f.folder + ')</span>'
+        : (f.folder ? f.filename + ' <span style="color:var(--muted);font-size:0.7rem">(' + f.folder + ')</span>' : f.filename);
+      return '<div class="cb-sel-opt" data-val="' + val + '" style="font-size:0.72rem">' + label + '</div>';
     }).join('');
     if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:0.72rem;pointer-events:none">No files found</div>';
 
@@ -2603,10 +3013,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
   }
 
-  function cbUpdateCount(form) {
+  window.cbUpdateCount = function cbUpdateCount(form) {
     var c = form.querySelector('.cb-count');
     if (c) c.value = form.querySelectorAll('.cb-slot').length;
-  }
+  };
 
   // ── Build blank campaign slot ─────────────────────────────────────────
   function mkSel(cIdx, field, opts, placeholder) {
@@ -2890,42 +3300,114 @@ window.cbPreview = function(form) {
     });
 };
 
-window.cbPublish = function(form, activate) {
+window.cbPublish = function(form) {
+  var activateCheck = form.querySelector('.cb-activate-check');
+  var dryRunCheck   = form.querySelector('.cb-dryrun-check');
+  var handOffCheck  = form.querySelector('.cb-handoff-check');
+  var isActive   = activateCheck ? activateCheck.checked : false;
+  var isDryRun   = dryRunCheck   ? dryRunCheck.checked   : false;
+  var isHandOff  = handOffCheck  ? handOffCheck.checked  : false;
+
+  // Mutual exclusivity: hand-off > dry-run > active
+  if (isHandOff) { isDryRun = false; isActive = false; }
+  else if (isDryRun) { isActive = false; }
+
+  var accLabel  = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
+  var country   = ((form.querySelector('[name="country"]') || {}).value || '?').trim();
+  var campCount = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '1'), 10) || 1;
+
+  var modeHtml;
+  if (isHandOff) {
+    modeHtml = '<span style="background:#1a2a1a;color:#7effa0;padding:0.1rem 0.45rem;border-radius:3px;font-weight:700">'
+      + '🖐 Hand-off — форма заполнится, браузер останется открытым — ты выберешь страницу и нажмёшь Publish</span>';
+  } else if (isDryRun) {
+    modeHtml = '<span style="background:#0d2d3a;color:#58d1ff;padding:0.1rem 0.45rem;border-radius:3px;font-weight:700">'
+      + '🔬 Dry Run — форма заполнится, в FB ничего не сохранится</span>';
+  } else if (isActive) {
+    modeHtml = '<span style="background:var(--bad);color:#fff;padding:0.1rem 0.45rem;border-radius:3px;font-weight:700">'
+      + '⚡ ACTIVE — кампании уйдут в ротацию немедленно!</span>';
+  } else {
+    modeHtml = '<span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
+      + 'Draft — черновик сохранится в Ads Manager, реклама не запустится</span>';
+  }
+
+  var bodyHtml =
+    'Аккаунт: <strong style="color:var(--accent)">' + accLabel + '</strong><br>'
+    + 'Страна: <strong>' + country + '</strong><br>'
+    + 'Кампаний: <strong>' + campCount + '</strong><br><br>'
+    + 'Режим: ' + modeHtml;
+
+  var title = isHandOff ? '🖐 Запустить Hand-off?' : (isDryRun ? '🔬 Запустить Dry Run?' : (isActive ? '⚡ Запустить ACTIVE-кампании?' : 'Создать черновики кампаний?'));
+  var confirmLabel = isHandOff ? '🖐 Заполнить и оставить открытым' : (isDryRun ? 'Запустить Dry Run' : (isActive ? '🚀 GO LIVE' : 'Создать черновики'));
+
+  _safeConfirm(title, bodyHtml, function() {
+    _doCbPublish(form, isActive, isDryRun, isHandOff);
+  }, { danger: isActive, confirmLabel: confirmLabel });
+};
+
+function _doCbPublish(form, isActive, isDryRun, isHandOff) {
   var statusPanel = form.querySelector('.cb-status-panel');
   var publishBtn  = form.querySelector('.cb-publish-btn');
-  var activateCheck = form.querySelector('.cb-activate-check');
   if (!statusPanel) return;
 
-  var isActive = activateCheck ? activateCheck.checked : false;
-
+  var modeLabel = isHandOff ? '🖐 Hand-off: заполняю форму…' : (isDryRun ? '🔬 Dry Run via Multilogin…' : 'Publishing via Multilogin…');
   statusPanel.style.display = 'block';
-  statusPanel.innerHTML = '<div class="cb-status-title">Publishing via Multilogin…</div>';
+  statusPanel.innerHTML = '<div class="cb-status-title">' + modeLabel + '</div>';
   if (publishBtn) publishBtn.disabled = true;
 
   var fd = cbCollectFormData(form);
   fd.set('via_multilogin', '1');
   fd.set('activate', isActive ? '1' : '0');
+  fd.set('dry_run', isDryRun ? '1' : '0');
+  fd.set('hand_off', isHandOff ? '1' : '0');
 
   fetch('/publish-jobs', { method: 'POST', body: fd })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.error) {
         statusPanel.innerHTML = '<span class="cb-status-fatal">Error: ' + data.error + '</span>';
+        if (publishBtn) publishBtn.disabled = false;
         return;
       }
       cbPollJob(data.job_id, statusPanel, publishBtn);
     })
     .catch(function(e) {
       statusPanel.innerHTML = '<span class="cb-status-fatal">Request failed: ' + e.message + '</span>';
+      if (publishBtn) publishBtn.disabled = false;
     });
-};
+}
 
 function cbPollJob(jobId, statusPanel, publishBtn) {
+  var stopBtnId = 'cb-stop-' + jobId.replace(/-/g, '').slice(0, 12);
+
   function renderStatus(job) {
     var done = job.done_count || 0;
     var total = job.total || 0;
-    var pct = total > 0 ? Math.round(done / total * 100) : 0;
-    var html = '<div class="cb-status-title">Publishing via Multilogin — ' + done + '/' + total + ' (' + pct + '%) ' + (job.status === 'done' ? '✓ done' : '⏳') + '</div>';
+    var hasFatal = (job.errors || []).length > 0;
+    var isHandOff = job.hand_off || false;
+    var isDryRun  = job.dry_run  || false;
+    var isCancelled = job.status === 'cancelled';
+    var isRunning = job.status === 'running' || job.status === 'pending';
+    var statusIcon = isCancelled ? '⏹'
+      : (job.status === 'done'
+        ? (hasFatal ? '❌' : (isHandOff ? '🖐' : (isDryRun ? '🔬' : '✓')))
+        : '⏳');
+    var doneLabel = isCancelled ? 'остановлено'
+      : (job.status === 'done'
+        ? (isHandOff ? 'Браузер открыт — выбери страницу и нажми Publish в Facebook'
+          : (isDryRun ? 'Dry run завершён — браузер открыт, Publish не нажат'
+            : 'завершено'))
+        : 'в процессе… (может занять 1–3 мин — targeting, форма)');
+    var html = '<div class="cb-status-title">' + statusIcon + ' ' + done + '/' + total + ' — ' + doneLabel + '</div>';
+    if (isRunning) {
+      html += '<div style="margin:0.5rem 0">'
+        + '<button type="button" id="' + stopBtnId + '" '
+        + 'style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#7f1d1d;color:#fff;'
+        + 'border:1px solid #b91c1c;border-radius:4px;cursor:pointer">'
+        + '⏹ Остановить процесс</button>'
+        + '<span style="font-size:0.7rem;color:var(--muted);margin-left:0.5rem">'
+        + 'закроет браузер и прервёт RPA</span></div>';
+    }
     (job.results || []).forEach(function(r) {
       var icon = r.success ? '✅' : '❌';
       html += '<div class="cb-status-row">';
@@ -2937,12 +3419,40 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       html += '</div>';
       if (!r.success && r.error) {
         html += '<div class="cb-status-err">' + r.error + '</div>';
+      } else if (r.success && r.error) {
+        html += '<div class="cb-status-err" style="color:var(--ok,#4caf50);border-color:var(--ok,#4caf50)">' + r.error + '</div>';
+      }
+      if (r.steps_completed && r.steps_completed.length) {
+        html += '<div class="cb-status-steps" style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem">'
+          + 'Шаги: ' + r.steps_completed.join(' → ') + '</div>';
       }
     });
     (job.errors || []).forEach(function(e) {
-      html += '<div class="cb-status-fatal">Fatal: ' + e + '</div>';
+      html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + e + '</div>';
     });
     return html;
+  }
+
+  function bindStopButton() {
+    var stopBtn = document.getElementById(stopBtnId);
+    if (!stopBtn || stopBtn._bound) return;
+    stopBtn._bound = true;
+    stopBtn.addEventListener('click', function() {
+      stopBtn.disabled = true;
+      stopBtn.textContent = 'Останавливаю…';
+      fetch('/publish-jobs/' + jobId + '/cancel', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.ok) {
+            stopBtn.textContent = '⏹ Ошибка: ' + (data.error || '?');
+            stopBtn.disabled = false;
+          }
+        })
+        .catch(function(e) {
+          stopBtn.textContent = '⏹ ' + e.message;
+          stopBtn.disabled = false;
+        });
+    });
   }
 
   function poll() {
@@ -2950,10 +3460,15 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       .then(function(r) { return r.json(); })
       .then(function(job) {
         statusPanel.innerHTML = renderStatus(job);
-        if (job.status !== 'done') {
+        bindStopButton();
+        statusPanel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+        if (job.status !== 'done' && job.status !== 'cancelled') {
           setTimeout(poll, 2000);
         } else {
           if (publishBtn) publishBtn.disabled = false;
+          if ((job.errors || []).length > 0 || (job.results || []).some(function(r){return !r.success;})) {
+            statusPanel.scrollIntoView({behavior: 'smooth', block: 'center'});
+          }
         }
       })
       .catch(function(e) {

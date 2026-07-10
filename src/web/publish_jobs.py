@@ -30,6 +30,7 @@ from src.meta_campaign_agent.multilogin_session import MultiloginSession
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
+_active_publishers: dict[str, RpaPublisher] = {}
 
 _LOG_PATH = "output/dashboard_publish_log.jsonl"
 
@@ -64,6 +65,8 @@ def create_job(
     *,
     via_multilogin: bool = True,
     activate: bool = False,
+    dry_run: bool = False,
+    hand_off: bool = False,
     total: int | None = None,
 ) -> str:
     """Create a new publish job, store it, return its job_id."""
@@ -75,6 +78,8 @@ def create_job(
             "country": country,
             "via_multilogin": via_multilogin,
             "activate": activate,
+            "dry_run": dry_run,
+            "hand_off": hand_off,
             "backend": "rpa" if use_rpa_publish() else "api",
             "status": "pending",
             "created_at": _now_iso(),
@@ -84,8 +89,35 @@ def create_job(
             "errors": [],
             "total": total if total is not None else len(slots),
             "done_count": 0,
+            "cancel_requested": False,
         }
     return job_id
+
+
+def cancel_job(job_id: str) -> dict[str, Any]:
+    """Request cancellation of a running/pending job. Closes browser if RPA is active."""
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            return {"ok": False, "error": "Job not found"}
+        if job["status"] in ("done", "cancelled"):
+            return {"ok": False, "error": f"Job already {job['status']}"}
+        job["cancel_requested"] = True
+        publisher = _active_publishers.get(job_id)
+
+    if publisher is not None:
+        try:
+            publisher.cancel()
+        except Exception:
+            pass
+
+    return {"ok": True, "job_id": job_id}
+
+
+def _is_cancelled(job_id: str) -> bool:
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        return bool(job and job.get("cancel_requested"))
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:
@@ -108,6 +140,8 @@ def _run_job(
     country: str,
     via_multilogin: bool,
     activate: bool,
+    dry_run: bool = False,
+    hand_off: bool = False,
 ) -> None:
     """Runs in a daemon thread. Updates _jobs[job_id] as it progresses."""
     with _jobs_lock:
@@ -115,7 +149,7 @@ def _run_job(
         _jobs[job_id]["started_at"] = _now_iso()
 
     if use_rpa_publish():
-        _run_rpa(job_id, slots, account_label=account_label, country=country, activate=activate)
+        _run_rpa(job_id, slots, account_label=account_label, country=country, activate=activate, dry_run=dry_run, hand_off=hand_off)
         return
 
     _run_api(job_id, slots, account_label=account_label, country=country, via_multilogin=via_multilogin, activate=activate)
@@ -166,13 +200,15 @@ def _write_draft_status(account_label: str, results: list[dict]) -> None:
         pass  # Non-fatal
 
 
-def _finish(job_id: str) -> None:
+def _finish(job_id: str, *, cancelled: bool = False) -> None:
     with _jobs_lock:
-        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["status"] = "cancelled" if cancelled else "done"
         _jobs[job_id]["finished_at"] = _now_iso()
         account_label = _jobs[job_id].get("account_label", "")
         results = list(_jobs[job_id].get("results", []))
-    _write_draft_status(account_label, results)
+        _active_publishers.pop(job_id, None)
+    if not cancelled:
+        _write_draft_status(account_label, results)
 
 
 def _run_rpa(
@@ -182,8 +218,12 @@ def _run_rpa(
     account_label: str,
     country: str,
     activate: bool,
+    dry_run: bool = False,
+    hand_off: bool = False,
 ) -> None:
-    publisher = RpaPublisher(dry_run=False)
+    publisher = RpaPublisher(dry_run=dry_run, hand_off=hand_off)
+    with _jobs_lock:
+        _active_publishers[job_id] = publisher
     try:
         drafts = publisher.build_drafts(
             slots,
@@ -194,6 +234,8 @@ def _run_rpa(
         )
     except Exception as e:
         _fatal(job_id, f"Failed to build campaign drafts: {e}")
+        with _jobs_lock:
+            _active_publishers.pop(job_id, None)
         return
 
     with _jobs_lock:
@@ -201,10 +243,14 @@ def _run_rpa(
 
     if not drafts:
         _fatal(job_id, "No campaigns to publish.")
+        with _jobs_lock:
+            _active_publishers.pop(job_id, None)
         return
 
     ready: list[Any] = []
     for draft in drafts:
+        if _is_cancelled(job_id):
+            break
         if draft.errors:
             _append_result(
                 job_id,
@@ -219,20 +265,36 @@ def _run_rpa(
         else:
             ready.append(draft)
 
+    if _is_cancelled(job_id):
+        with _jobs_lock:
+            _jobs[job_id]["errors"].append("Остановлено пользователем")
+        publisher.close(force=True)
+        _finish(job_id, cancelled=True)
+        return
+
     if not ready:
         _finish(job_id)
         return
 
+    cancelled = False
     try:
         for draft in ready:
+            if _is_cancelled(job_id):
+                cancelled = True
+                break
             result = publisher.publish_draft(draft)
             _append_result(job_id, _job_result_from_rpa(result))
     except Exception as e:
-        with _jobs_lock:
-            _jobs[job_id]["errors"].append(f"RPA error: {e}")
+        if _is_cancelled(job_id):
+            cancelled = True
+            with _jobs_lock:
+                _jobs[job_id]["errors"].append("Остановлено пользователем")
+        else:
+            with _jobs_lock:
+                _jobs[job_id]["errors"].append(f"RPA error: {e}")
     finally:
-        publisher.close()
-        _finish(job_id)
+        publisher.close(force=cancelled or _is_cancelled(job_id))
+        _finish(job_id, cancelled=cancelled or _is_cancelled(job_id))
 
 
 def _run_api(
@@ -361,12 +423,16 @@ def start_job(
     *,
     via_multilogin: bool = True,
     activate: bool = False,
+    dry_run: bool = False,
+    hand_off: bool = False,
 ) -> str:
     """Create a job and launch it in a background daemon thread. Returns job_id."""
     job_id = create_job(
         account_label, country, slots,
         via_multilogin=via_multilogin,
         activate=activate,
+        dry_run=dry_run,
+        hand_off=hand_off,
     )
     t = threading.Thread(
         target=_run_job,
@@ -376,6 +442,8 @@ def start_job(
             "country": country,
             "via_multilogin": via_multilogin,
             "activate": activate,
+            "dry_run": dry_run,
+            "hand_off": hand_off,
         },
         daemon=True,
         name=f"publish-{job_id[:8]}",

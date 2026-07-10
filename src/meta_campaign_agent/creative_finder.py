@@ -14,6 +14,10 @@ class AmbiguousCreativeError(ValueError):
 def find_creative_file(root: str | Path, filename: str) -> Path:
     """
     Recursively search root for filename (basename match, case-insensitive).
+
+    If filename contains path separators (e.g. 'Latam/Local/CL/file.mp4'), a
+    path-suffix match is used so callers can disambiguate duplicates.
+
     Raises CreativeNotFoundError or AmbiguousCreativeError.
     """
     root_path = Path(root)
@@ -24,13 +28,24 @@ def find_creative_file(root: str | Path, filename: str) -> Path:
     if not name:
         raise CreativeNotFoundError("Creative filename is empty")
 
-    target = Path(name).name.lower()
+    # Normalize separators so both / and \ work
+    name_norm = name.replace("\\", "/")
+    has_path = "/" in name_norm
+
+    target_basename = Path(name).name.lower()
     matches: list[Path] = []
 
     for path in root_path.rglob("*"):
         if not path.is_file():
             continue
-        if path.name.lower() == target:
+        if path.name.lower() != target_basename:
+            continue
+        if has_path:
+            # Path-suffix match: the relative path must end with the provided subpath
+            rel = path.relative_to(root_path).as_posix().lower()
+            if rel.endswith(name_norm.lower()):
+                matches.append(path)
+        else:
             matches.append(path)
 
     if not matches:

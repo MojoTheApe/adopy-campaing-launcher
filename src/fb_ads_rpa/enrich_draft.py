@@ -71,10 +71,15 @@ def enrich_campaign_drafts(
             draft.errors.append("ad_account_id not mapped in ad_account_map.csv")
         if not draft.link:
             draft.errors.append("Link empty in Upload FB Accounts sheet")
+        # page_id is only required for ACTIVE campaigns; drafts publish without it
         if not draft.page_id:
-            draft.errors.append("page_id missing in ad_account_map.csv")
-        if not entry.profile_id:
-            draft.errors.append("profile_id missing in ad_account_map.csv (browser session)")
+            draft.warnings.append("page_id not set — required for ACTIVE campaigns only")
+        if not entry.folder_id or not entry.profile_id:
+            missing_fields = ", ".join(f for f in ("folder_id", "profile_id") if not getattr(entry, f, None))
+            if preview_mode:
+                draft.warnings.append(f"{missing_fields} missing in ad_account_map.csv (set via ML panel before publishing)")
+            else:
+                draft.errors.append(f"{missing_fields} missing in ad_account_map.csv (browser session)")
 
         for ad_set in draft.ad_sets:
             for ad in ad_set.ads:

@@ -35,7 +35,7 @@ from src.campaign_bridge.dashboard_publisher import preview_jobs
 from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
-from src.web.publish_jobs import get_job, start_job
+from src.web.publish_jobs import get_job, start_job, cancel_job
 from src.web.cache import cache_built_at, cache_clear, get_cached_report
 from src.analysis_agent.money_format import fmt_usd
 from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
@@ -931,12 +931,16 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     country, account_label, slots = _parse_build_upload_form(form)
     via_ml = (form.get("via_multilogin") or "1").strip() not in ("0", "false", "no")
     activate = (form.get("activate") or "0").strip() in ("1", "true", "yes")
+    dry_run = (form.get("dry_run") or "0").strip() in ("1", "true", "yes")
+    hand_off = (form.get("hand_off") or "0").strip() in ("1", "true", "yes")
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
     job_id = start_job(
         account_label, country, slots,
         via_multilogin=via_ml,
         activate=activate,
+        dry_run=dry_run,
+        hand_off=hand_off,
     )
     if use_rpa_publish():
         from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
@@ -952,6 +956,15 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     else:
         total = len(slots)
     return JSONResponse({"job_id": job_id, "total": total})
+
+
+@app.post("/publish-jobs/{job_id}/cancel")
+async def publish_jobs_cancel(job_id: str) -> JSONResponse:
+    """Stop a running publish/RPA job and close its browser."""
+    result = cancel_job(job_id)
+    if not result.get("ok"):
+        return JSONResponse(result, status_code=404 if result.get("error") == "Job not found" else 400)
+    return JSONResponse(result)
 
 
 @app.get("/publish-jobs/{job_id}")
@@ -1000,6 +1013,178 @@ async def build_upload(request: Request) -> Response:
     )
 
 
+@app.post("/multilogin-search")
+async def multilogin_search(request: Request) -> JSONResponse:
+    """Search ML profiles using saved automation token (no re-login needed).
+
+    Body JSON: {search_text: str, instance?: 'A'|'B'}
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    search_text = (data.get("search_text") or "").strip()
+    instance = (data.get("instance") or "A").strip().upper()
+    if instance not in ("A", "B"):
+        instance = "A"
+
+    import requests as _req
+
+    env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
+    token = (os.environ.get(env_key) or "").strip()
+    if not token:
+        return JSONResponse({"ok": False, "error": f"{env_key} not set — sign in first to save a token"})
+
+    MLX_API = "https://api.multilogin.com"
+    H = {"Accept": "application/json", "Content-Type": "application/json",
+         "Authorization": f"Bearer {token}"}
+
+    folders: list[dict] = []
+    try:
+        rf = _req.get(f"{MLX_API}/workspace/folders", headers=H, timeout=15)
+        if rf.status_code == 200:
+            fd = rf.json().get("data") or {}
+            raw = fd.get("folders") if isinstance(fd, dict) else fd
+            folders = [
+                {"folder_id": f.get("folderID") or f.get("folder_id") or f.get("id") or "",
+                 "name": f.get("name") or f.get("folder_name") or ""}
+                for f in (raw if isinstance(raw, list) else [])
+            ]
+    except Exception:
+        pass
+
+    profiles: list[dict] = []
+    try:
+        rp = _req.post(
+            f"{MLX_API}/profile/search",
+            headers=H,
+            json={"limit": 100, "offset": 0, "search_text": search_text},
+            timeout=15,
+        )
+        if rp.status_code == 401:
+            return JSONResponse({"ok": False, "error": "Токен истёк — войди заново через Connect"})
+        if rp.status_code == 200:
+            pd = rp.json().get("data") or {}
+            raw_p = pd.get("profiles") if isinstance(pd, dict) else pd
+            profiles = [
+                {
+                    "profile_id": p.get("profile_id") or p.get("uuid") or p.get("id") or "",
+                    "folder_id": p.get("folder_id") or p.get("folderID") or "",
+                    "name": p.get("name") or p.get("profile_name") or "",
+                }
+                for p in (raw_p if isinstance(raw_p, list) else [])
+                if (p.get("profile_id") or p.get("uuid") or p.get("id"))
+            ]
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)})
+
+    return JSONResponse({"ok": True, "profiles": profiles, "folders": folders})
+
+
+@app.post("/multilogin-start-direct")
+async def multilogin_start_direct(request: Request) -> JSONResponse:
+    """Restart the MLX browser for a given account using DirectCDP (no token needed).
+
+    Body JSON: {account_label: str, instance?: 'A'|'B'}
+    Kills any running browser for that profile and restarts it with
+    --remote-debugging-port=19222 so Playwright can connect.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON"}, status_code=400)
+
+    account_label = (data.get("account_label") or "").strip()
+    if not account_label:
+        return JSONResponse({"ok": False, "error": "account_label is required"}, status_code=400)
+
+    from src.fb_ads_rpa.browser import MultiloginDirectCDPProvider
+    from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
+    from config.paths import get_ad_account_map_path
+
+    account_map = load_ad_account_map(get_ad_account_map_path())
+    entry = resolve_account_entry(account_map, account_label)
+    if not entry:
+        return JSONResponse({"ok": False, "error": f"Account {account_label!r} not in ad_account_map.csv"}, status_code=404)
+    if not entry.profile_id:
+        return JSONResponse({"ok": False, "error": "profile_id not set for this account in ad_account_map.csv"}, status_code=400)
+
+    provider = MultiloginDirectCDPProvider()
+    udd = provider._find_profile_user_data_dir(entry.profile_id)
+    if udd is None:
+        return JSONResponse({"ok": False, "error": f"MLX profile directory not found for profile_id={entry.profile_id}"}, status_code=500)
+
+    chrome = provider._find_mlx_chrome()
+    if chrome is None:
+        return JSONResponse({"ok": False, "error": "MLX Mimic chrome.exe not found under mlx/deps/"}, status_code=500)
+
+    # Kill existing + relaunch
+    provider._kill_profile_browser(str(udd), entry.profile_id or "")
+    import time; time.sleep(2)
+    import subprocess
+    cmd = [
+        str(chrome),
+        f"--user-data-dir={udd}",
+        f"--remote-debugging-port={MultiloginDirectCDPProvider.CDP_PORT}",
+        "--remote-allow-origins=*",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-extensions",
+        "--disable-background-mode",
+    ]
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    return JSONResponse({
+        "ok": True,
+        "message": f"Browser restarted with CDP on port {MultiloginDirectCDPProvider.CDP_PORT}",
+        "cdp_url": f"http://127.0.0.1:{MultiloginDirectCDPProvider.CDP_PORT}",
+        "profile_dir": str(udd),
+    })
+
+
+@app.post("/multilogin-save-token")
+async def multilogin_save_token(request: Request) -> JSONResponse:
+    """Save a manually pasted automation token to .env.
+
+    Body JSON: {token: str, instance?: 'A'|'B'}
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON"})
+
+    token = (data.get("token") or "").strip()
+    instance = (data.get("instance") or "A").strip().upper()
+    if instance not in ("A", "B"):
+        instance = "A"
+    if not token:
+        return JSONResponse({"ok": False, "error": "token is required"})
+
+    env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
+    env_path = _PROJ_ROOT / ".env"
+    try:
+        lines: list[str] = []
+        if env_path.is_file():
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+        updated = False
+        for i, line in enumerate(lines):
+            if line.startswith(f"{env_key}="):
+                lines[i] = f"{env_key}={token}"
+                updated = True
+                break
+        if not updated:
+            lines.append(f"{env_key}={token}")
+        env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        os.environ[env_key] = token
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"Failed to write .env: {exc}"})
+
+    return JSONResponse({"ok": True, "instance": instance, "env_key": env_key})
+
+
 @app.post("/multilogin-signin")
 async def multilogin_signin(request: Request) -> JSONResponse:
     """Sign in to Multilogin, return folders + profiles list.
@@ -1023,14 +1208,18 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     if not email or not password:
         return JSONResponse({"ok": False, "error": "email and password are required"}, status_code=400)
 
+    import hashlib as _hashlib
     import requests as _req
+
+    # Multilogin X API requires password to be SHA-256 hashed
+    password_hash = _hashlib.sha256(password.encode("utf-8")).hexdigest()
 
     MLX_API = "https://api.multilogin.com"
     H = {"Accept": "application/json", "Content-Type": "application/json"}
 
     # Step 1 — sign in
     try:
-        r = _req.post(f"{MLX_API}/user/signin", headers=H, json={"email": email, "password": password}, timeout=20)
+        r = _req.post(f"{MLX_API}/user/signin", headers=H, json={"email": email, "password": password_hash}, timeout=20)
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"Network error: {exc}"})
 
@@ -1093,8 +1282,26 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     except Exception:
         pass
 
-    # Step 5 — list profiles
+    # Step 5 — list profiles (try multiple endpoints for sub-accounts)
     profiles: list[dict] = []
+    profile_debug: list[str] = []
+
+    def _extract_profiles(body: dict) -> list[dict]:
+        data = body.get("data") or {}
+        raw = data.get("profiles") if isinstance(data, dict) else (data if isinstance(data, list) else [])
+        if not raw and isinstance(data, dict):
+            raw = data.get("items") or data.get("list") or []
+        return [
+            {
+                "profile_id": p.get("profile_id") or p.get("uuid") or p.get("id") or "",
+                "folder_id": p.get("folder_id") or p.get("folderID") or "",
+                "name": p.get("name") or p.get("profile_name") or "",
+            }
+            for p in (raw if isinstance(raw, list) else [])
+            if (p.get("profile_id") or p.get("uuid") or p.get("id"))
+        ]
+
+    # Try 1: POST /profile/search with empty string (workspace owners)
     try:
         rp = _req.post(
             f"{MLX_API}/profile/search",
@@ -1102,19 +1309,36 @@ async def multilogin_signin(request: Request) -> JSONResponse:
             json={"limit": 200, "offset": 0, "search_text": ""},
             timeout=20,
         )
+        profile_debug.append(f"search(empty) -> {rp.status_code}")
         if rp.status_code == 200:
-            pd = rp.json().get("data") or {}
-            raw_p = pd.get("profiles") if isinstance(pd, dict) else pd
-            profiles = [
-                {
-                    "profile_id": p.get("profile_id") or p.get("uuid") or p.get("id") or "",
-                    "folder_id": p.get("folder_id") or p.get("folderID") or "",
-                    "name": p.get("name") or p.get("profile_name") or "",
-                }
-                for p in (raw_p if isinstance(raw_p, list) else [])
-            ]
-    except Exception:
-        pass
+            profiles = _extract_profiles(rp.json())
+    except Exception as exc:
+        profile_debug.append(f"search(empty) -> err:{exc}")
+
+    # Try 2: POST /profile/search with "facebook" (sub-accounts may need search term)
+    if not profiles:
+        try:
+            rp2 = _req.post(
+                f"{MLX_API}/profile/search",
+                headers=auth_h2,
+                json={"limit": 200, "offset": 0, "search_text": "facebook"},
+                timeout=20,
+            )
+            profile_debug.append(f"search(facebook) -> {rp2.status_code}")
+            if rp2.status_code == 200:
+                profiles = _extract_profiles(rp2.json())
+        except Exception as exc:
+            profile_debug.append(f"search(facebook) -> err:{exc}")
+
+    # Try 3: GET /profile (older endpoint, some MLX versions)
+    if not profiles:
+        try:
+            rp3 = _req.get(f"{MLX_API}/profile", headers=auth_h2, timeout=20)
+            profile_debug.append(f"GET /profile -> {rp3.status_code}: {rp3.text[:120]}")
+            if rp3.status_code == 200:
+                profiles = _extract_profiles(rp3.json())
+        except Exception as exc:
+            profile_debug.append(f"GET /profile -> err:{exc}")
 
     return JSONResponse({
         "ok": True,
@@ -1122,4 +1346,5 @@ async def multilogin_signin(request: Request) -> JSONResponse:
         "token_saved": save_token and bool(auto_token),
         "folders": folders,
         "profiles": profiles,
+        "debug": profile_debug,
     })

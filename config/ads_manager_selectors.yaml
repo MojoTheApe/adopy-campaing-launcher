@@ -7,18 +7,41 @@ urls:
 selectors:
   create_button:
     - "role=button[name=/Create/i]"
+    - "role=button[name=/Crear/i]"
     - "div[aria-label='Create']"
+    - "div[aria-label='Crear']"
     - "text=Create"
+    - "text=Crear"
+  create_campaign_item:
+    - "role=menuitem[name=/Campaign/i]"
+    - "role=menuitem[name=/Campa/i]"
+    - "text=Campaign"
+    - "text=Campaña"
   campaign_objective_leads:
     - "text=Leads"
+    - "text=Clientes potenciales"
     - "div[role='button']:has-text('Leads')"
+    - "div[role='option']:has-text('Leads')"
   continue_button:
     - "role=button[name=/Continue/i]"
+    - "role=button[name=/Continuar/i]"
     - "div[aria-label='Continue']"
+    - "div[aria-label='Continuar']"
     - "text=Continue"
+    - "text=Continuar"
   campaign_name_input:
+    - "label=Campaign name"
+    - "label=/Nombre de la campaña/i"
+    - "placeholder=/Campaign name/i"
+    - "placeholder=/Nombre de la campaña/i"
+    - "role=textbox[name=/Campaign name/i]"
+    - "role=textbox[name=/Nombre de la campaña/i]"
+    - "input[aria-label*='Campaign name']"
+    - "input[aria-label*='Nombre de la campaña']"
     - "input[placeholder*='Campaign name']"
+    - "input[placeholder*='Nombre de la campaña']"
     - "label:has-text('Campaign name') >> .. >> input"
+    - "label:has-text('Nombre de la campaña') >> .. >> input"
   adset_name_input:
     - "input[placeholder*='Ad set name']"
     - "label:has-text('Ad set name') >> .. >> input"
