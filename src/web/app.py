@@ -1214,8 +1214,8 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     import hashlib as _hashlib
     import requests as _req
 
-    # Multilogin X API requires password to be SHA-256 hashed
-    password_hash = _hashlib.sha256(password.encode("utf-8")).hexdigest()
+    # Multilogin X API requires password to be MD5 hashed (per official docs)
+    password_hash = _hashlib.md5(password.encode("utf-8")).hexdigest()
 
     MLX_API = "https://api.multilogin.com"
     H = {"Accept": "application/json", "Content-Type": "application/json"}
@@ -1228,8 +1228,8 @@ async def multilogin_signin(request: Request) -> JSONResponse:
 
     if r.status_code != 200:
         body = r.json() if "application/json" in r.headers.get("content-type", "") else {}
-        msg = (body.get("status") or {}).get("message") or r.text[:200]
-        return JSONResponse({"ok": False, "error": f"Sign-in failed: {msg}"})
+        msg = (body.get("status") or {}).get("message") or r.text[:300]
+        return JSONResponse({"ok": False, "error": f"Sign-in failed [{r.status_code}]: {msg}", "debug_body": body})
 
     bearer = ((r.json().get("data") or {}).get("token") or "").strip()
     if not bearer:

@@ -12,7 +12,9 @@ GSheet credential — the caller decides how to surface warnings.
 from __future__ import annotations
 
 import concurrent.futures
+import csv
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -31,6 +33,62 @@ from src.analysis_agent.analyze_fb_stats import (
 from src.analysis_agent.gsheet_accounts import fetch_account_rows
 from src.analysis_agent.morning_report import build_morning_report
 from src.analysis_agent.news_context import NewsFetcher, build_news_context
+
+
+_RE_TWO_UPPER = re.compile(r"^[A-Z]{2}$")
+
+
+def _alias_from_label(label: str) -> str:
+    """Strip trailing short suffix (country code, etc.) to get account alias."""
+    parts = label.strip().rsplit(" ", 1)
+    if len(parts) == 2 and len(parts[1]) <= 4 and parts[1].isalpha():
+        return parts[0].strip()
+    return label.strip()
+
+
+def _country_from_label(label: str) -> str:
+    """Return first 2-uppercase-letter token from account name (e.g. 'MX' from 'FacebookElf161 MX')."""
+    for token in label.split():
+        if _RE_TWO_UPPER.match(token):
+            return token
+    return ""
+
+
+def _fallback_accounts_from_csv(cm_name: str) -> List[Dict[str, Any]]:
+    """Load all accounts from ad_account_map.csv as fallback when GSheet returns no rows.
+
+    Returns minimal account-row dicts compatible with gsheet_accounts format,
+    all marked is_ready=True so they appear in the campaign builder.
+    """
+    csv_path = _PROJ_ROOT / "config" / "ad_account_map.csv"
+    rows: List[Dict[str, Any]] = []
+    if not csv_path.exists():
+        return rows
+    try:
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                label = (row.get("account_name") or "").strip()
+                if not label:
+                    continue
+                country_code = _country_from_label(label)
+                rows.append({
+                    "cm": cm_name,
+                    "country_code": country_code,
+                    "account_label": label,
+                    "alias": _alias_from_label(label),
+                    "cost": "",
+                    "leads": "",
+                    "ftds": "",
+                    "stock": "",
+                    "to_do": "",
+                    "to_do_extra": "",
+                    "is_ready": True,
+                    "account_status": None,
+                })
+    except Exception as e:  # noqa: BLE001
+        print(f"[morning_service] Failed to load fallback accounts from CSV: {e}", file=sys.stderr)
+    return rows
 
 
 def _resolve_excel_path(excel_path: Optional[str]) -> str:
@@ -97,6 +155,7 @@ def load_morning_report(
     resolved_cm = _resolve_my_cm(my_cm)
 
     account_rows: List[Dict[str, Any]] = []
+    fallback_mode = False
     if skip_gsheet:
         warnings.append("GSheet skipped (skip_gsheet=True)")
     else:
@@ -108,6 +167,22 @@ def load_morning_report(
                 f"Sections 6-9 will be empty or limited."
             )
 
+    # If GSheet returned no accounts for this CM, fetch ALL accounts from the same
+    # tab (no CM filter) so the campaign builder shows every available account.
+    if not account_rows and not skip_gsheet:
+        try:
+            all_rows = fetch_account_rows(my_cm=None)
+        except Exception as e:  # noqa: BLE001
+            all_rows = []
+            warnings.append(f"GSheet fallback fetch failed: {type(e).__name__}: {e}")
+        if all_rows:
+            account_rows = all_rows
+            fallback_mode = True
+            warnings.append(
+                f"GSheet has no accounts for {resolved_cm!r} today — "
+                f"showing all {len(all_rows)} account(s) from the sheet (free to open campaigns)."
+            )
+
     enriched_df = _load_enriched_df(resolved_excel)
 
     report = build_morning_report(
@@ -117,6 +192,8 @@ def load_morning_report(
         trend_days=trend_days,
         country_filter=country_filter,
     )
+    report["is_fallback_mode"] = fallback_mode
+
     if with_news:
         sections = report.get("countries", [])
         max_workers = max(1, int(os.environ.get("MORNING_NEWS_WORKERS", "6")))

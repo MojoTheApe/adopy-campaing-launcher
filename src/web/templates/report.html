@@ -1052,6 +1052,7 @@
 </div>
 
 {% if report.countries %}
+{% set is_fallback_mode = report.is_fallback_mode | default(false) %}
 <div class="dashboard-shell">
 <aside class="sidebar" aria-label="Dashboard navigation">
   <div class="sidebar-label">Main</div>
@@ -1403,7 +1404,9 @@
 {% endif %}
 </div>
 
-{% set has_open = c.open_recs.values() | map('length') | sum > 0 if c.open_recs else false %}
+{% set _has_recs = (c.open_recs.values() | map('length') | sum > 0) if c.open_recs else false %}
+{% set _has_fallback_accs = is_fallback_mode and (c.open_recs | length > 0) %}
+{% set has_open = _has_recs or _has_fallback_accs %}
 <div id="view-country-{{ cid }}-open" class="view-panel" data-country="{{ cid }}">
 <h2 class="view-title">{{ c.country }}: {{ n_builder }} Campaign Builder</h2>
 
@@ -1485,11 +1488,17 @@
 </div>
 
 {% if has_open %}
+{% if is_fallback_mode %}
+<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:0.6rem 0.85rem;margin-bottom:0.75rem;font-size:0.8rem;color:#7a5c00">
+  <strong>Free slot</strong> — GSheet has no campaigns for you today. All available accounts are shown. Add campaigns manually with "+ Add Campaign".
+</div>
+{% else %}
 <p class="hint" style="margin:0 0 0.75rem 0;font-size:0.78rem;color:var(--muted)">Pick creative, copy and targeting from your Upload FB.xlsx — then Submit to download a ready Excel.</p>
+{% endif %}
 <div class="open-tree">
 {% for acc_label in c.open_recs.keys() | sort %}
   {% set recs = c.open_recs[acc_label] %}
-  {% if recs %}
+  {% if recs or is_fallback_mode %}
   {# Preflight info for this account from backend #}
   {% set pf = account_preflight.get(acc_label, {}) %}
   {% set ds = draft_status.get(acc_label, {}) %}
@@ -1586,6 +1595,9 @@
       </div>
 
     </div>{# /cb-preflight #}
+    {% if not recs and is_fallback_mode %}
+    <p style="font-size:0.78rem;color:var(--muted);margin:0.5rem 0 0.25rem">No performance data yet — click <strong>+ Add Campaign</strong> to build manually.</p>
+    {% endif %}
     <div class="cb-slots">
     {# One campaign card per rec; each creative becomes an ad row inside it #}
     {% set ns = namespace(idx=0) %}
