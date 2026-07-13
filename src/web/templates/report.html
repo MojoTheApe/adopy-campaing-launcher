@@ -1456,6 +1456,37 @@
       </div>
     </details>
 
+    {# ── Manual folder_id / profile_id entry ── #}
+    <details style="margin-top:0.6rem" open>
+      <summary style="font-size:0.72rem;color:var(--accent);cursor:pointer;user-select:none;font-weight:600">
+        ✏️ Ввести folder_id и profile_id вручную
+      </summary>
+      <div style="margin-top:0.5rem;display:flex;flex-direction:column;gap:0.35rem">
+        <p style="font-size:0.71rem;color:var(--muted);margin:0 0 0.2rem">
+          Найди IDs в приложении Multilogin: открой профиль → скопируй Profile ID (UUID).
+          Folder ID виден в URL папки или в настройках профиля.
+        </p>
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          <span style="font-size:0.72rem;color:var(--muted);width:5.5rem;flex-shrink:0">folder_id</span>
+          <input type="text" id="ml-manual-folder-{{ cid }}" class="cb-input"
+                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                 style="font-family:monospace;font-size:0.72rem;flex:1">
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          <span style="font-size:0.72rem;color:var(--muted);width:5.5rem;flex-shrink:0">profile_id</span>
+          <input type="text" id="ml-manual-profile-{{ cid }}" class="cb-input"
+                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                 style="font-family:monospace;font-size:0.72rem;flex:1">
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.15rem">
+          <button type="button" class="ml-connect-btn"
+                  style="padding:0.28rem 0.9rem;font-size:0.75rem"
+                  onclick="mlManualSave('{{ cid }}')">💾 Сохранить IDs</button>
+          <span id="ml-manual-status-{{ cid }}" style="font-size:0.72rem"></span>
+        </div>
+      </div>
+    </details>
+
     {# ── Paste token directly (no password needed) ── #}
     <details style="margin-top:0.6rem">
       <summary style="font-size:0.72rem;color:var(--muted);cursor:pointer;user-select:none">
@@ -2522,8 +2553,10 @@ function mlUseProfile(folderId, profileId, instance, profileName, btn) {
   var inst = instance || 'A';
   var pName = profileName || '?';
 
-  // Collect account names from the current page's Campaign Builder headers
-  var accTitles = Array.from(document.querySelectorAll('.cb-acc-title'))
+  // Collect account names scoped to the current country panel (not the whole page)
+  var panel = btn ? btn.closest('.view-panel') : null;
+  var scope = panel || document;
+  var accTitles = Array.from(scope.querySelectorAll('.cb-acc-title'))
     .map(function(el) { return el.textContent.trim(); })
     .filter(Boolean);
 
