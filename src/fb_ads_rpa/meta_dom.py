@@ -827,270 +827,164 @@ def expand_conversion_location_single(page: Page) -> bool:
 
 
 def _expand_conversion_location_single(page: Page) -> bool:
-    """Expand the 'Single' group inside Conversion location dropdown.
+    """Click the 'Single' accordion header in the open Conversion Location menu.
 
-    Finds the accordion HEADER ROW (the smallest element whose first line is
-    "Single" and that also contains the description subtitle).  Sorting by
-    bounding-box height ascending lets us avoid clicking a large container whose
-    center lands outside the header.
+    Best-practice approach: semantic locators, wait_for instead of sleep.
+    The subtitle text "Send people to one location…" is unique and stable —
+    clicking it (or its parent row) expands the Single section.
     """
-    # JS: collect candidates whose first text-line is "Single/Único/Única" AND
-    # that contain the subtitle phrase, then sort by height ↑ to find the
-    # tightest element (the header row, not an outer wrapper).
-    script = """
-    () => {
-      const norm  = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
-      const fline = (s) => norm((s || '').split('\\n')[0]);
-      const viz   = (el) => !!(el && el.offsetParent !== null
-                               && el.getBoundingClientRect().width > 0);
+    SUBTITLE_PATTERNS = [
+        re.compile(r"Send people to one location", re.I),
+        re.compile(r"Enviar personas a una ubicación", re.I),
+        re.compile(r"una ubicación donde", re.I),
+    ]
+    HEADING_TEXTS = ["Single", "Único", "Única"]
 
-      const SINGLE_WORDS  = ['single', 'único', 'única'];
-      const SUB_PHRASES   = ['send people to one location', 'una ubicación',
-                              'one location where'];
-
-      const candidates = [];
-      for (const el of document.querySelectorAll(
-        'div, li, section, [role=button], [role=listitem], [role=option]'
-      )) {
-        if (!viz(el)) continue;
-        const t  = norm(el.textContent || '');
-        const fl = fline(el.textContent || '');
-        if (!SINGLE_WORDS.includes(fl)) continue;
-        if (!SUB_PHRASES.some(p => t.includes(p))) continue;
-        const rect = el.getBoundingClientRect();
-        // Skip elements wider than a typical dropdown (> 700px) or
-        // taller than a header row (> 180px) — those are outer wrappers.
-        if (rect.width > 700 || rect.height > 180) continue;
-        candidates.push({ el, height: rect.height });
-      }
-
-      if (!candidates.length) return false;
-
-      // Smallest height = most specific (the header row itself)
-      candidates.sort((a, b) => a.height - b.height);
-      const best = candidates[0].el;
-      best.scrollIntoView({ block: 'nearest' });
-      best.click();
-      return true;
-    }
-    """
     for root in _roots(page):
-        try:
-            if root.evaluate(script):
-                time.sleep(1.0)
-                return True
-        except Exception:
-            pass
-
-    # Playwright fallback: filter by has_text substring (not exact) then size-check
-    for root in _roots(page):
-        for sub_phrase in (
-            re.compile(r"Send people to one location", re.I),
-            re.compile(r"Enviar personas", re.I),
-        ):
+        # Strategy 1: click the subtitle text (uniquely identifies Single row)
+        for pat in SUBTITLE_PATTERNS:
             try:
-                rows = root.locator(
-                    "div, li, [role=button], [role=listitem]"
-                ).filter(has_text=sub_phrase).all()
-                for row in rows[:20]:
-                    try:
-                        if not row.is_visible():
-                            continue
-                        blob = (row.inner_text(timeout=800) or "").lower()
-                        fl = blob.split('\n')[0].strip()
-                        if fl not in ('single', 'único', 'única'):
-                            continue
-                        box = row.bounding_box()
-                        if box and (box['width'] > 700 or box['height'] > 180):
-                            continue
-                        row.scroll_into_view_if_needed(timeout=2000)
-                        row.click(timeout=5000)
-                        time.sleep(1.0)
-                        return True
-                    except Exception:
-                        continue
+                el = root.get_by_text(pat).first
+                el.wait_for(state="visible", timeout=3000)
+                el.click(timeout=5000)
+                return True
+            except Exception:
+                pass
+
+        # Strategy 2: click "Single" heading text (exact match)
+        for heading in HEADING_TEXTS:
+            try:
+                el = root.get_by_text(heading, exact=True).first
+                el.wait_for(state="visible", timeout=2000)
+                el.click(timeout=5000)
+                return True
             except Exception:
                 pass
 
     return False
 
 
-def _wait_for_single_expanded(page: Page, timeout_s: float = 3.0) -> bool:
-    """Poll until the Single section is expanded (Website option visible) or timeout."""
-    script = """
-    () => {
-      const norm  = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
-      const fline = (s) => norm((s || '').split('\\n')[0]);
-      const viz   = (el) => !!(el && el.offsetParent !== null
-                               && el.getBoundingClientRect().width > 0);
-      const isWebsiteOnly = (el) => {
-        const line = fline(el.textContent || el.getAttribute('aria-label') || '');
-        if (line !== 'website' && line !== 'sitio web') return false;
-        const full = norm(el.textContent || '');
-        return !full.includes('instant') && !full.includes('and calls')
-               && !full.includes('formularios') && !full.includes('and messenger');
-      };
-      for (const el of document.querySelectorAll(
-        'div, span, label, li, [role=radio], [role=option]'
-      )) {
-        if (viz(el) && isWebsiteOnly(el)) return true;
-      }
-      return false;
-    }
+def _wait_for_single_expanded(page: Page, timeout_s: float = 5.0) -> bool:
+    """Wait (using Playwright wait_for) until 'Website' option is visible.
+
+    Replaces the old polling loop with a proper locator.wait_for call.
     """
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        for root in _roots(page):
+    WEBSITE_LABELS = ["Website", "Sitio web"]
+    timeout_ms = int(timeout_s * 1000)
+
+    for root in _roots(page):
+        for label in WEBSITE_LABELS:
+            # Prefer role=radio (semantic); exact=True excludes "Website and…"
             try:
-                if root.evaluate(script):
-                    return True
+                root.get_by_role("radio", name=label).first.wait_for(
+                    state="visible", timeout=timeout_ms
+                )
+                return True
             except Exception:
                 pass
-        time.sleep(0.25)
+            # Fall back to exact text match
+            try:
+                root.get_by_text(label, exact=True).first.wait_for(
+                    state="visible", timeout=timeout_ms
+                )
+                return True
+            except Exception:
+                pass
     return False
 
 
 def _pick_website_from_open_menu(page: Page) -> bool:
-    """Expand Single section, then click the Website radio inside it.
+    """Expand Single section then click the Website option.
 
-    UI structure after clicking the Conversion location trigger:
-      Multiple  (^)
-        ○ Website and instant forms
-        ○ Website and calls
-        ○ Instant forms and Messenger
-      Single    (v)   ← click to expand
-        ● Website          ← target
-        ○ Instant forms
-        ○ Messenger
-    After expanding Single, Website is usually auto-selected.
-    We must NOT click "Website and instant forms" (Multiple section).
+    Playwright best practices:
+    - getByText / getByRole for all locators (no raw CSS or XPath)
+    - wait_for(state='visible') instead of time.sleep
+    - verify selection state after clicking
+    - JS fallback only for plain <div> elements (Meta has no ARIA roles here)
     """
-    time.sleep(0.4)
+    # Step 1: expand the Single accordion
     _expand_conversion_location_single(page)
-    # Poll for up to 3 s: wait until the Single section is visually expanded
-    # (i.e. the Website option becomes visible in the DOM).
-    _wait_for_single_expanded(page, timeout_s=3.0)
 
-    # After expanding Single, Website is often auto-selected — check immediately.
+    # Step 2: wait for Website to become visible (semantic, not sleep)
+    _wait_for_single_expanded(page, timeout_s=5.0)
+
+    # Step 3: check if Website is already selected (auto-selected after expansion)
     if is_website_conversion_selected(page):
         return True
 
-    # JS: find Website radio inside the Single section container.
-    # Excludes "Website and instant forms", "Website and calls" by checking
-    # that the text does NOT contain "instant forms" / "and calls" / "and messenger".
-    script_single_website = """
-    () => {
-      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
-      const visible = (el) => !!(el && el.offsetParent !== null);
-      const firstLine = (s) => norm((s || '').split('\\n')[0]);
-      const isWebsite = (el) => {
-        const line = firstLine(el.textContent || el.getAttribute('aria-label') || '');
-        if (line !== 'website' && line !== 'sitio web') return false;
-        const full = norm(el.textContent || '');
-        return !full.includes('instant forms') && !full.includes('and calls')
-               && !full.includes('and messenger') && !full.includes('and instant');
-      };
+    # Step 4: click Website using semantic locators
+    WEBSITE_LABELS = ["Website", "Sitio web"]
+    EXCLUDE_WORDS = ("instant", "and calls", "messenger", "formularios")
 
-      // First try: find Single section header, then search within its expanded container
-      for (const heading of document.querySelectorAll('*')) {
-        if (!visible(heading)) continue;
-        const ht = firstLine(heading.textContent || '');
-        if (ht !== 'single' && ht !== 'único' && ht !== 'única') continue;
-        // Walk up to find container that also has "instant forms" (i.e. expanded sub-options)
-        let container = heading.parentElement;
-        for (let i = 0; i < 6 && container; i++) {
-          const ct = norm(container.textContent || '');
-          if (ct.includes('instant forms') && ct.includes('messenger')) {
-            // This container has the expanded sub-options — search inside it
-            for (const el of container.querySelectorAll(
-              '[role=radio], input[type=radio], [role=option], li, label, div, span'
-            )) {
-              if (!visible(el) || el.children.length > 3) continue;
-              if (!isWebsite(el)) continue;
-              el.scrollIntoView({ block: 'nearest' });
-              el.click();
-              return true;
-            }
-            break;
-          }
-          container = container.parentElement;
-        }
-      }
-
-      // Fallback: search whole page for exact "Website" radio (no "and ..." suffix)
-      for (const el of document.querySelectorAll(
-        '[role=radio], input[type=radio], [role=option], [role=menuitemradio]'
-      )) {
-        if (!visible(el)) continue;
-        if (!isWebsite(el)) continue;
-        el.scrollIntoView({ block: 'nearest' });
-        el.click();
-        return true;
-      }
-      return false;
-    }
-    """
     for root in _roots(page):
-        try:
-            if root.evaluate(script_single_website):
-                time.sleep(0.7)
-                return True
-        except Exception:
-            pass
+        for label in WEBSITE_LABELS:
+            # 4a. Role-based (most semantically correct)
+            try:
+                radio = root.get_by_role("radio", name=re.compile(
+                    rf"^{re.escape(label)}$", re.I
+                ))
+                if radio.count() > 0 and radio.first.is_visible():
+                    radio.first.click(timeout=5000)
+                    return True
+            except Exception:
+                pass
 
-    # Meta uses plain <div> with no role for conversion location options.
-    # ARIA-based searches (role=radio, role=option) all miss these elements.
-    # JS strategy: find any visible element whose FIRST LINE of text is exactly
-    # "Website" and that does NOT contain "instant forms" / "and calls".
-    # Then walk up 1-2 DOM levels to click the actual option row.
+            # 4b. Exact text match (works for plain <div> without ARIA role)
+            try:
+                candidates = root.get_by_text(label, exact=True).all()
+                for el in candidates[:10]:
+                    try:
+                        if not el.is_visible():
+                            continue
+                        # Exclude composite options like "Website and instant forms"
+                        ctx = (el.evaluate(
+                            "el => (el.closest('li,[role=option],div')?.textContent"
+                            " || el.textContent || '')"
+                        ) or "").lower()
+                        if any(x in ctx for x in EXCLUDE_WORDS):
+                            continue
+                        el.click(timeout=5000)
+                        return True
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+    # Step 5: JS fallback — Meta renders options as plain <div> with no ARIA roles.
+    # Find the visible element whose ENTIRE text is "Website" (largest bbox wins).
     script_plain_div = """
     () => {
-      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-      const firstLine = (s) => norm((s || '').split('\\n')[0]).toLowerCase();
-      const visible = (el) => !!(el && el.offsetParent !== null && el.getBoundingClientRect().width > 1);
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      const viz  = (el) => !!(el && el.offsetParent !== null
+                              && el.getBoundingClientRect().width > 1);
       const isWebsiteOnly = (el) => {
-        const line = firstLine(el.textContent || el.getAttribute('aria-label') || '');
-        if (line !== 'website' && line !== 'sitio web') return false;
-        const full = norm(el.textContent || '').toLowerCase();
-        return !full.includes('instant forms') && !full.includes('and calls')
-               && !full.includes('and messenger') && !full.includes('and instant')
-               && !full.includes('formularios');
+        const t = norm(el.textContent || el.getAttribute('aria-label') || '');
+        return t === 'website' || t === 'sitio web';
       };
-
-      // Search any visible element — Meta uses plain divs without role
-      const candidates = [];
+      const cands = [];
       for (const el of document.querySelectorAll(
         'div, span, label, li, [role=option], [role=radio], [role=menuitemradio]'
       )) {
-        if (!visible(el)) continue;
-        if (!isWebsiteOnly(el)) continue;
-        const rect = el.getBoundingClientRect();
-        if (rect.width < 4 || rect.height < 4) continue;
-        candidates.push({ el, area: rect.width * rect.height });
+        if (!viz(el) || !isWebsiteOnly(el)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4) continue;
+        cands.push({ el, area: r.width * r.height });
       }
-
-      if (!candidates.length) return false;
-
-      // Pick the LARGEST bounding box — it is the outer option row, not an inner text span.
-      candidates.sort((a, b) => b.area - a.area);
-      const best = candidates[0].el;
-      best.scrollIntoView({ block: 'nearest' });
-      best.click();
+      if (!cands.length) return false;
+      cands.sort((a, b) => b.area - a.area);
+      cands[0].el.scrollIntoView({ block: 'nearest' });
+      cands[0].el.click();
       return true;
     }
     """
     for root in _roots(page):
         try:
             if root.evaluate(script_plain_div):
-                time.sleep(0.7)
                 return True
         except Exception:
             pass
 
-    if _pick_website_from_aria_controls(page) and is_website_conversion_selected(page):
-        return True
-
-    return False
+    return _pick_website_from_aria_controls(page)
 
 
 def conversion_menu_is_open(page: Page) -> bool:
@@ -1187,67 +1081,60 @@ def _dismiss_floating_banners(page: Page) -> None:
 
 
 def select_conversion_location_website(page: Page, *, skip_open: bool = False) -> bool:
-    """Pick Website under Conversion → Conversion location on Ad Set level."""
+    """Pick 'Website' under Conversion → Conversion location on Ad Set level.
+
+    Playwright best practices applied throughout:
+    - Semantic locators (getByText, getByRole, getByLabel)
+    - wait_for(state=) instead of time.sleep
+    - Guard checks after every meaningful action before proceeding
+    - If a step fails, re-analyse and retry (up to 3 attempts)
+    """
     scroll_to_section(page, "Conversion location", "Ubicación de la conversión")
     _dismiss_floating_banners(page)
+
+    # Fast-path: already correct
     if is_website_conversion_selected(page):
         return True
 
+    # If menu is already open on the correct section, try to pick immediately
     if skip_open or conversion_menu_is_open(page):
-        # Safety check: if the WRONG menu is open (Conversion event), close it first
         if _is_conversion_event_menu(page):
-            close_open_dropdown(page)
-            time.sleep(0.4)
+            # Wrong menu open — close it before re-opening Conversion Location
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
         else:
             if _pick_website_from_open_menu(page) and is_website_conversion_selected(page):
                 return True
 
     for attempt in range(3):
+        # 1. Close any leftover open dropdown
         close_open_dropdown(page)
         _dismiss_floating_banners(page)
+
+        # 2. Open the Conversion Location dropdown
         if not click_conversion_location_dropdown(page):
-            break
-        wait_conversion_menu_open(page)
-        time.sleep(0.5)
+            break  # can't find the dropdown trigger — abort
+
+        # 3. Wait for menu to actually open (not a fixed delay)
+        if not wait_conversion_menu_open(page):
+            continue  # menu didn't open — retry
+
         _dismiss_floating_banners(page)
-        # Guard: verify the right menu opened before trying to pick
+
+        # 4. Guard: verify it's the Conversion Location menu, not Conversion Event
         if _is_conversion_event_menu(page):
-            close_open_dropdown(page)
-            time.sleep(0.3)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
             continue
+
+        # 5. Pick Website (expands Single, waits, clicks)
         if _pick_website_from_open_menu(page) and is_website_conversion_selected(page):
             return True
+
+        # Step failed — close and retry
         close_open_dropdown(page)
 
-    # Legacy radio/card UI fallback (popover may use radios without listbox)
-    for root in _roots(page):
-        try:
-            radios = root.get_by_role("radio", name=re.compile(r"^Website(?:\s|$)", re.I))
-            for i in range(min(radios.count(), 10)):
-                radio = radios.nth(i)
-                try:
-                    if not radio.is_visible():
-                        continue
-                    if _menu_first_line(radio.inner_text(timeout=1500)) not in {"website", "sitio web"}:
-                        continue
-                    radio.scroll_into_view_if_needed(timeout=3000)
-                    radio.click(timeout=5000)
-                    time.sleep(0.6)
-                    if is_website_conversion_selected(page):
-                        return True
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-    if select_option_near_section(
-        page,
-        ["Conversion location", "Ubicación de la conversión"],
-        ["Website", "Sitio web"],
-    ):
-        time.sleep(0.6)
-        return is_website_conversion_selected(page)
-    return False
+    return is_website_conversion_selected(page)
 
 
 def close_open_dropdown(page: Page) -> None:

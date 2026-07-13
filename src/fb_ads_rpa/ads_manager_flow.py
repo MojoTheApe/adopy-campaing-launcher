@@ -5,7 +5,7 @@ import re
 import time
 from typing import Any
 
-RPA_FLOW_VERSION = "v17"
+RPA_FLOW_VERSION = "v19"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
