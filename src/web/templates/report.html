@@ -2249,14 +2249,15 @@ function mlSignin(cid) {
     var accTitles = Array.from(scope.querySelectorAll('.cb-acc-title'))
       .map(function(el) { return el.textContent.trim(); }).filter(Boolean);
 
-    // Auto-match: profile name contains account label (or vice versa) → save immediately
+    // Auto-match: use only the part before the first space as the key (e.g. "Facebook_6958")
     var autoMatched = false;
     accTitles.forEach(function(accLabel) {
       if (autoMatched) return;
-      var accKey = accLabel.toLowerCase().replace(/[\s_\-]/g, '');
+      var accKey = accLabel.split(' ')[0].toLowerCase();
       var matched = profiles.filter(function(p) {
-        var pKey = (p.name || '').toLowerCase().replace(/[\s_\-]/g, '');
-        return pKey === accKey || pKey.indexOf(accKey) !== -1 || accKey.indexOf(pKey) !== -1;
+        var pKey = (p.name || '').toLowerCase();
+        // Profile starts with account key or equals it
+        return pKey === accKey || pKey.indexOf(accKey) === 0 || accKey.indexOf(pKey) === 0;
       });
       if (matched.length === 1) {
         var mp = matched[0];
