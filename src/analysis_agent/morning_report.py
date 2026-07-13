@@ -1767,7 +1767,7 @@ def build_country_section(
                     account_summary,
                     account_close_recs,
                 )
-            cc = acc["country_code"] or country[:2].upper()
+            cc = acc["country_code"] or _EXCEL_COUNTRY_TO_GSHEET_CODE.get(country.strip().lower(), country[:2]).upper()
             open_recs[acc["account_label"]] = build_open_recommendations(
                 combos_df=combos, df=df,
                 account_alias=alias,

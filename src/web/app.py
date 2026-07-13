@@ -904,11 +904,11 @@ async def preview_publish(request: Request) -> JSONResponse:
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
     if not country:
-        return JSONResponse({"error": "Country not set — check form."})
+        return JSONResponse({"error": "Country not set — check form."}, status_code=400)
     if not account_label:
-        return JSONResponse({"error": "Account label not set — check form."})
+        return JSONResponse({"error": "Account label not set — check form."}, status_code=400)
     if not slots:
-        return JSONResponse({"error": "No campaign slots found. Make sure the form has at least one campaign."})
+        return JSONResponse({"error": "No campaign slots found. Make sure the form has at least one campaign."}, status_code=400)
     try:
         if use_rpa_publish():
             pub = RpaPublisher(dry_run=True)
@@ -1252,6 +1252,8 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     # Step 3 — save token to .env
     env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
     if save_token and auto_token:
+        # Update both .env file and live os.environ so /multilogin-search works immediately
+        os.environ[env_key] = auto_token
         env_path = _PROJ_ROOT / ".env"
         try:
             if env_path.is_file():
@@ -1265,8 +1267,8 @@ async def multilogin_signin(request: Request) -> JSONResponse:
                 if not updated:
                     lines.append(f"{env_key}={auto_token}")
                 env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[multilogin-signin] Failed to write .env: {e}", file=sys.stderr)
 
     auth_h2 = {**H, "Authorization": f"Bearer {working_token}"}
 

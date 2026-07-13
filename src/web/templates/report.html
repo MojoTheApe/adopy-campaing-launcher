@@ -2611,7 +2611,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var accId = accLabel.replace(/[\s.]/g, '_');
     var statusEl = document.getElementById('cb-ml-status-' + accId);
     if (statusEl) {
-      statusEl.querySelector('.cb-pf-err, .cb-pf-ok, span').outerHTML =
+      var statusBadge = statusEl.querySelector('.cb-pf-err') || statusEl.querySelector('.cb-pf-ok');
+      if (statusBadge) statusBadge.outerHTML =
         '<span class="cb-pf-ok" style="font-size:0.72rem">✓ folder_id &amp; profile_id saved (Instance ' + instance + ')</span>';
     }
     // Update the accordion header badge
@@ -2784,7 +2785,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var ctype  = (firstAdType || {}).value || 'Image';
     // For name: use targeting code (from search input), not the full fb_interest string
     var tgtInput = slot.querySelector('.cb-targeting-search');
-    var tgt      = tgtInput ? tgtInput.value.trim() : getHiddenVal(slot, 'targeting').split(',')[0].trim();
+    var tgtSearchVal = tgtInput ? tgtInput.value.trim() : '';
+    var tgt = tgtSearchVal || getHiddenVal(slot, 'targeting').split(',')[0].trim();
     var os     = getHiddenVal(slot, 'os');
     var age    = (slot.querySelector('[name="camp_' + idx + '_age"]') || {}).value || '35';
     var asset  = (slot.querySelector('[name="camp_' + idx + '_asset"]') || {}).value || '';
