@@ -2243,8 +2243,38 @@ function mlSignin(cid) {
       return;
     }
 
-    // Pre-fill search box with first word of first CB account name (e.g. "FacebookUL869")
-    var firstAccTitle = ((document.querySelector('.cb-acc-title') || {}).textContent || '').split(' ')[0];
+    // Collect account labels from this country panel
+    var panel = profilesDiv ? profilesDiv.closest('.view-panel') : null;
+    var scope = panel || document;
+    var accTitles = Array.from(scope.querySelectorAll('.cb-acc-title'))
+      .map(function(el) { return el.textContent.trim(); }).filter(Boolean);
+
+    // Auto-match: profile name contains account label (or vice versa) → save immediately
+    var autoMatched = false;
+    accTitles.forEach(function(accLabel) {
+      if (autoMatched) return;
+      var accKey = accLabel.toLowerCase().replace(/[\s_\-]/g, '');
+      var matched = profiles.filter(function(p) {
+        var pKey = (p.name || '').toLowerCase().replace(/[\s_\-]/g, '');
+        return pKey === accKey || pKey.indexOf(accKey) !== -1 || accKey.indexOf(pKey) !== -1;
+      });
+      if (matched.length === 1) {
+        var mp = matched[0];
+        autoMatched = true;
+        _mlSaveIds(accLabel, mp.folder_id, mp.profile_id, instance, null);
+        if (status) status.innerHTML += ' <span style="color:var(--good)">· auto-linked <strong>'
+          + (mp.name||'?') + '</strong> → <strong>' + accLabel + '</strong> ✓</span>';
+      }
+    });
+
+    if (autoMatched) {
+      profilesDiv.innerHTML = '<span style="color:var(--good);font-size:0.73rem">'
+        + '✓ Профили автоматически привязаны к аккаунтам</span>';
+      return;
+    }
+
+    // No auto-match — show list for manual selection
+    var firstAccTitle = (accTitles[0] || '').split(' ')[0];
     var searchId = 'ml-search-' + cid;
 
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
