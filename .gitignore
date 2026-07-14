@@ -34,6 +34,9 @@ config/token_accounts.json
 # Claude Code
 .claude/
 
+# Brainstorm visual companion sessions
+.superpowers/
+
 # OS
 .DS_Store
 Thumbs.db
