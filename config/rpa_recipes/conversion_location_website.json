@@ -1,0 +1,51 @@
+{
+  "name": "conversion_location_website",
+  "source_recipe": "Costa_Rica_campaign_20260714_185153.json",
+  "recorded_at": "2026-07-14T18:51:53",
+  "notes": "Human-recorded. Website selected by Space keydown on SPAN after Single expanded. Not mouse click. CSS classes span.x1vvvo52.x1fvot60 are stable across sessions.",
+  "wizard_close_confirmed": {
+    "note": "Both recordings confirm wizard Close at y=22 — _isWizardClose guard (y<60) is correct",
+    "css_path": "div.x1qjc9v5.x14e42zd > div > span > div._2k0c._96v5 > div.x1a0uwpx.x78zum5:nth-of-type(1) > div[role='button'].xlup9mm.x1gslohp",
+    "x": 78,
+    "y": 22
+  },
+  "steps": [
+    {
+      "id": "open_dropdown",
+      "action": "click",
+      "match": {"own_text": "Website and instant forms"},
+      "recorded": {
+        "x": 1305, "y": 340, "w": 519, "h": 20,
+        "tag": "DIV", "role": "",
+        "css_path_note": "dynamic id like #js_100 — match by own_text"
+      }
+    },
+    {
+      "id": "expand_single",
+      "action": "click",
+      "match": {"own_text": "Single", "role": "heading"},
+      "recorded": {
+        "x": 1305, "y": 561, "w": 524, "h": 20,
+        "tag": "DIV", "role": "heading",
+        "css_path": "div[role='button'].x1i10hfl.x1qjc9v5:nth-of-type(1) > div.x78zum5.x1iyjqo2 > div.x6s0dn4.x78zum5 > div.x1iyjqo2.xeuugli:nth-of-type(1) > div.xeuugli > div[role='heading'].x1vvvo52.xsuwoey:nth-of-type(1)"
+      }
+    },
+    {
+      "id": "pick_website",
+      "action": "key_space",
+      "note": "Focus the SPAN then press Space — this is what the human recording shows. Mouse click did NOT register; Space keydown on the SPAN selected Website.",
+      "match": {"own_text": "Website", "tag": "SPAN", "exact": true, "exclude": ["instant", "calls", "messenger"]},
+      "recorded": {
+        "x": 1101, "y": 665, "w": 52, "h": 19,
+        "tag": "SPAN", "role": "",
+        "css_classes": "x1vvvo52 x1fvot60",
+        "css_selector": "span.x1vvvo52.x1fvot60",
+        "css_path_note": "nuxContainerId1 is dynamic — use css_selector + own_text filter",
+        "key": " "
+      }
+    }
+  ],
+  "verify": {
+    "conversion_location_equals": ["Website", "Sitio web"]
+  }
+}

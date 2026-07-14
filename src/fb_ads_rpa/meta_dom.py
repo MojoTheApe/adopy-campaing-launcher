@@ -1,8 +1,10 @@
 """DOM helpers for Meta Ads Manager — label-based fills that survive UI refactors."""
 from __future__ import annotations
 
+import json
 import re
 import time
+from pathlib import Path
 from typing import Any
 
 from playwright.sync_api import Frame, Page
@@ -589,23 +591,51 @@ def _conversion_location_display_value(page: Page) -> str:
 
 
 def is_website_conversion_selected(page: Page) -> bool:
-    current = _conversion_location_display_value(page)
-    if current:
-        return _website_only_label(current)
+    """Check if 'Website' (and only Website, not 'Website and instant forms') is selected.
 
+    Reads ONLY the dropdown trigger button's own text — not surrounding banners.
+    Meta often shows an Advantage+ recommendation banner mentioning 'website and instant forms'
+    after selecting 'Website', which confused the old text-search approach.
+    """
     script = """
     () => {
       const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
-      const exact = (t) => t === 'website' || t === 'sitio web';
-      const radios = [...document.querySelectorAll('[role=radio], input[type=radio]')];
-      for (const r of radios) {
-        const label = norm(
-          r.getAttribute('aria-label') ||
-          r.parentElement?.textContent ||
-          ''
-        );
-        if (!exact(label)) continue;
-        if (r.getAttribute('aria-checked') === 'true' || r.checked) return true;
+      // Find the 'Conversion location' label, then its nearest button/combobox sibling.
+      // We only read the button's OWN text (firstChild text nodes), ignoring descendants
+      // that may contain banner text.
+      for (const lbl of document.querySelectorAll('label, [role=label], span, div')) {
+        const lt = norm(lbl.textContent);
+        if (lt !== 'conversion location' && !lt.startsWith('conversion location')) continue;
+        if (lbl.offsetParent === null) continue;
+
+        // Walk up to find the section container
+        let section = lbl.parentElement;
+        for (let i = 0; i < 6 && section; i++, section = section.parentElement) {
+          // Look for a button/combobox within this section
+          for (const btn of section.querySelectorAll(
+            '[role="button"], [role="combobox"], button, select'
+          )) {
+            if (btn.offsetParent === null) continue;
+            // Read ONLY direct text node children (ignores nested elements like banners)
+            const ownText = norm(
+              Array.from(btn.childNodes)
+                .filter(n => n.nodeType === Node.TEXT_NODE)
+                .map(n => n.textContent).join('')
+              || btn.getAttribute('aria-label')
+              || btn.value
+              || btn.textContent  // fallback
+            );
+            if (ownText === 'website' || ownText === 'sitio web') return true;
+            // If we found a conversion-location-related button, stop searching upward
+            if (ownText.includes('website') || ownText.includes('sitio web') ||
+                ownText.includes('instant') || ownText.includes('formulario')) {
+              return ownText === 'website' || ownText === 'sitio web';
+            }
+          }
+          // Stop if we hit a section boundary
+          const role = (section.getAttribute('role') || '').toLowerCase();
+          if (role === 'region' || role === 'main' || role === 'dialog') break;
+        }
       }
       return false;
     }
@@ -616,6 +646,10 @@ def is_website_conversion_selected(page: Page) -> bool:
                 return True
         except Exception:
             pass
+    # Fallback: use display value helper but exclude banner text
+    current = _conversion_location_display_value(page)
+    if current:
+        return _website_only_label(current)
     return False
 
 
@@ -676,7 +710,16 @@ def click_conversion_location_dropdown(page: Page) -> bool:
                     btn = root.locator(sel).first
                     if btn.count() and btn.is_visible():
                         btn.scroll_into_view_if_needed(timeout=4000)
-                        btn.click(timeout=5000)
+                        box = btn.bounding_box()
+                        if box:
+                            # Recorded path: click the value chip itself (CDP-safe mouse)
+                            _mouse_click_chain(
+                                page,
+                                box["x"] + box["width"] / 2,
+                                box["y"] + box["height"] / 2,
+                            )
+                        else:
+                            btn.click(timeout=5000)
                         time.sleep(0.8)
                         return True
                 except Exception:
@@ -827,11 +870,11 @@ def expand_conversion_location_single(page: Page) -> bool:
 
 
 def _expand_conversion_location_single(page: Page) -> bool:
-    """Click the 'Single' accordion header in the open Conversion Location menu.
+    """Click the 'Single' accordion — golden path from human recording.
 
-    Best-practice approach: semantic locators, wait_for instead of sleep.
-    The subtitle text "Send people to one location…" is unique and stable —
-    clicking it (or its parent row) expands the Single section.
+    Recorded recipe (Costa_Rica_campaign_20260714_124938):
+      click role=heading own_text='Single'
+    Prefer heading + mouse chain (CDP-safe); fall back to subtitle / exact text.
     """
     SUBTITLE_PATTERNS = [
         re.compile(r"Send people to one location", re.I),
@@ -841,27 +884,210 @@ def _expand_conversion_location_single(page: Page) -> bool:
     HEADING_TEXTS = ["Single", "Único", "Única"]
 
     for root in _roots(page):
-        # Strategy 1: click the subtitle text (uniquely identifies Single row)
+        # Strategy 0 (recorded): role=heading name=Single + mouse chain
+        for heading in HEADING_TEXTS:
+            try:
+                el = root.get_by_role("heading", name=re.compile(rf"^{re.escape(heading)}$", re.I)).first
+                if el.is_visible(timeout=2000):
+                    box = el.bounding_box()
+                    if box:
+                        _mouse_click_chain(
+                            page,
+                            box["x"] + box["width"] / 2,
+                            box["y"] + box["height"] / 2,
+                        )
+                    else:
+                        el.click(timeout=5000, force=True)
+                    time.sleep(0.45)
+                    return True
+            except Exception:
+                pass
+
+        # Strategy 1: subtitle text
         for pat in SUBTITLE_PATTERNS:
             try:
                 el = root.get_by_text(pat).first
-                el.wait_for(state="visible", timeout=3000)
-                el.click(timeout=5000)
+                el.wait_for(state="visible", timeout=2500)
+                box = el.bounding_box()
+                if box:
+                    _mouse_click_chain(
+                        page,
+                        box["x"] + min(box["width"] * 0.4, 80),
+                        box["y"] + box["height"] / 2,
+                    )
+                else:
+                    el.click(timeout=5000)
+                time.sleep(0.35)
                 return True
             except Exception:
                 pass
 
-        # Strategy 2: click "Single" heading text (exact match)
+        # Strategy 2: exact "Single" text
         for heading in HEADING_TEXTS:
             try:
                 el = root.get_by_text(heading, exact=True).first
                 el.wait_for(state="visible", timeout=2000)
-                el.click(timeout=5000)
+                el.click(timeout=5000, force=True)
+                time.sleep(0.35)
                 return True
             except Exception:
                 pass
 
     return False
+
+
+def _click_recorded_website_label(page: Page) -> bool:
+    """Select 'Website' the way the human recording showed.
+
+    Recording (Costa_Rica_campaign_20260714_185153):
+      action 3: keydown key=" " on SPAN own_text='Website', css: span.x1vvvo52.x1fvot60
+      The Space keydown on the SPAN selected Website — mouse click did NOT register.
+
+    Strategy order (fastest-first):
+      1. Focus SPAN + press Space  (golden path from recording)
+      2. Focus SPAN + press Enter
+      3. Mouse click center of SPAN
+      4. Mouse click radio circle (parent left edge)
+      5. Parent container click
+    """
+    EXCLUDE = ("instant", "and calls", "messenger", "formularios", "forms")
+    LABELS = ("Website", "Sitio web")
+
+    def _get_own_text(el) -> str:
+        try:
+            return (el.evaluate(
+                """el => {
+                  const own = Array.from(el.childNodes)
+                    .filter(n => n.nodeType === 3)
+                    .map(n => n.textContent).join('')
+                    || el.getAttribute('aria-label') || '';
+                  return (own || el.textContent || '').replace(/\\s+/g,' ').trim();
+                }"""
+            ) or "").strip()
+        except Exception:
+            return ""
+
+    def _try_select_el(el) -> bool:
+        try:
+            if not el.is_visible():
+                return False
+            own = _get_own_text(el)
+            low = own.lower()
+            if low not in ("website", "sitio web"):
+                return False
+            if any(x in low for x in EXCLUDE):
+                return False
+            box = el.bounding_box()
+            if not box or box["width"] < 4 or box["height"] < 4 or box["height"] > 80:
+                return False
+
+            # Strategy 1: Focus + Space (matches recording exactly)
+            try:
+                el.focus(timeout=2000)
+                el.press(" ", timeout=2000)
+                time.sleep(0.5)
+                if is_website_conversion_selected(page):
+                    return True
+            except Exception:
+                pass
+
+            # Strategy 2: Focus + Enter
+            try:
+                el.focus(timeout=2000)
+                el.press("Enter", timeout=2000)
+                time.sleep(0.5)
+                if is_website_conversion_selected(page):
+                    return True
+            except Exception:
+                pass
+
+            cx = box["x"] + box["width"] / 2
+            cy = box["y"] + box["height"] / 2
+
+            # Strategy 3: Mouse click center of SPAN
+            _mouse_click_chain(page, cx, cy)
+            time.sleep(0.5)
+            if is_website_conversion_selected(page):
+                return True
+
+            # Strategy 4: Radio circle (left edge)
+            _mouse_click_chain(page, box["x"] + min(16, box["width"] * 0.12), cy)
+            time.sleep(0.5)
+            if is_website_conversion_selected(page):
+                return True
+
+            # Strategy 5: Parent container
+            try:
+                parent = el.locator("xpath=../..")
+                parent.click(timeout=3000, force=True)
+                time.sleep(0.5)
+                if is_website_conversion_selected(page):
+                    return True
+            except Exception:
+                pass
+
+            el.click(timeout=4000, force=True)
+            time.sleep(0.45)
+            if is_website_conversion_selected(page):
+                return True
+        except Exception:
+            pass
+        return False
+
+    for root in _roots(page):
+        # Priority 1: CSS class selector from recording (most specific)
+        for css in ("span.x1vvvo52.x1fvot60", "span.x1vvvo52"):
+            try:
+                for el in root.locator(css).all()[:8]:
+                    if _try_select_el(el):
+                        return True
+            except Exception:
+                pass
+
+        # Priority 2: get_by_text exact (any tag)
+        for label in LABELS:
+            try:
+                for el in root.get_by_text(label, exact=True).all()[:12]:
+                    if _try_select_el(el):
+                        return True
+            except Exception:
+                pass
+
+    return False
+
+
+def _pick_website_via_recorded_recipe(page: Page) -> bool:
+    """Primary path from config/rpa_recipes/conversion_location_website.json.
+
+    Human sequence:
+      1) menu already open (caller opens via 'Website and instant forms')
+      2) click Single (heading)
+      3) click Website (exact)
+    """
+    if is_website_conversion_selected(page):
+        return True
+
+    if not _is_website_option_visible(page):
+        _expand_conversion_location_single(page)
+        _wait_for_single_expanded(page, timeout_s=5.0)
+    else:
+        # Website already visible — do NOT toggle Single closed
+        pass
+
+    if is_website_conversion_selected(page):
+        return True
+
+    if _click_recorded_website_label(page):
+        return True
+
+    # One more expand+click cycle if first pass missed
+    if not _is_website_option_visible(page):
+        _expand_conversion_location_single(page)
+        _wait_for_single_expanded(page, timeout_s=4.0)
+        if _click_recorded_website_label(page):
+            return True
+
+    return is_website_conversion_selected(page)
 
 
 def _wait_for_single_expanded(page: Page, timeout_s: float = 5.0) -> bool:
@@ -893,72 +1119,39 @@ def _wait_for_single_expanded(page: Page, timeout_s: float = 5.0) -> bool:
     return False
 
 
-def _pick_website_from_open_menu(page: Page) -> bool:
-    """Expand Single section then click the Website option.
-
-    Playwright best practices:
-    - getByText / getByRole for all locators (no raw CSS or XPath)
-    - wait_for(state='visible') instead of time.sleep
-    - verify selection state after clicking
-    - JS fallback only for plain <div> elements (Meta has no ARIA roles here)
-    """
-    # Step 1: expand the Single accordion
-    _expand_conversion_location_single(page)
-
-    # Step 2: wait for Website to become visible (semantic, not sleep)
-    _wait_for_single_expanded(page, timeout_s=5.0)
-
-    # Step 3: check if Website is already selected (auto-selected after expansion)
-    if is_website_conversion_selected(page):
-        return True
-
-    # Step 4: click Website using semantic locators
+def _is_website_option_visible(page: Page, timeout_ms: int = 600) -> bool:
+    """Return True if the 'Website' (single) option is already visible in the open menu."""
     WEBSITE_LABELS = ["Website", "Sitio web"]
-    EXCLUDE_WORDS = ("instant", "and calls", "messenger", "formularios")
-
     for root in _roots(page):
         for label in WEBSITE_LABELS:
-            # 4a. Role-based (most semantically correct)
             try:
-                radio = root.get_by_role("radio", name=re.compile(
-                    rf"^{re.escape(label)}$", re.I
-                ))
-                if radio.count() > 0 and radio.first.is_visible():
-                    radio.first.click(timeout=5000)
+                el = root.get_by_text(label, exact=True).first
+                if el.is_visible(timeout=timeout_ms):
                     return True
             except Exception:
                 pass
+    return False
 
-            # 4b. Exact text match (works for plain <div> without ARIA role)
-            try:
-                candidates = root.get_by_text(label, exact=True).all()
-                for el in candidates[:10]:
-                    try:
-                        if not el.is_visible():
-                            continue
-                        # Exclude composite options like "Website and instant forms"
-                        ctx = (el.evaluate(
-                            "el => (el.closest('li,[role=option],div')?.textContent"
-                            " || el.textContent || '')"
-                        ) or "").lower()
-                        if any(x in ctx for x in EXCLUDE_WORDS):
-                            continue
-                        el.click(timeout=5000)
-                        return True
-                    except Exception:
-                        pass
-            except Exception:
-                pass
 
-    # Step 5: JS fallback — Meta renders options as plain <div> with no ARIA roles.
-    # Find the visible element whose ENTIRE text is "Website" (largest bbox wins).
-    script_plain_div = """
+def _find_website_option_bbox(page: Page) -> dict | None:
+    """Locate the Single → Website row and return click targets.
+
+    Returns dict with cx/cy (row center) and radio_x/radio_y (left radio circle).
+    Prefers a compact row (not a huge container that also contains Instant forms).
+    """
+    script = """
     () => {
       const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
-      const viz  = (el) => !!(el && el.offsetParent !== null
-                              && el.getBoundingClientRect().width > 1);
+      const viz = (el) => !!(el && el.offsetParent !== null);
+      const ownText = (el) => norm(
+        Array.from(el.childNodes)
+          .filter(n => n.nodeType === Node.TEXT_NODE)
+          .map(n => n.textContent).join('')
+        || (el.childElementCount === 0 ? (el.textContent || '') : '')
+        || el.getAttribute('aria-label') || ''
+      );
       const isWebsiteOnly = (el) => {
-        const t = norm(el.textContent || el.getAttribute('aria-label') || '');
+        const t = ownText(el);
         return t === 'website' || t === 'sitio web';
       };
       const cands = [];
@@ -968,23 +1161,495 @@ def _pick_website_from_open_menu(page: Page) -> bool:
         if (!viz(el) || !isWebsiteOnly(el)) continue;
         const r = el.getBoundingClientRect();
         if (r.width < 4 || r.height < 4) continue;
-        cands.push({ el, area: r.width * r.height });
+        // Prefer a parent row that is still Website-only (radio + label).
+        let row = el;
+        for (let i = 0; i < 4 && row.parentElement; i++) {
+          const p = row.parentElement;
+          const pr = p.getBoundingClientRect();
+          const pt = norm(p.textContent || '');
+          const websiteOnlyRow = (
+            pt === 'website' || pt === 'sitio web'
+            || (/^(website|sitio web)\\b/.test(pt)
+                && !pt.includes('instant')
+                && !pt.includes('calls')
+                && !pt.includes('messenger')
+                && !pt.includes('formularios'))
+          );
+          if (websiteOnlyRow && pr.width >= r.width && pr.height <= 72 && pr.height >= 16) {
+            row = p;
+          } else {
+            break;
+          }
+        }
+        const rr = row.getBoundingClientRect();
+        if (rr.width < 40 || rr.height < 14 || rr.height > 80) continue;
+        cands.push({
+          x: rr.x, y: rr.y, w: rr.width, h: rr.height,
+          cx: rr.x + Math.min(rr.width * 0.45, 120),
+          cy: rr.y + rr.height / 2,
+          radio_x: rr.x + Math.min(22, rr.width * 0.12),
+          radio_y: rr.y + rr.height / 2,
+        });
+      }
+      if (!cands.length) return null;
+      // Prefer medium rows (typical option height ~28-48px).
+      cands.sort((a, b) => {
+        const score = (c) => {
+          let s = 0;
+          if (c.h >= 22 && c.h <= 56) s += 100;
+          if (c.w >= 80 && c.w <= 640) s += 40;
+          s -= Math.abs(c.h - 36);
+          return s;
+        };
+        return score(b) - score(a);
+      });
+      return cands[0];
+    }
+    """
+    for root in _roots(page):
+        try:
+            hit = root.evaluate(script)
+            if hit:
+                return hit
+        except Exception:
+            pass
+    return None
+
+
+def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
+    """Trusted click via Chrome DevTools Protocol Input domain.
+
+    Playwright's connect_over_cdp path can drop/reorder mouse events
+    (microsoft/playwright#41286): ClickAsync succeeds but the page never
+    gets a click. Raw CDP mouseMoved → mousePressed → mouseReleased is the
+    community workaround used by Multilogin/CDP harnesses.
+    """
+    try:
+        session = page.context.new_cdp_session(page)
+        try:
+            for typ, extra in (
+                ("mouseMoved", {"button": "none"}),
+                ("mousePressed", {"button": "left", "buttons": 1, "clickCount": 1}),
+                ("mouseReleased", {"button": "left", "buttons": 0, "clickCount": 1}),
+            ):
+                params = {"type": typ, "x": float(x), "y": float(y), **extra}
+                session.send("Input.dispatchMouseEvent", params)
+                time.sleep(0.05)
+        finally:
+            try:
+                session.detach()
+            except Exception:
+                pass
+        return
+    except Exception:
+        pass
+    # Fallback: Playwright mouse API
+    page.mouse.move(x, y)
+    time.sleep(0.06)
+    page.mouse.down()
+    time.sleep(0.07)
+    page.mouse.up()
+
+
+def _mouse_click_chain(page: Page, x: float, y: float) -> None:
+    """Prefer raw CDP click; fall back to Playwright mouse chain."""
+    _cdp_mouse_click(page, x, y)
+
+
+def _scroll_website_option_into_view(page: Page) -> bool:
+    """Scroll the Single → Website row into the open menu viewport."""
+    script = """
+    () => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      const own = (el) => norm(
+        Array.from(el.childNodes).filter(n => n.nodeType === 3)
+          .map(n => n.textContent).join('')
+        || (el.childElementCount === 0 ? (el.textContent || '') : '')
+        || el.getAttribute('aria-label') || ''
+      );
+      for (const el of document.querySelectorAll('div, span, label, li, [role=radio]')) {
+        if (!el.offsetParent) continue;
+        if (own(el) !== 'website' && own(el) !== 'sitio web') continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4 || r.height > 80) continue;
+        el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        // Also scroll nearest scrollable ancestor
+        let p = el.parentElement;
+        for (let i = 0; i < 8 && p; i++, p = p.parentElement) {
+          const st = getComputedStyle(p);
+          if (/(auto|scroll)/.test(st.overflowY) && p.scrollHeight > p.clientHeight) {
+            const er = el.getBoundingClientRect();
+            const pr = p.getBoundingClientRect();
+            p.scrollTop += (er.top + er.height / 2) - (pr.top + pr.height / 2);
+            break;
+          }
+        }
+        return true;
+      }
+      return false;
+    }
+    """
+    for root in _roots(page):
+        try:
+            if root.evaluate(script):
+                time.sleep(0.35)
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _turn_off_advantage_plus_leads(page: Page) -> bool:
+    """Turn off 'Advantage+ leads campaign' if it is On — can block manual location picks."""
+    script = """
+    () => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      for (const el of document.querySelectorAll('*')) {
+        if (!el.offsetParent) continue;
+        const t = norm(el.textContent || '').slice(0, 80);
+        if (!t.includes('advantage+ leads') && !t.includes('advantage+ lead')) continue;
+        // Find nearby toggle/switch
+        let node = el;
+        for (let i = 0; i < 6 && node; i++, node = node.parentElement) {
+          const sw = node.querySelector(
+            '[role=switch], input[type=checkbox], [aria-checked]'
+          );
+          if (!sw || !sw.offsetParent) continue;
+          const checked = sw.getAttribute('aria-checked') === 'true'
+            || sw.checked === true;
+          if (checked) {
+            sw.click();
+            return true;
+          }
+          return false; // already off
+        }
+      }
+      return false;
+    }
+    """
+    for root in _roots(page):
+        try:
+            if root.evaluate(script):
+                time.sleep(0.7)
+                return True
+        except Exception:
+            pass
+    # Text fallback
+    for root in _roots(page):
+        try:
+            label = root.get_by_text(re.compile(r"Advantage\+ leads?", re.I)).first
+            if not label.is_visible(timeout=800):
+                continue
+            row = label.locator("xpath=ancestor::*[self::div or self::section][1]")
+            sw = row.get_by_role("switch").first
+            if sw.is_visible(timeout=800):
+                checked = sw.get_attribute("aria-checked")
+                if checked == "true":
+                    sw.click(timeout=3000, force=True)
+                    time.sleep(0.7)
+                    return True
+        except Exception:
+            pass
+    return False
+
+
+def _click_website_via_keyboard_focus(page: Page) -> bool:
+    """Focus Website option then Space/Enter — most reliable over CDP (#41286)."""
+    _scroll_website_option_into_view(page)
+    focused = False
+    script = """
+    () => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      const own = (el) => norm(
+        Array.from(el.childNodes).filter(n => n.nodeType === 3)
+          .map(n => n.textContent).join('')
+        || (el.childElementCount === 0 ? (el.textContent || '') : '')
+        || el.getAttribute('aria-label') || ''
+      );
+      for (const el of document.querySelectorAll(
+        '[role=radio], [role=option], [role=menuitemradio], div, span, label, li'
+      )) {
+        if (!el.offsetParent) continue;
+        if (own(el) !== 'website' && own(el) !== 'sitio web') continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4 || r.height > 80) continue;
+        el.scrollIntoView({ block: 'nearest' });
+        if (typeof el.focus === 'function') el.focus();
+        el.setAttribute('tabindex', '-1');
+        el.focus();
+        // Prefer radio ancestor
+        const radio = el.closest('[role=radio], [role=menuitemradio]') || el;
+        if (typeof radio.focus === 'function') radio.focus();
+        return true;
+      }
+      return false;
+    }
+    """
+    for root in _roots(page):
+        try:
+            if root.evaluate(script):
+                focused = True
+                break
+        except Exception:
+            pass
+    if not focused:
+        return False
+    time.sleep(0.2)
+    for key in ("Space", "Enter"):
+        try:
+            page.keyboard.press(key)
+            time.sleep(0.55)
+            if is_website_conversion_selected(page):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _click_website_via_cdp(page: Page) -> bool:
+    """Raw CDP click on radio circle then row center."""
+    _scroll_website_option_into_view(page)
+    bbox = _find_website_option_bbox(page)
+    if not bbox:
+        return False
+    targets = (
+        (float(bbox["radio_x"]), float(bbox["radio_y"])),
+        (float(bbox["cx"]), float(bbox["cy"])),
+    )
+    for x, y in targets:
+        try:
+            _cdp_mouse_click(page, x, y)
+            time.sleep(0.6)
+            if is_website_conversion_selected(page):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _click_website_via_mouse(page: Page) -> bool:
+    """Click Website using coordinates (radio circle, then row center)."""
+    _scroll_website_option_into_view(page)
+    bbox = _find_website_option_bbox(page)
+    if not bbox:
+        return False
+    # 1) Radio circle on the left — often the real hit target
+    try:
+        _mouse_click_chain(page, float(bbox["radio_x"]), float(bbox["radio_y"]))
+        time.sleep(0.55)
+        if is_website_conversion_selected(page):
+            return True
+    except Exception:
+        pass
+    # 2) Row center / label area
+    try:
+        _mouse_click_chain(page, float(bbox["cx"]), float(bbox["cy"]))
+        time.sleep(0.55)
+        if is_website_conversion_selected(page):
+            return True
+    except Exception:
+        pass
+    # 3) Playwright mouse.click convenience
+    try:
+        page.mouse.click(float(bbox["radio_x"]), float(bbox["radio_y"]))
+        time.sleep(0.55)
+        if is_website_conversion_selected(page):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _click_website_via_force_locator(page: Page) -> bool:
+    """force=True click on exact Website text (skips actionability checks)."""
+    WEBSITE_LABELS = ["Website", "Sitio web"]
+    EXCLUDE_WORDS = ("instant", "and calls", "messenger", "formularios")
+    for root in _roots(page):
+        for label in WEBSITE_LABELS:
+            try:
+                radio = root.get_by_role("radio", name=re.compile(
+                    rf"^{re.escape(label)}$", re.I
+                ))
+                if radio.count() > 0 and radio.first.is_visible():
+                    radio.first.click(timeout=4000, force=True)
+                    time.sleep(0.45)
+                    if is_website_conversion_selected(page):
+                        return True
+            except Exception:
+                pass
+            try:
+                for el in root.get_by_text(label, exact=True).all()[:10]:
+                    try:
+                        if not el.is_visible():
+                            continue
+                        own_text = (el.evaluate(
+                            "el => el.textContent || el.getAttribute('aria-label') || ''"
+                        ) or "").lower().strip()
+                        if any(x in own_text for x in EXCLUDE_WORDS):
+                            continue
+                        el.click(timeout=4000, force=True)
+                        time.sleep(0.45)
+                        if is_website_conversion_selected(page):
+                            return True
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+    return False
+
+
+def _click_website_via_keyboard(page: Page) -> bool:
+    """Navigate open Conversion Location menu with keyboard to Website."""
+    # Focus is usually already in the menu after opening / expanding Single.
+    for _ in range(14):
+        try:
+            page.keyboard.press("ArrowDown")
+            time.sleep(0.12)
+        except Exception:
+            break
+        # Stop early if Website already selected (some UIs select on focus)
+        if is_website_conversion_selected(page):
+            return True
+        # Detect focused option text when possible
+        try:
+            focused = page.evaluate("""() => {
+              const el = document.activeElement;
+              if (!el) return '';
+              return (el.getAttribute('aria-label') || el.textContent || '')
+                .replace(/\\s+/g, ' ').trim().toLowerCase();
+            }""") or ""
+            if focused in ("website", "sitio web") or (
+                focused.startswith("website")
+                and "instant" not in focused
+                and "calls" not in focused
+            ):
+                page.keyboard.press("Enter")
+                time.sleep(0.45)
+                if is_website_conversion_selected(page):
+                    return True
+                page.keyboard.press("Space")
+                time.sleep(0.45)
+                if is_website_conversion_selected(page):
+                    return True
+        except Exception:
+            pass
+    try:
+        page.keyboard.press("Enter")
+        time.sleep(0.45)
+    except Exception:
+        pass
+    return is_website_conversion_selected(page)
+
+
+def _click_website_via_js_row(page: Page) -> bool:
+    """JS: click the Website-only row (and its nearest radio-like child)."""
+    script = """
+    () => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      const viz = (el) => !!(el && el.offsetParent !== null);
+      const ownText = (el) => norm(
+        Array.from(el.childNodes)
+          .filter(n => n.nodeType === Node.TEXT_NODE)
+          .map(n => n.textContent).join('')
+        || (el.childElementCount === 0 ? (el.textContent || '') : '')
+        || el.getAttribute('aria-label') || ''
+      );
+      const cands = [];
+      for (const el of document.querySelectorAll(
+        'div, span, label, li, [role=option], [role=radio], [role=menuitemradio]'
+      )) {
+        if (!viz(el)) continue;
+        if (ownText(el) !== 'website' && ownText(el) !== 'sitio web') continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4 || r.height > 80) continue;
+        let row = el;
+        for (let i = 0; i < 3 && row.parentElement; i++) {
+          const p = row.parentElement;
+          const pt = norm(p.textContent || '');
+          const pr = p.getBoundingClientRect();
+          if ((pt === 'website' || pt === 'sitio web') && pr.height <= 72) row = p;
+          else break;
+        }
+        cands.push({ el, row, area: r.width * r.height });
       }
       if (!cands.length) return false;
-      cands.sort((a, b) => b.area - a.area);
-      cands[0].el.scrollIntoView({ block: 'nearest' });
-      cands[0].el.click();
+      cands.sort((a, b) => a.area - b.area);
+      const { el, row } = cands[0];
+      row.scrollIntoView({ block: 'nearest' });
+      const radio = row.querySelector(
+        '[role=radio], [role=menuitemradio], input[type=radio], [aria-checked]'
+      );
+      const target = radio || row || el;
+      target.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, cancelable:true, view:window}));
+      target.dispatchEvent(new MouseEvent('mouseup', {bubbles:true, cancelable:true, view:window}));
+      target.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true, view:window}));
+      if (typeof target.click === 'function') target.click();
       return true;
     }
     """
     for root in _roots(page):
         try:
-            if root.evaluate(script_plain_div):
-                return True
+            if root.evaluate(script):
+                time.sleep(0.55)
+                if is_website_conversion_selected(page):
+                    return True
         except Exception:
             pass
+    return False
 
-    return _pick_website_from_aria_controls(page)
+
+def _pick_website_from_open_menu(page: Page) -> bool:
+    """Expand Single (if needed) then click Website — fully automatic.
+
+    Research (Playwright #41286, Multilogin CDP): mouse clicks over connect_over_cdp
+    often succeed in the API but never reach the page. Keyboard Space/Enter and raw
+    CDP Input.dispatchMouseEvent are the reliable workarounds.
+
+    Order:
+      0. Scroll Website into menu viewport
+      1. Keyboard focus + Space/Enter  (most reliable over CDP)
+      2. Raw CDP mouse on radio / row
+      3. Recorded golden path (Single heading → Website)
+      4. Playwright mouse chain / force / JS / legacy keyboard
+    """
+    if is_website_conversion_selected(page):
+        return True
+
+    if not _is_website_option_visible(page):
+        _expand_conversion_location_single(page)
+        _wait_for_single_expanded(page, timeout_s=5.0)
+
+    _scroll_website_option_into_view(page)
+
+    if is_website_conversion_selected(page):
+        return True
+
+    # 1) Keyboard — proven stable when CDP mouse drops events
+    if _click_website_via_keyboard_focus(page):
+        return True
+
+    # 2) Raw CDP Input.dispatchMouseEvent
+    if _click_website_via_cdp(page):
+        return True
+
+    # 3) Human-recorded recipe
+    if _pick_website_via_recorded_recipe(page):
+        return True
+
+    # 4) Playwright mouse / force / JS / arrow-nav
+    if _click_website_via_mouse(page):
+        return True
+    if _click_website_via_force_locator(page):
+        return True
+    if _click_website_via_js_row(page):
+        return True
+    if _click_website_via_keyboard(page):
+        return True
+    if _pick_website_from_aria_controls(page):
+        time.sleep(0.5)
+        return is_website_conversion_selected(page) or True
+
+    return is_website_conversion_selected(page)
 
 
 def conversion_menu_is_open(page: Page) -> bool:
@@ -1048,15 +1713,74 @@ def pick_website_conversion_option(page: Page) -> bool:
     return _pick_website_from_open_menu(page)
 
 
+_WIZARD_CLOSE_GUARD_JS = """
+  // Returns true if an element looks like the wizard's own chrome (toolbar/header Close)
+  // and should NOT be clicked by banner-dismiss logic.
+  // Wizard Close is typically in a fixed top bar or a role=dialog header with no banner text nearby.
+  function _isWizardClose(el) {
+    // Walk up to 8 levels looking for known wizard container signals
+    let node = el;
+    for (let i = 0; i < 8; i++) {
+      if (!node || node === document.body) break;
+      const role = (node.getAttribute && node.getAttribute('role') || '').toLowerCase();
+      const label = (node.getAttribute && node.getAttribute('aria-label') || '').toLowerCase();
+      const id = (node.id || '').toLowerCase();
+      // Banner / notice / toast containers are NOT the wizard chrome
+      if (role === 'alert' || role === 'alertdialog' || role === 'status') return false;
+      if (id.indexOf('banner') !== -1 || id.indexOf('toast') !== -1 || id.indexOf('notice') !== -1) return false;
+      if (label.indexOf('banner') !== -1 || label.indexOf('notice') !== -1) return false;
+      // If we hit a scrollable inner panel (the adset editor body) it's not the wizard chrome
+      if (node.scrollHeight > 600 && node.scrollWidth > 400 && node !== document.documentElement) return false;
+      node = node.parentElement;
+    }
+    // If the element's bounding rect puts it in the top ~60px it is likely the wizard toolbar
+    const rect = el.getBoundingClientRect();
+    if (rect && rect.top < 60 && rect.top >= 0) return true;
+    return false;
+  }
+"""
+
+
+def _dismiss_advantage_banner(page: Page) -> None:
+    """Dismiss the Meta Advantage+ recommendation banner that appears after selecting Website.
+
+    The banner says 'You could get 14-24% lower cost per lead by choosing website
+    and instant forms' with an 'Apply now' button. We must NOT click 'Apply now'
+    (that switches back to website+forms). We look for a close/X button instead.
+    If no close button, we just ignore it — the banner does not block the flow.
+    Never clicks the wizard's own toolbar/header Close button.
+    """
+    script = _WIZARD_CLOSE_GUARD_JS + """
+      const closeSels = [
+        '[aria-label="Close recommendation"]',
+        '[aria-label="Close"]', '[aria-label="Cerrar"]',
+        '[aria-label="Dismiss"]', '[aria-label="Descartar"]',
+        'button[data-testid="close_button"]',
+      ];
+      for (const sel of closeSels) {
+        for (const el of document.querySelectorAll(sel)) {
+          if (el.offsetParent !== null && !_isWizardClose(el)) { el.click(); return true; }
+        }
+      }
+      return false;
+    """
+    # Wrap in IIFE
+    script = f"() => {{{script}}}"
+    for root in _roots(page):
+        try:
+            root.evaluate(script)
+        except Exception:
+            pass
+
+
 def _dismiss_floating_banners(page: Page) -> None:
     """Close any floating info/warning banners that may interfere with clicks.
 
     Meta sometimes shows 'Value rule creation is changing' or similar notices
     as dismissible overlays that can obscure dropdown options.
+    Never clicks the wizard's own toolbar/header Close button.
     """
-    script = """
-    () => {
-      // Look for close / dismiss buttons on any visible banner/notice
+    script = _WIZARD_CLOSE_GUARD_JS + """
       const closeSels = [
         '[aria-label="Close"]', '[aria-label="Cerrar"]',
         '[aria-label="Dismiss"]', '[aria-label="Descartar"]',
@@ -1064,15 +1788,15 @@ def _dismiss_floating_banners(page: Page) -> None:
       ];
       for (const sel of closeSels) {
         for (const el of document.querySelectorAll(sel)) {
-          if (el.offsetParent !== null) {
+          if (el.offsetParent !== null && !_isWizardClose(el)) {
             el.click();
             return true;
           }
         }
       }
       return false;
-    }
     """
+    script = f"() => {{{script}}}"
     for root in _roots(page):
         try:
             root.evaluate(script)
@@ -1083,14 +1807,13 @@ def _dismiss_floating_banners(page: Page) -> None:
 def select_conversion_location_website(page: Page, *, skip_open: bool = False) -> bool:
     """Pick 'Website' under Conversion → Conversion location on Ad Set level.
 
-    Playwright best practices applied throughout:
-    - Semantic locators (getByText, getByRole, getByLabel)
-    - wait_for(state=) instead of time.sleep
-    - Guard checks after every meaningful action before proceeding
-    - If a step fails, re-analyse and retry (up to 3 attempts)
+    Fully automatic. Uses keyboard + raw CDP clicks to work around Playwright's
+    connect_over_cdp mouse-drop bug (#41286).
     """
     scroll_to_section(page, "Conversion location", "Ubicación de la conversión")
     _dismiss_floating_banners(page)
+    # Advantage+ On can keep forcing "Website and instant forms"
+    _turn_off_advantage_plus_leads(page)
 
     # Fast-path: already correct
     if is_website_conversion_selected(page):
@@ -1099,8 +1822,8 @@ def select_conversion_location_website(page: Page, *, skip_open: bool = False) -
     # If menu is already open on the correct section, try to pick immediately
     if skip_open or conversion_menu_is_open(page):
         if _is_conversion_event_menu(page):
-            # Wrong menu open — close it before re-opening Conversion Location
-            page.keyboard.press("Escape")
+            # Wrong menu open — close safely (never use Escape: it may close the wizard)
+            close_open_dropdown(page)
             page.wait_for_timeout(300)
         else:
             if _pick_website_from_open_menu(page) and is_website_conversion_selected(page):
@@ -1110,6 +1833,8 @@ def select_conversion_location_website(page: Page, *, skip_open: bool = False) -
         # 1. Close any leftover open dropdown
         close_open_dropdown(page)
         _dismiss_floating_banners(page)
+        if attempt == 1:
+            _turn_off_advantage_plus_leads(page)
 
         # 2. Open the Conversion Location dropdown
         if not click_conversion_location_dropdown(page):
@@ -1117,19 +1842,25 @@ def select_conversion_location_website(page: Page, *, skip_open: bool = False) -
 
         # 3. Wait for menu to actually open (not a fixed delay)
         if not wait_conversion_menu_open(page):
-            continue  # menu didn't open — retry
+            # Menu may still show options without role=listbox
+            if not conversion_location_menu_visible(page):
+                continue
 
         _dismiss_floating_banners(page)
 
         # 4. Guard: verify it's the Conversion Location menu, not Conversion Event
         if _is_conversion_event_menu(page):
-            page.keyboard.press("Escape")
+            # Close safely — never press Escape (could close the entire wizard)
+            close_open_dropdown(page)
             page.wait_for_timeout(300)
             continue
 
-        # 5. Pick Website (expands Single, waits, clicks)
-        if _pick_website_from_open_menu(page) and is_website_conversion_selected(page):
-            return True
+        # 5. Pick Website (keyboard → CDP → recipe → fallbacks)
+        if _pick_website_from_open_menu(page):
+            page.wait_for_timeout(600)
+            _dismiss_advantage_banner(page)
+            if is_website_conversion_selected(page):
+                return True
 
         # Step failed — close and retry
         close_open_dropdown(page)
@@ -1457,22 +2188,90 @@ def pick_first_suggestion(page: Page) -> bool:
 
 
 # ── Country code → search name mapping ───────────────────────────────────────
+# ISO-2 → English name used as FB location search term.
+# Covers all regions (LATAM, MENA, EU, APAC, Africa).
 _COUNTRY_SEARCH: dict[str, str] = {
+    # LATAM
     "MX": "Mexico", "CL": "Chile", "CO": "Colombia", "EC": "Ecuador",
     "PE": "Peru", "AR": "Argentina", "BR": "Brazil", "VE": "Venezuela",
     "BO": "Bolivia", "PY": "Paraguay", "UY": "Uruguay", "CR": "Costa Rica",
     "GT": "Guatemala", "HN": "Honduras", "SV": "El Salvador", "NI": "Nicaragua",
     "PA": "Panama", "DO": "Dominican Republic", "PR": "Puerto Rico",
-    "US": "United States", "CA": "Canada", "GB": "United Kingdom",
-    "DE": "Germany", "FR": "France", "ES": "Spain", "IT": "Italy",
-    "PT": "Portugal", "NL": "Netherlands", "AU": "Australia",
+    "CU": "Cuba", "JM": "Jamaica",
+    # North America
+    "US": "United States", "CA": "Canada",
+    # Europe
+    "GB": "United Kingdom", "DE": "Germany", "FR": "France", "ES": "Spain",
+    "IT": "Italy", "PT": "Portugal", "NL": "Netherlands", "BE": "Belgium",
+    "CH": "Switzerland", "AT": "Austria", "SE": "Sweden", "NO": "Norway",
+    "DK": "Denmark", "FI": "Finland", "PL": "Poland", "CZ": "Czechia",
+    "SK": "Slovakia", "HU": "Hungary", "RO": "Romania", "BG": "Bulgaria",
+    "HR": "Croatia", "RS": "Serbia", "BA": "Bosnia and Herzegovina",
+    "GR": "Greece", "TR": "Turkey", "UA": "Ukraine", "RU": "Russia",
+    "BY": "Belarus", "LT": "Lithuania", "LV": "Latvia", "LU": "Luxembourg",
+    "IE": "Ireland",
+    # MENA
+    "AE": "United Arab Emirates", "SA": "Saudi Arabia", "KW": "Kuwait",
+    "QA": "Qatar", "OM": "Oman", "BH": "Bahrain", "IQ": "Iraq",
+    "JO": "Jordan", "LB": "Lebanon", "EG": "Egypt", "MA": "Morocco",
+    "TN": "Tunisia", "DZ": "Algeria", "LY": "Libya", "SY": "Syria",
+    "YE": "Yemen", "IL": "Israel",
+    # Africa
+    "NG": "Nigeria", "GH": "Ghana", "KE": "Kenya", "ZA": "South Africa",
+    "ET": "Ethiopia", "TZ": "Tanzania", "SN": "Senegal", "CM": "Cameroon",
+    "ML": "Mali", "CI": "Ivory Coast", "MZ": "Mozambique", "ZM": "Zambia",
+    "ZW": "Zimbabwe", "AO": "Angola", "NA": "Namibia", "BW": "Botswana",
+    "SO": "Somalia", "SD": "Sudan",
+    # APAC
+    "AU": "Australia", "NZ": "New Zealand", "JP": "Japan", "CN": "China",
+    "IN": "India", "ID": "Indonesia", "PH": "Philippines", "TH": "Thailand",
+    "VN": "Vietnam", "MY": "Malaysia", "SG": "Singapore", "TW": "Taiwan",
+    "KR": "South Korea", "BD": "Bangladesh", "PK": "Pakistan",
+    "LK": "Sri Lanka", "NP": "Nepal", "KH": "Cambodia", "LA": "Laos",
+    "MM": "Myanmar",
+    # Central Asia
+    "KZ": "Kazakhstan", "UZ": "Uzbekistan", "AZ": "Azerbaijan",
+    "AM": "Armenia", "GE": "Georgia", "KG": "Kyrgyzstan", "TJ": "Tajikistan",
+    "TM": "Turkmenistan",
+    # Other
     "ALL": "Worldwide",
 }
 
+# Reverse map: lowercase English name → ISO-2 (auto-generated from _COUNTRY_SEARCH).
+# Also includes common aliases.
+_COUNTRY_NAME_TO_ISO: dict[str, str] = {
+    v.lower(): k for k, v in _COUNTRY_SEARCH.items()
+}
+_COUNTRY_NAME_TO_ISO.update({
+    "usa": "US", "united states of america": "US",
+    "uk": "GB", "great britain": "GB",
+    "uae": "AE", "emirates": "AE",
+    "czech republic": "CZ",
+    "south korea": "KR", "republic of korea": "KR",
+    "russia": "RU", "russian federation": "RU",
+    "viet nam": "VN",
+    "bolivia (plurinational state of)": "BO",
+    "venezuela (bolivarian republic of)": "VE",
+    "iran": "IR", "syria": "SY", "syrian arab republic": "SY",
+    "cote d'ivoire": "CI", "ivory coast": "CI",
+    "tanzania": "TZ", "united republic of tanzania": "TZ",
+})
+
 
 def _country_search_term(code: str) -> str:
-    c = (code or "").strip().upper()
-    return _COUNTRY_SEARCH.get(c, c)
+    """Accept an ISO-2 code ('CR') OR a full name ('Costa Rica') and return
+    the English name to type into Facebook's location search box."""
+    raw = (code or "").strip()
+    cu = raw.upper()
+    # Already an ISO-2 code
+    if len(cu) == 2 and cu.isalpha():
+        return _COUNTRY_SEARCH.get(cu, raw)
+    # Full country name (e.g. "Costa Rica", "COSTA RICA") → look up via name map
+    iso = _COUNTRY_NAME_TO_ISO.get(raw.lower())
+    if iso:
+        return _COUNTRY_SEARCH.get(iso, raw)
+    # Fallback: use the original string (FB search can handle it in many cases)
+    return raw
 
 
 def fill_audience_location(page: Page, country_code: str) -> bool:
@@ -1717,3 +2516,119 @@ def select_placement_device(page: Page, os_val: str) -> bool:
                 except Exception:
                     continue
     return False
+
+
+# ── Teach-mode: capture what the user just clicked ────────────────────────────
+
+def _capture_website_locator_to_recipe(page: Page) -> dict:
+    """After user manually clicked Website, snapshot the selected element
+    and write its locator into config/rpa_recipes/conversion_location_website.json.
+
+    Returns the captured info dict.
+    """
+    recipe_path = (
+        Path(__file__).resolve().parents[2]
+        / "config"
+        / "rpa_recipes"
+        / "conversion_location_website.json"
+    )
+
+    # Try to find the Website element that is now selected / has aria-checked=true
+    captured: dict = {}
+    find_script = """
+    () => {
+      const texts = ['website', 'sitio web'];
+      // Look for elements whose text matches 'Website' (exact) and are in a list/menu
+      for (const el of document.querySelectorAll(
+        '[role="radio"], [role="option"], [role="menuitem"], div, span'
+      )) {
+        if (!el.offsetParent) continue;
+        const t = (el.textContent || '').trim().toLowerCase();
+        if (!texts.includes(t)) continue;
+        // Prefer checked/selected
+        const checked = el.getAttribute('aria-checked') === 'true'
+          || el.getAttribute('aria-selected') === 'true';
+        const rect = el.getBoundingClientRect();
+        return {
+          own_text: (el.textContent || '').trim(),
+          tag: el.tagName,
+          role: el.getAttribute('role') || '',
+          aria_checked: el.getAttribute('aria-checked') || '',
+          x: Math.round(rect.x + rect.width / 2),
+          y: Math.round(rect.y + rect.height / 2),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+          preferred: checked,
+        };
+      }
+      return null;
+    }
+    """
+    for root in _roots(page):
+        try:
+            info = root.evaluate(find_script)
+            if info:
+                captured = info
+                break
+        except Exception:
+            pass
+
+    if not captured:
+        return {}
+
+    # Load existing recipe, update pick_website step
+    try:
+        existing: dict = json.loads(recipe_path.read_text(encoding="utf-8"))
+    except Exception:
+        existing = {"name": "conversion_location_website", "steps": [], "verify": {}}
+
+    steps: list = existing.get("steps") or []
+    for step in steps:
+        if step.get("id") == "pick_website":
+            step["recorded"] = {
+                "x": captured.get("x"),
+                "y": captured.get("y"),
+                "w": captured.get("w"),
+                "h": captured.get("h"),
+                "tag": captured.get("tag", ""),
+                "role": captured.get("role", ""),
+                "teach_captured": True,
+            }
+            step["match"] = {
+                "own_text": captured.get("own_text", "Website"),
+                "exact": True,
+                "exclude": ["instant", "calls", "messenger"],
+            }
+            break
+    else:
+        # No pick_website step found — append one
+        steps.append({
+            "id": "pick_website",
+            "action": "click",
+            "match": {
+                "own_text": captured.get("own_text", "Website"),
+                "exact": True,
+                "exclude": ["instant", "calls", "messenger"],
+            },
+            "recorded": {
+                "x": captured.get("x"),
+                "y": captured.get("y"),
+                "w": captured.get("w"),
+                "h": captured.get("h"),
+                "tag": captured.get("tag", ""),
+                "role": captured.get("role", ""),
+                "teach_captured": True,
+            },
+        })
+        existing["steps"] = steps
+
+    existing["teach_updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        recipe_path.write_text(
+            json.dumps(existing, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+    return captured
