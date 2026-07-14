@@ -22,6 +22,14 @@ selectors:
     - "div[aria-label='Crear']"
     - "div[aria-label*='Create']"
     - "div[aria-label*='Crear']"
+  manual_campaign_setup_radio:
+    - "role=radio[name=/Manual campaign setup/i]"
+    - "role=radio[name=/Configuración manual de campaña/i]"
+    - "label:has-text('Manual campaign setup')"
+    - "label:has-text('Configuración manual de campaña')"
+    - "div[role='radio']:has-text('Manual campaign setup')"
+    - "div[role='radio']:has-text('Configuración manual')"
+    - "text=Manual campaign setup"
   create_campaign_item:
     - "role=menuitem[name=/Campaign/i]"
     - "role=menuitem[name=/Campa/i]"

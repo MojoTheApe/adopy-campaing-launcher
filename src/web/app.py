@@ -9,6 +9,7 @@ Routes:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -184,12 +185,10 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
         prefill: dict[str, str] = {}  # pre-populate inputs from Excel values
 
         if not entry:
-            missing = ["ad_account_id", "folder_id", "profile_id"]
+            missing = ["ad_account_id", "profile_id"]
         else:
             if not (entry.ad_account_id or "").strip():
                 missing.append("ad_account_id")
-            if not (entry.folder_id or "").strip():
-                missing.append("folder_id")
             if not (entry.profile_id or "").strip():
                 missing.append("profile_id")
 
@@ -896,6 +895,142 @@ async def account_link_patch(request: Request) -> JSONResponse:
 
     status = classify_link(link)
     return JSONResponse({"ok": True, "account": matched, "link_status": status})
+
+
+@app.post("/rpa-takeover")
+async def rpa_takeover(request: Request) -> JSONResponse:
+    """Pause or resume the RPA. Body: {action: 'pause'|'resume'}"""
+    from src.fb_ads_rpa.pacing import request_takeover, release_takeover, is_takeover_active
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    action = (data.get("action") or "pause").lower()
+    if action == "pause":
+        request_takeover()
+        return JSONResponse({"ok": True, "status": "paused"})
+    else:
+        release_takeover()
+        return JSONResponse({"ok": True, "status": "resumed"})
+
+
+@app.get("/rpa-takeover")
+async def rpa_takeover_status() -> JSONResponse:
+    from src.fb_ads_rpa.pacing import is_takeover_active, get_teach_state
+    teach = get_teach_state()
+    return JSONResponse({"active": is_takeover_active(), "teach": teach})
+
+
+@app.post("/rpa-teach/resume")
+async def rpa_teach_resume() -> JSONResponse:
+    """Tell the RPA that the user has clicked Website manually — resume the flow."""
+    from src.fb_ads_rpa.pacing import end_teach_wait, get_teach_state
+    state = get_teach_state()
+    if not state.get("waiting"):
+        return JSONResponse({"ok": False, "error": "Not in teach-mode wait"}, status_code=400)
+    end_teach_wait()
+    return JSONResponse({"ok": True, "message": "RPA resumed — capturing locator"})
+
+
+@app.get("/rpa-teach/status")
+async def rpa_teach_status() -> JSONResponse:
+    from src.fb_ads_rpa.pacing import get_teach_state
+    return JSONResponse(get_teach_state())
+
+
+@app.post("/rpa-record/start")
+async def rpa_record_start(request: Request) -> JSONResponse:
+    """Start click recorder on an already-open Multilogin CDP browser.
+
+    Body JSON: {recipe_name?: str, cdp_url?: str}
+    """
+    from src.fb_ads_rpa.click_recorder import start_recording
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    recipe_name = (data.get("recipe_name") or "campaign").strip()
+    cdp_url = (data.get("cdp_url") or "").strip() or None
+    result = await asyncio.to_thread(start_recording, recipe_name=recipe_name, cdp_url=cdp_url)
+    status = 200 if result.get("ok") else 400
+    return JSONResponse(result, status_code=status)
+
+
+@app.post("/rpa-record/stop")
+async def rpa_record_stop() -> JSONResponse:
+    from src.fb_ads_rpa.click_recorder import stop_recording
+    result = await asyncio.to_thread(stop_recording)
+    status = 200 if result.get("ok") else 400
+    return JSONResponse(result, status_code=status)
+
+
+@app.get("/rpa-record/status")
+async def rpa_record_status() -> JSONResponse:
+    from src.fb_ads_rpa.click_recorder import get_status
+    return JSONResponse(get_status())
+
+
+@app.get("/rpa-record/recipes")
+async def rpa_record_recipes() -> JSONResponse:
+    from src.fb_ads_rpa.click_recorder import list_recipes
+    return JSONResponse({"ok": True, "recipes": list_recipes()})
+
+
+@app.post("/rpa-website-lab/prepare")
+async def rpa_website_lab_prepare(request: Request) -> JSONResponse:
+    """Connect CDP + open Conversion location → Single so Website is visible."""
+    from src.fb_ads_rpa.website_click_lab import prepare, connect
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    cdp_url = (data.get("cdp_url") or "").strip() or None
+    if cdp_url:
+        conn = await asyncio.to_thread(connect, cdp_url=cdp_url)
+        if not conn.get("ok") and not conn.get("connected"):
+            return JSONResponse(conn, status_code=400)
+    result = await asyncio.to_thread(prepare)
+    return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+
+
+@app.post("/rpa-website-lab/step")
+async def rpa_website_lab_step(request: Request) -> JSONResponse:
+    """Run one strategy step: A|B|C|D|E|F."""
+    from src.fb_ads_rpa.website_click_lab import run_step
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    step = (data.get("step") or "").strip().upper()
+    result = await asyncio.to_thread(run_step, step)
+    return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+
+
+@app.post("/rpa-website-lab/run-all")
+async def rpa_website_lab_run_all(request: Request) -> JSONResponse:
+    """Live flow: prepare then A→B→F→C→D→E until Website is selected."""
+    from src.fb_ads_rpa.website_click_lab import run_all
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    cdp_url = (data.get("cdp_url") or "").strip() or None
+    stop = data.get("stop_on_success", True)
+    result = await asyncio.to_thread(run_all, stop_on_success=bool(stop), cdp_url=cdp_url)
+    return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+
+
+@app.get("/rpa-website-lab/status")
+async def rpa_website_lab_status() -> JSONResponse:
+    from src.fb_ads_rpa.website_click_lab import get_status
+    return JSONResponse(get_status())
+
+
+@app.post("/rpa-website-lab/disconnect")
+async def rpa_website_lab_disconnect() -> JSONResponse:
+    from src.fb_ads_rpa.website_click_lab import disconnect
+    result = await asyncio.to_thread(disconnect)
+    return JSONResponse(result)
 
 
 @app.post("/preview-publish")

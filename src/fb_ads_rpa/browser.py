@@ -13,6 +13,10 @@ from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 
+# Keep Playwright persistent-context sessions alive after hand-off so GC does not
+# close the Chromium window when the RpaPublisher instance is discarded.
+_HANDOFF_PLAYWRIGHT_SESSIONS: list[tuple[Any, Any]] = []
+
 
 @dataclass
 class BrowserConnection:
@@ -28,17 +32,24 @@ class BrowserConnection:
 
         If keep_browser_open=True, Playwright disconnects without closing
         the browser window (hand-off mode — user continues manually).
+        For CDP sessions we disconnect then stop the driver.
+        For persistent contexts (PlaywrightProfile) we must NOT call
+        playwright.stop() — that would tear down the Chromium window.
         """
+        is_cdp = hasattr(self.browser, "disconnect")
         try:
             if keep_browser_open:
-                # disconnect() exists on Browser (CDP) but not on BrowserContext
-                if hasattr(self.browser, "disconnect"):
+                if is_cdp:
                     self.browser.disconnect()
-                # else: persistent context — just leave it open
+                # else: persistent context — leave window open; skip stop below
             else:
                 self.browser.close()
         except Exception:
             pass
+        # Stopping Playwright after CDP disconnect is safe (remote browser stays).
+        # Stopping after launch_persistent_context closes the browser — skip when handing off.
+        if keep_browser_open and not is_cdp:
+            return
         try:
             self.playwright.stop()
         except Exception:
@@ -61,6 +72,12 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
     else:
         context = browser.new_context()
         page = context.new_page()
+    # Install human-activity tracker on the page
+    try:
+        from src.fb_ads_rpa.pacing import _install_mouse_tracker
+        _install_mouse_tracker(page)
+    except Exception:
+        pass
     return BrowserConnection(
         provider=provider,
         page=page,
@@ -83,8 +100,8 @@ class MultiloginBrowserProvider:
         from src.meta_campaign_agent.multilogin_config import get_multilogin_instance
         from src.meta_campaign_agent.multilogin_launcher import MultiloginLauncher, MultiloginLauncherError
 
-        if not entry.folder_id or not entry.profile_id:
-            raise MultiloginLauncherError(f"{account_label}: folder_id and profile_id required")
+        if not entry.profile_id:
+            raise MultiloginLauncherError(f"{account_label}: profile_id is required")
 
         ml = get_multilogin_instance(entry.multilogin_instance)
         self._launcher = MultiloginLauncher(ml)
@@ -92,7 +109,8 @@ class MultiloginBrowserProvider:
         self._started_profile_id = started.profile_id
 
         if not started.port:
-            self.close(entry)
+            # Leave profile running — do not stop on a port resolution glitch.
+            self.close(entry, keep_browser_open=True)
             raise MultiloginLauncherError("Multilogin start did not return debug port")
 
         ws = started.ws_endpoint or ""
@@ -108,7 +126,9 @@ class MultiloginBrowserProvider:
                 ws_endpoint=started.ws_endpoint,
             )
         except Exception:
-            self.close(entry)
+            # Never stop_profile here: profile may have been already running
+            # (reuse) or user needs the window left open after a CDP blip.
+            self.close(entry, keep_browser_open=True)
             raise
 
     def close(self, entry: AccountMapEntry, *, keep_browser_open: bool = False) -> None:
@@ -116,6 +136,7 @@ class MultiloginBrowserProvider:
             # Hand-off mode: leave the Multilogin profile running so the user
             # can interact with the pre-filled form manually.
             self._started_profile_id = None
+            self._launcher = None
             return
         if self._launcher and self._started_profile_id:
             try:
@@ -123,6 +144,7 @@ class MultiloginBrowserProvider:
             except Exception:
                 pass
         self._started_profile_id = None
+        self._launcher = None
 
 
 class DolphinBrowserProvider:
@@ -258,6 +280,130 @@ class MultiloginDirectCDPProvider:
             except Exception:
                 pass
 
+    def _cdp_accepting(self, port: int | None = None) -> bool:
+        import socket
+
+        p = port or self.CDP_PORT
+        try:
+            with socket.create_connection(("127.0.0.1", p), timeout=1):
+                return True
+        except OSError:
+            return False
+
+    def _profile_process_running(self, user_data_dir: str, profile_id: str = "") -> bool:
+        """True if an MLX Mimic chrome process is using this profile dir."""
+        import psutil  # type: ignore
+
+        needles: list[str] = []
+        udd_norm = user_data_dir.lower().replace("/", "\\")
+        needles.append(udd_norm)
+        last = udd_norm.rstrip("\\").rsplit("\\", 1)[-1]
+        if last:
+            needles.append(last)
+        if profile_id:
+            needles.append(profile_id.lower())
+        mlx_home_norm = str(Path.home() / "mlx").lower().replace("/", "\\")
+
+        for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
+            try:
+                if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
+                    continue
+                exe = (proc.info["exe"] or "").lower().replace("/", "\\")
+                if "mimic" not in exe and mlx_home_norm not in exe:
+                    continue
+                cmd = " ".join(proc.info["cmdline"] or []).lower().replace("/", "\\")
+                if any(n in cmd for n in needles):
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def _discover_debug_port(self, user_data_dir: str, profile_id: str = "") -> int | None:
+        """Find CDP port of an already-running Mimic (DevToolsActivePort or cmdline)."""
+        import psutil  # type: ignore
+
+        # Chrome writes DevToolsActivePort into the profile dir when debugging is on
+        for candidate in (
+            Path(user_data_dir) / "DevToolsActivePort",
+            Path(user_data_dir) / "Default" / "DevToolsActivePort",
+        ):
+            try:
+                if candidate.is_file():
+                    first = candidate.read_text(encoding="utf-8", errors="replace").splitlines()[0].strip()
+                    if first.isdigit():
+                        port = int(first)
+                        if self._cdp_accepting(port):
+                            return port
+            except Exception:
+                pass
+
+        # Parse --remote-debugging-port=NNNN from Mimic cmdline
+        needles: list[str] = []
+        udd_norm = user_data_dir.lower().replace("/", "\\")
+        needles.append(udd_norm)
+        last = udd_norm.rstrip("\\").rsplit("\\", 1)[-1]
+        if last:
+            needles.append(last)
+        if profile_id:
+            needles.append(profile_id.lower())
+        mlx_home_norm = str(Path.home() / "mlx").lower().replace("/", "\\")
+
+        for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
+            try:
+                if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
+                    continue
+                exe = (proc.info["exe"] or "").lower().replace("/", "\\")
+                if "mimic" not in exe and mlx_home_norm not in exe:
+                    continue
+                cmdline = proc.info["cmdline"] or []
+                cmd = " ".join(cmdline).lower().replace("/", "\\")
+                if not any(n in cmd for n in needles):
+                    continue
+                for arg in cmdline:
+                    if isinstance(arg, str) and "--remote-debugging-port=" in arg:
+                        try:
+                            port = int(arg.split("=", 1)[1].strip())
+                        except ValueError:
+                            continue
+                        if port > 0 and self._cdp_accepting(port):
+                            return port
+            except Exception:
+                continue
+
+        if self._cdp_accepting(self.CDP_PORT):
+            return self.CDP_PORT
+        return None
+
+    def _try_attach_existing(
+        self, profile_id: str, user_data_dir: str
+    ) -> "BrowserConnection | None":
+        """Reuse an already-running Mimic for this profile (do not kill/restart)."""
+        import logging
+
+        log = logging.getLogger(__name__)
+        if not self._profile_process_running(user_data_dir, profile_id):
+            return None
+        port = self._discover_debug_port(user_data_dir, profile_id)
+        if port is None:
+            log.info(
+                "Profile %s is running but no CDP debug port found — will relaunch with debugging",
+                profile_id,
+            )
+            return None
+        try:
+            cdp_url = f"http://127.0.0.1:{port}"
+            conn = _connect_playwright(
+                cdp_url=cdp_url,
+                provider="multilogin_direct",
+                debug_port=str(port),
+                ws_endpoint=None,
+            )
+            log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
+            return conn
+        except Exception as exc:
+            log.warning("Could not attach to running Mimic (%s) — will relaunch", exc)
+            return None
+
     def open(self, entry: AccountMapEntry, account_label: str) -> "BrowserConnection":
         profile_id = entry.profile_id
         if not profile_id:
@@ -276,7 +422,14 @@ class MultiloginDirectCDPProvider:
         if chrome is None:
             raise RuntimeError("MLX Mimic browser (chrome.exe) not found under mlx/deps/")
 
-        # Stop any running instance of this profile
+        # Prefer attaching to an already-open profile instead of killing it.
+        reused = self._try_attach_existing(profile_id, self._user_data_dir)
+        if reused is not None:
+            self._proc = None  # we did not spawn this process
+            return reused
+
+        # Stop any running instance of this profile only when we must relaunch
+        # (process up without our CDP port, or nothing running).
         self._kill_profile_browser(self._user_data_dir, profile_id)
         time.sleep(2)  # let Chrome release the profile lock
 
@@ -356,7 +509,8 @@ class MultiloginDirectCDPProvider:
 
     def close(self, entry: AccountMapEntry, *, keep_browser_open: bool = False) -> None:
         if keep_browser_open:
-            # Hand-off: leave browser running for user
+            # Hand-off: leave browser running for user. Do not terminate our Popen
+            # handle and do not kill Mimic. Clear handle so we don't kill on GC.
             self._proc = None
             return
         if self._proc:
@@ -366,7 +520,7 @@ class MultiloginDirectCDPProvider:
                 pass
             self._proc = None
         if self._user_data_dir:
-            self._kill_profile_browser(self._user_data_dir)
+            self._kill_profile_browser(self._user_data_dir, self._profile_id_cache or "")
         self._user_data_dir = None
         self._profile_id_cache = None
 
@@ -466,8 +620,9 @@ class PlaywrightProfileProvider:
 
     def close(self, entry: AccountMapEntry, *, keep_browser_open: bool = False) -> None:
         if keep_browser_open:
-            self._context = None
-            self._playwright = None
+            # Pin refs at module level — job runner drops RpaPublisher after close().
+            if self._context is not None or self._playwright is not None:
+                _HANDOFF_PLAYWRIGHT_SESSIONS.append((self._context, self._playwright))
             return
         if self._context:
             try:

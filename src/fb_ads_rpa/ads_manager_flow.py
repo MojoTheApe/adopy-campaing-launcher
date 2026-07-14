@@ -5,12 +5,15 @@ import re
 import time
 from typing import Any
 
-RPA_FLOW_VERSION = "v19"
+RPA_FLOW_VERSION = "v29"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft, RpaPublishResult
+from src.fb_ads_rpa.page_diagnostics import diagnose_and_recover
 from src.fb_ads_rpa.meta_dom import (
+    _COUNTRY_NAME_TO_ISO,
+    _COUNTRY_SEARCH,
     click_conversion_location_dropdown,
     click_conversion_event_dropdown,
     click_sidebar_tree_index,
@@ -43,8 +46,17 @@ from src.fb_ads_rpa.meta_dom import (
     wait_conversion_menu_open,
     wait_editor_saved,
     wizard_editor_level,
+    _capture_website_locator_to_recipe,
 )
-from src.fb_ads_rpa.pacing import pause_after_navigation, pause_medium, pause_short
+from src.fb_ads_rpa.pacing import (
+    pause_after_navigation,
+    pause_medium,
+    pause_short,
+    begin_teach_wait,
+    wait_for_teach_resume,
+    end_teach_wait,
+    get_teach_state,
+)
 from src.fb_ads_rpa.screenshots import capture
 from src.fb_ads_rpa.selectors import load_selectors
 
@@ -140,9 +152,28 @@ def _click_first(page: Page, selectors: list[str], *, timeout_ms: int) -> None:
 _CREATE_BUTTON_RE = re.compile(r"\+?\s*(Create|Crear)", re.I)
 _LOADING_OVERLAY_RE = re.compile(r"^(Loading\.\.\.|Cargando\.\.\.)$", re.I)
 _OBJECTIVE_MODAL_RE = re.compile(
-    r"(Create new campaign|Crear nueva campa|Choose a campaign objective|Elige un objetivo)",
+    r"(Choose a campaign objective|Elige un objetivo|Buying type|Tipo de compra|"
+    r"Awareness|Traffic|Engagement|Leads|App promotion|Sales)",
     re.I,
 )
+_OBJECTIVE_CHOOSER_RE = re.compile(
+    r"Choose a campaign objective|Elige un objetivo",
+    re.I,
+)
+_OBJECTIVE_TITLE_RE = re.compile(
+    r"(Create new campaign|Crear nueva campa)",
+    re.I,
+)
+_AI_GUIDED_DIALOG_RE = re.compile(
+    r"(Meta AI.guided setup|Manual campaign setup|Configuraci[oó]n manual de campa)",
+    re.I,
+)
+_MANUAL_SETUP_RE = re.compile(
+    r"Manual campaign setup|Configuraci[oó]n manual de campa",
+    re.I,
+)
+_AI_SETUP_RE = re.compile(r"Meta AI.guided setup", re.I)
+_AI_DESCRIBE_RE = re.compile(r"Describe your campaign", re.I)
 _CONTINUE_BUTTON_RE = re.compile(r"^(Continue|Continuar)$", re.I)
 _NEXT_BUTTON_RE = re.compile(r"^(Next|Siguiente)$", re.I)
 _CAMPAIGN_NAME_LABEL_RE = re.compile(r"^Campaign name$|^Nombre de la campaña$", re.I)
@@ -150,7 +181,79 @@ _AD_SET_NAME_LABEL_RE = re.compile(r"^Ad set name$|^Nombre del conjunto", re.I)
 _DAILY_BUDGET_LABEL_RE = re.compile(r"^Daily budget$|^Presupuesto diario", re.I)
 
 
+def _ai_describe_textarea_visible(page: Page) -> bool:
+    for root in _ads_roots(page):
+        try:
+            if root.get_by_placeholder(_AI_DESCRIBE_RE).first.is_visible(timeout=500):
+                return True
+        except Exception:
+            pass
+        try:
+            if root.get_by_text(_AI_DESCRIBE_RE).first.is_visible(timeout=400):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _objectives_chooser_visible(page: Page) -> bool:
+    """True when Manual is selected and objective list (Leads/Traffic/…) is shown.
+
+    On modern Ads Manager, Manual + objectives appear in the SAME dialog that still
+    contains the text 'Meta AI-guided setup' — so we must not treat that as 'stuck'.
+    """
+    for root in _ads_roots(page):
+        try:
+            if root.get_by_text(_OBJECTIVE_CHOOSER_RE).first.is_visible(timeout=600):
+                return True
+        except Exception:
+            pass
+        # Fallback: several objective names visible together
+        try:
+            has_leads = root.get_by_text(re.compile(r"^Leads$", re.I)).first.is_visible(timeout=400)
+            has_traffic = root.get_by_text(re.compile(r"^Traffic$", re.I)).first.is_visible(timeout=400)
+            has_aware = root.get_by_text(re.compile(r"^Awareness$", re.I)).first.is_visible(timeout=400)
+            if has_leads and (has_traffic or has_aware):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _is_ai_guided_dialog_open(page: Page) -> bool:
+    """True only while still on the AI-vs-Manual choice / AI prompt — not when objectives show.
+
+    Screenshot 02c_ai_dialog_stuck showed Manual already selected + objectives list, but
+    Continue disabled until Leads is picked. That state is NOT 'AI stuck'.
+    """
+    if _objectives_chooser_visible(page):
+        return False
+    if _ai_describe_textarea_visible(page):
+        return True
+    for root in _ads_roots(page):
+        try:
+            if root.get_by_text(_AI_SETUP_RE).first.is_visible(timeout=500):
+                # Choice screen without objectives yet
+                if root.get_by_text(_MANUAL_SETUP_RE).first.is_visible(timeout=400):
+                    return True
+        except Exception:
+            pass
+        try:
+            loc = root.get_by_text(_AI_GUIDED_DIALOG_RE)
+            if loc.count() and loc.first.is_visible():
+                # If both Manual text and no objectives → still on choice screen
+                return not _objectives_chooser_visible(page)
+        except Exception:
+            pass
+    return False
+
+
 def _is_objective_modal_open(page: Page) -> bool:
+    """True when the Leads/objective picker is visible (including inside Manual dialog)."""
+    if _objectives_chooser_visible(page):
+        return True
+    if _is_ai_guided_dialog_open(page):
+        return False
     for root in _ads_roots(page):
         try:
             loc = root.get_by_text(_OBJECTIVE_MODAL_RE)
@@ -161,12 +264,167 @@ def _is_objective_modal_open(page: Page) -> bool:
         try:
             dlg = root.get_by_role("dialog")
             if dlg.count() and dlg.first.is_visible():
-                txt = dlg.first.inner_text(timeout=500)
-                if _OBJECTIVE_MODAL_RE.search(txt or ""):
+                txt = dlg.first.inner_text(timeout=800) or ""
+                if _OBJECTIVE_CHOOSER_RE.search(txt):
+                    return True
+                if re.search(r"\bLeads\b", txt) and re.search(
+                    r"Traffic|Awareness|Engagement|Sales", txt, re.I
+                ):
                     return True
         except Exception:
             pass
     return False
+
+
+def _is_manual_setup_selected(page: Page) -> bool:
+    """True when Manual is chosen (objectives visible, AI textarea gone, or radio checked)."""
+    if _objectives_chooser_visible(page):
+        return True
+    if _ai_describe_textarea_visible(page):
+        return False
+    script = """
+    () => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      for (const el of document.querySelectorAll(
+        '[role=radio], [aria-checked], input[type=radio], label, div'
+      )) {
+        if (!el.offsetParent) continue;
+        const t = norm(el.getAttribute('aria-label') || el.textContent || '');
+        if (!t.includes('manual campaign setup') && !t.includes('configuración manual')) continue;
+        if (t.includes('meta ai')) continue;
+        const checked = el.getAttribute('aria-checked');
+        if (checked === 'true') return true;
+        if (el.checked === true) return true;
+      }
+      return false;
+    }
+    """
+    for root in _ads_roots(page):
+        try:
+            if root.evaluate(script):
+                return True
+        except Exception:
+            pass
+    # Choice screen still open but AI prompt gone → Manual selected
+    if not _is_ai_guided_dialog_open(page):
+        return True
+    return not _ai_describe_textarea_visible(page)
+
+
+def _click_manual_campaign_setup(page: Page) -> bool:
+    """Click 'Manual campaign setup' with CDP-resilient strategies."""
+    # 1) Semantic / role
+    for root in _ads_roots(page):
+        for name_re in (
+            re.compile(r"Manual campaign setup", re.I),
+            re.compile(r"Configuraci[oó]n manual de campa", re.I),
+        ):
+            try:
+                radio = root.get_by_role("radio", name=name_re).first
+                if radio.is_visible(timeout=1500):
+                    radio.click(timeout=4000, force=True)
+                    time.sleep(0.45)
+                    if _is_manual_setup_selected(page):
+                        return True
+            except Exception:
+                pass
+            try:
+                el = root.get_by_text(name_re).first
+                if el.is_visible(timeout=1500):
+                    el.click(timeout=4000, force=True)
+                    time.sleep(0.45)
+                    if _is_manual_setup_selected(page):
+                        return True
+                    # Mouse chain on bbox (CDP-safe)
+                    box = el.bounding_box()
+                    if box:
+                        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                        time.sleep(0.05)
+                        page.mouse.down()
+                        time.sleep(0.07)
+                        page.mouse.up()
+                        time.sleep(0.45)
+                        if _is_manual_setup_selected(page):
+                            return True
+            except Exception:
+                pass
+
+    # 2) JS: find Manual row and click radio / row
+    script = """
+    () => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      const hits = [];
+      for (const el of document.querySelectorAll(
+        '[role=radio], label, div, span, li'
+      )) {
+        if (!el.offsetParent) continue;
+        const t = norm(el.getAttribute('aria-label') || '');
+        const own = norm(
+          Array.from(el.childNodes).filter(n => n.nodeType === 3)
+            .map(n => n.textContent).join('') || el.textContent || ''
+        );
+        const text = t || own;
+        if (!text.includes('manual campaign setup') && !text.includes('configuración manual')) continue;
+        if (text.includes('meta ai')) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 8 || r.height < 8 || r.height > 120) continue;
+        hits.push({ el, area: r.width * r.height });
+      }
+      if (!hits.length) return false;
+      hits.sort((a, b) => a.area - b.area);
+      const target = hits[0].el;
+      target.scrollIntoView({ block: 'nearest' });
+      const radio = target.closest('[role=radio]') || target.querySelector('[role=radio]') || target;
+      radio.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, cancelable:true, view:window}));
+      radio.dispatchEvent(new MouseEvent('mouseup', {bubbles:true, cancelable:true, view:window}));
+      radio.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true, view:window}));
+      if (typeof radio.click === 'function') radio.click();
+      return true;
+    }
+    """
+    for root in _ads_roots(page):
+        try:
+            if root.evaluate(script):
+                time.sleep(0.5)
+                if _is_manual_setup_selected(page):
+                    return True
+        except Exception:
+            pass
+    return _is_manual_setup_selected(page)
+
+
+def _dismiss_ai_guided_setup_dialog(page: Page, *, timeout_ms: int = 20000) -> bool:
+    """Select Manual campaign setup until the objective chooser appears.
+
+    Success = Manual selected AND 'Choose a campaign objective' is visible.
+    Do NOT click Continue here — Continue stays disabled until Leads is picked.
+    """
+    if _objectives_chooser_visible(page):
+        return True
+    if not _is_ai_guided_dialog_open(page) and not _ai_describe_textarea_visible(page):
+        return True
+
+    deadline = time.time() + timeout_ms / 1000
+    while time.time() < deadline:
+        if _objectives_chooser_visible(page):
+            return True
+        _click_manual_campaign_setup(page)
+        time.sleep(0.55)
+        if _objectives_chooser_visible(page):
+            return True
+        if _is_manual_setup_selected(page) and not _ai_describe_textarea_visible(page):
+            # Manual selected; wait briefly for objectives to render
+            time.sleep(0.8)
+            if _objectives_chooser_visible(page):
+                return True
+            # Objectives may already be there under a slightly different label
+            if _is_objective_modal_open(page):
+                return True
+        time.sleep(0.35)
+
+    return _objectives_chooser_visible(page) or (
+        _is_manual_setup_selected(page) and not _ai_describe_textarea_visible(page)
+    )
 
 
 def _wait_for_ads_manager_ready(page: Page, *, timeout_ms: int = 60000) -> None:
@@ -230,12 +488,41 @@ def _select_leads_objective(page: Page, selectors: list[str], *, timeout_ms: int
             re.compile(r"^Leads$", re.I),
             re.compile(r"Clientes potenciales", re.I),
         ):
+            # Recorded path: click heading/text 'Leads' then radio
+            try:
+                heading = root.get_by_role("heading", name=name_re).first
+                if heading.is_visible(timeout=1500):
+                    box = heading.bounding_box()
+                    if box:
+                        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                        time.sleep(0.05)
+                        page.mouse.down()
+                        time.sleep(0.07)
+                        page.mouse.up()
+                    else:
+                        heading.click(timeout=per_try, force=True)
+                    pause_short()
+                    return
+            except Exception as exc:
+                last_err = exc
             try:
                 radio = root.get_by_role("radio", name=name_re).first
                 radio.wait_for(state="visible", timeout=per_try)
-                radio.click(timeout=per_try)
+                radio.click(timeout=per_try, force=True)
                 pause_short()
                 return
+            except Exception as exc:
+                last_err = exc
+            try:
+                el = root.get_by_text(name_re).first
+                if el.is_visible(timeout=1500):
+                    box = el.bounding_box()
+                    if box:
+                        page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                    else:
+                        el.click(timeout=per_try, force=True)
+                    pause_short()
+                    return
             except Exception as exc:
                 last_err = exc
 
@@ -506,6 +793,16 @@ class AdsManagerFlow:
         result.steps_completed.append("click_create")
         self._shot("02_create_clicked", result)
 
+        # New Meta UI: MUST pick Manual before Continue — AI-guided has no Campaign name field.
+        if _is_ai_guided_dialog_open(self.page):
+            result.steps_completed.append("ai_guided_dialog_open")
+            if _dismiss_ai_guided_setup_dialog(self.page, timeout_ms=self.action_timeout):
+                result.steps_completed.append("manual_setup_dismissed")
+                self._shot("02c_manual_setup_continued", result)
+            else:
+                result.steps_completed.append("manual_setup_dismiss_failed")
+                self._shot("02c_manual_setup_fail", result)
+
         if _is_objective_modal_open(self.page):
             result.steps_completed.append("objective_modal_open")
         else:
@@ -514,14 +811,27 @@ class AdsManagerFlow:
         if (
             "wizard_form_ready" not in result.steps_completed
             and not _is_objective_modal_open(self.page)
+            and not _is_ai_guided_dialog_open(self.page)
         ):
             result.steps_completed.append("create_retry")
             try:
                 _click_first(self.page, create_sels, timeout_ms=12000)
                 pause_medium()
                 self._shot("02b_create_retry", result)
+                # Retry also lands on AI dialog often — dismiss again
+                if _is_ai_guided_dialog_open(self.page):
+                    result.steps_completed.append("ai_guided_dialog_open_retry")
+                    if _dismiss_ai_guided_setup_dialog(self.page, timeout_ms=self.action_timeout):
+                        result.steps_completed.append("manual_setup_dismissed_retry")
+                        self._shot("02c_manual_setup_continued", result)
+                    else:
+                        result.steps_completed.append("manual_setup_dismiss_failed_retry")
             except AdsManagerFlowError:
                 result.steps_completed.append("create_retry_skipped")
+        elif _is_ai_guided_dialog_open(self.page):
+            result.steps_completed.append("create_retry_blocked_by_ai_dialog")
+            if _dismiss_ai_guided_setup_dialog(self.page, timeout_ms=self.action_timeout):
+                result.steps_completed.append("manual_setup_dismissed_late")
         elif "wizard_form_ready" not in result.steps_completed:
             result.steps_completed.append("create_retry_skipped_modal_open")
 
@@ -536,6 +846,19 @@ class AdsManagerFlow:
             pause_medium()
         except AdsManagerFlowError:
             result.steps_completed.append("create_campaign_menu_skipped")
+
+        # Final gate: stuck only if AI prompt still active (not when objectives are shown)
+        if _ai_describe_textarea_visible(self.page) and not _objectives_chooser_visible(self.page):
+            result.steps_completed.append("ai_guided_still_open")
+            self._shot("02c_ai_dialog_stuck", result)
+            if not _dismiss_ai_guided_setup_dialog(self.page, timeout_ms=15000):
+                raise AdsManagerFlowError(
+                    "Stuck on 'Meta AI-guided setup' dialog — could not select "
+                    "'Manual campaign setup'. Check screenshot 02c_ai_dialog_stuck."
+                )
+
+        if _objectives_chooser_visible(self.page) or _is_objective_modal_open(self.page):
+            result.steps_completed.append("objective_chooser_ready")
 
         try:
             _select_leads_objective(
@@ -555,7 +878,18 @@ class AdsManagerFlow:
             result.steps_completed.append("continue_skipped_or_disabled")
 
         pause_medium()
+        # One more check: AI prompt (not objective chooser)
+        if _ai_describe_textarea_visible(self.page) and not _objectives_chooser_visible(self.page):
+            result.steps_completed.append("ai_guided_after_objective")
+            _dismiss_ai_guided_setup_dialog(self.page, timeout_ms=12000)
+
         self._wait_for_campaign_name_field(result)
+        if _ai_describe_textarea_visible(self.page) and not _objectives_chooser_visible(self.page):
+            self._shot("03_wizard_started", result)
+            raise AdsManagerFlowError(
+                "Wizard still on AI-guided setup — Campaign name field does not exist on this screen. "
+                "Manual setup was not applied."
+            )
         self._shot("03_wizard_started", result)
 
     def _wait_for_campaign_name_field(self, result: RpaPublishResult, *, quick: bool = False) -> None:
@@ -771,8 +1105,12 @@ class AdsManagerFlow:
     def _fill_audience_location(
         self, draft: CampaignDraft, result: RpaPublishResult
     ) -> None:
-        country = (draft.country or "").strip().upper()
-        if not country or country == "ALL":
+        raw = (draft.country or "").strip()
+        # Normalize full name → ISO-2 ("Costa Rica" → "CR", "Mexico" → "MX").
+        # Falls back to 2-char uppercase if no mapping found.
+        iso = _COUNTRY_NAME_TO_ISO.get(raw.lower()) or (raw.upper() if len(raw) == 2 else None)
+        country = iso or raw.upper()[:2]
+        if not country or country == "ALL" or not raw:
             result.steps_completed.append("audience_location_all_skipped")
             return
         if fill_audience_location(self.page, country):
@@ -841,6 +1179,7 @@ class AdsManagerFlow:
                     result.steps_completed.append("conversion_location_single_clicked")
                     pause_short()
                     self._shot("04d_conversion_single_expanded", result)
+                    result.steps_completed.append("conversion_location_recipe_path")  # recorded: Single → Website
             elif menu_open:
                 result.steps_completed.append("conversion_location_wrong_menu")
                 close_open_dropdown(self.page)
@@ -886,6 +1225,30 @@ class AdsManagerFlow:
             result.steps_completed.append(f"screenshot_menu_open:{menu_shot}")
         result.steps_completed.append(f"screenshot_conversion_fail:{fail_shot}")
 
+        # Self-healing: run diagnostics and attempt recovery
+        diag = diagnose_and_recover(self.page, failed_step="conversion_location")
+        result.steps_completed.append(f"diag:{diag.summary()}")
+        if diag.conversion_location == "website":
+            result.steps_completed.append("conversion_location_website_recovered")
+            self._shot("04d_conversion_website_recovered", result)
+            return
+
+        # Teach-mode: pause so the user can click Website manually.
+        # The RPA waits up to 10 minutes, then re-checks and captures the locator.
+        result.steps_completed.append("teach_mode_website_waiting")
+        begin_teach_wait("website_click")
+        resumed = wait_for_teach_resume(max_wait_s=600.0)
+        if resumed:
+            # After user click: capture what changed and verify
+            time.sleep(0.8)
+            if is_website_conversion_selected(self.page):
+                result.steps_completed.append("conversion_location_website_teach")
+                self._shot("04d_conversion_website_teach", result)
+                _capture_website_locator_to_recipe(self.page)
+                result.steps_completed.append("teach_website_captured")
+            else:
+                result.steps_completed.append("teach_mode_website_still_failed")
+
     def _conversion_location_ok(self, result: RpaPublishResult) -> bool:
         return any(
             s in result.steps_completed
@@ -893,6 +1256,7 @@ class AdsManagerFlow:
                 "conversion_location_website",
                 "conversion_location_website_already",
                 "conversion_location_website_selector",
+                "conversion_location_website_recovered",
             )
         )
 
@@ -903,6 +1267,7 @@ class AdsManagerFlow:
                 "conversion_event_lead",
                 "conversion_event_lead_already",
                 "conversion_event_lead_selector",
+                "conversion_event_lead_recovered",
             )
         )
 
@@ -957,6 +1322,13 @@ class AdsManagerFlow:
 
         result.steps_completed.append("conversion_event_lead_skipped")
         self._shot("04e_conversion_event_fail", result)
+
+        # Self-healing: run diagnostics and attempt recovery
+        diag = diagnose_and_recover(self.page, failed_step="conversion_event")
+        result.steps_completed.append(f"diag:{diag.summary()}")
+        if diag.conversion_event == "lead":
+            result.steps_completed.append("conversion_event_lead_recovered")
+            self._shot("04e_conversion_event_recovered", result)
 
     def _fill_targeting_group(
         self,
@@ -1321,7 +1693,7 @@ class AdsManagerFlow:
         try:
             self._goto_campaigns(draft, result)
             self._start_create_wizard(result)
-            result.steps_completed.append("rpa_flow_v12")
+            result.steps_completed.append(f"rpa_flow_{RPA_FLOW_VERSION}")
             self._fill_campaign_and_adset(draft, ad_set, result)
 
             ad_set_ready = self._conversion_location_ok(result) and self._conversion_event_ok(result)

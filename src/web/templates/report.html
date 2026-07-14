@@ -1414,7 +1414,7 @@
 <div class="ml-connect-panel" id="ml-connect-{{ cid }}">
   <div class="ml-connect-header" onclick="mlTogglePanel('{{ cid }}')">
     <span class="ml-connect-icon">🔑</span>
-    <span class="ml-connect-title">Multilogin — connect to get folder_id & profile_id</span>
+    <span class="ml-connect-title">Multilogin — connect to auto-link profile_id</span>
     <span class="ml-connect-chevron" id="ml-chevron-{{ cid }}">▸</span>
   </div>
   <div class="ml-connect-body" id="ml-body-{{ cid }}" style="display:none">
@@ -1450,40 +1450,9 @@
           <code>folder_id</code> и API-токен не обязательны.
         </p>
         <p style="font-size:0.72rem;color:#8fd4a0;margin:0">
-          Просто нажми <strong>Preview</strong> → <strong>Go Live</strong> / <strong>Dry Run</strong>.
+          Просто нажми <strong>Preview</strong> → <strong>Publish</strong> — кампания поднимется как draft.
           Кнопка «Перезапустить браузер» больше не нужна.
         </p>
-      </div>
-    </details>
-
-    {# ── Manual folder_id / profile_id entry ── #}
-    <details style="margin-top:0.6rem" open>
-      <summary style="font-size:0.72rem;color:var(--accent);cursor:pointer;user-select:none;font-weight:600">
-        ✏️ Ввести folder_id и profile_id вручную
-      </summary>
-      <div style="margin-top:0.5rem;display:flex;flex-direction:column;gap:0.35rem">
-        <p style="font-size:0.71rem;color:var(--muted);margin:0 0 0.2rem">
-          Найди IDs в приложении Multilogin: открой профиль → скопируй Profile ID (UUID).
-          Folder ID виден в URL папки или в настройках профиля.
-        </p>
-        <div style="display:flex;gap:0.5rem;align-items:center">
-          <span style="font-size:0.72rem;color:var(--muted);width:5.5rem;flex-shrink:0">folder_id</span>
-          <input type="text" id="ml-manual-folder-{{ cid }}" class="cb-input"
-                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                 style="font-family:monospace;font-size:0.72rem;flex:1">
-        </div>
-        <div style="display:flex;gap:0.5rem;align-items:center">
-          <span style="font-size:0.72rem;color:var(--muted);width:5.5rem;flex-shrink:0">profile_id</span>
-          <input type="text" id="ml-manual-profile-{{ cid }}" class="cb-input"
-                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                 style="font-family:monospace;font-size:0.72rem;flex:1">
-        </div>
-        <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.15rem">
-          <button type="button" class="ml-connect-btn"
-                  style="padding:0.28rem 0.9rem;font-size:0.75rem"
-                  onclick="mlManualSave('{{ cid }}')">💾 Сохранить IDs</button>
-          <span id="ml-manual-status-{{ cid }}" style="font-size:0.72rem"></span>
-        </div>
       </div>
     </details>
 
@@ -1609,16 +1578,18 @@
           </div>
           {% endif %}
 
-          {# Multilogin IDs — set via Connect panel, not manual inputs #}
-          {% set ml_missing = pf.missing_map_fields | select('in', ['folder_id', 'profile_id']) | list %}
+          {# profile_id — inline input when missing, status when set #}
           <div class="cb-map-field-row" id="cb-ml-status-{{ acc_id }}">
-            <span class="cb-map-field-label">Multilogin IDs</span>
-            {% if ml_missing %}
-              <span class="cb-pf-err" style="font-size:0.72rem">
-                ⚠ not configured — use "Connect" panel above, click <strong>Use</strong> next to a profile
-              </span>
+            <span class="cb-map-field-label">profile_id</span>
+            {% if 'profile_id' in pf.missing_map_fields %}
+              <input type="text" class="cb-input cb-map-input" data-field="profile_id"
+                     value="" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                     style="font-family:monospace;font-size:0.72rem">
+              <button type="button" class="cb-field-save-btn"
+                      onclick="cbSaveOneMapField(this, '{{ acc_label | e }}', 'profile_id')">Save</button>
+              <span class="cb-field-status"></span>
             {% else %}
-              <span class="cb-pf-ok" style="font-size:0.72rem">✓ folder_id &amp; profile_id set</span>
+              <span class="cb-pf-ok" style="font-size:0.72rem">✓ set</span>
             {% endif %}
           </div>
 
@@ -1746,16 +1717,21 @@
       <button type="button" class="cb-preview-btn"
               onclick="cbPreview(this.closest('form'))">Preview</button>
       <button type="button" class="cb-publish-btn" disabled
-              onclick="cbPublish(this.closest('form'), false)">Publish via Multilogin</button>
-      <label class="cb-activate-label" title="🖐 Hand-off: RPA fills the form completely (creatives, copies, targeting), then disconnects — browser stays open so you can select the Facebook Page and click Publish manually.">
-        <input type="checkbox" class="cb-handoff-check" checked> 🖐 Hand-off (я выберу страницу и нажму Publish)
-      </label>
-      <label class="cb-activate-label" title="Dry Run: browser opens, fills the form, but skips creative upload and does NOT click Publish. Nothing is saved in Facebook.">
-        <input type="checkbox" class="cb-dryrun-check"> 🔬 Dry Run
-      </label>
-      <label class="cb-activate-label">
-        <input type="checkbox" class="cb-activate-check"> ⚡ ACTIVE (go live)
-      </label>
+              onclick="cbPublish(this.closest('form'))"
+              title="Поднимает кампанию через Multilogin и оставляет черновик в Ads Manager (Publish в Facebook не жмёт).">Publish</button>
+      <button type="button" id="rpa-takeover-btn"
+              style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#b45309;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
+              onclick="rpaTakeover()">⏸ Пауза RPA</button>
+      <button type="button" class="rpa-record-btn"
+              style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#1d4ed8;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
+              onclick="rpaRecordToggle(this)"
+              title="Записывает твои клики в открытом Multilogin браузере.">⏺ Record clicks</button>
+      <button type="button" class="rpa-lab-btn"
+              style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#7c3aed;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
+              onclick="rpaWebsiteLabToggle(this)"
+              title="Live lab: по очереди A→B→F→C→D→E кликает Website.">🧪 Website Lab</button>
+      <span class="rpa-record-status" style="font-size:0.72rem;color:var(--muted);margin-left:0.25rem"></span>
+      <div class="rpa-lab-panel" style="display:none;width:100%;margin-top:0.5rem;padding:0.55rem 0.7rem;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-size:0.74rem"></div>
     </div>
 
     {# Preview result panel (hidden until Preview clicked) #}
@@ -2250,27 +2226,28 @@ function mlSignin(cid) {
       .map(function(el) { return el.textContent.trim(); }).filter(Boolean);
 
     // Auto-match: use only the part before the first space as the key (e.g. "Facebook_6958")
-    var autoMatched = false;
+    // Each account is matched independently — multiple accounts per country are all processed.
+    // Safety: only saves if EXACTLY 1 profile matches the key (no ambiguous matches).
+    var usedProfileIds = {};  // prevent one profile being linked to multiple accounts
+    var autoLinked = [];
     accTitles.forEach(function(accLabel) {
-      if (autoMatched) return;
       var accKey = accLabel.split(' ')[0].toLowerCase();
       var matched = profiles.filter(function(p) {
+        if (usedProfileIds[p.profile_id]) return false;  // already claimed
         var pKey = (p.name || '').toLowerCase();
-        // Profile starts with account key or equals it
         return pKey === accKey || pKey.indexOf(accKey) === 0 || accKey.indexOf(pKey) === 0;
       });
       if (matched.length === 1) {
         var mp = matched[0];
-        autoMatched = true;
+        usedProfileIds[mp.profile_id] = true;
         _mlSaveIds(accLabel, mp.folder_id, mp.profile_id, instance, null);
-        if (status) status.innerHTML += ' <span style="color:var(--good)">· auto-linked <strong>'
-          + (mp.name||'?') + '</strong> → <strong>' + accLabel + '</strong> ✓</span>';
+        autoLinked.push((mp.name||'?') + ' → ' + accLabel);
       }
     });
 
-    if (autoMatched) {
+    if (autoLinked.length) {
       profilesDiv.innerHTML = '<span style="color:var(--good);font-size:0.73rem">'
-        + '✓ Профили автоматически привязаны к аккаунтам</span>';
+        + '✓ Автоматически привязаны: ' + autoLinked.join(', ') + '</span>';
       return;
     }
 
@@ -2318,18 +2295,22 @@ function mlManualSave(cid) {
   folderId  = folderId.trim();
   profileId = profileId.trim();
 
-  if (!folderId || !profileId) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Заполни оба поля</span>';
+  if (!profileId) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Заполни profile_id</span>';
     return;
   }
 
   // Validate UUID format (loosely)
   var uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRe.test(folderId) || !uuidRe.test(profileId)) {
+  if (!uuidRe.test(profileId) || (folderId && !uuidRe.test(folderId))) {
     if (statusEl) statusEl.innerHTML = '<span style="color:var(--warn)">⚠ Не похоже на UUID — проверь значения</span>';
   }
 
-  var accTitles = Array.from(document.querySelectorAll('.cb-acc-title'))
+  // Scope to the current country panel so we never pick accounts from another geo.
+  var _panel = document.getElementById('view-country-' + cid + '-open')
+             || document.getElementById('view-country-' + cid + '-open-ml')
+             || document;
+  var accTitles = Array.from(_panel.querySelectorAll('.cb-acc-title'))
     .map(function(el) { return el.textContent.trim(); })
     .filter(Boolean);
 
@@ -2542,7 +2523,9 @@ function mlTestToken(cid) {
       if (profilesDiv) profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">Профили не найдены (проверь workspace).</span>';
       return;
     }
-    var firstAccTitle = ((document.querySelector('.cb-acc-title')||{}).textContent||'').split(' ')[0];
+    // Scope to current country panel for default filter value.
+    var _cpanel = document.getElementById('view-country-' + cid + '-open') || document;
+    var firstAccTitle = ((_cpanel.querySelector('.cb-acc-title')||{}).textContent||'').split(' ')[0];
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' profile(s) — найди нужный и нажми Use</div>';
     html += '<input type="text" placeholder="Фильтр…" value="' + firstAccTitle.replace(/"/g,'&quot;') + '"'
@@ -2675,9 +2658,15 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var accId = accLabel.replace(/[\s.]/g, '_');
     var statusEl = document.getElementById('cb-ml-status-' + accId);
     if (statusEl) {
-      var statusBadge = statusEl.querySelector('.cb-pf-err') || statusEl.querySelector('.cb-pf-ok');
-      if (statusBadge) statusBadge.outerHTML =
-        '<span class="cb-pf-ok" style="font-size:0.72rem">✓ folder_id &amp; profile_id saved (Instance ' + instance + ')</span>';
+      // Replace everything after the label (input+button or old badge) with success badge
+      var label = statusEl.querySelector('.cb-map-field-label');
+      var successHtml = '<span class="cb-pf-ok" style="font-size:0.72rem">✓ profile_id set</span>';
+      if (label) {
+        label.insertAdjacentHTML('afterend', successHtml);
+        Array.from(statusEl.children).forEach(function(child) {
+          if (child !== label && !child.classList.contains('cb-pf-ok')) child.remove();
+        });
+      }
     }
     // Update the accordion header badge
     document.querySelectorAll('.cb-acc-title').forEach(function(el) {
@@ -3236,6 +3225,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         if (statusEl) { statusEl.textContent = '✓ Saved'; statusEl.style.color = 'var(--good)'; }
         input.style.borderColor = 'var(--good)';
         btn.style.background = '#16a34a';
+        // For profile_id: replace the whole row with a clean OK badge
+        if (fieldName === 'profile_id' && fieldRow) {
+          var lbl = fieldRow.querySelector('.cb-map-field-label');
+          fieldRow.innerHTML = (lbl ? lbl.outerHTML : '<span class="cb-map-field-label">profile_id</span>')
+            + '<span class="cb-pf-ok" style="font-size:0.72rem">✓ set</span>';
+          // Also update the accordion header warning badge
+          var panel = fieldRow.closest('.view-panel');
+          if (panel) {
+            var hdrErr = panel.querySelector('.cb-pf-err');
+            if (hdrErr) hdrErr.outerHTML = '<span style="font-size:0.7rem;color:var(--good)">✓ config ok</span>';
+          }
+        }
       } else {
         if (statusEl) { statusEl.textContent = '✗ ' + (d.error || 'Error'); statusEl.style.color = 'var(--bad)'; }
       }
@@ -3412,66 +3413,264 @@ window.cbPreview = function(form) {
     });
 };
 
+// ── RPA Human Takeover ────────────────────────────────────────────────
+var _rpaPaused = false;
+window.rpaTakeover = function() {
+  var btn = document.getElementById('rpa-takeover-btn');
+  if (!_rpaPaused) {
+    fetch('/rpa-takeover', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action:'pause'}) })
+      .then(function() {
+        _rpaPaused = true;
+        if (btn) { btn.textContent = '▶ Возобновить RPA'; btn.style.background = '#15803d'; }
+      });
+  } else {
+    fetch('/rpa-takeover', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action:'resume'}) })
+      .then(function() {
+        _rpaPaused = false;
+        if (btn) { btn.textContent = '⏸ Пауза RPA'; btn.style.background = '#b45309'; }
+      });
+  }
+};
+
+// ── Click Recorder (learn from your manual campaign creation) ─────────
+var _rpaRecording = false;
+var _rpaRecordPoll = null;
+
+function _rpaRecordSetUI(running, message) {
+  document.querySelectorAll('.rpa-record-btn').forEach(function(btn) {
+    if (running) {
+      btn.textContent = '⏹ Stop record';
+      btn.style.background = '#b91c1c';
+    } else {
+      btn.textContent = '⏺ Record clicks';
+      btn.style.background = '#1d4ed8';
+    }
+  });
+  document.querySelectorAll('.rpa-record-status').forEach(function(el) {
+    el.textContent = message || '';
+    el.style.color = running ? 'var(--warn)' : 'var(--muted)';
+  });
+}
+
+window.rpaRecordToggle = function(btn) {
+  if (_rpaRecording) {
+    fetch('/rpa-record/stop', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        _rpaRecording = false;
+        if (_rpaRecordPoll) { clearInterval(_rpaRecordPoll); _rpaRecordPoll = null; }
+        var msg = d.ok
+          ? ('✓ Saved ' + (d.actions_count || 0) + ' actions' + (d.recipe_path ? ' → ' + d.recipe_path.split(/[/\\\\]/).pop() : ''))
+          : ('⚠ ' + (d.error || 'Stop failed'));
+        _rpaRecordSetUI(false, msg);
+      })
+      .catch(function(e) {
+        _rpaRecording = false;
+        _rpaRecordSetUI(false, '⚠ ' + e.message);
+      });
+    return;
+  }
+
+  var form = btn ? btn.closest('form') : null;
+  var country = form ? ((form.querySelector('[name=country]') || {}).value || '') : '';
+  var recipeName = (country ? country.replace(/\\s+/g, '_') + '_' : '') + 'campaign';
+
+  _rpaRecordSetUI(true, 'Connecting to Multilogin CDP…');
+  fetch('/rpa-record/start', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({recipe_name: recipeName})
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, d: d}; }); })
+  .then(function(res) {
+    if (!res.d.ok && !res.d.running) {
+      _rpaRecording = false;
+      _rpaRecordSetUI(false, '⚠ ' + (res.d.error || 'Cannot start recorder'));
+      return;
+    }
+    _rpaRecording = true;
+    _rpaRecordSetUI(true, res.d.message || 'Recording… create campaign manually');
+    if (_rpaRecordPoll) clearInterval(_rpaRecordPoll);
+    _rpaRecordPoll = setInterval(function() {
+      fetch('/rpa-record/status')
+        .then(function(r) { return r.json(); })
+        .then(function(s) {
+          if (!s.running && _rpaRecording) {
+            _rpaRecording = false;
+            if (_rpaRecordPoll) { clearInterval(_rpaRecordPoll); _rpaRecordPoll = null; }
+            _rpaRecordSetUI(false, s.message || ('Saved ' + (s.actions_count || 0) + ' actions'));
+            return;
+          }
+          _rpaRecordSetUI(!!s.running, s.message || ((s.actions_count || 0) + ' actions'));
+        })
+        .catch(function() {});
+    }, 1500);
+  })
+  .catch(function(e) {
+    _rpaRecording = false;
+    _rpaRecordSetUI(false, '⚠ ' + e.message);
+  });
+};
+
+// ── Website Click Lab (live A→F solver) ───────────────────────────────
+var _rpaLabPoll = null;
+
+function _rpaLabRender(panel, s) {
+  if (!panel) return;
+  panel.style.display = 'block';
+  var html = '<div style="font-weight:600;margin-bottom:0.35rem">🧪 Website Lab'
+    + (s.winner ? ' — <span style="color:var(--good)">winner: ' + s.winner + '</span>' : '')
+    + '</div>';
+  html += '<div style="color:var(--muted);margin-bottom:0.4rem">' + (s.message || '') + '</div>';
+  html += '<div style="margin-bottom:0.45rem">'
+    + '<button type="button" onclick="rpaWebsiteLabRunAll(this)" style="margin-right:0.3rem;padding:0.2rem 0.55rem;font-size:0.72rem;background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer">▶ Run all A→F</button>'
+    + '<button type="button" onclick="rpaWebsiteLabPrepare(this)" style="margin-right:0.3rem;padding:0.2rem 0.55rem;font-size:0.72rem;background:#334155;color:#fff;border:none;border-radius:4px;cursor:pointer">Prepare menu</button>';
+  var order = s.step_order || ['A','B','F','C','D','E'];
+  var meta = s.step_meta || {};
+  order.forEach(function(st) {
+    var title = (meta[st] && meta[st].title) ? meta[st].title : st;
+    html += '<button type="button" onclick="rpaWebsiteLabStep(\'' + st + '\', this)" title="' + title.replace(/"/g,'&quot;') + '"'
+      + ' style="margin:0.15rem 0.2rem 0 0;padding:0.2rem 0.45rem;font-size:0.72rem;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;cursor:pointer">'
+      + st + '</button>';
+  });
+  html += '</div>';
+  html += '<div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.3rem">'
+    + 'selected=' + (s.website_selected ? '✓' : '✗')
+    + ' · menu=' + (s.menu_open ? 'open' : 'closed')
+    + (s.current_step ? ' · running ' + s.current_step : '')
+    + '</div>';
+  var steps = s.steps || [];
+  if (steps.length) {
+    html += '<ol style="margin:0.2rem 0 0 1.1rem;padding:0">';
+    steps.forEach(function(st) {
+      var mark = st.ok || st.website_selected ? '✓' : '✗';
+      var clr = st.ok || st.website_selected ? 'var(--good)' : 'var(--bad)';
+      html += '<li style="margin:0.15rem 0;color:' + clr + '"><strong>' + st.step + '</strong> '
+        + (st.title || '') + ' — ' + mark + ' '
+        + '<span style="color:var(--muted)">' + (st.detail || '') + '</span></li>';
+    });
+    html += '</ol>';
+  }
+  if (s.golden_locator) {
+    html += '<pre style="margin-top:0.4rem;white-space:pre-wrap;font-size:0.68rem;background:#0f172a;color:#cbd5e1;padding:0.4rem;border-radius:4px;max-height:120px;overflow:auto">'
+      + JSON.stringify(s.golden_locator, null, 2) + '</pre>';
+  }
+  if (s.error) html += '<div style="color:var(--bad);margin-top:0.3rem">⚠ ' + s.error + '</div>';
+  panel.innerHTML = html;
+}
+
+function _rpaLabPanelFrom(btn) {
+  var form = btn ? btn.closest('form') : null;
+  var root = form || document;
+  return root.querySelector('.rpa-lab-panel');
+}
+
+function _rpaLabStartPoll(panel) {
+  if (_rpaLabPoll) clearInterval(_rpaLabPoll);
+  _rpaLabPoll = setInterval(function() {
+    fetch('/rpa-website-lab/status')
+      .then(function(r) { return r.json(); })
+      .then(function(s) {
+        _rpaLabRender(panel, s);
+        if (!s.running && s.winner) {
+          clearInterval(_rpaLabPoll);
+          _rpaLabPoll = null;
+        }
+      })
+      .catch(function() {});
+  }, 800);
+}
+
+window.rpaWebsiteLabToggle = function(btn) {
+  var panel = _rpaLabPanelFrom(btn);
+  if (!panel) return;
+  if (panel.style.display === 'block') {
+    panel.style.display = 'none';
+    if (_rpaLabPoll) { clearInterval(_rpaLabPoll); _rpaLabPoll = null; }
+    return;
+  }
+  fetch('/rpa-website-lab/status')
+    .then(function(r) { return r.json(); })
+    .then(function(s) {
+      _rpaLabRender(panel, s);
+      panel.style.display = 'block';
+    });
+};
+
+window.rpaWebsiteLabRunAll = function(btn) {
+  var panel = _rpaLabPanelFrom(btn);
+  _rpaLabRender(panel, {message: 'Starting live lab…', steps: [], step_order: ['A','B','F','C','D','E'], step_meta: {}});
+  fetch('/rpa-website-lab/run-all', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({stop_on_success: true})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(s) {
+    _rpaLabRender(panel, s);
+    if (s.ok || s.running) _rpaLabStartPoll(panel);
+  })
+  .catch(function(e) {
+    _rpaLabRender(panel, {message: '⚠ ' + e.message, error: e.message, steps: []});
+  });
+};
+
+window.rpaWebsiteLabPrepare = function(btn) {
+  var panel = _rpaLabPanelFrom(btn);
+  fetch('/rpa-website-lab/prepare', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(s) { _rpaLabRender(panel, s); });
+};
+
+window.rpaWebsiteLabStep = function(step, btn) {
+  var panel = _rpaLabPanelFrom(btn);
+  fetch('/rpa-website-lab/step', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({step: step})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(s) { _rpaLabRender(panel, s); });
+};
+
 window.cbPublish = function(form) {
-  var activateCheck = form.querySelector('.cb-activate-check');
-  var dryRunCheck   = form.querySelector('.cb-dryrun-check');
-  var handOffCheck  = form.querySelector('.cb-handoff-check');
-  var isActive   = activateCheck ? activateCheck.checked : false;
-  var isDryRun   = dryRunCheck   ? dryRunCheck.checked   : false;
-  var isHandOff  = handOffCheck  ? handOffCheck.checked  : false;
-
-  // Mutual exclusivity: hand-off > dry-run > active
-  if (isHandOff) { isDryRun = false; isActive = false; }
-  else if (isDryRun) { isActive = false; }
-
   var accLabel  = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
   var country   = ((form.querySelector('[name="country"]') || {}).value || '?').trim();
   var campCount = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '1'), 10) || 1;
-
-  var modeHtml;
-  if (isHandOff) {
-    modeHtml = '<span style="background:#1a2a1a;color:#7effa0;padding:0.1rem 0.45rem;border-radius:3px;font-weight:700">'
-      + '🖐 Hand-off — форма заполнится, браузер останется открытым — ты выберешь страницу и нажмёшь Publish</span>';
-  } else if (isDryRun) {
-    modeHtml = '<span style="background:#0d2d3a;color:#58d1ff;padding:0.1rem 0.45rem;border-radius:3px;font-weight:700">'
-      + '🔬 Dry Run — форма заполнится, в FB ничего не сохранится</span>';
-  } else if (isActive) {
-    modeHtml = '<span style="background:var(--bad);color:#fff;padding:0.1rem 0.45rem;border-radius:3px;font-weight:700">'
-      + '⚡ ACTIVE — кампании уйдут в ротацию немедленно!</span>';
-  } else {
-    modeHtml = '<span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
-      + 'Draft — черновик сохранится в Ads Manager, реклама не запустится</span>';
-  }
 
   var bodyHtml =
     'Аккаунт: <strong style="color:var(--accent)">' + accLabel + '</strong><br>'
     + 'Страна: <strong>' + country + '</strong><br>'
     + 'Кампаний: <strong>' + campCount + '</strong><br><br>'
-    + 'Режим: ' + modeHtml;
+    + 'Режим: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
+    + 'Draft — RPA заполнит кампанию и оставит черновик в Ads Manager (кнопку Publish в Facebook не нажимает)</span>';
 
-  var title = isHandOff ? '🖐 Запустить Hand-off?' : (isDryRun ? '🔬 Запустить Dry Run?' : (isActive ? '⚡ Запустить ACTIVE-кампании?' : 'Создать черновики кампаний?'));
-  var confirmLabel = isHandOff ? '🖐 Заполнить и оставить открытым' : (isDryRun ? 'Запустить Dry Run' : (isActive ? '🚀 GO LIVE' : 'Создать черновики'));
-
-  _safeConfirm(title, bodyHtml, function() {
-    _doCbPublish(form, isActive, isDryRun, isHandOff);
-  }, { danger: isActive, confirmLabel: confirmLabel });
+  _safeConfirm('Поднять кампанию как draft?', bodyHtml, function() {
+    _doCbPublish(form);
+  }, { confirmLabel: 'Publish → draft' });
 };
 
-function _doCbPublish(form, isActive, isDryRun, isHandOff) {
+function _doCbPublish(form) {
   var statusPanel = form.querySelector('.cb-status-panel');
   var publishBtn  = form.querySelector('.cb-publish-btn');
   if (!statusPanel) return;
 
-  var modeLabel = isHandOff ? '🖐 Hand-off: заполняю форму…' : (isDryRun ? '🔬 Dry Run via Multilogin…' : 'Publishing via Multilogin…');
   statusPanel.style.display = 'block';
-  statusPanel.innerHTML = '<div class="cb-status-title">' + modeLabel + '</div>';
+  statusPanel.innerHTML = '<div class="cb-status-title">Поднимаю кампанию (draft)…</div>';
   if (publishBtn) publishBtn.disabled = true;
 
   var fd = cbCollectFormData(form);
   fd.set('via_multilogin', '1');
-  fd.set('activate', isActive ? '1' : '0');
-  fd.set('dry_run', isDryRun ? '1' : '0');
-  fd.set('hand_off', isHandOff ? '1' : '0');
+  fd.set('activate', '0');
+  fd.set('dry_run', '0');
+  // hand_off: fill form, leave as draft, keep browser open — do NOT click Meta Publish
+  fd.set('hand_off', '1');
 
   fetch('/publish-jobs', { method: 'POST', body: fd })
     .then(function(r) { return r.json(); })
@@ -3496,20 +3695,15 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var done = job.done_count || 0;
     var total = job.total || 0;
     var hasFatal = (job.errors || []).length > 0;
-    var isHandOff = job.hand_off || false;
-    var isDryRun  = job.dry_run  || false;
     var isCancelled = job.status === 'cancelled';
     var isRunning = job.status === 'running' || job.status === 'pending';
     var statusIcon = isCancelled ? '⏹'
-      : (job.status === 'done'
-        ? (hasFatal ? '❌' : (isHandOff ? '🖐' : (isDryRun ? '🔬' : '✓')))
-        : '⏳');
+      : (job.status === 'done' ? (hasFatal ? '❌' : '✓') : '⏳');
     var doneLabel = isCancelled ? 'остановлено'
       : (job.status === 'done'
-        ? (isHandOff ? 'Браузер открыт — выбери страницу и нажми Publish в Facebook'
-          : (isDryRun ? 'Dry run завершён — браузер открыт, Publish не нажат'
-            : 'завершено'))
-        : 'в процессе… (может занять 1–3 мин — targeting, форма)');
+        ? (hasFatal ? 'есть ошибки'
+          : 'draft готов — кампания в Ads Manager, Publish не нажат')
+        : 'в процессе… (может занять 1–3 мин)');
     var html = '<div class="cb-status-title">' + statusIcon + ' ' + done + '/' + total + ' — ' + doneLabel + '</div>';
     if (isRunning) {
       html += '<div style="margin:0.5rem 0">'
@@ -3535,8 +3729,16 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         html += '<div class="cb-status-err" style="color:var(--ok,#4caf50);border-color:var(--ok,#4caf50)">' + r.error + '</div>';
       }
       if (r.steps_completed && r.steps_completed.length) {
+        var stepsHtml = r.steps_completed.join(' → ');
+        var teachWaiting = r.steps_completed.indexOf('teach_mode_website_waiting') !== -1
+          && r.steps_completed.indexOf('conversion_location_website_teach') === -1
+          && r.steps_completed.indexOf('teach_mode_website_still_failed') === -1;
+        var teachCapture = r.steps_completed.indexOf('teach_website_captured') !== -1;
+        var extra = teachWaiting
+          ? ' <span style="color:#3b82f6;font-weight:600">⏸ ждём клик Website</span>'
+          : (teachCapture ? ' <span style="color:#22c55e">✓ Website локатор захвачен</span>' : '');
         html += '<div class="cb-status-steps" style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem">'
-          + 'Шаги: ' + r.steps_completed.join(' → ') + '</div>';
+          + 'Шаги: ' + stepsHtml + extra + '</div>';
       }
     });
     (job.errors || []).forEach(function(e) {
@@ -3567,6 +3769,55 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     });
   }
 
+  var _teachBannerShown = false;
+
+  function _checkTeachMode() {
+    fetch('/rpa-teach/status')
+      .then(function(r) { return r.json(); })
+      .then(function(s) {
+        var banner = document.getElementById('rpa-teach-banner');
+        if (s.waiting) {
+          if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'rpa-teach-banner';
+            banner.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);'
+              + 'z-index:9999;background:#1e3a5f;color:#fff;border:2px solid #3b82f6;'
+              + 'border-radius:10px;padding:1rem 1.5rem;max-width:480px;text-align:center;'
+              + 'box-shadow:0 4px 24px rgba(0,0,0,0.5);font-size:0.92rem;line-height:1.5';
+            banner.innerHTML = '<strong style="font-size:1rem">Нужен ваш клик</strong><br>'
+              + 'RPA не смог выбрать <b>Website</b> автоматически.<br>'
+              + 'Кликни <b>Website</b> в открытом меню браузера, затем нажми кнопку ниже.<br><br>'
+              + '<button onclick="rpaTeachResume()" style="padding:0.5rem 1.2rem;'
+              + 'background:#3b82f6;color:#fff;border:none;border-radius:6px;'
+              + 'cursor:pointer;font-weight:700;font-size:0.9rem">Я кликнул Website — продолжить</button>'
+              + '<button onclick="document.getElementById(\'rpa-teach-banner\').remove()" '
+              + 'style="margin-left:0.7rem;padding:0.5rem 0.8rem;background:transparent;'
+              + 'color:#93c5fd;border:1px solid #3b82f6;border-radius:6px;cursor:pointer;font-size:0.85rem">Скрыть</button>';
+            document.body.appendChild(banner);
+          }
+          _teachBannerShown = true;
+        } else if (banner) {
+          banner.remove();
+          _teachBannerShown = false;
+        }
+      })
+      .catch(function() {});
+  }
+
+  window.rpaTeachResume = function() {
+    var banner = document.getElementById('rpa-teach-banner');
+    if (banner) {
+      banner.innerHTML = '<span style="color:#93c5fd">⏳ Возобновляю RPA…</span>';
+    }
+    fetch('/rpa-teach/resume', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (banner) banner.remove();
+        if (!d.ok) { alert('Ошибка resume: ' + (d.error || '?')); }
+      })
+      .catch(function(e) { alert('Ошибка: ' + e.message); });
+  };
+
   function poll() {
     fetch('/publish-jobs/' + jobId)
       .then(function(r) { return r.json(); })
@@ -3575,8 +3826,11 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         bindStopButton();
         statusPanel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
         if (job.status !== 'done' && job.status !== 'cancelled') {
+          _checkTeachMode();
           setTimeout(poll, 2000);
         } else {
+          var banner = document.getElementById('rpa-teach-banner');
+          if (banner) banner.remove();
           if (publishBtn) publishBtn.disabled = false;
           if ((job.errors || []).length > 0 || (job.results || []).some(function(r){return !r.success;})) {
             statusPanel.scrollIntoView({behavior: 'smooth', block: 'center'});

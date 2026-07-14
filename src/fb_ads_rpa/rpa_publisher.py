@@ -70,16 +70,16 @@ class RpaPublisher:
         account_map = load_ad_account_map(get_ad_account_map_path())
         return resolve_account_entry(account_map, account_label)
 
-    def _reset_browser(self) -> None:
+    def _reset_browser(self, *, keep_browser_open: bool = False) -> None:
         if self._conn:
             try:
-                self._conn.close(keep_browser_open=False)
+                self._conn.close(keep_browser_open=keep_browser_open)
             except Exception:
                 pass
             self._conn = None
         if self._entry is not None:
             try:
-                self._provider.close(self._entry, keep_browser_open=False)
+                self._provider.close(self._entry, keep_browser_open=keep_browser_open)
             except Exception:
                 pass
 
@@ -115,19 +115,22 @@ class RpaPublisher:
         if not entry:
             raise RuntimeError(f"Account {account_label!r} not in ad_account_map.csv")
         self._entry = entry
+        # When handing off / keeping the window, never hard-kill on provider switch.
+        soft = bool(self.hand_off or self.dry_run)
         try:
             self._conn = self._provider.open(entry, account_label)
             log.info("Browser opened via %s", self._provider.__class__.__name__)
         except Exception as exc:
             err_str = str(exc)
-            self._reset_browser()
+            self._reset_browser(keep_browser_open=soft)
             if "401" in err_str or "Authorization" in err_str or "authorization" in err_str:
                 log.warning("MLX API returned 401 (token expired). Trying DirectCDP.")
                 try:
                     self._conn = self._open_multilogin_direct(entry, account_label)
                 except Exception as direct_exc:
                     log.warning("DirectCDP failed (%s). Falling back to PlaywrightProfile.", direct_exc)
-                    self._reset_browser()
+                    # PlaywrightProfile needs the profile lock — must stop Mimic.
+                    self._reset_browser(keep_browser_open=False)
                     self._conn = self._open_playwright_profile(entry, account_label)
             elif (
                 "license check failed" in err_str.lower()
@@ -140,16 +143,16 @@ class RpaPublisher:
                     self._conn = self._open_multilogin_direct(entry, account_label)
                 except Exception as direct_exc:
                     log.warning("DirectCDP failed (%s). Falling back to PlaywrightProfile.", direct_exc)
-                    self._reset_browser()
+                    self._reset_browser(keep_browser_open=False)
                     self._conn = self._open_playwright_profile(entry, account_label)
             else:
                 raise
         return self._conn
 
     def close(self, *, force: bool = False) -> None:
-        # Dry run and hand-off: leave the browser open so the user can inspect the form.
-        # force=True on cancel always closes the browser.
-        keep_open = (self.hand_off or self.dry_run) and not force and not self._cancelled
+        # Always leave the Multilogin/Mimic window open after a run.
+        # Only force=True (user cancel) or _cancelled stops the profile.
+        keep_open = not force and not self._cancelled
         if self._conn:
             try:
                 self._conn.close(keep_browser_open=keep_open)
@@ -181,19 +184,19 @@ class RpaPublisher:
             if not self._browser_closed_error(exc):
                 raise
             log.warning("Browser closed during RPA (%s). Retrying with PlaywrightProfileProvider.", exc)
-            self._reset_browser()
+            self._reset_browser(keep_browser_open=False)
             entry = self._entry or self._resolve_entry(draft.account_label)
             self._conn = self._open_playwright_profile(entry, draft.account_label)
             flow = AdsManagerFlow(self._conn.page, selectors_path=self.selectors_path)
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
         if self.hand_off and result.success:
-            result.error = "🖐 Browser left open — select your Facebook Page and click Publish"
+            result.error = "Draft ready — browser left open, Meta Publish was not clicked"
             # Keep success=True so the UI shows it as complete, not failed
         elif self.dry_run and result.success:
             provider = getattr(self._conn, "provider", "unknown") if self._conn else "unknown"
             result.error = (
-                "🔬 Dry run complete — browser left open, Publish NOT clicked. "
-                f"Browser: {provider}. Check the form in Ads Manager."
+                "Dry run complete — browser left open, Publish NOT clicked. "
+                f"Browser: {provider}."
             )
         return result
 

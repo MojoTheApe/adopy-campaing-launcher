@@ -35,9 +35,9 @@ class MultiloginSession:
         self.started: StartedProfile | None = None
 
     def __enter__(self) -> MultiloginPublishContext:
-        if not self.entry.folder_id or not self.entry.profile_id:
+        if not self.entry.profile_id:
             raise MultiloginLauncherError(
-                f"Account {self.account_name!r}: folder_id and profile_id required in ad_account_map.csv"
+                f"Account {self.account_name!r}: profile_id required in ad_account_map.csv"
             )
         self.started = self.launcher.start_profile(self.entry.folder_id, self.entry.profile_id)
         return MultiloginPublishContext(
