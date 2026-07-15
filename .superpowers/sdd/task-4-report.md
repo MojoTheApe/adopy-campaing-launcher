@@ -111,3 +111,35 @@ After that, the import check passed.
 
 - The exact pytest command from the brief cannot pass until `tests/test_fb_ads_rpa_browser_profile.py` is restored or the brief is corrected.
 - The extra AdsManagerFlow mock tests currently fail for existing behavior outside this task's changes.
+
+## Review fix evidence - 2026-07-15
+
+Implemented fixes for Important/High Task 4 review findings:
+
+- `_finish_publish` is draft/hand-off only for every status, including `ACTIVE`; it records `finish_draft_no_publish`, captures `99_draft`, and logs `finish_draft` / `hand_off_draft` without any `publish_button` click path.
+- `nav_ad_set` safe promotion is gated on `scroll_to_section(...)` returning true for the Conversion location section.
+- Website teach success is recognized by `_conversion_location_ok`, and later failure logs are skipped once Website has already been confirmed.
+
+Red evidence:
+
+```text
+PYTHONPATH=/workspace python3 -m pytest --noconftest tests/test_create_wizard_flow.py -v
+4 failed, 3 passed
+Expected failures covered ACTIVE no-publish, nav gate on failed section scroll, teach-mode Website ok, and skip failure log after teach success.
+```
+
+Green evidence:
+
+```text
+PYTHONPATH=/workspace python3 -m pytest --noconftest tests/test_rpa_variations_ranks.py tests/test_rpa_variations_catalog.py -v
+9 passed in 0.07s
+
+PYTHONPATH=/workspace python3 -m pytest --noconftest tests/test_create_wizard_flow.py -v
+7 passed in 3.36s
+
+PYTHONPATH=/workspace python3 - <<'PY'
+from src.fb_ads_rpa.ads_manager_flow import AdsManagerFlow
+print(AdsManagerFlow.__name__)
+PY
+AdsManagerFlow
+```

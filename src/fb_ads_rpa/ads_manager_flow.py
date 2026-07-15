@@ -716,6 +716,10 @@ class AdsManagerFlow:
         ok: bool,
         screenshot: str | None = None,
     ) -> None:
+        if not ok and self._conversion_location_ok(result):
+            return
+        if ok and getattr(result, "_ranks_conversion_location_website_logged_ok", False):
+            return
         ranks = self._variations_ranks()
         if ranks is None:
             return
@@ -735,6 +739,8 @@ class AdsManagerFlow:
                 ok=ok,
                 screenshot=screenshot,
             )
+            if ok:
+                setattr(result, "_ranks_conversion_location_website_logged_ok", True)
         except Exception:
             pass
 
@@ -1265,8 +1271,10 @@ class AdsManagerFlow:
             return
         close_open_dropdown(self.page)
         wait_editor_saved(self.page)
-        scroll_to_section(self.page, "Conversion location", "Ubicación de la conversión")
-        self._mark_variation_next_step_ok("nav_ad_set")
+        if scroll_to_section(self.page, "Conversion location", "Ubicación de la conversión"):
+            self._mark_variation_next_step_ok("nav_ad_set")
+        else:
+            result.steps_completed.append("conversion_location_section_not_reached")
         if is_website_conversion_selected(self.page):
             result.steps_completed.append("conversion_location_website_already")
             self._log_conversion_location_website_outcome(
@@ -1400,6 +1408,8 @@ class AdsManagerFlow:
                 "conversion_location_website_already",
                 "conversion_location_website_selector",
                 "conversion_location_website_recovered",
+                "conversion_location_website_teach",
+                "teach_website_captured",
             )
         )
 
@@ -1795,32 +1805,16 @@ class AdsManagerFlow:
             self._shot(f"06_ad_{idx + 1}", result)
 
     def _finish_publish(self, draft: CampaignDraft, result: RpaPublishResult, *, dry_run: bool) -> None:
-        # DRAFT status → leave wizard open, don't click Publish
-        if draft.status == "DRAFT" or dry_run:
-            result.steps_completed.append("left_as_draft_in_ads_manager")
-            shot = self._shot("99_draft", result)
-            self._log_variation_outcome(
-                "finish_draft",
-                "hand_off_draft",
-                ok=True,
-                screenshot=shot,
-            )
-            return
-
-        sels = self.cfg.get("selectors") or {}
-        try:
-            _click_first(
-                self.page,
-                _selector_list(sels, "publish_button"),
-                timeout_ms=self.action_timeout,
-            )
-            pause_medium()
-            result.steps_completed.append("clicked_publish")
-            self._shot("06_publish", result)
-        except AdsManagerFlowError as exc:
-            shot = capture(self.page, "publish_failed")
-            result.screenshot_paths.append(shot)
-            raise AdsManagerFlowError(str(exc), screenshot=shot) from exc
+        # Agent 10 constraints require draft hand-off only, even for ACTIVE drafts.
+        result.steps_completed.append("left_as_draft_in_ads_manager")
+        result.steps_completed.append("finish_draft_no_publish")
+        shot = self._shot("99_draft", result)
+        self._log_variation_outcome(
+            "finish_draft",
+            "hand_off_draft",
+            ok=True,
+            screenshot=shot,
+        )
 
     def publish_campaign(
         self,
