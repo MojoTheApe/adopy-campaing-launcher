@@ -31,9 +31,13 @@ class StrategyRanks:
     def ordered_strategies(self, step_id: str, fallback: list[str]) -> list[str]:
         strategies = self.data["steps"].get(step_id, {}).get("strategies", [])
         ranked = sorted(strategies, key=lambda item: item.get("score", 0), reverse=True)
-        ordered = [item["id"] for item in ranked]
+        ordered = [item["id"] for item in ranked if not _is_publish_strategy(item["id"])]
         known = set(ordered)
-        ordered.extend(strategy_id for strategy_id in fallback if strategy_id not in known)
+        ordered.extend(
+            strategy_id
+            for strategy_id in fallback
+            if strategy_id not in known and not _is_publish_strategy(strategy_id)
+        )
         return ordered
 
     def log_outcome(
@@ -46,10 +50,16 @@ class StrategyRanks:
         browser_crash: bool = False,
     ) -> None:
         _reject_publish(strategy_id)
+        self._append_outcome(
+            step_id,
+            strategy_id,
+            ok=ok,
+            screenshot=screenshot,
+            browser_crash=browser_crash,
+        )
         if browser_crash:
             return
 
-        self._append_outcome(step_id, strategy_id, ok=ok, screenshot=screenshot)
         if ok:
             if step_risk(step_id) == "risky":
                 self._append_pending_approval(step_id, strategy_id, screenshot)
@@ -99,6 +109,7 @@ class StrategyRanks:
         *,
         ok: bool,
         screenshot: str | None,
+        browser_crash: bool = False,
     ) -> None:
         entry = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -108,6 +119,8 @@ class StrategyRanks:
         }
         if screenshot is not None:
             entry["screenshot"] = screenshot
+        if browser_crash:
+            entry["browser_crash"] = True
         self.data["outcome_log"].append(entry)
         self.data["outcome_log"] = self.data["outcome_log"][-_MAX_OUTCOME_LOG:]
 
@@ -178,5 +191,9 @@ def _normalise_data(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _reject_publish(strategy_id: str) -> None:
-    if _PUBLISH_RE.search(strategy_id):
+    if _is_publish_strategy(strategy_id):
         raise ValueError(f"Refusing publish strategy: {strategy_id!r}")
+
+
+def _is_publish_strategy(strategy_id: str) -> bool:
+    return bool(_PUBLISH_RE.search(strategy_id))
