@@ -78,6 +78,9 @@ class StrategyRanks:
             return
         self._record_win(step_id, pending["strategy_id"])
 
+    def list_pending(self) -> list[dict[str, Any]]:
+        return list(self.data["pending_approval"])
+
     def approve_pending(self, step_id: str, strategy_id: str) -> bool:
         _reject_publish(strategy_id)
         pending = self.data["pending_approval"]

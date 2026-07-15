@@ -45,6 +45,15 @@ def test_risky_success_goes_pending_not_promoted(tmp_path: Path):
     assert order[0] == "recipe_space"  # unchanged until approve
 
 
+def test_list_pending(tmp_path: Path):
+    path = tmp_path / "ranks.json"
+    path.write_text(json.dumps({"version": 1, "steps": {}, "pending_approval": []}), encoding="utf-8")
+    ranks = StrategyRanks.load(path)
+    ranks.log_outcome("conversion_event_lead", "select_lead_event", ok=True)
+    pending = ranks.list_pending()
+    assert pending[0]["step_id"] == "conversion_event_lead"
+
+
 def test_approve_pending_promotes_risky(tmp_path: Path):
     path = tmp_path / "ranks.json"
     path.write_text(json.dumps({"version": 1, "steps": {}, "pending_approval": []}), encoding="utf-8")

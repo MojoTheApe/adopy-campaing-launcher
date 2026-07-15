@@ -938,6 +938,28 @@ async def rpa_teach_status() -> JSONResponse:
     return JSONResponse(get_teach_state())
 
 
+@app.get("/rpa-teach/pending-strategies")
+async def rpa_teach_pending_strategies() -> JSONResponse:
+    from src.fb_ads_rpa.variations.ranks import StrategyRanks
+
+    ranks = StrategyRanks.load()
+    return JSONResponse(ranks.list_pending())
+
+
+@app.post("/rpa-teach/approve-strategy")
+async def rpa_teach_approve_strategy(request: Request) -> JSONResponse:
+    body = await request.json()
+    step_id = str(body.get("step_id") or "")
+    strategy_id = str(body.get("strategy_id") or "")
+    from src.fb_ads_rpa.variations.ranks import StrategyRanks
+
+    ranks = StrategyRanks.load()
+    ok = ranks.approve_pending(step_id, strategy_id)
+    if ok:
+        ranks.save()
+    return JSONResponse({"ok": ok})
+
+
 @app.post("/rpa-record/start")
 async def rpa_record_start(request: Request) -> JSONResponse:
     """Start click recorder on an already-open Multilogin CDP browser.
