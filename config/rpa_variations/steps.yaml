@@ -1,0 +1,87 @@
+version: 1
+steps:
+  open_campaigns:
+    left_tab: null
+    section: campaigns_list
+    risk: safe
+    must: ["Ads Manager ready", "Create visible"]
+    shot: "01_campaigns"
+    ui_variants:
+      - id: loading_overlay
+        notes: "Wait for overlay to clear before Create"
+    strategies: ["wait_ready", "goto_act_url"]
+  create_manual:
+    left_tab: null
+    section: create_wizard
+    risk: safe
+    must: ["Manual setup selected", "not stuck in AI-guided"]
+    shot: "02_*"
+    ui_variants:
+      - id: ai_guided_dialog
+      - id: legacy_create_menu
+    strategies: ["dismiss_ai", "click_manual", "click_create"]
+  objective_leads:
+    left_tab: null
+    section: objective
+    risk: safe
+    must: ["Leads selected", "Campaign name field visible"]
+    shot: "03_wizard_started"
+    ui_variants:
+      - id: en_es_labels
+    strategies: ["select_leads", "continue_when_enabled"]
+  campaign_name_budget:
+    left_tab: campaign
+    section: details
+    risk: safe
+    must: ["campaign name filled"]
+    shot: "04_campaign_level"
+    strategies: ["fill_campaign_name", "fill_daily_budget"]
+  nav_ad_set:
+    left_tab: ad_set
+    section: navigation
+    risk: safe
+    must: ["Ad set level visible"]
+    shot: "04b_*"
+    ui_variants:
+      - id: sidebar_tree
+      - id: breadcrumb
+    strategies: ["sidebar_ad_set", "breadcrumb_ad_set", "next_step"]
+  conversion_location_website:
+    left_tab: ad_set
+    section: conversion
+    risk: risky
+    must: ["conversion_location == Website"]
+    shot: "04d_*"
+    ui_variants:
+      - id: hybrid_default
+        notes: "Website and instant forms selected by default"
+      - id: en_vs_es
+    strategies: ["recipe_space", "keyboard_space_enter", "cdp_mouse", "playwright_click", "teach_mode"]
+  conversion_event_lead:
+    left_tab: ad_set
+    section: conversion
+    risk: risky
+    must: ["conversion_event == Lead"]
+    shot: "04e_*"
+    strategies: ["select_lead_event", "diagnose_recover"]
+  audience_targeting:
+    left_tab: ad_set
+    section: audience
+    risk: safe
+    must: ["geo/age set", "targeting if conversion ok"]
+    shot: "05_*"
+    strategies: ["fill_location", "fill_age", "paste_targeting", "manual_placements"]
+  ad_creative_copy:
+    left_tab: ad
+    section: ad_setup
+    risk: safe
+    must: ["creative uploaded", "primary text filled"]
+    shot: "ad_*"
+    strategies: ["upload_creative", "fill_ad_copy"]
+  finish_draft:
+    left_tab: null
+    section: finish
+    risk: safe
+    must: ["left as Draft", "Publish not clicked"]
+    shot: "99_draft"
+    strategies: ["hand_off_draft"]
