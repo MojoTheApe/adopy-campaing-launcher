@@ -3,7 +3,7 @@
 Routes:
     GET  /              - render the full morning report as HTML
     GET  /details       - return one <tr><td colspan> drill fragment
-    POST /refresh       - invalidate cache, rebuild, redirect to /
+    POST /refresh       - rebuild report (reuse Excel DF), JSON or redirect to /
     POST /build-upload  - §11 selections → validated Upload FB xlsx download
     GET  /api/ref-data  - JSON with ad copies, creatives, targetings from Upload FB.xlsx
 """
@@ -673,17 +673,34 @@ async def export_assets() -> Response:
     )
 
 
+def _wants_json(request: Request) -> bool:
+    accept = (request.headers.get("accept") or "").lower()
+    if "application/json" in accept:
+        return True
+    return (request.query_params.get("format") or "").lower() == "json"
+
+
 @app.post("/refresh")
-async def refresh() -> RedirectResponse:
-    """Force cache rebuild on next /. Redirects to / so the browser
-    follows the redirect and re-renders with fresh data."""
-    cache_clear()
-    # Also invalidate Upload FB.xlsx ref caches (tracking links, creatives, ad copies)
-    global _ref_full_cache, _ref_full_mtime, _ref_opts_cache, _ref_opts_mtime
-    _ref_full_cache = None
-    _ref_full_mtime = -1.0
-    _ref_opts_cache = None
-    _ref_opts_mtime = -1.0
+async def refresh(request: Request) -> Response:
+    """Rebuild report now (reuse Excel DF if mtime unchanged), then redirect or JSON.
+
+    Runs in a worker thread so the event loop stays responsive (Stop / other
+    requests keep working during Refresh). Prefer JSON via Accept: application/json
+    for the dashboard button — then the client reloads a warm cache.
+
+    Upload FB.xlsx ref caches are left alone — they already invalidate on mtime.
+    """
+    # Keep excel_df so force_rebuild skips re-parsing when the file is unchanged.
+    cache_clear(keep_excel_df=True)
+    try:
+        await asyncio.to_thread(lambda: get_cached_report(force_rebuild=True))
+    except (FileNotFoundError, ValueError) as e:
+        if _wants_json(request):
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        return RedirectResponse(url="/", status_code=303)
+
+    if _wants_json(request):
+        return JSONResponse({"ok": True, "built_at": cache_built_at()})
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -1071,6 +1088,12 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     activate = (form.get("activate") or "0").strip() in ("1", "true", "yes")
     dry_run = (form.get("dry_run") or "0").strip() in ("1", "true", "yes")
     hand_off = (form.get("hand_off") or "0").strip() in ("1", "true", "yes")
+    user_confirmed = (form.get("user_confirmed") or "0").strip() in ("1", "true", "yes")
+    if not user_confirmed:
+        return JSONResponse(
+            {"error": "Publish blocked: confirm in the dashboard UI first (user_confirmed=0)."},
+            status_code=403,
+        )
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
     job_id = start_job(
@@ -1098,7 +1121,7 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
 
 @app.post("/publish-jobs/{job_id}/cancel")
 async def publish_jobs_cancel(job_id: str) -> JSONResponse:
-    """Stop a running publish/RPA job and close its browser."""
+    """Stop a running publish/RPA job; Multilogin window stays open."""
     result = cancel_job(job_id)
     if not result.get("ok"):
         return JSONResponse(result, status_code=404 if result.get("error") == "Job not found" else 400)
@@ -1222,65 +1245,14 @@ async def multilogin_search(request: Request) -> JSONResponse:
 
 @app.post("/multilogin-start-direct")
 async def multilogin_start_direct(request: Request) -> JSONResponse:
-    """Restart the MLX browser for a given account using DirectCDP (no token needed).
-
-    Body JSON: {account_label: str, instance?: 'A'|'B'}
-    Kills any running browser for that profile and restarts it with
-    --remote-debugging-port=19222 so Playwright can connect.
-    """
-    try:
-        data = await request.json()
-    except Exception:
-        return JSONResponse({"ok": False, "error": "Invalid JSON"}, status_code=400)
-
-    account_label = (data.get("account_label") or "").strip()
-    if not account_label:
-        return JSONResponse({"ok": False, "error": "account_label is required"}, status_code=400)
-
-    from src.fb_ads_rpa.browser import MultiloginDirectCDPProvider
-    from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
-    from config.paths import get_ad_account_map_path
-
-    account_map = load_ad_account_map(get_ad_account_map_path())
-    entry = resolve_account_entry(account_map, account_label)
-    if not entry:
-        return JSONResponse({"ok": False, "error": f"Account {account_label!r} not in ad_account_map.csv"}, status_code=404)
-    if not entry.profile_id:
-        return JSONResponse({"ok": False, "error": "profile_id not set for this account in ad_account_map.csv"}, status_code=400)
-
-    provider = MultiloginDirectCDPProvider()
-    udd = provider._find_profile_user_data_dir(entry.profile_id)
-    if udd is None:
-        return JSONResponse({"ok": False, "error": f"MLX profile directory not found for profile_id={entry.profile_id}"}, status_code=500)
-
-    chrome = provider._find_mlx_chrome()
-    if chrome is None:
-        return JSONResponse({"ok": False, "error": "MLX Mimic chrome.exe not found under mlx/deps/"}, status_code=500)
-
-    # Kill existing + relaunch
-    provider._kill_profile_browser(str(udd), entry.profile_id or "")
-    import time; time.sleep(2)
-    import subprocess
-    cmd = [
-        str(chrome),
-        f"--user-data-dir={udd}",
-        f"--remote-debugging-port={MultiloginDirectCDPProvider.CDP_PORT}",
-        "--remote-allow-origins=*",
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--no-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-extensions",
-        "--disable-background-mode",
-    ]
-    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-    return JSONResponse({
-        "ok": True,
-        "message": f"Browser restarted with CDP on port {MultiloginDirectCDPProvider.CDP_PORT}",
-        "cdp_url": f"http://127.0.0.1:{MultiloginDirectCDPProvider.CDP_PORT}",
-        "profile_dir": str(udd),
-    })
+    """Disabled — use Campaign Builder → Preview → Publish (with confirmation modal)."""
+    return JSONResponse(
+        {
+            "ok": False,
+            "error": "Direct browser restart is disabled. Use Publish in Campaign Builder after confirming the modal.",
+        },
+        status_code=403,
+    )
 
 
 @app.post("/multilogin-save-token")

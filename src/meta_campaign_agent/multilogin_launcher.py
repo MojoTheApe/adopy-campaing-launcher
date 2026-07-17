@@ -86,8 +86,13 @@ class MultiloginLauncher:
             # Profile already running — Multilogin returns port in data even on error
             already_running = (
                 "ALREADY_RUNNING" in error_code
+                or "PROFILE_ALREADY_RUNNING" in error_code
                 or "ALREADY RUNNING" in (msg or "").upper()
                 or "already running" in (msg or "").lower()
+                or "browser process is running" in (msg or "").lower()
+                or "can't lock profile" in (msg or "").lower()
+                or "cant lock profile" in (msg or "").lower()
+                or "cannot lock" in (msg or "").lower()
                 or r.status_code == 409
             )
             if already_running:
@@ -154,22 +159,42 @@ class MultiloginLauncher:
                 continue
         return None
 
-    def stop_profile(self, profile_id: str) -> None:
-        # Try v2 stop first, fall back to v1
-        url = f"{self.config.launcher_base_v2}/profile/{profile_id}/stop"
-        r = requests.get(url, headers=self._headers(), timeout=self.timeout)
-        if r.status_code == 404:
-            url = f"{self.config.launcher_base_v1}/profile/stop"
-            r = requests.get(
-                url,
-                headers=self._headers(),
-                params={"profile_id": profile_id},
-                timeout=self.timeout,
+    def stop_profile(self, profile_id: str, folder_id: str | None = None) -> None:
+        """Stop a running MLX profile.
+
+        MLX X requires folder_id in the URL (same as start).  Provide it for
+        a reliable stop; without it we fall back to legacy endpoints.
+        """
+        resolved_folder = (folder_id or "").strip() or None
+        if not resolved_folder:
+            resolved_folder = self._resolve_folder_id(profile_id)
+
+        candidates: list[str] = []
+        if resolved_folder:
+            candidates.append(
+                f"{self.config.launcher_base_v2}/profile/f/{resolved_folder}/p/{profile_id}/stop"
             )
-        if r.status_code >= 400:
+        # Legacy endpoints (may 404 but worth trying)
+        candidates += [
+            f"{self.config.launcher_base_v2}/profile/{profile_id}/stop",
+            f"{self.config.launcher_base_v1}/profile/stop",
+        ]
+
+        last_err: str = ""
+        for url in candidates:
+            params = {"profile_id": profile_id} if url.endswith("/profile/stop") else {}
             try:
-                body = r.json()
-                msg = body.get("status", {}).get("message") if isinstance(body.get("status"), dict) else r.text
-            except ValueError:
-                msg = r.text[:500]
-            raise MultiloginLauncherError(f"Stop profile failed HTTP {r.status_code}: {msg}")
+                r = requests.get(url, headers=self._headers(), params=params, timeout=self.timeout)
+                if r.status_code < 400:
+                    return  # success
+                try:
+                    body = r.json()
+                    msg = body.get("status", {}).get("message") if isinstance(body.get("status"), dict) else r.text
+                except ValueError:
+                    msg = r.text[:200]
+                last_err = f"HTTP {r.status_code}: {msg}"
+                if r.status_code != 404:
+                    break  # non-404 error → stop trying
+            except Exception as exc:
+                last_err = str(exc)
+        raise MultiloginLauncherError(f"Stop profile failed {last_err}")

@@ -63,10 +63,19 @@ def test_start_create_wizard_skips_retry_when_modal_already_open():
         patch("src.fb_ads_rpa.ads_manager_flow._wait_for_ads_manager_ready"),
         patch("src.fb_ads_rpa.ads_manager_flow._click_first", side_effect=click_side_effect) as mock_click,
         patch("src.fb_ads_rpa.ads_manager_flow._is_objective_modal_open", side_effect=[True, True]),
+        patch("src.fb_ads_rpa.ads_manager_flow._dismiss_ai_guided_setup_dialog", return_value=True),
+        patch("src.fb_ads_rpa.ads_manager_flow._click_leads_grid_row", return_value=True),
+        patch("src.fb_ads_rpa.ads_manager_flow._is_objective_picker_visible", side_effect=[True, False]),
+        patch("src.fb_ads_rpa.ads_manager_flow._is_campaign_wizard_ready", return_value=False),
         patch("src.fb_ads_rpa.ads_manager_flow._select_leads_objective"),
         patch("src.fb_ads_rpa.ads_manager_flow._click_continue_when_enabled"),
         patch.object(flow, "_wait_for_campaign_name_field") as mock_wait,
+        patch.object(flow, "_shot", return_value="/tmp/test.png"),
     ):
+        def mark_ready(*args, **kwargs):
+            result.steps_completed.append("wizard_form_ready")
+
+        mock_wait.side_effect = mark_ready
         flow._start_create_wizard(result)
 
     assert mock_click.call_count >= 1

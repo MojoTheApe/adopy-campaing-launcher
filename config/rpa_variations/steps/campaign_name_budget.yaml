@@ -1,0 +1,18 @@
+step_id: campaign_name_budget
+left_tab: campaign
+section: campaign_details
+risk: safe
+must:
+  - Campaign name == draft.name
+  - Daily budget filled
+ui_variants:
+  - id: verifying_edits
+    notes: "Wait Verifying your edits before fill"
+  - id: advantage_plus_budget_on
+    notes: "CBO / Advantage+ campaign budget toggle may relocate budget field"
+strategies:
+  - id: wait_editor_saved
+  - id: label_fill_campaign_name
+  - id: label_fill_daily_budget
+  - id: reopen_via_edit_toolbar
+evidence: []

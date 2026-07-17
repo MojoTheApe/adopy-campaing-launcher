@@ -12,7 +12,7 @@ from src.fb_ads_rpa.browser import (
     get_browser_provider,
 )
 from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
-from src.fb_ads_rpa.config import get_browser_provider as get_browser_provider_name
+from src.fb_ads_rpa.config import get_browser_provider as get_browser_provider_name, get_mlx_attach_only
 from src.fb_ads_rpa.draft import CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.enrich_draft import enrich_campaign_drafts
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
@@ -41,9 +41,9 @@ class RpaPublisher:
         self._cancelled = False
 
     def cancel(self) -> None:
-        """Stop RPA and close the browser immediately."""
+        """Stop RPA work; disconnect CDP but leave Multilogin window open."""
         self._cancelled = True
-        self.close(force=True)
+        self.close(force=False)
 
     def build_drafts(
         self,
@@ -103,10 +103,24 @@ class RpaPublisher:
     def _open_playwright_profile(self, entry, account_label: str) -> BrowserConnection:
         log.warning(
             "Using PlaywrightProfileProvider — vanilla Chromium + MLX profile cookies "
-            "(NOT Mimic/antidetect). Refresh MLX automation token to use Multilogin API."
+            "(NOT Mimic/antidetect). Prefer opening the profile in MLX Desktop + DirectCDP, "
+            "or refresh MULTILOGIN_AUTOMATION_TOKEN_A."
         )
         self._provider = PlaywrightProfileProvider()
         return self._provider.open(entry, account_label)
+
+    @staticmethod
+    def _mlx_fallback_error(direct_exc: BaseException, pw_exc: BaseException | None = None) -> RuntimeError:
+        parts = [
+            "Could not open Multilogin browser for RPA.",
+            "1) Open this profile in the Multilogin (MLX) Desktop app.",
+            "2) Retry publish (RPA will attach via CDP), or set FB_BROWSER_PROVIDER=multilogin_direct.",
+            "3) Or refresh MULTILOGIN_AUTOMATION_TOKEN_A and use the Multilogin API provider.",
+            f"DirectCDP error: {direct_exc}",
+        ]
+        if pw_exc is not None:
+            parts.append(f"PlaywrightProfile error: {pw_exc}")
+        return RuntimeError(" ".join(parts))
 
     def _ensure_browser(self, account_label: str) -> BrowserConnection:
         if self._conn is not None:
@@ -115,6 +129,7 @@ class RpaPublisher:
         if not entry:
             raise RuntimeError(f"Account {account_label!r} not in ad_account_map.csv")
         self._entry = entry
+        attach_only = get_mlx_attach_only()
         # When handing off / keeping the window, never hard-kill on provider switch.
         soft = bool(self.hand_off or self.dry_run)
         try:
@@ -123,15 +138,25 @@ class RpaPublisher:
         except Exception as exc:
             err_str = str(exc)
             self._reset_browser(keep_browser_open=soft)
+            if attach_only:
+                raise RuntimeError(
+                    f"{exc} "
+                    "(MLX attach-only: RPA connects via Multilogin automation API on Publish. "
+                    "If the profile was opened manually in MLX Desktop, close it or retry Publish — "
+                    "RPA will restart it with automation enabled.)"
+                ) from exc
             if "401" in err_str or "Authorization" in err_str or "authorization" in err_str:
                 log.warning("MLX API returned 401 (token expired). Trying DirectCDP.")
                 try:
                     self._conn = self._open_multilogin_direct(entry, account_label)
                 except Exception as direct_exc:
                     log.warning("DirectCDP failed (%s). Falling back to PlaywrightProfile.", direct_exc)
-                    # PlaywrightProfile needs the profile lock — must stop Mimic.
-                    self._reset_browser(keep_browser_open=False)
-                    self._conn = self._open_playwright_profile(entry, account_label)
+                    # Keep Multilogin open if it started; only disconnect CDP.
+                    self._reset_browser(keep_browser_open=True)
+                    try:
+                        self._conn = self._open_playwright_profile(entry, account_label)
+                    except Exception as pw_exc:
+                        raise self._mlx_fallback_error(direct_exc, pw_exc) from pw_exc
             elif (
                 "license check failed" in err_str.lower()
                 or "mimic browser exited" in err_str.lower()
@@ -143,25 +168,28 @@ class RpaPublisher:
                     self._conn = self._open_multilogin_direct(entry, account_label)
                 except Exception as direct_exc:
                     log.warning("DirectCDP failed (%s). Falling back to PlaywrightProfile.", direct_exc)
-                    self._reset_browser(keep_browser_open=False)
-                    self._conn = self._open_playwright_profile(entry, account_label)
+                    self._reset_browser(keep_browser_open=True)
+                    try:
+                        self._conn = self._open_playwright_profile(entry, account_label)
+                    except Exception as pw_exc:
+                        raise self._mlx_fallback_error(direct_exc, pw_exc) from pw_exc
             else:
                 raise
         return self._conn
 
     def close(self, *, force: bool = False) -> None:
-        # Always leave the Multilogin/Mimic window open after a run.
-        # Only force=True (user cancel) or _cancelled stops the profile.
-        keep_open = not force and not self._cancelled
+        # Always leave Multilogin/Mimic open so the user can verify FB login.
+        # force/cancel only stop RPA + disconnect CDP — never stop_profile.
+        _ = force  # kept for call-site compat; must not close MLX window
         if self._conn:
             try:
-                self._conn.close(keep_browser_open=keep_open)
+                self._conn.close(keep_browser_open=True)
             except Exception:
                 pass
             self._conn = None
         if self._entry is not None:
             try:
-                self._provider.close(self._entry, keep_browser_open=keep_open)
+                self._provider.close(self._entry, keep_browser_open=True)
             except Exception:
                 pass
             self._entry = None
@@ -184,9 +212,12 @@ class RpaPublisher:
             if not self._browser_closed_error(exc):
                 raise
             log.warning("Browser closed during RPA (%s). Retrying with PlaywrightProfileProvider.", exc)
-            self._reset_browser(keep_browser_open=False)
+            self._reset_browser(keep_browser_open=True)
             entry = self._entry or self._resolve_entry(draft.account_label)
-            self._conn = self._open_playwright_profile(entry, draft.account_label)
+            try:
+                self._conn = self._open_playwright_profile(entry, draft.account_label)
+            except Exception as pw_exc:
+                raise self._mlx_fallback_error(exc, pw_exc) from pw_exc
             flow = AdsManagerFlow(self._conn.page, selectors_path=self.selectors_path)
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
         if self.hand_off and result.success:

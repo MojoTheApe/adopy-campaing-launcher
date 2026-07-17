@@ -1,0 +1,28 @@
+step_id: conversion_location_website
+left_tab: ad_set
+section: conversion
+risk: risky
+must:
+  - conversion_location == Website
+  - not "Website and instant forms"
+ui_variants:
+  - id: hybrid_default
+    notes: "Website and instant forms selected; Single below fold"
+  - id: advantage_plus_leads_on
+    notes: "Advantage+ On fights Website-only"
+  - id: wrong_tab_ads_list
+    notes: "RPA on manage/ads list — no Conversion location"
+  - id: en_vs_es
+    notes: "Website / Sitio web"
+strategies:
+  - id: advantage_plus_off
+  - id: open_dropdown
+  - id: scroll_menu_to_single
+  - id: expand_single
+  - id: website_exact_space
+  - id: meta_dom_select_conversion_location_website
+  - id: ai_recovery_cdp
+  - id: teach_mode_manual_click
+evidence:
+  - output/rpa_screenshots/20260716_125636_04d_conversion_menu_open.png
+  - config/rpa_recipes/conversion_location_website.json

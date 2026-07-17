@@ -1,8 +1,12 @@
 """Playwright browser session via antidetect profile (Multilogin / Dolphin)."""
 from __future__ import annotations
 
+import logging
 import os
+import shutil
+import stat
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,9 +17,212 @@ from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 
+log = logging.getLogger(__name__)
+
 # Keep Playwright persistent-context sessions alive after hand-off so GC does not
 # close the Chromium window when the RpaPublisher instance is discarded.
 _HANDOFF_PLAYWRIGHT_SESSIONS: list[tuple[Any, Any]] = []
+
+_MLX_OPEN_HINT = (
+    "Open this Multilogin profile in the MLX Desktop app, then retry RPA "
+    "(provider=multilogin_direct will attach via CDP). "
+    "Or refresh MULTILOGIN_AUTOMATION_TOKEN_A. "
+    "Do not use Playwright Chromium against an MLX profile — Chrome profile "
+    "migration crashes (version downgrade / Access denied on GPU cache)."
+)
+
+
+def _mlx_home() -> Path:
+    return Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx")))
+
+
+def _find_mlx_profile_dir(profile_id: str) -> Path | None:
+    profiles_root = _mlx_home() / "profiles"
+    if not profiles_root.is_dir():
+        return None
+    for p in profiles_root.rglob(profile_id):
+        if p.is_dir():
+            return p
+    return None
+
+
+def _folder_id_from_profile_dir(profile_dir: Path | str | None) -> str | None:
+    """Infer MLX folder_id from on-disk path …/profiles/{ws}/{folder_id}/{profile_id}."""
+    if not profile_dir:
+        return None
+    p = Path(profile_dir)
+    try:
+        folder = p.parent.name
+        # UUIDs look like 8-4-4-4-12
+        if len(folder) == 36 and folder.count("-") == 4:
+            return folder
+    except Exception:
+        pass
+    return None
+
+
+def _profile_chrome_version(user_data_dir: str | Path) -> str | None:
+    """Return Last Version / newest Snapshots folder name, e.g. '149.0.7827.55'."""
+    udd = Path(user_data_dir)
+    last = udd / "Last Version"
+    try:
+        if last.is_file():
+            text = last.read_text(encoding="utf-8", errors="replace").strip()
+            if text:
+                return text.splitlines()[0].strip()
+    except Exception:
+        pass
+    snaps = udd / "Snapshots"
+    if snaps.is_dir():
+        versions = [p.name for p in snaps.iterdir() if p.is_dir() and p.name[:1].isdigit()]
+        if versions:
+            return sorted(versions, key=lambda v: [int(x) if x.isdigit() else 0 for x in v.split(".")])[-1]
+    return None
+
+
+def _parse_chrome_major_minor(version: str | None) -> tuple[int, int] | None:
+    if not version:
+        return None
+    parts = version.split(".")
+    try:
+        return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+    except ValueError:
+        return None
+
+
+def _rmtree_force(path: Path) -> bool:
+    """Best-effort delete; on Windows uses robocopy mirror for stubborn dirs."""
+    if not path.exists():
+        return True
+
+    def _onerror(func, p, _exc_info):  # noqa: ANN001
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except Exception:
+            pass
+
+    try:
+        shutil.rmtree(path, onerror=_onerror)
+    except Exception:
+        pass
+    if not path.exists():
+        return True
+    if os.name == "nt":
+        empty = path.parent / f"_empty_del_{os.getpid()}"
+        try:
+            empty.mkdir(exist_ok=True)
+            subprocess.run(
+                ["robocopy", str(empty), str(path), "/MIR", "/NFL", "/NDL", "/NJH", "/NJS", "/nc", "/ns", "/np"],
+                check=False,
+                capture_output=True,
+            )
+            try:
+                empty.rmdir()
+            except Exception:
+                pass
+            shutil.rmtree(path, onerror=_onerror)
+        except Exception:
+            pass
+    return not path.exists()
+
+
+def _cleanup_chrome_migration_leftovers(user_data_dir: str | Path) -> None:
+    """Remove failed Chrome downgrade leftovers that poison the next launch."""
+    udd = Path(user_data_dir)
+    for p in list(udd.glob("*CHROME_DELETE*")):
+        log.info("Removing stale Chrome migration dir: %s", p.name)
+        _rmtree_force(p)
+    # GPU/Shader caches often hold the Access Denied locks during migration.
+    for name in ("GPUPersistentCache", "ShaderCache", "GrShaderCache", "GraphiteDawnCache"):
+        p = udd / name
+        if p.exists():
+            _rmtree_force(p)
+
+
+def _kill_chrome_for_user_data_dir(user_data_dir: str, profile_id: str = "", *, mlx_only: bool = False) -> None:
+    """Kill Chrome/Chromium processes that hold this profile directory."""
+    import psutil  # type: ignore
+
+    needles: list[str] = []
+    udd_norm = user_data_dir.lower().replace("/", "\\")
+    needles.append(udd_norm)
+    last = udd_norm.rstrip("\\").rsplit("\\", 1)[-1]
+    if last:
+        needles.append(last)
+    if profile_id:
+        needles.append(profile_id.lower())
+
+    mlx_home_norm = str(_mlx_home()).lower().replace("/", "\\")
+
+    for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
+        try:
+            if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
+                continue
+            exe = (proc.info["exe"] or "").lower().replace("/", "\\")
+            cmd = " ".join(proc.info["cmdline"] or []).lower().replace("/", "\\")
+            if not any(n in cmd for n in needles):
+                continue
+            if mlx_only:
+                if "mimic" not in exe and mlx_home_norm not in exe:
+                    continue
+            else:
+                # Include Playwright bundled Chromium and Mimic.
+                if (
+                    "mimic" not in exe
+                    and mlx_home_norm not in exe
+                    and "ms-playwright" not in exe
+                    and "chromium" not in exe
+                ):
+                    # Still kill if cmdline clearly owns this MLX profile path.
+                    if "mlx" not in cmd and "profiles" not in cmd:
+                        continue
+            proc.kill()
+        except Exception:
+            pass
+
+
+def _find_mlx_chrome_for_profile(user_data_dir: str | Path | None = None) -> Path | None:
+    """Prefer Mimic chrome.exe whose major version is >= profile Last Version."""
+    deps = _mlx_home() / "deps"
+    if not deps.is_dir():
+        return None
+    candidates = [p for p in deps.glob("mimic_*/chrome.exe") if p.is_file()]
+    if not candidates:
+        return None
+
+    def _mimic_key(chrome: Path) -> tuple[int, int, str]:
+        # mimic_150.4 -> (150, 4)
+        name = chrome.parent.name  # mimic_150.4
+        ver = name.replace("mimic_", "", 1)
+        parts = ver.split(".")
+        try:
+            major = int(parts[0])
+            minor = int(parts[1]) if len(parts) > 1 else 0
+        except ValueError:
+            major, minor = 0, 0
+        return major, minor, name
+
+    candidates.sort(key=_mimic_key, reverse=True)
+    needed = _parse_chrome_major_minor(_profile_chrome_version(user_data_dir) if user_data_dir else None)
+    if needed is None:
+        return candidates[0]
+    need_major, _need_minor = needed
+    for chrome in candidates:
+        major, _minor, _ = _mimic_key(chrome)
+        if major >= need_major:
+            return chrome
+    return candidates[0]
+
+
+def _downgrade_launch_error(exc: BaseException) -> bool:
+    err = str(exc).lower()
+    return (
+        "chrome version downgrade" in err
+        or "user data migration" in err
+        or ("access is denied" in err and "chromedelete" in err.replace("_", "").replace(" ", ""))
+        or ("access is denied" in err and "gpupersistentcache" in err.lower())
+    )
 
 
 @dataclass
@@ -54,6 +261,9 @@ class BrowserConnection:
             self.playwright.stop()
         except Exception:
             pass
+        if getattr(_pw_tls, "playwright", None) is self.playwright:
+            _pw_tls.playwright = None
+        _reset_asyncio_running_loop()
 
 
 class BrowserProvider(Protocol):
@@ -62,30 +272,79 @@ class BrowserProvider(Protocol):
     def close(self, entry: AccountMapEntry) -> None: ...
 
 
-def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None) -> BrowserConnection:
-    ensure_playwright_browsers_path()
-    pw = sync_playwright().start()
-    browser = pw.chromium.connect_over_cdp(cdp_url)
-    if browser.contexts:
-        context = browser.contexts[0]
-        page = context.pages[0] if context.pages else context.new_page()
-    else:
-        context = browser.new_context()
-        page = context.new_page()
-    # Install human-activity tracker on the page
+# Per-thread sync Playwright driver. A failed CDP attach that leaves the driver
+# running makes the next sync_playwright().start() raise
+# "Playwright Sync API inside the asyncio loop".
+_pw_tls = threading.local()
+
+
+def _reset_asyncio_running_loop() -> None:
+    """Clear any asyncio running-loop mark so Playwright sync API can start.
+
+    Covers: inherited ContextVar (some 3.14 builds), threading.local TLS, and
+    the CPython _asyncio._set_running_loop used by get_running_loop().
+    """
     try:
-        from src.fb_ads_rpa.pacing import _install_mouse_tracker
-        _install_mouse_tracker(page)
+        import asyncio
+        import asyncio.events as _ae
+
+        _rl = getattr(_ae, "_running_loop", None)
+        if _rl is not None and hasattr(_rl, "set"):
+            _rl.set(None)
+        elif _rl is not None and hasattr(_rl, "loop_pid"):
+            _rl.loop_pid = (None, None)
+        setter = getattr(_ae, "_set_running_loop", None) or getattr(asyncio, "_set_running_loop", None)
+        if callable(setter):
+            setter(None)
     except Exception:
         pass
-    return BrowserConnection(
-        provider=provider,
-        page=page,
-        browser=browser,
-        playwright=pw,
-        debug_port=debug_port,
-        ws_endpoint=ws_endpoint,
-    )
+
+
+def _stop_thread_playwright() -> None:
+    """Stop a leaked sync Playwright driver in this thread (if any)."""
+    pw = getattr(_pw_tls, "playwright", None)
+    _pw_tls.playwright = None
+    if pw is None:
+        return
+    try:
+        pw.stop()
+    except Exception:
+        pass
+    _reset_asyncio_running_loop()
+
+
+def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None) -> BrowserConnection:
+    ensure_playwright_browsers_path()
+    # Prior failed attach may have left sync Playwright's loop running in-thread.
+    _stop_thread_playwright()
+    _reset_asyncio_running_loop()
+    pw = sync_playwright().start()
+    _pw_tls.playwright = pw
+    try:
+        browser = pw.chromium.connect_over_cdp(cdp_url)
+        if browser.contexts:
+            context = browser.contexts[0]
+            page = context.pages[0] if context.pages else context.new_page()
+        else:
+            context = browser.new_context()
+            page = context.new_page()
+        # Install human-activity tracker on the page
+        try:
+            from src.fb_ads_rpa.pacing import _install_mouse_tracker
+            _install_mouse_tracker(page)
+        except Exception:
+            pass
+        return BrowserConnection(
+            provider=provider,
+            page=page,
+            browser=browser,
+            playwright=pw,
+            debug_port=debug_port,
+            ws_endpoint=ws_endpoint,
+        )
+    except Exception:
+        _stop_thread_playwright()
+        raise
 
 
 class MultiloginBrowserProvider:
@@ -132,17 +391,9 @@ class MultiloginBrowserProvider:
             raise
 
     def close(self, entry: AccountMapEntry, *, keep_browser_open: bool = False) -> None:
-        if keep_browser_open:
-            # Hand-off mode: leave the Multilogin profile running so the user
-            # can interact with the pre-filled form manually.
-            self._started_profile_id = None
-            self._launcher = None
-            return
-        if self._launcher and self._started_profile_id:
-            try:
-                self._launcher.stop_profile(self._started_profile_id)
-            except Exception:
-                pass
+        # Policy: never stop Multilogin after campaign upload — user verifies FB login.
+        # keep_browser_open=False is ignored for stop_profile (compat only).
+        _ = keep_browser_open
         self._started_profile_id = None
         self._launcher = None
 
@@ -220,65 +471,15 @@ class MultiloginDirectCDPProvider:
 
     def _find_profile_user_data_dir(self, profile_id: str) -> Path | None:
         """Search MLX profiles directory for a folder matching profile_id."""
-        mlx_home = Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx")))
-        profiles_root = mlx_home / "profiles"
-        if not profiles_root.is_dir():
-            return None
-        # Search up to 3 levels deep: profiles/<workspace>/<sub>/<profile_id>
-        for p in profiles_root.rglob(profile_id):
-            if p.is_dir():
-                return p
-        return None
+        return _find_mlx_profile_dir(profile_id)
 
-    def _find_mlx_chrome(self) -> Path | None:
-        """Find the MLX Mimic chrome.exe."""
-        mlx_home = Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx")))
-        deps = mlx_home / "deps"
-        if deps.is_dir():
-            for chrome in sorted(deps.glob("mimic_*/chrome.exe"), reverse=True):
-                if chrome.is_file():
-                    return chrome
-        return None
+    def _find_mlx_chrome(self, user_data_dir: str | None = None) -> Path | None:
+        """Find MLX Mimic chrome.exe (prefer version >= profile Last Version)."""
+        return _find_mlx_chrome_for_profile(user_data_dir)
 
     def _kill_profile_browser(self, user_data_dir: str, profile_id: str = "") -> None:
-        """Kill all MLX chrome.exe processes that own this user-data-dir.
-
-        Chrome stores the path as 8.3 short names on Windows, so we match
-        against the last segment (profile_id UUID) and the mlx/profiles substring.
-        We also match against --client-session-id which always uses the full UUID.
-        """
-        import psutil  # type: ignore
-
-        # Build multiple needles to catch both long-path and 8.3-path representations
-        needles: list[str] = []
-        udd_norm = user_data_dir.lower().replace("/", "\\")
-        needles.append(udd_norm)
-
-        # Last path segment = profile_id (UUID), present as-is in --user-data-dir
-        last = udd_norm.rstrip("\\").rsplit("\\", 1)[-1]  # e.g. "a89cdc8a-..."
-        if last:
-            needles.append(last)  # matches both long and 8.3 forms
-
-        # MLX also passes --client-session-id=<full UUID> — always full form
-        if profile_id:
-            needles.append(profile_id.lower())
-
-        # Only kill mimic (MLX) chrome processes, not all Chrome instances
-        mlx_home_norm = str(Path.home() / "mlx").lower().replace("/", "\\")
-
-        for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
-            try:
-                if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
-                    continue
-                exe = (proc.info["exe"] or "").lower().replace("/", "\\")
-                # Only target MLX mimic browser, not other Chromium instances
-                if "mimic" not in exe and mlx_home_norm not in exe:
-                    continue
-                cmd = " ".join(proc.info["cmdline"] or []).lower().replace("/", "\\")
-                if any(n in cmd for n in needles):
-                    proc.kill()
-            except Exception:
-                pass
+        """Kill all MLX chrome.exe processes that own this user-data-dir."""
+        _kill_chrome_for_user_data_dir(user_data_dir, profile_id, mlx_only=True)
 
     def _cdp_accepting(self, port: int | None = None) -> bool:
         import socket
@@ -418,7 +619,7 @@ class MultiloginDirectCDPProvider:
             )
         self._user_data_dir = str(user_data_dir)
 
-        chrome = self._find_mlx_chrome()
+        chrome = self._find_mlx_chrome(self._user_data_dir)
         if chrome is None:
             raise RuntimeError("MLX Mimic browser (chrome.exe) not found under mlx/deps/")
 
@@ -432,6 +633,7 @@ class MultiloginDirectCDPProvider:
         # (process up without our CDP port, or nothing running).
         self._kill_profile_browser(self._user_data_dir, profile_id)
         time.sleep(2)  # let Chrome release the profile lock
+        _cleanup_chrome_migration_leftovers(self._user_data_dir)
 
         # Build the launch command — minimal flags + remote debugging port.
         # --disable-extensions: prevents the MLX Agent extension from trying
@@ -508,29 +710,168 @@ class MultiloginDirectCDPProvider:
         return conn
 
     def close(self, entry: AccountMapEntry, *, keep_browser_open: bool = False) -> None:
-        if keep_browser_open:
-            # Hand-off: leave browser running for user. Do not terminate our Popen
-            # handle and do not kill Mimic. Clear handle so we don't kill on GC.
-            self._proc = None
-            return
-        if self._proc:
-            try:
-                self._proc.terminate()
-            except Exception:
-                pass
-            self._proc = None
-        if self._user_data_dir:
-            self._kill_profile_browser(self._user_data_dir, self._profile_id_cache or "")
+        # Never kill Mimic after campaign upload — user verifies FB login in the window.
+        _ = keep_browser_open
+        self._proc = None
         self._user_data_dir = None
         self._profile_id_cache = None
 
 
-class PlaywrightProfileProvider:
-    """Launch Playwright's own Chromium with the MLX profile directory.
+class MultiloginAttachOnlyProvider:
+    """Connect to Multilogin via MLX automation API when the user clicks Publish.
 
-    Bypasses MLX Mimic entirely — avoids the license-check crash.
-    Facebook cookies are preserved because we reuse the same user-data-dir.
-    Works even when the MLX Desktop App is logged out.
+    Does NOT fall back to vanilla Playwright Chromium or DirectCDP relaunch.
+    MLX exposes CDP only when the profile is started with automation_type=playwright;
+    a profile opened manually in MLX Desktop has no debug port. In that case we close
+    the manual Mimic window locally and restart the same profile through the MLX API.
+    """
+
+    def __init__(self) -> None:
+        self._direct = MultiloginDirectCDPProvider()
+        self._launcher: Any = None
+        self._api_started = False
+
+    def _start_via_mlx_api(
+        self,
+        entry: AccountMapEntry,
+        account_label: str,
+        profile_id: str,
+        udd: str,
+    ) -> Any:
+        from src.meta_campaign_agent.multilogin_config import get_multilogin_instance
+        from src.meta_campaign_agent.multilogin_launcher import (
+            MultiloginLauncher,
+            MultiloginLauncherError,
+        )
+
+        folder_id = (entry.folder_id or "").strip() or _folder_id_from_profile_dir(udd)
+        if not folder_id:
+            raise RuntimeError(
+                f"{account_label}: folder_id missing in ad_account_map.csv and "
+                f"could not infer it from MLX profile path for {profile_id}"
+            )
+        if not (entry.folder_id or "").strip():
+            log.info(
+                "%s: inferred folder_id=%s from MLX profile dir (add to ad_account_map.csv)",
+                account_label,
+                folder_id,
+            )
+
+        ml = get_multilogin_instance(entry.multilogin_instance)
+        self._launcher = MultiloginLauncher(ml)
+        last_exc: MultiloginLauncherError | None = None
+        for attempt in range(3):
+            try:
+                started = self._launcher.start_profile(
+                    folder_id, profile_id, headless=False
+                )
+                if started.port:
+                    self._api_started = True
+                    return started
+                last_exc = MultiloginLauncherError(
+                    "MLX API did not return a CDP port after start"
+                )
+            except MultiloginLauncherError as exc:
+                last_exc = exc
+                msg = str(exc).lower()
+                # A manually (Quick) launched profile holds MLX's lock and has no CDP.
+                # "can't lock profile" / "already running" both mean: MLX must release
+                # this profile before it can start it with automation enabled.
+                lock_conflict = (
+                    "can't lock profile" in msg
+                    or "cant lock profile" in msg
+                    or "cannot lock" in msg
+                    or "can't lock" in msg
+                    or "browser process is running" in msg
+                    or "already running" in msg
+                    or "profile_already_running" in msg
+                )
+                if attempt < 2 and lock_conflict:
+                    # Gracefully stop ONLY this profile via MLX API. This releases MLX
+                    # Desktop's lock, preserves the profile's cookies/login, and does
+                    # NOT touch any of the user's other open profiles.
+                    log.warning(
+                        "Profile %s is locked (opened manually in MLX). Stopping it via "
+                        "MLX API and restarting with automation enabled…",
+                        profile_id,
+                    )
+                    try:
+                        self._launcher.stop_profile(profile_id, folder_id=folder_id)
+                    except MultiloginLauncherError as stop_exc:
+                        # Last resort: kill Mimic for THIS profile's dir only (scoped).
+                        log.warning(
+                            "MLX stop_profile failed (%s); killing Mimic for this "
+                            "profile only (other profiles untouched)",
+                            stop_exc,
+                        )
+                        _kill_chrome_for_user_data_dir(udd, profile_id, mlx_only=True)
+                    time.sleep(3)
+                    continue
+                raise RuntimeError(
+                    f"Не удалось запустить профиль {account_label!r} через MLX automation. "
+                    f"MLX API: {exc}"
+                ) from exc
+        raise RuntimeError(
+            f"MLX API не вернул CDP-порт для {account_label!r}. "
+            f"Последняя ошибка: {last_exc}"
+        )
+
+    def open(self, entry: AccountMapEntry, account_label: str) -> BrowserConnection:
+        profile_id = entry.profile_id
+        if not profile_id:
+            raise RuntimeError(f"{account_label}: profile_id is required")
+
+        user_data_dir = _find_mlx_profile_dir(profile_id)
+        if user_data_dir is None:
+            raise RuntimeError(
+                f"MLX profile directory not found for profile_id={profile_id}"
+            )
+        udd = str(user_data_dir)
+
+        reused = self._direct._try_attach_existing(profile_id, udd)
+        if reused is not None:
+            log.info("Attached to already-open Multilogin profile %s", profile_id)
+            return reused
+
+        # Manually (Quick) launched MLX profiles expose no CDP port, so we cannot
+        # attach. _start_via_mlx_api gracefully stops ONLY this profile via the MLX
+        # API (releasing MLX's lock, keeping cookies) and restarts it with automation
+        # enabled. It does NOT kill other open profiles.
+        if self._direct._profile_process_running(udd, profile_id):
+            log.info(
+                "Profile %s is open in MLX manual mode (no CDP). Will restart it via "
+                "MLX automation API (other profiles untouched).",
+                profile_id,
+            )
+
+        started = self._start_via_mlx_api(entry, account_label, profile_id, udd)
+        ws = started.ws_endpoint or ""
+        if ws and not ws.startswith("/"):
+            ws = f"/{ws}"
+        cdp = f"http://127.0.0.1:{started.port}{ws}"
+        log.info(
+            "Connected via MLX automation CDP to profile %s on port %s",
+            profile_id,
+            started.port,
+        )
+        return _connect_playwright(
+            cdp_url=cdp,
+            provider="multilogin_attach",
+            debug_port=started.port,
+            ws_endpoint=started.ws_endpoint,
+        )
+
+    def close(self, entry: AccountMapEntry, *, keep_browser_open: bool = False) -> None:
+        # Never stop the Multilogin profile — user keeps their window.
+        self._launcher = None
+        self._api_started = False
+
+
+class PlaywrightProfileProvider:
+    """Launch Playwright Chromium with the MLX profile directory (last-resort fallback).
+
+    Prefer Multilogin API or DirectCDP. This path often fails when Mimic wrote a
+    newer profile (Chrome downgrade migration / Access denied on GPU cache).
     """
 
     def __init__(self, *, headless: bool = False):
@@ -540,42 +881,11 @@ class PlaywrightProfileProvider:
         self._user_data_dir: str | None = None
 
     def _find_profile_user_data_dir(self, profile_id: str) -> Path | None:
-        mlx_home = Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx")))
-        profiles_root = mlx_home / "profiles"
-        if not profiles_root.is_dir():
-            return None
-        for p in profiles_root.rglob(profile_id):
-            if p.is_dir():
-                return p
-        return None
+        return _find_mlx_profile_dir(profile_id)
 
     def _kill_profile_browser(self, user_data_dir: str, profile_id: str = "") -> None:
-        """Kill any running browser that holds a lock on this profile directory."""
-        import psutil  # type: ignore
-
-        needles: list[str] = []
-        udd_norm = user_data_dir.lower().replace("/", "\\")
-        needles.append(udd_norm)
-        last = udd_norm.rstrip("\\").rsplit("\\", 1)[-1]
-        if last:
-            needles.append(last)
-        if profile_id:
-            needles.append(profile_id.lower())
-
-        mlx_home_norm = str(Path.home() / "mlx").lower().replace("/", "\\")
-
-        for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
-            try:
-                if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
-                    continue
-                exe = (proc.info["exe"] or "").lower().replace("/", "\\")
-                if "mimic" not in exe and mlx_home_norm not in exe:
-                    continue
-                cmd = " ".join(proc.info["cmdline"] or []).lower().replace("/", "\\")
-                if any(n in cmd for n in needles):
-                    proc.kill()
-            except Exception:
-                pass
+        """Kill Mimic and Playwright Chromium processes holding this profile."""
+        _kill_chrome_for_user_data_dir(user_data_dir, profile_id, mlx_only=False)
 
     def open(self, entry: AccountMapEntry, account_label: str) -> BrowserConnection:
         profile_id = entry.profile_id
@@ -588,24 +898,46 @@ class PlaywrightProfileProvider:
                 f"MLX profile directory not found for profile_id={profile_id}"
             )
         self._user_data_dir = str(user_data_dir)
+        profile_ver = _profile_chrome_version(self._user_data_dir)
 
-        # Kill any running MLX browser for this profile (releases profile lock)
+        # Kill any browser for this profile (releases profile lock)
         self._kill_profile_browser(self._user_data_dir, profile_id)
         time.sleep(2)
+        _cleanup_chrome_migration_leftovers(self._user_data_dir)
 
         ensure_playwright_browsers_path()
+        _stop_thread_playwright()
+        _reset_asyncio_running_loop()
         self._playwright = sync_playwright().start()
-        # launch_persistent_context opens Playwright's own Chromium with existing profile data
-        context = self._playwright.chromium.launch_persistent_context(
-            user_data_dir=self._user_data_dir,
-            headless=self.headless,
-            args=[
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--disable-popup-blocking",
-                "--disable-extensions",
-            ],
-        )
+        _pw_tls.playwright = self._playwright
+        try:
+            # launch_persistent_context opens Playwright's own Chromium with existing profile data
+            context = self._playwright.chromium.launch_persistent_context(
+                user_data_dir=self._user_data_dir,
+                headless=self.headless,
+                args=[
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-popup-blocking",
+                    "--disable-extensions",
+                ],
+            )
+        except Exception as exc:
+            try:
+                self._playwright.stop()
+            except Exception:
+                pass
+            self._playwright = None
+            if getattr(_pw_tls, "playwright", None) is not None:
+                _pw_tls.playwright = None
+            _reset_asyncio_running_loop()
+            if _downgrade_launch_error(exc) or "browser has been closed" in str(exc).lower():
+                raise RuntimeError(
+                    f"Playwright Chromium cannot open MLX profile "
+                    f"(profile Chrome {profile_ver or 'unknown'}). {_MLX_OPEN_HINT} "
+                    f"Original error: {exc}"
+                ) from exc
+            raise
         self._context = context
         page = context.pages[0] if context.pages else context.new_page()
         # BrowserConnection expects a Browser but we have a BrowserContext — wrap it
@@ -649,6 +981,11 @@ def get_browser_provider(name: str | None = None) -> BrowserProvider:
         return MultiloginBrowserProvider()
     if key in ("multilogin_direct", "direct", "direct_cdp"):
         return MultiloginDirectCDPProvider()
+    if key in ("multilogin_attach", "attach", "attach_only"):
+        return MultiloginAttachOnlyProvider()
     if key in ("playwright_profile", "pw_profile"):
         return PlaywrightProfileProvider()
-    raise ValueError(f"Unknown browser provider {key!r} — use multilogin, multilogin_direct, playwright_profile, or dolphin")
+    raise ValueError(
+        f"Unknown browser provider {key!r} — use multilogin_attach, multilogin, "
+        f"multilogin_direct, playwright_profile, or dolphin"
+    )

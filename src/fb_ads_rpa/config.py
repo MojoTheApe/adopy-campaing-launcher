@@ -32,11 +32,19 @@ def get_publish_backend() -> str:
     return (os.environ.get("FB_PUBLISH_BACKEND") or "rpa").strip().lower()
 
 
+def get_mlx_attach_only() -> bool:
+    """When True (default), RPA uses MLX automation API on Publish only (no DirectCDP/Playwright fallback)."""
+    val = (os.environ.get("FB_MLX_ATTACH_ONLY") or "1").strip().lower()
+    return val not in ("0", "false", "no", "off")
+
+
 def get_browser_provider() -> str:
-    """multilogin (API), multilogin_direct (Mimic CDP, no token), playwright_profile, dolphin."""
+    """multilogin_attach (default), multilogin (API), multilogin_direct, playwright_profile, dolphin."""
     explicit = (os.environ.get("FB_BROWSER_PROVIDER") or "").strip().lower()
     if explicit:
         return explicit
+    if get_mlx_attach_only():
+        return "multilogin_attach"
     token_a = (os.environ.get("MULTILOGIN_AUTOMATION_TOKEN_A") or "").strip()
     if not token_a:
         return "multilogin_direct"
@@ -53,3 +61,22 @@ def get_dolphin_api_token() -> str:
 
 def use_rpa_publish() -> bool:
     return get_publish_backend() != "api"
+
+
+def get_use_recipe_player() -> bool:
+    """When True, RPA runs the compiled golden recipe (config/rpa_recipes/campaign_golden.yaml)
+    via RecipePlayer, falling back to the hardcoded AdsManagerFlow steps for any gap.
+
+    Default ON. Disable with FB_RPA_RECIPE_PLAYER=0.
+    """
+    val = (os.environ.get("FB_RPA_RECIPE_PLAYER") or "1").strip().lower()
+    return val in ("1", "true", "yes", "on")
+
+
+def get_recipe_stop_after() -> str:
+    """Optional step id to stop RecipePlayer after (campaign-open gate: s06_campaign).
+
+    Empty = run full recipe to handoff. Set FB_RPA_RECIPE_STOP_AFTER=s06_campaign
+    for /rpa-campaign-open (Create → name + budget only).
+    """
+    return (os.environ.get("FB_RPA_RECIPE_STOP_AFTER") or "").strip()

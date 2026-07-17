@@ -5,7 +5,7 @@ import re
 import time
 from typing import Any
 
-RPA_FLOW_VERSION = "v29"
+RPA_FLOW_VERSION = "v34"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
@@ -25,6 +25,7 @@ from src.fb_ads_rpa.meta_dom import (
     conversion_menu_is_open,
     conversion_location_menu_visible,
     dismiss_open_popovers,
+    dismiss_publish_draft_dialog,
     expand_conversion_location_single,
     fill_audience_location,
     fill_audience_age,
@@ -47,6 +48,7 @@ from src.fb_ads_rpa.meta_dom import (
     wait_editor_saved,
     wizard_editor_level,
     _capture_website_locator_to_recipe,
+    _turn_off_advantage_plus_leads,
 )
 from src.fb_ads_rpa.pacing import (
     pause_after_navigation,
@@ -457,6 +459,18 @@ def _wait_for_ads_manager_ready(page: Page, *, timeout_ms: int = 60000) -> None:
         _time.sleep(0.5)
 
 
+def _wait_for_standalone_url(page: Page, *, timeout_ms: int = 8000) -> bool:
+    """Return True if /edit/standalone URL loads within timeout (campaign wizard opened)."""
+    import time as _time
+
+    deadline = _time.time() + timeout_ms / 1000
+    while _time.time() < deadline:
+        if "/edit/standalone" in page.url or "/campaigns/edit/" in page.url:
+            return True
+        _time.sleep(0.3)
+    return False
+
+
 def _click_continue_when_enabled(page: Page, *, timeout_ms: int) -> None:
     import time as _time
 
@@ -478,14 +492,209 @@ def _click_continue_when_enabled(page: Page, *, timeout_ms: int) -> None:
     raise AdsManagerFlowError("Continue button not enabled/visible") from last_err
 
 
+def _is_campaign_wizard_ready(page: Page) -> bool:
+    """True when the campaign-level creation form is open (past objective picker).
+
+    After Continue, Meta navigates to /campaigns/edit/standalone — detect that too.
+    """
+    url = page.url
+    if "/edit/standalone" in url or "/campaigns/edit/" in url:
+        return True
+    if wizard_editor_level(page) == "campaign":
+        return True
+    if main_panel_has_label(
+        page,
+        ["Campaign name", "Nombre de la campaña", "Campaign details", "Advantage+ campaign budget"],
+    ):
+        return True
+    for root in _ads_roots(page):
+        for ph_re in (
+            re.compile(r"campaign name", re.I),
+            re.compile(r"enter your campaign name", re.I),
+            re.compile(r"nombre de la campa", re.I),
+        ):
+            try:
+                loc = root.get_by_placeholder(ph_re).first
+                if loc.is_visible(timeout=500):
+                    return True
+            except Exception:
+                pass
+    return False
+
+
+def _is_objective_picker_visible(page: Page) -> bool:
+    """True when the Create-campaign objective grid/modal is still open."""
+    has_heading = False
+    for root in _ads_roots(page):
+        try:
+            if root.get_by_text(_OBJECTIVE_CHOOSER_RE).first.is_visible(timeout=400):
+                has_heading = True
+                break
+        except Exception:
+            pass
+    if not has_heading:
+        return False
+    for root in _ads_roots(page):
+        try:
+            row = root.get_by_role("row", name=re.compile(r"^Leads\b", re.I)).first
+            if row.is_visible(timeout=400):
+                box = row.bounding_box()
+                # Sidebar rows sit near top; objective grid rows are lower in the modal.
+                if box and box.get("y", 0) > 150:
+                    return True
+        except Exception:
+            pass
+    return has_heading
+
+
+def _click_leads_grid_row(page: Page) -> bool:
+    """Click Leads in Meta's objective grid.
+
+    Meta records show Leads as SPAN[role=heading] inside a role=row grid tile.
+    Try heading, row, gridcell in that order; filter out sidebar items (y<=150).
+    """
+    for root in _ads_roots(page):
+        for name_re in (
+            re.compile(r"^Leads$", re.I),
+            re.compile(r"^Leads\b", re.I),
+            re.compile(r"Clientes potenciales", re.I),
+        ):
+            # Primary: heading inside the tile (exactly what the recorder captured)
+            try:
+                loc = root.get_by_role("heading", name=name_re).first
+                if loc.is_visible(timeout=1500):
+                    box = loc.bounding_box()
+                    if box and box.get("y", 0) > 150:
+                        loc.click(timeout=5000, force=True)
+                        pause_short()
+                        return True
+            except Exception:
+                pass
+            # Secondary: row or gridcell
+            for role in ("row", "gridcell"):
+                try:
+                    loc = root.get_by_role(role, name=name_re).first
+                    if not loc.is_visible(timeout=1000):
+                        continue
+                    box = loc.bounding_box()
+                    if box and box.get("y", 0) <= 150:
+                        continue
+                    loc.scroll_into_view_if_needed(timeout=3000)
+                    loc.click(timeout=5000, force=True)
+                    pause_short()
+                    return True
+                except Exception:
+                    pass
+    # JS fallback: find any heading/row/span with text "Leads" below y=150
+    script = """
+    () => {
+      const isLeads = t => /^Leads$/i.test(t) || /clientes potenciales/i.test(t);
+      for (const el of document.querySelectorAll('[role=heading], [role=row], [role=gridcell], span, div')) {
+        if (!el.offsetParent) continue;
+        const t = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
+        if (!isLeads(t)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.y <= 150 || r.width < 10) continue;
+        el.scrollIntoView({ block: 'center' });
+        el.click();
+        return true;
+      }
+      return false;
+    }
+    """
+    for root in _ads_roots(page):
+        try:
+            if root.evaluate(script):
+                pause_short()
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _is_leads_objective_selected(page: Page) -> bool:
+    if _is_campaign_wizard_ready(page):
+        return True
+    script = """
+    () => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      for (const el of document.querySelectorAll('[role=radio], [aria-checked], input[type=radio]')) {
+        const t = norm(el.getAttribute('aria-label') || el.textContent || '');
+        if (!t.startsWith('leads') && !t.includes('clientes potenciales')) continue;
+        if (el.getAttribute('aria-checked') === 'true') return true;
+        if (el.checked === true) return true;
+      }
+      return false;
+    }
+    """
+    for root in _ads_roots(page):
+        try:
+            if root.evaluate(script):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _click_leads_objective_js(page: Page) -> bool:
+    """Click the Leads objective tile via DOM (CDP-safe when Playwright locators miss)."""
+    if _click_leads_grid_row(page):
+        return True
+    script = """
+    () => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      const isLeads = (t) =>
+        t === 'leads' || t.startsWith('leads ') || t.includes('clientes potenciales');
+      const candidates = [];
+      for (const el of document.querySelectorAll(
+        '[role=radio], [role=button], [role=option], label, div, span'
+      )) {
+        if (!el.offsetParent) continue;
+        const aria = norm(el.getAttribute('aria-label') || '');
+        const text = norm(el.textContent || '');
+        const label = aria || text;
+        if (!isLeads(label)) continue;
+        if (label.includes('campaign name') || label.includes('daily budget')) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 24 || r.height < 24 || r.width > 420) continue;
+        candidates.push({ el, area: r.width * r.height, y: r.y });
+      }
+      if (!candidates.length) return false;
+      candidates.sort((a, b) => (a.y - b.y) || (a.area - b.area));
+      const target = candidates[0].el;
+      target.scrollIntoView({ block: 'center', inline: 'nearest' });
+      const clickEl = target.closest('[role=radio]') || target;
+      clickEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+      clickEl.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+      clickEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      if (typeof clickEl.click === 'function') clickEl.click();
+      return true;
+    }
+    """
+    for root in _ads_roots(page):
+        try:
+            if root.evaluate(script):
+                pause_short()
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def _select_leads_objective(page: Page, selectors: list[str], *, timeout_ms: int) -> None:
-    """Pick Leads in the objective modal (radio cards in new Ads Manager UI)."""
+    """Pick Leads in the objective modal (grid rows or radio cards)."""
+    if _is_leads_objective_selected(page):
+        return
+
+    if _click_leads_grid_row(page):
+        return
+
     last_err: Exception | None = None
     per_try = max(2500, timeout_ms // max(len(selectors) + 2, 1))
 
     for root in _ads_roots(page):
         for name_re in (
-            re.compile(r"^Leads$", re.I),
+            re.compile(r"^Leads\b", re.I),
             re.compile(r"Clientes potenciales", re.I),
         ):
             # Recorded path: click heading/text 'Leads' then radio
@@ -502,7 +711,8 @@ def _select_leads_objective(page: Page, selectors: list[str], *, timeout_ms: int
                     else:
                         heading.click(timeout=per_try, force=True)
                     pause_short()
-                    return
+                    if _is_leads_objective_selected(page):
+                        return
             except Exception as exc:
                 last_err = exc
             try:
@@ -510,7 +720,8 @@ def _select_leads_objective(page: Page, selectors: list[str], *, timeout_ms: int
                 radio.wait_for(state="visible", timeout=per_try)
                 radio.click(timeout=per_try, force=True)
                 pause_short()
-                return
+                if _is_leads_objective_selected(page):
+                    return
             except Exception as exc:
                 last_err = exc
             try:
@@ -522,11 +733,32 @@ def _select_leads_objective(page: Page, selectors: list[str], *, timeout_ms: int
                     else:
                         el.click(timeout=per_try, force=True)
                     pause_short()
-                    return
+                    if _is_leads_objective_selected(page):
+                        return
+            except Exception as exc:
+                last_err = exc
+            try:
+                card = root.locator(
+                    "div[role='radio']:has-text('Leads'), "
+                    "div[role='button']:has-text('Leads'), "
+                    "label:has-text('Leads')"
+                ).first
+                if card.is_visible(timeout=1500):
+                    card.click(timeout=per_try, force=True)
+                    pause_short()
+                    if _is_leads_objective_selected(page):
+                        return
             except Exception as exc:
                 last_err = exc
 
-    _click_first(page, selectors, timeout_ms=timeout_ms)
+    if _click_leads_objective_js(page):
+        return
+
+    try:
+        _click_first(page, selectors, timeout_ms=timeout_ms)
+    except AdsManagerFlowError as exc:
+        last_err = exc
+        raise AdsManagerFlowError("Could not select Leads objective") from last_err
 
 
 def _is_campaign_editor_active(page: Page) -> bool:
@@ -860,30 +1092,66 @@ class AdsManagerFlow:
         if _objectives_chooser_visible(self.page) or _is_objective_modal_open(self.page):
             result.steps_completed.append("objective_chooser_ready")
 
-        try:
-            _select_leads_objective(
-                self.page,
-                _selector_list(sels, "campaign_objective_leads"),
-                timeout_ms=self.action_timeout,
+        # Manual must be selected before Leads/Continue work on the new Meta dialog.
+        if _dismiss_ai_guided_setup_dialog(self.page, timeout_ms=self.action_timeout):
+            result.steps_completed.append("manual_setup_ensured")
+
+        leads_sels = _selector_list(sels, "campaign_objective_leads")
+        for attempt in range(3):
+            if "wizard_form_ready" in result.steps_completed or _is_campaign_wizard_ready(self.page):
+                result.steps_completed.append("wizard_form_ready")
+                break
+
+            if _click_leads_grid_row(self.page):
+                result.steps_completed.append("select_leads_grid_row")
+            else:
+                try:
+                    _select_leads_objective(
+                        self.page,
+                        leads_sels,
+                        timeout_ms=self.action_timeout,
+                    )
+                    result.steps_completed.append("select_leads_objective")
+                except AdsManagerFlowError:
+                    if _click_leads_objective_js(self.page):
+                        result.steps_completed.append("select_leads_objective_js")
+                    elif attempt == 2:
+                        result.steps_completed.append("objective_skipped_or_preselected")
+                    else:
+                        result.steps_completed.append(f"objective_retry_{attempt}")
+
+            # Always try Continue after picking Leads — don't gate on picker check.
+            try:
+                _click_continue_when_enabled(self.page, timeout_ms=12000)
+                result.steps_completed.append("continue_after_objective")
+            except AdsManagerFlowError:
+                if _is_campaign_wizard_ready(self.page):
+                    result.steps_completed.append("wizard_form_ready")
+                    break
+                result.steps_completed.append("continue_skipped_or_disabled")
+
+            # Wait for navigation to /edit/standalone or for the form to appear.
+            _wait_for_standalone_url(self.page, timeout_ms=8000)
+            pause_medium()
+
+            if _ai_describe_textarea_visible(self.page) and not _objectives_chooser_visible(self.page):
+                result.steps_completed.append("ai_guided_after_objective")
+                _dismiss_ai_guided_setup_dialog(self.page, timeout_ms=12000)
+
+            if _is_campaign_wizard_ready(self.page):
+                result.steps_completed.append("wizard_form_ready")
+                break
+            self._wait_for_campaign_name_field(result, quick=(attempt < 2))
+
+        if "wizard_form_ready" not in result.steps_completed:
+            shot = self._shot("03_wizard_objectives_stuck", result)
+            raise AdsManagerFlowError(
+                "Stuck on campaign objective dialog — could not select Leads and click Continue. "
+                "Pick 'Manual campaign setup', then Leads, then Continue manually and retry Publish. "
+                "Check screenshot 03_wizard_objectives_stuck.",
+                screenshot=shot,
             )
-            result.steps_completed.append("select_leads_objective")
-            pause_short()
-        except AdsManagerFlowError:
-            result.steps_completed.append("objective_skipped_or_preselected")
 
-        try:
-            _click_continue_when_enabled(self.page, timeout_ms=self.action_timeout)
-            result.steps_completed.append("continue_after_objective")
-        except AdsManagerFlowError:
-            result.steps_completed.append("continue_skipped_or_disabled")
-
-        pause_medium()
-        # One more check: AI prompt (not objective chooser)
-        if _ai_describe_textarea_visible(self.page) and not _objectives_chooser_visible(self.page):
-            result.steps_completed.append("ai_guided_after_objective")
-            _dismiss_ai_guided_setup_dialog(self.page, timeout_ms=12000)
-
-        self._wait_for_campaign_name_field(result)
         if _ai_describe_textarea_visible(self.page) and not _objectives_chooser_visible(self.page):
             self._shot("03_wizard_started", result)
             raise AdsManagerFlowError(
@@ -901,6 +1169,18 @@ class AdsManagerFlow:
         timeout_ms = 8000 if quick else self.action_timeout
         deadline = _time.time() + timeout_ms / 1000
         while _time.time() < deadline:
+            if _is_campaign_wizard_ready(self.page):
+                result.steps_completed.append("wizard_form_ready")
+                return
+            # Also check placeholder used on standalone page
+            try:
+                if self.page.get_by_placeholder(
+                    re.compile(r"enter your campaign name", re.I)
+                ).first.is_visible(timeout=500):
+                    result.steps_completed.append("wizard_form_ready")
+                    return
+            except Exception:
+                pass
             for root in _ads_roots(self.page):
                 for sel in name_sels:
                     try:
@@ -1159,9 +1439,17 @@ class AdsManagerFlow:
         if not self._ensure_ad_set_level(result):
             result.steps_completed.append("conversion_location_wrong_level")
             return
+        # Dismiss 'Publish draft items?' / 'Review draft items' before anything else
+        dismiss_publish_draft_dialog(self.page)
         close_open_dropdown(self.page)
         wait_editor_saved(self.page)
         scroll_to_section(self.page, "Conversion location", "Ubicación de la conversión")
+        dismiss_publish_draft_dialog(self.page)
+        # Advantage+ On forces "Website and instant forms" — must be Off first
+        if _turn_off_advantage_plus_leads(self.page):
+            result.steps_completed.append("advantage_plus_leads_off")
+            dismiss_publish_draft_dialog(self.page)
+            pause_short()
         if is_website_conversion_selected(self.page):
             result.steps_completed.append("conversion_location_website_already")
             return
@@ -1175,11 +1463,12 @@ class AdsManagerFlow:
             if menu_open and conversion_location_menu_visible(self.page):
                 result.steps_completed.append("conversion_location_menu_opened")
                 menu_shot = self._shot("04d_conversion_menu_open", result)
+                # Scroll Multiple → reveal Single → expand → Website (exact)
                 if expand_conversion_location_single(self.page):
                     result.steps_completed.append("conversion_location_single_clicked")
                     pause_short()
                     self._shot("04d_conversion_single_expanded", result)
-                    result.steps_completed.append("conversion_location_recipe_path")  # recorded: Single → Website
+                    result.steps_completed.append("conversion_location_recipe_path")
             elif menu_open:
                 result.steps_completed.append("conversion_location_wrong_menu")
                 close_open_dropdown(self.page)
@@ -1233,11 +1522,11 @@ class AdsManagerFlow:
             self._shot("04d_conversion_website_recovered", result)
             return
 
-        # Teach-mode: pause so the user can click Website manually.
-        # The RPA waits up to 10 minutes, then re-checks and captures the locator.
+        # Teach-mode: pause so the user can click Website manually (Single → Website).
+        # Keep the wizard open; do not navigate to Ads list while waiting.
         result.steps_completed.append("teach_mode_website_waiting")
         begin_teach_wait("website_click")
-        resumed = wait_for_teach_resume(max_wait_s=600.0)
+        resumed = wait_for_teach_resume(max_wait_s=180.0)
         if resumed:
             # After user click: capture what changed and verify
             time.sleep(0.8)
@@ -1689,6 +1978,29 @@ class AdsManagerFlow:
         if not ad_set or not ad_set.ads:
             result.error = "No ad set or ads on draft"
             return result
+
+        # Recipe Player (feature-flagged): data-driven golden path with fallback.
+        from src.fb_ads_rpa.config import get_use_recipe_player
+
+        if get_use_recipe_player():
+            try:
+                from src.fb_ads_rpa.recipe_player import RecipePlayer
+
+                self._goto_campaigns(draft, result)
+                player = RecipePlayer(self.page, draft)
+                run = player.run()
+                result.steps_completed.extend(
+                    f"recipe:{o.step_id}:{'ok' if o.ok else 'fail'}" for o in run.steps
+                )
+                result.screenshot_paths.extend(run.screenshots)
+                result.success = run.ok
+                if run.error:
+                    result.error = run.error
+                return result
+            except Exception as exc:
+                log.warning("RecipePlayer failed (%s); falling back to hardcoded flow", exc)
+                result.steps_completed.append(f"recipe_player_fallback:{str(exc)[:120]}")
+                # fall through to the proven hardcoded flow below
 
         try:
             self._goto_campaigns(draft, result)

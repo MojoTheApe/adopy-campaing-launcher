@@ -1037,10 +1037,45 @@
   <span class="meta">Trend: <strong>{{ report.trend_days }}d</strong></span>
   <span class="meta">Combos: <strong>{{ report.total_combos }}</strong></span>
   {% if built_at %}<span class="meta">Built: <strong>{{ built_at }}</strong></span>{% endif %}
-  <form class="refresh" method="post" action="/refresh">
-    <button type="submit">Refresh</button>
+  <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
+    <button type="submit" id="dash-refresh-btn">Refresh</button>
   </form>
 </header>
+<script>
+async function dashRefresh(ev) {
+  if (ev) ev.preventDefault();
+  var btn = document.getElementById('dash-refresh-btn');
+  if (!btn || btn.disabled) return false;
+  var prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Refreshing…';
+  try {
+    var r = await fetch('/refresh', {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+    });
+    var data = null;
+    try { data = await r.json(); } catch (_e) { data = null; }
+    if (!r.ok || (data && data.ok === false)) {
+      var err = (data && data.error) ? data.error : ('HTTP ' + r.status);
+      btn.textContent = 'Error';
+      alert('Refresh failed: ' + err);
+      btn.disabled = false;
+      btn.textContent = prev;
+      return false;
+    }
+    btn.textContent = 'Reloading…';
+    // Preserve country/section hash so Campaign Builder stays open after refresh.
+    location.reload();
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = prev;
+    alert('Refresh failed: ' + (e && e.message ? e.message : e));
+  }
+  return false;
+}
+</script>
 
 {% if warnings %}
 <div class="warnings">
@@ -1437,21 +1472,22 @@
     <div id="ml-status-{{ cid }}" style="margin-top:0.5rem;font-size:0.74rem"></div>
     <div id="ml-profiles-{{ cid }}" style="margin-top:0.6rem"></div>
 
-    {# ── No-token mode info ── #}
-    <details style="margin-top:0.6rem" id="ml-direct-section-{{ cid }}">
+    {# ── Attach-only workflow ── #}
+    <details style="margin-top:0.6rem" id="ml-direct-section-{{ cid }}" open>
       <summary style="font-size:0.72rem;color:#4caf50;cursor:pointer;user-select:none;font-weight:600">
-        ✓ Без API-токена (только profile_id)
+        ✓ Как запускать RPA (Multilogin)
       </summary>
       <div style="margin-top:0.5rem;padding:0.5rem;background:#0a2a14;border-radius:6px;border:1px solid #1a5a2a">
         <p style="font-size:0.72rem;color:#8fd4a0;margin:0 0 0.4rem">
-          Если automation token истёк (HTTP 401), RPA автоматически откроет
-          <strong>Playwright Chromium</strong> с cookies из MLX-профиля.
-          Нужен только <code>profile_id</code> в <code>ad_account_map.csv</code> —
-          <code>folder_id</code> и API-токен не обязательны.
+          <strong>1.</strong> Перед Publish профиль в MLX Desktop лучше <strong>не открывать вручную</strong> (RPA стартует сам с CDP).<br>
+          <strong>2.</strong> Campaign Builder → <strong>Preview</strong> → <strong>Publish</strong> (подтверди в модалке).<br>
+          <strong>3.</strong> RPA откроет профиль через <strong>MLX automation API</strong>, зальёт кампанию и
+          <strong>не закроет окно</strong> — проверь, что Facebook залогинен в нужный аккаунт.
         </p>
         <p style="font-size:0.72rem;color:#8fd4a0;margin:0">
-          Просто нажми <strong>Preview</strong> → <strong>Publish</strong> — кампания поднимется как draft.
-          Кнопка «Перезапустить браузер» больше не нужна.
+          ⚠️ Ручной «Quick launch» из MLX Desktop <strong>не даёт CDP</strong> — RPA не сможет к нему подключиться.
+          Если профиль уже открыт вручную, RPA может перезапустить <strong>только его</strong> ради CDP (куки сохранятся).
+          После любого исхода окно Multilogin <strong>остаётся открытым</strong> — не закрываем.
         </p>
       </div>
     </details>
@@ -3648,6 +3684,8 @@ window.cbPublish = function(form) {
     'Аккаунт: <strong style="color:var(--accent)">' + accLabel + '</strong><br>'
     + 'Страна: <strong>' + country + '</strong><br>'
     + 'Кампаний: <strong>' + campCount + '</strong><br><br>'
+    + '<span style="color:var(--muted);font-size:0.85rem">RPA подключится к профилю Multilogin через MLX automation '
+    + '(профиль можно не открывать заранее; если открыт вручную — окно может перезапуститься).</span><br><br>'
     + 'Режим: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — RPA заполнит кампанию и оставит черновик в Ads Manager (кнопку Publish в Facebook не нажимает)</span>';
 
@@ -3671,6 +3709,7 @@ function _doCbPublish(form) {
   fd.set('dry_run', '0');
   // hand_off: fill form, leave as draft, keep browser open — do NOT click Meta Publish
   fd.set('hand_off', '1');
+  fd.set('user_confirmed', '1');
 
   fetch('/publish-jobs', { method: 'POST', body: fd })
     .then(function(r) { return r.json(); })
@@ -3696,23 +3735,26 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var total = job.total || 0;
     var hasFatal = (job.errors || []).length > 0;
     var isCancelled = job.status === 'cancelled';
-    var isRunning = job.status === 'running' || job.status === 'pending';
+    var isCancelling = job.status === 'cancelling';
+    var isRunning = job.status === 'running' || job.status === 'pending' || isCancelling;
     var statusIcon = isCancelled ? '⏹'
-      : (job.status === 'done' ? (hasFatal ? '❌' : '✓') : '⏳');
+      : (isCancelling ? '⏹'
+      : (job.status === 'done' ? (hasFatal ? '❌' : '✓') : '⏳'));
     var doneLabel = isCancelled ? 'остановлено'
+      : (isCancelling ? 'останавливаю… (окно Multilogin останется открытым)'
       : (job.status === 'done'
         ? (hasFatal ? 'есть ошибки'
           : 'draft готов — кампания в Ads Manager, Publish не нажат')
-        : 'в процессе… (может занять 1–3 мин)');
+        : 'в процессе… (может занять 1–3 мин)'));
     var html = '<div class="cb-status-title">' + statusIcon + ' ' + done + '/' + total + ' — ' + doneLabel + '</div>';
-    if (isRunning) {
+    if (isRunning && !isCancelling) {
       html += '<div style="margin:0.5rem 0">'
         + '<button type="button" id="' + stopBtnId + '" '
         + 'style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#7f1d1d;color:#fff;'
         + 'border:1px solid #b91c1c;border-radius:4px;cursor:pointer">'
         + '⏹ Остановить процесс</button>'
         + '<span style="font-size:0.7rem;color:var(--muted);margin-left:0.5rem">'
-        + 'закроет браузер и прервёт RPA</span></div>';
+        + 'прервёт RPA; окно Multilogin останется открытым</span></div>';
     }
     (job.results || []).forEach(function(r) {
       var icon = r.success ? '✅' : '❌';
@@ -3827,7 +3869,8 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         statusPanel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
         if (job.status !== 'done' && job.status !== 'cancelled') {
           _checkTeachMode();
-          setTimeout(poll, 2000);
+          // Poll faster while cancelling so Stop feels responsive.
+          setTimeout(poll, job.status === 'cancelling' ? 600 : 2000);
         } else {
           var banner = document.getElementById('rpa-teach-banner');
           if (banner) banner.remove();

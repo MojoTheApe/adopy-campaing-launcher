@@ -1,0 +1,18 @@
+step_id: open_campaigns
+left_tab: null
+section: campaigns_list
+risk: safe
+must:
+  - Create button visible
+  - correct act= account
+ui_variants:
+  - id: empty_filtered
+    notes: "No campaigns found / Clear filter"
+  - id: review_draft_modal
+    notes: "Review draft items blocks Create — Cancel not Close"
+strategies:
+  - id: goto_act_url
+  - id: wait_create_visible
+  - id: clear_filter
+  - id: dismiss_review_draft_cancel
+evidence: []

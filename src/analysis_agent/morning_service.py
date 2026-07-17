@@ -129,12 +129,17 @@ def load_morning_report(
     skip_gsheet: bool = False,
     with_news: bool = False,
     news_fetcher: Optional[NewsFetcher] = None,
+    enriched_df: Optional[pd.DataFrame] = None,
 ) -> Tuple[Dict[str, Any], pd.DataFrame, List[str]]:
     """Build the full morning report from current Excel + GSheet state.
 
     Excel is parsed + enriched ONCE. The enriched DataFrame is returned
     alongside the report dict so the caller (web app drilldown) doesn't
     re-parse on every drill request.
+
+    Pass ``enriched_df`` to skip re-reading Excel (Refresh reuses the DF when
+    the file mtime is unchanged). GSheet fetch runs in parallel with Excel
+    load when both are needed.
 
     Returns:
         (report_dict, enriched_df, warnings)
@@ -156,20 +161,40 @@ def load_morning_report(
 
     account_rows: List[Dict[str, Any]] = []
     fallback_mode = False
+    gsheet_error: Exception | None = None
+
+    def _fetch_gsheet() -> List[Dict[str, Any]]:
+        return fetch_account_rows(my_cm=resolved_cm)
+
+    # GSheet + Excel are independent — run in parallel when Excel must load.
     if skip_gsheet:
         warnings.append("GSheet skipped (skip_gsheet=True)")
-    else:
+        if enriched_df is None:
+            enriched_df = _load_enriched_df(resolved_excel)
+    elif enriched_df is not None:
         try:
-            account_rows = fetch_account_rows(my_cm=resolved_cm)
+            account_rows = _fetch_gsheet()
         except Exception as e:  # noqa: BLE001 - graceful degradation
-            warnings.append(
-                f"GSheet unavailable: {type(e).__name__}: {e}. "
-                f"Sections 6-9 will be empty or limited."
-            )
+            gsheet_error = e
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            fut_gsheet = pool.submit(_fetch_gsheet)
+            fut_df = pool.submit(_load_enriched_df, resolved_excel)
+            try:
+                account_rows = fut_gsheet.result()
+            except Exception as e:  # noqa: BLE001
+                gsheet_error = e
+            enriched_df = fut_df.result()
+
+    if gsheet_error is not None:
+        warnings.append(
+            f"GSheet unavailable: {type(gsheet_error).__name__}: {gsheet_error}. "
+            f"Sections 6-9 will be empty or limited."
+        )
 
     # If GSheet returned no accounts for this CM, fetch ALL accounts from the same
     # tab (no CM filter) so the campaign builder shows every available account.
-    if not account_rows and not skip_gsheet:
+    if not account_rows and not skip_gsheet and gsheet_error is None:
         try:
             all_rows = fetch_account_rows(my_cm=None)
         except Exception as e:  # noqa: BLE001
@@ -183,7 +208,7 @@ def load_morning_report(
                 f"showing all {len(all_rows)} account(s) from the sheet (free to open campaigns)."
             )
 
-    enriched_df = _load_enriched_df(resolved_excel)
+    assert enriched_df is not None
 
     report = build_morning_report(
         df=enriched_df,

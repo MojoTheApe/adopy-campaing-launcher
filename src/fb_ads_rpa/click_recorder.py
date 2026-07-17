@@ -152,7 +152,14 @@ def _find_cdp_url() -> str | None:
     """Scan common CDP ports for a running Multilogin / Chrome instance."""
     import urllib.request
 
-    ports = [19222, *range(9222, 9260), 45000, 45001, 35000, 58888]
+    ports = [
+        60361,  # MLX automation port (known current)
+        19222,
+        *range(56000, 56500, 10),
+        *range(60000, 60500, 10),
+        *range(9222, 9260),
+        45000, 45001, 35000, 58888,
+    ]
     for port in ports:
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=0.6) as resp:

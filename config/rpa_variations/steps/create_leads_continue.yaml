@@ -1,0 +1,23 @@
+step_id: create_leads_continue
+left_tab: create
+section: objective
+risk: safe
+must:
+  - Campaign name field OR /edit/ wizard URL
+ui_variants:
+  - id: ai_guided_vs_manual
+    notes: "Must pick Manual before Leads continuum"
+  - id: side_panel_wizard
+    notes: "Wizard on manage URL without /edit/ — detect Campaign name DOM"
+  - id: new_tab_edit
+    notes: "Continue opens adsets/edit/standalone tab"
+strategies:
+  - id: click_create_semantic
+  - id: ensure_manual
+  - id: select_leads_heading
+  - id: click_continue
+  - id: bind_wizard_tab
+  - id: skip_layer_confirm
+evidence:
+  - output/rpa_screenshots/20260716_140616_player_wizard_ready.png
+  - output/rpa_screenshots/20260716_140628_player_lost_wizard_campaign.png

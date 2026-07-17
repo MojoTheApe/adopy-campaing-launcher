@@ -875,7 +875,13 @@ def _expand_conversion_location_single(page: Page) -> bool:
     Recorded recipe (Costa_Rica_campaign_20260714_124938):
       click role=heading own_text='Single'
     Prefer heading + mouse chain (CDP-safe); fall back to subtitle / exact text.
+
+    IMPORTANT: Single sits below Multiple in the dropdown — scroll first.
+    Success = exact Website radio becomes visible (not 'Website and …').
     """
+    if _is_website_option_visible(page, timeout_ms=500):
+        return True
+
     SUBTITLE_PATTERNS = [
         re.compile(r"Send people to one location", re.I),
         re.compile(r"Enviar personas a una ubicación", re.I),
@@ -883,57 +889,82 @@ def _expand_conversion_location_single(page: Page) -> bool:
     ]
     HEADING_TEXTS = ["Single", "Único", "Única"]
 
-    for root in _roots(page):
-        # Strategy 0 (recorded): role=heading name=Single + mouse chain
-        for heading in HEADING_TEXTS:
-            try:
-                el = root.get_by_role("heading", name=re.compile(rf"^{re.escape(heading)}$", re.I)).first
-                if el.is_visible(timeout=2000):
+    for attempt in range(3):
+        _scroll_conversion_menu_to_single(page)
+        if _is_website_option_visible(page, timeout_ms=400):
+            return True
+
+        clicked = False
+        for root in _roots(page):
+            # Strategy 0 (recorded): role=heading name=Single + mouse chain
+            for heading in HEADING_TEXTS:
+                try:
+                    el = root.get_by_role(
+                        "heading", name=re.compile(rf"^{re.escape(heading)}$", re.I)
+                    ).first
+                    if el.is_visible(timeout=1500):
+                        el.scroll_into_view_if_needed(timeout=2000)
+                        box = el.bounding_box()
+                        if box:
+                            _mouse_click_chain(
+                                page,
+                                box["x"] + box["width"] / 2,
+                                box["y"] + box["height"] / 2,
+                            )
+                        else:
+                            el.click(timeout=5000, force=True)
+                        clicked = True
+                        time.sleep(0.5)
+                        break
+                except Exception:
+                    pass
+            if clicked:
+                break
+
+            # Strategy 1: subtitle text
+            for pat in SUBTITLE_PATTERNS:
+                try:
+                    el = root.get_by_text(pat).first
+                    el.wait_for(state="visible", timeout=1500)
+                    el.scroll_into_view_if_needed(timeout=2000)
                     box = el.bounding_box()
                     if box:
                         _mouse_click_chain(
                             page,
-                            box["x"] + box["width"] / 2,
+                            box["x"] + min(box["width"] * 0.4, 80),
                             box["y"] + box["height"] / 2,
                         )
                     else:
-                        el.click(timeout=5000, force=True)
+                        el.click(timeout=5000)
+                    clicked = True
                     time.sleep(0.45)
-                    return True
-            except Exception:
-                pass
+                    break
+                except Exception:
+                    pass
+            if clicked:
+                break
 
-        # Strategy 1: subtitle text
-        for pat in SUBTITLE_PATTERNS:
-            try:
-                el = root.get_by_text(pat).first
-                el.wait_for(state="visible", timeout=2500)
-                box = el.bounding_box()
-                if box:
-                    _mouse_click_chain(
-                        page,
-                        box["x"] + min(box["width"] * 0.4, 80),
-                        box["y"] + box["height"] / 2,
-                    )
-                else:
-                    el.click(timeout=5000)
-                time.sleep(0.35)
-                return True
-            except Exception:
-                pass
+            # Strategy 2: exact "Single" text
+            for heading in HEADING_TEXTS:
+                try:
+                    el = root.get_by_text(heading, exact=True).first
+                    el.wait_for(state="visible", timeout=1500)
+                    el.scroll_into_view_if_needed(timeout=2000)
+                    el.click(timeout=5000, force=True)
+                    clicked = True
+                    time.sleep(0.45)
+                    break
+                except Exception:
+                    pass
+            if clicked:
+                break
 
-        # Strategy 2: exact "Single" text
-        for heading in HEADING_TEXTS:
-            try:
-                el = root.get_by_text(heading, exact=True).first
-                el.wait_for(state="visible", timeout=2000)
-                el.click(timeout=5000, force=True)
-                time.sleep(0.35)
-                return True
-            except Exception:
-                pass
+        if _wait_for_single_expanded(page, timeout_s=2.5):
+            return True
+        if not clicked:
+            break
 
-    return False
+    return _is_website_option_visible(page, timeout_ms=600)
 
 
 def _click_recorded_website_label(page: Page) -> bool:
@@ -1091,46 +1122,149 @@ def _pick_website_via_recorded_recipe(page: Page) -> bool:
 
 
 def _wait_for_single_expanded(page: Page, timeout_s: float = 5.0) -> bool:
-    """Wait (using Playwright wait_for) until 'Website' option is visible.
-
-    Replaces the old polling loop with a proper locator.wait_for call.
-    """
-    WEBSITE_LABELS = ["Website", "Sitio web"]
+    """Wait until Single → Website (exact) is visible — never 'Website and …'."""
     timeout_ms = int(timeout_s * 1000)
+    exact_radio = re.compile(r"^(Website|Sitio web)$", re.I)
 
     for root in _roots(page):
-        for label in WEBSITE_LABELS:
-            # Prefer role=radio (semantic); exact=True excludes "Website and…"
+        try:
+            root.get_by_role("radio", name=exact_radio).first.wait_for(
+                state="visible", timeout=timeout_ms
+            )
+            return True
+        except Exception:
+            pass
+        for label in ("Website", "Sitio web"):
             try:
-                root.get_by_role("radio", name=label).first.wait_for(
-                    state="visible", timeout=timeout_ms
-                )
-                return True
-            except Exception:
-                pass
-            # Fall back to exact text match
-            try:
-                root.get_by_text(label, exact=True).first.wait_for(
-                    state="visible", timeout=timeout_ms
-                )
-                return True
+                # exact text only — must not match "Website and instant forms"
+                el = root.get_by_text(label, exact=True).first
+                el.wait_for(state="visible", timeout=max(800, timeout_ms // 2))
+                own = (el.evaluate(
+                    """el => Array.from(el.childNodes)
+                      .filter(n => n.nodeType === 3)
+                      .map(n => n.textContent).join('')
+                      || el.getAttribute('aria-label')
+                      || (el.childElementCount === 0 ? el.textContent : '')
+                      || ''"""
+                ) or "").strip().lower()
+                if own in ("website", "sitio web"):
+                    return True
             except Exception:
                 pass
     return False
 
 
 def _is_website_option_visible(page: Page, timeout_ms: int = 600) -> bool:
-    """Return True if the 'Website' (single) option is already visible in the open menu."""
-    WEBSITE_LABELS = ["Website", "Sitio web"]
+    """True only for Single → Website, not 'Website and instant forms'."""
+    exact_radio = re.compile(r"^(Website|Sitio web)$", re.I)
     for root in _roots(page):
-        for label in WEBSITE_LABELS:
+        try:
+            el = root.get_by_role("radio", name=exact_radio).first
+            if el.is_visible(timeout=timeout_ms):
+                return True
+        except Exception:
+            pass
+        for label in ("Website", "Sitio web"):
             try:
                 el = root.get_by_text(label, exact=True).first
-                if el.is_visible(timeout=timeout_ms):
+                if not el.is_visible(timeout=timeout_ms):
+                    continue
+                own = (el.evaluate(
+                    """el => Array.from(el.childNodes)
+                      .filter(n => n.nodeType === 3)
+                      .map(n => n.textContent).join('')
+                      || el.getAttribute('aria-label')
+                      || (el.childElementCount === 0 ? el.textContent : '')
+                      || ''"""
+                ) or "").strip().lower()
+                if own in ("website", "sitio web"):
                     return True
             except Exception:
                 pass
     return False
+
+
+def _scroll_conversion_menu_to_single(page: Page) -> bool:
+    """Scroll the open Conversion location dropdown so Single / Website appear.
+
+    Meta shows Multiple options first; Single → Website is below the fold.
+    """
+    script = """
+    () => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      const own = (el) => norm(
+        Array.from(el.childNodes).filter(n => n.nodeType === 3)
+          .map(n => n.textContent).join('')
+        || (el.childElementCount === 0 ? (el.textContent || '') : '')
+        || el.getAttribute('aria-label') || ''
+      );
+      // Prefer an open listbox/menu
+      let scrollers = [];
+      for (const el of document.querySelectorAll('[role=listbox], [role=menu]')) {
+        if (!el.offsetParent) continue;
+        if (el.scrollHeight > el.clientHeight + 8) scrollers.push(el);
+      }
+      // Fallback: any scrollable ancestor of "Multiple" / "Single"
+      for (const el of document.querySelectorAll('div, span, [role=heading]')) {
+        if (!el.offsetParent) continue;
+        const t = own(el);
+        if (t !== 'single' && t !== 'multiple' && t !== 'único' && t !== 'única') continue;
+        let p = el.parentElement;
+        for (let i = 0; i < 10 && p; i++, p = p.parentElement) {
+          const st = getComputedStyle(p);
+          if (/(auto|scroll)/.test(st.overflowY) && p.scrollHeight > p.clientHeight + 8) {
+            scrollers.push(p);
+            break;
+          }
+        }
+      }
+      if (!scrollers.length) return false;
+      let moved = false;
+      for (const sc of scrollers) {
+        const before = sc.scrollTop;
+        sc.scrollTop = Math.min(sc.scrollHeight, sc.scrollTop + Math.max(220, sc.clientHeight * 0.7));
+        if (sc.scrollTop !== before) moved = true;
+      }
+      // Also bring Single heading into view if present
+      for (const el of document.querySelectorAll('[role=heading], div, span')) {
+        if (!el.offsetParent) continue;
+        if (!['single', 'único', 'única'].includes(own(el))) continue;
+        el.scrollIntoView({ block: 'center', inline: 'nearest' });
+        moved = true;
+        break;
+      }
+      return moved;
+    }
+    """
+    ok = False
+    for root in _roots(page):
+        try:
+            if root.evaluate(script):
+                ok = True
+                time.sleep(0.35)
+        except Exception:
+            pass
+    # Playwright wheel fallback over the open menu center
+    if not ok or not _is_website_option_visible(page, timeout_ms=300):
+        try:
+            box = None
+            for root in _roots(page):
+                try:
+                    lb = root.locator("[role=listbox], [role=menu]").last
+                    if lb.is_visible(timeout=400):
+                        box = lb.bounding_box()
+                        if box:
+                            break
+                except Exception:
+                    pass
+            if box:
+                page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] * 0.7)
+                page.mouse.wheel(0, 480)
+                time.sleep(0.35)
+                ok = True
+        except Exception:
+            pass
+    return ok
 
 
 def _find_website_option_bbox(page: Page) -> dict | None:
@@ -1615,10 +1749,14 @@ def _pick_website_from_open_menu(page: Page) -> bool:
     if is_website_conversion_selected(page):
         return True
 
+    # Dismiss 'Publish draft items?' dialog that may be blocking the dropdown
+    dismiss_publish_draft_dialog(page)
+
     if not _is_website_option_visible(page):
         _expand_conversion_location_single(page)
         _wait_for_single_expanded(page, timeout_s=5.0)
 
+    dismiss_publish_draft_dialog(page)
     _scroll_website_option_into_view(page)
 
     if is_website_conversion_selected(page):
@@ -1629,6 +1767,7 @@ def _pick_website_from_open_menu(page: Page) -> bool:
         return True
 
     # 2) Raw CDP Input.dispatchMouseEvent
+    dismiss_publish_draft_dialog(page)
     if _click_website_via_cdp(page):
         return True
 
@@ -1773,6 +1912,97 @@ def _dismiss_advantage_banner(page: Page) -> None:
             pass
 
 
+def dismiss_publish_draft_dialog(page: Page) -> bool:
+    """Dismiss draft review modals that block Ads Manager clicks.
+
+    Handles both:
+      - 'Publish draft items?' → Close
+      - 'Review draft items' (with errors) → Cancel  (Close is often absent)
+
+    Never clicks Publish / Fix error — RPA must keep editing.
+    """
+    dismiss_re = re.compile(r"^(Close|Cancel|Cerrar|Cancelar)$", re.I)
+    for root in _roots(page):
+        # Strategy 1: dialog with draft wording → Close or Cancel
+        try:
+            dialog = root.locator(
+                "[role=dialog]:has-text('Publish draft'), "
+                "[role=dialog]:has-text('Review draft'), "
+                "[role=dialog]:has-text('draft items')"
+            ).first
+            if dialog.is_visible(timeout=1000):
+                for name_re in (
+                    re.compile(r"^Cancel$", re.I),
+                    re.compile(r"^Close$", re.I),
+                    re.compile(r"^Cancelar$", re.I),
+                    re.compile(r"^Cerrar$", re.I),
+                ):
+                    try:
+                        btn = dialog.get_by_role("button", name=name_re).first
+                        if btn.is_visible(timeout=400):
+                            btn.click(timeout=3000, force=True)
+                            time.sleep(0.45)
+                            return True
+                    except Exception:
+                        pass
+                # Fallback: any dismiss-looking button in the dialog
+                try:
+                    btn = dialog.get_by_role("button", name=dismiss_re).first
+                    if btn.is_visible(timeout=400):
+                        btn.click(timeout=3000, force=True)
+                        time.sleep(0.45)
+                        return True
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Strategy 2: JS scan — Cancel preferred over Close; never Publish.
+        # Must NOT match the campaign wizard itself: it is often role=dialog with
+        # an "In draft" badge + bottom Close — clicking that closes the wizard
+        # ("Lost campaign wizard" after player_wizard_ready).
+        try:
+            script = """
+            () => {
+              const prefer = ['cancel', 'cancelar', 'close', 'cerrar'];
+              for (const dialog of document.querySelectorAll('[role=dialog]')) {
+                if (!dialog.offsetParent) continue;
+                const txt = (dialog.textContent || '').toLowerCase();
+                // Wizard chrome — never dismiss
+                if (
+                  txt.includes('campaign name') ||
+                  txt.includes('daily budget') ||
+                  txt.includes('ad set name') ||
+                  txt.includes('conversion location') ||
+                  txt.includes('nombre de la campaña')
+                ) continue;
+                // Only real draft-review modals (not bare "In draft" / "Publish")
+                const isDraftModal =
+                  txt.includes('publish draft') ||
+                  txt.includes('review draft') ||
+                  txt.includes('draft items') ||
+                  (txt.includes('publish') && txt.includes('draft item'));
+                if (!isDraftModal) continue;
+                const buttons = Array.from(dialog.querySelectorAll('button, [role=button]'))
+                  .filter(b => b.offsetParent);
+                for (const want of prefer) {
+                  for (const btn of buttons) {
+                    const t = (btn.textContent || btn.innerText || '').trim().toLowerCase();
+                    if (t === want) { btn.click(); return true; }
+                  }
+                }
+              }
+              return false;
+            }
+            """
+            if root.evaluate(script):
+                time.sleep(0.45)
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def _dismiss_floating_banners(page: Page) -> None:
     """Close any floating info/warning banners that may interfere with clicks.
 
@@ -1811,9 +2041,14 @@ def select_conversion_location_website(page: Page, *, skip_open: bool = False) -
     connect_over_cdp mouse-drop bug (#41286).
     """
     scroll_to_section(page, "Conversion location", "Ubicación de la conversión")
+    # Dismiss 'Publish draft items?' modal first — it blocks all clicks if visible
+    dismiss_publish_draft_dialog(page)
     _dismiss_floating_banners(page)
     # Advantage+ On can keep forcing "Website and instant forms"
+    # NOTE: only do this when no dropdown is open, to avoid triggering a draft-save dialog
     _turn_off_advantage_plus_leads(page)
+    # Re-dismiss in case Advantage+ toggle triggered the draft dialog
+    dismiss_publish_draft_dialog(page)
 
     # Fast-path: already correct
     if is_website_conversion_selected(page):
@@ -1821,6 +2056,7 @@ def select_conversion_location_website(page: Page, *, skip_open: bool = False) -
 
     # If menu is already open on the correct section, try to pick immediately
     if skip_open or conversion_menu_is_open(page):
+        dismiss_publish_draft_dialog(page)
         if _is_conversion_event_menu(page):
             # Wrong menu open — close safely (never use Escape: it may close the wizard)
             close_open_dropdown(page)
@@ -1830,11 +2066,15 @@ def select_conversion_location_website(page: Page, *, skip_open: bool = False) -
                 return True
 
     for attempt in range(3):
+        # 0. Dismiss any blocking modal first
+        dismiss_publish_draft_dialog(page)
+
         # 1. Close any leftover open dropdown
         close_open_dropdown(page)
         _dismiss_floating_banners(page)
         if attempt == 1:
             _turn_off_advantage_plus_leads(page)
+            dismiss_publish_draft_dialog(page)
 
         # 2. Open the Conversion Location dropdown
         if not click_conversion_location_dropdown(page):
@@ -1846,6 +2086,7 @@ def select_conversion_location_website(page: Page, *, skip_open: bool = False) -
             if not conversion_location_menu_visible(page):
                 continue
 
+        dismiss_publish_draft_dialog(page)
         _dismiss_floating_banners(page)
 
         # 4. Guard: verify it's the Conversion Location menu, not Conversion Event

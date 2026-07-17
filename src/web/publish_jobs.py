@@ -95,7 +95,10 @@ def create_job(
 
 
 def cancel_job(job_id: str) -> dict[str, Any]:
-    """Request cancellation of a running/pending job. Closes browser if RPA is active."""
+    """Request cancellation of a running/pending job.
+
+    Stops RPA and disconnects CDP; Multilogin window stays open for FB login check.
+    """
     with _jobs_lock:
         job = _jobs.get(job_id)
         if job is None:
@@ -103,6 +106,9 @@ def cancel_job(job_id: str) -> dict[str, Any]:
         if job["status"] in ("done", "cancelled"):
             return {"ok": False, "error": f"Job already {job['status']}"}
         job["cancel_requested"] = True
+        # Surface immediate feedback in the poll UI before the worker finishes.
+        if job["status"] in ("pending", "running"):
+            job["status"] = "cancelling"
         publisher = _active_publishers.get(job_id)
 
     if publisher is not None:
@@ -132,6 +138,35 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         return snap
 
 
+def _clear_inherited_asyncio_loop() -> None:
+    """Clear asyncio running-loop marks before sync Playwright in a worker thread.
+
+    Also stop any leaked sync Playwright driver from a prior failed CDP attach
+    in this thread (that leaves get_running_loop() returning a running loop and
+    triggers 'Playwright Sync API inside the asyncio loop' on the next start).
+    """
+    try:
+        from src.fb_ads_rpa.browser import _reset_asyncio_running_loop, _stop_thread_playwright
+
+        _stop_thread_playwright()
+        _reset_asyncio_running_loop()
+    except Exception:
+        try:
+            import asyncio
+            import asyncio.events as _ae
+
+            _rl = getattr(_ae, "_running_loop", None)
+            if _rl is not None and hasattr(_rl, "set"):
+                _rl.set(None)
+            elif _rl is not None and hasattr(_rl, "loop_pid"):
+                _rl.loop_pid = (None, None)
+            setter = getattr(_ae, "_set_running_loop", None)
+            if callable(setter):
+                setter(None)
+        except Exception:
+            pass
+
+
 def _run_job(
     job_id: str,
     slots: list[dict[str, Any]],
@@ -144,6 +179,10 @@ def _run_job(
     hand_off: bool = False,
 ) -> None:
     """Runs in a daemon thread. Updates _jobs[job_id] as it progresses."""
+    # Must be first: clear any asyncio event loop inherited from the parent
+    # async handler (Python 3.14+ ContextVar propagation via threading.Thread).
+    _clear_inherited_asyncio_loop()
+
     with _jobs_lock:
         _jobs[job_id]["status"] = "running"
         _jobs[job_id]["started_at"] = _now_iso()
@@ -268,7 +307,8 @@ def _run_rpa(
     if _is_cancelled(job_id):
         with _jobs_lock:
             _jobs[job_id]["errors"].append("Остановлено пользователем")
-        publisher.close(force=True)
+        # Never stop Multilogin — user needs the window to verify FB login.
+        publisher.close(force=False)
         _finish(job_id, cancelled=True)
         return
 
@@ -293,7 +333,8 @@ def _run_rpa(
             with _jobs_lock:
                 _jobs[job_id]["errors"].append(f"RPA error: {e}")
     finally:
-        publisher.close(force=cancelled or _is_cancelled(job_id))
+        # Disconnect CDP only; Multilogin window stays open for FB login check.
+        publisher.close(force=False)
         _finish(job_id, cancelled=cancelled or _is_cancelled(job_id))
 
 

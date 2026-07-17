@@ -1,0 +1,28 @@
+---
+description: Agent 10 / campaign upload — never close Multilogin window; leave it open so user can verify Facebook login
+globs: src/fb_ads_rpa/**,src/web/publish_jobs.py,src/web/templates/report.html,src/meta_campaign_agent/multilogin*.py,config/ad_account_map.csv,.cursor/skills/agent10-*/**
+alwaysApply: true
+---
+
+# Multilogin window stays open (campaign upload)
+
+When uploading / publishing Meta campaigns via dashboard RPA (Agent 10):
+
+## Hard rule
+
+1. **Never close** the Multilogin (MLX / Mimic) browser window after launch, Publish, cancel, error, or job end.
+2. RPA may **disconnect Playwright CDP** only — the profile window must keep running.
+3. Leave the window open so the user can **verify Facebook is logged into the correct account** before trusting the run.
+4. Do **not** call MLX `stop_profile`, kill Mimic, or instruct the user to close the profile as part of a normal/failed upload flow.
+5. Do **not** “clean up” by closing Multilogin tabs/windows after screenshots or debugging.
+
+## Allowed exceptions
+
+- Restarting **the same** profile solely to enable automation CDP when it was opened manually without a debug port (cookies preserved). Prefer attach; restart only when attach is impossible.
+- Never stop unrelated Multilogin profiles.
+
+## Agent behavior
+
+- After Publish / RPA: report status and remind that the Multilogin window stays open for FB login check.
+- If code paths still stop the profile on `force`/`cancel`, fix them to keep the window open.
+- Dashboard copy and skills must match this rule (window left open for login verification).

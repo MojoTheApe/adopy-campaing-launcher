@@ -29,6 +29,12 @@ try:
 except ImportError:
     pass
 
+# Recipe Player ON by default so dashboard RPA uses the golden path.
+os.environ.setdefault("FB_RPA_RECIPE_PLAYER", "1")
+# Campaign-open gate: stop after Campaign name + Daily budget (s00–s06).
+# Clear or set FB_RPA_RECIPE_STOP_AFTER= to run the full recipe past Ad set.
+os.environ.setdefault("FB_RPA_RECIPE_STOP_AFTER", "s06_campaign")
+
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 
 ensure_playwright_browsers_path()
@@ -36,6 +42,7 @@ ensure_playwright_browsers_path()
 from src.fb_ads_rpa.ads_manager_flow import RPA_FLOW_VERSION
 
 print(f"[serve] RPA flow version: {RPA_FLOW_VERSION}")
+print(f"[serve] Recipe player: {os.environ.get('FB_RPA_RECIPE_PLAYER', '1')}")
 
 import uvicorn
 
