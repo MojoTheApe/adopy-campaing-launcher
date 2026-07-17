@@ -136,8 +136,9 @@ Optional later: per-account overrides under `output/rpa_variations/`.
 
 ### Risk classification (initial)
 
-- **Safe:** Create click, Manual dismiss, Leads select, Continue, campaign/ad set name fill, budget fill, geo/age, copy fields, sidebar/breadcrumb navigation clicks  
-- **Risky:** Conversion location Website, conversion event Lead, Publish  
+- **Safe:** Create click, Manual dismiss, Leads select, Continue, campaign/ad set name fill, budget fill, geo/age, copy fields, sidebar/breadcrumb navigation clicks, finish as **Draft / hand-off** (leave wizard without Publish)  
+- **Risky:** Conversion location Website, conversion event Lead  
+- **Out of scope / never learn:** clicking **Publish** — RPA must always leave the campaign as Draft (hand-off). Do not treat Publish as a strategy to rank or promote.
 
 ### Integration with existing tools
 
@@ -149,7 +150,7 @@ Optional later: per-account overrides under `output/rpa_variations/`.
 ### Non-goals (phase 1)
 
 - Vision / screenshot embedding compare  
-- Auto-Publish  
+- **Publish** (always Draft / hand-off only)  
 - Learning from PlaywrightProfile downgrade / browser launch failures  
 
 ---
@@ -193,7 +194,8 @@ Upload FB–created campaigns are the live reference when available; until then 
 Learning rules (hybrid C):
 - Always log per-step strategy outcomes.
 - Auto-promote SAFE strategies only if the step succeeded in DOM AND the run did not collapse before the next major left-tab / checklist step.
-- RISKY steps (conversion location, conversion event, Publish): pending_approval only; promote after teach-mode / my explicit approve.
+- RISKY steps (conversion location, conversion event): pending_approval only; promote after teach-mode / my explicit approve.
+- Always leave campaign as Draft / hand-off — never click Publish.
 - Never learn from Multilogin/browser launch crashes.
 
 Tasks:
@@ -245,10 +247,10 @@ Russian short version for chat kickoff:
 | Topic | Decision |
 |-------|----------|
 | Scope | Full stack (catalog + learner + skill + prompt) |
-| Recipe | Leads → Website → Lead → Draft |
+| Recipe | Leads → Website → Lead → Draft (never Publish) |
 | Tabs | Left tabs; both level + section panels |
 | Golden | Code checklist first; live Upload FB later |
-| Learning | Hybrid C |
+| Learning | Hybrid C; Publish out of scope / not ranked |
 | Skill invoke | Auto on RPA topics + slash full audit |
 | Catalog phase 1 | Full path thin; deepen conversion later |
 | Approach | #2 ranked strategy store |

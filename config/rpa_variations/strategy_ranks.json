@@ -4,56 +4,42 @@
   "notes": "Hybrid learner store. Risky winners stay in pending_approval until approve.",
   "steps": {
     "open_campaigns": {
-      "risk": "safe",
-      "order": ["goto_act_url", "wait_create_visible"],
-      "stats": {},
-      "pending_approval": []
+      "strategies": []
     },
     "create_leads_continue": {
-      "risk": "safe",
-      "order": [
-        "click_create_semantic",
-        "ensure_manual",
-        "select_leads_heading",
-        "click_continue",
-        "bind_wizard_tab",
-        "skip_layer_confirm"
-      ],
-      "stats": {
-        "skip_layer_confirm": {"wins": 1, "fails": 0, "note": "layerConfirm closes wizard"},
-        "dismiss_draft_not_wizard_close": {
+      "strategies": [
+        {
+          "id": "skip_layer_confirm",
           "wins": 1,
           "fails": 0,
+          "score": 1,
+          "note": "layerConfirm closes wizard"
+        },
+        {
+          "id": "dismiss_draft_not_wizard_close",
+          "wins": 1,
+          "fails": 0,
+          "score": 1,
           "note": "dismiss JS matched In draft+Close on wizard → player_lost_wizard_campaign; tightened to publish/review draft modals only"
         }
-      },
-      "pending_approval": []
+      ]
     },
     "campaign_name_budget": {
-      "risk": "safe",
-      "order": ["label_fill_campaign_name", "label_fill_daily_budget", "wait_editor_saved"],
-      "stats": {},
-      "pending_approval": []
+      "strategies": []
     },
     "conversion_location_website": {
-      "risk": "risky",
-      "order": [
-        "advantage_plus_off",
-        "open_dropdown",
-        "scroll_menu_to_single",
-        "expand_single",
-        "website_exact_space",
-        "meta_dom_select_conversion_location_website",
-        "ai_recovery_cdp"
-      ],
-      "stats": {
-        "website_exact_radio_bug": {
+      "strategies": [
+        {
+          "id": "website_exact_radio_bug",
           "wins": 0,
           "fails": 1,
+          "score": -1,
           "note": "get_by_role(radio,name=Website) matched Website and instant forms"
         }
-      },
-      "pending_approval": []
+      ]
     }
-  }
+  },
+  "pending_safe": {},
+  "pending_approval": [],
+  "outcome_log": []
 }

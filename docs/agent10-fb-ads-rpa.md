@@ -48,6 +48,18 @@ python scripts/run_rpa_publish.py --account "EC Fav" --country MX
 
 Screenshots on failure: `output/rpa_screenshots/`.
 
+## Variations learning
+
+Agent 10 RPA variations use a Draft-only learning loop for Ads Manager UI drift. Ground truth lives in [`config/rpa_variations/checklist.md`](../config/rpa_variations/checklist.md), with left tabs **Campaign / Ad set / Ad** plus section panels, and the recipe ends at Draft hand-off — never Publish.
+
+- Variation catalog: [`config/rpa_variations/steps.yaml`](../config/rpa_variations/steps.yaml)
+- Ranked strategy store: [`config/rpa_variations/strategy_ranks.json`](../config/rpa_variations/strategy_ranks.json)
+- Agent skill: [`.cursor/skills/agent10-rpa-variations/SKILL.md`](../.cursor/skills/agent10-rpa-variations/SKILL.md)
+- Slash audit: [`.cursor/commands/rpa-audit.md`](../.cursor/commands/rpa-audit.md) (`/rpa-audit`)
+- Design spec: [`docs/superpowers/specs/2026-07-15-agent10-rpa-variations-design.md`](superpowers/specs/2026-07-15-agent10-rpa-variations-design.md)
+
+Hybrid C rules: safe steps may auto-promote only after DOM success and progress to the next major checklist step; risky conversion steps (`conversion_location_website`, `conversion_event_lead`) go to `pending_approval` until teach-mode or explicit approval. Browser issues are not UI learning; prefer Multilogin Desktop / DirectCDP for MLX profiles.
+
 ## Dashboard
 
 - **Preview** (`POST /preview-publish`) — shows CampaignDraft tree when `FB_PUBLISH_BACKEND=rpa`

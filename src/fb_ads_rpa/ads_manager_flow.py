@@ -878,6 +878,104 @@ class AdsManagerFlow:
         self.nav_timeout = int(timing.get("navigation_timeout_ms") or 90000)
         self.action_timeout = int(timing.get("action_timeout_ms") or 45000)
 
+    def _variations_ranks(self) -> "StrategyRanks | None":
+        cached = getattr(self, "_strategy_ranks", None)
+        if cached is not None:
+            return cached
+        try:
+            from src.fb_ads_rpa.variations.ranks import StrategyRanks
+
+            ranks = StrategyRanks.load()
+        except Exception:
+            return None
+        self._strategy_ranks = ranks
+        return ranks
+
+    def _log_variation_outcome(
+        self,
+        step_id: str,
+        strategy_id: str,
+        *,
+        ok: bool,
+        screenshot: str | None = None,
+    ) -> None:
+        ranks = self._variations_ranks()
+        if ranks is None:
+            return
+        try:
+            ranks.log_outcome(step_id, strategy_id, ok=ok, screenshot=screenshot)
+        except Exception:
+            pass
+
+    def _mark_variation_next_step_ok(self, step_id: str) -> None:
+        ranks = self._variations_ranks()
+        if ranks is None:
+            return
+        try:
+            ranks.mark_next_step_ok(step_id)
+        except Exception:
+            pass
+
+    def _infer_nav_ad_set_strategy(self, steps: list[str]) -> str:
+        if any("ad_set_breadcrumb" in step for step in steps):
+            return "breadcrumb_ad_set"
+        if any("next_from_campaign" in step for step in steps):
+            return "next_step"
+        return "sidebar_ad_set"
+
+    def _log_nav_ad_set_success(self, result: RpaPublishResult, steps: list[str]) -> None:
+        if getattr(result, "_ranks_nav_ad_set_logged", False):
+            return
+        self._log_variation_outcome(
+            "nav_ad_set",
+            self._infer_nav_ad_set_strategy(steps),
+            ok=True,
+        )
+        setattr(result, "_ranks_nav_ad_set_logged", True)
+
+    def _infer_conversion_location_website_strategy(self, steps: list[str]) -> str:
+        if any("teach_website" in step or "website_teach" in step for step in steps):
+            return "teach_mode"
+        if any("recipe" in step for step in steps):
+            return "recipe_space"
+        return "playwright_click"
+
+    def _log_conversion_location_website_outcome(
+        self,
+        result: RpaPublishResult,
+        steps: list[str],
+        *,
+        ok: bool,
+        screenshot: str | None = None,
+    ) -> None:
+        if not ok and self._conversion_location_ok(result):
+            return
+        if ok and getattr(result, "_ranks_conversion_location_website_logged_ok", False):
+            return
+        ranks = self._variations_ranks()
+        if ranks is None:
+            return
+        try:
+            from src.fb_ads_rpa.variations.catalog import default_strategies
+
+            ranks.ordered_strategies(
+                "conversion_location_website",
+                default_strategies("conversion_location_website"),
+            )
+        except Exception:
+            pass
+        try:
+            ranks.log_outcome(
+                "conversion_location_website",
+                self._infer_conversion_location_website_strategy(steps),
+                ok=ok,
+                screenshot=screenshot,
+            )
+            if ok:
+                setattr(result, "_ranks_conversion_location_website_logged_ok", True)
+        except Exception:
+            pass
+
     def _shot(self, label: str, result: RpaPublishResult) -> str:
         path = capture(self.page, label)
         result.screenshot_paths.append(path)
@@ -990,11 +1088,14 @@ class AdsManagerFlow:
         return False
 
     def _ensure_ad_set_level(self, result: RpaPublishResult, *, force: bool = False) -> bool:
+        start_idx = len(result.steps_completed)
         already = _is_ad_set_level_visible(self.page)
         if already and not force:
+            self._log_nav_ad_set_success(result, result.steps_completed[start_idx:])
             return True
         if self._navigate_to_ad_set_level(result):
             result.steps_completed.append("ensure_ad_set_level_ok")
+            self._log_nav_ad_set_success(result, result.steps_completed[start_idx:])
             return True
         result.steps_completed.append("ensure_ad_set_level_failed")
         self._shot("04b_ensure_ad_set_fail", result)
@@ -1291,11 +1392,14 @@ class AdsManagerFlow:
             return False
 
     def _advance_to_ad_set(self, result: RpaPublishResult) -> None:
+        start_idx = len(result.steps_completed)
         if _is_ad_set_level_visible(self.page):
             result.steps_completed.append("already_on_ad_set_level")
+            self._log_nav_ad_set_success(result, result.steps_completed[start_idx:])
             return
 
         if self._navigate_to_ad_set_level(result):
+            self._log_nav_ad_set_success(result, result.steps_completed[start_idx:])
             return
 
         result.steps_completed.append("ad_set_level_wait_timeout")
@@ -1436,14 +1540,23 @@ class AdsManagerFlow:
             self._shot("06_placements_fail", result)
 
     def _select_conversion_location_website(self, result: RpaPublishResult) -> None:
+        start_idx = len(result.steps_completed)
         if not self._ensure_ad_set_level(result):
             result.steps_completed.append("conversion_location_wrong_level")
+            self._log_conversion_location_website_outcome(
+                result,
+                result.steps_completed[start_idx:],
+                ok=False,
+            )
             return
         # Dismiss 'Publish draft items?' / 'Review draft items' before anything else
         dismiss_publish_draft_dialog(self.page)
         close_open_dropdown(self.page)
         wait_editor_saved(self.page)
-        scroll_to_section(self.page, "Conversion location", "Ubicación de la conversión")
+        if scroll_to_section(self.page, "Conversion location", "Ubicación de la conversión"):
+            self._mark_variation_next_step_ok("nav_ad_set")
+        else:
+            result.steps_completed.append("conversion_location_section_not_reached")
         dismiss_publish_draft_dialog(self.page)
         # Advantage+ On forces "Website and instant forms" — must be Off first
         if _turn_off_advantage_plus_leads(self.page):
@@ -1452,6 +1565,11 @@ class AdsManagerFlow:
             pause_short()
         if is_website_conversion_selected(self.page):
             result.steps_completed.append("conversion_location_website_already")
+            self._log_conversion_location_website_outcome(
+                result,
+                result.steps_completed[start_idx:],
+                ok=True,
+            )
             return
 
         menu_shot: str | None = None
@@ -1477,7 +1595,13 @@ class AdsManagerFlow:
             pause_medium()
             if is_website_conversion_selected(self.page):
                 result.steps_completed.append("conversion_location_website")
-                self._shot("04d_conversion_website", result)
+                shot = self._shot("04d_conversion_website", result)
+                self._log_conversion_location_website_outcome(
+                    result,
+                    result.steps_completed[start_idx:],
+                    ok=True,
+                    screenshot=shot,
+                )
                 return
             result.steps_completed.append("conversion_location_website_unverified")
             if not menu_shot:
@@ -1503,7 +1627,13 @@ class AdsManagerFlow:
             pause_medium()
             if is_website_conversion_selected(self.page):
                 result.steps_completed.append("conversion_location_website_selector")
-                self._shot("04d_conversion_website", result)
+                shot = self._shot("04d_conversion_website", result)
+                self._log_conversion_location_website_outcome(
+                    result,
+                    result.steps_completed[start_idx:],
+                    ok=True,
+                    screenshot=shot,
+                )
                 return
         except AdsManagerFlowError:
             pass
@@ -1519,7 +1649,13 @@ class AdsManagerFlow:
         result.steps_completed.append(f"diag:{diag.summary()}")
         if diag.conversion_location == "website":
             result.steps_completed.append("conversion_location_website_recovered")
-            self._shot("04d_conversion_website_recovered", result)
+            shot = self._shot("04d_conversion_website_recovered", result)
+            self._log_conversion_location_website_outcome(
+                result,
+                result.steps_completed[start_idx:],
+                ok=True,
+                screenshot=shot,
+            )
             return
 
         # Teach-mode: pause so the user can click Website manually (Single → Website).
@@ -1532,11 +1668,26 @@ class AdsManagerFlow:
             time.sleep(0.8)
             if is_website_conversion_selected(self.page):
                 result.steps_completed.append("conversion_location_website_teach")
-                self._shot("04d_conversion_website_teach", result)
+                shot = self._shot("04d_conversion_website_teach", result)
                 _capture_website_locator_to_recipe(self.page)
                 result.steps_completed.append("teach_website_captured")
+                self._log_conversion_location_website_outcome(
+                    result,
+                    result.steps_completed[start_idx:],
+                    ok=True,
+                    screenshot=shot,
+                )
+                return
             else:
                 result.steps_completed.append("teach_mode_website_still_failed")
+
+        if not self._conversion_location_ok(result):
+            self._log_conversion_location_website_outcome(
+                result,
+                result.steps_completed[start_idx:],
+                ok=False,
+                screenshot=fail_shot,
+            )
 
     def _conversion_location_ok(self, result: RpaPublishResult) -> bool:
         return any(
@@ -1546,6 +1697,8 @@ class AdsManagerFlow:
                 "conversion_location_website_already",
                 "conversion_location_website_selector",
                 "conversion_location_website_recovered",
+                "conversion_location_website_teach",
+                "teach_website_captured",
             )
         )
 
@@ -1941,26 +2094,16 @@ class AdsManagerFlow:
             self._shot(f"06_ad_{idx + 1}", result)
 
     def _finish_publish(self, draft: CampaignDraft, result: RpaPublishResult, *, dry_run: bool) -> None:
-        # DRAFT status → leave wizard open, don't click Publish
-        if draft.status == "DRAFT" or dry_run:
-            result.steps_completed.append("left_as_draft_in_ads_manager")
-            self._shot("99_draft", result)
-            return
-
-        sels = self.cfg.get("selectors") or {}
-        try:
-            _click_first(
-                self.page,
-                _selector_list(sels, "publish_button"),
-                timeout_ms=self.action_timeout,
-            )
-            pause_medium()
-            result.steps_completed.append("clicked_publish")
-            self._shot("06_publish", result)
-        except AdsManagerFlowError as exc:
-            shot = capture(self.page, "publish_failed")
-            result.screenshot_paths.append(shot)
-            raise AdsManagerFlowError(str(exc), screenshot=shot) from exc
+        # Agent 10 constraints require draft hand-off only, even for ACTIVE drafts.
+        result.steps_completed.append("left_as_draft_in_ads_manager")
+        result.steps_completed.append("finish_draft_no_publish")
+        shot = self._shot("99_draft", result)
+        self._log_variation_outcome(
+            "finish_draft",
+            "hand_off_draft",
+            ok=True,
+            screenshot=shot,
+        )
 
     def publish_campaign(
         self,
@@ -2055,5 +2198,12 @@ class AdsManagerFlow:
             result.error = str(exc)
             if isinstance(exc, AdsManagerFlowError) and exc.screenshot:
                 result.screenshot_paths.append(exc.screenshot)
+        finally:
+            ranks = getattr(self, "_strategy_ranks", None)
+            if ranks is not None:
+                try:
+                    ranks.save()
+                except Exception:
+                    pass
 
         return result
