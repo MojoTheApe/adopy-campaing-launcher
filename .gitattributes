@@ -1,0 +1,20 @@
+# Normalize line endings for text files to LF in the repo; Git still checks
+# out using core.autocrlf/OS defaults locally. This stops the whole-file
+# "modified" diffs caused by mixed CRLF/LF across the tree.
+* text=auto eol=lf
+
+# Windows-only scripts: keep CRLF so double-click / cmd.exe behave normally.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files — never touch line endings.
+*.xlsx binary
+*.xls binary
+*.pdf binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary
