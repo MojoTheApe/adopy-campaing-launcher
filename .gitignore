@@ -44,6 +44,22 @@ Thumbs.db
 # Excel lock/temp files
 output/~$*
 
+# RPA runtime artifacts (regenerated every run — screenshots, evidence packs,
+# per-account learned recipe dumps, job/test logs)
+output/rpa_screenshots/
+output/rpa_evidence/
+output/rpa_recipes/
+output/draft_status.json
+output/dry_run_slots_cl.json
+output/publish_dry_run.json
+output/test_publish_log.jsonl
+output/*.xlsx
+serve_out.log
+serve_err.log
+serve_recipe_player.log
+_diag_out/
+analysis_agent/debug-*.log
+
 # Local SQLite (recreated at runtime)
 data/*.db
 data/*.db-shm
