@@ -31,9 +31,9 @@ except ImportError:
 
 # Recipe Player ON by default so dashboard RPA uses the golden path.
 os.environ.setdefault("FB_RPA_RECIPE_PLAYER", "1")
-# Campaign-open gate: stop after Campaign name + Daily budget (s00–s06).
-# Clear or set FB_RPA_RECIPE_STOP_AFTER= to run the full recipe past Ad set.
-os.environ.setdefault("FB_RPA_RECIPE_STOP_AFTER", "s06_campaign")
+# Gate: Campaign name + budget → Ad set name → Conversion location Single → Website.
+# (Not "Website and instant forms".) Clear FB_RPA_RECIPE_STOP_AFTER= to run full recipe.
+os.environ.setdefault("FB_RPA_RECIPE_STOP_AFTER", "s12_conversion_location")
 
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 

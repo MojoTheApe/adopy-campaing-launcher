@@ -27,7 +27,9 @@ from typing import Any, Callable
 import yaml
 from playwright.sync_api import Page
 
+from src.fb_ads_rpa import intent_runner as ir
 from src.fb_ads_rpa import meta_dom as md
+from src.fb_ads_rpa import wizard_guard as wg
 from src.fb_ads_rpa.config import get_recipe_stop_after
 from src.fb_ads_rpa.pacing import pause_medium, pause_short
 from src.fb_ads_rpa.screenshots import capture as capture_screenshot
@@ -91,6 +93,8 @@ class RecipePlayer:
         self.screenshot_dir = screenshot_dir
         self.result = RecipeRunResult()
         self._ad = self._first_ad()
+        self._guard_recover_attempts = 0
+        self._run_id = time.strftime("%Y%m%d_%H%M%S")
 
     # ── params ────────────────────────────────────────────────────────────────
     def _first_ad(self) -> Any:
@@ -149,10 +153,22 @@ class RecipePlayer:
             md.dismiss_publish_draft_dialog(self.page)
         except Exception:
             pass
+        # Measurement banner: dismiss via X — never "About this update"
+        try:
+            if wg.dismiss_measurement_banner(self.page):
+                pause_short(self.page)
+        except Exception:
+            pass
+        try:
+            wg.dismiss_account_switcher(self.page)
+        except Exception:
+            pass
         try:
             md._dismiss_floating_banners(self.page)
         except Exception:
             pass
+        # If a prior mis-click left Ads Manager (news/help), recover before next step
+        self._ensure_not_left_ads_manager(context="pre_step")
         # Clear empty-state filters that hide the Create flow context
         try:
             clear_btn = self.page.get_by_role("button", name=re.compile(r"^Clear filter$", re.I)).first
@@ -161,6 +177,73 @@ class RecipePlayer:
                 pause_short(self.page)
         except Exception:
             pass
+
+    def _wizard_is_open(self) -> bool:
+        """True only when campaign/ad-set edit chrome is visible (not manage list)."""
+        try:
+            if self._page_has_wizard(self.page):
+                return True
+        except Exception:
+            pass
+        try:
+            from src.fb_ads_rpa.ads_manager_flow import _is_campaign_wizard_ready
+
+            if _is_campaign_wizard_ready(self.page):
+                return True
+        except Exception:
+            pass
+        return "/edit/" in (self.page.url or "")
+
+    def _ensure_not_left_ads_manager(self, *, context: str = "") -> bool:
+        """If URL is business news/help, back + reopen *edit wizard*. Manage list alone is not OK."""
+        cfg = wg.load_forbidden_zones()
+        if not wg.url_left_ads_manager(self.page.url, cfg=cfg):
+            # Still may be on manage list after a partial recover — caller uses _ensure_on_wizard
+            return True
+        if self._guard_recover_attempts >= cfg.max_recover_attempts:
+            self._shot("player_guard_recover_exhausted")
+            self._record(
+                "wizard_guard",
+                "recover",
+                False,
+                "exhausted",
+                f"{context} url={(self.page.url or '')[:80]}",
+            )
+            return False
+        self._guard_recover_attempts += 1
+        self._shot(f"player_guard_left_{context or 'nav'}")
+        rec = wg.recover_from_bad_url(
+            self.page,
+            reopen_fn=self._reopen_wizard_from_list,
+            switch_wizard_fn=lambda: self._switch_to_wizard_tab(timeout_s=8),
+            cfg=cfg,
+        )
+        # recover may have switched tabs via context — re-bind if Ads Manager tab exists
+        try:
+            for p in self.page.context.pages:
+                if wg.is_ads_manager_url(p.url) and not wg.url_left_ads_manager(p.url, cfg=cfg):
+                    self.page = p
+                    break
+        except Exception:
+            pass
+        # Always demand real wizard chrome after leaving news/help
+        wizard_ok = False
+        if self._switch_to_wizard_tab(timeout_s=6) and self._wizard_is_open():
+            wizard_ok = True
+        elif self._reopen_wizard_from_list() and self._wizard_is_open():
+            wizard_ok = True
+            if not rec.ok:
+                rec = wg.RecoverResult(ok=True, action="forced_reopen", detail=(self.page.url or "")[:80])
+        ok = bool(rec.ok and wizard_ok)
+        self._record(
+            "wizard_guard",
+            "recover",
+            ok,
+            rec.action if ok else (rec.action or "no_wizard"),
+            f"{context} {rec.detail}",
+        )
+        self._shot("player_guard_recover")
+        return ok
 
     # ── generic executors ──────────────────────────────────────────────────────
     def _semantic_locator(self, match: dict[str, Any]):
@@ -200,27 +283,184 @@ class RecipePlayer:
             return page.get_by_role(role).first
         return None
 
+    def _nav_own_text(self, match: dict[str, Any]) -> str | None:
+        own = (match.get("own_text") or match.get("text") or "").strip()
+        if own.lower() in ("next", "continue"):
+            return own
+        return None
+
+    def _click_footer_nav(self, own_text: str) -> bool:
+        """Click wizard footer Next/Continue via live bbox CDP — never stale recorded coords.
+
+        Multilogin Playwright clicks often miss (#41286) and land on the measurement
+        banner 'About this update' → business/news/click-attribution.
+        """
+        page = self.page
+        try:
+            wg.dismiss_measurement_banner(page)
+        except Exception:
+            pass
+        try:
+            wg.dismiss_account_switcher(page)
+        except Exception:
+            pass
+        # Dismiss value-rules / insight tooltips that steal clicks
+        try:
+            tip = page.get_by_text(re.compile(r"Value rules", re.I)).first
+            if tip.is_visible(timeout=300):
+                page.keyboard.press("Escape")
+                pause_short(page)
+        except Exception:
+            pass
+
+        pat = re.compile(rf"^{re.escape(own_text)}$", re.I)
+        candidates = []
+        for role in ("button", "link"):
+            try:
+                loc = page.get_by_role(role, name=pat)
+                n = min(loc.count(), 10)
+                for i in range(n):
+                    el = loc.nth(i)
+                    try:
+                        if not el.is_visible(timeout=300):
+                            continue
+                        box = el.bounding_box()
+                        if not box or box.get("width", 0) < 8 or box.get("height", 0) < 8:
+                            continue
+                        candidates.append((box["y"], box, el))
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+        # Also div[role=button] with exact own text (Meta footer pattern)
+        try:
+            loc = page.locator(f'div[role="button"]:has-text("{own_text}")')
+            n = min(loc.count(), 10)
+            for i in range(n):
+                el = loc.nth(i)
+                try:
+                    if not el.is_visible(timeout=300):
+                        continue
+                    txt = (el.inner_text(timeout=300) or "").strip()
+                    if not pat.match(txt.split("\n")[0].strip()):
+                        continue
+                    box = el.bounding_box()
+                    if not box or box.get("width", 0) < 8:
+                        continue
+                    candidates.append((box["y"], box, el))
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        if not candidates:
+            return False
+        # Prefer the lowest (footer) control
+        candidates.sort(key=lambda t: t[0], reverse=True)
+        _y, box, el = candidates[0]
+        # Refuse if the control text is a forbidden help link
+        try:
+            t = (el.inner_text(timeout=300) or "").strip().split("\n")[0][:60]
+            if wg.forbidden_click_reason(t):
+                return False
+        except Exception:
+            pass
+        cx = box["x"] + box["width"] / 2
+        cy = box["y"] + box["height"] / 2
+        # Banner strip is usually y < 80 — refuse clicks that high for Next
+        if own_text.lower() == "next" and cy < 100:
+            log.warning("footer Next bbox too high (y=%.0f) — refusing (banner risk)", cy)
+            return False
+        try:
+            md._cdp_mouse_click(page, cx, cy)
+            return True
+        except Exception:
+            try:
+                el.click(timeout=3000)
+                return True
+            except Exception:
+                return False
+
     def _generic_click(self, step: dict[str, Any]) -> bool:
         """Cascade: semantic -> keyboard focus+Enter -> raw CDP bbox -> css -> coords."""
         match = step.get("match", {})
         rec = step.get("recorded", {})
 
+        blocked = wg.forbidden_match_reason(match)
+        if blocked:
+            self._record(step["id"], "click", False, "forbidden_zone", blocked)
+            self._shot(f"player_forbidden_{step['id']}")
+            log.warning("recipe step %s blocked by forbidden zone: %s", step["id"], blocked)
+            return False
+
+        def _after_click(strategy: str) -> bool:
+            pause_short(self.page)
+            if wg.url_left_ads_manager(self.page.url):
+                self._shot(f"player_left_after_{step['id']}")
+                ok = self._ensure_not_left_ads_manager(context=f"after_{step['id']}")
+                self._record(
+                    step["id"],
+                    "click",
+                    ok,
+                    f"{strategy}+guard_recover",
+                    (self.page.url or "")[:80],
+                )
+                return ok
+            self._record(step["id"], "click", True, strategy)
+            return True
+
+        nav = self._nav_own_text(match)
+        if nav:
+            # Always clear measurement banner before footer nav
+            try:
+                wg.dismiss_measurement_banner(self.page)
+            except Exception:
+                pass
+            if self._click_footer_nav(nav):
+                return _after_click("footer_nav_cdp")
+            self._record(step["id"], "click", False, "", f"footer {nav} not found")
+            return False
+
         # 1) Semantic locator
         loc = self._semantic_locator(match)
         if loc is not None:
             try:
+                # Block if the resolved control's visible text is a forbidden help/exit link
+                try:
+                    loc_text = (loc.inner_text(timeout=400) or "").strip().split("\n")[0][:80]
+                except Exception:
+                    loc_text = ""
+                if loc_text and wg.forbidden_click_reason(loc_text):
+                    self._record(
+                        step["id"],
+                        "click",
+                        False,
+                        "forbidden_zone",
+                        f"locator:{loc_text[:60]}",
+                    )
+                    return False
                 if loc.is_visible(timeout=2500):
                     loc.scroll_into_view_if_needed(timeout=2000)
+                    box = None
+                    try:
+                        box = loc.bounding_box()
+                    except Exception:
+                        box = None
+                    if box and box.get("width", 0) > 0:
+                        md._cdp_mouse_click(
+                            self.page,
+                            box["x"] + box["width"] / 2,
+                            box["y"] + box["height"] / 2,
+                        )
+                        return _after_click("semantic_cdp_bbox")
                     loc.click(timeout=4000)
-                    self._record(step["id"], "click", True, "semantic")
-                    return True
+                    return _after_click("semantic")
             except Exception:
                 pass
-            # 2) Semantic + force
+            # 2) Semantic + force (avoid — often clicks through to banner)
             try:
                 loc.click(timeout=2500, force=True)
-                self._record(step["id"], "click", True, "semantic_force")
-                return True
+                return _after_click("semantic_force")
             except Exception:
                 pass
 
@@ -231,18 +471,31 @@ class RecipePlayer:
                 el = self.page.locator(css_path).first
                 if el.is_visible(timeout=2000):
                     el.click(timeout=3000, force=True)
-                    self._record(step["id"], "click", True, "css_path")
-                    return True
+                    return _after_click("css_path")
             except Exception:
                 pass
 
-        # 4) Recorded coordinates via raw CDP mouse (Multilogin #41286 workaround)
+        # 4) Recorded coordinates via raw CDP mouse — skip if banner / About this update visible
         x, y, w, h = rec.get("x"), rec.get("y"), rec.get("w"), rec.get("h")
         if x is not None and y is not None and (w or 0) > 0 and (h or 0) > 0:
             try:
+                if self.page.get_by_text(
+                    re.compile(r"^About this update$", re.I)
+                ).first.is_visible(timeout=300):
+                    wg.dismiss_measurement_banner(self.page)
+                    self._record(
+                        step["id"],
+                        "click",
+                        False,
+                        "blocked_banner",
+                        "refusing stale coords while About this update visible",
+                    )
+                    return False
+            except Exception:
+                pass
+            try:
                 md._cdp_mouse_click(self.page, x + (w or 0) / 2, y + (h or 0) / 2)
-                self._record(step["id"], "click", True, "cdp_coords")
-                return True
+                return _after_click("cdp_coords")
             except Exception:
                 pass
 
@@ -358,7 +611,7 @@ class RecipePlayer:
         Never treat draft row title "New Leads Campaign" on the manage list as
         wizard chrome — that false-positive kept RPA on Ads list.
         """
-        url = p.url
+        url = p.url or ""
         # Must be on a Meta/Facebook domain first.
         meta_domains = ("facebook.com", "meta.com", "fb.com", "adsmanager")
         if not any(d in url for d in meta_domains):
@@ -366,27 +619,50 @@ class RecipePlayer:
         # Prefer explicit edit URLs (strong signal)
         if "/edit/standalone" in url or "/campaigns/edit/" in url or "/adsets/edit/" in url:
             return True
-        # Labels that only appear inside the editor (not campaign table cells).
+        # Manage URL may still host a side-panel editor — require editor labels.
+        on_manage_list = bool(
+            re.search(r"/adsmanager/manage/(campaigns|adsets|ads)(?:\?|$)", url)
+            and "/edit/" not in url
+        )
         wizard_texts = [
             "Campaign name",
             "Campaign details",
             "Nombre de la campaña",
             "Ad set name",
             "Conversion location",
+            "Advantage+ campaign budget",
         ]
-        on_manage_list = bool(
-            re.search(r"/adsmanager/manage/(campaigns|adsets|ads)(?:\?|$)", url)
-            and "/edit/" not in url
-        )
+        if on_manage_list:
+            for text in wizard_texts:
+                try:
+                    if p.get_by_text(text, exact=True).first.is_visible(timeout=400):
+                        return True
+                except Exception:
+                    pass
+            # Plain Ads/Campaigns/Ad sets table — not the editor
+            return False
+        try:
+            level = md.wizard_editor_level(p)
+            if level in ("campaign", "ad_set", "ad"):
+                return True
+        except Exception:
+            pass
         for text in wizard_texts:
             try:
                 if p.get_by_text(text, exact=True).first.is_visible(timeout=400):
                     return True
             except Exception:
                 pass
-        # Plain manage list with no wizard chrome
-        if on_manage_list:
-            return False
+        for ph_re in (
+            re.compile(r"campaign name", re.I),
+            re.compile(r"enter your campaign name", re.I),
+            re.compile(r"nombre de la campa", re.I),
+        ):
+            try:
+                if p.get_by_placeholder(ph_re).first.is_visible(timeout=400):
+                    return True
+            except Exception:
+                pass
         return False
 
     def _bring_page_front(self, p: "Page") -> None:
@@ -435,6 +711,17 @@ class RecipePlayer:
                 log.info("Wizard detected on current page (url=%s)", self.page.url)
                 return True
 
+            # Align with AdsManagerFlow readiness (placeholders / campaign level)
+            try:
+                from src.fb_ads_rpa.ads_manager_flow import _is_campaign_wizard_ready
+
+                if _is_campaign_wizard_ready(self.page):
+                    self._bring_page_front(self.page)
+                    log.info("Wizard ready via AdsManagerFlow detector (url=%s)", self.page.url)
+                    return True
+            except Exception:
+                pass
+
             for p in pages:
                 if p is self.page:
                     continue
@@ -449,6 +736,72 @@ class RecipePlayer:
         log.warning("Wizard not found after %.0fs (url=%s)", timeout_s, self.page.url)
         return False
 
+    def _recover_objective_then_continue(self) -> bool:
+        """If still on Create objective dialog: Manual → Leads → Continue."""
+        try:
+            from src.fb_ads_rpa.ads_manager_flow import (
+                _click_continue_when_enabled,
+                _click_leads_grid_row,
+                _dismiss_ai_guided_setup_dialog,
+                _is_campaign_wizard_ready,
+                _is_objective_modal_open,
+                _objectives_chooser_visible,
+            )
+        except Exception as exc:
+            log.debug("objective recover import failed: %s", exc)
+            return False
+
+        page = self.page
+        if _is_campaign_wizard_ready(page):
+            return True
+        if not (_objectives_chooser_visible(page) or _is_objective_modal_open(page)):
+            return False
+
+        self._record("wizard_recover", "manual", True, "still_on_objective_modal")
+        self._shot("player_wizard_recover_objective")
+        try:
+            if _dismiss_ai_guided_setup_dialog(page, timeout_ms=12000):
+                self._record("wizard_recover", "manual", True, "ensure_manual")
+        except Exception as exc:
+            self._record("wizard_recover", "manual", False, "", str(exc)[:80])
+
+        try:
+            if _click_leads_grid_row(page):
+                self._record("wizard_recover", "leads", True, "grid_row")
+        except Exception:
+            pass
+
+        try:
+            _click_continue_when_enabled(page, timeout_ms=12000)
+            self._record("wizard_recover", "continue", True, "enabled_click")
+            pause_medium(page)
+        except Exception as exc:
+            self._record("wizard_recover", "continue", False, "", str(exc)[:80])
+            return False
+        return True
+
+    def _wait_for_wizard_after_continue(self, *, timeout_s: float = 28) -> bool:
+        """After Continue: wait/recover until Campaign name wizard is open."""
+        pause_medium(self.page)
+        # First pass — Meta often needs several seconds to open /edit/ or side panel
+        if self._switch_to_wizard_tab(timeout_s=min(14.0, timeout_s)):
+            return True
+
+        # Still on objective chooser / AI dialog → Manual + Leads + Continue again
+        if self._recover_objective_then_continue():
+            if self._switch_to_wizard_tab(timeout_s=12):
+                return True
+
+        # Draft may already exist on the manage list
+        if self._reopen_wizard_from_list():
+            return True
+
+        # Final wait window
+        remaining = max(4.0, timeout_s - 14.0)
+        if self._switch_to_wizard_tab(timeout_s=remaining):
+            return True
+        return False
+
     def _reopen_wizard_from_list(self) -> bool:
         """If wizard closed to campaigns list, reopen via Edit / row double-click."""
         page = self.page
@@ -456,19 +809,67 @@ class RecipePlayer:
             md.dismiss_publish_draft_dialog(page)
         except Exception:
             pass
-        # Prefer explicit Edit toolbar button when a draft is selected
+        try:
+            wg.dismiss_account_switcher(page)
+        except Exception:
+            pass
+        try:
+            wg.dismiss_measurement_banner(page)
+        except Exception:
+            pass
+        # Prefer Ad sets tab when a draft hierarchy is already selected
+        for tab_name in (r"^Ad sets$", r"^Conjuntos de anuncios$"):
+            try:
+                tab = page.get_by_role("tab", name=re.compile(tab_name, re.I)).first
+                if tab.is_visible(timeout=800):
+                    tab.click(timeout=2500)
+                    pause_short(page)
+                    break
+            except Exception:
+                pass
+        # Prefer explicit Edit toolbar button when a draft is selected (CDP bbox)
         for name in (r"^Edit$", r"^Editar$"):
             try:
                 btn = page.get_by_role("button", name=re.compile(name, re.I)).first
                 if btn.is_visible(timeout=1000):
-                    btn.click(timeout=3000)
+                    box = btn.bounding_box()
+                    if box and box.get("width", 0) > 0:
+                        md._cdp_mouse_click(
+                            page,
+                            box["x"] + box["width"] / 2,
+                            box["y"] + box["height"] / 2,
+                        )
+                    else:
+                        btn.click(timeout=3000)
                     pause_medium(page)
-                    if self._switch_to_wizard_tab(timeout_s=8):
+                    if self._switch_to_wizard_tab(timeout_s=8) and self._wizard_is_open():
                         return True
             except Exception:
                 pass
+        # Pencil / aria Edit
+        for sel in ('[aria-label="Edit"]', '[aria-label="Editar"]'):
+            try:
+                btn = page.locator(sel).first
+                if btn.is_visible(timeout=600):
+                    box = btn.bounding_box()
+                    if box:
+                        md._cdp_mouse_click(
+                            page,
+                            box["x"] + box["width"] / 2,
+                            box["y"] + box["height"] / 2,
+                        )
+                        pause_medium(page)
+                        if self._switch_to_wizard_tab(timeout_s=8) and self._wizard_is_open():
+                            return True
+            except Exception:
+                pass
         # Double-click a draft row titled New Leads Campaign / our campaign name
-        names = [getattr(self.draft, "name", None), "New Leads Campaign"]
+        names = [
+            getattr(self.draft, "name", None),
+            "New Leads Campaign",
+            "New Leads Ad Set",
+            "New Leads Ad",
+        ]
         for name in names:
             if not name:
                 continue
@@ -477,7 +878,7 @@ class RecipePlayer:
                 if row.is_visible(timeout=1200):
                     row.dblclick(timeout=3000)
                     pause_medium(page)
-                    if self._switch_to_wizard_tab(timeout_s=8):
+                    if self._switch_to_wizard_tab(timeout_s=8) and self._wizard_is_open():
                         return True
             except Exception:
                 pass
@@ -542,10 +943,30 @@ class RecipePlayer:
             pass
 
         # Must be on the wizard ad-set page — never the manage/ads list
-        if not self._ensure_on_wizard(need="conversion"):
+        try:
+            wg.dismiss_account_switcher(page)
+        except Exception:
+            pass
+        if not self._ensure_on_wizard(need="conversion") or not self._wizard_is_open():
             log.warning("_select_conversion_location_panel: not on wizard (url=%s)", page.url)
-            return False
+            self._shot("player_conversion_not_on_wizard")
+            # Last attempt: reopen edit from manage list
+            if not (self._reopen_wizard_from_list() and self._ensure_on_wizard(need="conversion")):
+                return False
         page = self.page
+        # Hard marker: Conversion location label must be visible
+        try:
+            if not page.get_by_text("Conversion location", exact=True).first.is_visible(timeout=2500):
+                log.warning("_select_conversion_location_panel: Conversion location label missing")
+                self._shot("player_conversion_label_missing")
+                if not self._reopen_wizard_from_list():
+                    return False
+                page = self.page
+                if not page.get_by_text("Conversion location", exact=True).first.is_visible(timeout=2500):
+                    return False
+        except Exception:
+            self._shot("player_conversion_label_missing")
+            return False
 
         # ── Step 0: turn off Advantage+ (only when ON — never toggle blindly) ─
         try:
@@ -671,6 +1092,9 @@ class RecipePlayer:
             # Delegated sections: run the robust handler once, skip raw sub-steps.
             if section in _DELEGATED_SECTIONS:
                 if section in handled_sections:
+                    # Still honor stop_after on later ids in the same section (e.g. s12).
+                    if stop_after and sid == stop_after:
+                        return self._finish_gate(stop_after)
                     continue
                 handled_sections.add(section)
                 if section.startswith("conversion") or section.startswith("audience") or section in (
@@ -684,7 +1108,8 @@ class RecipePlayer:
                     self._shot(f"player_fail_{section}")
                     self.result.error = (
                         "Conversion location → Website failed. "
-                        "Stay on Ad set edit tab; turn Advantage+ Off; pick Single → Website."
+                        "Stay on Ad set edit tab; turn Advantage+ Off; pick Single → Website "
+                        "(not Website and instant forms)."
                     )
                     self.result.ok = False
                     self._shot("player_handoff")
@@ -693,6 +1118,12 @@ class RecipePlayer:
                     self._shot(f"player_fail_{section}")
                     self.result.error = f"Delegated section failed: {section}"
                     # continue for non-conversion sections — hand-off lets user finish
+                # Gate may target s12 while delegated work ran on s10 — stop if stop_after
+                # belongs to this section.
+                if stop_after and self._stop_after_in_section(stop_after, section):
+                    return self._finish_gate(stop_after, section_ok=ok)
+                if stop_after and sid == stop_after:
+                    return self._finish_gate(stop_after, section_ok=ok)
                 continue
 
             self._guards()
@@ -711,32 +1142,67 @@ class RecipePlayer:
                     self._shot("player_handoff")
                     return self.result
 
-            if action == "fill":
+            if action == "fill" and step.get("param") == "{{campaign_name}}":
+                # IVHP: fill is not enough — Campaign name must verify in the field
+                value = self._resolve(step) or ""
+                outcome = ir.run_intent(
+                    self.page,
+                    "campaign_name",
+                    value=value,
+                    run_id=self._run_id,
+                )
+                self._record(
+                    sid,
+                    "fill",
+                    outcome.ok and outcome.verified,
+                    outcome.strategy or "ivhp",
+                    outcome.detail or (outcome.evidence_dir or ""),
+                )
+                if outcome.evidence_dir:
+                    self.result.screenshots.append(outcome.evidence_dir)
+                if not (outcome.ok and outcome.verified):
+                    self._shot("player_ivhp_campaign_name_fail")
+                    self.result.error = (
+                        "IVHP: Campaign name verify failed "
+                        f"(expected={value!r}). See evidence: {outcome.evidence_dir or 'n/a'}"
+                    )
+                    self.result.ok = False
+                    self._shot("player_handoff")
+                    return self.result
+            elif action == "fill":
                 self._generic_fill(step)
+                # Meta often jumps to Ad level after Ad set name save — return to Ad set
+                # before Conversion location.
+                if step.get("param") == "{{adset_name}}":
+                    self._return_to_ad_set_after_rename()
             elif action == "upload_creative":
                 self._upload_creative(step)
             elif step.get("param") == "{{page_name}}":
                 self._pick_available_page(step)
             else:
                 ok = self._generic_click(step)
-                if not ok and step.get("risk") == "risky":
+                if not ok and step.get("optional"):
+                    self._record(sid, action or "click", True, "skip_optional_miss")
+                elif not ok and step.get("risk") == "risky":
                     self._shot(f"player_fail_{sid}")
 
-            # After Continue → bind wizard tab and wait for Meta to finish verifying
+            # After Continue → wait for wizard (URL or side panel), recover Manual if needed
             if section == "objective_continue":
-                wizard_found = self._switch_to_wizard_tab()
+                wizard_found = self._wait_for_wizard_after_continue(timeout_s=28)
+                detail = "edit_tab" if "/edit/" in (self.page.url or "") else "dom_wizard"
                 self._record(
                     "wizard_tab_switch",
                     "navigate",
                     wizard_found,
-                    "edit_tab" if "/edit/" in self.page.url else "dom_wizard",
-                    self.page.url[:80],
+                    detail,
+                    (self.page.url or "")[:80],
                 )
                 if not wizard_found:
                     self._shot("player_wizard_tab_not_found")
                     self.result.error = (
                         "Campaign wizard did not open after Continue "
-                        "(no /edit/standalone tab found)"
+                        "(no Campaign name /edit wizard — try Manual → Leads → Continue). "
+                        f"url={(self.page.url or '')[:100]}"
                     )
                     self.result.ok = False
                     self._shot("player_handoff")
@@ -760,12 +1226,27 @@ class RecipePlayer:
                 and (step.get("match") or {}).get("own_text") == "Next"
                 and level == "campaign"
             ):
-                if not self._switch_to_wizard_tab(timeout_s=10):
+                # Coords/mis-click may have opened measurement news — recover first
+                if not self._ensure_not_left_ads_manager(context="after_next"):
                     self._shot("player_adset_tab_not_found")
-                    self.result.error = "Ad set wizard not found after Next"
+                    self.result.error = (
+                        "Left Ads Manager after Next (help/news). Guard recover failed. "
+                        f"url={(self.page.url or '')[:100]}"
+                    )
                     self.result.ok = False
                     self._shot("player_handoff")
                     return self.result
+                if not self._switch_to_wizard_tab(timeout_s=10):
+                    # One more recover+reopen pass before failing the gate
+                    self._ensure_not_left_ads_manager(context="adset_missing")
+                    if not (self._reopen_wizard_from_list() or self._switch_to_wizard_tab(timeout_s=8)):
+                        self._shot("player_adset_tab_not_found")
+                        self.result.error = "Ad set wizard not found after Next"
+                        self.result.ok = False
+                        self._shot("player_handoff")
+                        return self.result
+                # Best-effort: land on ad set panel (do not hard-fail if still painting)
+                self._ensure_on_wizard(need="adset")
                 try:
                     md._turn_off_advantage_plus_leads(self.page)
                     md.dismiss_publish_draft_dialog(self.page)
@@ -775,20 +1256,138 @@ class RecipePlayer:
 
             pause_short(self.page)
 
-            # Campaign-open gate: stop after name + budget (s06), before Next / Ad set.
             if stop_after and sid == stop_after:
-                name_ok = any(o.step_id == "s05_campaign" and o.ok for o in self.result.steps)
-                budget_ok = any(o.step_id == "s06_campaign" and o.ok for o in self.result.steps)
-                if stop_after == "s06_campaign":
-                    self.result.ok = self.result.error is None and name_ok and budget_ok
-                else:
-                    self.result.ok = self.result.error is None
-                if not self.result.ok and not self.result.error:
-                    self.result.error = f"Gate stop_after={stop_after} incomplete (name={name_ok} budget={budget_ok})"
-                self._record("gate_campaign_open", "gate", bool(self.result.ok), f"stop_after={stop_after}")
-                self._shot("player_gate_campaign_open" if self.result.ok else "player_handoff")
-                return self.result
+                return self._finish_gate(stop_after)
 
         self.result.ok = self.result.error is None
         self._shot("player_handoff")
+        return self.result
+
+    def _stop_after_in_section(self, stop_after: str, section: str) -> bool:
+        if not stop_after or not section:
+            return False
+        for s in self.steps:
+            if s.get("id") == stop_after and (s.get("section") or "") == section:
+                return True
+        return False
+
+    def _return_to_ad_set_after_rename(self) -> None:
+        """After Ad set name fill, Meta may switch to Ad — get Conversion location back."""
+        try:
+            wg.dismiss_account_switcher(self.page)
+        except Exception:
+            pass
+        try:
+            md.wait_editor_saved(self.page, timeout_s=12)
+        except Exception:
+            pass
+        if not self._wizard_is_open():
+            reopened = self._reopen_wizard_from_list()
+            self._record(
+                "adset_level_restore",
+                "nav",
+                reopened and self._wizard_is_open(),
+                "reopen_from_list",
+            )
+            if reopened:
+                self._shot("player_adset_after_rename")
+            return
+        try:
+            if md.wizard_editor_level(self.page) == "ad_set":
+                if self.page.get_by_text("Conversion location", exact=True).first.is_visible(timeout=800):
+                    self._record("adset_level_keep", "nav", True, "still_ad_set")
+                    return
+        except Exception:
+            pass
+        # Prefer sidebar Ad set (index 1), then breadcrumb
+        restored = False
+        try:
+            if md.click_wizard_sidebar_level(self.page, 1):
+                restored = True
+        except Exception:
+            pass
+        if not restored:
+            try:
+                if md.click_wizard_breadcrumb_index(self.page, 1):
+                    restored = True
+            except Exception:
+                pass
+        try:
+            md.wait_editor_saved(self.page, timeout_s=8)
+        except Exception:
+            pass
+        # Only count restore if Conversion location (or Ad set name) is actually visible
+        visible = False
+        for label in ("Conversion location", "Ad set name"):
+            try:
+                if self.page.get_by_text(label, exact=True).first.is_visible(timeout=800):
+                    visible = True
+                    break
+            except Exception:
+                pass
+        ok = bool(restored and visible and self._wizard_is_open())
+        self._record(
+            "adset_level_restore",
+            "nav",
+            ok,
+            "sidebar_or_breadcrumb" if restored else "missing",
+        )
+        if ok:
+            self._shot("player_adset_after_rename")
+        else:
+            self._shot("player_adset_restore_fail")
+
+    def _finish_gate(self, stop_after: str, *, section_ok: bool | None = None) -> RecipeRunResult:
+        """Evaluate gate success and stop the recipe."""
+        name_ok = any(o.step_id == "s05_campaign" and o.ok for o in self.result.steps)
+        budget_ok = any(o.step_id == "s06_campaign" and o.ok for o in self.result.steps)
+        adset_ok = any(o.step_id == "s09_adset" and o.ok for o in self.result.steps)
+        website_ok = False
+        try:
+            website_ok = bool(md.is_website_conversion_selected(self.page))
+        except Exception:
+            website_ok = False
+
+        if stop_after == "s06_campaign":
+            self.result.ok = self.result.error is None and name_ok and budget_ok
+            gate_name = "gate_campaign_open"
+        elif stop_after in (
+            "s10_conversion_location",
+            "s11_conversion_location",
+            "s12_conversion_location",
+        ):
+            if section_ok is False:
+                website_ok = False
+            self.result.ok = (
+                self.result.error is None
+                and name_ok
+                and budget_ok
+                and adset_ok
+                and website_ok
+            )
+            gate_name = "gate_adset_website"
+            if not self.result.ok and not self.result.error:
+                missing = []
+                if not adset_ok:
+                    missing.append("ad_set_name")
+                if not website_ok:
+                    missing.append("conversion_website_exact")
+                self.result.error = (
+                    f"Gate stop_after={stop_after} incomplete: "
+                    + (",".join(missing) or f"name={name_ok} budget={budget_ok}")
+                )
+        else:
+            self.result.ok = self.result.error is None
+            if section_ok is False:
+                self.result.ok = False
+            gate_name = "gate_stop_after"
+
+        if not self.result.ok and not self.result.error:
+            self.result.error = (
+                f"Gate stop_after={stop_after} incomplete "
+                f"(name={name_ok} budget={budget_ok} adset={adset_ok} website={website_ok})"
+            )
+        self._record(gate_name, "gate", bool(self.result.ok), f"stop_after={stop_after}")
+        shot = "player_gate_adset_website" if gate_name == "gate_adset_website" else "player_gate_campaign_open"
+        self._shot(shot if self.result.ok else "player_handoff")
         return self.result

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-07-16T00:00:00+00:00",
+  "updated_at": "2026-07-18T06:10:28.183287+00:00",
   "notes": "Hybrid learner store. Risky winners stay in pending_approval until approve.",
   "steps": {
     "open_campaigns": {
@@ -37,6 +37,34 @@
           "note": "get_by_role(radio,name=Website) matched Website and instant forms"
         }
       ]
+    },
+    "campaign_name": {
+      "risk": "safe",
+      "order": [
+        "fill_near_label_verified"
+      ],
+      "stats": {
+        "fill_near_label_verified": {
+          "wins": 1,
+          "fails": 1,
+          "note": "ivhp_verify_ok",
+          "last_ts": "2026-07-18T06:10:28.182650+00:00"
+        },
+        "fill_near_label": {
+          "wins": 0,
+          "fails": 1,
+          "note": "verify_fail current=",
+          "last_ts": "2026-07-17T21:12:58.848112+00:00"
+        },
+        "get_by_label_type": {
+          "wins": 0,
+          "fails": 2,
+          "note": "ivhp_all_failed",
+          "last_ts": "2026-07-17T21:12:59.075453+00:00",
+          "last_evidence": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\rpa_evidence\\20260718_001204\\campaign_name"
+        }
+      },
+      "pending_approval": []
     }
   },
   "pending_safe": {},

@@ -1,0 +1,23 @@
+# IVHP intent: fill + verify Campaign name (safe).
+id: campaign_name
+risk: safe
+recipe_step_ids:
+  - s05_campaign
+intent: "Fill Campaign name with {{value}} and verify the field keeps that value"
+labels:
+  - Campaign name
+  - Nombre de la campaña
+verify:
+  type: input_value_near_label
+  labels:
+    - Campaign name
+    - Nombre de la campaña
+strategies:
+  - id: wait_editor_saved
+    kind: wait
+  - id: fill_near_label_verified
+    kind: fill_verified
+  - id: fill_near_label
+    kind: fill
+  - id: get_by_label_type
+    kind: get_by_label

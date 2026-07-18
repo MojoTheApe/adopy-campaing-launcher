@@ -1,0 +1,38 @@
+# Forbidden click / navigation zones for Agent 10 campaign-open (phase A).
+# How to extend: send a screenshot → append pattern + evidence; update skill cheat sheet.
+version: 1
+
+bad_url_patterns:
+  - /business/news/
+  - /business/help/
+  - click-attribution
+  - /business/helpcenter/
+
+# own_text / aria-label / link text matched against recipe click targets
+# and against resolved locator text before clicking.
+forbidden_click_texts:
+  - pattern: "(?i)^About this update$"
+    reason: exits Ads Manager to measurement news (click-attribution)
+    evidence: 20260717_142747_player_wizard_tab_not_found.png
+  - pattern: "(?i)^About (daily budget|campaign budget|campaign objectives)$"
+    reason: help links leave Ads Manager / open help
+    evidence: 20260717_144348_player_campaign.png
+  - pattern: "(?i)^Learn more$"
+    reason: often opens help/news in same tab
+  - pattern: "(?i)^(Close|Cerrar)$"
+    reason: closes wizard chrome (draft dialog Cancel is allowed separately)
+    scope: wizard_chrome
+  - pattern: "(?i)^Discard drafts?$"
+    reason: destroys drafts / leaves create flow
+  - pattern: "(?i)^Review and publish"
+    reason: leaves edit flow toward publish review
+
+# Never block these recipe intents even if text overlaps a soft rule.
+allowed_click_texts:
+  - "(?i)^(Create|Continue|Next|Leads|Manual campaign setup|Website|Single|Cancel|Cancelar)$"
+
+# Soft: if URL matches, recover (history.back → reopen draft). Max attempts per run.
+recover:
+  # News → manage list without edit wizard counts as failure; reopen needs a second try.
+  max_attempts: 3
+  prefer_close_news_tab: true

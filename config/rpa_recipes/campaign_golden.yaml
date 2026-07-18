@@ -42,6 +42,23 @@ steps:
     y: 234
     w: 95
     h: 36
+# New Meta UI: Manual must be selected before Leads/Continue enable Campaign name.
+- id: s00b_manual
+  left_tab: create
+  section: objective_manual
+  action: click
+  risk: safe
+  optional: true
+  on_fail: skip
+  match:
+    own_text: Manual campaign setup
+    tag: DIV
+  recorded:
+    css_path: ''
+    x: 0
+    y: 0
+    w: 0
+    h: 0
 - id: s01_objective
   left_tab: create
   section: objective
@@ -148,16 +165,20 @@ steps:
   section: ''
   action: click
   risk: safe
+  # Footer Next only — never fall back to stale recorded x/y (hits measurement banner).
   match:
     own_text: Next
+    role: button
+    exact: true
     tag: DIV
   recorded:
     css_path: div[role="none"].x3nfvp2.x193iq5w > div[role="button"].x1i10hfl.xjqpnuy > span.x1vvvo52.x1fvot60
       > div.x78zum5 > div.x6s0dn4.x78zum5 > div.x1vvvo52.x1fvot60
-    x: 1881
-    y: 1117
-    w: 31
-    h: 20
+    # Intentionally zeroed — stale coords open business/news/click-attribution
+    x: 0
+    y: 0
+    w: 0
+    h: 0
 - id: s08_adset
   left_tab: adset
   section: ''
@@ -190,13 +211,17 @@ steps:
     h: 20
   param: '{{adset_name}}'
   recorded_value: SA_ArF_All_Image_Day_30_15.07
+# s10–s12 are DELEGATED to meta_dom.select_conversion_location_website:
+# open Conversion location dropdown → expand Single → pick Website (exact).
+# Never select "Website and instant forms".
 - id: s10_conversion_location
   left_tab: adset
   section: conversion_location
   action: click
   risk: risky
   match:
-    own_text: Website and instant forms
+    label: Conversion location
+    own_text: Conversion location
     tag: DIV
   recorded:
     css_path: '#js_21k'
@@ -205,7 +230,7 @@ steps:
     w: 520
     h: 20
   verify:
-    selected: Website and instant forms
+    selected: Website
 - id: s11_conversion_location
   left_tab: adset
   section: conversion_location
@@ -232,6 +257,7 @@ steps:
     exact: true
     exclude:
     - instant
+    - forms
     - calls
     - messenger
   recorded:

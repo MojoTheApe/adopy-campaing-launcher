@@ -74,9 +74,11 @@ def get_use_recipe_player() -> bool:
 
 
 def get_recipe_stop_after() -> str:
-    """Optional step id to stop RecipePlayer after (campaign-open gate: s06_campaign).
+    """Optional step id to stop RecipePlayer after that step (or its delegated section).
 
-    Empty = run full recipe to handoff. Set FB_RPA_RECIPE_STOP_AFTER=s06_campaign
-    for /rpa-campaign-open (Create → name + budget only).
+    Empty = run full recipe to handoff.
+    Default gate (serve.py): s12_conversion_location —
+    Ad set name + Conversion location → Single → Website (exact).
+    Older gate: s06_campaign (name + budget only).
     """
     return (os.environ.get("FB_RPA_RECIPE_STOP_AFTER") or "").strip()
