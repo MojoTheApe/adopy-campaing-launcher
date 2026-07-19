@@ -1,0 +1,114 @@
+{
+  "_readme": "Карта кнопок для Ads Manager. Каждый шаг — список кандидатов-локаторов, пробуются по порядку (см. locator_utils.resolve). Значения ниже — заготовка по типовому UI Ads Manager, НЕ проверены на живом аккаунте — обязательно откалибровать через `playwright codegen https://adsmanager.facebook.com` перед первым живым запуском (см. docs/agent10_fb_ads_playwright_upload.md, раздел 2). Строки с {value} подставляются в рантайме (interest_option, location_option, creative_library_item, objective_option).",
+
+  "logged_in_marker": [
+    { "by": "role", "role": "button", "name": "Create" },
+    { "by": "role", "role": "link", "name": "Campaigns" },
+    { "by": "text", "text": "Ads Manager" }
+  ],
+
+  "open_create_button": [
+    { "by": "role", "role": "button", "name": "Create" },
+    { "by": "text", "text": "Create", "exact": true }
+  ],
+
+  "campaign_name_field": [
+    { "by": "label", "label": "Campaign name" },
+    { "by": "placeholder", "placeholder": "Campaign name" }
+  ],
+
+  "objective_option": [
+    { "by": "role", "role": "radio", "name": "{value}" },
+    { "by": "text", "text": "{value}", "exact": true }
+  ],
+
+  "next_button": [
+    { "by": "role", "role": "button", "name": "Next" },
+    { "by": "text", "text": "Next", "exact": true }
+  ],
+
+  "daily_budget_field": [
+    { "by": "label", "label": "Daily budget" },
+    { "by": "placeholder", "placeholder": "Daily budget" }
+  ],
+
+  "ad_set_name_field": [
+    { "by": "label", "label": "Ad set name" },
+    { "by": "placeholder", "placeholder": "Ad set name" }
+  ],
+
+  "age_min_field": [
+    { "by": "label", "label": "Minimum age" },
+    { "by": "test_id", "test_id": "age-min-select" }
+  ],
+
+  "age_max_field": [
+    { "by": "label", "label": "Maximum age" },
+    { "by": "test_id", "test_id": "age-max-select" }
+  ],
+
+  "location_search_field": [
+    { "by": "placeholder", "placeholder": "Add locations" },
+    { "by": "label", "label": "Locations" }
+  ],
+
+  "location_option": [
+    { "by": "role", "role": "option", "name": "{value}" },
+    { "by": "text", "text": "{value}" }
+  ],
+
+  "interest_search_field": [
+    { "by": "placeholder", "placeholder": "Add demographics, interests or behaviors" },
+    { "by": "label", "label": "Detailed targeting" }
+  ],
+
+  "interest_option": [
+    { "by": "role", "role": "option", "name": "{value}" },
+    { "by": "text", "text": "{value}" }
+  ],
+
+  "creative_library_open_button": [
+    { "by": "text", "text": "Use existing post" },
+    { "by": "text", "text": "Ad creative" },
+    { "by": "role", "role": "button", "name": "Select media" }
+  ],
+
+  "creative_library_search_field": [
+    { "by": "placeholder", "placeholder": "Search" }
+  ],
+
+  "creative_library_item": [
+    { "by": "role", "role": "img", "name": "{value}" },
+    { "by": "text", "text": "{value}" }
+  ],
+
+  "primary_text_field": [
+    { "by": "label", "label": "Primary text" },
+    { "by": "placeholder", "placeholder": "Primary text" }
+  ],
+
+  "headline_field": [
+    { "by": "label", "label": "Headline" },
+    { "by": "placeholder", "placeholder": "Headline" }
+  ],
+
+  "link_description_field": [
+    { "by": "label", "label": "Description" },
+    { "by": "placeholder", "placeholder": "Description" }
+  ],
+
+  "website_url_field": [
+    { "by": "label", "label": "Website URL" },
+    { "by": "placeholder", "placeholder": "Enter URL" }
+  ],
+
+  "publish_button": [
+    { "by": "role", "role": "button", "name": "Publish" },
+    { "by": "text", "text": "Publish", "exact": true }
+  ],
+
+  "publish_confirmation_marker": [
+    { "by": "text", "text": "Your campaign was submitted" },
+    { "by": "role", "role": "link", "name": "View campaign" }
+  ]
+}
