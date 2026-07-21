@@ -17,6 +17,7 @@
 | **7** | Связки → твоё согласование → передача в п.8/таски | ❌ Не сделано — см. `docs/agent7_approved_combos.md` |
 | **8** | Сбор кампании из Excel под FB (шаблон готов) | ✅ **Сделано:** агент 8 — `run_upload_from_plan.py`, `src/upload_agent/`. План (CSV: account, country, asset, os, creative, targeting, age, creative_number, date, copy) → один .xlsx, лист на аккаунт; подстановки из Upluad FB.xlsx (Accounts, Ad copy, Countries, Interests, Video/Image file name). См. `docs/agent8_excel_fb_research.md`. |
 | **9** | Ежедневный таск-менеджер + тест follow-up для команды | ❌ Не сделано |
+| **10** | Реальная публикация плана (агент 8) в Facebook Ads Manager через браузер | ⏳ Каркас сделан: `run_publish_to_facebook.py`, `src/fb_publish_agent/`. Playwright, Page Object Model, селекторы вынесены в `selectors.json` (нужна калибровка через `playwright codegen` на живом аккаунте), dry-run по умолчанию, идемпотентный статус в самом `upload_plan.xlsx`. См. `docs/agent10_fb_ads_playwright_upload.md`. |
 
 ---
 

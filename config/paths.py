@@ -35,3 +35,26 @@ def get_creatives_root() -> str:
 def get_ad_account_map_path() -> str:
     """CSV mapping Excel sheet name (account) -> act_* ad account id."""
     return os.environ.get("META_AD_ACCOUNT_MAP_PATH", "").strip() or AD_ACCOUNT_MAP_DEFAULT
+
+
+# ── Agent 10: Facebook Ads Manager publish (Playwright) ──────────────────────
+
+FB_ADS_AUTH_STATE_DEFAULT = ".auth/fb_state.json"
+FB_ADS_MANAGER_URL_DEFAULT = "https://adsmanager.facebook.com/adsmanager/manage/campaigns"
+FB_PUBLISH_OUTPUT_DIR_DEFAULT = "output/fb_publish_runs"
+
+
+def get_fb_ads_auth_state_path() -> str:
+    """Путь к сохранённой сессии браузера (storage_state), созданной run_fb_login_session.py.
+    Переменная FB_ADS_AUTH_STATE переопределяет путь. Файл в git не попадает (см. .gitignore)."""
+    return os.environ.get("FB_ADS_AUTH_STATE", "").strip() or FB_ADS_AUTH_STATE_DEFAULT
+
+
+def get_fb_ads_manager_url() -> str:
+    """URL Ads Manager, с которого стартует флоу создания кампании."""
+    return os.environ.get("FB_ADS_MANAGER_URL", "").strip() or FB_ADS_MANAGER_URL_DEFAULT
+
+
+def get_fb_publish_output_dir() -> str:
+    """Папка для скриншотов, trace-файлов и отчётов по прогонам агента 10."""
+    return os.environ.get("FB_PUBLISH_OUTPUT_DIR", "").strip() or FB_PUBLISH_OUTPUT_DIR_DEFAULT

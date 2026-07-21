@@ -25,6 +25,10 @@ config/google_credentials.json
 config/oauth_client.json
 config/token_accounts.json
 
+# Agent 10: сохранённая сессия браузера FB Ads Manager + прогоны (скриншоты/trace)
+.auth/
+output/fb_publish_runs/
+
 # Obsidian
 .obsidian/
 
