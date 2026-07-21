@@ -99,24 +99,37 @@ def fill_input_near_label(
 
 
 def click_sidebar_tree_index(page: Page, index: int) -> bool:
-    """Click campaign tree item: 0=campaign, 1=ad set, 2=ad."""
-    script = """
+    """Click campaign tree item: 0=campaign, 1=ad set, 2=ad.
+
+    Live evidence (2026-07-20): a real user click on this row changes the URL
+    path itself (/manage/campaigns/edit/... -> /manage/adsets/edit/...), i.e.
+    it triggers Meta's client-side router. A JS `el.click()` synthetic click
+    only toggled this row's own highlighted/selected look without ever
+    triggering that route change — the main panel stayed on stale Campaign
+    content indefinitely (confirmed across multiple runs and several seconds
+    of extra waiting, so it isn't a render-timing race). Real mouse input via
+    CDP (same workaround already used elsewhere in this file for Playwright
+    connect_over_cdp click drops, #41286) is required for the router to fire.
+    So: JS only *locates and scrolls* the target row and returns its bounding
+    box; Python dispatches the actual click via _mouse_click_chain.
+    """
+    locate_script = """
     (index) => {
       const visible = (el) => {
         if (!el || !el.offsetParent) return false;
         const st = getComputedStyle(el);
         return st.visibility !== 'hidden' && st.display !== 'none';
       };
-      const clickEl = (el) => {
-        if (!el) return false;
+      const bboxOf = (el) => {
+        if (!el) return null;
         el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-        el.click();
-        return true;
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
       };
 
       const tree = [...document.querySelectorAll('[role="treeitem"]')].filter(visible);
       if (tree.length > index) {
-        return clickEl(tree[index]);
+        return bboxOf(tree[index]);
       }
 
       // Left wizard nav: one clickable row per vertical band.
@@ -137,7 +150,7 @@ def click_sidebar_tree_index(page: Page, index: int) -> bool:
       }
       const rows = [...bands.values()].sort((a, b) => a.top - b.top);
       if (rows.length > index) {
-        return clickEl(rows[index].el);
+        return bboxOf(rows[index].el);
       }
 
       if (index === 1) {
@@ -156,7 +169,7 @@ def click_sidebar_tree_index(page: Page, index: int) -> bool:
             if (pr.width >= 80 && pr.height >= 16 && pr.height <= 100) best = node;
             node = node.parentElement;
           }
-          return clickEl(best);
+          return bboxOf(best);
         }
       }
 
@@ -169,19 +182,25 @@ def click_sidebar_tree_index(page: Page, index: int) -> bool:
           const text = (el.innerText || el.textContent || '').trim();
           if (!patterns.some((p) => p.test(text))) continue;
           if (/ad\\s*set|conjunto/i.test(text)) continue;
-          return clickEl(el);
+          return bboxOf(el);
         }
       }
 
-      return false;
+      return null;
     }
     """
     for root in _roots(page):
         try:
-            if root.evaluate(script, index):
-                return True
+            bbox = root.evaluate(locate_script, index)
         except Exception:
-            pass
+            bbox = None
+        if not bbox:
+            continue
+        cx = float(bbox["x"]) + float(bbox["width"]) / 2
+        cy = float(bbox["y"]) + float(bbox["height"]) / 2
+        _mouse_click_chain(page, cx, cy)
+        time.sleep(0.3)
+        return True
     return False
 
 
@@ -433,7 +452,9 @@ def read_input_near_label(page: Page, label_variants: list[str]) -> str:
         if (!match(el.textContent)) continue;
         let node = el;
         for (let depth = 0; depth < 8 && node; depth++) {
-          for (const inp of node.querySelectorAll('input, textarea, [contenteditable=true]')) {
+          for (const inp of node.querySelectorAll(
+            'input:not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea, [contenteditable=true]'
+          )) {
             if (!inp.offsetParent) continue;
             return inp.value || inp.textContent || '';
           }
@@ -1852,6 +1873,217 @@ def pick_website_conversion_option(page: Page) -> bool:
     return _pick_website_from_open_menu(page)
 
 
+def run_recorded_campaign_flow(
+    page: Page,
+    *,
+    campaign_name: str,
+    budget: str,
+    adset_name: str,
+) -> str:
+    """Create -> Website, using the exact locators from a verified human
+    Playwright codegen recording (2026-07-21) instead of the label/breadcrumb/
+    coordinate cascade the rest of this file falls back to.
+
+    The recording confirmed several things live evidence had only guessed at:
+      - Campaign/Ad set name inputs have no real ARIA label — they match by
+        placeholder text, not get_by_label.
+      - The Budget input's accessible name is "Budget", not "Daily budget".
+      - The footer Next control has no `role` attribute on its own text node,
+        but get_by_role("button", name="Next") still resolves it (role comes
+        from an ancestor) — no breadcrumb/sidebar-tree workaround needed here.
+
+    Returns "" on success, else a short slug naming the first failed step
+    (matches the vocabulary already used in RecipeRunResult step ids).
+    """
+
+    def _wait_loading() -> None:
+        # Meta shows a transient full-page "Loading..." overlay, seemingly on
+        # a periodic list refresh as well as after transitions (list -> Create
+        # modal, Continue -> wizard) — confirmed live (2026-07-21) covering the
+        # page while a click/fill silently missed underneath it, and a single
+        # wait-then-click was still sometimes racing a fresh overlay. Checked
+        # before every action below, with a retry loop around the action itself.
+        try:
+            page.get_by_text("Loading...", exact=False).first.wait_for(state="hidden", timeout=10000)
+        except Exception:
+            pass
+
+    def _click(loc, *, attempts: int = 3) -> bool:
+        for _ in range(attempts):
+            _wait_loading()
+            try:
+                loc.wait_for(state="visible", timeout=8000)
+                loc.scroll_into_view_if_needed(timeout=3000)
+                box = loc.bounding_box()
+                if box and box.get("width", 0) > 0:
+                    _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                else:
+                    loc.click(timeout=4000)
+                return True
+            except Exception:
+                time.sleep(0.6)
+        return False
+
+    def _fill(loc, value: str, *, attempts: int = 3) -> bool:
+        for _ in range(attempts):
+            _wait_loading()
+            try:
+                loc.wait_for(state="visible", timeout=8000)
+                loc.click(timeout=3000)
+                loc.fill(value, timeout=4000)
+                return True
+            except Exception:
+                time.sleep(0.6)
+        return False
+
+    def _shot(label: str) -> None:
+        try:
+            from src.fb_ads_rpa.screenshots import capture as _capture
+
+            _capture(page, f"recorded_{label}")
+        except Exception:
+            pass
+
+    if not _click(page.get_by_role("button", name="Create", exact=True)):
+        return "create"
+    _shot("after_create")
+
+    # New Meta UI sometimes shows a Guided/Manual choice before the objective
+    # picker enables Campaign name — click Manual if present, best-effort
+    # (the recording's session apparently started already past this choice).
+    try:
+        page.get_by_text("Manual campaign setup", exact=False).first.click(timeout=3000)
+        _shot("after_manual")
+    except Exception:
+        pass
+
+    try:
+        page.get_by_role("heading", name="Leads").first.click(timeout=5000)
+    except Exception:
+        pass
+    if not _click(page.get_by_role("radio", name="Leads")):
+        _shot("fail_objective_leads")
+        return "objective_leads"
+    _shot("after_leads")
+
+    if not _click(page.get_by_role("button", name="Continue")):
+        _shot("fail_objective_continue")
+        return "objective_continue"
+    _wait_loading()
+    _shot("after_continue")
+
+    if not _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name):
+        _shot("fail_campaign_name")
+        return "campaign_name"
+    _shot("after_campaign_name")
+
+    try:
+        page.get_by_role("textbox", name="Budget").click(timeout=3000)
+    except Exception:
+        pass
+    budget_ok = _fill(page.get_by_role("spinbutton", name="Budget"), budget)
+    if not budget_ok:
+        budget_ok = _fill(page.get_by_role("textbox", name="Budget"), budget)
+    if not budget_ok:
+        # aria_snapshot evidence (2026-07-21) showed this input's accessible
+        # name/placeholder is actually "Please enter amount", not "Budget" —
+        # try that directly rather than the role+name guess above.
+        budget_ok = _fill(page.get_by_placeholder("Please enter amount"), budget)
+    if not budget_ok:
+        _shot("fail_daily_budget")
+        return "daily_budget"
+    _shot("after_campaign_fields")
+
+    if not _click(page.get_by_role("button", name="Next")):
+        _shot("fail_next_to_adset")
+        return "next_to_adset"
+    _wait_loading()
+    _shot("after_next_to_adset")
+
+    if not _fill(page.get_by_placeholder("Enter your ad set name here..."), adset_name):
+        _shot("fail_adset_name")
+        return "adset_name"
+    # Reusing the same ad set name across runs makes Meta show a name-history
+    # autocomplete dropdown under this field — confirmed live (2026-07-21)
+    # covering the Conversion location control below it and blocking the next
+    # click. NOTE: do not press Escape here — elsewhere in this file that's
+    # documented to close the whole wizard, not just a popover. Click a
+    # neutral heading instead to move focus off the field.
+    try:
+        page.get_by_text("Ad set name", exact=True).first.click(timeout=2000)
+    except Exception:
+        pass
+    _shot("after_adset_name")
+
+    if not click_conversion_location_dropdown(page):
+        _shot("fail_conversion_location_open")
+        return "conversion_location_open"
+    # Live evidence (2026-07-21): the open menu shows Website directly, both
+    # "Multiple" and "Single" already expanded — no separate accordion click
+    # needed. wait_conversion_menu_open() checks [role=listbox]/[role=menu],
+    # which this custom dropdown doesn't use (consistent with the rest of
+    # today's findings: this UI is light on real ARIA roles) — check for the
+    # "Website" radio text directly instead.
+    try:
+        page.get_by_role("radio", name="Website", exact=True).wait_for(state="visible", timeout=8000)
+    except Exception:
+        _shot("fail_conversion_location_menu")
+        return "conversion_location_menu"
+    _shot("after_conversion_menu_open")
+
+    website_radio = page.get_by_role("radio", name="Website", exact=True)
+    if not _click(website_radio):
+        if not pick_website_conversion_option(page):
+            _shot("fail_conversion_website")
+            return "conversion_website"
+
+    time.sleep(0.6)
+    _shot("after_website_click")
+
+    try:
+        page.get_by_text("Verifying your edits", exact=False).first.wait_for(state="hidden", timeout=8000)
+    except Exception:
+        pass
+
+    # Menu auto-collapses to a compact dropdown right after selection — the
+    # radio locator from before no longer resolves, and is_website_conversion_
+    # selected() walks up from the "Conversion location" label and can pick up
+    # a green "Instant forms" suggestion banner's buttons before reaching the
+    # real control (confirmed live 2026-07-21: both false-negative even with
+    # "Website" plainly showing in the collapsed dropdown). Simplest reliable
+    # check: an exact, standalone "Website" own-text node, small and visible —
+    # same own-text pattern already used elsewhere in this file. Excludes
+    # "Website and instant forms" / "Website and calls" by requiring exact
+    # equality on the trimmed own text.
+    website_confirmed = False
+    try:
+        website_confirmed = bool(
+            page.evaluate(
+                """
+                () => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  for (const el of document.querySelectorAll('div, span, button, [role=combobox]')) {
+                    if (!el.offsetParent) continue;
+                    const kids = Array.from(el.childNodes).filter(n => n.nodeType === 3);
+                    const own = norm(kids.map(n => n.textContent).join(''));
+                    if (own === 'Website') return true;
+                  }
+                  return false;
+                }
+                """
+            )
+        )
+    except Exception:
+        pass
+
+    if not website_confirmed:
+        _shot("fail_conversion_website_verify")
+        return "conversion_website_verify"
+
+    _shot("success_website_selected")
+    return ""
+
+
 _WIZARD_CLOSE_GUARD_JS = """
   // Returns true if an element looks like the wizard's own chrome (toolbar/header Close)
   // and should NOT be clicked by banner-dismiss logic.
@@ -1912,6 +2144,33 @@ def _dismiss_advantage_banner(page: Page) -> None:
             pass
 
 
+def dismiss_discard_drafts_dialog(page: Page) -> bool:
+    """Dismiss the 'Discard drafts' confirmation — always Cancel, NEVER Discard.
+
+    Distinct from dismiss_publish_draft_dialog: this is the manage-list toolbar's
+    'Discard drafts' button confirmation ("Any changes ... will be discarded."),
+    triggered by a stray click landing on that toolbar button (e.g. a stale
+    coordinate fallback). Left un-dismissed it blocks every subsequent step; if
+    ever auto-clicked wrong it would delete the campaign. Only Cancel is safe.
+    """
+    for root in _roots(page):
+        try:
+            dialog = root.locator(
+                "[role=dialog]:has-text('Discard drafts'), "
+                "[role=dialog]:has-text('will be discarded')"
+            ).first
+            if not dialog.is_visible(timeout=600):
+                continue
+            btn = dialog.get_by_role("button", name=re.compile(r"^(Cancel|Cancelar)$", re.I)).first
+            if btn.is_visible(timeout=600):
+                btn.click(timeout=3000, force=True)
+                time.sleep(0.4)
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def dismiss_publish_draft_dialog(page: Page) -> bool:
     """Dismiss draft review modals that block Ads Manager clicks.
 
@@ -1922,6 +2181,15 @@ def dismiss_publish_draft_dialog(page: Page) -> bool:
     Never clicks Publish / Fix error — RPA must keep editing.
     """
     dismiss_re = re.compile(r"^(Close|Cancel|Cerrar|Cancelar)$", re.I)
+    # The campaign wizard itself is often role=dialog with an "In draft" badge and
+    # a bottom Close button — matching it here and clicking Close CLOSES THE WIZARD,
+    # not a popup (this reproduced live: "draft closes after every step", because
+    # this function runs before every single step). Never treat the wizard's own
+    # chrome as a dismissible draft-review modal.
+    _WIZARD_CHROME_MARKERS = (
+        "campaign name", "daily budget", "ad set name", "conversion location",
+        "nombre de la campaña", "campaign score", "campaign details",
+    )
     for root in _roots(page):
         # Strategy 1: dialog with draft wording → Close or Cancel
         try:
@@ -1931,6 +2199,12 @@ def dismiss_publish_draft_dialog(page: Page) -> bool:
                 "[role=dialog]:has-text('draft items')"
             ).first
             if dialog.is_visible(timeout=1000):
+                try:
+                    dialog_text = (dialog.inner_text(timeout=800) or "").lower()
+                except Exception:
+                    dialog_text = ""
+                if any(marker in dialog_text for marker in _WIZARD_CHROME_MARKERS):
+                    continue  # this is the wizard, not a confirm popup — skip to Strategy 2's own guard
                 for name_re in (
                     re.compile(r"^Cancel$", re.I),
                     re.compile(r"^Close$", re.I),
@@ -1974,7 +2248,9 @@ def dismiss_publish_draft_dialog(page: Page) -> bool:
                   txt.includes('daily budget') ||
                   txt.includes('ad set name') ||
                   txt.includes('conversion location') ||
-                  txt.includes('nombre de la campaña')
+                  txt.includes('nombre de la campaña') ||
+                  txt.includes('campaign score') ||
+                  txt.includes('campaign details')
                 ) continue;
                 // Only real draft-review modals (not bare "In draft" / "Publish")
                 const isDraftModal =

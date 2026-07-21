@@ -150,6 +150,10 @@ class RecipePlayer:
     def _guards(self) -> None:
         """Global pre-step guards that unblock the UI."""
         try:
+            md.dismiss_discard_drafts_dialog(self.page)
+        except Exception:
+            pass
+        try:
             md.dismiss_publish_draft_dialog(self.page)
         except Exception:
             pass
@@ -192,7 +196,10 @@ class RecipePlayer:
                 return True
         except Exception:
             pass
-        return "/edit/" in (self.page.url or "")
+        # NOTE: no longer falls back to "/edit/" in url alone — same class of false
+        # positive as elsewhere (Meta can leave a stale /edit/ URL after the wizard
+        # closed). Both real checks above already failed, so it's genuinely closed.
+        return False
 
     def _ensure_not_left_ads_manager(self, *, context: str = "") -> bool:
         """If URL is business news/help, back + reopen *edit wizard*. Manage list alone is not OK."""
@@ -354,17 +361,51 @@ class RecipePlayer:
             pass
 
         if not candidates:
+            # Last resort: Meta's footer "Next" is sometimes a plain <div> with
+            # no role attribute at all — confirmed live (2026-07-20) via DevTools:
+            # exactly one element on the Campaign panel has own (direct-text-node)
+            # text "Next", tag DIV, role=null. Neither role-based locator above
+            # can ever match that. Scan by own-text instead, same pattern already
+            # used successfully for Single/Website in meta_dom.py.
+            own_text_script = """
+            (target) => {
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              const ownText = (el) => norm(
+                Array.from(el.childNodes).filter((n) => n.nodeType === 3)
+                  .map((n) => n.textContent).join('')
+              );
+              const out = [];
+              for (const el of document.querySelectorAll('div, span, a, button')) {
+                if (!el.offsetParent) continue;
+                if (ownText(el).toLowerCase() !== target.toLowerCase()) continue;
+                const r = el.getBoundingClientRect();
+                if (r.width < 8 || r.height < 8) continue;
+                out.push({ x: r.x, y: r.y, width: r.width, height: r.height });
+              }
+              return out;
+            }
+            """
+            for root in (page, *[f for f in page.frames if f != page.main_frame]):
+                try:
+                    boxes = root.evaluate(own_text_script, own_text)
+                except Exception:
+                    boxes = []
+                for box in boxes or []:
+                    candidates.append((box["y"], box, None))
+
+        if not candidates:
             return False
         # Prefer the lowest (footer) control
         candidates.sort(key=lambda t: t[0], reverse=True)
         _y, box, el = candidates[0]
         # Refuse if the control text is a forbidden help link
-        try:
-            t = (el.inner_text(timeout=300) or "").strip().split("\n")[0][:60]
-            if wg.forbidden_click_reason(t):
-                return False
-        except Exception:
-            pass
+        if el is not None:
+            try:
+                t = (el.inner_text(timeout=300) or "").strip().split("\n")[0][:60]
+                if wg.forbidden_click_reason(t):
+                    return False
+            except Exception:
+                pass
         cx = box["x"] + box["width"] / 2
         cy = box["y"] + box["height"] / 2
         # Banner strip is usually y < 80 — refuse clicks that high for Next
@@ -375,11 +416,13 @@ class RecipePlayer:
             md._cdp_mouse_click(page, cx, cy)
             return True
         except Exception:
-            try:
-                el.click(timeout=3000)
-                return True
-            except Exception:
-                return False
+            if el is not None:
+                try:
+                    el.click(timeout=3000)
+                    return True
+                except Exception:
+                    return False
+            return False
 
     def _generic_click(self, step: dict[str, Any]) -> bool:
         """Cascade: semantic -> keyboard focus+Enter -> raw CDP bbox -> css -> coords."""
@@ -393,8 +436,49 @@ class RecipePlayer:
             log.warning("recipe step %s blocked by forbidden zone: %s", step["id"], blocked)
             return False
 
+        nav = self._nav_own_text(match)
+
         def _after_click(strategy: str) -> bool:
             pause_short(self.page)
+            self._shot(f"player_after_{step['id']}_click")
+            # Diagnostic: any click strategy can report success while Meta silently
+            # ignores it (still showing the same panel) — this left the wizard
+            # stuck at Campaign level (current_step=0) with s07 marked ok, no
+            # matter which of the click strategies below "succeeded". Check the
+            # actual DOM regardless of which strategy fired.
+            if nav and nav.lower() == "next" and step.get("left_tab") == "campaign":
+                def _campaign_panel_still_showing() -> bool:
+                    try:
+                        return self.page.get_by_text(
+                            "Campaign name", exact=True
+                        ).first.is_visible(timeout=1000)
+                    except Exception:
+                        return False
+
+                # Give Meta's transition a moment before the first check — a check
+                # fired too early can catch a fleeting mid-transition state and
+                # wrongly conclude the click worked, only for the page to settle
+                # back on the Campaign panel a beat later (reproduced live: s07
+                # logged "ok" yet the panel was still Campaign moments after).
+                self.page.wait_for_timeout(800)
+                if _campaign_panel_still_showing():
+                    # Rescue attempt: click the "Ad set" item directly in the left
+                    # tree instead of relying on Next at all — a different
+                    # navigation path than the one that just failed.
+                    try:
+                        md.click_sidebar_tree_index(self.page, 1)
+                        self.page.wait_for_timeout(800)
+                    except Exception:
+                        pass
+                    if _campaign_panel_still_showing():
+                        self._record(
+                            step["id"], "click", False, f"{strategy}+no_effect",
+                            "Next click reported ok but Campaign name panel still visible "
+                            "(sidebar-tree rescue also didn't leave the Campaign panel)",
+                        )
+                        return False
+                    self._record(step["id"], "click", True, f"{strategy}+sidebar_tree_rescue")
+                    return True
             if wg.url_left_ads_manager(self.page.url):
                 self._shot(f"player_left_after_{step['id']}")
                 ok = self._ensure_not_left_ads_manager(context=f"after_{step['id']}")
@@ -409,17 +493,73 @@ class RecipePlayer:
             self._record(step["id"], "click", True, strategy)
             return True
 
-        nav = self._nav_own_text(match)
         if nav:
             # Always clear measurement banner before footer nav
             try:
                 wg.dismiss_measurement_banner(self.page)
             except Exception:
                 pass
+
+            # Level transitions (Campaign -> Ad set -> Ad): cascade Next -> left
+            # wizard tree -> Next again, verifying real panel content after each
+            # attempt instead of trusting "the click didn't throw".
+            #
+            # Two failure modes seen live today, in order:
+            #  1) breadcrumb_index's primary strategy locates `[role="navigation"]
+            #     a` across the whole page/all frames, unscoped — it matched Ads
+            #     Manager's main left icon rail instead of the in-wizard
+            #     breadcrumb, and clicking that navigated away from the edit flow
+            #     entirely, popping Meta's "Discard drafts?" dialog (run 12:45).
+            #     -> breadcrumb dropped from this cascade entirely.
+            #  2) sidebar_tree's click_sidebar_tree_index (JS `el.click()`)
+            #     reliably highlights the target row in the left tree (aria/CSS
+            #     selection state changes) but the main panel kept showing stale
+            #     Campaign content — a highlighted tree row is not proof the
+            #     panel actually swapped (runs 17:18 and 20:23, confirmed even
+            #     after several extra seconds of waiting). So every attempt below
+            #     is followed by a real content check (_wait_for_level), and a
+            #     click that doesn't produce the destination panel is treated as
+            #     failed, not accepted.
+            level_target = {"campaign": 1, "adset": 2}.get(step.get("left_tab") or "")
+            level_need = {"campaign": "adset", "adset": "ad"}.get(step.get("left_tab") or "")
+            if nav.lower() == "next" and level_target is not None and level_need:
+                self._shot(f"player_before_{step['id']}_click")
+
+                def _attempt(strategy: str, action: Any) -> bool:
+                    try:
+                        action()
+                    except Exception:
+                        pass
+                    return self._wait_for_level(level_need, timeout_s=5.0)
+
+                if _attempt("footer_nav_cdp", lambda: self._click_footer_nav(nav)):
+                    return _after_click("footer_nav_cdp")
+                if _attempt("sidebar_tree", lambda: md.click_sidebar_tree_index(self.page, level_target)):
+                    return _after_click("sidebar_tree")
+                if _attempt("footer_nav_cdp_retry", lambda: self._click_footer_nav(nav)):
+                    return _after_click("footer_nav_cdp_retry")
+                log.warning(
+                    "Next/sidebar-tree cascade failed to reach level %r — falling back to generic click",
+                    level_need,
+                )
+
+            # Known React SPA race: Playwright's actionability check (visible,
+            # stable, receives events) passes before React finishes re-attaching
+            # its event delegation after the last render — the click physically
+            # registers on the DOM node but no handler is listening yet, so
+            # nothing happens. A short settle pause before the click is the
+            # documented workaround (not a blanket waitForTimeout — this is
+            # scoped to the one click that kept silently no-op'ing).
+            self.page.wait_for_timeout(400)
+            self._shot(f"player_before_{step['id']}_click")
             if self._click_footer_nav(nav):
                 return _after_click("footer_nav_cdp")
-            self._record(step["id"], "click", False, "", f"footer {nav} not found")
-            return False
+            # NOTE: footer-nav search failing used to be a hard stop here — no other
+            # strategy was tried, which left the wizard stuck at the Campaign panel
+            # (current_step=0) while every later step (adset name, conversion
+            # location) silently ran against the wrong screen. Fall through to the
+            # normal semantic/css/coords cascade below instead of giving up.
+            log.warning("footer nav for %r not found — falling back to generic click", nav)
 
         # 1) Semantic locator
         loc = self._semantic_locator(match)
@@ -561,6 +701,23 @@ class RecipePlayer:
             try:
                 md._cdp_mouse_click(self.page, x + (w or 0) / 2, y + (h or 0) / 2)
                 pause_short(self.page)
+                # Guard: recorded coords are from an old recording and may miss the
+                # field entirely on today's layout. If focus didn't actually land in
+                # an editable element, Control+a selects the WHOLE PAGE instead of
+                # the field's text — this derailed a real run (jumped straight past
+                # Ad set config to the Ad level). Bail out before that can happen.
+                try:
+                    focus_ok = bool(
+                        self.page.locator(
+                            "input:focus, textarea:focus, [contenteditable=true]:focus"
+                        ).first.count()
+                    )
+                except Exception:
+                    focus_ok = False
+                if not focus_ok:
+                    self._record(step["id"], "fill", False, "coords_no_focus", "click missed the field")
+                    self._record(step["id"], "fill", False, "", "all strategies failed")
+                    return False
                 self.page.keyboard.press("Control+a")
                 self.page.keyboard.type(value, delay=25)
                 verified = False
@@ -616,9 +773,12 @@ class RecipePlayer:
         meta_domains = ("facebook.com", "meta.com", "fb.com", "adsmanager")
         if not any(d in url for d in meta_domains):
             return False
-        # Prefer explicit edit URLs (strong signal)
-        if "/edit/standalone" in url or "/campaigns/edit/" in url or "/adsets/edit/" in url:
-            return True
+        # NOTE: an /edit/ URL used to be trusted on its own as "wizard open", but
+        # Meta's SPA can leave that URL fragment in place after the wizard has
+        # already auto-saved and closed back to the manage list — the campaign_name
+        # fill step would then run against the list view and silently type nothing
+        # (reproduced consistently across multiple days of RPA runs). Every path
+        # below now requires an actual visible wizard marker, not just the URL.
         # Manage URL may still host a side-panel editor — require editor labels.
         on_manage_list = bool(
             re.search(r"/adsmanager/manage/(campaigns|adsets|ads)(?:\?|$)", url)
@@ -682,6 +842,10 @@ class RecipePlayer:
         deadline = time.time() + timeout_s
         while time.time() < deadline:
             try:
+                md.dismiss_discard_drafts_dialog(self.page)
+            except Exception:
+                pass
+            try:
                 md.dismiss_publish_draft_dialog(self.page)
             except Exception:
                 pass
@@ -699,7 +863,10 @@ class RecipePlayer:
                 )
             ]
             for p in edit_pages:
-                if self._page_has_wizard(p) or "/edit/" in p.url:
+                # NOTE: used to also accept "/edit/" in p.url alone as a fallback —
+                # same stale-URL false positive as elsewhere. _page_has_wizard()
+                # already does a real visibility check now; trust that only.
+                if self._page_has_wizard(p):
                     if p is not self.page:
                         log.info("Switching to wizard edit tab: %s", p.url[:100])
                         self.page = p
@@ -806,6 +973,10 @@ class RecipePlayer:
         """If wizard closed to campaigns list, reopen via Edit / row double-click."""
         page = self.page
         try:
+            md.dismiss_discard_drafts_dialog(page)
+        except Exception:
+            pass
+        try:
             md.dismiss_publish_draft_dialog(page)
         except Exception:
             pass
@@ -884,6 +1055,45 @@ class RecipePlayer:
                 pass
         return False
 
+    _LEVEL_MARKERS: dict[str, list[str]] = {
+        "campaign": [
+            "Campaign name",
+            "Nombre de la campaña",
+            "Daily budget",
+            "Campaign details",
+        ],
+        "adset": ["Ad set name", "Conversion location", "Nombre del conjunto"],
+        "conversion": ["Conversion location", "Ubicación de la conversión"],
+        "ad": [
+            "Instant form",
+            "Create instant form",
+            "Destination",
+            "Ad setup",
+            "Primary text",
+            "Add media",
+        ],
+    }
+
+    def _level_markers_visible(self, need: str, *, timeout_ms: int = 900) -> bool:
+        for text in self._LEVEL_MARKERS.get(need, []):
+            try:
+                if self.page.get_by_text(text, exact=True).first.is_visible(timeout=timeout_ms):
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def _wait_for_level(self, need: str, *, timeout_s: float = 5.0) -> bool:
+        """Poll for need-specific panel markers — a highlighted sidebar-tree row or
+        an 'ok' click result is not proof the main panel actually swapped content."""
+        deadline = time.monotonic() + timeout_s
+        while True:
+            if self._level_markers_visible(need, timeout_ms=700):
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            self.page.wait_for_timeout(400)
+
     def _ensure_on_wizard(self, *, need: str = "") -> bool:
         """Re-acquire wizard tab before critical steps. need: campaign|adset|conversion."""
         try:
@@ -891,27 +1101,33 @@ class RecipePlayer:
         except Exception:
             pass
         if self._switch_to_wizard_tab(timeout_s=8):
-            markers = {
-                "campaign": [
-                    "Campaign name",
-                    "Nombre de la campaña",
-                    "Daily budget",
-                    "Campaign details",
-                ],
-                "adset": ["Ad set name", "Conversion location", "Nombre del conjunto"],
-                "conversion": ["Conversion location", "Ubicación de la conversión"],
-            }.get(need, [])
+            markers = self._LEVEL_MARKERS.get(need, [])
             if not markers:
                 return True
-            for text in markers:
-                try:
-                    if self.page.get_by_text(text, exact=True).first.is_visible(timeout=1000):
-                        return True
-                except Exception:
-                    pass
-            if "/edit/" in (self.page.url or ""):
-                return True
-            # Wizard tab found but labels still painting
+            # Retry the need-specific markers for a few seconds — live evidence
+            # (2026-07-20 17:18 run) showed Meta's main panel taking longer than
+            # one ~1s pass to swap from Campaign to Ad set content after a
+            # sidebar-tree level switch. A single quick pass fell through to the
+            # generic _page_has_wizard() check below, which is level-agnostic
+            # (accepts "Campaign name" as proof of *a* wizard being open) — that
+            # let the run proceed onto the Ad set panel's fields while the stale
+            # Campaign panel was still showing, so the next click missed and
+            # closed the wizard back to the manage list.
+            for _ in range(4):
+                for text in markers:
+                    try:
+                        if self.page.get_by_text(text, exact=True).first.is_visible(timeout=1000):
+                            return True
+                    except Exception:
+                        pass
+                self.page.wait_for_timeout(500)
+            # NOTE: do not trust "/edit/" in url alone here — Meta's SPA can leave a
+            # stale /edit/ URL fragment after the wizard has already closed back to
+            # the manage list, which produced false positives (campaign_name fill
+            # then ran against the list view and silently typed nothing).
+            # _page_has_wizard() below does a real DOM/visibility check, but it is
+            # level-agnostic — only trust it here as a last resort once the
+            # need-specific markers above have had a real chance to appear.
             if self._page_has_wizard(self.page):
                 return True
         # Last resort: reopen from manage list
@@ -1142,12 +1358,26 @@ class RecipePlayer:
                     self._shot("player_handoff")
                     return self.result
 
-            if action == "fill" and step.get("param") == "{{campaign_name}}":
-                # IVHP: fill is not enough — Campaign name must verify in the field
+            if action == "fill" and step.get("param") in ("{{campaign_name}}", "{{adset_name}}", "{{daily_budget}}"):
+                # IVHP: fill is not enough — value must verify in the field. Also used
+                # for adset_name: the old _generic_fill path for this field included a
+                # keyboard select-all fallback that, when focus wasn't actually in the
+                # input, selected the WHOLE PAGE instead — derailing the rest of the
+                # run (jumped straight to Ad level, Conversion location never set).
+                # daily_budget was on the same unverified _generic_fill path and was
+                # caught live silently reverting to Meta's $25 default (React-
+                # controlled input ignoring a non-keyboard value set) with the run
+                # still logging s06_campaign as ok.
+                _intent_by_param = {
+                    "{{campaign_name}}": "campaign_name",
+                    "{{adset_name}}": "adset_name",
+                    "{{daily_budget}}": "daily_budget",
+                }
+                intent_id = _intent_by_param[step.get("param")]
                 value = self._resolve(step) or ""
                 outcome = ir.run_intent(
                     self.page,
-                    "campaign_name",
+                    intent_id,
                     value=value,
                     run_id=self._run_id,
                 )
@@ -1161,9 +1391,9 @@ class RecipePlayer:
                 if outcome.evidence_dir:
                     self.result.screenshots.append(outcome.evidence_dir)
                 if not (outcome.ok and outcome.verified):
-                    self._shot("player_ivhp_campaign_name_fail")
+                    self._shot(f"player_ivhp_{intent_id}_fail")
                     self.result.error = (
-                        "IVHP: Campaign name verify failed "
+                        f"IVHP: {intent_id} verify failed "
                         f"(expected={value!r}). See evidence: {outcome.evidence_dir or 'n/a'}"
                     )
                     self.result.ok = False

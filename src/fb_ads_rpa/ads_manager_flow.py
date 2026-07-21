@@ -1,9 +1,12 @@
 """Playwright RPA flow for Facebook Ads Manager campaign creation."""
 from __future__ import annotations
 
+import logging
 import re
 import time
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 RPA_FLOW_VERSION = "v36"
 
@@ -38,6 +41,7 @@ from src.fb_ads_rpa.meta_dom import (
     main_panel_has_label,
     open_detailed_targeting_field,
     pick_first_suggestion,
+    run_recorded_campaign_flow,
     scroll_to_section,
     select_conversion_event_lead,
     select_conversion_location_website,
@@ -2122,9 +2126,42 @@ class AdsManagerFlow:
             result.error = "No ad set or ads on draft"
             return result
 
-        # Recipe Player (feature-flagged): data-driven golden path with fallback.
-        from src.fb_ads_rpa.config import get_use_recipe_player
+        # Recorded flow (opt-in, FB_RPA_ENGINE=recorded_flow): direct replay of
+        # a verified human Playwright codegen recording (2026-07-21) — takes
+        # priority over both the LLM agent and the recipe player when enabled.
+        from src.fb_ads_rpa.config import get_use_llm_agent, get_use_recipe_player, get_use_recorded_flow
 
+        if get_use_recorded_flow():
+            self._goto_campaigns(draft, result)
+            fail_step = run_recorded_campaign_flow(
+                self.page,
+                campaign_name=draft.name,
+                budget=str(ad_set.daily_budget or ""),
+                adset_name=ad_set.name,
+            )
+            result.steps_completed.append("recorded_flow:reached_website" if not fail_step else f"recorded_flow_fail:{fail_step}")
+            result.success = not fail_step
+            if fail_step:
+                result.error = f"Recorded flow failed at: {fail_step}"
+            return result
+
+        # LLM agent (opt-in, FB_RPA_ENGINE=llm_agent): live Claude-driven loop —
+        # takes priority over the static recipe player when enabled.
+        if get_use_llm_agent():
+            try:
+                from src.fb_ads_rpa.llm_agent import LLMAgentPlayer
+
+                self._goto_campaigns(draft, result)
+                agent = LLMAgentPlayer(self.page)
+                llm_result = agent.publish_campaign(draft, dry_run=dry_run)
+                llm_result.campaign_name = draft.name
+                return llm_result
+            except Exception as exc:
+                log.warning("LLMAgentPlayer failed (%s); falling back to recipe/hardcoded flow", exc)
+                result.steps_completed.append(f"llm_agent_fallback:{str(exc)[:120]}")
+                # fall through to recipe player / hardcoded flow below
+
+        # Recipe Player (feature-flagged): data-driven golden path with fallback.
         if get_use_recipe_player():
             try:
                 from src.fb_ads_rpa.recipe_player import RecipePlayer

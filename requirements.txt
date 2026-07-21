@@ -19,5 +19,6 @@ openai>=1.30.0
 PyYAML>=6.0.0
 # RPA publish (Ads Manager UI)
 playwright>=1.40.0
+anthropic>=0.117.0
 # Tests
 pytest>=7.0.0

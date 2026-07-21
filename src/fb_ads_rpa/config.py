@@ -73,6 +73,30 @@ def get_use_recipe_player() -> bool:
     return val in ("1", "true", "yes", "on")
 
 
+def get_use_llm_agent() -> bool:
+    """When True, RPA delegates to LLMAgentPlayer (src/fb_ads_rpa/llm_agent.py) —
+    a live Claude-driven loop that reads the accessibility tree and decides each
+    click itself, instead of replaying the static recorded recipe. Requires
+    ANTHROPIC_API_KEY. Takes priority over FB_RPA_RECIPE_PLAYER when set.
+
+    Default OFF (opt-in until a live key is configured and it's been smoke-tested).
+    Enable with FB_RPA_ENGINE=llm_agent.
+    """
+    val = (os.environ.get("FB_RPA_ENGINE") or "").strip().lower()
+    return val == "llm_agent"
+
+
+def get_use_recorded_flow() -> bool:
+    """When True, RPA runs meta_dom.run_recorded_campaign_flow — a direct,
+    linear replay of a verified human Playwright codegen recording (2026-07-21)
+    for Create -> Website, instead of the label/breadcrumb/coordinate cascade
+    in recipe_player.py. Takes priority over both the LLM agent and the recipe
+    player when set. Enable with FB_RPA_ENGINE=recorded_flow.
+    """
+    val = (os.environ.get("FB_RPA_ENGINE") or "").strip().lower()
+    return val == "recorded_flow"
+
+
 def get_recipe_stop_after() -> str:
     """Optional step id to stop RecipePlayer after that step (or its delegated section).
 

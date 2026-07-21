@@ -840,7 +840,7 @@ async def account_map_patch(request: Request) -> JSONResponse:
     _FIELDNAMES = [
         "account_name", "ad_account_id", "page_id", "multilogin_instance",
         "folder_id", "profile_id", "proxy_type", "proxy_host", "proxy_port",
-        "proxy_user", "proxy_pass",
+        "proxy_user", "proxy_pass", "country",
     ]
 
     # Read existing rows
@@ -863,10 +863,10 @@ async def account_map_patch(request: Request) -> JSONResponse:
         new_row.update(rows[existing_idx])
 
     new_row["account_name"] = account_name
-    for field in ("ad_account_id", "folder_id", "profile_id", "page_id", "multilogin_instance"):
+    for field in ("ad_account_id", "folder_id", "profile_id", "page_id", "multilogin_instance", "country"):
         val = (data.get(field) or "").strip()
         if val:
-            new_row[field] = val
+            new_row[field] = val.upper() if field == "country" else val
 
     # Ensure act_ prefix
     act = new_row.get("ad_account_id", "")

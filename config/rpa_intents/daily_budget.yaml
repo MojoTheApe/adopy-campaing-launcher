@@ -1,0 +1,25 @@
+# IVHP intent: fill + verify Daily budget (safe).
+id: daily_budget
+risk: safe
+recipe_step_ids:
+  - s06_campaign
+intent: "Fill Daily budget with {{value}} and verify the field keeps that value"
+labels:
+  - Budget
+  - Daily budget
+  - Presupuesto diario
+verify:
+  type: input_value_near_label
+  labels:
+    - Budget
+    - Daily budget
+    - Presupuesto diario
+strategies:
+  - id: wait_editor_saved
+    kind: wait
+  - id: fill_near_label_verified
+    kind: fill_verified
+  - id: fill_near_label
+    kind: fill
+  - id: get_by_label_type
+    kind: get_by_label

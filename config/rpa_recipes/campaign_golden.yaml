@@ -117,7 +117,17 @@ steps:
   section: ''
   action: click
   risk: safe
+  # Skipped: pure pre-focus click before s05's IVHP fill, which finds/focuses/
+  # verifies the field on its own. get_by_label("Campaign name", exact=True)
+  # matches ZERO elements live (confirmed 2026-07-20 via diagnostic logging) —
+  # Meta's input isn't actually ARIA-labeled despite looking labeled visually.
+  # With no semantic/css match, this step fell through to the stale recorded
+  # x/y below (captured 2026-07-14, a dynamic per-session position) as a blind
+  # coordinate click, which is the prime suspect for closing the wizard right
+  # after this step on every run today.
+  skip: true
   match:
+    label: Campaign name
     role: combobox
     tag: INPUT
   recorded:
@@ -185,6 +195,11 @@ steps:
   action: click
   risk: safe
   locked: true
+  # Skipped: same reasoning as s04_campaign — pure pre-focus click before s09's
+  # IVHP fill. get_by_label("Ad set name", exact=True) also matches ZERO
+  # elements live (confirmed 2026-07-20), so this fell through to stale
+  # recorded x/y as a blind coordinate click.
+  skip: true
   match:
     label: Ad set name
     tag: INPUT

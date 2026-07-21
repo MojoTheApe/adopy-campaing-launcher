@@ -26,6 +26,8 @@ forbidden_click_texts:
     reason: destroys drafts / leaves create flow
   - pattern: "(?i)^Review and publish"
     reason: leaves edit flow toward publish review
+  - pattern: "(?i)^Publish$"
+    reason: publishes the campaign live — never automatic, only on explicit ACTIVE + confirmed publish
 
 # Never block these recipe intents even if text overlaps a soft rule.
 allowed_click_texts:

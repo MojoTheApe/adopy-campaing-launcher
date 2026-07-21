@@ -71,7 +71,11 @@ def _fallback_accounts_from_csv(cm_name: str) -> List[Dict[str, Any]]:
                 label = (row.get("account_name") or "").strip()
                 if not label:
                     continue
-                country_code = _country_from_label(label)
+                # Explicit 'country' column (set via dashboard or CSV) wins over
+                # guessing from the account name — a name suffix like "SA" is just
+                # a legacy label, not necessarily where the account is actually
+                # running today (that can change day to day).
+                country_code = (row.get("country") or "").strip().upper() or _country_from_label(label)
                 rows.append({
                     "cm": cm_name,
                     "country_code": country_code,
@@ -207,6 +211,20 @@ def load_morning_report(
                 f"GSheet has no accounts for {resolved_cm!r} today — "
                 f"showing all {len(all_rows)} account(s) from the sheet (free to open campaigns)."
             )
+
+    # Supplement with ad_account_map.csv: accounts that are Multilogin-mapped for
+    # RPA but aren't listed in today's GSheet tab (e.g. not scheduled for any CM
+    # today) still need to be pickable in Campaign Builder — otherwise a mapped
+    # account is invisible until someone adds it to the sheet for that day.
+    existing_labels = {(r.get("account_label") or "").strip().lower() for r in account_rows}
+    csv_rows = _fallback_accounts_from_csv(resolved_cm)
+    new_from_csv = [r for r in csv_rows if r["account_label"].strip().lower() not in existing_labels]
+    if new_from_csv:
+        account_rows = account_rows + new_from_csv
+        fallback_mode = True
+        warnings.append(
+            f"Added {len(new_from_csv)} account(s) from ad_account_map.csv not present in today's GSheet."
+        )
 
     assert enriched_df is not None
 

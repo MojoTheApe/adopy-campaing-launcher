@@ -1,0 +1,25 @@
+# IVHP intent: fill + verify Ad set name (safe).
+id: adset_name
+risk: safe
+recipe_step_ids:
+  - s09_adset
+intent: "Fill Ad set name with {{value}} and verify the field keeps that value"
+labels:
+  - Ad set name
+  - Nombre del conjunto de anuncios
+  - Nombre del conjunto
+verify:
+  type: input_value_near_label
+  labels:
+    - Ad set name
+    - Nombre del conjunto de anuncios
+    - Nombre del conjunto
+strategies:
+  - id: wait_editor_saved
+    kind: wait
+  - id: fill_near_label_verified
+    kind: fill_verified
+  - id: fill_near_label
+    kind: fill
+  - id: get_by_label_type
+    kind: get_by_label

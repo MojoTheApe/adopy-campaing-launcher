@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-07-18T06:10:28.183287+00:00",
+  "updated_at": "2026-07-21T14:47:00.035973+00:00",
   "notes": "Hybrid learner store. Risky winners stay in pending_approval until approve.",
   "steps": {
     "open_campaigns": {
@@ -45,23 +45,77 @@
       ],
       "stats": {
         "fill_near_label_verified": {
-          "wins": 1,
+          "wins": 22,
+          "fails": 4,
+          "note": "ivhp_verify_ok",
+          "last_ts": "2026-07-21T14:46:48.027038+00:00"
+        },
+        "fill_near_label": {
+          "wins": 0,
+          "fails": 4,
+          "note": "verify_fail current=",
+          "last_ts": "2026-07-19T21:20:26.269367+00:00"
+        },
+        "get_by_label_type": {
+          "wins": 0,
+          "fails": 8,
+          "note": "ivhp_all_failed",
+          "last_ts": "2026-07-19T21:20:26.712215+00:00",
+          "last_evidence": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\rpa_evidence\\20260720_001922\\campaign_name"
+        }
+      },
+      "pending_approval": []
+    },
+    "adset_name": {
+      "risk": "safe",
+      "order": [],
+      "stats": {
+        "fill_near_label_verified": {
+          "wins": 0,
+          "fails": 15,
+          "note": "verify_fail current=",
+          "last_ts": "2026-07-20T19:16:42.995438+00:00"
+        },
+        "fill_near_label": {
+          "wins": 0,
+          "fails": 15,
+          "note": "verify_fail current=",
+          "last_ts": "2026-07-20T19:16:43.123674+00:00"
+        },
+        "get_by_label_type": {
+          "wins": 0,
+          "fails": 30,
+          "note": "ivhp_all_failed",
+          "last_ts": "2026-07-20T19:16:43.690245+00:00",
+          "last_evidence": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\rpa_evidence\\20260720_221441\\adset_name"
+        }
+      },
+      "pending_approval": []
+    },
+    "daily_budget": {
+      "risk": "safe",
+      "order": [
+        "fill_near_label_verified"
+      ],
+      "stats": {
+        "fill_near_label_verified": {
+          "wins": 9,
           "fails": 1,
           "note": "ivhp_verify_ok",
-          "last_ts": "2026-07-18T06:10:28.182650+00:00"
+          "last_ts": "2026-07-21T14:47:00.034352+00:00"
         },
         "fill_near_label": {
           "wins": 0,
           "fails": 1,
-          "note": "verify_fail current=",
-          "last_ts": "2026-07-17T21:12:58.848112+00:00"
+          "note": "verify_fail current=true",
+          "last_ts": "2026-07-21T14:41:05.693400+00:00"
         },
         "get_by_label_type": {
           "wins": 0,
           "fails": 2,
           "note": "ivhp_all_failed",
-          "last_ts": "2026-07-17T21:12:59.075453+00:00",
-          "last_evidence": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\rpa_evidence\\20260718_001204\\campaign_name"
+          "last_ts": "2026-07-21T14:41:06.241533+00:00",
+          "last_evidence": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\rpa_evidence\\20260721_173958\\daily_budget"
         }
       },
       "pending_approval": []

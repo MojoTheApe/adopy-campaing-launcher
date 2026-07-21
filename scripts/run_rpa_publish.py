@@ -16,6 +16,10 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from dotenv import load_dotenv
+
+load_dotenv(_ROOT / ".env")
+
 from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 
