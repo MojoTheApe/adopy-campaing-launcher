@@ -177,8 +177,19 @@ it, don't go back to guessing:**
   404.
 - **Never commit/leave on disk any Playwright codegen recording that still
   has a plaintext Facebook login in it** — happened twice today, both
-  deleted. A sanitized, credential-free copy of today's founding recording
-  lives at `output/codegen_conversion_location_sanitized.py` for reference.
+  deleted (login block only — see next point, don't overcorrect by deleting
+  the whole recording).
+- **`output/codegen_conversion_location_sanitized.py` now has the FULL
+  recorded session** (95 lines) — not just through Website. It continues
+  through Conversion event → Audience (Locations, Detailed targeting,
+  Languages) → Platforms/Placements → Ad level (ad name, Website URL,
+  creative upload, Headline). This is exactly the ground truth needed for
+  the "next step" work above — read it before recording a fresh session,
+  it may already answer most of what you'd otherwise re-record. (First pass
+  today accidentally kept only the Website-reaching prefix when stripping
+  credentials — restored from conversation context after the user pointed
+  out the rest was needed too. Lesson: when sanitizing a credential leak,
+  remove only the credential-bearing lines, not the whole file.)
 
 ## Files touched today (for `git diff` / review against the tag)
 
