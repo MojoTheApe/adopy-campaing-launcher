@@ -1880,9 +1880,9 @@ def run_recorded_campaign_flow(
     budget: str,
     adset_name: str,
 ) -> str:
-    """Create -> Website, using the exact locators from a verified human
-    Playwright codegen recording (2026-07-21) instead of the label/breadcrumb/
-    coordinate cascade the rest of this file falls back to.
+    """Create -> Website -> Conversion event, using the exact locators from a
+    verified human Playwright codegen recording (2026-07-21) instead of the
+    label/breadcrumb/coordinate cascade the rest of this file falls back to.
 
     The recording confirmed several things live evidence had only guessed at:
       - Campaign/Ad set name inputs have no real ARIA label — they match by
@@ -2081,6 +2081,87 @@ def run_recorded_campaign_flow(
         return "conversion_website_verify"
 
     _shot("success_website_selected")
+
+    # --- Conversion event ------------------------------------------------
+    # Recording (2026-07-21, full-path segment, lines 21-23 of
+    # output/codegen_conversion_location_sanitized.py): click the event
+    # search placeholder "Select an event or search by", then pick an
+    # option. The recording's own click target for the option was an
+    # unstable Meta hash-class element with no visible name — match by
+    # text/role instead ("Lead", matching the Leads objective), same
+    # rationale as the rest of this function: prefer role/text over
+    # generated CSS classes.
+    #
+    # Do NOT verify with is_lead_conversion_event_selected() — live evidence
+    # (2026-07-21) showed it walks up from the "Conversion event" label and
+    # can return the neighboring "Dataset" field's value ("FacebookUL921")
+    # instead, a false negative even though "Lead" was plainly showing in
+    # the dropdown. Same own-text-node pattern already used for the
+    # Website check below is reliable; reuse it here.
+    def _conversion_event_is_lead() -> bool:
+        try:
+            return bool(
+                page.evaluate(
+                    """
+                    () => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      const targets = ['Lead', 'Cliente potencial', 'Prospecto'];
+                      for (const el of document.querySelectorAll('div, span, button, [role=combobox]')) {
+                        if (!el.offsetParent) continue;
+                        const kids = Array.from(el.childNodes).filter(n => n.nodeType === 3);
+                        const own = norm(kids.map(n => n.textContent).join(''));
+                        if (targets.includes(own)) return true;
+                      }
+                      return false;
+                    }
+                    """
+                )
+            )
+        except Exception:
+            return False
+
+    if not _conversion_event_is_lead():
+        opened = False
+        for _ in range(3):
+            _wait_loading()
+            try:
+                page.get_by_text("Select an event or search by", exact=False).first.click(timeout=4000)
+                opened = True
+                break
+            except Exception:
+                time.sleep(0.5)
+        if not opened:
+            _shot("fail_conversion_event_open")
+            return "conversion_event_open"
+        time.sleep(0.4)
+        _shot("after_conversion_event_open")
+
+        picked = False
+        for label in ("Lead", "Leads", "Cliente potencial", "Prospecto"):
+            for getter in (
+                lambda l=label: page.get_by_role("option", name=l, exact=True).first,
+                lambda l=label: page.get_by_text(l, exact=True).first,
+            ):
+                try:
+                    opt = getter()
+                    if opt.is_visible(timeout=1500):
+                        opt.click(timeout=3000)
+                        picked = True
+                        break
+                except Exception:
+                    pass
+            if picked:
+                break
+        if not picked:
+            _shot("fail_conversion_event_pick")
+            return "conversion_event_pick"
+
+        time.sleep(0.5)
+        if not _conversion_event_is_lead():
+            _shot("fail_conversion_event_verify")
+            return "conversion_event_verify"
+
+    _shot("success_conversion_event")
     return ""
 
 
