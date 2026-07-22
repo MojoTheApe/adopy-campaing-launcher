@@ -1879,10 +1879,12 @@ def run_recorded_campaign_flow(
     campaign_name: str,
     budget: str,
     adset_name: str,
+    country: str = "",
 ) -> str:
-    """Create -> Website -> Conversion event, using the exact locators from a
-    verified human Playwright codegen recording (2026-07-21) instead of the
-    label/breadcrumb/coordinate cascade the rest of this file falls back to.
+    """Create -> Website -> Conversion event -> Audience locations, using the
+    exact locators from a verified human Playwright codegen recording
+    (2026-07-21) instead of the label/breadcrumb/coordinate cascade the rest
+    of this file falls back to.
 
     The recording confirmed several things live evidence had only guessed at:
       - Campaign/Ad set name inputs have no real ARIA label — they match by
@@ -1897,18 +1899,21 @@ def run_recorded_campaign_flow(
     """
 
     def _wait_loading() -> None:
-        # Meta shows a transient full-page "Loading..." overlay, seemingly on
-        # a periodic list refresh as well as after transitions (list -> Create
+        # Meta shows a transient full-page loading overlay, seemingly on a
+        # periodic list refresh as well as after transitions (list -> Create
         # modal, Continue -> wizard) — confirmed live (2026-07-21) covering the
         # page while a click/fill silently missed underneath it, and a single
         # wait-then-click was still sometimes racing a fresh overlay. Checked
         # before every action below, with a retry loop around the action itself.
+        # Wording varies ("Loading...", "Loading creation" seen live on a
+        # campaign list with 30+ prior test drafts) — match any "Loading"
+        # text rather than the literal ellipsis.
         try:
-            page.get_by_text("Loading...", exact=False).first.wait_for(state="hidden", timeout=10000)
+            page.get_by_text(re.compile(r"Loading", re.I)).first.wait_for(state="hidden", timeout=30000)
         except Exception:
             pass
 
-    def _click(loc, *, attempts: int = 3) -> bool:
+    def _click(loc, *, attempts: int = 5) -> bool:
         for _ in range(attempts):
             _wait_loading()
             try:
@@ -1924,7 +1929,7 @@ def run_recorded_campaign_flow(
                 time.sleep(0.6)
         return False
 
-    def _fill(loc, value: str, *, attempts: int = 3) -> bool:
+    def _fill(loc, value: str, *, attempts: int = 5) -> bool:
         for _ in range(attempts):
             _wait_loading()
             try:
@@ -2136,6 +2141,18 @@ def run_recorded_campaign_flow(
         time.sleep(0.4)
         _shot("after_conversion_event_open")
 
+        # Live evidence (2026-07-22): on an account/dataset with no recorded
+        # events yet, the "Active events"/"Inactive events" quick-lists are
+        # both empty — "Lead" only surfaces once you type it into the same
+        # search box the click above focused. Type it before looking for the
+        # option; harmless on accounts where "Lead" was already listed.
+        try:
+            page.keyboard.type("Lead", delay=40)
+            time.sleep(0.6)
+        except Exception:
+            pass
+        _shot("after_conversion_event_search")
+
         picked = False
         for label in ("Lead", "Leads", "Cliente potencial", "Prospecto"):
             for getter in (
@@ -2162,6 +2179,131 @@ def run_recorded_campaign_flow(
             return "conversion_event_verify"
 
     _shot("success_conversion_event")
+
+    # --- Audience: Locations ---------------------------------------------
+    # Recording lines 24-28 (full-path segment): swap the default "United
+    # States" location for the account's target country. Ground-truth role
+    # names from the recording: button "Locations Inclusion: United...",
+    # combobox "Search locations", result row exact text "Country" (Meta
+    # tags country-level results this way regardless of which country), a
+    # "Remove" button per location chip. _country_search_term() is the
+    # existing ISO-2 -> English-name lookup already used elsewhere in this
+    # file (e.g. fill_audience_location) -- pure data lookup, safe to reuse.
+    search_term = _country_search_term(country) if country else ""
+    if search_term:
+        # Live evidence (2026-07-21): with "Advantage+ leads campaign" On
+        # (the default for a fresh ad set), the Audience section hides the
+        # manual Locations/Detailed targeting controls the recording used —
+        # the "Locations Inclusion: ..." button never appears at all (the ad
+        # set panel goes straight from Conversion event to Budget & schedule).
+        # Live evidence (2026-07-22): the old _turn_off_advantage_plus_leads()
+        # helper silently failed to turn it off — it walks
+        # document.querySelectorAll('*') in document order, so the first
+        # element whose full descendant textContent happens to contain
+        # "advantage+ leads" is a large ancestor container, and it then
+        # grabs the FIRST [role=switch] found anywhere inside that big
+        # container (not necessarily the right one). Scope to a small
+        # label-like marker first, then walk a few ancestor levels for the
+        # nearby switch — same near-label pattern already used elsewhere in
+        # this file (main_panel_has_label, fill_input_near_label).
+        try:
+            page.evaluate(
+                """
+                () => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+                  const visible = (el) => !!(el && el.offsetParent !== null);
+                  let marker = null;
+                  for (const el of document.querySelectorAll('label, span, div, h2, h3, [role=heading]')) {
+                    if (!visible(el) || el.children.length > 3) continue;
+                    if (norm(el.textContent).includes('advantage+ leads')) { marker = el; break; }
+                  }
+                  if (!marker) return false;
+                  let node = marker;
+                  for (let i = 0; i < 6 && node; i++, node = node.parentElement) {
+                    const sw = node.querySelector('[role=switch], input[type=checkbox]');
+                    if (sw && sw.offsetParent) {
+                      const checked = sw.getAttribute('aria-checked') === 'true' || sw.checked === true;
+                      if (checked) sw.click();
+                      return true;
+                    }
+                  }
+                  return false;
+                }
+                """
+            )
+            time.sleep(0.6)
+        except Exception:
+            pass
+        try:
+            page.get_by_role("button", name=re.compile(r"^(Turn off|Confirm)$", re.I)).first.click(timeout=2500)
+            time.sleep(0.5)
+        except Exception:
+            pass
+        _shot("after_advantage_plus_off")
+
+        if not _click(page.get_by_role("button", name=re.compile(r"^Locations Inclusion:", re.I))):
+            _shot("fail_audience_locations_open")
+            return "audience_locations_open"
+        _shot("after_locations_open")
+
+        if not _fill(page.get_by_role("combobox", name="Search locations"), search_term):
+            _shot("fail_audience_location_search")
+            return "audience_location_search"
+        time.sleep(1.0)
+        _shot("after_location_search")
+
+        try:
+            page.get_by_text("Country", exact=True).first.click(timeout=4000)
+        except Exception:
+            _shot("fail_audience_location_pick")
+            return "audience_location_pick"
+        time.sleep(0.5)
+        _shot("after_location_picked")
+
+        # Remove the default "United States" chip, leaving only the new
+        # country. Match by nearby text rather than the recording's
+        # positional nth(1) Remove button, which breaks if chip order
+        # differs from today's session.
+        removed_default = False
+        try:
+            removed_default = bool(
+                page.evaluate(
+                    """
+                    () => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      const isRemove = (b) => {
+                        const t = norm(b.textContent) || norm(b.getAttribute('aria-label') || '');
+                        return t === 'Remove' || t === 'Eliminar' || t === 'Quitar';
+                      };
+                      const buttons = [...document.querySelectorAll('[role=button], button')].filter(isRemove);
+                      for (const btn of buttons) {
+                        if (!btn.offsetParent) continue;
+                        let node = btn;
+                        for (let i = 0; i < 6 && node; i++, node = node.parentElement) {
+                          if (norm(node.textContent).includes('United States')) {
+                            btn.click();
+                            return true;
+                          }
+                        }
+                      }
+                      return false;
+                    }
+                    """
+                )
+            )
+        except Exception:
+            pass
+        if not removed_default:
+            try:
+                page.get_by_role("button", name="Remove").nth(1).click(timeout=3000)
+                removed_default = True
+            except Exception:
+                pass
+        time.sleep(0.5)
+        _shot("after_remove_default_location")
+        if not removed_default:
+            return "audience_location_remove_default"
+
     return ""
 
 
