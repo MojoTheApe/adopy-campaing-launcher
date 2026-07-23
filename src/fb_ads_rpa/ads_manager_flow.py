@@ -2133,14 +2133,21 @@ class AdsManagerFlow:
 
         if get_use_recorded_flow():
             self._goto_campaigns(draft, result)
+            ad = ad_set.ads[0]
             fail_step = run_recorded_campaign_flow(
                 self.page,
                 campaign_name=draft.name,
                 budget=str(ad_set.daily_budget or ""),
                 adset_name=ad_set.name,
                 country=draft.country,
+                interests=ad_set.targeting_label,
+                ad_name=ad.copy_name,
+                website_url=draft.link,
+                headline=ad.ad_title,
+                primary_text=ad.ad_body,
+                creative_filename=ad.creative_filename,
             )
-            result.steps_completed.append("recorded_flow:reached_audience_locations" if not fail_step else f"recorded_flow_fail:{fail_step}")
+            result.steps_completed.append("recorded_flow:reached_draft_handoff" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step
             if fail_step:
                 result.error = f"Recorded flow failed at: {fail_step}"

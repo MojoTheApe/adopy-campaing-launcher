@@ -1761,7 +1761,7 @@ async function dashRefresh(ev) {
       <button type="button" class="rpa-record-btn"
               style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#1d4ed8;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
               onclick="rpaRecordToggle(this)"
-              title="Записывает твои клики в открытом Multilogin браузере.">⏺ Record clicks</button>
+              title="Открывает Playwright Inspector (codegen) на уже открытом Multilogin-браузере — без нового окна и без повторного логина.">⏺ Record (codegen)</button>
       <button type="button" class="rpa-lab-btn"
               style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#7c3aed;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
               onclick="rpaWebsiteLabToggle(this)"
@@ -3470,17 +3470,20 @@ window.rpaTakeover = function() {
   }
 };
 
-// ── Click Recorder (learn from your manual campaign creation) ─────────
+// ── Codegen Recorder (Playwright Inspector on the already-open Multilogin
+// browser — see docs/agent10-codegen-via-multilogin.md. Replaces the old
+// JSON click_recorder wiring: this opens a real, editable-code Inspector
+// on the SAME window instead of logging action metadata to a JSON file) ──
 var _rpaRecording = false;
 var _rpaRecordPoll = null;
 
 function _rpaRecordSetUI(running, message) {
   document.querySelectorAll('.rpa-record-btn').forEach(function(btn) {
     if (running) {
-      btn.textContent = '⏹ Stop record';
+      btn.textContent = '⏹ Stop codegen';
       btn.style.background = '#b91c1c';
     } else {
-      btn.textContent = '⏺ Record clicks';
+      btn.textContent = '⏺ Record (codegen)';
       btn.style.background = '#1d4ed8';
     }
   });
@@ -3492,13 +3495,13 @@ function _rpaRecordSetUI(running, message) {
 
 window.rpaRecordToggle = function(btn) {
   if (_rpaRecording) {
-    fetch('/rpa-record/stop', { method: 'POST' })
+    fetch('/rpa-codegen/stop', { method: 'POST' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         _rpaRecording = false;
         if (_rpaRecordPoll) { clearInterval(_rpaRecordPoll); _rpaRecordPoll = null; }
         var msg = d.ok
-          ? ('✓ Saved ' + (d.actions_count || 0) + ' actions' + (d.recipe_path ? ' → ' + d.recipe_path.split(/[/\\\\]/).pop() : ''))
+          ? '✓ Inspector closed'
           : ('⚠ ' + (d.error || 'Stop failed'));
         _rpaRecordSetUI(false, msg);
       })
@@ -3509,37 +3512,33 @@ window.rpaRecordToggle = function(btn) {
     return;
   }
 
-  var form = btn ? btn.closest('form') : null;
-  var country = form ? ((form.querySelector('[name=country]') || {}).value || '') : '';
-  var recipeName = (country ? country.replace(/\\s+/g, '_') + '_' : '') + 'campaign';
-
   _rpaRecordSetUI(true, 'Connecting to Multilogin CDP…');
-  fetch('/rpa-record/start', {
+  fetch('/rpa-codegen/start', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({recipe_name: recipeName})
+    body: JSON.stringify({})
   })
   .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, d: d}; }); })
   .then(function(res) {
     if (!res.d.ok && !res.d.running) {
       _rpaRecording = false;
-      _rpaRecordSetUI(false, '⚠ ' + (res.d.error || 'Cannot start recorder'));
+      _rpaRecordSetUI(false, '⚠ ' + (res.d.error || 'Cannot start codegen'));
       return;
     }
     _rpaRecording = true;
-    _rpaRecordSetUI(true, res.d.message || 'Recording… create campaign manually');
+    _rpaRecordSetUI(true, res.d.message || 'Inspector open — click through the UI manually');
     if (_rpaRecordPoll) clearInterval(_rpaRecordPoll);
     _rpaRecordPoll = setInterval(function() {
-      fetch('/rpa-record/status')
+      fetch('/rpa-codegen/status')
         .then(function(r) { return r.json(); })
         .then(function(s) {
           if (!s.running && _rpaRecording) {
             _rpaRecording = false;
             if (_rpaRecordPoll) { clearInterval(_rpaRecordPoll); _rpaRecordPoll = null; }
-            _rpaRecordSetUI(false, s.message || ('Saved ' + (s.actions_count || 0) + ' actions'));
+            _rpaRecordSetUI(false, s.message || 'Inspector closed');
             return;
           }
-          _rpaRecordSetUI(!!s.running, s.message || ((s.actions_count || 0) + ' actions'));
+          _rpaRecordSetUI(!!s.running, s.message || 'Recording…');
         })
         .catch(function() {});
     }, 1500);
