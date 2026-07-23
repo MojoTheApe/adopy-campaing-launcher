@@ -1,9 +1,9 @@
 ---
 kind: handoff
 name: agent10-codegen-training-handoff
-created: 2026-07-23
+created: 2026-07-24
 status: draft
-version: 1
+version: 2
 tags:
   - rpa
   - agent10
@@ -15,148 +15,158 @@ related:
   - agent10-codegen-via-multilogin.md
 ---
 
-# Handoff: Agent 10 — codegen-training loop, ready to connect and test
+# Handoff: Agent 10 — post codegen-via-Multilogin experiment, account paused
 
-Context dump for continuing in a fresh session. Picks up where
-`agent10-post-conversion-location-handoff.md` left off (that one ends at
-"Website selected" milestone, 2026-07-21). This one covers 2026-07-22/23.
+Context dump for continuing in a fresh session. Supersedes v1 of this
+document (written earlier on 2026-07-23, before the codegen-Inspector
+experiment below ran and failed). Picks up where
+`agent10-post-conversion-location-handoff.md` left off.
 
 ## Where things are
 
-- **Repo:** `C:\Users\EvgeniSedin\fb_agents` (same caveat as before — NOT
-  `C:\fb_agents`, a stale duplicate).
-- **Working branch:** `feat/agent10-post-conversion-location` (unchanged).
-- **Nothing committed since `agent10-conversion-event-2026-07-21` tag** —
-  everything below is uncommitted working-tree state. See "What to do
-  first" below.
-- **Dashboard:** now managed via `.claude/launch.json` → use
-  `preview_start({name: "dashboard"})`, not raw `python serve.py` — this
-  session hit repeated stray-process pileups on port 9090 from starting it
-  manually; the managed preview avoids that. Config already created.
-- **The user also runs their own separate dashboard instance on port 9091**
-  (their own terminal/browser, not the Claude preview) — the two are
-  independent processes reading the same files on disk (`Upload FB.xlsx`,
-  `config/ad_account_map.csv`). Restarting the *preview* instance does not
-  affect their 9091 instance and vice versa — if a code fix needs to reach
-  their session, they need to restart their own process too.
+- **Repo:** `C:\Users\EvgeniSedin\fb_agents` (NOT `C:\fb_agents`, a stale
+  duplicate — confirmed again this session: `preview_start` with a
+  `.claude/launch.json` resolved to the WRONG checkout at one point because
+  that stale duplicate has its own `.claude/launch.json` higher up the
+  session's default directory tree. If the dashboard ever shows missing
+  accounts / stale `RPA_FLOW_VERSION` in its logs, that's the symptom —
+  just run `python serve.py` directly via Bash from
+  `C:\Users\EvgeniSedin\fb_agents`, don't rely on `preview_start({name:...})`
+  for this project).
+- **Working branch:** `feat/agent10-post-conversion-location`.
+- **Account state right now: paused, user reported it "hung" (подвис).**
+  Do not run more live tests until the user confirms the Multilogin profile
+  is responsive again. The last live test before the freeze failed early at
+  the `create` step (likely transient, unrelated to any code change) —
+  don't read anything into that specific failure.
+- **Nothing new committed this session** (last commit: `e7e664a`,
+  "extend recorded flow past Website, live-fix onboarding modal + Locations
+  panel access, add codegen recorder" — already pushed to GitHub). Since
+  then: further uncommitted edits, see below.
 
-## What changed this session (2026-07-22/23)
+## The big finding this session: Playwright's Inspector doesn't work on Multilogin's Mimic browser
 
-### 1. `run_recorded_campaign_flow()` extended end-to-end
+This is the most important thing to know before touching the "Record"
+button again. Full story in `agent10-codegen-via-multilogin.md` (rewritten
+to v2) — summary:
 
-`src/fb_ads_rpa/meta_dom.py` — the function now covers **Create through
-draft hand-off** (was: Create through Website only, at the end of the last
-session). New parameters: `interests`, `language`, `ad_name`,
-`website_url`, `headline`, `primary_text`, `creative_filename`, all wired
-from `AdSetDraft`/`AdDraft`/`CampaignDraft` fields in
-`ads_manager_flow.py::publish_campaign`.
+- Built `src/fb_ads_rpa/codegen_recorder.py`: connects over CDP to the
+  already-open Multilogin browser and calls `page.pause()` to open the real
+  Playwright Inspector (the same UI `playwright codegen` uses) on that same
+  window — no second browser, no fresh login.
+- Wired it to the dashboard's "Record" button, tested it live against
+  `FacebookDQ204 CR`.
+- **It does not work.** Confirmed twice: the Inspector genuinely connects
+  (window flashes when toggling its own Record button, CDP handshake
+  succeeds), but neither "Pick locator" (hover highlighting) nor "Record"
+  (click capture) produce any effect at all — no highlight on hover, no new
+  code lines on click, even with the Inspector's own Record toggle visibly
+  turned on (red).
+- Ruled out user error: at the same moment, the **old** `click_recorder.py`
+  (a plain `document.addEventListener('click', ..., true)` injected via
+  `page.evaluate()`, not Playwright's built-in Inspector machinery) was
+  running against the exact same CDP connection and **did** capture the
+  click correctly, own_text and all. So it's specifically Playwright
+  Inspector's own mechanism (likely the CDP `Overlay` domain) that Mimic's
+  antidetect modifications break — not the CDP connection itself, and not
+  a general "no JS works here" problem. Regular scripted automation
+  (`Input.dispatchMouseEvent` etc., what `run_recorded_campaign_flow` uses
+  all day) is unaffected.
+- **Reverted the dashboard button back to `click_recorder.py`** (now
+  labeled "⏺ Record clicks" again). `codegen_recorder.py` is left in the
+  repo (its account-based CDP-port lookup fix is independently useful, see
+  below) but the dashboard no longer calls it.
+- **Do not try `page.pause()`/Inspector again on this browser** without new
+  information (e.g. Multilogin explicitly announcing DevTools
+  Overlay/Inspector compatibility). It's a dead end here.
 
-**Verification status — important, read before trusting any of this:**
-- Steps 1–13 (Create → Website → Conversion event → Audience Locations
-  country swap) — **live-verified repeatedly today**, works reliably.
-- Steps 14–22 (Detailed targeting → Languages → Placements → Ad level →
-  draft hand-off) — **written today from the full codegen recording
-  (`output/codegen_conversion_location_sanitized.py`) but NEVER live-tested**.
-  The account became unusable for testing today (a colleague was manually
-  using the same browser window, plus general account slowdown after 60+
-  automated runs). Full step-by-step detail, exact selectors, and known
-  live gotchas for steps 1–13 are in `agent10-recorded-flow-runbook.md` —
-  **read that before the next live test**, it tells you exactly what to
-  expect to break and how the code currently reacts.
+### Real, incidental win from this experiment
 
-### 2. Real codegen-via-Multilogin, wired to the dashboard
+While debugging the above, found and fixed a **real, separate bug**: both
+`click_recorder.py` and `codegen_recorder.py`'s CDP-port discovery
+(`_find_cdp_url()`) uses a fixed list of common ports and missed the port
+an active test session's browser was actually running on. Added
+`_find_cdp_url_for_account(account_label)` to both modules — looks up the
+account's `profile_id` in `ad_account_map.csv`, finds its MLX profile
+directory, and reads the real port from the profile's own
+`DevToolsActivePort` file (same mechanism `browser.py`'s
+`MultiloginDirectCDPProvider` already used for actual RPA runs). Confirmed
+live: found the correct port (`56413`) on the first try where the old
+scan found nothing. The dashboard's "Record clicks" button now passes
+`account_label` through to use this.
 
-New: `src/fb_ads_rpa/codegen_recorder.py` + routes `/rpa-codegen/start`,
-`/stop`, `/status` in `src/web/app.py`. The dashboard's **"⏺ Record
-(codegen)"** button (was "Record clicks") now opens a real Playwright
-Inspector on the *already-open* Multilogin browser via `page.pause()` over
-CDP — not a separate browser, no fresh-login risk. Full design rationale
-in `agent10-codegen-via-multilogin.md`.
+### What the working recorder captured (useful ground truth, not yet fully applied)
 
-**This is the tool for training steps 14–22 next**, per the user's stated
-goal: repeat codegen recordings often (safe — human-paced clicking looks
-like normal usage, unlike the scripted automation loops that made the
-account flaky) to cover more account/campaign variations, rather than
-guessing selectors blind.
+Used the now-confirmed-working `click_recorder.py` to capture the exact
+click sequence for the "Further limit the reach of your ads" panel-reopen
+step that was blocking progress past Audience Locations on
+`FacebookDQ204 CR`. Captured JSON (`output/rpa_recipes/probe_test_*.json`):
 
-The old JSON action-logger (`click_recorder.py`, `/rpa-record/*` routes)
-still exists and still works — just no longer wired to this button. Keep
-it in mind as a fallback if `page.pause()` ever proves awkward for a given
-session.
+```
+click "Further limit the reach of your ads" — own_text exact match,
+  role="" on the element itself (role inherited from a div[role=button]
+  ancestor a few levels up — same pattern as the "Next" footer button
+  elsewhere in this file)
+click "Continue" — immediately follows, same own_text/role="" pattern
+```
 
-### 3. Fixed misleading "Network error" on dashboard Save buttons
+Applied this as a fix in `run_recorded_campaign_flow()`
+(`src/fb_ads_rpa/meta_dom.py`): replaced the unreliable
+`get_by_text(...).first.click()` / `get_by_role("button", name=...)`
+attempts for this specific reopen step with the same own-text-node +
+`_cdp_mouse_click()` pattern already proven for Website/Lead selection
+(`get_by_role` wasn't resolving reliably through this much DOM nesting in
+practice, even though the role-inheritance theory is sound).
 
-`src/web/app.py` — `/account-link-patch` and `/account-map-patch` had
-unhandled exceptions on file-save (most commonly `PermissionError` when
-`Upload FB.xlsx` / `ad_account_map.csv` is open in Excel elsewhere).
-Unhandled → FastAPI's default 500 came back as plain text, not JSON → the
-dashboard's `fetch().then(r => r.json())` threw → UI showed "Network
-error" regardless of the real cause. Both routes now catch `PermissionError`
-specifically ("file is open elsewhere — close it and retry") and other
-exceptions generically, always returning valid JSON. Verified live (hit
-the endpoint directly, got a proper JSON error body back).
+**Not yet live-verified** — the one test run attempted right after this
+fix failed early at `create` (looked transient/unrelated), and then the
+account reportedly froze before a clean retest could happen. **This is
+the first thing to verify once the account is responsive again.**
 
-### 4. Cleanup
+## Current uncommitted changes (git status)
 
-Deleted ~413MB / 1417 files in `output/rpa_screenshots/` and 62
-`output/manual_test_run*.log` files accumulated from today's live-test
-loop (confirmed gitignored/untracked first). `output/rpa_screenshots/`
-will refill fast once live testing resumes — that's expected and fine.
+```
+ M src/fb_ads_rpa/click_recorder.py       — added _find_cdp_url_for_account, account_label param
+ M src/fb_ads_rpa/codegen_recorder.py     — same fix (kept for reference, not wired to dashboard)
+ M src/fb_ads_rpa/meta_dom.py             — own-text+CDP-click fix for "Further limit reach" reopen + Continue
+ M src/web/app.py                         — /rpa-record/start and /rpa-codegen/start both accept account_label
+ M src/web/templates/report.html          — Record button reverted to click_recorder wiring, passes account_label
+?? output/manual_test_run63.log..71.log   — test noise, don't commit
+?? creatives/                             — unrelated, don't commit
+ M output/unknown_targets.log             — pre-existing, unrelated to this session, don't commit
+```
 
-### 5. Documentation package (also uncommitted)
-
-A parallel thread this session: the user wants to take this from
-"works on my laptop" to a shared, multi-user, domain-hosted setup. Wrote:
-
-- `global-rollout-overview.md` — business context, current vs target
-  architecture, phased rollout, explicitly **unresolved** open questions
-  (hosting, dashboard auth, rollout scale) flagged as stakeholder
-  decisions, not guessed at.
-- `hub-agent-architecture.md` (+ `-en.md`) — hub+local-agent technical
-  spec: data model, API contract, security, job lifecycle. Explicit
-  section on what's reused as-is (the whole RPA engine, unchanged).
-- `agent-update-strategy.md` (+ `-en.md`) — how to keep the local agent's
-  code current on every employee's machine: git-based auto-update
-  (recommended first) vs Intune-managed deployment (gated on confirming
-  with IT that Intune is actually used for internal app deployment today).
-- This is a **separate initiative** from `service-architecture.md`
-  (pre-existing, per-customer SaaS spec for the analysis side) — don't
-  conflate the two when picking this back up.
+`docs/agent10-codegen-via-multilogin.md` was also rewritten (v2) to
+document the Inspector-doesn't-work finding — should be committed
+regardless of whether the meta_dom.py fix above is verified yet, since
+it's accurate regardless.
 
 ## What to do first in the next session
 
-1. **Decide on committing.** Nothing from this session is committed yet.
-   Recommend: one commit for the code (`meta_dom.py`, `ads_manager_flow.py`,
-   `app.py`, `report.html`, `codegen_recorder.py`) once steps 14–22 get at
-   least one live confirmation: separately, the six new `docs/*.md` files
-   can be committed any time (pure documentation, no risk). Do NOT commit
-   `output/dry_run_slots_cr_navtest.json` changes or `config/ad_account_map.csv`
-   without checking what changed there first — the CSV was modified during
-   this session via dashboard Save buttons (real account config), verify
-   it's not test noise before deciding whether that belongs in this branch
-   or should be committed separately/immediately for safety.
-
-2. **Connect to the platform.** Confirm: Multilogin profile for the test
-   account open and logged in; dashboard reachable (`preview_start({name:
-   "dashboard"})`, or ask the user whether their own 9091 instance should
-   be used instead for this round).
-
-3. **Use "Record (codegen)" to cover steps 14–22.** For each remaining
-   segment (Detailed targeting, Languages, Placements, Ad level, draft
-   hand-off), click Record, walk through it manually once, copy the
-   generated code out of the Inspector, compare it against what's already
-   in `run_recorded_campaign_flow()` (lines are already written from the
-   *original* recording — the new recording will tell you where today's
-   live UI actually diverges). Update `agent10-recorded-flow-runbook.md`'s
-   verification-status table as each segment gets confirmed.
-
-4. **Vary account/campaign each time**, per the user's stated goal —
-   the whole point of building the codegen-via-Multilogin path was to make
-   it cheap to repeat across different accounts/campaign shapes instead of
-   hand-tuning selectors against one single test account.
-
+1. **Check the account/Multilogin profile is responsive** before running
+   anything. The user reported it hung after the last test attempt — don't
+   assume it's fine just because some time has passed.
+2. **Live-verify the "Further limit the reach" reopen fix** in
+   `meta_dom.py` (see above) — this is the immediate next milestone, one
+   step past where testing stalled all of 2026-07-22/23. Test against
+   `FacebookDQ204 CR` (act_1566229345092982, profile_id
+   `c21d4ddf-b705-478c-85ad-4ddf8a22955f`, already filled into
+   `config/ad_account_map.csv` this session) or `FacebookUL921 CR Ait`
+   (the original, much more heavily-used test account).
+3. **If it works**, use the dashboard's "Record clicks" button (now fixed)
+   to capture the *next* unverified segments the same way — this is the
+   real, working version of the "train faster with recordings" loop the
+   user wanted, just via JSON action capture instead of live codegen.
+   Manually translate each captured `own_text`/`role`/`css_path` into an
+   own-text + `_cdp_mouse_click()` step in `meta_dom.py`, same pattern as
+   today's fix.
+4. **Commit in stages, not all at once**: commit the
+   `agent10-codegen-via-multilogin.md` doc update immediately (safe, no
+   live-test dependency). Commit the code changes once the reopen fix is
+   verified live. Review `output/unknown_targets.log`'s diff before ever
+   including it in a commit — it's unrelated to this work.
 5. Only after 2+ clean full live runs (Create → draft hand-off, no fail
-   step) — tag and fast-forward-merge into `master`, the same process used
-   for the Website and Conversion-event milestones earlier.
+   step) — tag and fast-forward-merge into `master`, same process as the
+   Website and Conversion-event milestones.
 
 #rpa #agent10 #handoff #codegen
