@@ -3250,7 +3250,8 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
     for attempt in range(3):
         for root in _roots(page):
             try:
-                heading = root.get_by_text(re.compile(r"^Locations$|^Ubicaciones$", re.I)).first
+                heading_locator = root.get_by_text(re.compile(r"^Locations$|^Ubicaciones$", re.I))
+                heading = heading_locator.first
                 heading.wait_for(state="visible", timeout=3000)
                 heading.scroll_into_view_if_needed(timeout=3000)
                 row = heading.locator("xpath=ancestor::*[3]")
@@ -3263,23 +3264,69 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                         dumped_html = True
                     except Exception:
                         pass
+                    # Diagnostic (2026-07-24): every click variant tried so
+                    # far lands on the same tooltip/wrong-place result
+                    # regardless of exact target, on 2 different accounts —
+                    # so capture what's actually on screen right when we
+                    # believe we've found+scrolled to "Locations", plus how
+                    # many DOM nodes match that text, to check whether this
+                    # locator is matching a duplicate summary/overview
+                    # instance instead of the real editable field.
+                    try:
+                        match_count = heading_locator.count()
+                        Path("output/debug_locations_match_count.txt").write_text(
+                            str(match_count), encoding="utf-8"
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        from src.fb_ads_rpa.screenshots import capture as _capture
+
+                        _capture(page, "recorded_locations_heading_found")
+                    except Exception:
+                        pass
                 clicked = False
-                # Attempt #8 (2026-07-24): every prior attempt targeted the
-                # header (Locations text + info icon) or the whole row and
-                # always landed on the icon's own legitimate tooltip instead
-                # of opening edit mode — 3 identical failures across 2 live
-                # sessions ruled out both "wrong sub-target within the header"
-                # and "scroll/render race" as the cause. The one sibling
-                # block never actually tried in isolation is `_7zgk` (the
-                # "Inclusion: <value>" + empty `<ul class="_7zgl">` chip-list
-                # group right below the header) — it was only reachable as an
-                # "if not clicked" fallback that could never run, because the
-                # header/row click above never raised (bounding_box always
-                # resolves, CDP click never throws), so `clicked` was already
-                # True before this branch could execute. Try it FIRST and in
-                # isolation this time.
+                # Attempt #9 (2026-07-24): a diagnostic screenshot taken at
+                # exactly this point (before any click) confirmed the page IS
+                # correctly scrolled to the real, unique (count==1) Locations
+                # row — ruling out "wrong element found" and "scroll race" as
+                # causes. Every click target tried so far (icon, value text,
+                # _7zgk block, header, whole row) produced the identical
+                # tooltip result regardless of which one — consistent with
+                # the row having a single shared hover/click handler on a
+                # wrapping element, where the real "open edit mode" trigger
+                # might not even exist in the static outerHTML dumped so far
+                # (those dumps were taken via el.outerHTML with no real mouse
+                # movement — if Meta conditionally renders an edit affordance
+                # only on :hover via React state, a dump without a real hover
+                # would never see it). Hover first (real mouse move + dwell,
+                # not a click) and re-dump the row afterward to check for a
+                # newly-appeared button/pencil-icon before falling back to
+                # the same click cascade as before.
+                try:
+                    row.hover(timeout=2000)
+                    time.sleep(0.6)
+                    hover_dump = row.evaluate("el => el.outerHTML")
+                    Path("output/debug_locations_row_html_after_hover.txt").write_text(
+                        hover_dump[:6000], encoding="utf-8"
+                    )
+                except Exception:
+                    pass
+                for hover_sel in ("button", "[role=button]", "[aria-label*=edit i]", "a"):
+                    try:
+                        hover_btn = row.locator(hover_sel).first
+                        if hover_btn.count() and hover_btn.is_visible():
+                            box = hover_btn.bounding_box()
+                            if box and box.get("width", 0) > 0:
+                                _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                            else:
+                                hover_btn.click(timeout=3000)
+                            clicked = True
+                            break
+                    except Exception:
+                        continue
                 inclusion_block = row.locator("._7zgk").first
-                for candidate in (inclusion_block, heading.locator("xpath=ancestor::*[2]"), row):
+                for candidate in ([] if clicked else [inclusion_block, heading.locator("xpath=ancestor::*[2]"), row]):
                     try:
                         box = candidate.bounding_box()
                         if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
@@ -3317,6 +3364,23 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                 inp.fill(search_term, timeout=5000)
                 time.sleep(1.5)
                 return _pick_country_suggestion(root, page, search_term)
+            except Exception:
+                pass
+        else:
+            # No element matched our placeholder list, but the click may
+            # still have focused a hidden/proxy input — Meta sometimes keeps
+            # the real text field opacity:0 or zero-width behind the
+            # read-only summary until typing starts (per live user request
+            # 2026-07-24: "just try typing the country" instead of only
+            # hunting for a visible input first). Type blind at whatever
+            # currently has focus and only declare success if a real
+            # suggestion list actually shows up — otherwise this would
+            # falsely report success on a stray keystroke landing nowhere.
+            try:
+                page.keyboard.type(search_term, delay=40)
+                time.sleep(1.5)
+                if page.locator("[role=option]:visible, li[role=option]").first.count():
+                    return _pick_country_suggestion(page, page, search_term)
             except Exception:
                 pass
         time.sleep(0.5)
