@@ -2183,26 +2183,48 @@ def run_recorded_campaign_flow(
     # optimistically returns True after a click/Enter, without checking what
     # actually got selected) — treat its return value as a weaker signal than
     # the other steps in this function until that's tightened up.
+    # Audience fill-in (Locations / Age / Targeting): best-effort from here
+    # on, per explicit direction — if one field doesn't click, log it and
+    # move on to the next rather than aborting the whole run. soft_fails
+    # collects what didn't work so the caller/diary can see exactly which
+    # pieces still need a live fix, without losing the rest of the segment.
+    soft_fails: list[str] = []
+
     if country:
         _shot("before_audience_location")
         try:
+            all_placeholders = page.evaluate(
+                "() => Array.from(document.querySelectorAll('input[placeholder]'))"
+                ".filter(el => el.offsetParent !== null)"
+                ".map(el => el.placeholder)"
+            )
+            Path("output/debug_visible_placeholders.txt").write_text(
+                "visible input placeholders before fill_audience_location:\n"
+                + "\n".join(all_placeholders),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+        try:
             if not fill_audience_location(page, country):
                 _shot("fail_audience_location")
-                return "audience_location"
-            _shot("after_audience_location")
-        except Exception:
+                soft_fails.append("audience_location")
+            else:
+                _shot("after_audience_location")
+        except Exception as exc:
             _shot("fail_audience_location")
-            return "audience_location"
+            soft_fails.append(f"audience_location:{str(exc)[:60]}")
 
     # Age — same reused, not-yet-independently-verified function.
     try:
         if not fill_audience_age(page, age_min, age_max):
             _shot("fail_audience_age")
-            return "audience_age"
-        _shot("after_audience_age")
-    except Exception:
+            soft_fails.append("audience_age")
+        else:
+            _shot("after_audience_age")
+    except Exception as exc:
         _shot("fail_audience_age")
-        return "audience_age"
+        soft_fails.append(f"audience_age:{str(exc)[:60]}")
 
     # Detailed targeting: paste each comma-separated interest term and pick
     # the first autocomplete suggestion — same pattern the old recipe_player
@@ -2211,19 +2233,28 @@ def run_recorded_campaign_flow(
         try:
             if not open_detailed_targeting_field(page):
                 _shot("fail_targeting_open")
-                return "targeting_open"
-            any_added = False
-            for term in [t.strip() for t in targeting_label.split(",") if t.strip()]:
-                if fill_targeting_interest(page, term):
-                    pick_first_suggestion(page)
-                    any_added = True
-                    time.sleep(0.4)
-            _shot("after_targeting" if any_added else "fail_targeting_none_added")
-            if not any_added:
-                return "targeting"
-        except Exception:
+                soft_fails.append("targeting_open")
+            else:
+                any_added = False
+                for term in [t.strip() for t in targeting_label.split(",") if t.strip()]:
+                    if fill_targeting_interest(page, term):
+                        pick_first_suggestion(page)
+                        any_added = True
+                        time.sleep(0.4)
+                _shot("after_targeting" if any_added else "fail_targeting_none_added")
+                if not any_added:
+                    soft_fails.append("targeting_none_added")
+        except Exception as exc:
             _shot("fail_targeting")
-            return "targeting"
+            soft_fails.append(f"targeting:{str(exc)[:60]}")
+
+    if soft_fails:
+        try:
+            Path("output/debug_audience_soft_fails.txt").write_text(
+                "\n".join(soft_fails), encoding="utf-8"
+            )
+        except Exception:
+            pass
 
     return ""
 
@@ -2898,13 +2929,12 @@ def select_conversion_event_lead(page: Page) -> bool:
 
 def open_detailed_targeting_field(page: Page) -> bool:
     """Scroll to Audience and focus the Detailed targeting interests input."""
-    scroll_to_section(
-        page,
-        "Audience",
-        "Audiencia",
-        "Detailed targeting",
-        "Segmentación detallada",
-    )
+    # Same reasoning as fill_audience_location/fill_audience_age: skip the
+    # scroll_to_section("Audience", ...) pre-scroll — "Audience" as the FIRST
+    # label tried is exactly the fallback confirmed live 2026-07-24 to jump
+    # all the way back up to that section's top-level heading instead of the
+    # specific Detailed targeting input further down. get_by_placeholder(...)
+    # below targets the actual input directly and auto-scrolls it into view.
     placeholders = [
         re.compile(r"Add interests", re.I),
         re.compile(r"interests, behaviors", re.I),
@@ -3097,7 +3127,16 @@ def _country_search_term(code: str) -> str:
 def fill_audience_location(page: Page, country_code: str) -> bool:
     """Type country into Audience → Locations input and pick first suggestion."""
     search_term = _country_search_term(country_code)
-    scroll_to_section(page, "Locations", "Ubicaciones", "Audience", "Audiencia")
+    # Don't call scroll_to_section here at all — confirmed live 2026-07-24
+    # (recorded_flow path) that this page was ALREADY correctly positioned
+    # with Locations clearly visible before this function ran (screenshot
+    # evidence), yet scroll_to_section's own "Locations"/"Audience" text
+    # search matched some OTHER instance of that text earlier in the DOM and
+    # scrolled all the way back up to it, leaving the real field off-screen
+    # for every placeholder/input search below. get_by_placeholder(...) below
+    # targets the specific input directly and Playwright's own .click()/
+    # .fill() already auto-scroll that exact element into view — no need to
+    # pre-scroll via a much fuzzier heading/text match first.
     time.sleep(0.4)
 
     location_placeholders = [
@@ -3165,7 +3204,10 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
 
 def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     """Set audience age range dropdowns / inputs (min and max)."""
-    scroll_to_section(page, "Age", "Edad")
+    # Same reasoning as fill_audience_location: skip the fuzzy
+    # scroll_to_section heading match — the precise marker search a few
+    # lines below (exact "^Age$|^Edad$" match) already does its own
+    # scroll_into_view_if_needed on the correct element.
     time.sleep(0.3)
     age_min_str = str(age_min)
     age_max_str = str(age_max) if age_max < 65 else "65+"
