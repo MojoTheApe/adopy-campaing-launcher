@@ -3169,17 +3169,31 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
             heading.wait_for(state="visible", timeout=3000)
             heading.scroll_into_view_if_needed(timeout=3000)
             row = heading.locator("xpath=ancestor::*[3]")
-            clicked = False
-            # Prefer clicking the "Inclusion: <value>" line itself — confirmed
-            # live 2026-07-24 that trying button/svg/a FIRST landed on the
-            # "ⓘ" info-tooltip icon next to the heading (opened a help
-            # tooltip explaining location formats, not edit mode) since it's
-            # the nearest matching element, not the actual edit control.
             try:
-                inclusion = row.get_by_text(re.compile(r"^Inclusion:", re.I)).first
-                if inclusion.is_visible(timeout=1500):
-                    inclusion.click(timeout=3000)
-                    clicked = True
+                html_dump = row.evaluate("el => el.outerHTML")
+                Path("output/debug_locations_row_html.txt").write_text(
+                    html_dump[:6000], encoding="utf-8"
+                )
+            except Exception:
+                pass
+            clicked = False
+            # Ground truth from a live outerHTML dump (2026-07-24,
+            # output/debug_locations_row_html.txt): this row has NO real
+            # button/link/role=button anywhere. The only SVG present is the
+            # "ⓘ" info icon, explicitly role="presentation" (non-interactive
+            # per ARIA — yet it kept absorbing every earlier click attempt
+            # anyway) and the "Inclusion: <value>" text is a bare
+            # <span><strong>Inclusion:</strong> value</span> with no click
+            # affordance markers. Meta's edit-on-click handler is most likely
+            # bound to that span's own wrapping div — locate it via the
+            # <strong>Inclusion</strong> tag (stable, semantic) and click its
+            # immediate parent div, not any inner text/icon.
+            try:
+                strong_el = row.locator("strong", has_text=re.compile("Inclusion", re.I)).first
+                strong_el.wait_for(state="visible", timeout=2000)
+                wrapper = strong_el.locator("xpath=ancestor::div[1]")
+                wrapper.click(timeout=3000)
+                clicked = True
             except Exception:
                 pass
             if not clicked:
