@@ -3141,6 +3141,47 @@ def _country_search_term(code: str) -> str:
     return raw
 
 
+def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
+    """Pick the country-level suggestion from an open location autocomplete.
+
+    Facebook's location search often lists several granularities for the
+    same typed text (e.g. a "Costa Rica (Country)" entry alongside a city or
+    region that happens to share the name) — per live user guidance
+    (2026-07-24), prefer the option explicitly tagged "(Country)" over a
+    blind first-match, since picking the wrong granularity would silently
+    narrow targeting instead of the whole country. Falls back to the first
+    visible option, then a bare Enter, if no country-tagged option shows up.
+    """
+    country_re = re.compile(rf"^{re.escape(search_term)}\s*\(country\)", re.I)
+    for sel in ("[role=option]:visible", "li[role=option]"):
+        try:
+            opt = root.locator(sel).filter(has_text=country_re).first
+            if opt.count() and opt.is_visible():
+                opt.click(timeout=4000)
+                time.sleep(0.6)
+                return True
+        except Exception:
+            continue
+    for sel in (
+        "[role=option]:visible",
+        "[role=listbox] [role=option]:first-child",
+        "li[role=option]:first-child",
+        "ul[role=listbox] li:first-child",
+        "li[role=option]",
+    ):
+        try:
+            sug = root.locator(sel).first
+            if sug.count() and sug.is_visible():
+                sug.click(timeout=4000)
+                time.sleep(0.6)
+                return True
+        except Exception:
+            continue
+    page.keyboard.press("Enter")
+    time.sleep(0.5)
+    return True
+
+
 def fill_audience_location(page: Page, country_code: str) -> bool:
     """Type country into Audience → Locations input and pick first suggestion."""
     search_term = _country_search_term(country_code)
@@ -3163,55 +3204,29 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
     # the summary/edit control to expand it into edit mode first, the same
     # way Conversion location needed an explicit open-dropdown click before
     # any option became interactable.
-    for root in _roots(page):
-        try:
-            heading = root.get_by_text(re.compile(r"^Locations$|^Ubicaciones$", re.I)).first
-            heading.wait_for(state="visible", timeout=3000)
-            heading.scroll_into_view_if_needed(timeout=3000)
-            row = heading.locator("xpath=ancestor::*[3]")
-            try:
-                html_dump = row.evaluate("el => el.outerHTML")
-                Path("output/debug_locations_row_html.txt").write_text(
-                    html_dump[:6000], encoding="utf-8"
-                )
-            except Exception:
-                pass
-            clicked = False
-            # Ground truth from a live outerHTML dump (2026-07-24,
-            # output/debug_locations_row_html.txt): this row has NO real
-            # button/link/role=button anywhere. The only SVG present is the
-            # "ⓘ" info icon, explicitly role="presentation" (non-interactive
-            # per ARIA — yet it kept absorbing every earlier click attempt
-            # anyway) and the "Inclusion: <value>" text is a bare
-            # <span><strong>Inclusion:</strong> value</span> with no click
-            # affordance markers. Meta's edit-on-click handler is most likely
-            # bound to that span's own wrapping div — locate it via the
-            # <strong>Inclusion</strong> tag (stable, semantic) and click its
-            # immediate parent div, not any inner text/icon.
-            try:
-                strong_el = row.locator("strong", has_text=re.compile("Inclusion", re.I)).first
-                strong_el.wait_for(state="visible", timeout=2000)
-                wrapper = strong_el.locator("xpath=ancestor::div[1]")
-                wrapper.click(timeout=3000)
-                clicked = True
-            except Exception:
-                pass
-            if not clicked:
-                for sel in ("button", "[role=button]", "a"):
-                    try:
-                        btn = row.locator(sel).first
-                        if btn.count() and btn.is_visible():
-                            btn.click(timeout=3000)
-                            clicked = True
-                            break
-                    except Exception:
-                        continue
-            if clicked:
-                time.sleep(0.5)
-                break
-        except Exception:
-            continue
-
+    #
+    # Ground truth from a live outerHTML dump (2026-07-24,
+    # output/debug_locations_row_html.txt): this row has NO real
+    # button/link/role=button anywhere — only a role="presentation" (non-
+    # interactive per ARIA) info-icon SVG and a bare
+    # <span><strong>Inclusion:</strong> value</span>. Several locator-based
+    # .click() attempts on different targets in this row all produced the
+    # identical result — the info tooltip — which first looked like a
+    # hover-intercept (Playwright's click() moves the mouse first, which can
+    # trigger the icon's :hover tooltip before the press lands). Switching to
+    # a raw CDP click (no separate hover dwell) still hit the same tooltip on
+    # a live retest (2026-07-24) — but that time a fresh outerHTML dump
+    # proved "Locations" WAS located and scrolled to correctly right before
+    # the click, while the failure screenshot showed the page back at the
+    # Conversion section with the tooltip floating over it. So the real
+    # cause is a page-side scroll/re-render race between locate and click
+    # (already suspected in the diary's "unstable scroll after
+    # Further-limit-reach" notes), not purely a hover intercept — by the time
+    # the click fires, our computed coordinates may no longer point at
+    # Locations at all. Mitigation: retry the whole
+    # locate -> scroll -> click -> verify-edit-mode cycle a few times instead
+    # of trusting one shot, so a later attempt can catch the row after Meta's
+    # transient re-render settles.
     location_placeholders = [
         re.compile(r"Add locations?", re.I),
         re.compile(r"Agregar ubicaciones?", re.I),
@@ -3219,35 +3234,91 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
         re.compile(r"Buscar ubicaciones?", re.I),
         re.compile(r"Enter a location", re.I),
     ]
-    for root in _roots(page):
-        for ph in location_placeholders:
+
+    def _find_edit_mode_input():
+        for root in _roots(page):
+            for ph in location_placeholders:
+                try:
+                    inp = root.get_by_placeholder(ph).first
+                    if inp.count() and inp.is_visible():
+                        return root, inp
+                except Exception:
+                    continue
+        return None, None
+
+    dumped_html = False
+    for attempt in range(3):
+        for root in _roots(page):
             try:
-                inp = root.get_by_placeholder(ph).first
-                inp.wait_for(state="visible", timeout=5000)
-                inp.scroll_into_view_if_needed(timeout=5000)
-                inp.click(timeout=5000)
+                heading = root.get_by_text(re.compile(r"^Locations$|^Ubicaciones$", re.I)).first
+                heading.wait_for(state="visible", timeout=3000)
+                heading.scroll_into_view_if_needed(timeout=3000)
+                row = heading.locator("xpath=ancestor::*[3]")
+                if not dumped_html:
+                    try:
+                        html_dump = row.evaluate("el => el.outerHTML")
+                        Path("output/debug_locations_row_html.txt").write_text(
+                            html_dump[:6000], encoding="utf-8"
+                        )
+                        dumped_html = True
+                    except Exception:
+                        pass
+                clicked = False
+                header_block = heading.locator("xpath=ancestor::*[2]")
+                for candidate in (header_block, row):
+                    try:
+                        box = candidate.bounding_box()
+                        if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
+                            _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                            clicked = True
+                            break
+                    except Exception:
+                        continue
+                if not clicked:
+                    try:
+                        strong_el = row.locator("strong", has_text=re.compile("Inclusion", re.I)).first
+                        strong_el.wait_for(state="visible", timeout=2000)
+                        wrapper = strong_el.locator("xpath=ancestor::div[1]")
+                        box = wrapper.bounding_box()
+                        if box and box.get("width", 0) > 0:
+                            _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                        else:
+                            wrapper.click(timeout=3000)
+                        clicked = True
+                    except Exception:
+                        pass
+                if not clicked:
+                    for sel in ("button", "[role=button]", "a"):
+                        try:
+                            btn = row.locator(sel).first
+                            if btn.count() and btn.is_visible():
+                                btn.click(timeout=3000)
+                                clicked = True
+                                break
+                        except Exception:
+                            continue
+                if clicked:
+                    break
+            except Exception:
+                continue
+
+        # Check for the edit-mode input immediately rather than trusting the
+        # click blindly — if it didn't land (stale coordinates, tooltip),
+        # retry the whole locate+click cycle instead of falling straight
+        # through to a single 5s wait per placeholder.
+        time.sleep(0.5)
+        root, inp = _find_edit_mode_input()
+        if inp is not None:
+            try:
+                inp.scroll_into_view_if_needed(timeout=3000)
+                inp.click(timeout=3000)
                 time.sleep(0.3)
                 inp.fill(search_term, timeout=5000)
                 time.sleep(1.5)
-                for sug_sel in (
-                    "[role=option]:visible",
-                    "[role=listbox] [role=option]:first-child",
-                    "li[role=option]:first-child",
-                    "ul[role=listbox] li:first-child",
-                ):
-                    try:
-                        sug = root.locator(sug_sel).first
-                        if sug.count() and sug.is_visible():
-                            sug.click(timeout=4000)
-                            time.sleep(0.6)
-                            return True
-                    except Exception:
-                        continue
-                page.keyboard.press("Enter")
-                time.sleep(0.5)
-                return True
+                return _pick_country_suggestion(root, page, search_term)
             except Exception:
-                continue
+                pass
+        time.sleep(0.5)
 
     # Fallback: find any input near "Locations" label
     for root in _roots(page):
@@ -3262,14 +3333,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                     time.sleep(0.3)
                     inp.fill(search_term, timeout=5000)
                     time.sleep(1.5)
-                    sug = page.locator("[role=option]:visible, li[role=option]").first
-                    if sug.count() and sug.is_visible():
-                        sug.click(timeout=4000)
-                        time.sleep(0.6)
-                    else:
-                        page.keyboard.press("Enter")
-                        time.sleep(0.5)
-                    return True
+                    return _pick_country_suggestion(page, page, search_term)
         except Exception:
             pass
     return False
