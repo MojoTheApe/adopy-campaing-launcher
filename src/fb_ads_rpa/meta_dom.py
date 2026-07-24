@@ -3264,8 +3264,22 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                     except Exception:
                         pass
                 clicked = False
-                header_block = heading.locator("xpath=ancestor::*[2]")
-                for candidate in (header_block, row):
+                # Attempt #8 (2026-07-24): every prior attempt targeted the
+                # header (Locations text + info icon) or the whole row and
+                # always landed on the icon's own legitimate tooltip instead
+                # of opening edit mode — 3 identical failures across 2 live
+                # sessions ruled out both "wrong sub-target within the header"
+                # and "scroll/render race" as the cause. The one sibling
+                # block never actually tried in isolation is `_7zgk` (the
+                # "Inclusion: <value>" + empty `<ul class="_7zgl">` chip-list
+                # group right below the header) — it was only reachable as an
+                # "if not clicked" fallback that could never run, because the
+                # header/row click above never raised (bounding_box always
+                # resolves, CDP click never throws), so `clicked` was already
+                # True before this branch could execute. Try it FIRST and in
+                # isolation this time.
+                inclusion_block = row.locator("._7zgk").first
+                for candidate in (inclusion_block, heading.locator("xpath=ancestor::*[2]"), row):
                     try:
                         box = candidate.bounding_box()
                         if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
@@ -3274,19 +3288,6 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                             break
                     except Exception:
                         continue
-                if not clicked:
-                    try:
-                        strong_el = row.locator("strong", has_text=re.compile("Inclusion", re.I)).first
-                        strong_el.wait_for(state="visible", timeout=2000)
-                        wrapper = strong_el.locator("xpath=ancestor::div[1]")
-                        box = wrapper.bounding_box()
-                        if box and box.get("width", 0) > 0:
-                            _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-                        else:
-                            wrapper.click(timeout=3000)
-                        clicked = True
-                    except Exception:
-                        pass
                 if not clicked:
                     for sel in ("button", "[role=button]", "a"):
                         try:
