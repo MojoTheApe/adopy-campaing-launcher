@@ -2162,11 +2162,28 @@ def run_recorded_campaign_flow(
                 btn = root.get_by_role("button", name=re.compile(r"^continue$", re.I)).first
                 if btn.is_visible(timeout=1500):
                     btn.click(timeout=4000)
-                    time.sleep(0.6)
                     continued = True
                     break
             except Exception:
                 continue
+        if continued:
+            # Confirmed live 2026-07-24: the scroll position after this
+            # Continue click was inconsistent between runs (sometimes
+            # Locations/Age already visible, sometimes the page ended up
+            # back at the top) — a fixed sleep(0.6) wasn't enough to let
+            # Meta's own re-render/verification settle. Wait for the actual
+            # markers instead: the "Verifying your edits..." indicator, then
+            # the "You've switched audience setup" toast to appear AND clear.
+            wait_editor_saved(page)
+            try:
+                toast = page.get_by_text(
+                    re.compile(r"You've switched audience setup", re.I)
+                ).first
+                toast.wait_for(state="visible", timeout=3000)
+                toast.wait_for(state="hidden", timeout=8000)
+            except Exception:
+                pass
+            time.sleep(0.5)
         _shot("after_further_limit_continue" if continued else "fail_further_limit_continue")
         if not continued:
             return "further_limit_reach_continue"
@@ -3138,6 +3155,48 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
     # .fill() already auto-scroll that exact element into view — no need to
     # pre-scroll via a much fuzzier heading/text match first.
     time.sleep(0.4)
+
+    # Locations renders as a collapsed read-only summary ("Locations /
+    # Inclusion: Hong Kong") with no visible input at all — confirmed live
+    # 2026-07-24 via a placeholder dump (only "Ad set name" and "Search
+    # existing audiences" were visible, no location-related input). Click
+    # the summary/edit control to expand it into edit mode first, the same
+    # way Conversion location needed an explicit open-dropdown click before
+    # any option became interactable.
+    for root in _roots(page):
+        try:
+            heading = root.get_by_text(re.compile(r"^Locations$|^Ubicaciones$", re.I)).first
+            heading.wait_for(state="visible", timeout=3000)
+            heading.scroll_into_view_if_needed(timeout=3000)
+            row = heading.locator("xpath=ancestor::*[3]")
+            clicked = False
+            # Prefer clicking the "Inclusion: <value>" line itself — confirmed
+            # live 2026-07-24 that trying button/svg/a FIRST landed on the
+            # "ⓘ" info-tooltip icon next to the heading (opened a help
+            # tooltip explaining location formats, not edit mode) since it's
+            # the nearest matching element, not the actual edit control.
+            try:
+                inclusion = row.get_by_text(re.compile(r"^Inclusion:", re.I)).first
+                if inclusion.is_visible(timeout=1500):
+                    inclusion.click(timeout=3000)
+                    clicked = True
+            except Exception:
+                pass
+            if not clicked:
+                for sel in ("button", "[role=button]", "a"):
+                    try:
+                        btn = row.locator(sel).first
+                        if btn.count() and btn.is_visible():
+                            btn.click(timeout=3000)
+                            clicked = True
+                            break
+                    except Exception:
+                        continue
+            if clicked:
+                time.sleep(0.5)
+                break
+        except Exception:
+            continue
 
     location_placeholders = [
         re.compile(r"Add locations?", re.I),
