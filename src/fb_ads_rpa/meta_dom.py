@@ -1893,6 +1893,10 @@ def run_recorded_campaign_flow(
     campaign_name: str,
     budget: str,
     adset_name: str,
+    country: str = "",
+    age_min: int = 18,
+    age_max: int = 65,
+    targeting_label: str = "",
 ) -> str:
     """Create -> Website, using the exact locators from a verified human
     Playwright codegen recording (2026-07-21) instead of the label/breadcrumb/
@@ -1964,7 +1968,13 @@ def run_recorded_campaign_flow(
     # accounts used so far): the banner sat at the very top of the page and
     # the flow never got past the campaigns list, suggesting it covered or
     # shifted the Create button just enough to miss it.
-    _dismiss_floating_banners(page)
+    # Retry the dismiss a few times with a short wait — confirmed live
+    # 2026-07-24 that a single dismiss attempt can run before the banner has
+    # actually rendered (intermittent: worked on one run, didn't on the next
+    # against the same account), leaving it in place to block/shift Create.
+    for _ in range(3):
+        _dismiss_floating_banners(page)
+        time.sleep(0.4)
     if not _click(page.get_by_role("button", name="Create", exact=True)):
         return "create"
     _shot("after_create")
@@ -2163,6 +2173,57 @@ def run_recorded_campaign_flow(
     except Exception:
         _shot("fail_further_limit_reach")
         return "further_limit_reach"
+
+    # Locations: confirmed live 2026-07-24 that without an explicit fill here,
+    # this defaults to whatever Meta last used (seen: Hong Kong) instead of
+    # the draft's actual country — a real targeting-correctness bug, not just
+    # a missing nice-to-have. Reuses fill_audience_location(), which was
+    # written for the older recipe_player delegated path and has NOT been
+    # independently re-verified the way Website/Conversion event were (it
+    # optimistically returns True after a click/Enter, without checking what
+    # actually got selected) — treat its return value as a weaker signal than
+    # the other steps in this function until that's tightened up.
+    if country:
+        _shot("before_audience_location")
+        try:
+            if not fill_audience_location(page, country):
+                _shot("fail_audience_location")
+                return "audience_location"
+            _shot("after_audience_location")
+        except Exception:
+            _shot("fail_audience_location")
+            return "audience_location"
+
+    # Age — same reused, not-yet-independently-verified function.
+    try:
+        if not fill_audience_age(page, age_min, age_max):
+            _shot("fail_audience_age")
+            return "audience_age"
+        _shot("after_audience_age")
+    except Exception:
+        _shot("fail_audience_age")
+        return "audience_age"
+
+    # Detailed targeting: paste each comma-separated interest term and pick
+    # the first autocomplete suggestion — same pattern the old recipe_player
+    # path used for this exact field.
+    if targeting_label:
+        try:
+            if not open_detailed_targeting_field(page):
+                _shot("fail_targeting_open")
+                return "targeting_open"
+            any_added = False
+            for term in [t.strip() for t in targeting_label.split(",") if t.strip()]:
+                if fill_targeting_interest(page, term):
+                    pick_first_suggestion(page)
+                    any_added = True
+                    time.sleep(0.4)
+            _shot("after_targeting" if any_added else "fail_targeting_none_added")
+            if not any_added:
+                return "targeting"
+        except Exception:
+            _shot("fail_targeting")
+            return "targeting"
 
     return ""
 

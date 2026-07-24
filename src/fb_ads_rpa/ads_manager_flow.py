@@ -2138,8 +2138,12 @@ class AdsManagerFlow:
                 campaign_name=draft.name,
                 budget=str(ad_set.daily_budget or ""),
                 adset_name=ad_set.name,
+                country=draft.country,
+                age_min=ad_set.age_min,
+                age_max=ad_set.age_max,
+                targeting_label=ad_set.targeting_label,
             )
-            result.steps_completed.append("recorded_flow:reached_conversion_event" if not fail_step else f"recorded_flow_fail:{fail_step}")
+            result.steps_completed.append("recorded_flow:reached_targeting" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step
             if fail_step:
                 result.error = f"Recorded flow failed at: {fail_step}"
