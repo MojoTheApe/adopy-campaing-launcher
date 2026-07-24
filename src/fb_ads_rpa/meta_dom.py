@@ -621,42 +621,56 @@ def is_website_conversion_selected(page: Page) -> bool:
     script = """
     () => {
       const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
-      // Find the 'Conversion location' label, then its nearest button/combobox sibling.
-      // We only read the button's OWN text (firstChild text nodes), ignoring descendants
-      // that may contain banner text.
-      for (const lbl of document.querySelectorAll('label, [role=label], span, div')) {
-        const lt = norm(lbl.textContent);
-        if (lt !== 'conversion location' && !lt.startsWith('conversion location')) continue;
-        if (lbl.offsetParent === null) continue;
+      const ownText = (el) => norm(
+        Array.from(el.childNodes)
+          .filter(n => n.nodeType === Node.TEXT_NODE)
+          .map(n => n.textContent).join('')
+      );
 
-        // Walk up to find the section container
-        let section = lbl.parentElement;
-        for (let i = 0; i < 6 && section; i++, section = section.parentElement) {
-          // Look for a button/combobox within this section
-          for (const btn of section.querySelectorAll(
-            '[role="button"], [role="combobox"], button, select'
-          )) {
-            if (btn.offsetParent === null) continue;
-            // Read ONLY direct text node children (ignores nested elements like banners)
-            const ownText = norm(
-              Array.from(btn.childNodes)
-                .filter(n => n.nodeType === Node.TEXT_NODE)
-                .map(n => n.textContent).join('')
-              || btn.getAttribute('aria-label')
-              || btn.value
-              || btn.textContent  // fallback
-            );
-            if (ownText === 'website' || ownText === 'sitio web') return true;
-            // If we found a conversion-location-related button, stop searching upward
-            if (ownText.includes('website') || ownText.includes('sitio web') ||
-                ownText.includes('instant') || ownText.includes('formulario')) {
-              return ownText === 'website' || ownText === 'sitio web';
-            }
-          }
-          // Stop if we hit a section boundary
-          const role = (section.getAttribute('role') || '').toLowerCase();
-          if (role === 'region' || role === 'main' || role === 'dialog') break;
+      // Find the small 'Conversion location' heading/label element itself
+      // (not a big wrapping container — cap children count so we get the
+      // heading, not a div that also wraps the description + control).
+      let marker = null;
+      for (const el of document.querySelectorAll('label, [role=label], span, div, h2, h3, [role=heading]')) {
+        if (el.offsetParent === null || el.children.length > 2) continue;
+        const t = norm(el.textContent);
+        if (t === 'conversion location' || t === 'ubicación de la conversión' ||
+            t.startsWith('conversion location') || t.startsWith('ubicación de la conversión')) {
+          marker = el;
+          break;
         }
+      }
+      if (!marker) return false;
+
+      // Walk forward in DOCUMENT ORDER from the marker (TreeWalker over the
+      // whole body), not up-then-back-down through querySelectorAll on an
+      // ancestor — that pattern matched elements anywhere inside a large
+      // section (confirmed live 2026-07-24: a role-restricted version found
+      // nothing at all since Meta's trigger has no button/combobox role, and
+      // a div/span-widened version over-matched banner/description text
+      // instead of the actual small trigger). Direct own-text-node equality
+      // on each candidate, closest one after the marker, is what the earlier
+      // 'after selection the menu collapses to a compact dropdown showing
+      // just the value' behavior actually looks like in the DOM.
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+      walker.currentNode = marker;
+      let steps = 0;
+      while (walker.nextNode() && steps < 400) {
+        steps++;
+        const el = walker.currentNode;
+        if (el.offsetParent === null) continue;
+        const t = ownText(el);
+        if (!t || t.length > 40) continue;
+        if (t === 'website' || t === 'sitio web') return true;
+        if (t === 'website and instant forms' || t === 'website and calls' ||
+            t === 'instant forms and messenger' ||
+            t.includes('website') || t.includes('instant') || t.includes('formulario')) {
+          // First conversion-location-flavored value we hit after the marker
+          // is the current trigger value — stop here either way.
+          return false;
+        }
+        // 'Conversion event' marks the end of this section — stop searching.
+        if (t === 'conversion event' || t === 'evento de conversión') break;
       }
       return false;
     }
@@ -1807,7 +1821,7 @@ def _pick_website_from_open_menu(page: Page) -> bool:
         return True
     if _pick_website_from_aria_controls(page):
         time.sleep(0.5)
-        return is_website_conversion_selected(page) or True
+        return is_website_conversion_selected(page)
 
     return is_website_conversion_selected(page)
 
@@ -1944,6 +1958,13 @@ def run_recorded_campaign_flow(
         except Exception:
             pass
 
+    # Dismiss any dismissible top banner (e.g. "We're evolving how we measure
+    # results") before the very first click — confirmed live 2026-07-24 on a
+    # fresh account (existing real campaigns, unlike the emptier test
+    # accounts used so far): the banner sat at the very top of the page and
+    # the flow never got past the campaigns list, suggesting it covered or
+    # shifted the Create button just enough to miss it.
+    _dismiss_floating_banners(page)
     if not _click(page.get_by_role("button", name="Create", exact=True)):
         return "create"
     _shot("after_create")
@@ -2024,18 +2045,18 @@ def run_recorded_campaign_flow(
     # which this custom dropdown doesn't use (consistent with the rest of
     # today's findings: this UI is light on real ARIA roles) — check for the
     # "Website" radio text directly instead.
-    try:
-        page.get_by_role("radio", name="Website", exact=True).wait_for(state="visible", timeout=8000)
-    except Exception:
-        _shot("fail_conversion_location_menu")
-        return "conversion_location_menu"
     _shot("after_conversion_menu_open")
 
-    website_radio = page.get_by_role("radio", name="Website", exact=True)
-    if not _click(website_radio):
-        if not pick_website_conversion_option(page):
-            _shot("fail_conversion_website")
-            return "conversion_website"
+    # Don't trust a bare radio click here: "Website" lives inside the "Single"
+    # accordion, which the live run today (2026-07-24) showed is NOT always
+    # already expanded despite this file's older comment — a coordinate-based
+    # click can silently land on the still-visible "Website and instant forms"
+    # (Multiple) option instead. pick_website_conversion_option() already
+    # handles expanding Single first and tries several verified click
+    # strategies, so use it directly instead of a fragile inline attempt.
+    if not pick_website_conversion_option(page):
+        _shot("fail_conversion_website")
+        return "conversion_website"
 
     time.sleep(0.6)
     _shot("after_website_click")
@@ -2045,42 +2066,104 @@ def run_recorded_campaign_flow(
     except Exception:
         pass
 
-    # Menu auto-collapses to a compact dropdown right after selection — the
-    # radio locator from before no longer resolves, and is_website_conversion_
-    # selected() walks up from the "Conversion location" label and can pick up
-    # a green "Instant forms" suggestion banner's buttons before reaching the
-    # real control (confirmed live 2026-07-21: both false-negative even with
-    # "Website" plainly showing in the collapsed dropdown). Simplest reliable
-    # check: an exact, standalone "Website" own-text node, small and visible —
-    # same own-text pattern already used elsewhere in this file. Excludes
-    # "Website and instant forms" / "Website and calls" by requiring exact
-    # equality on the trimmed own text.
-    website_confirmed = False
-    try:
-        website_confirmed = bool(
-            page.evaluate(
-                """
-                () => {
-                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                  for (const el of document.querySelectorAll('div, span, button, [role=combobox]')) {
-                    if (!el.offsetParent) continue;
-                    const kids = Array.from(el.childNodes).filter(n => n.nodeType === 3);
-                    const own = norm(kids.map(n => n.textContent).join(''));
-                    if (own === 'Website') return true;
-                  }
-                  return false;
-                }
-                """
-            )
-        )
-    except Exception:
-        pass
-
-    if not website_confirmed:
+    # is_website_conversion_selected() reads ONLY the dropdown trigger's own
+    # text (ignoring nested banners), so it correctly distinguishes "Website"
+    # from "Website and instant forms" — a whole-page text-node scan (the
+    # previous approach here) found a live false positive today (2026-07-24):
+    # it matched a "Website" text node still present in the DOM inside a
+    # collapsed-but-not-removed "Single" section, even though the visible
+    # dropdown still showed "Website and instant forms".
+    if not is_website_conversion_selected(page):
         _shot("fail_conversion_website_verify")
         return "conversion_website_verify"
 
     _shot("success_website_selected")
+
+    # Next segment past Website: Conversion event = Lead. Reuses the existing
+    # select_conversion_event_lead()/is_lead_conversion_event_selected() pair
+    # (already used by the older recipe_player delegated-section path) rather
+    # than writing a new implementation — but don't assume it's correct just
+    # because it exists; verify it live the same way Website's check just got
+    # caught being wrong.
+    if not select_conversion_event_lead(page):
+        _shot("fail_conversion_event")
+        return "conversion_event"
+    _shot("success_conversion_event")
+
+    # Next segment: Audience section, "Further limit the reach of your ads"
+    # (gear icon, collapsed by default under Suggest an audience) — confirmed
+    # live 2026-07-24 that the wizard actually reaches this screen. First
+    # pass: just expand it and screenshot: what's inside hasn't been mapped
+    # yet, so don't assume a shape for it — the next iteration reads this
+    # screenshot to decide what (if anything) needs filling in here.
+    try:
+        scroll_to_section(page, "Audience")
+        opened = False
+        for _ in range(5):
+            try:
+                el = page.get_by_text(
+                    re.compile(r"further limit the reach of your ads", re.I)
+                ).first
+                el.scroll_into_view_if_needed(timeout=5000)
+                el.click(timeout=5000)
+                time.sleep(0.6)
+                opened = True
+                break
+            except Exception:
+                # Not rendered/visible yet — nudge the page down and retry
+                # rather than assuming the text is simply absent.
+                try:
+                    page.mouse.wheel(0, 400)
+                except Exception:
+                    pass
+                time.sleep(0.6)
+        _shot("after_further_limit_reach" if opened else "fail_further_limit_reach_click")
+        if not opened:
+            return "further_limit_reach"
+
+        # The link opens a confirmation modal ("Reach your preferred
+        # audiences") with 3 radio choices; "Stay in current setup" is
+        # selected by default. Pick the "Further limit the reach of your
+        # ads" radio specifically (matches the same phrase as the link that
+        # opened this modal, but scoped to the dialog so we don't re-match
+        # the now-hidden link behind it), then Continue.
+        picked_radio = False
+        for root in _roots(page):
+            try:
+                dialog = root.get_by_role("dialog").first
+                if not dialog.is_visible(timeout=1500):
+                    continue
+                option = dialog.get_by_text(
+                    re.compile(r"further limit the reach of your ads", re.I)
+                ).first
+                option.scroll_into_view_if_needed(timeout=3000)
+                option.click(timeout=4000)
+                picked_radio = True
+                break
+            except Exception:
+                continue
+        _shot("after_pick_further_limit_radio" if picked_radio else "fail_pick_further_limit_radio")
+        if not picked_radio:
+            return "further_limit_reach_radio"
+
+        continued = False
+        for root in _roots(page):
+            try:
+                btn = root.get_by_role("button", name=re.compile(r"^continue$", re.I)).first
+                if btn.is_visible(timeout=1500):
+                    btn.click(timeout=4000)
+                    time.sleep(0.6)
+                    continued = True
+                    break
+            except Exception:
+                continue
+        _shot("after_further_limit_continue" if continued else "fail_further_limit_continue")
+        if not continued:
+            return "further_limit_reach_continue"
+    except Exception:
+        _shot("fail_further_limit_reach")
+        return "further_limit_reach"
+
     return ""
 
 
@@ -2479,18 +2562,39 @@ def _section_field_display_value(page: Page, section_labels: list[str]) -> str:
 
 
 def _click_section_dropdown(page: Page, section_labels: list[str]) -> bool:
-    scroll_to_section(page, *section_labels)
+    scrolled = scroll_to_section(page, *section_labels)
     # Use partial-match patterns so "* Conversion event" matches "Conversion event"
     patterns = [
         re.compile(re.escape(label), re.I)
         for label in section_labels
         if label.strip()
     ]
+    _dbg = []
+    _dbg.append(f"scroll_to_section({section_labels}) -> {scrolled}")
     for root in _roots(page):
         for pattern in patterns:
             try:
+                match_count = root.get_by_text(pattern).count()
                 marker = root.get_by_text(pattern).first
+                try:
+                    mbox = marker.bounding_box()
+                    mtext = marker.evaluate("el => (el.textContent||'').trim().slice(0,80)")
+                except Exception as exc:
+                    mbox, mtext = None, f"<err:{exc}>"
+                _dbg.append(f"pattern={pattern.pattern!r} match_count={match_count} box={mbox} text={mtext!r}")
                 marker.scroll_into_view_if_needed(timeout=5000)
+                # scroll_into_view_if_needed aligns to the nearest edge, which
+                # can leave the marker right at the bottom of the viewport with
+                # its actual dropdown control (rendered below the label) still
+                # off-screen — confirmed live 2026-07-24 for "Conversion event"
+                # (screenshot showed just the label text at the very bottom
+                # edge, control not visible). Force a centered scroll instead
+                # so there's room below for whatever control follows the label.
+                try:
+                    marker.evaluate("el => el.scrollIntoView({block: 'center', behavior: 'instant'})")
+                    page.wait_for_timeout(300)
+                except Exception:
+                    pass
                 for depth in range(1, 14):
                     row = marker.locator(f"xpath=ancestor::*[{depth}]")
                     for sel in (
@@ -2499,20 +2603,72 @@ def _click_section_dropdown(page: Page, section_labels: list[str]) -> bool:
                         "[aria-haspopup='menu']",
                         "[role=button]",
                         "button",
+                        # Same class of bug fixed today for conversion location:
+                        # Meta's trigger here is very likely a role-less plain
+                        # div/span too, so the role-only selectors above never
+                        # matched anything and this function silently gave up
+                        # every time (confirmed live 2026-07-24 — 2 identical
+                        # failure screenshots). Restrict to elements with a
+                        # short own-text (a value/placeholder chip) so we don't
+                        # accidentally click a large wrapping container.
+                        "div",
+                        "span",
                     ):
                         try:
                             # Use .first (not .last) — the field's own button is always
                             # the first/nearest control relative to its label; using .last
                             # can accidentally pick a button from a LOWER section.
                             ctrl = row.locator(sel).first
+                            if sel in ("div", "span"):
+                                own = (ctrl.evaluate(
+                                    "el => Array.from(el.childNodes)"
+                                    ".filter(n => n.nodeType === 3)"
+                                    ".map(n => n.textContent).join('').trim()"
+                                ) if ctrl.count() else "")
+                                if not own or len(own) > 60:
+                                    continue
+                                # Reject the label's own text (e.g. "Conversion
+                                # event") and anything positioned ABOVE the
+                                # marker — confirmed live 2026-07-24: an
+                                # unfiltered depth=1 span click "succeeded"
+                                # (no exception) but didn't open anything,
+                                # because it landed on a wrapper right next to
+                                # the label itself, not the control below it.
+                                own_norm = re.sub(r"\s+", " ", own).strip().lower()
+                                label_norm = re.sub(r"\s+", " ", pattern.pattern.replace("\\", "")).strip().lower()
+                                if own_norm == label_norm or own_norm.lstrip("*• ") == label_norm:
+                                    continue
+                                if mbox:
+                                    try:
+                                        cbox = ctrl.bounding_box()
+                                    except Exception:
+                                        cbox = None
+                                    if cbox and cbox["y"] < mbox["y"] - 2:
+                                        continue
                             if ctrl.count() and ctrl.is_visible():
                                 ctrl.click(timeout=5000)
                                 time.sleep(0.6)
+                                _dbg.append(f"CLICKED depth={depth} sel={sel!r} own={own if sel in ('div','span') else ''!r}")
+                                try:
+                                    Path("output/debug_conversion_event.txt").write_text(
+                                        "\n".join(_dbg), encoding="utf-8"
+                                    )
+                                except Exception:
+                                    pass
                                 return True
-                        except Exception:
+                            elif ctrl.count():
+                                _dbg.append(
+                                    f"depth={depth} sel={sel!r} count={ctrl.count()} visible=False"
+                                )
+                        except Exception as exc:
+                            _dbg.append(f"depth={depth} sel={sel!r} exc={exc}")
                             continue
-            except Exception:
-                pass
+            except Exception as exc:
+                _dbg.append(f"outer exc pattern={pattern.pattern!r}: {exc}")
+    try:
+        Path("output/debug_conversion_event.txt").write_text("\n".join(_dbg), encoding="utf-8")
+    except Exception:
+        pass
     return False
 
 
@@ -2558,16 +2714,102 @@ def _pick_menu_option(page: Page, option_labels: list[str]) -> bool:
                             continue
             except Exception:
                 pass
+    # Fallback: Meta's custom dropdowns repeatedly turn out not to use
+    # role=listbox/menu/option (confirmed today for conversion location's
+    # own trigger and menu) — if no role-based container matched at all,
+    # search the whole visible page for a small element whose own text is
+    # exactly one of the target labels (e.g. "Lead"), same own-text-only
+    # discipline used by is_website_conversion_selected's fix.
+    try:
+        for root in _roots(page):
+            found = root.evaluate(
+                """
+                (targets) => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+                  for (const el of document.querySelectorAll('div, span, li, [role]')) {
+                    if (!el.offsetParent) continue;
+                    const own = norm(Array.from(el.childNodes)
+                      .filter(n => n.nodeType === 3).map(n => n.textContent).join(''));
+                    if (own && targets.includes(own)) {
+                      el.scrollIntoView({block: 'center'});
+                      return true;
+                    }
+                  }
+                  return false;
+                }
+                """,
+                list(targets),
+            )
+            if found:
+                for label in option_labels:
+                    try:
+                        item = root.get_by_text(re.compile(rf"^{re.escape(label)}$", re.I)).first
+                        if item.is_visible():
+                            item.click(timeout=5000)
+                            time.sleep(0.6)
+                            return True
+                    except Exception:
+                        continue
+    except Exception:
+        pass
     return False
 
 
 def is_lead_conversion_event_selected(page: Page) -> bool:
-    current = _section_field_display_value(
-        page,
-        ["Conversion event", "Evento de conversión"],
-    )
-    if current:
-        return _norm_label(current) in {"lead", "leads", "cliente potencial", "prospecto"}
+    # _section_field_display_value's ancestor-walk-then-wide-descendant-search
+    # pattern produced a live false NEGATIVE today (2026-07-24) — a user
+    # watching the real browser confirmed "Lead" was genuinely selected and
+    # the wizard had already moved on to the Audience section three times,
+    # while this check kept reporting failure. Reuse the TreeWalker,
+    # own-text-only, forward-from-marker approach that fixed the equivalent
+    # false POSITIVE for is_website_conversion_selected — same underlying
+    # class of bug (over-broad or mismatched DOM traversal), different sign.
+    script = """
+    () => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      const ownText = (el) => norm(
+        Array.from(el.childNodes)
+          .filter(n => n.nodeType === Node.TEXT_NODE)
+          .map(n => n.textContent).join('')
+      );
+      let marker = null;
+      for (const el of document.querySelectorAll('label, [role=label], span, div, h2, h3, [role=heading]')) {
+        if (el.offsetParent === null || el.children.length > 2) continue;
+        const t = norm(el.textContent).replace(/^[*✱•\\s]+/, '');
+        if (t === 'conversion event' || t === 'evento de conversión' ||
+            t.startsWith('conversion event') || t.startsWith('evento de conversión')) {
+          marker = el;
+          break;
+        }
+      }
+      if (!marker) return false;
+      const targets = ['lead', 'leads', 'cliente potencial', 'prospecto'];
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+      walker.currentNode = marker;
+      let steps = 0;
+      while (walker.nextNode() && steps < 400) {
+        steps++;
+        const el = walker.currentNode;
+        if (el.offsetParent === null) continue;
+        const t = ownText(el);
+        if (!t || t.length > 40) continue;
+        if (targets.includes(t)) return true;
+        if (t === 'select an event or search by name' || t.includes('search')) {
+          // Empty/placeholder state — not selected, but this IS the field;
+          // no point scanning further past it for this section.
+          return false;
+        }
+        if (t === 'cost per result goal' || t === 'costo por resultado') break;
+      }
+      return false;
+    }
+    """
+    for root in _roots(page):
+        try:
+            if root.evaluate(script):
+                return True
+        except Exception:
+            pass
     return False
 
 

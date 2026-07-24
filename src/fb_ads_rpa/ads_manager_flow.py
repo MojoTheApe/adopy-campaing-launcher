@@ -2139,7 +2139,7 @@ class AdsManagerFlow:
                 budget=str(ad_set.daily_budget or ""),
                 adset_name=ad_set.name,
             )
-            result.steps_completed.append("recorded_flow:reached_website" if not fail_step else f"recorded_flow_fail:{fail_step}")
+            result.steps_completed.append("recorded_flow:reached_conversion_event" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step
             if fail_step:
                 result.error = f"Recorded flow failed at: {fail_step}"
