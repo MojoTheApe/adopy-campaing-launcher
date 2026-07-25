@@ -3747,38 +3747,93 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                 except Exception:
                     pass
                 if target_val != default_text:
-                    # STOPPED HERE (2026-07-25) after a second live incident:
-                    # even the container-scoped scroll+search version above
-                    # (safe from the earlier unscoped-click issue) was
-                    # followed, on the very next run, by the same "whole
-                    # Audience panel switched to Suggest-an-audience/
-                    # Advantage+ mode" corruption that broke Languages and
-                    # Targeting too — twice in a row now, regardless of
-                    # whether the fallback click was scoped safely or not.
-                    # That rules out "clicked the wrong unrelated element"
-                    # as the cause and points at something about
-                    # scrolling/interacting with this menu at all (repeated
-                    # clicks/scroll attempts, a real timing race, or account
-                    # instability at ~59 runs today) triggering a genuine
-                    # Meta-side mode switch. Opening the menu (the click
-                    # above) is confirmed safe on its own — only exact-value
-                    # selection via scrolling this list is disabled here
-                    # until that's understood; picking a real fix requires
-                    # a fresh account and isolating whether the switch
-                    # happens on the value click, the "13" anchor click, or
-                    # the scrollTop manipulation specifically, one at a time.
-                    pass
-                # Test50 bug: "ok=True" was set right after a click
-                # succeeded, without checking whether the displayed value
-                # actually changed — for age_max=65 this trivially matched
-                # Meta's own default ("65+") and looked like success despite
-                # doing nothing. Verify the real displayed value instead of
-                # trusting the click.
-                try:
-                    if root.get_by_text(re.compile(rf"^{re.escape(target_val)}$"), exact=True).first.is_visible():
-                        ok = True
-                except Exception:
-                    pass
+                    # ROOT CAUSE FOUND (2026-07-25): isolation test proved a
+                    # single click on the "13" list item ALONE (no scrolling
+                    # at all) reproduces the exact same "whole Audience
+                    # panel switches to Suggest-an-audience/Advantage+"
+                    # corruption. This isn't a stray-click accident — age 13
+                    # is Meta's/COPPA's minimum targetable age and a real
+                    # boundary value; clicking it very plausibly triggers
+                    # Meta's own age-restriction handling (forcing a
+                    # simplified/restricted audience mode as a safety
+                    # measure), independent of anything our scroll logic
+                    # does. The "13" anchor was only ever meant to locate
+                    # the scrollable list container, not to actually select
+                    # anything — reuse the ALREADY-CLICKED `el` (the current
+                    # "18"/"65+" trigger, already open and not a new
+                    # selection) for that instead, with no extra click on
+                    # any list value.
+                    container = None
+                    try:
+                        el.evaluate(
+                            """el => {
+                              let node = el;
+                              for (let i = 0; i < 8 && node; i++) {
+                                node = node.parentElement;
+                                if (!node) break;
+                                const style = getComputedStyle(node);
+                                if ((style.overflowY === 'auto' || style.overflowY === 'scroll')
+                                    && node.scrollHeight > node.clientHeight) {
+                                  node.dataset.__ageScrollTarget = '1';
+                                  break;
+                                }
+                              }
+                            }"""
+                        )
+                        marked = root.locator("[data-__age-scroll-target]")
+                        if marked.count():
+                            container = marked.first
+                    except Exception:
+                        pass
+                    if container is not None:
+                        target_el = container.get_by_text(
+                            re.compile(rf"^{re.escape(target_val)}$"), exact=True
+                        ).first
+                        found_target = bool(target_el.count()) and target_el.is_visible()
+                        if not found_target:
+                            for _ in range(20):
+                                try:
+                                    root.evaluate(
+                                        """() => {
+                                          const node = document.querySelector('[data-__age-scroll-target]');
+                                          if (node) node.scrollTop += 50;
+                                        }"""
+                                    )
+                                except Exception:
+                                    pass
+                                time.sleep(0.12)
+                                target_el = container.get_by_text(
+                                    re.compile(rf"^{re.escape(target_val)}$"), exact=True
+                                ).first
+                                if target_el.count() and target_el.is_visible():
+                                    found_target = True
+                                    break
+                        if found_target:
+                            try:
+                                box = target_el.bounding_box(timeout=1500)
+                                if box and box.get("width", 0) > 0:
+                                    _cdp_mouse_click(
+                                        page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+                                    )
+                                    time.sleep(0.4)
+                            except Exception:
+                                pass
+                # Test50 bug (partially fixed, then re-found in Test63):
+                # checking "is target_val visible anywhere on the page" is
+                # NOT sufficient proof of selection — when target_val is
+                # already visible as an unselected item inside the still-open
+                # dropdown list (e.g. "20" sitting right there in the
+                # unscrolled 13-20 view), this reports a false success even
+                # though the trigger still shows the old default_text and
+                # nothing was actually selected (confirmed live: Test63's
+                # "after_audience_age" screenshot still showed "18", not
+                # "20", despite this check having set ok=True). Only trust
+                # the trivial case (target already equals the current
+                # value) here; a real fix needs to verify the TRIGGER's own
+                # displayed text changed, not just that the target string
+                # exists somewhere on the page — not yet implemented.
+                if target_val == default_text:
+                    ok = True
             except Exception as age_click_exc:
                 try:
                     with open("output/debug_age_label_click_error.txt", "a", encoding="utf-8") as f:
