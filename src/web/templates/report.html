@@ -111,6 +111,32 @@
       color: var(--accent);
       font-weight: 500;
     }
+    .sidebar-link.sidebar-home {
+      font-weight: 700;
+      font-size: 0.9rem;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      margin-bottom: 0.35rem;
+    }
+    .sidebar-link.sidebar-home.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .sidebar-link.sidebar-home:hover:not(.active) { background: var(--bg-hover); color: var(--text); }
+    .sidebar-link-builder {
+      font-weight: 600;
+      color: var(--good);
+      border-top: 1px dashed var(--border);
+      margin-top: 0.25rem;
+      padding-top: 0.6rem;
+    }
+    .sidebar-link-builder:hover { background: var(--good-soft); color: var(--good); }
+    .sidebar-sections .sidebar-link.sidebar-link-builder.active {
+      background: var(--good-soft);
+      color: var(--good);
+      box-shadow: inset 2px 0 0 var(--good);
+    }
     .sidebar-country-btn {
       display: block;
       width: 100%;
@@ -131,16 +157,27 @@
       outline: 2px solid var(--accent);
       outline-offset: 1px;
     }
+    .sidebar-country.expanded {
+      background: var(--bg-subtle);
+      border-radius: var(--radius-sm);
+      margin-bottom: 2px;
+    }
     .sidebar-country.expanded .sidebar-country-btn {
       color: var(--accent);
-      background: var(--accent-soft);
+      background: transparent;
     }
-    .sidebar-sections { display: none; padding-bottom: 0.25rem; }
+    .sidebar-sections { display: none; padding-bottom: 0.35rem; }
     .sidebar-country.expanded .sidebar-sections { display: block; }
     .sidebar-sections .sidebar-link {
       padding-left: 1.25rem;
       font-size: 0.8125rem;
       font-weight: 400;
+    }
+    .sidebar-sections .sidebar-link.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+      box-shadow: inset 2px 0 0 var(--accent);
     }
     .main-content {
       flex: 1;
@@ -1091,7 +1128,7 @@ async function dashRefresh(ev) {
 <div class="dashboard-shell">
 <aside class="sidebar" aria-label="Dashboard navigation">
   <div class="sidebar-label">Main</div>
-  <button type="button" class="sidebar-link sidebar-home active" data-view="home">Home</button>
+  <button type="button" class="sidebar-link sidebar-home active" data-view="home">🏠 Home</button>
 
   <div class="sidebar-label">Countries</div>
   {% for c in report.countries %}
@@ -1118,7 +1155,7 @@ async function dashRefresh(ev) {
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-creatives">{{ n_creatives }} Creatives</button>
       {% if c.account_rows %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-accounts">{{ n_accounts }} Accounts</button>{% endif %}
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-optimization">{{ n_optimization }} Optimization</button>
-      <button type="button" class="sidebar-link" data-view="country-{{ cid }}-open">{{ n_builder }} Campaign Builder</button>
+      <button type="button" class="sidebar-link sidebar-link-builder" data-view="country-{{ cid }}-open">🚀 {{ n_builder }} Campaign Builder</button>
     </div>
   </div>
   {% endfor %}
@@ -2055,11 +2092,25 @@ async function dashRefresh(ev) {
     });
   });
 
+  function currentViewCountry() {
+    var activePanel = document.querySelector('.view-panel.active');
+    return activePanel ? activePanel.dataset.country : null;
+  }
+
   countryBtns.forEach(function (btn) {
     btn.addEventListener('click', function () {
       var countryId = btn.dataset.country;
+      var block = btn.closest('.sidebar-country');
+
+      if (block.classList.contains('expanded')) {
+        block.classList.remove('expanded');
+        return;
+      }
+
       expandCountry(countryId);
-      showView('country-' + countryId + '-cm', true);
+      if (currentViewCountry() !== countryId) {
+        showView('country-' + countryId + '-cm', true);
+      }
     });
   });
 
