@@ -3303,12 +3303,25 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                 # not a click) and re-dump the row afterward to check for a
                 # newly-appeared button/pencil-icon before falling back to
                 # the same click cascade as before.
+                section = heading.locator("xpath=ancestor::*[6]")
+                if not dumped_html:
+                    try:
+                        section_dump = section.evaluate("el => el.outerHTML")
+                        Path("output/debug_locations_section_html.txt").write_text(
+                            section_dump[:15000], encoding="utf-8"
+                        )
+                    except Exception:
+                        pass
                 try:
                     row.hover(timeout=2000)
                     time.sleep(0.6)
                     hover_dump = row.evaluate("el => el.outerHTML")
                     Path("output/debug_locations_row_html_after_hover.txt").write_text(
                         hover_dump[:6000], encoding="utf-8"
+                    )
+                    section_hover_dump = section.evaluate("el => el.outerHTML")
+                    Path("output/debug_locations_section_html_after_hover.txt").write_text(
+                        section_hover_dump[:15000], encoding="utf-8"
                     )
                 except Exception:
                     pass
@@ -3345,6 +3358,19 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                                 break
                         except Exception:
                             continue
+                # Screenshot immediately after this attempt's click, not
+                # after the whole 3-attempt retry cycle plus placeholder
+                # search — a prior run showed ~80s between "found Locations"
+                # and the final aggregate "fail" screenshot, far more than
+                # this loop's own sleeps account for, which made the
+                # end-of-cascade screenshot unreliable for seeing what the
+                # click itself actually did.
+                try:
+                    from src.fb_ads_rpa.screenshots import capture as _capture
+
+                    _capture(page, f"recorded_locations_click_attempt{attempt + 1}_clicked{clicked}")
+                except Exception:
+                    pass
                 if clicked:
                     break
             except Exception:
