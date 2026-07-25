@@ -1702,11 +1702,43 @@ def _click_website_via_keyboard(page: Page) -> bool:
                     return True
         except Exception:
             pass
+    # Bug found live 2026-07-25 (DQ204): every other strategy in this file's
+    # cascade gates its click/Enter on the focused element's text actually
+    # reading "website" first — this was the one exception. If none of the
+    # 14 ArrowDown presses above ever landed on "website" text (e.g. this
+    # account's Single list has extra options — Calls/App/WhatsApp — not
+    # present on the accounts this cascade was tuned against, so 14 presses
+    # overshoots), it used to press Enter unconditionally on whatever ended
+    # up focused. Live evidence: this silently confirmed "WhatsApp" as the
+    # Conversion location, changing the whole ad set's objective/Performance
+    # goal — a much bigger side effect than "wrong radio in a submenu".
+    # Re-check the focused text one last time before committing anything;
+    # if it's not Website, back out with Escape instead of blindly
+    # committing to whatever is focused.
     try:
-        page.keyboard.press("Enter")
-        time.sleep(0.45)
+        focused = page.evaluate("""() => {
+          const el = document.activeElement;
+          if (!el) return '';
+          return (el.getAttribute('aria-label') || el.textContent || '')
+            .replace(/\\s+/g, ' ').trim().toLowerCase();
+        }""") or ""
     except Exception:
-        pass
+        focused = ""
+    is_website_text = focused in ("website", "sitio web") or (
+        focused.startswith("website") and "instant" not in focused and "calls" not in focused
+    )
+    if is_website_text:
+        try:
+            page.keyboard.press("Enter")
+            time.sleep(0.45)
+        except Exception:
+            pass
+    # else: leave it alone — focus without Enter/Space never commits a radio
+    # selection, so simply not pressing anything here is already safe. Do
+    # NOT press Escape (documented elsewhere in this file, e.g.
+    # close_open_dropdown's docstring, to sometimes close the whole wizard
+    # rather than just this menu) to "clean up" — an unwanted wrong
+    # selection is recoverable by retrying; a closed wizard is not.
     return is_website_conversion_selected(page)
 
 
@@ -3242,7 +3274,12 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                     inp = root.get_by_placeholder(ph).first
                     if inp.count() and inp.is_visible():
                         return root, inp
-                except Exception:
+                except Exception as exc:
+                    try:
+                        with open("output/debug_locations_find_input_error.txt", "a", encoding="utf-8") as f:
+                            f.write(f"ph={ph.pattern!r} exc={exc!r}\n")
+                    except Exception:
+                        pass
                     continue
         return None, None
 
@@ -3329,7 +3366,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                     try:
                         hover_btn = row.locator(hover_sel).first
                         if hover_btn.count() and hover_btn.is_visible():
-                            box = hover_btn.bounding_box()
+                            box = hover_btn.bounding_box(timeout=1500)
                             if box and box.get("width", 0) > 0:
                                 _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
                             else:
@@ -3341,7 +3378,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                 inclusion_block = row.locator("._7zgk").first
                 for candidate in ([] if clicked else [inclusion_block, heading.locator("xpath=ancestor::*[2]"), row]):
                     try:
-                        box = candidate.bounding_box()
+                        box = candidate.bounding_box(timeout=1500)
                         if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
                             _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
                             clicked = True
@@ -3358,19 +3395,68 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                                 break
                         except Exception:
                             continue
-                # Screenshot immediately after this attempt's click, not
-                # after the whole 3-attempt retry cycle plus placeholder
-                # search — a prior run showed ~80s between "found Locations"
-                # and the final aggregate "fail" screenshot, far more than
-                # this loop's own sleeps account for, which made the
-                # end-of-cascade screenshot unreliable for seeing what the
-                # click itself actually did.
+                # Check for the edit-mode input right after a successful
+                # click — live evidence 2026-07-25 (DQ204 Test22-25) showed
+                # the click reliably DOES open the real editor (search input
+                # + "Include"/"Browse" visible in a screenshot taken right
+                # after), confirmed reproducible on attempt 1 of every run —
+                # yet both a zero-delay check (Test23) AND a flat 0.25s-delay
+                # check (Test24/25) missed it every single time, despite the
+                # screenshot taken immediately afterward proving it WAS open
+                # at roughly that same moment. A single point-in-time check
+                # isn't reliable here — the open/closed state looks like it's
+                # flickering (React re-mount racing our query, not a clean
+                # one-way "opens then closes after Xms" timeline), or our
+                # query is hitting a transient "execution context destroyed"
+                # error during a re-render and silently swallowing it. Poll
+                # repeatedly for a short window instead of trusting one shot.
+                immediate_root, immediate_inp = (None, None)
+                if clicked:
+                    for _ in range(10):
+                        time.sleep(0.15)
+                        immediate_root, immediate_inp = _find_edit_mode_input()
+                        if immediate_inp is not None:
+                            break
                 try:
                     from src.fb_ads_rpa.screenshots import capture as _capture
 
                     _capture(page, f"recorded_locations_click_attempt{attempt + 1}_clicked{clicked}")
                 except Exception:
                     pass
+                if immediate_inp is not None:
+                    try:
+                        immediate_inp.scroll_into_view_if_needed(timeout=3000)
+                        immediate_inp.click(timeout=3000)
+                        time.sleep(0.3)
+                        # Root cause found live 2026-07-25 (DQ204 Test26):
+                        # .fill() throws — Playwright's error log shows the
+                        # placeholder-matched element resolves to a
+                        # <span placeholder="Search locations" ...>, not a
+                        # real <input>/<textarea>/[contenteditable]. Meta
+                        # built this as a custom fake-input component, so
+                        # .fill() is fundamentally incompatible with it.
+                        # Type via keyboard instead — it dispatches key
+                        # events to whatever has DOM focus regardless of
+                        # element type, which a real <input> doesn't need
+                        # but this span-based component does.
+                        page.keyboard.type(search_term, delay=40)
+                        time.sleep(1.5)
+                        return _pick_country_suggestion(immediate_root, page, search_term)
+                    except Exception as fill_exc:
+                        try:
+                            with open("output/debug_locations_fill_error.txt", "a", encoding="utf-8") as f:
+                                f.write(f"attempt={attempt + 1} exc={fill_exc!r}\n")
+                        except Exception:
+                            pass
+                elif clicked:
+                    try:
+                        with open("output/debug_locations_fill_error.txt", "a", encoding="utf-8") as f:
+                            f.write(
+                                f"attempt={attempt + 1}: clicked=True but "
+                                f"_find_edit_mode_input() found nothing after polling\n"
+                            )
+                    except Exception:
+                        pass
                 if clicked:
                     break
             except Exception:
@@ -3387,7 +3473,10 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                 inp.scroll_into_view_if_needed(timeout=3000)
                 inp.click(timeout=3000)
                 time.sleep(0.3)
-                inp.fill(search_term, timeout=5000)
+                # See the note above (attempt loop): this is a <span
+                # placeholder="..."> fake-input, not a real editable
+                # element — .fill() throws, keyboard typing works.
+                page.keyboard.type(search_term, delay=40)
                 time.sleep(1.5)
                 return _pick_country_suggestion(root, page, search_term)
             except Exception:
