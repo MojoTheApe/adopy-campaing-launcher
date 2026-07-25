@@ -1929,6 +1929,7 @@ def run_recorded_campaign_flow(
     age_min: int = 18,
     age_max: int = 65,
     targeting_label: str = "",
+    language_names: list[str] | None = None,
 ) -> str:
     """Create -> Website, using the exact locators from a verified human
     Playwright codegen recording (2026-07-21) instead of the label/breadcrumb/
@@ -2239,6 +2240,25 @@ def run_recorded_campaign_flow(
     # pieces still need a live fix, without losing the rest of the segment.
     soft_fails: list[str] = []
 
+    # Age BEFORE Locations (reordered 2026-07-25): Age used to render as
+    # live "18 [v] 65+ [v]" dropdowns directly, confirmed in screenshots
+    # from before the Locations fix existed. Now that Locations reliably
+    # expands into a large panel (map + chip list), it pushes everything
+    # below it down and Age started rendering as a collapsed "18 - 65+"
+    # text summary instead — a click-to-expand attempt modeled on Locations
+    # made this worse (scrolled past Age entirely), so the working
+    # hypothesis is layout-order, not Age's own mechanics: fill Age first,
+    # while the page is still in its simpler pre-Locations-expansion state.
+    try:
+        if not fill_audience_age(page, age_min, age_max):
+            _shot("fail_audience_age")
+            soft_fails.append("audience_age")
+        else:
+            _shot("after_audience_age")
+    except Exception as exc:
+        _shot("fail_audience_age")
+        soft_fails.append(f"audience_age:{str(exc)[:60]}")
+
     if country:
         _shot("before_audience_location")
         try:
@@ -2264,16 +2284,23 @@ def run_recorded_campaign_flow(
             _shot("fail_audience_location")
             soft_fails.append(f"audience_location:{str(exc)[:60]}")
 
-    # Age — same reused, not-yet-independently-verified function.
-    try:
-        if not fill_audience_age(page, age_min, age_max):
-            _shot("fail_audience_age")
-            soft_fails.append("audience_age")
-        else:
-            _shot("after_audience_age")
-    except Exception as exc:
-        _shot("fail_audience_age")
-        soft_fails.append(f"audience_age:{str(exc)[:60]}")
+    # Languages — new (2026-07-25), no real data plumbing exists yet
+    # (AdSet/draft has no language field). TODO: wire language_names through
+    # from real campaign data once fill_audience_languages is confirmed
+    # live; for now a hardcoded test value lets this get its first live
+    # exercise ("Spanish" matches country=CR's real primary language) rather
+    # than staying entirely unverified.
+    test_language_names = language_names or (["Spanish"] if country == "CR" else [])
+    if test_language_names:
+        try:
+            if not fill_audience_languages(page, test_language_names):
+                _shot("fail_languages")
+                soft_fails.append("languages")
+            else:
+                _shot("after_languages")
+        except Exception as exc:
+            _shot("fail_languages")
+            soft_fails.append(f"languages:{str(exc)[:60]}")
 
     # Detailed targeting: paste each comma-separated interest term and pick
     # the first autocomplete suggestion — same pattern the old recipe_player
@@ -3636,6 +3663,84 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
         except Exception:
             continue
 
+    # If Age isn't already showing live dropdowns, try the same
+    # click-to-expand pattern that fixed Locations — the earlier single
+    # naive attempt (Test28) scrolled the page away instead of expanding,
+    # but it lacked the poll/retry discipline that made the Locations fix
+    # reliable (a single point-in-time check is not enough, per that same
+    # day's evidence). Only attempt this if Age genuinely isn't interactive
+    # yet — Test32 showed it sometimes already is, in which case don't risk
+    # an unnecessary click.
+    already_expanded = False
+    for root in _roots(page):
+        try:
+            marker = root.get_by_text(age_label_re).first
+            for depth in range(1, 10):
+                row = marker.locator(f"xpath=ancestor::*[{depth}]")
+                if row.locator("select, [role=combobox], [role=spinbutton]").count() >= 2:
+                    already_expanded = True
+                    break
+            break
+        except Exception:
+            continue
+
+    if not already_expanded:
+        for root in _roots(page):
+            try:
+                heading = root.get_by_text(age_label_re).first
+                heading.wait_for(state="visible", timeout=2000)
+                heading.scroll_into_view_if_needed(timeout=2000)
+                header_block = heading.locator("xpath=ancestor::*[2]")
+                click_row = heading.locator("xpath=ancestor::*[3]")
+                wide_row = heading.locator("xpath=ancestor::*[6]")
+                # First click wakes the row into a :hover-like state — live
+                # evidence 2026-07-25 (Test34 fail screenshot) shows this
+                # reveals a pencil/edit icon at the row's right edge, but
+                # doesn't open edit mode on its own (unlike Locations, where
+                # the same single click opened the editor directly). A
+                # second click specifically near where that icon renders is
+                # needed.
+                for candidate in (header_block, click_row):
+                    try:
+                        box = candidate.bounding_box(timeout=1500)
+                        if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
+                            _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                            break
+                    except Exception:
+                        continue
+                time.sleep(0.3)
+                try:
+                    wbox = wide_row.bounding_box(timeout=1500)
+                    if wbox and wbox.get("width", 0) > 0:
+                        _cdp_mouse_click(page, wbox["x"] + wbox["width"] - 20, wbox["y"] + 20)
+                except Exception:
+                    pass
+                break
+            except Exception:
+                continue
+        # Test35 fail screenshot showed Age genuinely reaching the live
+        # "18 [v] 65+ [v]" dropdown state (row highlighted blue) — but the
+        # select-count check below still found nothing at the time it ran,
+        # same class of "screenshot proves it but our check ran too early"
+        # timing gap the Locations fix hit before its own poll was widened.
+        # 10x150ms (1.5s) wasn't enough here; give it more room.
+        for _ in range(24):
+            time.sleep(0.2)
+            found = False
+            for root in _roots(page):
+                try:
+                    marker = root.get_by_text(age_label_re).first
+                    for depth in range(1, 10):
+                        row = marker.locator(f"xpath=ancestor::*[{depth}]")
+                        if row.locator("select, [role=combobox], [role=spinbutton]").count() >= 2:
+                            found = True
+                            break
+                    break
+                except Exception:
+                    continue
+            if found:
+                break
+
     for root in _roots(page):
         try:
             marker = root.get_by_text(age_label_re).first
@@ -3644,6 +3749,18 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                 row = marker.locator(f"xpath=ancestor::*[{depth}]")
                 selects = row.locator("select, [role=combobox], [role=spinbutton]")
                 if selects.count() >= 2:
+                    try:
+                        dump_lines = []
+                        for k in range(min(selects.count(), 4)):
+                            e = selects.nth(k)
+                            tag_k = e.evaluate("el => el.tagName.toLowerCase()")
+                            outer_k = e.evaluate("el => el.outerHTML")
+                            dump_lines.append(f"[{k}] tag={tag_k}\n{outer_k[:1500]}")
+                        Path("output/debug_age_selects.txt").write_text(
+                            "\n\n---\n\n".join(dump_lines), encoding="utf-8"
+                        )
+                    except Exception:
+                        pass
                     for idx, val in [(0, age_min_str), (1, age_max_str)]:
                         try:
                             el = selects.nth(idx)
@@ -3657,6 +3774,12 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                             else:
                                 el.click(timeout=3000)
                                 time.sleep(0.3)
+                                try:
+                                    from src.fb_ads_rpa.screenshots import capture as _capture
+
+                                    _capture(page, f"recorded_age_dropdown_open_idx{idx}")
+                                except Exception:
+                                    pass
                                 target_val = age_min if idx == 0 else age_max
                                 opt = root.get_by_role(
                                     "option",
@@ -3669,7 +3792,12 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                                     page.keyboard.press("Enter")
                             time.sleep(0.4)
                             ok = True
-                        except Exception:
+                        except Exception as age_exc:
+                            try:
+                                with open("output/debug_age_fill_error.txt", "a", encoding="utf-8") as f:
+                                    f.write(f"idx={idx} exc={age_exc!r}\n")
+                            except Exception:
+                                pass
                             continue
                     if ok:
                         return True
@@ -3716,6 +3844,107 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
         except Exception:
             pass
     return False
+
+
+def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
+    """Type language(s) into Audience → Languages and pick suggestions.
+
+    New (2026-07-25), modeled directly on fill_audience_location's proven
+    pattern from the same session rather than starting from scratch blind:
+    Languages is a sibling field in the same Audience panel with a very
+    similar "collapsed summary vs. open search" shape (Locations' fix
+    already established that this general family of field can render as a
+    span-based fake input needing keyboard.type, not .fill()). Not yet
+    live-verified — first real test of this exact function.
+    """
+    if not language_names:
+        return True
+    time.sleep(0.3)
+    lang_placeholders = [
+        re.compile(r"Add languages?", re.I),
+        re.compile(r"Search languages?", re.I),
+        re.compile(r"Agregar idiomas?", re.I),
+        re.compile(r"Buscar idiomas?", re.I),
+    ]
+    lang_label_re = re.compile(r"^Languages$|^Idiomas$", re.I)
+
+    def _find_lang_input():
+        for root in _roots(page):
+            for ph in lang_placeholders:
+                try:
+                    inp = root.get_by_placeholder(ph).first
+                    if inp.count() and inp.is_visible():
+                        return root, inp
+                except Exception:
+                    continue
+        return None, None
+
+    root, inp = _find_lang_input()
+    if inp is None:
+        for root in _roots(page):
+            try:
+                heading = root.get_by_text(lang_label_re).first
+                heading.wait_for(state="visible", timeout=3000)
+                heading.scroll_into_view_if_needed(timeout=3000)
+                header_block = heading.locator("xpath=ancestor::*[2]")
+                row = heading.locator("xpath=ancestor::*[3]")
+                for candidate in (header_block, row):
+                    try:
+                        box = candidate.bounding_box(timeout=1500)
+                        if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
+                            _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                            break
+                    except Exception:
+                        continue
+                break
+            except Exception:
+                continue
+        for _ in range(10):
+            time.sleep(0.15)
+            root, inp = _find_lang_input()
+            if inp is not None:
+                break
+
+    if inp is None:
+        return False
+
+    ok_any = False
+    for name in language_names:
+        try:
+            inp.click(timeout=3000)
+            page.keyboard.type(name, delay=40)
+            time.sleep(1.2)
+            # Prefer the "(All)" variant over a blind first-match — per live
+            # user guidance (2026-07-25) watching the real suggestion list:
+            # Meta lists per-country language variants (e.g. "Spanish
+            # (Spain)", "Spanish (Mexico)") alongside a broader "Spanish
+            # (All)" entry, and the broad one is what's wanted here, same
+            # reasoning as _pick_country_suggestion's "(Country)" preference.
+            all_re = re.compile(rf"^{re.escape(name)}\s*\(all\)", re.I)
+            picked = False
+            for sel in ("[role=option]:visible", "li[role=option]"):
+                try:
+                    opt = page.locator(sel).filter(has_text=all_re).first
+                    if opt.count() and opt.is_visible():
+                        opt.click(timeout=3000)
+                        time.sleep(0.5)
+                        ok_any = True
+                        picked = True
+                        break
+                except Exception:
+                    continue
+            if not picked:
+                opt = page.locator("[role=option]:visible, li[role=option]").first
+                if opt.count() and opt.is_visible():
+                    opt.click(timeout=3000)
+                    time.sleep(0.5)
+                    ok_any = True
+            root, inp = _find_lang_input()
+            if inp is None:
+                break
+        except Exception:
+            continue
+    return ok_any
 
 
 def select_manual_placements(page: Page) -> bool:
