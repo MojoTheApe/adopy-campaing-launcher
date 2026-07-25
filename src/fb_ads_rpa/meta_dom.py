@@ -3531,6 +3531,36 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     age_label_re = re.compile(r"^Age$|^Edad$", re.I)
     ok = False
 
+    # Diagnostic only (2026-07-25, DQ204 Test27/28): Age can render as a
+    # collapsed read-only summary ("18 - 65+", no select/combobox nearby)
+    # rather than live dropdowns, seen via the fail_audience_age screenshot
+    # right after the Locations fix expanded that section (map + chips
+    # pushed everything below it down). A click-to-expand attempt modeled on
+    # the Locations fix was tried and reverted (Test28) — it landed on the
+    # info icon and scrolled the page far past Age entirely (down to
+    # Placements), making things worse, not better, unlike Locations where
+    # the same click pattern reliably opened the real editor. Age's
+    # collapsed/expanded mechanics are evidently different from Locations'
+    # and need their own live investigation, not a copy-paste of that fix.
+    # Keep only a passive HTML dump of Age's natural (un-clicked) state here
+    # for the next session to start from real data instead of guessing.
+    for root in _roots(page):
+        try:
+            heading = root.get_by_text(age_label_re).first
+            heading.wait_for(state="visible", timeout=2000)
+            heading.scroll_into_view_if_needed(timeout=2000)
+            row = heading.locator("xpath=ancestor::*[3]")
+            try:
+                age_row_dump = row.evaluate("el => el.outerHTML")
+                Path("output/debug_age_row_html.txt").write_text(
+                    age_row_dump[:6000], encoding="utf-8"
+                )
+            except Exception:
+                pass
+            break
+        except Exception:
+            continue
+
     for root in _roots(page):
         try:
             marker = root.get_by_text(age_label_re).first
