@@ -3214,6 +3214,81 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     return True
 
 
+def _remove_stale_default_locations(page: Page, keep_text: str) -> None:
+    """Remove pre-existing Inclusion location chips other than keep_text.
+
+    Per live user request (2026-07-25): Meta ad accounts default the
+    Locations field to some country (e.g. "Hong Kong" was the default seen
+    live on both test accounts this session) — adding the target country is
+    not enough on its own, the stale default stays alongside it and the
+    audience keeps targeting both. Best-effort only: if no remove control is
+    found, this silently does nothing rather than risk clicking the wrong
+    thing (never remove the entry we just added).
+    """
+    # Ground truth from a live full outerHTML dump (2026-07-25, DQ204
+    # Test30, output/debug_locations_section_after_add.txt): each Inclusion
+    # location row is an <li> containing the location name text and a real
+    # <button type="button"> whose accessible name is "Close" — computed
+    # from a visually-hidden <span class="accessible_elem">Close</span>
+    # child, not an aria-label attribute (why the earlier [aria-label*=...]
+    # guesses found nothing). Both the newly-added country and the stale
+    # default have this same structure. get_by_role("button", name="Close")
+    # picks up that computed accessible name directly.
+    keep_re = re.compile(re.escape(keep_text), re.I)
+    for root in _roots(page):
+        try:
+            close_buttons = root.get_by_role("button", name="Close")
+            n = close_buttons.count()
+            removed_any = False
+            for i in range(n):
+                btn = close_buttons.nth(i)
+                try:
+                    row_text = btn.locator("xpath=ancestor::li[1]").inner_text(timeout=1000)
+                except Exception:
+                    row_text = ""
+                # No <li> ancestor (or empty) means this "Close" button isn't
+                # a location chip at all (e.g. an unrelated banner/dialog
+                # close control elsewhere on the page) — skip rather than
+                # risk clicking something unrelated. Also skip the row that
+                # is the country we just added.
+                if not row_text or keep_re.search(row_text):
+                    continue
+                try:
+                    btn.click(timeout=3000, force=True)
+                    time.sleep(0.6)
+                    removed_any = True
+                    break
+                except Exception:
+                    try:
+                        box = btn.bounding_box(timeout=1500)
+                        if box and box.get("width", 0) > 0:
+                            _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                            time.sleep(0.6)
+                            removed_any = True
+                            break
+                    except Exception:
+                        continue
+            try:
+                from src.fb_ads_rpa.screenshots import capture as _capture
+
+                _capture(page, f"recorded_locations_remove_default_removed{removed_any}")
+            except Exception:
+                pass
+            return
+        except Exception:
+            continue
+
+
+def _pick_country_and_clear_defaults(root, page: Page, search_term: str) -> bool:
+    if not _pick_country_suggestion(root, page, search_term):
+        return False
+    try:
+        _remove_stale_default_locations(page, search_term)
+    except Exception:
+        pass
+    return True
+
+
 def fill_audience_location(page: Page, country_code: str) -> bool:
     """Type country into Audience → Locations input and pick first suggestion."""
     search_term = _country_search_term(country_code)
@@ -3441,7 +3516,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                         # but this span-based component does.
                         page.keyboard.type(search_term, delay=40)
                         time.sleep(1.5)
-                        return _pick_country_suggestion(immediate_root, page, search_term)
+                        return _pick_country_and_clear_defaults(immediate_root, page, search_term)
                     except Exception as fill_exc:
                         try:
                             with open("output/debug_locations_fill_error.txt", "a", encoding="utf-8") as f:
@@ -3478,7 +3553,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                 # element — .fill() throws, keyboard typing works.
                 page.keyboard.type(search_term, delay=40)
                 time.sleep(1.5)
-                return _pick_country_suggestion(root, page, search_term)
+                return _pick_country_and_clear_defaults(root, page, search_term)
             except Exception:
                 pass
         else:
@@ -3495,7 +3570,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                 page.keyboard.type(search_term, delay=40)
                 time.sleep(1.5)
                 if page.locator("[role=option]:visible, li[role=option]").first.count():
-                    return _pick_country_suggestion(page, page, search_term)
+                    return _pick_country_and_clear_defaults(page, page, search_term)
             except Exception:
                 pass
         time.sleep(0.5)
@@ -3513,7 +3588,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                     time.sleep(0.3)
                     inp.fill(search_term, timeout=5000)
                     time.sleep(1.5)
-                    return _pick_country_suggestion(page, page, search_term)
+                    return _pick_country_and_clear_defaults(page, page, search_term)
         except Exception:
             pass
     return False
