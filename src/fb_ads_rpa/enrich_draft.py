@@ -1,6 +1,7 @@
 """Resolve Upload FB + creatives folder into CampaignDraft fields."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -8,7 +9,49 @@ from typing import Any
 from config.paths import get_ad_account_map_path, get_creatives_root, get_upload_fb_excel_path
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
 from src.meta_campaign_agent.creative_finder import AmbiguousCreativeError, CreativeNotFoundError, find_creative_file
-from src.upload_agent.build_upload_excel import get_account_info, load_reference_data, lookup_ad_copy, lookup_creative_file
+from src.upload_agent.build_upload_excel import (
+    get_account_info,
+    load_reference_data,
+    lookup_ad_copy,
+    lookup_creative_file,
+    lookup_interest,
+)
+
+
+def _interest_names_from_targeting(ref: dict, targeting_name: str) -> str:
+    """Resolve a named targeting profile (e.g. "Day") to a comma-separated
+    list of real Meta interest/behavior names, for typing one at a time into
+    the browser's Detailed Targeting search box.
+
+    "targeting" in the slot/plan data is a KEY into the Upload FB.xlsx
+    "Interests" sheet (see lookup_interest), not literal text to type —
+    confirmed live 2026-07-25: "Day" resolves to a JSON blob of real
+    interests like "Swing trading"/"Day trading"/"Stock market index". The
+    RPA browser path needs plain names (it types each one into a search
+    box and picks an autocomplete suggestion), unlike the Graph-API publish
+    path which can pass this same JSON directly as a structured spec.
+    """
+    targeting_name = (targeting_name or "").strip()
+    if not targeting_name:
+        return ""
+    raw = lookup_interest(ref, targeting_name)
+    if not raw:
+        return targeting_name
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return targeting_name
+    names: list[str] = []
+    groups = parsed if isinstance(parsed, list) else [parsed]
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        for bucket in ("interests", "behaviors"):
+            for item in group.get(bucket) or []:
+                name = (item or {}).get("name")
+                if name:
+                    names.append(str(name).strip())
+    return ", ".join(names) if names else targeting_name
 
 _ref_cache: dict | None = None
 _ref_cache_mtime: float = -1.0
@@ -81,6 +124,9 @@ def enrich_campaign_drafts(
                 draft.errors.append("profile_id missing in ad_account_map.csv (browser session)")
 
         for ad_set in draft.ad_sets:
+            if ref and getattr(ad_set, "targeting_label", ""):
+                ad_set.targeting_label = _interest_names_from_targeting(ref, ad_set.targeting_label)
+
             for ad in ad_set.ads:
                 # If creative_filename was set directly from folder scan — skip Excel lookup
                 if not ad.creative_filename:
