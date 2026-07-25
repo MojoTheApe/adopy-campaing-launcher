@@ -3723,10 +3723,19 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     # row we were querying — matching the earlier finding that our
     # select/combobox searches inside that row never found anything.
     for root in _roots(page):
+        # Bug found live (2026-07-25, Test64): this session's test data
+        # always has age_max=65, which trivially equals Meta's own default
+        # ("65+") — the old single shared `ok` flag meant that trivial match
+        # alone satisfied the whole function, masking a genuinely failed
+        # age_min selection (screenshot showed "18" still unchanged while
+        # the function had already reported success). Track both boundaries
+        # independently and only report success if BOTH are confirmed.
+        boundary_results = []
         for default_text, target_val in (("18", age_min_str), ("65+", age_max_str)):
             try:
                 el = root.get_by_text(re.compile(rf"^{re.escape(default_text)}$"), exact=True).first
                 if not el.count() or not el.is_visible():
+                    boundary_results.append(False)
                     continue
                 # Test50 bug: no scroll_into_view before computing the box —
                 # the resulting screenshot showed a totally unrelated section
@@ -3738,7 +3747,8 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                 box = el.bounding_box(timeout=1500)
                 if not box or box.get("width", 0) <= 0:
                     continue
-                _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                trigger_x, trigger_y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+                _cdp_mouse_click(page, trigger_x, trigger_y)
                 time.sleep(0.5)
                 try:
                     from src.fb_ads_rpa.screenshots import capture as _capture
@@ -3827,21 +3837,41 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                 # though the trigger still shows the old default_text and
                 # nothing was actually selected (confirmed live: Test63's
                 # "after_audience_age" screenshot still showed "18", not
-                # "20", despite this check having set ok=True). Only trust
-                # the trivial case (target already equals the current
-                # value) here; a real fix needs to verify the TRIGGER's own
-                # displayed text changed, not just that the target string
-                # exists somewhere on the page — not yet implemented.
+                # "20", despite this check having set ok=True).
+                #
+                # Real fix: check what's actually rendered at the trigger's
+                # own screen position (trigger_x/trigger_y, captured before
+                # any click) via elementFromPoint — this is agnostic to
+                # whatever markup/class the trigger uses and immune to the
+                # "text visible elsewhere on the page" false positive, since
+                # it only cares about that one specific pixel spot where the
+                # value box lives.
                 if target_val == default_text:
-                    ok = True
+                    boundary_results.append(True)
+                else:
+                    boundary_ok = False
+                    try:
+                        time.sleep(0.3)
+                        current_text = page.evaluate(
+                            """([x, y]) => {
+                              const el = document.elementFromPoint(x, y);
+                              return el ? (el.textContent || '').trim() : null;
+                            }""",
+                            [trigger_x, trigger_y],
+                        )
+                        boundary_ok = current_text == target_val
+                    except Exception:
+                        pass
+                    boundary_results.append(boundary_ok)
             except Exception as age_click_exc:
                 try:
                     with open("output/debug_age_label_click_error.txt", "a", encoding="utf-8") as f:
                         f.write(f"val={default_text!r} exc={age_click_exc!r}\n")
                 except Exception:
                     pass
+                boundary_results.append(False)
                 continue
-        if ok:
+        if len(boundary_results) == 2 and all(boundary_results):
             return True
 
     # Diagnostic (2026-07-25, DQ204 Test37): a fail screenshot showed real
