@@ -672,6 +672,58 @@
       display: inline-block;
     }
     .cb-add-btn-sm:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* "Send to Builder" trigger + popup */
+    .cb-send-btn {
+      background: transparent;
+      border: 1px solid var(--border-strong);
+      color: var(--accent);
+      border-radius: 3px;
+      padding: 0.15rem 0.55rem;
+      font-size: 0.7rem;
+      font-family: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .cb-send-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+    .cb-send-btn.cb-send-selected {
+      background: var(--good); border-color: var(--good); color: #fff;
+    }
+    .cb-cart-bar {
+      position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 9998;
+      background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 8px;
+      padding: 0.6rem 0.8rem; box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+      display: flex; align-items: center; gap: 0.65rem; font-size: 0.8rem;
+    }
+    .cb-cart-count { color: var(--text); font-weight: 600; white-space: nowrap; }
+    .cb-cart-bar button {
+      font-family: inherit; font-size: 0.76rem; font-weight: 600; border-radius: 5px; cursor: pointer; padding: 0.35rem 0.75rem;
+    }
+    #cb-cart-build { background: var(--accent); border: none; color: #fff; }
+    #cb-cart-build:hover { background: #1d4ed8; }
+    #cb-cart-clear { background: transparent; border: 1px solid var(--border-strong); color: var(--muted); }
+    #cb-cart-clear:hover { color: var(--bad); border-color: var(--bad); }
+    .cb-send-modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+      z-index: 9999; display: flex; align-items: center; justify-content: center;
+    }
+    .cb-send-modal-box {
+      background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+      padding: 1.2rem 1.4rem; max-width: 440px; width: 92%; max-height: 85vh; overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,.65); font-size: 0.8rem;
+    }
+    .cb-send-modal-title { font-size: 0.9rem; font-weight: 700; color: var(--accent); margin-bottom: 0.75rem; }
+    .cb-send-field-row {
+      display: flex; justify-content: space-between; gap: 0.75rem;
+      padding: 0.3rem 0; border-bottom: 1px solid var(--border); font-size: 0.78rem;
+    }
+    .cb-send-field-label { color: var(--muted); }
+    .cb-send-field-val { color: var(--text); font-weight: 500; text-align: right; word-break: break-word; }
+    .cb-send-field-val.cb-send-unresolved { color: var(--warn); }
+    .cb-send-modal-actions { display: flex; gap: 0.55rem; justify-content: flex-end; margin-top: 1rem; }
+    .cb-send-modal-msg { font-size: 0.78rem; color: var(--muted); margin: 0.5rem 0; line-height: 1.5; }
+    .cb-send-modal-msg.cb-send-warn { color: var(--warn); }
     .cb-targeting-hint {
       font-size: 0.65rem;
       color: var(--muted);
@@ -841,6 +893,58 @@
       font-size: 0.78rem;
     }
     .cb-preview-errors { color: var(--bad); font-size: 0.72rem; }
+
+    /* ── Visual ad preview (Feed / Reels mockups) ── */
+    .cb-preview-toggle { display: inline-flex; gap: 0; border-radius: 5px; overflow: hidden; border: 1px solid var(--border-strong); margin-top: 0.4rem; }
+    .cb-preview-toggle-btn {
+      padding: 0.25rem 0.7rem; font-size: 0.72rem; font-weight: 600; font-family: inherit;
+      background: var(--bg-elev); color: var(--muted); border: none; cursor: pointer;
+    }
+    .cb-preview-toggle-btn + .cb-preview-toggle-btn { border-left: 1px solid var(--border-strong); }
+    .cb-preview-toggle-btn.cb-preview-toggle-active { background: var(--accent); color: #fff; }
+    .cb-visual-preview { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.6rem; }
+    .cb-visual-empty { color: var(--muted); font-size: 0.75rem; padding: 0.5rem 0; }
+
+    .fb-feed-preview {
+      width: 320px; background: #fff; color: #050505; border-radius: 8px;
+      overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.35); font-family: Helvetica, Arial, sans-serif;
+    }
+    .fb-feed-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.7rem 0.4rem; }
+    .fb-feed-avatar {
+      width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg,#2563eb,#1e3a8a);
+      color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0;
+    }
+    .fb-feed-page-name { font-size: 0.8rem; font-weight: 700; line-height: 1.2; }
+    .fb-feed-sponsored { font-size: 0.68rem; color: #65676b; }
+    .fb-feed-body { padding: 0 0.7rem 0.5rem; font-size: 0.8rem; line-height: 1.35; white-space: pre-wrap; word-break: break-word; }
+    .fb-feed-media { width: 100%; aspect-ratio: 1.91 / 1; background: #e4e6e9; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .fb-feed-media img, .fb-feed-media video { width: 100%; height: 100%; object-fit: cover; }
+    .fb-feed-link-bar { background: #f0f2f5; padding: 0.55rem 0.7rem; border-top: 1px solid #dadde1; display: flex; align-items: center; gap: 0.5rem; }
+    .fb-feed-link-text { flex: 1; min-width: 0; }
+    .fb-feed-link-domain { font-size: 0.65rem; color: #65676b; text-transform: uppercase; letter-spacing: 0.02em; }
+    .fb-feed-link-title { font-size: 0.78rem; font-weight: 700; color: #050505; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fb-feed-link-desc { font-size: 0.7rem; color: #65676b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fb-feed-cta { flex-shrink: 0; background: #e4e6e9; border: none; border-radius: 5px; padding: 0.4rem 0.7rem; font-size: 0.75rem; font-weight: 700; color: #050505; cursor: default; }
+    .fb-feed-actions { display: flex; gap: 1rem; padding: 0.45rem 0.7rem; border-top: 1px solid #dadde1; font-size: 0.72rem; color: #65676b; font-weight: 600; }
+
+    .fb-reels-preview {
+      width: 190px; height: 338px; border-radius: 10px; overflow: hidden; position: relative;
+      background: #000; box-shadow: 0 1px 3px rgba(0,0,0,0.5); flex-shrink: 0;
+    }
+    .fb-reels-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .fb-reels-scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, transparent 20%, transparent 55%, rgba(0,0,0,0.75) 100%); }
+    .fb-reels-top { position: absolute; top: 0.5rem; left: 0.5rem; right: 0.5rem; display: flex; align-items: center; gap: 0.35rem; }
+    .fb-reels-avatar {
+      width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg,#2563eb,#1e3a8a);
+      color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.62rem; flex-shrink: 0; border: 1.5px solid #fff;
+    }
+    .fb-reels-page-name { color: #fff; font-size: 0.68rem; font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+    .fb-reels-follow { font-size: 0.6rem; font-weight: 700; color: #fff; border: 1px solid #fff; border-radius: 4px; padding: 0.1rem 0.4rem; background: transparent; }
+    .fb-reels-bottom { position: absolute; bottom: 0.6rem; left: 0.5rem; right: 2.2rem; }
+    .fb-reels-body { color: #fff; font-size: 0.68rem; line-height: 1.3; margin-bottom: 0.4rem; text-shadow: 0 1px 2px rgba(0,0,0,0.6); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .fb-reels-cta { background: #fff; color: #050505; border: none; border-radius: 5px; padding: 0.3rem 0.6rem; font-size: 0.65rem; font-weight: 700; cursor: default; }
+    .fb-reels-side { position: absolute; right: 0.4rem; bottom: 0.6rem; display: flex; flex-direction: column; gap: 0.55rem; align-items: center; color: #fff; font-size: 0.9rem; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+    .fb-reels-side span { font-size: 0.55rem; font-weight: 700; margin-top: -0.3rem; }
 
     .cb-status-panel {
       margin-top: 0.65rem;
@@ -1321,6 +1425,7 @@ async function dashRefresh(ev) {
     <th class="num">Dep</th>
     <th class="num">Leads</th>
     <th class="num">Spend</th>
+    <th></th>
   </tr></thead>
   <tbody>
   {% for row in c.top_combos %}
@@ -1334,6 +1439,10 @@ async function dashRefresh(ev) {
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
       <td class="num">{{ row.spend | fmt_usd }}</td>
+      <td>
+        <button type="button" class="cb-send-btn" data-source="combo" data-country="{{ cid }}"
+                data-country-name="{{ c.country }}" data-payload='{{ row | tojson | e }}'>+ Builder</button>
+      </td>
     </tr>
   {% endfor %}
   </tbody>
@@ -1567,7 +1676,7 @@ async function dashRefresh(ev) {
   {% set default_asset = recs[0].offer if recs else '' %}
   {% set acc_id = acc_label | replace(' ', '_') | replace('.', '_') %}
 
-  <div class="cb-acc-row">
+  <div class="cb-acc-row" data-acc-label="{{ acc_label }}">
     {# ── Accordion header ── #}
     <div class="cb-acc-header" onclick="cbToggleAcc('{{ acc_id }}')">
       <span class="cb-acc-chevron" id="cb-chev-{{ acc_id }}">▸</span>
@@ -1651,6 +1760,20 @@ async function dashRefresh(ev) {
               <span class="cb-field-status"></span>
             {% else %}
               <span class="cb-pf-ok" style="font-size:0.72rem">✓ set</span>
+            {% endif %}
+          </div>
+
+          {# page_name — optional, used only by the visual ad preview #}
+          <div class="cb-map-field-row" id="cb-page-name-status-{{ acc_id }}">
+            <span class="cb-map-field-label">Page name</span>
+            {% if not pf.page_name %}
+              <input type="text" class="cb-input cb-map-input" data-field="page_name"
+                     value="" placeholder="e.g. Global Trading Academy">
+              <button type="button" class="cb-field-save-btn"
+                      onclick="cbSaveOneMapField(this, '{{ acc_label | e }}', 'page_name')">Save</button>
+              <span class="cb-field-status"></span>
+            {% else %}
+              <span class="cb-pf-ok" style="font-size:0.72rem">✓ {{ pf.page_name }}</span>
             {% endif %}
           </div>
 
@@ -1755,6 +1878,12 @@ async function dashRefresh(ev) {
                   </div>
                   <input type="hidden" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_copy" value="">
                 </div>
+                <span class="cb-label">CTA <span style="opacity:0.6">(preview only)</span></span>
+                <select class="cb-select cb-cta-select" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_cta">
+                  {% for cta in ['Learn More', 'Sign Up', 'Get Offer', 'Download', 'Shop Now', 'Apply Now', 'Get Quote'] %}
+                  <option value="{{ cta }}">{{ cta }}</option>
+                  {% endfor %}
+                </select>
               </div>
             </div>
             {% endfor %}
@@ -2766,6 +2895,21 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   var REF = null;
   try { REF = {{ ref_options_json | safe }}; } catch(e) {}
 
+  // {country_slug: {account_alias: account_label}} — resolves the "Account
+  // Alias" strings shown in Combos/CM-drill rows to the Builder's accordion key.
+  var ACCOUNT_ALIAS_MAP = {};
+  try { ACCOUNT_ALIAS_MAP = {{ account_alias_map_json | safe }}; } catch(e) {}
+
+  // {account_label: {page_name, ...}} — used by the visual ad preview to show
+  // the right Page name without a second round-trip. window-scoped: cbPreview()
+  // (below) lives in a separate top-level scope, outside this IIFE.
+  window.ACCOUNT_PREFLIGHT = {};
+  try { window.ACCOUNT_PREFLIGHT = {{ account_preflight_json | safe }}; } catch(e) {}
+
+  // Keep in sync with the server-rendered <select> options in report.html's
+  // cb-ad-row markup — preview-only, not part of the real publish payload.
+  var CTA_OPTIONS = ['Learn More', 'Sign Up', 'Get Offer', 'Download', 'Shop Now', 'Apply Now', 'Get Quote'];
+
   // ── Creatives from folder (loaded once) ──────────────────────────────
   var CREATIVES = [];  // [{filename, rel_path, folder, type}]
   fetch('/api/creatives')
@@ -3097,6 +3241,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-sel-dropdown" hidden>' + copiesHtml + '</div>' +
       '<input type="hidden" name="' + pfx + 'copy" value="">' +
       '</div>' +
+      '<span class="cb-label">CTA <span style="opacity:0.6">(preview only)</span></span>' +
+      '<select class="cb-select cb-cta-select" name="' + pfx + 'cta">' +
+      CTA_OPTIONS.map(function(c) { return '<option value="' + c + '">' + c + '</option>'; }).join('') +
+      '</select>' +
       '</div></div>';
   }
 
@@ -3377,6 +3525,454 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     cbUpdateCount(form);
   };
 
+  // ── "Send to Builder" (Add-to-Cart style prefill) ─────────────────────
+  function mapDeviceToOS(device) {
+    return (device || '').toLowerCase() === 'ios' ? 'iOS' : 'All';
+  }
+  function numericAge(age) {
+    var m = String(age == null ? '' : age).match(/\d+/);
+    return m ? m[0] : '35';
+  }
+  function guessCreativeType(text) {
+    // Split on non-alphanumeric like the Python creative-skip-prefix check does
+    // (an underscore counts as a "word" char to \b, so a plain regex misses
+    // tokens like "promo_video_test") — match per-token startswith, not substring.
+    var tokens = (text || '').toLowerCase().split(/[^a-z0-9]+/);
+    var isVideo = tokens.some(function(tok) { return tok.indexOf('vid') === 0; });
+    return isVideo ? 'Video' : 'Image';
+  }
+  // Find a CREATIVES entry whose filename/rel_path contains this text as a
+  // loose match — best-effort only, the popup always leaves the field
+  // editable so the user can pick manually if this guesses wrong or misses.
+  function findCreativeMatch(text, ctype) {
+    var q = (text || '').trim().toLowerCase();
+    if (!q) return null;
+    var isVideo = ctype === 'Video';
+    var pool = CREATIVES.filter(function(f) {
+      return isVideo ? f.type === 'Video' : f.type === 'Image';
+    });
+    var hit = pool.find(function(f) {
+      return f.filename.toLowerCase().indexOf(q) >= 0 || q.indexOf(f.filename.toLowerCase().replace(/\.[a-z0-9]+$/, '')) >= 0;
+    });
+    return hit || null;
+  }
+
+  function setSlotField(slot, idx, suffix, value) {
+    var el = slot.querySelector('[name="camp_' + idx + '_' + suffix + '"]');
+    if (el) el.value = value;
+    return el;
+  }
+
+  // Fill a searchable .cb-sel-wrap (hidden value + visible text) directly,
+  // bypassing the dropdown-click path since we already know the resolved value.
+  function setSelWrap(wrap, hiddenVal, displayText) {
+    if (!wrap) return;
+    var hidden = wrap.querySelector('input[type="hidden"]');
+    var text = wrap.querySelector('.cb-sel-text');
+    if (hidden) hidden.value = hiddenVal;
+    if (text) text.value = displayText;
+  }
+
+  // Campaign-level fields (targeting/OS/age/asset) — applied once per slot,
+  // from the FIRST cart item (a campaign has one targeting, not one per ad).
+  function applyCampaignFields(slot, prefill) {
+    var idx = slot.dataset.idx;
+    var tgtWrap = slot.querySelector('.cb-targeting-wrap');
+    var tgt = prefill.targeting || {};
+    if (tgt.matched) {
+      setSelWrap(tgtWrap, tgt.fb_interest || '', tgt.code || '');
+      var hint = tgtWrap ? tgtWrap.querySelector('.cb-targeting-hint') : null;
+      if (hint) hint.textContent = tgt.fb_interest || '';
+    } else if (tgt.raw) {
+      var tgtInput = tgtWrap ? tgtWrap.querySelector('.cb-targeting-search') : null;
+      if (tgtInput) tgtInput.value = tgt.raw;
+    }
+    var osWrap = slot.querySelector('.cb-fields .cb-inline .cb-sel-wrap');
+    var os = mapDeviceToOS(prefill.device);
+    setSelWrap(osWrap, os, os);
+    setSlotField(slot, idx, 'age', numericAge(prefill.age));
+    setSlotField(slot, idx, 'asset', prefill.asset || '');
+  }
+
+  // Per-ad-row fields — creative type + best-effort file match. `adRow` must
+  // already exist (created via the initial blank slot or a prior cbAddAd()).
+  function applyAdRowFields(adRow, slot, prefill) {
+    var idx = slot.dataset.idx;
+    var aIdx = adRow.dataset.adIdx;
+    var ctype = guessCreativeType(prefill.creativeHint);
+    var typeRadio = adRow.querySelector('[name="camp_' + idx + '_ad_' + aIdx + '_creative_type"][value="' + ctype + '"]');
+    if (typeRadio) { typeRadio.checked = true; cbAdTypeChange(typeRadio); }
+    var match = findCreativeMatch(prefill.creativeHint, ctype);
+    if (match) {
+      var creativeWrap = adRow.querySelector('.cb-creative-sel-wrap');
+      var creativeVal = match.rel_path || match.filename;
+      setSelWrap(creativeWrap, creativeVal, creativeVal);
+    }
+  }
+
+  function closeSendModal() {
+    var existing = document.getElementById('cb-send-modal');
+    if (existing) existing.remove();
+  }
+
+  // ── Multi-select cart ─────────────────────────────────────────────────
+  // Plain-data cart (no DOM refs) so it survives JSON round-trip through
+  // sessionStorage across the silent-refresh-and-reload flow (see buildCampaign()).
+  var SEND_CART = [];
+
+  function updateCartBtnVisual(btn, selected) {
+    btn.classList.toggle('cb-send-selected', selected);
+    btn.textContent = selected ? '✓ Selected' : '+ Builder';
+  }
+
+  function renderCartBar() {
+    var bar = document.getElementById('cb-cart-bar');
+    if (!SEND_CART.length) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'cb-cart-bar';
+      bar.className = 'cb-cart-bar';
+      document.body.appendChild(bar);
+    }
+    bar.innerHTML = '<span class="cb-cart-count">' + SEND_CART.length + ' ad' + (SEND_CART.length === 1 ? '' : 's') + ' selected</span>'
+      + '<button type="button" id="cb-cart-build">Build Campaign</button>'
+      + '<button type="button" id="cb-cart-clear">Clear</button>';
+    bar.querySelector('#cb-cart-build').onclick = function() { openCartModal(); };
+    bar.querySelector('#cb-cart-clear').onclick = function() { clearCart(); };
+  }
+
+  function clearCart() {
+    SEND_CART.forEach(function(item) { if (item.btnEl) updateCartBtnVisual(item.btnEl, false); });
+    SEND_CART = [];
+    renderCartBar();
+  }
+
+  window.cbToggleCartItem = function(btn) {
+    var source = btn.dataset.source;
+    var country = btn.dataset.country;
+    var countryName = btn.dataset.countryName || country;
+    var payload = {};
+    try { payload = JSON.parse(btn.dataset.payload || '{}'); } catch (e) {}
+
+    var existingIdx = SEND_CART.findIndex(function(item) { return item.btnEl === btn; });
+    if (existingIdx >= 0) {
+      SEND_CART.splice(existingIdx, 1);
+      updateCartBtnVisual(btn, false);
+      renderCartBar();
+      return;
+    }
+    if (SEND_CART.length && SEND_CART[0].country !== country) {
+      alert('A campaign is built from one country at a time. Click "Clear" on the cart bar first, then start selecting ads for ' + countryName + '.');
+      return;
+    }
+    SEND_CART.push({ btnEl: btn, source: source, country: country, countryName: countryName, payload: payload });
+    updateCartBtnVisual(btn, true);
+    renderCartBar();
+  };
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.cb-send-btn');
+    if (btn) window.cbToggleCartItem(btn);
+  });
+
+  // ── Resolve one cart item's targeting/device/age/asset (async) ────────
+  function resolveItemPrefill(item) {
+    var payload = item.payload;
+    if (item.source === 'combo') {
+      var interestText = payload.interest || '';
+      return fetch('/api/resolve-targeting?text=' + encodeURIComponent(interestText))
+        .then(function(r) { return r.json(); })
+        .catch(function() { return { raw: interestText, matched: false }; })
+        .then(function(targeting) {
+          return {
+            asset: payload.offer, device: payload.device, age: payload.age,
+            targeting: targeting, creativeHint: payload.creative || payload.offer,
+            aliasGuess: payload.top_account || '',
+          };
+        });
+    }
+    // source === 'ad'
+    return fetch('/api/parse-adset?name=' + encodeURIComponent(payload.adset || ''))
+      .then(function(r) { return r.json(); })
+      .catch(function() { return { device: null, age: null, targeting: { matched: false } }; })
+      .then(function(parsed) {
+        return {
+          asset: payload.ad_asset, device: parsed.device, age: parsed.age,
+          targeting: parsed.targeting, creativeHint: payload.ad_title || payload.ad_asset,
+          aliasGuess: payload.account || '',
+        };
+      });
+  }
+
+  // ── Modal: review cart, pick account, build ────────────────────────────
+  function openCartModal() {
+    if (!SEND_CART.length) return;
+    closeSendModal();
+    var country = SEND_CART[0].country;
+    var countryName = SEND_CART[0].countryName;
+
+    var overlay = document.createElement('div');
+    overlay.id = 'cb-send-modal';
+    overlay.className = 'cb-send-modal-overlay';
+    var box = document.createElement('div');
+    box.className = 'cb-send-modal-box';
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeSendModal(); });
+    box.innerHTML = '<div class="cb-send-modal-title">Build Campaign — ' + escHtml(countryName) + '</div>'
+      + '<div class="cb-send-modal-msg">Resolving ' + SEND_CART.length + ' ad(s)…</div>';
+
+    Promise.all(SEND_CART.map(resolveItemPrefill)).then(function(prefills) {
+      SEND_CART.forEach(function(item, i) { item.prefill = prefills[i]; });
+      renderCartModalBody(box, country, countryName);
+    });
+  }
+
+  function accountOptionsFor(country) {
+    // Union of: accounts already loaded in the DOM (buildable instantly) and
+    // every account known for this country (may need a refresh first) — this
+    // is the fix for "relevant accounts aren't offered": previously only the
+    // exact alias match was ever shown.
+    var panel = document.getElementById('view-country-' + country + '-open');
+    var loaded = panel ? Array.from(panel.querySelectorAll('.cb-acc-row')).map(function(r) { return r.dataset.accLabel; }) : [];
+    var known = Object.values(ACCOUNT_ALIAS_MAP[country] || {});
+    var all = Array.from(new Set(loaded.concat(known))).sort();
+    return all.map(function(label) { return { label: label, loaded: loaded.indexOf(label) >= 0 }; });
+  }
+
+  function bestAccountGuess(options) {
+    for (var i = 0; i < SEND_CART.length; i++) {
+      var alias = SEND_CART[i].prefill && SEND_CART[i].prefill.aliasGuess;
+      var label = alias && (ACCOUNT_ALIAS_MAP[SEND_CART[i].country] || {})[alias];
+      if (label && options.some(function(o) { return o.label === label; })) return label;
+    }
+    return '';
+  }
+
+  function renderCartModalBody(box, country, countryName) {
+    var itemsHtml = SEND_CART.map(function(item, i) {
+      var p = item.prefill || {};
+      var tgtText = (p.targeting && p.targeting.matched)
+        ? p.targeting.code
+        : (p.targeting && p.targeting.raw ? p.targeting.raw + ' (?)' : '—');
+      return '<div class="cb-send-field-row"><span class="cb-send-field-label">Ad ' + (i + 1) + '</span>'
+        + '<span class="cb-send-field-val' + (!(p.targeting && p.targeting.matched) ? ' cb-send-unresolved' : '') + '">'
+        + escHtml(p.asset || '—') + ' · ' + escHtml(tgtText) + '</span></div>';
+    }).join('');
+
+    var options = accountOptionsFor(country);
+    var guess = bestAccountGuess(options);
+    var optionsHtml = '<option value="">— choose account —</option>' + options.map(function(o) {
+      var sel = o.label === guess ? ' selected' : '';
+      var tag = o.loaded ? '' : ' (needs refresh)';
+      return '<option value="' + escHtml(o.label) + '"' + sel + '>' + escHtml(o.label) + tag + '</option>';
+    }).join('');
+
+    box.innerHTML = '<div class="cb-send-modal-title">Build Campaign — ' + escHtml(countryName) + '</div>'
+      + itemsHtml
+      + '<div class="cb-send-field-row" style="align-items:center">'
+      + '<span class="cb-send-field-label">Account</span>'
+      + '<select id="cb-send-acc-select" class="cb-select" style="max-width:220px">' + optionsHtml + '</select>'
+      + '</div>'
+      + '<div id="cb-send-new-acc-wrap" style="display:flex;gap:0.4rem;margin-top:0.4rem">'
+      + '<input type="text" id="cb-send-new-acc-name" class="cb-input" placeholder="…or type a new account name" style="flex:1">'
+      + '<button type="button" id="cb-send-create-acc" style="padding:0.3rem 0.7rem;background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:4px;color:var(--accent);cursor:pointer;font-size:0.75rem">Add account</button>'
+      + '</div>'
+      + '<div id="cb-send-status" class="cb-send-modal-msg"></div>'
+      + '<div class="cb-send-modal-actions">'
+      + '<button type="button" id="cb-send-cancel" style="padding:0.32rem 0.85rem;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text);cursor:pointer;font-size:0.77rem">Cancel</button>'
+      + '<button type="button" id="cb-send-build" style="padding:0.35rem 0.9rem;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.78rem;font-weight:600">Build</button>'
+      + '</div>';
+
+    box.querySelector('#cb-send-cancel').onclick = closeSendModal;
+    box.querySelector('#cb-send-create-acc').onclick = function() {
+      var nameInput = box.querySelector('#cb-send-new-acc-name');
+      var name = (nameInput.value || '').trim();
+      if (!name) { nameInput.style.borderColor = 'var(--bad)'; return; }
+      var btn = box.querySelector('#cb-send-create-acc');
+      btn.disabled = true;
+      fetch('/account-map-patch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_name: name, country: countryCode(countryName) }),
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        btn.disabled = false;
+        if (d.ok) {
+          ACCOUNT_ALIAS_MAP[country] = ACCOUNT_ALIAS_MAP[country] || {};
+          ACCOUNT_ALIAS_MAP[country][name] = name;
+          var select = box.querySelector('#cb-send-acc-select');
+          var opt = document.createElement('option');
+          opt.value = name; opt.textContent = name + ' (needs refresh)'; opt.selected = true;
+          select.appendChild(opt);
+          nameInput.value = '';
+        } else {
+          nameInput.style.borderColor = 'var(--bad)';
+        }
+      })
+      .catch(function() { btn.disabled = false; });
+    };
+    box.querySelector('#cb-send-build').onclick = function() {
+      var select = box.querySelector('#cb-send-acc-select');
+      var accountLabel = select.value;
+      if (!accountLabel) { select.style.borderColor = 'var(--bad)'; return; }
+      buildCampaign(SEND_CART.slice(), accountLabel, country, countryName);
+    };
+  }
+
+  // ── Place the cart's ads into one campaign slot, refreshing first if the
+  // target account isn't loaded in the DOM yet — no separate manual Refresh
+  // click needed, Build handles it end-to-end. ──────────────────────────
+  function placeCampaignInRow(row, cartItems) {
+    var form = row.querySelector('form.open-account-form');
+    if (!form) return;
+    cbAddSlot(form);
+    var container = form.querySelector('.cb-slots');
+    var slots = container.querySelectorAll('.cb-slot');
+    var slot = slots[slots.length - 1];
+
+    applyCampaignFields(slot, cartItems[0].prefill);
+    cartItems.forEach(function(item, i) {
+      if (i > 0) cbAddAd(slot.querySelector('.cb-add-btn-sm'));
+      var adRow = slot.querySelectorAll('.cb-ad-row')[i];
+      if (adRow) applyAdRowFields(adRow, slot, item.prefill);
+    });
+    cbUpdateName(slot);
+
+    closeSendModal();
+    clearCart();
+    var body = row.querySelector('.cb-acc-body');
+    if (body && !body.classList.contains('cb-acc-open')) {
+      body.classList.add('cb-acc-open');
+      var chev = row.querySelector('.cb-acc-chevron');
+      if (chev) chev.textContent = '▾';
+    }
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function findAccountRow(country, accountLabel) {
+    var panel = document.getElementById('view-country-' + country + '-open');
+    return panel ? panel.querySelector('.cb-acc-row[data-acc-label="' + CSS.escape(accountLabel) + '"]') : null;
+  }
+
+  function buildCampaign(cartItems, accountLabel, country, countryName) {
+    var row = findAccountRow(country, accountLabel);
+    if (row) { placeCampaignInRow(row, cartItems); return; }
+
+    // Account known but not yet loaded on this page — refresh silently and
+    // finish the build automatically once the page comes back, instead of
+    // asking the user to click the header Refresh button themselves.
+    var statusEl = document.getElementById('cb-send-status');
+    if (statusEl) statusEl.textContent = 'Account not loaded yet — refreshing…';
+    sessionStorage.setItem('cbPendingBuild', JSON.stringify({
+      cartItems: cartItems.map(function(it) { return { source: it.source, country: it.country, countryName: it.countryName, payload: it.payload, prefill: it.prefill }; }),
+      accountLabel: accountLabel, country: country, countryName: countryName, hash: location.hash,
+    }));
+    fetch('/refresh', { method: 'POST' }).then(function() { location.reload(); }).catch(function() { location.reload(); });
+  }
+
+  // Resume an auto-refresh-triggered build after the page reloads.
+  (function resumePendingBuild() {
+    var raw = sessionStorage.getItem('cbPendingBuild');
+    if (!raw) return;
+    sessionStorage.removeItem('cbPendingBuild');
+    var pending;
+    try { pending = JSON.parse(raw); } catch (e) { return; }
+    if (pending.hash) location.hash = pending.hash;
+    setTimeout(function() {
+      var row = findAccountRow(pending.country, pending.accountLabel);
+      if (row) {
+        placeCampaignInRow(row, pending.cartItems);
+      } else {
+        alert('Account "' + pending.accountLabel + '" still not found after refresh — check config/ad_account_map.csv and that it has performance data for ' + pending.countryName + '.');
+      }
+    }, 300);
+  })();
+
+  // ── Visual ad preview (Feed / Reels mockups) ──────────────────────────
+  // window-scoped: cbPreview() (further down the page) lives in a separate
+  // top-level <script>, outside this IIFE's closure.
+  function escHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function pageInitial(name) {
+    var n = (name || 'P').trim();
+    return n ? n[0].toUpperCase() : 'P';
+  }
+  function mediaTag(adRaw) {
+    if (!adRaw.creative_rel_path) {
+      return '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#8a8d91;font-size:0.7rem;background:#e4e6e9">No creative file</div>';
+    }
+    var src = '/creative-file?path=' + encodeURIComponent(adRaw.creative_rel_path);
+    return adRaw.creative_type === 'Video'
+      ? '<video src="' + src + '" muted loop autoplay playsinline></video>'
+      : '<img src="' + src + '" alt="">';
+  }
+
+  function renderFeedPreview(adRaw, pageName, cta) {
+    var body = escHtml(adRaw.ad_body);
+    var title = escHtml(adRaw.ad_title || pageName);
+    var desc = escHtml(adRaw.ad_link_description);
+    return '<div class="fb-feed-preview">'
+      + '<div class="fb-feed-header">'
+      + '<div class="fb-feed-avatar">' + escHtml(pageInitial(pageName)) + '</div>'
+      + '<div><div class="fb-feed-page-name">' + escHtml(pageName) + '</div>'
+      + '<div class="fb-feed-sponsored">Sponsored</div></div>'
+      + '</div>'
+      + (body ? '<div class="fb-feed-body">' + body + '</div>' : '')
+      + '<div class="fb-feed-media">' + mediaTag(adRaw) + '</div>'
+      + '<div class="fb-feed-link-bar">'
+      + '<div class="fb-feed-link-text">'
+      + (title ? '<div class="fb-feed-link-title">' + title + '</div>' : '')
+      + (desc ? '<div class="fb-feed-link-desc">' + desc + '</div>' : '')
+      + '</div>'
+      + '<button type="button" class="fb-feed-cta">' + escHtml(cta) + '</button>'
+      + '</div>'
+      + '<div class="fb-feed-actions"><span>👍 Like</span><span>💬 Comment</span><span>↗ Share</span></div>'
+      + '</div>';
+  }
+
+  function renderReelsPreview(adRaw, pageName, cta) {
+    var body = escHtml(adRaw.ad_body);
+    return '<div class="fb-reels-preview">'
+      + mediaTag(adRaw).replace('<img', '<img class="fb-reels-media"').replace('<video', '<video class="fb-reels-media"')
+      + '<div class="fb-reels-scrim"></div>'
+      + '<div class="fb-reels-top">'
+      + '<div class="fb-reels-avatar">' + escHtml(pageInitial(pageName)) + '</div>'
+      + '<div class="fb-reels-page-name">' + escHtml(pageName) + '</div>'
+      + '<button type="button" class="fb-reels-follow">Follow</button>'
+      + '</div>'
+      + '<div class="fb-reels-side"><div>❤️<span>Like</span></div><div>💬<span>0</span></div><div>↗<span>Share</span></div></div>'
+      + '<div class="fb-reels-bottom">'
+      + (body ? '<div class="fb-reels-body">' + body + '</div>' : '')
+      + '<button type="button" class="fb-reels-cta">' + escHtml(cta) + '</button>'
+      + '</div>'
+      + '</div>';
+  }
+
+  window.buildVisualPreviewHtml = function(plan, pageName, ctaMap) {
+    var cards = [];
+    plan.forEach(function(p, pIdx) {
+      var adsRaw = p._ads_raw || [];
+      adsRaw.forEach(function(adRaw, aIdx) {
+        var cta = ctaMap[pIdx + '_' + aIdx] || 'Learn More';
+        cards.push(
+          '<div style="display:flex;flex-direction:column;gap:0.3rem;align-items:center">'
+          + '<span style="font-size:0.68rem;color:var(--muted)">Campaign ' + (pIdx + 1) + ' — Ad ' + (aIdx + 1) + '</span>'
+          + '<div style="display:flex;gap:0.6rem;flex-wrap:wrap;justify-content:center">'
+          + renderFeedPreview(adRaw, pageName, cta)
+          + renderReelsPreview(adRaw, pageName, cta)
+          + '</div></div>'
+        );
+      });
+    });
+    if (!cards.length) return '<div class="cb-visual-empty">No ads to preview yet — add a creative file first.</div>';
+    return '<div class="cb-visual-preview">' + cards.join('') + '</div>';
+  }
+
   // ── Init ─────────────────────────────────────────────────────────────
   initAllSelects();
   document.querySelectorAll('.cb-slot').forEach(function(slot) {
@@ -3408,6 +4004,16 @@ window.cbPreview = function(form) {
   panel.innerHTML = '<span style="color:var(--muted)">Loading preview…</span>';
   if (publishBtn) publishBtn.disabled = true;
 
+  // Collect client-only fields the server response doesn't echo back (CTA),
+  // plus which Page name this account's previews should show.
+  var accountLabel = (form.querySelector('[name="account_label"]') || {}).value || '';
+  var pageName = (ACCOUNT_PREFLIGHT[accountLabel] && ACCOUNT_PREFLIGHT[accountLabel].page_name) || accountLabel || 'Your Page';
+  var ctaMap = {};
+  form.querySelectorAll('.cb-cta-select').forEach(function(sel) {
+    var m = sel.name.match(/^camp_(\d+)_ad_(\d+)_cta$/);
+    if (m) ctaMap[m[1] + '_' + m[2]] = sel.value;
+  });
+
   var fd = cbCollectFormData(form);
   fetch('/preview-publish', { method: 'POST', body: fd })
     .then(function(r) {
@@ -3424,7 +4030,7 @@ window.cbPreview = function(form) {
         return;
       }
       var plan = data.plan || [];
-      var SKIP = ['errors', 'warnings'];
+      var SKIP = ['errors', 'warnings', '_ads_raw'];
       var hasErrors = plan.some(function(p) { return p.errors && p.errors.length; });
 
       var html = '<strong style="font-size:0.8rem">Preview — ' + plan.length + ' campaign(s)</strong>';
@@ -3481,7 +4087,28 @@ window.cbPreview = function(form) {
       } else if (hasErrors) {
         html += '<p style="color:var(--bad);margin-top:0.5rem;font-size:0.75rem">Fix errors above before publishing</p>';
       }
-      panel.innerHTML = html;
+
+      var visualHtml = buildVisualPreviewHtml(plan, pageName, ctaMap);
+      panel.innerHTML =
+        '<div class="cb-preview-toggle">'
+        + '<button type="button" class="cb-preview-toggle-btn cb-preview-toggle-active" data-view="diag">Diagnostic</button>'
+        + '<button type="button" class="cb-preview-toggle-btn" data-view="visual">Visual</button>'
+        + '</div>'
+        + '<div class="cb-preview-diag">' + html + '</div>'
+        + '<div class="cb-preview-visual" style="display:none">' + visualHtml + '</div>';
+
+      var toggleBtns = panel.querySelectorAll('.cb-preview-toggle-btn');
+      var diagEl = panel.querySelector('.cb-preview-diag');
+      var visEl = panel.querySelector('.cb-preview-visual');
+      toggleBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          toggleBtns.forEach(function(b) { b.classList.remove('cb-preview-toggle-active'); });
+          btn.classList.add('cb-preview-toggle-active');
+          var showVisual = btn.dataset.view === 'visual';
+          diagEl.style.display = showVisual ? 'none' : 'block';
+          visEl.style.display = showVisual ? 'block' : 'none';
+        });
+      });
     })
     .catch(function(e) {
       panel.innerHTML = '<span class="cb-preview-errors">Request failed: ' + e.message + '</span>';

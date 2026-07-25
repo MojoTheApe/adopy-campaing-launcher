@@ -5,7 +5,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from config.paths import get_creatives_root
 from src.fb_ads_rpa.draft import CampaignDraft
+
+
+def _creative_rel_path(creative_path: str | None) -> str | None:
+    """Strip the creatives root off an absolute path so the client only ever
+    sees a relative path (passed to GET /creative-file, never a local FS path).
+    """
+    if not creative_path:
+        return None
+    try:
+        return str(Path(creative_path).relative_to(get_creatives_root())).replace("\\", "/")
+    except ValueError:
+        return Path(creative_path).name
 
 
 def preview_campaign_drafts(drafts: list[CampaignDraft]) -> list[dict[str, Any]]:
@@ -39,6 +52,7 @@ def preview_campaign_drafts(drafts: list[CampaignDraft]) -> list[dict[str, Any]]
             row["Age Max"] = ad_set.age_max
             row["OS"] = ad_set.os
 
+        ads_raw: list[dict[str, Any]] = []
         for idx, ad in enumerate((ad_set.ads if ad_set else []), start=1):
             prefix = f"Ad {idx}"
             creative_file = ad.creative_filename or "—"
@@ -50,6 +64,16 @@ def preview_campaign_drafts(drafts: list[CampaignDraft]) -> list[dict[str, Any]]
             row[f"{prefix} — Body"] = (ad.ad_body or "")[:80] + (
                 "…" if len(ad.ad_body or "") > 80 else ""
             )
+            ads_raw.append({
+                "creative_type": ad.creative_type,
+                "creative_rel_path": _creative_rel_path(ad.creative_path),
+                "ad_title": ad.ad_title or "",
+                "ad_body": ad.ad_body or "",
+                "ad_link_description": ad.ad_link_description or "",
+            })
+        # Untruncated per-ad fields for the visual Feed/Reels preview — additive,
+        # the flat "Ad N — ..." keys above stay unchanged for the diagnostic table.
+        row["_ads_raw"] = ads_raw
 
         result.append(row)
     return result

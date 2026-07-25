@@ -1,0 +1,56 @@
+"""Send-to-Builder alias resolution: 'trade'/'trading_target'/'trader' -> canonical 'Trading'."""
+
+from __future__ import annotations
+
+from src.web.adset_helpers import parse_adset_for_builder, resolve_interest_alias
+
+
+def test_resolve_interest_alias_matches_known_alias():
+    result = resolve_interest_alias("trade")
+    assert result["matched"] is True
+    assert result["code"] == "Trading"
+    assert result["label"] == "Trading (Generic)"
+    assert "Day trading" in result["fb_interest"]
+
+
+def test_resolve_interest_alias_is_case_insensitive():
+    result = resolve_interest_alias("Trader")
+    assert result["matched"] is True
+    assert result["code"] == "Trading"
+
+
+def test_resolve_interest_alias_canonical_key_passthrough():
+    result = resolve_interest_alias("Trading")
+    assert result["matched"] is True
+    assert result["code"] == "Trading"
+
+
+def test_resolve_interest_alias_unknown_text():
+    result = resolve_interest_alias("nonexistent_xyz_target")
+    assert result["matched"] is False
+    assert result["code"] is None
+    assert result["raw"] == "nonexistent_xyz_target"
+
+
+def test_resolve_interest_alias_empty_text():
+    result = resolve_interest_alias("")
+    assert result["matched"] is False
+    assert result["raw"] == ""
+
+
+def test_parse_adset_for_builder_resolves_alias_from_full_name():
+    # Format: CountryCode_OfferName_Device_Creative_Interest_Age[_Date]
+    # "video" (bare media-type token, no numeric suffix) is stripped as
+    # creative/not-targeting per _MEDIA_TYPE_TOKENS, leaving "Trade" as the
+    # isolated interest token — see analyze_fb_stats._is_creative_skip_token.
+    result = parse_adset_for_builder("KW_Casino_iOS_video_Trade_35_15.07")
+    assert result["country_code"] == "KW"
+    assert result["device"] == "ios"
+    assert result["age"] == "35"
+    assert result["targeting"]["matched"] is True
+    assert result["targeting"]["code"] == "Trading"
+
+
+def test_parse_adset_for_builder_empty_name():
+    result = parse_adset_for_builder("")
+    assert result["targeting"]["matched"] is False

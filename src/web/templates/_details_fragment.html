@@ -39,6 +39,7 @@
               <th class="num">CPL</th>
               <th class="num">CPA</th>
               <th>Date</th>
+              <th></th>
               {% elif section == 'cm_comparison' %}
               <th>Campaign / Ad set</th>
               <th>Account</th>
@@ -71,6 +72,9 @@
               hx-trigger="click"
               style="cursor:pointer"
               {% endif %}
+              {% if section == 'optimization' %}
+              data-account="{{ r.account or '' }}" data-adset="{{ r.adset or '' }}"
+              {% endif %}
             >
               {% if section == 'optimization' %}
               <td>{{ r.ad_title or '' }}</td>
@@ -81,6 +85,10 @@
               <td class="num">{{ r.cpl | fmt_usd }}</td>
               <td class="num">{{ r.cpa | fmt_usd }}</td>
               <td class="date">{{ r.date or '' }}</td>
+              <td>
+                <button type="button" class="cb-send-btn" data-source="ad" data-country="{{ country | anchor_slug }}"
+                        data-country-name="{{ country }}" data-payload='{{ r | tojson | e }}'>+ Builder</button>
+              </td>
               {% elif section == 'cm_comparison' %}
               <td class="adset" style="max-width:300px;word-break:break-word">
                 {{ r.adset or '' }}

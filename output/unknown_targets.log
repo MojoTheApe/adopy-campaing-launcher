@@ -4613,3 +4613,322 @@ GPT_FX/SM|/IOS | source: EC_FAV_All_IMG_GPT_FX/SM\/IOS_35_6.1
 GMB|TRD | source: CO_ML_all_GMB|TRD_35+28.6.2026
 GMBL|OnlineGaming | source: KW_Trl_IOS_Images_GMBL|OnlineGaming_35_07.07
 SM|GMBL | source: CO_AIT_all_SM|GMBL_35+10.7.2026
+SM|Reading | source: SA_Ait_All_Video_SM|Reading_35_07.05
+Day|Investment | source: CL_ML_all_Day|Investment_40+16.7.2026
+GMBL|Day | source: SA_ARMC_all_GMBL|Day_vid_30+1.7.2026 - IOS
+GMBL|TradingYB_V1 | source: CO_AIT_iOS_VID_GMBL|TradingYB_V1_35_10.7
+GMBL|TradingYB | source: CO_AIT_iOS_VID_GMBL|TradingYB_35_10.7
+Passive|Day | source: PE_AIT_all_Passive|Day_35+15.7.2026
+DAY|Investment | source: EC_AIT_All_VID_DAY|Investment_30_7.7
+GMBL|TradingNik | source: CO_AIT_iOS_VID_GMBL|TradingNik_35_18.6
+SM|TradingYB | source: MX_AMZN_all_SM|TradingYB_40+8.7.2026
+Investment|LUX | source: GT_AIT_iOS_VID_Investment|LUX_40_27.2
+GMBL|Platforms | source: CO_AIT_all_GMBL|Platforms_35+15.7.2026
+Trading|Investment | source: CL_ML_all_Trading|Investment_35+14.7.2026
+gmbl|day | source: SA_Arc_IOS_images_gmbl|day_30+_14.7
+HV|Trading | source: CL_ML_all_HV|Trading_35+16.7.2026
+Passive|Trading | source: CL_ML_all_Passive|Trading_35+16.7.2026
+GMBL|FX | source: MX_ML_IOS_Videos_GMBL|FX_35_01.07
+GMBL|Investment | source: CO_AIT_all_GMBL|Investment_35+30.6.2026 - iOS
+GMBL|TradingYB_2 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+15.7_2
+GMBL|TradingYB_1 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+15.7_1
+GMBL|Trading | source: CO_Ait_IOS_Videos_GMBL|Trading_35_06.07
+GMBL|Invesmtnet | source: CO_BNC_IOS_Video_GMBL|Invesmtnet_35_09,07
+GMBL|DS | source: CO_Ait_IOS_Videos_GMBL|DS_35_08.07
+Mix|Reading | source: SA_ARMC_all_Mix|Reading_30+8.7.2026 - iOS
+Investment|Day | source: CL_AIT_all_Investment|Day_35+1.7.2026 - iOS
+Trading|SM | source: MX_AMZN_all_Trading|SM_35+11.7.2026
+GMBL|DAY | source: SA_ARM_iOS_IMG_GMBL|DAY_30_6.7
+SM|PF | source: MX_AMZ_iOS_VID_SM|PF_35_2.7
+GMBL|InvestmentYB | source: CO_AIT_all_GMBL|InvestmentYB_35+29.6.2026
+FX|TradingYB | source: EC_AIT_All_VID_FX|TradingYB_35_30.6
+DAY|TradingYB | source: EC_AIT_All_VID_DAY|TradingYB_35_29.6
+HV|GMBL | source: CL_AIT_all_HV|GMBL_35+29.6.2026
+GMBL|investment | source: EC_AIT_All_VID_GMBL|investment_35_06.07
+HV|Passive | source: CL_ML_all_HV|Passive_35+3.7.2026 - iOS
+Day|IPO | source: CL_ML_all_Day|IPO_35+3.7.2026 - iOS
+Gmbl|DS | source: CO_BNC_IOS_Video_Gmbl|DS_35_09.07
+HV|IPO | source: CL_SQM_all_HV|IPO_35+03.7.2026
+TRD|Investment | source: CO_BAC_iOS_VID_TRD|Investment_35_7.7
+Passive|Platforms | source: PE_AIT_All_Image_Passive|Platforms_35_17.07
+GMB|TradingYB | source: SV_AIT_all_GMB|TradingYB_35_21.7.2026
+HV|Day | source: CL_ML_all_HV|Day_35+3.7.2026
+GMBL|Day|SM | source: CO_AIT_all_GMBL|Day|SM_35+11.7.2026
+GMBLCO_AIT_all_GMBL|TradingYB | source: CO_AIT_all_GMBLCO_AIT_all_GMBL|TradingYB_35+12-2.7.2026|TradingYB_35+12-1.7.2026
+GMB|Investment | source: CO_ML_all_GMB|Investment_35+21.6.2026
+HV|GMBL|SM | source: MX_AMZ_All_Video_HV|GMBL|SM_40_04.07
+SM|Trading | source: MX_AMZN_all_SM|Trading_35+6.7.2026
+SM|Day | source: AR_AIT_all_SM|Day_35+11.7.2026
+GMBL|tradingYB | source: CL_ML_All_VID_GMBL|tradingYB_35_7.7
+Blue_InvestmentIOS | source: ARG_Ait_All_Video_Blue_InvestmentIOS_40_12.11
+HV|Trading_40-64_Nokit | source: CL_ML_iOS_VID_HV|Trading_40-64_15.4_Nokit
+Cond_IMG_SM|PF/iOS | source: KW_TRL_All_Cond_IMG_SM|PF/iOS_25_17.5
+HV|TradingYB | source: CL_AIT_All_VID_HV|TradingYB_35_8.6
+Reading|SM | source: KW_BB_IOS_Images_Reading|SM_30_24.05cond
+DAY|HV | source: CL_SX_All_IMG_DAY|HV_30_20.7
+IPO|HV | source: CL_SX_All_IMG_IPO|HV_30_20.7
+TRD|WC | source: CL_ML_All_IMG_TRD|WC_35_17.7
+DAY|WC | source: CL_ML_All_IMG_DAY|WC_35_17.7
+sm|tradingyb | source: CL_ML_all_sm|tradingyb_35_14.7
+day|investment | source: CL_ML_all_day|investment_35_14.7
+DAY|TradingNik | source: EC_AIT_All_VID_DAY|TradingNik_35_26.6
+HV|Investment | source: UAE_AIT_all_HV|Investment_vid_30+1.7.2026 - IOS
+GMBL|TradeYB | source: SA_Arc_IOS_Images_GMBL|TradeYB_30_04.07
+Gmbl|Investment | source: CL_ML_IOS_Videos_Gmbl|Investment_35_02.07
+Gmbl|TRadingYB | source: CL_ML_IOS_Videos_Gmbl|TRadingYB_35_02.07
+GMBL|YB | source: CO_BAC_iOS_VID_GMBL|YB_35_1.7
+GMBL|BS | source: KW_Trl_IOS_Mix_GMBL|BS_30_06.07
+SM|HV | source: MX_PMX_iOS_IMG_SM|HV_35_7.7
+HV|FX | source: MX_PMX_all_HV|FX_40+7.7.2026
+GMBL|IPO | source: SA_ARMC_all_GMBL|IPO_30+8.7.2026 - iOS
+GMBL|SM | source: CO_AIT_all_GMBL|SM_35+10.7.2026
+Passive|TradingYB | source: CO_AIT_all_Passive|TradingYB_35+14.7.2026
+CL_ML_All_Images_ML21_Day|Investment_35_11.07 | source: CL_ML_All_Images_ML21_Day|Investment_35_11.07
+CL_ML_All_Images_ML21_Trading|Investment_35_11.07 | source: CL_ML_All_Images_ML21_Trading|Investment_35_11.07
+Day|GMBL | source: CL_ML_all_Day|GMBL_35_11.07
+GMBL|TradingYB_V2 | source: CO_AIT_iOS_VID_GMBL|TradingYB_V2_35_10.7
+TRD|HV | source: CL_SX_All_IMG_TRD|HV_35_17.7
+GMBL|TradingYB_3 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+16.7_3
+GPT_FX/SM|/IOS | source: EC_FAV_All_IMG_GPT_FX/SM\/IOS_35_6.1
+GMB|TRD | source: CO_ML_all_GMB|TRD_35+28.6.2026
+GMBL|OnlineGaming | source: KW_Trl_IOS_Images_GMBL|OnlineGaming_35_07.07
+SM|GMBL | source: CO_AIT_all_SM|GMBL_35+10.7.2026
+SM|Reading | source: SA_Ait_All_Video_SM|Reading_35_07.05
+Day|Investment | source: CL_ML_all_Day|Investment_40+16.7.2026
+GMBL|Day | source: SA_ARMC_all_GMBL|Day_vid_30+1.7.2026 - IOS
+GMBL|TradingYB_V1 | source: CO_AIT_iOS_VID_GMBL|TradingYB_V1_35_10.7
+GMBL|TradingYB | source: CO_AIT_iOS_VID_GMBL|TradingYB_35_10.7
+Passive|Day | source: PE_AIT_all_Passive|Day_35+15.7.2026
+DAY|Investment | source: EC_AIT_All_VID_DAY|Investment_30_7.7
+GMBL|TradingNik | source: CO_AIT_iOS_VID_GMBL|TradingNik_35_18.6
+SM|TradingYB | source: MX_AMZN_all_SM|TradingYB_40+8.7.2026
+Investment|LUX | source: GT_AIT_iOS_VID_Investment|LUX_40_27.2
+GMBL|Platforms | source: CO_AIT_all_GMBL|Platforms_35+15.7.2026
+Trading|Investment | source: CL_ML_all_Trading|Investment_35+14.7.2026
+gmbl|day | source: SA_Arc_IOS_images_gmbl|day_30+_14.7
+HV|Trading | source: CL_ML_all_HV|Trading_35+16.7.2026
+Passive|Trading | source: CL_ML_all_Passive|Trading_35+16.7.2026
+GMBL|FX | source: MX_ML_IOS_Videos_GMBL|FX_35_01.07
+GMBL|Investment | source: CO_AIT_all_GMBL|Investment_35+30.6.2026 - iOS
+GMBL|TradingYB_2 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+15.7_2
+GMBL|TradingYB_1 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+15.7_1
+GMBL|Trading | source: CO_Ait_IOS_Videos_GMBL|Trading_35_06.07
+GMBL|Invesmtnet | source: CO_BNC_IOS_Video_GMBL|Invesmtnet_35_09,07
+GMBL|DS | source: CO_Ait_IOS_Videos_GMBL|DS_35_08.07
+Mix|Reading | source: SA_ARMC_all_Mix|Reading_30+8.7.2026 - iOS
+Investment|Day | source: CL_AIT_all_Investment|Day_35+1.7.2026 - iOS
+Trading|SM | source: MX_AMZN_all_Trading|SM_35+11.7.2026
+GMBL|DAY | source: SA_ARM_iOS_IMG_GMBL|DAY_30_6.7
+SM|PF | source: MX_AMZ_iOS_VID_SM|PF_35_2.7
+GMBL|InvestmentYB | source: CO_AIT_all_GMBL|InvestmentYB_35+29.6.2026
+FX|TradingYB | source: EC_AIT_All_VID_FX|TradingYB_35_30.6
+DAY|TradingYB | source: EC_AIT_All_VID_DAY|TradingYB_35_29.6
+HV|GMBL | source: CL_AIT_all_HV|GMBL_35+29.6.2026
+GMBL|investment | source: EC_AIT_All_VID_GMBL|investment_35_06.07
+HV|Passive | source: CL_ML_all_HV|Passive_35+3.7.2026 - iOS
+Day|IPO | source: CL_ML_all_Day|IPO_35+3.7.2026 - iOS
+Gmbl|DS | source: CO_BNC_IOS_Video_Gmbl|DS_35_09.07
+HV|IPO | source: CL_SQM_all_HV|IPO_35+03.7.2026
+TRD|Investment | source: CO_BAC_iOS_VID_TRD|Investment_35_7.7
+Passive|Platforms | source: PE_AIT_All_Image_Passive|Platforms_35_17.07
+GMB|TradingYB | source: SV_AIT_all_GMB|TradingYB_35_21.7.2026
+HV|Day | source: CL_ML_all_HV|Day_35+3.7.2026
+GMBL|Day|SM | source: CO_AIT_all_GMBL|Day|SM_35+11.7.2026
+GMBLCO_AIT_all_GMBL|TradingYB | source: CO_AIT_all_GMBLCO_AIT_all_GMBL|TradingYB_35+12-2.7.2026|TradingYB_35+12-1.7.2026
+GMB|Investment | source: CO_ML_all_GMB|Investment_35+21.6.2026
+HV|GMBL|SM | source: MX_AMZ_All_Video_HV|GMBL|SM_40_04.07
+SM|Trading | source: MX_AMZN_all_SM|Trading_35+6.7.2026
+SM|Day | source: AR_AIT_all_SM|Day_35+11.7.2026
+GMBL|tradingYB | source: CL_ML_All_VID_GMBL|tradingYB_35_7.7
+HV|Trading_40-64_Nokit | source: CL_ML_iOS_VID_HV|Trading_40-64_15.4_Nokit
+Cond_IMG_SM|PF/iOS | source: KW_TRL_All_Cond_IMG_SM|PF/iOS_25_17.5
+HV|TradingYB | source: CL_AIT_All_VID_HV|TradingYB_35_8.6
+Reading|SM | source: KW_BB_IOS_Images_Reading|SM_30_24.05cond
+DAY|HV | source: CL_SX_All_IMG_DAY|HV_30_20.7
+IPO|HV | source: CL_SX_All_IMG_IPO|HV_30_20.7
+TRD|WC | source: CL_ML_All_IMG_TRD|WC_35_17.7
+DAY|WC | source: CL_ML_All_IMG_DAY|WC_35_17.7
+sm|tradingyb | source: CL_ML_all_sm|tradingyb_35_14.7
+day|investment | source: CL_ML_all_day|investment_35_14.7
+DAY|TradingNik | source: EC_AIT_All_VID_DAY|TradingNik_35_26.6
+HV|Investment | source: UAE_AIT_all_HV|Investment_vid_30+1.7.2026 - IOS
+GMBL|TradeYB | source: SA_Arc_IOS_Images_GMBL|TradeYB_30_04.07
+Gmbl|Investment | source: CL_ML_IOS_Videos_Gmbl|Investment_35_02.07
+Gmbl|TRadingYB | source: CL_ML_IOS_Videos_Gmbl|TRadingYB_35_02.07
+GMBL|YB | source: CO_BAC_iOS_VID_GMBL|YB_35_1.7
+GMBL|BS | source: KW_Trl_IOS_Mix_GMBL|BS_30_06.07
+SM|HV | source: MX_PMX_iOS_IMG_SM|HV_35_7.7
+HV|FX | source: MX_PMX_all_HV|FX_40+7.7.2026
+GMBL|IPO | source: SA_ARMC_all_GMBL|IPO_30+8.7.2026 - iOS
+GMBL|SM | source: CO_AIT_all_GMBL|SM_35+10.7.2026
+Passive|TradingYB | source: CO_AIT_all_Passive|TradingYB_35+14.7.2026
+CL_ML_All_Images_ML21_Day|Investment_35_11.07 | source: CL_ML_All_Images_ML21_Day|Investment_35_11.07
+CL_ML_All_Images_ML21_Trading|Investment_35_11.07 | source: CL_ML_All_Images_ML21_Trading|Investment_35_11.07
+Day|GMBL | source: CL_ML_all_Day|GMBL_35_11.07
+GMBL|TradingYB_V2 | source: CO_AIT_iOS_VID_GMBL|TradingYB_V2_35_10.7
+TRD|HV | source: CL_SX_All_IMG_TRD|HV_35_17.7
+GMBL|TradingYB_3 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+16.7_3
+GPT_FX/SM|/IOS | source: EC_FAV_All_IMG_GPT_FX/SM\/IOS_35_6.1
+GMB|TRD | source: CO_ML_all_GMB|TRD_35+28.6.2026
+GMBL|OnlineGaming | source: KW_Trl_IOS_Images_GMBL|OnlineGaming_35_07.07
+SM|GMBL | source: CO_AIT_all_SM|GMBL_35+10.7.2026
+SM|Reading | source: SA_Ait_All_Video_SM|Reading_35_07.05
+Day|Investment | source: CL_ML_all_Day|Investment_40+16.7.2026
+GMBL|Day | source: SA_ARMC_all_GMBL|Day_vid_30+1.7.2026 - IOS
+GMBL|TradingYB_V1 | source: CO_AIT_iOS_VID_GMBL|TradingYB_V1_35_10.7
+GMBL|TradingYB | source: CO_AIT_iOS_VID_GMBL|TradingYB_35_10.7
+Passive|Day | source: PE_AIT_all_Passive|Day_35+15.7.2026
+DAY|Investment | source: EC_AIT_All_VID_DAY|Investment_30_7.7
+GMBL|TradingNik | source: CO_AIT_iOS_VID_GMBL|TradingNik_35_18.6
+SM|TradingYB | source: MX_AMZN_all_SM|TradingYB_40+8.7.2026
+Investment|LUX | source: GT_AIT_iOS_VID_Investment|LUX_40_27.2
+GMBL|Platforms | source: CO_AIT_all_GMBL|Platforms_35+15.7.2026
+Trading|Investment | source: CL_ML_all_Trading|Investment_35+14.7.2026
+gmbl|day | source: SA_Arc_IOS_images_gmbl|day_30+_14.7
+HV|Trading | source: CL_ML_all_HV|Trading_35+16.7.2026
+Passive|Trading | source: CL_ML_all_Passive|Trading_35+16.7.2026
+GMBL|FX | source: MX_ML_IOS_Videos_GMBL|FX_35_01.07
+GMBL|Investment | source: CO_AIT_all_GMBL|Investment_35+30.6.2026 - iOS
+GMBL|TradingYB_2 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+15.7_2
+GMBL|TradingYB_1 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+15.7_1
+GMBL|Trading | source: CO_Ait_IOS_Videos_GMBL|Trading_35_06.07
+GMBL|Invesmtnet | source: CO_BNC_IOS_Video_GMBL|Invesmtnet_35_09,07
+GMBL|DS | source: CO_Ait_IOS_Videos_GMBL|DS_35_08.07
+Mix|Reading | source: SA_ARMC_all_Mix|Reading_30+8.7.2026 - iOS
+Investment|Day | source: CL_AIT_all_Investment|Day_35+1.7.2026 - iOS
+Trading|SM | source: MX_AMZN_all_Trading|SM_35+11.7.2026
+GMBL|DAY | source: SA_ARM_iOS_IMG_GMBL|DAY_30_6.7
+SM|PF | source: MX_AMZ_iOS_VID_SM|PF_35_2.7
+GMBL|InvestmentYB | source: CO_AIT_all_GMBL|InvestmentYB_35+29.6.2026
+FX|TradingYB | source: EC_AIT_All_VID_FX|TradingYB_35_30.6
+DAY|TradingYB | source: EC_AIT_All_VID_DAY|TradingYB_35_29.6
+HV|GMBL | source: CL_AIT_all_HV|GMBL_35+29.6.2026
+GMBL|investment | source: EC_AIT_All_VID_GMBL|investment_35_06.07
+HV|Passive | source: CL_ML_all_HV|Passive_35+3.7.2026 - iOS
+Day|IPO | source: CL_ML_all_Day|IPO_35+3.7.2026 - iOS
+Gmbl|DS | source: CO_BNC_IOS_Video_Gmbl|DS_35_09.07
+HV|IPO | source: CL_SQM_all_HV|IPO_35+03.7.2026
+TRD|Investment | source: CO_BAC_iOS_VID_TRD|Investment_35_7.7
+Passive|Platforms | source: PE_AIT_All_Image_Passive|Platforms_35_17.07
+GMB|TradingYB | source: SV_AIT_all_GMB|TradingYB_35_21.7.2026
+HV|Day | source: CL_ML_all_HV|Day_35+3.7.2026
+GMBL|Day|SM | source: CO_AIT_all_GMBL|Day|SM_35+11.7.2026
+GMBLCO_AIT_all_GMBL|TradingYB | source: CO_AIT_all_GMBLCO_AIT_all_GMBL|TradingYB_35+12-2.7.2026|TradingYB_35+12-1.7.2026
+GMB|Investment | source: CO_ML_all_GMB|Investment_35+21.6.2026
+HV|GMBL|SM | source: MX_AMZ_All_Video_HV|GMBL|SM_40_04.07
+SM|Trading | source: MX_AMZN_all_SM|Trading_35+6.7.2026
+SM|Day | source: AR_AIT_all_SM|Day_35+11.7.2026
+GMBL|tradingYB | source: CL_ML_All_VID_GMBL|tradingYB_35_7.7
+HV|Trading_40-64_Nokit | source: CL_ML_iOS_VID_HV|Trading_40-64_15.4_Nokit
+Cond_IMG_SM|PF/iOS | source: KW_TRL_All_Cond_IMG_SM|PF/iOS_25_17.5
+HV|TradingYB | source: CL_AIT_All_VID_HV|TradingYB_35_8.6
+Reading|SM | source: KW_BB_IOS_Images_Reading|SM_30_24.05cond
+DAY|HV | source: CL_SX_All_IMG_DAY|HV_30_20.7
+IPO|HV | source: CL_SX_All_IMG_IPO|HV_30_20.7
+TRD|WC | source: CL_ML_All_IMG_TRD|WC_35_17.7
+DAY|WC | source: CL_ML_All_IMG_DAY|WC_35_17.7
+sm|tradingyb | source: CL_ML_all_sm|tradingyb_35_14.7
+day|investment | source: CL_ML_all_day|investment_35_14.7
+DAY|TradingNik | source: EC_AIT_All_VID_DAY|TradingNik_35_26.6
+HV|Investment | source: UAE_AIT_all_HV|Investment_vid_30+1.7.2026 - IOS
+GMBL|TradeYB | source: SA_Arc_IOS_Images_GMBL|TradeYB_30_04.07
+Gmbl|Investment | source: CL_ML_IOS_Videos_Gmbl|Investment_35_02.07
+Gmbl|TRadingYB | source: CL_ML_IOS_Videos_Gmbl|TRadingYB_35_02.07
+GMBL|YB | source: CO_BAC_iOS_VID_GMBL|YB_35_1.7
+GMBL|BS | source: KW_Trl_IOS_Mix_GMBL|BS_30_06.07
+SM|HV | source: MX_PMX_iOS_IMG_SM|HV_35_7.7
+HV|FX | source: MX_PMX_all_HV|FX_40+7.7.2026
+GMBL|IPO | source: SA_ARMC_all_GMBL|IPO_30+8.7.2026 - iOS
+GMBL|SM | source: CO_AIT_all_GMBL|SM_35+10.7.2026
+Passive|TradingYB | source: CO_AIT_all_Passive|TradingYB_35+14.7.2026
+CL_ML_All_Images_ML21_Day|Investment_35_11.07 | source: CL_ML_All_Images_ML21_Day|Investment_35_11.07
+CL_ML_All_Images_ML21_Trading|Investment_35_11.07 | source: CL_ML_All_Images_ML21_Trading|Investment_35_11.07
+Day|GMBL | source: CL_ML_all_Day|GMBL_35_11.07
+GMBL|TradingYB_V2 | source: CO_AIT_iOS_VID_GMBL|TradingYB_V2_35_10.7
+TRD|HV | source: CL_SX_All_IMG_TRD|HV_35_17.7
+GMBL|TradingYB_3 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+16.7_3
+GPT_FX/SM|/IOS | source: EC_FAV_All_IMG_GPT_FX/SM\/IOS_35_6.1
+GMB|TRD | source: CO_ML_all_GMB|TRD_35+28.6.2026
+GMBL|OnlineGaming | source: KW_Trl_IOS_Images_GMBL|OnlineGaming_35_07.07
+SM|GMBL | source: CO_AIT_all_SM|GMBL_35+10.7.2026
+SM|Reading | source: SA_Ait_All_Video_SM|Reading_35_07.05
+Day|Investment | source: CL_ML_all_Day|Investment_40+16.7.2026
+GMBL|Day | source: SA_ARMC_all_GMBL|Day_vid_30+1.7.2026 - IOS
+GMBL|TradingYB_V1 | source: CO_AIT_iOS_VID_GMBL|TradingYB_V1_35_10.7
+GMBL|TradingYB | source: CO_AIT_iOS_VID_GMBL|TradingYB_35_10.7
+Passive|Day | source: PE_AIT_all_Passive|Day_35+15.7.2026
+DAY|Investment | source: EC_AIT_All_VID_DAY|Investment_30_7.7
+GMBL|TradingNik | source: CO_AIT_iOS_VID_GMBL|TradingNik_35_18.6
+SM|TradingYB | source: MX_AMZN_all_SM|TradingYB_40+8.7.2026
+Investment|LUX | source: GT_AIT_iOS_VID_Investment|LUX_40_27.2
+GMBL|Platforms | source: CO_AIT_all_GMBL|Platforms_35+15.7.2026
+Trading|Investment | source: CL_ML_all_Trading|Investment_35+14.7.2026
+gmbl|day | source: SA_Arc_IOS_images_gmbl|day_30+_14.7
+HV|Trading | source: CL_ML_all_HV|Trading_35+16.7.2026
+Passive|Trading | source: CL_ML_all_Passive|Trading_35+16.7.2026
+GMBL|FX | source: MX_ML_IOS_Videos_GMBL|FX_35_01.07
+GMBL|Investment | source: CO_AIT_all_GMBL|Investment_35+30.6.2026 - iOS
+GMBL|TradingYB_2 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+15.7_2
+GMBL|TradingYB_1 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+15.7_1
+GMBL|Trading | source: CO_Ait_IOS_Videos_GMBL|Trading_35_06.07
+GMBL|Invesmtnet | source: CO_BNC_IOS_Video_GMBL|Invesmtnet_35_09,07
+GMBL|DS | source: CO_Ait_IOS_Videos_GMBL|DS_35_08.07
+Mix|Reading | source: SA_ARMC_all_Mix|Reading_30+8.7.2026 - iOS
+Investment|Day | source: CL_AIT_all_Investment|Day_35+1.7.2026 - iOS
+Trading|SM | source: MX_AMZN_all_Trading|SM_35+11.7.2026
+GMBL|DAY | source: SA_ARM_iOS_IMG_GMBL|DAY_30_6.7
+SM|PF | source: MX_AMZ_iOS_VID_SM|PF_35_2.7
+GMBL|InvestmentYB | source: CO_AIT_all_GMBL|InvestmentYB_35+29.6.2026
+FX|TradingYB | source: EC_AIT_All_VID_FX|TradingYB_35_30.6
+DAY|TradingYB | source: EC_AIT_All_VID_DAY|TradingYB_35_29.6
+HV|GMBL | source: CL_AIT_all_HV|GMBL_35+29.6.2026
+GMBL|investment | source: EC_AIT_All_VID_GMBL|investment_35_06.07
+HV|Passive | source: CL_ML_all_HV|Passive_35+3.7.2026 - iOS
+Day|IPO | source: CL_ML_all_Day|IPO_35+3.7.2026 - iOS
+Gmbl|DS | source: CO_BNC_IOS_Video_Gmbl|DS_35_09.07
+HV|IPO | source: CL_SQM_all_HV|IPO_35+03.7.2026
+TRD|Investment | source: CO_BAC_iOS_VID_TRD|Investment_35_7.7
+Passive|Platforms | source: PE_AIT_All_Image_Passive|Platforms_35_17.07
+GMB|TradingYB | source: SV_AIT_all_GMB|TradingYB_35_21.7.2026
+HV|Day | source: CL_ML_all_HV|Day_35+3.7.2026
+GMBL|Day|SM | source: CO_AIT_all_GMBL|Day|SM_35+11.7.2026
+GMBLCO_AIT_all_GMBL|TradingYB | source: CO_AIT_all_GMBLCO_AIT_all_GMBL|TradingYB_35+12-2.7.2026|TradingYB_35+12-1.7.2026
+GMB|Investment | source: CO_ML_all_GMB|Investment_35+21.6.2026
+HV|GMBL|SM | source: MX_AMZ_All_Video_HV|GMBL|SM_40_04.07
+SM|Trading | source: MX_AMZN_all_SM|Trading_35+6.7.2026
+SM|Day | source: AR_AIT_all_SM|Day_35+11.7.2026
+GMBL|tradingYB | source: CL_ML_All_VID_GMBL|tradingYB_35_7.7
+HV|Trading_40-64_Nokit | source: CL_ML_iOS_VID_HV|Trading_40-64_15.4_Nokit
+Cond_IMG_SM|PF/iOS | source: KW_TRL_All_Cond_IMG_SM|PF/iOS_25_17.5
+HV|TradingYB | source: CL_AIT_All_VID_HV|TradingYB_35_8.6
+Reading|SM | source: KW_BB_IOS_Images_Reading|SM_30_24.05cond
+DAY|HV | source: CL_SX_All_IMG_DAY|HV_30_20.7
+IPO|HV | source: CL_SX_All_IMG_IPO|HV_30_20.7
+TRD|WC | source: CL_ML_All_IMG_TRD|WC_35_17.7
+DAY|WC | source: CL_ML_All_IMG_DAY|WC_35_17.7
+sm|tradingyb | source: CL_ML_all_sm|tradingyb_35_14.7
+day|investment | source: CL_ML_all_day|investment_35_14.7
+DAY|TradingNik | source: EC_AIT_All_VID_DAY|TradingNik_35_26.6
+HV|Investment | source: UAE_AIT_all_HV|Investment_vid_30+1.7.2026 - IOS
+GMBL|TradeYB | source: SA_Arc_IOS_Images_GMBL|TradeYB_30_04.07
+Gmbl|Investment | source: CL_ML_IOS_Videos_Gmbl|Investment_35_02.07
+Gmbl|TRadingYB | source: CL_ML_IOS_Videos_Gmbl|TRadingYB_35_02.07
+GMBL|YB | source: CO_BAC_iOS_VID_GMBL|YB_35_1.7
+GMBL|BS | source: KW_Trl_IOS_Mix_GMBL|BS_30_06.07
+SM|HV | source: MX_PMX_iOS_IMG_SM|HV_35_7.7
+HV|FX | source: MX_PMX_all_HV|FX_40+7.7.2026
+GMBL|IPO | source: SA_ARMC_all_GMBL|IPO_30+8.7.2026 - iOS
+GMBL|SM | source: CO_AIT_all_GMBL|SM_35+10.7.2026
+Passive|TradingYB | source: CO_AIT_all_Passive|TradingYB_35+14.7.2026
+CL_ML_All_Images_ML21_Day|Investment_35_11.07 | source: CL_ML_All_Images_ML21_Day|Investment_35_11.07
+CL_ML_All_Images_ML21_Trading|Investment_35_11.07 | source: CL_ML_All_Images_ML21_Trading|Investment_35_11.07
+Day|GMBL | source: CL_ML_all_Day|GMBL_35_11.07
+GMBL|TradingYB_V2 | source: CO_AIT_iOS_VID_GMBL|TradingYB_V2_35_10.7
+TRD|HV | source: CL_SX_All_IMG_TRD|HV_35_17.7
+GMBL|TradingYB_3 | source: CO_AIT_All_Videos_2046_GMBL|TradingYB_35+16.7_3
+GPT_FX/SM|/IOS | source: EC_FAV_All_IMG_GPT_FX/SM\/IOS_35_6.1
+GMB|TRD | source: CO_ML_all_GMB|TRD_35+28.6.2026
+GMBL|OnlineGaming | source: KW_Trl_IOS_Images_GMBL|OnlineGaming_35_07.07
+SM|GMBL | source: CO_AIT_all_SM|GMBL_35+10.7.2026
+1 | source: MX_A_1
+2 | source: MX_A_2

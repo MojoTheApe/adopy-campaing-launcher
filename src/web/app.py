@@ -49,6 +49,12 @@ from src.campaign_bridge.open_rec_mapper import parse_creative_from_ad_title
 from config.paths import get_upload_fb_excel_path, get_creatives_root, get_ad_account_map_path
 from src.campaign_bridge.link_validation import classify_link
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
+from src.web.adset_helpers import parse_adset_for_builder, resolve_interest_alias
+from src.meta_campaign_agent.creative_finder import (
+    find_creative_file as _find_creative_file_scoped,
+    CreativeNotFoundError,
+    AmbiguousCreativeError,
+)
 
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -192,6 +198,11 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
             if not (entry.profile_id or "").strip():
                 missing.append("profile_id")
 
+        # page_name is optional (used only by the visual ad preview, not the
+        # real publish flow) — tracked separately so a missing value doesn't
+        # trip the "⚠ missing: ..." header badge that signals a broken account.
+        page_name = (entry.page_name if entry else "") or ""
+
         # Pre-fill ad_account_id from Excel if it's missing from the map
         if "ad_account_id" in missing and excel_act_id:
             prefill["ad_account_id"] = excel_act_id
@@ -202,6 +213,7 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
             "missing_map_fields": missing,
             "has_map_entry": entry is not None,
             "prefill": prefill,
+            "page_name": page_name,
         }
     return result
 
@@ -302,6 +314,7 @@ templates.env.filters["fmt_usd"] = fmt_usd
 templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")
 templates.env.filters["creative_type"] = lambda name: parse_creative_from_ad_title(name)[0]
 templates.env.filters["creative_id"] = lambda name: parse_creative_from_ad_title(name)[1]
+templates.env.filters["tojson"] = lambda obj: json.dumps(obj, ensure_ascii=False, default=str)
 
 # Drill fragment column counts per section — keep in sync with report.html
 # table headers. The detail <td colspan> must match the parent table's
@@ -309,7 +322,7 @@ templates.env.filters["creative_id"] = lambda name: parse_creative_from_ad_title
 _NCOLS_BY_SECTION = {
     "cm_comparison": 8,   # CM, Dep, Leads, Spend, Net, CPA, ROI, (drill col)
     "trend": 6,           # offer, device, interest, creative, deposits_total/recent
-    "top_combos": 9,      # offer, device, interest, age, creative, category, deposits, leads, spend
+    "top_combos": 10,     # offer, device, interest, age, creative, category, deposits, leads, spend, (builder col)
     "targeting": 5,       # interest, deposits, leads, spend, cpa
     "creatives": 5,       # ad_title, deposits, leads, spend, cpa
     "optimization": 7,    # adset, spend, leads, ftds, cpl, cpa, reason
@@ -370,6 +383,20 @@ def _render_report(
     account_preflight = _build_account_preflight(all_account_labels)
     draft_status = _load_draft_status()
 
+    # {country_slug: {account_alias: account_label}} — lets client JS resolve the
+    # "Account Alias" strings shown in Combos/CM-drill rows to the accordion key
+    # (account_label) the Campaign Builder actually keys its UI on.
+    account_alias_map: dict[str, dict[str, str]] = {}
+    for c in report.get("countries", []):
+        cid = _anchor_slug(c.get("country", ""))
+        alias_map: dict[str, str] = {}
+        for acc in c.get("account_rows") or []:
+            alias = acc.get("alias")
+            label = acc.get("account_label")
+            if alias and label:
+                alias_map[alias] = label
+        account_alias_map[cid] = alias_map
+
     return templates.TemplateResponse(
         "report.html",
         {
@@ -382,6 +409,7 @@ def _render_report(
             "ref_options_json": json.dumps(ref_opts, ensure_ascii=False),
             "account_preflight": account_preflight,
             "account_preflight_json": json.dumps(account_preflight, ensure_ascii=False),
+            "account_alias_map_json": json.dumps(account_alias_map, ensure_ascii=False),
             "draft_status": draft_status,
         },
     )
@@ -818,6 +846,46 @@ async def api_creatives() -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+@app.get("/api/resolve-targeting")
+async def api_resolve_targeting(text: str = "") -> JSONResponse:
+    """Resolve a free-text interest string (e.g. 'trade') to its canonical KB
+    target (e.g. 'Trading') via config/knowledge_base.json's aliases[] — used by
+    the Campaign Builder's "Send to Builder" popup to fix naming mismatches
+    between how a real ad set/combo was named and the dashboard's own taxonomy.
+    """
+    return JSONResponse(resolve_interest_alias(text))
+
+
+@app.get("/api/parse-adset")
+async def api_parse_adset(name: str = "") -> JSONResponse:
+    """Parse a raw Meta ad set name into (country_code, device, age, targeting)
+    and resolve its interest token via the same KB alias lookup as
+    /api/resolve-targeting. Used for the "Send to Builder" popup when the only
+    field available is a real ad set's free-text name (CM Comparison drill).
+    """
+    return JSONResponse(parse_adset_for_builder(name))
+
+
+@app.get("/creative-file")
+async def creative_file(path: str = "") -> Response:
+    """Serve creative bytes (image/video) for the Campaign Builder's visual
+    ad preview — the only route that returns actual file content; /api/creatives
+    only lists metadata. `path` is whatever the client already knows (a
+    rel_path from /api/creatives, or a bare filename) and is resolved the same
+    root-scoped way publish-time enrichment does, so it can never escape
+    get_creatives_root().
+    """
+    if not path.strip():
+        return JSONResponse({"error": "path is required"}, status_code=400)
+    try:
+        resolved = _find_creative_file_scoped(get_creatives_root(), path)
+    except CreativeNotFoundError:
+        return JSONResponse({"error": "Creative not found"}, status_code=404)
+    except AmbiguousCreativeError as e:
+        return JSONResponse({"error": str(e)}, status_code=409)
+    return FileResponse(resolved)
+
+
 @app.post("/account-map-patch")
 async def account_map_patch(request: Request) -> JSONResponse:
     """Upsert a row in config/ad_account_map.csv with the provided account fields.
@@ -840,7 +908,7 @@ async def account_map_patch(request: Request) -> JSONResponse:
     _FIELDNAMES = [
         "account_name", "ad_account_id", "page_id", "multilogin_instance",
         "folder_id", "profile_id", "proxy_type", "proxy_host", "proxy_port",
-        "proxy_user", "proxy_pass", "country",
+        "proxy_user", "proxy_pass", "country", "page_name",
     ]
 
     # Read existing rows
@@ -863,7 +931,7 @@ async def account_map_patch(request: Request) -> JSONResponse:
         new_row.update(rows[existing_idx])
 
     new_row["account_name"] = account_name
-    for field in ("ad_account_id", "folder_id", "profile_id", "page_id", "multilogin_instance", "country"):
+    for field in ("ad_account_id", "folder_id", "profile_id", "page_id", "multilogin_instance", "country", "page_name"):
         val = (data.get(field) or "").strip()
         if val:
             new_row[field] = val.upper() if field == "country" else val

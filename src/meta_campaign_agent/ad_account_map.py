@@ -17,6 +17,9 @@ class AccountMapEntry:
     proxy_port: str | None = None
     proxy_user: str | None = None
     proxy_pass: str | None = None
+    # Facebook Page display name — used only by the Campaign Builder's visual
+    # ad preview (Feed/Reels mockup), not part of the real publish flow.
+    page_name: str | None = None
 
 
 def load_ad_account_map(path: str | Path) -> dict[str, AccountMapEntry]:
@@ -48,6 +51,7 @@ def load_ad_account_map(path: str | Path) -> dict[str, AccountMapEntry]:
                 proxy_port=(row.get("proxy_port") or "").strip() or None,
                 proxy_user=(row.get("proxy_user") or row.get("proxy_username") or "").strip() or None,
                 proxy_pass=(row.get("proxy_pass") or row.get("proxy_password") or "").strip() or None,
+                page_name=(row.get("page_name") or "").strip() or None,
             )
     return out
 
