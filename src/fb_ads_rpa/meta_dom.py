@@ -3747,86 +3747,27 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                 except Exception:
                     pass
                 if target_val != default_text:
-                    # Ground truth from a live screenshot (2026-07-25,
-                    # DQ204 Test51): clicking "18"/"65+" opens a scrollable
-                    # list of [role=radio] options (13, 14, 15, ... with the
-                    # current value's radio pre-selected/highlighted) — NOT
-                    # [role=option]. The target age is often below the
-                    # initially-visible range (e.g. "30" when the list
-                    # opens showing 13-20), so scroll the open menu down a
-                    # bit at a time until the target radio appears.
-                    radio = root.get_by_role("radio", name=re.compile(rf"^{re.escape(target_val)}$", re.I)).first
-                    found_radio = radio.count() and radio.is_visible()
-                    if not found_radio:
-                        # Test52/53 bug: page.mouse.wheel(), even after
-                        # moving the mouse onto a visible radio first, still
-                        # didn't reveal the target — mouse-position-relative
-                        # wheel events are too fragile for this virtualized
-                        # list. Scroll the list's actual DOM scrollTop
-                        # directly via JS instead: find the nearest
-                        # scrollable ancestor of a visible radio and
-                        # increment its scrollTop, checking after each step.
-                        try:
-                            any_radio = root.locator("[role=radio]").first
-                            if any_radio.count():
-                                any_radio.evaluate(
-                                    """el => {
-                                      let node = el;
-                                      for (let i = 0; i < 8 && node; i++) {
-                                        node = node.parentElement;
-                                        if (!node) break;
-                                        const style = getComputedStyle(node);
-                                        if ((style.overflowY === 'auto' || style.overflowY === 'scroll')
-                                            && node.scrollHeight > node.clientHeight) {
-                                          node.dataset.__ageScrollTarget = '1';
-                                          break;
-                                        }
-                                      }
-                                    }"""
-                                )
-                        except Exception:
-                            pass
-                        for _ in range(15):
-                            try:
-                                root.evaluate(
-                                    """() => {
-                                      const node = document.querySelector('[data-__age-scroll-target]');
-                                      if (node) node.scrollTop += 80;
-                                    }"""
-                                )
-                            except Exception:
-                                pass
-                            time.sleep(0.15)
-                            radio = root.get_by_role(
-                                "radio", name=re.compile(rf"^{re.escape(target_val)}$", re.I)
-                            ).first
-                            if radio.count() and radio.is_visible():
-                                found_radio = True
-                                break
-                    if found_radio:
-                        radio.click(timeout=3000)
-                        time.sleep(0.4)
-                    else:
-                        opt = root.get_by_role("option", name=re.compile(rf"^{re.escape(target_val)}$", re.I)).first
-                        if opt.count() and opt.is_visible():
-                            opt.click(timeout=3000)
-                            time.sleep(0.4)
-                        # Removed (2026-07-25, after a live incident): an
-                        # unscoped root.get_by_text(target_val, exact=True)
-                        # .last fallback used to run here, searching the
-                        # WHOLE page for the target age text with no
-                        # containment to the age menu at all. Test58 showed
-                        # the real danger: with test data age_max="50" and
-                        # budget="50" both present, this could easily click
-                        # the budget field (or any other unrelated "50"/"30"
-                        # on the page) instead of an age option — the run
-                        # right after this fallback existed came back with
-                        # the whole Audience panel switched to a completely
-                        # different "Suggest an audience / Advantage+" mode,
-                        # breaking Locations/Languages/Targeting too. Failing
-                        # to select the age (soft-fail, unchanged value) is
-                        # far safer than an unscoped click that can land
-                        # anywhere on the page.
+                    # STOPPED HERE (2026-07-25) after a second live incident:
+                    # even the container-scoped scroll+search version above
+                    # (safe from the earlier unscoped-click issue) was
+                    # followed, on the very next run, by the same "whole
+                    # Audience panel switched to Suggest-an-audience/
+                    # Advantage+ mode" corruption that broke Languages and
+                    # Targeting too — twice in a row now, regardless of
+                    # whether the fallback click was scoped safely or not.
+                    # That rules out "clicked the wrong unrelated element"
+                    # as the cause and points at something about
+                    # scrolling/interacting with this menu at all (repeated
+                    # clicks/scroll attempts, a real timing race, or account
+                    # instability at ~59 runs today) triggering a genuine
+                    # Meta-side mode switch. Opening the menu (the click
+                    # above) is confirmed safe on its own — only exact-value
+                    # selection via scrolling this list is disabled here
+                    # until that's understood; picking a real fix requires
+                    # a fresh account and isolating whether the switch
+                    # happens on the value click, the "13" anchor click, or
+                    # the scrollTop manipulation specifically, one at a time.
+                    pass
                 # Test50 bug: "ok=True" was set right after a click
                 # succeeded, without checking whether the displayed value
                 # actually changed — for age_max=65 this trivially matched
