@@ -3811,11 +3811,22 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                         if opt.count() and opt.is_visible():
                             opt.click(timeout=3000)
                             time.sleep(0.4)
-                        else:
-                            opt2 = root.get_by_text(re.compile(rf"^{re.escape(target_val)}$"), exact=True).last
-                            if opt2.count() and opt2.is_visible():
-                                opt2.click(timeout=3000)
-                                time.sleep(0.4)
+                        # Removed (2026-07-25, after a live incident): an
+                        # unscoped root.get_by_text(target_val, exact=True)
+                        # .last fallback used to run here, searching the
+                        # WHOLE page for the target age text with no
+                        # containment to the age menu at all. Test58 showed
+                        # the real danger: with test data age_max="50" and
+                        # budget="50" both present, this could easily click
+                        # the budget field (or any other unrelated "50"/"30"
+                        # on the page) instead of an age option — the run
+                        # right after this fallback existed came back with
+                        # the whole Audience panel switched to a completely
+                        # different "Suggest an audience / Advantage+" mode,
+                        # breaking Locations/Languages/Targeting too. Failing
+                        # to select the age (soft-fail, unchanged value) is
+                        # far safer than an unscoped click that can land
+                        # anywhere on the page.
                 # Test50 bug: "ok=True" was set right after a click
                 # succeeded, without checking whether the displayed value
                 # actually changed — for age_max=65 this trivially matched
