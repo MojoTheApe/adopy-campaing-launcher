@@ -2311,12 +2311,7 @@ def run_recorded_campaign_flow(
                 _shot("fail_targeting_open")
                 soft_fails.append("targeting_open")
             else:
-                any_added = False
-                for term in [t.strip() for t in targeting_label.split(",") if t.strip()]:
-                    if fill_targeting_interest(page, term):
-                        pick_first_suggestion(page)
-                        any_added = True
-                        time.sleep(0.4)
+                any_added = paste_targeting_interests(page, targeting_label)
                 _shot("after_targeting" if any_added else "fail_targeting_none_added")
                 if not any_added:
                     soft_fails.append("targeting_none_added")
@@ -3151,6 +3146,57 @@ def pick_first_suggestion(page: Page) -> bool:
             pass
     return False
 
+
+def paste_targeting_interests(page: Page, targeting_label: str) -> bool:
+    """Paste the whole comma-separated interest list into Detailed
+    targeting in one shot, instead of typing/picking each term one at a
+    time.
+
+    Per live user request (2026-07-25): confirmed live via a synthetic
+    ClipboardEvent('paste') dispatch — Meta's Detailed targeting field
+    parses a pasted comma-separated string itself and adds each resolved
+    interest as its own chip automatically (screenshot: 4 interests each
+    got their own row under "Interests > Additional interests", audience
+    size narrowed accordingly, "Verifying your edits..." confirmed the
+    change was accepted). Much simpler and more reliable than the previous
+    type-one-term/pick-a-suggestion loop, which needed a real autocomplete
+    round-trip (network delay) per term and depended on
+    pick_first_suggestion() correctly identifying the right non-role-based
+    suggestion row — the same class of "looks native, isn't" pitfall
+    chased all session for other fields.
+
+    Assumes the target input already has focus (call after
+    open_detailed_targeting_field(), which clicks/focuses it).
+    """
+    text = (targeting_label or "").strip()
+    if not text:
+        return False
+    try:
+        page.evaluate(
+            """(text) => {
+              const el = document.activeElement;
+              if (!el) return;
+              const dt = new DataTransfer();
+              dt.setData('text/plain', text);
+              const evt = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+              el.dispatchEvent(evt);
+            }""",
+            text,
+        )
+    except Exception:
+        return False
+    time.sleep(1.5)
+    try:
+        page.get_by_text("Verifying your edits", exact=False).first.wait_for(state="hidden", timeout=8000)
+    except Exception:
+        pass
+    first_term = text.split(",")[0].strip()
+    if not first_term:
+        return False
+    try:
+        return bool(page.get_by_text(first_term, exact=False).first.is_visible())
+    except Exception:
+        return False
 
 
 # ── Country code → search name mapping ───────────────────────────────────────
