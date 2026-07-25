@@ -3684,11 +3684,158 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     # Audience field in document order.
     for root in _roots(page):
         try:
-            match_count = root.get_by_text(age_label_re).count()
+            age_locator = root.get_by_text(age_label_re)
+            match_count = age_locator.count()
             with open("output/debug_age_match_count.txt", "a", encoding="utf-8") as f:
                 f.write(f"root={root} match_count={match_count}\n")
+            # Test42 found match_count=2 for the very first time this was
+            # checked — confirming a real duplicate-instance risk (exactly
+            # what ruling this out for Locations required back when). Dump
+            # each match's own ancestor context individually so we can see
+            # which index is the real Audience field and which is a decoy
+            # elsewhere in the DOM (nav/breadcrumb/summary card) that
+            # `.first` may have been silently grabbing all along.
+            for i in range(min(match_count, 5)):
+                try:
+                    el = age_locator.nth(i)
+                    ctx = el.locator("xpath=ancestor::*[4]")
+                    outer = ctx.evaluate("el => el.outerHTML")
+                    visible = el.is_visible()
+                    with open("output/debug_age_match_contexts.txt", "a", encoding="utf-8") as f:
+                        f.write(f"--- match[{i}] visible={visible} ---\n{outer[:2000]}\n\n")
+                except Exception as e2:
+                    with open("output/debug_age_match_contexts.txt", "a", encoding="utf-8") as f:
+                        f.write(f"--- match[{i}] ERROR {e2!r} ---\n\n")
         except Exception:
             pass
+
+    # SOLVED (2026-07-25, DQ204 Test49): clicking the "Age" label kept
+    # timing out — Playwright's own retry log named the exact blocker:
+    # <div id="...">18</div> (a dynamic id) physically intercepts pointer
+    # events at the label's location. That "18" div (and presumably a
+    # sibling "65+" div) is not a decoy — it IS the real, already-live
+    # age-min/age-max trigger, just visually overlapping the "Age" label
+    # text. Click those two value elements directly instead of the label,
+    # via raw CDP (bypasses Playwright's own actionability/interception
+    # check, which is exactly what made every locator-based click here
+    # fail). Search broadly (not scoped to a specific ancestor depth of the
+    # "Age" marker) since this element may not even be a descendant of the
+    # row we were querying — matching the earlier finding that our
+    # select/combobox searches inside that row never found anything.
+    for root in _roots(page):
+        for default_text, target_val in (("18", age_min_str), ("65+", age_max_str)):
+            try:
+                el = root.get_by_text(re.compile(rf"^{re.escape(default_text)}$"), exact=True).first
+                if not el.count() or not el.is_visible():
+                    continue
+                # Test50 bug: no scroll_into_view before computing the box —
+                # the resulting screenshot showed a totally unrelated section
+                # of the page (Custom audiences), meaning either the click
+                # coordinates were stale relative to actual scroll position,
+                # or this matched an unrelated "18"/"65+" text node elsewhere
+                # entirely. Force it into view first so the box is trustworthy.
+                el.scroll_into_view_if_needed(timeout=2000)
+                box = el.bounding_box(timeout=1500)
+                if not box or box.get("width", 0) <= 0:
+                    continue
+                _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                time.sleep(0.5)
+                try:
+                    from src.fb_ads_rpa.screenshots import capture as _capture
+
+                    _capture(page, f"recorded_age_value_click_{default_text.replace('+', 'p')}")
+                except Exception:
+                    pass
+                if target_val != default_text:
+                    # Ground truth from a live screenshot (2026-07-25,
+                    # DQ204 Test51): clicking "18"/"65+" opens a scrollable
+                    # list of [role=radio] options (13, 14, 15, ... with the
+                    # current value's radio pre-selected/highlighted) — NOT
+                    # [role=option]. The target age is often below the
+                    # initially-visible range (e.g. "30" when the list
+                    # opens showing 13-20), so scroll the open menu down a
+                    # bit at a time until the target radio appears.
+                    radio = root.get_by_role("radio", name=re.compile(rf"^{re.escape(target_val)}$", re.I)).first
+                    found_radio = radio.count() and radio.is_visible()
+                    if not found_radio:
+                        # Test52/53 bug: page.mouse.wheel(), even after
+                        # moving the mouse onto a visible radio first, still
+                        # didn't reveal the target — mouse-position-relative
+                        # wheel events are too fragile for this virtualized
+                        # list. Scroll the list's actual DOM scrollTop
+                        # directly via JS instead: find the nearest
+                        # scrollable ancestor of a visible radio and
+                        # increment its scrollTop, checking after each step.
+                        try:
+                            any_radio = root.locator("[role=radio]").first
+                            if any_radio.count():
+                                any_radio.evaluate(
+                                    """el => {
+                                      let node = el;
+                                      for (let i = 0; i < 8 && node; i++) {
+                                        node = node.parentElement;
+                                        if (!node) break;
+                                        const style = getComputedStyle(node);
+                                        if ((style.overflowY === 'auto' || style.overflowY === 'scroll')
+                                            && node.scrollHeight > node.clientHeight) {
+                                          node.dataset.__ageScrollTarget = '1';
+                                          break;
+                                        }
+                                      }
+                                    }"""
+                                )
+                        except Exception:
+                            pass
+                        for _ in range(15):
+                            try:
+                                root.evaluate(
+                                    """() => {
+                                      const node = document.querySelector('[data-__age-scroll-target]');
+                                      if (node) node.scrollTop += 80;
+                                    }"""
+                                )
+                            except Exception:
+                                pass
+                            time.sleep(0.15)
+                            radio = root.get_by_role(
+                                "radio", name=re.compile(rf"^{re.escape(target_val)}$", re.I)
+                            ).first
+                            if radio.count() and radio.is_visible():
+                                found_radio = True
+                                break
+                    if found_radio:
+                        radio.click(timeout=3000)
+                        time.sleep(0.4)
+                    else:
+                        opt = root.get_by_role("option", name=re.compile(rf"^{re.escape(target_val)}$", re.I)).first
+                        if opt.count() and opt.is_visible():
+                            opt.click(timeout=3000)
+                            time.sleep(0.4)
+                        else:
+                            opt2 = root.get_by_text(re.compile(rf"^{re.escape(target_val)}$"), exact=True).last
+                            if opt2.count() and opt2.is_visible():
+                                opt2.click(timeout=3000)
+                                time.sleep(0.4)
+                # Test50 bug: "ok=True" was set right after a click
+                # succeeded, without checking whether the displayed value
+                # actually changed — for age_max=65 this trivially matched
+                # Meta's own default ("65+") and looked like success despite
+                # doing nothing. Verify the real displayed value instead of
+                # trusting the click.
+                try:
+                    if root.get_by_text(re.compile(rf"^{re.escape(target_val)}$"), exact=True).first.is_visible():
+                        ok = True
+                except Exception:
+                    pass
+            except Exception as age_click_exc:
+                try:
+                    with open("output/debug_age_label_click_error.txt", "a", encoding="utf-8") as f:
+                        f.write(f"val={default_text!r} exc={age_click_exc!r}\n")
+                except Exception:
+                    pass
+                continue
+        if ok:
+            return True
 
     # Diagnostic (2026-07-25, DQ204 Test37): a fail screenshot showed real
     # "18 [v] 65+ [v]" controls visibly on screen, yet our select/combobox/
