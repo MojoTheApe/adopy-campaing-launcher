@@ -3673,6 +3673,54 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     age_label_re = re.compile(r"^Age$|^Edad$", re.I)
     ok = False
 
+    # Diagnostic (2026-07-25, DQ204 Test40): Locations' own mystery was
+    # eventually resolved in part by checking how many DOM nodes match its
+    # heading text at all (count==1 ruled out a duplicate-instance theory).
+    # That exact check was never done for Age — after 7 failed attempts and
+    # multiple runs where a screenshot proved the real dropdowns were on
+    # screen while every query found zero matches, it's worth confirming
+    # get_by_text(age_label_re).first isn't grabbing an unrelated "Age" text
+    # node elsewhere in the DOM (nav, filter, breadcrumb) ahead of the real
+    # Audience field in document order.
+    for root in _roots(page):
+        try:
+            match_count = root.get_by_text(age_label_re).count()
+            with open("output/debug_age_match_count.txt", "a", encoding="utf-8") as f:
+                f.write(f"root={root} match_count={match_count}\n")
+        except Exception:
+            pass
+
+    # Diagnostic (2026-07-25, DQ204 Test37): a fail screenshot showed real
+    # "18 [v] 65+ [v]" controls visibly on screen, yet our select/combobox/
+    # spinbutton search found zero matches for the entire ~9.6s poll window
+    # — strongly suggesting these are neither <select> nor
+    # [role=combobox]/[role=spinbutton] at all, most likely a [role=button]
+    # custom dropdown trigger like several other fields in this file (e.g.
+    # Conversion location, Performance goal). Dump the tag/role of whatever
+    # element's own text is exactly "18" or "65+" near the Age marker,
+    # whatever the current state happens to be, before any click attempt.
+    for root in _roots(page):
+        try:
+            marker = root.get_by_text(age_label_re).first
+            for depth in range(1, 8):
+                row = marker.locator(f"xpath=ancestor::*[{depth}]")
+                for val_text in ("18", "65+", "65"):
+                    try:
+                        el = row.get_by_text(re.compile(rf"^{re.escape(val_text)}$"), exact=True).first
+                        if el.count() and el.is_visible():
+                            info = el.evaluate(
+                                "el => ({tag: el.tagName.toLowerCase(), role: el.getAttribute('role'), "
+                                "cls: el.className, outer: el.outerHTML.slice(0,600), "
+                                "parentOuter: el.parentElement ? el.parentElement.outerHTML.slice(0,800) : ''})"
+                            )
+                            with open("output/debug_age_value_elements.txt", "a", encoding="utf-8") as f:
+                                f.write(f"depth={depth} val={val_text!r} info={info}\n\n")
+                    except Exception:
+                        continue
+            break
+        except Exception:
+            continue
+
     # Diagnostic only (2026-07-25, DQ204 Test27/28): Age can render as a
     # collapsed read-only summary ("18 - 65+", no select/combobox nearby)
     # rather than live dropdowns, seen via the fail_audience_age screenshot
@@ -3768,10 +3816,12 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
         # a longer duration blindly, so the exact moment it appears (if it
         # ever does within this window) is visible after the run.
         poll_start = time.time()
+        value_dumped = False
         for tick in range(24):
             time.sleep(0.2)
             found = False
             match_count = 0
+            value_hits = 0
             for root in _roots(page):
                 try:
                     marker = root.get_by_text(age_label_re).first
@@ -3782,13 +3832,44 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                             match_count = c
                         if c >= 2:
                             found = True
+                        # Broader check (2026-07-25): the select/combobox/
+                        # spinbutton search above found nothing for a full
+                        # 9.6s window in Test37 despite a screenshot proving
+                        # "18"/"65+" controls were visible — they're likely
+                        # some other element type entirely (e.g. a plain
+                        # [role=button], matching several other custom
+                        # dropdown triggers elsewhere in this file). Look for
+                        # the exact value text directly and dump its real
+                        # tag/role/outerHTML the first time it's seen.
+                        if not value_dumped:
+                            try:
+                                for val_text in ("18", "65+", "65"):
+                                    el = row.get_by_text(re.compile(rf"^{re.escape(val_text)}$"), exact=True).first
+                                    if el.count() and el.is_visible():
+                                        value_hits += 1
+                                        info = el.evaluate(
+                                            "el => ({tag: el.tagName.toLowerCase(), role: el.getAttribute('role'), "
+                                            "cls: el.className, outer: el.outerHTML.slice(0,600), "
+                                            "parentOuter: el.parentElement ? el.parentElement.outerHTML.slice(0,800) : ''})"
+                                        )
+                                        with open("output/debug_age_value_elements.txt", "a", encoding="utf-8") as f:
+                                            f.write(
+                                                f"tick={tick} depth={depth} val={val_text!r} info={info}\n\n"
+                                            )
+                                        value_dumped = True
+                            except Exception:
+                                pass
+                        if found:
                             break
                     break
                 except Exception:
                     continue
             try:
                 with open("output/debug_age_poll_ticks.txt", "a", encoding="utf-8") as f:
-                    f.write(f"tick={tick} t={time.time() - poll_start:.2f}s max_match_count={match_count} found={found}\n")
+                    f.write(
+                        f"tick={tick} t={time.time() - poll_start:.2f}s "
+                        f"max_match_count={match_count} value_hits={value_hits} found={found}\n"
+                    )
             except Exception:
                 pass
             if found:
