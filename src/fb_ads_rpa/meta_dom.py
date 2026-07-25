@@ -3041,6 +3041,46 @@ def open_detailed_targeting_field(page: Page) -> bool:
                 return True
             except Exception:
                 pass
+    # "Detailed targeting" renders as a collapsed "All demographics,
+    # interests and behaviors" summary in every screenshot captured this
+    # session — same collapsed-summary family as Locations/Age/Languages —
+    # so none of the placeholder/label searches above would ever find
+    # anything in that state. A live dump (2026-07-25, DQ204 Test37) showed
+    # a SIMPLER structure than Locations/Age: header text + value text, no
+    # info-icon div at all — click the header/row via CDP (the proven
+    # pattern from Locations/Languages) then poll for the real input.
+    targeting_placeholders = placeholders  # reuse the list already defined above
+    for root in _roots(page):
+        try:
+            heading = root.get_by_text(re.compile(r"^Detailed targeting$|^Segmentación detallada$", re.I)).first
+            heading.wait_for(state="visible", timeout=2000)
+            heading.scroll_into_view_if_needed(timeout=2000)
+            header_block = heading.locator("xpath=ancestor::*[2]")
+            row = heading.locator("xpath=ancestor::*[3]")
+            for candidate in (header_block, row):
+                try:
+                    box = candidate.bounding_box(timeout=1500)
+                    if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
+                        _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                        break
+                except Exception:
+                    continue
+            break
+        except Exception:
+            continue
+
+    for _ in range(15):
+        time.sleep(0.2)
+        for root in _roots(page):
+            for ph in targeting_placeholders:
+                try:
+                    inp = root.get_by_placeholder(ph).first
+                    if inp.count() and inp.is_visible():
+                        inp.click(timeout=3000)
+                        time.sleep(0.3)
+                        return True
+                except Exception:
+                    continue
     return False
 
 
@@ -3723,22 +3763,41 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
         # select-count check below still found nothing at the time it ran,
         # same class of "screenshot proves it but our check ran too early"
         # timing gap the Locations fix hit before its own poll was widened.
-        # 10x150ms (1.5s) wasn't enough here; give it more room.
-        for _ in range(24):
+        # Test36's 24x200ms (4.8s) still missed it — log every single tick
+        # with a timestamp (append, not overwrite) instead of guessing at
+        # a longer duration blindly, so the exact moment it appears (if it
+        # ever does within this window) is visible after the run.
+        poll_start = time.time()
+        for tick in range(24):
             time.sleep(0.2)
             found = False
+            match_count = 0
             for root in _roots(page):
                 try:
                     marker = root.get_by_text(age_label_re).first
                     for depth in range(1, 10):
                         row = marker.locator(f"xpath=ancestor::*[{depth}]")
-                        if row.locator("select, [role=combobox], [role=spinbutton]").count() >= 2:
+                        c = row.locator("select, [role=combobox], [role=spinbutton]").count()
+                        if c > match_count:
+                            match_count = c
+                        if c >= 2:
                             found = True
                             break
                     break
                 except Exception:
                     continue
+            try:
+                with open("output/debug_age_poll_ticks.txt", "a", encoding="utf-8") as f:
+                    f.write(f"tick={tick} t={time.time() - poll_start:.2f}s max_match_count={match_count} found={found}\n")
+            except Exception:
+                pass
             if found:
+                try:
+                    from src.fb_ads_rpa.screenshots import capture as _capture
+
+                    _capture(page, f"recorded_age_poll_found_tick{tick}")
+                except Exception:
+                    pass
                 break
 
     for root in _roots(page):
