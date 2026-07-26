@@ -1930,6 +1930,11 @@ def run_recorded_campaign_flow(
     age_max: int = 65,
     targeting_label: str = "",
     language_names: list[str] | None = None,
+    creative_type: str = "",
+    creative_path: str = "",
+    ad_title: str = "",
+    ad_body: str = "",
+    destination_url: str = "",
 ) -> str:
     """Create -> Website, using the exact locators from a verified human
     Playwright codegen recording (2026-07-21) instead of the label/breadcrumb/
@@ -2124,14 +2129,25 @@ def run_recorded_campaign_flow(
 
     # Next segment past Website: Conversion event = Lead. Reuses the existing
     # select_conversion_event_lead()/is_lead_conversion_event_selected() pair
-    # (already used by the older recipe_player delegated-section path) rather
-    # than writing a new implementation — but don't assume it's correct just
-    # because it exists; verify it live the same way Website's check just got
-    # caught being wrong.
-    if not select_conversion_event_lead(page):
+    # (already used by the older recipe_player delegated-section path).
+    # Soft-fail (2026-07-26, explicit user direction): confirmed live via
+    # playwright-skill that a hard failure here can be the pixel/dataset
+    # genuinely having no tracked events yet (both "Active events" and
+    # "Inactive events" render empty) — not a click/selector bug, and not
+    # something retrying fixes. Per the same "don't stop the test, keep
+    # going" direction that made Locations/Age/Targeting soft-fail, log and
+    # continue into Audience/Targeting/Ad-level instead of aborting the
+    # whole run over one field this account's data can't currently satisfy.
+    top_level_soft_fails: list[str] = []
+    try:
+        if not select_conversion_event_lead(page):
+            _shot("fail_conversion_event")
+            top_level_soft_fails.append("conversion_event")
+        else:
+            _shot("success_conversion_event")
+    except Exception as exc:
         _shot("fail_conversion_event")
-        return "conversion_event"
-    _shot("success_conversion_event")
+        top_level_soft_fails.append(f"conversion_event:{str(exc)[:60]}")
 
     # Next segment: Audience section, "Further limit the reach of your ads"
     # (gear icon, collapsed by default under Suggest an audience) — confirmed
@@ -2238,7 +2254,7 @@ def run_recorded_campaign_flow(
     # move on to the next rather than aborting the whole run. soft_fails
     # collects what didn't work so the caller/diary can see exactly which
     # pieces still need a live fix, without losing the rest of the segment.
-    soft_fails: list[str] = []
+    soft_fails: list[str] = list(top_level_soft_fails)
 
     # Age BEFORE Locations (reordered 2026-07-25): Age used to render as
     # live "18 [v] 65+ [v]" dropdowns directly, confirmed in screenshots
@@ -2327,7 +2343,292 @@ def run_recorded_campaign_flow(
         except Exception:
             pass
 
+    # Ad level: Next -> Set up creative -> Media upload -> Primary text/
+    # Headline -> Destination (Website + tracking link, no Instant Form).
+    # Same soft-fail contract as the Audience block above — a failure here
+    # is logged and the run still ends in success (recorded_flow:reached_ad
+    # instead of :reached_targeting), matching the explicit "don't stop the
+    # test, keep going" direction that shaped the Audience block too.
+    ad_level_fails: list[str] = []
+    if creative_path:
+        ad_edit_url = ""
+        reached_ad_level = False
+        try:
+            if not _click(page.get_by_role("button", name="Next")):
+                _shot("fail_next_to_ad")
+                ad_level_fails.append("next_to_ad")
+            else:
+                _wait_loading()
+                ad_edit_url = page.url
+                reached_ad_level = True
+                _shot("after_next_to_ad")
+        except Exception as exc:
+            ad_level_fails.append(f"next_to_ad:{str(exc)[:60]}")
+
+        creative_uploaded = False
+        if reached_ad_level:
+            try:
+                if not upload_ad_creative(page, creative_type, creative_path, edit_url=ad_edit_url):
+                    _shot("fail_ad_creative_upload")
+                    ad_level_fails.append("ad_creative_upload")
+                else:
+                    creative_uploaded = True
+                    _shot("after_ad_creative_upload")
+            except Exception as exc:
+                _shot("fail_ad_creative_upload")
+                ad_level_fails.append(f"ad_creative_upload:{str(exc)[:60]}")
+
+        if reached_ad_level and creative_uploaded and (ad_title or ad_body):
+            try:
+                if not fill_ad_copy(page, ad_title, ad_body):
+                    _shot("fail_ad_copy")
+                    ad_level_fails.append("ad_copy")
+                else:
+                    _shot("after_ad_copy")
+            except Exception as exc:
+                _shot("fail_ad_copy")
+                ad_level_fails.append(f"ad_copy:{str(exc)[:60]}")
+
+        if reached_ad_level and destination_url:
+            try:
+                if not set_ad_destination_website(page, destination_url):
+                    _shot("fail_ad_destination")
+                    ad_level_fails.append("ad_destination")
+                else:
+                    _shot("after_ad_destination")
+            except Exception as exc:
+                _shot("fail_ad_destination")
+                ad_level_fails.append(f"ad_destination:{str(exc)[:60]}")
+
+    if ad_level_fails:
+        try:
+            Path("output/debug_ad_level_soft_fails.txt").write_text(
+                "\n".join(ad_level_fails), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
     return ""
+
+
+def upload_ad_creative(
+    page: Page, creative_type: str, creative_path: str, *, edit_url: str = ""
+) -> bool:
+    """Set up creative -> Video/Image ad -> Media -> upload the real file.
+
+    Confirmed live (2026-07-25/26) via playwright-skill: the "Set up
+    creative" modal's first step varies run to run — sometimes "Creative
+    setup" (Source URL/Extensions) first, sometimes it opens straight on
+    Media — so this checks for the Upload button rather than assuming a
+    fixed number of clicks to get there. Also confirmed live: the first
+    `[aria-label="Close"]` match after upload can be the WHOLE ad editor's
+    close button, not a toast dismiss — clicking it blindly bounced the
+    whole run back to the ads list. Recover via `edit_url` (the page's own
+    /ads/edit/ URL captured right after the Next-to-ad-level click) instead
+    of guessing a re-open control.
+    """
+    is_video = (creative_type or "").strip().lower() == "video"
+    option_label = "Video ad" if is_video else "Image ad"
+
+    try:
+        setup_btn = page.get_by_role("button", name=re.compile("Set up creative", re.I)).first
+        setup_btn.scroll_into_view_if_needed(timeout=3000)
+        setup_btn.click(timeout=5000)
+        time.sleep(0.5)
+    except Exception:
+        return False
+
+    try:
+        opt = page.get_by_text(option_label, exact=True).first
+        if opt.count():
+            opt.click(timeout=3000)
+            time.sleep(0.7)
+    except Exception:
+        pass
+
+    # If the modal opened on "Creative setup" instead of straight to Media,
+    # its own Next advances to Media.
+    if page.get_by_role("button", name="Upload").count() < 1:
+        try:
+            page.get_by_role("button", name="Next").first.click(timeout=3000)
+            time.sleep(0.7)
+        except Exception:
+            pass
+
+    upload_btn = page.get_by_role("button", name="Upload")
+    if upload_btn.count() < 1:
+        return False
+
+    try:
+        with page.expect_file_chooser(timeout=8000) as fc_info:
+            upload_btn.first.click(timeout=5000)
+        fc_info.value.set_files(creative_path)
+    except Exception:
+        return False
+
+    # Wait for the "Uploading video/image ..." toast to clear (confirmed
+    # live: a 14MB file still took several seconds over the Multilogin CDP
+    # connection).
+    try:
+        page.get_by_text("Uploading", exact=False).first.wait_for(state="hidden", timeout=40000)
+    except Exception:
+        pass
+    time.sleep(1.0)
+
+    # Still inside the Media step (Upload button still present)? Select the
+    # uploaded thumbnail by filename and advance via the MODAL's own Next —
+    # scoped to a dialog role so this can't fall through to some other Next
+    # elsewhere on the page.
+    if page.get_by_role("button", name="Upload").count() > 0:
+        filename = Path(creative_path).stem
+        try:
+            thumb = page.get_by_text(filename, exact=False).first
+            if thumb.count():
+                thumb.click(timeout=3000)
+                time.sleep(0.5)
+        except Exception:
+            pass
+        try:
+            for root in _roots(page):
+                dialog = root.get_by_role("dialog").first
+                if not dialog.is_visible(timeout=1000):
+                    continue
+                next_btn = dialog.get_by_role("button", name="Next").first
+                if next_btn.count() and not next_btn.is_disabled():
+                    next_btn.click(timeout=5000)
+                    time.sleep(1.0)
+                break
+        except Exception:
+            pass
+
+    # Confirm we're still on the ad editor, not bounced back to the ads
+    # list by some other in-between click — recover via the saved edit URL
+    # rather than guessing a re-open control.
+    if edit_url and "/ads/edit/" not in page.url:
+        try:
+            page.goto(edit_url)
+            time.sleep(1.0)
+        except Exception:
+            return False
+
+    return "/ads/edit/" in page.url
+
+
+def _reveal_ad_copy_fields(page: Page) -> bool:
+    """Make the Primary text/Headline inputs visible.
+
+    Confirmed live (2026-07-26): these fields exist in the DOM as soon as a
+    creative is attached, but their container (`#creativeEditorComponent`)
+    can render with `display: none !important` regardless — expanding then
+    collapsing any placement row (e.g. "Feeds, In-stream ads for reels")
+    was observed to trigger the re-render that makes it visible. Not a
+    principled fix (root cause of the hidden state isn't understood), but a
+    reliable-enough fallback: check visibility first and only do the
+    expand/collapse dance if it's actually needed.
+    """
+    def _primary_text_visible() -> bool:
+        try:
+            return bool(
+                page.evaluate(
+                    "() => { const all = [...document.querySelectorAll('*')];"
+                    " const el = all.find(e => e.textContent.trim() === 'Primary text'"
+                    " && e.children.length === 0 && e.offsetParent !== null);"
+                    " return !!el; }"
+                )
+            )
+        except Exception:
+            return False
+
+    if _primary_text_visible():
+        return True
+
+    try:
+        row = page.get_by_text("Feeds, In-stream ads for reels", exact=False).first
+        if row.count():
+            row.scroll_into_view_if_needed(timeout=3000)
+            row.click(timeout=3000)
+            time.sleep(0.4)
+            row.click(timeout=3000)
+            time.sleep(0.4)
+    except Exception:
+        pass
+
+    return _primary_text_visible()
+
+
+def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
+    """Fill Primary text (Body) and Headline (Title) with real ad copy.
+
+    Confirmed live (2026-07-26): `page.keyboard.type()` drops accented
+    characters ("Regístrese" -> "Registrese") on this field — use
+    `page.keyboard.insertText()` instead, which pastes the string in one
+    shot and preserves accents/emoji/bullets correctly.
+    """
+    if not _reveal_ad_copy_fields(page):
+        return False
+
+    ok = False
+    if ad_body:
+        try:
+            primary_box = page.get_by_role(
+                "combobox", name="Tell people what your ad is about"
+            ).first
+            if primary_box.count():
+                primary_box.click(timeout=3000)
+                page.keyboard.insert_text(ad_body)
+                time.sleep(0.4)
+                ok = True
+        except Exception:
+            pass
+
+    if ad_title:
+        try:
+            headline_box = page.get_by_placeholder("Write a short headline").first
+            if headline_box.count():
+                headline_box.click(timeout=3000)
+                page.keyboard.press("Control+A")
+                page.keyboard.insert_text(ad_title)
+                time.sleep(0.4)
+                ok = True
+        except Exception:
+            pass
+
+    return ok
+
+
+def set_ad_destination_website(page: Page, destination_url: str) -> bool:
+    """Set the ad's destination to Website + Browser add-ons: None, with the
+    real account tracking link — instead of the Instant Form Meta suggests
+    by default for Leads objective ads.
+
+    Confirmed live (2026-07-26) by explicit user direction: creating an
+    Instant Form is a whole separate sub-wizard (Intro/Questions/Privacy
+    policy) that isn't part of this account's real publish process — the
+    real flow uses Website with the account's own tracking link instead,
+    which also clears the "lead_gen_form_id must be valid" verification
+    error Meta shows while an Instant Form is required but missing.
+    """
+    try:
+        none_opt = page.get_by_text("None", exact=True).first
+        if not none_opt.count():
+            return False
+        none_opt.scroll_into_view_if_needed(timeout=3000)
+        none_opt.click(timeout=3000)
+        time.sleep(0.6)
+    except Exception:
+        return False
+
+    try:
+        url_box = page.get_by_placeholder("http://www.example.com/page").first
+        if not url_box.count():
+            return False
+        url_box.click(timeout=3000)
+        page.keyboard.insert_text(destination_url)
+        time.sleep(0.4)
+    except Exception:
+        return False
+
+    return True
 
 
 _WIZARD_CLOSE_GUARD_JS = """
