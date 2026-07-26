@@ -2893,23 +2893,17 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
         time.sleep(0.3)
         return True
 
-    def _primary_text_has_content() -> bool:
+    def _locator_has_content(locator) -> bool:
+        # Confirmed live (2026-07-26): when the "Set up your creative" modal
+        # is still open, there can be a SECOND matching element sitting
+        # behind it on the main page (same aria-label/placeholder, still
+        # counted visible by offsetParent even though obscured by the
+        # modal) — re-querying the whole document with a fresh selector can
+        # silently grab that other (empty) one instead of the one actually
+        # filled. Check the SAME element handle we just clicked instead.
         try:
-            return bool(page.evaluate(
-                "() => { const el = [...document.querySelectorAll('[role=combobox]')]"
-                ".find(e => e.offsetParent !== null && (e.getAttribute('aria-label')||'')"
-                ".includes('Tell people what your ad is about'));"
-                " return !!(el && el.textContent.trim().length > 0); }"
-            ))
-        except Exception:
-            return False
-
-    def _headline_has_content() -> bool:
-        try:
-            return bool(page.evaluate(
-                "() => { const el = [...document.querySelectorAll('[placeholder]')]"
-                ".find(e => e.offsetParent !== null && e.getAttribute('placeholder') === 'Write a short headline');"
-                " return !!(el && (el.value || el.textContent || '').trim().length > 0); }"
+            return bool(locator.evaluate(
+                "el => (el.value !== undefined ? el.value : el.textContent || '').trim().length > 0"
             ))
         except Exception:
             return False
@@ -2928,7 +2922,7 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
             if primary_box.count() and _click_via_cdp(primary_box):
                 page.keyboard.insert_text(ad_body)
                 time.sleep(0.4)
-                body_ok = _primary_text_has_content()
+                body_ok = _locator_has_content(primary_box)
         except Exception:
             pass
 
@@ -2940,7 +2934,7 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
                 page.keyboard.press("Control+A")
                 page.keyboard.insert_text(ad_title)
                 time.sleep(0.4)
-                title_ok = _headline_has_content()
+                title_ok = _locator_has_content(headline_box)
         except Exception:
             pass
 
