@@ -2856,12 +2856,25 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
     # autosaves continuously, so the creative/ad-name/etc already entered
     # survive the reload). Slower than the expand/collapse dance above, so
     # only used once that's been tried and failed.
+    #
+    # Confirmed live (2026-07-26): the SPA takes noticeably longer than 3s
+    # to repaint after reload — a flat sleep(3.0) caught the page still
+    # blank, which then also broke the NEXT step (destination) since it
+    # ran against the same still-loading page. Poll for the sidebar nav
+    # (a stable early marker) plus extra settle time instead of guessing
+    # a fixed duration.
     try:
         page.reload(wait_until="domcontentloaded", timeout=20000)
-        time.sleep(3.0)
+        page.wait_for_load_state("networkidle", timeout=15000)
+        time.sleep(2.0)
     except Exception:
-        pass
-    return _primary_text_visible()
+        time.sleep(5.0)
+
+    for _ in range(10):
+        if _primary_text_visible():
+            return True
+        time.sleep(1.0)
+    return False
 
 
 def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
