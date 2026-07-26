@@ -2676,6 +2676,33 @@ def upload_ad_creative(
     is_video = (creative_type or "").strip().lower() == "video"
     option_label = "Video ad" if is_video else "Image ad"
 
+    # Confirmed live (2026-07-26): the "Set up creative" button doesn't
+    # reliably become interactable just by waiting for Playwright's own
+    # "visible" state — the page's main scroll container needs to actually
+    # be scrolled toward the bottom first (an "Ad setup" section with a new
+    # Format radio group renders above it and the button isn't found/
+    # clickable until the container is scrolled past that point), even
+    # though the element technically satisfies Playwright's visibility
+    # check beforehand. Force the main content panel to scroll to its
+    # current max first (best-effort, harmless if it's already there).
+    try:
+        page.evaluate(
+            """
+            () => {
+              const all = [...document.querySelectorAll('*')];
+              const container = all.find(e => {
+                const style = getComputedStyle(e);
+                return (style.overflowY === 'auto' || style.overflowY === 'scroll')
+                  && e.scrollHeight > e.clientHeight + 50 && e.scrollHeight > 1500;
+              });
+              if (container) container.scrollTop = container.scrollHeight;
+            }
+            """
+        )
+        time.sleep(0.5)
+    except Exception:
+        pass
+
     # Confirmed live (2026-07-26): right after the Next-to-Ad-level click the
     # page can still be mid-render ("Saving..." indicator, Ad creative
     # section not painted yet) — a short 3s scroll-wait isn't always enough
