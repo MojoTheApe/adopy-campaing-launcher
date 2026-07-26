@@ -2851,7 +2851,17 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
             return True
         time.sleep(1.0)
 
-    return False
+    # Last resort — confirmed live (2026-07-26): a full page reload reliably
+    # clears the stuck `display: none !important` state (the ad draft
+    # autosaves continuously, so the creative/ad-name/etc already entered
+    # survive the reload). Slower than the expand/collapse dance above, so
+    # only used once that's been tried and failed.
+    try:
+        page.reload(wait_until="domcontentloaded", timeout=20000)
+        time.sleep(3.0)
+    except Exception:
+        pass
+    return _primary_text_visible()
 
 
 def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
