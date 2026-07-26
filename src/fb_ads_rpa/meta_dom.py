@@ -1930,6 +1930,7 @@ def run_recorded_campaign_flow(
     age_max: int = 65,
     targeting_label: str = "",
     language_names: list[str] | None = None,
+    ad_name: str = "",
     creative_type: str = "",
     creative_path: str = "",
     ad_title: str = "",
@@ -2365,6 +2366,21 @@ def run_recorded_campaign_flow(
             _shot("fail_targeting")
             soft_fails.append(f"targeting:{str(exc)[:60]}")
 
+    # Placements: switch off Advantage+ automatic placements and set the
+    # account's real manual configuration (confirmed live 2026-07-26 via
+    # user screenshot) — real checkboxes, so this should be more reliable
+    # than the Audience fields above, but still soft-fail per the same
+    # "don't stop the test" contract.
+    try:
+        if not fill_placements(page):
+            _shot("fail_placements")
+            soft_fails.append("placements")
+        else:
+            _shot("after_placements")
+    except Exception as exc:
+        _shot("fail_placements")
+        soft_fails.append(f"placements:{str(exc)[:60]}")
+
     if soft_fails:
         try:
             Path("output/debug_audience_soft_fails.txt").write_text(
@@ -2394,6 +2410,14 @@ def run_recorded_campaign_flow(
                 _shot("after_next_to_ad")
         except Exception as exc:
             ad_level_fails.append(f"next_to_ad:{str(exc)[:60]}")
+
+        if reached_ad_level:
+            final_ad_name = ad_name or f"{campaign_name} Ad"
+            if not _fill(page.get_by_placeholder("Enter your ad name here..."), final_ad_name):
+                _shot("fail_ad_name")
+                ad_level_fails.append("ad_name")
+            else:
+                _shot("after_ad_name")
 
         creative_uploaded = False
         if reached_ad_level:
@@ -2439,6 +2463,198 @@ def run_recorded_campaign_flow(
             pass
 
     return ""
+
+
+def fill_placements(page: Page) -> bool:
+    """Set manual Placement controls to the account's real target
+    configuration instead of leaving Advantage+ automatic placements on.
+
+    Confirmed live 2026-07-26 via the user's own screenshot of the desired
+    final checkbox state (their manual reference setup). Unlike almost
+    everywhere else in this file, these are real `<input type=checkbox>` +
+    `<label>` pairs — plain get_by_label()/check()/uncheck() works
+    reliably here, no span-pseudo-input workarounds needed. Real category
+    container ids confirmed live: ads_placement_expandable_list_item_
+    {feed,story,stream,search,external}.
+    """
+    # Same class of bug fixed everywhere else in this file: text like
+    # "Placements"/"Show more settings"/"Placement controls" matches more
+    # than one DOM node (hidden duplicate render), so Playwright's own
+    # get_by_text(...).first + auto-scroll can click a hidden copy instead
+    # of the one actually on screen — confirmed live 2026-07-26 (two
+    # attempts using plain locators both silently failed to expand). Find
+    # the genuinely visible node via JS (offsetParent check) and click its
+    # real screen coordinates through the existing CDP-click helper
+    # instead.
+    def _find_visible_text(text: str, *, exact: bool = True, min_y: float = 0) -> dict | None:
+        try:
+            return page.evaluate(
+                """
+                ([text, exact, min_y]) => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const all = [...document.querySelectorAll('*')];
+                  const matches = all.filter(e => {
+                    if (e.offsetParent === null || e.children.length > 1) return false;
+                    const t = norm(e.textContent);
+                    return exact ? t === text : t.includes(text);
+                  });
+                  for (const el of matches) {
+                    const r = el.getBoundingClientRect();
+                    if (r.y >= min_y) {
+                      el.scrollIntoView({ block: 'center', behavior: 'instant' });
+                      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                    }
+                  }
+                  return null;
+                }
+                """,
+                [text, exact, min_y],
+            )
+        except Exception:
+            return None
+
+    def _click_visible_text(text: str, *, exact: bool = True, min_y: float = 0) -> bool:
+        box = _find_visible_text(text, exact=exact, min_y=min_y)
+        if not box:
+            return False
+        time.sleep(0.3)
+        _cdp_mouse_click(page, box["x"], box["y"])
+        return True
+
+    # Two different "Show more settings" links exist on this page (one
+    # under Budget & schedule, one under Placements — Meta reuses the same
+    # generic label) — confirmed live 2026-07-26 that grabbing the wrong
+    # (Budget & schedule's, hidden off-screen at this scroll position) one
+    # silently no-ops. Anchor by the "Placements" heading's own y position
+    # and only accept a "Show more settings" match below it. Also poll
+    # for a few seconds — right after scrolling to a freshly-revealed
+    # section, its own "Show more settings" node can take a moment to
+    # mount into the DOM.
+    _dbg: list[str] = []
+
+    def _dump_dbg() -> None:
+        try:
+            Path("output/debug_placements_fill.txt").write_text(
+                "\n".join(_dbg), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
+    placements_box = _find_visible_text("Placements")
+    _dbg.append(f"placements_box={placements_box}")
+    if not placements_box:
+        _dump_dbg()
+        return False
+    _cdp_mouse_click(page, placements_box["x"], placements_box["y"])
+    time.sleep(0.5)
+
+    placements_y = placements_box["y"]
+    expanded = False
+    for i in range(10):
+        hide_box = _find_visible_text("Hide settings", min_y=placements_y)
+        _dbg.append(f"tick {i}: hide_settings={hide_box}")
+        if hide_box:
+            expanded = True
+            break
+        show_box = _find_visible_text("Show more settings", exact=False, min_y=placements_y)
+        _dbg.append(f"tick {i}: show_more_box={show_box}")
+        if show_box:
+            time.sleep(0.3)
+            _cdp_mouse_click(page, show_box["x"], show_box["y"])
+            time.sleep(0.5)
+            hide_box2 = _find_visible_text("Hide settings", min_y=placements_y)
+            _dbg.append(f"tick {i}: hide_settings_after_click={hide_box2}")
+            if hide_box2:
+                expanded = True
+                break
+        time.sleep(0.4)
+    _dbg.append(f"expanded={expanded}")
+    if not expanded:
+        _dump_dbg()
+        return False
+
+    pc_box = _find_visible_text("Placement controls", min_y=placements_y)
+    _dbg.append(f"placement_controls_box={pc_box}")
+    if not pc_box:
+        _dump_dbg()
+        return False
+    time.sleep(0.3)
+    _cdp_mouse_click(page, pc_box["x"], pc_box["y"])
+    time.sleep(0.6)
+    _dump_dbg()
+
+    # Expand the three categories with individual items to touch — Search
+    # results/Apps and sites stay collapsed since only their single
+    # category-level checkbox needs to go off.
+    for expand_id in (
+        "ads_placement_expandable_list_item_feed",
+        "ads_placement_expandable_list_item_story",
+        "ads_placement_expandable_list_item_stream",
+    ):
+        try:
+            page.locator(f"#{expand_id}").get_by_role("button", name="Expand").first.click(timeout=2000)
+            time.sleep(0.3)
+        except Exception:
+            pass
+
+    ok = True
+
+    def _set(label: str, want_checked: bool) -> None:
+        nonlocal ok
+        try:
+            cb = page.get_by_label(label, exact=True).first
+            if not cb.count():
+                ok = False
+                return
+            if want_checked and not cb.is_checked():
+                cb.check(timeout=2500)
+            elif not want_checked and cb.is_checked():
+                cb.uncheck(timeout=2500)
+            time.sleep(0.2)
+        except Exception:
+            ok = False
+
+    for label in (
+        "Facebook Feed",
+        "Instagram feed",
+        "Instagram Stories",
+        "Facebook Stories",
+        "Instagram Reels",
+        "Facebook Reels",
+        "Facebook in-stream reels",
+    ):
+        _set(label, True)
+
+    for label in (
+        "Facebook profile feed",
+        "Instagram profile feed",
+        "Facebook Marketplace",
+        "Facebook right column",
+        "Instagram Explore home",
+        "Facebook Business Explore",
+        "Threads feed",
+        "Facebook Notifications",
+        "Messenger Stories",
+        "WhatsApp Status",
+        "Ads on Facebook Reels",
+    ):
+        _set(label, False)
+
+    # Search results / Apps and sites: whole category off — uncheck the
+    # single category-level checkbox directly, no need to expand.
+    for container_id in (
+        "ads_placement_expandable_list_item_search",
+        "ads_placement_expandable_list_item_external",
+    ):
+        try:
+            cb = page.locator(f"#{container_id}").locator("input[type=checkbox]").first
+            if cb.count() and cb.is_checked():
+                cb.uncheck(timeout=2500)
+                time.sleep(0.2)
+        except Exception:
+            ok = False
+
+    return ok
 
 
 def upload_ad_creative(
