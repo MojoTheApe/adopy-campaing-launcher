@@ -2865,33 +2865,86 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
     if not _reveal_ad_copy_fields(page):
         return False
 
-    ok = False
+    def _click_via_cdp(locator) -> bool:
+        # Confirmed live (2026-07-26): Playwright's own .click() can report
+        # success under connect_over_cdp without the page actually receiving
+        # focus (microsoft/playwright#41286 — dropped/reordered mouse
+        # events). insert_text() then silently goes nowhere (or Ctrl+A
+        # selects the whole document instead of the field). Use the raw CDP
+        # click helper (same fix already applied elsewhere in this file)
+        # instead of locator.click().
+        #
+        # Also confirmed live: Playwright's own scroll_into_view_if_needed()
+        # is an async/smooth scroll — bounding_box() read right after can be
+        # stale by hundreds of px (same race already fixed elsewhere in this
+        # file for other elements). Force an instant JS scroll on the actual
+        # element first and settle before reading the box.
+        try:
+            locator.evaluate(
+                "el => el.scrollIntoView({block: 'center', behavior: 'instant'})"
+            )
+        except Exception:
+            pass
+        time.sleep(0.3)
+        box = locator.bounding_box()
+        if not box:
+            return False
+        _mouse_click_chain(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        time.sleep(0.3)
+        return True
+
+    def _primary_text_has_content() -> bool:
+        try:
+            return bool(page.evaluate(
+                "() => { const el = [...document.querySelectorAll('[role=combobox]')]"
+                ".find(e => e.offsetParent !== null && (e.getAttribute('aria-label')||'')"
+                ".includes('Tell people what your ad is about'));"
+                " return !!(el && el.textContent.trim().length > 0); }"
+            ))
+        except Exception:
+            return False
+
+    def _headline_has_content() -> bool:
+        try:
+            return bool(page.evaluate(
+                "() => { const el = [...document.querySelectorAll('[placeholder]')]"
+                ".find(e => e.offsetParent !== null && e.getAttribute('placeholder') === 'Write a short headline');"
+                " return !!(el && (el.value || el.textContent || '').trim().length > 0); }"
+            ))
+        except Exception:
+            return False
+
+    # Both fields verified post-insert — Playwright's own click can report
+    # success under connect_over_cdp without the page actually receiving
+    # focus (see _click_via_cdp docstring above), silently leaving the
+    # field empty even though no exception was raised. Don't trust a clean
+    # run of insert_text() alone; check the field's real content after.
+    body_ok = not ad_body
     if ad_body:
         try:
             primary_box = page.get_by_role(
                 "combobox", name="Tell people what your ad is about"
             ).first
-            if primary_box.count():
-                primary_box.click(timeout=3000)
+            if primary_box.count() and _click_via_cdp(primary_box):
                 page.keyboard.insert_text(ad_body)
                 time.sleep(0.4)
-                ok = True
+                body_ok = _primary_text_has_content()
         except Exception:
             pass
 
+    title_ok = not ad_title
     if ad_title:
         try:
             headline_box = page.get_by_placeholder("Write a short headline").first
-            if headline_box.count():
-                headline_box.click(timeout=3000)
+            if headline_box.count() and _click_via_cdp(headline_box):
                 page.keyboard.press("Control+A")
                 page.keyboard.insert_text(ad_title)
                 time.sleep(0.4)
-                ok = True
+                title_ok = _headline_has_content()
         except Exception:
             pass
 
-    return ok
+    return body_ok and title_ok
 
 
 def set_ad_destination_website(page: Page, destination_url: str) -> bool:
