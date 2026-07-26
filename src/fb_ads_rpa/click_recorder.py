@@ -170,6 +170,42 @@ def _find_cdp_url() -> str | None:
     return None
 
 
+def _find_cdp_url_for_account(account_label: str) -> str | None:
+    """Look up the real CDP port for an already-open Multilogin profile.
+
+    Live evidence (2026-07-23): _find_cdp_url()'s fixed port list missed the
+    port an active RPA test session's browser was actually running on. The
+    same account's port is found reliably via browser.py's
+    _discover_debug_port(), which reads the profile's own DevToolsActivePort
+    file rather than guessing -- prefer this when an account_label is given.
+    """
+    try:
+        from config.paths import get_ad_account_map_path
+        from src.meta_campaign_agent.ad_account_map import (
+            load_ad_account_map,
+            resolve_account_entry,
+        )
+        from src.fb_ads_rpa.browser import (
+            MultiloginDirectCDPProvider,
+            _find_mlx_profile_dir,
+        )
+
+        account_map = load_ad_account_map(get_ad_account_map_path())
+        entry = resolve_account_entry(account_map, account_label)
+        if not entry or not entry.profile_id:
+            return None
+        user_data_dir = _find_mlx_profile_dir(entry.profile_id)
+        if user_data_dir is None:
+            return None
+        provider = MultiloginDirectCDPProvider()
+        port = provider._discover_debug_port(str(user_data_dir), entry.profile_id)
+        if port is None:
+            return None
+        return f"http://127.0.0.1:{port}"
+    except Exception:
+        return None
+
+
 def get_status() -> dict[str, Any]:
     with _lock:
         return {
@@ -271,13 +307,22 @@ def _recorder_loop(cdp_url: str) -> None:
                     _state.error = f"Save failed: {exc}"
 
 
-def start_recording(*, recipe_name: str = "campaign", cdp_url: str | None = None) -> dict[str, Any]:
+def start_recording(
+    *,
+    recipe_name: str = "campaign",
+    cdp_url: str | None = None,
+    account_label: str | None = None,
+) -> dict[str, Any]:
     global _thread
     with _lock:
         if _state.running:
             return {"ok": False, "error": "Recorder already running", **get_status()}
 
-    url = cdp_url or _find_cdp_url()
+    url = cdp_url
+    if not url and account_label:
+        url = _find_cdp_url_for_account(account_label)
+    if not url:
+        url = _find_cdp_url()
     if not url:
         return {
             "ok": False,

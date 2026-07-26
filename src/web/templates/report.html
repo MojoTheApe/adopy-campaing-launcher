@@ -1914,8 +1914,8 @@ async function dashRefresh(ev) {
               onclick="rpaTakeover()">⏸ Пауза RPA</button>
       <button type="button" class="rpa-record-btn"
               style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#1d4ed8;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
-              onclick="rpaRecordToggle(this)"
-              title="Записывает твои клики в открытом Multilogin браузере.">⏺ Record clicks</button>
+              onclick="rpaRecordToggle(this, '{{ acc_label | e }}')"
+              title="Записывает твои клики в открытом Multilogin браузере (JSON-рецепт с role/aria-label/own_text). Playwright Inspector (codegen) не работает на антидетект-браузере Multilogin — Overlay-подсветка и запись через него не срабатывают, подтверждено вживую 2026-07-23.">⏺ Record clicks</button>
       <button type="button" class="rpa-lab-btn"
               style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#7c3aed;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
               onclick="rpaWebsiteLabToggle(this)"
@@ -4137,6 +4137,14 @@ window.rpaTakeover = function() {
 };
 
 // ── Click Recorder (learn from your manual campaign creation) ─────────
+// Reverted 2026-07-23 from the Playwright-Inspector-based codegen wiring:
+// confirmed live that page.pause()'s Inspector (Overlay-based highlighting
+// and click recording) does not work on Multilogin's antidetect (Mimic)
+// browser -- the CDP connection itself works fine for scripted automation,
+// but the Inspector's own recording machinery silently captures nothing.
+// This plain JS click listener (own_text/role/css_path/coordinates written
+// to a JSON recipe) does work on Mimic -- confirmed live the same day.
+// See docs/agent10-codegen-via-multilogin.md for the full story.
 var _rpaRecording = false;
 var _rpaRecordPoll = null;
 
@@ -4156,7 +4164,7 @@ function _rpaRecordSetUI(running, message) {
   });
 }
 
-window.rpaRecordToggle = function(btn) {
+window.rpaRecordToggle = function(btn, accountLabel) {
   if (_rpaRecording) {
     fetch('/rpa-record/stop', { method: 'POST' })
       .then(function(r) { return r.json(); })
@@ -4175,15 +4183,13 @@ window.rpaRecordToggle = function(btn) {
     return;
   }
 
-  var form = btn ? btn.closest('form') : null;
-  var country = form ? ((form.querySelector('[name=country]') || {}).value || '') : '';
-  var recipeName = (country ? country.replace(/\\s+/g, '_') + '_' : '') + 'campaign';
+  var recipeName = (accountLabel ? accountLabel.replace(/\s+/g, '_') + '_' : '') + 'campaign';
 
   _rpaRecordSetUI(true, 'Connecting to Multilogin CDP…');
   fetch('/rpa-record/start', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({recipe_name: recipeName})
+    body: JSON.stringify({recipe_name: recipeName, account_label: accountLabel || ''})
   })
   .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, d: d}; }); })
   .then(function(res) {

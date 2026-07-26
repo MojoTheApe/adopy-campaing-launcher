@@ -1926,19 +1926,27 @@ def run_recorded_campaign_flow(
     budget: str,
     adset_name: str,
     country: str = "",
-    age_min: int = 18,
-    age_max: int = 65,
-    targeting_label: str = "",
-    language_names: list[str] | None = None,
-    creative_type: str = "",
-    creative_path: str = "",
-    ad_title: str = "",
-    ad_body: str = "",
-    destination_url: str = "",
+    interests: str = "",
+    language: str = "Spanish (All)",
+    ad_name: str = "",
+    website_url: str = "",
+    headline: str = "",
+    primary_text: str = "",
+    creative_filename: str = "",
 ) -> str:
-    """Create -> Website, using the exact locators from a verified human
-    Playwright codegen recording (2026-07-21) instead of the label/breadcrumb/
-    coordinate cascade the rest of this file falls back to.
+    """Create -> draft hand-off, using the exact locators from a verified
+    human Playwright codegen recording (2026-07-21/22) instead of the
+    label/breadcrumb/coordinate cascade the rest of this file falls back to.
+
+    2026-07-23: extended past Audience Locations to cover the rest of the
+    recording (output/codegen_conversion_location_sanitized.py, lines 29-95)
+    in one offline pass -- transcribed manually from the recording rather
+    than live-verified segment by segment, because the live test account
+    became unreliable to test against today (another person's manual
+    interaction + account instability repeatedly corrupted screenshots).
+    Every step below is a direct translation of a recorded line; treat
+    fail_* step names as exact pointers to what needs live re-diagnosis
+    first, the same way earlier segments were fixed.
 
     The recording confirmed several things live evidence had only guessed at:
       - Campaign/Ad set name inputs have no real ARIA label — they match by
@@ -1953,18 +1961,21 @@ def run_recorded_campaign_flow(
     """
 
     def _wait_loading() -> None:
-        # Meta shows a transient full-page "Loading..." overlay, seemingly on
-        # a periodic list refresh as well as after transitions (list -> Create
+        # Meta shows a transient full-page loading overlay, seemingly on a
+        # periodic list refresh as well as after transitions (list -> Create
         # modal, Continue -> wizard) — confirmed live (2026-07-21) covering the
         # page while a click/fill silently missed underneath it, and a single
         # wait-then-click was still sometimes racing a fresh overlay. Checked
         # before every action below, with a retry loop around the action itself.
+        # Wording varies ("Loading...", "Loading creation" seen live on a
+        # campaign list with 30+ prior test drafts) — match any "Loading"
+        # text rather than the literal ellipsis.
         try:
-            page.get_by_text("Loading...", exact=False).first.wait_for(state="hidden", timeout=10000)
+            page.get_by_text(re.compile(r"Loading", re.I)).first.wait_for(state="hidden", timeout=30000)
         except Exception:
             pass
 
-    def _click(loc, *, attempts: int = 3) -> bool:
+    def _click(loc, *, attempts: int = 5) -> bool:
         for _ in range(attempts):
             _wait_loading()
             try:
@@ -1980,7 +1991,7 @@ def run_recorded_campaign_flow(
                 time.sleep(0.6)
         return False
 
-    def _fill(loc, value: str, *, attempts: int = 3) -> bool:
+    def _fill(loc, value: str, *, attempts: int = 5) -> bool:
         for _ in range(attempts):
             _wait_loading()
             try:
@@ -2040,6 +2051,21 @@ def run_recorded_campaign_flow(
         return "objective_continue"
     _wait_loading()
     _shot("after_continue")
+
+    # Live evidence (2026-07-23, first run ever on a fresh account —
+    # FacebookDQ204 CR): a one-time onboarding modal ("You no longer need to
+    # choose a campaign setup") appears over Campaign details on accounts
+    # that haven't dismissed it before, blocking the campaign-name fill
+    # underneath. Never seen on the day's main test account since it had
+    # already dismissed this once. Best-effort, harmless no-op elsewhere.
+    # First attempt used a raw one-shot .click() with no _wait_loading()
+    # guard -- it raced the transient "Loading..." overlay (same class of
+    # bug documented everywhere else in this function) and silently missed,
+    # while the screenshot happened to catch the overlay and looked like
+    # progress. Use the same retrying _click() helper as everything else.
+    if not _click(page.get_by_role("button", name="Don't show again"), attempts=3):
+        _click(page.get_by_role("button", name="OK", exact=True), attempts=2)
+    _shot("after_onboarding_modal")
 
     if not _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name):
         _shot("fail_campaign_name")
@@ -2127,286 +2153,589 @@ def run_recorded_campaign_flow(
 
     _shot("success_website_selected")
 
-    # Next segment past Website: Conversion event = Lead. Reuses the existing
-    # select_conversion_event_lead()/is_lead_conversion_event_selected() pair
-    # (already used by the older recipe_player delegated-section path).
-    # Soft-fail (2026-07-26, explicit user direction): confirmed live via
-    # playwright-skill that a hard failure here can be the pixel/dataset
-    # genuinely having no tracked events yet (both "Active events" and
-    # "Inactive events" render empty) — not a click/selector bug, and not
-    # something retrying fixes. Per the same "don't stop the test, keep
-    # going" direction that made Locations/Age/Targeting soft-fail, log and
-    # continue into Audience/Targeting/Ad-level instead of aborting the
-    # whole run over one field this account's data can't currently satisfy.
-    top_level_soft_fails: list[str] = []
-    try:
-        if not select_conversion_event_lead(page):
-            _shot("fail_conversion_event")
-            top_level_soft_fails.append("conversion_event")
-        else:
-            _shot("success_conversion_event")
-    except Exception as exc:
-        _shot("fail_conversion_event")
-        top_level_soft_fails.append(f"conversion_event:{str(exc)[:60]}")
+    # --- Conversion event ------------------------------------------------
+    # Recording (2026-07-21, full-path segment, lines 21-23 of
+    # output/codegen_conversion_location_sanitized.py): click the event
+    # search placeholder "Select an event or search by", then pick an
+    # option. The recording's own click target for the option was an
+    # unstable Meta hash-class element with no visible name — match by
+    # text/role instead ("Lead", matching the Leads objective), same
+    # rationale as the rest of this function: prefer role/text over
+    # generated CSS classes.
+    #
+    # Do NOT verify with is_lead_conversion_event_selected() — live evidence
+    # (2026-07-21) showed it walks up from the "Conversion event" label and
+    # can return the neighboring "Dataset" field's value ("FacebookUL921")
+    # instead, a false negative even though "Lead" was plainly showing in
+    # the dropdown. Same own-text-node pattern already used for the
+    # Website check below is reliable; reuse it here.
+    def _conversion_event_is_lead() -> bool:
+        try:
+            return bool(
+                page.evaluate(
+                    """
+                    () => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      const targets = ['Lead', 'Cliente potencial', 'Prospecto'];
+                      for (const el of document.querySelectorAll('div, span, button, [role=combobox]')) {
+                        if (!el.offsetParent) continue;
+                        const kids = Array.from(el.childNodes).filter(n => n.nodeType === 3);
+                        const own = norm(kids.map(n => n.textContent).join(''));
+                        if (targets.includes(own)) return true;
+                      }
+                      return false;
+                    }
+                    """
+                )
+            )
+        except Exception:
+            return False
 
-    # Next segment: Audience section, "Further limit the reach of your ads"
-    # (gear icon, collapsed by default under Suggest an audience) — confirmed
-    # live 2026-07-24 that the wizard actually reaches this screen. First
-    # pass: just expand it and screenshot: what's inside hasn't been mapped
-    # yet, so don't assume a shape for it — the next iteration reads this
-    # screenshot to decide what (if anything) needs filling in here.
-    try:
-        scroll_to_section(page, "Audience")
+    if not _conversion_event_is_lead():
         opened = False
-        for _ in range(5):
+        for _ in range(3):
+            _wait_loading()
             try:
-                el = page.get_by_text(
-                    re.compile(r"further limit the reach of your ads", re.I)
-                ).first
-                el.scroll_into_view_if_needed(timeout=5000)
-                el.click(timeout=5000)
-                time.sleep(0.6)
+                page.get_by_text("Select an event or search by", exact=False).first.click(timeout=4000)
                 opened = True
                 break
             except Exception:
-                # Not rendered/visible yet — nudge the page down and retry
-                # rather than assuming the text is simply absent.
+                time.sleep(0.5)
+        if not opened:
+            _shot("fail_conversion_event_open")
+            return "conversion_event_open"
+        time.sleep(0.4)
+        _shot("after_conversion_event_open")
+
+        # Live evidence (2026-07-22): on an account/dataset with no recorded
+        # events yet, the "Active events"/"Inactive events" quick-lists are
+        # both empty — "Lead" only surfaces once you type it into the same
+        # search box the click above focused. Type it before looking for the
+        # option; harmless on accounts where "Lead" was already listed.
+        try:
+            page.keyboard.type("Lead", delay=40)
+            time.sleep(0.6)
+        except Exception:
+            pass
+        _shot("after_conversion_event_search")
+
+        picked = False
+        for label in ("Lead", "Leads", "Cliente potencial", "Prospecto"):
+            for getter in (
+                lambda l=label: page.get_by_role("option", name=l, exact=True).first,
+                lambda l=label: page.get_by_text(l, exact=True).first,
+            ):
                 try:
-                    page.mouse.wheel(0, 400)
+                    opt = getter()
+                    if opt.is_visible(timeout=1500):
+                        opt.click(timeout=3000)
+                        picked = True
+                        break
                 except Exception:
                     pass
-                time.sleep(0.6)
-        _shot("after_further_limit_reach" if opened else "fail_further_limit_reach_click")
-        if not opened:
-            return "further_limit_reach"
-
-        # The link opens a confirmation modal ("Reach your preferred
-        # audiences") with 3 radio choices; "Stay in current setup" is
-        # selected by default. Pick the "Further limit the reach of your
-        # ads" radio specifically (matches the same phrase as the link that
-        # opened this modal, but scoped to the dialog so we don't re-match
-        # the now-hidden link behind it), then Continue.
-        picked_radio = False
-        for root in _roots(page):
-            try:
-                dialog = root.get_by_role("dialog").first
-                if not dialog.is_visible(timeout=1500):
-                    continue
-                option = dialog.get_by_text(
-                    re.compile(r"further limit the reach of your ads", re.I)
-                ).first
-                option.scroll_into_view_if_needed(timeout=3000)
-                option.click(timeout=4000)
-                picked_radio = True
+            if picked:
                 break
-            except Exception:
-                continue
-        _shot("after_pick_further_limit_radio" if picked_radio else "fail_pick_further_limit_radio")
-        if not picked_radio:
-            return "further_limit_reach_radio"
+        if not picked:
+            _shot("fail_conversion_event_pick")
+            return "conversion_event_pick"
 
-        continued = False
-        for root in _roots(page):
+        time.sleep(0.5)
+        if not _conversion_event_is_lead():
+            _shot("fail_conversion_event_verify")
+            return "conversion_event_verify"
+
+    _shot("success_conversion_event")
+
+    # --- Audience: Locations ---------------------------------------------
+    # Recording lines 24-28 (full-path segment): swap the default "United
+    # States" location for the account's target country. Ground-truth role
+    # names from the recording: button "Locations Inclusion: United...",
+    # combobox "Search locations", result row exact text "Country" (Meta
+    # tags country-level results this way regardless of which country), a
+    # "Remove" button per location chip. _country_search_term() is the
+    # existing ISO-2 -> English-name lookup already used elsewhere in this
+    # file (e.g. fill_audience_location) -- pure data lookup, safe to reuse.
+    search_term = _country_search_term(country) if country else ""
+    if search_term:
+        # Live evidence (2026-07-22): tried repeatedly to turn off
+        # "Advantage+ leads campaign" (still shows On) before looking for
+        # Locations, on the theory that On hides the manual section. That
+        # theory turned out wrong: two runs today (2026-07-22) had the full
+        # Locations panel render correctly while the indicator still read
+        # On the whole time. Whether Locations is visible/expanded seems to
+        # depend on page settle time after Conversion event, not this
+        # toggle. Also, the toggle-click code was landing on the page's
+        # unrelated top "Ad set is off/on" switch and flipping it live (a
+        # real, if likely harmless on a disposable draft, side effect) --
+        # removed entirely rather than keep guessing at its selector.
+        # Just wait for Locations to actually show up. Bumped from 4x1s to
+        # 8x2s (2026-07-22) -- 4 seconds total wasn't always enough; some
+        # runs still show nothing but the Conversion section after that.
+        locations_visible = False
+        for _ in range(8):
+            _wait_loading()
+            if scroll_to_section(page, "Locations", "Ubicaciones"):
+                locations_visible = True
+                break
+            time.sleep(2.0)
+        _shot("after_locations_open")
+
+        # Live evidence (2026-07-22): Locations sometimes renders collapsed
+        # -- just "Inclusion: United States" + a "Show more controls" link,
+        # with no search input on screen at all until that link is
+        # clicked. Try it (best-effort, harmless no-op if already expanded).
+        try:
+            page.get_by_text("Show more controls", exact=False).first.click(timeout=2000)
+            time.sleep(0.5)
+        except Exception:
+            pass
+
+        # User instruction (2026-07-22, based on their own manual recording
+        # in the live account): click "Further limit the reach of your ads"
+        # BEFORE touching the country search -- this is what actually
+        # expands the manual audience controls (Locations search box
+        # included) in this account's current UI, ahead of the recording's
+        # original order (which clicked it only after the location swap).
+        try:
+            page.get_by_role(
+                "button", name=re.compile(r"Further limit the reach", re.I)
+            ).first.click(timeout=3000)
+            time.sleep(0.8)
+        except Exception:
             try:
-                btn = root.get_by_role("button", name=re.compile(r"^continue$", re.I)).first
-                if btn.is_visible(timeout=1500):
-                    btn.click(timeout=4000)
-                    continued = True
-                    break
-            except Exception:
-                continue
-        if continued:
-            # Confirmed live 2026-07-24: the scroll position after this
-            # Continue click was inconsistent between runs (sometimes
-            # Locations/Age already visible, sometimes the page ended up
-            # back at the top) — a fixed sleep(0.6) wasn't enough to let
-            # Meta's own re-render/verification settle. Wait for the actual
-            # markers instead: the "Verifying your edits..." indicator, then
-            # the "You've switched audience setup" toast to appear AND clear.
-            wait_editor_saved(page)
-            try:
-                toast = page.get_by_text(
-                    re.compile(r"You've switched audience setup", re.I)
-                ).first
-                toast.wait_for(state="visible", timeout=3000)
-                toast.wait_for(state="hidden", timeout=8000)
+                page.get_by_text(re.compile(r"Further limit the reach", re.I)).first.click(timeout=3000)
+                time.sleep(0.8)
             except Exception:
                 pass
+        _shot("after_further_limit_reach")
+
+        # User instruction (2026-07-23, from their own manual recording):
+        # the button click above reveals three radio options; the bottom
+        # one shares the exact same label ("Further limit the reach of
+        # your ads") -- matches the original codegen recording's radio
+        # check (line 30: get_by_role("radio", name="Further limit the
+        # reach of").check()). Select it explicitly, the button click
+        # alone doesn't check it.
+        try:
+            page.get_by_role(
+                "radio", name=re.compile(r"Further limit the reach", re.I)
+            ).first.check(timeout=3000)
             time.sleep(0.5)
-        _shot("after_further_limit_continue" if continued else "fail_further_limit_continue")
-        if not continued:
-            return "further_limit_reach_continue"
-    except Exception:
-        _shot("fail_further_limit_reach")
-        return "further_limit_reach"
+        except Exception:
+            pass
+        _shot("after_further_limit_reach_radio")
 
-    # Locations: confirmed live 2026-07-24 that without an explicit fill here,
-    # this defaults to whatever Meta last used (seen: Hong Kong) instead of
-    # the draft's actual country — a real targeting-correctness bug, not just
-    # a missing nice-to-have. Reuses fill_audience_location(), which was
-    # written for the older recipe_player delegated path and has NOT been
-    # independently re-verified the way Website/Conversion event were (it
-    # optimistically returns True after a click/Enter, without checking what
-    # actually got selected) — treat its return value as a weaker signal than
-    # the other steps in this function until that's tightened up.
-    # Audience fill-in (Locations / Age / Targeting): best-effort from here
-    # on, per explicit direction — if one field doesn't click, log it and
-    # move on to the next rather than aborting the whole run. soft_fails
-    # collects what didn't work so the caller/diary can see exactly which
-    # pieces still need a live fix, without losing the rest of the segment.
-    soft_fails: list[str] = list(top_level_soft_fails)
-
-    # Age BEFORE Locations (reordered 2026-07-25): Age used to render as
-    # live "18 [v] 65+ [v]" dropdowns directly, confirmed in screenshots
-    # from before the Locations fix existed. Now that Locations reliably
-    # expands into a large panel (map + chip list), it pushes everything
-    # below it down and Age started rendering as a collapsed "18 - 65+"
-    # text summary instead — a click-to-expand attempt modeled on Locations
-    # made this worse (scrolled past Age entirely), so the working
-    # hypothesis is layout-order, not Age's own mechanics: fill Age first,
-    # while the page is still in its simpler pre-Locations-expansion state.
-    try:
-        if not fill_audience_age(page, age_min, age_max):
-            _shot("fail_audience_age")
-            soft_fails.append("audience_age")
-        else:
-            _shot("after_audience_age")
-    except Exception as exc:
-        _shot("fail_audience_age")
-        soft_fails.append(f"audience_age:{str(exc)[:60]}")
-
-    if country:
-        _shot("before_audience_location")
+        # Recording line 31: a Continue confirmation follows the radio
+        # check (narrowing Advantage detailed targeting shows a confirm
+        # step). Best-effort -- not every account/session shows it.
         try:
-            all_placeholders = page.evaluate(
-                "() => Array.from(document.querySelectorAll('input[placeholder]'))"
-                ".filter(el => el.offsetParent !== null)"
-                ".map(el => el.placeholder)"
-            )
-            Path("output/debug_visible_placeholders.txt").write_text(
-                "visible input placeholders before fill_audience_location:\n"
-                + "\n".join(all_placeholders),
-                encoding="utf-8",
+            page.get_by_role("button", name="Continue", exact=True).click(timeout=2500)
+            time.sleep(0.6)
+        except Exception:
+            pass
+
+        # This account's search input's visible placeholder "Search
+        # locations" doesn't resolve via role=combobox -- match by
+        # placeholder first, same pattern as Campaign/Ad set name earlier
+        # in this function.
+        location_search_ok = _fill(page.get_by_placeholder("Search locations"), search_term)
+        if not location_search_ok:
+            location_search_ok = _fill(page.get_by_role("combobox", name="Search locations"), search_term)
+
+        if not location_search_ok:
+            # User instruction (2026-07-23, live observation): once the
+            # Audience section has already collapsed to a summary (green
+            # checkmarks for Budget/Audience/Placements, Placements section
+            # visible below -- confirmed live on FacebookDQ204 CR), the plain
+            # search box is gone. A second, later instance of "Further limit
+            # the reach of your ads" (a small gear-icon link next to "Save
+            # audience") reopens the panel -- exposing Locations/Age/Detailed
+            # targeting/Languages together (confirmed live via the custom
+            # click_recorder.py probe, 2026-07-23: get_by_role/get_by_text
+            # with .first was unreliable here -- own text is "Further limit
+            # the reach of your ads" with role="" on the element itself, role
+            # inherited from a div[role=button] a few levels up, same pattern
+            # as "Next" elsewhere in this function, but accessible-name
+            # computation through that much nesting isn't resolving via
+            # get_by_role in practice. Use the same own-text-node + CDP-click
+            # pattern already proven reliable for Website/Lead instead of
+            # relying on ARIA role/name matching.
+            try:
+                box = page.evaluate(
+                    """
+                    () => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      for (const el of document.querySelectorAll('div, span, a, [role=button]')) {
+                        if (!el.offsetParent) continue;
+                        const own = norm(
+                          Array.from(el.childNodes).filter(n => n.nodeType === 3)
+                            .map(n => n.textContent).join('')
+                          || (el.childElementCount === 0 ? (el.textContent || '') : '')
+                        );
+                        if (own === 'Further limit the reach of your ads') {
+                          const r = el.getBoundingClientRect();
+                          return { x: r.x, y: r.y, width: r.width, height: r.height };
+                        }
+                      }
+                      return null;
+                    }
+                    """
+                )
+                if box:
+                    _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                    time.sleep(0.8)
+            except Exception:
+                pass
+            _shot("after_further_limit_reach_reopen")
+
+            # Live evidence (2026-07-23, via click_recorder.py probe): this
+            # click is immediately followed by a "Continue" confirmation,
+            # same own-text/role pattern -- reuse the same precise click.
+            try:
+                cbox = page.evaluate(
+                    """
+                    () => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      for (const el of document.querySelectorAll('div, span, a, [role=button]')) {
+                        if (!el.offsetParent) continue;
+                        const own = norm(
+                          Array.from(el.childNodes).filter(n => n.nodeType === 3)
+                            .map(n => n.textContent).join('')
+                          || (el.childElementCount === 0 ? (el.textContent || '') : '')
+                        );
+                        if (own === 'Continue') {
+                          const r = el.getBoundingClientRect();
+                          return { x: r.x, y: r.y, width: r.width, height: r.height };
+                        }
+                      }
+                      return null;
+                    }
+                    """
+                )
+                if cbox:
+                    _cdp_mouse_click(page, cbox["x"] + cbox["width"] / 2, cbox["y"] + cbox["height"] / 2)
+                    time.sleep(0.6)
+            except Exception:
+                pass
+            _shot("after_further_limit_reach_reopen_continue")
+            location_search_ok = _fill(page.get_by_placeholder("Search locations"), search_term)
+            if not location_search_ok:
+                location_search_ok = _fill(page.get_by_role("combobox", name="Search locations"), search_term)
+
+        # 2026-07-24: user instruction -- if a step doesn't click, skip it
+        # and move on rather than hard-failing the whole flow. Every skip
+        # still gets a fail_* screenshot for later diagnosis.
+        if not location_search_ok:
+            _shot("fail_audience_location_search")
+        time.sleep(1.0)
+        _shot("after_location_search")
+
+        try:
+            page.get_by_text("Country", exact=True).first.click(timeout=4000)
+            time.sleep(0.5)
+        except Exception:
+            _shot("fail_audience_location_pick")
+        _shot("after_location_picked")
+
+        # Remove the default "United States" chip, leaving only the new
+        # country. Match by nearby text rather than the recording's
+        # positional nth(1) Remove button, which breaks if chip order
+        # differs from today's session.
+        removed_default = False
+        try:
+            removed_default = bool(
+                page.evaluate(
+                    """
+                    () => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      const isRemove = (b) => {
+                        const t = norm(b.textContent) || norm(b.getAttribute('aria-label') || '');
+                        return t === 'Remove' || t === 'Eliminar' || t === 'Quitar';
+                      };
+                      const buttons = [...document.querySelectorAll('[role=button], button')].filter(isRemove);
+                      for (const btn of buttons) {
+                        if (!btn.offsetParent) continue;
+                        let node = btn;
+                        for (let i = 0; i < 6 && node; i++, node = node.parentElement) {
+                          if (norm(node.textContent).includes('United States')) {
+                            btn.click();
+                            return true;
+                          }
+                        }
+                      }
+                      return false;
+                    }
+                    """
+                )
             )
         except Exception:
             pass
-        try:
-            if not fill_audience_location(page, country):
-                _shot("fail_audience_location")
-                soft_fails.append("audience_location")
-            else:
-                _shot("after_audience_location")
-        except Exception as exc:
-            _shot("fail_audience_location")
-            soft_fails.append(f"audience_location:{str(exc)[:60]}")
+        if not removed_default:
+            try:
+                page.get_by_role("button", name="Remove").nth(1).click(timeout=3000)
+                removed_default = True
+            except Exception:
+                pass
+        time.sleep(0.5)
+        _shot("after_remove_default_location")
+        if not removed_default:
+            _shot("fail_audience_location_remove_default")
 
-    # Languages — new (2026-07-25), no real data plumbing exists yet
-    # (AdSet/draft has no language field). TODO: wire language_names through
-    # from real campaign data once fill_audience_languages is confirmed
-    # live; for now a hardcoded test value lets this get its first live
-    # exercise ("Spanish" matches country=CR's real primary language) rather
-    # than staying entirely unverified.
-    test_language_names = language_names or (["Spanish"] if country == "CR" else [])
-    if test_language_names:
+    # --- Detailed targeting -----------------------------------------------
+    # Recording lines 32-41. Lines 32-33 were unstable Meta hash-class
+    # clicks in the recording (expanding the Advantage-audience "Use as a
+    # suggestion" toggle area) -- skipped in favor of going straight for
+    # the labelled controls that actually need to end up in a specific
+    # state (checkbox unchecked, interests filled).
+    if interests:
         try:
-            if not fill_audience_languages(page, test_language_names):
-                _shot("fail_languages")
-                soft_fails.append("languages")
-            else:
-                _shot("after_languages")
-        except Exception as exc:
+            cb = page.get_by_role(
+                "checkbox", name=re.compile(r"Use as a suggestion", re.I)
+            ).first
+            if cb.is_checked(timeout=2000):
+                cb.uncheck(timeout=2500)
+                time.sleep(0.4)
+        except Exception:
+            pass
+        _shot("after_advantage_audience_toggle")
+
+        try:
+            page.get_by_role(
+                "button", name=re.compile(r"^Detailed targeting", re.I)
+            ).first.click(timeout=3000)
+            time.sleep(0.6)
+        except Exception:
+            pass
+        _shot("after_detailed_targeting_open")
+
+        # Recording: the search input inside #DETAILED has no real ARIA
+        # label (get_by_label("", exact=True) in the recording -- an
+        # empty label). #DETAILED is a real, stable element id (not a
+        # generated hash class), safe to anchor on directly.
+        filled_interests = False
+        try:
+            detailed = page.locator("#DETAILED")
+            inp = detailed.locator("input, textarea, [contenteditable=true]").first
+            inp.click(timeout=3000)
+            inp.fill(interests, timeout=4000)
+            filled_interests = True
+        except Exception:
+            pass
+        if not filled_interests:
+            _shot("fail_detailed_targeting_fill")
+        time.sleep(0.8)
+        _shot("after_detailed_targeting_fill")
+
+    # --- Languages ----------------------------------------------------
+    # Recording lines 42-45.
+    if language:
+        try:
+            page.get_by_role(
+                "button", name=re.compile(r"^Languages", re.I)
+            ).first.click(timeout=3000)
+            time.sleep(0.6)
+        except Exception:
+            pass
+        try:
+            lang_box = page.locator("#language_targeting_tokenizer").get_by_placeholder(
+                "Search languages"
+            )
+            lang_box.click(timeout=3000)
+            lang_box.fill(language.split(" ")[0], timeout=3000)
+            time.sleep(0.8)
+            page.get_by_role("option", name=language, exact=True).first.click(timeout=3000)
+        except Exception:
             _shot("fail_languages")
-            soft_fails.append(f"languages:{str(exc)[:60]}")
+        time.sleep(0.5)
+        _shot("after_languages")
 
-    # Detailed targeting: paste each comma-separated interest term and pick
-    # the first autocomplete suggestion — same pattern the old recipe_player
-    # path used for this exact field.
-    if targeting_label:
-        try:
-            if not open_detailed_targeting_field(page):
-                _shot("fail_targeting_open")
-                soft_fails.append("targeting_open")
-            else:
-                any_added = paste_targeting_interests(page, targeting_label)
-                _shot("after_targeting" if any_added else "fail_targeting_none_added")
-                if not any_added:
-                    soft_fails.append("targeting_none_added")
-        except Exception as exc:
-            _shot("fail_targeting")
-            soft_fails.append(f"targeting:{str(exc)[:60]}")
+    # --- Placements (manual) -----------------------------------------------
+    # Recording lines 46-66. Each toggle is best-effort: getting most of
+    # them right matters more than failing the whole flow if a given
+    # account's placement UI shows a slightly different set of options.
+    try:
+        page.get_by_role("link", name=re.compile(r"Show more settings", re.I)).first.click(
+            timeout=2500
+        )
+        time.sleep(0.5)
+    except Exception:
+        pass
+    _shot("after_show_more_settings")
 
-    if soft_fails:
+    try:
+        page.get_by_role("button", name=re.compile(r"^Platforms", re.I)).first.click(
+            timeout=3000
+        )
+        time.sleep(0.6)
+    except Exception:
+        pass
+    for label in ("Messenger", "Audience Network", "Threads", "Allow limited spending to"):
         try:
-            Path("output/debug_audience_soft_fails.txt").write_text(
-                "\n".join(soft_fails), encoding="utf-8"
-            )
+            cb = page.get_by_role("checkbox", name=re.compile(re.escape(label), re.I)).first
+            if cb.is_checked(timeout=1500):
+                cb.uncheck(timeout=2500)
+                time.sleep(0.3)
         except Exception:
-            pass
+            continue
+    _shot("after_platforms")
 
-    # Ad level: Next -> Set up creative -> Media upload -> Primary text/
-    # Headline -> Destination (Website + tracking link, no Instant Form).
-    # Same soft-fail contract as the Audience block above — a failure here
-    # is logged and the run still ends in success (recorded_flow:reached_ad
-    # instead of :reached_targeting), matching the explicit "don't stop the
-    # test, keep going" direction that shaped the Audience block too.
-    ad_level_fails: list[str] = []
-    if creative_path:
-        ad_edit_url = ""
-        reached_ad_level = False
+    try:
+        page.get_by_role(
+            "button", name=re.compile(r"^Placement controls", re.I)
+        ).first.click(timeout=3000)
+        time.sleep(0.6)
+    except Exception:
+        pass
+    try:
+        cb = page.get_by_role("checkbox", name=re.compile(r"Search results", re.I)).first
+        if cb.is_checked(timeout=1500):
+            cb.uncheck(timeout=2500)
+    except Exception:
+        pass
+
+    for expand_id in (
+        "ads_placement_expandable_list_item_stream",
+        "ads_placement_expandable_list_item_feed",
+    ):
         try:
-            if not _click(page.get_by_role("button", name="Next")):
-                _shot("fail_next_to_ad")
-                ad_level_fails.append("next_to_ad")
-            else:
-                _wait_loading()
-                ad_edit_url = page.url
-                reached_ad_level = True
-                _shot("after_next_to_ad")
-        except Exception as exc:
-            ad_level_fails.append(f"next_to_ad:{str(exc)[:60]}")
-
-        creative_uploaded = False
-        if reached_ad_level:
-            try:
-                if not upload_ad_creative(page, creative_type, creative_path, edit_url=ad_edit_url):
-                    _shot("fail_ad_creative_upload")
-                    ad_level_fails.append("ad_creative_upload")
-                else:
-                    creative_uploaded = True
-                    _shot("after_ad_creative_upload")
-            except Exception as exc:
-                _shot("fail_ad_creative_upload")
-                ad_level_fails.append(f"ad_creative_upload:{str(exc)[:60]}")
-
-        if reached_ad_level and creative_uploaded and (ad_title or ad_body):
-            try:
-                if not fill_ad_copy(page, ad_title, ad_body):
-                    _shot("fail_ad_copy")
-                    ad_level_fails.append("ad_copy")
-                else:
-                    _shot("after_ad_copy")
-            except Exception as exc:
-                _shot("fail_ad_copy")
-                ad_level_fails.append(f"ad_copy:{str(exc)[:60]}")
-
-        if reached_ad_level and destination_url:
-            try:
-                if not set_ad_destination_website(page, destination_url):
-                    _shot("fail_ad_destination")
-                    ad_level_fails.append("ad_destination")
-                else:
-                    _shot("after_ad_destination")
-            except Exception as exc:
-                _shot("fail_ad_destination")
-                ad_level_fails.append(f"ad_destination:{str(exc)[:60]}")
-
-    if ad_level_fails:
-        try:
-            Path("output/debug_ad_level_soft_fails.txt").write_text(
-                "\n".join(ad_level_fails), encoding="utf-8"
-            )
+            page.locator(f"#{expand_id}").get_by_role(
+                "button", name=re.compile(r"Expand", re.I)
+            ).first.click(timeout=2500)
+            time.sleep(0.4)
         except Exception:
-            pass
+            continue
+
+    for label, checked in (
+        ("Facebook in-stream reels", False),
+        ("Ads on Facebook Reels", False),
+        ("Facebook in-stream reels", True),
+        ("Facebook profile feed", False),
+        ("Instagram profile feed", False),
+        ("Facebook Marketplace", False),
+        ("Facebook right column", False),
+        ("Facebook Notifications", False),
+    ):
+        try:
+            cb = page.get_by_role("checkbox", name=re.compile(re.escape(label), re.I)).first
+            is_checked = cb.is_checked(timeout=1500)
+            if checked and not is_checked:
+                cb.check(timeout=2500)
+            elif not checked and is_checked:
+                cb.uncheck(timeout=2500)
+            time.sleep(0.3)
+        except Exception:
+            continue
+
+    # Recording line 63: a plain click (not check/uncheck) on "Instagram
+    # Explore home" -- toggles whatever its current state is.
+    try:
+        page.get_by_role(
+            "checkbox", name=re.compile(r"Instagram Explore home", re.I)
+        ).first.click(timeout=2500)
+    except Exception:
+        pass
+
+    # Recording lines 64-65: two Story placement checkboxes matched only
+    # by a generated hash class in the recording (no visible text at all
+    # in that row besides an icon) -- best-effort: any checkbox whose
+    # accessible name mentions "Story" that's still checked.
+    try:
+        story_boxes = page.get_by_role("checkbox", name=re.compile(r"Story", re.I))
+        for i in range(min(story_boxes.count(), 4)):
+            box = story_boxes.nth(i)
+            try:
+                if box.is_checked(timeout=1000):
+                    box.uncheck(timeout=2000)
+                    time.sleep(0.2)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    _shot("after_placements")
+
+    # --- Next -> Ad level ---------------------------------------------------
+    if not _click(page.get_by_role("button", name="Next")):
+        _shot("fail_next_to_ad")
+    _wait_loading()
+    _shot("after_next_to_ad")
+
+    # --- Ad level -----------------------------------------------------
+    final_ad_name = ad_name or f"{campaign_name} Ad"
+    if not _fill(page.get_by_placeholder("Enter your ad name here..."), final_ad_name):
+        _shot("fail_ad_name")
+    _shot("after_ad_name")
+
+    # Recording line 71: a radio named "None" -- live evidence didn't
+    # confirm which section this belongs to (likely a Partnership Ads /
+    # additional page opt-out). Best-effort, non-fatal.
+    try:
+        page.get_by_role("radio", name="None", exact=True).first.check(timeout=2500)
+    except Exception:
+        pass
+
+    if website_url:
+        if not _fill(page.get_by_role("textbox", name="Website URL"), website_url):
+            _shot("fail_website_url")
+        _shot("after_website_url")
+
+    if creative_filename:
+        try:
+            page.get_by_role(
+                "button", name=re.compile(r"Set up creative", re.I)
+            ).first.click(timeout=3000)
+            time.sleep(0.6)
+            page.get_by_text(re.compile(r"^Video ad$", re.I)).first.click(timeout=3000)
+            time.sleep(0.6)
+            page.get_by_role(
+                "button", name=re.compile(re.escape(creative_filename), re.I)
+            ).first.click(timeout=4000)
+            time.sleep(0.6)
+            for _ in range(5):
+                try:
+                    page.get_by_role("button", name="Next", exact=True).click(timeout=2500)
+                    time.sleep(0.6)
+                except Exception:
+                    break
+            try:
+                page.get_by_role("button", name="Done", exact=True).click(timeout=2500)
+                time.sleep(0.6)
+            except Exception:
+                pass
+        except Exception:
+            _shot("fail_creative_setup")
+        _shot("after_creative_setup")
+
+    if primary_text:
+        if not _fill(
+            page.get_by_role("textbox", name=re.compile(r"Primary text", re.I)), primary_text
+        ):
+            try:
+                page.get_by_placeholder(re.compile(r"Tell people what your ad", re.I)).fill(
+                    primary_text, timeout=3000
+                )
+            except Exception:
+                pass
+        _shot("after_primary_text")
+
+    if headline:
+        if not _fill(page.get_by_role("textbox", name="Headline"), headline):
+            _shot("fail_headline")
+        _shot("after_headline")
+
+    # --- Draft hand-off -----------------------------------------------
+    # Never click Publish -- Agent 10's standing constraint. Close any
+    # open panel/preview and return to the Campaigns tab, leaving the
+    # campaign as a draft.
+    try:
+        page.get_by_label("Close", exact=True).first.click(timeout=2500)
+        time.sleep(0.4)
+    except Exception:
+        pass
+    try:
+        page.get_by_role("tab", name=re.compile(r"^Campaigns", re.I)).first.click(timeout=3000)
+    except Exception:
+        pass
+    _shot("success_draft_ready")
 
     return ""
 

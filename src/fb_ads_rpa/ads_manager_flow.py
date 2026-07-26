@@ -2140,16 +2140,14 @@ class AdsManagerFlow:
                 budget=str(ad_set.daily_budget or ""),
                 adset_name=ad_set.name,
                 country=draft.country,
-                age_min=ad_set.age_min,
-                age_max=ad_set.age_max,
-                targeting_label=ad_set.targeting_label,
-                creative_type=ad.creative_type,
-                creative_path=ad.creative_path or "",
-                ad_title=ad.ad_title,
-                ad_body=ad.ad_body,
-                destination_url=draft.link,
+                interests=ad_set.targeting_label,
+                ad_name=ad.copy_name,
+                website_url=draft.link,
+                headline=ad.ad_title,
+                primary_text=ad.ad_body,
+                creative_filename=ad.creative_filename,
             )
-            result.steps_completed.append("recorded_flow:reached_ad" if not fail_step else f"recorded_flow_fail:{fail_step}")
+            result.steps_completed.append("recorded_flow:reached_draft_handoff" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step
             if fail_step:
                 result.error = f"Recorded flow failed at: {fail_step}"

@@ -911,46 +911,58 @@ async def account_map_patch(request: Request) -> JSONResponse:
         "proxy_user", "proxy_pass", "country", "page_name",
     ]
 
-    # Read existing rows
-    rows: list[dict] = []
-    if map_path.is_file():
-        with open(map_path, encoding="utf-8-sig", newline="") as f:
-            reader = _csv.DictReader(f)
-            rows = list(reader)
+    try:
+        # Read existing rows
+        rows: list[dict] = []
+        if map_path.is_file():
+            with open(map_path, encoding="utf-8-sig", newline="") as f:
+                reader = _csv.DictReader(f)
+                rows = list(reader)
 
-    # Upsert: find existing row by account_name (case-insensitive) or append
-    name_lower = account_name.lower()
-    existing_idx: int | None = None
-    for i, row in enumerate(rows):
-        if (row.get("account_name") or "").strip().lower() == name_lower:
-            existing_idx = i
-            break
+        # Upsert: find existing row by account_name (case-insensitive) or append
+        name_lower = account_name.lower()
+        existing_idx: int | None = None
+        for i, row in enumerate(rows):
+            if (row.get("account_name") or "").strip().lower() == name_lower:
+                existing_idx = i
+                break
 
-    new_row: dict = {f: "" for f in _FIELDNAMES}
-    if existing_idx is not None:
-        new_row.update(rows[existing_idx])
+        new_row: dict = {f: "" for f in _FIELDNAMES}
+        if existing_idx is not None:
+            new_row.update(rows[existing_idx])
 
-    new_row["account_name"] = account_name
-    for field in ("ad_account_id", "folder_id", "profile_id", "page_id", "multilogin_instance", "country", "page_name"):
-        val = (data.get(field) or "").strip()
-        if val:
-            new_row[field] = val.upper() if field == "country" else val
+        new_row["account_name"] = account_name
+        for field in ("ad_account_id", "folder_id", "profile_id", "page_id", "multilogin_instance", "country", "page_name"):
+            val = (data.get(field) or "").strip()
+            if val:
+                new_row[field] = val.upper() if field == "country" else val
 
-    # Ensure act_ prefix
-    act = new_row.get("ad_account_id", "")
-    if act and not act.startswith("act_"):
-        new_row["ad_account_id"] = f"act_{act.lstrip('act_')}"
+        # Ensure act_ prefix
+        act = new_row.get("ad_account_id", "")
+        if act and not act.startswith("act_"):
+            new_row["ad_account_id"] = f"act_{act.lstrip('act_')}"
 
-    if existing_idx is not None:
-        rows[existing_idx] = new_row
-    else:
-        rows.append(new_row)
+        if existing_idx is not None:
+            rows[existing_idx] = new_row
+        else:
+            rows.append(new_row)
 
-    map_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(map_path, "w", encoding="utf-8", newline="") as f:
-        writer = _csv.DictWriter(f, fieldnames=_FIELDNAMES, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+        map_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(map_path, "w", encoding="utf-8", newline="") as f:
+            writer = _csv.DictWriter(f, fieldnames=_FIELDNAMES, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+    except PermissionError:
+        # Same class of bug fixed in /account-link-patch below: an unhandled
+        # exception here previously made FastAPI's default 500 come back as
+        # plain text, not JSON, so the dashboard's r.json() threw and showed
+        # a misleading "Network error" instead of "file is open elsewhere".
+        return JSONResponse(
+            {"ok": False, "error": f"{map_path.name} is open elsewhere (e.g. Excel) — close it and retry"},
+            status_code=409,
+        )
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"Failed to save: {exc}"}, status_code=500)
 
     return JSONResponse({"ok": True, "saved": new_row["account_name"]})
 
@@ -971,7 +983,20 @@ async def account_link_patch(request: Request) -> JSONResponse:
     if not account_name:
         return JSONResponse({"ok": False, "error": "account_name is required"}, status_code=400)
 
-    matched = _write_link_to_excel(account_name, link)
+    try:
+        matched = _write_link_to_excel(account_name, link)
+    except PermissionError:
+        # openpyxl's wb.save() raises this when Upload FB.xlsx is open in Excel
+        # (or another program) elsewhere -- previously unhandled, which made
+        # FastAPI's default 500 response come back as plain text instead of
+        # JSON, so the dashboard's fetch().then(r => r.json()) threw and the
+        # UI showed a misleading "Network error" instead of the real cause.
+        return JSONResponse(
+            {"ok": False, "error": "Upload FB.xlsx is open elsewhere (e.g. Excel) — close it and retry"},
+            status_code=409,
+        )
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"Failed to save link: {exc}"}, status_code=500)
     if matched is None:
         excel_path = get_upload_fb_excel_path()
         if not os.path.isfile(excel_path):
@@ -1049,7 +1074,7 @@ async def rpa_teach_approve_strategy(request: Request) -> JSONResponse:
 async def rpa_record_start(request: Request) -> JSONResponse:
     """Start click recorder on an already-open Multilogin CDP browser.
 
-    Body JSON: {recipe_name?: str, cdp_url?: str}
+    Body JSON: {recipe_name?: str, cdp_url?: str, account_label?: str}
     """
     from src.fb_ads_rpa.click_recorder import start_recording
     try:
@@ -1058,7 +1083,10 @@ async def rpa_record_start(request: Request) -> JSONResponse:
         data = {}
     recipe_name = (data.get("recipe_name") or "campaign").strip()
     cdp_url = (data.get("cdp_url") or "").strip() or None
-    result = await asyncio.to_thread(start_recording, recipe_name=recipe_name, cdp_url=cdp_url)
+    account_label = (data.get("account_label") or "").strip() or None
+    result = await asyncio.to_thread(
+        start_recording, recipe_name=recipe_name, cdp_url=cdp_url, account_label=account_label
+    )
     status = 200 if result.get("ok") else 400
     return JSONResponse(result, status_code=status)
 
@@ -1081,6 +1109,40 @@ async def rpa_record_status() -> JSONResponse:
 async def rpa_record_recipes() -> JSONResponse:
     from src.fb_ads_rpa.click_recorder import list_recipes
     return JSONResponse({"ok": True, "recipes": list_recipes()})
+
+
+@app.post("/rpa-codegen/start")
+async def rpa_codegen_start(request: Request) -> JSONResponse:
+    """Open the Playwright Inspector (codegen) on an already-open Multilogin
+    CDP browser — same window, no fresh login. See
+    docs/agent10-codegen-via-multilogin.md.
+
+    Body JSON: {cdp_url?: str, account_label?: str}
+    """
+    from src.fb_ads_rpa.codegen_recorder import start_codegen
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    cdp_url = (data.get("cdp_url") or "").strip() or None
+    account_label = (data.get("account_label") or "").strip() or None
+    result = await asyncio.to_thread(start_codegen, cdp_url=cdp_url, account_label=account_label)
+    status = 200 if result.get("ok") else 400
+    return JSONResponse(result, status_code=status)
+
+
+@app.post("/rpa-codegen/stop")
+async def rpa_codegen_stop() -> JSONResponse:
+    from src.fb_ads_rpa.codegen_recorder import stop_codegen
+    result = await asyncio.to_thread(stop_codegen)
+    status = 200 if result.get("ok") else 400
+    return JSONResponse(result, status_code=status)
+
+
+@app.get("/rpa-codegen/status")
+async def rpa_codegen_status() -> JSONResponse:
+    from src.fb_ads_rpa.codegen_recorder import get_status
+    return JSONResponse(get_status())
 
 
 @app.post("/rpa-website-lab/prepare")
