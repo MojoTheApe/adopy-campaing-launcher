@@ -1760,8 +1760,8 @@ async function dashRefresh(ev) {
               onclick="rpaTakeover()">⏸ Пауза RPA</button>
       <button type="button" class="rpa-record-btn"
               style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#1d4ed8;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
-              onclick="rpaRecordToggle(this)"
-              title="Открывает Playwright Inspector (codegen) на уже открытом Multilogin-браузере — без нового окна и без повторного логина.">⏺ Record (codegen)</button>
+              onclick="rpaRecordToggle(this, '{{ acc_label | e }}')"
+              title="Записывает твои клики в открытом Multilogin браузере (JSON-рецепт с role/aria-label/own_text). Playwright Inspector (codegen) не работает на антидетект-браузере Multilogin — Overlay-подсветка и запись через него не срабатывают, подтверждено вживую 2026-07-23.">⏺ Record clicks</button>
       <button type="button" class="rpa-lab-btn"
               style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#7c3aed;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
               onclick="rpaWebsiteLabToggle(this)"
@@ -3470,20 +3470,25 @@ window.rpaTakeover = function() {
   }
 };
 
-// ── Codegen Recorder (Playwright Inspector on the already-open Multilogin
-// browser — see docs/agent10-codegen-via-multilogin.md. Replaces the old
-// JSON click_recorder wiring: this opens a real, editable-code Inspector
-// on the SAME window instead of logging action metadata to a JSON file) ──
+// ── Click Recorder (learn from your manual campaign creation) ─────────
+// Reverted 2026-07-23 from the Playwright-Inspector-based codegen wiring:
+// confirmed live that page.pause()'s Inspector (Overlay-based highlighting
+// and click recording) does not work on Multilogin's antidetect (Mimic)
+// browser -- the CDP connection itself works fine for scripted automation,
+// but the Inspector's own recording machinery silently captures nothing.
+// This plain JS click listener (own_text/role/css_path/coordinates written
+// to a JSON recipe) does work on Mimic -- confirmed live the same day.
+// See docs/agent10-codegen-via-multilogin.md for the full story.
 var _rpaRecording = false;
 var _rpaRecordPoll = null;
 
 function _rpaRecordSetUI(running, message) {
   document.querySelectorAll('.rpa-record-btn').forEach(function(btn) {
     if (running) {
-      btn.textContent = '⏹ Stop codegen';
+      btn.textContent = '⏹ Stop record';
       btn.style.background = '#b91c1c';
     } else {
-      btn.textContent = '⏺ Record (codegen)';
+      btn.textContent = '⏺ Record clicks';
       btn.style.background = '#1d4ed8';
     }
   });
@@ -3493,15 +3498,15 @@ function _rpaRecordSetUI(running, message) {
   });
 }
 
-window.rpaRecordToggle = function(btn) {
+window.rpaRecordToggle = function(btn, accountLabel) {
   if (_rpaRecording) {
-    fetch('/rpa-codegen/stop', { method: 'POST' })
+    fetch('/rpa-record/stop', { method: 'POST' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         _rpaRecording = false;
         if (_rpaRecordPoll) { clearInterval(_rpaRecordPoll); _rpaRecordPoll = null; }
         var msg = d.ok
-          ? '✓ Inspector closed'
+          ? ('✓ Saved ' + (d.actions_count || 0) + ' actions' + (d.recipe_path ? ' → ' + d.recipe_path.split(/[/\\\\]/).pop() : ''))
           : ('⚠ ' + (d.error || 'Stop failed'));
         _rpaRecordSetUI(false, msg);
       })
@@ -3512,33 +3517,35 @@ window.rpaRecordToggle = function(btn) {
     return;
   }
 
+  var recipeName = (accountLabel ? accountLabel.replace(/\s+/g, '_') + '_' : '') + 'campaign';
+
   _rpaRecordSetUI(true, 'Connecting to Multilogin CDP…');
-  fetch('/rpa-codegen/start', {
+  fetch('/rpa-record/start', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({})
+    body: JSON.stringify({recipe_name: recipeName, account_label: accountLabel || ''})
   })
   .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, d: d}; }); })
   .then(function(res) {
     if (!res.d.ok && !res.d.running) {
       _rpaRecording = false;
-      _rpaRecordSetUI(false, '⚠ ' + (res.d.error || 'Cannot start codegen'));
+      _rpaRecordSetUI(false, '⚠ ' + (res.d.error || 'Cannot start recorder'));
       return;
     }
     _rpaRecording = true;
-    _rpaRecordSetUI(true, res.d.message || 'Inspector open — click through the UI manually');
+    _rpaRecordSetUI(true, res.d.message || 'Recording… create campaign manually');
     if (_rpaRecordPoll) clearInterval(_rpaRecordPoll);
     _rpaRecordPoll = setInterval(function() {
-      fetch('/rpa-codegen/status')
+      fetch('/rpa-record/status')
         .then(function(r) { return r.json(); })
         .then(function(s) {
           if (!s.running && _rpaRecording) {
             _rpaRecording = false;
             if (_rpaRecordPoll) { clearInterval(_rpaRecordPoll); _rpaRecordPoll = null; }
-            _rpaRecordSetUI(false, s.message || 'Inspector closed');
+            _rpaRecordSetUI(false, s.message || ('Saved ' + (s.actions_count || 0) + ' actions'));
             return;
           }
-          _rpaRecordSetUI(!!s.running, s.message || 'Recording…');
+          _rpaRecordSetUI(!!s.running, s.message || ((s.actions_count || 0) + ' actions'));
         })
         .catch(function() {});
     }, 1500);

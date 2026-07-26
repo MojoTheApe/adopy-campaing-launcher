@@ -1006,7 +1006,7 @@ async def rpa_teach_approve_strategy(request: Request) -> JSONResponse:
 async def rpa_record_start(request: Request) -> JSONResponse:
     """Start click recorder on an already-open Multilogin CDP browser.
 
-    Body JSON: {recipe_name?: str, cdp_url?: str}
+    Body JSON: {recipe_name?: str, cdp_url?: str, account_label?: str}
     """
     from src.fb_ads_rpa.click_recorder import start_recording
     try:
@@ -1015,7 +1015,10 @@ async def rpa_record_start(request: Request) -> JSONResponse:
         data = {}
     recipe_name = (data.get("recipe_name") or "campaign").strip()
     cdp_url = (data.get("cdp_url") or "").strip() or None
-    result = await asyncio.to_thread(start_recording, recipe_name=recipe_name, cdp_url=cdp_url)
+    account_label = (data.get("account_label") or "").strip() or None
+    result = await asyncio.to_thread(
+        start_recording, recipe_name=recipe_name, cdp_url=cdp_url, account_label=account_label
+    )
     status = 200 if result.get("ok") else 400
     return JSONResponse(result, status_code=status)
 
@@ -1046,7 +1049,7 @@ async def rpa_codegen_start(request: Request) -> JSONResponse:
     CDP browser — same window, no fresh login. See
     docs/agent10-codegen-via-multilogin.md.
 
-    Body JSON: {cdp_url?: str}
+    Body JSON: {cdp_url?: str, account_label?: str}
     """
     from src.fb_ads_rpa.codegen_recorder import start_codegen
     try:
@@ -1054,7 +1057,8 @@ async def rpa_codegen_start(request: Request) -> JSONResponse:
     except Exception:
         data = {}
     cdp_url = (data.get("cdp_url") or "").strip() or None
-    result = await asyncio.to_thread(start_codegen, cdp_url=cdp_url)
+    account_label = (data.get("account_label") or "").strip() or None
+    result = await asyncio.to_thread(start_codegen, cdp_url=cdp_url, account_label=account_label)
     status = 200 if result.get("ok") else 400
     return JSONResponse(result, status_code=status)
 

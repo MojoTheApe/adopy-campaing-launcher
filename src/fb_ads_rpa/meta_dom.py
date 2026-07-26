@@ -2314,31 +2314,92 @@ def run_recorded_campaign_flow(
             # visible below -- confirmed live on FacebookDQ204 CR), the plain
             # search box is gone. A second, later instance of "Further limit
             # the reach of your ads" (a small gear-icon link next to "Save
-            # audience", distinct from the button+radio+Continue combo
-            # already clicked above) reopens the panel -- exposing Age
-            # controls and, per the user, a way to edit the location again.
+            # audience") reopens the panel -- exposing Locations/Age/Detailed
+            # targeting/Languages together (confirmed live via the custom
+            # click_recorder.py probe, 2026-07-23: get_by_role/get_by_text
+            # with .first was unreliable here -- own text is "Further limit
+            # the reach of your ads" with role="" on the element itself, role
+            # inherited from a div[role=button] a few levels up, same pattern
+            # as "Next" elsewhere in this function, but accessible-name
+            # computation through that much nesting isn't resolving via
+            # get_by_role in practice. Use the same own-text-node + CDP-click
+            # pattern already proven reliable for Website/Lead instead of
+            # relying on ARIA role/name matching.
             try:
-                page.get_by_text("Further limit the reach of your ads", exact=True).first.click(timeout=3000)
-                time.sleep(0.8)
+                box = page.evaluate(
+                    """
+                    () => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      for (const el of document.querySelectorAll('div, span, a, [role=button]')) {
+                        if (!el.offsetParent) continue;
+                        const own = norm(
+                          Array.from(el.childNodes).filter(n => n.nodeType === 3)
+                            .map(n => n.textContent).join('')
+                          || (el.childElementCount === 0 ? (el.textContent || '') : '')
+                        );
+                        if (own === 'Further limit the reach of your ads') {
+                          const r = el.getBoundingClientRect();
+                          return { x: r.x, y: r.y, width: r.width, height: r.height };
+                        }
+                      }
+                      return null;
+                    }
+                    """
+                )
+                if box:
+                    _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                    time.sleep(0.8)
             except Exception:
                 pass
             _shot("after_further_limit_reach_reopen")
+
+            # Live evidence (2026-07-23, via click_recorder.py probe): this
+            # click is immediately followed by a "Continue" confirmation,
+            # same own-text/role pattern -- reuse the same precise click.
+            try:
+                cbox = page.evaluate(
+                    """
+                    () => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      for (const el of document.querySelectorAll('div, span, a, [role=button]')) {
+                        if (!el.offsetParent) continue;
+                        const own = norm(
+                          Array.from(el.childNodes).filter(n => n.nodeType === 3)
+                            .map(n => n.textContent).join('')
+                          || (el.childElementCount === 0 ? (el.textContent || '') : '')
+                        );
+                        if (own === 'Continue') {
+                          const r = el.getBoundingClientRect();
+                          return { x: r.x, y: r.y, width: r.width, height: r.height };
+                        }
+                      }
+                      return null;
+                    }
+                    """
+                )
+                if cbox:
+                    _cdp_mouse_click(page, cbox["x"] + cbox["width"] / 2, cbox["y"] + cbox["height"] / 2)
+                    time.sleep(0.6)
+            except Exception:
+                pass
+            _shot("after_further_limit_reach_reopen_continue")
             location_search_ok = _fill(page.get_by_placeholder("Search locations"), search_term)
             if not location_search_ok:
                 location_search_ok = _fill(page.get_by_role("combobox", name="Search locations"), search_term)
 
+        # 2026-07-24: user instruction -- if a step doesn't click, skip it
+        # and move on rather than hard-failing the whole flow. Every skip
+        # still gets a fail_* screenshot for later diagnosis.
         if not location_search_ok:
             _shot("fail_audience_location_search")
-            return "audience_location_search"
         time.sleep(1.0)
         _shot("after_location_search")
 
         try:
             page.get_by_text("Country", exact=True).first.click(timeout=4000)
+            time.sleep(0.5)
         except Exception:
             _shot("fail_audience_location_pick")
-            return "audience_location_pick"
-        time.sleep(0.5)
         _shot("after_location_picked")
 
         # Remove the default "United States" chip, leaving only the new
@@ -2383,7 +2444,7 @@ def run_recorded_campaign_flow(
         time.sleep(0.5)
         _shot("after_remove_default_location")
         if not removed_default:
-            return "audience_location_remove_default"
+            _shot("fail_audience_location_remove_default")
 
     # --- Detailed targeting -----------------------------------------------
     # Recording lines 32-41. Lines 32-33 were unstable Meta hash-class
@@ -2427,7 +2488,6 @@ def run_recorded_campaign_flow(
             pass
         if not filled_interests:
             _shot("fail_detailed_targeting_fill")
-            return "detailed_targeting_fill"
         time.sleep(0.8)
         _shot("after_detailed_targeting_fill")
 
@@ -2451,7 +2511,6 @@ def run_recorded_campaign_flow(
             page.get_by_role("option", name=language, exact=True).first.click(timeout=3000)
         except Exception:
             _shot("fail_languages")
-            return "languages"
         time.sleep(0.5)
         _shot("after_languages")
 
@@ -2562,7 +2621,6 @@ def run_recorded_campaign_flow(
     # --- Next -> Ad level ---------------------------------------------------
     if not _click(page.get_by_role("button", name="Next")):
         _shot("fail_next_to_ad")
-        return "next_to_ad"
     _wait_loading()
     _shot("after_next_to_ad")
 
@@ -2570,7 +2628,6 @@ def run_recorded_campaign_flow(
     final_ad_name = ad_name or f"{campaign_name} Ad"
     if not _fill(page.get_by_placeholder("Enter your ad name here..."), final_ad_name):
         _shot("fail_ad_name")
-        return "ad_name"
     _shot("after_ad_name")
 
     # Recording line 71: a radio named "None" -- live evidence didn't
@@ -2584,7 +2641,6 @@ def run_recorded_campaign_flow(
     if website_url:
         if not _fill(page.get_by_role("textbox", name="Website URL"), website_url):
             _shot("fail_website_url")
-            return "website_url"
         _shot("after_website_url")
 
     if creative_filename:
@@ -2612,7 +2668,6 @@ def run_recorded_campaign_flow(
                 pass
         except Exception:
             _shot("fail_creative_setup")
-            return "creative_setup"
         _shot("after_creative_setup")
 
     if primary_text:
@@ -2630,7 +2685,6 @@ def run_recorded_campaign_flow(
     if headline:
         if not _fill(page.get_by_role("textbox", name="Headline"), headline):
             _shot("fail_headline")
-            return "headline"
         _shot("after_headline")
 
     # --- Draft hand-off -----------------------------------------------
