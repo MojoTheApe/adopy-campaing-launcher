@@ -2534,16 +2534,24 @@ def fill_placements(page: Page) -> bool:
             return None
 
     def _find_anchor_containing(text: str, min_y: float = 0) -> dict | None:
+        # Prefer a real <a> tag, but fall back to any small leaf-ish element
+        # containing the text — confirmed elsewhere in this file that Meta
+        # doesn't always render the same control as the same tag across
+        # sessions.
         try:
             return page.evaluate(
                 """
                 ([text, min_y]) => {
                   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                  const links = [...document.querySelectorAll('a')].filter(a =>
-                    a.offsetParent !== null && norm(a.textContent).toLowerCase().includes(text.toLowerCase()));
-                  for (const a of links) {
-                    const r = a.getBoundingClientRect();
-                    if (r.y >= min_y) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                  const matchesText = (e) => norm(e.textContent).toLowerCase().includes(text.toLowerCase());
+                  const links = [...document.querySelectorAll('a')].filter(a => a.offsetParent !== null && matchesText(a));
+                  const fallback = [...document.querySelectorAll('*')].filter(e =>
+                    e.offsetParent !== null && e.children.length <= 2 && matchesText(e));
+                  for (const el of [...links, ...fallback]) {
+                    const r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0 && r.y >= min_y) {
+                      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                    }
                   }
                   return null;
                 }
@@ -2591,8 +2599,18 @@ def fill_placements(page: Page) -> bool:
 
     expanded = False
     for i in range(10):
+        # Re-measure the Placements heading's position fresh every
+        # iteration instead of trusting the one captured before this loop
+        # started — confirmed live 2026-07-27 that the page's layout can
+        # shift between iterations (dismissable banners, re-renders), which
+        # made a stale min_y wrongly filter out a genuinely visible "Show
+        # more settings" link whose y had since become smaller than the
+        # stale threshold.
+        fresh_heading = _find_leaf_text("Placements")
+        if fresh_heading:
+            placements_y = fresh_heading["y"]
         hide_box = _find_leaf_text("Hide settings", exact=False, min_y=placements_y)
-        _dbg.append(f"tick {i}: hide_settings={hide_box}")
+        _dbg.append(f"tick {i}: placements_y={placements_y} hide_settings={hide_box}")
         if hide_box:
             expanded = True
             break
