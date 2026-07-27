@@ -3189,6 +3189,19 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     except Exception:
         pass
 
+    # Confirmed live (2026-07-27): the Destination section's container
+    # (`#adgroupAdDestinationGeneric`) can render with the exact same
+    # `display: none !important` Meta applies to the Ad creative section's
+    # `#creativeEditorComponent` — same underlying quirk, different section.
+    # Force it visible the same way before touching "None"/the URL field.
+    try:
+        page.evaluate(
+            "() => { const el = document.getElementById('adgroupAdDestinationGeneric');"
+            " if (el) el.style.setProperty('display', 'block', 'important'); }"
+        )
+    except Exception:
+        pass
+
     try:
         none_opt = page.get_by_text("None", exact=True).first
         if not none_opt.count():
