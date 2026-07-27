@@ -2817,13 +2817,24 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
     expand/collapse dance if it's actually needed.
     """
     def _primary_text_visible() -> bool:
+        # Confirmed live (2026-07-27): checking offsetParent alone isn't
+        # enough — a forced `display:block` can make a label paint while an
+        # ancestor still carries `aria-hidden="true"`, which keeps Playwright's
+        # accessible-role locators (get_by_role/get_by_placeholder, used by
+        # fill_ad_copy) from ever matching the actual input, even though this
+        # plain-DOM check reports "visible". Also require no aria-hidden
+        # ancestor so this check reflects what the real fill step can reach.
         try:
             return bool(
                 page.evaluate(
                     "() => { const all = [...document.querySelectorAll('*')];"
                     " const el = all.find(e => e.textContent.trim() === 'Primary text'"
                     " && e.children.length === 0 && e.offsetParent !== null);"
-                    " return !!el; }"
+                    " if (!el) return false;"
+                    " let cur = el;"
+                    " while (cur) { if (cur.getAttribute && cur.getAttribute('aria-hidden') === 'true') return false;"
+                    " cur = cur.parentElement; }"
+                    " return true; }"
                 )
             )
         except Exception:
@@ -2844,6 +2855,11 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
             "() => { const el = document.getElementById('creativeEditorComponent');"
             " if (!el) return false;"
             " el.style.setProperty('display', 'block', 'important');"
+            " let cur = el;"
+            " for (let i = 0; i < 8 && cur; i++) {"
+            "   if (cur.getAttribute && cur.getAttribute('aria-hidden') === 'true') cur.removeAttribute('aria-hidden');"
+            "   cur = cur.parentElement;"
+            " }"
             " return true; }"
         )
         if forced and _primary_text_visible():
@@ -3019,16 +3035,40 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
     # focus (see _click_via_cdp docstring above), silently leaving the
     # field empty even though no exception was raised. Don't trust a clean
     # run of insert_text() alone; check the field's real content after.
+    def _dump_locator_miss(what: str) -> None:
+        # Diagnostic (2026-07-27): _reveal_ad_copy_fields() reported success
+        # but Playwright's own role/placeholder locator still didn't match
+        # anything — capture why, instead of silently returning False again.
+        try:
+            info = page.evaluate(
+                "() => { const el = document.getElementById('creativeEditorComponent');"
+                " const style = el ? getComputedStyle(el) : null;"
+                " let ariaHiddenAncestor = null; let cur = el;"
+                " while (cur) { if (cur.getAttribute && cur.getAttribute('aria-hidden') === 'true') {"
+                "   ariaHiddenAncestor = cur.tagName + '.' + (cur.className||''); break; } cur = cur.parentElement; }"
+                " return { containerFound: !!el, containerDisplay: style ? style.display : null,"
+                " containerOffsetParent: el ? el.offsetParent !== null : null, ariaHiddenAncestor,"
+                " comboboxCount: document.querySelectorAll('[role=combobox]').length,"
+                " placeholderFieldCount: document.querySelectorAll('[placeholder]').length }; }"
+            )
+            with open("output/debug_ad_copy_locator_miss.json", "a", encoding="utf-8") as f:
+                f.write(json.dumps({"field": what, **info}, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+
     body_ok = not ad_body
     if ad_body:
         try:
             primary_box = page.get_by_role(
                 "combobox", name="Tell people what your ad is about"
             ).first
-            if primary_box.count() and _click_via_cdp(primary_box):
-                page.keyboard.insert_text(ad_body)
-                time.sleep(0.4)
-                body_ok = _locator_has_content(primary_box)
+            if primary_box.count():
+                if _click_via_cdp(primary_box):
+                    page.keyboard.insert_text(ad_body)
+                    time.sleep(0.4)
+                    body_ok = _locator_has_content(primary_box)
+            else:
+                _dump_locator_miss("primary_text")
         except Exception:
             pass
 
@@ -3036,11 +3076,14 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
     if ad_title:
         try:
             headline_box = page.get_by_placeholder("Write a short headline").first
-            if headline_box.count() and _click_via_cdp(headline_box):
-                page.keyboard.press("Control+A")
-                page.keyboard.insert_text(ad_title)
-                time.sleep(0.4)
-                title_ok = _locator_has_content(headline_box)
+            if headline_box.count():
+                if _click_via_cdp(headline_box):
+                    page.keyboard.press("Control+A")
+                    page.keyboard.insert_text(ad_title)
+                    time.sleep(0.4)
+                    title_ok = _locator_has_content(headline_box)
+            else:
+                _dump_locator_miss("headline")
         except Exception:
             pass
 
