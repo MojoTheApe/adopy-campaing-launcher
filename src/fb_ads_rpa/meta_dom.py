@@ -5022,14 +5022,35 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                     boundary_ok = False
                     try:
                         time.sleep(0.3)
-                        current_text = page.evaluate(
-                            """([x, y]) => {
-                              const el = document.elementFromPoint(x, y);
-                              return el ? (el.textContent || '').trim() : null;
-                            }""",
-                            [trigger_x, trigger_y],
+                        # FIXED (2026-07-27, confirmed live): trigger_x/
+                        # trigger_y are captured before the dropdown even
+                        # opens — by the time this runs (after scrolling,
+                        # selecting, and the list closing), the whole
+                        # section has reflowed and elementFromPoint at that
+                        # stale position no longer means anything (proven
+                        # live: a run where the value screenshot clearly
+                        # showed the correct 30/45 still logged this
+                        # boundary as failed). Check the closed-dropdown
+                        # trigger's real current text directly instead of a
+                        # frozen screen coordinate: a visible leaf reading
+                        # exactly target_val that is NOT inside an open
+                        # [role=listbox] (a value sitting unselected inside
+                        # a still-open list doesn't count, matching the
+                        # original Test50/63 concern this code already
+                        # guards against).
+                        boundary_ok = bool(
+                            page.evaluate(
+                                """(targetVal) => {
+                                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                                  return [...document.querySelectorAll('*')].some(e => {
+                                    if (e.offsetParent === null || e.children.length !== 0) return false;
+                                    if (norm(e.textContent) !== targetVal) return false;
+                                    return !e.closest('[role=listbox]');
+                                  });
+                                }""",
+                                target_val,
+                            )
                         )
-                        boundary_ok = current_text == target_val
                     except Exception:
                         pass
                     boundary_results.append(boundary_ok)
