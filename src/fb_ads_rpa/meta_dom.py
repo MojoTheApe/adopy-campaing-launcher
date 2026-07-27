@@ -2817,19 +2817,25 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
     expand/collapse dance if it's actually needed.
     """
     def _primary_text_visible() -> bool:
-        # Confirmed live (2026-07-27): checking offsetParent alone isn't
-        # enough — a forced `display:block` can make a label paint while an
-        # ancestor still carries `aria-hidden="true"`, which keeps Playwright's
-        # accessible-role locators (get_by_role/get_by_placeholder, used by
-        # fill_ad_copy) from ever matching the actual input, even though this
-        # plain-DOM check reports "visible". Also require no aria-hidden
-        # ancestor so this check reflects what the real fill step can reach.
+        # Confirmed live (2026-07-27): a generic "any element whose text is
+        # exactly 'Primary text'" search is not specific enough — Test98's
+        # debug_ad_copy_locator_miss.json dump proved this check was
+        # reporting "visible" while `#creativeEditorComponent` (the ONLY
+        # container holding the real, editable "Tell people what your ad is
+        # about" combobox that fill_ad_copy() actually targets) was still
+        # `display: none`. There are up to 7 role=combobox elements on this
+        # page (multiple ad-copy text variation slots, decoy/preview panels,
+        # etc) — a decoy elsewhere satisfied the old text-only check. Check
+        # the SAME accessible-name combobox fill_ad_copy() will use, scoped
+        # to #creativeEditorComponent, plus no aria-hidden ancestor.
         try:
             return bool(
                 page.evaluate(
-                    "() => { const all = [...document.querySelectorAll('*')];"
-                    " const el = all.find(e => e.textContent.trim() === 'Primary text'"
-                    " && e.children.length === 0 && e.offsetParent !== null);"
+                    "() => { const container = document.getElementById('creativeEditorComponent');"
+                    " if (!container) return false;"
+                    " const combos = [...container.querySelectorAll('[role=combobox]')];"
+                    " const el = combos.find(e => (e.getAttribute('aria-label') || '')"
+                    " .includes('Tell people what your ad is about') && e.offsetParent !== null);"
                     " if (!el) return false;"
                     " let cur = el;"
                     " while (cur) { if (cur.getAttribute && cur.getAttribute('aria-hidden') === 'true') return false;"
