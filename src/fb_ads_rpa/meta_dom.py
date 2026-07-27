@@ -2756,13 +2756,26 @@ def upload_ad_creative(
     except Exception:
         return False
 
-    # Wait for the "Uploading video/image ..." toast to clear (confirmed
-    # live: a 14MB file still took several seconds over the Multilogin CDP
-    # connection).
+    # Wait for the upload to actually finish (confirmed live 2026-07-27: a
+    # 14MB file over the Multilogin CDP connection can take long enough that
+    # the "Uploading ..." toast hasn't even rendered yet at the moment this
+    # code runs — `wait_for(state="hidden")` on a locator matching ZERO
+    # elements succeeds immediately (vacuously "hidden"), so the old check
+    # could report done before the upload even started. Wait for the
+    # positive "upload is complete" toast instead of the absence of
+    # "Uploading" — confirmed live this is the actual text Meta shows
+    # ("Your video X.mp4 upload is complete").
     try:
-        page.get_by_text("Uploading", exact=False).first.wait_for(state="hidden", timeout=40000)
+        page.get_by_text("upload is complete", exact=False).first.wait_for(
+            state="visible", timeout=45000
+        )
     except Exception:
-        pass
+        # Fall back to the old best-effort check in case the toast text
+        # ever differs (e.g. images) — better than nothing.
+        try:
+            page.get_by_text("Uploading", exact=False).first.wait_for(state="hidden", timeout=40000)
+        except Exception:
+            pass
     time.sleep(1.0)
 
     # Still inside the Media step (Upload button still present)? Select the
