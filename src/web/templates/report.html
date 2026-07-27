@@ -690,20 +690,16 @@
     .cb-send-btn.cb-send-selected {
       background: var(--good); border-color: var(--good); color: #fff;
     }
-    .cb-cart-bar {
-      position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 9998;
-      background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 8px;
-      padding: 0.6rem 0.8rem; box-shadow: 0 6px 24px rgba(0,0,0,0.3);
-      display: flex; align-items: center; gap: 0.65rem; font-size: 0.8rem;
+    .cb-autobuilt-badge {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      background: color-mix(in srgb, var(--warn) 15%, transparent);
+      border: 1px solid var(--warn);
+      color: var(--warn);
+      font-size: 0.68rem; font-weight: 700;
+      padding: 0.2rem 0.55rem; border-radius: 4px;
+      margin: 0.3rem 0 0.4rem;
     }
-    .cb-cart-count { color: var(--text); font-weight: 600; white-space: nowrap; }
-    .cb-cart-bar button {
-      font-family: inherit; font-size: 0.76rem; font-weight: 600; border-radius: 5px; cursor: pointer; padding: 0.35rem 0.75rem;
-    }
-    #cb-cart-build { background: var(--accent); border: none; color: #fff; }
-    #cb-cart-build:hover { background: #1d4ed8; }
-    #cb-cart-clear { background: transparent; border: 1px solid var(--border-strong); color: var(--muted); }
-    #cb-cart-clear:hover { color: var(--bad); border-color: var(--bad); }
+    .cb-field-needs-review { outline: 1.5px solid var(--bad); outline-offset: 1px; border-radius: 3px; }
     .cb-send-modal-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,0.72);
       z-index: 9999; display: flex; align-items: center; justify-content: center;
@@ -1816,14 +1812,13 @@ async function dashRefresh(ev) {
           <div class="cb-inline">
             <div class="cb-sel-wrap" style="width:6.5rem">
               <input type="text" class="cb-sel-text" placeholder="OS" autocomplete="off"
-                     value="{% if r.device == 'iOS' %}iOS{% elif r.device == 'Android' %}Android{% else %}All{% endif %}">
+                     value="{% if r.device == 'iOS' %}iOS{% else %}All{% endif %}">
               <div class="cb-sel-dropdown" hidden>
                 <div class="cb-sel-opt" data-val="All">All</div>
                 <div class="cb-sel-opt" data-val="iOS">iOS</div>
-                <div class="cb-sel-opt" data-val="Android">Android</div>
               </div>
               <input type="hidden" name="camp_{{ ns.idx }}_os"
-                     value="{% if r.device == 'iOS' %}iOS{% elif r.device == 'Android' %}Android{% else %}All{% endif %}">
+                     value="{% if r.device == 'iOS' %}iOS{% else %}All{% endif %}">
             </div>
             <input type="number" name="camp_{{ ns.idx }}_age" class="cb-input cb-input-sm"
                    value="{{ r.age or '35' }}" min="18" max="65"
@@ -3072,6 +3067,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     // Update visible name display
     var nameDisplay = slot.querySelector('[data-name-display]');
     if (nameDisplay) nameDisplay.textContent = name;
+    checkAutoBuiltReview(slot);
   };
 
   // ── Searchable select ─────────────────────────────────────────────────
@@ -3374,7 +3370,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-targeting-hint" style="font-size:0.67rem;color:var(--muted);margin-top:0.15rem;word-break:break-word"></div>' +
       '</div>' +
       '<span class="cb-label">OS / Age / Budget</span>' +
-      '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS', 'Android'], 'OS') +
+      '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS'], 'OS') +
       '<input type="number" name="camp_' + idx + '_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
       '<span style="color:var(--muted);font-size:0.72rem">$/day</span>' +
       '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50">' +
@@ -3541,9 +3537,15 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var isVideo = tokens.some(function(tok) { return tok.indexOf('vid') === 0; });
     return isVideo ? 'Video' : 'Image';
   }
-  // Find a CREATIVES entry whose filename/rel_path contains this text as a
-  // loose match — best-effort only, the popup always leaves the field
-  // editable so the user can pick manually if this guesses wrong or misses.
+  // Find a CREATIVES entry whose basename overlaps meaningfully with `text`.
+  // Deliberately conservative: a prior version also matched when the FILE's
+  // basename appeared anywhere inside `text`, which meant short/generic
+  // basenames like "1.jpg" matched almost anything containing the digit "1"
+  // (e.g. combo text "2012 Story3") and silently attached the wrong file.
+  // Only auto-match now when the shared substring is long enough to be a
+  // real signal; anything shorter is left blank for manual review instead
+  // of guessing wrong.
+  var CREATIVE_MATCH_MIN_LEN = 6;
   function findCreativeMatch(text, ctype) {
     var q = (text || '').trim().toLowerCase();
     if (!q) return null;
@@ -3552,7 +3554,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       return isVideo ? f.type === 'Video' : f.type === 'Image';
     });
     var hit = pool.find(function(f) {
-      return f.filename.toLowerCase().indexOf(q) >= 0 || q.indexOf(f.filename.toLowerCase().replace(/\.[a-z0-9]+$/, '')) >= 0;
+      var stem = f.filename.toLowerCase().replace(/\.[a-z0-9]+$/, '');
+      if (stem.length < CREATIVE_MATCH_MIN_LEN) return false;
+      return f.filename.toLowerCase().indexOf(q) >= 0 || q.indexOf(stem) >= 0;
     });
     return hit || null;
   }
@@ -3573,8 +3577,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (text) text.value = displayText;
   }
 
-  // Campaign-level fields (targeting/OS/age/asset) — applied once per slot,
-  // from the FIRST cart item (a campaign has one targeting, not one per ad).
+  // Campaign-level fields (targeting/OS/age/asset). Returns true if targeting
+  // resolved with confidence — false means the slot needs a review flag.
   function applyCampaignFields(slot, prefill) {
     var idx = slot.dataset.idx;
     var tgtWrap = slot.querySelector('.cb-targeting-wrap');
@@ -3592,10 +3596,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     setSelWrap(osWrap, os, os);
     setSlotField(slot, idx, 'age', numericAge(prefill.age));
     setSlotField(slot, idx, 'asset', prefill.asset || '');
+    return !!tgt.matched;
   }
 
   // Per-ad-row fields — creative type + best-effort file match. `adRow` must
   // already exist (created via the initial blank slot or a prior cbAddAd()).
+  // Returns true if a creative file was confidently matched.
   function applyAdRowFields(adRow, slot, prefill) {
     var idx = slot.dataset.idx;
     var aIdx = adRow.dataset.adIdx;
@@ -3608,6 +3614,44 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var creativeVal = match.rel_path || match.filename;
       setSelWrap(creativeWrap, creativeVal, creativeVal);
     }
+    return !!match;
+  }
+
+  // ── Auto-built review marker ───────────────────────────────────────────
+  // Slots created via Send-to-Builder that couldn't confidently resolve
+  // targeting and/or the first ad's creative get a badge + red field
+  // outlines. Cleared automatically once both are filled in (manually or
+  // otherwise) — checked from cbUpdateName(), which already fires on every
+  // relevant field change (targeting pick, creative pick, OS/age/asset edit).
+  function markNeedsReview(slot, targetingOk, creativeOk) {
+    if (targetingOk && creativeOk) return;
+    slot.dataset.autoBuilt = '1';
+    if (!targetingOk) {
+      var tgtWrap = slot.querySelector('.cb-targeting-wrap');
+      if (tgtWrap) tgtWrap.classList.add('cb-field-needs-review');
+    }
+    if (!creativeOk) {
+      var creativeWrap = slot.querySelector('.cb-ad-row[data-ad-idx="0"] .cb-creative-sel-wrap');
+      if (creativeWrap) creativeWrap.classList.add('cb-field-needs-review');
+    }
+    var header = slot.querySelector('.cb-slot-header');
+    if (header && !slot.querySelector('.cb-autobuilt-badge')) {
+      header.insertAdjacentHTML('afterend', '<div class="cb-autobuilt-badge">⚡ Auto-built — review before publish</div>');
+    }
+  }
+
+  function checkAutoBuiltReview(slot) {
+    if (slot.dataset.autoBuilt !== '1') return;
+    var tgtWrap = slot.querySelector('.cb-targeting-wrap');
+    var targetingOk = !!(tgtWrap && tgtWrap.querySelector('.cb-targeting-hidden') || {}).value;
+    var creativeWrap = slot.querySelector('.cb-ad-row[data-ad-idx="0"] .cb-creative-sel-wrap');
+    var creativeOk = !!(creativeWrap && creativeWrap.querySelector('input[type="hidden"]') || {}).value;
+    if (!targetingOk || !creativeOk) return;
+    slot.dataset.autoBuilt = '0';
+    if (tgtWrap) tgtWrap.classList.remove('cb-field-needs-review');
+    if (creativeWrap) creativeWrap.classList.remove('cb-field-needs-review');
+    var badge = slot.querySelector('.cb-autobuilt-badge');
+    if (badge) badge.remove();
   }
 
   function closeSendModal() {
@@ -3615,70 +3659,55 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (existing) existing.remove();
   }
 
-  // ── Multi-select cart ─────────────────────────────────────────────────
-  // Plain-data cart (no DOM refs) so it survives JSON round-trip through
-  // sessionStorage across the silent-refresh-and-reload flow (see buildCampaign()).
-  var SEND_CART = [];
-
-  function updateCartBtnVisual(btn, selected) {
-    btn.classList.toggle('cb-send-selected', selected);
-    btn.textContent = selected ? '✓ Selected' : '+ Builder';
+  // ── Send to Builder: single-item, immediate ────────────────────────────
+  // No cart/staging step — clicking "+ Builder" opens the resolve/confirm
+  // popup directly for that one ad; confirming sends it straight to its
+  // account (wherever that account currently is, on-screen or not) and
+  // inserts it as the first slot there, so browsing many ads across many
+  // accounts is just click → confirm → click → confirm, no batching needed.
+  function flashSent(btn) {
+    if (!btn) return;
+    var orig = btn.textContent;
+    btn.classList.add('cb-send-selected');
+    btn.textContent = '✓ Sent';
+    setTimeout(function() {
+      btn.classList.remove('cb-send-selected');
+      btn.textContent = orig;
+    }, 2000);
   }
 
-  function renderCartBar() {
-    var bar = document.getElementById('cb-cart-bar');
-    if (!SEND_CART.length) { if (bar) bar.remove(); return; }
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'cb-cart-bar';
-      bar.className = 'cb-cart-bar';
-      document.body.appendChild(bar);
-    }
-    bar.innerHTML = '<span class="cb-cart-count">' + SEND_CART.length + ' ad' + (SEND_CART.length === 1 ? '' : 's') + ' selected</span>'
-      + '<button type="button" id="cb-cart-build">Build Campaign</button>'
-      + '<button type="button" id="cb-cart-clear">Clear</button>';
-    bar.querySelector('#cb-cart-build').onclick = function() { openCartModal(); };
-    bar.querySelector('#cb-cart-clear').onclick = function() { clearCart(); };
-  }
-
-  function clearCart() {
-    SEND_CART.forEach(function(item) { if (item.btnEl) updateCartBtnVisual(item.btnEl, false); });
-    SEND_CART = [];
-    renderCartBar();
-  }
-
-  window.cbToggleCartItem = function(btn) {
+  window.cbOpenSendToBuilderModal = function(btn) {
     var source = btn.dataset.source;
     var country = btn.dataset.country;
     var countryName = btn.dataset.countryName || country;
     var payload = {};
     try { payload = JSON.parse(btn.dataset.payload || '{}'); } catch (e) {}
 
-    var existingIdx = SEND_CART.findIndex(function(item) { return item.btnEl === btn; });
-    if (existingIdx >= 0) {
-      SEND_CART.splice(existingIdx, 1);
-      updateCartBtnVisual(btn, false);
-      renderCartBar();
-      return;
-    }
-    if (SEND_CART.length && SEND_CART[0].country !== country) {
-      alert('A campaign is built from one country at a time. Click "Clear" on the cart bar first, then start selecting ads for ' + countryName + '.');
-      return;
-    }
-    SEND_CART.push({ btnEl: btn, source: source, country: country, countryName: countryName, payload: payload });
-    updateCartBtnVisual(btn, true);
-    renderCartBar();
+    closeSendModal();
+    var overlay = document.createElement('div');
+    overlay.id = 'cb-send-modal';
+    overlay.className = 'cb-send-modal-overlay';
+    var box = document.createElement('div');
+    box.className = 'cb-send-modal-box';
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeSendModal(); });
+    box.innerHTML = '<div class="cb-send-modal-title">Send to Builder</div>'
+      + '<div class="cb-send-modal-msg">Resolving…</div>';
+
+    resolveItemPrefill(source, payload).then(function(prefill) {
+      renderSendModalBody(box, country, countryName, prefill, btn);
+    });
   };
 
   document.addEventListener('click', function(e) {
     var btn = e.target.closest('.cb-send-btn');
-    if (btn) window.cbToggleCartItem(btn);
+    if (btn) window.cbOpenSendToBuilderModal(btn);
   });
 
-  // ── Resolve one cart item's targeting/device/age/asset (async) ────────
-  function resolveItemPrefill(item) {
-    var payload = item.payload;
-    if (item.source === 'combo') {
+  // ── Resolve one item's targeting/device/age/asset (async) ─────────────
+  function resolveItemPrefill(source, payload) {
+    if (source === 'combo') {
       var interestText = payload.interest || '';
       return fetch('/api/resolve-targeting?text=' + encodeURIComponent(interestText))
         .then(function(r) { return r.json(); })
@@ -3704,30 +3733,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       });
   }
 
-  // ── Modal: review cart, pick account, build ────────────────────────────
-  function openCartModal() {
-    if (!SEND_CART.length) return;
-    closeSendModal();
-    var country = SEND_CART[0].country;
-    var countryName = SEND_CART[0].countryName;
-
-    var overlay = document.createElement('div');
-    overlay.id = 'cb-send-modal';
-    overlay.className = 'cb-send-modal-overlay';
-    var box = document.createElement('div');
-    box.className = 'cb-send-modal-box';
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeSendModal(); });
-    box.innerHTML = '<div class="cb-send-modal-title">Build Campaign — ' + escHtml(countryName) + '</div>'
-      + '<div class="cb-send-modal-msg">Resolving ' + SEND_CART.length + ' ad(s)…</div>';
-
-    Promise.all(SEND_CART.map(resolveItemPrefill)).then(function(prefills) {
-      SEND_CART.forEach(function(item, i) { item.prefill = prefills[i]; });
-      renderCartModalBody(box, country, countryName);
-    });
-  }
-
   function accountOptionsFor(country) {
     // Union of: accounts already loaded in the DOM (buildable instantly) and
     // every account known for this country (may need a refresh first) — this
@@ -3740,36 +3745,31 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return all.map(function(label) { return { label: label, loaded: loaded.indexOf(label) >= 0 }; });
   }
 
-  function bestAccountGuess(options) {
-    for (var i = 0; i < SEND_CART.length; i++) {
-      var alias = SEND_CART[i].prefill && SEND_CART[i].prefill.aliasGuess;
-      var label = alias && (ACCOUNT_ALIAS_MAP[SEND_CART[i].country] || {})[alias];
-      if (label && options.some(function(o) { return o.label === label; })) return label;
-    }
+  function bestAccountGuess(country, prefill, options) {
+    var alias = prefill.aliasGuess;
+    var label = alias && (ACCOUNT_ALIAS_MAP[country] || {})[alias];
+    if (label && options.some(function(o) { return o.label === label; })) return label;
     return '';
   }
 
-  function renderCartModalBody(box, country, countryName) {
-    var itemsHtml = SEND_CART.map(function(item, i) {
-      var p = item.prefill || {};
-      var tgtText = (p.targeting && p.targeting.matched)
-        ? p.targeting.code
-        : (p.targeting && p.targeting.raw ? p.targeting.raw + ' (?)' : '—');
-      return '<div class="cb-send-field-row"><span class="cb-send-field-label">Ad ' + (i + 1) + '</span>'
-        + '<span class="cb-send-field-val' + (!(p.targeting && p.targeting.matched) ? ' cb-send-unresolved' : '') + '">'
-        + escHtml(p.asset || '—') + ' · ' + escHtml(tgtText) + '</span></div>';
-    }).join('');
+  function renderSendModalBody(box, country, countryName, prefill, sourceBtn) {
+    var tgtText = (prefill.targeting && prefill.targeting.matched)
+      ? prefill.targeting.code
+      : (prefill.targeting && prefill.targeting.raw ? prefill.targeting.raw + ' (?)' : '—');
+    var itemHtml = '<div class="cb-send-field-row"><span class="cb-send-field-label">Ad</span>'
+      + '<span class="cb-send-field-val' + (!(prefill.targeting && prefill.targeting.matched) ? ' cb-send-unresolved' : '') + '">'
+      + escHtml(prefill.asset || '—') + ' · ' + escHtml(tgtText) + '</span></div>';
 
     var options = accountOptionsFor(country);
-    var guess = bestAccountGuess(options);
+    var guess = bestAccountGuess(country, prefill, options);
     var optionsHtml = '<option value="">— choose account —</option>' + options.map(function(o) {
       var sel = o.label === guess ? ' selected' : '';
       var tag = o.loaded ? '' : ' (needs refresh)';
       return '<option value="' + escHtml(o.label) + '"' + sel + '>' + escHtml(o.label) + tag + '</option>';
     }).join('');
 
-    box.innerHTML = '<div class="cb-send-modal-title">Build Campaign — ' + escHtml(countryName) + '</div>'
-      + itemsHtml
+    box.innerHTML = '<div class="cb-send-modal-title">Send to Builder — ' + escHtml(countryName) + '</div>'
+      + itemHtml
       + '<div class="cb-send-field-row" style="align-items:center">'
       + '<span class="cb-send-field-label">Account</span>'
       + '<select id="cb-send-acc-select" class="cb-select" style="max-width:220px">' + optionsHtml + '</select>'
@@ -3817,31 +3817,41 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var select = box.querySelector('#cb-send-acc-select');
       var accountLabel = select.value;
       if (!accountLabel) { select.style.borderColor = 'var(--bad)'; return; }
-      buildCampaign(SEND_CART.slice(), accountLabel, country, countryName);
+      buildCampaign(prefill, accountLabel, country, countryName, sourceBtn);
     };
   }
 
-  // ── Place the cart's ads into one campaign slot, refreshing first if the
-  // target account isn't loaded in the DOM yet — no separate manual Refresh
-  // click needed, Build handles it end-to-end. ──────────────────────────
-  function placeCampaignInRow(row, cartItems) {
+  // Prepend a brand-new blank slot (instead of appending at the bottom like
+  // the manual "+ Add Campaign" button does) and renumber everything so
+  // camp_N indices stay sequential in DOM order — this is what makes a
+  // Send-to-Builder campaign show up as the very first slot, above even the
+  // server-rendered recommendation slots.
+  function addSlotAtTop(form) {
+    var container = form.querySelector('.cb-slots');
+    var idx = container.querySelectorAll('.cb-slot').length;
+    container.insertAdjacentHTML('afterbegin', buildBlankSlotHTML(idx));
+    var newSlot = container.firstElementChild;
+    cbRenumber(form);
+    cbUpdateCount(form);
+    initAllSelects(newSlot);
+    return newSlot;
+  }
+
+  // ── Place one ad into a fresh top slot, refreshing first if the target
+  // account isn't loaded in the DOM yet — no separate manual Refresh click
+  // needed, Build handles it end-to-end. ─────────────────────────────────
+  function placeCampaignInRow(row, prefill) {
     var form = row.querySelector('form.open-account-form');
     if (!form) return;
-    cbAddSlot(form);
-    var container = form.querySelector('.cb-slots');
-    var slots = container.querySelectorAll('.cb-slot');
-    var slot = slots[slots.length - 1];
+    var slot = addSlotAtTop(form);
 
-    applyCampaignFields(slot, cartItems[0].prefill);
-    cartItems.forEach(function(item, i) {
-      if (i > 0) cbAddAd(slot.querySelector('.cb-add-btn-sm'));
-      var adRow = slot.querySelectorAll('.cb-ad-row')[i];
-      if (adRow) applyAdRowFields(adRow, slot, item.prefill);
-    });
+    var targetingOk = applyCampaignFields(slot, prefill);
+    var adRow = slot.querySelector('.cb-ad-row[data-ad-idx="0"]');
+    var creativeOk = adRow ? applyAdRowFields(adRow, slot, prefill) : false;
+    markNeedsReview(slot, targetingOk, creativeOk);
     cbUpdateName(slot);
 
     closeSendModal();
-    clearCart();
     var body = row.querySelector('.cb-acc-body');
     if (body && !body.classList.contains('cb-acc-open')) {
       body.classList.add('cb-acc-open');
@@ -3856,9 +3866,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return panel ? panel.querySelector('.cb-acc-row[data-acc-label="' + CSS.escape(accountLabel) + '"]') : null;
   }
 
-  function buildCampaign(cartItems, accountLabel, country, countryName) {
+  function buildCampaign(prefill, accountLabel, country, countryName, sourceBtn) {
     var row = findAccountRow(country, accountLabel);
-    if (row) { placeCampaignInRow(row, cartItems); return; }
+    if (row) {
+      placeCampaignInRow(row, prefill);
+      flashSent(sourceBtn);
+      return;
+    }
 
     // Account known but not yet loaded on this page — refresh silently and
     // finish the build automatically once the page comes back, instead of
@@ -3866,8 +3880,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var statusEl = document.getElementById('cb-send-status');
     if (statusEl) statusEl.textContent = 'Account not loaded yet — refreshing…';
     sessionStorage.setItem('cbPendingBuild', JSON.stringify({
-      cartItems: cartItems.map(function(it) { return { source: it.source, country: it.country, countryName: it.countryName, payload: it.payload, prefill: it.prefill }; }),
-      accountLabel: accountLabel, country: country, countryName: countryName, hash: location.hash,
+      prefill: prefill, accountLabel: accountLabel, country: country, countryName: countryName, hash: location.hash,
     }));
     fetch('/refresh', { method: 'POST' }).then(function() { location.reload(); }).catch(function() { location.reload(); });
   }
@@ -3883,7 +3896,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     setTimeout(function() {
       var row = findAccountRow(pending.country, pending.accountLabel);
       if (row) {
-        placeCampaignInRow(row, pending.cartItems);
+        placeCampaignInRow(row, pending.prefill);
       } else {
         alert('Account "' + pending.accountLabel + '" still not found after refresh — check config/ad_account_map.csv and that it has performance data for ' + pending.countryName + '.');
       }
