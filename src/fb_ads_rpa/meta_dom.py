@@ -2553,7 +2553,36 @@ def fill_placements(page: Page) -> bool:
         except Exception:
             return None
 
+    # Confirmed live 2026-07-27: the "Placements" heading isn't reliably in
+    # the DOM at all right after the previous step (Detailed targeting) —
+    # this page mounts sections progressively as the main panel scrolls
+    # (same pattern already seen for the Ad-level creative fields), not
+    # just a visibility/offsetParent issue. Force-scroll toward increasing
+    # fractions of the container's scrollHeight and retry instead of
+    # searching the DOM as-is.
     placements_box = _find_leaf_text("Placements")
+    for frac in (0.5, 0.6, 0.7, 0.8, 0.9, 1.0):
+        if placements_box:
+            break
+        try:
+            page.evaluate(
+                """
+                (f) => {
+                  const all = [...document.querySelectorAll('*')];
+                  const container = all.find(e => {
+                    const style = getComputedStyle(e);
+                    return (style.overflowY === 'auto' || style.overflowY === 'scroll')
+                      && e.scrollHeight > e.clientHeight + 50 && e.scrollHeight > 1500;
+                  });
+                  if (container) container.scrollTop = container.scrollHeight * f;
+                }
+                """,
+                frac,
+            )
+        except Exception:
+            pass
+        time.sleep(0.5)
+        placements_box = _find_leaf_text("Placements")
     _dbg.append(f"placements_box={placements_box}")
     if not placements_box:
         _dump_dbg()
