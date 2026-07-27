@@ -4888,26 +4888,31 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                     # "18"/"65+" trigger, already open and not a new
                     # selection) for that instead, with no extra click on
                     # any list value.
+                    #
+                    # FIXED (2026-07-27, confirmed live): walking up
+                    # ancestors from `el` (the closed-state trigger text)
+                    # never finds the real scrollable list — the open
+                    # dropdown is a separate, portal-rendered
+                    # `[role=listbox]` element, not an ancestor/descendant
+                    # of the trigger at all. Live diagnosis (walking up
+                    # from a value INSIDE the open list, e.g. "13") found
+                    # the real container this way instead: a global
+                    # `[role=listbox]` search, since only one dropdown is
+                    # open at a time right after clicking the trigger.
                     container = None
                     try:
-                        el.evaluate(
-                            """el => {
-                              let node = el;
-                              for (let i = 0; i < 8 && node; i++) {
-                                node = node.parentElement;
-                                if (!node) break;
-                                const style = getComputedStyle(node);
-                                if ((style.overflowY === 'auto' || style.overflowY === 'scroll')
-                                    && node.scrollHeight > node.clientHeight) {
-                                  node.dataset.__ageScrollTarget = '1';
-                                  break;
-                                }
-                              }
+                        tagged = root.evaluate(
+                            """() => {
+                              const el = document.querySelector('[role=listbox]');
+                              if (!el) return false;
+                              el.setAttribute('data-__age-scroll-target', '1');
+                              return true;
                             }"""
                         )
-                        marked = root.locator("[data-__age-scroll-target]")
-                        if marked.count():
-                            container = marked.first
+                        if tagged:
+                            marked = root.locator("[data-__age-scroll-target]")
+                            if marked.count():
+                                container = marked.first
                     except Exception:
                         pass
                     if container is not None:
