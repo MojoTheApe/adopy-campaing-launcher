@@ -4969,11 +4969,37 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                                 box = target_el.bounding_box(timeout=1500)
                                 _age_dbg.append(f"click_box={box}")
                                 if box and box.get("width", 0) > 0:
-                                    _cdp_mouse_click(
-                                        page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
-                                    )
+                                    click_x = box["x"] + box["width"] / 2
+                                    click_y = box["y"] + box["height"] / 2
+                                    try:
+                                        at_point = page.evaluate(
+                                            """([x, y]) => {
+                                              const el = document.elementFromPoint(x, y);
+                                              if (!el) return null;
+                                              return { tag: el.tagName, text: (el.textContent||'').trim().slice(0,30),
+                                                role: el.getAttribute('role'), outer: el.outerHTML.slice(0, 300) };
+                                            }""",
+                                            [click_x, click_y],
+                                        )
+                                        _age_dbg.append(f"element_at_click_point={at_point}")
+                                    except Exception:
+                                        pass
+                                    _cdp_mouse_click(page, click_x, click_y)
                                     time.sleep(0.4)
                                     _age_dbg.append("clicked_target")
+                                    # Verify the click actually registered by
+                                    # checking the option's own aria-selected/
+                                    # checked state right after — independent
+                                    # of the (possibly stale) trigger position
+                                    # check done later.
+                                    try:
+                                        post_click_state = target_el.evaluate(
+                                            "el => ({ ariaSelected: el.getAttribute('aria-selected'), "
+                                            "checked: el.querySelector('input') ? el.querySelector('input').checked : null })"
+                                        )
+                                        _age_dbg.append(f"post_click_state={post_click_state}")
+                                    except Exception as verify_exc:
+                                        _age_dbg.append(f"post_click_verify_exception={verify_exc!r}")
                             except Exception as click_exc:
                                 _age_dbg.append(f"click_exception={click_exc!r}")
                     try:
