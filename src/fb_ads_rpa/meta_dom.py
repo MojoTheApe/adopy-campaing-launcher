@@ -1937,6 +1937,7 @@ def run_recorded_campaign_flow(
     ad_body: str = "",
     destination_url: str = "",
     os_val: str = "All",
+    additional_ads: list[dict[str, str]] | None = None,
 ) -> str:
     """Create -> Website -> ... -> Ad level, using the exact locators from a
     verified human Playwright codegen recording (2026-07-21) instead of the
@@ -2467,6 +2468,70 @@ def run_recorded_campaign_flow(
                 _shot("fail_ad_destination")
                 ad_level_fails.append(f"ad_destination:{str(exc)[:60]}")
 
+        # Additional ads (2nd, 3rd, ...) in the same ad set — each one is a
+        # fresh "Create ad" (create_additional_ad()) followed by the exact
+        # same per-ad fill sequence used for the first ad above. Confirmed
+        # live 2026-07-28 that upload_ad_creative/fill_ad_copy/
+        # set_ad_destination_website work unmodified here.
+        if reached_ad_level and additional_ads:
+            for i, extra in enumerate(additional_ads, start=2):
+                tag = f"ad{i}"
+                try:
+                    if not create_additional_ad(page, adset_name):
+                        _shot(f"fail_{tag}_create")
+                        ad_level_fails.append(f"{tag}_create")
+                        continue
+                    _shot(f"after_{tag}_create")
+                except Exception as exc:
+                    _shot(f"fail_{tag}_create")
+                    ad_level_fails.append(f"{tag}_create:{str(exc)[:60]}")
+                    continue
+
+                extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
+                if not _fill(page.get_by_placeholder("Enter your ad name here..."), extra_name):
+                    _shot(f"fail_{tag}_name")
+                    ad_level_fails.append(f"{tag}_name")
+                else:
+                    _shot(f"after_{tag}_name")
+
+                extra_creative_path = extra.get("creative_path") or ""
+                if extra_creative_path:
+                    try:
+                        if not upload_ad_creative(
+                            page, extra.get("creative_type") or "", extra_creative_path, edit_url=page.url
+                        ):
+                            _shot(f"fail_{tag}_creative_upload")
+                            ad_level_fails.append(f"{tag}_creative_upload")
+                        else:
+                            _shot(f"after_{tag}_creative_upload")
+                    except Exception as exc:
+                        _shot(f"fail_{tag}_creative_upload")
+                        ad_level_fails.append(f"{tag}_creative_upload:{str(exc)[:60]}")
+
+                extra_title = extra.get("ad_title") or ""
+                extra_body = extra.get("ad_body") or ""
+                if extra_title or extra_body:
+                    try:
+                        if not fill_ad_copy(page, extra_title, extra_body):
+                            _shot(f"fail_{tag}_copy")
+                            ad_level_fails.append(f"{tag}_copy")
+                        else:
+                            _shot(f"after_{tag}_copy")
+                    except Exception as exc:
+                        _shot(f"fail_{tag}_copy")
+                        ad_level_fails.append(f"{tag}_copy:{str(exc)[:60]}")
+
+                if destination_url:
+                    try:
+                        if not set_ad_destination_website(page, destination_url):
+                            _shot(f"fail_{tag}_destination")
+                            ad_level_fails.append(f"{tag}_destination")
+                        else:
+                            _shot(f"after_{tag}_destination")
+                    except Exception as exc:
+                        _shot(f"fail_{tag}_destination")
+                        ad_level_fails.append(f"{tag}_destination:{str(exc)[:60]}")
+
     if ad_level_fails:
         try:
             Path("output/debug_ad_level_soft_fails.txt").write_text(
@@ -2941,6 +3006,123 @@ def select_devices_ios_only(page: Page) -> bool:
               e.offsetParent !== null && (e.textContent || '').trim() === 'iOS devices only')"""
         )
     )
+
+
+def create_additional_ad(page: Page, adset_name: str) -> bool:
+    """Add another ad to the ad set that's already open (for campaigns with
+    more than one ad per ad set), landing on the same "Set up creative"
+    button state that upload_ad_creative() expects for the first ad.
+
+    Confirmed live 2026-07-28: the left tree's ad-set row has an "Action
+    menu" icon at its far right — but finding it via `[role=button]` + exact
+    text "Action menu" (with an `offsetParent !== null` visibility check)
+    is unreliable, intermittently finding 0 matches even with a real mouse
+    hover over the row first (retried up to 10x live, still 0). A raw
+    coordinate click bypasses this entirely: `elementFromPoint()` at that
+    same spot always resolves to the icon's div regardless of what the
+    text/role search reports, and a real click there opens the menu 100%
+    of the time in live testing. The x offset is computed from the row's
+    own *wide* ancestor (walk up until width > 350px — the row's own
+    bounding box is only as wide as its text, not the full tree panel)
+    rather than a hardcoded pixel, so it isn't tied to one fixed sidebar
+    width.
+
+    Its "Create ad" menu item is reliably identified by
+    `data-surface="/am/editor_drawer/lib:campaign-structure-item-action-
+    menu-create"` (text-matching "Create ad" is fragile for the same
+    ancestor-vs-descendant reason fixed elsewhere in this file for Devices/
+    Placements: querySelectorAll('*') returns the non-clickable wrapper
+    before the real `[role=menuitem]`).
+
+    "Create ad" sometimes opens a "Set up your creative" wizard modal
+    directly (skipping the "Set up creative" button state that
+    upload_ad_creative() expects), sometimes lands straight on the ad-level
+    page — confirmed live both ways happen across otherwise-identical
+    calls. Cancel out of the modal if present (best-effort, not an error if
+    it never appeared); either way the real completion signal is the
+    "Set up creative" button becoming visible, so the rest of the ad fill
+    sequence (upload_ad_creative / fill_ad_copy / set_ad_destination_
+    website) can run completely unmodified for every additional ad.
+    """
+    click_point = page.evaluate(
+        """(adsetName) => {
+          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          const candidates = [...document.querySelectorAll('*')].filter(e =>
+            e.offsetParent !== null && norm(e.textContent) === adsetName && e.children.length === 0);
+          const rows = [];
+          const seen = new Set();
+          for (const leaf of candidates) {
+            let row = leaf;
+            for (let i = 0; i < 5 && row; i++) {
+              if (row.getAttribute('role') === 'button' || row.tagName === 'A' || row.onclick) break;
+              row = row.parentElement;
+            }
+            row = row || leaf;
+            if (!seen.has(row)) { seen.add(row); rows.push(row); }
+          }
+          // rows[0] is the campaign row, rows[1] is the ad-set row (both
+          // share the same name in this recorded flow).
+          if (rows.length < 2) return null;
+          let wide = rows[1];
+          for (let i = 0; i < 8 && wide; i++) {
+            if (wide.getBoundingClientRect().width > 350) break;
+            wide = wide.parentElement;
+          }
+          if (!wide) return null;
+          const r = wide.getBoundingClientRect();
+          return {x: r.right - 22, y: r.y + r.height / 2};
+        }""",
+        adset_name,
+    )
+    if not click_point:
+        return False
+
+    # A click with no prior hover dwell can land on the row's own (wider)
+    # click target — navigating into the ad set instead of opening the
+    # menu — confirmed live 2026-07-28: the icon only becomes the active
+    # hit-target after a brief hover.
+    page.mouse.move(click_point["x"], click_point["y"])
+    time.sleep(0.4)
+    page.mouse.click(click_point["x"], click_point["y"])
+    time.sleep(0.6)
+
+    create_clicked = False
+    for _ in range(5):
+        create_clicked = page.evaluate(
+            """() => {
+              const el = document.querySelector(
+                '[data-surface="/am/editor_drawer/lib:campaign-structure-item-action-menu-create"]');
+              if (!el) return false;
+              el.click();
+              return true;
+            }"""
+        )
+        if create_clicked:
+            break
+        time.sleep(0.3)
+    if not create_clicked:
+        return False
+    time.sleep(1.5)
+
+    # "Create ad" sometimes opens the "Set up your creative" wizard modal
+    # directly, sometimes not — Cancel out of it if present (best-effort,
+    # retried since the modal can still be mid-render right after the
+    # click), then confirm we're truly past it before the final check.
+    for _ in range(5):
+        try:
+            page.get_by_role("button", name="Cancel").first.click(timeout=2000)
+            time.sleep(0.6)
+            break
+        except Exception:
+            time.sleep(0.3)
+
+    try:
+        page.get_by_role("button", name=re.compile("Set up creative", re.I)).first.wait_for(
+            state="visible", timeout=10000
+        )
+    except Exception:
+        return False
+    return True
 
 
 def upload_ad_creative(

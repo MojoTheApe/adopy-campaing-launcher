@@ -2134,6 +2134,16 @@ class AdsManagerFlow:
         if get_use_recorded_flow():
             self._goto_campaigns(draft, result)
             ad = ad_set.ads[0]
+            additional_ads = [
+                {
+                    "ad_name": extra.copy_name,
+                    "creative_type": extra.creative_type,
+                    "creative_path": extra.creative_path or "",
+                    "ad_title": extra.ad_title,
+                    "ad_body": extra.ad_body,
+                }
+                for extra in ad_set.ads[1:]
+            ]
             fail_step = run_recorded_campaign_flow(
                 self.page,
                 campaign_name=draft.name,
@@ -2151,6 +2161,7 @@ class AdsManagerFlow:
                 ad_body=ad.ad_body,
                 destination_url=draft.link,
                 os_val=ad_set.os,
+                additional_ads=additional_ads,
             )
             result.steps_completed.append("recorded_flow:reached_ad" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step

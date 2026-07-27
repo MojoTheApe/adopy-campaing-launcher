@@ -1,12 +1,32 @@
 [
   {
-    "name": "CR_AIT_DQ204_Test129_Day_35_24.07",
+    "name": "CR_AIT_DQ204_Test134_MultiAd_35",
     "targeting": "Day",
-    "os": "iOS",
+    "os": "All",
     "age": "35",
     "budget": "50",
     "creative_type": "Video",
     "creative_file": "2046_2.mp4",
     "copy": "ES Ai Trader Text6"
+  },
+  {
+    "name": "CR_AIT_DQ204_Test134_MultiAd_35",
+    "targeting": "Day",
+    "os": "All",
+    "age": "35",
+    "budget": "50",
+    "creative_type": "Video",
+    "creative_file": "2046_2.mp4",
+    "copy": "ES Ai Trader Text 5"
+  },
+  {
+    "name": "CR_AIT_DQ204_Test134_MultiAd_35",
+    "targeting": "Day",
+    "os": "All",
+    "age": "35",
+    "budget": "50",
+    "creative_type": "Video",
+    "creative_file": "2046_2.mp4",
+    "copy": "ES Ai Trader Text 4"
   }
 ]
