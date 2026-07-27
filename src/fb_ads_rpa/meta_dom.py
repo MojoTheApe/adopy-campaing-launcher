@@ -2507,20 +2507,29 @@ def fill_placements(page: Page) -> bool:
             pass
 
     def _find_leaf_text(text: str, *, exact: bool = True, min_y: float = 0) -> dict | None:
+        # Confirmed live 2026-07-27: "Hide settings"/"Show more settings"
+        # never sit on a pure children.length===0 leaf — every wrapping
+        # element down to the innermost <a>/<span> still has at least 1
+        # child (a hidden chevron-icon element), so a strict leaf-only
+        # filter never matches them at all. Allow up to 2 children for
+        # substring (exact=False) searches; keep the strict leaf
+        # requirement for exact matches (confirmed working for headings
+        # like "Placements"/"Placement controls").
+        max_children = 0 if exact else 2
         try:
             return page.evaluate(
                 """
-                ([text, exact, min_y]) => {
+                ([text, exact, min_y, maxChildren]) => {
                   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
                   const all = [...document.querySelectorAll('*')];
                   const matches = all.filter(e => {
-                    if (e.offsetParent === null || e.children.length !== 0) return false;
+                    if (e.offsetParent === null || e.children.length > maxChildren) return false;
                     const t = norm(e.textContent);
                     return exact ? t === text : t.includes(text);
                   });
                   for (const el of matches) {
                     const r = el.getBoundingClientRect();
-                    if (r.y >= min_y) {
+                    if (r.width > 0 && r.height > 0 && r.y >= min_y) {
                       el.scrollIntoView({ block: 'center', behavior: 'instant' });
                       return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
                     }
@@ -2528,7 +2537,7 @@ def fill_placements(page: Page) -> bool:
                   return null;
                 }
                 """,
-                [text, exact, min_y],
+                [text, exact, min_y, max_children],
             )
         except Exception:
             return None
