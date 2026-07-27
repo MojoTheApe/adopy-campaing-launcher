@@ -4905,50 +4905,94 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                     # it — confirmed via elementFromPoint(x, y) returning
                     # null right at the computed click point, meaning the
                     # page had already reflowed/scrolled by the time the
-                    # click fired (the exact same class of bug already
-                    # found and fixed for fill_placements() earlier today).
-                    # Find AND click inside one atomic page.evaluate() call
-                    # instead — a native element.click() on the real text
-                    # node bubbles up to whatever ancestor holds the actual
-                    # option/radio handler, immune to any reflow in between.
+                    # click fired.
+                    #
+                    # Tried making the WHOLE scroll+find+click sequence one
+                    # synchronous page.evaluate() call — regressed (both
+                    # boundaries went from "found" to "not_found"). Root
+                    # cause: this list virtualizes its rows (only renders a
+                    # DOM node for whatever's near the current scroll
+                    # position); a synchronous JS loop that changes
+                    # scrollTop 60 times in a row never yields back to the
+                    # browser's render/effect cycle, so the virtualizer
+                    # never gets a chance to actually mount the newly
+                    # scrolled-to rows — scrollTop ends up at its final
+                    # value but the DOM still only reflects whatever was
+                    # rendered before the loop started. Keep the scroll
+                    # loop as separate Python-driven ticks with real sleeps
+                    # (confirmed working: found target 30 at tick 2, 45 at
+                    # tick 12) so the browser can render between each step —
+                    # only the FINAL find+click is atomic, closing the
+                    # actual staleness gap without breaking virtualization.
                     _age_dbg: list[str] = []
-                    result = page.evaluate(
-                        """
-                        (targetVal) => {
-                          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                          const listbox = document.querySelector('[role=listbox]');
-                          if (!listbox) return { stage: 'no_listbox' };
-                          listbox.scrollTop = 0;
-                          // Prefer the innermost (fewest-children) match —
-                          // querySelectorAll returns ancestors before their
-                          // own descendants, and a native click() on an
-                          // outer wrapper does not reach a handler attached
-                          // only to an inner element (confirmed the hard
-                          // way for fill_placements() earlier today).
-                          const findTarget = () => {
-                            const matches = [...listbox.querySelectorAll('*')].filter(e =>
-                              e.offsetParent !== null && norm(e.textContent) === targetVal);
-                            if (!matches.length) return null;
-                            matches.sort((a, b) => a.children.length - b.children.length);
-                            return matches[0];
-                          };
-                          let found = findTarget();
-                          let tick = 0;
-                          while (!found && tick < 60) {
-                            listbox.scrollTop += 50;
-                            found = findTarget();
-                            tick++;
-                          }
-                          if (!found) return { stage: 'not_found', tick };
-                          found.scrollIntoView({ block: 'center', behavior: 'instant' });
-                          found.click();
-                          return { stage: 'clicked', tick };
-                        }
-                        """,
-                        target_val,
+                    tagged = page.evaluate(
+                        """() => {
+                          const el = document.querySelector('[role=listbox]');
+                          if (!el) return false;
+                          el.setAttribute('data-__age-scroll-target', '1');
+                          el.scrollTop = 0;
+                          return true;
+                        }"""
                     )
-                    _age_dbg.append(f"target_val={target_val!r} result={result}")
-                    time.sleep(0.4)
+                    _age_dbg.append(f"target_val={target_val!r} tagged={tagged}")
+
+                    def _age_target_present() -> bool:
+                        return bool(
+                            page.evaluate(
+                                """(targetVal) => {
+                                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                                  const listbox = document.querySelector('[data-__age-scroll-target]');
+                                  if (!listbox) return false;
+                                  return [...listbox.querySelectorAll('*')].some(e =>
+                                    e.offsetParent !== null && norm(e.textContent) === targetVal);
+                                }""",
+                                target_val,
+                            )
+                        )
+
+                    found_tick = None
+                    if tagged:
+                        if _age_target_present():
+                            found_tick = -1
+                        else:
+                            for scroll_i in range(40):
+                                try:
+                                    page.evaluate(
+                                        """() => {
+                                          const node = document.querySelector('[data-__age-scroll-target]');
+                                          if (node) node.scrollTop += 50;
+                                        }"""
+                                    )
+                                except Exception:
+                                    pass
+                                time.sleep(0.12)
+                                if _age_target_present():
+                                    found_tick = scroll_i
+                                    break
+                    _age_dbg.append(f"found_tick={found_tick}")
+
+                    if found_tick is not None:
+                        # Atomic re-find + click — no separate bounding_box
+                        # measurement, no gap for the page to reflow before
+                        # the click actually fires.
+                        click_result = page.evaluate(
+                            """(targetVal) => {
+                              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                              const listbox = document.querySelector('[data-__age-scroll-target]');
+                              if (!listbox) return 'no_listbox';
+                              const matches = [...listbox.querySelectorAll('*')].filter(e =>
+                                e.offsetParent !== null && norm(e.textContent) === targetVal);
+                              if (!matches.length) return 'no_match';
+                              matches.sort((a, b) => a.children.length - b.children.length);
+                              const el = matches[0];
+                              el.scrollIntoView({ block: 'center', behavior: 'instant' });
+                              el.click();
+                              return 'clicked';
+                            }""",
+                            target_val,
+                        )
+                        _age_dbg.append(f"click_result={click_result}")
+                        time.sleep(0.4)
                     try:
                         with open("output/debug_age_scroll_click.txt", "a", encoding="utf-8") as f:
                             f.write("\n".join(_age_dbg) + "\n---\n")
