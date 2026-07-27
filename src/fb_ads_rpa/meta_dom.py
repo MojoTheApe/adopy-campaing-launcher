@@ -2569,27 +2569,30 @@ def fill_placements(page: Page) -> bool:
     # with a marker attribute once, then scope every subsequent search to
     # its subtree — DOM containment instead of screen-space Y, immune to
     # scroll/reflow entirely.
-    tagged = page.evaluate(
+    tag_info = page.evaluate(
         """
         () => {
           const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
           const heading = [...document.querySelectorAll('*')].find(e =>
             e.children.length === 0 && norm(e.textContent) === 'Placements' && e.offsetParent !== null);
-          if (!heading) return false;
+          if (!heading) return { tagged: false };
           let node = heading;
           for (let i = 0; i < 10 && node; i++) {
-            if (norm(node.textContent).includes('Account controls')) {
+            const t = norm(node.textContent);
+            if (t.includes('Account controls')) {
               node.setAttribute('data-rpa-placements-marker', '1');
-              return true;
+              const showMoreCount = [...node.querySelectorAll('*')].filter(e =>
+                e.offsetParent !== null && norm(e.textContent).toLowerCase().includes('show more settings')).length;
+              return { tagged: true, depth: i, textLen: t.length, showMoreCount, rect: node.getBoundingClientRect() };
             }
             node = node.parentElement;
           }
-          return false;
+          return { tagged: false };
         }
         """
     )
-    _dbg.append(f"tagged_container={tagged}")
-    if not tagged:
+    _dbg.append(f"tag_info={tag_info}")
+    if not tag_info or not tag_info.get("tagged"):
         _dump_dbg()
         return False
 
