@@ -846,6 +846,24 @@ async def api_creatives() -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+@app.get("/api/ad-copy")
+async def api_ad_copy() -> JSONResponse:
+    """Return every "ad texts" row from the Google Sheet — canonical source for
+    the Campaign Builder's Ad Title search (see src/web/ad_copy_gsheet.py; the
+    old Excel "Ad copy" sheet is no longer used for this).
+
+    Returns [{ad_title, headline, body, description, asset, language}].
+    """
+    from src.web.ad_copy_gsheet import load_ad_copy
+
+    data = load_ad_copy()
+    rows = [
+        {"ad_title": title, **entry}
+        for title, entry in data.items()
+    ]
+    return JSONResponse({"rows": rows})
+
+
 @app.get("/api/resolve-targeting")
 async def api_resolve_targeting(text: str = "") -> JSONResponse:
     """Resolve a free-text interest string (e.g. 'trade') to its canonical KB

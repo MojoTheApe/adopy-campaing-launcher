@@ -12,11 +12,11 @@ from src.meta_campaign_agent.creative_finder import AmbiguousCreativeError, Crea
 from src.upload_agent.build_upload_excel import (
     get_account_info,
     load_reference_data,
-    lookup_ad_copy,
     lookup_country,
     lookup_creative_file,
     lookup_interest,
 )
+from src.web.ad_copy_gsheet import lookup_ad_copy_by_title
 
 
 def _interest_names_from_targeting(ref: dict, targeting_name: str) -> str:
@@ -173,11 +173,15 @@ def enrich_campaign_drafts(
                             f"(pick a file from the folder or set creative_id in Upload FB)"
                         )
 
-                if ref:
-                    copy = lookup_ad_copy(ref, ad.copy_name) if ad.copy_name else {}
-                    ad.ad_title = (copy.get("title") or ad.copy_name or "").strip()
+                # "Ad Title" — Google Sheet is the canonical source (was the Excel
+                # "Ad copy" sheet's "Ad copy name"; see fb_agents Obsidian diary,
+                # 2026-07-28). Independent of `ref` (Excel), which only backs the
+                # creative-file/interest/country lookups below.
+                if ad.copy_name:
+                    copy = lookup_ad_copy_by_title(ad.copy_name)
+                    ad.ad_title = (copy.get("headline") or ad.copy_name or "").strip()
                     ad.ad_body = (copy.get("body") or "").strip()
-                    ad.ad_link_description = (copy.get("link_description") or "").strip()
+                    ad.ad_link_description = (copy.get("description") or "").strip()
 
                 if ad.creative_filename and not preview_mode:
                     try:

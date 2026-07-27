@@ -1882,15 +1882,13 @@ async function dashRefresh(ev) {
                   <div class="cb-sel-dropdown" hidden></div>
                   <input type="hidden" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_creative_file" value="">
                 </div>
-                <span class="cb-label">Copy</span>
-                <div class="cb-sel-wrap">
-                  <input type="text" class="cb-sel-text" placeholder="— search copy —" autocomplete="off" value="">
-                  <div class="cb-sel-dropdown" hidden>
-                    <div class="cb-sel-opt" data-val="">— select —</div>
-                    {% for copy_name in ref_options.ad_copies %}
-                    <div class="cb-sel-opt" data-val="{{ copy_name }}">{{ copy_name }}</div>
-                    {% endfor %}
-                  </div>
+                <span class="cb-label">Ad Title</span>
+                <div class="cb-sel-wrap cb-adtitle-sel-wrap">
+                  <input type="text" class="cb-sel-text cb-adtitle-search"
+                         placeholder="— type to search ad title —"
+                         autocomplete="off" value=""
+                         oninput="cbAdTitleSearch(this)">
+                  <div class="cb-sel-dropdown" hidden></div>
                   <input type="hidden" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_copy" value="">
                 </div>
                 <span class="cb-label">CTA <span style="opacity:0.6">(preview only)</span></span>
@@ -3005,6 +3003,73 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     }
   });
 
+  // ── Ad Title (ad copy/text) — sourced from the "ad texts" Google Sheet
+  // tab (Ad Title / Headline / Body / Description / Asset / Language),
+  // replacing the old Excel "Ad copy" sheet. Same fetch-once-filter-client-
+  // side pattern as CREATIVES above.
+  var AD_TITLES = [];  // [{ad_title, headline, body, description, asset, language}]
+  fetch('/api/ad-copy')
+    .then(function(r){ return r.json(); })
+    .then(function(d){ AD_TITLES = d.rows || []; })
+    .catch(function(){});
+
+  window.cbAdTitleSearch = function(input) {
+    var wrap = input.closest('.cb-adtitle-sel-wrap');
+    if (!wrap) return;
+    var dropdown = wrap.querySelector('.cb-sel-dropdown');
+    var hidden   = wrap.querySelector('input[type="hidden"]');
+    var query    = input.value.trim().toLowerCase();
+
+    var matches = AD_TITLES.filter(function(t) {
+      if (!query) return true;
+      return (t.ad_title || '').toLowerCase().indexOf(query) >= 0
+          || (t.headline || '').toLowerCase().indexOf(query) >= 0;
+    }).slice(0, 60);
+
+    if (!matches.length && !query) {
+      dropdown.hidden = true;
+      return;
+    }
+
+    var html = matches.map(function(t) {
+      var preview = (t.headline || '').slice(0, 60) + ((t.headline || '').length > 60 ? '…' : '');
+      return '<div class="cb-sel-opt" data-val="' + t.ad_title + '" style="font-size:0.72rem">' +
+        t.ad_title +
+        (preview ? '<br><span style="font-size:0.66rem;color:var(--muted)">' + preview + '</span>' : '') +
+        '</div>';
+    }).join('');
+    if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:0.72rem;pointer-events:none">No ad titles found</div>';
+
+    dropdown.innerHTML = html;
+    dropdown.hidden = false;
+
+    dropdown.querySelectorAll('.cb-sel-opt').forEach(function(opt) {
+      opt.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        var val = opt.dataset.val || '';
+        input.value = val;
+        if (hidden) hidden.value = val;
+        dropdown.hidden = true;
+      });
+    });
+  };
+
+  // close ad-title dropdown on blur
+  document.addEventListener('click', function(e) {
+    document.querySelectorAll('.cb-adtitle-sel-wrap .cb-sel-dropdown').forEach(function(d) {
+      if (!d.closest('.cb-adtitle-sel-wrap').contains(e.target)) d.hidden = true;
+    });
+  });
+
+  // Same rationale as the creative-search focusin fix above — a pre-filled
+  // Ad Title box (from Send-to-Builder) should show matches immediately on
+  // click, not require re-typing first.
+  document.addEventListener('focusin', function(e) {
+    if (e.target.classList && e.target.classList.contains('cb-adtitle-search') && e.target.value) {
+      cbAdTitleSearch(e.target);
+    }
+  });
+
   // ── Helpers ──────────────────────────────────────────────────────────
   function todayDDMM() {
     var d = new Date();
@@ -3167,7 +3232,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   function initAllSelects(root) {
     // Skip creative and targeting wrappers — they have their own JS handlers
-    (root || document).querySelectorAll('.cb-sel-wrap:not(.cb-creative-sel-wrap):not(.cb-targeting-wrap)').forEach(initCbSel);
+    (root || document).querySelectorAll('.cb-sel-wrap:not(.cb-creative-sel-wrap):not(.cb-targeting-wrap):not(.cb-adtitle-sel-wrap)').forEach(initCbSel);
   }
 
   // ── Targeting code picker ─────────────────────────────────────────────
@@ -3239,12 +3304,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   // ── Ad row HTML builder ───────────────────────────────────────────────
   function buildAdRowHTML(cIdx, aIdx) {
-    var ref = REF || {ad_copies:[]};
     var pfx = 'camp_' + cIdx + '_ad_' + aIdx + '_';
-    var copiesHtml = '<div class="cb-sel-opt" data-val="">— select —</div>';
-    (ref.ad_copies || []).forEach(function(c) {
-      copiesHtml += '<div class="cb-sel-opt" data-val="' + c + '">' + c + '</div>';
-    });
     return '<div class="cb-ad-row" data-ad-idx="' + aIdx + '">' +
       '<div class="cb-ad-row-header">' +
       '<span class="cb-ad-row-label">Ad ' + (aIdx + 1) + '</span>' +
@@ -3262,10 +3322,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'creative_file" value="">' +
       '</div>' +
-      '<span class="cb-label">Copy</span>' +
-      '<div class="cb-sel-wrap">' +
-      '<input type="text" class="cb-sel-text" placeholder="— search copy —" autocomplete="off" value="">' +
-      '<div class="cb-sel-dropdown" hidden>' + copiesHtml + '</div>' +
+      '<span class="cb-label">Ad Title</span>' +
+      '<div class="cb-sel-wrap cb-adtitle-sel-wrap">' +
+      '<input type="text" class="cb-sel-text cb-adtitle-search" placeholder="— type to search ad title —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'copy" value="">' +
       '</div>' +
       '<span class="cb-label">CTA <span style="opacity:0.6">(preview only)</span></span>' +
@@ -3385,7 +3445,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   function buildBlankSlotHTML(idx) {
-    var ref = REF || {ad_copies:[], targetings:[]};
     return '<div class="cb-slot" data-idx="' + idx + '">' +
       '<div class="cb-slot-header">' +
       '<span class="cb-slot-label">Campaign ' + (idx + 1) + '</span>' +
@@ -3689,15 +3748,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       if (searchInput) searchInput.value = creativeName;
     }
 
-    // Copy is a closed set of named presets (not filenames), so this is
-    // always just a search starting point — never auto-selected — but it
-    // saves retyping the creative name a second time to go find the
-    // matching copy preset, and keeps the ad's identifying text aligned
-    // with its creative like the rest of the pipeline expects.
-    var copyWrap = adRow.querySelector('.cb-sel-wrap:not(.cb-creative-sel-wrap)');
-    if (copyWrap) {
-      var copySearch = copyWrap.querySelector('.cb-sel-text');
-      if (copySearch && !copySearch.value) copySearch.value = creativeName;
+    // Ad Title is a closed set of named presets from the "ad texts" GSheet
+    // (not filenames), so this is always just a search starting point —
+    // never auto-selected — but it saves retyping the creative name a
+    // second time to go find the matching Ad Title preset, and keeps the
+    // ad's identifying text aligned with its creative like the rest of the
+    // pipeline expects.
+    var adTitleWrap = adRow.querySelector('.cb-adtitle-sel-wrap');
+    if (adTitleWrap) {
+      var adTitleSearch = adTitleWrap.querySelector('.cb-sel-text');
+      if (adTitleSearch && !adTitleSearch.value) adTitleSearch.value = creativeName;
     }
 
     return !!match;
