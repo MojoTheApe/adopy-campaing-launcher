@@ -2636,7 +2636,16 @@ def fill_placements(page: Page) -> bool:
         _dump_dbg()
         return False
 
-    pc_box = _find_leaf_text("Placement controls", min_y=placements_y)
+    # Confirmed live 2026-07-27: by the time "Hide settings" appears, the
+    # page has scrolled/reflowed enough that the OLDER "Placements" heading
+    # position is no longer a reliable floor for "Placement controls" (it
+    # can now sit above that stale y, wrongly failing the min_y check).
+    # Re-anchor on "Hide settings" itself, which is guaranteed to render
+    # directly above the now-expanded Devices/Platforms/Placement controls
+    # content.
+    hide_settings_now = _find_leaf_text("Hide settings", exact=False)
+    controls_min_y = hide_settings_now["y"] if hide_settings_now else 0
+    pc_box = _find_leaf_text("Placement controls", min_y=controls_min_y)
     _dbg.append(f"placement_controls_box={pc_box}")
     if not pc_box:
         _dump_dbg()
