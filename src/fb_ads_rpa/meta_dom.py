@@ -2597,6 +2597,17 @@ def fill_placements(page: Page) -> bool:
         return False
 
     def _click_in_placements(text: str, *, exact: bool = True, max_children: int = 0) -> bool:
+        # Confirmed live 2026-07-27: querySelectorAll('*') returns ancestors
+        # BEFORE their own descendants (document order) — a nested chain of
+        # wrappers all sharing the same visible text (e.g. <div><div><a>
+        # text</a></div></div>) means the FIRST match is the outermost
+        # wrapper, not the actual clickable <a>. Calling .click() on that
+        # outer element does not invoke a React onClick handler attached
+        # only to the inner <a> (native click doesn't propagate DOWN to
+        # descendants) — 12 nested "show more settings" matches were found
+        # this way and repeatedly "clicked" without ever expanding
+        # anything. Prefer the deepest (most children-specific, i.e. an
+        # actual leaf-ish <a>/<span>) match instead of the first one found.
         try:
             return bool(
                 page.evaluate(
@@ -2609,6 +2620,12 @@ def fill_placements(page: Page) -> bool:
                         if (e.offsetParent === null || e.children.length > maxChildren) return false;
                         const t = norm(e.textContent);
                         return exact ? t === text : t.toLowerCase().includes(text.toLowerCase());
+                      });
+                      matches.sort((a, b) => {
+                        const aTag = a.tagName === 'A' ? 0 : 1;
+                        const bTag = b.tagName === 'A' ? 0 : 1;
+                        if (aTag !== bTag) return aTag - bTag;
+                        return a.children.length - b.children.length;
                       });
                       for (const el of matches) {
                         const r = el.getBoundingClientRect();
