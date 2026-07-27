@@ -2507,57 +2507,6 @@ def fill_placements(page: Page) -> bool:
         except Exception:
             pass
 
-    def _click_leaf_text(text: str, *, exact: bool = True, min_y: float = 0, max_children: int = 0) -> bool:
-        """Find a leaf-ish element by text and click it, atomically."""
-        try:
-            return bool(
-                page.evaluate(
-                    """
-                    ([text, exact, minY, maxChildren]) => {
-                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                      const all = [...document.querySelectorAll('*')];
-                      const matches = all.filter(e => {
-                        if (e.offsetParent === null || e.children.length > maxChildren) return false;
-                        const t = norm(e.textContent);
-                        return exact ? t === text : t.toLowerCase().includes(text.toLowerCase());
-                      });
-                      for (const el of matches) {
-                        const r = el.getBoundingClientRect();
-                        if (r.width > 0 && r.height > 0 && r.y >= minY) {
-                          el.scrollIntoView({ block: 'center', behavior: 'instant' });
-                          el.click();
-                          return true;
-                        }
-                      }
-                      return false;
-                    }
-                    """,
-                    [text, exact, min_y, max_children],
-                )
-            )
-        except Exception:
-            return False
-
-    def _text_present(text: str, *, exact: bool = True) -> bool:
-        try:
-            return bool(
-                page.evaluate(
-                    """
-                    ([text, exact]) => {
-                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                      return [...document.querySelectorAll('*')].some(e => {
-                        if (e.offsetParent === null) return false;
-                        const t = norm(e.textContent);
-                        return exact ? t === text : t.toLowerCase().includes(text.toLowerCase());
-                      });
-                    }
-                    """,
-                    [text, exact],
-                )
-            )
-        except Exception:
-            return False
-
     def _text_y(text: str, *, exact: bool = True, max_children: int = 0) -> float | None:
         try:
             return page.evaluate(
@@ -2611,20 +2560,99 @@ def fill_placements(page: Page) -> bool:
         _dump_dbg()
         return False
 
-    # Two "Show more settings" links exist (Budget & schedule's, above
-    # Placements, and Placements' own) — the min_y floor (re-measured
-    # fresh each tick, since the page can reflow between ticks) keeps this
-    # scoped to the one at or below the Placements heading.
+    # Confirmed live 2026-07-27: Y-coordinate disambiguation between
+    # Budget & schedule's "Show more settings" and Placements' own kept
+    # breaking — el.scrollIntoView() on click shifts the whole viewport,
+    # which moves the "Placements" heading's own y between ticks, and a
+    # re-measured floor can then wrongly admit/exclude either link
+    # depending on scroll drift. Tag the Placements card's own container
+    # with a marker attribute once, then scope every subsequent search to
+    # its subtree — DOM containment instead of screen-space Y, immune to
+    # scroll/reflow entirely.
+    tagged = page.evaluate(
+        """
+        () => {
+          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          const heading = [...document.querySelectorAll('*')].find(e =>
+            e.children.length === 0 && norm(e.textContent) === 'Placements' && e.offsetParent !== null);
+          if (!heading) return false;
+          let node = heading;
+          for (let i = 0; i < 10 && node; i++) {
+            if (norm(node.textContent).includes('Account controls')) {
+              node.setAttribute('data-rpa-placements-marker', '1');
+              return true;
+            }
+            node = node.parentElement;
+          }
+          return false;
+        }
+        """
+    )
+    _dbg.append(f"tagged_container={tagged}")
+    if not tagged:
+        _dump_dbg()
+        return False
+
+    def _click_in_placements(text: str, *, exact: bool = True, max_children: int = 0) -> bool:
+        try:
+            return bool(
+                page.evaluate(
+                    """
+                    ([text, exact, maxChildren]) => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      const container = document.querySelector('[data-rpa-placements-marker]');
+                      if (!container) return false;
+                      const matches = [...container.querySelectorAll('*')].filter(e => {
+                        if (e.offsetParent === null || e.children.length > maxChildren) return false;
+                        const t = norm(e.textContent);
+                        return exact ? t === text : t.toLowerCase().includes(text.toLowerCase());
+                      });
+                      for (const el of matches) {
+                        const r = el.getBoundingClientRect();
+                        if (r.width > 0 && r.height > 0) {
+                          el.scrollIntoView({ block: 'center', behavior: 'instant' });
+                          el.click();
+                          return true;
+                        }
+                      }
+                      return false;
+                    }
+                    """,
+                    [text, exact, max_children],
+                )
+            )
+        except Exception:
+            return False
+
+    def _present_in_placements(text: str, *, exact: bool = True) -> bool:
+        try:
+            return bool(
+                page.evaluate(
+                    """
+                    ([text, exact]) => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      const container = document.querySelector('[data-rpa-placements-marker]');
+                      if (!container) return false;
+                      return [...container.querySelectorAll('*')].some(e => {
+                        if (e.offsetParent === null) return false;
+                        const t = norm(e.textContent);
+                        return exact ? t === text : t.toLowerCase().includes(text.toLowerCase());
+                      });
+                    }
+                    """,
+                    [text, exact],
+                )
+            )
+        except Exception:
+            return False
+
     expanded = False
     for i in range(10):
-        fresh_y = _text_y("Placements")
-        if fresh_y is not None:
-            placements_y = fresh_y
-        if _text_present("Hide settings", exact=False):
+        if _present_in_placements("Hide settings", exact=False):
             expanded = True
             break
-        clicked = _click_leaf_text("show more settings", exact=False, min_y=placements_y, max_children=2)
-        _dbg.append(f"tick {i}: placements_y={placements_y} show_more_clicked={clicked}")
+        clicked = _click_in_placements("show more settings", exact=False, max_children=2)
+        _dbg.append(f"tick {i}: show_more_clicked={clicked}")
         if clicked:
             time.sleep(0.6)
             continue
@@ -2634,12 +2662,7 @@ def fill_placements(page: Page) -> bool:
         _dump_dbg()
         return False
 
-    # "Placement controls" can end up above the stale Placements y once
-    # settings are expanded (the page reflows) — re-anchor on "Hide
-    # settings" itself, which is guaranteed to render directly above the
-    # newly-expanded Devices/Platforms/Placement controls content.
-    controls_min_y = _text_y("Hide settings", exact=False) or 0
-    pc_clicked = _click_leaf_text("Placement controls", min_y=controls_min_y)
+    pc_clicked = _click_in_placements("Placement controls")
     _dbg.append(f"placement_controls_clicked={pc_clicked}")
     if not pc_clicked:
         _dump_dbg()
