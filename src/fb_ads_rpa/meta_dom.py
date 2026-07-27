@@ -2893,6 +2893,70 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
         if _primary_text_visible():
             return True
         time.sleep(1.0)
+
+    # Diagnostic dump (2026-07-27) — every fallback above has now failed.
+    # Capture enough live DOM/React state to actually root-cause this
+    # instead of guessing at another CSS-level workaround.
+    try:
+        dump = page.evaluate(
+            """
+            () => {
+              const el = document.getElementById('creativeEditorComponent');
+              const dup = document.querySelectorAll('#creativeEditorComponent').length;
+              const primaryLabels = [...document.querySelectorAll('*')]
+                .filter(e => e.textContent.trim() === 'Primary text' && e.children.length === 0);
+              const describe = (node) => {
+                if (!node) return null;
+                const style = getComputedStyle(node);
+                const reactKey = Object.keys(node).find(k => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
+                let fiberInfo = null;
+                if (reactKey) {
+                  const fiber = node[reactKey];
+                  fiberInfo = {
+                    type: fiber.type ? (fiber.type.name || fiber.type.displayName || String(fiber.type)) : null,
+                    key: fiber.key,
+                    memoizedPropsKeys: fiber.memoizedProps ? Object.keys(fiber.memoizedProps) : null,
+                    memoizedStateExists: !!fiber.memoizedState,
+                  };
+                }
+                return {
+                  tag: node.tagName,
+                  id: node.id,
+                  className: node.className,
+                  inlineStyle: node.getAttribute('style'),
+                  computedDisplay: style.display,
+                  computedVisibility: style.visibility,
+                  offsetParent: node.offsetParent !== null,
+                  childCount: node.children.length,
+                  fiberInfo,
+                };
+              };
+              const ancestorChain = [];
+              let cur = el;
+              for (let i = 0; i < 6 && cur; i++) {
+                ancestorChain.push(describe(cur));
+                cur = cur.parentElement;
+              }
+              return {
+                creativeEditorFound: !!el,
+                duplicateCount: dup,
+                ancestorChain,
+                primaryLabelCount: primaryLabels.length,
+                primaryLabelsInfo: primaryLabels.map(describe),
+                url: window.location.href,
+              };
+            }
+            """
+        )
+        with open("output/debug_ad_copy_reveal_dump.json", "w", encoding="utf-8") as f:
+            json.dump(dump, f, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        try:
+            with open("output/debug_ad_copy_reveal_dump.json", "w", encoding="utf-8") as f:
+                f.write(f"dump failed: {exc}")
+        except Exception:
+            pass
+
     return False
 
 
