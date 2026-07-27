@@ -4900,6 +4900,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                     # `[role=listbox]` search, since only one dropdown is
                     # open at a time right after clicking the trigger.
                     container = None
+                    _age_dbg: list[str] = []
                     try:
                         tagged = root.evaluate(
                             """() => {
@@ -4913,15 +4914,17 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                             marked = root.locator("[data-__age-scroll-target]")
                             if marked.count():
                                 container = marked.first
-                    except Exception:
-                        pass
+                    except Exception as tag_exc:
+                        _age_dbg.append(f"tag_exception={tag_exc!r}")
+                    _age_dbg.append(f"target_val={target_val!r} container_found={container is not None}")
                     if container is not None:
                         target_el = container.get_by_text(
                             re.compile(rf"^{re.escape(target_val)}$"), exact=True
                         ).first
                         found_target = bool(target_el.count()) and target_el.is_visible()
+                        _age_dbg.append(f"found_target_before_scroll={found_target}")
                         if not found_target:
-                            for _ in range(20):
+                            for scroll_i in range(20):
                                 try:
                                     root.evaluate(
                                         """() => {
@@ -4937,17 +4940,27 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                                 ).first
                                 if target_el.count() and target_el.is_visible():
                                     found_target = True
+                                    _age_dbg.append(f"found_target_at_scroll_tick={scroll_i}")
                                     break
+                            if not found_target:
+                                _age_dbg.append("found_target_never_after_20_ticks")
                         if found_target:
                             try:
                                 box = target_el.bounding_box(timeout=1500)
+                                _age_dbg.append(f"click_box={box}")
                                 if box and box.get("width", 0) > 0:
                                     _cdp_mouse_click(
                                         page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
                                     )
                                     time.sleep(0.4)
-                            except Exception:
-                                pass
+                                    _age_dbg.append("clicked_target")
+                            except Exception as click_exc:
+                                _age_dbg.append(f"click_exception={click_exc!r}")
+                    try:
+                        with open("output/debug_age_scroll_click.txt", "a", encoding="utf-8") as f:
+                            f.write("\n".join(_age_dbg) + "\n---\n")
+                    except Exception:
+                        pass
                 # Test50 bug (partially fixed, then re-found in Test63):
                 # checking "is target_val visible anywhere on the page" is
                 # NOT sufficient proof of selection — when target_val is
