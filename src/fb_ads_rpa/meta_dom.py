@@ -2832,6 +2832,25 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
     if _primary_text_visible():
         return True
 
+    # Cheap first attempt — confirmed live (2026-07-26) that the hidden
+    # state is a `display: none !important` on `#creativeEditorComponent`
+    # itself (the field elements are fully mounted underneath, just not
+    # painted) — force it visible directly via JS instead of waiting on
+    # Meta's own re-render to happen to fix it. Near-instant; only fall
+    # through to the slower dances below if this container isn't even
+    # in the DOM yet.
+    try:
+        forced = page.evaluate(
+            "() => { const el = document.getElementById('creativeEditorComponent');"
+            " if (!el) return false;"
+            " el.style.setProperty('display', 'block', 'important');"
+            " return true; }"
+        )
+        if forced and _primary_text_visible():
+            return True
+    except Exception:
+        pass
+
     # Retry a few times with waits — confirmed live (2026-07-26) that this
     # can fail on the first attempt right after the upload-complete toast
     # appears, before the placement list has actually rendered/settled;
