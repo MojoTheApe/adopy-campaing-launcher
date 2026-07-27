@@ -4899,109 +4899,56 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                     # the real container this way instead: a global
                     # `[role=listbox]` search, since only one dropdown is
                     # open at a time right after clicking the trigger.
-                    container = None
+                    # FIXED (2026-07-27, confirmed live): the previous
+                    # measure-bounding-box-then-separately-CDP-click pattern
+                    # left a real gap between computing (x, y) and clicking
+                    # it — confirmed via elementFromPoint(x, y) returning
+                    # null right at the computed click point, meaning the
+                    # page had already reflowed/scrolled by the time the
+                    # click fired (the exact same class of bug already
+                    # found and fixed for fill_placements() earlier today).
+                    # Find AND click inside one atomic page.evaluate() call
+                    # instead — a native element.click() on the real text
+                    # node bubbles up to whatever ancestor holds the actual
+                    # option/radio handler, immune to any reflow in between.
                     _age_dbg: list[str] = []
-                    try:
-                        tagged = root.evaluate(
-                            """() => {
-                              const el = document.querySelector('[role=listbox]');
-                              if (!el) return false;
-                              el.setAttribute('data-__age-scroll-target', '1');
-                              return true;
-                            }"""
-                        )
-                        if tagged:
-                            marked = root.locator("[data-__age-scroll-target]")
-                            if marked.count():
-                                container = marked.first
-                    except Exception as tag_exc:
-                        _age_dbg.append(f"tag_exception={tag_exc!r}")
-                    _age_dbg.append(f"target_val={target_val!r} container_found={container is not None}")
-                    if container is not None:
-                        # Confirmed live 2026-07-27: the age-max list opens
-                        # already scrolled near its OWN bottom (65+ is the
-                        # last item), so a target below the default (e.g.
-                        # 45) sits ABOVE the current view — but this loop
-                        # only ever scrolled down (+=), which can never
-                        # reach it (age_min's 30, above the 18 default,
-                        # worked fine scrolling down). Reset to the top of
-                        # the list first so the search direction is always
-                        # the same regardless of which boundary or where
-                        # the default value happens to sit.
-                        try:
-                            root.evaluate(
-                                """() => {
-                                  const node = document.querySelector('[data-__age-scroll-target]');
-                                  if (node) node.scrollTop = 0;
-                                }"""
-                            )
-                            time.sleep(0.15)
-                        except Exception:
-                            pass
-                        target_el = container.get_by_text(
-                            re.compile(rf"^{re.escape(target_val)}$"), exact=True
-                        ).first
-                        found_target = bool(target_el.count()) and target_el.is_visible()
-                        _age_dbg.append(f"found_target_before_scroll={found_target}")
-                        if not found_target:
-                            for scroll_i in range(40):
-                                try:
-                                    root.evaluate(
-                                        """() => {
-                                          const node = document.querySelector('[data-__age-scroll-target]');
-                                          if (node) node.scrollTop += 50;
-                                        }"""
-                                    )
-                                except Exception:
-                                    pass
-                                time.sleep(0.12)
-                                target_el = container.get_by_text(
-                                    re.compile(rf"^{re.escape(target_val)}$"), exact=True
-                                ).first
-                                if target_el.count() and target_el.is_visible():
-                                    found_target = True
-                                    _age_dbg.append(f"found_target_at_scroll_tick={scroll_i}")
-                                    break
-                            if not found_target:
-                                _age_dbg.append("found_target_never_after_40_ticks")
-                        if found_target:
-                            try:
-                                box = target_el.bounding_box(timeout=1500)
-                                _age_dbg.append(f"click_box={box}")
-                                if box and box.get("width", 0) > 0:
-                                    click_x = box["x"] + box["width"] / 2
-                                    click_y = box["y"] + box["height"] / 2
-                                    try:
-                                        at_point = page.evaluate(
-                                            """([x, y]) => {
-                                              const el = document.elementFromPoint(x, y);
-                                              if (!el) return null;
-                                              return { tag: el.tagName, text: (el.textContent||'').trim().slice(0,30),
-                                                role: el.getAttribute('role'), outer: el.outerHTML.slice(0, 300) };
-                                            }""",
-                                            [click_x, click_y],
-                                        )
-                                        _age_dbg.append(f"element_at_click_point={at_point}")
-                                    except Exception:
-                                        pass
-                                    _cdp_mouse_click(page, click_x, click_y)
-                                    time.sleep(0.4)
-                                    _age_dbg.append("clicked_target")
-                                    # Verify the click actually registered by
-                                    # checking the option's own aria-selected/
-                                    # checked state right after — independent
-                                    # of the (possibly stale) trigger position
-                                    # check done later.
-                                    try:
-                                        post_click_state = target_el.evaluate(
-                                            "el => ({ ariaSelected: el.getAttribute('aria-selected'), "
-                                            "checked: el.querySelector('input') ? el.querySelector('input').checked : null })"
-                                        )
-                                        _age_dbg.append(f"post_click_state={post_click_state}")
-                                    except Exception as verify_exc:
-                                        _age_dbg.append(f"post_click_verify_exception={verify_exc!r}")
-                            except Exception as click_exc:
-                                _age_dbg.append(f"click_exception={click_exc!r}")
+                    result = page.evaluate(
+                        """
+                        (targetVal) => {
+                          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                          const listbox = document.querySelector('[role=listbox]');
+                          if (!listbox) return { stage: 'no_listbox' };
+                          listbox.scrollTop = 0;
+                          // Prefer the innermost (fewest-children) match —
+                          // querySelectorAll returns ancestors before their
+                          // own descendants, and a native click() on an
+                          // outer wrapper does not reach a handler attached
+                          // only to an inner element (confirmed the hard
+                          // way for fill_placements() earlier today).
+                          const findTarget = () => {
+                            const matches = [...listbox.querySelectorAll('*')].filter(e =>
+                              e.offsetParent !== null && norm(e.textContent) === targetVal);
+                            if (!matches.length) return null;
+                            matches.sort((a, b) => a.children.length - b.children.length);
+                            return matches[0];
+                          };
+                          let found = findTarget();
+                          let tick = 0;
+                          while (!found && tick < 60) {
+                            listbox.scrollTop += 50;
+                            found = findTarget();
+                            tick++;
+                          }
+                          if (!found) return { stage: 'not_found', tick };
+                          found.scrollIntoView({ block: 'center', behavior: 'instant' });
+                          found.click();
+                          return { stage: 'clicked', tick };
+                        }
+                        """,
+                        target_val,
+                    )
+                    _age_dbg.append(f"target_val={target_val!r} result={result}")
+                    time.sleep(0.4)
                     try:
                         with open("output/debug_age_scroll_click.txt", "a", encoding="utf-8") as f:
                             f.write("\n".join(_age_dbg) + "\n---\n")
