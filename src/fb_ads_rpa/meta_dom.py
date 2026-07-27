@@ -2331,16 +2331,13 @@ def run_recorded_campaign_flow(
             _shot("fail_audience_location")
             soft_fails.append(f"audience_location:{str(exc)[:60]}")
 
-    # Languages — new (2026-07-25), no real data plumbing exists yet
-    # (AdSet/draft has no language field). TODO: wire language_names through
-    # from real campaign data once fill_audience_languages is confirmed
-    # live; for now a hardcoded test value lets this get its first live
-    # exercise ("Spanish" matches country=CR's real primary language) rather
-    # than staying entirely unverified.
-    test_language_names = language_names or (["Spanish"] if country == "CR" else [])
-    if test_language_names:
+    # Languages — wired to the real per-country language from the Upload
+    # FB.xlsx "Countries" sheet (see enrich_draft.py's lookup_country()),
+    # not a hardcoded guess. Confirmed live (2026-07-25) fill_audience_languages
+    # itself works; only the "what value to type" plumbing was missing before.
+    if language_names:
         try:
-            if not fill_audience_languages(page, test_language_names):
+            if not fill_audience_languages(page, language_names):
                 _shot("fail_languages")
                 soft_fails.append("languages")
             else:

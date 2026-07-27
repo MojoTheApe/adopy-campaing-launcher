@@ -2143,6 +2143,7 @@ class AdsManagerFlow:
                 age_min=ad_set.age_min,
                 age_max=ad_set.age_max,
                 targeting_label=ad_set.targeting_label,
+                language_names=[draft.language] if draft.language else None,
                 ad_name=ad.copy_name,
                 creative_type=ad.creative_type,
                 creative_path=ad.creative_path or "",

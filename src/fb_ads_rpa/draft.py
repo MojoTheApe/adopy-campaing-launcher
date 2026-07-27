@@ -65,6 +65,7 @@ class CampaignDraft:
     status: str = "DRAFT"
     link: str = ""
     pixel_id: str = ""
+    language: str = ""
     page_id: str | None = None
     ad_account_id: str | None = None
     ad_sets: list[AdSetDraft] = field(default_factory=list)
@@ -86,6 +87,7 @@ class CampaignDraft:
             "Objective": self.objective,
             "Link": self.link or "—",
             "Pixel": self.pixel_id or "—",
+            "Language": self.language or "—",
             "ad_sets": [a.to_preview_dict() for a in self.ad_sets],
             "errors": self.errors,
             "warnings": self.warnings,

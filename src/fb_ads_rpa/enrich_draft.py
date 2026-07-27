@@ -13,6 +13,7 @@ from src.upload_agent.build_upload_excel import (
     get_account_info,
     load_reference_data,
     lookup_ad_copy,
+    lookup_country,
     lookup_creative_file,
     lookup_interest,
 )
@@ -52,6 +53,31 @@ def _interest_names_from_targeting(ref: dict, targeting_name: str) -> str:
                 if name:
                     names.append(str(name).strip())
     return ", ".join(names) if names else targeting_name
+
+_GCC_ARABIC_COUNTRIES = {"KW", "SA", "AE", "BH", "OM", "QA"}
+_LATAM_SPANISH_COUNTRIES = {
+    "CL", "CO", "EC", "MX", "CR", "PE", "AR", "PY", "SV", "GT", "BO", "DO", "PA", "UY",
+}
+
+
+def _geo_language_for_country(country_code: str) -> str:
+    """Business rule: GCC/Arabic countries -> Arabic, LatAm -> Spanish (all).
+
+    Confirmed with user (2026-07-27): this account only ever runs these two
+    campaign families, so the country code alone reliably determines the
+    ad's audience language — used as the fallback when the Upload FB.xlsx
+    "Countries" sheet doesn't have an explicit language value for that row.
+    """
+    # Pass the base name only — fill_audience_languages() already searches
+    # for a "<name> (all)" suggestion first and falls back to the first
+    # match if there isn't one (confirmed live: Arabic has no such variant).
+    c = (country_code or "").strip().upper()
+    if c in _GCC_ARABIC_COUNTRIES:
+        return "Arabic"
+    if c in _LATAM_SPANISH_COUNTRIES:
+        return "Spanish"
+    return ""
+
 
 _ref_cache: dict | None = None
 _ref_cache_mtime: float = -1.0
@@ -103,6 +129,15 @@ def enrich_campaign_drafts(
         draft.page_id = (entry.page_id if entry else None)
         draft.link = str(account_info.get("link") or "")
         draft.pixel_id = str(account_info.get("pixel") or "")
+        # The GCC/LatAm rule is authoritative for this account's two known
+        # campaign families (confirmed with user 2026-07-27) — checked
+        # first so it can't be silently overridden by unexpected text in
+        # the Upload FB.xlsx "Countries" sheet's language column (that
+        # sheet's format isn't guaranteed to match what fill_audience_
+        # languages() expects to type). Excel is only a fallback for
+        # countries outside those two families.
+        excel_language = str(lookup_country(ref, draft.country).get("language") or "").strip() if ref else ""
+        draft.language = _geo_language_for_country(draft.country) or excel_language
 
         if ref.get("_load_error"):
             draft.warnings.append(f"Upload FB.xlsx not loaded: {ref['_load_error']}")
