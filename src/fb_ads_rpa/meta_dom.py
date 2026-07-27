@@ -3035,10 +3035,11 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
     # focus (see _click_via_cdp docstring above), silently leaving the
     # field empty even though no exception was raised. Don't trust a clean
     # run of insert_text() alone; check the field's real content after.
-    def _dump_locator_miss(what: str) -> None:
-        # Diagnostic (2026-07-27): _reveal_ad_copy_fields() reported success
-        # but Playwright's own role/placeholder locator still didn't match
-        # anything — capture why, instead of silently returning False again.
+    def _dump_stage(what: str, stage: str, extra: dict | None = None) -> None:
+        # Diagnostic (2026-07-27): pin down EXACTLY which stage fails —
+        # locator not found, click/bounding-box failed, or content
+        # verification failed after a clean click+insert — instead of
+        # collapsing all of these into one opaque False.
         try:
             info = page.evaluate(
                 "() => { const el = document.getElementById('creativeEditorComponent');"
@@ -3051,8 +3052,9 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
                 " comboboxCount: document.querySelectorAll('[role=combobox]').length,"
                 " placeholderFieldCount: document.querySelectorAll('[placeholder]').length }; }"
             )
+            record = {"field": what, "stage": stage, **info, **(extra or {})}
             with open("output/debug_ad_copy_locator_miss.json", "a", encoding="utf-8") as f:
-                f.write(json.dumps({"field": what, **info}, ensure_ascii=False) + "\n")
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
         except Exception:
             pass
 
@@ -3062,30 +3064,40 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
             primary_box = page.get_by_role(
                 "combobox", name="Tell people what your ad is about"
             ).first
-            if primary_box.count():
+            count = primary_box.count()
+            if count:
                 if _click_via_cdp(primary_box):
                     page.keyboard.insert_text(ad_body)
                     time.sleep(0.4)
                     body_ok = _locator_has_content(primary_box)
+                    if not body_ok:
+                        _dump_stage("primary_text", "content_check_failed_after_insert", {"count": count})
+                else:
+                    _dump_stage("primary_text", "click_via_cdp_failed", {"count": count})
             else:
-                _dump_locator_miss("primary_text")
-        except Exception:
-            pass
+                _dump_stage("primary_text", "locator_count_zero", {"count": count})
+        except Exception as exc:
+            _dump_stage("primary_text", f"exception:{str(exc)[:80]}")
 
     title_ok = not ad_title
     if ad_title:
         try:
             headline_box = page.get_by_placeholder("Write a short headline").first
-            if headline_box.count():
+            count = headline_box.count()
+            if count:
                 if _click_via_cdp(headline_box):
                     page.keyboard.press("Control+A")
                     page.keyboard.insert_text(ad_title)
                     time.sleep(0.4)
                     title_ok = _locator_has_content(headline_box)
+                    if not title_ok:
+                        _dump_stage("headline", "content_check_failed_after_insert", {"count": count})
+                else:
+                    _dump_stage("headline", "click_via_cdp_failed", {"count": count})
             else:
-                _dump_locator_miss("headline")
-        except Exception:
-            pass
+                _dump_stage("headline", "locator_count_zero", {"count": count})
+        except Exception as exc:
+            _dump_stage("headline", f"exception:{str(exc)[:80]}")
 
     return body_ok and title_ok
 
