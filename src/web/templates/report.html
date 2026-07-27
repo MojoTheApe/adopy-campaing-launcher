@@ -2986,6 +2986,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
   });
 
+  // Clicking into a creative search box that's already pre-filled (e.g. by
+  // Send-to-Builder, when no confident match was found) should immediately
+  // show matching results, not require re-typing first — cbCreativeSearch()
+  // otherwise only ever fires on oninput. focusin bubbles (plain focus
+  // doesn't), so this works via delegation for dynamically-added ad rows too.
+  document.addEventListener('focusin', function(e) {
+    if (e.target.classList && e.target.classList.contains('cb-creative-search') && e.target.value) {
+      cbCreativeSearch(e.target);
+    }
+  });
+
   // ── Helpers ──────────────────────────────────────────────────────────
   function todayDDMM() {
     var d = new Date();
@@ -3541,6 +3552,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var m = String(age == null ? '' : age).match(/\d+/);
     return m ? m[0] : '35';
   }
+  // "Ad Title" values are frequently "<creative> - <ad copy/segment title>"
+  // (confirmed on real data: ~half of all Ad Title values follow this
+  // pattern, e.g. "Image 134.jpg - ES Invest Like a pro Amazon"). Only the
+  // left-hand side actually identifies the creative file — matching against
+  // the full string (including the copy title) misses real files. Falls
+  // back to the whole text unchanged when there's no " - " separator.
+  function creativeNamePart(text) {
+    var s = (text || '');
+    var i = s.indexOf(' - ');
+    return i >= 0 ? s.slice(0, i).trim() : s.trim();
+  }
   function guessCreativeType(text) {
     // Split on non-alphanumeric like the Python creative-skip-prefix check does
     // (an underscore counts as a "word" char to \b, so a plain regex misses
@@ -3567,11 +3589,22 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   function findCreativeMatch(text) {
     var q = (text || '').trim().toLowerCase();
     if (!q) return null;
+    // stem found inside q at a real boundary — not just anywhere. Without
+    // this, a short numeric-ish stem like "image 1" (from "image 1.png")
+    // matches INSIDE "image 134.jpg" too, since "134" starts with "1" —
+    // confirmed live. Require the character right after the match to be
+    // absent or non-digit, so "image 1" only matches up to a real word break.
+    function stemFoundAtBoundary(q, stem) {
+      var pos = q.indexOf(stem);
+      if (pos < 0) return false;
+      var nextChar = q.charAt(pos + stem.length);
+      return !nextChar || !/[0-9]/.test(nextChar);
+    }
     function search(pool) {
       return pool.find(function(f) {
         var stem = f.filename.toLowerCase().replace(/\.[a-z0-9]+$/, '');
         if (stem.length < CREATIVE_MATCH_MIN_LEN) return false;
-        return f.filename.toLowerCase().indexOf(q) >= 0 || q.indexOf(stem) >= 0;
+        return f.filename.toLowerCase().indexOf(q) >= 0 || stemFoundAtBoundary(q, stem);
       });
     }
     var hitImage = search(CREATIVES.filter(function(f) { return f.type === 'Image'; }));
@@ -3631,8 +3664,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   function applyAdRowFields(adRow, slot, prefill) {
     var idx = slot.dataset.idx;
     var aIdx = adRow.dataset.adIdx;
-    var match = findCreativeMatch(prefill.creativeHint);
-    var ctype = match ? match.type : guessCreativeType(prefill.creativeHint);
+    var creativeName = creativeNamePart(prefill.creativeHint);
+    var match = findCreativeMatch(creativeName);
+    var ctype = match ? match.type : guessCreativeType(creativeName);
     var typeRadio = adRow.querySelector('[name="camp_' + idx + '_ad_' + aIdx + '_creative_type"][value="' + ctype + '"]');
     if (typeRadio) { typeRadio.checked = true; cbAdTypeChange(typeRadio); }
     var creativeWrap = adRow.querySelector('.cb-creative-sel-wrap');
@@ -3641,7 +3675,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       setSelWrap(creativeWrap, creativeVal, creativeVal);
     } else if (creativeWrap) {
       var searchInput = creativeWrap.querySelector('.cb-creative-search');
-      if (searchInput) searchInput.value = prefill.creativeHint || '';
+      // Pre-fill with just the creative-name part (not the whole "creative -
+      // title" string) so clicking into the field (see the focusin listener
+      // below) immediately searches on the right thing.
+      if (searchInput) searchInput.value = creativeName;
     }
     return !!match;
   }

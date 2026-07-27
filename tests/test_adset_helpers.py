@@ -38,6 +38,33 @@ def test_resolve_interest_alias_empty_text():
     assert result["raw"] == ""
 
 
+def test_resolve_interest_alias_compound_pipe_resolves_both_parts():
+    # "Day" and "SM" are both real KB keys (Day Trading / Stock Market) —
+    # a bare single-key lookup of "Day|SM" always failed before, since
+    # compound AND-groups are never modeled as their own KB entries.
+    result = resolve_interest_alias("Day|SM")
+    assert result["matched"] is True
+    assert result["code"] == "Day|SM"
+
+
+def test_resolve_interest_alias_compound_slash_same_as_pipe():
+    # `/` is a third separator seen in real ad set names, equivalent to `|`.
+    result = resolve_interest_alias("Day/SM")
+    assert result["matched"] is True
+    assert result["code"] == "Day|SM"
+
+
+def test_resolve_interest_alias_compound_backslash_same_as_pipe():
+    result = resolve_interest_alias("Day\\SM")
+    assert result["matched"] is True
+    assert result["code"] == "Day|SM"
+
+
+def test_resolve_interest_alias_compound_fails_if_any_part_unresolved():
+    result = resolve_interest_alias("Day|nonexistent_xyz")
+    assert result["matched"] is False
+
+
 def test_parse_adset_for_builder_resolves_alias_from_full_name():
     # Format: CountryCode_OfferName_Device_Creative_Interest_Age[_Date]
     # "video" (bare media-type token, no numeric suffix) is stripped as

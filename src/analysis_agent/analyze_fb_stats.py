@@ -54,18 +54,18 @@ _MEDIA_TYPE_TOKENS = frozenset(
 
 
 def _normalize_targeting_sep(s: str) -> str:
-    """Normalize AND-group separators: both `\\` and `|` mean the same; display as `|`."""
-    return s.replace("\\", "|")
+    """Normalize AND-group separators: `\\`, `/` and `|` all mean the same; display as `|`."""
+    return s.replace("\\", "|").replace("/", "|")
 
 
 def _is_compound_targeting_token(token: str) -> bool:
-    """`|` or `\\` marks two interests in one campaign (define further / narrow further)."""
-    return "|" in token or "\\" in token
+    """`|`, `\\` or `/` marks two+ interests in one campaign (define further / narrow further)."""
+    return "|" in token or "\\" in token or "/" in token
 
 
 def _is_creative_skip_token(token: str, creative_prefixes: list) -> bool:
     """Return True when an adset token is creative/media, not targeting."""
-    if _is_compound_targeting_token(token) or "/" in token:
+    if _is_compound_targeting_token(token):
         return False
 
     p_lower = token.lower()
