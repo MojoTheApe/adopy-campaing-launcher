@@ -700,6 +700,18 @@
       margin: 0.3rem 0 0.4rem;
     }
     .cb-field-needs-review { outline: 1.5px solid var(--bad); outline-offset: 1px; border-radius: 3px; }
+    .cb-cart-bar {
+      position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 9998;
+      background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 8px;
+      padding: 0.6rem 0.8rem; box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+      display: flex; align-items: center; gap: 0.65rem; font-size: 0.8rem;
+    }
+    .cb-cart-count { color: var(--text); font-weight: 600; white-space: nowrap; }
+    .cb-cart-bar button {
+      font-family: inherit; font-size: 0.76rem; font-weight: 600; border-radius: 5px; cursor: pointer; padding: 0.35rem 0.75rem;
+      background: var(--accent); border: none; color: #fff;
+    }
+    .cb-cart-bar button:hover { background: #1d4ed8; }
     .cb-send-modal-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,0.72);
       z-index: 9999; display: flex; align-items: center; justify-content: center;
@@ -3067,7 +3079,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     // Update visible name display
     var nameDisplay = slot.querySelector('[data-name-display]');
     if (nameDisplay) nameDisplay.textContent = name;
-    checkAutoBuiltReview(slot);
+    refreshReviewMarkers(slot);
   };
 
   // ── Searchable select ─────────────────────────────────────────────────
@@ -3545,20 +3557,31 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // Only auto-match now when the shared substring is long enough to be a
   // real signal; anything shorter is left blank for manual review instead
   // of guessing wrong.
+  // Searches BOTH Image and Video pools rather than committing to one pool
+  // up front from a keyword guess — a prior version guessed the type first
+  // (guessCreativeType) and searched only that pool, so a real video file
+  // was never found whenever the combo/ad text didn't happen to contain a
+  // "vid"-prefixed token. Returns {file, type} from whichever pool actually
+  // matched (the keyword guess only breaks a tie if, rarely, both match).
   var CREATIVE_MATCH_MIN_LEN = 6;
-  function findCreativeMatch(text, ctype) {
+  function findCreativeMatch(text) {
     var q = (text || '').trim().toLowerCase();
     if (!q) return null;
-    var isVideo = ctype === 'Video';
-    var pool = CREATIVES.filter(function(f) {
-      return isVideo ? f.type === 'Video' : f.type === 'Image';
-    });
-    var hit = pool.find(function(f) {
-      var stem = f.filename.toLowerCase().replace(/\.[a-z0-9]+$/, '');
-      if (stem.length < CREATIVE_MATCH_MIN_LEN) return false;
-      return f.filename.toLowerCase().indexOf(q) >= 0 || q.indexOf(stem) >= 0;
-    });
-    return hit || null;
+    function search(pool) {
+      return pool.find(function(f) {
+        var stem = f.filename.toLowerCase().replace(/\.[a-z0-9]+$/, '');
+        if (stem.length < CREATIVE_MATCH_MIN_LEN) return false;
+        return f.filename.toLowerCase().indexOf(q) >= 0 || q.indexOf(stem) >= 0;
+      });
+    }
+    var hitImage = search(CREATIVES.filter(function(f) { return f.type === 'Image'; }));
+    var hitVideo = search(CREATIVES.filter(function(f) { return f.type === 'Video'; }));
+    if (hitImage && hitVideo) {
+      return guessCreativeType(text) === 'Video' ? { file: hitVideo, type: 'Video' } : { file: hitImage, type: 'Image' };
+    }
+    if (hitVideo) return { file: hitVideo, type: 'Video' };
+    if (hitImage) return { file: hitImage, type: 'Image' };
+    return null;
   }
 
   function setSlotField(slot, idx, suffix, value) {
@@ -3601,57 +3624,59 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   // Per-ad-row fields — creative type + best-effort file match. `adRow` must
   // already exist (created via the initial blank slot or a prior cbAddAd()).
-  // Returns true if a creative file was confidently matched.
+  // Returns true if a creative file was confidently matched. When nothing
+  // matches, the original hint text is left in the search box (instead of
+  // a blank field with no clue) so it's immediately visible what to search
+  // for manually.
   function applyAdRowFields(adRow, slot, prefill) {
     var idx = slot.dataset.idx;
     var aIdx = adRow.dataset.adIdx;
-    var ctype = guessCreativeType(prefill.creativeHint);
+    var match = findCreativeMatch(prefill.creativeHint);
+    var ctype = match ? match.type : guessCreativeType(prefill.creativeHint);
     var typeRadio = adRow.querySelector('[name="camp_' + idx + '_ad_' + aIdx + '_creative_type"][value="' + ctype + '"]');
     if (typeRadio) { typeRadio.checked = true; cbAdTypeChange(typeRadio); }
-    var match = findCreativeMatch(prefill.creativeHint, ctype);
+    var creativeWrap = adRow.querySelector('.cb-creative-sel-wrap');
     if (match) {
-      var creativeWrap = adRow.querySelector('.cb-creative-sel-wrap');
-      var creativeVal = match.rel_path || match.filename;
+      var creativeVal = match.file.rel_path || match.file.filename;
       setSelWrap(creativeWrap, creativeVal, creativeVal);
+    } else if (creativeWrap) {
+      var searchInput = creativeWrap.querySelector('.cb-creative-search');
+      if (searchInput) searchInput.value = prefill.creativeHint || '';
     }
     return !!match;
   }
 
   // ── Auto-built review marker ───────────────────────────────────────────
   // Slots created via Send-to-Builder that couldn't confidently resolve
-  // targeting and/or the first ad's creative get a badge + red field
-  // outlines. Cleared automatically once both are filled in (manually or
-  // otherwise) — checked from cbUpdateName(), which already fires on every
+  // targeting and/or a creative get a badge + red field outlines. Re-derived
+  // from current DOM state every time (not cached booleans) so it stays
+  // correct as ads get added to an active campaign (see ACTIVE_CAMPAIGN
+  // below) — checked from cbUpdateName(), which already fires on every
   // relevant field change (targeting pick, creative pick, OS/age/asset edit).
-  function markNeedsReview(slot, targetingOk, creativeOk) {
-    if (targetingOk && creativeOk) return;
-    slot.dataset.autoBuilt = '1';
-    if (!targetingOk) {
-      var tgtWrap = slot.querySelector('.cb-targeting-wrap');
-      if (tgtWrap) tgtWrap.classList.add('cb-field-needs-review');
-    }
-    if (!creativeOk) {
-      var creativeWrap = slot.querySelector('.cb-ad-row[data-ad-idx="0"] .cb-creative-sel-wrap');
-      if (creativeWrap) creativeWrap.classList.add('cb-field-needs-review');
-    }
-    var header = slot.querySelector('.cb-slot-header');
-    if (header && !slot.querySelector('.cb-autobuilt-badge')) {
-      header.insertAdjacentHTML('afterend', '<div class="cb-autobuilt-badge">⚡ Auto-built — review before publish</div>');
-    }
-  }
-
-  function checkAutoBuiltReview(slot) {
+  // Only slots flagged data-auto-built="1" (i.e. created via Send-to-Builder)
+  // are checked at all — manually-added blank slots are never flagged.
+  function refreshReviewMarkers(slot) {
     if (slot.dataset.autoBuilt !== '1') return;
     var tgtWrap = slot.querySelector('.cb-targeting-wrap');
     var targetingOk = !!(tgtWrap && tgtWrap.querySelector('.cb-targeting-hidden') || {}).value;
-    var creativeWrap = slot.querySelector('.cb-ad-row[data-ad-idx="0"] .cb-creative-sel-wrap');
-    var creativeOk = !!(creativeWrap && creativeWrap.querySelector('input[type="hidden"]') || {}).value;
-    if (!targetingOk || !creativeOk) return;
-    slot.dataset.autoBuilt = '0';
-    if (tgtWrap) tgtWrap.classList.remove('cb-field-needs-review');
-    if (creativeWrap) creativeWrap.classList.remove('cb-field-needs-review');
+    if (tgtWrap) tgtWrap.classList.toggle('cb-field-needs-review', !targetingOk);
+
+    var creativeOk = true;
+    slot.querySelectorAll('.cb-ad-row').forEach(function(adRow) {
+      var wrap = adRow.querySelector('.cb-creative-sel-wrap');
+      var ok = !!(wrap && wrap.querySelector('input[type="hidden"]') || {}).value;
+      if (wrap) wrap.classList.toggle('cb-field-needs-review', !ok);
+      if (!ok) creativeOk = false;
+    });
+
     var badge = slot.querySelector('.cb-autobuilt-badge');
-    if (badge) badge.remove();
+    if (targetingOk && creativeOk) {
+      slot.dataset.autoBuilt = '0';
+      if (badge) badge.remove();
+    } else if (!badge) {
+      var header = slot.querySelector('.cb-slot-header');
+      if (header) header.insertAdjacentHTML('afterend', '<div class="cb-autobuilt-badge">⚡ Auto-built — review before publish</div>');
+    }
   }
 
   function closeSendModal() {
@@ -3682,6 +3707,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var countryName = btn.dataset.countryName || country;
     var payload = {};
     try { payload = JSON.parse(btn.dataset.payload || '{}'); } catch (e) {}
+
+    // A campaign is already open for adding more ads — as long as it's the
+    // same country, skip the popup entirely and append straight to it.
+    if (ACTIVE_CAMPAIGN && ACTIVE_CAMPAIGN.country === country) {
+      addAdToActiveCampaign(source, payload, btn);
+      return;
+    }
 
     closeSendModal();
     var overlay = document.createElement('div');
@@ -3842,13 +3874,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // needed, Build handles it end-to-end. ─────────────────────────────────
   function placeCampaignInRow(row, prefill) {
     var form = row.querySelector('form.open-account-form');
-    if (!form) return;
+    if (!form) return null;
     var slot = addSlotAtTop(form);
+    slot.dataset.autoBuilt = '1';
 
-    var targetingOk = applyCampaignFields(slot, prefill);
+    applyCampaignFields(slot, prefill);
     var adRow = slot.querySelector('.cb-ad-row[data-ad-idx="0"]');
-    var creativeOk = adRow ? applyAdRowFields(adRow, slot, prefill) : false;
-    markNeedsReview(slot, targetingOk, creativeOk);
+    if (adRow) applyAdRowFields(adRow, slot, prefill);
     cbUpdateName(slot);
 
     closeSendModal();
@@ -3859,6 +3891,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       if (chev) chev.textContent = '▾';
     }
     row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return slot;
   }
 
   function findAccountRow(country, accountLabel) {
@@ -3866,10 +3899,61 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return panel ? panel.querySelector('.cb-acc-row[data-acc-label="' + CSS.escape(accountLabel) + '"]') : null;
   }
 
+  // ── Active campaign: click more ads to add them to the same campaign ──
+  // After the first Build, the new slot becomes "active" — subsequent
+  // "+ Builder" clicks skip the popup entirely and add straight to it as a
+  // new ad row, until you press Done (or start a build for a different
+  // country, which isn't allowed while one campaign is mid-build anyway).
+  var ACTIVE_CAMPAIGN = null; // { slot, form, accountLabel, country }
+
+  function renderActiveCampaignBar() {
+    var bar = document.getElementById('cb-active-campaign-bar');
+    if (!ACTIVE_CAMPAIGN) { if (bar) bar.remove(); return; }
+    var adCount = ACTIVE_CAMPAIGN.slot.querySelectorAll('.cb-ad-row').length;
+    var name = (ACTIVE_CAMPAIGN.slot.querySelector('[data-name-display]') || {}).textContent || ACTIVE_CAMPAIGN.accountLabel;
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'cb-active-campaign-bar';
+      bar.className = 'cb-cart-bar';
+      document.body.appendChild(bar);
+    }
+    bar.innerHTML = '<span class="cb-cart-count">Adding to: <strong>' + escHtml(name) + '</strong> (' + adCount + ' ad' + (adCount === 1 ? '' : 's') + ')</span>'
+      + '<button type="button" id="cb-active-campaign-done">Done</button>';
+    bar.querySelector('#cb-active-campaign-done').onclick = clearActiveCampaign;
+  }
+
+  function setActiveCampaign(slot, form, accountLabel, country) {
+    ACTIVE_CAMPAIGN = { slot: slot, form: form, accountLabel: accountLabel, country: country };
+    renderActiveCampaignBar();
+  }
+
+  function clearActiveCampaign() {
+    ACTIVE_CAMPAIGN = null;
+    renderActiveCampaignBar();
+  }
+
+  // Add one more ad straight into the active campaign's slot — no popup,
+  // no account picker (already decided), just resolve + append + flash.
+  function addAdToActiveCampaign(source, payload, sourceBtn) {
+    resolveItemPrefill(source, payload).then(function(prefill) {
+      if (!ACTIVE_CAMPAIGN) return; // Done was pressed while this was resolving
+      var slot = ACTIVE_CAMPAIGN.slot;
+      cbAddAd(slot.querySelector('.cb-add-btn-sm'));
+      var rows = slot.querySelectorAll('.cb-ad-row');
+      var newAdRow = rows[rows.length - 1];
+      applyAdRowFields(newAdRow, slot, prefill);
+      cbUpdateName(slot);
+      renderActiveCampaignBar();
+      flashSent(sourceBtn);
+    });
+  }
+
   function buildCampaign(prefill, accountLabel, country, countryName, sourceBtn) {
     var row = findAccountRow(country, accountLabel);
     if (row) {
-      placeCampaignInRow(row, prefill);
+      var slot = placeCampaignInRow(row, prefill);
+      var form = row.querySelector('form.open-account-form');
+      if (slot) setActiveCampaign(slot, form, accountLabel, country);
       flashSent(sourceBtn);
       return;
     }
@@ -3896,7 +3980,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     setTimeout(function() {
       var row = findAccountRow(pending.country, pending.accountLabel);
       if (row) {
-        placeCampaignInRow(row, pending.prefill);
+        var slot = placeCampaignInRow(row, pending.prefill);
+        var form = row.querySelector('form.open-account-form');
+        if (slot) setActiveCampaign(slot, form, pending.accountLabel, pending.country);
       } else {
         alert('Account "' + pending.accountLabel + '" still not found after refresh — check config/ad_account_map.csv and that it has performance data for ' + pending.countryName + '.');
       }
