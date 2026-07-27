@@ -690,6 +690,14 @@
     .cb-send-btn.cb-send-selected {
       background: var(--good); border-color: var(--good); color: #fff;
     }
+    /* Whole-card accent for a pre-built (Send-to-Builder) slot that still
+       needs review — not just the small badge line, the entire slot border/
+       background shifts so it's obvious at a glance in a long slot list. */
+    .cb-slot[data-auto-built="1"] {
+      border: 1.5px solid var(--warn);
+      background: color-mix(in srgb, var(--warn) 6%, var(--bg-elev));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 35%, transparent), var(--shadow-sm);
+    }
     .cb-autobuilt-badge {
       display: inline-flex; align-items: center; gap: 0.3rem;
       background: color-mix(in srgb, var(--warn) 15%, transparent);
@@ -3680,6 +3688,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       // below) immediately searches on the right thing.
       if (searchInput) searchInput.value = creativeName;
     }
+
+    // Copy is a closed set of named presets (not filenames), so this is
+    // always just a search starting point — never auto-selected — but it
+    // saves retyping the creative name a second time to go find the
+    // matching copy preset, and keeps the ad's identifying text aligned
+    // with its creative like the rest of the pipeline expects.
+    var copyWrap = adRow.querySelector('.cb-sel-wrap:not(.cb-creative-sel-wrap)');
+    if (copyWrap) {
+      var copySearch = copyWrap.querySelector('.cb-sel-text');
+      if (copySearch && !copySearch.value) copySearch.value = creativeName;
+    }
+
     return !!match;
   }
 
