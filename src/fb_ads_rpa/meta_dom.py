@@ -2466,24 +2466,47 @@ def fill_placements(page: Page) -> bool:
     """Set manual Placement controls to the account's real target
     configuration instead of leaving Advantage+ automatic placements on.
 
-    Confirmed live 2026-07-26 via the user's own screenshot of the desired
-    final checkbox state (their manual reference setup). Unlike almost
-    everywhere else in this file, these are real `<input type=checkbox>` +
-    `<label>` pairs — plain get_by_label()/check()/uncheck() works
-    reliably here, no span-pseudo-input workarounds needed. Real category
-    container ids confirmed live: ads_placement_expandable_list_item_
-    {feed,story,stream,search,external}.
+    Confirmed live 2026-07-27 by walking the real flow end-to-end with the
+    user watching: the "Advantage+ on" pill next to the Placements heading
+    is a pure status badge (no role/onclick/tabindex on any ancestor up to
+    8 levels) — it is NOT the control that reveals manual placements, and
+    clicking it is a no-op. The actual sequence is:
+      1. Click the "Show more settings" link under Placements (a real <a>
+         tag — the old code's substring/child-count text search matched
+         ambiguous nodes and often missed it).
+      2. Click the "Placement controls" summary label that appears once
+         settings are expanded — this DOES work as a direct click (the old
+         code already tried this; it just never got called reliably
+         because step 1 was broken). It reveals a 5-category checkbox tree:
+         Feeds / Stories, Status, Reels / In-stream ads for reels /
+         Search results / Apps and sites.
+      3. Uncheck the Search results and Apps and sites category checkboxes
+         directly (no need to expand them).
+      4. Expand Feeds / Stories, Status, Reels / In-stream ads for reels
+         (each has its own "Expand" button, id=
+         ads_placement_expandable_list_item_{feed,story,stream}) and set
+         each sub-item checkbox to the target account configuration.
+      5. Uncheck "Allow limited spending to excluded placements" (shown
+         below the checkbox tree once anything is excluded).
+
+    Sub-item checkboxes are NOT wrapped in a `<label>` (confirmed live via
+    DOM inspection — only the category-level checkboxes are), so
+    get_by_label() does not reliably find them. Locate each by its own
+    exact leaf text node, then walk up a few ancestors to find the nearest
+    input[type=checkbox] — the same pattern already used successfully
+    elsewhere in this file for label-less pseudo-inputs.
     """
-    # Same class of bug fixed everywhere else in this file: text like
-    # "Placements"/"Show more settings"/"Placement controls" matches more
-    # than one DOM node (hidden duplicate render), so Playwright's own
-    # get_by_text(...).first + auto-scroll can click a hidden copy instead
-    # of the one actually on screen — confirmed live 2026-07-26 (two
-    # attempts using plain locators both silently failed to expand). Find
-    # the genuinely visible node via JS (offsetParent check) and click its
-    # real screen coordinates through the existing CDP-click helper
-    # instead.
-    def _find_visible_text(text: str, *, exact: bool = True, min_y: float = 0) -> dict | None:
+    _dbg: list[str] = []
+
+    def _dump_dbg() -> None:
+        try:
+            Path("output/debug_placements_fill.txt").write_text(
+                "\n".join(_dbg), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
+    def _find_leaf_text(text: str, *, exact: bool = True, min_y: float = 0) -> dict | None:
         try:
             return page.evaluate(
                 """
@@ -2491,7 +2514,7 @@ def fill_placements(page: Page) -> bool:
                   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
                   const all = [...document.querySelectorAll('*')];
                   const matches = all.filter(e => {
-                    if (e.offsetParent === null || e.children.length > 1) return false;
+                    if (e.offsetParent === null || e.children.length !== 0) return false;
                     const t = norm(e.textContent);
                     return exact ? t === text : t.includes(text);
                   });
@@ -2510,79 +2533,101 @@ def fill_placements(page: Page) -> bool:
         except Exception:
             return None
 
-    def _click_visible_text(text: str, *, exact: bool = True, min_y: float = 0) -> bool:
-        box = _find_visible_text(text, exact=exact, min_y=min_y)
-        if not box:
-            return False
-        time.sleep(0.3)
-        _cdp_mouse_click(page, box["x"], box["y"])
-        return True
-
-    # Two different "Show more settings" links exist on this page (one
-    # under Budget & schedule, one under Placements — Meta reuses the same
-    # generic label) — confirmed live 2026-07-26 that grabbing the wrong
-    # (Budget & schedule's, hidden off-screen at this scroll position) one
-    # silently no-ops. Anchor by the "Placements" heading's own y position
-    # and only accept a "Show more settings" match below it. Also poll
-    # for a few seconds — right after scrolling to a freshly-revealed
-    # section, its own "Show more settings" node can take a moment to
-    # mount into the DOM.
-    _dbg: list[str] = []
-
-    def _dump_dbg() -> None:
+    def _find_anchor_containing(text: str, min_y: float = 0) -> dict | None:
         try:
-            Path("output/debug_placements_fill.txt").write_text(
-                "\n".join(_dbg), encoding="utf-8"
+            return page.evaluate(
+                """
+                ([text, min_y]) => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const links = [...document.querySelectorAll('a')].filter(a =>
+                    a.offsetParent !== null && norm(a.textContent).toLowerCase().includes(text.toLowerCase()));
+                  for (const a of links) {
+                    const r = a.getBoundingClientRect();
+                    if (r.y >= min_y) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                  }
+                  return null;
+                }
+                """,
+                [text, min_y],
             )
         except Exception:
-            pass
+            return None
 
-    placements_box = _find_visible_text("Placements")
+    placements_box = _find_leaf_text("Placements")
     _dbg.append(f"placements_box={placements_box}")
     if not placements_box:
         _dump_dbg()
         return False
-    _cdp_mouse_click(page, placements_box["x"], placements_box["y"])
-    time.sleep(0.5)
-
     placements_y = placements_box["y"]
+
     expanded = False
     for i in range(10):
-        hide_box = _find_visible_text("Hide settings", min_y=placements_y)
+        hide_box = _find_leaf_text("Hide settings", exact=False, min_y=placements_y)
         _dbg.append(f"tick {i}: hide_settings={hide_box}")
         if hide_box:
             expanded = True
             break
-        show_box = _find_visible_text("Show more settings", exact=False, min_y=placements_y)
-        _dbg.append(f"tick {i}: show_more_box={show_box}")
+        show_box = _find_anchor_containing("show more settings", min_y=placements_y)
+        _dbg.append(f"tick {i}: show_more_anchor={show_box}")
         if show_box:
             time.sleep(0.3)
-            _cdp_mouse_click(page, show_box["x"], show_box["y"])
-            time.sleep(0.5)
-            hide_box2 = _find_visible_text("Hide settings", min_y=placements_y)
-            _dbg.append(f"tick {i}: hide_settings_after_click={hide_box2}")
-            if hide_box2:
-                expanded = True
-                break
+            _mouse_click_chain(page, show_box["x"], show_box["y"])
+            time.sleep(0.6)
+            continue
         time.sleep(0.4)
     _dbg.append(f"expanded={expanded}")
     if not expanded:
         _dump_dbg()
         return False
 
-    pc_box = _find_visible_text("Placement controls", min_y=placements_y)
+    pc_box = _find_leaf_text("Placement controls", min_y=placements_y)
     _dbg.append(f"placement_controls_box={pc_box}")
     if not pc_box:
         _dump_dbg()
         return False
     time.sleep(0.3)
-    _cdp_mouse_click(page, pc_box["x"], pc_box["y"])
-    time.sleep(0.6)
+    _mouse_click_chain(page, pc_box["x"], pc_box["y"])
+    time.sleep(0.8)
     _dump_dbg()
 
-    # Expand the three categories with individual items to touch — Search
-    # results/Apps and sites stay collapsed since only their single
-    # category-level checkbox needs to go off.
+    ok = True
+
+    def _category_checkbox(container_id: str) -> tuple[bool, dict] | None:
+        try:
+            info = page.evaluate(
+                """
+                (id) => {
+                  const el = document.getElementById(id);
+                  const cb = el ? el.querySelector('input[type=checkbox]') : null;
+                  if (!cb) return null;
+                  const r = cb.getBoundingClientRect();
+                  return { checked: cb.checked, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                }
+                """,
+                container_id,
+            )
+        except Exception:
+            return None
+        if not info:
+            return None
+        return info["checked"], {"x": info["x"], "y": info["y"]}
+
+    def _uncheck_category(container_id: str) -> None:
+        nonlocal ok
+        result = _category_checkbox(container_id)
+        if result is None:
+            ok = False
+            return
+        checked, box = result
+        if checked:
+            _mouse_click_chain(page, box["x"], box["y"])
+            time.sleep(0.4)
+
+    # Search results / Apps and sites: whole category off — uncheck the
+    # single category-level checkbox directly, no need to expand.
+    _uncheck_category("ads_placement_expandable_list_item_search")
+    _uncheck_category("ads_placement_expandable_list_item_external")
+
     for expand_id in (
         "ads_placement_expandable_list_item_feed",
         "ads_placement_expandable_list_item_story",
@@ -2590,26 +2635,55 @@ def fill_placements(page: Page) -> bool:
     ):
         try:
             page.locator(f"#{expand_id}").get_by_role("button", name="Expand").first.click(timeout=2000)
-            time.sleep(0.3)
+            time.sleep(0.4)
         except Exception:
             pass
 
-    ok = True
+    def _sub_item_checkbox(label: str) -> tuple[bool, dict] | None:
+        try:
+            info = page.evaluate(
+                """
+                (label) => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const rows = [...document.querySelectorAll('*')].filter(e =>
+                    e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
+                  for (const row of rows) {
+                    let container = row.parentElement;
+                    for (let i = 0; i < 4 && container; i++) {
+                      const cb = container.querySelector('input[type=checkbox]');
+                      if (cb) {
+                        const r = cb.getBoundingClientRect();
+                        return { checked: cb.checked, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                      }
+                      container = container.parentElement;
+                    }
+                  }
+                  return null;
+                }
+                """,
+                label,
+            )
+        except Exception:
+            return None
+        if not info:
+            return None
+        return info["checked"], {"x": info["x"], "y": info["y"]}
 
     def _set(label: str, want_checked: bool) -> None:
         nonlocal ok
-        try:
-            cb = page.get_by_label(label, exact=True).first
-            if not cb.count():
-                ok = False
-                return
-            if want_checked and not cb.is_checked():
-                cb.check(timeout=2500)
-            elif not want_checked and cb.is_checked():
-                cb.uncheck(timeout=2500)
-            time.sleep(0.2)
-        except Exception:
+        # Re-queried fresh on every call — confirmed live 2026-07-27 that
+        # unchecking one sub-item can reflow rows below it (a category's
+        # description text can grow/shrink), so a coordinate captured
+        # before an earlier click can silently land on the wrong row by
+        # the time this one runs.
+        result = _sub_item_checkbox(label)
+        if result is None:
             ok = False
+            return
+        checked, box = result
+        if checked != want_checked:
+            _mouse_click_chain(page, box["x"], box["y"])
+            time.sleep(0.4)
 
     for label in (
         "Facebook Feed",
@@ -2637,19 +2711,36 @@ def fill_placements(page: Page) -> bool:
     ):
         _set(label, False)
 
-    # Search results / Apps and sites: whole category off — uncheck the
-    # single category-level checkbox directly, no need to expand.
-    for container_id in (
-        "ads_placement_expandable_list_item_search",
-        "ads_placement_expandable_list_item_external",
-    ):
-        try:
-            cb = page.locator(f"#{container_id}").locator("input[type=checkbox]").first
-            if cb.count() and cb.is_checked():
-                cb.uncheck(timeout=2500)
-                time.sleep(0.2)
-        except Exception:
-            ok = False
+    # "Allow limited spending to excluded placements" appears once any
+    # placement above is excluded — confirmed live 2026-07-27 it defaults
+    # to checked; the account's real config wants it off.
+    try:
+        info = page.evaluate(
+            """
+            () => {
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              const row = [...document.querySelectorAll('*')].find(e =>
+                norm(e.textContent).startsWith('Allow limited spending to excluded placements')
+                && e.offsetParent !== null);
+              if (!row) return null;
+              let container = row;
+              for (let i = 0; i < 6 && container; i++) {
+                const cb = container.querySelector('input[type=checkbox]');
+                if (cb) {
+                  const r = cb.getBoundingClientRect();
+                  return { checked: cb.checked, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                }
+                container = container.parentElement;
+              }
+              return null;
+            }
+            """
+        )
+        if info and info["checked"]:
+            _mouse_click_chain(page, info["x"], info["y"])
+            time.sleep(0.3)
+    except Exception:
+        pass
 
     return ok
 
