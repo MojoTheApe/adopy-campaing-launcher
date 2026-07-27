@@ -2993,44 +2993,47 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
     if not _reveal_ad_copy_fields(page):
         return False
 
-    def _click_via_cdp(locator) -> bool:
-        # Confirmed live (2026-07-26): Playwright's own .click() can report
-        # success under connect_over_cdp without the page actually receiving
-        # focus (microsoft/playwright#41286 — dropped/reordered mouse
-        # events). insert_text() then silently goes nowhere (or Ctrl+A
-        # selects the whole document instead of the field). Use the raw CDP
-        # click helper (same fix already applied elsewhere in this file)
-        # instead of locator.click().
+    def _click_via_cdp_handle(locator):
+        # Uses the raw CDP mouse-event click (_mouse_click_chain), not
+        # locator.click() — confirmed live (2026-07-26): Playwright's own
+        # click can report success under connect_over_cdp without the page
+        # actually receiving focus (microsoft/playwright#41286), silently
+        # leaving insert_text() with nowhere to go.
         #
-        # Also confirmed live: Playwright's own scroll_into_view_if_needed()
-        # is an async/smooth scroll — bounding_box() read right after can be
-        # stale by hundreds of px (same race already fixed elsewhere in this
-        # file for other elements). Force an instant JS scroll on the actual
-        # element first and settle before reading the box.
+        # Confirmed live (2026-07-27): with multiple ad-copy text variation
+        # slots on the page ("Primary text (1 of 5)", "Add text option"),
+        # several role=combobox elements can share the SAME accessible name
+        # — re-resolving a bare Locator's `.first` after the click (for the
+        # content check) is not guaranteed to hit the same DOM node if
+        # anything reflows/reorders in between, even though the click itself
+        # visibly filled the right one (confirmed live via screenshot: real
+        # text was present, but the re-resolved check still saw an empty
+        # slot). Pin one concrete ElementHandle up front and use it for
+        # both the click and the later verification — no re-resolution.
         try:
-            locator.evaluate(
-                "el => el.scrollIntoView({block: 'center', behavior: 'instant'})"
-            )
+            handle = locator.element_handle(timeout=3000)
+        except Exception:
+            return None
+        if handle is None:
+            return None
+        try:
+            handle.evaluate("el => el.scrollIntoView({block: 'center', behavior: 'instant'})")
         except Exception:
             pass
         time.sleep(0.3)
-        box = locator.bounding_box()
+        try:
+            box = handle.bounding_box()
+        except Exception:
+            box = None
         if not box:
-            return False
+            return None
         _mouse_click_chain(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
         time.sleep(0.3)
-        return True
+        return handle
 
-    def _locator_has_content(locator) -> bool:
-        # Confirmed live (2026-07-26): when the "Set up your creative" modal
-        # is still open, there can be a SECOND matching element sitting
-        # behind it on the main page (same aria-label/placeholder, still
-        # counted visible by offsetParent even though obscured by the
-        # modal) — re-querying the whole document with a fresh selector can
-        # silently grab that other (empty) one instead of the one actually
-        # filled. Check the SAME element handle we just clicked instead.
+    def _handle_has_content(handle) -> bool:
         try:
-            return bool(locator.evaluate(
+            return bool(handle.evaluate(
                 "el => (el.value !== undefined ? el.value : el.textContent || '').trim().length > 0"
             ))
         except Exception:
@@ -3072,10 +3075,11 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
             ).first
             count = primary_box.count()
             if count:
-                if _click_via_cdp(primary_box):
+                handle = _click_via_cdp_handle(primary_box)
+                if handle is not None:
                     page.keyboard.insert_text(ad_body)
                     time.sleep(0.4)
-                    body_ok = _locator_has_content(primary_box)
+                    body_ok = _handle_has_content(handle)
                     if not body_ok:
                         _dump_stage("primary_text", "content_check_failed_after_insert", {"count": count})
                 else:
@@ -3091,11 +3095,12 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
             headline_box = page.get_by_placeholder("Write a short headline").first
             count = headline_box.count()
             if count:
-                if _click_via_cdp(headline_box):
+                handle = _click_via_cdp_handle(headline_box)
+                if handle is not None:
                     page.keyboard.press("Control+A")
                     page.keyboard.insert_text(ad_title)
                     time.sleep(0.4)
-                    title_ok = _locator_has_content(headline_box)
+                    title_ok = _handle_has_content(handle)
                     if not title_ok:
                         _dump_stage("headline", "content_check_failed_after_insert", {"count": count})
                 else:
