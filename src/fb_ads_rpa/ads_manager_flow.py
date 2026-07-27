@@ -2150,6 +2150,7 @@ class AdsManagerFlow:
                 ad_title=ad.ad_title,
                 ad_body=ad.ad_body,
                 destination_url=draft.link,
+                os_val=ad_set.os,
             )
             result.steps_completed.append("recorded_flow:reached_ad" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step

@@ -1936,6 +1936,7 @@ def run_recorded_campaign_flow(
     ad_title: str = "",
     ad_body: str = "",
     destination_url: str = "",
+    os_val: str = "All",
 ) -> str:
     """Create -> Website -> ... -> Ad level, using the exact locators from a
     verified human Playwright codegen recording (2026-07-21) instead of the
@@ -2377,6 +2378,21 @@ def run_recorded_campaign_flow(
     except Exception as exc:
         _shot("fail_placements")
         soft_fails.append(f"placements:{str(exc)[:60]}")
+
+    # Devices and operating systems: lives inside the same Placements /
+    # Account controls panel just expanded above (confirmed live
+    # 2026-07-28), not a separate Audience field. "All" is Meta's default
+    # (no-op); only "iOS" needs an explicit switch.
+    if (os_val or "All").strip().lower() == "ios":
+        try:
+            if not select_devices_ios_only(page):
+                _shot("fail_devices_ios")
+                soft_fails.append("devices_ios")
+            else:
+                _shot("after_devices_ios")
+        except Exception as exc:
+            _shot("fail_devices_ios")
+            soft_fails.append(f"devices_ios:{str(exc)[:60]}")
 
     if soft_fails:
         try:
@@ -2829,6 +2845,102 @@ def fill_placements(page: Page) -> bool:
         pass
 
     return ok
+
+
+def select_devices_ios_only(page: Page) -> bool:
+    """Set 'Devices and operating systems' (inside the same Placements /
+    Account controls panel fill_placements() expands — not a separate
+    section) to 'iOS devices only'.
+
+    Confirmed live 2026-07-28. Two things that look like the same bug class
+    fixed elsewhere in this file turned out to have a different cause here:
+      - The "Devices and operating systems" heading toggle IS a real
+        ancestor of a [role=button][aria-expanded] div, ~10 levels up from
+        the leaf text — a plain ancestor walk works for opening it.
+      - But for the "All mobile devices" trigger below it, walking UP from
+        the leaf text node to find a [role=button] ancestor fails, because
+        querySelectorAll('*') returns that DIV[role=button] itself (2
+        children: two <span>s, one holding the label text, one empty)
+        BEFORE its own leaf descendants in document order. A naive
+        `find()` on exact-text-match therefore returns that wrapper's
+        outer non-interactive parent, and walking further UP from there
+        never reaches the button (it's a sibling/descendant, not an
+        ancestor). Fix: select `[role=button]` elements directly and
+        match on text, no ancestor walk needed.
+    """
+    expanded = page.evaluate(
+        """() => {
+          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          const already = [...document.querySelectorAll('[role=button]')].some(e =>
+            e.offsetParent !== null && /^(All mobile devices|iOS devices only|Android devices only)$/.test(norm(e.textContent)));
+          if (already) return true;
+          const heading = [...document.querySelectorAll('*')].find(e =>
+            e.offsetParent !== null && norm(e.textContent) === 'Devices and operating systems' && e.children.length === 0);
+          if (!heading) return false;
+          let cur = heading;
+          for (let i = 0; i < 16 && cur; i++) {
+            if (cur.getAttribute('role') === 'button' && cur.hasAttribute('aria-expanded')) {
+              cur.scrollIntoView({block: 'center', behavior: 'instant'});
+              cur.click();
+              return true;
+            }
+            cur = cur.parentElement;
+          }
+          return false;
+        }"""
+    )
+    if not expanded:
+        return False
+
+    for _ in range(15):
+        present = page.evaluate(
+            """() => [...document.querySelectorAll('[role=button]')].some(e =>
+              e.offsetParent !== null && (e.textContent || '').trim() === 'All mobile devices')"""
+        )
+        if present:
+            break
+        time.sleep(0.2)
+    else:
+        return False
+
+    clicked = page.evaluate(
+        """() => {
+          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          const el = [...document.querySelectorAll('[role=button]')].find(e =>
+            e.offsetParent !== null && norm(e.textContent) === 'All mobile devices');
+          if (!el) return false;
+          el.scrollIntoView({block: 'center', behavior: 'instant'});
+          el.click();
+          return true;
+        }"""
+    )
+    if not clicked:
+        return False
+    time.sleep(0.5)
+
+    picked = page.evaluate(
+        """() => {
+          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          const listbox = document.querySelector('[role=listbox]');
+          const scope = listbox || document;
+          const el = [...scope.querySelectorAll('[role=menuitemradio], [role=radio], [role=option]')].find(e =>
+            e.offsetParent !== null && norm(e.textContent) === 'iOS devices only');
+          if (!el) return false;
+          el.scrollIntoView({block: 'center', behavior: 'instant'});
+          el.click();
+          return true;
+        }"""
+    )
+    if not picked:
+        return False
+    time.sleep(0.5)
+
+    return bool(
+        page.evaluate(
+            """() => [...document.querySelectorAll('[role=button]')].some(e =>
+              e.offsetParent !== null && (e.textContent || '').trim() === 'iOS devices only')"""
+        )
+    )
 
 
 def upload_ad_creative(
@@ -5063,6 +5175,32 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                 boundary_results.append(False)
                 continue
         if len(boundary_results) == 2 and all(boundary_results):
+            # "Use as a suggestion" appears right below the Age boundaries
+            # once both are set to non-default values — confirmed live
+            # 2026-07-27 it's checked by default ("We'll also reach people
+            # beyond your age range..."). The account's real config wants
+            # this off (a hard age boundary, not a soft suggestion).
+            try:
+                page.evaluate(
+                    """() => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      const row = [...document.querySelectorAll('*')].find(e =>
+                        norm(e.textContent).startsWith('Use as a suggestion') && e.offsetParent !== null);
+                      if (!row) return;
+                      let container = row;
+                      for (let i = 0; i < 6 && container; i++) {
+                        const cb = container.querySelector('input[type=checkbox]');
+                        if (cb) {
+                          if (cb.checked) cb.click();
+                          return;
+                        }
+                        container = container.parentElement;
+                      }
+                    }"""
+                )
+                time.sleep(0.3)
+            except Exception:
+                pass
             return True
 
     # Diagnostic (2026-07-25, DQ204 Test37): a fail screenshot showed real
