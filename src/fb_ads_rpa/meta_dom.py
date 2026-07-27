@@ -4918,13 +4918,33 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                         _age_dbg.append(f"tag_exception={tag_exc!r}")
                     _age_dbg.append(f"target_val={target_val!r} container_found={container is not None}")
                     if container is not None:
+                        # Confirmed live 2026-07-27: the age-max list opens
+                        # already scrolled near its OWN bottom (65+ is the
+                        # last item), so a target below the default (e.g.
+                        # 45) sits ABOVE the current view — but this loop
+                        # only ever scrolled down (+=), which can never
+                        # reach it (age_min's 30, above the 18 default,
+                        # worked fine scrolling down). Reset to the top of
+                        # the list first so the search direction is always
+                        # the same regardless of which boundary or where
+                        # the default value happens to sit.
+                        try:
+                            root.evaluate(
+                                """() => {
+                                  const node = document.querySelector('[data-__age-scroll-target]');
+                                  if (node) node.scrollTop = 0;
+                                }"""
+                            )
+                            time.sleep(0.15)
+                        except Exception:
+                            pass
                         target_el = container.get_by_text(
                             re.compile(rf"^{re.escape(target_val)}$"), exact=True
                         ).first
                         found_target = bool(target_el.count()) and target_el.is_visible()
                         _age_dbg.append(f"found_target_before_scroll={found_target}")
                         if not found_target:
-                            for scroll_i in range(20):
+                            for scroll_i in range(40):
                                 try:
                                     root.evaluate(
                                         """() => {
@@ -4943,7 +4963,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                                     _age_dbg.append(f"found_target_at_scroll_tick={scroll_i}")
                                     break
                             if not found_target:
-                                _age_dbg.append("found_target_never_after_20_ticks")
+                                _age_dbg.append("found_target_never_after_40_ticks")
                         if found_target:
                             try:
                                 box = target_el.bounding_box(timeout=1500)
