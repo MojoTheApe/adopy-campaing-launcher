@@ -3269,7 +3269,11 @@ def upload_ad_creative(
             page.get_by_text("Uploading", exact=False).first.wait_for(state="hidden", timeout=40000)
         except Exception:
             pass
-    time.sleep(1.0)
+    # Trimmed from 1.0s (2026-07-28): this runs only after the positive
+    # "upload is complete" signal already fired above, unlike most other
+    # sleeps in this file which were added to cover a specific documented
+    # race — this one is plain padding on top of an already-confirmed state.
+    time.sleep(0.4)
 
     # Still inside the Media step (Upload button still present)? Select the
     # uploaded thumbnail by filename and advance via the MODAL's own Next —
@@ -3715,7 +3719,47 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     except Exception:
         return False
 
-    return True
+    # Confirmed live (2026-07-28): the same async-save-race class as the
+    # campaign name/budget fields — Meta's debounced autosave can silently
+    # revert the ad's Destination back to Instant Form/Lead Gen minutes
+    # later with no exception raised anywhere, surfacing only much later as
+    # a real validation error ("Param call_to_action[value][lead_gen_form_id]
+    # must be a valid Lead Gen Data id"). Give the debounced autosave a
+    # moment to actually start, wait for "Verifying your edits..." to
+    # clear, then read the URL field back before trusting it — retrying the
+    # None+URL selection if it didn't stick.
+    time.sleep(0.6)
+    wait_editor_saved(page)
+
+    def _url_matches() -> bool:
+        try:
+            box = page.get_by_placeholder("http://www.example.com/page").first
+            if not box.count():
+                return False
+            return box.input_value(timeout=2000).strip() == destination_url.strip()
+        except Exception:
+            return False
+
+    if not _url_matches():
+        for _ in range(2):
+            try:
+                retry_none = page.get_by_text("None", exact=True).first
+                if retry_none.count():
+                    retry_none.scroll_into_view_if_needed(timeout=3000)
+                    retry_none.click(timeout=3000)
+                    time.sleep(0.6)
+                retry_box = page.get_by_placeholder("http://www.example.com/page").first
+                if retry_box.count():
+                    retry_box.click(timeout=3000)
+                    page.keyboard.insert_text(destination_url)
+                    time.sleep(0.6)
+                wait_editor_saved(page)
+            except Exception:
+                pass
+            if _url_matches():
+                break
+
+    return _url_matches()
 
 
 _WIZARD_CLOSE_GUARD_JS = """
