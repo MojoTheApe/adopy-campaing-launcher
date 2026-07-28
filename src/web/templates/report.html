@@ -795,6 +795,21 @@
     }
     .cb-ad-row:hover .cb-remove-ad-btn { opacity: 1; }
     .cb-remove-ad-btn:hover { color: var(--bad); border-color: var(--bad); opacity: 1; }
+    .cb-duplicate-ad-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      width: 1.2rem; height: 1.2rem;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      line-height: 1;
+      padding: 0;
+      font-family: inherit;
+      opacity: 0.5;
+    }
+    .cb-ad-row:hover .cb-duplicate-ad-btn { opacity: 1; }
+    .cb-duplicate-ad-btn:hover { color: var(--accent); border-color: var(--accent); opacity: 1; }
     .cb-ad-fields {
       display: grid;
       grid-template-columns: 7rem 1fr;
@@ -1865,6 +1880,7 @@ async function dashRefresh(ev) {
             <div class="cb-ad-row" data-ad-idx="{{ loop.index0 }}">
               <div class="cb-ad-row-header">
                 <span class="cb-ad-row-label">Ad {{ loop.index }}</span>
+                <button type="button" class="cb-duplicate-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate ad">⧉</button>
                 <button type="button" class="cb-remove-ad-btn" onclick="cbRemoveAd(this)" title="Remove ad">×</button>
               </div>
               <div class="cb-ad-fields">
@@ -3308,6 +3324,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return '<div class="cb-ad-row" data-ad-idx="' + aIdx + '">' +
       '<div class="cb-ad-row-header">' +
       '<span class="cb-ad-row-label">Ad ' + (aIdx + 1) + '</span>' +
+      '<button type="button" class="cb-duplicate-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate ad">⧉</button>' +
       '<button type="button" class="cb-remove-ad-btn" onclick="cbRemoveAd(this)" title="Remove ad">×</button>' +
       '</div>' +
       '<div class="cb-ad-fields">' +
@@ -3357,6 +3374,54 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var rows = slot.querySelectorAll('.cb-ad-row');
     if (rows.length <= 1) return; // keep at least 1
     row.remove();
+    cbRenumberAds(slot);
+    cbUpdateAdCount(slot);
+    cbUpdateAdLabels(slot);
+  };
+
+  // Clone an existing ad row's values (type/creative/ad title/CTA) into a new
+  // row right after it, so the user only has to tweak the one field that
+  // differs instead of re-filling everything from scratch.
+  window.cbDuplicateAd = function(btn) {
+    var row = btn.closest('.cb-ad-row');
+    var slot = btn.closest('.cb-slot');
+    if (!row || !slot) return;
+    var cIdx = slot.dataset.idx;
+    var aIdx = slot.querySelectorAll('.cb-ad-row').length;
+    row.insertAdjacentHTML('afterend', buildAdRowHTML(cIdx, aIdx));
+    var newRow = row.nextElementSibling;
+    if (newRow) {
+      var srcType = row.querySelector('input[name$="_creative_type"]:checked');
+      if (srcType) {
+        var newType = newRow.querySelector('input[name$="_creative_type"][value="' + srcType.value + '"]');
+        if (newType) newType.checked = true;
+      }
+      var srcCreative = row.querySelector('.cb-creative-sel-wrap');
+      var newCreative = newRow.querySelector('.cb-creative-sel-wrap');
+      if (srcCreative && newCreative) {
+        newCreative.dataset.ctype = srcCreative.dataset.ctype;
+        var csSrc = srcCreative.querySelector('.cb-creative-search');
+        var csNew = newCreative.querySelector('.cb-creative-search');
+        if (csSrc && csNew) csNew.value = csSrc.value;
+        var chSrc = srcCreative.querySelector('input[type=hidden]');
+        var chNew = newCreative.querySelector('input[type=hidden]');
+        if (chSrc && chNew) chNew.value = chSrc.value;
+      }
+      var srcTitle = row.querySelector('.cb-adtitle-sel-wrap');
+      var newTitle = newRow.querySelector('.cb-adtitle-sel-wrap');
+      if (srcTitle && newTitle) {
+        var tsSrc = srcTitle.querySelector('.cb-adtitle-search');
+        var tsNew = newTitle.querySelector('.cb-adtitle-search');
+        if (tsSrc && tsNew) tsNew.value = tsSrc.value;
+        var thSrc = srcTitle.querySelector('input[type=hidden]');
+        var thNew = newTitle.querySelector('input[type=hidden]');
+        if (thSrc && thNew) thNew.value = thSrc.value;
+      }
+      var srcCta = row.querySelector('.cb-cta-select');
+      var newCta = newRow.querySelector('.cb-cta-select');
+      if (srcCta && newCta) newCta.value = srcCta.value;
+      initAllSelects(newRow);
+    }
     cbRenumberAds(slot);
     cbUpdateAdCount(slot);
     cbUpdateAdLabels(slot);

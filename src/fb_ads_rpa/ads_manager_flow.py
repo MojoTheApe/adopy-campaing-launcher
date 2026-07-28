@@ -8,7 +8,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-RPA_FLOW_VERSION = "v36"
+RPA_FLOW_VERSION = "v37"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
@@ -2132,7 +2132,6 @@ class AdsManagerFlow:
         from src.fb_ads_rpa.config import get_use_llm_agent, get_use_recipe_player, get_use_recorded_flow
 
         if get_use_recorded_flow():
-            self._goto_campaigns(draft, result)
             ad = ad_set.ads[0]
             additional_ads = [
                 {
@@ -2144,25 +2143,62 @@ class AdsManagerFlow:
                 }
                 for extra in ad_set.ads[1:]
             ]
-            fail_step = run_recorded_campaign_flow(
-                self.page,
-                campaign_name=draft.name,
-                budget=str(ad_set.daily_budget or ""),
-                adset_name=ad_set.name,
-                country=draft.country,
-                age_min=ad_set.age_min,
-                age_max=ad_set.age_max,
-                targeting_label=ad_set.targeting_label,
-                language_names=[draft.language] if draft.language else None,
-                ad_name=ad.copy_name,
-                creative_type=ad.creative_type,
-                creative_path=ad.creative_path or "",
-                ad_title=ad.ad_title,
-                ad_body=ad.ad_body,
-                destination_url=draft.link,
-                os_val=ad_set.os,
-                additional_ads=additional_ads,
-            )
+
+            # These are all pre-audience "setup" steps (campaign objective,
+            # name, budget, ad set name, conversion location) — confirmed
+            # live 2026-07-28 that a transient hiccup on any one of them
+            # (proxy/timing, not a real code bug: the very next campaign in
+            # the same dashboard job sailed through the identical step
+            # seconds later) is fixed 100% of the time by simply retrying
+            # the whole campaign fresh from the campaigns list, exactly
+            # what the user was doing by hand from the dashboard. Once past
+            # this point the flow is in the soft-fail Audience/Ad-level
+            # zone, which already tolerates individual field failures
+            # without needing a whole-campaign retry.
+            _EARLY_SETUP_STEPS = {
+                "create",
+                "objective_leads",
+                "objective_continue",
+                "campaign_name",
+                "daily_budget",
+                "next_to_adset",
+                "adset_name",
+                "conversion_location_open",
+                "conversion_website",
+                "conversion_website_verify",
+                "further_limit_reach",
+                "further_limit_reach_radio",
+                "further_limit_reach_continue",
+            }
+            max_attempts = 3
+            fail_step = ""
+            for attempt in range(1, max_attempts + 1):
+                self._goto_campaigns(draft, result)
+                fail_step = run_recorded_campaign_flow(
+                    self.page,
+                    campaign_name=draft.name,
+                    budget=str(ad_set.daily_budget or ""),
+                    adset_name=ad_set.name,
+                    country=draft.country,
+                    age_min=ad_set.age_min,
+                    age_max=ad_set.age_max,
+                    targeting_label=ad_set.targeting_label,
+                    language_names=[draft.language] if draft.language else None,
+                    ad_name=ad.copy_name,
+                    creative_type=ad.creative_type,
+                    creative_path=ad.creative_path or "",
+                    ad_title=ad.ad_title,
+                    ad_body=ad.ad_body,
+                    destination_url=draft.link,
+                    os_val=ad_set.os,
+                    additional_ads=additional_ads,
+                )
+                if not fail_step or fail_step not in _EARLY_SETUP_STEPS:
+                    break
+                result.steps_completed.append(f"recorded_flow_retry:{fail_step}:attempt{attempt}")
+                if attempt < max_attempts:
+                    time.sleep(1.5)
+
             result.steps_completed.append("recorded_flow:reached_ad" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step
             if fail_step:
