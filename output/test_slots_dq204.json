@@ -1,6 +1,6 @@
 [
   {
-    "name": "CR_AIT_DQ204_Test136_RetryCheck_35",
+    "name": "CR_AIT_DQ204_Test137_NameFixA_35",
     "targeting": "Day",
     "os": "All",
     "age": "35",
@@ -8,5 +8,15 @@
     "creative_type": "Video",
     "creative_file": "2046_2.mp4",
     "copy": "ES Ai Trader Text6"
+  },
+  {
+    "name": "CR_AIT_DQ204_Test137_NameFixB_35",
+    "targeting": "Day",
+    "os": "All",
+    "age": "35",
+    "budget": "50",
+    "creative_type": "Video",
+    "creative_file": "2046_2.mp4",
+    "copy": "ES Ai Trader Text 5"
   }
 ]

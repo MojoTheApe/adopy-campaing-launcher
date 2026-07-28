@@ -2077,6 +2077,15 @@ def run_recorded_campaign_flow(
     if not _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name):
         _shot("fail_campaign_name")
         return "campaign_name"
+    # Confirmed live 2026-07-28: _fill() returning True only means the type
+    # succeeded, not that Meta's async autosave actually persisted it — a
+    # campaign was seen to silently revert to the default "New Leads
+    # Campaign" / $25 budget many steps later, with no exception anywhere
+    # along the way. Give the debounced autosave a moment to actually
+    # start, then wait for "Verifying your edits..." to clear before
+    # trusting the value and moving on.
+    time.sleep(0.6)
+    wait_editor_saved(page)
     _shot("after_campaign_name")
 
     try:
@@ -2094,7 +2103,23 @@ def run_recorded_campaign_flow(
     if not budget_ok:
         _shot("fail_daily_budget")
         return "daily_budget"
+    time.sleep(0.6)
+    wait_editor_saved(page)
     _shot("after_campaign_fields")
+
+    # Verify both fields actually still hold what we just typed before
+    # clicking Next — cheaper than discovering a silent revert several
+    # minutes and many screenshots later.
+    try:
+        name_now = page.get_by_placeholder("Enter your campaign name here").input_value(timeout=2000)
+    except Exception:
+        name_now = None
+    if name_now is not None and name_now.strip() != campaign_name.strip():
+        for _ in range(3):
+            if _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name):
+                time.sleep(0.6)
+                wait_editor_saved(page)
+                break
 
     if not _click(page.get_by_role("button", name="Next")):
         _shot("fail_next_to_adset")
