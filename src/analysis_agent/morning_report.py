@@ -9,6 +9,7 @@ The result is a plain dict — no external rendering dependencies.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -1441,7 +1442,18 @@ def _assemble_open_campaign(
     quality = _check_quality(primary, bench)
     offer_part = _offer_abbr(offer, country_name=country_name)
     device_part = str(device_raw).capitalize()
-    age_part = f"_{age_raw}" if not _is_nan_val(age_raw) else ""
+    # Single source of truth for age — the campaign name and the "age" field
+    # returned below must always agree. Source data sometimes has an
+    # open-ended notation like "35+" — confirmed live 2026-07-28 that this
+    # silently breaks the dashboard's <input type="number"> (invalid values
+    # are dropped, so the field renders empty) while the campaign name
+    # displayed alongside it looked fine only because of an unrelated JS
+    # fallback reading the now-empty input back to "35". Strip to digits
+    # only so both the name and the number input get a value that's
+    # actually valid, instead of "fixing" it by accident on the client.
+    age_digits = re.sub(r"[^0-9]", "", str(age_raw)) if not _is_nan_val(age_raw) else ""
+    age_value = age_digits or "35"
+    age_part = f"_{age_value}"
 
     argument = f"{total_dep} dep"
     if is_running:
@@ -1464,7 +1476,7 @@ def _assemble_open_campaign(
         "strategy_label": OPEN_STRATEGY_LABELS[strategy_type],
         "campaign_name": campaign_name,
         "device": str(device_raw),
-        "age": str(age_raw) if not _is_nan_val(age_raw) else "35",
+        "age": age_value,
         "targeting": interest,
         "offer": offer,
         "category": primary.get("category", "Strong"),
