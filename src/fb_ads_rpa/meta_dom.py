@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from playwright.sync_api import Frame, Page
+
+from src.fb_ads_rpa import run_telemetry as _telemetry
+from src.fb_ads_rpa.config import get_reuse_library_media
+
 PageLike = Page | Frame
 
 
@@ -2010,7 +2014,27 @@ def run_recorded_campaign_flow(
                 time.sleep(0.6)
         return False
 
-    def _shot(label: str) -> None:
+    # Telemetry rides along with the screenshots. Every step in this flow
+    # already calls _shot("after_<step>") or _shot("fail_<step>"), so this
+    # single choke point yields a complete, machine-readable record of the
+    # run — per-step outcome AND duration — with no separate instrumentation
+    # to keep in sync as steps change. Until now the same information had to
+    # be reconstructed by hand from screenshot filenames.
+    run_id = _telemetry.new_run_id()
+    _shot_clock = {"t": time.time()}
+
+    def _shot(label: str, diag: dict | None = None) -> None:
+        now = time.time()
+        step, ok = _telemetry.normalise_step(label)
+        _telemetry.record(
+            step,
+            ok,
+            run_id=run_id,
+            campaign=campaign_name,
+            duration_s=now - _shot_clock["t"],
+            diag=diag,
+        )
+        _shot_clock["t"] = now
         try:
             from src.fb_ads_rpa.screenshots import capture as _capture
 
@@ -2084,7 +2108,6 @@ def run_recorded_campaign_flow(
     # along the way. Give the debounced autosave a moment to actually
     # start, then wait for "Verifying your edits..." to clear before
     # trusting the value and moving on.
-    time.sleep(0.6)
     wait_editor_saved(page)
     _shot("after_campaign_name")
 
@@ -2103,7 +2126,6 @@ def run_recorded_campaign_flow(
     if not budget_ok:
         _shot("fail_daily_budget")
         return "daily_budget"
-    time.sleep(0.6)
     wait_editor_saved(page)
     _shot("after_campaign_fields")
 
@@ -2117,7 +2139,6 @@ def run_recorded_campaign_flow(
     if name_now is not None and name_now.strip() != campaign_name.strip():
         for _ in range(3):
             if _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name):
-                time.sleep(0.6)
                 wait_editor_saved(page)
                 break
 
@@ -2441,14 +2462,22 @@ def run_recorded_campaign_flow(
         try:
             if not _click(page.get_by_role("button", name="Next")):
                 _shot("fail_next_to_ad")
-                ad_level_fails.append("next_to_ad")
-            else:
-                _wait_loading()
-                ad_edit_url = page.url
-                reached_ad_level = True
-                _shot("after_next_to_ad")
-        except Exception as exc:
-            ad_level_fails.append(f"next_to_ad:{str(exc)[:60]}")
+                # HARD fail, not soft. Confirmed live 2026-07-29 (Test145,
+                # campaign B): the editor drawer closed mid-audience-setup,
+                # every later step failed against the bare ad-sets list,
+                # and this soft-append still let the run report
+                # success/reached_ad for a campaign with ZERO configured
+                # ads. Reaching the ad level is the whole point of the
+                # flow — failing to get there must fail the campaign (and
+                # lets publish_campaign's whole-campaign retry re-run it).
+                return "next_to_ad"
+        except Exception:
+            _shot("fail_next_to_ad")
+            return "next_to_ad"
+        _wait_loading()
+        ad_edit_url = page.url
+        reached_ad_level = True
+        _shot("after_next_to_ad")
 
         if reached_ad_level:
             final_ad_name = ad_name or f"{campaign_name} Ad"
@@ -2461,7 +2490,7 @@ def run_recorded_campaign_flow(
         creative_uploaded = False
         if reached_ad_level:
             try:
-                if not upload_ad_creative(page, creative_type, creative_path, edit_url=ad_edit_url):
+                if not upload_ad_creative_with_retry(page, creative_type, creative_path, edit_url=ad_edit_url):
                     _shot("fail_ad_creative_upload")
                     ad_level_fails.append("ad_creative_upload")
                 else:
@@ -2502,7 +2531,25 @@ def run_recorded_campaign_flow(
             for i, extra in enumerate(additional_ads, start=2):
                 tag = f"ad{i}"
                 try:
-                    if not create_additional_ad(page, adset_name):
+                    created = create_additional_ad(page, adset_name)
+                    if not created:
+                        # A reported failure does not mean no ad was born:
+                        # Meta names every fresh ad "New Leads Ad", so if
+                        # that row now exists in the tree the create DID
+                        # land and only the post-create bookkeeping flaked
+                        # — adopt the shell (select it, close any wizard)
+                        # and let the normal naming step rename it. Only
+                        # when no shell exists is a clean retry safe
+                        # (otherwise a second create would duplicate ads).
+                        # Confirmed need live 2026-07-29 (Test146, B ad2):
+                        # create failed once, leaving the ad missing
+                        # entirely — the only fill step with no retry path.
+                        if _open_tree_ad(page, "New Leads Ad"):
+                            _close_creative_setup_modal(page)
+                            created = True
+                        else:
+                            created = create_additional_ad(page, adset_name)
+                    if not created:
                         _shot(f"fail_{tag}_create")
                         ad_level_fails.append(f"{tag}_create")
                         continue
@@ -2522,7 +2569,7 @@ def run_recorded_campaign_flow(
                 extra_creative_path = extra.get("creative_path") or ""
                 if extra_creative_path:
                     try:
-                        if not upload_ad_creative(
+                        if not upload_ad_creative_with_retry(
                             page, extra.get("creative_type") or "", extra_creative_path, edit_url=page.url
                         ):
                             _shot(f"fail_{tag}_creative_upload")
@@ -2557,13 +2604,35 @@ def run_recorded_campaign_flow(
                         _shot(f"fail_{tag}_destination")
                         ad_level_fails.append(f"{tag}_destination:{str(exc)[:60]}")
 
-    if ad_level_fails:
-        try:
-            Path("output/debug_ad_level_soft_fails.txt").write_text(
-                "\n".join(ad_level_fails), encoding="utf-8"
-            )
-        except Exception:
-            pass
+        # Final destination sweep over every ad of this campaign.
+        # Confirmed live 2026-07-29 (Test143): an ad's Browser add-ons
+        # radio can revert to "Instant form" AFTER its own in-flow check
+        # already passed — the last ad of campaign B read back clean at
+        # fill time, yet the post-run live verification found the
+        # lead_gen_form_id error banner on it. Re-visit each ad once the
+        # whole campaign is filled and re-fix anything that reverted.
+        if reached_ad_level and destination_url:
+            sweep_names = [ad_name or f"{campaign_name} Ad"]
+            for i, extra in enumerate(additional_ads or [], start=2):
+                sweep_names.append(extra.get("ad_name") or f"{campaign_name} Ad {i}")
+            try:
+                sweep_failed = verify_and_fix_ad_destinations(page, sweep_names, destination_url)
+                for bad in sweep_failed:
+                    ad_level_fails.append(f"destination_sweep:{bad}")
+                _shot("after_destination_sweep")
+            except Exception as exc:
+                ad_level_fails.append(f"destination_sweep:{str(exc)[:60]}")
+
+    # Was written to debug_ad_level_soft_fails.txt, which each run
+    # OVERWROTE — so the previous run's evidence was gone before anyone
+    # could compare. Append-only telemetry keeps the history.
+    _telemetry.record(
+        "ad_level_summary",
+        not ad_level_fails,
+        run_id=run_id,
+        campaign=campaign_name,
+        diag={"soft_fails": ad_level_fails} if ad_level_fails else None,
+    )
 
     return ""
 
@@ -3069,11 +3138,72 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
     sequence (upload_ad_creative / fill_ad_copy / set_ad_destination_
     website) can run completely unmodified for every additional ad.
     """
+    # Preferred path: click the ad-set row's action-menu button by its own
+    # stable data-surface, no coordinates at all.
+    #
+    # Found 2026-07-30 via the new telemetry. Every tree level exposes one:
+    #   editor_tree:campaign/...action-menu-item/CAMPAIGN_GROUP
+    #   editor_tree:adset/...action-menu-item/CAMPAIGN     <- ad set row
+    #   editor_tree:ad/...action-menu-item/ADGROUP         <- each ad row
+    # (the level prefix is what identifies the row; the trailing type name
+    # is offset by one and must NOT be used for matching).
+    #
+    # They report zero size and offsetParent === null because the icon only
+    # renders on hover — which is exactly why every coordinate-based attempt
+    # kept missing, and why a DOM .click() (which ignores visibility, same
+    # as the "Create ad" menu-item click below already relies on) is the
+    # right tool. The coordinate path is kept as a fallback in case Meta
+    # renames these surfaces.
+    surface_clicked = False
+    try:
+        surface_clicked = bool(
+            page.evaluate(
+                """() => {
+                  const el = document.querySelector(
+                    '[data-surface*="editor_tree:adset"][data-surface*="campaign-structure-action-menu-item"]');
+                  if (!el) return false;
+                  el.click();
+                  return true;
+                }"""
+            )
+        )
+    except Exception:
+        surface_clicked = False
+    if surface_clicked:
+        time.sleep(0.6)
+
     click_point = page.evaluate(
         """(adsetName) => {
           const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          // Confirmed live 2026-07-29 (Test142): when the browser window is
+          // in NARROW restored bounds (e.g. it was un-maximized before
+          // being minimised), the tree renders truncated names — the leaf
+          // text is then a shortened PREFIX of the full ad-set name, so an
+          // exact === match finds < 2 rows and this whole function bails
+          // in ~3s. Accept a long-enough prefix as a match too.
+          const nameMatches = (raw) => {
+            const t = norm(raw).replace(/[…\\u2026]+$/, '');
+            if (!t) return false;
+            if (t === adsetName) return true;
+            return t.length >= 10 && adsetName.startsWith(t);
+          };
+          // Confirmed live 2026-07-29 (real dashboard run,
+          // CR_AIT_All_Video_FX_35_29.07): the campaign/ad-set name appears
+          // BOTH in the left structure tree and in the top breadcrumb, so a
+          // page-wide search mixes them and "rows[1]" can be a breadcrumb
+          // item instead of the ad-set row — the click point then lands
+          // nowhere and one ad per campaign is silently skipped. Keep only
+          // candidates in the left tree panel (leftmost third of the
+          // window) and order them top-to-bottom, so rows[0] is reliably
+          // the campaign row and rows[1] the ad-set row.
+          const inTree = (el) => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.x < window.innerWidth * 0.34;
+          };
           const candidates = [...document.querySelectorAll('*')].filter(e =>
-            e.offsetParent !== null && norm(e.textContent) === adsetName && e.children.length === 0);
+            e.offsetParent !== null && nameMatches(e.textContent) && e.children.length === 0
+            && inTree(e))
+            .sort((a, b) => a.getBoundingClientRect().y - b.getBoundingClientRect().y);
           const rows = [];
           const seen = new Set();
           for (const leaf of candidates) {
@@ -3087,29 +3217,86 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
           }
           // rows[0] is the campaign row, rows[1] is the ad-set row (both
           // share the same name in this recorded flow).
-          if (rows.length < 2) return null;
-          let wide = rows[1];
-          for (let i = 0; i < 8 && wide; i++) {
-            if (wide.getBoundingClientRect().width > 350) break;
-            wide = wide.parentElement;
+          if (rows.length < 2) {
+            const wide = [...document.querySelectorAll('*')].filter(e =>
+              e.offsetParent !== null && nameMatches(e.textContent) && e.children.length === 0);
+            return {_diag: 'rows_lt_2', rows: rows.length, pageWide: wide.length,
+                    xs: wide.slice(0, 8).map(e => Math.round(e.getBoundingClientRect().x)),
+                    innerWidth: window.innerWidth};
           }
-          if (!wide) return null;
-          const r = wide.getBoundingClientRect();
-          return {x: r.right - 22, y: r.y + r.height / 2};
+          // No width THRESHOLD at all — thresholds keep breaking at
+          // window sizes nobody tested (fixed 350px failed at ~1000px,
+          // 0.22*innerWidth failed at ~1500px where the tree panel is
+          // ~310px — confirmed live 2026-07-29, Test147: 1-second create
+          // failures). The tree panel is simply the WIDEST ancestor that
+          // is still clearly narrower than the page, so take the widest
+          // ancestor below 60% of the window and be done with it.
+          // X and Y come from DIFFERENT elements, deliberately.
+          //
+          // The "..." action-menu icon sits at the right edge of the tree
+          // PANEL, so x has to come from a wide ancestor. But y must come
+          // from the ad-set ROW itself. Confirmed live 2026-07-30 via the
+          // new telemetry (`underPoint: DIV//ES Ai Trader Text 2 ... Action
+          // menu`): taking y from that same wide ancestor aimed at the
+          // panel's vertical centre, which lands on whatever ad row happens
+          // to sit in the middle of the list — so every additional-ad create
+          // clicked the wrong row and no menu ever opened. Three earlier
+          // attempts kept re-tuning the WIDTH threshold; the bug was on the
+          // vertical axis the whole time.
+          let node = rows[1];
+          let panel = null, panelW = 0;
+          for (let i = 0; i < 8 && node; i++) {
+            const w = node.getBoundingClientRect().width;
+            if (w < window.innerWidth * 0.6 && w > panelW) { panel = node; panelW = w; }
+            node = node.parentElement;
+          }
+          if (!panel) return {_diag: 'no_wide_ancestor', rows: rows.length,
+                              innerWidth: window.innerWidth};
+
+          // Row rect for y: prefer the walked-up row, but if that ancestor
+          // is tall it is a container rather than a row — use the bare text
+          // leaf then, whose box is always the row's own line.
+          let rowRect = rows[1].getBoundingClientRect();
+          if (rowRect.height > 80) rowRect = candidates[1].getBoundingClientRect();
+
+          const p = panel.getBoundingClientRect();
+          return {x: p.right - 22, y: rowRect.y + rowRect.height / 2,
+                  _diag: 'ok', rows: rows.length,
+                  panelW: Math.round(panelW), rowH: Math.round(rowRect.height),
+                  innerWidth: window.innerWidth};
         }""",
         adset_name,
     )
-    if not click_point:
-        return False
+    def _diag(stage: str, extra: dict | None = None) -> None:
+        # Same approach that cracked the ad-copy bug: record WHICH stage
+        # failed instead of collapsing every cause into one opaque False.
+        # Added 2026-07-29 after `fail_ad3_create` recurred on both
+        # campaigns of a real dashboard run and two rounds of guessing at
+        # the geometry heuristics failed to fix it.
+        _telemetry.record(
+            "create_additional_ad",
+            False,
+            note=stage,
+            diag={
+                "adset": adset_name,
+                "point": click_point if isinstance(click_point, dict) else None,
+                **(extra or {}),
+            },
+        )
 
-    # A click with no prior hover dwell can land on the row's own (wider)
-    # click target — navigating into the ad set instead of opening the
-    # menu — confirmed live 2026-07-28: the icon only becomes the active
-    # hit-target after a brief hover.
-    page.mouse.move(click_point["x"], click_point["y"])
-    time.sleep(0.4)
-    page.mouse.click(click_point["x"], click_point["y"])
-    time.sleep(0.6)
+    if not surface_clicked:
+        if not click_point or not isinstance(click_point, dict) or "x" not in click_point:
+            _diag("no_click_point")
+            return False
+
+        # A click with no prior hover dwell can land on the row's own (wider)
+        # click target — navigating into the ad set instead of opening the
+        # menu — confirmed live 2026-07-28: the icon only becomes the active
+        # hit-target after a brief hover.
+        page.mouse.move(click_point["x"], click_point["y"])
+        time.sleep(0.4)
+        page.mouse.click(click_point["x"], click_point["y"])
+        time.sleep(0.6)
 
     create_clicked = False
     for _ in range(5):
@@ -3126,28 +3313,328 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
             break
         time.sleep(0.3)
     if not create_clicked:
+        # What DID the click open, if anything? Record the menu surfaces on
+        # the page and what sits under the click point.
+        try:
+            probe = page.evaluate(
+                """(pt) => {
+                  const surfaces = [...document.querySelectorAll('[data-surface]')]
+                    .filter(e => e.offsetParent !== null)
+                    .map(e => e.getAttribute('data-surface'))
+                    .filter(s => s && s.indexOf('action-menu') !== -1);
+                  const under = document.elementFromPoint(pt.x, pt.y);
+                  return {
+                    menuSurfaces: [...new Set(surfaces)].slice(0, 10),
+                    anyMenuOpen: !!document.querySelector('[role=menu],[role=menuitem]'),
+                    underPoint: under ? (under.tagName + '/' + (under.getAttribute('role') || '') +
+                                         '/' + (under.textContent || '').trim().slice(0, 40)) : null,
+                  };
+                }""",
+                {"x": click_point["x"], "y": click_point["y"]},
+            )
+        except Exception as exc:
+            probe = {"probe_error": str(exc)[:80]}
+        _diag("create_menu_item_not_found", probe)
         return False
     time.sleep(1.5)
 
     # "Create ad" sometimes opens the "Set up your creative" wizard modal
-    # directly, sometimes not — Cancel out of it if present (best-effort,
-    # retried since the modal can still be mid-render right after the
-    # click), then confirm we're truly past it before the final check.
-    for _ in range(5):
+    # directly, sometimes not. Close it, then prove it is actually gone.
+    #
+    # The previous version clicked the first "Cancel" it could find, broke
+    # out of the loop on the first click that didn't raise, and accepted the
+    # underlying "Set up creative" button being "visible" as proof it had
+    # worked. Confirmed live 2026-07-29 (Test138): that reports success
+    # while the modal is still wide open, because Playwright's visibility
+    # check does not consider occlusion — a button covered by a fullscreen
+    # modal is still "visible". The second ad then failed on every single
+    # following step, its fields being behind that modal.
+    # Each round: try the modal's close icon, re-check, and if it is still
+    # up fall back to its own Cancel button.
+    #
+    # Confirmed live 2026-07-29 (Test141): the previous version gated the
+    # Cancel fallback on `_close_creative_setup_modal()` returning False —
+    # but that helper reports whether it CLICKED, not whether the modal
+    # closed. When the icon hunt landed on the wrong small element near the
+    # top-right corner it returned True every round, so Cancel was never
+    # tried at all and all six rounds re-clicked the same dead spot.
+    for _ in range(6):
+        if not _creative_modal_open(page):
+            break
+        _close_creative_setup_modal(page)
+        time.sleep(0.6)
+        if not _creative_modal_open(page):
+            break
         try:
             page.get_by_role("button", name="Cancel").first.click(timeout=2000)
-            time.sleep(0.6)
-            break
         except Exception:
-            time.sleep(0.3)
+            pass
+        time.sleep(0.6)
 
+    if _creative_modal_open(page):
+        return False
+
+    # Readiness is the ad-name field specifically — that is what the caller
+    # writes to next, so it is the only signal worth gating on.
     try:
-        page.get_by_role("button", name=re.compile("Set up creative", re.I)).first.wait_for(
+        page.get_by_placeholder("Enter your ad name here...").first.wait_for(
             state="visible", timeout=10000
         )
     except Exception:
         return False
     return True
+
+
+def _creative_modal_open(page: Page) -> bool:
+    """Is the "Set up your creative" wizard modal currently covering the page?"""
+    try:
+        return page.get_by_text("Set up your creative", exact=True).first.is_visible(timeout=1000)
+    except Exception:
+        return False
+
+
+def _library_selected_count(page: Page) -> int:
+    """Sum of the media library's own "N selected" counters."""
+    try:
+        return int(
+            page.evaluate(
+                """
+                () => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  let total = 0;
+                  for (const el of document.querySelectorAll('*')) {
+                    if (!el.offsetParent || el.children.length !== 0) continue;
+                    const m = norm(el.textContent).match(/^(\\d+) selected$/);
+                    if (m) total += parseInt(m[1], 10);
+                  }
+                  return total;
+                }
+                """
+            )
+        )
+    except Exception:
+        return 0
+
+
+def _library_tiles(page: Page, filename: str):
+    """Locator for the clickable library tiles captioned `filename`.
+
+    Ground truth from a live DOM walk (2026-07-29): the caption is a plain
+    text div, and the real interactive element is the `[role=button]`
+    exactly two levels above it. The grid itself is a
+    `ReactVirtualized__Grid`, so tiles mount and unmount as it scrolls —
+    which is why this returns a locator (re-resolved on every use, and
+    auto-scrolled by Playwright before clicking) rather than precomputed
+    coordinates. An earlier coordinate-based attempt failed live: clicks
+    landed on stale positions and the grid stayed at "0 selected".
+    """
+    return page.get_by_text(filename, exact=True).locator(
+        "xpath=ancestor::*[@role='button'][1]"
+    )
+
+
+def _library_search(page: Page, filename: str) -> bool:
+    """Filter the media library grid down to `filename` before picking one.
+
+    Without this the code picks from whatever the grid happens to be
+    showing. On this account that is 60+ near-identical entries for the
+    same file left by past test runs, most of them scrolled out of view —
+    so the pick is a lottery and usually lands on nothing. Searching first
+    is both what a human does and what makes the choice deterministic.
+    """
+    try:
+        box = page.get_by_placeholder(re.compile(r"Search media", re.I)).first
+        if not box.count():
+            return False
+    except Exception:
+        return False
+
+    # Same focus trap as every other text field today (playwright#41286):
+    # a plain .click() can "succeed" without the page getting focus, after
+    # which keyboard input goes nowhere — or worse, Control+A lands on the
+    # page itself. Use the shared CDP-click helper, keep the pinned handle,
+    # and read the value back before claiming the search happened.
+    handle = _focus_via_cdp_click(page, box)
+    if handle is None:
+        return False
+    try:
+        box.fill(filename, timeout=3000)
+    except Exception:
+        # Meta builds several of these search fields as span-based fake
+        # inputs where .fill() throws — type via keyboard instead. Focus
+        # was established above, so Control+A stays inside the field.
+        try:
+            page.keyboard.press("Control+A")
+            page.keyboard.insert_text(filename)
+        except Exception:
+            return False
+
+    try:
+        typed_ok = bool(handle.evaluate(
+            "(el, name) => (el.value !== undefined ? el.value : el.textContent || '').includes(name)",
+            filename,
+        ))
+    except Exception:
+        typed_ok = False
+    if not typed_ok:
+        return False
+
+    # Let the grid re-query and re-render before anything reads it.
+    time.sleep(1.5)
+    wait_editor_saved(page, appear_s=0.5, timeout_s=5)
+    return True
+
+
+def _try_reuse_library_media(page: Page, filename: str) -> bool:
+    """Attach an already-uploaded copy of `filename` from the media library.
+
+    Saves the whole CDP file-transfer round-trip on repeat runs. Returns
+    False — leaving the Media step untouched so the caller can upload
+    normally — whenever a copy can't be selected.
+
+    Two things make this harder than it looks, both confirmed live:
+
+    * Repeated test runs leave DOZENS of identical entries for the same
+      filename, most flagged with a warning badge. Clicking one is a
+      lottery, so this tries several and verifies the grid's own "N
+      selected" counter actually moved instead of assuming the click took.
+      A run on 2026-07-29 failed exactly here: the click landed on the
+      caption, the counter stayed at "0 selected", Next stayed disabled,
+      and the ad ended up with no media at all.
+    * Picking an EXISTING item (unlike a fresh upload) always forces the
+      Trim -> Crop -> Text -> Image generation -> Enhancements ->
+      Translation wizard. Rather than click through each step's
+      differently-labelled button, force-close the modal — that keeps the
+      selection applied rather than discarding it.
+    """
+    before = _library_selected_count(page)
+    _library_search(page, filename)
+    tiles = _library_tiles(page, filename)
+    try:
+        available = tiles.count()
+    except Exception:
+        available = 0
+    if not available:
+        return False
+
+    picked = False
+    for i in range(min(available, 6)):
+        try:
+            tile = tiles.nth(i)
+            tile.scroll_into_view_if_needed(timeout=3000)
+            tile.click(timeout=3000)
+        except Exception:
+            continue
+        time.sleep(0.5)
+        if _library_selected_count(page) > before:
+            picked = True
+            break
+    if not picked:
+        return False
+
+    # Past this point the grid state has changed, so a failure here is a
+    # real failure rather than something the upload path can pick up from.
+    try:
+        advanced = False
+        for root in _roots(page):
+            dialog = root.get_by_role("dialog").first
+            if not dialog.is_visible(timeout=1000):
+                continue
+            next_btn = dialog.get_by_role("button", name="Next").first
+            if next_btn.count() and not next_btn.is_disabled():
+                next_btn.click(timeout=5000)
+                time.sleep(1.0)
+                advanced = True
+            break
+        if not advanced:
+            return False
+        _close_creative_setup_modal(page)
+        time.sleep(0.5)
+        return "/ads/edit/" in page.url and _verify_ad_media_present(page)
+    except Exception:
+        return False
+
+
+def upload_ad_creative_with_retry(
+    page: Page, creative_type: str, creative_path: str, *, edit_url: str = "", attempts: int = 2
+) -> bool:
+    """upload_ad_creative plus one clean retry.
+
+    Confirmed live 2026-07-29 (Test145): the step can fail on a
+    nondeterministic render — the "Set up creative" button simply never
+    became actionable within its wait on one ad, while the identical
+    sequence worked on the ads before and after it. Between attempts:
+    close any half-open creative wizard, then check whether the media in
+    fact landed despite the reported failure (a retry would otherwise
+    report False forever — once media is attached, the "Set up creative"
+    button this function waits for no longer exists).
+    """
+    for _ in range(attempts):
+        try:
+            if upload_ad_creative(page, creative_type, creative_path, edit_url=edit_url):
+                return True
+        except Exception:
+            pass
+        _close_creative_setup_modal(page)
+        time.sleep(0.8)
+        if _verify_ad_media_present(page):
+            return True
+    return False
+
+
+def _close_creative_setup_modal(page: Page) -> bool:
+    """Force-close the "Set up your creative" modal via its own top-right
+    icon, regardless of which sub-step it's currently on (Trim/Crop/Text/
+    Image generation/Enhancements/Translation/...).
+
+    This modal isn't a role=dialog, so it's scoped by walking up from the
+    "Set up your creative" heading to its own modal container (the
+    ancestor whose bounding box covers most of the viewport) rather than a
+    page-wide `[aria-label="Close"]` search — confirmed live (2026-07-26)
+    that a page-wide search can hit the whole ad editor's close button
+    instead of a toast/modal-local one. Confirmed live (2026-07-29): doing
+    this even mid-wizard (e.g. on the Enhancements step, after picking an
+    existing media-library thumbnail) keeps the current media selection
+    applied to the ad rather than discarding it.
+    """
+    try:
+        modal_heading = page.get_by_text("Set up your creative", exact=True).first
+        if not modal_heading.count() or not modal_heading.is_visible(timeout=1500):
+            return False
+        box = page.evaluate(
+            """
+            () => {
+              const all = [...document.querySelectorAll('*')];
+              const heading = all.find(e => e.textContent.trim() === 'Set up your creative' && e.offsetParent !== null);
+              if (!heading) return null;
+              let modal = heading;
+              for (let i = 0; i < 10 && modal; i++) {
+                const r = modal.getBoundingClientRect();
+                if (r.width > window.innerWidth * 0.5 && r.height > window.innerHeight * 0.5) break;
+                modal = modal.parentElement;
+              }
+              if (!modal) return null;
+              const mr = modal.getBoundingClientRect();
+              let best = null, bestDist = Infinity;
+              for (const el of modal.querySelectorAll('div, span, svg, button, [role=button]')) {
+                if (!el.offsetParent || el.children.length > 1) continue;
+                const r = el.getBoundingClientRect();
+                if (r.width < 8 || r.width > 40 || r.height < 8 || r.height > 40) continue;
+                const dist = Math.hypot(r.x - mr.right, r.y - mr.top);
+                if (dist < bestDist) { bestDist = dist; best = r; }
+              }
+              if (!best) return null;
+              return { x: best.x + best.width / 2, y: best.y + best.height / 2 };
+            }
+            """
+        )
+        if box:
+            _cdp_mouse_click(page, box["x"], box["y"])
+            time.sleep(0.8)
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def upload_ad_creative(
@@ -3220,28 +3707,59 @@ def upload_ad_creative(
         pass
 
     # If the modal opened on "Creative setup" instead of straight to Media,
-    # its own Next advances to Media.
-    if page.get_by_role("button", name="Upload").count() < 1:
+    # its own Next advances to Media. Confirmed live 2026-07-29 (Test141,
+    # campaign B ad 1): a single Next click + 0.7s was not enough — the
+    # wizard stayed on Creative setup and the whole step failed at the
+    # Upload-button check below. Retry the advance, scoped to the dialog so
+    # it can't hit some other Next elsewhere on the page, until the Media
+    # step (Upload button) actually renders.
+    for _ in range(5):
+        if page.get_by_role("button", name="Upload").count() > 0:
+            break
+        clicked_next = False
         try:
-            page.get_by_role("button", name="Next").first.click(timeout=3000)
-            time.sleep(0.7)
+            for root in _roots(page):
+                dialog = root.get_by_role("dialog").first
+                if not dialog.is_visible(timeout=1000):
+                    continue
+                next_btn = dialog.get_by_role("button", name="Next").first
+                if next_btn.count() and not next_btn.is_disabled():
+                    next_btn.click(timeout=3000)
+                    clicked_next = True
+                break
         except Exception:
             pass
+        if not clicked_next:
+            # No dialog-scoped Next to click — fall back once to the page-
+            # wide first Next (pre-2026-07-29 behaviour) rather than
+            # spinning the remaining rounds doing nothing.
+            try:
+                page.get_by_role("button", name="Next").first.click(timeout=3000)
+            except Exception:
+                pass
+        time.sleep(1.2)
 
     upload_btn = page.get_by_role("button", name="Upload")
     if upload_btn.count() < 1:
         return False
 
-    # NOTE: tried reusing an already-uploaded copy of the same file from the
-    # media library here (searching by filename, selecting the existing
-    # thumbnail instead of re-uploading) to avoid the CDP file-transfer
-    # round-trip on repeated test runs. Reverted (2026-07-26): repeated runs
-    # leave several duplicate thumbnails for the same filename in the
-    # library, several marked "restricted" and not actually selectable — a
-    # plain filename match can land on one of those, leaving "0 selected"
-    # and silently stalling on the Media step. Worth revisiting with a
-    # properly live-verified way to detect the restricted badge, but a
-    # speculative CSS-based heuristic isn't safe to ship untested.
+    # Media-reuse: confirmed live (2026-07-29) that the Media step's own
+    # library grid (Account/Business/Video URL/Page tabs + existing
+    # thumbnails) is already visible right next to the Upload button, even
+    # on a brand-new ad — no extra "Edit media -> Change Video" navigation
+    # needed. An earlier attempt (2026-07-26) reverted this over a
+    # suspected "restricted" duplicate-thumbnail trap, but live retesting
+    # (2026-07-28 diary, Test135 follow-up) showed clicking ANY thumbnail
+    # for the filename, warning icon or not, produces a clean "1 selected"
+    # — that concern doesn't hold. Only commit to this path if a thumbnail
+    # for the exact filename is actually visible; otherwise fall straight
+    # through to the real upload below, unchanged.
+    # Note the `.name`, not `.stem`: the library captions each tile with the
+    # full filename including extension ("2046_2.mp4"), so matching on the
+    # stem finds nothing.
+    if get_reuse_library_media() and _try_reuse_library_media(page, Path(creative_path).name):
+        return True
+
     try:
         with page.expect_file_chooser(timeout=8000) as fc_info:
             upload_btn.first.click(timeout=5000)
@@ -3311,7 +3829,56 @@ def upload_ad_creative(
         except Exception:
             return False
 
-    return "/ads/edit/" in page.url
+    if "/ads/edit/" not in page.url:
+        return False
+
+    # Confirmed live (2026-07-29): being on the right URL says nothing about
+    # whether the media actually landed on the ad. A run reported
+    # `after_ad_creative_upload` success for all three ads, yet two of them
+    # were later found in Ads Manager still showing the empty-media state —
+    # the same async-save-race class already confirmed for campaign
+    # name/budget and ad destination. Wait for Meta's own save indicator to
+    # clear, then assert the Ad creative section really left the empty
+    # state before reporting success.
+    return _verify_ad_media_present(page)
+
+
+def _verify_ad_media_present(page: Page) -> bool:
+    """True once the ad's creative section is out of its empty state.
+
+    Meta shows "Please specify the media to run with this ad." while no
+    media is attached, and swaps in "Edit media"/"Remove media" controls
+    once one is — confirmed live (2026-07-29) on both a genuinely empty ad
+    and one with media applied. Checks visible text only: the empty-state
+    string stays in the DOM (hidden) after media is attached, so a raw
+    `body.textContent` check reports a false negative.
+    """
+    wait_editor_saved(page)
+    for _ in range(6):
+        try:
+            state = page.evaluate(
+                """
+                () => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const visible = [...document.querySelectorAll('*')]
+                    .filter(e => e.offsetParent !== null && e.children.length === 0)
+                    .map(e => norm(e.textContent));
+                  return {
+                    empty: visible.some(t => t.includes('Please specify the media')),
+                    filled: visible.some(t => t === 'Edit media' || t === 'Remove media'),
+                  };
+                }
+                """
+            )
+        except Exception:
+            time.sleep(0.5)
+            continue
+        if state.get("filled") and not state.get("empty"):
+            return True
+        if state.get("empty"):
+            return False
+        time.sleep(0.5)
+    return False
 
 
 def _reveal_ad_copy_fields(page: Page) -> bool:
@@ -3492,6 +4059,77 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
     return False
 
 
+def _focus_via_cdp_click(page: Page, locator):
+    """Pin an ElementHandle and give it real keyboard focus; None on failure.
+
+    Shared by every "click a field, then insert_text into it" step. Uses
+    the raw CDP mouse-event click (_mouse_click_chain), not
+    locator.click() — confirmed live (2026-07-26): Playwright's own click
+    can report success under connect_over_cdp without the page actually
+    receiving focus (microsoft/playwright#41286), silently leaving
+    insert_text() with nowhere to go. Confirmed live again 2026-07-29
+    (Test141): the Destination -> Website URL field hit the exact same
+    trap — locator.click() "succeeded", insert_text went nowhere, the ad
+    was left on the lead_gen_form_id validation error.
+
+    Confirmed live (2026-07-27): with multiple ad-copy text variation
+    slots on the page, several role=combobox elements can share the SAME
+    accessible name — re-resolving a bare Locator's `.first` after the
+    click is not guaranteed to hit the same DOM node if anything reflows
+    in between. Pin one concrete ElementHandle up front and use it for
+    both the click and the later verification — no re-resolution.
+    """
+    try:
+        handle = locator.element_handle(timeout=3000)
+    except Exception:
+        return None
+    if handle is None:
+        return None
+    try:
+        handle.evaluate("el => el.scrollIntoView({block: 'center', behavior: 'instant'})")
+    except Exception:
+        pass
+    time.sleep(0.3)
+    try:
+        box = handle.bounding_box()
+    except Exception:
+        box = None
+
+    # Confirmed live 2026-07-29 (Test140, via debug_ad_copy_locator_miss
+    # .json): the Headline field repeatedly reached here with the locator
+    # matched (count == 1) and its container visible (display: block,
+    # offsetParent set), yet bounding_box() still returned None — so the
+    # whole step bailed even though the field was plainly on screen in the
+    # screenshot. Fall back to the element's own rect, which is reported
+    # even when Playwright's visibility heuristics decline to produce a
+    # box, and then to a plain DOM focus(): insert_text() targets whatever
+    # holds focus, so focus alone is enough to fill the field. Callers
+    # must still verify the field's content afterwards, so a fallback that
+    # quietly does nothing is caught rather than trusted.
+    if not box:
+        try:
+            rect = handle.evaluate(
+                "el => { const r = el.getBoundingClientRect();"
+                " return {x: r.x, y: r.y, width: r.width, height: r.height}; }"
+            )
+            if rect and rect.get("width", 0) > 0 and rect.get("height", 0) > 0:
+                box = rect
+        except Exception:
+            box = None
+
+    if box:
+        _mouse_click_chain(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        time.sleep(0.3)
+        return handle
+
+    try:
+        handle.evaluate("el => el.focus()")
+        time.sleep(0.2)
+        return handle
+    except Exception:
+        return None
+
+
 def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
     """Fill Primary text (Body) and Headline (Title) with real ad copy.
 
@@ -3504,42 +4142,7 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
         return False
 
     def _click_via_cdp_handle(locator):
-        # Uses the raw CDP mouse-event click (_mouse_click_chain), not
-        # locator.click() — confirmed live (2026-07-26): Playwright's own
-        # click can report success under connect_over_cdp without the page
-        # actually receiving focus (microsoft/playwright#41286), silently
-        # leaving insert_text() with nowhere to go.
-        #
-        # Confirmed live (2026-07-27): with multiple ad-copy text variation
-        # slots on the page ("Primary text (1 of 5)", "Add text option"),
-        # several role=combobox elements can share the SAME accessible name
-        # — re-resolving a bare Locator's `.first` after the click (for the
-        # content check) is not guaranteed to hit the same DOM node if
-        # anything reflows/reorders in between, even though the click itself
-        # visibly filled the right one (confirmed live via screenshot: real
-        # text was present, but the re-resolved check still saw an empty
-        # slot). Pin one concrete ElementHandle up front and use it for
-        # both the click and the later verification — no re-resolution.
-        try:
-            handle = locator.element_handle(timeout=3000)
-        except Exception:
-            return None
-        if handle is None:
-            return None
-        try:
-            handle.evaluate("el => el.scrollIntoView({block: 'center', behavior: 'instant'})")
-        except Exception:
-            pass
-        time.sleep(0.3)
-        try:
-            box = handle.bounding_box()
-        except Exception:
-            box = None
-        if not box:
-            return None
-        _mouse_click_chain(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-        time.sleep(0.3)
-        return handle
+        return _focus_via_cdp_click(page, locator)
 
     def _handle_has_content(handle) -> bool:
         try:
@@ -3571,14 +4174,16 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
                 " comboboxCount: document.querySelectorAll('[role=combobox]').length,"
                 " placeholderFieldCount: document.querySelectorAll('[placeholder]').length }; }"
             )
-            record = {"field": what, "stage": stage, **info, **(extra or {})}
-            with open("output/debug_ad_copy_locator_miss.json", "a", encoding="utf-8") as f:
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            _telemetry.record(
+                f"ad_copy_{what}",
+                False,
+                note=stage,
+                diag={**info, **(extra or {})},
+            )
         except Exception:
             pass
 
-    body_ok = not ad_body
-    if ad_body:
+    def _fill_body() -> bool:
         try:
             primary_box = page.get_by_role(
                 "combobox", name="Tell people what your ad is about"
@@ -3589,18 +4194,18 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
                 if handle is not None:
                     page.keyboard.insert_text(ad_body)
                     time.sleep(0.4)
-                    body_ok = _handle_has_content(handle)
-                    if not body_ok:
-                        _dump_stage("primary_text", "content_check_failed_after_insert", {"count": count})
+                    if _handle_has_content(handle):
+                        return True
+                    _dump_stage("primary_text", "content_check_failed_after_insert", {"count": count})
                 else:
                     _dump_stage("primary_text", "click_via_cdp_failed", {"count": count})
             else:
                 _dump_stage("primary_text", "locator_count_zero", {"count": count})
         except Exception as exc:
             _dump_stage("primary_text", f"exception:{str(exc)[:80]}")
+        return False
 
-    title_ok = not ad_title
-    if ad_title:
+    def _fill_title() -> bool:
         try:
             headline_box = page.get_by_placeholder("Write a short headline").first
             count = headline_box.count()
@@ -3610,17 +4215,142 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
                     page.keyboard.press("Control+A")
                     page.keyboard.insert_text(ad_title)
                     time.sleep(0.4)
-                    title_ok = _handle_has_content(handle)
-                    if not title_ok:
-                        _dump_stage("headline", "content_check_failed_after_insert", {"count": count})
+                    if _handle_has_content(handle):
+                        return True
+                    _dump_stage("headline", "content_check_failed_after_insert", {"count": count})
                 else:
                     _dump_stage("headline", "click_via_cdp_failed", {"count": count})
             else:
                 _dump_stage("headline", "locator_count_zero", {"count": count})
         except Exception as exc:
             _dump_stage("headline", f"exception:{str(exc)[:80]}")
+        return False
+
+    # Confirmed live 2026-07-29 (Test143, via debug_ad_copy_locator_miss
+    # .json): `#creativeEditorComponent` can flip BACK to display:none
+    # after _reveal_ad_copy_fields() already succeeded — the dump showed
+    # content_check_failed_after_insert with containerDisplay:'none' for
+    # both fields, i.e. Meta re-hid the container between the reveal and
+    # the typing, and the (correct) focus-fallback typed into a hidden
+    # field. One re-reveal + retry cycle covers that re-hide.
+    body_ok = not ad_body
+    title_ok = not ad_title
+    for attempt in range(2):
+        if not body_ok:
+            body_ok = _fill_body()
+        if not title_ok:
+            title_ok = _fill_title()
+        if body_ok and title_ok:
+            break
+        if attempt == 0:
+            _reveal_ad_copy_fields(page)
+            time.sleep(0.5)
 
     return body_ok and title_ok
+
+
+def _browser_addon_none_checked(page: Page) -> bool | None:
+    """Is Destination -> Browser add-ons -> "None" actually selected?
+
+    Returns None when the control can't be located at all, so callers can
+    tell "definitely wrong" apart from "couldn't tell".
+
+    Scoped to the "Browser add-ons" radio group when it can be found: a
+    full-editor page has several other exact-"None" leaves ("Excluded
+    placements: None" etc.) — an unscoped first-match probe was observed
+    (2026-07-29, Test143 verification) reporting false on ads whose actual
+    Browser add-ons radio was fine.
+    """
+    try:
+        return page.evaluate(
+            """
+            () => {
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              const leaves = [...document.querySelectorAll('*')].filter(e =>
+                e.offsetParent !== null && e.children.length === 0);
+              const scopes = [];
+              const bao = leaves.find(e => norm(e.textContent) === 'Browser add-ons');
+              if (bao) {
+                let n = bao;
+                for (let i = 0; i < 8 && n; i++) {
+                  n = n.parentElement;
+                  if (n && n.querySelectorAll('[role=radio], input[type=radio]').length >= 3) {
+                    scopes.push(n);
+                    break;
+                  }
+                }
+              }
+              scopes.push(document);
+              for (const scope of scopes) {
+              const labels = [...scope.querySelectorAll('*')].filter(e =>
+                e.offsetParent !== null && e.children.length === 0 && norm(e.textContent) === 'None');
+              for (const label of labels) {
+                let node = label;
+                for (let i = 0; i < 6 && node; i++) {
+                  const radio = node.querySelector('[role=radio], input[type=radio]');
+                  if (radio) {
+                    const v = radio.getAttribute('aria-checked');
+                    if (v !== null) return v === 'true';
+                    return !!radio.checked;
+                  }
+                  node = node.parentElement;
+                }
+              }
+              }
+              return null;
+            }
+            """
+        )
+    except Exception:
+        return None
+
+
+def _select_browser_addon_none(page: Page) -> bool:
+    """Select Destination -> Browser add-ons -> "None", and verify it took.
+
+    Confirmed live (2026-07-29, user screenshot): clicking the "None" *text
+    label* is not enough — the radio stayed on Meta's default "Instant form
+    (suggested)" while the Website URL beside it filled in correctly and
+    the footer read "All edits saved". The ad then failed validation with
+    "Param call_to_action[value][lead_gen_form_id] must be a valid Lead Gen
+    Data id". Same trap as the media-library tiles: the handler lives on
+    the control, not on its caption.
+
+    So: aim at the radio itself first, fall back to the label, and confirm
+    `aria-checked` afterwards rather than trusting the click.
+    """
+    for attempt in range(3):
+        if _browser_addon_none_checked(page) is True:
+            return True
+
+        clicked = False
+        try:
+            radio = page.get_by_role("radio", name=re.compile(r"^\s*None\b", re.I)).first
+            if radio.count():
+                radio.scroll_into_view_if_needed(timeout=3000)
+                radio.click(timeout=3000)
+                clicked = True
+        except Exception:
+            clicked = False
+
+        if not clicked:
+            try:
+                label = page.get_by_text("None", exact=True).first
+                if not label.count():
+                    return False
+                label.scroll_into_view_if_needed(timeout=3000)
+                label.click(timeout=3000)
+                clicked = True
+            except Exception:
+                return False
+
+        time.sleep(0.5)
+        if _browser_addon_none_checked(page) is True:
+            return True
+
+    # Unreadable state is not treated as failure — some renders expose no
+    # radio role at all, and the caller still cross-checks the URL field.
+    return _browser_addon_none_checked(page) is not False
 
 
 def set_ad_destination_website(page: Page, destination_url: str) -> bool:
@@ -3638,53 +4368,10 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     Confirmed live (2026-07-26): the "Set up your creative" modal doesn't
     always auto-close after Media/Text like it did on other runs — some
     runs leave it open on its own Trim/Crop/Text steps, hiding the main Ad
-    page's Destination section underneath. Close it first if still open,
-    scoped to the modal's own dialog container (not a page-wide
-    `[aria-label="Close"]` search — that was already confirmed live to
-    sometimes hit the whole ad editor's close button instead of a toast).
+    page's Destination section underneath. Close it first if still open
+    via the shared `_close_creative_setup_modal()` helper.
     """
-    try:
-        modal_heading = page.get_by_text("Set up your creative", exact=True).first
-        if modal_heading.count() and modal_heading.is_visible(timeout=1500):
-            # Same "role-less custom control" pattern as everything else in
-            # this file — this modal isn't a role=dialog, so scope the close
-            # click by walking up from the heading to its modal container
-            # (the ancestor whose bounding box covers most of the viewport),
-            # then click the small icon-only control nearest that
-            # container's top-right corner instead of a page-wide
-            # `[aria-label="Close"]` search.
-            box = page.evaluate(
-                """
-                () => {
-                  const all = [...document.querySelectorAll('*')];
-                  const heading = all.find(e => e.textContent.trim() === 'Set up your creative' && e.offsetParent !== null);
-                  if (!heading) return null;
-                  let modal = heading;
-                  for (let i = 0; i < 10 && modal; i++) {
-                    const r = modal.getBoundingClientRect();
-                    if (r.width > window.innerWidth * 0.5 && r.height > window.innerHeight * 0.5) break;
-                    modal = modal.parentElement;
-                  }
-                  if (!modal) return null;
-                  const mr = modal.getBoundingClientRect();
-                  let best = null, bestDist = Infinity;
-                  for (const el of modal.querySelectorAll('div, span, svg, button, [role=button]')) {
-                    if (!el.offsetParent || el.children.length > 1) continue;
-                    const r = el.getBoundingClientRect();
-                    if (r.width < 8 || r.width > 40 || r.height < 8 || r.height > 40) continue;
-                    const dist = Math.hypot(r.x - mr.right, r.y - mr.top);
-                    if (dist < bestDist) { bestDist = dist; best = r; }
-                  }
-                  if (!best) return null;
-                  return { x: best.x + best.width / 2, y: best.y + best.height / 2 };
-                }
-                """
-            )
-            if box:
-                _cdp_mouse_click(page, box["x"], box["y"])
-                time.sleep(0.8)
-    except Exception:
-        pass
+    _close_creative_setup_modal(page)
 
     # Confirmed live (2026-07-27): the Destination section's container
     # (`#adgroupAdDestinationGeneric`) can render with the exact same
@@ -3699,21 +4386,21 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     except Exception:
         pass
 
-    try:
-        none_opt = page.get_by_text("None", exact=True).first
-        if not none_opt.count():
-            return False
-        none_opt.scroll_into_view_if_needed(timeout=3000)
-        none_opt.click(timeout=3000)
-        time.sleep(0.6)
-    except Exception:
+    if not _select_browser_addon_none(page):
         return False
 
+    # Confirmed live 2026-07-29 (Test141, campaign B ads 2/3): a plain
+    # url_box.click() here reported success while the page never received
+    # focus (playwright#41286 again), so insert_text() went nowhere and
+    # the URL stayed on its placeholder — caught only by the read-back
+    # check below. Use the shared CDP-click helper instead, same as the
+    # ad-copy fields.
     try:
         url_box = page.get_by_placeholder("http://www.example.com/page").first
         if not url_box.count():
             return False
-        url_box.click(timeout=3000)
+        if _focus_via_cdp_click(page, url_box) is None:
+            return False
         page.keyboard.insert_text(destination_url)
         time.sleep(0.4)
     except Exception:
@@ -3728,7 +4415,6 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     # moment to actually start, wait for "Verifying your edits..." to
     # clear, then read the URL field back before trusting it — retrying the
     # None+URL selection if it didn't stick.
-    time.sleep(0.6)
     wait_editor_saved(page)
 
     def _url_matches() -> bool:
@@ -3740,26 +4426,163 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
         except Exception:
             return False
 
-    if not _url_matches():
+    def _both_ok() -> bool:
+        if not _url_matches():
+            return False
+        # None (unreadable state) must not fail the whole step — but a
+        # definite False must, since that is the exact broken state seen
+        # live: URL correctly filled and "All edits saved" showing, while
+        # Browser add-ons had silently snapped back to "Instant form".
+        return _browser_addon_none_checked(page) is not False
+
+    if not _both_ok():
         for _ in range(2):
             try:
-                retry_none = page.get_by_text("None", exact=True).first
-                if retry_none.count():
-                    retry_none.scroll_into_view_if_needed(timeout=3000)
-                    retry_none.click(timeout=3000)
-                    time.sleep(0.6)
+                _select_browser_addon_none(page)
                 retry_box = page.get_by_placeholder("http://www.example.com/page").first
-                if retry_box.count():
-                    retry_box.click(timeout=3000)
+                if retry_box.count() and _focus_via_cdp_click(page, retry_box) is not None:
                     page.keyboard.insert_text(destination_url)
-                    time.sleep(0.6)
                 wait_editor_saved(page)
             except Exception:
                 pass
-            if _url_matches():
+            if _both_ok():
                 break
 
-    return _url_matches()
+    return _both_ok()
+
+
+def _open_tree_ad(page: Page, ad_name: str) -> bool:
+    """Select an ad in the left campaign-structure tree by name.
+
+    Prefix-tolerant (narrow layouts truncate row names — same finding as
+    create_additional_ad, 2026-07-29). The current ad's name also appears
+    in the top breadcrumb, so among all matches the LEFTMOST one is taken:
+    the tree panel hugs the left edge, the breadcrumb does not.
+    """
+    point = page.evaluate(
+        """(adName) => {
+          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          const nameMatches = (raw) => {
+            const t = norm(raw).replace(/[…\\u2026]+$/, '');
+            if (!t) return false;
+            if (t === adName) return true;
+            return t.length >= 10 && adName.startsWith(t);
+          };
+          const cands = [...document.querySelectorAll('*')].filter(e =>
+            e.offsetParent !== null && e.children.length === 0 && nameMatches(e.textContent));
+          let best = null, bx = Infinity;
+          for (const c of cands) {
+            const r = c.getBoundingClientRect();
+            if (r.width > 0 && r.x < bx) { bx = r.x; best = r; }
+          }
+          return best ? {x: best.x + best.width / 2, y: best.y + best.height / 2} : null;
+        }""",
+        ad_name,
+    )
+    if not point:
+        return False
+    try:
+        _cdp_mouse_click(page, point["x"], point["y"])
+    except Exception:
+        return False
+    time.sleep(1.5)
+    wait_editor_saved(page)
+    return True
+
+
+def _ad_destination_persisted(page: Page, destination_url: str) -> bool:
+    """Does the currently open ad still hold Website URL + add-ons None?
+
+    The editor mounts its sections lazily — scroll toward the bottom and
+    re-check a few times before concluding the field isn't there.
+    """
+    for _ in range(4):
+        try:
+            if page.get_by_text(
+                re.compile(r"must be a valid Lead Gen", re.I)
+            ).first.is_visible(timeout=500):
+                return False
+        except Exception:
+            pass
+        try:
+            box = page.get_by_placeholder("http://www.example.com/page").first
+            if box.count():
+                if (box.input_value(timeout=2000) or "").strip() == destination_url.strip():
+                    return _browser_addon_none_checked(page) is not False
+                return False
+        except Exception:
+            pass
+        try:
+            page.evaluate(
+                """
+                () => {
+                  const all = [...document.querySelectorAll('*')];
+                  const c = all.find(e => {
+                    const s = getComputedStyle(e);
+                    return (s.overflowY === 'auto' || s.overflowY === 'scroll')
+                      && e.scrollHeight > e.clientHeight + 50 && e.scrollHeight > 1500;
+                  });
+                  if (c) c.scrollTop = c.scrollHeight;
+                }
+                """
+            )
+        except Exception:
+            pass
+        time.sleep(1.0)
+    return False
+
+
+def verify_and_fix_ad_destinations(
+    page: Page, ad_names: list[str], destination_url: str
+) -> list[str]:
+    """Re-visit every ad of the campaign and re-fix reverted destinations.
+
+    Confirmed live 2026-07-29 (Test143): Meta can revert an ad's Browser
+    add-ons radio back to "Instant form" AFTER the in-flow save-wait and
+    read-back already passed — the revert lands once the flow has moved on
+    to the next ad. A single end-of-campaign sweep catches those. Returns
+    the names that could not be verified or repaired (soft-fail contract,
+    same as the per-ad steps).
+    """
+    failed: list[str] = []
+    for name in ad_names:
+        if not _open_tree_ad(page, name):
+            failed.append(f"{name}:row_not_found")
+            continue
+        ok = _ad_destination_persisted(page, destination_url)
+        if not ok:
+            try:
+                ok = set_ad_destination_website(page, destination_url)
+            except Exception:
+                ok = False
+        if not ok:
+            failed.append(name)
+
+    # Tail stability watch. Confirmed live twice (Test143 AND Test144,
+    # 2026-07-29): the ad left open when the flow ends — always the LAST
+    # one filled/swept — gets its Browser add-ons radio reverted to
+    # "Instant form" AFTER its check passed and the run moved on. A single
+    # point-in-time pass can therefore never certify the final ad. Sit on
+    # it until its destination survives two consecutive checks ~6s apart,
+    # re-fixing in between; give up (soft-fail) after 4 rounds.
+    if ad_names:
+        last = ad_names[-1]
+        stable = 0
+        for _ in range(4):
+            time.sleep(6.0)
+            if _ad_destination_persisted(page, destination_url):
+                stable += 1
+                if stable >= 2:
+                    break
+            else:
+                stable = 0
+                try:
+                    set_ad_destination_website(page, destination_url)
+                except Exception:
+                    pass
+        else:
+            failed.append(f"{last}:unstable_after_sweep")
+    return failed
 
 
 _WIZARD_CLOSE_GUARD_JS = """
@@ -4085,25 +4908,65 @@ def close_open_dropdown(page: Page) -> None:
                 pass
 
 
-def wait_editor_saved(page: Page, *, timeout_s: float = 15) -> None:
-    """Wait until Meta finishes 'Verifying your edits...'."""
+_SAVE_BUSY_RE = re.compile(r"Verifying your edits|Saving\b|Saving…|Saving\.\.\.", re.I)
+
+
+def _editor_is_busy_saving(page: Page) -> bool:
+    """True while Meta shows any of its in-flight autosave indicators."""
+    for root in _roots(page):
+        try:
+            if root.get_by_text(_SAVE_BUSY_RE).first.is_visible():
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def wait_editor_saved(page: Page, *, timeout_s: float = 15, appear_s: float = 1.5) -> None:
+    """Wait until Meta's debounced autosave has actually completed.
+
+    Two phases, deliberately:
+
+    1. Wait (up to `appear_s`) for a busy indicator to APPEAR. Meta's save
+       is debounced, so right after a keystroke or click there is nothing
+       to wait on yet — the old single-phase version returned instantly in
+       that window and reported "saved" before the save had even been
+       scheduled. That false confidence is the direct cause of the silent
+       revert bugs confirmed live on campaign name, daily budget, ad
+       destination and ad media (2026-07-28/29): every one of them typed
+       correctly, "verified" instantly, then reverted many steps later.
+       Callers previously worked around this with a hardcoded
+       `time.sleep(0.6)` guess; the wait belongs here instead.
+    2. Wait (up to `timeout_s`) for it to CLEAR.
+
+    Matches every in-flight wording seen live — "Verifying your edits…"
+    and the footer's "Saving…" — rather than only the first. Returning
+    without ever seeing an indicator is normal and fine: it means the
+    field was already persisted (or never dirty).
+    """
     import time as _time
+
+    appear_deadline = _time.time() + appear_s
+    while _time.time() < appear_deadline:
+        if _editor_is_busy_saving(page):
+            break
+        # Meta's footer flips to a positive "All edits saved" once nothing
+        # is pending. Seeing it means the debounce has already fired and
+        # settled, so there is no point sitting out the rest of the
+        # appearance window — this keeps the common already-saved case
+        # cheap instead of costing the full `appear_s` at every call site.
+        try:
+            if page.get_by_text(re.compile(r"All edits saved", re.I)).first.is_visible():
+                return
+        except Exception:
+            pass
+        _time.sleep(0.15)
 
     deadline = _time.time() + timeout_s
     while _time.time() < deadline:
-        busy = False
-        for root in _roots(page):
-            try:
-                loc = root.get_by_text(re.compile(r"Verifying your edits", re.I)).first
-                if loc.is_visible():
-                    busy = True
-                    break
-            except Exception:
-                pass
-        if not busy:
+        if not _editor_is_busy_saving(page):
             return
-        _time.sleep(0.5)
-    _time.sleep(0.4)
+        _time.sleep(0.35)
 
 
 def dismiss_open_popovers(page: Page) -> None:
@@ -4444,30 +5307,43 @@ def open_detailed_targeting_field(page: Page) -> bool:
         re.compile(r"Añadir intereses", re.I),
         re.compile(r"demographics", re.I),
     ]
-    for root in _roots(page):
-        for ph in placeholders:
-            try:
-                inp = root.get_by_placeholder(ph).first
-                inp.wait_for(state="visible", timeout=5000)
-                inp.scroll_into_view_if_needed(timeout=5000)
-                inp.click(timeout=5000)
-                time.sleep(0.3)
-                return True
-            except Exception:
-                pass
-        for label_re in (
-            re.compile(r"Detailed targeting", re.I),
-            re.compile(r"Segmentación detallada", re.I),
-        ):
-            try:
-                inp = root.get_by_label(label_re).first
-                inp.wait_for(state="visible", timeout=5000)
-                inp.scroll_into_view_if_needed(timeout=5000)
-                inp.click(timeout=5000)
-                time.sleep(0.3)
-                return True
-            except Exception:
-                pass
+
+    # Instant single-shot check — NO wait_for. The input either exists right
+    # now (section already expanded) or the section is collapsed and no
+    # amount of waiting will make it appear. The previous version burned
+    # 4 placeholders x 5s + 2 labels x 5s per root (page + every ad-preview
+    # iframe) on wait_for timeouts before reaching the collapsed-row click
+    # that actually works — measured live 2026-07-29 as a consistent
+    # 33-65s dead pause right after the Languages step, every campaign.
+    def _click_input_now() -> bool:
+        for root in _roots(page):
+            for ph in placeholders:
+                try:
+                    inp = root.get_by_placeholder(ph).first
+                    if inp.count() and inp.is_visible():
+                        inp.scroll_into_view_if_needed(timeout=3000)
+                        inp.click(timeout=3000)
+                        time.sleep(0.3)
+                        return True
+                except Exception:
+                    continue
+            for label_re in (
+                re.compile(r"Detailed targeting", re.I),
+                re.compile(r"Segmentación detallada", re.I),
+            ):
+                try:
+                    inp = root.get_by_label(label_re).first
+                    if inp.count() and inp.is_visible():
+                        inp.scroll_into_view_if_needed(timeout=3000)
+                        inp.click(timeout=3000)
+                        time.sleep(0.3)
+                        return True
+                except Exception:
+                    continue
+        return False
+
+    if _click_input_now():
+        return True
     # "Detailed targeting" renders as a collapsed "All demographics,
     # interests and behaviors" summary in every screenshot captured this
     # session — same collapsed-summary family as Locations/Age/Languages —

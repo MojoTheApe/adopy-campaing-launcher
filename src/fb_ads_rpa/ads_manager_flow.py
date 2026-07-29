@@ -8,7 +8,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-RPA_FLOW_VERSION = "v39"
+RPA_FLOW_VERSION = "v66"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
@@ -2169,6 +2169,12 @@ class AdsManagerFlow:
                 "further_limit_reach",
                 "further_limit_reach_radio",
                 "further_limit_reach_continue",
+                # Added 2026-07-29 (Test145): the editor drawer can close
+                # mid-audience-setup (transient), leaving every later step
+                # failing against the bare ad-sets list. next_to_ad is now
+                # a hard fail in the recorded flow, and re-running the
+                # whole campaign is exactly the right recovery for it.
+                "next_to_ad",
             }
             max_attempts = 3
             fail_step = ""

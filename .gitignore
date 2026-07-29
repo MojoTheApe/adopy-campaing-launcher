@@ -57,6 +57,8 @@ output/draft_status.json
 output/dry_run_slots_cl.json
 output/publish_dry_run.json
 output/test_publish_log.jsonl
+# Per-run RPA telemetry (local diagnostic data, grows every run)
+output/rpa_telemetry.jsonl
 output/*.xlsx
 serve_out.log
 serve_err.log

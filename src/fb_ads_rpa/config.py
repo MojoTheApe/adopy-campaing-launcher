@@ -73,6 +73,25 @@ def get_use_recipe_player() -> bool:
     return val in ("1", "true", "yes", "on")
 
 
+def get_reuse_library_media() -> bool:
+    """When True, the ad-creative step first tries to attach an existing copy
+    of the file from the account's media library instead of re-uploading it.
+
+    Default ON. Disable with FB_RPA_REUSE_MEDIA=0.
+
+    It was briefly off by default after a broken first version cost a whole
+    run on 2026-07-29 (clicks landed on the filename caption instead of the
+    tile, the grid stayed at "0 selected", ads ended up with no media). Two
+    things changed since: the pick now searches the library by filename and
+    verifies the grid's own "N selected" counter actually moved, and — if
+    it can't select anything — it bails before touching the Media step, so
+    the caller falls straight through to the proven upload path. Worst case
+    is therefore the old behaviour plus a couple of seconds.
+    """
+    val = (os.environ.get("FB_RPA_REUSE_MEDIA") or "1").strip().lower()
+    return val in ("1", "true", "yes", "on")
+
+
 def get_use_llm_agent() -> bool:
     """When True, RPA delegates to LLMAgentPlayer (src/fb_ads_rpa/llm_agent.py) —
     a live Claude-driven loop that reads the accessibility tree and decides each

@@ -313,6 +313,84 @@ def _stop_thread_playwright() -> None:
     _reset_asyncio_running_loop()
 
 
+def _disable_background_throttling(context, page) -> None:
+    """Stop Chrome throttling the page when its window is minimised or behind
+    another one.
+
+    Confirmed live 2026-07-29 (Test139): with the browser window in the
+    background, identical steps ran 10-50x slower — the first ad's whole
+    sequence took 7-80s per step, while the second ad's name step took 2m52s
+    and its creative upload took 12 minutes, then "failed". Chrome throttles
+    background renderers (timers clamped, rAF stopped, rendering paused), and
+    Playwright waits on exactly those signals for visibility/actionability,
+    so it stalls until its timeout and reports a failure that has nothing to
+    do with the page's actual content.
+
+    We attach over CDP to a Multilogin profile, so we can't pass the usual
+    `--disable-renderer-backgrounding` launch flags — but these two CDP
+    commands achieve the same thing on a live target.
+    """
+    try:
+        session = context.new_cdp_session(page)
+    except Exception:
+        return
+    # Report the page as focused/active regardless of real window state.
+    try:
+        session.send("Emulation.setFocusEmulationEnabled", {"enabled": True})
+    except Exception:
+        pass
+    # Keep the page out of the frozen/discarded lifecycle states.
+    try:
+        session.send("Page.setWebLifecycleState", {"state": "active"})
+    except Exception:
+        pass
+
+
+def _ensure_wide_window(context, page) -> None:
+    """Force the browser window's layout to a wide desktop size, even if it
+    is currently minimised or was left in narrow restored bounds.
+
+    Confirmed live 2026-07-29 (Test142): the flow's DOM heuristics assume a
+    desktop-width layout — in a ~1000px window Meta truncates tree-row
+    names (breaking exact-text matching) and the tree panel is narrower
+    than coordinate heuristics expect. The window had been un-maximised at
+    some point, so minimising it kept a NARROW layout, and every
+    additional-ad step failed in seconds. Win32 ShowWindow(maximise) +
+    ShowWindow(minimise) did NOT relayout Chrome; CDP Browser.setWindowBounds
+    does. If the window was minimised, it is re-minimised afterwards so the
+    user-visible state (and the background-throttling test mode) is
+    preserved — layout keeps the last non-minimised size.
+    """
+    try:
+        session = context.new_cdp_session(page)
+        info = session.send("Browser.getWindowForTarget")
+        window_id = info.get("windowId")
+        bounds = info.get("bounds") or {}
+        if window_id is None:
+            return
+        was_minimized = bounds.get("windowState") == "minimized"
+        width = bounds.get("width") or 0
+        if not was_minimized and width >= 1280:
+            return
+        session.send(
+            "Browser.setWindowBounds",
+            {"windowId": window_id, "bounds": {"windowState": "normal"}},
+        )
+        session.send(
+            "Browser.setWindowBounds",
+            {"windowId": window_id,
+             "bounds": {"left": 0, "top": 0, "width": 1920, "height": 1040}},
+        )
+        time.sleep(1.0)  # let Chrome actually relayout at the new size
+        if was_minimized:
+            session.send(
+                "Browser.setWindowBounds",
+                {"windowId": window_id, "bounds": {"windowState": "minimized"}},
+            )
+    except Exception as exc:
+        log.debug("ensure_wide_window skipped: %s", exc)
+
+
 def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None) -> BrowserConnection:
     ensure_playwright_browsers_path()
     # Prior failed attach may have left sync Playwright's loop running in-thread.
@@ -328,6 +406,8 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
         else:
             context = browser.new_context()
             page = context.new_page()
+        _disable_background_throttling(context, page)
+        _ensure_wide_window(context, page)
         # Install human-activity tracker on the page
         try:
             from src.fb_ads_rpa.pacing import _install_mouse_tracker
