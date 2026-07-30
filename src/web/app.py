@@ -218,6 +218,27 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     return result
 
 
+def _load_sheet_targets() -> list[dict]:
+    """Targeting profiles from the Google Sheet "Detailed targeting" tab.
+
+    Same shape as _load_kb_targets(). The sheet loader keeps its own 5-min
+    cache, so calling this per request is cheap; [] on any failure so the
+    caller can fall back.
+    """
+    try:
+        from src.analysis_agent.gsheet_targeting import load_targeting_profiles
+
+        profiles = load_targeting_profiles()
+    except Exception:
+        return []
+    result = [
+        {"code": p.name, "label": p.name, "fb_interest": p.interests}
+        for p in profiles.values()
+    ]
+    result.sort(key=lambda x: x["code"].lower())
+    return result
+
+
 def _load_kb_targets() -> list[dict]:
     """Load targeting codes + FB interests from config/knowledge_base.json.
 
@@ -260,6 +281,12 @@ def _load_ref_options() -> dict:
     except OSError:
         return {**empty, "targetings": _load_kb_targets()}
     if _ref_opts_cache is not None and mtime == _ref_opts_mtime:
+        # targetings come from the Google Sheet (own 5-min cache) — refresh
+        # them independently of the Excel mtime this cache is keyed on, or
+        # sheet edits would stay invisible until the Excel file changes.
+        fresh = _load_sheet_targets()
+        if fresh:
+            return {**_ref_opts_cache, "targetings": fresh}
         return _ref_opts_cache
     try:
         ref = load_reference_data(excel_path)
@@ -274,11 +301,14 @@ def _load_ref_options() -> dict:
         {"id": k, "filename": v}
         for k, v in sorted((ref.get("video_files") or {}).items(), key=lambda x: x[0])
     ]
-    # Prefer KB targets (from GSheet); fall back to Excel interests if KB empty
-    kb_targets = _load_kb_targets()
-    if kb_targets:
-        targetings = kb_targets
-    else:
+    # Single source of truth (user direction 2026-07-30): the "Detailed
+    # targeting" tab of the shared Google Sheet — the same profiles the RPA
+    # resolves at publish time, so the picker can never offer a profile the
+    # publish path doesn't know. KB/Excel remain as fallbacks only.
+    targetings = _load_sheet_targets()
+    if not targetings:
+        targetings = _load_kb_targets()
+    if not targetings:
         targetings = [
             {"code": t, "label": t, "fb_interest": t}
             for t in sorted(ref.get("interests") or {})
@@ -549,7 +579,14 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     "tracking_link": tracking_link,
                 }
             )
-    return country, account_label, slots
+    # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
+    # live 2026-07-30: the full name leaked into draft.country, where both
+    # the GCC/LatAm language rule and the Excel Countries lookup expect
+    # 2-letter codes — so draft.language came out empty and the audience
+    # Language step was silently SKIPPED on every dashboard run (while CLI
+    # runs, always invoked with --country CR, kept setting it). Telemetry
+    # made this visible: dashboard runs had no `languages` row at all.
+    return country_val or country, account_label, slots
 
 
 @app.get("/", response_class=HTMLResponse)
