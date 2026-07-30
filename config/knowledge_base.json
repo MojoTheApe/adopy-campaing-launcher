@@ -18,7 +18,8 @@
         "OM",
         "QA"
       ],
-      "notes": "Один из лучших таргетов для Gulf. Высокий CPA, высокое качество депозита."
+      "notes": "Один из лучших таргетов для Gulf. Высокий CPA, высокое качество депозита.",
+      "fb_interest_2": ""
     },
     "EF+": {
       "label": "Elite Forex Extended",
@@ -69,7 +70,8 @@
         "KW",
         "QA"
       ],
-      "notes": "Нишевый, маленький охват."
+      "notes": "Нишевый, маленький охват.",
+      "fb_interest_2": ""
     },
     "FX": {
       "label": "Forex (Generic)",
@@ -79,7 +81,7 @@
         "foreks",
         "fx/ios"
       ],
-      "fb_interest": "Forex trading, Currency trading",
+      "fb_interest": "Foreign exchange market, Forex signal, forex trader, Forex Club, Forex Signals, Easy forex, Forex Bank, Forex Online Trading, Forex Factory, Profit Forex Signal, FOREX.com, Forex CFDs Signal, MT5.com - Forex Traders Community, FxPro, iFOREX, XForex, OzForex, InstaForex",
       "audience": "интересующиеся форексом, включая новичков",
       "top_countries": [
         "BH",
@@ -87,7 +89,8 @@
         "KW",
         "OM"
       ],
-      "notes": "Более широкий и дешёвый чем EF. Альтернатива EF в Gulf-странах."
+      "notes": "Более широкий и дешёвый чем EF. Альтернатива EF в Gulf-странах.",
+      "fb_interest_2": ""
     },
     "Trading": {
       "label": "Trading (Generic)",
@@ -104,7 +107,8 @@
         "MX",
         "CL"
       ],
-      "notes": "Хорошо работает в Центральной Америке."
+      "notes": "Хорошо работает в Центральной Америке.",
+      "fb_interest_2": ""
     },
     "SM": {
       "label": "Stock Market",
@@ -114,7 +118,7 @@
         "stocks",
         "stock"
       ],
-      "fb_interest": "Stock market, Wall Street, Investing",
+      "fb_interest": "Foreign exchange market, Investor, Stock exchange, Stock market",
       "audience": "пользователи, интересующиеся фондовым рынком США",
       "top_countries": [
         "MX",
@@ -122,7 +126,8 @@
         "CO",
         "AR"
       ],
-      "notes": "Финансовая аудитория с фокусом на акции."
+      "notes": "Финансовая аудитория с фокусом на акции.",
+      "fb_interest_2": ""
     },
     "Day": {
       "label": "Day Trading",
@@ -132,13 +137,14 @@
         "day_trade",
         "daytrade"
       ],
-      "fb_interest": "Swing trading, Stock market index, Financial market, Day trading, Stock exchange, FxPro, Forex signal, Passive income, MetaTrader 4, CMC Markets, Foreign exchange market, Stock market, FXCM, Interactive Brokers, Stock market index future, Algorithmic trading, EToro, E-Trade, Stock Market Learning, Alpari Group, Plus500, Return on investment, High-frequency trading",
+      "fb_interest": "Algorithmic trading, Alpari Group, CMC Markets, Day trading, E-Trade, EToro, Financial market, Foreign exchange market, Forex signal, FXCM, FxPro, High-frequency trading, Passive income, Plus500, Stock exchange, Stock market, Swing trading",
       "audience": "дэй-трейдеры, ищущие быстрый доход от торговли",
       "top_countries": [
         "MX",
         "CL"
       ],
-      "notes": "Узкая ниша внутри Trading."
+      "notes": "Узкая ниша внутри Trading.",
+      "fb_interest_2": ""
     },
     "IPO": {
       "label": "IPO Interest",
@@ -171,7 +177,8 @@
         "EC",
         "CO"
       ],
-      "notes": "FB ML оптимизирует. При достаточном бюджете и пикселе даёт лучший CPL."
+      "notes": "FB ML оптимизирует. При достаточном бюджете и пикселе даёт лучший CPL.",
+      "fb_interest_2": ""
     },
     "PF": {
       "label": "Personal Finance",
@@ -188,7 +195,8 @@
         "CL",
         "GT"
       ],
-      "notes": "Более низкая осведомлённость о трейдинге, чем HV/EF."
+      "notes": "Более низкая осведомлённость о трейдинге, чем HV/EF.",
+      "fb_interest_2": ""
     },
     "CCorg": {
       "label": "CC Organic",
@@ -259,7 +267,8 @@
       "fb_interest": "Luxury Watches, Luxury Shop, Luxury Travel, First class travel, Luxury, Luxury Bags, Luxury box, The Luxury Collection, Shopping, Luxury Resorts, Luxury Store, Luxury Lifestyle, Sofitel, Luxury Travel Advisor, Gourmet, Luxury yacht, Personal luxury car, Luxury vehicle, Travel, Luxury goods, Destinology - Luxury Holidays, Destination Luxury or Luxury Lodge Holiday, Behaviors: Frequent Travelers, Frequent international travelers or People who prefer high-value goods in UAE",
       "audience": "Люкс-аудитория: путешественники, покупатели премиум-товаров; акцент на Gulf (UAE, KW, QA)",
       "top_countries": [],
-      "notes": "Behaviors включают Frequent Travelers и People who prefer high-value goods in UAE. Хорошо работает для Gulf-офферов."
+      "notes": "Behaviors включают Frequent Travelers и People who prefer high-value goods in UAE. Хорошо работает для Gulf-офферов.",
+      "fb_interest_2": ""
     },
     "Reading": {
       "label": "Reading",
@@ -267,15 +276,17 @@
       "fb_interest": "All-news radio, E-books, News magazine, News broadcasting, Literature, Online newspaper, Local news, Books, Breaking news, News media, Newspapers, Current events, Journalism",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Hobbies": {
       "label": "Hobbies",
       "aliases": [],
-      "fb_interest": "Interests: Adventure travel, Acting, Vacations, Singing, Community issues, Gardening, Ecotourism, Mountains, Car rentals, Trucks, Crafts, Rabbits, Electric vehicle, Furniture, Volunteering, Painting, Performing arts, Cats, Fish, Automobiles, Fine art, Minivans, Air travel, Cruises, Home improvement, Birds, Current events, Guitar, SUVs, Dogs, Home Appliances, Motorcycles, Nature (science), Reptiles, Drums, RVs, Horses, Charity and causes, Dance, Lakes, Tourism, Beaches, Scooters, Pet food, Do it yourself (DIY), Hotels, Writing, Politics, Law, Sculpture, Hybrids, Drawing, Photography, Theme parks or Boats",
+      "fb_interest": "Adventure travel, Acting, Vacations, Singing, Community issues, Gardening, Ecotourism, Mountains, Car rentals, Trucks, Crafts, Rabbits, Electric vehicle, Furniture, Volunteering, Painting, Performing arts, Cats, Fish, Automobiles, Fine art, Minivans, Air travel, Cruises, Home improvement, Birds, Current events, Guitar, SUVs, Dogs, Home Appliances, Motorcycles, Nature (science), Reptiles, Drums, RVs, Horses, Charity and causes, Dance, Lakes, Tourism, Beaches, Scooters, Pet food, Do it yourself (DIY), Hotels, Writing, Politics, Law, Sculpture, Hybrids, Drawing, Photography, Theme parks or Boats",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Investment Plus": {
       "label": "Investment Plus",
@@ -283,7 +294,8 @@
       "fb_interest": "Real estate investment trust, Alternative Investment Market, Investment banking, Investopedia, Alternative investment, Investment club, Creative real estate investing, Investment trust, Fidelity Investments, Financial adviser, Edward Jones Investments, Property investment club, Investment management, Private equity, Investment strategy, Investment, Investment company, Investec, Real estate investing, Investor, Return on investment, XP Investimentos or Investing.com",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "sport": {
       "label": "sport",
@@ -291,7 +303,8 @@
       "fb_interest": "UEFA Champions League, Lionel Messi, La Liga, Liverpool F.C., Real Madrid C.F., Cristiano Ronaldo, FC Barcelona, FIFA World Cup, Sports, Physical fitness, Premier League, UEFA Europa League, FIFA, Football, Neymar, UEFA, Ligue 1, Physical exercise or Manchester City F.C., Behaviors: Soccer fans (moderate content engagement) or Soccer fans (high content engagement)",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "InvestmentPlus latam": {
       "label": "InvestmentPlus latam",
@@ -299,7 +312,8 @@
       "fb_interest": "Real estate investment trust, Alternative Investment Market, Investment banking, Investopedia, Alternative investment, Investment club, Creative real estate investing, Investment trust, Fidelity Investments, Financial adviser, Edward Jones Investments, Property investment club, Investment management, Private equity, Angel investor, Investment strategy, Investment, Investment company, Investec, Real estate investing, Investor, Return on investment, XP Investimentos, Investing.com",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "reading latam": {
       "label": "reading latam",
@@ -307,7 +321,8 @@
       "fb_interest": "All-news radio, E-books, ESPNews, Opera News, News magazine, Sport (Spanish newspaper), News broadcasting, Record (newspaper), Online newspaper, Local news, Books, International News Service v. Associated Press, Science News, Breaking news, News media, Newspapers, Sporting News",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Gambling AR com": {
       "label": "Gambling AR com",
@@ -320,10 +335,11 @@
     "Sport AR com": {
       "label": "Sport AR com",
       "aliases": [],
-      "fb_interest": "Interests: CBSSports.com, Sports, NBC Sports, Cue sports, ESPNcricinfo, NDTV, Sporting News, Fox Sports, Fox Sports 1 or 247Sports.com, Behaviors: Sports page admins, Employers: FOX Sports",
+      "fb_interest": "CBSSports.com, Sports, NBC Sports, Cue sports, ESPNcricinfo, NDTV, Sporting News, Fox Sports, Fox Sports 1 or 247Sports.com, Behaviors: Sports page admins, Employers: FOX Sports",
       "audience": "Спортивная аудитория для AR (Argentina) и .com аккаунтов",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Foreign ex": {
       "label": "Foreign ex",
@@ -336,18 +352,20 @@
     "GMBL": {
       "label": "GMBL",
       "aliases": [],
-      "fb_interest": "Sky Betting and Gaming, Betfred, Gambling, Sports betting, Online poker, Paddy Power, Lottery, Online gambling, Sportingbet, Bwin.Party Digital Entertainment, Slot machine, Bookmaker, Casino games, Unibet, Betfair, Casino, Ladbrokes, Betsson, Bet365, Sportsbet.com.au or Tipico",
+      "fb_interest": "Bet365, Betfair, Betfred, Betsson, Bookmaker, Bwin.Party Digital Entertainment, Ladbrokes, Lottery, Online gambling, Paddy Power, Passive income, Sky Betting and Gaming, Slot machine, Sportingbet, Sports betting, Sportsbet.com.au, Stock market, Tipico, Unibet, Casino games, Gambling, Online poker",
       "audience": "Любители азартных игр, ставок на спорт, онлайн-казино; применяется для всех стран",
       "top_countries": [],
-      "notes": "Широкий гемблинг-таргет. Использовать осторожно — требует одобрения FB для гемблинг-офферов."
+      "notes": "Широкий гемблинг-таргет. Использовать осторожно — требует одобрения FB для гемблинг-офферов.",
+      "fb_interest_2": ""
     },
     "competators investment mix": {
       "label": "competators investment mix",
       "aliases": [],
-      "fb_interest": "Interests: Swing trading, Trading strategy, Financial market, Day trading, Stock exchange, Finance, Alternative investment, Financial services, Passive income, Investment management, MetaTrader 4, Stock, Investment strategy, Investment, EToro, E-Trade, Investor, Plus500, Return on investment, Investing.com",
+      "fb_interest": "Swing trading, Trading strategy, Financial market, Day trading, Stock exchange, Finance, Alternative investment, Financial services, Passive income, Investment management, MetaTrader 4, Stock, Investment strategy, Investment, EToro, E-Trade, Investor, Plus500, Return on investment, Investing.com",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Stockmarket": {
       "label": "Stockmarket",
@@ -363,7 +381,8 @@
       "fb_interest": "Initial Public Offering, Venture Capital, Angel Investor, Investment Banking, Private Equity fund",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Luxury2": {
       "label": "Luxury2",
@@ -371,7 +390,8 @@
       "fb_interest": "Horse care, Arabian horse, Property investment trust, Show jumping, National Cutting Horse Association, Horse tack, Cross-country equestrianism, American Quarter Horse, FEI World Equestrian Games, Horse & Hound, Horse breeding, Horse training, Horse show, Horse trainer, Endurance riding, Arabian Ranches Golf Club, Horse & Rider, Horse racing (sport), Falconry, Horseback riding (horse sport), Equestrian facility, World Arabian Horse Organization",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Tech": {
       "label": "Tech",
@@ -379,7 +399,8 @@
       "fb_interest": "Andreessen Horowitz, Digital Trends, Gadget, Kickstarter, Seed accelerator, TechCrunch, TechRadar, VentureBeat, Technology",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "OnlineEducation": {
       "label": "OnlineEducation",
@@ -387,15 +408,17 @@
       "fb_interest": "Business education, Coaching, Coursera, EdX, Emotional intelligence",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Wellbeing": {
       "label": "Wellbeing",
       "aliases": [],
-      "fb_interest": "Well-being, Quality of life, Quality of life, Self-confidence, Self-knowledge, Self-esteem, Personal development, Personal development, Health & wellness, Emotional intelligence, Coaching",
+      "fb_interest": "Well-being, Quality of life, Quality of life, Self-confidence, Self-knowledge, Self-esteem, Personal development, Personal development, Health & wellness, Emotional intelligence, Coaching, Self-knowledge, Self-knowledge, Happiness, Motivation",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Lux": {
       "label": "Lux",
@@ -403,15 +426,17 @@
       "fb_interest": "Gucci, Louis Vuitton, Chanel, Dior, Prada, Balenciaga, Versace, Bottega Veneta, Off-White, Alexander McQueen, Zara, H&M, Mango, Shein, ASOS, Net-a-Porter, Farfetch, Revolve, Fashion Nova, Nordstrom, Online shopping, Fashion accessories, Streetwear, Luxury goods, High-end fashion, Personal stylists, Fashion magazines, Fashion shows, Beauty and cosmetics, Luxury lifestyle, Instagram influencers, Fashion photography, Travel and lifestyle bloggers, Vogue, Harper’s Bazaar, GQ, Glamour, Marie Claire",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "OnlineGaming": {
       "label": "OnlineGaming",
       "aliases": [],
-      "fb_interest": "Blizzard Entertainment, Call of Duty, Epic Games, FIFA, Fortnite, Gamer, Grand Theft Auto, Grand Theft Auto [AND], League of Legends, MMORPG, MMORPG, Nintendo, PC Gamer, PlayStation, PlayStation 4, PlayStation Network, PlayStation Store, Roblox, Rockstar Games, Twitch, Ubisoft, Video game developer, Xbox, Xbox One, Esports teams, Strategy video game, Video game publisher, Video game related content, Online games, Video games",
+      "fb_interest": "Blizzard Entertainment, Call of Duty, Epic Games, FIFA, Fortnite, Gamer, Grand Theft Auto, Grand Theft Auto V, League of Legends, MMORPG, MMORPG, Nintendo, PC Gamer, PlayStation, PlayStation 4, PlayStation Network, PlayStation Store, Roblox, Rockstar Games, Twitch, Ubisoft, Video game developer, Xbox, Xbox One, Esports teams, Strategy video game, Video game publisher, Video game related content, Online games, Video games",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Current Events": {
       "label": "Current Events",
@@ -419,7 +444,8 @@
       "fb_interest": "Local news, Current events",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Gos": {
       "label": "Gos",
@@ -427,7 +453,8 @@
       "fb_interest": "Celebrity, Celebrity Gossip, Celebrity News, Entertainment Weekly, Internet celebrity, The Hollywood Gossip, Music",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "HedgeFund": {
       "label": "HedgeFund",
@@ -435,7 +462,8 @@
       "fb_interest": "Asset management, Investment management, Mutual fund, Private equity, Private equity fund, Private equity real estate, Venture capital, Venture capital financing",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "ES": {
       "label": "ES",
@@ -443,7 +471,8 @@
       "fb_interest": "Engaged Shoppers, Online shoppers, People who have made online purchases, Shopping and fashion buyers, Frequent online buyers, High value goods buyers, Credit card users, Debit card users, Mobile payment users, In-app purchasers, Facebook Payments users, PayPal users, Apple Pay users, Google Pay users, Amazon, AliExpress, eBay, Etsy, Shopify, Zalando, ASOS, Online banking, Digital wallets, Subscription services, SaaS products, Streaming services (Netflix, Spotify)",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Main 1": {
       "label": "Main 1",
@@ -451,7 +480,8 @@
       "fb_interest": "Swing trading, Stock market index, Electronic trading platform, Trading strategy, Financial market, Money, Day trading, Stock exchange, Finance, FxPro, Personal finance, Technical analysis, Market trend, Forex signal, Passive income, Investment management, MetaTrader 4, Stock, Investment strategy, Foreign exchange market, Stock market, FXCM, Investment, Interactive Brokers, Algorithmic trading, Wealth, EToro, E-Trade, Investor, Income, Online Trading Academy, Plus500, Return on investment, Forex Trader",
       "audience": "AI-сгенерированный таргет внутри FB аккаунта — не используется в ручном анализе",
       "top_countries": [],
-      "notes": "Составлен автоматически Facebook Advantage+ или вручную через AI. Пока не классифицируем."
+      "notes": "Составлен автоматически Facebook Advantage+ или вручную через AI. Пока не классифицируем.",
+      "fb_interest_2": ""
     },
     "Main 2": {
       "label": "Main 2",
@@ -459,7 +489,8 @@
       "fb_interest": "Financial market, Investopedia, MarketWatch, Motivation, NASDAQ, Investment management, Investment strategy, Investor, Motivational speaking, Investing.com, Investor, Motivational speaker, Investor Relations, Investment Consultant, Investment Analyst",
       "audience": "AI-сгенерированный таргет внутри FB аккаунта — не используется в ручном анализе",
       "top_countries": [],
-      "notes": "Составлен автоматически Facebook Advantage+ или вручную через AI. Пока не классифицируем."
+      "notes": "Составлен автоматически Facebook Advantage+ или вручную через AI. Пока не классифицируем.",
+      "fb_interest_2": ""
     },
     "TRDEZ": {
       "label": "TRDEZ",
@@ -467,23 +498,26 @@
       "fb_interest": "Trading strategy, Day trading, FxPro, CMC Markets, FXCM, EToro, E-Trade, Plus500",
       "audience": "",
       "top_countries": [],
-      "notes": ""
+      "notes": "",
+      "fb_interest_2": ""
     },
     "Mix": {
       "label": "Mix",
       "aliases": [],
-      "fb_interest": "Investment banking, Asset management, Private banking, Private equity, Wealth management, Personal finance [AND] Frequent international travelers, Business class, Business jet, FirstClass, Horse racing, Luxury, Luxury Resorts, Luxury vehicle, Yacht club",
+      "fb_interest": "Investment banking, Asset management, Private banking, Private equity, Wealth management, Investment banking, Personal finance",
       "audience": "Комбо: финансы + премиум-образ жизни. AND-логика (Narrow Further): финансовые интересы И путешествия/люкс",
       "top_countries": [],
-      "notes": "V в Google Sheet = Narrow Further (Define Further) в FB — аудитория должна соответствовать ОБЕИМ группам."
+      "notes": "V в Google Sheet = Narrow Further (Define Further) в FB — аудитория должна соответствовать ОБЕИМ группам.",
+      "fb_interest_2": "Frequent international travelers, Business class, Business jet, FirstClass, Horse racing, Luxury, Luxury Resorts, Luxury vehicle, Yacht club"
     },
     "Mix2": {
       "label": "Mix2",
       "aliases": [],
-      "fb_interest": "Investment banking, Asset management, Private banking, Private equity, Wealth management, Investment banking, Personal finance [AND] All-news radio, E-books, ESPNews, Opera News, News magazine, Sport (Spanish newspaper), News broadcasting, Record (newspaper), Online newspaper, Local news, Books, International News Service v. Associated Press, Science News, Breaking news, News media, Newspapers, Sporting News",
+      "fb_interest": "Investment banking, Asset management, Private banking, Private equity, Wealth management, Investment banking, Personal finance",
       "audience": "Комбо: финансы + читатели новостей. AND-логика: финансовые интересы И медиа/новости",
       "top_countries": [],
-      "notes": "V в Google Sheet = Narrow Further (Define Further) в FB — аудитория должна соответствовать ОБЕИМ группам."
+      "notes": "V в Google Sheet = Narrow Further (Define Further) в FB — аудитория должна соответствовать ОБЕИМ группам.",
+      "fb_interest_2": "All-news radio, E-books, ESPNews, Opera News, News magazine, Sport (Spanish newspaper), News broadcasting, Record (newspaper), Online newspaper, Local news, Books, International News Service v. Associated Press, Science News, Breaking news, News media, Newspapers, Sporting News"
     },
     "Mix1": {
       "label": "Mix1",
@@ -537,6 +571,87 @@
       "label": "All-news radio, E-books, News magazine, News broadcasting, Literature, Online newspaper, Local news, Books, Breaking news, News media, Newspapers, Current events, Journalism",
       "aliases": [],
       "fb_interest": "Wealth Managment",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Cars": {
+      "label": "Cars",
+      "aliases": [],
+      "fb_interest": "Audi, BMW, Ferrari, Jaguar Cars, Mercedes-AMG, Mercedes-Benz, Rolls-Royce Motor Cars, Bentley, Bentley, Bugatti Automobiles, McLaren Automotive",
+      "fb_interest_2": "",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "TradingYB": {
+      "label": "TradingYB",
+      "aliases": [],
+      "fb_interest": "Day Trading, Swing trading",
+      "fb_interest_2": "",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Gik": {
+      "label": "Gik",
+      "aliases": [],
+      "fb_interest": "SpaceX, tesla, Apple Inc.",
+      "fb_interest_2": "",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "TradingNIK": {
+      "label": "TradingNIK",
+      "aliases": [],
+      "fb_interest": "Swing Trading, Day Trading, investment",
+      "fb_interest_2": "",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Investment": {
+      "label": "Investment",
+      "aliases": [],
+      "fb_interest": "Creative real estate investing, Fidelity Investments, Financial adviser, Investing and trading, Investing.com, Investment club, Investment company, Investment management, Investment strategy, Investor, Private equity, Real estate investing, Investment",
+      "fb_interest_2": "",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Passive": {
+      "label": "Passive",
+      "aliases": [],
+      "fb_interest": "Income, Passive income, Wealth, Wealth management",
+      "fb_interest_2": "",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Platforms": {
+      "label": "Platforms",
+      "aliases": [],
+      "fb_interest": "Bloomberg L.P., Charles Schwab Corporation, EToro, Fidelity Investments, Investing.com, Investopedia, MarketWatch, MetaTrader 4, TD Ameritrade, The Motley Fool",
+      "fb_interest_2": "",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "GMB": {
+      "label": "GMB",
+      "aliases": [],
+      "fb_interest": "Online gambling, Sports betting, Gambling",
+      "fb_interest_2": "",
+      "audience": "",
+      "top_countries": [],
+      "notes": ""
+    },
+    "Investing": {
+      "label": "Investing",
+      "aliases": [],
+      "fb_interest": "Investing, Stock exchange, Financial market, Stock market, Capital market, Investment banking, Bloomberg, CNBC, Financial Times, The Wall Street Journal, Investopedia, Interactive Brokers, E*TRADE, NASDAQ, S&P 500, Dow Jones Industrial Average, Return on investment, Portfolio management, Wealth management",
+      "fb_interest_2": "",
       "audience": "",
       "top_countries": [],
       "notes": ""

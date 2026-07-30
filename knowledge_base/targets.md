@@ -43,7 +43,7 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ---
 ## FX — Forex (Generic)
 
-- **FB Interest:** Forex trading, Currency trading
+- **FB Interest:** Foreign exchange market, Forex signal, forex trader, Forex Club, Forex Signals, Easy forex, Forex Bank, Forex Online Trading, Forex Factory, Profit Forex Signal, FOREX.com, Forex CFDs Signal, MT5.com - Forex Traders Community, FxPro, iFOREX, XForex, OzForex, InstaForex
 - **Аудитория:** интересующиеся форексом, включая новичков
 - **Топ-страны:** BH, UAE, KW, OM
 - **Алиасы:** forex, fx_target, foreks, fx/ios
@@ -61,7 +61,7 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ---
 ## SM — Stock Market
 
-- **FB Interest:** Stock market, Wall Street, Investing
+- **FB Interest:** Foreign exchange market, Investor, Stock exchange, Stock market
 - **Аудитория:** пользователи, интересующиеся фондовым рынком США
 - **Топ-страны:** MX, CL, CO, AR
 - **Алиасы:** stockmarket, stock_market, stocks, stock
@@ -70,7 +70,7 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ---
 ## Day — Day Trading
 
-- **FB Interest:** Swing trading, Stock market index, Financial market, Day trading, Stock exchange, FxPro, Forex signal, Passive income, MetaTrader 4, CMC Markets, Foreign exchange market, Stock market, FXCM, Interactive Brokers, Stock market index future, Algorithmic trading, EToro, E-Trade, Stock Market Learning, Alpari Group, Plus500, Return on investment, High-frequency trading
+- **FB Interest:** Algorithmic trading, Alpari Group, CMC Markets, Day trading, E-Trade, EToro, Financial market, Foreign exchange market, Forex signal, FXCM, FxPro, High-frequency trading, Passive income, Plus500, Stock exchange, Stock market, Swing trading
 - **Аудитория:** дэй-трейдеры, ищущие быстрый доход от торговли
 - **Топ-страны:** MX, CL
 - **Алиасы:** daytrading, day_trading, day_trade, daytrade
@@ -154,7 +154,7 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ---
 ## Hobbies — Hobbies
 
-- **FB Interest:** Interests: Adventure travel, Acting, Vacations, Singing, Community issues, Gardening, Ecotourism, Mountains, Car rentals, Trucks, Crafts, Rabbits, Electric vehicle, Furniture, Volunteering, Painting, Performing arts, Cats, Fish, Automobiles, Fine art, Minivans, Air travel, Cruises, Home improvement, Birds, Current events, Guitar, SUVs, Dogs, Home Appliances, Motorcycles, Nature (science), Reptiles, Drums, RVs, Horses, Charity and causes, Dance, Lakes, Tourism, Beaches, Scooters, Pet food, Do it yourself (DIY), Hotels, Writing, Politics, Law, Sculpture, Hybrids, Drawing, Photography, Theme parks or Boats
+- **FB Interest:** Adventure travel, Acting, Vacations, Singing, Community issues, Gardening, Ecotourism, Mountains, Car rentals, Trucks, Crafts, Rabbits, Electric vehicle, Furniture, Volunteering, Painting, Performing arts, Cats, Fish, Automobiles, Fine art, Minivans, Air travel, Cruises, Home improvement, Birds, Current events, Guitar, SUVs, Dogs, Home Appliances, Motorcycles, Nature (science), Reptiles, Drums, RVs, Horses, Charity and causes, Dance, Lakes, Tourism, Beaches, Scooters, Pet food, Do it yourself (DIY), Hotels, Writing, Politics, Law, Sculpture, Hybrids, Drawing, Photography, Theme parks or Boats
 - **Аудитория:** —
 
 ---
@@ -190,7 +190,7 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ---
 ## Sport AR com — Sport AR com
 
-- **FB Interest:** Interests: CBSSports.com, Sports, NBC Sports, Cue sports, ESPNcricinfo, NDTV, Sporting News, Fox Sports, Fox Sports 1 or 247Sports.com, Behaviors: Sports page admins, Employers: FOX Sports
+- **FB Interest:** CBSSports.com, Sports, NBC Sports, Cue sports, ESPNcricinfo, NDTV, Sporting News, Fox Sports, Fox Sports 1 or 247Sports.com, Behaviors: Sports page admins, Employers: FOX Sports
 - **Аудитория:** Спортивная аудитория для AR (Argentina) и .com аккаунтов
 
 ---
@@ -202,14 +202,14 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ---
 ## GMBL — GMBL
 
-- **FB Interest:** Sky Betting and Gaming, Betfred, Gambling, Sports betting, Online poker, Paddy Power, Lottery, Online gambling, Sportingbet, Bwin.Party Digital Entertainment, Slot machine, Bookmaker, Casino games, Unibet, Betfair, Casino, Ladbrokes, Betsson, Bet365, Sportsbet.com.au or Tipico
+- **FB Interest:** Bet365, Betfair, Betfred, Betsson, Bookmaker, Bwin.Party Digital Entertainment, Ladbrokes, Lottery, Online gambling, Paddy Power, Passive income, Sky Betting and Gaming, Slot machine, Sportingbet, Sports betting, Sportsbet.com.au, Stock market, Tipico, Unibet, Casino games, Gambling, Online poker
 - **Аудитория:** Любители азартных игр, ставок на спорт, онлайн-казино; применяется для всех стран
 - **Примечание:** Широкий гемблинг-таргет. Использовать осторожно — требует одобрения FB для гемблинг-офферов.
 
 ---
 ## competators investment mix — competators investment mix
 
-- **FB Interest:** Interests: Swing trading, Trading strategy, Financial market, Day trading, Stock exchange, Finance, Alternative investment, Financial services, Passive income, Investment management, MetaTrader 4, Stock, Investment strategy, Investment, EToro, E-Trade, Investor, Plus500, Return on investment, Investing.com
+- **FB Interest:** Swing trading, Trading strategy, Financial market, Day trading, Stock exchange, Finance, Alternative investment, Financial services, Passive income, Investment management, MetaTrader 4, Stock, Investment strategy, Investment, EToro, E-Trade, Investor, Plus500, Return on investment, Investing.com
 - **Аудитория:** —
 
 ---
@@ -245,7 +245,7 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ---
 ## Wellbeing — Wellbeing
 
-- **FB Interest:** Well-being, Quality of life, Quality of life, Self-confidence, Self-knowledge, Self-esteem, Personal development, Personal development, Health & wellness, Emotional intelligence, Coaching
+- **FB Interest:** Well-being, Quality of life, Quality of life, Self-confidence, Self-knowledge, Self-esteem, Personal development, Personal development, Health & wellness, Emotional intelligence, Coaching, Self-knowledge, Self-knowledge, Happiness, Motivation
 - **Аудитория:** —
 
 ---
@@ -257,7 +257,7 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ---
 ## OnlineGaming — OnlineGaming
 
-- **FB Interest:** Blizzard Entertainment, Call of Duty, Epic Games, FIFA, Fortnite, Gamer, Grand Theft Auto, Grand Theft Auto [AND], League of Legends, MMORPG, MMORPG, Nintendo, PC Gamer, PlayStation, PlayStation 4, PlayStation Network, PlayStation Store, Roblox, Rockstar Games, Twitch, Ubisoft, Video game developer, Xbox, Xbox One, Esports teams, Strategy video game, Video game publisher, Video game related content, Online games, Video games
+- **FB Interest:** Blizzard Entertainment, Call of Duty, Epic Games, FIFA, Fortnite, Gamer, Grand Theft Auto, Grand Theft Auto V, League of Legends, MMORPG, MMORPG, Nintendo, PC Gamer, PlayStation, PlayStation 4, PlayStation Network, PlayStation Store, Roblox, Rockstar Games, Twitch, Ubisoft, Video game developer, Xbox, Xbox One, Esports teams, Strategy video game, Video game publisher, Video game related content, Online games, Video games
 - **Аудитория:** —
 
 ---
@@ -307,14 +307,16 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ---
 ## Mix — Mix
 
-- **FB Interest:** Investment banking, Asset management, Private banking, Private equity, Wealth management, Personal finance [AND] Frequent international travelers, Business class, Business jet, FirstClass, Horse racing, Luxury, Luxury Resorts, Luxury vehicle, Yacht club
+- **FB Interest:** Investment banking, Asset management, Private banking, Private equity, Wealth management, Investment banking, Personal finance
+- **FB Interest 2 (Define further / AND):** Frequent international travelers, Business class, Business jet, FirstClass, Horse racing, Luxury, Luxury Resorts, Luxury vehicle, Yacht club
 - **Аудитория:** Комбо: финансы + премиум-образ жизни. AND-логика (Narrow Further): финансовые интересы И путешествия/люкс
 - **Примечание:** V в Google Sheet = Narrow Further (Define Further) в FB — аудитория должна соответствовать ОБЕИМ группам.
 
 ---
 ## Mix2 — Mix2
 
-- **FB Interest:** Investment banking, Asset management, Private banking, Private equity, Wealth management, Investment banking, Personal finance [AND] All-news radio, E-books, ESPNews, Opera News, News magazine, Sport (Spanish newspaper), News broadcasting, Record (newspaper), Online newspaper, Local news, Books, International News Service v. Associated Press, Science News, Breaking news, News media, Newspapers, Sporting News
+- **FB Interest:** Investment banking, Asset management, Private banking, Private equity, Wealth management, Investment banking, Personal finance
+- **FB Interest 2 (Define further / AND):** All-news radio, E-books, ESPNews, Opera News, News magazine, Sport (Spanish newspaper), News broadcasting, Record (newspaper), Online newspaper, Local news, Books, International News Service v. Associated Press, Science News, Breaking news, News media, Newspapers, Sporting News
 - **Аудитория:** Комбо: финансы + читатели новостей. AND-логика: финансовые интересы И медиа/новости
 - **Примечание:** V в Google Sheet = Narrow Further (Define Further) в FB — аудитория должна соответствовать ОБЕИМ группам.
 
@@ -358,6 +360,60 @@ _Авто-генерируется из Google Sheet. Редактируй alias
 ## All-news radio, E-books, News magazine, News broadcasting, Literature, Online newspaper, Local news, Books, Breaking news, News media, Newspapers, Current events, Journalism — All-news radio, E-books, News magazine, News broadcasting, Literature, Online newspaper, Local news, Books, Breaking news, News media, Newspapers, Current events, Journalism
 
 - **FB Interest:** Wealth Managment
+- **Аудитория:** —
+
+---
+## Cars — Cars
+
+- **FB Interest:** Audi, BMW, Ferrari, Jaguar Cars, Mercedes-AMG, Mercedes-Benz, Rolls-Royce Motor Cars, Bentley, Bentley, Bugatti Automobiles, McLaren Automotive
+- **Аудитория:** —
+
+---
+## TradingYB — TradingYB
+
+- **FB Interest:** Day Trading, Swing trading
+- **Аудитория:** —
+
+---
+## Gik — Gik
+
+- **FB Interest:** SpaceX, tesla, Apple Inc.
+- **Аудитория:** —
+
+---
+## TradingNIK — TradingNIK
+
+- **FB Interest:** Swing Trading, Day Trading, investment
+- **Аудитория:** —
+
+---
+## Investment — Investment
+
+- **FB Interest:** Creative real estate investing, Fidelity Investments, Financial adviser, Investing and trading, Investing.com, Investment club, Investment company, Investment management, Investment strategy, Investor, Private equity, Real estate investing, Investment
+- **Аудитория:** —
+
+---
+## Passive — Passive
+
+- **FB Interest:** Income, Passive income, Wealth, Wealth management
+- **Аудитория:** —
+
+---
+## Platforms — Platforms
+
+- **FB Interest:** Bloomberg L.P., Charles Schwab Corporation, EToro, Fidelity Investments, Investing.com, Investopedia, MarketWatch, MetaTrader 4, TD Ameritrade, The Motley Fool
+- **Аудитория:** —
+
+---
+## GMB — GMB
+
+- **FB Interest:** Online gambling, Sports betting, Gambling
+- **Аудитория:** —
+
+---
+## Investing — Investing
+
+- **FB Interest:** Investing, Stock exchange, Financial market, Stock market, Capital market, Investment banking, Bloomberg, CNBC, Financial Times, The Wall Street Journal, Investopedia, Interactive Brokers, E*TRADE, NASDAQ, S&P 500, Dow Jones Industrial Average, Return on investment, Portfolio management, Wealth management
 - **Аудитория:** —
 
 ---

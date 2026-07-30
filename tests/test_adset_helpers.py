@@ -102,10 +102,18 @@ def test_fuzzy_pure_noise_value_stays_unmatched():
     assert result["matched"] is False
 
 
-def test_fuzzy_boundary_guard_no_match_inside_word():
-    # "Trading" внутри "TradingYB" НЕ на границе слова — TradingYB ждёт
-    # решения пользователя о маппинге, автоматом не приравнивается.
+def test_fuzzy_variant_suffix_resolves_to_sheet_profile():
+    # TradingYB добавлен пользователем в шит как самостоятельный профиль
+    # (2026-07-30) — суффикс варианта "_V1" отбрасывается границей слова.
     result = resolve_interest_alias("TradingYB_V1")
+    assert result["matched"] is True
+    assert result["code"] == "TradingYB"
+
+
+def test_fuzzy_boundary_guard_no_match_inside_word():
+    # "Trading"/"trade" внутри "TradeYB" НЕ на границе слова — TradeYB
+    # остаётся нерезолвнутым (такого профиля нет), автоматом не приравнивается.
+    result = resolve_interest_alias("TradeYB")
     assert result["matched"] is False
 
 
