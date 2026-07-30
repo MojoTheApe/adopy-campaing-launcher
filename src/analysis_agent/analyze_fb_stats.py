@@ -26,7 +26,7 @@ from config.analysis_rules import (
 )
 from config.paths import get_excel_path
 from src.knowledge_agent.knowledge_base import (
-    resolve_target_code,
+    resolve_targeting_text,
     log_unknown_target,
 )
 from src.analysis_agent.report_markdown import build_full_report_markdown
@@ -265,7 +265,7 @@ def _log_unknown_interests(df: pd.DataFrame) -> None:
     for interest in unique_interests:
         if interest.lower() in skip_values:
             continue
-        if resolve_target_code(interest) is None:
+        if resolve_targeting_text(interest) is None:
             # Find an example adset name for context
             example_rows = df[df["Interest"].astype(str).str.strip() == interest]["Adset Name"]
             source = str(example_rows.iloc[0]) if not example_rows.empty else ""

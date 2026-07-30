@@ -17,13 +17,19 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from src.knowledge_agent.knowledge_base import get_target_context, resolve_target_code
+from src.knowledge_agent.knowledge_base import get_target_context, resolve_targeting_text
 
 NA_SENTINEL = "__NA__"
 
 
 def interest_bucket_key(raw: Any) -> str:
-    """Stable targeting bucket for §4 aggregates (case + KB aliases)."""
+    """Stable targeting bucket for §4 aggregates (case + KB aliases).
+
+    Uses resolve_targeting_text (Д4): compound-aware ("HV|Trading" buckets as
+    the canonical compound, not raw-lowercase) + dictionary fallback for KB
+    keys buried in parsing noise ("AAY_Day" → Day). Unresolvable values keep
+    the old raw-lowercase bucket so nothing disappears from the report.
+    """
     if raw is None:
         return NA_SENTINEL
     try:
@@ -34,7 +40,7 @@ def interest_bucket_key(raw: Any) -> str:
     s = str(raw).strip()
     if not s or s.lower() in ("nan", "none"):
         return NA_SENTINEL
-    canonical = resolve_target_code(s)
+    canonical = resolve_targeting_text(s)
     if canonical:
         return canonical
     return s.lower()

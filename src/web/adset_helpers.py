@@ -8,7 +8,6 @@ the Campaign Builder UI.
 """
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, Optional
 
 from config.analysis_rules import (
@@ -17,21 +16,18 @@ from config.analysis_rules import (
     get_device_keywords,
 )
 from src.analysis_agent.analyze_fb_stats import parse_adset_name
-from src.knowledge_agent.knowledge_base import get_target_context, resolve_target_code
-
-# `|`, `\` and `/` all mean "two+ interests combined in one campaign" (an
-# AND-group) — see analyze_fb_stats._is_compound_targeting_token. Every part
-# must resolve individually for the whole thing to count as matched.
-_COMPOUND_SEP_RE = re.compile(r"[|\\/]")
+from src.knowledge_agent.knowledge_base import get_target_context, resolve_targeting_parts
 
 
 def resolve_interest_alias(text: Optional[str]) -> Dict[str, Any]:
     """Resolve a free-text interest/targeting string to its canonical KB target(s).
 
-    Splits `|`/`\\`/`/`-joined compound targeting (e.g. "Day|Investment") into
-    parts and resolves each independently, then recombines — a single lookup
-    of the whole compound string against the KB always fails, since compound
-    combos are never modeled as their own KB entries.
+    Delegates to knowledge_base.resolve_targeting_parts, which handles both
+    `|`/`\\`/`/`-joined compounds AND the dictionary fallback (KB key embedded
+    in parsing noise, e.g. "AAY_Day" → Day, "Blue_HV|Investment" parts) — see
+    задача Д4 in the Obsidian plan. A single lookup of the whole compound
+    string against the KB always fails, since compound combos are never
+    modeled as their own KB entries.
 
     Returns {"raw": text, "matched": bool, "code": str|None, "label": str|None,
     "fb_interest": str|None} — "code" is the canonical KB key(s) joined with
@@ -39,20 +35,11 @@ def resolve_interest_alias(text: Optional[str]) -> Dict[str, Any]:
     (possibly using a different separator, e.g. "Day/Investment").
     """
     raw = (text or "").strip()
-    if not raw:
-        return {"raw": raw, "matched": False, "code": None, "label": None, "fb_interest": None}
-
-    parts = [p.strip() for p in _COMPOUND_SEP_RE.split(raw) if p.strip()]
+    parts = resolve_targeting_parts(raw) if raw else None
     if not parts:
         return {"raw": raw, "matched": False, "code": None, "label": None, "fb_interest": None}
 
-    resolved = []
-    for part in parts:
-        canonical = resolve_target_code(part)
-        if not canonical:
-            return {"raw": raw, "matched": False, "code": None, "label": None, "fb_interest": None}
-        resolved.append((canonical, get_target_context(canonical) or {}))
-
+    resolved = [(c, get_target_context(c) or {}) for c in parts]
     return {
         "raw": raw,
         "matched": True,

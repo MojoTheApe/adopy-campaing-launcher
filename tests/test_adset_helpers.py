@@ -65,6 +65,69 @@ def test_resolve_interest_alias_compound_fails_if_any_part_unresolved():
     assert result["matched"] is False
 
 
+# ── Д4: словарный fallback (KB-ключ внутри мусора парсинга) ────────────────
+
+
+def test_fuzzy_prefix_noise_is_stripped():
+    # "AAY_" — префикс аккаунта/оффера, приклеенный к таргетингу; позиционный
+    # парс отдаёт весь токен целиком, точный резолв всегда мимо.
+    result = resolve_interest_alias("AAY_Day")
+    assert result["matched"] is True
+    assert result["code"] == "Day"
+
+
+def test_fuzzy_space_separated_prefix():
+    result = resolve_interest_alias("2046 Day")
+    assert result["matched"] is True
+    assert result["code"] == "Day"
+
+
+def test_fuzzy_compound_with_age_and_variant_noise():
+    # Реальный кейс из аудита (76 строк): возраст и суффикс внутри части.
+    result = resolve_interest_alias("HV|Trading_40-64_Nokit")
+    assert result["matched"] is True
+    assert result["code"] == "HV|Trading"
+
+
+def test_fuzzy_device_part_is_dropped_not_failed():
+    # "/iOS" делает девайс отдельной частью компаунда; она отбрасывается как
+    # мусор, а не проваливает значение.
+    result = resolve_interest_alias("FX|Day/iOS")
+    assert result["matched"] is True
+    assert result["code"] == "FX|Day"
+
+
+def test_fuzzy_pure_noise_value_stays_unmatched():
+    result = resolve_interest_alias("iOS")
+    assert result["matched"] is False
+
+
+def test_fuzzy_boundary_guard_no_match_inside_word():
+    # "Trading" внутри "TradingYB" НЕ на границе слова — TradingYB ждёт
+    # решения пользователя о маппинге, автоматом не приравнивается.
+    result = resolve_interest_alias("TradingYB_V1")
+    assert result["matched"] is False
+
+
+def test_fuzzy_real_kb_gap_stays_unmatched():
+    # Investment/TRD — реальные пробелы KB (открытый вопрос), не мусор.
+    result = resolve_interest_alias("TRD|Investment/iOS")
+    assert result["matched"] is False
+
+
+def test_fuzzy_two_char_keys_not_scanned_inside_noise():
+    # "ES" в имени — языковой маркер; ключ ES (Engaged Shoppers) не должен
+    # выуживаться сканом из "ES_Lg_CL" (2-буквенные — только целой частью).
+    result = resolve_interest_alias("ES_Lg_CL")
+    assert result["matched"] is False
+
+
+def test_fuzzy_compound_dedupes_repeated_code():
+    result = resolve_interest_alias("Day|daytrading")
+    assert result["matched"] is True
+    assert result["code"] == "Day"
+
+
 def test_parse_adset_for_builder_resolves_alias_from_full_name():
     # Format: CountryCode_OfferName_Device_Creative_Interest_Age[_Date]
     # "video" (bare media-type token, no numeric suffix) is stripped as
