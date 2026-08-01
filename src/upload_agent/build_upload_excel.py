@@ -272,6 +272,18 @@ def get_account_info(ref: dict, account_name: str) -> dict[str, Any]:
     for key, val in accounts.items():
         if name.upper() in key.upper():
             return val
+    # Geo relabels of one profile ("FacebookELf221 EC" vs the sheet's
+    # "FacebookElf221 AR Ait") share pixel/domain/tracker — match on the
+    # first name token, but ONLY when exactly one row carries it. Sheets
+    # like UL58 have several same-prefix rows with different links; guessing
+    # between those would silently attach the wrong tracker, so ambiguity
+    # keeps the old not-found behaviour. (User-confirmed case, 2026-07-31.)
+    token = name.split()[0].upper() if name.split() else ""
+    if token:
+        hits = [val for key, val in accounts.items()
+                if (key or "").upper().split()[:1] == [token]]
+        if len(hits) == 1:
+            return hits[0]
     return {"pixel": None, "domain": None, "link": None}
 
 

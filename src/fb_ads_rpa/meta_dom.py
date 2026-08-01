@@ -203,7 +203,7 @@ def click_sidebar_tree_index(page: Page, index: int) -> bool:
         cx = float(bbox["x"]) + float(bbox["width"]) / 2
         cy = float(bbox["y"]) + float(bbox["height"]) / 2
         _mouse_click_chain(page, cx, cy)
-        time.sleep(0.3)
+        _sleep_h(0.3)
         return True
     return False
 
@@ -273,7 +273,7 @@ def click_wizard_breadcrumb_index(page: Page, index: int) -> bool:
             nav_links = root.locator('[role="navigation"] a, [role="navigation"] [role="link"]')
             if nav_links.count() > index:
                 nav_links.nth(index).click(timeout=5000)
-                time.sleep(0.5)
+                _sleep_h(0.5)
                 return True
         except Exception:
             pass
@@ -310,7 +310,7 @@ def click_wizard_breadcrumb_index(page: Page, index: int) -> bool:
     for root in _roots(page):
         try:
             if root.evaluate(script, index):
-                time.sleep(0.5)
+                _sleep_h(0.5)
                 return True
         except Exception:
             pass
@@ -371,15 +371,15 @@ def click_wizard_sidebar_level(page: Page, level: int) -> bool:
                 item = items.nth(level)
                 item.scroll_into_view_if_needed(timeout=5000)
                 item.click(timeout=5000)
-                time.sleep(0.6)
+                _sleep_h(0.6)
                 return True
         except Exception:
             pass
     if click_sidebar_tree_index(page, level):
-        time.sleep(0.5)
+        _sleep_h(0.5)
         return True
     if level in (0, 1, 2) and click_wizard_breadcrumb_index(page, level):
-        time.sleep(0.5)
+        _sleep_h(0.5)
         return True
     return False
 
@@ -486,7 +486,7 @@ def fill_input_near_label_verified(
     if not fill_input_near_label(page, label_variants, value):
         return False
     import time
-    time.sleep(0.4)
+    _sleep_h(0.4)
     current = read_input_near_label(page, label_variants)
     return value.strip() in current or current.strip() == value.strip()
 
@@ -555,7 +555,7 @@ def scroll_to_section(page: Page, *labels: str) -> bool:
                     loc = getter()
                     loc.wait_for(state="visible", timeout=5000)
                     loc.scroll_into_view_if_needed(timeout=5000)
-                    time.sleep(0.3)
+                    _sleep_h(0.3)
                     return True
                 except Exception:
                     pass
@@ -759,7 +759,7 @@ def click_conversion_location_dropdown(page: Page) -> bool:
                             )
                         else:
                             btn.click(timeout=5000)
-                        time.sleep(0.8)
+                        _sleep_h(0.8)
                         return True
                 except Exception:
                     continue
@@ -790,7 +790,7 @@ def click_conversion_location_dropdown(page: Page) -> bool:
     for root in _roots(page):
         try:
             if root.evaluate(script):
-                time.sleep(0.8)
+                _sleep_h(0.8)
                 return True
         except Exception:
             pass
@@ -813,11 +813,11 @@ def click_conversion_location_dropdown(page: Page) -> bool:
                         ctrl = row.locator(sel).first  # FIRST, not last
                         if ctrl.count() and ctrl.is_visible():
                             ctrl.click(timeout=5000)
-                            time.sleep(0.8)
+                            _sleep_h(0.8)
                             # Verify we opened the right menu
                             if _is_conversion_event_menu(page):
                                 close_open_dropdown(page)
-                                time.sleep(0.3)
+                                _sleep_h(0.3)
                                 continue
                             return True
                     except Exception:
@@ -855,7 +855,7 @@ def _pick_website_by_mouse_below_dropdown(page: Page) -> bool:
                 # Typical menu: row2 = Website only (below hybrid default)
                 for offset in (52, 92, 132):
                     page.mouse.click(cx, box["y"] + box["height"] + offset)
-                    time.sleep(0.55)
+                    _sleep_h(0.55)
                     if is_website_conversion_selected(page):
                         return True
             except Exception:
@@ -896,7 +896,7 @@ def _pick_website_from_aria_controls(page: Page) -> bool:
     for root in _roots(page):
         try:
             if root.evaluate(script):
-                time.sleep(0.6)
+                _sleep_h(0.6)
                 return True
         except Exception:
             pass
@@ -953,7 +953,7 @@ def _expand_conversion_location_single(page: Page) -> bool:
                         else:
                             el.click(timeout=5000, force=True)
                         clicked = True
-                        time.sleep(0.5)
+                        _sleep_h(0.5)
                         break
                 except Exception:
                     pass
@@ -976,7 +976,7 @@ def _expand_conversion_location_single(page: Page) -> bool:
                     else:
                         el.click(timeout=5000)
                     clicked = True
-                    time.sleep(0.45)
+                    _sleep_h(0.45)
                     break
                 except Exception:
                     pass
@@ -991,7 +991,7 @@ def _expand_conversion_location_single(page: Page) -> bool:
                     el.scroll_into_view_if_needed(timeout=2000)
                     el.click(timeout=5000, force=True)
                     clicked = True
-                    time.sleep(0.45)
+                    _sleep_h(0.45)
                     break
                 except Exception:
                     pass
@@ -1055,7 +1055,7 @@ def _click_recorded_website_label(page: Page) -> bool:
             try:
                 el.focus(timeout=2000)
                 el.press(" ", timeout=2000)
-                time.sleep(0.5)
+                _sleep_h(0.5)
                 if is_website_conversion_selected(page):
                     return True
             except Exception:
@@ -1065,7 +1065,7 @@ def _click_recorded_website_label(page: Page) -> bool:
             try:
                 el.focus(timeout=2000)
                 el.press("Enter", timeout=2000)
-                time.sleep(0.5)
+                _sleep_h(0.5)
                 if is_website_conversion_selected(page):
                     return True
             except Exception:
@@ -1076,13 +1076,13 @@ def _click_recorded_website_label(page: Page) -> bool:
 
             # Strategy 3: Mouse click center of SPAN
             _mouse_click_chain(page, cx, cy)
-            time.sleep(0.5)
+            _sleep_h(0.5)
             if is_website_conversion_selected(page):
                 return True
 
             # Strategy 4: Radio circle (left edge)
             _mouse_click_chain(page, box["x"] + min(16, box["width"] * 0.12), cy)
-            time.sleep(0.5)
+            _sleep_h(0.5)
             if is_website_conversion_selected(page):
                 return True
 
@@ -1090,14 +1090,14 @@ def _click_recorded_website_label(page: Page) -> bool:
             try:
                 parent = el.locator("xpath=../..")
                 parent.click(timeout=3000, force=True)
-                time.sleep(0.5)
+                _sleep_h(0.5)
                 if is_website_conversion_selected(page):
                     return True
             except Exception:
                 pass
 
             el.click(timeout=4000, force=True)
-            time.sleep(0.45)
+            _sleep_h(0.45)
             if is_website_conversion_selected(page):
                 return True
         except Exception:
@@ -1280,7 +1280,7 @@ def _scroll_conversion_menu_to_single(page: Page) -> bool:
         try:
             if root.evaluate(script):
                 ok = True
-                time.sleep(0.35)
+                _sleep_h(0.35)
         except Exception:
             pass
     # Playwright wheel fallback over the open menu center
@@ -1299,7 +1299,7 @@ def _scroll_conversion_menu_to_single(page: Page) -> bool:
             if box:
                 page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] * 0.7)
                 page.mouse.wheel(0, 480)
-                time.sleep(0.35)
+                _sleep_h(0.35)
                 ok = True
         except Exception:
             pass
@@ -1389,6 +1389,96 @@ def _find_website_option_bbox(page: Page) -> dict | None:
     return None
 
 
+def _human_jitter(base: float, spread: float = 0.3) -> float:
+    """A pause near `base` with human-looking spread.
+
+    Fixed sleeps were the most countable tell in the 2026-07-31
+    detectability audit: 33 pauses of exactly 0.5s, 24 of 0.6s, 21 of 0.3s
+    in one file. Real people never repeat an interval to the millisecond.
+    """
+    import random
+
+    lo, hi = base * (1.0 - spread), base * (1.0 + spread)
+    return random.uniform(lo, hi)
+
+
+def _sleep_h(base: float, spread: float = 0.3) -> None:
+    """Jittered sleep — drop-in for time.sleep() on interaction pauses."""
+    time.sleep(_human_jitter(base, spread))
+
+
+def _type_human(page: Page, text: str) -> None:
+    """Type text as keystrokes, not as one instant insertion.
+
+    Measured 2026-07-31: `insert_text` puts the whole string in with ZERO
+    keydown events — the probe's key array stayed empty. That reads as a
+    paste that never fired a paste event, which no human input produces.
+    Real keypresses cost ~40ms each but look like typing. Accented/emoji
+    characters still go through insert_text, because keyboard.type drops
+    them (confirmed live 2026-07-26 on ad copy: "Regístrese" lost its
+    accent), so those are inserted per-chunk rather than all at once.
+    """
+    import random
+
+    if not text:
+        return
+    chunk = ""
+    for ch in text:
+        if ch.isascii():
+            chunk += ch
+            continue
+        if chunk:
+            page.keyboard.type(chunk, delay=random.uniform(25, 70))
+            chunk = ""
+        page.keyboard.insert_text(ch)
+        time.sleep(_human_jitter(0.04, 0.5))
+    if chunk:
+        page.keyboard.type(chunk, delay=random.uniform(25, 70))
+
+
+def _click_trusted(page: Page, selector_or_handle, *, timeout: float = 3000) -> bool:
+    """Click an element so the page sees isTrusted=True.
+
+    Measured live 2026-07-31: `el.click()` from JS produces
+    `isTrusted: false` — the one unambiguous synthetic-input marker a site
+    can log. CDP `Input.dispatchMouseEvent` produces `isTrusted: true`,
+    indistinguishable from a real user. So: resolve the element's centre,
+    click it through the trusted path, and only fall back to a DOM click
+    when the element has no clickable box at all (zero-size hover-only
+    icons — the media-library tiles and tree action menus, where a DOM
+    click is the only thing that works).
+
+    `selector_or_handle` may be a CSS selector string or an ElementHandle.
+    Returns True if a click of either kind was dispatched.
+    """
+    handle = None
+    try:
+        if isinstance(selector_or_handle, str):
+            handle = page.query_selector(selector_or_handle)
+        else:
+            handle = selector_or_handle
+        if handle is None:
+            return False
+        try:
+            handle.evaluate("el => el.scrollIntoView({block: 'center', behavior: 'instant'})")
+        except Exception:
+            pass
+        _sleep_h(0.2)
+        box = None
+        try:
+            box = handle.bounding_box()
+        except Exception:
+            box = None
+        if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
+            _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            return True
+        # Zero-size / hover-only control: DOM click is the only option.
+        handle.evaluate("el => el.click()")
+        return True
+    except Exception:
+        return False
+
+
 def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
     """Trusted click via Chrome DevTools Protocol Input domain.
 
@@ -1400,14 +1490,25 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
     try:
         session = page.context.new_cdp_session(page)
         try:
+            # Approach along a curved path instead of teleporting to the
+            # target. Audit 2026-07-31: our pointer produced 2-3 points
+            # from anywhere to anywhere, with the press ~8ms after the last
+            # move — a shape no hand makes. Walk a few interpolated points
+            # with a slight arc and human-ish gaps, then press.
+            for px, py in _mouse_path(page, x, y):
+                session.send(
+                    "Input.dispatchMouseEvent",
+                    {"type": "mouseMoved", "x": px, "y": py, "button": "none"},
+                )
+                time.sleep(_human_jitter(0.02, 0.5))
+            _sleep_h(0.08)
             for typ, extra in (
-                ("mouseMoved", {"button": "none"}),
                 ("mousePressed", {"button": "left", "buttons": 1, "clickCount": 1}),
                 ("mouseReleased", {"button": "left", "buttons": 0, "clickCount": 1}),
             ):
                 params = {"type": typ, "x": float(x), "y": float(y), **extra}
                 session.send("Input.dispatchMouseEvent", params)
-                time.sleep(0.05)
+                time.sleep(_human_jitter(0.06, 0.4))
         finally:
             try:
                 session.detach()
@@ -1418,10 +1519,50 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
         pass
     # Fallback: Playwright mouse API
     page.mouse.move(x, y)
-    time.sleep(0.06)
+    _sleep_h(0.06)
     page.mouse.down()
-    time.sleep(0.07)
+    _sleep_h(0.07)
     page.mouse.up()
+
+
+def _mouse_path(page: Page, x: float, y: float) -> list[tuple[float, float]]:
+    """Interpolated points from the current pointer to (x, y), with an arc.
+
+    Starts wherever the tracker last saw the pointer (installed by
+    pacing._install_mouse_tracker); falls back to a point offset from the
+    target so the first move is never a teleport from (0,0).
+    """
+    import math
+    import random
+
+    try:
+        last = page.evaluate("() => window._rpa_last_mouse || null")
+    except Exception:
+        last = None
+    if last and last.get("x", -1) >= 0:
+        sx, sy = float(last["x"]), float(last["y"])
+    else:
+        sx, sy = float(x) - random.uniform(120, 260), float(y) - random.uniform(60, 180)
+
+    dist = math.hypot(x - sx, y - sy)
+    steps = max(3, min(12, int(dist / 60) + 3))
+    # Perpendicular bow so the path is an arc, not a straight ruler line.
+    bow = random.uniform(-1, 1) * min(28.0, dist * 0.12)
+    dx, dy = x - sx, y - sy
+    norm = math.hypot(dx, dy) or 1.0
+    px_, py_ = -dy / norm, dx / norm
+
+    pts: list[tuple[float, float]] = []
+    for i in range(1, steps + 1):
+        t = i / steps
+        ease = t * t * (3 - 2 * t)  # smoothstep: slow start, slow finish
+        arc = math.sin(math.pi * t) * bow
+        pts.append((
+            sx + dx * ease + px_ * arc + random.uniform(-1.2, 1.2),
+            sy + dy * ease + py_ * arc + random.uniform(-1.2, 1.2),
+        ))
+    pts[-1] = (float(x), float(y))
+    return pts
 
 
 def _mouse_click_chain(page: Page, x: float, y: float) -> None:
@@ -1465,7 +1606,7 @@ def _scroll_website_option_into_view(page: Page) -> bool:
     for root in _roots(page):
         try:
             if root.evaluate(script):
-                time.sleep(0.35)
+                _sleep_h(0.35)
                 return True
         except Exception:
             pass
@@ -1503,7 +1644,7 @@ def _turn_off_advantage_plus_leads(page: Page) -> bool:
     for root in _roots(page):
         try:
             if root.evaluate(script):
-                time.sleep(0.7)
+                _sleep_h(0.7)
                 return True
         except Exception:
             pass
@@ -1519,7 +1660,7 @@ def _turn_off_advantage_plus_leads(page: Page) -> bool:
                 checked = sw.get_attribute("aria-checked")
                 if checked == "true":
                     sw.click(timeout=3000, force=True)
-                    time.sleep(0.7)
+                    _sleep_h(0.7)
                     return True
         except Exception:
             pass
@@ -1567,11 +1708,11 @@ def _click_website_via_keyboard_focus(page: Page) -> bool:
             pass
     if not focused:
         return False
-    time.sleep(0.2)
+    _sleep_h(0.2)
     for key in ("Space", "Enter"):
         try:
             page.keyboard.press(key)
-            time.sleep(0.55)
+            _sleep_h(0.55)
             if is_website_conversion_selected(page):
                 return True
         except Exception:
@@ -1592,7 +1733,7 @@ def _click_website_via_cdp(page: Page) -> bool:
     for x, y in targets:
         try:
             _cdp_mouse_click(page, x, y)
-            time.sleep(0.6)
+            _sleep_h(0.6)
             if is_website_conversion_selected(page):
                 return True
         except Exception:
@@ -1609,7 +1750,7 @@ def _click_website_via_mouse(page: Page) -> bool:
     # 1) Radio circle on the left — often the real hit target
     try:
         _mouse_click_chain(page, float(bbox["radio_x"]), float(bbox["radio_y"]))
-        time.sleep(0.55)
+        _sleep_h(0.55)
         if is_website_conversion_selected(page):
             return True
     except Exception:
@@ -1617,7 +1758,7 @@ def _click_website_via_mouse(page: Page) -> bool:
     # 2) Row center / label area
     try:
         _mouse_click_chain(page, float(bbox["cx"]), float(bbox["cy"]))
-        time.sleep(0.55)
+        _sleep_h(0.55)
         if is_website_conversion_selected(page):
             return True
     except Exception:
@@ -1625,7 +1766,7 @@ def _click_website_via_mouse(page: Page) -> bool:
     # 3) Playwright mouse.click convenience
     try:
         page.mouse.click(float(bbox["radio_x"]), float(bbox["radio_y"]))
-        time.sleep(0.55)
+        _sleep_h(0.55)
         if is_website_conversion_selected(page):
             return True
     except Exception:
@@ -1645,7 +1786,7 @@ def _click_website_via_force_locator(page: Page) -> bool:
                 ))
                 if radio.count() > 0 and radio.first.is_visible():
                     radio.first.click(timeout=4000, force=True)
-                    time.sleep(0.45)
+                    _sleep_h(0.45)
                     if is_website_conversion_selected(page):
                         return True
             except Exception:
@@ -1661,7 +1802,7 @@ def _click_website_via_force_locator(page: Page) -> bool:
                         if any(x in own_text for x in EXCLUDE_WORDS):
                             continue
                         el.click(timeout=4000, force=True)
-                        time.sleep(0.45)
+                        _sleep_h(0.45)
                         if is_website_conversion_selected(page):
                             return True
                     except Exception:
@@ -1677,7 +1818,7 @@ def _click_website_via_keyboard(page: Page) -> bool:
     for _ in range(14):
         try:
             page.keyboard.press("ArrowDown")
-            time.sleep(0.12)
+            _sleep_h(0.12)
         except Exception:
             break
         # Stop early if Website already selected (some UIs select on focus)
@@ -1697,11 +1838,11 @@ def _click_website_via_keyboard(page: Page) -> bool:
                 and "calls" not in focused
             ):
                 page.keyboard.press("Enter")
-                time.sleep(0.45)
+                _sleep_h(0.45)
                 if is_website_conversion_selected(page):
                     return True
                 page.keyboard.press("Space")
-                time.sleep(0.45)
+                _sleep_h(0.45)
                 if is_website_conversion_selected(page):
                     return True
         except Exception:
@@ -1734,7 +1875,7 @@ def _click_website_via_keyboard(page: Page) -> bool:
     if is_website_text:
         try:
             page.keyboard.press("Enter")
-            time.sleep(0.45)
+            _sleep_h(0.45)
         except Exception:
             pass
     # else: leave it alone — focus without Enter/Space never commits a radio
@@ -1795,7 +1936,7 @@ def _click_website_via_js_row(page: Page) -> bool:
     for root in _roots(page):
         try:
             if root.evaluate(script):
-                time.sleep(0.55)
+                _sleep_h(0.55)
                 if is_website_conversion_selected(page):
                     return True
         except Exception:
@@ -1856,7 +1997,7 @@ def _pick_website_from_open_menu(page: Page) -> bool:
     if _click_website_via_keyboard(page):
         return True
     if _pick_website_from_aria_controls(page):
-        time.sleep(0.5)
+        _sleep_h(0.5)
         return is_website_conversion_selected(page)
 
     return is_website_conversion_selected(page)
@@ -1999,7 +2140,7 @@ def run_recorded_campaign_flow(
                     loc.click(timeout=4000)
                 return True
             except Exception:
-                time.sleep(0.6)
+                _sleep_h(0.6)
         return False
 
     def _fill(loc, value: str, *, attempts: int = 5) -> bool:
@@ -2011,7 +2152,7 @@ def run_recorded_campaign_flow(
                 loc.fill(value, timeout=4000)
                 return True
             except Exception:
-                time.sleep(0.6)
+                _sleep_h(0.6)
         return False
 
     # Telemetry rides along with the screenshots. Every step in this flow
@@ -2054,7 +2195,7 @@ def run_recorded_campaign_flow(
     # against the same account), leaving it in place to block/shift Create.
     for _ in range(3):
         _dismiss_floating_banners(page)
-        time.sleep(0.4)
+        _sleep_h(0.4)
     if not _click(page.get_by_role("button", name="Create", exact=True)):
         return "create"
     _shot("after_create")
@@ -2185,7 +2326,7 @@ def run_recorded_campaign_flow(
         _shot("fail_conversion_website")
         return "conversion_website"
 
-    time.sleep(0.6)
+    _sleep_h(0.6)
     _shot("after_website_click")
 
     try:
@@ -2244,7 +2385,7 @@ def run_recorded_campaign_flow(
                 ).first
                 el.scroll_into_view_if_needed(timeout=5000)
                 el.click(timeout=5000)
-                time.sleep(0.6)
+                _sleep_h(0.6)
                 opened = True
                 break
             except Exception:
@@ -2254,7 +2395,7 @@ def run_recorded_campaign_flow(
                     page.mouse.wheel(0, 400)
                 except Exception:
                     pass
-                time.sleep(0.6)
+                _sleep_h(0.6)
         _shot("after_further_limit_reach" if opened else "fail_further_limit_reach_click")
         if not opened:
             return "further_limit_reach"
@@ -2311,7 +2452,7 @@ def run_recorded_campaign_flow(
                 toast.wait_for(state="hidden", timeout=8000)
             except Exception:
                 pass
-            time.sleep(0.5)
+            _sleep_h(0.5)
         _shot("after_further_limit_continue" if continued else "fail_further_limit_continue")
         if not continued:
             return "further_limit_reach_continue"
@@ -2728,7 +2869,7 @@ def fill_placements(page: Page) -> bool:
             )
         except Exception:
             pass
-        time.sleep(0.5)
+        _sleep_h(0.5)
         placements_y = _text_y("Placements")
     _dbg.append(f"placements_y={placements_y}")
     if placements_y is None:
@@ -2849,9 +2990,9 @@ def fill_placements(page: Page) -> bool:
         clicked = _click_in_placements("show more settings", exact=False, max_children=2)
         _dbg.append(f"tick {i}: show_more_clicked={clicked}")
         if clicked:
-            time.sleep(0.6)
+            _sleep_h(0.6)
             continue
-        time.sleep(0.4)
+        _sleep_h(0.4)
     _dbg.append(f"expanded={expanded}")
     if not expanded:
         _dump_dbg()
@@ -2862,7 +3003,7 @@ def fill_placements(page: Page) -> bool:
     if not pc_clicked:
         _dump_dbg()
         return False
-    time.sleep(0.8)
+    _sleep_h(0.8)
     _dump_dbg()
 
     ok = True
@@ -2890,9 +3031,9 @@ def fill_placements(page: Page) -> bool:
     # Search results / Apps and sites: whole category off — click the
     # single category-level checkbox directly, no need to expand.
     _set_category("ads_placement_expandable_list_item_search", False)
-    time.sleep(0.3)
+    _sleep_h(0.3)
     _set_category("ads_placement_expandable_list_item_external", False)
-    time.sleep(0.3)
+    _sleep_h(0.3)
 
     for expand_id in (
         "ads_placement_expandable_list_item_feed",
@@ -2912,7 +3053,7 @@ def fill_placements(page: Page) -> bool:
             )
         except Exception:
             pass
-        time.sleep(0.4)
+        _sleep_h(0.4)
 
     def _set(label: str, want_checked: bool) -> None:
         nonlocal ok
@@ -2948,7 +3089,7 @@ def fill_placements(page: Page) -> bool:
             result = False
         if not result:
             ok = False
-        time.sleep(0.3)
+        _sleep_h(0.3)
 
     for label in (
         "Facebook Feed",
@@ -3058,7 +3199,7 @@ def select_devices_ios_only(page: Page) -> bool:
         )
         if present:
             break
-        time.sleep(0.2)
+        _sleep_h(0.2)
     else:
         return False
 
@@ -3075,7 +3216,7 @@ def select_devices_ios_only(page: Page) -> bool:
     )
     if not clicked:
         return False
-    time.sleep(0.5)
+    _sleep_h(0.5)
 
     picked = page.evaluate(
         """() => {
@@ -3092,7 +3233,7 @@ def select_devices_ios_only(page: Page) -> bool:
     )
     if not picked:
         return False
-    time.sleep(0.5)
+    _sleep_h(0.5)
 
     return bool(
         page.evaluate(
@@ -3170,7 +3311,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
     except Exception:
         surface_clicked = False
     if surface_clicked:
-        time.sleep(0.6)
+        _sleep_h(0.6)
 
     click_point = page.evaluate(
         """(adsetName) => {
@@ -3294,9 +3435,9 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
         # menu — confirmed live 2026-07-28: the icon only becomes the active
         # hit-target after a brief hover.
         page.mouse.move(click_point["x"], click_point["y"])
-        time.sleep(0.4)
+        _sleep_h(0.4)
         page.mouse.click(click_point["x"], click_point["y"])
-        time.sleep(0.6)
+        _sleep_h(0.6)
 
     create_clicked = False
     for _ in range(5):
@@ -3311,7 +3452,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
         )
         if create_clicked:
             break
-        time.sleep(0.3)
+        _sleep_h(0.3)
     if not create_clicked:
         # What DID the click open, if anything? Record the menu surfaces on
         # the page and what sits under the click point.
@@ -3336,7 +3477,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
             probe = {"probe_error": str(exc)[:80]}
         _diag("create_menu_item_not_found", probe)
         return False
-    time.sleep(1.5)
+    _sleep_h(1.5)
 
     # "Create ad" sometimes opens the "Set up your creative" wizard modal
     # directly, sometimes not. Close it, then prove it is actually gone.
@@ -3362,14 +3503,14 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
         if not _creative_modal_open(page):
             break
         _close_creative_setup_modal(page)
-        time.sleep(0.6)
+        _sleep_h(0.6)
         if not _creative_modal_open(page):
             break
         try:
             page.get_by_role("button", name="Cancel").first.click(timeout=2000)
         except Exception:
             pass
-        time.sleep(0.6)
+        _sleep_h(0.6)
 
     if _creative_modal_open(page):
         return False
@@ -3465,7 +3606,7 @@ def _library_search(page: Page, filename: str) -> bool:
         # was established above, so Control+A stays inside the field.
         try:
             page.keyboard.press("Control+A")
-            page.keyboard.insert_text(filename)
+            _type_human(page, filename)
         except Exception:
             return False
 
@@ -3480,7 +3621,7 @@ def _library_search(page: Page, filename: str) -> bool:
         return False
 
     # Let the grid re-query and re-render before anything reads it.
-    time.sleep(1.5)
+    _sleep_h(1.5)
     wait_editor_saved(page, appear_s=0.5, timeout_s=5)
     return True
 
@@ -3525,7 +3666,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> bool:
             tile.click(timeout=3000)
         except Exception:
             continue
-        time.sleep(0.5)
+        _sleep_h(0.5)
         if _library_selected_count(page) > before:
             picked = True
             break
@@ -3543,13 +3684,13 @@ def _try_reuse_library_media(page: Page, filename: str) -> bool:
             next_btn = dialog.get_by_role("button", name="Next").first
             if next_btn.count() and not next_btn.is_disabled():
                 next_btn.click(timeout=5000)
-                time.sleep(1.0)
+                _sleep_h(1.0)
                 advanced = True
             break
         if not advanced:
             return False
         _close_creative_setup_modal(page)
-        time.sleep(0.5)
+        _sleep_h(0.5)
         return "/ads/edit/" in page.url and _verify_ad_media_present(page)
     except Exception:
         return False
@@ -3576,7 +3717,7 @@ def upload_ad_creative_with_retry(
         except Exception:
             pass
         _close_creative_setup_modal(page)
-        time.sleep(0.8)
+        _sleep_h(0.8)
         if _verify_ad_media_present(page):
             return True
     return False
@@ -3630,7 +3771,7 @@ def _close_creative_setup_modal(page: Page) -> bool:
         )
         if box:
             _cdp_mouse_click(page, box["x"], box["y"])
-            time.sleep(0.8)
+            _sleep_h(0.8)
             return True
     except Exception:
         pass
@@ -3679,7 +3820,7 @@ def upload_ad_creative(
             }
             """
         )
-        time.sleep(0.5)
+        _sleep_h(0.5)
     except Exception:
         pass
 
@@ -3694,7 +3835,7 @@ def upload_ad_creative(
         setup_btn.wait_for(state="visible", timeout=15000)
         setup_btn.scroll_into_view_if_needed(timeout=3000)
         setup_btn.click(timeout=5000)
-        time.sleep(0.5)
+        _sleep_h(0.5)
     except Exception:
         return False
 
@@ -3702,7 +3843,7 @@ def upload_ad_creative(
         opt = page.get_by_text(option_label, exact=True).first
         if opt.count():
             opt.click(timeout=3000)
-            time.sleep(0.7)
+            _sleep_h(0.7)
     except Exception:
         pass
 
@@ -3737,7 +3878,7 @@ def upload_ad_creative(
                 page.get_by_role("button", name="Next").first.click(timeout=3000)
             except Exception:
                 pass
-        time.sleep(1.2)
+        _sleep_h(1.2)
 
     upload_btn = page.get_by_role("button", name="Upload")
     if upload_btn.count() < 1:
@@ -3791,7 +3932,7 @@ def upload_ad_creative(
     # "upload is complete" signal already fired above, unlike most other
     # sleeps in this file which were added to cover a specific documented
     # race — this one is plain padding on top of an already-confirmed state.
-    time.sleep(0.4)
+    _sleep_h(0.4)
 
     # Still inside the Media step (Upload button still present)? Select the
     # uploaded thumbnail by filename and advance via the MODAL's own Next —
@@ -3803,7 +3944,7 @@ def upload_ad_creative(
             thumb = page.get_by_text(filename, exact=False).first
             if thumb.count():
                 thumb.click(timeout=3000)
-                time.sleep(0.5)
+                _sleep_h(0.5)
         except Exception:
             pass
         try:
@@ -3814,7 +3955,7 @@ def upload_ad_creative(
                 next_btn = dialog.get_by_role("button", name="Next").first
                 if next_btn.count() and not next_btn.is_disabled():
                     next_btn.click(timeout=5000)
-                    time.sleep(1.0)
+                    _sleep_h(1.0)
                 break
         except Exception:
             pass
@@ -3825,7 +3966,7 @@ def upload_ad_creative(
     if edit_url and "/ads/edit/" not in page.url:
         try:
             page.goto(edit_url)
-            time.sleep(1.0)
+            _sleep_h(1.0)
         except Exception:
             return False
 
@@ -3871,13 +4012,13 @@ def _verify_ad_media_present(page: Page) -> bool:
                 """
             )
         except Exception:
-            time.sleep(0.5)
+            _sleep_h(0.5)
             continue
         if state.get("filled") and not state.get("empty"):
             return True
         if state.get("empty"):
             return False
-        time.sleep(0.5)
+        _sleep_h(0.5)
     return False
 
 
@@ -3960,14 +4101,14 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
             if row.count():
                 row.scroll_into_view_if_needed(timeout=3000)
                 row.click(timeout=3000)
-                time.sleep(0.5)
+                _sleep_h(0.5)
                 row.click(timeout=3000)
-                time.sleep(0.5)
+                _sleep_h(0.5)
         except Exception:
             pass
         if _primary_text_visible():
             return True
-        time.sleep(1.0)
+        _sleep_h(1.0)
 
     # Last resort — confirmed live (2026-07-26): a full page reload reliably
     # clears the stuck `display: none !important` state (the ad draft
@@ -3984,14 +4125,14 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
     try:
         page.reload(wait_until="domcontentloaded", timeout=20000)
         page.wait_for_load_state("networkidle", timeout=15000)
-        time.sleep(2.0)
+        _sleep_h(2.0)
     except Exception:
         time.sleep(5.0)
 
     for _ in range(10):
         if _primary_text_visible():
             return True
-        time.sleep(1.0)
+        _sleep_h(1.0)
 
     # Diagnostic dump (2026-07-27) — every fallback above has now failed.
     # Capture enough live DOM/React state to actually root-cause this
@@ -4089,7 +4230,7 @@ def _focus_via_cdp_click(page: Page, locator):
         handle.evaluate("el => el.scrollIntoView({block: 'center', behavior: 'instant'})")
     except Exception:
         pass
-    time.sleep(0.3)
+    _sleep_h(0.3)
     try:
         box = handle.bounding_box()
     except Exception:
@@ -4119,12 +4260,12 @@ def _focus_via_cdp_click(page: Page, locator):
 
     if box:
         _mouse_click_chain(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-        time.sleep(0.3)
+        _sleep_h(0.3)
         return handle
 
     try:
         handle.evaluate("el => el.focus()")
-        time.sleep(0.2)
+        _sleep_h(0.2)
         return handle
     except Exception:
         return None
@@ -4192,8 +4333,8 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
             if count:
                 handle = _click_via_cdp_handle(primary_box)
                 if handle is not None:
-                    page.keyboard.insert_text(ad_body)
-                    time.sleep(0.4)
+                    _type_human(page, ad_body)
+                    _sleep_h(0.4)
                     if _handle_has_content(handle):
                         return True
                     _dump_stage("primary_text", "content_check_failed_after_insert", {"count": count})
@@ -4213,8 +4354,8 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
                 handle = _click_via_cdp_handle(headline_box)
                 if handle is not None:
                     page.keyboard.press("Control+A")
-                    page.keyboard.insert_text(ad_title)
-                    time.sleep(0.4)
+                    _type_human(page, ad_title)
+                    _sleep_h(0.4)
                     if _handle_has_content(handle):
                         return True
                     _dump_stage("headline", "content_check_failed_after_insert", {"count": count})
@@ -4244,7 +4385,7 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
             break
         if attempt == 0:
             _reveal_ad_copy_fields(page)
-            time.sleep(0.5)
+            _sleep_h(0.5)
 
     return body_ok and title_ok
 
@@ -4344,7 +4485,7 @@ def _select_browser_addon_none(page: Page) -> bool:
             except Exception:
                 return False
 
-        time.sleep(0.5)
+        _sleep_h(0.5)
         if _browser_addon_none_checked(page) is True:
             return True
 
@@ -4386,9 +4527,12 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     except Exception:
         pass
 
-    if not _select_browser_addon_none(page):
-        return False
-
+    # ORDER MATTERS — URL first, "None" LAST. Confirmed live 2026-07-30
+    # after a day of chasing "the radio keeps reverting": editing the
+    # Website URL field RESETS Browser add-ons back to Meta's suggested
+    # "Instant form". The old order (None, then URL) therefore undid its
+    # own selection on every single call — which is what fed the repair
+    # loops (and, before v70's Ctrl+A, the url+url+url appends).
     # Confirmed live 2026-07-29 (Test141, campaign B ads 2/3): a plain
     # url_box.click() here reported success while the page never received
     # focus (playwright#41286 again), so insert_text() went nowhere and
@@ -4401,9 +4545,27 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
             return False
         if _focus_via_cdp_click(page, url_box) is None:
             return False
+        # Select-all BEFORE inserting: insert_text APPENDS at the caret, it
+        # does not replace. Confirmed live 2026-07-30: every destination
+        # retry and every sweep re-fix appended another copy of the URL, so
+        # the field grew url+url+url... until Meta's "Your website URL
+        # exceeds 1024 characters" error — which is also why the read-back
+        # equality check kept failing and the repair loops never converged.
+        page.keyboard.press("Control+A")
+        # Fast insert here, NOT _type_human. This is a 255-char tracking
+        # URL — a technical value nobody types by hand, so there is nothing
+        # to disguise, and typing it took ~70s during which Meta re-rendered
+        # the Destination section and reset the "None" radio we set right
+        # afterwards (confirmed live 2026-07-31, Test155: destination failed
+        # in BOTH campaigns, server showed the lead_gen banner on campaign
+        # B). Human-paced typing stays where it matters — the ad copy a real
+        # person would actually write.
         page.keyboard.insert_text(destination_url)
-        time.sleep(0.4)
+        _sleep_h(0.4)
     except Exception:
+        return False
+
+    if not _select_browser_addon_none(page):
         return False
 
     # Confirmed live (2026-07-28): the same async-save-race class as the
@@ -4438,10 +4600,12 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     if not _both_ok():
         for _ in range(2):
             try:
-                _select_browser_addon_none(page)
                 retry_box = page.get_by_placeholder("http://www.example.com/page").first
                 if retry_box.count() and _focus_via_cdp_click(page, retry_box) is not None:
-                    page.keyboard.insert_text(destination_url)
+                    page.keyboard.press("Control+A")  # replace, never append
+                    page.keyboard.insert_text(destination_url)  # fast: see note above
+                # None AFTER the URL — see the ordering note above.
+                _select_browser_addon_none(page)
                 wait_editor_saved(page)
             except Exception:
                 pass
@@ -4485,7 +4649,7 @@ def _open_tree_ad(page: Page, ad_name: str) -> bool:
         _cdp_mouse_click(page, point["x"], point["y"])
     except Exception:
         return False
-    time.sleep(1.5)
+    _sleep_h(1.5)
     wait_editor_saved(page)
     return True
 
@@ -4528,7 +4692,7 @@ def _ad_destination_persisted(page: Page, destination_url: str) -> bool:
             )
         except Exception:
             pass
-        time.sleep(1.0)
+        _sleep_h(1.0)
     return False
 
 
@@ -4665,7 +4829,7 @@ def dismiss_discard_drafts_dialog(page: Page) -> bool:
             btn = dialog.get_by_role("button", name=re.compile(r"^(Cancel|Cancelar)$", re.I)).first
             if btn.is_visible(timeout=600):
                 btn.click(timeout=3000, force=True)
-                time.sleep(0.4)
+                _sleep_h(0.4)
                 return True
         except Exception:
             pass
@@ -4716,7 +4880,7 @@ def dismiss_publish_draft_dialog(page: Page) -> bool:
                         btn = dialog.get_by_role("button", name=name_re).first
                         if btn.is_visible(timeout=400):
                             btn.click(timeout=3000, force=True)
-                            time.sleep(0.45)
+                            _sleep_h(0.45)
                             return True
                     except Exception:
                         pass
@@ -4725,7 +4889,7 @@ def dismiss_publish_draft_dialog(page: Page) -> bool:
                     btn = dialog.get_by_role("button", name=dismiss_re).first
                     if btn.is_visible(timeout=400):
                         btn.click(timeout=3000, force=True)
-                        time.sleep(0.45)
+                        _sleep_h(0.45)
                         return True
                 except Exception:
                     pass
@@ -4773,7 +4937,7 @@ def dismiss_publish_draft_dialog(page: Page) -> bool:
             }
             """
             if root.evaluate(script):
-                time.sleep(0.45)
+                _sleep_h(0.45)
                 return True
         except Exception:
             pass
@@ -4902,7 +5066,7 @@ def close_open_dropdown(page: Page) -> None:
                 loc = root.get_by_text(pattern).first
                 loc.scroll_into_view_if_needed(timeout=3000)
                 loc.click(timeout=3000)
-                time.sleep(0.45)
+                _sleep_h(0.45)
                 return
             except Exception:
                 pass
@@ -4936,7 +5100,7 @@ def wait_editor_saved(page: Page, *, timeout_s: float = 15, appear_s: float = 1.
        destination and ad media (2026-07-28/29): every one of them typed
        correctly, "verified" instantly, then reverted many steps later.
        Callers previously worked around this with a hardcoded
-       `time.sleep(0.6)` guess; the wait belongs here instead.
+       `_sleep_h(0.6)` guess; the wait belongs here instead.
     2. Wait (up to `timeout_s`) for it to CLEAR.
 
     Matches every in-flight wording seen live — "Verifying your edits…"
@@ -4960,13 +5124,13 @@ def wait_editor_saved(page: Page, *, timeout_s: float = 15, appear_s: float = 1.
                 return
         except Exception:
             pass
-        _time.sleep(0.15)
+        _sleep_h(0.15)
 
     deadline = _time.time() + timeout_s
     while _time.time() < deadline:
         if not _editor_is_busy_saving(page):
             return
-        _time.sleep(0.35)
+        _sleep_h(0.35)
 
 
 def dismiss_open_popovers(page: Page) -> None:
@@ -5105,7 +5269,7 @@ def _click_section_dropdown(page: Page, section_labels: list[str]) -> bool:
                                         continue
                             if ctrl.count() and ctrl.is_visible():
                                 ctrl.click(timeout=5000)
-                                time.sleep(0.6)
+                                _sleep_h(0.6)
                                 _dbg.append(f"CLICKED depth={depth} sel={sel!r} own={own if sel in ('div','span') else ''!r}")
                                 try:
                                     Path("output/debug_conversion_event.txt").write_text(
@@ -5134,7 +5298,7 @@ def _pick_menu_option(page: Page, option_labels: list[str]) -> bool:
     targets = {_norm_label(v) for v in option_labels if v.strip()}
     if not targets:
         return False
-    time.sleep(0.4)
+    _sleep_h(0.4)
     for root in _roots(page):
         for listbox_sel in ("[role=listbox]", "[role=menu]", "[role=dialog]"):
             try:
@@ -5155,7 +5319,7 @@ def _pick_menu_option(page: Page, option_labels: list[str]) -> bool:
                             if first not in targets:
                                 continue
                             opt.click(timeout=5000)
-                            time.sleep(0.6)
+                            _sleep_h(0.6)
                             return True
                         except Exception:
                             continue
@@ -5166,7 +5330,7 @@ def _pick_menu_option(page: Page, option_labels: list[str]) -> bool:
                             ).first
                             if item.is_visible():
                                 item.click(timeout=5000)
-                                time.sleep(0.6)
+                                _sleep_h(0.6)
                                 return True
                         except Exception:
                             continue
@@ -5204,7 +5368,7 @@ def _pick_menu_option(page: Page, option_labels: list[str]) -> bool:
                         item = root.get_by_text(re.compile(rf"^{re.escape(label)}$", re.I)).first
                         if item.is_visible():
                             item.click(timeout=5000)
-                            time.sleep(0.6)
+                            _sleep_h(0.6)
                             return True
                     except Exception:
                         continue
@@ -5323,7 +5487,7 @@ def open_detailed_targeting_field(page: Page) -> bool:
                     if inp.count() and inp.is_visible():
                         inp.scroll_into_view_if_needed(timeout=3000)
                         inp.click(timeout=3000)
-                        time.sleep(0.3)
+                        _sleep_h(0.3)
                         return True
                 except Exception:
                     continue
@@ -5336,7 +5500,7 @@ def open_detailed_targeting_field(page: Page) -> bool:
                     if inp.count() and inp.is_visible():
                         inp.scroll_into_view_if_needed(timeout=3000)
                         inp.click(timeout=3000)
-                        time.sleep(0.3)
+                        _sleep_h(0.3)
                         return True
                 except Exception:
                     continue
@@ -5373,14 +5537,14 @@ def open_detailed_targeting_field(page: Page) -> bool:
             continue
 
     for _ in range(15):
-        time.sleep(0.2)
+        _sleep_h(0.2)
         for root in _roots(page):
             for ph in targeting_placeholders:
                 try:
                     inp = root.get_by_placeholder(ph).first
                     if inp.count() and inp.is_visible():
                         inp.click(timeout=3000)
-                        time.sleep(0.3)
+                        _sleep_h(0.3)
                         return True
                 except Exception:
                     continue
@@ -5493,7 +5657,7 @@ def paste_targeting_interests(page: Page, targeting_label: str) -> bool:
         )
     except Exception:
         return False
-    time.sleep(1.5)
+    _sleep_h(1.5)
     try:
         page.get_by_text("Verifying your edits", exact=False).first.wait_for(state="hidden", timeout=8000)
     except Exception:
@@ -5611,7 +5775,7 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
             opt = root.locator(sel).filter(has_text=country_re).first
             if opt.count() and opt.is_visible():
                 opt.click(timeout=4000)
-                time.sleep(0.6)
+                _sleep_h(0.6)
                 return True
         except Exception:
             continue
@@ -5626,12 +5790,12 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
             sug = root.locator(sel).first
             if sug.count() and sug.is_visible():
                 sug.click(timeout=4000)
-                time.sleep(0.6)
+                _sleep_h(0.6)
                 return True
         except Exception:
             continue
     page.keyboard.press("Enter")
-    time.sleep(0.5)
+    _sleep_h(0.5)
     return True
 
 
@@ -5676,7 +5840,7 @@ def _remove_stale_default_locations(page: Page, keep_text: str) -> None:
                     continue
                 try:
                     btn.click(timeout=3000, force=True)
-                    time.sleep(0.6)
+                    _sleep_h(0.6)
                     removed_any = True
                     break
                 except Exception:
@@ -5684,7 +5848,7 @@ def _remove_stale_default_locations(page: Page, keep_text: str) -> None:
                         box = btn.bounding_box(timeout=1500)
                         if box and box.get("width", 0) > 0:
                             _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-                            time.sleep(0.6)
+                            _sleep_h(0.6)
                             removed_any = True
                             break
                     except Exception:
@@ -5723,7 +5887,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
     # targets the specific input directly and Playwright's own .click()/
     # .fill() already auto-scroll that exact element into view — no need to
     # pre-scroll via a much fuzzier heading/text match first.
-    time.sleep(0.4)
+    _sleep_h(0.4)
 
     # Locations renders as a collapsed read-only summary ("Locations /
     # Inclusion: Hong Kong") with no visible input at all — confirmed live
@@ -5847,7 +6011,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                         pass
                 try:
                     row.hover(timeout=2000)
-                    time.sleep(0.6)
+                    _sleep_h(0.6)
                     hover_dump = row.evaluate("el => el.outerHTML")
                     Path("output/debug_locations_row_html_after_hover.txt").write_text(
                         hover_dump[:6000], encoding="utf-8"
@@ -5909,7 +6073,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                 immediate_root, immediate_inp = (None, None)
                 if clicked:
                     for _ in range(10):
-                        time.sleep(0.15)
+                        _sleep_h(0.15)
                         immediate_root, immediate_inp = _find_edit_mode_input()
                         if immediate_inp is not None:
                             break
@@ -5923,7 +6087,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                     try:
                         immediate_inp.scroll_into_view_if_needed(timeout=3000)
                         immediate_inp.click(timeout=3000)
-                        time.sleep(0.3)
+                        _sleep_h(0.3)
                         # Root cause found live 2026-07-25 (DQ204 Test26):
                         # .fill() throws — Playwright's error log shows the
                         # placeholder-matched element resolves to a
@@ -5936,7 +6100,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                         # element type, which a real <input> doesn't need
                         # but this span-based component does.
                         page.keyboard.type(search_term, delay=40)
-                        time.sleep(1.5)
+                        _sleep_h(1.5)
                         return _pick_country_and_clear_defaults(immediate_root, page, search_term)
                     except Exception as fill_exc:
                         try:
@@ -5962,18 +6126,18 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
         # click blindly — if it didn't land (stale coordinates, tooltip),
         # retry the whole locate+click cycle instead of falling straight
         # through to a single 5s wait per placeholder.
-        time.sleep(0.5)
+        _sleep_h(0.5)
         root, inp = _find_edit_mode_input()
         if inp is not None:
             try:
                 inp.scroll_into_view_if_needed(timeout=3000)
                 inp.click(timeout=3000)
-                time.sleep(0.3)
+                _sleep_h(0.3)
                 # See the note above (attempt loop): this is a <span
                 # placeholder="..."> fake-input, not a real editable
                 # element — .fill() throws, keyboard typing works.
                 page.keyboard.type(search_term, delay=40)
-                time.sleep(1.5)
+                _sleep_h(1.5)
                 return _pick_country_and_clear_defaults(root, page, search_term)
             except Exception:
                 pass
@@ -5989,12 +6153,12 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
             # falsely report success on a stray keystroke landing nowhere.
             try:
                 page.keyboard.type(search_term, delay=40)
-                time.sleep(1.5)
+                _sleep_h(1.5)
                 if page.locator("[role=option]:visible, li[role=option]").first.count():
                     return _pick_country_and_clear_defaults(page, page, search_term)
             except Exception:
                 pass
-        time.sleep(0.5)
+        _sleep_h(0.5)
 
     # Fallback: find any input near "Locations" label
     for root in _roots(page):
@@ -6006,9 +6170,9 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                 inp = row.locator("input").first
                 if inp.count() and inp.is_visible():
                     inp.click(timeout=5000)
-                    time.sleep(0.3)
+                    _sleep_h(0.3)
                     inp.fill(search_term, timeout=5000)
-                    time.sleep(1.5)
+                    _sleep_h(1.5)
                     return _pick_country_and_clear_defaults(page, page, search_term)
         except Exception:
             pass
@@ -6021,7 +6185,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     # scroll_to_section heading match — the precise marker search a few
     # lines below (exact "^Age$|^Edad$" match) already does its own
     # scroll_into_view_if_needed on the correct element.
-    time.sleep(0.3)
+    _sleep_h(0.3)
     age_min_str = str(age_min)
     age_max_str = str(age_max) if age_max < 65 else "65+"
     age_label_re = re.compile(r"^Age$|^Edad$", re.I)
@@ -6103,7 +6267,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                     continue
                 trigger_x, trigger_y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
                 _cdp_mouse_click(page, trigger_x, trigger_y)
-                time.sleep(0.5)
+                _sleep_h(0.5)
                 try:
                     from src.fb_ads_rpa.screenshots import capture as _capture
 
@@ -6204,7 +6368,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                                     )
                                 except Exception:
                                     pass
-                                time.sleep(0.12)
+                                _sleep_h(0.12)
                                 if _age_target_present():
                                     found_tick = scroll_i
                                     break
@@ -6231,7 +6395,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                             target_val,
                         )
                         _age_dbg.append(f"click_result={click_result}")
-                        time.sleep(0.4)
+                        _sleep_h(0.4)
                     try:
                         with open("output/debug_age_scroll_click.txt", "a", encoding="utf-8") as f:
                             f.write("\n".join(_age_dbg) + "\n---\n")
@@ -6260,7 +6424,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                 else:
                     boundary_ok = False
                     try:
-                        time.sleep(0.3)
+                        _sleep_h(0.3)
                         # FIXED (2026-07-27, confirmed live): trigger_x/
                         # trigger_y are captured before the dropdown even
                         # opens — by the time this runs (after scrolling,
@@ -6325,7 +6489,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                       }
                     }"""
                 )
-                time.sleep(0.3)
+                _sleep_h(0.3)
             except Exception:
                 pass
             return True
@@ -6436,7 +6600,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                             break
                     except Exception:
                         continue
-                time.sleep(0.3)
+                _sleep_h(0.3)
                 try:
                     wbox = wide_row.bounding_box(timeout=1500)
                     if wbox and wbox.get("width", 0) > 0:
@@ -6458,7 +6622,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
         poll_start = time.time()
         value_dumped = False
         for tick in range(24):
-            time.sleep(0.2)
+            _sleep_h(0.2)
             found = False
             match_count = 0
             value_hits = 0
@@ -6553,7 +6717,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                                 )
                             else:
                                 el.click(timeout=3000)
-                                time.sleep(0.3)
+                                _sleep_h(0.3)
                                 try:
                                     from src.fb_ads_rpa.screenshots import capture as _capture
 
@@ -6570,7 +6734,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                                 else:
                                     el.fill(str(target_val), timeout=3000)
                                     page.keyboard.press("Enter")
-                            time.sleep(0.4)
+                            _sleep_h(0.4)
                             ok = True
                         except Exception as age_exc:
                             try:
@@ -6619,7 +6783,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     for root in _roots(page):
         try:
             if root.evaluate(script, [age_min_str, age_max_str]):
-                time.sleep(0.5)
+                _sleep_h(0.5)
                 return True
         except Exception:
             pass
@@ -6639,7 +6803,7 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
     """
     if not language_names:
         return True
-    time.sleep(0.3)
+    _sleep_h(0.3)
     lang_placeholders = [
         re.compile(r"Add languages?", re.I),
         re.compile(r"Search languages?", re.I),
@@ -6680,7 +6844,7 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
             except Exception:
                 continue
         for _ in range(10):
-            time.sleep(0.15)
+            _sleep_h(0.15)
             root, inp = _find_lang_input()
             if inp is not None:
                 break
@@ -6693,7 +6857,7 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
         try:
             inp.click(timeout=3000)
             page.keyboard.type(name, delay=40)
-            time.sleep(1.2)
+            _sleep_h(1.2)
             # Prefer the "(All)" variant over a blind first-match — per live
             # user guidance (2026-07-25) watching the real suggestion list:
             # Meta lists per-country language variants (e.g. "Spanish
@@ -6707,7 +6871,7 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
                     opt = page.locator(sel).filter(has_text=all_re).first
                     if opt.count() and opt.is_visible():
                         opt.click(timeout=3000)
-                        time.sleep(0.5)
+                        _sleep_h(0.5)
                         ok_any = True
                         picked = True
                         break
@@ -6717,7 +6881,7 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
                 opt = page.locator("[role=option]:visible, li[role=option]").first
                 if opt.count() and opt.is_visible():
                     opt.click(timeout=3000)
-                    time.sleep(0.5)
+                    _sleep_h(0.5)
                     ok_any = True
             root, inp = _find_lang_input()
             if inp is None:
@@ -6733,7 +6897,7 @@ def select_manual_placements(page: Page) -> bool:
         page, "Placements", "Ubicaciones de anuncio", "Placement",
         "Account controls", "Controles de cuenta",
     )
-    time.sleep(0.4)
+    _sleep_h(0.4)
     for root in _roots(page):
         for text_re in (
             re.compile(r"Manual placements?", re.I),
@@ -6749,7 +6913,7 @@ def select_manual_placements(page: Page) -> bool:
                     loc.wait_for(state="visible", timeout=4000)
                     loc.scroll_into_view_if_needed(timeout=4000)
                     loc.click(timeout=5000)
-                    time.sleep(0.8)
+                    _sleep_h(0.8)
                     return True
                 except Exception:
                     continue
@@ -6772,7 +6936,7 @@ def select_placement_device(page: Page, os_val: str) -> bool:
         "Devices", "Dispositivos",
         "Account controls", "Controles de cuenta",
     )
-    time.sleep(0.4)
+    _sleep_h(0.4)
 
     device_targets: dict[str, list] = {
         "Mobile":  [
@@ -6804,7 +6968,7 @@ def select_placement_device(page: Page, os_val: str) -> bool:
                         pass
                     loc.scroll_into_view_if_needed(timeout=4000)
                     loc.click(timeout=5000)
-                    time.sleep(0.6)
+                    _sleep_h(0.6)
                     return True
                 except Exception:
                     continue

@@ -159,8 +159,27 @@ def enrich_campaign_drafts(
                 draft.errors.append("profile_id missing in ad_account_map.csv (browser session)")
 
         for ad_set in draft.ad_sets:
-            if ref and getattr(ad_set, "targeting_label", ""):
-                ad_set.targeting_label = _interest_names_from_targeting(ref, ad_set.targeting_label)
+            if getattr(ad_set, "targeting_label", ""):
+                # Primary source (user direction, 2026-07-30): the
+                # "Detailed targeting" tab of the shared Google Sheet —
+                # names come back already comma-separated, no JSON parsing.
+                # The Excel "Interests" sheet remains the fallback so a
+                # Sheets outage or a missing profile can't break publishing.
+                resolved = ""
+                try:
+                    from src.analysis_agent.gsheet_targeting import lookup_targeting_interests
+
+                    resolved = lookup_targeting_interests(ad_set.targeting_label)
+                except Exception:
+                    resolved = ""
+                if resolved:
+                    ad_set.targeting_label = resolved
+                elif ref:
+                    draft.warnings.append(
+                        f"targeting {ad_set.targeting_label!r} not in Google Sheet "
+                        "'Detailed targeting' — used Excel Interests fallback"
+                    )
+                    ad_set.targeting_label = _interest_names_from_targeting(ref, ad_set.targeting_label)
 
             for ad in ad_set.ads:
                 # If creative_filename was set directly from folder scan — skip Excel lookup

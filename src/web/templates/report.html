@@ -4893,13 +4893,32 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       .catch(function(e) { alert('Ошибка: ' + e.message); });
   };
 
+  // Scroll to the status panel ONCE, when polling starts. Scrolling on
+  // every tick (previous behaviour) yanked the page back to the pause
+  // button every 2 seconds for the entire run, making the dashboard
+  // unusable while a campaign was publishing (user report, 2026-07-31).
+  var scrolledToStatus = false;
   function poll() {
     fetch('/publish-jobs/' + jobId)
-      .then(function(r) { return r.json(); })
+      .then(function(r) {
+        // Job state lives in server memory — after a dashboard restart the
+        // id is gone forever. Stop politely instead of polling a 404 (or
+        // spamming "Failed to fetch" while the server is mid-restart).
+        if (r.status === 404) {
+          statusPanel.innerHTML += '<div class="cb-status-fatal">Дешборд был перезапущен — статус этого прогона потерян. Обновите страницу (F5).</div>';
+          if (publishBtn) publishBtn.disabled = false;
+          return null;
+        }
+        return r.json();
+      })
       .then(function(job) {
+        if (job === null) return;
         statusPanel.innerHTML = renderStatus(job);
         bindStopButton();
-        statusPanel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+        if (!scrolledToStatus) {
+          scrolledToStatus = true;
+          statusPanel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+        }
         if (job.status !== 'done' && job.status !== 'cancelled') {
           _checkTeachMode();
           // Poll faster while cancelling so Stop feels responsive.

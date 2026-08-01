@@ -100,7 +100,56 @@ class RpaPublisher:
         self._provider = MultiloginDirectCDPProvider()
         return self._provider.open(entry, account_label)
 
+    @staticmethod
+    def _profile_already_running(entry) -> bool:
+        """Is this MLX profile currently open (started by hand from MLX)?
+
+        Detected by a live chrome.exe whose command line carries the
+        profile's own user-data-dir. MLX shortens the path on disk
+        (…\\mlx\\profiles\\B18D03~1\\3EF7F4~1\\C21D4D~1), so match on the
+        profile id's leading characters rather than the full uuid.
+        """
+        profile_id = (getattr(entry, "profile_id", "") or "").strip()
+        if not profile_id:
+            return False
+        needle = profile_id.replace("-", "")[:6].lower()
+        try:
+            import psutil  # type: ignore
+
+            for proc in psutil.process_iter(["name", "cmdline"]):
+                try:
+                    name = (proc.info.get("name") or "").lower()
+                    if "chrome" not in name:
+                        continue
+                    cmd = " ".join(proc.info.get("cmdline") or []).lower()
+                    if "mlx" in cmd and needle in cmd.replace("-", ""):
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            return False
+        return False
+
     def _open_playwright_profile(self, entry, account_label: str) -> BrowserConnection:
+        # SAFETY GATE (user directive 2026-07-30, after this fallback fired
+        # for real): opening the account's cookies in vanilla Chromium — no
+        # Mimic fingerprint, no profile proxy — is exactly the signature
+        # that gets ad accounts burned. It happened live: the DQ204 browser
+        # wedged (CDP dead, profile lock held), DirectCDP failed, and the
+        # chain silently dropped to a plain browser with the real session.
+        # Never do that automatically again. If someone truly wants this
+        # path, they must set FB_RPA_ALLOW_PLAIN_BROWSER=1 explicitly.
+        import os as _os
+
+        allow = (_os.environ.get("FB_RPA_ALLOW_PLAIN_BROWSER") or "").strip().lower()
+        if allow not in ("1", "true", "yes", "on"):
+            raise RuntimeError(
+                "PlaywrightProfile fallback is DISABLED: it would open the "
+                "account session in a vanilla (non-antidetect, non-proxied) "
+                "browser. Re-open the profile in the Multilogin Desktop app "
+                "and retry. (Override only if you understand the risk: "
+                "FB_RPA_ALLOW_PLAIN_BROWSER=1.)"
+            )
         log.warning(
             "Using PlaywrightProfileProvider — vanilla Chromium + MLX profile cookies "
             "(NOT Mimic/antidetect). Prefer opening the profile in MLX Desktop + DirectCDP, "
@@ -132,6 +181,25 @@ class RpaPublisher:
         attach_only = get_mlx_attach_only()
         # When handing off / keeping the window, never hard-kill on provider switch.
         soft = bool(self.hand_off or self.dry_run)
+
+        # If the user already has this profile open in MLX Desktop, go
+        # straight to DirectCDP. The MLX automation API refuses to start a
+        # profile that is already running ("HTTP 401: Profile Authorization
+        # error", seen live 2026-07-31), so trying the API first just burns
+        # time and then fails. DirectCDP is built for exactly this: it finds
+        # the running profile and relaunches it with a debugging port.
+        # Working on an already-open account is the normal case, not an
+        # exception — the user should never have to close their browser
+        # for a run to start.
+        if self._profile_already_running(entry):
+            log.info("Profile already open in MLX — using DirectCDP instead of the API.")
+            try:
+                self._conn = self._open_multilogin_direct(entry, account_label)
+                return self._conn
+            except Exception as direct_exc:
+                log.warning("DirectCDP on running profile failed (%s); trying normal chain.", direct_exc)
+                self._reset_browser(keep_browser_open=True)
+
         try:
             self._conn = self._provider.open(entry, account_label)
             log.info("Browser opened via %s", self._provider.__class__.__name__)
@@ -211,14 +279,18 @@ class RpaPublisher:
         except Exception as exc:
             if not self._browser_closed_error(exc):
                 raise
-            log.warning("Browser closed during RPA (%s). Retrying with PlaywrightProfileProvider.", exc)
+            # A dead PAGE usually does not mean a dead BROWSER — confirmed
+            # live 2026-07-31: a tab crashed mid-run while Mimic itself kept
+            # running with its CDP port alive. Re-attach through the normal
+            # provider chain first (which starts with attach-to-running);
+            # the plain-browser fallback stays behind its v72 safety gate.
+            log.warning("Browser target died mid-run (%s). Re-attaching.", exc)
             self._reset_browser(keep_browser_open=True)
-            entry = self._entry or self._resolve_entry(draft.account_label)
             try:
-                self._conn = self._open_playwright_profile(entry, draft.account_label)
-            except Exception as pw_exc:
-                raise self._mlx_fallback_error(exc, pw_exc) from pw_exc
-            flow = AdsManagerFlow(self._conn.page, selectors_path=self.selectors_path)
+                conn = self._ensure_browser(draft.account_label)
+            except Exception as re_exc:
+                raise self._mlx_fallback_error(exc, re_exc) from re_exc
+            flow = AdsManagerFlow(conn.page, selectors_path=self.selectors_path)
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
         if self.hand_off and result.success:
             result.error = "Draft ready — browser left open, Meta Publish was not clicked"
@@ -260,8 +332,37 @@ class RpaPublisher:
                     continue
                 results.append(self.publish_draft(draft))
         finally:
+            # Park the tab on the campaigns LIST before letting go of the
+            # browser. Confirmed live 2026-07-31 (Test152 server-truth
+            # check): an ad editor left open after the run lets Meta's
+            # "Instant form (suggested)" re-render eventually COMMIT via the
+            # page's own autosave — the last ad of the run kept reverting
+            # server-side even after the in-run sweep and tail watch had
+            # verified it. The last ad of the FIRST campaign always
+            # survived, because starting the next campaign navigated away —
+            # this applies the same escape to the final campaign.
+            try:
+                if self._conn is not None:
+                    self._goto_campaigns_list(self._conn.page)
+            except Exception:
+                pass
             self.close()
         return results
+
+    @staticmethod
+    def _goto_campaigns_list(page) -> None:
+        import re as _re
+
+        url = page.url or ""
+        m = _re.search(r"[?&]act=(\d+)", url)
+        if not m or "/adsmanager/" not in url:
+            return
+        page.goto(
+            f"https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={m.group(1)}",
+            wait_until="domcontentloaded",
+            timeout=30000,
+        )
+        page.wait_for_timeout(3000)
 
     def __enter__(self) -> "RpaPublisher":
         return self

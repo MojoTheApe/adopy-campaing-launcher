@@ -346,6 +346,87 @@ def _disable_background_throttling(context, page) -> None:
         pass
 
 
+# Keep strong references to keep-alive CDP sessions: if the session object
+# is garbage-collected python-side, its event handlers (screencast acks)
+# die with it and Chrome may pause the cast.
+_KEEPALIVE_SESSIONS: list = []
+
+
+def _keep_renderer_active(context, page) -> None:
+    """Force the renderer to keep producing frames while minimised.
+
+    Measured live 2026-07-30 on the DQ204 profile (window minimised, focus
+    emulation + active lifecycle already applied):
+        rAF 26/s, timers 5.2/s        <- still throttled ~2x
+        + tiny CDP screencast:
+        rAF 43.6/s, timers 9.3/s      <- near the restored-window reference
+        restored window reference:
+        rAF 59.9/s, timers 10/s
+
+    Focus emulation fools document.hasFocus(), but Windows occlusion still
+    clamps background timers to ~200ms and stops begin-frames — which is
+    what made minimised runs randomly slow ("the whole test didn't load").
+    Starting a screencast obliges Chrome to schedule frames regardless of
+    occlusion; a 320x200 jpeg every 2nd frame is negligible overhead, and
+    frames are ACKed so the cast never stalls on backpressure.
+    """
+    try:
+        session = context.new_cdp_session(page)
+
+        def _ack(params: dict) -> None:
+            try:
+                session.send("Page.screencastFrameAck", {"sessionId": params["sessionId"]})
+            except Exception:
+                pass
+
+        session.on("Page.screencastFrame", _ack)
+        session.send(
+            "Page.startScreencast",
+            {"format": "jpeg", "quality": 20, "maxWidth": 320, "maxHeight": 200,
+             "everyNthFrame": 2},
+        )
+        _KEEPALIVE_SESSIONS.append(session)
+    except Exception as exc:
+        log.debug("keep_renderer_active skipped: %s", exc)
+
+
+def _patch_window_geometry(session, page) -> None:
+    """Make window.outer* consistent with the viewport.
+
+    Measured 2026-07-31 on the live profile: outerWidth 1280 while
+    innerWidth was 1600 — a window narrower than its own content area,
+    which no real browser window can be, and a one-line tell for any
+    script that looks. It comes from the Mimic profile's device-pixel
+    ratio disagreeing with the reported window bounds. Applied both to
+    future documents and to the one already open.
+    """
+    src = """
+        (() => {
+          const fix = () => {
+            try {
+              const iw = window.innerWidth, ih = window.innerHeight;
+              if (!iw || !ih) return;
+              if (window.outerWidth >= iw && window.outerHeight >= ih) return;
+              Object.defineProperty(window, 'outerWidth',
+                { get: () => window.innerWidth, configurable: true });
+              Object.defineProperty(window, 'outerHeight',
+                { get: () => window.innerHeight + 88, configurable: true });
+            } catch (e) {}
+          };
+          fix();
+          window.addEventListener('resize', fix, { passive: true });
+        })();
+    """
+    try:
+        session.send("Page.addScriptToEvaluateOnNewDocument", {"source": src})
+    except Exception:
+        pass
+    try:
+        page.evaluate(src)
+    except Exception:
+        pass
+
+
 def _ensure_wide_window(context, page) -> None:
     """Force the browser window's layout to a wide desktop size, even if it
     is currently minimised or was left in narrow restored bounds.
@@ -371,6 +452,11 @@ def _ensure_wide_window(context, page) -> None:
         was_minimized = bounds.get("windowState") == "minimized"
         width = bounds.get("width") or 0
         if not was_minimized and width >= 1280:
+            # Nothing to resize — but the geometry patch must still run:
+            # the outerWidth<innerWidth anomaly comes from the profile's
+            # device-pixel-ratio, not from our resize, so it is present
+            # even on a window that was already wide.
+            _patch_window_geometry(session, page)
             return
         session.send(
             "Browser.setWindowBounds",
@@ -382,6 +468,15 @@ def _ensure_wide_window(context, page) -> None:
              "bounds": {"left": 0, "top": 0, "width": 1920, "height": 1040}},
         )
         time.sleep(1.0)  # let Chrome actually relayout at the new size
+
+        # Repair the impossible geometry this can leave behind. Measured
+        # 2026-07-31: outerWidth 1280 while innerWidth was 1600 — a window
+        # narrower than its own viewport, which no real browser window can
+        # be, and a one-line check for any script that cares. It happens
+        # because the CDP resize and the device-pixel-ratio scaling of a
+        # Mimic profile disagree. Override the reported outer* values to
+        # sit just outside the real viewport (normal chrome thickness).
+        _patch_window_geometry(session, page)
         if was_minimized:
             session.send(
                 "Browser.setWindowBounds",
@@ -408,6 +503,7 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
             page = context.new_page()
         _disable_background_throttling(context, page)
         _ensure_wide_window(context, page)
+        _keep_renderer_active(context, page)
         # Install human-activity tracker on the page
         try:
             from src.fb_ads_rpa.pacing import _install_mouse_tracker

@@ -30,6 +30,8 @@ from src.meta_campaign_agent.multilogin_session import MultiloginSession
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
+# Serialises actual publishing across jobs/accounts — see _run_job.
+_publish_serial = threading.Semaphore(1)
 _active_publishers: dict[str, RpaPublisher] = {}
 
 _LOG_PATH = "output/dashboard_publish_log.jsonl"
@@ -183,15 +185,27 @@ def _run_job(
     # async handler (Python 3.14+ ContextVar propagation via threading.Thread).
     _clear_inherited_asyncio_loop()
 
+    # One publish at a time, account-agnostic. Multi-account support
+    # (2026-07-31, user request) works by QUEUEING: launching builders for
+    # two accounts starts two jobs, and the second waits here in "queued"
+    # until the first finishes — never two Multilogin browsers driven at
+    # once. Parallel profiles are a later, deliberate step, not a default.
+    # The semaphore is held for the WHOLE run, not just the status flip.
     with _jobs_lock:
-        _jobs[job_id]["status"] = "running"
-        _jobs[job_id]["started_at"] = _now_iso()
+        _jobs[job_id]["status"] = "queued"
+    with _publish_serial:
+        if _is_cancelled(job_id):
+            _finish(job_id, cancelled=True)
+            return
+        with _jobs_lock:
+            _jobs[job_id]["status"] = "running"
+            _jobs[job_id]["started_at"] = _now_iso()
 
-    if use_rpa_publish():
-        _run_rpa(job_id, slots, account_label=account_label, country=country, activate=activate, dry_run=dry_run, hand_off=hand_off)
-        return
+        if use_rpa_publish():
+            _run_rpa(job_id, slots, account_label=account_label, country=country, activate=activate, dry_run=dry_run, hand_off=hand_off)
+            return
 
-    _run_api(job_id, slots, account_label=account_label, country=country, via_multilogin=via_multilogin, activate=activate)
+        _run_api(job_id, slots, account_label=account_label, country=country, via_multilogin=via_multilogin, activate=activate)
 
 
 def _append_result(job_id: str, res: dict[str, Any]) -> None:
