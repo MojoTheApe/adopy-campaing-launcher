@@ -688,18 +688,19 @@
     }
 
     /* "Send to Builder" trigger + popup */
-    /* Landing-page chips (CM drill) + Assets landing filter */
-    .lp-chips { max-width: 260px; }
+    /* Landing-page chips: second line under the adset name in the CM drill —
+       kept muted so the numeric columns and the name stay the focus. */
+    .lp-chips { margin-top: 3px; line-height: 1.6; }
     .lp-chip {
       display: inline-block;
-      background: var(--accent-soft, #eef2ff);
+      background: transparent;
       border: 1px solid var(--border);
-      color: var(--fg);
+      color: var(--muted);
       border-radius: 10px;
-      padding: 0.05rem 0.5rem;
-      font-size: 0.68rem;
+      padding: 0 0.45rem;
+      font-size: 0.66rem;
       font-family: var(--mono, monospace);
-      margin: 1px 2px 1px 0;
+      margin: 0 3px 0 0;
       white-space: nowrap;
     }
     .lp-chip-more {

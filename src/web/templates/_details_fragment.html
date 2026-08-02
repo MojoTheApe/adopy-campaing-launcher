@@ -43,7 +43,6 @@
               <th>Campaign / Ad set</th>
               <th>Account</th>
               <th class="num">Dep</th>
-              <th>Landings</th>
               <th class="num">Leads</th>
               <th class="num">Spend</th>
               <th class="num">CPA</th>
@@ -89,20 +88,22 @@
               <td class="adset" style="max-width:300px;word-break:break-word">
                 {{ r.adset or '' }}
                 {% if r.adset %}<span style="color:var(--muted);font-size:0.7rem;margin-left:4px">▸ ads</span>{% endif %}
+                {% if r.variants %}
+                <div class="lp-chips" onclick="event.stopPropagation()">
+                  {%- for v in r.variants -%}
+                    <span class="lp-chip{% if loop.index > 3 %} lp-chip-extra{% endif %}"
+                          {% if loop.index > 3 %}hidden{% endif %}
+                          title="{{ v.name }}: {{ v.ftds }} dep">{{ v.name }} ×{{ v.ftds }}</span>
+                  {%- endfor -%}
+                  {%- if r.variants|length > 3 -%}
+                    <button type="button" class="lp-chip lp-chip-more"
+                            onclick="this.closest('.lp-chips').querySelectorAll('.lp-chip-extra').forEach(function(c){c.hidden=false});this.remove()">+{{ r.variants|length - 3 }}</button>
+                  {%- endif -%}
+                </div>
+                {% endif %}
               </td>
               <td>{{ r.account or '' }}</td>
               <td class="num good">{{ r.ftds or 0 }}</td>
-              <td class="lp-chips" onclick="event.stopPropagation()">
-                {%- for v in (r.variants or []) -%}
-                  <span class="lp-chip{% if loop.index > 2 %} lp-chip-extra{% endif %}"
-                        {% if loop.index > 2 %}hidden{% endif %}
-                        title="{{ v.name }}: {{ v.ftds }} dep">{{ v.name }} ×{{ v.ftds }}</span>
-                {%- endfor -%}
-                {%- if (r.variants or [])|length > 2 -%}
-                  <button type="button" class="lp-chip lp-chip-more"
-                          onclick="this.closest('.lp-chips').querySelectorAll('.lp-chip-extra').forEach(function(c){c.hidden=false});this.remove()">+{{ (r.variants or [])|length - 2 }}</button>
-                {%- endif -%}
-              </td>
               <td class="num">{{ r.leads or 0 }}</td>
               <td class="num">{{ r.spend | fmt_usd }}</td>
               <td class="num">{{ r.cpa | fmt_usd }}</td>
