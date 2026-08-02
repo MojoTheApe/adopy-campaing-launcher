@@ -649,6 +649,9 @@
       word-break: break-word;
     }
     .cbp-media { width: 100%; max-height: 115px; object-fit: cover; display: block; background: #000; }
+    /* Videos are often square/vertical: cover would crop the frame — show
+       the whole thing (letterboxed on black) with a taller cap instead. */
+    video.cbp-media { max-height: 215px; object-fit: contain; }
     .cbp-media-skel {
       height: 72px;
       background: var(--bg);
