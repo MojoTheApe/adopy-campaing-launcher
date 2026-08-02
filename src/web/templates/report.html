@@ -601,6 +601,74 @@
       gap: 0.5rem;
       margin-bottom: 0.45rem;
     }
+    /* Two-column slot: form fields capped left, ad preview stack right
+       (grill session 2026-08-02: Q2=a, no sticky; Q6=a, conservative). */
+    .cb-slot-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 640px) minmax(225px, 285px);
+      column-gap: 1.25rem;
+      align-items: start;
+    }
+    .cb-slot-main { min-width: 0; }
+    @media (max-width: 1150px) {
+      .cb-slot-grid { grid-template-columns: 1fr; }
+      .cb-preview-col { max-width: 420px; margin-top: 0.6rem; }
+    }
+    /* FB-like ad preview mini-card (minimal set: placeholder page identity,
+       3-line body, capped media, headline + CTA). */
+    .cbp-adlabel { color: var(--muted); font-size: 0.68rem; font-weight: 600; margin: 0 0 0.2rem 0.1rem; }
+    .cbp-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-elev);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      font-size: 0.72rem;
+      margin-bottom: 0.65rem;
+    }
+    .cbp-head { display: flex; align-items: center; gap: 0.45rem; padding: 0.5rem 0.6rem 0.35rem; }
+    .cbp-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--border); flex: none; }
+    .cbp-pagename { font-weight: 600; }
+    .cbp-sub { color: var(--muted); font-size: 0.62rem; }
+    .cbp-body {
+      padding: 0 0.6rem 0.45rem;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      white-space: pre-line;
+      word-break: break-word;
+    }
+    .cbp-media { width: 100%; max-height: 150px; object-fit: cover; display: block; background: #000; }
+    .cbp-media-skel {
+      height: 96px;
+      background: var(--bg);
+      border-block: 1px dashed var(--border);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-style: italic;
+    }
+    .cbp-foot { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem; background: var(--bg); }
+    .cbp-headline { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cbp-cta {
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      padding: 0.2rem 0.55rem;
+      font-weight: 600;
+      white-space: nowrap;
+      background: var(--bg-elev);
+    }
+    .cbp-skel-text { color: var(--muted); font-style: italic; }
+    /* Collapsible account pre-flight header */
+    .cb-preflight-toggle {
+      display: flex; align-items: center; gap: 0.4rem;
+      background: transparent; border: none; cursor: pointer;
+      font-family: inherit; font-size: 0.78rem; font-weight: 600;
+      color: var(--fg); padding: 0; margin-bottom: 0.45rem;
+    }
+    .cb-preflight-caret { color: var(--muted); transition: transform 150ms var(--ease-out); transform: rotate(90deg); display: inline-block; }
+    .cb-preflight-collapsed .cb-preflight-caret { transform: rotate(0deg); }
+    .cb-preflight-collapsed .cb-preflight-body { display: none; }
+    .cb-preflight-collapsed { padding-bottom: 0.4rem; }
     .cb-slot-label { color: var(--muted); font-size: 0.75rem; font-weight: 600; flex: 1; }
     .cb-remove-btn {
       background: transparent;
@@ -1769,7 +1837,19 @@ async function dashRefresh(ev) {
         data-asset="{{ default_asset }}">
 
     {# ── Pre-flight panel: link + account map ── #}
-    <div class="cb-preflight">
+    {% set pf_ok = pf.link_status == 'tracking' and not pf.missing_map_fields and pf.page_name %}
+    <div class="cb-preflight {% if pf_ok %}cb-preflight-collapsed{% endif %}">
+      <button type="button" class="cb-preflight-toggle"
+              onclick="this.closest('.cb-preflight').classList.toggle('cb-preflight-collapsed')">
+        <span class="cb-preflight-caret">▸</span> ⚙ Account
+        {% if pf_ok %}
+          <span class="cb-pf-ok">настроен ✓</span>
+          <span style="color:var(--muted);font-weight:400">· tracking, ids, page — заполнены</span>
+        {% else %}
+          <span class="cb-pf-err">требует настройки</span>
+        {% endif %}
+      </button>
+      <div class="cb-preflight-body">
 
       {# Tracking link row #}
       <div class="cb-preflight-row">
@@ -1844,6 +1924,7 @@ async function dashRefresh(ev) {
         </div>
       </div>
 
+      </div>{# /cb-preflight-body #}
     </div>{# /cb-preflight #}
     {% if not recs and is_fallback_mode %}
     <p style="font-size:0.78rem;color:var(--muted);margin:0.5rem 0 0.25rem">No performance data yet — click <strong>+ Add Campaign</strong> to build manually.</p>
@@ -1863,6 +1944,8 @@ async function dashRefresh(ev) {
         </div>
         <div class="cb-slot-name" data-name-display></div>
 
+        <div class="cb-slot-grid">
+        <div class="cb-slot-main">
         {# ── Campaign-level fields ── #}
         <div class="cb-fields">
           <span class="cb-label">Targeting</span>
@@ -1953,6 +2036,9 @@ async function dashRefresh(ev) {
           <button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>
           <button type="button" class="cb-add-btn-sm cb-dup-btn" onclick="cbDuplicateAd(this)" title="Duplicate the last ad — tweak one field instead of refilling everything">⧉ Duplicate ad</button>
         </div>
+        </div>{# /cb-slot-main #}
+        <div class="cb-preview-col" data-preview-col></div>
+        </div>{# /cb-slot-grid #}
       </div>
       {% set ns.idx = ns.idx + 1 %}
     {% endfor %}
@@ -3037,7 +3123,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   var CREATIVES = [];  // [{filename, rel_path, folder, type}]
   fetch('/api/creatives')
     .then(function(r){ return r.json(); })
-    .then(function(d){ CREATIVES = d.files || []; })
+    .then(function(d){ CREATIVES = d.files || []; cbpRenderAll(); })
     .catch(function(){});
 
   window.cbCreativeSearch = function(input) {
@@ -3120,8 +3206,104 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   var AD_TITLES = [];  // [{ad_title, headline, body, description, asset, language}]
   fetch('/api/ad-copy')
     .then(function(r){ return r.json(); })
-    .then(function(d){ AD_TITLES = d.rows || []; })
+    .then(function(d){ AD_TITLES = d.rows || []; cbpRenderAll(); })
     .catch(function(){});
+
+  // ── Ad preview mini-cards (grill session 2026-08-02) ─────────────────
+  // One FB-like card per ad row, rendered into the slot's [data-preview-col].
+  // Media via /creative-file (lazy img / metadata-only video), texts from
+  // AD_TITLES, CTA from the row's select. Skeleton hints for missing parts.
+  function cbpEsc(s) {
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  function cbRenderPreviews(slot) {
+    var col = slot.querySelector('[data-preview-col]');
+    if (!col) return;
+    var cards = [];
+    slot.querySelectorAll('.cb-ad-row').forEach(function(row, i) {
+      var fileHidden = row.querySelector('input[type="hidden"][name$="_creative_file"]');
+      var fileSearch = row.querySelector('.cb-creative-search');
+      var fileVal = ((fileHidden && fileHidden.value) || (fileSearch && fileSearch.value) || '').trim();
+      var copyHidden = row.querySelector('input[type="hidden"][name$="_copy"]');
+      var copySearch = row.querySelector('.cb-adtitle-search');
+      var copyVal = ((copyHidden && copyHidden.value) || (copySearch && copySearch.value) || '').trim();
+      var ctaSel = row.querySelector('.cb-cta-select');
+      var cta = ctaSel ? ctaSel.value : 'Learn More';
+      var vidRadio = row.querySelector('input[type="radio"][value="Video"]');
+      var isVideo = !!(vidRadio && vidRadio.checked);
+
+      var media;
+      if (fileVal) {
+        var cr = CREATIVES.find(function(f) {
+          return f.filename === fileVal || f.rel_path === fileVal;
+        });
+        var path = cr ? (cr.rel_path || cr.filename) : fileVal;
+        var url = '/creative-file?path=' + encodeURIComponent(path);
+        if (isVideo || (cr && cr.type === 'Video') || /\.(mp4|mov|webm)$/i.test(path)) {
+          media = '<video class="cbp-media" src="' + cbpEsc(url) + '" preload="metadata" muted controls></video>';
+        } else {
+          media = '<img class="cbp-media" src="' + cbpEsc(url) + '" loading="lazy" alt="">';
+        }
+      } else {
+        media = '<div class="cbp-media-skel">выбери файл…</div>';
+      }
+
+      var copy = copyVal ? AD_TITLES.find(function(t) { return t.ad_title === copyVal; }) : null;
+      var bodyHtml = copy && copy.body
+        ? cbpEsc(copy.body)
+        : (copyVal ? cbpEsc(copyVal) : '<span class="cbp-skel-text">выбери текст…</span>');
+      var headlineHtml = copy && copy.headline
+        ? cbpEsc(copy.headline)
+        : '<span class="cbp-skel-text">headline</span>';
+
+      cards.push(
+        '<div class="cbp-adlabel">Ad ' + (i + 1) + '</div>' +
+        '<div class="cbp-card">' +
+          '<div class="cbp-head"><span class="cbp-avatar"></span>' +
+            '<span><div class="cbp-pagename">Page name</div><div class="cbp-sub">Sponsored</div></span></div>' +
+          '<div class="cbp-body">' + bodyHtml + '</div>' +
+          media +
+          '<div class="cbp-foot"><span class="cbp-headline">' + headlineHtml + '</span>' +
+            '<span class="cbp-cta">' + cbpEsc(cta) + '</span></div>' +
+        '</div>');
+    });
+    col.innerHTML = cards.join('');
+  }
+
+  function cbpRenderAll() {
+    document.querySelectorAll('.cb-slot').forEach(cbRenderPreviews);
+  }
+
+  var _cbpTimer = null;
+  function cbpSchedule(el) {
+    var slot = el && el.closest ? el.closest('.cb-slot') : null;
+    clearTimeout(_cbpTimer);
+    _cbpTimer = setTimeout(function() {
+      if (slot && document.contains(slot)) cbRenderPreviews(slot);
+      else cbpRenderAll();
+    }, 180);
+  }
+  document.addEventListener('input', function(e) {
+    if (e.target.closest && e.target.closest('.cb-slot')) cbpSchedule(e.target);
+  });
+  document.addEventListener('change', function(e) {
+    if (e.target.closest && e.target.closest('.cb-slot')) cbpSchedule(e.target);
+  });
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest) return;
+    if (e.target.closest('.cb-sel-opt') || e.target.closest('.cb-add-btn-sm')
+        || e.target.closest('.cb-remove-ad-btn') || e.target.closest('.cb-add-btn')) {
+      cbpSchedule(e.target);
+    }
+  });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', cbpRenderAll);
+  } else {
+    cbpRenderAll();
+  }
 
   window.cbAdTitleSearch = function(input) {
     var wrap = input.closest('.cb-adtitle-sel-wrap');
@@ -3702,6 +3884,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>' +
       '</div>' +
       '<div class="cb-slot-name" data-name-display></div>' +
+      '<div class="cb-slot-grid">' +
+      '<div class="cb-slot-main">' +
       '<div class="cb-fields">' +
       '<span class="cb-label">Targeting</span>' +
       '<div class="cb-sel-wrap cb-targeting-wrap">' +
@@ -3726,6 +3910,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<input type="hidden" name="camp_' + idx + '_ad_count" class="cb-ad-count" value="1">' +
       '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>' +
       '<button type="button" class="cb-add-btn-sm cb-dup-btn" onclick="cbDuplicateAd(this)" title="Duplicate the last ad — tweak one field instead of refilling everything">⧉ Duplicate ad</button>' +
+      '</div>' +
+      '</div>' +
+      '<div class="cb-preview-col" data-preview-col></div>' +
       '</div>' +
       '</div>';
   }
