@@ -710,8 +710,17 @@
       font-family: inherit;
     }
     .lp-chip-more:hover { border-color: var(--accent); }
-    .lp-filter { margin-left: 0.75rem; font-size: 0.75rem; color: var(--muted); font-weight: 400; }
-    .lp-filter-select { width: auto; display: inline-block; font-size: 0.75rem; padding: 0.15rem 0.4rem; }
+    /* Assets: clickable rows expanding a per-landing breakdown */
+    .asset-row { cursor: pointer; }
+    .asset-row:hover td { background: var(--accent-soft, #eef2ff); }
+    .asset-caret { color: var(--muted); font-size: 0.7rem; margin-left: 4px; transition: none; }
+    .asset-row.asset-open .asset-caret { color: var(--accent); }
+    .asset-variant-detail > td { padding: 0 !important; background: var(--bg); }
+    .asset-variant-inner { padding: 0.5rem 0.75rem 0.6rem; border-left: 3px solid var(--accent); }
+    .asset-variant-table { width: auto; min-width: 60%; margin: 0; box-shadow: none; }
+    .asset-variant-table th { font-size: 0.7rem; }
+    .asset-variant-table td { font-size: 0.78rem; padding: 0.25rem 0.6rem; }
+    .asset-variant-total td { border-top: 1px solid var(--border-strong); font-weight: 600; }
     .cb-send-btn {
       background: transparent;
       border: 1px solid var(--border-strong);
@@ -1405,16 +1414,6 @@ async function dashRefresh(ev) {
 <div id="view-country-{{ cid }}-assets" class="view-panel" data-country="{{ cid }}">
 <h2 class="view-title">{{ c.country }}: {{ n_assets }} Assets
   <a href="/export/assets" style="margin-left:0.75rem;font-size:0.75rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0.15rem 0.5rem;text-decoration:none;" title="Download Excel">⬇ xlsx</a>
-  {% if c.asset_variants %}
-  <label class="lp-filter">Лендинг:
-    <select class="cb-select lp-filter-select" onchange="assetVariantFilter(this, '{{ cid }}')">
-      <option value="">Все</option>
-      {% for v in c.asset_variants | map(attribute='variant') | unique | sort if v %}
-      <option value="{{ v }}">{{ v }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  {% endif %}
 </h2>
 {% if c.asset_variants %}
 {# tojson is already HTML-safe (escapes < > & to \uXXXX); `safe` stops the
@@ -1432,8 +1431,9 @@ async function dashRefresh(ev) {
   <tbody id="asset-tbody-{{ cid }}">
   {% for row in c.asset_summary %}
     {% set cr = (row.deposits / row.leads * 100) if row.leads > 0 else 0 %}
-    <tr>
-      <td>{{ row.offer }}</td>
+    <tr class="asset-row" onclick="assetVariantToggle(this, '{{ cid }}')" data-offer="{{ row.offer | e }}"
+        title="Показать распределение по лендингам">
+      <td>{{ row.offer }} <span class="asset-caret">▸</span></td>
       <td class="num">{{ row.leads }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ '%.1f' % cr }}%</td>
@@ -1442,9 +1442,6 @@ async function dashRefresh(ev) {
   {% endfor %}
   </tbody>
 </table>
-<div class="lp-filter-note" style="display:none;font-size:0.72rem;color:var(--muted);margin-top:0.35rem">
-  Разметка лендингов ведётся с 30.07 — старые строки без лендинга в срез не входят.
-</div>
 </div>
 {% endif %}
 
@@ -2345,47 +2342,69 @@ async function dashRefresh(ev) {
   });
 })();
 
-// Assets: landing-page (Variant) slice switcher. Aggregates are embedded
-// per-country as JSON (offer x variant rows); "Все" folds every variant
-// including untagged history, a concrete slice shows tagged rows only.
-function assetVariantFilter(sel, cid) {
+// Assets: click a row -> expand the landing-page (Variant) breakdown for
+// that asset with Leads / Deposits / CR / Spend / CPL / CPA per landing.
+// Aggregates are embedded per-country as JSON (offer x variant rows);
+// untagged history (variant "") shows as "— (без лендинга)" so the
+// breakdown always adds up to the asset's totals.
+function assetVariantToggle(tr, cid) {
+  var next = tr.nextElementSibling;
+  if (next && next.classList.contains('asset-variant-detail')) {
+    next.remove();
+    tr.classList.remove('asset-open');
+    return;
+  }
   var dataEl = document.getElementById('asset-variants-' + cid);
-  var tbody = document.getElementById('asset-tbody-' + cid);
-  if (!dataEl || !tbody) return;
-  var rows = JSON.parse(dataEl.textContent || '[]');
-  var pick = sel.value;
-  var agg = {};
-  rows.forEach(function(r) {
-    if (pick && r.variant !== pick) return;
-    var a = agg[r.offer] || (agg[r.offer] = { leads: 0, deposits: 0, net: 0 });
-    a.leads += r.leads || 0;
-    a.deposits += r.deposits || 0;
-    a.net += r.net || 0;
+  if (!dataEl) return;
+  var offer = tr.getAttribute('data-offer');
+  var rows = JSON.parse(dataEl.textContent || '[]').filter(function(r) {
+    return r.offer === offer;
   });
-  var items = Object.keys(agg).map(function(offer) {
-    var a = agg[offer];
-    return { offer: offer, leads: a.leads, deposits: a.deposits, net: a.net };
-  }).sort(function(x, y) { return (y.deposits - x.deposits) || (y.leads - x.leads); });
-  var fmtUsd = function(v) {
-    if (!v && v !== 0) return '';
-    return '$' + Math.round(v).toLocaleString('en-US');
-  };
-  // escHtml from the builder IIFE is out of scope here — local escaper.
   var esc = function(s) {
     var d = document.createElement('div');
     d.textContent = s == null ? '' : String(s);
     return d.innerHTML;
   };
-  tbody.innerHTML = items.map(function(r) {
-    var cr = r.leads > 0 ? (r.deposits / r.leads * 100).toFixed(1) : '0.0';
-    return '<tr><td>' + esc(r.offer) + '</td>'
-      + '<td class="num">' + r.leads + '</td>'
-      + '<td class="num">' + r.deposits + '</td>'
-      + '<td class="num">' + cr + '%</td>'
-      + '<td class="num">' + fmtUsd(r.net) + '</td></tr>';
-  }).join('') || '<tr><td colspan="5" style="color:var(--muted)">Нет данных по этому лендингу</td></tr>';
-  var note = tbody.closest('.view-panel').querySelector('.lp-filter-note');
-  if (note) note.style.display = pick ? 'block' : 'none';
+  var fmtUsd = function(v) {
+    if (v == null || isNaN(v)) return '—';
+    return '$' + Math.round(v).toLocaleString('en-US');
+  };
+  // untagged last, then by deposits / leads / spend desc
+  rows.sort(function(x, y) {
+    if (!x.variant !== !y.variant) return x.variant ? -1 : 1;
+    return (y.deposits - x.deposits) || (y.leads - x.leads) || (y.spend - x.spend);
+  });
+  var render = function(r, cls) {
+    var name = r.variant ? esc(r.variant) : '— (без лендинга)';
+    var cr = r.leads > 0 ? (r.deposits / r.leads * 100).toFixed(1) + '%' : '—';
+    var cpl = r.leads > 0 ? fmtUsd(r.spend / r.leads) : '—';
+    var cpa = r.deposits > 0 ? fmtUsd(r.spend / r.deposits) : '—';
+    return '<tr class="' + (cls || '') + '"><td>' + name + '</td>'
+      + '<td class="num">' + (r.leads || 0) + '</td>'
+      + '<td class="num' + (r.deposits > 0 ? ' good' : '') + '">' + (r.deposits || 0) + '</td>'
+      + '<td class="num">' + cr + '</td>'
+      + '<td class="num">' + fmtUsd(r.spend) + '</td>'
+      + '<td class="num">' + cpl + '</td>'
+      + '<td class="num">' + cpa + '</td></tr>';
+  };
+  var total = rows.reduce(function(a, r) {
+    a.leads += r.leads || 0; a.deposits += r.deposits || 0; a.spend += r.spend || 0;
+    return a;
+  }, { variant: 'Всего', leads: 0, deposits: 0, spend: 0 });
+  var body = rows.map(function(r) { return render(r); }).join('')
+    || '<tr><td colspan="7" style="color:var(--muted)">Нет данных по лендингам</td></tr>';
+  var detail = document.createElement('tr');
+  detail.className = 'asset-variant-detail';
+  detail.innerHTML = '<td colspan="5"><div class="asset-variant-inner">'
+    + '<table class="asset-variant-table"><thead><tr>'
+    + '<th>Лендинг</th><th class="num">Leads</th><th class="num">Deposits</th>'
+    + '<th class="num">CR</th><th class="num">Spend</th><th class="num">CPL</th><th class="num">CPA</th>'
+    + '</tr></thead><tbody>' + body + (rows.length > 1 ? render(total, 'asset-variant-total') : '')
+    + '</tbody></table>'
+    + '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem">Разметка лендингов ведётся с 30.07 — старые строки попадают в «— (без лендинга)».</div>'
+    + '</div></td>';
+  tr.after(detail);
+  tr.classList.add('asset-open');
 }
 
 // §6 Creative Brief copy button
