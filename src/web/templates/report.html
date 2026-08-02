@@ -1743,12 +1743,17 @@ async function dashRefresh(ev) {
         <button type="button" class="ml-inst-btn ml-inst-active" data-inst="A" onclick="mlSetInstance('{{ cid }}','A')">Instance A</button>
         <button type="button" class="ml-inst-btn" data-inst="B" onclick="mlSetInstance('{{ cid }}','B')">Instance B</button>
       </div>
-      <input type="email" id="ml-email-{{ cid }}" class="cb-input" placeholder="Multilogin email" autocomplete="username">
-      <input type="password" id="ml-pass-{{ cid }}" class="cb-input" placeholder="Multilogin password" autocomplete="current-password">
-      <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem">
-        <input type="checkbox" id="ml-save-{{ cid }}" checked> Save token to .env (1 month)
-      </label>
-      <button type="button" class="ml-connect-btn" onclick="mlSignin('{{ cid }}')">Connect</button>
+      {# Token-first (grill 2026-08-02, Q1=a): the credential form is shown
+         only when the saved monthly token is dead — mlTokenFirst() decides. #}
+      <div id="ml-token-banner-{{ cid }}" style="display:none;font-size:0.74rem"></div>
+      <div id="ml-cred-fields-{{ cid }}">
+        <input type="email" id="ml-email-{{ cid }}" class="cb-input" placeholder="Multilogin email" autocomplete="username">
+        <input type="password" id="ml-pass-{{ cid }}" class="cb-input" placeholder="Multilogin password" autocomplete="current-password">
+        <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem">
+          <input type="checkbox" id="ml-save-{{ cid }}" checked> Save token to .env (1 month)
+        </label>
+        <button type="button" class="ml-connect-btn" onclick="mlSignin('{{ cid }}')">Connect</button>
+      </div>
     </div>
     <div id="ml-status-{{ cid }}" style="margin-top:0.5rem;font-size:0.74rem"></div>
     <div id="ml-profiles-{{ cid }}" style="margin-top:0.6rem"></div>
@@ -2579,6 +2584,7 @@ function mlTogglePanel(cid) {
   var open = body.style.display !== 'none';
   body.style.display = open ? 'none' : 'block';
   if (chevron) chevron.textContent = open ? '▸' : '▾';
+  if (!open) mlTokenFirst(cid);  // just opened → token-first check
 }
 
 function mlSetInstance(cid, inst) {
@@ -2587,6 +2593,113 @@ function mlSetInstance(cid, inst) {
   if (!toggle) return;
   toggle.querySelectorAll('.ml-inst-btn').forEach(function(btn) {
     btn.classList.toggle('ml-inst-active', btn.dataset.inst === inst);
+  });
+  delete _mlTokenChecked[cid];  // instance switch → re-run the token check
+  mlTokenFirst(cid);
+}
+
+// ── Token-first connect (grill 2026-08-02, Q1=a) ─────────────────────
+// The saved monthly automation token is checked BEFORE showing any login
+// form; credentials are asked only when the token is missing/expired.
+var _mlTokenChecked = {};  // cid → instance last checked
+
+function mlTokenFirst(cid) {
+  var instance = _mlInstance[cid] || 'A';
+  if (_mlTokenChecked[cid] === instance) return;
+  _mlTokenChecked[cid] = instance;
+  var banner = document.getElementById('ml-token-banner-' + cid);
+  var creds = document.getElementById('ml-cred-fields-' + cid);
+  if (!banner || !creds) return;
+  banner.style.display = 'block';
+  banner.innerHTML = '<span style="color:var(--muted)">Проверяю сохранённый токен…</span>';
+
+  fetch('/multilogin-token-status?instance=' + instance)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.alive) {
+        var until = '';
+        if (d.expires_at) {
+          try {
+            var dt = new Date(d.expires_at);
+            until = ' · до ' + dt.getDate() + '.' + ('0' + (dt.getMonth() + 1)).slice(-2);
+          } catch (e) {}
+        }
+        creds.style.display = 'none';
+        banner.innerHTML = '<span style="color:var(--good)">✓ Подключено по сохранённому токену'
+          + ' (Instance ' + instance + until + ')</span>'
+          + ' <button type="button" class="ml-connect-btn" style="margin-left:0.5rem;font-size:0.72rem;padding:0.2rem 0.6rem"'
+          + ' onclick="mlListProfiles(\'' + cid + '\')">Профили</button>'
+          + ' <a href="#" style="margin-left:0.5rem;font-size:0.7rem;color:var(--muted)"'
+          + ' onclick="event.preventDefault();this.parentNode.style.display=\'none\';'
+          + 'document.getElementById(\'ml-cred-fields-' + cid + '\').style.display=\'block\'">другой аккаунт</a>';
+        mlListProfiles(cid);  // decision: alive token → straight to profiles
+      } else {
+        creds.style.display = 'block';
+        banner.innerHTML = d.has_token
+          ? '<span style="color:var(--warn)">⚠ Сохранённый токен истёк — введи логин и пароль (раз в месяц)</span>'
+          : '';
+        if (!d.has_token) banner.style.display = 'none';
+      }
+    })
+    .catch(function() {
+      creds.style.display = 'block';
+      banner.style.display = 'none';
+    });
+}
+
+function mlListProfiles(cid) {
+  var instance = _mlInstance[cid] || 'A';
+  var profilesDiv = document.getElementById('ml-profiles-' + cid);
+  var statusEl = document.getElementById('ml-status-' + cid);
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Загружаю профили…</span>';
+  fetch('/multilogin-search', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({search_text: '', instance: instance})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.ok) {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + (data.error || 'Ошибка') + '</span>';
+      return;
+    }
+    if (statusEl) statusEl.innerHTML = '';
+    var profiles = data.profiles || [];
+    var folders  = data.folders  || [];
+    var folderMap = {};
+    folders.forEach(function(f) { folderMap[f.folder_id] = f.name; });
+    if (!profilesDiv) return;
+    if (!profiles.length) {
+      profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">Профили не найдены.</span>'
+        + '<div style="margin-top:0.5rem">'
+        + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Поиск профиля по имени…" style="width:100%;font-size:0.75rem">'
+        + '<button type="button" class="ml-connect-btn" style="margin-top:0.35rem;font-size:0.75rem"'
+        + ' onclick="mlSearchByTerm(\'' + cid + '\', \'' + instance + '\')">🔍 Найти</button></div>';
+      return;
+    }
+    var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
+      + profiles.length + ' профил(ей)</div>'
+      + '<input type="text" class="cb-input" placeholder="фильтр по имени…" style="width:100%;font-size:0.74rem;margin-bottom:0.35rem"'
+      + ' oninput="(function(v){document.querySelectorAll(\'#ml-profile-list-' + cid + ' .ml-profile-row\')'
+      + '.forEach(function(r){r.style.display = r.dataset.pname.indexOf(v.toLowerCase()) >= 0 ? \'\' : \'none\'})})(this.value)">'
+      + '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+    profiles.forEach(function(p) {
+      var folderName = folderMap[p.folder_id] || p.folder_id || '—';
+      var pName = (p.name || '—');
+      html += '<div class="ml-profile-row" data-pname="' + pName.toLowerCase() + '">'
+        + '<span class="ml-profile-name">' + pName + '</span>'
+        + '<span class="ml-profile-id">folder: ' + folderName + '</span>'
+        + '<button class="ml-profile-use-btn" onclick="mlUseProfile(\''
+          + (p.folder_id||'') + '\',\'' + (p.profile_id||'') + '\',\'' + instance + '\','
+          + JSON.stringify(pName) + ',this)">'
+        + 'Use</button>'
+        + '</div>';
+    });
+    html += '</div>';
+    profilesDiv.innerHTML = html;
+  })
+  .catch(function(e) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + e.message + '</span>';
   });
 }
 

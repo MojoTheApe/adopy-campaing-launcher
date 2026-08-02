@@ -1381,6 +1381,63 @@ async def build_upload(request: Request) -> Response:
     )
 
 
+@app.get("/multilogin-token-status")
+async def multilogin_token_status(instance: str = "A") -> JSONResponse:
+    """Is the saved automation token alive? (token-first connect, no re-login)
+
+    Checks locally first (MLX automation tokens are JWTs — decode `exp`
+    without a network call), then confirms with one light API request.
+    Never touches credentials: the token either works or the client falls
+    back to the login form.
+    """
+    import base64 as _b64
+    import json as _json
+    import time as _time
+
+    import requests as _req
+
+    instance = (instance or "A").strip().upper()
+    if instance not in ("A", "B"):
+        instance = "A"
+    env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
+    token = (os.environ.get(env_key) or "").strip()
+    if not token:
+        return JSONResponse({"ok": True, "has_token": False, "alive": False})
+
+    expires_at: str | None = None
+    email: str | None = None
+    parts = token.split(".")
+    if len(parts) == 3:
+        try:
+            payload_raw = parts[1] + "=" * (-len(parts[1]) % 4)
+            payload = _json.loads(_b64.urlsafe_b64decode(payload_raw))
+            exp = payload.get("exp")
+            email = payload.get("email") or payload.get("sub")
+            if isinstance(exp, (int, float)):
+                from datetime import datetime, timezone
+                expires_at = datetime.fromtimestamp(exp, tz=timezone.utc).isoformat()
+                if exp < _time.time() + 60:
+                    return JSONResponse({"ok": True, "has_token": True, "alive": False,
+                                         "reason": "expired", "expires_at": expires_at})
+        except Exception:
+            pass  # not a decodable JWT — let the API call decide
+
+    try:
+        r = _req.get(
+            "https://api.multilogin.com/workspace/folders",
+            headers={"Accept": "application/json", "Authorization": f"Bearer {token}"},
+            timeout=12,
+        )
+    except Exception as exc:
+        return JSONResponse({"ok": True, "has_token": True, "alive": False,
+                             "reason": f"network: {exc}", "expires_at": expires_at})
+    if r.status_code == 401:
+        return JSONResponse({"ok": True, "has_token": True, "alive": False,
+                             "reason": "expired", "expires_at": expires_at})
+    return JSONResponse({"ok": True, "has_token": True, "alive": r.status_code == 200,
+                         "expires_at": expires_at, "email": email})
+
+
 @app.post("/multilogin-search")
 async def multilogin_search(request: Request) -> JSONResponse:
     """Search ML profiles using saved automation token (no re-login needed).
