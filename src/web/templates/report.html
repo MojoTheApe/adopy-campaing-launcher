@@ -804,6 +804,38 @@
     .asset-variant-table th { font-size: 0.7rem; }
     .asset-variant-table td { font-size: 0.78rem; padding: 0.25rem 0.6rem; }
     .asset-variant-total td { border-top: 1px solid var(--border-strong); font-weight: 600; }
+    /* Prebuild cart: row buttons + toast */
+    .cb-cart-btn {
+      background: transparent;
+      border: 1px solid var(--border-strong);
+      color: var(--accent);
+      border-radius: 3px;
+      padding: 0.12rem 0.45rem;
+      font-size: 0.7rem;
+      font-family: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .cb-cart-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+    .cb-cart-btn.cb-send-selected { background: var(--good); border-color: var(--good); color: #fff; }
+    #cb-cart-toast {
+      position: fixed;
+      bottom: 4.2rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: var(--fg);
+      color: var(--bg-elev);
+      padding: 0.4rem 0.9rem;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out);
+      z-index: 9999;
+    }
+    #cb-cart-toast.cb-cart-toast-show { opacity: 1; transform: translateX(-50%) translateY(0); }
     .cb-send-btn {
       background: transparent;
       border: 1px solid var(--border-strong);
@@ -1544,6 +1576,7 @@ async function dashRefresh(ev) {
         <th>Creative</th>
         <th class="num">Total dep</th>
         <th class="num">Recent dep</th>
+        <th></th>
       </tr></thead>
       <tbody>
       {% for row in rows %}
@@ -1554,6 +1587,10 @@ async function dashRefresh(ev) {
           <td>{{ row.creative or '—' }}</td>
           <td class="num">{{ row.deposits_total }}</td>
           <td class="num">{{ row.deposits_recent }}</td>
+          <td><button type="button" class="cb-cart-btn" data-kind="campaign" data-source="combo"
+                      data-country="{{ cid }}" data-country-name="{{ c.country }}"
+                      data-payload='{{ row | tojson | e }}'
+                      title="В сборку: новая кампания">+ 🛒</button></td>
         </tr>
       {% endfor %}
       </tbody>
@@ -1577,6 +1614,7 @@ async function dashRefresh(ev) {
     <th class="num">Dep</th>
     <th class="num">Leads</th>
     <th class="num">Spend</th>
+    <th></th>
   </tr></thead>
   <tbody>
   {% for row in c.top_combos %}
@@ -1590,6 +1628,10 @@ async function dashRefresh(ev) {
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
       <td class="num">{{ row.spend | fmt_usd }}</td>
+      <td><button type="button" class="cb-cart-btn" data-kind="campaign" data-source="combo"
+                  data-country="{{ cid }}" data-country-name="{{ c.country }}"
+                  data-payload='{{ row | tojson | e }}'
+                  title="В сборку: новая кампания">+ 🛒</button></td>
     </tr>
   {% endfor %}
   </tbody>
@@ -1634,6 +1676,7 @@ async function dashRefresh(ev) {
     <th class="num">Leads</th>
     <th class="num">Spend</th>
     <th class="num">CPA</th>
+    <th></th>
   </tr></thead>
   <tbody>
   {% for row in c.creatives %}
@@ -1643,6 +1686,10 @@ async function dashRefresh(ev) {
       <td class="num">{{ row.leads }}</td>
       <td class="num">{{ row.spend | fmt_usd }}</td>
       <td class="num">{{ row.cpa | fmt_usd }}</td>
+      <td><button type="button" class="cb-cart-btn" data-kind="ad" data-source="creative"
+                  data-country="{{ cid }}" data-country-name="{{ c.country }}"
+                  data-payload='{{ row | tojson | e }}'
+                  title="В сборку: объявление в последнюю кампанию">+ 🛒</button></td>
     </tr>
   {% endfor %}
   </tbody>
@@ -4741,6 +4788,254 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       }
     }, 300);
   })();
+
+  // ── Prebuild cart (grill session №2, 2026-08-02: Q2–Q4 = a) ──────────
+  // Travel the stats, silently collect campaign/ad modules into a
+  // localStorage cart bound to (country, account); materialize on demand,
+  // replacing the untouched default slot. Campaign modules (Combos/Trend)
+  // open a new campaign; ad modules (Optimization drill, Creatives) append
+  // to the LAST campaign (a shell campaign is created if the cart is empty).
+  var CB_CART_KEY = 'cbCart:v1';
+  var CB_CART_ACC_KEY = 'cbCartAcc:v1';
+  var _cbCartTouched = false;
+
+  function cbCartLoadAll() {
+    try { return JSON.parse(localStorage.getItem(CB_CART_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function cbCartSaveAll(all) {
+    try { localStorage.setItem(CB_CART_KEY, JSON.stringify(all)); } catch (e) {}
+  }
+  function cbCartAccGet(country) {
+    try { return (JSON.parse(localStorage.getItem(CB_CART_ACC_KEY)) || {})[country] || ''; } catch (e) { return ''; }
+  }
+  function cbCartAccSet(country, label) {
+    try {
+      var m = JSON.parse(localStorage.getItem(CB_CART_ACC_KEY)) || {};
+      m[country] = label;
+      localStorage.setItem(CB_CART_ACC_KEY, JSON.stringify(m));
+    } catch (e) {}
+  }
+
+  function cbCartToast(msg) {
+    var t = document.getElementById('cb-cart-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'cb-cart-toast';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add('cb-cart-toast-show');
+    clearTimeout(t._hideTimer);
+    t._hideTimer = setTimeout(function() { t.classList.remove('cb-cart-toast-show'); }, 1800);
+  }
+
+  function cbCartActiveCountry() {
+    var panel = document.querySelector('.view-panel.active');
+    return panel ? panel.dataset.country : null;
+  }
+
+  function cbCartCounts(entry) {
+    var camps = entry ? entry.campaigns.length : 0;
+    var ads = 0;
+    if (entry) entry.campaigns.forEach(function(c) {
+      ads += (c.src ? 1 : 0) + (c.ads ? c.ads.length : 0);
+    });
+    return { camps: camps, ads: ads };
+  }
+
+  function cbCartBarRender() {
+    var country = cbCartActiveCountry();
+    var bar = document.getElementById('cb-cart-bar');
+    if (!country) { if (bar) bar.style.display = 'none'; return; }
+    var options = accountOptionsFor(country);
+    var label = cbCartAccGet(country) || (options[0] && options[0].label) || '';
+    var all = cbCartLoadAll();
+    var entry = all[country + '|' + label];
+    var n = cbCartCounts(entry);
+    if (!n.camps && !_cbCartTouched) { if (bar) bar.style.display = 'none'; return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'cb-cart-bar';
+      bar.className = 'cb-cart-bar';
+      document.body.appendChild(bar);
+    }
+    bar.style.display = 'flex';
+    var optHtml = options.map(function(o) {
+      return '<option value="' + escHtml(o.label) + '"' + (o.label === label ? ' selected' : '') + '>'
+        + escHtml(o.label) + (o.loaded ? '' : ' (needs refresh)') + '</option>';
+    }).join('');
+    bar.innerHTML = '<span class="cb-cart-count">🛒 Собираю в:</span>'
+      + '<select id="cb-cart-acc" class="cb-select" style="max-width:190px;font-size:0.74rem">' + optHtml + '</select>'
+      + '<span class="cb-cart-count">' + n.camps + ' камп · ' + n.ads + ' ад</span>'
+      + '<button type="button" id="cb-cart-open"' + (n.camps ? '' : ' disabled') + '>Открыть в билдере</button>'
+      + '<button type="button" id="cb-cart-clear" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4)"'
+      + (n.camps ? '' : ' disabled') + '>×</button>';
+    bar.querySelector('#cb-cart-acc').onchange = function() {
+      cbCartAccSet(country, this.value);
+      cbCartBarRender();
+    };
+    bar.querySelector('#cb-cart-open').onclick = cbCartOpenBuilder;
+    bar.querySelector('#cb-cart-clear').onclick = function() {
+      delete all[country + '|' + label];
+      cbCartSaveAll(all);
+      cbCartToast('Сборка очищена');
+      cbCartBarRender();
+    };
+  }
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.cb-cart-btn');
+    if (!btn) return;
+    var country = btn.dataset.country;
+    var options = accountOptionsFor(country);
+    var label = cbCartAccGet(country) || (options[0] && options[0].label) || '';
+    if (!label) { cbCartToast('Для этой страны нет аккаунтов'); return; }
+    cbCartAccSet(country, label);
+    var payload = {};
+    try { payload = JSON.parse(btn.dataset.payload || '{}'); } catch (err) {}
+    var all = cbCartLoadAll();
+    var key = country + '|' + label;
+    var entry = all[key] || (all[key] = { country: country, accountLabel: label, campaigns: [] });
+    if (btn.dataset.kind === 'campaign') {
+      entry.campaigns.push({ src: { source: btn.dataset.source, payload: payload }, ads: [] });
+      cbCartToast('+ Кампания ' + entry.campaigns.length + ' → ' + label);
+    } else {
+      var last = entry.campaigns[entry.campaigns.length - 1];
+      if (!last) { last = { src: null, ads: [] }; entry.campaigns.push(last); }
+      last.ads.push({ source: btn.dataset.source, payload: payload });
+      cbCartToast('+ Ad → Кампания ' + entry.campaigns.length + ' (' + label + ')');
+    }
+    cbCartSaveAll(all);
+    _cbCartTouched = true;
+    flashSent(btn);
+    cbCartBarRender();
+  });
+
+  // 'creative' rows carry only an ad title — no adset to parse.
+  function cbCartResolve(mod) {
+    if (!mod) return Promise.resolve({ targeting: { matched: false } });
+    if (mod.source === 'creative') {
+      return Promise.resolve({ asset: '', creativeHint: (mod.payload || {}).ad_title || '',
+                               targeting: { matched: false } });
+    }
+    return resolveItemPrefill(mod.source, mod.payload);
+  }
+
+  function cbCartOpenBuilder() {
+    var country = cbCartActiveCountry();
+    if (!country) return;
+    var label = cbCartAccGet(country);
+    var all = cbCartLoadAll();
+    var entry = all[country + '|' + label];
+    if (!entry || !entry.campaigns.length) { cbCartToast('Сборка пуста'); return; }
+    var row = findAccountRow(country, label);
+    if (!row) {
+      sessionStorage.setItem('cbCartPending', JSON.stringify({ country: country, accountLabel: label }));
+      cbCartToast('Аккаунт не загружен — обновляю страницу…');
+      fetch('/refresh', { method: 'POST' }).then(function() { location.reload(); }).catch(function() { location.reload(); });
+      return;
+    }
+    var navBtn = document.querySelector('.sidebar-link[data-view="country-' + country + '-open"]');
+    if (navBtn) navBtn.click();
+    cbCartMaterialize(row, entry, all, country, label);
+  }
+
+  function cbCartMaterialize(row, entry, all, country, label) {
+    var form = row.querySelector('form.open-account-form');
+    if (!form) return;
+    var body = row.querySelector('.cb-acc-body');
+    if (body && !body.classList.contains('cb-acc-open')) {
+      body.classList.add('cb-acc-open');
+      var chev = row.querySelector('.cb-acc-chevron');
+      if (chev) chev.textContent = '▾';
+    }
+
+    // Grill task 3: prebuilt slots REPLACE the untouched default slot(s) —
+    // "untouched" = no targeting, no creative file, no ad copy anywhere.
+    form.querySelectorAll('.cb-slot').forEach(function(slot) {
+      var touched = false;
+      var tgt = slot.querySelector('.cb-targeting-hidden');
+      var tgtSearch = slot.querySelector('.cb-targeting-search');
+      if ((tgt && tgt.value) || (tgtSearch && tgtSearch.value)) touched = true;
+      slot.querySelectorAll('.cb-ad-row').forEach(function(r) {
+        var f = r.querySelector('input[type="hidden"][name$="_creative_file"]');
+        var c = r.querySelector('input[type="hidden"][name$="_copy"]');
+        var fs = r.querySelector('.cb-creative-search');
+        var cs = r.querySelector('.cb-adtitle-search');
+        if ((f && f.value) || (c && c.value) || (fs && fs.value) || (cs && cs.value)) touched = true;
+      });
+      if (!touched) slot.remove();
+    });
+    cbRenumber(form);
+    cbUpdateCount(form);
+
+    var chain = Promise.resolve();
+    entry.campaigns.forEach(function(camp) {
+      chain = chain.then(function() {
+        var container = form.querySelector('.cb-slots');
+        var idx = container.querySelectorAll('.cb-slot').length;
+        container.insertAdjacentHTML('beforeend', buildBlankSlotHTML(idx));
+        var slot = container.querySelector('.cb-slot[data-idx="' + idx + '"]');
+        if (!slot) return;
+        initAllSelects(slot);
+        slot.dataset.autoBuilt = '1';
+        var first = camp.src || camp.ads[0] || null;
+        var extraAds = camp.src ? (camp.ads || []) : (camp.ads || []).slice(1);
+        return cbCartResolve(first).then(function(prefill) {
+          applyCampaignFields(slot, prefill);
+          var adRow = slot.querySelector('.cb-ad-row[data-ad-idx="0"]');
+          if (adRow) applyAdRowFields(adRow, slot, prefill);
+          var adChain = Promise.resolve();
+          extraAds.forEach(function(mod) {
+            adChain = adChain.then(function() {
+              return cbCartResolve(mod).then(function(p2) {
+                cbAddAd(slot.querySelector('.cb-add-btn-sm'));
+                var rows = slot.querySelectorAll('.cb-ad-row');
+                applyAdRowFields(rows[rows.length - 1], slot, p2);
+              });
+            });
+          });
+          return adChain.then(function() { cbUpdateName(slot); });
+        });
+      });
+    });
+    chain.then(function() {
+      delete all[country + '|' + label];
+      cbCartSaveAll(all);
+      cbCartBarRender();
+      cbpRenderAll();
+      row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      cbCartToast('Собрано: ' + entry.campaigns.length + ' камп. → проверь и жми Preview');
+    });
+  }
+
+  // Resume materialization after the account-not-loaded refresh path.
+  (function resumeCartPending() {
+    var raw = sessionStorage.getItem('cbCartPending');
+    if (!raw) return;
+    sessionStorage.removeItem('cbCartPending');
+    var p;
+    try { p = JSON.parse(raw); } catch (e) { return; }
+    setTimeout(function() {
+      var row = findAccountRow(p.country, p.accountLabel);
+      var all = cbCartLoadAll();
+      var entry = all[p.country + '|' + p.accountLabel];
+      if (row && entry && entry.campaigns.length) {
+        var navBtn = document.querySelector('.sidebar-link[data-view="country-' + p.country + '-open"]');
+        if (navBtn) navBtn.click();
+        cbCartMaterialize(row, entry, all, p.country, p.accountLabel);
+      }
+    }, 400);
+  })();
+
+  // Bar follows view switches; initial render after load.
+  document.addEventListener('click', function(e) {
+    if (e.target.closest && (e.target.closest('.sidebar-link') || e.target.closest('.sidebar-country-btn')
+        || e.target.closest('.sidebar-home'))) {
+      setTimeout(cbCartBarRender, 60);
+    }
+  });
+  setTimeout(cbCartBarRender, 300);
 
   // ── Visual ad preview (Feed / Reels mockups) ──────────────────────────
   // window-scoped: cbPreview() (further down the page) lives in a separate
