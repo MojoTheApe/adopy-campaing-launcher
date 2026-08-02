@@ -613,12 +613,15 @@
     }
     .cb-slot-main { min-width: 0; }
     .cb-preview-col {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
-      gap: 0.55rem 0.6rem;
-      align-items: start;
-      max-width: 540px;
-      margin-top: 1.4rem; /* optically level with the first ad row under the "Ads" divider */
+      position: relative; /* JS aligns each card to the middle of its ad row */
+      max-width: 300px;
+      width: 100%;
+    }
+    .cbp-item { margin-bottom: 0.6rem; }
+    .cb-preview-col.cbp-aligned .cbp-item {
+      position: absolute;
+      left: 0; right: 0;
+      margin-bottom: 0;
     }
     @media (max-width: 1150px) {
       .cb-slot-grid { grid-template-columns: 1fr; }
@@ -3285,7 +3288,74 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         '</div>');
     });
     col.innerHTML = cards.join('');
+    cbpAlign(slot);
   }
+
+  // Staircase alignment: each card's vertical middle targets the middle of
+  // its ad row; when a card is taller than its row, the next one is pushed
+  // down so cards never overlap. Falls back to natural stacking on narrow
+  // screens (grid is single-column there) or hidden panels (zero rects).
+  function cbpAlign(slot) {
+    var col = slot.querySelector('[data-preview-col]');
+    if (!col) return;
+    var items = col.querySelectorAll('.cbp-item');
+    var rows = slot.querySelectorAll('.cb-ad-row');
+    var wide = window.matchMedia('(min-width: 1151px)').matches;
+    if (!wide || !items.length || col.offsetParent === null) {
+      col.classList.remove('cbp-aligned');
+      col.style.minHeight = '';
+      items.forEach(function(it) { it.style.top = ''; });
+      return;
+    }
+    col.classList.add('cbp-aligned');
+    var colTop = col.getBoundingClientRect().top;
+    var cursor = 0;
+    var GAP = 10;
+    items.forEach(function(it, i) {
+      var h = it.offsetHeight || 0;
+      var top = cursor;
+      var row = rows[i];
+      if (row) {
+        var r = row.getBoundingClientRect();
+        var target = (r.top - colTop) + r.height / 2 - h / 2;
+        top = Math.max(cursor, target, 0);
+      }
+      it.style.top = Math.round(top) + 'px';
+      cursor = top + h + GAP;
+    });
+    col.style.minHeight = Math.ceil(cursor) + 'px';
+  }
+
+  function cbpAlignAll() {
+    document.querySelectorAll('.cb-slot').forEach(cbpAlign);
+  }
+
+  // Media loading changes card heights — re-align when previews finish
+  // loading (load/loadedmetadata don't bubble, so capture phase).
+  document.addEventListener('load', function(e) {
+    if (e.target.closest && e.target.closest('[data-preview-col]')) {
+      var slot = e.target.closest('.cb-slot');
+      if (slot) cbpAlign(slot);
+    }
+  }, true);
+  document.addEventListener('loadedmetadata', function(e) {
+    if (e.target.closest && e.target.closest('[data-preview-col]')) {
+      var slot = e.target.closest('.cb-slot');
+      if (slot) cbpAlign(slot);
+    }
+  }, true);
+  var _cbpResizeTimer = null;
+  window.addEventListener('resize', function() {
+    clearTimeout(_cbpResizeTimer);
+    _cbpResizeTimer = setTimeout(cbpAlignAll, 200);
+  });
+  // View switches unhide panels (rects become measurable) — re-align then.
+  document.addEventListener('click', function(e) {
+    if (e.target.closest && (e.target.closest('.sidebar-link') || e.target.closest('.sidebar-country-btn')
+        || e.target.closest('.cb-acc-row'))) {
+      setTimeout(cbpAlignAll, 120);
+    }
+  });
 
   function cbpRenderAll() {
     document.querySelectorAll('.cb-slot').forEach(cbRenderPreviews);
