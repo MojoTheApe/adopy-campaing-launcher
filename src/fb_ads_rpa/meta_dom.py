@@ -4459,11 +4459,73 @@ def _select_browser_addon_none(page: Page) -> bool:
 
     So: aim at the radio itself first, fall back to the label, and confirm
     `aria-checked` afterwards rather than trusting the click.
+
+    Confirmed live (2026-08-02, ad 120250948999160213): on this render the
+    group is FOUR native `input[type=radio]` (None / Call / WhatsApp /
+    Instant form (suggested)) and a real mouse click dead-center on the
+    None input changes NOTHING — not even for 300ms (watched at t+0.3s,
+    t+1.5s, t+4s, t+10s; input enabled, pointer-events auto, hit-target
+    confirmed via elementFromPoint). What DOES work is the native radio
+    group keyboard protocol: focus the currently-checked radio and press
+    ArrowUp until index 0 ("None") is checked — selection follows focus.
+    So keyboard is the PRIMARY path now, clicks are the fallback.
+
+    Also established the same day: "Instant form (suggested)" is a UI-side
+    suggestion Meta re-applies every time the editor opens; it only
+    corrupts the ad (call_to_action -> lead_gen) if an autosave fires
+    while it is checked. Selecting None + letting autosave settle wipes
+    the lead_gen state server-side.
     """
     for attempt in range(3):
         if _browser_addon_none_checked(page) is True:
             return True
 
+        # PRIMARY: keyboard. Focus whichever radio in the group is checked
+        # (or the last one) and walk ArrowUp — native groups move selection
+        # together with focus, and key events via CDP are trusted input.
+        try:
+            focused = page.evaluate(
+                """
+                () => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const leaves = [...document.querySelectorAll('*')].filter(e =>
+                    e.offsetParent !== null && e.children.length === 0);
+                  const bao = leaves.find(e => norm(e.textContent) === 'Browser add-ons');
+                  if (!bao) return false;
+                  let scope = null, n = bao;
+                  for (let i = 0; i < 10 && n; i++) {
+                    n = n.parentElement;
+                    if (n && n.querySelectorAll('[role=radio], input[type=radio]').length >= 2) {
+                      scope = n; break;
+                    }
+                  }
+                  if (!scope) return false;
+                  const radios = [...scope.querySelectorAll('[role=radio], input[type=radio]')]
+                    .filter(r => r.offsetParent !== null);
+                  if (!radios.length) return false;
+                  const cur = radios.find(r =>
+                    r.getAttribute('aria-checked') === 'true' || r.checked) || radios[radios.length - 1];
+                  cur.scrollIntoView({ block: 'center' });
+                  cur.focus();
+                  return document.activeElement === cur;
+                }
+                """
+            )
+        except Exception:
+            focused = False
+
+        if focused:
+            for _ in range(5):
+                try:
+                    page.keyboard.press("ArrowUp")
+                except Exception:
+                    break
+                _sleep_h(0.5)
+                if _browser_addon_none_checked(page) is True:
+                    return True
+
+        # FALLBACK: the old click paths (kept for renders where the group
+        # exposes role=radio without native inputs).
         clicked = False
         try:
             radio = page.get_by_role("radio", name=re.compile(r"^\s*None\b", re.I)).first
