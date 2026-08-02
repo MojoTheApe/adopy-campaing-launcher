@@ -672,8 +672,45 @@
       display: inline-block;
     }
     .cb-add-btn-sm:hover { color: var(--accent); border-color: var(--accent); }
+    /* Duplicate ad / Duplicate campaign — the two workhorse buttons of the
+       builder (user request 2026-08-02: make them stand out). Filled accent
+       vs the ghost add-buttons beside them. */
+    .cb-dup-btn {
+      background: var(--accent);
+      border: 1px solid var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+    .cb-dup-btn:hover {
+      background: color-mix(in srgb, var(--accent) 85%, #000);
+      border-color: color-mix(in srgb, var(--accent) 85%, #000);
+      color: #fff;
+    }
 
     /* "Send to Builder" trigger + popup */
+    /* Landing-page chips (CM drill) + Assets landing filter */
+    .lp-chips { max-width: 260px; }
+    .lp-chip {
+      display: inline-block;
+      background: var(--accent-soft, #eef2ff);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      border-radius: 10px;
+      padding: 0.05rem 0.5rem;
+      font-size: 0.68rem;
+      font-family: var(--mono, monospace);
+      margin: 1px 2px 1px 0;
+      white-space: nowrap;
+    }
+    .lp-chip-more {
+      cursor: pointer;
+      color: var(--accent);
+      background: transparent;
+      font-family: inherit;
+    }
+    .lp-chip-more:hover { border-color: var(--accent); }
+    .lp-filter { margin-left: 0.75rem; font-size: 0.75rem; color: var(--muted); font-weight: 400; }
+    .lp-filter-select { width: auto; display: inline-block; font-size: 0.75rem; padding: 0.15rem 0.4rem; }
     .cb-send-btn {
       background: transparent;
       border: 1px solid var(--border-strong);
@@ -1367,7 +1404,22 @@ async function dashRefresh(ev) {
 <div id="view-country-{{ cid }}-assets" class="view-panel" data-country="{{ cid }}">
 <h2 class="view-title">{{ c.country }}: {{ n_assets }} Assets
   <a href="/export/assets" style="margin-left:0.75rem;font-size:0.75rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0.15rem 0.5rem;text-decoration:none;" title="Download Excel">⬇ xlsx</a>
+  {% if c.asset_variants %}
+  <label class="lp-filter">Лендинг:
+    <select class="cb-select lp-filter-select" onchange="assetVariantFilter(this, '{{ cid }}')">
+      <option value="">Все</option>
+      {% for v in c.asset_variants | map(attribute='variant') | unique | sort if v %}
+      <option value="{{ v }}">{{ v }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
 </h2>
+{% if c.asset_variants %}
+{# tojson is already HTML-safe (escapes < > & to \uXXXX); `safe` stops the
+   autoescaper from entity-encoding the quotes, which broke JSON.parse. #}
+<script type="application/json" id="asset-variants-{{ cid }}">{{ c.asset_variants | tojson | safe }}</script>
+{% endif %}
 <table>
   <thead><tr>
     <th>Asset</th>
@@ -1376,7 +1428,7 @@ async function dashRefresh(ev) {
     <th class="num">CR</th>
     <th class="num">Player Value</th>
   </tr></thead>
-  <tbody>
+  <tbody id="asset-tbody-{{ cid }}">
   {% for row in c.asset_summary %}
     {% set cr = (row.deposits / row.leads * 100) if row.leads > 0 else 0 %}
     <tr>
@@ -1389,6 +1441,9 @@ async function dashRefresh(ev) {
   {% endfor %}
   </tbody>
 </table>
+<div class="lp-filter-note" style="display:none;font-size:0.72rem;color:var(--muted);margin-top:0.35rem">
+  Разметка лендингов ведётся с 30.07 — старые строки без лендинга в срез не входят.
+</div>
 </div>
 {% endif %}
 
@@ -1441,7 +1496,6 @@ async function dashRefresh(ev) {
     <th class="num">Dep</th>
     <th class="num">Leads</th>
     <th class="num">Spend</th>
-    <th></th>
   </tr></thead>
   <tbody>
   {% for row in c.top_combos %}
@@ -1455,10 +1509,6 @@ async function dashRefresh(ev) {
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
       <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td>
-        <button type="button" class="cb-send-btn" data-source="combo" data-country="{{ cid }}"
-                data-country-name="{{ c.country }}" data-payload='{{ row | tojson | e }}'>+ Builder</button>
-      </td>
     </tr>
   {% endfor %}
   </tbody>
@@ -1903,7 +1953,7 @@ async function dashRefresh(ev) {
           </div>
           <input type="hidden" name="camp_{{ ns.idx }}_ad_count" class="cb-ad-count" value="{{ creatives|length }}">
           <button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>
-          <button type="button" class="cb-add-btn-sm" onclick="cbDuplicateAd(this)" title="Duplicate the last ad — tweak one field instead of refilling everything">⧉ Duplicate ad</button>
+          <button type="button" class="cb-add-btn-sm cb-dup-btn" onclick="cbDuplicateAd(this)" title="Duplicate the last ad — tweak one field instead of refilling everything">⧉ Duplicate ad</button>
         </div>
       </div>
       {% set ns.idx = ns.idx + 1 %}
@@ -1916,7 +1966,7 @@ async function dashRefresh(ev) {
 
     <button type="button" class="cb-add-btn"
             onclick="cbAddSlot(this.closest('form'))">+ Add Campaign</button>
-    <button type="button" class="cb-add-btn"
+    <button type="button" class="cb-add-btn cb-dup-btn"
             onclick="cbDuplicateSlot(this.closest('form'))" title="Duplicate the last campaign (including its ads) — tweak one field instead of refilling everything">⧉ Duplicate campaign</button>
 
     <div class="cb-actions">
@@ -1928,16 +1978,10 @@ async function dashRefresh(ev) {
       <button type="button" id="rpa-takeover-btn"
               style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#b45309;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
               onclick="rpaTakeover()">⏸ Пауза RPA</button>
-      <button type="button" class="rpa-record-btn"
-              style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#1d4ed8;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
-              onclick="rpaRecordToggle(this, '{{ acc_label | e }}')"
-              title="Записывает твои клики в открытом Multilogin браузере (JSON-рецепт с role/aria-label/own_text). Playwright Inspector (codegen) не работает на антидетект-браузере Multilogin — Overlay-подсветка и запись через него не срабатывают, подтверждено вживую 2026-07-23.">⏺ Record clicks</button>
-      <button type="button" class="rpa-lab-btn"
-              style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#7c3aed;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
-              onclick="rpaWebsiteLabToggle(this)"
-              title="Live lab: по очереди A→B→F→C→D→E кликает Website.">🧪 Website Lab</button>
-      <span class="rpa-record-status" style="font-size:0.72rem;color:var(--muted);margin-left:0.25rem"></span>
-      <div class="rpa-lab-panel" style="display:none;width:100%;margin-top:0.5rem;padding:0.55rem 0.7rem;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-size:0.74rem"></div>
+      {# Record clicks / Website Lab dev tools removed from the builder UI
+         2026-08-02 (user: "убираем ненужные кнопки, записи и шаги") — the
+         /rpa-record and /rpa-website-lab endpoints and their JS stay for
+         diagnostics via console. #}
     </div>
 
     {# Preview result panel (hidden until Preview clicked) #}
@@ -2299,6 +2343,49 @@ async function dashRefresh(ev) {
     }
   });
 })();
+
+// Assets: landing-page (Variant) slice switcher. Aggregates are embedded
+// per-country as JSON (offer x variant rows); "Все" folds every variant
+// including untagged history, a concrete slice shows tagged rows only.
+function assetVariantFilter(sel, cid) {
+  var dataEl = document.getElementById('asset-variants-' + cid);
+  var tbody = document.getElementById('asset-tbody-' + cid);
+  if (!dataEl || !tbody) return;
+  var rows = JSON.parse(dataEl.textContent || '[]');
+  var pick = sel.value;
+  var agg = {};
+  rows.forEach(function(r) {
+    if (pick && r.variant !== pick) return;
+    var a = agg[r.offer] || (agg[r.offer] = { leads: 0, deposits: 0, net: 0 });
+    a.leads += r.leads || 0;
+    a.deposits += r.deposits || 0;
+    a.net += r.net || 0;
+  });
+  var items = Object.keys(agg).map(function(offer) {
+    var a = agg[offer];
+    return { offer: offer, leads: a.leads, deposits: a.deposits, net: a.net };
+  }).sort(function(x, y) { return (y.deposits - x.deposits) || (y.leads - x.leads); });
+  var fmtUsd = function(v) {
+    if (!v && v !== 0) return '';
+    return '$' + Math.round(v).toLocaleString('en-US');
+  };
+  // escHtml from the builder IIFE is out of scope here — local escaper.
+  var esc = function(s) {
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  };
+  tbody.innerHTML = items.map(function(r) {
+    var cr = r.leads > 0 ? (r.deposits / r.leads * 100).toFixed(1) : '0.0';
+    return '<tr><td>' + esc(r.offer) + '</td>'
+      + '<td class="num">' + r.leads + '</td>'
+      + '<td class="num">' + r.deposits + '</td>'
+      + '<td class="num">' + cr + '%</td>'
+      + '<td class="num">' + fmtUsd(r.net) + '</td></tr>';
+  }).join('') || '<tr><td colspan="5" style="color:var(--muted)">Нет данных по этому лендингу</td></tr>';
+  var note = tbody.closest('.view-panel').querySelector('.lp-filter-note');
+  if (note) note.style.display = pick ? 'block' : 'none';
+}
 
 // §6 Creative Brief copy button
 function copyBrief(btn) {
@@ -3618,7 +3705,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-ad-rows">' + buildAdRowHTML(idx, 0) + '</div>' +
       '<input type="hidden" name="camp_' + idx + '_ad_count" class="cb-ad-count" value="1">' +
       '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>' +
-      '<button type="button" class="cb-add-btn-sm" onclick="cbDuplicateAd(this)" title="Duplicate the last ad — tweak one field instead of refilling everything">⧉ Duplicate ad</button>' +
+      '<button type="button" class="cb-add-btn-sm cb-dup-btn" onclick="cbDuplicateAd(this)" title="Duplicate the last ad — tweak one field instead of refilling everything">⧉ Duplicate ad</button>' +
       '</div>' +
       '</div>';
   }

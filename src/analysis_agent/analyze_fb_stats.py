@@ -248,6 +248,15 @@ def enrich_structure(df: pd.DataFrame) -> pd.DataFrame:
     # Offer is always taken from Ad Asset column
     df["Offer"] = df["Ad Asset"].fillna("").astype(str).str.strip()
 
+    # Variant = landing page name (column added 2026-08-02; tagging started
+    # 2026-07-30, so historical rows are legitimately empty). "-" is used in
+    # the sheet as an explicit "no landing" marker — fold it into untagged.
+    if "Variant" in df.columns:
+        df["Variant"] = df["Variant"].fillna("").astype(str).str.strip()
+        df.loc[df["Variant"] == "-", "Variant"] = ""
+    else:
+        df["Variant"] = ""
+
     # Log any Interest values not found in Knowledge Base
     _log_unknown_interests(df)
 

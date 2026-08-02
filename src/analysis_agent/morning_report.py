@@ -321,6 +321,44 @@ def build_asset_summary(df: pd.DataFrame, country: str) -> List[Dict[str, Any]]:
     return rows
 
 
+def build_asset_variants(df: pd.DataFrame, country: str) -> List[Dict[str, Any]]:
+    """Flat (offer x variant) aggregate for the Assets landing-page dropdown.
+
+    Variant tagging in the stats sheet started 2026-07-30, so untagged rows
+    (variant == "") are the historical majority — the client folds them into
+    the "All" slice and shows them as "—" when a concrete slice is picked.
+    """
+    df_c = df[df["Country Final"] == country]
+    if df_c.empty or "Offer" not in df_c.columns or "Variant" not in df_c.columns:
+        return []
+
+    grouped = (
+        df_c.groupby(["Offer", "Variant"], dropna=False)
+        .agg(
+            Deposits=("# FTDs", "sum"),
+            Leads=("# Leads", "sum"),
+            Spend=("$ Spend", "sum"),
+            Net=("$ Net", "sum"),
+        )
+        .reset_index()
+    )
+
+    rows = []
+    for _, r in grouped.iterrows():
+        offer = _display_offer(r.get("Offer"), country)
+        if not offer:
+            continue
+        rows.append({
+            "offer": offer,
+            "variant": str(r.get("Variant") or ""),
+            "deposits": _safe_int(r.get("Deposits")),
+            "leads": _safe_int(r.get("Leads")),
+            "spend": _safe_float(r.get("Spend")),
+            "net": _safe_float(r.get("Net")),
+        })
+    return rows
+
+
 # ── Section 2: Recent trend ────────────────────────────────────────────────────
 
 def build_trend(
@@ -1807,6 +1845,7 @@ def build_country_section(
         "my_totals": my_totals,
         "my_spend": my_totals["spend"],
         "asset_summary": build_asset_summary(df, country),
+        "asset_variants": build_asset_variants(df, country),
         "trend": trend_block,
         "top_combos": top_combos,
         "targeting": targeting,

@@ -148,6 +148,11 @@ def _cm_row_to_dict(row: pd.Series) -> Dict[str, Any]:
         "cm": _to_native(row.get("CM")),
         "date": _to_native(row.get("Date")),
         "ad_title": None,
+        # [{"name": "vid_es_lp", "ftds": 4}, ...] sorted by ftds desc;
+        # untagged rows (pre-2026-07-30 data) surface as name "—".
+        # NB: .map() leaves NaN for adsets without breakdown — isinstance
+        # guards against that (NaN is truthy, `or []` wouldn't catch it).
+        "variants": row["_variants"] if isinstance(row.get("_variants"), list) else [],
     }
 
 
@@ -174,7 +179,27 @@ def _aggregate_cm_drill_rows(filtered: pd.DataFrame) -> pd.DataFrame:
     # Keep only adsets with at least 1 deposit
     grouped = grouped[grouped["# FTDs"] > 0].copy()
     grouped["CPA"] = grouped["$ Spend"] / grouped["# FTDs"].replace(0, pd.NA)
-    return grouped.sort_values("# FTDs", ascending=False)
+    grouped = grouped.sort_values("# FTDs", ascending=False)
+
+    # Landing-page (Variant) deposit breakdown per adset, for the chips in
+    # the CM drill: [{"name": ..., "ftds": n}, ...] sorted by ftds desc.
+    if "Variant" in filtered.columns:
+        vg = (
+            filtered.groupby(["Adset Name", "Variant"], dropna=False)["# FTDs"]
+            .sum()
+            .reset_index()
+        )
+        vg = vg[vg["# FTDs"] > 0]
+        by_adset: Dict[Any, List[Dict[str, Any]]] = {}
+        for _, r in vg.iterrows():
+            name = str(r["Variant"] or "").strip() or "—"
+            by_adset.setdefault(r["Adset Name"], []).append(
+                {"name": name, "ftds": int(r["# FTDs"])}
+            )
+        for chips in by_adset.values():
+            chips.sort(key=lambda c: -c["ftds"])
+        grouped["_variants"] = grouped["Adset Name"].map(by_adset)
+    return grouped
 
 
 def _aggregate_optimization_drill_rows(filtered: pd.DataFrame) -> pd.DataFrame:
