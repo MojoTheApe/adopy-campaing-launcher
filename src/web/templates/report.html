@@ -678,7 +678,7 @@
       display: flex; align-items: center; gap: 0.4rem;
       background: transparent; border: none; cursor: pointer;
       font-family: inherit; font-size: 0.78rem; font-weight: 600;
-      color: var(--fg); padding: 0; margin-bottom: 0.45rem;
+      color: var(--text); padding: 0; margin-bottom: 0.45rem;
     }
     .cb-preflight-caret { color: var(--muted); transition: transform 150ms var(--ease-out); transform: rotate(90deg); display: inline-block; }
     .cb-preflight-collapsed .cb-preflight-caret { transform: rotate(0deg); }
@@ -824,7 +824,7 @@
       bottom: 4.2rem;
       left: 50%;
       transform: translateX(-50%) translateY(8px);
-      background: var(--fg);
+      background: var(--text);
       color: var(--bg-elev);
       padding: 0.4rem 0.9rem;
       border-radius: 6px;
@@ -1331,6 +1331,63 @@
       margin: 0.2rem 0 0.1rem;
     }
     .gcs-ftd-bar-fill { height: 100%; border-radius: 999px; transform-origin: left center; }
+    /* ── Polish layer (grill №2, задача 13): дизайн-ДНК uitripled/shadcn,
+       портирована вручную — библиотека React+Tailwind, берём только язык.
+       Единое ощущение контролов: один радиус, слоистая тень, видимое
+       фокус-кольцо, мягкий ховер, тактильное нажатие. ── */
+    .cb-preview-btn, .cb-publish-btn, .ml-connect-btn, .cb-field-save-btn,
+    .cb-add-btn, .cb-add-btn-sm, .cb-dup-btn, .cb-cart-btn, .cb-send-btn,
+    .ml-profile-use-btn, .cb-cart-bar button, .lp-chip-more,
+    #rpa-takeover-btn {
+      border-radius: 6px;
+      transition: background-color 150ms var(--ease-out),
+                  border-color 150ms var(--ease-out),
+                  color 150ms var(--ease-out),
+                  box-shadow 150ms var(--ease-out),
+                  transform 100ms var(--ease-out);
+    }
+    .cb-preview-btn:active, .cb-publish-btn:active, .ml-connect-btn:active,
+    .cb-field-save-btn:active, .cb-add-btn:active, .cb-add-btn-sm:active,
+    .cb-dup-btn:active, .cb-cart-btn:active, .cb-cart-bar button:active,
+    #rpa-takeover-btn:active {
+      transform: translateY(0.5px) scale(0.98);
+    }
+    .cb-preview-btn:focus-visible, .cb-publish-btn:focus-visible,
+    .ml-connect-btn:focus-visible, .cb-field-save-btn:focus-visible,
+    .cb-add-btn:focus-visible, .cb-add-btn-sm:focus-visible,
+    .cb-dup-btn:focus-visible, .cb-cart-btn:focus-visible,
+    .cb-cart-bar button:focus-visible, .cb-select:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+    }
+    /* Primary actions get the layered shadow treatment */
+    .cb-dup-btn, .cb-publish-btn:not([disabled]), .ml-connect-btn, .cb-cart-bar button {
+      box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+    .cb-dup-btn:hover, .cb-publish-btn:not([disabled]):hover, .ml-connect-btn:hover {
+      box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+    /* Cart bar: pill card with the md shadow, consistent inner rhythm */
+    .cb-cart-bar {
+      border-radius: 10px;
+      box-shadow: var(--shadow-md);
+      gap: 0.6rem;
+      align-items: center;
+      padding: 0.5rem 0.8rem;
+    }
+    /* Tables: row hover feedback everywhere (uitripled list pattern) */
+    tbody tr:hover td { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+    .drill-detail:hover > td { background: inherit; }
+    /* Preview cards join the same elevation system */
+    .cbp-card { transition: box-shadow 150ms var(--ease-out); }
+    .cbp-card:hover { box-shadow: var(--shadow-md); }
+    @media (prefers-reduced-motion: reduce) {
+      .cb-preview-btn, .cb-publish-btn, .ml-connect-btn, .cb-field-save-btn,
+      .cb-add-btn, .cb-add-btn-sm, .cb-dup-btn, .cb-cart-btn, .cb-send-btn,
+      .cb-cart-bar button, .cbp-card, #cb-cart-toast {
+        transition: none;
+      }
+    }
   </style>
 </head>
 <body>
