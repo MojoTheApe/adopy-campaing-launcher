@@ -3723,6 +3723,51 @@ def upload_ad_creative_with_retry(
     return False
 
 
+_MOUNT_FRACS = (0.4, 0.55, 0.7, 0.85, 0.3, 0.6, 1.0)
+
+
+def _scroll_until_mounted(
+    page: Page,
+    present_js: str,
+    *,
+    fracs: tuple[float, ...] = _MOUNT_FRACS,
+    settle_s: float = 0.9,
+) -> bool:
+    """Scroll the editor's main container until `present_js` reports True.
+
+    Meta's ad editor virtualises its sections: a control is absent from the
+    DOM (not merely hidden) unless the container sits near it. Established
+    live three separate times on 2026-08-02/03 — the Call to action
+    combobox, the Browser add-ons radio group, and the "Set up creative"
+    menu trigger all behaved this way, and in every case a blind
+    `scrollTop = scrollHeight` was what hid them: the bottom of the page
+    unmounts the middle. Stepping fractions and checking after each is the
+    pattern that works. Returns True if the control mounted.
+    """
+    scroll_js = """
+    (frac) => {
+      const c = [...document.querySelectorAll('*')].find((e) => {
+        const st = getComputedStyle(e);
+        return (st.overflowY === 'auto' || st.overflowY === 'scroll')
+          && e.scrollHeight > e.clientHeight + 50 && e.scrollHeight > 1500;
+      });
+      if (!c) return false;
+      c.scrollTop = Math.floor(c.scrollHeight * frac);
+      return true;
+    }
+    """
+    for frac in fracs:
+        try:
+            if not page.evaluate(scroll_js, frac):
+                return False  # no scroll container — nothing to do
+            _sleep_h(settle_s)
+            if page.evaluate(present_js):
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def _close_creative_setup_modal(page: Page) -> bool:
     """Force-close the "Set up your creative" modal via its own top-right
     icon, regardless of which sub-step it's currently on (Trim/Crop/Text/
@@ -3797,90 +3842,109 @@ def upload_ad_creative(
     is_video = (creative_type or "").strip().lower() == "video"
     option_label = "Video ad" if is_video else "Image ad"
 
-    # Confirmed live (2026-07-26): the "Set up creative" button doesn't
-    # reliably become interactable just by waiting for Playwright's own
-    # "visible" state — the page's main scroll container needs to actually
-    # be scrolled toward the bottom first (an "Ad setup" section with a new
-    # Format radio group renders above it and the button isn't found/
-    # clickable until the container is scrolled past that point), even
-    # though the element technically satisfies Playwright's visibility
-    # check beforehand. Force the main content panel to scroll to its
-    # current max first (best-effort, harmless if it's already there).
-    try:
-        page.evaluate(
-            """
-            () => {
-              const all = [...document.querySelectorAll('*')];
-              const container = all.find(e => {
-                const style = getComputedStyle(e);
-                return (style.overflowY === 'auto' || style.overflowY === 'scroll')
-                  && e.scrollHeight > e.clientHeight + 50 && e.scrollHeight > 1500;
-              });
-              if (container) container.scrollTop = container.scrollHeight;
-            }
-            """
-        )
-        _sleep_h(0.5)
-    except Exception:
-        pass
+    # The editor is virtualised: sections mount/unmount as the container
+    # scrolls. The old code slammed scrollTop to scrollHeight ("scroll past
+    # the Ad setup section", 2026-07-26) — but confirmed live 2026-08-03
+    # (run 038fc1b6/b0ed965f, all 6 creative uploads soft-failed) that
+    # bottom-scrolling now UNMOUNTS the Ad creative section entirely, so the
+    # button is not merely invisible, it is absent from the DOM and the
+    # 15s wait_for burns out. Same trap as the Call to action combobox and
+    # the Browser add-ons group. Step through fractions and stop at the
+    # first one where the control actually mounts.
+    _scroll_until_mounted(
+        page,
+        """
+        () => [...document.querySelectorAll('[role=button],button')]
+          .some(e => e.offsetParent !== null
+                && /Set up creative/i.test((e.textContent || '').replace(/\\s+/g, ' ').trim()))
+        """,
+    )
 
-    # Confirmed live (2026-07-26): right after the Next-to-Ad-level click the
-    # page can still be mid-render ("Saving..." indicator, Ad creative
-    # section not painted yet) — a short 3s scroll-wait isn't always enough
-    # and the whole function fails before it even gets started. Wait
-    # explicitly for the button itself to become visible first, with a
-    # longer timeout, before attempting to click it.
-    try:
-        setup_btn = page.get_by_role("button", name=re.compile("Set up creative", re.I)).first
-        setup_btn.wait_for(state="visible", timeout=15000)
-        setup_btn.scroll_into_view_if_needed(timeout=3000)
-        setup_btn.click(timeout=5000)
-        _sleep_h(0.5)
-    except Exception:
+    # Click the trigger through the trusted-coordinate path, NOT through a
+    # Playwright locator click. Confirmed live 2026-08-03: the virtualised
+    # editor keeps re-rendering around this control, so Playwright's
+    # actionability gate rejects it ("element is not stable", then "element
+    # is not visible") and burns its whole timeout even though the element
+    # is mounted and a real mouse click at its centre works every time.
+    setup_handle = page.query_selector(
+        "xpath=//*[@role='button' or self::button]"
+        "[contains(normalize-space(.), 'Set up creative')]"
+    )
+    if setup_handle is None:
         return False
+    if not _click_trusted(page, setup_handle, timeout=5000):
+        return False
+    _sleep_h(0.6)
 
-    try:
-        opt = page.get_by_text(option_label, exact=True).first
-        if opt.count():
-            opt.click(timeout=3000)
+    # "Set up creative" is a MENU trigger on this UI variant (verified live
+    # 2026-08-03: aria-haspopup="menu", items "Image ad" / "Video ad"), not
+    # a button that opens the modal directly. The old code peeked once with
+    # `if opt.count()` ~0.5s after the click and silently moved on when the
+    # menu had not rendered yet — the run then spent ~40s failing to find an
+    # Upload button that was never going to appear. Wait for the item, and
+    # re-click the trigger once if the menu never came up.
+    # Menu items carry zero-width spaces in this UI (measured live: button
+    # labels come back as 'Open​'), so match on *contains* rather than
+    # exact text, and click through the same trusted path.
+    item_xpath = (
+        "xpath=//*[@role='menuitem' or @role='option']"
+        f"[contains(normalize-space(.), '{option_label}')]"
+    )
+    for attempt in range(3):
+        for _ in range(10):  # up to ~3s for the menu to paint
+            handle = page.query_selector(item_xpath)
+            if handle is not None:
+                break
+            _sleep_h(0.3)
+        if handle is not None and _click_trusted(page, handle, timeout=3000):
             _sleep_h(0.7)
-    except Exception:
-        pass
+            break
+        if attempt < 2 and setup_handle is not None:
+            # Menu never painted (or our click toggled it shut) — re-trigger.
+            _click_trusted(page, setup_handle, timeout=3000)
+            _sleep_h(0.6)
 
-    # If the modal opened on "Creative setup" instead of straight to Media,
-    # its own Next advances to Media. Confirmed live 2026-07-29 (Test141,
-    # campaign B ad 1): a single Next click + 0.7s was not enough — the
-    # wizard stayed on Creative setup and the whole step failed at the
-    # Upload-button check below. Retry the advance, scoped to the dialog so
-    # it can't hit some other Next elsewhere on the page, until the Media
-    # step (Upload button) actually renders.
-    for _ in range(5):
+    # Advance to the wizard's Media step.
+    #
+    # The wizard ("Set up your creative": Creative setup / Media / Trim /
+    # Crop / Text / …) opens on Creative setup and is NOT a role="dialog"
+    # any more — measured live 2026-08-03, it renders as a plain full-panel
+    # overlay. The old loop scoped its Next lookup to role="dialog", found
+    # nothing, and fell through to a page-wide Playwright click that the
+    # re-rendering panel rejected; the step then failed at the Upload check.
+    #
+    # Prefer the wizard's own left-hand step list — clicking "Media"
+    # directly is one action instead of an unknown number of Nexts — and
+    # keep trusted Next clicks as the fallback.
+    for _ in range(6):
         if page.get_by_role("button", name="Upload").count() > 0:
             break
-        clicked_next = False
-        try:
-            for root in _roots(page):
-                dialog = root.get_by_role("dialog").first
-                if not dialog.is_visible(timeout=1000):
-                    continue
-                next_btn = dialog.get_by_role("button", name="Next").first
-                if next_btn.count() and not next_btn.is_disabled():
-                    next_btn.click(timeout=3000)
-                    clicked_next = True
-                break
-        except Exception:
-            pass
-        if not clicked_next:
-            # No dialog-scoped Next to click — fall back once to the page-
-            # wide first Next (pre-2026-07-29 behaviour) rather than
-            # spinning the remaining rounds doing nothing.
-            try:
-                page.get_by_role("button", name="Next").first.click(timeout=3000)
-            except Exception:
-                pass
+        media_step = page.query_selector(
+            "xpath=//*[@role='tab' or @role='button' or @role='listitem' or @role='menuitem']"
+            "[normalize-space(.)='Media']"
+        )
+        if media_step is not None and _click_trusted(page, media_step, timeout=2500):
+            _sleep_h(1.2)
+            continue
+        next_handle = page.query_selector(
+            "xpath=//*[@role='button' or self::button]"
+            "[normalize-space(.)='Next' and not(@aria-disabled='true')]"
+        )
+        if next_handle is not None:
+            _click_trusted(page, next_handle, timeout=2500)
         _sleep_h(1.2)
 
+    # The advance loop above polls on a fixed cadence; the wizard's Media
+    # step can finish painting just after the last round. Measured live
+    # 2026-08-03: the function returned False at 19.1s while the Upload
+    # button was present on the page moments later. Give it a real wait
+    # before declaring failure instead of trusting the poll's last tick.
     upload_btn = page.get_by_role("button", name="Upload")
+    if upload_btn.count() < 1:
+        try:
+            upload_btn.first.wait_for(state="attached", timeout=8000)
+        except Exception:
+            return False
     if upload_btn.count() < 1:
         return False
 
