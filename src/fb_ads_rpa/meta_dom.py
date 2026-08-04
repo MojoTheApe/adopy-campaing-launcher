@@ -3729,6 +3729,89 @@ def upload_ad_creative_with_retry(
     return False
 
 
+def _click_xpath(page: Page, xpath: str, *, scroll: bool = True) -> bool:
+    """Measure an element's centre and CDP-click it in one shot.
+
+    The ad editor re-renders continuously: a handle obtained from
+    query_selector goes stale within milliseconds, so `bounding_box()` was
+    observed returning None *after* `_clickable` had already verified a box
+    on the very same element (measured 2026-08-04). Holding any handle
+    across the measure→click gap is therefore unsafe. This resolves the
+    element, scrolls it into view and reads its centre inside a SINGLE
+    page.evaluate, then dispatches a trusted CDP click at those
+    coordinates — nothing survives the round trip except two numbers.
+
+    Picks the smallest matching box, since `contains()` XPaths also match
+    layout wrappers. Pass a bare XPath (no "xpath=" prefix).
+    """
+    js = """
+    (args) => {
+      const [xp, doScroll] = args;
+      const it = document.evaluate(xp, document, null,
+        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+      let best = null, bestArea = Infinity;
+      for (let i = 0; i < it.snapshotLength; i++) {
+        const el = it.snapshotItem(i);
+        if (!el || el.offsetParent === null) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) continue;
+        const area = r.width * r.height;
+        if (area < bestArea) { best = el; bestArea = area; }
+      }
+      if (!best) return null;
+      if (doScroll) best.scrollIntoView({ block: 'center', behavior: 'instant' });
+      const r = best.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return null;
+      if (r.bottom < 0 || r.top > innerHeight) return null;
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    }
+    """
+    try:
+        pt = page.evaluate(js, [xpath, scroll])
+    except Exception:
+        return False
+    if not pt:
+        return False
+    try:
+        _cdp_mouse_click(page, pt["x"], pt["y"])
+        return True
+    except Exception:
+        return False
+
+
+def _clickable(page: Page, xpath: str):
+    """First handle matching `xpath` that has a real, on-screen click box.
+
+    `contains(normalize-space(.), 'X')` matches every ancestor whose subtree
+    contains the text, and `query_selector` hands back the OUTERMOST one —
+    typically a layout wrapper with no box at all. Measured live 2026-08-04
+    on the "Set up creative" trigger: handle found, isConnected true,
+    bounding_box() None, so _click_trusted fell through to a DOM click that
+    reported success and did nothing. Pick the smallest boxed candidate
+    instead — that is the actual control.
+    """
+    try:
+        handles = page.query_selector_all(xpath)
+    except Exception:
+        return None
+    best = None
+    best_area = None
+    for h in handles:
+        try:
+            box = h.bounding_box()
+        except Exception:
+            box = None
+        if not box:
+            continue
+        w, hgt = box.get("width", 0), box.get("height", 0)
+        if w <= 0 or hgt <= 0:
+            continue
+        area = w * hgt
+        if best_area is None or area < best_area:
+            best, best_area = h, area
+    return best
+
+
 _MOUNT_FRACS = (0.4, 0.55, 0.7, 0.85, 0.3, 0.6, 1.0)
 
 
@@ -3880,13 +3963,13 @@ def upload_ad_creative(
     # fresh query each attempt, and advance only on OBSERVED effect (menu
     # item painted, then wizard actually open) — never on "click sent".
     trigger_xpath = (
-        "xpath=//*[@role='button' or self::button]"
+        "//*[@role='button' or self::button]"
         "[contains(normalize-space(.), 'Set up creative')]"
     )
     # Zero-width spaces infest this UI's labels ('Open​') — match on
     # contains, not equality.
     item_xpath = (
-        "xpath=//*[@role='menuitem' or @role='option']"
+        "//*[@role='menuitem' or @role='option']"
         f"[contains(normalize-space(.), '{option_label}')]"
     )
 
@@ -3912,21 +3995,19 @@ def upload_ad_creative(
         if _wizard_open():
             opened = True
             break
-        trigger = page.query_selector(trigger_xpath)  # fresh — see above
-        if trigger is None:
+        if not _click_xpath(page, trigger_xpath):
             _sleep_h(0.8)
             continue
-        _click_trusted(page, trigger, timeout=4000)
         # menu painted?
         item = None
         for _ in range(8):  # ~2.4s
-            item = page.query_selector(item_xpath)  # fresh handle every poll
-            if item is not None:
+            if page.query_selector("xpath=" + item_xpath) is not None:
+                item = True
                 break
             _sleep_h(0.3)
-        if item is None:
+        if not item:
             continue  # menu never came up (or toggled shut) — retrigger
-        _click_trusted(page, item, timeout=3000)
+        _click_xpath(page, item_xpath)
         for _ in range(10):  # ~3s for the wizard panel to mount
             if _wizard_open():
                 opened = True
@@ -3953,19 +4034,18 @@ def upload_ad_creative(
     for _ in range(6):
         if page.get_by_role("button", name="Upload").count() > 0:
             break
-        media_step = page.query_selector(
-            "xpath=//*[@role='tab' or @role='button' or @role='listitem' or @role='menuitem']"
-            "[normalize-space(.)='Media']"
-        )
-        if media_step is not None and _click_trusted(page, media_step, timeout=2500):
+        if _click_xpath(
+            page,
+            "//*[@role='tab' or @role='button' or @role='listitem' or @role='menuitem']"
+            "[normalize-space(.)='Media']",
+        ):
             _sleep_h(1.2)
             continue
-        next_handle = page.query_selector(
-            "xpath=//*[@role='button' or self::button]"
-            "[normalize-space(.)='Next' and not(@aria-disabled='true')]"
+        _click_xpath(
+            page,
+            "//*[@role='button' or self::button]"
+            "[normalize-space(.)='Next' and not(@aria-disabled='true')]",
         )
-        if next_handle is not None:
-            _click_trusted(page, next_handle, timeout=2500)
         _sleep_h(1.2)
 
     # The advance loop above polls on a fixed cadence; the wizard's Media
@@ -3999,9 +4079,34 @@ def upload_ad_creative(
     if get_reuse_library_media() and _try_reuse_library_media(page, Path(creative_path).name):
         return True
 
+    # Clear the library search box before uploading. The reuse attempt just
+    # above types the filename into it; when reuse fails the filter STAYS,
+    # and the freshly uploaded file lands in a grid that is still filtered
+    # to a term matching nothing — measured live 2026-08-04: "No images
+    # match your search", 0 tiles, "0 selected", Next aria-disabled, so the
+    # wizard could never be advanced and the media never attached.
     try:
-        with page.expect_file_chooser(timeout=8000) as fc_info:
-            upload_btn.first.click(timeout=5000)
+        search_box = page.get_by_placeholder(re.compile(r"Search media", re.I)).first
+        if search_box.count() and (search_box.input_value(timeout=1500) or "").strip():
+            handle = _focus_via_cdp_click(page, search_box)
+            if handle is not None:
+                page.keyboard.press("Control+A")
+                page.keyboard.press("Delete")
+                _sleep_h(1.2)
+    except Exception:
+        pass
+
+    # Trusted click here too: a Playwright locator click on this panel gets
+    # rejected as "not stable" the same way the trigger did (2026-08-04), so
+    # the file chooser never opens and the whole step fails after the wizard
+    # had already been driven all the way to Media.
+    try:
+        with page.expect_file_chooser(timeout=10000) as fc_info:
+            if not _click_xpath(
+                page,
+                "//*[@role='button' or self::button][normalize-space(.)='Upload']",
+            ):
+                upload_btn.first.click(timeout=5000)
         fc_info.value.set_files(creative_path)
     except Exception:
         return False
@@ -4015,48 +4120,108 @@ def upload_ad_creative(
     # positive "upload is complete" toast instead of the absence of
     # "Uploading" — confirmed live this is the actual text Meta shows
     # ("Your video X.mp4 upload is complete").
-    try:
-        page.get_by_text("upload is complete", exact=False).first.wait_for(
-            state="visible", timeout=45000
-        )
-    except Exception:
-        # Fall back to the old best-effort check in case the toast text
-        # ever differs (e.g. images) — better than nothing.
+    # Wait on the OBSERVABLE result — the library's "N selected" counter
+    # going non-zero — not on a toast. Measured live 2026-08-04: the upload
+    # completes and the tile shows "1 selected" while no "upload is
+    # complete" toast is ever visible to us, so the old 45s wait (plus a 40s
+    # fallback) burned the step's whole budget for nothing.
+    sel_js = """
+        () => [...document.querySelectorAll('*')]
+          .filter(e => e.offsetParent !== null && e.children.length === 0)
+          .some(e => /^[1-9]\\d* selected$/.test(
+            (e.textContent || '').replace(/\\s+/g, ' ').trim()))
+    """
+    tile_js = """
+        (name) => [...document.querySelectorAll('*')]
+          .filter(e => e.offsetParent !== null && e.children.length === 0)
+          .some(e => (e.textContent || '').replace(/\\s+/g, ' ').trim() === name)
+    """
+    fname = Path(creative_path).name
+
+    # Wait for the uploaded tile to appear in the grid (observable result of
+    # the upload — measured 2026-08-04 that no "upload is complete" toast is
+    # ever visible to us, so the old 45s+40s toast waits burned the budget).
+    for _ in range(60):
         try:
-            page.get_by_text("Uploading", exact=False).first.wait_for(state="hidden", timeout=40000)
+            if page.evaluate(sel_js) or page.evaluate(tile_js, fname):
+                break
         except Exception:
             pass
+        _sleep_h(1.0)
+
+    # Uploading does NOT always select the tile: measured live 2026-08-04
+    # sitting on "0 selected" with Next aria-disabled, i.e. the wizard
+    # refuses to advance. Click the tile until the counter moves.
+    for _ in range(3):
+        try:
+            if page.evaluate(sel_js):
+                break
+        except Exception:
+            pass
+        # The caption is a plain text div; the interactive element is the
+        # [role=button] two levels above it (ground truth 2026-07-29 — an
+        # earlier version clicked the caption and sat at "0 selected").
+        # _clickable would pick the caption, being the smallest match, so go
+        # through the ancestor explicitly.
+        if not _click_xpath(
+            page,
+            f'//*[normalize-space(text())="{fname}"]'
+            "/ancestor::*[@role='button'][1]",
+        ):
+            break
+        _sleep_h(1.2)
+    selected = False
+    try:
+        selected = page.evaluate(sel_js)
+    except Exception:
+        pass
     # Trimmed from 1.0s (2026-07-28): this runs only after the positive
     # "upload is complete" signal already fired above, unlike most other
     # sleeps in this file which were added to cover a specific documented
     # race — this one is plain padding on top of an already-confirmed state.
     _sleep_h(0.4)
 
-    # Still inside the Media step (Upload button still present)? Select the
-    # uploaded thumbnail by filename and advance via the MODAL's own Next —
-    # scoped to a dialog role so this can't fall through to some other Next
-    # elsewhere on the page.
-    if page.get_by_role("button", name="Upload").count() > 0:
-        filename = Path(creative_path).stem
-        try:
-            thumb = page.get_by_text(filename, exact=False).first
-            if thumb.count():
-                thumb.click(timeout=3000)
-                _sleep_h(0.5)
-        except Exception:
-            pass
-        try:
-            for root in _roots(page):
-                dialog = root.get_by_role("dialog").first
-                if not dialog.is_visible(timeout=1000):
-                    continue
-                next_btn = dialog.get_by_role("button", name="Next").first
-                if next_btn.count() and not next_btn.is_disabled():
-                    next_btn.click(timeout=5000)
-                    _sleep_h(1.0)
+    # Make sure the uploaded tile is actually selected, then walk the wizard
+    # out. Both used to go through role="dialog" / Playwright locator clicks
+    # — neither works on this UI (the wizard is not a dialog, and the panel
+    # rejects locator clicks as unstable), so the ad was left sitting inside
+    # an open wizard with the media never committed.
+    if not selected:
+        tile = _clickable(
+            page,
+            "xpath=//*[@role='button' or @role='option' or self::div]"
+            f"[contains(normalize-space(.), '{Path(creative_path).name}')]",
+        )
+        if tile is not None:
+            _click_trusted(page, tile, timeout=3000)
+            _sleep_h(0.8)
+
+    # Advance until the wizard closes (or we run out of patience): each
+    # round clicks the enabled Next/Done, then checks whether the wizard
+    # title is still on screen.
+    for _ in range(8):
+        still_open = page.evaluate(
+            """
+            () => [...document.querySelectorAll('*')]
+              .some(e => e.offsetParent !== null && e.children.length === 0
+                    && (e.textContent || '').replace(/\\s+/g, ' ').trim()
+                       === 'Set up your creative')
+            """
+        )
+        if not still_open:
+            break
+        advanced = False
+        for label in ("Done", "Save", "Next"):
+            if _click_xpath(
+                page,
+                "//*[@role='button' or self::button]"
+                f"[normalize-space(.)='{label}' and not(@aria-disabled='true')]",
+            ):
+                advanced = True
                 break
-        except Exception:
-            pass
+        if not advanced:
+            break
+        _sleep_h(1.4)
 
     # Confirm we're still on the ad editor, not bounced back to the ads
     # list by some other in-between click — recover via the saved edit URL
