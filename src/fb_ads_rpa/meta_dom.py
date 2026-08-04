@@ -4101,7 +4101,7 @@ def upload_ad_creative(
     # the file chooser never opens and the whole step fails after the wizard
     # had already been driven all the way to Media.
     try:
-        with page.expect_file_chooser(timeout=10000) as fc_info:
+        with page.expect_file_chooser(timeout=25000) as fc_info:
             if not _click_xpath(
                 page,
                 "//*[@role='button' or self::button][normalize-space(.)='Upload']",
@@ -4199,7 +4199,8 @@ def upload_ad_creative(
     # Advance until the wizard closes (or we run out of patience): each
     # round clicks the enabled Next/Done, then checks whether the wizard
     # title is still on screen.
-    for _ in range(8):
+    misses = 0
+    for _ in range(16):
         still_open = page.evaluate(
             """
             () => [...document.querySelectorAll('*')]
@@ -4220,7 +4221,17 @@ def upload_ad_creative(
                 advanced = True
                 break
         if not advanced:
-            break
+            # A transient render can leave no enabled button for a beat —
+            # measured live 2026-08-04 walking this wizard: rounds where the
+            # selection counter briefly vanished still had Next a moment
+            # later. Breaking on the first miss left the wizard open and the
+            # media uncommitted, which is exactly how the step kept failing.
+            misses += 1
+            if misses >= 4:
+                break
+            _sleep_h(1.2)
+            continue
+        misses = 0
         _sleep_h(1.4)
 
     # Confirm we're still on the ad editor, not bounced back to the ads
