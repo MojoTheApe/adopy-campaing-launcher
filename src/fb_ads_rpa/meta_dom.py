@@ -1472,7 +1472,13 @@ def _click_trusted(page: Page, selector_or_handle, *, timeout: float = 3000) -> 
         if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
             _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
             return True
-        # Zero-size / hover-only control: DOM click is the only option.
+        # No box: either a zero-size hover-only control (DOM click is the
+        # only option) or a STALE handle whose node left the document — the
+        # virtualised editor recycles nodes constantly, and "clicking" a
+        # detached node used to report success with zero effect (run
+        # 45b8ccb4, 2026-08-04). Refuse the stale case so callers re-query.
+        if not handle.evaluate("el => el.isConnected"):
+            return False
         handle.evaluate("el => el.click()")
         return True
     except Exception:
@@ -3860,49 +3866,77 @@ def upload_ad_creative(
         """,
     )
 
-    # Click the trigger through the trusted-coordinate path, NOT through a
-    # Playwright locator click. Confirmed live 2026-08-03: the virtualised
-    # editor keeps re-rendering around this control, so Playwright's
-    # actionability gate rejects it ("element is not stable", then "element
-    # is not visible") and burns its whole timeout even though the element
-    # is mounted and a real mouse click at its centre works every time.
-    setup_handle = page.query_selector(
+    # "Set up creative" is a MENU trigger on this UI variant (verified live
+    # 2026-08-03: aria-haspopup="menu", items "Image ad" / "Video ad"), and
+    # clicks must go through the trusted-coordinate path — Playwright's
+    # actionability gate rejects the re-rendering control ("element is not
+    # stable"), while a real mouse click at its centre works.
+    #
+    # CRITICAL (run 45b8ccb4/baee53d9, 2026-08-04): the handle must be
+    # RE-QUERIED before every click. The panel re-renders continuously, a
+    # handle captured once goes stale, and _click_trusted's fallback then
+    # "clicks" a detached node — reported success, zero effect. The fail
+    # screenshots show exactly that: menu closed, trigger untouched. So:
+    # fresh query each attempt, and advance only on OBSERVED effect (menu
+    # item painted, then wizard actually open) — never on "click sent".
+    trigger_xpath = (
         "xpath=//*[@role='button' or self::button]"
         "[contains(normalize-space(.), 'Set up creative')]"
     )
-    if setup_handle is None:
-        return False
-    if not _click_trusted(page, setup_handle, timeout=5000):
-        return False
-    _sleep_h(0.6)
-
-    # "Set up creative" is a MENU trigger on this UI variant (verified live
-    # 2026-08-03: aria-haspopup="menu", items "Image ad" / "Video ad"), not
-    # a button that opens the modal directly. The old code peeked once with
-    # `if opt.count()` ~0.5s after the click and silently moved on when the
-    # menu had not rendered yet — the run then spent ~40s failing to find an
-    # Upload button that was never going to appear. Wait for the item, and
-    # re-click the trigger once if the menu never came up.
-    # Menu items carry zero-width spaces in this UI (measured live: button
-    # labels come back as 'Open​'), so match on *contains* rather than
-    # exact text, and click through the same trusted path.
+    # Zero-width spaces infest this UI's labels ('Open​') — match on
+    # contains, not equality.
     item_xpath = (
         "xpath=//*[@role='menuitem' or @role='option']"
         f"[contains(normalize-space(.), '{option_label}')]"
     )
-    for attempt in range(3):
-        for _ in range(10):  # up to ~3s for the menu to paint
-            handle = page.query_selector(item_xpath)
-            if handle is not None:
+
+    def _wizard_open() -> bool:
+        # Match ONLY the wizard's own title. "Creative setup" and "Media"
+        # also appear on the plain ad page (measured 2026-08-04: a first
+        # version keyed on those returned True before anything was clicked,
+        # so the loop exited immediately and the step failed doing nothing).
+        try:
+            return page.evaluate(
+                """
+                () => [...document.querySelectorAll('*')]
+                  .some(e => e.offsetParent !== null && e.children.length === 0
+                        && (e.textContent || '').replace(/\\s+/g, ' ').trim()
+                           === 'Set up your creative')
+                """
+            )
+        except Exception:
+            return False
+
+    opened = False
+    for _attempt in range(4):
+        if _wizard_open():
+            opened = True
+            break
+        trigger = page.query_selector(trigger_xpath)  # fresh — see above
+        if trigger is None:
+            _sleep_h(0.8)
+            continue
+        _click_trusted(page, trigger, timeout=4000)
+        # menu painted?
+        item = None
+        for _ in range(8):  # ~2.4s
+            item = page.query_selector(item_xpath)  # fresh handle every poll
+            if item is not None:
                 break
             _sleep_h(0.3)
-        if handle is not None and _click_trusted(page, handle, timeout=3000):
-            _sleep_h(0.7)
+        if item is None:
+            continue  # menu never came up (or toggled shut) — retrigger
+        _click_trusted(page, item, timeout=3000)
+        for _ in range(10):  # ~3s for the wizard panel to mount
+            if _wizard_open():
+                opened = True
+                break
+            _sleep_h(0.3)
+        if opened:
             break
-        if attempt < 2 and setup_handle is not None:
-            # Menu never painted (or our click toggled it shut) — re-trigger.
-            _click_trusted(page, setup_handle, timeout=3000)
-            _sleep_h(0.6)
+    if not opened:
+        return False
+    _sleep_h(0.7)
 
     # Advance to the wizard's Media step.
     #
