@@ -4100,15 +4100,45 @@ def upload_ad_creative(
     # rejected as "not stable" the same way the trigger did (2026-08-04), so
     # the file chooser never opens and the whole step fails after the wizard
     # had already been driven all the way to Media.
-    try:
-        with page.expect_file_chooser(timeout=25000) as fc_info:
-            if not _click_xpath(
-                page,
-                "//*[@role='button' or self::button][normalize-space(.)='Upload']",
-            ):
-                upload_btn.first.click(timeout=5000)
-        fc_info.value.set_files(creative_path)
-    except Exception:
+    #
+    # RETRY the whole upload, not just the click: measured live 2026-08-04
+    # that the identical code path sometimes lands the file in the library
+    # and sometimes does not (chooser opens, set_files returns, file never
+    # appears as a tile). Treating set_files as success is what let those
+    # runs continue into a wizard that could never be advanced. Verify the
+    # observable result — a tile captioned with the filename — and re-upload
+    # if it never shows.
+    _upload_name = Path(creative_path).name
+    _tile_present_js = r"""
+        (name) => [...document.querySelectorAll('*')]
+          .filter(e => e.offsetParent !== null && e.children.length === 0)
+          .some(e => (e.textContent || '').replace(/\s+/g, ' ').trim() === name)
+    """
+    landed = False
+    for _attempt in range(3):
+        try:
+            with page.expect_file_chooser(timeout=25000) as fc_info:
+                if not _click_xpath(
+                    page,
+                    "//*[@role='button' or self::button][normalize-space(.)='Upload']",
+                ):
+                    upload_btn.first.click(timeout=5000)
+            fc_info.value.set_files(creative_path)
+        except Exception:
+            _sleep_h(1.5)
+            continue
+        # Give the grid time to show the new tile before judging.
+        for _ in range(30):
+            try:
+                if page.evaluate(_tile_present_js, _upload_name):
+                    landed = True
+                    break
+            except Exception:
+                pass
+            _sleep_h(1.0)
+        if landed:
+            break
+    if not landed:
         return False
 
     # Wait for the upload to actually finish (confirmed live 2026-07-27: a
