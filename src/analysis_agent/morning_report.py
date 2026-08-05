@@ -25,6 +25,7 @@ from src.analysis_agent.analyze_fb_stats import (
     aggregate_combos,
     compute_metrics,
     enrich_structure,
+    split_ad_title,
 )
 from src.analysis_agent.gsheet_accounts import (
     format_account_status_todo_cell,
@@ -677,9 +678,15 @@ def build_creative_breakdown(
         title = str(title_raw or "").strip()
         if not title or title.lower() == "nan":
             title = "(no title)"
+        # Ad Title packs "<creative id> - <text name>" into one cell; show
+        # the halves separately (user request 2026-08-03) while keeping the
+        # full title as the aggregation key.
+        creative_id, text_name = split_ad_title(title_raw)
         rows.append(
             {
                 "ad_title": title,
+                "creative_id": creative_id,
+                "text_name": text_name,
                 "deposits": _safe_int(r.get("Deposits")),
                 "leads": _safe_int(r.get("Leads")),
                 "spend": _safe_float(r.get("Spend")),

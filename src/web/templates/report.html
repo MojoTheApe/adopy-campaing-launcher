@@ -1728,7 +1728,8 @@ async function dashRefresh(ev) {
 {% if c.creatives %}
 <table>
   <thead><tr>
-    <th>Ad title</th>
+    <th>Creative</th>
+    <th>Text</th>
     <th class="num">Deposits</th>
     <th class="num">Leads</th>
     <th class="num">Spend</th>
@@ -1737,8 +1738,9 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody>
   {% for row in c.creatives %}
-    <tr>
-      <td>{{ row.ad_title }}</td>
+    <tr title="{{ row.ad_title }}">
+      <td>{{ row.creative_id or row.ad_title }}</td>
+      <td>{{ row.text_name or '—' }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
       <td class="num">{{ row.spend | fmt_usd }}</td>
@@ -4365,10 +4367,22 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // left-hand side actually identifies the creative file — matching against
   // the full string (including the copy title) misses real files. Falls
   // back to the whole text unchanged when there's no " - " separator.
+  // Ad Title packs "<creative id> - <text name>" into one string. Mirror of
+  // split_ad_title() in analyze_fb_stats.py — a dash counts as the separator
+  // only when it has whitespace on at least one side, so names whose own
+  // dash is tight ("Vid 1-2257") stay whole. The old version required the
+  // exact " - " and therefore missed "2307_2- 6" and friends.
+  function splitAdTitle(text) {
+    var s = (text || '').trim();
+    if (!s || s === '-') return { creative: '', textName: '' };
+    var m = /\s-|-\s/.exec(s);
+    if (!m) return { creative: s, textName: '' };
+    var strip = function(v) { return v.replace(/^[\s-]+|[\s-]+$/g, ''); };
+    return { creative: strip(s.slice(0, m.index)) || s,
+             textName: strip(s.slice(m.index + m[0].length)) };
+  }
   function creativeNamePart(text) {
-    var s = (text || '');
-    var i = s.indexOf(' - ');
-    return i >= 0 ? s.slice(0, i).trim() : s.trim();
+    return splitAdTitle(text).creative;
   }
   function guessCreativeType(text) {
     // Split on non-alphanumeric like the Python creative-skip-prefix check does

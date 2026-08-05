@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -46,6 +47,34 @@ def normalize_text_segment(ad_title) -> str:
             if v in text:
                 return segment.upper()
     return get_text_segment_fallback()
+
+
+def split_ad_title(ad_title) -> tuple[str, str]:
+    """Split an Ad Title into (creative id, text name).
+
+    The sheet stores both halves in one cell, separated by a dash that has
+    whitespace on at least one side — verified against the real file
+    2026-08-03 (512 distinct titles):
+
+        "2046 1 - Text6"           -> ("2046 1", "Text6")
+        "2046 - Text 4"            -> ("2046",   "Text 4")
+        "1_eslat_2257 - StoryYA 4" -> ("1_eslat_2257", "StoryYA 4")
+        "2307_2- 6"                -> ("2307_2", "6")
+        "2046 - - text 6"          -> ("2046",   "text 6")
+
+    A dash with no whitespace around it is part of the name itself
+    ("Vid 1-2254"), so those stay whole in the creative half. Titles with
+    no separator at all ("New Engagement Ad", "-") return an empty text.
+    """
+    s = "" if ad_title is None else str(ad_title).strip()
+    if not s or s == "-":
+        return "", ""
+    m = re.search(r"\s-|-\s", s)
+    if not m:
+        return s, ""
+    creative = s[: m.start()].strip(" -")
+    text = s[m.end():].strip(" -")
+    return (creative or s), text
 
 
 _MEDIA_TYPE_TOKENS = frozenset(
@@ -242,6 +271,12 @@ def enrich_structure(df: pd.DataFrame) -> pd.DataFrame:
     df["Creative"] = df["Ad Title"].fillna("").astype(str).str.strip()
 
     df["TextSegment"] = df["Ad Title"].apply(normalize_text_segment)
+
+    # Ad Title carries creative id + text name in one cell — expose both
+    # halves so the dashboard can show (and group by) them separately.
+    _split = df["Ad Title"].apply(split_ad_title)
+    df["CreativeId"] = _split.apply(lambda t: t[0])
+    df["TextName"] = _split.apply(lambda t: t[1])
 
     df["Country Final"] = df["Country"]
 
