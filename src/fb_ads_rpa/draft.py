@@ -16,6 +16,28 @@ class AdDraft:
     ad_body: str = ""
     ad_link_description: str = ""
 
+    def ad_name(self) -> str:
+        """Name for the ad in Ads Manager: "<creative> - <text>".
+
+        The stats sheet stores both halves in one Ad Title cell in exactly
+        this shape ("2046 1 - Text6"), and the dashboard splits it back
+        apart (`split_ad_title`). Publishing only the text half — which is
+        what happened until 2026-08-05, ads landed named just "Text4" —
+        meant the creative could never be attributed in the reports.
+
+        The creative half is `creative_id` when the builder supplied one,
+        otherwise the file's own name without its extension.
+        """
+        creative = (self.creative_id or "").strip()
+        if not creative and self.creative_filename:
+            creative = self.creative_filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+            if "." in creative:
+                creative = creative.rsplit(".", 1)[0]
+        text = (self.copy_name or "").strip()
+        if creative and text:
+            return f"{creative} - {text}"
+        return text or creative
+
     def to_preview_dict(self) -> dict[str, Any]:
         return {
             "creative_type": self.creative_type,

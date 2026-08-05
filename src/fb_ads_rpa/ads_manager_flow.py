@@ -8,7 +8,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-RPA_FLOW_VERSION = "v83"
+RPA_FLOW_VERSION = "v84"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
@@ -2135,7 +2135,7 @@ class AdsManagerFlow:
             ad = ad_set.ads[0]
             additional_ads = [
                 {
-                    "ad_name": extra.copy_name,
+                    "ad_name": extra.ad_name(),
                     "creative_type": extra.creative_type,
                     "creative_path": extra.creative_path or "",
                     "ad_title": extra.ad_title,
@@ -2190,7 +2190,7 @@ class AdsManagerFlow:
                     age_max=ad_set.age_max,
                     targeting_label=ad_set.targeting_label,
                     language_names=[draft.language] if draft.language else None,
-                    ad_name=ad.copy_name,
+                    ad_name=ad.ad_name(),
                     creative_type=ad.creative_type,
                     creative_path=ad.creative_path or "",
                     ad_title=ad.ad_title,
