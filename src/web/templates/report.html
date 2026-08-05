@@ -612,17 +612,21 @@
       align-items: start;
     }
     .cb-slot-main { min-width: 0; }
+    /* Even stack, not row-aligned. Aligning each card to the middle of its
+       ad row (2026-08-04) looked tidy with one ad and fell apart with three:
+       a card is taller than the row it points at, so every card pushed the
+       next one down and the column filled with gaps. Uniform card height +
+       one constant gap reads as deliberate rhythm instead. */
     .cb-preview-col {
-      position: relative; /* JS aligns each card to the middle of its ad row */
-      max-width: 300px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.6rem;
+      align-content: start;
+      max-width: 430px;
       width: 100%;
+      margin-top: 1.35rem; /* clears the "Ads" divider so row 1 meets ad 1 */
     }
-    .cbp-item { margin-bottom: 0.6rem; }
-    .cb-preview-col.cbp-aligned .cbp-item {
-      position: absolute;
-      left: 0; right: 0;
-      margin-bottom: 0;
-    }
+    .cbp-item { display: flex; flex-direction: column; min-width: 0; }
     @media (max-width: 1150px) {
       .cb-slot-grid { grid-template-columns: 1fr; }
       .cb-preview-col { max-width: 460px; margin-top: 0.6rem; }
@@ -651,12 +655,20 @@
       white-space: pre-line;
       word-break: break-word;
     }
-    .cbp-media { width: 100%; max-height: 115px; object-fit: cover; display: block; background: #000; }
-    /* Videos are often square/vertical: cover would crop the frame — show
-       the whole thing (letterboxed on black) with a taller cap instead. */
-    video.cbp-media { max-height: 215px; object-fit: contain; }
+    /* One fixed media box for every card — mixed portrait/square/landscape
+       assets otherwise give each card a different height and the column
+       stops reading as a list. `contain` keeps the whole frame visible
+       (letterboxed) rather than cropping it, which matters for the vertical
+       story creatives. */
+    .cbp-media {
+      width: 100%;
+      height: 150px;
+      object-fit: contain;
+      display: block;
+      background: #000;
+    }
     .cbp-media-skel {
-      height: 72px;
+      height: 150px;
       background: var(--bg);
       border-block: 1px dashed var(--border);
       display: flex; align-items: center; justify-content: center;
@@ -3514,35 +3526,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // its ad row; when a card is taller than its row, the next one is pushed
   // down so cards never overlap. Falls back to natural stacking on narrow
   // screens (grid is single-column there) or hidden panels (zero rects).
+  // Layout is pure CSS now (even flex stack). Kept as a no-op so the
+  // existing call sites — render, resize, media load, view switch — do not
+  // need unpicking; an earlier version positioned each card absolutely to
+  // face its ad row and that is what produced the gaps.
   function cbpAlign(slot) {
     var col = slot.querySelector('[data-preview-col]');
     if (!col) return;
-    var items = col.querySelectorAll('.cbp-item');
-    var rows = slot.querySelectorAll('.cb-ad-row');
-    var wide = window.matchMedia('(min-width: 1151px)').matches;
-    if (!wide || !items.length || col.offsetParent === null) {
-      col.classList.remove('cbp-aligned');
-      col.style.minHeight = '';
-      items.forEach(function(it) { it.style.top = ''; });
-      return;
-    }
-    col.classList.add('cbp-aligned');
-    var colTop = col.getBoundingClientRect().top;
-    var cursor = 0;
-    var GAP = 10;
-    items.forEach(function(it, i) {
-      var h = it.offsetHeight || 0;
-      var top = cursor;
-      var row = rows[i];
-      if (row) {
-        var r = row.getBoundingClientRect();
-        var target = (r.top - colTop) + r.height / 2 - h / 2;
-        top = Math.max(cursor, target, 0);
-      }
-      it.style.top = Math.round(top) + 'px';
-      cursor = top + h + GAP;
-    });
-    col.style.minHeight = Math.ceil(cursor) + 'px';
+    col.classList.remove('cbp-aligned');
+    col.style.minHeight = '';
+    col.querySelectorAll('.cbp-item').forEach(function(it) { it.style.top = ''; });
   }
 
   function cbpAlignAll() {
