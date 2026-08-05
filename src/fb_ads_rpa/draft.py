@@ -1,8 +1,30 @@
 """Campaign tree for RPA publish: Campaign → Ad Set(s) → Ad(s)."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
+
+# Dimensions, not creative numbers: "1080x1080", "1080x1920", and the same
+# with a Cyrillic "х" — which really occurs in the folder
+# ("text5_img2_1080х1920.png"), so both letters have to be stripped.
+_DIMENSIONS_RE = re.compile(r"\d{3,4}\s*[xх×]\s*\d{3,4}", re.I)
+# Creative numbers observed across the real folder (4717 files) are always
+# four digits: CAC-1253, cac-2285, 1_eslat_2243, 2175_ADN3, "1328 - 26s".
+# The boundaries keep it from matching inside longer runs like
+# "516594629_1264482105091024".
+_CREATIVE_NUM_RE = re.compile(r"(?<!\d)(\d{4})(?!\d)")
+
+
+def _creative_number(filename: str) -> str:
+    """Pull the creative number out of a file name ("…_2243_square.mp4" ->
+    "2243"). Returns "" when the name carries no number to speak of — a
+    plain "coffee.mp4" or a pure-dimensions "1080x1080-17.png"."""
+    stem = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    if "." in stem:
+        stem = stem.rsplit(".", 1)[0]
+    m = _CREATIVE_NUM_RE.search(_DIMENSIONS_RE.sub(" ", stem))
+    return m.group(1) if m else ""
 
 
 @dataclass
@@ -30,9 +52,7 @@ class AdDraft:
         """
         creative = (self.creative_id or "").strip()
         if not creative and self.creative_filename:
-            creative = self.creative_filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-            if "." in creative:
-                creative = creative.rsplit(".", 1)[0]
+            creative = _creative_number(self.creative_filename)
         text = (self.copy_name or "").strip()
         if creative and text:
             return f"{creative} - {text}"
