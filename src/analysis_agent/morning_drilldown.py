@@ -157,18 +157,28 @@ def _cm_row_to_dict(row: pd.Series) -> Dict[str, Any]:
 
 
 def _aggregate_cm_drill_rows(filtered: pd.DataFrame) -> pd.DataFrame:
-    """One drill row per Adset Name for a CM; only adsets with FTDs > 0, sorted by FTDs desc."""
+    """One drill row per (Account Alias, Adset Name) for a CM; only rows with
+    FTDs > 0, sorted by FTDs desc.
+
+    Grouping on Adset Name ALONE was wrong: the naming convention repeats the
+    same ad-set name across accounts, so several accounts' rows collapsed into
+    one group and `Account Alias: first` labelled the whole thing with
+    whichever account happened to come first. Confirmed against the real file
+    2026-08-17 — FacebookElf264 has 3 deposits in 3 ad-sets, two of whose
+    names it shares with FacebookDQ260; both of those got attributed to
+    DQ260, so the drill showed Elf264 with 1 deposit while BI reported 3
+    (and DQ260 appeared twice). Account is part of the identity, not a label.
+    """
     if filtered.empty:
         return filtered
 
     grouped = (
-        filtered.groupby("Adset Name", dropna=False)
+        filtered.groupby(["Account Alias", "Adset Name"], dropna=False)
         .agg(
             **{
                 "# FTDs": ("# FTDs", "sum"),
                 "# Leads": ("# Leads", "sum"),
                 "$ Spend": ("$ Spend", "sum"),
-                "Account Alias": ("Account Alias", "first"),
                 "CM": ("CM", "first"),
                 "Ad Asset": ("Ad Asset", "first"),
                 "Date": ("Date", "max"),
