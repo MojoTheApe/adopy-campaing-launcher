@@ -49,6 +49,27 @@ def normalize_text_segment(ad_title) -> str:
     return get_text_segment_fallback()
 
 
+# The account sheet writes aliases with a trailing country suffix
+# ("FacebookDQ365 EC", "FacebookUL992 SA") while the stats export writes the
+# bare name ("FacebookDQ365"). Measured 2026-08-22: 15 of 21 accounts lost
+# their metrics to that mismatch — Optimization showed "no ad sets" and the
+# status table showed blanks for accounts that had plenty of data. The suffix
+# is presentation, not identity, so strip it on both sides before matching.
+_ALIAS_SUFFIX_RE = re.compile(r"\s+[A-Za-z]{2}\s*$")
+
+
+def normalize_account_alias(alias) -> str:
+    """Bare account alias, with any trailing 2-letter country suffix removed."""
+    s = "" if alias is None else str(alias).strip()
+    return _ALIAS_SUFFIX_RE.sub("", s).strip()
+
+
+def alias_matches(series, alias):
+    """Boolean mask: rows of `series` whose alias matches `alias`, suffix-blind."""
+    target = normalize_account_alias(alias)
+    return series.fillna("").astype(str).map(normalize_account_alias) == target
+
+
 def split_ad_title(ad_title) -> tuple[str, str]:
     """Split an Ad Title into (creative id, text name).
 

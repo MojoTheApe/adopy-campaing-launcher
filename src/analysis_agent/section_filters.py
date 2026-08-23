@@ -17,6 +17,8 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from src.analysis_agent.analyze_fb_stats import alias_matches
+
 from src.knowledge_agent.knowledge_base import get_target_context, resolve_targeting_text
 
 NA_SENTINEL = "__NA__"
@@ -145,7 +147,7 @@ def filter_optimization_rows(
     """Ad-level rows for one ad set within a ready account (§9 drill-down)."""
     mask = (
         (df["Country Final"] == country)
-        & (df["Account Alias"].fillna("").astype(str).str.strip() == str(account).strip())
+        & alias_matches(df["Account Alias"], account)
         & _na_match(df["Adset Name"], adset)
     )
     rows = df[mask]

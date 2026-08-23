@@ -24,6 +24,7 @@ if str(_PROJ_ROOT) not in sys.path:
 from src.analysis_agent.analyze_fb_stats import (
     aggregate_combos,
     compute_metrics,
+    alias_matches,
     enrich_structure,
     split_ad_title,
 )
@@ -943,7 +944,7 @@ def build_account_performance_summary(
     """Aggregate full account performance for close recommendation context."""
     df_c = df[
         (df["Country Final"] == country)
-        & (df["Account Alias"].fillna("").astype(str) == account_alias)
+        & alias_matches(df["Account Alias"], account_alias)
     ]
     has_data = not df_c.empty
     leads = _safe_int(df_c["# Leads"].sum()) if has_data else 0
@@ -1030,7 +1031,7 @@ def build_close_recommendations(
     """
     df_c = df[
         (df["Country Final"] == country)
-        & (df["Account Alias"].fillna("").astype(str) == account_alias)
+        & alias_matches(df["Account Alias"], account_alias)
     ].copy()
     if df_c.empty:
         return []
@@ -1265,7 +1266,7 @@ def _get_running_interests(
     """Return set of Interest values already active on this account."""
     mask = (
         (df["Country Final"] == country)
-        & (df["Account Alias"].fillna("").astype(str) == account_alias)
+        & alias_matches(df["Account Alias"], account_alias)
         & (df["$ Spend"] > 0)
     )
     if "Interest" not in df.columns:
