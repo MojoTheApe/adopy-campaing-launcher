@@ -323,6 +323,50 @@ def build_asset_summary(df: pd.DataFrame, country: str) -> List[Dict[str, Any]]:
     return rows
 
 
+def build_variant_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, Any]]:
+    """Per-landing-page performance for this country, best first.
+
+    The Variant column is the landing page name. Tagging started 2026-07-30,
+    so untagged history is real and large — it is surfaced as its own
+    "— (без лендинга)" row rather than dropped, so the rows still add up to
+    the country's totals and nobody reads a partial slice as the whole.
+    """
+    df_c = df[df["Country Final"] == country]
+    if df_c.empty or "Variant" not in df_c.columns:
+        return []
+
+    grouped = (
+        df_c.groupby("Variant", dropna=False)
+        .agg(
+            Deposits=("# FTDs", "sum"),
+            Leads=("# Leads", "sum"),
+            Spend=("$ Spend", "sum"),
+            Net=("$ Net", "sum"),
+        )
+        .reset_index()
+    )
+    grouped["CPL"] = grouped["Spend"] / grouped["Leads"].replace(0, pd.NA)
+    grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
+    grouped["CR"] = (grouped["Deposits"] / grouped["Leads"].replace(0, pd.NA)) * 100.0
+    grouped = grouped.sort_values(["Deposits", "Spend"], ascending=[False, False])
+
+    rows = []
+    for _, r in grouped.iterrows():
+        name = str(r.get("Variant") or "").strip()
+        rows.append({
+            "variant": name,
+            "is_untagged": not name,
+            "deposits": _safe_int(r.get("Deposits")),
+            "leads": _safe_int(r.get("Leads")),
+            "spend": _safe_float(r.get("Spend")),
+            "net": _safe_float(r.get("Net")),
+            "cpl": _safe_float(r.get("CPL")),
+            "cpa": _safe_float(r.get("CPA")),
+            "cr": _safe_float(r.get("CR")),
+        })
+    return rows
+
+
 def build_asset_variants(df: pd.DataFrame, country: str) -> List[Dict[str, Any]]:
     """Flat (offer x variant) aggregate for the Assets landing-page dropdown.
 
@@ -1854,6 +1898,7 @@ def build_country_section(
         "my_spend": my_totals["spend"],
         "asset_summary": build_asset_summary(df, country),
         "asset_variants": build_asset_variants(df, country),
+        "variants": build_variant_breakdown(df, country),
         "trend": trend_block,
         "top_combos": top_combos,
         "targeting": targeting,

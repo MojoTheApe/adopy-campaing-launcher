@@ -1475,6 +1475,7 @@ async function dashRefresh(ev) {
   {% set sec = namespace(n=0) %}
   {% set sec.n = sec.n + 1 %}{% set n_cm = sec.n %}
   {% if c.asset_summary %}{% set sec.n = sec.n + 1 %}{% set n_assets = sec.n %}{% endif %}
+  {% if c.variants %}{% set sec.n = sec.n + 1 %}{% set n_landings = sec.n %}{% endif %}
   {% if c.trend.has_date %}{% set sec.n = sec.n + 1 %}{% set n_trend = sec.n %}{% endif %}
   {% set sec.n = sec.n + 1 %}{% set n_combos = sec.n %}
   {% if c.targeting %}{% set sec.n = sec.n + 1 %}{% set n_targeting = sec.n %}{% endif %}
@@ -1488,6 +1489,7 @@ async function dashRefresh(ev) {
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-goals">My Goals</button>
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-cm">{{ n_cm }} CM</button>
       {% if c.asset_summary %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-assets">{{ n_assets }} Assets</button>{% endif %}
+      {% if c.variants %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-landings">{{ n_landings }} Landings</button>{% endif %}
       {% if c.trend.has_date %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-trend">{{ n_trend }} Trend</button>{% endif %}
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-combos">{{ n_combos }} Combos</button>
       {% if c.targeting %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-targeting">{{ n_targeting }} Targeting</button>{% endif %}
@@ -1539,6 +1541,7 @@ async function dashRefresh(ev) {
 {% set sec = namespace(n=0) %}
 {% set sec.n = sec.n + 1 %}{% set n_cm = sec.n %}
 {% if c.asset_summary %}{% set sec.n = sec.n + 1 %}{% set n_assets = sec.n %}{% endif %}
+  {% if c.variants %}{% set sec.n = sec.n + 1 %}{% set n_landings = sec.n %}{% endif %}
 {% if c.trend.has_date %}{% set sec.n = sec.n + 1 %}{% set n_trend = sec.n %}{% endif %}
 {% set sec.n = sec.n + 1 %}{% set n_combos = sec.n %}
 {% if c.targeting %}{% set sec.n = sec.n + 1 %}{% set n_targeting = sec.n %}{% endif %}
@@ -1626,6 +1629,42 @@ async function dashRefresh(ev) {
   {% endfor %}
   </tbody>
 </table>
+</div>
+{% endif %}
+
+{# ── Section {{ n_landings }}: Landings (Variant) ───────────────────── #}
+{% if c.variants %}
+<div id="view-country-{{ cid }}-landings" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: {{ n_landings }} Landings <span class="hint">разбивка по посадочным страницам</span></h2>
+<table>
+  <thead><tr>
+    <th>Лендинг</th>
+    <th class="num">Leads</th>
+    <th class="num">Deposits</th>
+    <th class="num">CR</th>
+    <th class="num">Spend</th>
+    <th class="num">CPL</th>
+    <th class="num">CPA</th>
+    <th class="num">Net</th>
+  </tr></thead>
+  <tbody>
+  {% for row in c.variants %}
+    <tr{% if row.is_untagged %} class="lp-untagged"{% endif %}>
+      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (без лендинга)</span>{% else %}{{ row.variant }}{% endif %}</td>
+      <td class="num">{{ row.leads }}</td>
+      <td class="num {% if row.deposits > 0 %}good{% elif row.spend > 0 %}bad{% endif %}">{{ row.deposits }}</td>
+      <td class="num">{% if row.cr is not none %}{{ '%.1f' % row.cr }}%{% else %}—{% endif %}</td>
+      <td class="num">{{ row.spend | fmt_usd }}</td>
+      <td class="num">{% if row.cpl is not none %}{{ row.cpl | fmt_usd }}{% else %}—{% endif %}</td>
+      <td class="num">{% if row.cpa is not none %}{{ row.cpa | fmt_usd }}{% else %}—{% endif %}</td>
+      <td class="num">{{ row.net | fmt_usd }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p style="font-size:0.72rem;color:var(--muted);margin-top:0.4rem">
+  Разметка лендингов ведётся с 30.07 — всё, что открутилось раньше, попадает в строку «без лендинга».
+</p>
 </div>
 {% endif %}
 
