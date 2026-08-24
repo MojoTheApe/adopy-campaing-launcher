@@ -3974,17 +3974,36 @@ def upload_ad_creative(
     )
 
     def _wizard_open() -> bool:
-        # Match ONLY the wizard's own title. "Creative setup" and "Media"
-        # also appear on the plain ad page (measured 2026-08-04: a first
-        # version keyed on those returned True before anything was clicked,
-        # so the loop exited immediately and the step failed doing nothing).
+        """Is the creative wizard on screen?
+
+        Meta reshaped this modal on 2026-08-24: the "Set up your creative"
+        title is GONE, the panel became a narrow centred modal, and the step
+        list moved from a vertical column on the left to a horizontal row
+        across the top. Keying on the old title made the code open the wizard
+        and then fail to notice it had — every creative upload in the runs of
+        24.08 died that way while the screenshot clearly showed it open.
+
+        "Creative setup" alone is NOT enough: it also appears on the plain ad
+        page ("Creative setup (0/1)"). Require several sibling step labels
+        that exist only inside the wizard, plus its own Next/Cancel pair.
+        """
         try:
             return page.evaluate(
-                """
-                () => [...document.querySelectorAll('*')]
-                  .some(e => e.offsetParent !== null && e.children.length === 0
-                        && (e.textContent || '').replace(/\\s+/g, ' ').trim()
-                           === 'Set up your creative')
+                r"""
+                () => {
+                  const norm = (x) => (x || '').replace(/\s+/g, ' ').trim();
+                  const vis = [...document.querySelectorAll('*')]
+                    .filter(e => e.offsetParent !== null && e.children.length === 0)
+                    .map(e => norm(e.textContent));
+                  if (vis.includes('Set up your creative')) return true;  // legacy shape
+                  const steps = ['Creative setup', 'Media', 'Text',
+                                 'Image generation', 'Enhancements', 'Translation'];
+                  const hits = steps.filter(t => vis.includes(t)).length;
+                  const hasNav = [...document.querySelectorAll('[role=button],button')]
+                    .filter(e => e.offsetParent !== null)
+                    .some(e => ['Next', 'Cancel'].includes(norm(e.textContent)));
+                  return hits >= 3 && hasNav;
+                }
                 """
             )
         except Exception:

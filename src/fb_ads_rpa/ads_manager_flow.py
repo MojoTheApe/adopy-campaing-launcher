@@ -8,7 +8,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-RPA_FLOW_VERSION = "v85"
+RPA_FLOW_VERSION = "v86"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
