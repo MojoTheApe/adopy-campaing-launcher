@@ -118,10 +118,22 @@ def main() -> int:
             try:
                 b = p.chromium.connect_over_cdp(f"http://127.0.0.1:{args.port}", timeout=60000)
                 ctx = b.contexts[0]
-                page = ctx.pages[0]
-                try:
-                    page.evaluate("1")
-                except Exception:
+                # Work in our OWN tab. Navigating pages[0] hijacks whatever the
+                # operator is looking at, every single check — and this runs for
+                # hours next to someone actually using the account. Find the tab
+                # we opened last time (it is the one already sitting on this
+                # account's campaigns page) and reuse it; only open a new one if
+                # there isn't one yet.
+                page = None
+                for candidate in ctx.pages:
+                    try:
+                        if f"act={args.act}" in (candidate.url or ""):
+                            candidate.evaluate("1")
+                            page = candidate
+                            break
+                    except Exception:
+                        continue
+                if page is None:
                     page = ctx.new_page()
                 page.goto(url, wait_until="domcontentloaded", timeout=60000)
                 page.wait_for_timeout(9000)
