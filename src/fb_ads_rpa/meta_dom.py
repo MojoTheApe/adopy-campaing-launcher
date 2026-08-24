@@ -4135,14 +4135,33 @@ def upload_ad_creative(
     """
     landed = False
     for _attempt in range(3):
+        # Hand the file straight to the hidden <input type=file> instead of
+        # clicking Upload and catching a chooser. In the 2026-08-24 modal the
+        # Upload control became one item in a tab strip
+        # (Images | Videos | Upload | Account videos) and stopped matching an
+        # exact-text button lookup — the user watching the screen confirmed
+        # the click never lands. set_input_files needs no click at all, so the
+        # control's shape stops mattering. Clicking is kept as a fallback for
+        # renders that only expose a chooser.
         try:
-            with page.expect_file_chooser(timeout=25000) as fc_info:
-                if not _click_xpath(
-                    page,
-                    "//*[@role='button' or self::button][normalize-space(.)='Upload']",
-                ):
-                    upload_btn.first.click(timeout=5000)
-            fc_info.value.set_files(creative_path)
+            handles = page.query_selector_all("input[type=file]")
+            fed = False
+            for h in handles:
+                try:
+                    h.set_input_files(creative_path)
+                    fed = True
+                    break
+                except Exception:
+                    continue
+            if not fed:
+                with page.expect_file_chooser(timeout=25000) as fc_info:
+                    if not _click_xpath(
+                        page,
+                        "//*[@role='button' or self::button]"
+                        "[contains(normalize-space(.), 'Upload')]",
+                    ):
+                        upload_btn.first.click(timeout=5000)
+                fc_info.value.set_files(creative_path)
         except Exception:
             _sleep_h(1.5)
             continue
