@@ -805,6 +805,46 @@ class MultiloginDirectCDPProvider:
             self._proc = None  # we did not spawn this process
             return reused
 
+        # SAFETY GATE (user directive 2026-08-24). Everything below relaunches
+        # Mimic ourselves, and the command we build carries NO --proxy-server
+        # and passes --disable-extensions, which switches off the MLX Agent —
+        # the component that applies the profile's proxy and part of its
+        # masking. Nothing else supplies one: the profile's Chrome Preferences
+        # has no `proxy` key and the proxy columns in ad_account_map.csv are
+        # empty. So this branch would put the ad account on Facebook from the
+        # machine's real IP, unmasked — the same signature that got the
+        # PlaywrightProfile fallback gated off on 2026-07-30, just wearing
+        # Mimic's binary.
+        #
+        # The attach branch above is safe and is the normal case: MLX starts
+        # profiles with --proxy-server plus a debug port, and we merely connect
+        # to it. Reaching here means the profile is either closed or open
+        # without a debug port, and the fix is for a human to open it in MLX
+        # Desktop — not for us to quietly relaunch it stripped.
+        allow = (os.environ.get("FB_RPA_ALLOW_UNPROXIED_RELAUNCH") or "").strip().lower()
+        if allow not in ("1", "true", "yes", "on"):
+            running = self._profile_process_running(self._user_data_dir, profile_id)
+            why = (
+                "the profile is open but exposes no CDP debug port"
+                if running
+                else "the profile is not running"
+            )
+            raise RuntimeError(
+                f"{account_label}: refusing to relaunch this Multilogin profile. "
+                f"DirectCDP can only attach to a profile MLX itself started, and {why}. "
+                "Relaunching it here would start the browser WITHOUT the profile's proxy "
+                "and with the MLX Agent disabled, putting the ad account on Facebook from "
+                "this machine's real IP. "
+                "Open the profile in the Multilogin Desktop app and retry. "
+                "(Override only if you understand the risk: FB_RPA_ALLOW_UNPROXIED_RELAUNCH=1.)"
+            )
+        log.warning(
+            "Relaunching Mimic for profile %s WITHOUT proxy or MLX Agent "
+            "(FB_RPA_ALLOW_UNPROXIED_RELAUNCH is set) — the account will appear from this "
+            "machine's real IP.",
+            profile_id,
+        )
+
         # Stop any running instance of this profile only when we must relaunch
         # (process up without our CDP port, or nothing running).
         self._kill_profile_browser(self._user_data_dir, profile_id)
