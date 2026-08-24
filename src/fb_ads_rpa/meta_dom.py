@@ -3664,7 +3664,16 @@ def _try_reuse_library_media(page: Page, filename: str) -> bool:
     if not available:
         return False
 
+    # Poll the counter for seconds, not milliseconds, before giving up on a
+    # click. The old 0.5s check raced Meta's own render: the click HAD
+    # landed, the counter simply had not caught up, so the loop moved on and
+    # clicked the next duplicate — and the next. Every one of them
+    # eventually registered. Measured run 5bff134ea745 (24.08): ads ended up
+    # with "6 of 10 selected" / four preview variations instead of the one
+    # creative they were built from, because repeated test runs had left
+    # three identical CCblk.mp4 tiles in this account's library.
     picked = False
+    clicked: list[int] = []
     for i in range(min(available, 6)):
         try:
             tile = tiles.nth(i)
@@ -3672,12 +3681,29 @@ def _try_reuse_library_media(page: Page, filename: str) -> bool:
             tile.click(timeout=3000)
         except Exception:
             continue
-        _sleep_h(0.5)
-        if _library_selected_count(page) > before:
-            picked = True
+        clicked.append(i)
+        for _ in range(10):  # ~3s
+            _sleep_h(0.3)
+            if _library_selected_count(page) > before:
+                picked = True
+                break
+        if picked:
             break
     if not picked:
         return False
+
+    # One ad, one creative. If a slow render still let two clicks through,
+    # toggle the surplus back off — an over-selected ad silently becomes a
+    # multi-media ad Meta then spins into extra variations, which is not the
+    # campaign the operator built on the dashboard.
+    for i in reversed(clicked[:-1]):
+        if _library_selected_count(page) <= before + 1:
+            break
+        try:
+            tiles.nth(i).click(timeout=3000)
+        except Exception:
+            continue
+        _sleep_h(0.8)
 
     # Past this point the grid state has changed, so a failure here is a
     # real failure rather than something the upload path can pick up from.
@@ -4144,34 +4170,24 @@ def upload_ad_creative(
         # control's shape stops mattering. Clicking is kept as a fallback for
         # renders that only expose a chooser.
         try:
-            def _feed() -> bool:
-                for h in page.query_selector_all("input[type=file]"):
-                    try:
-                        h.set_input_files(creative_path)
-                        return True
-                    except Exception:
-                        continue
-                return False
+            # 1) If a file input is already mounted, feed it — no click, so the
+            #    control's shape cannot matter.
+            fed = False
+            for h in page.query_selector_all("input[type=file]"):
+                try:
+                    h.set_input_files(creative_path)
+                    fed = True
+                    break
+                except Exception:
+                    continue
 
-            fed = _feed()
-            if not fed:
-                # In the 2026-08-24 modal the media picker opens on the
-                # library grid and the file input does not exist yet — it is
-                # mounted only once the "Upload" TAB is activated (the strip
-                # reads Images | Videos | Upload | Account videos). Measured:
-                # feeding straight away found no input at all, the grid kept
-                # showing the account's existing videos and the counter stayed
-                # at "0 of 10 selected". So: activate the tab, then feed.
-                _click_xpath(
-                    page,
-                    "//*[@role='tab' or @role='button' or self::button]"
-                    "[contains(normalize-space(.), 'Upload')]",
-                )
-                for _ in range(10):  # ~3s for the drop zone to mount
-                    _sleep_h(0.3)
-                    if _feed():
-                        fed = True
-                        break
+            # 2) Otherwise click Upload INSIDE expect_file_chooser. It must be
+            #    inside: the button opens a real OS file dialog, and a bare
+            #    click leaves that dialog with nobody to answer it — the page
+            #    then hangs (measured 24.08 on v89: 139s on a single step).
+            #    The button is a normal toolbar button reading "+ Upload", so
+            #    match on *contains*; the old exact-'Upload' lookup missed it
+            #    and that is why uploads failed from 24.08 onward.
             if not fed:
                 with page.expect_file_chooser(timeout=25000) as fc_info:
                     if not _click_xpath(
@@ -4292,15 +4308,14 @@ def upload_ad_creative(
     # title is still on screen.
     misses = 0
     for _ in range(16):
-        still_open = page.evaluate(
-            """
-            () => [...document.querySelectorAll('*')]
-              .some(e => e.offsetParent !== null && e.children.length === 0
-                    && (e.textContent || '').replace(/\\s+/g, ' ').trim()
-                       === 'Set up your creative')
-            """
-        )
-        if not still_open:
+        # Ask the SAME detector that opened the wizard. This used to test for
+        # the literal title 'Set up your creative', which the 2026-08-24
+        # redesign removed: the check reported "already closed" on the very
+        # first round, the loop broke before pressing anything, and the ad was
+        # left sitting in an open wizard with the tile selected and Next
+        # untouched — media never committed, so _verify_ad_media_present then
+        # failed the whole step (measured run d5aa7a96bbd1, all 4 ads).
+        if not _wizard_open():
             break
         advanced = False
         for label in ("Done", "Save", "Next"):
@@ -4360,7 +4375,15 @@ def _verify_ad_media_present(page: Page) -> bool:
     `body.textContent` check reports a false negative.
     """
     wait_editor_saved(page)
-    for _ in range(6):
+    # Never call an ad empty while its video is still going up. The wizard
+    # closes as soon as the tile is selected, but Meta keeps uploading in the
+    # background behind an "Uploading video X.mp4" toast; this check used to
+    # give up ~3s later and report the ad media-less. Measured run
+    # 58c3cb9b53c6 (24.08): ad3 failed with that toast still mid-progress on
+    # screen, while the three ads whose uploads happened to finish sooner all
+    # passed — a stopwatch race, not a broken step.
+    grace = 0
+    for _ in range(150):  # up to ~2.5 min, only spent while work is in flight
         try:
             state = page.evaluate(
                 """
@@ -4372,6 +4395,7 @@ def _verify_ad_media_present(page: Page) -> bool:
                   return {
                     empty: visible.some(t => t.includes('Please specify the media')),
                     filled: visible.some(t => t === 'Edit media' || t === 'Remove media'),
+                    uploading: visible.some(t => /^Uploading (video|image)\\b/.test(t)),
                   };
                 }
                 """
@@ -4381,8 +4405,16 @@ def _verify_ad_media_present(page: Page) -> bool:
             continue
         if state.get("filled") and not state.get("empty"):
             return True
+        if state.get("uploading"):
+            grace = 0
+            _sleep_h(1.0)
+            continue
         if state.get("empty"):
-            return False
+            # Attaching lands a beat after the toast clears — confirm the
+            # empty state persists before failing the step.
+            grace += 1
+            if grace >= 6:  # ~3s of settled, upload-free empty state
+                return False
         _sleep_h(0.5)
     return False
 
@@ -4429,6 +4461,28 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
         except Exception:
             return False
 
+    if _primary_text_visible():
+        return True
+
+    # Mount the section before trying to un-hide it. Every fallback below
+    # assumes #creativeEditorComponent is in the DOM and merely painted
+    # `display: none` — but the editor is virtualised, and when the section
+    # is scrolled away it is ABSENT, so all of them no-op and the step burns
+    # through to the page reload. Ground truth from this step's own dump
+    # (debug_ad_copy_reveal_dump.json, run 66b8e5ff5bdd): creativeEditorFound
+    # false, primaryLabelCount 0 — while the failure screenshot taken moments
+    # later shows the Primary text field plainly on screen. Same trap already
+    # documented here for the CTA combobox, the Browser add-ons radio group
+    # and the "Set up creative" button.
+    _scroll_until_mounted(
+        page,
+        """
+        () => !!document.getElementById('creativeEditorComponent')
+              || [...document.querySelectorAll('*')]
+                   .some(e => e.children.length === 0
+                         && (e.textContent || '').replace(/\\s+/g, ' ').trim() === 'Primary text')
+        """,
+    )
     if _primary_text_visible():
         return True
 
@@ -5866,10 +5920,84 @@ def click_conversion_event_dropdown(page: Page) -> bool:
     return _click_section_dropdown(page, ["Conversion event", "Evento de conversión"])
 
 
+_DATASET_PLACEHOLDER = "Select a dataset or search by name or ID"
+
+
+def _select_leads_dataset(page: Page) -> bool:
+    """Fill the ad set's required "* Dataset" field (2026-08-24 layout).
+
+    Meta rebuilt the ad set's Conversion block on 24.08: "Conversion event ->
+    Lead" is gone, replaced by a Performance goal ("Maximize number of leads",
+    already correct by default) plus a required "* Dataset" combobox holding
+    the account's pixel. The old lookup searched for a "Conversion event"
+    section that no longer exists and burned its whole budget waiting —
+    measured 17-21s and True on every run through 17.08, then exactly 130.5s
+    and False on eight consecutive runs from 24.08, this one included.
+
+    Picks the first offered dataset: these accounts carry a single pixel
+    (the ad-level Tracking block auto-checks that same one, e.g.
+    "FacebookELF303 / Pixel ID: 1912109486413769"), so there is nothing to
+    choose between. Returns False rather than guessing if the menu offers
+    nothing — an empty required field is visible to the operator on the
+    draft, a wrong pixel would not be.
+    """
+    _scroll_until_mounted(
+        page,
+        """
+        () => [...document.querySelectorAll('*')]
+          .some(e => e.offsetParent !== null && e.children.length === 0
+                && /^\\*?\\s*Dataset$/.test((e.textContent || '').replace(/\\s+/g, ' ').trim()))
+        """,
+    )
+
+    def _empty() -> bool:
+        try:
+            return page.evaluate(
+                """
+                (ph) => [...document.querySelectorAll('*')]
+                  .filter(e => e.offsetParent !== null && e.children.length === 0)
+                  .some(e => (e.textContent || '').replace(/\\s+/g, ' ').trim() === ph)
+                """,
+                _DATASET_PLACEHOLDER,
+            )
+        except Exception:
+            return False
+
+    if not _empty():
+        return True  # already carries a dataset
+
+    for _ in range(3):
+        if not _click_xpath(
+            page,
+            "//*[@role='combobox' or @role='button' or self::div]"
+            f"[normalize-space(.)='{_DATASET_PLACEHOLDER}']",
+        ):
+            _sleep_h(0.8)
+            continue
+        # Wait for the menu to paint, then take the first real option.
+        for _ in range(12):  # ~3.6s
+            _sleep_h(0.3)
+            if page.query_selector("xpath=//*[@role='option']") is not None:
+                break
+        if _click_xpath(page, "(//*[@role='option'])[1]"):
+            wait_editor_saved(page)
+            _sleep_h(0.8)
+            if not _empty():
+                return True
+        close_open_dropdown(page)
+        _sleep_h(0.6)
+    return not _empty()
+
+
 def select_conversion_event_lead(page: Page) -> bool:
     """Open Conversion event dropdown and choose Lead."""
     scroll_to_section(page, "Conversion event", "Evento de conversión")
     if is_lead_conversion_event_selected(page):
+        return True
+    # The 24.08 layout has no Conversion event dropdown at all; its successor
+    # is the Dataset field. Try it before the legacy path so the run doesn't
+    # spend 130s failing to find a section that was removed.
+    if _select_leads_dataset(page):
         return True
     for _ in range(2):
         if not click_conversion_event_dropdown(page):

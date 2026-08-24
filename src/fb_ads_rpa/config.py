@@ -77,18 +77,32 @@ def get_reuse_library_media() -> bool:
     """When True, the ad-creative step first tries to attach an existing copy
     of the file from the account's media library instead of re-uploading it.
 
-    Default ON. Disable with FB_RPA_REUSE_MEDIA=0.
+    Default OFF since 2026-08-24. Enable with FB_RPA_REUSE_MEDIA=1.
 
-    It was briefly off by default after a broken first version cost a whole
-    run on 2026-07-29 (clicks landed on the filename caption instead of the
-    tile, the grid stayed at "0 selected", ads ended up with no media). Two
-    things changed since: the pick now searches the library by filename and
-    verifies the grid's own "N selected" counter actually moved, and — if
-    it can't select anything — it bails before touching the Media step, so
-    the caller falls straight through to the proven upload path. Worst case
-    is therefore the old behaviour plus a couple of seconds.
+    It was briefly off before, after a broken first version cost a whole run
+    on 2026-07-29 (clicks landed on the filename caption instead of the tile,
+    the grid stayed at "0 selected", ads ended up with no media), then turned
+    back on once the pick learned to search by filename and verify the grid's
+    own "N selected" counter.
+
+    Off again, and this time the claim that its worst case is "the old
+    behaviour plus a couple of seconds" is simply not true. When the pick
+    clicks tiles and then fails to advance the wizard, it returns False with
+    those selections STILL APPLIED, and the upload path then adds its own on
+    top: ads came out carrying 3-6 media instead of the one creative they
+    were built from (measured runs 5bff134ea745 and 770bd7e5fb7b, "3 of 10
+    selected" / "6 of 10 selected"). Meta spins the surplus into extra ad
+    variations, so the published ad is not the one the operator assembled on
+    the dashboard.
+
+    It also buys nothing: every ad in every run of 24.08 shows an "upload is
+    complete" toast, i.e. the reuse path falls through to a real upload
+    anyway. Repeated test runs leave many identical tiles per filename, which
+    is exactly the case it handles worst. A fresh upload auto-selects exactly
+    the file it just sent — the behaviour we want — at a cost of ~30-60s per
+    ad, which these runs were already paying.
     """
-    val = (os.environ.get("FB_RPA_REUSE_MEDIA") or "1").strip().lower()
+    val = (os.environ.get("FB_RPA_REUSE_MEDIA") or "0").strip().lower()
     return val in ("1", "true", "yes", "on")
 
 
