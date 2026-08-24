@@ -56,16 +56,19 @@ goto waitport
 echo Starting server on port %PORT%...
 start "" /b python serve.py --port %PORT%
 
-REM Open the browser once the server actually answers.
+REM Open the browser once the server actually answers. First response is
+REM slow on purpose: the app pulls GSheet and builds the report from a
+REM ~71k-row Excel before it serves anything, measured 30-40s. A 30s budget
+REM sometimes gave up moments before it was ready.
 set /a TRIES=0
 :waitup
 timeout /t 1 >nul
 curl -s -o nul -m 3 %URL% 2>nul
 if not errorlevel 1 goto isup
 set /a TRIES+=1
-if %TRIES% GEQ 30 (
+if %TRIES% GEQ 90 (
     echo.
-    echo Server did not come up within 30s. Run this to see why:
+    echo Server did not come up within 90s. Run this to see why:
     echo     python serve.py --port %PORT%
     pause
     exit /b 1
