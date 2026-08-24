@@ -4144,15 +4144,34 @@ def upload_ad_creative(
         # control's shape stops mattering. Clicking is kept as a fallback for
         # renders that only expose a chooser.
         try:
-            handles = page.query_selector_all("input[type=file]")
-            fed = False
-            for h in handles:
-                try:
-                    h.set_input_files(creative_path)
-                    fed = True
-                    break
-                except Exception:
-                    continue
+            def _feed() -> bool:
+                for h in page.query_selector_all("input[type=file]"):
+                    try:
+                        h.set_input_files(creative_path)
+                        return True
+                    except Exception:
+                        continue
+                return False
+
+            fed = _feed()
+            if not fed:
+                # In the 2026-08-24 modal the media picker opens on the
+                # library grid and the file input does not exist yet — it is
+                # mounted only once the "Upload" TAB is activated (the strip
+                # reads Images | Videos | Upload | Account videos). Measured:
+                # feeding straight away found no input at all, the grid kept
+                # showing the account's existing videos and the counter stayed
+                # at "0 of 10 selected". So: activate the tab, then feed.
+                _click_xpath(
+                    page,
+                    "//*[@role='tab' or @role='button' or self::button]"
+                    "[contains(normalize-space(.), 'Upload')]",
+                )
+                for _ in range(10):  # ~3s for the drop zone to mount
+                    _sleep_h(0.3)
+                    if _feed():
+                        fed = True
+                        break
             if not fed:
                 with page.expect_file_chooser(timeout=25000) as fc_info:
                     if not _click_xpath(
