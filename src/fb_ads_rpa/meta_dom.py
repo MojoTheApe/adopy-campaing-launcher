@@ -4174,11 +4174,15 @@ def upload_ad_creative(
     # completes and the tile shows "1 selected" while no "upload is
     # complete" toast is ever visible to us, so the old 45s wait (plus a 40s
     # fallback) burned the step's whole budget for nothing.
-    sel_js = """
+    # Counter format changed with the 2026-08-24 modal: it now reads
+    # "0 of 10 selected" where it used to read "0 selected". The old regex
+    # anchored straight after the number, so a real selection went unnoticed,
+    # the tile-click loop kept retrying and Next stayed disabled. Accept both.
+    sel_js = r"""
         () => [...document.querySelectorAll('*')]
           .filter(e => e.offsetParent !== null && e.children.length === 0)
-          .some(e => /^[1-9]\\d* selected$/.test(
-            (e.textContent || '').replace(/\\s+/g, ' ').trim()))
+          .some(e => /^[1-9]\d*( of \d+)? selected$/.test(
+            (e.textContent || '').replace(/\s+/g, ' ').trim()))
     """
     tile_js = """
         (name) => [...document.querySelectorAll('*')]
