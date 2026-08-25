@@ -146,6 +146,12 @@ class RpaPublishResult:
     campaign_id: str | None = None
     adset_id: str | None = None
     ad_ids: list[str] = field(default_factory=list)
+    # Ad-level steps that failed while the run as a whole still reached the
+    # end. `success` stays True because the draft really was created — but a
+    # draft whose ad has no creative must not be published, and until now the
+    # only trace of that was a telemetry line nobody reads before clicking
+    # Publish (run 58c3cb9b53c6: ad3 had no media, result said success).
+    warnings: list[str] = field(default_factory=list)
 
     def to_job_dict(self) -> dict[str, Any]:
         return {

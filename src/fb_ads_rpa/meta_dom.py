@@ -2089,6 +2089,7 @@ def run_recorded_campaign_flow(
     destination_url: str = "",
     os_val: str = "All",
     additional_ads: list[dict[str, str]] | None = None,
+    soft_fails_out: list[str] | None = None,
 ) -> str:
     """Create -> Website -> ... -> Ad level, using the exact locators from a
     verified human Playwright codegen recording (2026-07-21) instead of the
@@ -2780,6 +2781,12 @@ def run_recorded_campaign_flow(
         campaign=campaign_name,
         diag={"soft_fails": ad_level_fails} if ad_level_fails else None,
     )
+    # Hand the failures back to the caller as well. Telemetry alone is not a
+    # warning: nobody reads rpa_telemetry.jsonl in the seconds between a run
+    # finishing and the operator clicking Publish, so an ad that ended up with
+    # no creative was indistinguishable from a clean run.
+    if soft_fails_out is not None:
+        soft_fails_out.extend(ad_level_fails)
 
     return ""
 

@@ -2178,7 +2178,12 @@ class AdsManagerFlow:
             }
             max_attempts = 3
             fail_step = ""
+            ad_soft_fails: list[str] = []
             for attempt in range(1, max_attempts + 1):
+                # Only the surviving attempt's state matters — a retry rebuilds
+                # the campaign from scratch, so failures from the abandoned one
+                # would otherwise be reported against the draft that replaced it.
+                ad_soft_fails.clear()
                 self._goto_campaigns(draft, result)
                 fail_step = run_recorded_campaign_flow(
                     self.page,
@@ -2198,6 +2203,7 @@ class AdsManagerFlow:
                     destination_url=draft.link,
                     os_val=ad_set.os,
                     additional_ads=additional_ads,
+                    soft_fails_out=ad_soft_fails,
                 )
                 if not fail_step or fail_step not in _EARLY_SETUP_STEPS:
                     break
@@ -2209,6 +2215,29 @@ class AdsManagerFlow:
             result.success = not fail_step
             if fail_step:
                 result.error = f"Recorded flow failed at: {fail_step}"
+
+            # Reaching the ad level is not the same as building a publishable
+            # draft. An ad whose creative or destination step failed still
+            # counts as "reached_ad", and the run then reported success while
+            # the draft carried an ad with no media (run 58c3cb9b53c6, ad3) —
+            # which the operator would only discover after publishing it.
+            # Keep success as-is (the draft does exist, and flipping it would
+            # invite a re-run that builds a duplicate), but say plainly that
+            # this one must not go out untouched.
+            if ad_soft_fails:
+                result.warnings.extend(ad_soft_fails)
+                result.steps_completed.append("ad_level_soft_fails:" + ",".join(ad_soft_fails))
+                blocking = [
+                    f for f in ad_soft_fails
+                    if "creative_upload" in f or "destination" in f
+                ]
+                if blocking:
+                    note = (
+                        "DO NOT PUBLISH AS IS — these ad-level steps failed: "
+                        + ", ".join(blocking)
+                        + ". Check the draft in Ads Manager first."
+                    )
+                    result.error = f"{result.error} | {note}" if result.error else note
             return result
 
         # LLM agent (opt-in, FB_RPA_ENGINE=llm_agent): live Claude-driven loop —

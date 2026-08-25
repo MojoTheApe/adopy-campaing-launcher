@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -97,6 +98,29 @@ def main() -> int:
     ap.add_argument("--interval", type=int, default=300, help="seconds between checks")
     ap.add_argument("--hours", type=float, default=12.0, help="stop after this long")
     args = ap.parse_args()
+
+    # SAFETY GATE (2026-08-25, after this script drew a checkpoint).
+    # Polling the campaigns page on a fixed cadence looks exactly like what it
+    # is: the same URL, from a CDP-created tab, every N seconds to the second.
+    # Run live on FacebookElf303 it made 8 such loads between 00:06 and 00:43
+    # on an account Facebook had already challenged by email hours earlier, and
+    # a second checkpoint — this one by phone — followed. That is not proof of
+    # causation, but it is the wrong kind of coincidence to repeat by accident.
+    #
+    # Spend and leads are already collected by the stats pipeline the dashboard
+    # reads; prefer that over driving the account's own browser. Reach for this
+    # script only when you specifically need Meta's own restriction wording,
+    # accept the risk, and keep the interval irregular and long.
+    allow = (os.environ.get("FB_RPA_ALLOW_ACCOUNT_WATCH") or "").strip().lower()
+    if allow not in ("1", "true", "yes", "on"):
+        print(
+            "watch_account is DISABLED: polling Ads Manager from the account's own "
+            "browser is automated activity on a live account, and it preceded a phone "
+            "checkpoint on FacebookElf303 (2026-08-25). Read spend/leads from the stats "
+            "pipeline instead. Override deliberately with FB_RPA_ALLOW_ACCOUNT_WATCH=1.",
+            file=sys.stderr,
+        )
+        return 2
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     log_path = OUT_DIR / f"{args.label}_watch.jsonl"
