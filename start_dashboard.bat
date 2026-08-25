@@ -24,7 +24,24 @@ REM as before - this only ever adds a choice, never removes one.
 set "PY=python"
 if exist ".venv\Scripts\python.exe" set "PY=.venv\Scripts\python.exe"
 
+REM Already serving? Then just open it. The old script always killed whatever
+REM held the port and started its own copy — which collided with a dashboard
+REM started from a terminal, the bind failed, and it printed "Server failed to
+REM start" even though nothing was wrong.
+curl -s -o nul -m 3 %URL% 2>nul
+if not errorlevel 1 (
+    echo Dashboard is already running - opening it.
+    start "" "%URL%"
+    timeout /t 2 >nul
+    exit /b 0
+)
+
 REM ---------------------------------------------------------------- Updates
+REM Deliberately placed AFTER the already-running check: we only update when we
+REM are about to start the server anyway. Pulling new code out from under a
+REM live serve.py can break it, because Python imports parts of the app lazily
+REM and would then load a file that changed mid-flight.
+REM
 REM Only on machines the installer marked. A developer checkout must never be
 REM git-pulled from under someone mid-edit, so the marker is written solely on
 REM a fresh install. Failure here is never fatal: a buyer who cannot reach
@@ -42,18 +59,6 @@ if exist "%LOCALAPPDATA%\ACL\auto_update" (
             call :after_pull
         )
     )
-)
-
-REM Already serving? Then just open it. The old script always killed whatever
-REM held the port and started its own copy — which collided with a dashboard
-REM started from a terminal, the bind failed, and it printed "Server failed to
-REM start" even though nothing was wrong.
-curl -s -o nul -m 3 %URL% 2>nul
-if not errorlevel 1 (
-    echo Dashboard is already running - opening it.
-    start "" "%URL%"
-    timeout /t 2 >nul
-    exit /b 0
 )
 
 echo Stopping any stale process on port %PORT%...
