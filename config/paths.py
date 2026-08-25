@@ -1,14 +1,23 @@
 """Paths and file locations. Excel paths can be overridden via env vars."""
 import os
 
-# Единственный док с отчётом (фиксируем): cursor example.xlsx на рабочем столе
-EXCEL_PATH_DEFAULT = r"C:\Users\EvgeniSedin\Desktop\cursor example.xlsx"
+# Единственный док с отчётом (фиксируем): cursor example.xlsx на рабочем столе.
+#
+# Defaults are built from the CURRENT user's Desktop, not a literal
+# C:\Users\EvgeniSedin\... — on this machine they resolve to exactly the same
+# paths as before, but on a media buyer's machine running ACL they point at
+# that buyer's own Desktop instead of at a stranger's, which cannot exist. A
+# missing file is then an honest "your file isn't there" rather than a
+# confusing error naming someone else's account.
+_DESKTOP = os.path.join(os.path.expanduser("~"), "Desktop")
+
+EXCEL_PATH_DEFAULT = os.path.join(_DESKTOP, "cursor example.xlsx")
 REPORT_EXCEL_DEFAULT = EXCEL_PATH_DEFAULT  # тот же файл — док с отчётом
 STATS_FOLDER_DEFAULT = os.path.dirname(EXCEL_PATH_DEFAULT)
 STATS_FILENAME_DEFAULT = os.path.basename(EXCEL_PATH_DEFAULT)
 
-UPLOAD_FB_EXCEL_DEFAULT = r"C:\Users\EvgeniSedin\Desktop\Upluad FB.xlsx"
-CREATIVES_ROOT_DEFAULT = r"C:\Users\EvgeniSedin\Desktop\Creatives"
+UPLOAD_FB_EXCEL_DEFAULT = os.path.join(_DESKTOP, "Upluad FB.xlsx")
+CREATIVES_ROOT_DEFAULT = os.path.join(_DESKTOP, "Creatives")
 AD_ACCOUNT_MAP_DEFAULT = os.path.join(os.path.dirname(__file__), "ad_account_map.csv")
 
 
