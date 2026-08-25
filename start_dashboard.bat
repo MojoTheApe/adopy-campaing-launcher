@@ -18,6 +18,32 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Prefer ACL's own environment when install_acl.bat has made one. An older
+REM install that never had a .venv keeps running on the system Python exactly
+REM as before - this only ever adds a choice, never removes one.
+set "PY=python"
+if exist ".venv\Scripts\python.exe" set "PY=.venv\Scripts\python.exe"
+
+REM ---------------------------------------------------------------- Updates
+REM Only on machines the installer marked. A developer checkout must never be
+REM git-pulled from under someone mid-edit, so the marker is written solely on
+REM a fresh install. Failure here is never fatal: a buyer who cannot reach
+REM GitHub still needs to launch campaigns.
+if exist "%LOCALAPPDATA%\ACL\auto_update" (
+    git rev-parse --git-dir >nul 2>&1
+    if not errorlevel 1 (
+        echo Checking for updates...
+        for /f "delims=" %%h in ('git rev-parse HEAD 2^>nul') do set "HEAD_BEFORE=%%h"
+        git pull --ff-only >nul 2>&1
+        if errorlevel 1 (
+            echo   could not update - continuing with the installed version.
+        ) else (
+            for /f "delims=" %%h in ('git rev-parse HEAD 2^>nul') do set "HEAD_AFTER=%%h"
+            call :after_pull
+        )
+    )
+)
+
 REM Already serving? Then just open it. The old script always killed whatever
 REM held the port and started its own copy — which collided with a dashboard
 REM started from a terminal, the bind failed, and it printed "Server failed to
@@ -54,7 +80,7 @@ goto waitport
 
 :portfree
 echo Starting server on port %PORT%...
-start "" /b python serve.py --port %PORT%
+start "" /b "%PY%" serve.py --port %PORT%
 
 REM Open the browser once the server actually answers. First response is
 REM slow on purpose: the app pulls GSheet and builds the report from a
@@ -85,3 +111,19 @@ REM Hold the window so closing it also stops the server.
 :hold
 timeout /t 30 >nul
 goto hold
+
+REM ---------------------------------------------------------------------------
+REM Reached only via `call` above. Reinstalling dependencies costs seconds, so
+REM do it only when the pull actually brought something new - otherwise every
+REM single launch would pay for a no-op resolve.
+:after_pull
+if "%HEAD_BEFORE%"=="%HEAD_AFTER%" (
+    echo   already up to date.
+    exit /b 0
+)
+echo   updated. Refreshing dependencies...
+"%PY%" -m pip install --disable-pip-version-check -q -r requirements.txt
+if errorlevel 1 (
+    echo   WARNING: dependency refresh failed - the app may not start.
+)
+exit /b 0
