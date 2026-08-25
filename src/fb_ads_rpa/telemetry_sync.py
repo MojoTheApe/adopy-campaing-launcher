@@ -166,6 +166,58 @@ def pending(limit: int | None = None, *, since: int | None = None) -> tuple[list
     return [to_row(r, label, machine_id, version) for r in slice_], start + len(slice_)
 
 
+def fetch_rows(*, local: bool = False) -> tuple[list[dict[str, str]], str]:
+    """(rows, human-readable source) for anything that reads the aggregate.
+
+    Shared by the report and the proposals tool so the sheet's shape is
+    understood in exactly one place. Falls back to this machine's JSONL when
+    the sheet cannot be read — a analyst without network still gets an answer,
+    clearly labelled as covering one machine only.
+    """
+    if not local:
+        status = config_status()
+        if status["sheet_id"]:
+            try:
+                service = _service_oauth(status["sheet_id"])
+                values = (
+                    service.spreadsheets()
+                    .values()
+                    .get(spreadsheetId=status["sheet_id"], range=status["tab"])
+                    .execute()
+                    .get("values", [])
+                )
+                if values:
+                    header, *body = values
+                    rows = [
+                        dict(zip(header, row + [""] * (len(header) - len(row)))) for row in body
+                    ]
+                    return rows, "общая таблица"
+            except Exception:
+                pass  # fall through to local
+
+    label, machine_id = machine_identity()
+    version = _flow_version()
+    rows = []
+    for rec in run_telemetry.load():
+        ok = rec.get("ok")
+        rows.append(
+            {
+                "ts": str(rec.get("ts", "")),
+                "machine": label,
+                "machine_id": machine_id,
+                "flow_version_at_upload": version,
+                "run_id": str(rec.get("run_id", "")),
+                "campaign": str(rec.get("campaign", "")),
+                "step": str(rec.get("step", "")),
+                "ok": "" if ok is None else ("1" if ok else "0"),
+                "duration_s": "" if rec.get("duration_s") is None else str(rec["duration_s"]),
+                "diag": json.dumps(rec.get("diag"), ensure_ascii=False) if rec.get("diag") else "",
+                "note": str(rec.get("note", "")),
+            }
+        )
+    return rows, "локальный JSONL этой машины"
+
+
 def config_status() -> dict[str, Any]:
     """Which transport (if any) this machine can use, in preference order.
 

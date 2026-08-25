@@ -38,58 +38,12 @@ try:
 except Exception:
     pass
 
-from src.fb_ads_rpa import run_telemetry, telemetry_sync  # noqa: E402
+from src.fb_ads_rpa import telemetry_sync  # noqa: E402
 
 DEFAULT_VAULT = os.path.join(
     os.path.expanduser("~"), "Desktop", "Obsidian", "Kuwait Forms", "дешборд"
 )
 NOTE_NAME = "RPA — Сводка телеметрии (генерируется).md"
-
-
-def _rows_from_sheet() -> list[dict]:
-    status = telemetry_sync.config_status()
-    if not status["sheet_id"]:
-        raise RuntimeError("GSHEET_TELEMETRY_ID is not set — use --local for this machine only")
-    service = telemetry_sync._service_oauth(status["sheet_id"])
-    resp = (
-        service.spreadsheets()
-        .values()
-        .get(spreadsheetId=status["sheet_id"], range=status["tab"])
-        .execute()
-    )
-    values = resp.get("values", [])
-    if not values:
-        return []
-    header, *body = values
-    out = []
-    for row in body:
-        padded = row + [""] * (len(header) - len(row))
-        out.append(dict(zip(header, padded)))
-    return out
-
-
-def _rows_from_local() -> list[dict]:
-    label, machine_id = telemetry_sync.machine_identity()
-    version = telemetry_sync._flow_version()
-    rows = []
-    for rec in run_telemetry.load():
-        ok = rec.get("ok")
-        rows.append(
-            {
-                "ts": rec.get("ts", ""),
-                "machine": label,
-                "machine_id": machine_id,
-                "flow_version_at_upload": version,
-                "run_id": rec.get("run_id", ""),
-                "campaign": rec.get("campaign", ""),
-                "step": rec.get("step", ""),
-                "ok": "" if ok is None else ("1" if ok else "0"),
-                "duration_s": "" if rec.get("duration_s") is None else str(rec["duration_s"]),
-                "diag": "",
-                "note": rec.get("note", ""),
-            }
-        )
-    return rows
 
 
 def _day(ts: str) -> str:
@@ -246,14 +200,7 @@ def main() -> int:
     ap.add_argument("--no-write", action="store_true", help="print, do not touch Obsidian")
     args = ap.parse_args()
 
-    if args.local:
-        rows, source = _rows_from_local(), "локальный JSONL этой машины"
-    else:
-        try:
-            rows, source = _rows_from_sheet(), "общая таблица"
-        except Exception as exc:
-            print(f"Не удалось прочитать таблицу ({exc}); беру локальные данные.", file=sys.stderr)
-            rows, source = _rows_from_local(), "локальный JSONL этой машины"
+    rows, source = telemetry_sync.fetch_rows(local=args.local)
 
     if not rows:
         print("Нет данных.")
