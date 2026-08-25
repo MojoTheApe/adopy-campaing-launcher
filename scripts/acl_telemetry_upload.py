@@ -53,7 +53,18 @@ def main() -> int:
     print(f"machine   : {label} ({machine_id})")
     print(f"sheet     : {status['sheet_id'] or '(GSHEET_TELEMETRY_ID not set)'}")
     print(f"tab       : {status['tab']}")
-    print(f"key file  : {status['key_path']} {'' if status['key_exists'] else '(MISSING)'}")
+    # Show only the transport actually in use. Printing the service-account key
+    # path while writing over OAuth invites the reader to debug the wrong thing.
+    print(f"transport : {status['transport'] or '(none configured)'}")
+    if status["transport"] == "oauth":
+        print(
+            f"auth      : {'authorised' if status['oauth_authorised'] else 'browser consent needed'}"
+            f" — {status['oauth_token']}"
+        )
+    elif status["transport"] == "service_account":
+        print(f"key file  : {status['key_path']}")
+    elif status["transport"] == "webhook":
+        print(f"webhook   : {status['webhook']}")
 
     if args.status:
         print("configured:", "yes" if status["configured"] else "no")

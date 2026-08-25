@@ -103,3 +103,4 @@ data/*.db-wal
 telemetry_service_account.json
 machine_id.txt
 telemetry_cursor.json
+token_telemetry.json
