@@ -127,6 +127,33 @@ def check_playwright() -> None:
         report(MISSING, "Playwright", "not installed", "pip install -r requirements.txt")
 
 
+def check_telemetry() -> None:
+    """Optional, never required: a machine that never reports still runs fine."""
+    try:
+        from src.fb_ads_rpa import telemetry_sync
+    except Exception as exc:
+        report(WARN, "Telemetry upload", f"unavailable: {exc}")
+        return
+    label, machine_id = telemetry_sync.machine_identity()
+    status = telemetry_sync.config_status()
+    if status["configured"]:
+        pending, _ = telemetry_sync.pending(limit=None)
+        report(OK, "Telemetry upload", f"{label} ({machine_id}) — {len(pending)} record(s) pending")
+        return
+    missing = []
+    if not status["sheet_id"]:
+        missing.append("GSHEET_TELEMETRY_ID not set")
+    if not status["key_exists"]:
+        missing.append(f"key missing at {status['key_path']}")
+    report(
+        WARN,
+        "Telemetry upload",
+        "off — " + "; ".join(missing),
+        "Optional. Turning it on lets one Meta UI change be spotted across all "
+        "machines at once instead of debugged separately on each.",
+    )
+
+
 def main() -> int:
     print(f"ACL doctor — checkout {_ROOT}")
     print(f"Machine config dir: {get_local_config_dir()}")
@@ -159,6 +186,7 @@ def main() -> int:
         required=False,
         fix="Set FB_CREATIVES_ROOT in .env — RPA looks up creative files by name here.",
     )
+    check_telemetry()
 
     print()
     if _failed:

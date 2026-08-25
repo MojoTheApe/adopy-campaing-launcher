@@ -96,3 +96,10 @@ data/*.db-wal
 .impeccable/live/deferred-svelte-component-accepts.json
 .impeccable/live/*.png
 # impeccable-ignore-end
+
+# ACL machine-local state (never code): service-account key, machine id,
+# telemetry cursor. These live in %LOCALAPPDATA%\ACL, but ignore them here
+# too in case someone points ACL_CONFIG_DIR inside the checkout.
+telemetry_service_account.json
+machine_id.txt
+telemetry_cursor.json
