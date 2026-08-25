@@ -32,9 +32,51 @@ def get_creatives_root() -> str:
     return os.environ.get("FB_CREATIVES_ROOT", "").strip() or CREATIVES_ROOT_DEFAULT
 
 
+def get_local_config_dir() -> str:
+    """Per-machine config that must NEVER travel with the code.
+
+    ACL is moving from "one repo on Evgeni's machine" to a launcher installed
+    on every media buyer's computer, updated from the shared work repo. That
+    only works if the repo carries code and the machine carries its own
+    accounts: ten buyers have ten different account maps, and a file living in
+    git would both overwrite theirs on update and push theirs to a repository
+    outside developers can read.
+
+    Override with ACL_CONFIG_DIR. Default is the OS's own per-user data
+    location, deliberately OUTSIDE the checkout so that deleting or re-cloning
+    the repo cannot take a buyer's configuration with it.
+    """
+    explicit = os.environ.get("ACL_CONFIG_DIR", "").strip()
+    if explicit:
+        return explicit
+    base = os.environ.get("LOCALAPPDATA", "").strip()
+    if base:  # Windows — every buyer machine today
+        return os.path.join(base, "ACL")
+    return os.path.join(os.path.expanduser("~"), ".config", "acl")
+
+
 def get_ad_account_map_path() -> str:
-    """CSV mapping Excel sheet name (account) -> act_* ad account id."""
-    return os.environ.get("META_AD_ACCOUNT_MAP_PATH", "").strip() or AD_ACCOUNT_MAP_DEFAULT
+    """CSV mapping Excel sheet name (account) -> act_* ad account id.
+
+    Resolution order, first hit wins:
+      1. META_AD_ACCOUNT_MAP_PATH — explicit override, unchanged behaviour.
+      2. <local config dir>/ad_account_map.csv — where a buyer's own map lives.
+      3. config/ad_account_map.csv in the checkout — how it has always worked;
+         kept so existing installs keep running untouched after this change.
+
+    When none exists, returns the local-config path rather than the repo one:
+    the file is meant to be created there, so callers' "not found" errors point
+    a new install at the right place instead of back into git.
+    """
+    explicit = os.environ.get("META_AD_ACCOUNT_MAP_PATH", "").strip()
+    if explicit:
+        return explicit
+    local = os.path.join(get_local_config_dir(), "ad_account_map.csv")
+    if os.path.exists(local):
+        return local
+    if os.path.exists(AD_ACCOUNT_MAP_DEFAULT):
+        return AD_ACCOUNT_MAP_DEFAULT
+    return local
 
 
 # ── Agent 10: Facebook Ads Manager publish (Playwright) ──────────────────────
