@@ -1,0 +1,22 @@
+# ACL — tooling that developers need and media buyers do not.
+#
+#   pip install -r requirements-dev.txt
+#
+# Kept out of requirements.txt so a buyer's install stays small and so a broken
+# dev-only package can never stop a campaign from being built.
+
+-r requirements.txt
+
+pytest==9.0.3
+
+# Used only by one-off scripts, not by the dashboard or RPA:
+#   Pillow   -> scripts/convert_favicon_to_ico.py
+#   fpdf2    -> scripts/_make_docs_pdf.py, scripts/_debug_pdf.py
+Pillow==12.2.0
+fpdf2==2.8.7
+
+# src/creative_agent/vision_analyzer.py imports cv2, but opencv-python is not
+# installed even on the machine ACL runs on today — that module has never
+# executed here. Left commented rather than pinned to a version nobody has
+# tested: install it deliberately if you pick that work up.
+# opencv-python
