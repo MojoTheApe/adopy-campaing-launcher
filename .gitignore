@@ -24,10 +24,18 @@ output/*.md
 config/google_credentials.json
 config/oauth_client.json
 config/token_accounts.json
+# Per-machine, not code: every media buyer running ACL has a different
+# account map, and the work repo is readable by outside developers.
+# Lives in %LOCALAPPDATA%\ACL (see config/paths.get_local_config_dir);
+# copy config/ad_account_map.example.csv to start one.
+config/ad_account_map.csv
 
 # Agent 10: сохранённая сессия браузера FB Ads Manager + прогоны (скриншоты/trace)
 .auth/
 output/fb_publish_runs/
+
+# Архив статистики для дневника креативов (накапливается локально, крупный)
+data/*.sqlite3
 
 # Obsidian
 .obsidian/

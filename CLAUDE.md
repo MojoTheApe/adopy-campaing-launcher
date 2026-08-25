@@ -17,9 +17,24 @@
 
 ## Общие файлы (правишь → коммитишь сразу, отдельным коммитом)
 
-- `config/ad_account_map.csv`
 - `config/paths.py`
 - `config/knowledge_base.json`
+
+## Машинные файлы (НЕ коммитить — у каждого своя копия)
+
+Разделение «код в гите, машинное локально» — условие раздачи ACL байерам:
+у десяти человек десять разных карт аккаунтов, а рабочий репозиторий
+читают посторонние разработчики.
+
+- `.env`, `config/token_accounts.json`, `config/google_credentials.json`
+- `config/ad_account_map.csv` — выведен из-под гита 2026-08-25. Живёт в
+  `%LOCALAPPDATA%\ACL\` (см. `config.paths.get_local_config_dir`);
+  шаблон — `config/ad_account_map.example.csv`. Копия в `config/` пока
+  оставлена на диске: `src/analysis_agent/morning_service.py:63` читает
+  её в обход `paths.py`, и без этой копии дешборд сломается.
+  **Таск дешборд-трека:** перевести это место на
+  `config.paths.get_ad_account_map_path()`, после чего копию в `config/`
+  можно удалить. Не коммитить файл обратно.
 
 ## Git — жёсткие запреты (обе сессии)
 
