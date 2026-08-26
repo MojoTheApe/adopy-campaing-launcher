@@ -127,6 +127,29 @@ def check_playwright() -> None:
         report(MISSING, "Playwright", "not installed", "pip install -r requirements.txt")
 
 
+def check_google_client() -> None:
+    """The OAuth client file every Google integration needs, and git never ships.
+
+    It is in .gitignore, so a fresh clone has nothing to authorise with: neither
+    the dashboard's sheet reads nor telemetry upload would work, and both fail
+    far from here with a message about credentials rather than about a missing
+    file. Someone has to hand this file to each machine.
+    """
+    path = os.environ.get("GSHEET_OAUTH_CLIENT", "").strip() or "config/oauth_client.json"
+    if not os.path.isabs(path):
+        path = str(_ROOT / path)
+    if os.path.exists(path):
+        report(OK, "Google OAuth client", path)
+    else:
+        report(
+            MISSING,
+            "Google OAuth client",
+            path,
+            "Not in git by design — copy it from another ACL machine or ask whoever "
+            "set up the Google project. Sheets access (dashboard + telemetry) needs it.",
+        )
+
+
 def check_telemetry() -> None:
     """Optional, never required: a machine that never reports still runs fine."""
     try:
@@ -186,6 +209,7 @@ def main() -> int:
         required=False,
         fix="Set FB_CREATIVES_ROOT in .env — RPA looks up creative files by name here.",
     )
+    check_google_client()
     check_telemetry()
 
     print()
