@@ -17,7 +17,7 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from src.analysis_agent.analyze_fb_stats import alias_matches
+from src.analysis_agent.analyze_fb_stats import alias_matches, split_ad_title
 
 from src.knowledge_agent.knowledge_base import get_target_context, resolve_targeting_text
 
@@ -132,9 +132,26 @@ def filter_targeting_rows(df: pd.DataFrame, country: str, bucket: str) -> pd.Dat
     return df[mask]
 
 
-def filter_creative_rows(df: pd.DataFrame, country: str, creative: str) -> pd.DataFrame:
-    """Rows aggregated by `build_creative_breakdown` (groupby Ad Title)."""
-    mask = (df["Country Final"] == country) & _na_match(df["Ad Title"], creative)
+def filter_creative_rows(
+    df: pd.DataFrame, country: str, creative: str, text: str | None = None
+) -> pd.DataFrame:
+    """Rows behind one row of `build_creative_breakdown`.
+
+    That breakdown groups by the parsed (creative, text) pair rather than the
+    raw Ad Title, because the same ad is spelled several ways. So match the
+    same way — an exact match on the cell would miss every spelling but one.
+    `text=None` keeps the old behaviour for any caller still passing a title.
+    """
+    in_country = df["Country Final"] == country
+    if text is None:
+        return df[in_country & _na_match(df["Ad Title"], creative)]
+
+    parsed = df["Ad Title"].apply(split_ad_title)
+    mask = (
+        in_country
+        & (parsed.apply(lambda t: t[0]) == str(creative or "").strip())
+        & (parsed.apply(lambda t: t[1]) == str(text or "").strip())
+    )
     return df[mask]
 
 

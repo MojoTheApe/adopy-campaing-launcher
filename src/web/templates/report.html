@@ -4404,12 +4404,26 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // only when it has whitespace on at least one side, so names whose own
   // dash is tight ("Vid 1-2257") stay whole. The old version required the
   // exact " - " and therefore missed "2307_2- 6" and friends.
+  // Mirrors split_ad_title() in analyze_fb_stats.py — keep the two in step.
+  // Anchors on the creative NUMBER, not the dash: a large minority of titles
+  // are typed without any separator ("2257 Story3"), and the dash rule put
+  // their text into the creative half.
   function splitAdTitle(text) {
     var s = (text || '').trim();
+    var strip = function(v) { return v.replace(/^[\s\-_]+|[\s\-_]+$/g, ''); };
     if (!s || s === '-') return { creative: '', textName: '' };
+    var num = /(?:^|\D)(\d{3,4})(?!\d)/.exec(s);
+    if (num) {
+      var after = s.indexOf(num[1], num.index) + num[1].length;
+      var rest = s.slice(after).replace(/^[\s_\-]+/, '');
+      // A digit straight after the number is a variant ("2046 1 - Story14"),
+      // unless dropping it would leave nothing ("2046 - 6").
+      var trimmed = rest.replace(/^\d+(?!\d)[\s_\-]*/, '');
+      if (strip(trimmed)) rest = trimmed;
+      return { creative: num[1], textName: strip(rest) };
+    }
     var m = /\s-|-\s/.exec(s);
     if (!m) return { creative: s, textName: '' };
-    var strip = function(v) { return v.replace(/^[\s-]+|[\s-]+$/g, ''); };
     return { creative: strip(s.slice(0, m.index)) || s,
              textName: strip(s.slice(m.index + m[0].length)) };
   }

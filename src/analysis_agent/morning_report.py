@@ -698,35 +698,52 @@ def build_targeting_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, 
 # ── Section 5: Creative breakdown ─────────────────────────────────────────────
 
 def build_creative_breakdown(
-    df: pd.DataFrame, country: str, top_n: int = 5
+    df: pd.DataFrame, country: str, top_n: int | None = None
 ) -> List[Dict[str, Any]]:
-    """Aggregate by Ad Title for this country. Returns top_n by deposits then spend."""
+    """Aggregate by Ad Title for this country, best first.
+
+    `top_n=None` means every title. It used to default to 5, and the cut was
+    applied BEFORE the caller dropped zero-deposit rows — so the country page
+    could only ever show five creatives no matter how many had earned
+    deposits. Measured on El Salvador 2026-08-26: 17 titles carried deposits
+    totalling 27, the table showed 5 of them totalling 15, and the missing 12
+    were invisible rather than marked. A breakdown that silently drops 44% of
+    the deposits is worse than no breakdown.
+    """
     df_c = df[df["Country Final"] == country].copy()
     if df_c.empty or "Ad Title" not in df_c.columns:
         return []
 
+    # Group by what the row actually claims to be — the creative and its text —
+    # not by the raw cell. The same ad is typed several ways ("2046 1 - Story14"
+    # and "2046 - Story14"), and grouping on the cell listed each spelling as a
+    # separate creative, splitting one ad's deposits across rows that looked
+    # identical on screen. Titles are kept so the tooltip can show the variants.
+    _parsed = df_c["Ad Title"].apply(split_ad_title)
+    df_c["_CreativeId"] = _parsed.apply(lambda t: t[0])
+    df_c["_TextName"] = _parsed.apply(lambda t: t[1])
+
     grouped = (
-        df_c.groupby("Ad Title", dropna=False)
+        df_c.groupby(["_CreativeId", "_TextName"], dropna=False)
         .agg(
             Deposits=("# FTDs", "sum"),
             Leads=("# Leads", "sum"),
             Spend=("$ Spend", "sum"),
+            Titles=("Ad Title", lambda s: sorted({str(x).strip() for x in s.dropna()})),
         )
         .reset_index()
     )
     grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
-    grouped = grouped.sort_values(["Deposits", "Spend"], ascending=[False, False]).head(top_n)
+    grouped = grouped.sort_values(["Deposits", "Spend"], ascending=[False, False])
+    if top_n is not None:
+        grouped = grouped.head(top_n)
 
     rows = []
     for _, r in grouped.iterrows():
-        title_raw = r.get("Ad Title")
-        title = str(title_raw or "").strip()
-        if not title or title.lower() == "nan":
-            title = "(no title)"
-        # Ad Title packs "<creative id> - <text name>" into one cell; show
-        # the halves separately (user request 2026-08-03) while keeping the
-        # full title as the aggregation key.
-        creative_id, text_name = split_ad_title(title_raw)
+        creative_id = str(r.get("_CreativeId") or "").strip()
+        text_name = str(r.get("_TextName") or "").strip()
+        titles = list(r.get("Titles") or [])
+        title = " · ".join(titles) if titles else "(no title)"
         rows.append(
             {
                 "ad_title": title,
@@ -736,10 +753,13 @@ def build_creative_breakdown(
                 "leads": _safe_int(r.get("Leads")),
                 "spend": _safe_float(r.get("Spend")),
                 "cpa": _safe_float(r.get("CPA")),
+                # The drill needs the pair, not a single cell, now that one row
+                # can cover several spellings of the same ad.
                 "aggregate_key": {
                     "section": "creatives",
                     "country": country,
-                    "creative": _key_value(title_raw),
+                    "creative": creative_id,
+                    "text": text_name,
                 },
             }
         )

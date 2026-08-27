@@ -113,7 +113,9 @@ def get_underlying_rows(
         elif section == "targeting":
             filtered = filter_targeting_rows(df, country, kwargs["bucket"])
         elif section == "creatives":
-            filtered = filter_creative_rows(df, country, kwargs["creative"])
+            filtered = filter_creative_rows(
+                df, country, kwargs["creative"], kwargs.get("text"),
+            )
         elif section == "optimization":
             filtered = filter_optimization_rows(
                 df, country, kwargs["account"], kwargs["adset"],

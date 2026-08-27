@@ -70,26 +70,52 @@ def alias_matches(series, alias):
     return series.fillna("").astype(str).map(normalize_account_alias) == target
 
 
+# A creative is identified by a 3-4 digit number; everything else in the
+# title is naming noise around it (prefixes like "Vid", variant digits,
+# and separators typed four different ways).
+_CREATIVE_NUM_RE = re.compile(r"(?<!\d)(\d{3,4})(?!\d)")
+
+
 def split_ad_title(ad_title) -> tuple[str, str]:
     """Split an Ad Title into (creative id, text name).
 
-    The sheet stores both halves in one cell, separated by a dash that has
-    whitespace on at least one side — verified against the real file
-    2026-08-03 (512 distinct titles):
+    The sheet stores both halves in one cell. This used to split on a dash
+    with whitespace on at least one side, which is how most titles are
+    written — but the dash is NOT reliable on its own. Buyers type these by hand and a
+    large minority omit it — measured on real El Salvador data 2026-08-26,
+    where "2257 Story3", "2257 Story14" and "2046 StoryYA 4" all carry a
+    text name with no separator at all. Keying on the dash put the text into
+    the creative half and left the Text column showing "—".
 
-        "2046 1 - Text6"           -> ("2046 1", "Text6")
-        "2046 - Text 4"            -> ("2046",   "Text 4")
-        "1_eslat_2257 - StoryYA 4" -> ("1_eslat_2257", "StoryYA 4")
-        "2307_2- 6"                -> ("2307_2", "6")
-        "2046 - - text 6"          -> ("2046",   "text 6")
+    So anchor on what the creative actually is: a 3–4 digit number. Anything
+    after it is the text, minus a variant digit ("2046 1 - Story14" is
+    creative 2046) and any separators:
 
-    A dash with no whitespace around it is part of the name itself
-    ("Vid 1-2254"), so those stay whole in the creative half. Titles with
-    no separator at all ("New Engagement Ad", "-") return an empty text.
+        "2046 1 - Story14"  -> ("2046", "Story14")
+        "2257 Story3"       -> ("2257", "Story3")
+        "2307_2- 6"         -> ("2307", "6")
+        "Vid 2257 - Story13"-> ("2257", "Story13")
+        "2046- Powered"     -> ("2046", "Powered")
+
+    Titles with no number at all fall back to the dash rule, which is all
+    there is to go on ("Blue - modern" -> ("Blue", "modern")). Titles with
+    neither ("New Engagement Ad", "-") return an empty text.
     """
     s = "" if ad_title is None else str(ad_title).strip()
     if not s or s == "-":
         return "", ""
+
+    m = _CREATIVE_NUM_RE.search(s)
+    if m:
+        rest = re.sub(r"^[\s_\-–—]+", "", s[m.end():])
+        # A digit right after the creative number is a variant, not the text —
+        # unless dropping it would leave nothing, as in "2046 - 6" where the
+        # text really is "6".
+        trimmed = re.sub(r"^\d+(?!\d)[\s_\-–—]*", "", rest)
+        if trimmed.strip(" -_–—"):
+            rest = trimmed
+        return m.group(1), rest.strip(" -_–—")
+
     m = re.search(r"\s-|-\s", s)
     if not m:
         return s, ""
