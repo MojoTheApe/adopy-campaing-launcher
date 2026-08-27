@@ -52,6 +52,20 @@
   `MojoTheApe/adopy-campaing-launcher`, куда получат доступ разработчики.
   Не «чинить» это обратно в один адрес. Отдельный remote `origin-old`
   трогать не нужно — его адрес уже входит в push-список `origin`.
+- Голый `git push` работает правильно ТОЛЬКО из-за
+  `remote.pushDefault = origin`. Без него команда идёт по upstream ветки,
+  а upstream у всех веток здесь — `origin-old`, то есть один адрес из
+  трёх, молча (2026-08-27: `git push --dry-run` рапортовал
+  «Everything up-to-date», ничего никуда не отправив). Это НАСТРОЙКА
+  КЛОНА, в гит она не попадает: после `git clone` её надо задать заново:
+
+      git remote set-url --add --push origin https://github.com/JenyaFarber/fb_agents.git
+      git remote set-url --add --push origin https://github.com/evgenis-ctrl/fb_agents.git
+      git remote set-url --add --push origin https://github.com/MojoTheApe/adopy-campaing-launcher.git
+      git config remote.pushDefault origin
+
+  Проверка, что всё три адреса на месте: `git push --dry-run -v` должен
+  напечатать три строки `Pushing to …`.
 - Раз рабочий репозиторий видят посторонние разработчики: ничего
   секретного в коммиты. `.env`, токены и credentials не отслеживаются —
   так и оставить. `config/ad_account_map.csv` отслеживается и содержит
