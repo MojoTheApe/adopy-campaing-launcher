@@ -6036,6 +6036,29 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     el.textContent = t || '';
   }
 
+  function accountForProfile(profileId) {
+    var p = openProfiles.filter(function (x) { return x.profile_id === profileId; })[0];
+    if (!p || !p.key) return '';
+    var tail = function (label) {
+      var m = String(label || '').split(' ')[0].match(/([A-Za-z])(\d{1,4})$/);
+      return m ? (m[1] + m[2]).toUpperCase() : '';
+    };
+    var hits = knownLabels.filter(function (l) { return tail(l) === p.key; });
+    // The same account shows up twice — as the sheet label
+    // ("FacebookMKTOBFLW27 SV Ait") and as the bare stats alias
+    // ("FacebookMKTOBFLW27"). Collapse those before judging ambiguity, or a
+    // perfectly clear match reads as two candidates and nothing is offered.
+    var byBase = {};
+    hits.forEach(function (l) {
+      var base = String(l).split(' ')[0].toLowerCase();
+      // Prefer the fuller label: it is the one the map and the sheet use.
+      if (!byBase[base] || l.length > byBase[base].length) byBase[base] = l;
+    });
+    var unique = Object.keys(byBase).map(function (k) { return byBase[k]; });
+    // Still refuse when two genuinely different accounts share a tail.
+    return unique.length === 1 ? unique[0] : '';
+  }
+
   function detectedFor(profileId) {
     if (!profileId) return '';
     var p = openProfiles.filter(function (x) { return x.profile_id === profileId; })[0];
@@ -6369,11 +6392,24 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     if (!t) return;
     // Choosing a profile fills the cabinet from that profile's history, but
     // never overwrites something already typed or saved.
-    if (t.classList && (t.classList.contains('ac-prof') || t.classList.contains('acq-prof'))) {
-      var scope = t.closest('tr') || t.closest('.ac-country-add');
-      var field = scope && (scope.querySelector('.ac-adid') || scope.querySelector('.acq-adid'));
+    var isProfileSelect = t.id === 'ac-new-prof'
+      || (t.classList && (t.classList.contains('ac-prof') || t.classList.contains('acq-prof')));
+    if (isProfileSelect) {
+      var scope = t.closest('tr') || t.closest('.ac-country-add') || t.closest('#ac-add-box');
+      var field = scope && (scope.querySelector('.ac-adid')
+                         || scope.querySelector('.acq-adid')
+                         || scope.querySelector('#ac-new-adid'));
       var det = detectedFor(t.value);
       if (field && det && !field.value.trim()) field.value = det;
+
+      // In the manual form there is no row to take the account from, so the
+      // profile is the only clue we have — offer the account whose name
+      // matches it, since that is almost always the one being added.
+      var nameField = scope && scope.querySelector('#ac-new-label');
+      if (nameField && !nameField.value.trim()) {
+        var guess = accountForProfile(t.value);
+        if (guess) { nameField.value = guess; checkLabel(); }
+      }
     }
     if (t.id === 'ac-check-all') {
       document.querySelectorAll('#ac-list .ac-check').forEach(function (c) { c.checked = t.checked; });
