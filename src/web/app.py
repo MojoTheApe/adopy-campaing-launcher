@@ -993,6 +993,7 @@ async def api_accounts_overview() -> JSONResponse:
     from src.analysis_agent.analyze_fb_stats import normalize_account_alias
     from src.analysis_agent.gsheet_accounts import fetch_account_rows
     from src.fb_ads_rpa.mlx_profiles import (
+        ad_account_id_for,
         folder_id_for,
         open_profiles_detailed,
         profile_name_key,
@@ -1148,6 +1149,9 @@ async def api_accounts_overview() -> JSONResponse:
                 "name": p.get("name") or "",
                 "key": profile_name_key(p.get("name") or ""),
                 "folder_id": folder_id_for(p["profile_id"]),
+                # The ad account this profile actually works in, read from its
+                # own browser history — the last field a person had to copy.
+                "ad_account_id": ad_account_id_for(p["profile_id"]),
                 "taken_by": taken.get(p["profile_id"], ""),
             }
             for p in open_detail

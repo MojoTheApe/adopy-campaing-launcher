@@ -1534,8 +1534,9 @@ async function dashRefresh(ev) {
         <div id="ac-label-hint" style="font-size:0.72rem;margin-top:0.2rem"></div>
       </label>
       <label style="flex:0 0 11rem">
-        <div style="font-size:0.75rem;color:var(--muted)">Кабинет — вставьте ссылку</div>
-        <input id="ac-new-adid" type="text" placeholder="ссылка из Ads Manager или act_…" style="width:100%">
+        <div style="font-size:0.75rem;color:var(--muted)">Рекламный кабинет</div>
+        <input id="ac-new-adid" type="text" placeholder="подставится по профилю" style="width:100%"
+               title="Заполняется само, когда выбран профиль. Иначе откройте кабинет в Ads Manager и вставьте сюда адрес из адресной строки.">
       </label>
       <label style="flex:0 0 15rem">
         <div style="font-size:0.75rem;color:var(--muted)">Профиль Multilogin</div>
@@ -1550,7 +1551,8 @@ async function dashRefresh(ev) {
     </div>
     <div style="margin-top:0.5rem;font-size:0.75rem;color:var(--muted)">
       Нужно, когда аккаунта ещё нет в общей таблице. Запись идёт только в карту этой машины.<br>
-      В поле кабинета можно вставить целиком адрес страницы Ads Manager — номер возьмётся из него.
+      Кабинет подставляется сам по выбранному профилю. Если не подставился — откройте нужный
+      кабинет в Ads Manager и вставьте сюда адрес из адресной строки браузера целиком.
     </div>
   </div>
 
@@ -1910,8 +1912,9 @@ async function dashRefresh(ev) {
       <input class="acq-label" type="text" placeholder="название аккаунта" style="width:100%" autocomplete="off">
     </label>
     <label style="flex:1 1 13rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Кабинет — ссылка или act_…</div>
-      <input class="acq-adid" type="text" placeholder="вставьте ссылку из Ads Manager" style="width:100%">
+      <div style="font-size:0.72rem;color:var(--muted)">Рекламный кабинет</div>
+      <input class="acq-adid" type="text" placeholder="подставится по профилю" style="width:100%"
+             title="Заполняется само по выбранному профилю. Иначе вставьте адрес из адресной строки Ads Manager.">
     </label>
     <label style="flex:0 0 13rem">
       <div style="font-size:0.72rem;color:var(--muted)">Профиль Multilogin</div>
@@ -6033,6 +6036,12 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     el.textContent = t || '';
   }
 
+  function detectedFor(profileId) {
+    if (!profileId) return '';
+    var p = openProfiles.filter(function (x) { return x.profile_id === profileId; })[0];
+    return (p && p.ad_account_id) || '';
+  }
+
   function profileOptions(current, suggested) {
     // Profiles open right now, shown by NAME: connecting an account means
     // opening its profile anyway, and the name is what the operator
@@ -6092,8 +6101,10 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         + '<td><b>' + esc(a.label) + '</b><div style="font-size:0.72rem">' + badge + '</div></td>'
         + '<td>' + esc(a.country) + '</td>'
         + '<td>' + esc(a.status) + '</td>'
-        + '<td><input class="ac-adid" type="text" style="width:13rem" value="' + esc(a.ad_account_id)
-        + '" placeholder="ссылка или act_…" title="Можно вставить адрес страницы Ads Manager целиком"></td>'
+        + '<td><input class="ac-adid" type="text" style="width:13rem" value="'
+        + esc(a.ad_account_id || detectedFor(a.suggested_profile))
+        + '" placeholder="ссылка или act_…" title="Можно вставить адрес страницы Ads Manager целиком. '
+        + 'Если профиль подобран, кабинет подставлен из его истории."></td>'
         + '<td><select class="ac-prof" style="max-width:17rem">'
         + profileOptions(a.profile_id, a.suggested_profile) + '</select></td>'
         + '<td><button type="button" class="btn ac-save">Сохранить</button>'
@@ -6356,6 +6367,14 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   document.addEventListener('change', function (ev) {
     var t = ev.target;
     if (!t) return;
+    // Choosing a profile fills the cabinet from that profile's history, but
+    // never overwrites something already typed or saved.
+    if (t.classList && (t.classList.contains('ac-prof') || t.classList.contains('acq-prof'))) {
+      var scope = t.closest('tr') || t.closest('.ac-country-add');
+      var field = scope && (scope.querySelector('.ac-adid') || scope.querySelector('.acq-adid'));
+      var det = detectedFor(t.value);
+      if (field && det && !field.value.trim()) field.value = det;
+    }
     if (t.id === 'ac-check-all') {
       document.querySelectorAll('#ac-list .ac-check').forEach(function (c) { c.checked = t.checked; });
       refreshBulk();

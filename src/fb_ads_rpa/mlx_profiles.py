@@ -213,3 +213,60 @@ def profile_name_key(name: str) -> str:
 
     m = _re.search(r"([A-Za-z])(\d{1,4})\s*$", (name or "").strip())
     return (m.group(1) + m.group(2)).upper() if m else ""
+
+
+def ad_account_id_for(profile_id: str) -> str:
+    """The ad account this profile actually works in, or "".
+
+    Read from the profile's own browser history: every Ads Manager URL carries
+    `act=<id>`, so the answer is already on disk. This is the last field a
+    person still had to find and copy by hand.
+
+    Purely a local file read — no network call, and nothing drives the
+    account's browser. That distinction matters here: polling a live account
+    through its browser is what preceded a checkpoint on 2026-08-25, and this
+    deliberately does not do that.
+
+    Picks the id seen most often among recent visits rather than simply the
+    newest: one stray click into another account should not rename the
+    profile's owner.
+    """
+    pid = (profile_id or "").strip()
+    if not pid:
+        return ""
+
+    import os as _os
+    import re as _re
+    import shutil as _shutil
+    import sqlite3 as _sqlite3
+    import tempfile as _tempfile
+    from collections import Counter
+
+    hist = next(iter(_profiles_root().glob(f"*/*/{pid}/Default/History")), None)
+    if hist is None:
+        return ""
+
+    tmp = _os.path.join(_tempfile.gettempdir(), f"acl_hist_{pid[:8]}.db")
+    try:
+        # The live file is locked by the running browser; work on a copy.
+        _shutil.copyfile(hist, tmp)
+        con = _sqlite3.connect(tmp)
+        try:
+            rows = con.execute(
+                "SELECT url FROM urls WHERE url LIKE '%adsmanager.facebook.com%act=%' "
+                "ORDER BY last_visit_time DESC LIMIT 200"
+            ).fetchall()
+        finally:
+            con.close()
+    except Exception:
+        return ""
+    finally:
+        try:
+            _os.remove(tmp)
+        except Exception:
+            pass
+
+    ids = [m.group(1) for (u,) in rows if (m := _re.search(r"act=(\d{6,})", u or ""))]
+    if not ids:
+        return ""
+    return f"act_{Counter(ids).most_common(1)[0][0]}"
