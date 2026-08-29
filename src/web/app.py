@@ -1333,9 +1333,20 @@ async def account_map_remove(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
 
-    account_name = (data.get("account_name") or "").strip()
-    if not account_name:
-        return JSONResponse({"ok": False, "error": "account_name is required"}, status_code=400)
+    # One name or many. Removing several in a single request rewrites the file
+    # once instead of N times: fewer chances of leaving the map half-edited.
+    names = data.get("account_names")
+    if isinstance(names, list):
+        wanted = [str(n).strip() for n in names if str(n).strip()]
+    else:
+        one = (data.get("account_name") or "").strip()
+        wanted = [one] if one else []
+
+    if not wanted:
+        return JSONResponse(
+            {"ok": False, "error": "account_name или account_names обязательны"},
+            status_code=400,
+        )
 
     map_path = Path(get_ad_account_map_path())
     if not map_path.is_file():
@@ -1347,10 +1358,16 @@ async def account_map_remove(request: Request) -> JSONResponse:
             fieldnames = reader.fieldnames or []
             rows = list(reader)
 
-        kept = [r for r in rows if (r.get("account_name") or "").strip() != account_name]
-        if len(kept) == len(rows):
+        target = set(wanted)
+        kept = [r for r in rows if (r.get("account_name") or "").strip() not in target]
+        removed = [
+            (r.get("account_name") or "").strip() for r in rows
+            if (r.get("account_name") or "").strip() in target
+        ]
+        if not removed:
+            shown = "«" + "», «".join(wanted[:3]) + "»"
             return JSONResponse(
-                {"ok": False, "error": f"«{account_name}» нет в карте этой машины"},
+                {"ok": False, "error": f"{shown} нет в карте этой машины"},
                 status_code=404,
             )
 
@@ -1361,7 +1378,12 @@ async def account_map_remove(request: Request) -> JSONResponse:
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
-    return JSONResponse({"ok": True, "removed": account_name, "left": len(kept)})
+    # `missing` is reported rather than treated as failure: the rest were
+    # removed, and pretending otherwise would invite a confused retry.
+    missing = sorted(set(wanted) - set(removed))
+    return JSONResponse(
+        {"ok": True, "removed": removed, "missing": missing, "left": len(kept)}
+    )
 
 
 @app.post("/account-link-patch")

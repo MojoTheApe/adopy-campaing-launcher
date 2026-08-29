@@ -1549,6 +1549,11 @@ async function dashRefresh(ev) {
     </div>
   </div>
 
+  <div id="ac-bulk" style="display:none;margin:0.5rem 0;padding:0.5rem 0.8rem;border:1px solid var(--border);border-radius:6px;align-items:center;gap:0.7rem">
+    <span id="ac-bulk-count" style="font-size:0.85rem"></span>
+    <button type="button" id="ac-bulk-drop" class="btn">Убрать выбранные</button>
+    <button type="button" id="ac-bulk-clear" class="btn" style="background:transparent">Снять выделение</button>
+  </div>
   <div id="ac-msg" style="margin:0.5rem 0;font-size:0.85rem"></div>
   <div id="ac-list">Загрузка…</div>
 </div>
@@ -6039,7 +6044,9 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
             + 'откройте профиль аккаунта, и он появится в списке выбора.</p>';
     }
 
-    html += '<table><thead><tr><th>Аккаунт</th><th>Страна</th><th>Статус</th>'
+    html += '<table><thead><tr>'
+         + '<th style="width:1.6rem"><input type="checkbox" id="ac-check-all" title="Выбрать все, которые можно убрать"></th>'
+         + '<th>Аккаунт</th><th>Страна</th><th>Статус</th>'
          + '<th>ad_account_id</th><th>Профиль Multilogin</th><th></th><th></th></tr></thead><tbody>';
     accs.forEach(function (a) {
       var badge = a.connected
@@ -6048,7 +6055,11 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       if (a.local_only) {
         badge += ' <span style="color:var(--muted)">· только на этой машине</span>';
       }
+      var removable = a.connected || a.local_only;
       html += '<tr data-label="' + esc(a.label) + '">'
+        + '<td>' + (removable
+            ? '<input type="checkbox" class="ac-check" aria-label="выбрать ' + esc(a.label) + '">'
+            : '') + '</td>'
         + '<td><b>' + esc(a.label) + '</b><div style="font-size:0.72rem">' + badge + '</div></td>'
         + '<td>' + esc(a.country) + '</td>'
         + '<td>' + esc(a.status) + '</td>'
@@ -6057,7 +6068,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         + '<td><select class="ac-prof" style="max-width:16rem">' + profileOptions(a.profile_id) + '</select></td>'
         + '<td><button type="button" class="btn ac-save">Сохранить</button>'
         + '<span class="ac-row-msg" style="margin-left:0.5rem;font-size:0.75rem"></span></td>'
-        + '<td>' + (a.connected || a.local_only
+        + '<td>' + (removable
             ? '<button type="button" class="btn ac-drop" title="Убрать из карты этой машины">Убрать</button>'
             : '') + '</td>'
         + '</tr>';
@@ -6067,6 +6078,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var newSel = document.getElementById('ac-new-prof');
     if (newSel) newSel.innerHTML = profileOptions('');
 
+    refreshBulk();
     knownLabels = (d.suggestions || []).concat(accs.map(function (a) { return a.label; }));
     var dl = document.getElementById('ac-known-labels');
     if (dl) {
@@ -6170,6 +6182,46 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       .catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); });
   }
 
+  function selected() {
+    return [...document.querySelectorAll('#ac-list .ac-check:checked')]
+      .map(function (c) { return c.closest('tr').getAttribute('data-label'); })
+      .filter(Boolean);
+  }
+
+  function refreshBulk() {
+    var bar = document.getElementById('ac-bulk');
+    var label = document.getElementById('ac-bulk-count');
+    if (!bar || !label) return;
+    var n = selected().length;
+    bar.style.display = n ? 'flex' : 'none';
+    label.textContent = 'Выбрано: ' + n;
+  }
+
+  function removeMany(labels) {
+    if (!labels.length) return;
+    var list = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ' и ещё ' + (labels.length - 8) : '');
+    if (!window.confirm('Убрать ' + labels.length + ' аккаунт(ов) из карты ЭТОЙ машины?'
+        + String.fromCharCode(10, 10) + list + String.fromCharCode(10, 10)
+        + 'Записи в общей таблице не изменятся.')) return;
+
+    var btn = document.getElementById('ac-bulk-drop');
+    if (btn) btn.disabled = true;
+    say('Убираю ' + labels.length + '…');
+    fetch('/account-map-remove', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_names: labels })
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (btn) btn.disabled = false;
+        if (!d.ok) { say(d.error || 'не удалось', 'err'); return; }
+        var msg = 'Убрано: ' + (d.removed || []).length;
+        if ((d.missing || []).length) msg += ' · не найдено: ' + d.missing.join(', ');
+        say(msg, 'ok');
+        load(true);
+      })
+      .catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); });
+  }
+
   function drop(btn) {
     var row = btn.closest('tr'); if (!row) return;
     var label = row.getAttribute('data-label');
@@ -6196,10 +6248,28 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     if (ev.target && ev.target.id === 'ac-new-label') checkLabel();
   });
 
+  document.addEventListener('change', function (ev) {
+    var t = ev.target;
+    if (!t) return;
+    if (t.id === 'ac-check-all') {
+      document.querySelectorAll('#ac-list .ac-check').forEach(function (c) { c.checked = t.checked; });
+      refreshBulk();
+      return;
+    }
+    if (t.classList && t.classList.contains('ac-check')) refreshBulk();
+  });
+
   document.addEventListener('click', function (ev) {
     var t = ev.target;
     if (t && t.id === 'ac-add-btn') { addManual(); return; }
     if (t && t.classList && t.classList.contains('ac-save')) { save(t); return; }
+    if (t && t.id === 'ac-bulk-drop') { removeMany(selected()); return; }
+    if (t && t.id === 'ac-bulk-clear') {
+      document.querySelectorAll('#ac-list .ac-check, #ac-check-all')
+        .forEach(function (c) { c.checked = false; });
+      refreshBulk();
+      return;
+    }
     if (t && t.classList && t.classList.contains('ac-drop')) { drop(t); return; }
     if (t && t.getAttribute && t.getAttribute('data-view') === 'accounts') { load(false); }
   });
