@@ -88,6 +88,74 @@ def get_ad_account_map_path() -> str:
     return local
 
 
+def migrate_legacy_account_map() -> str:
+    """Move an older install's account map out of the checkout, once.
+
+    Machines that ran ACL before 2026-08-25 keep their map inside the checkout.
+    They still work — the resolver falls back to it — but the file is one
+    `git clean` or re-clone away from being lost, and it is the last thing
+    holding a buyer's account ids inside a repository outside developers read.
+
+    Deliberately copies ONLY when the machine-local file is absent, and never
+    merges the two. The dashboard lets a buyer remove an account; merging would
+    resurrect exactly the rows someone chose to delete, on every start, with no
+    way to make the deletion stick.
+
+    The checkout copy is left in place rather than deleted: it costs nothing,
+    and an automatic delete of the only file holding real ad account ids is not
+    something a start-up path should do behind a person's back. Returns a
+    human-readable note, or "" when there was nothing to do.
+    """
+    local = os.path.join(get_local_config_dir(), "ad_account_map.csv")
+    if os.path.exists(local) or not os.path.exists(AD_ACCOUNT_MAP_DEFAULT):
+        return ""
+    try:
+        import shutil
+
+        os.makedirs(os.path.dirname(local), exist_ok=True)
+        shutil.copyfile(AD_ACCOUNT_MAP_DEFAULT, local)
+    except Exception as exc:  # never block start-up over a convenience move
+        return f"could not copy the account map to {local}: {exc}"
+    return f"account map copied out of the checkout to {local}"
+
+
+def get_env_files() -> list[str]:
+    """`.env` files to load, in the order they should be applied.
+
+    Machine-local first so it wins: `python-dotenv` does not overwrite a value
+    that is already set, so whichever file is loaded first decides. Settings
+    belong to the machine, not to the code — an update, a re-clone or a
+    `git clean` in the checkout must not take a buyer's configuration with it.
+
+    The checkout `.env` stays supported as the second entry so every existing
+    install keeps working with no action from anyone.
+    """
+    files = []
+    local = os.path.join(get_local_config_dir(), ".env")
+    if os.path.exists(local):
+        files.append(local)
+    repo = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if os.path.exists(repo):
+        files.append(repo)
+    return files
+
+
+def load_env() -> list[str]:
+    """Load the machine's settings. Returns the files actually loaded."""
+    try:
+        from dotenv import load_dotenv
+    except Exception:
+        return []
+    loaded = []
+    for f in get_env_files():
+        try:
+            load_dotenv(f)
+            loaded.append(f)
+        except Exception:
+            continue
+    return loaded
+
+
 # ── Agent 10: Facebook Ads Manager publish (Playwright) ──────────────────────
 
 FB_ADS_AUTH_STATE_DEFAULT = ".auth/fb_state.json"
