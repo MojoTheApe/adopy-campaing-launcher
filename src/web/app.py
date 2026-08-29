@@ -1091,10 +1091,26 @@ async def api_accounts_overview() -> JSONResponse:
 
     accounts.sort(key=lambda a: (a["connected"], a["label"].lower()))
 
+    # Accounts this buyer actually runs (they appear in the stats) but which
+    # are neither in the sheet tab nor in this machine's map. These are the
+    # names worth suggesting when adding by hand: typing a label that matches
+    # nothing joins to nothing, which is how the map and the sheet drifted
+    # apart in the first place.
+    listed_norm = {normalize_account_alias(a["label"]) for a in accounts}
+    suggestions = sorted(
+        {
+            alias
+            for alias, owner in owner_by_alias.items()
+            if alias and alias not in listed_norm
+            and (not selected_cm or owner == selected_cm)
+        }
+    )
+
     return JSONResponse({
         "ok": True,
         "map_path": map_path,
         "accounts": accounts,
+        "suggestions": suggestions,
         # folder_id comes off the profile's own path, so the operator never
         # has to find or type it.
         "open_profiles": [

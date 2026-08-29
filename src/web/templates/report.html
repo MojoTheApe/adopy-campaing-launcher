@@ -1528,7 +1528,10 @@ async function dashRefresh(ev) {
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:flex-end">
       <label style="flex:1 1 16rem">
         <div style="font-size:0.75rem;color:var(--muted)">Название как в таблице</div>
-        <input id="ac-new-label" type="text" placeholder="FacebookXX123 CO Dav" style="width:100%">
+        <input id="ac-new-label" type="text" list="ac-known-labels"
+               placeholder="начните вводить — подскажем" style="width:100%" autocomplete="off">
+        <datalist id="ac-known-labels"></datalist>
+        <div id="ac-label-hint" style="font-size:0.72rem;margin-top:0.2rem"></div>
       </label>
       <label style="flex:0 0 11rem">
         <div style="font-size:0.75rem;color:var(--muted)">Кабинет — вставьте ссылку</div>
@@ -5986,7 +5989,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
 
 // ── Аккаунты: подключение к этой машине ──────────────────────────────────
 (function () {
-  var loaded = false, openProfiles = [];
+  var loaded = false, openProfiles = [], knownLabels = [];
 
   function esc(v) {
     return String(v == null ? '' : v)
@@ -6063,6 +6066,18 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
 
     var newSel = document.getElementById('ac-new-prof');
     if (newSel) newSel.innerHTML = profileOptions('');
+
+    knownLabels = (d.suggestions || []).concat(accs.map(function (a) { return a.label; }));
+    var dl = document.getElementById('ac-known-labels');
+    if (dl) {
+      dl.innerHTML = '';
+      (d.suggestions || []).forEach(function (name) {
+        var o = document.createElement('option');
+        o.value = name;
+        o.label = 'есть в статистике, здесь не подключён';
+        dl.appendChild(o);
+      });
+    }
   }
 
   function load(force) {
@@ -6106,6 +6121,22 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         btn.disabled = false;
         if (msg) { msg.style.color = '#b91c1c'; msg.textContent = String(e); }
       });
+  }
+
+  function checkLabel() {
+    var inp = document.getElementById('ac-new-label');
+    var hint = document.getElementById('ac-label-hint');
+    if (!inp || !hint) return;
+    var v = (inp.value || '').trim();
+    if (!v) { hint.textContent = ''; return; }
+    var norm = function (x) { return x.toLowerCase().replace(/[^a-z0-9]/g, ''); };
+    var hit = knownLabels.some(function (k) { return norm(k) === norm(v); });
+    // A soft warning, not a block: a genuinely new account has no history yet
+    // and must still be addable.
+    hint.style.color = hit ? 'var(--ok,#4caf50)' : '#b45309';
+    hint.textContent = hit
+      ? '✓ такой аккаунт известен'
+      : 'такого имени нет ни в таблице, ни в статистике — проверьте написание';
   }
 
   function addManual() {
@@ -6160,6 +6191,10 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       })
       .catch(function (e) { btn.disabled = false; say(String(e), 'err'); });
   }
+
+  document.addEventListener('input', function (ev) {
+    if (ev.target && ev.target.id === 'ac-new-label') checkLabel();
+  });
 
   document.addEventListener('click', function (ev) {
     var t = ev.target;
