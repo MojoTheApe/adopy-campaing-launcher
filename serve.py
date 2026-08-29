@@ -57,9 +57,12 @@ from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 
 ensure_playwright_browsers_path()
 
-from src.fb_ads_rpa.ads_manager_flow import RPA_FLOW_VERSION
+# The version string says both what the flow calls itself and which commit is
+# actually running — see telemetry_sync.flow_version. With ACL on ten machines,
+# "v96" alone cannot tell two installs apart.
+from src.fb_ads_rpa.telemetry_sync import flow_version
 
-print(f"[serve] RPA flow version: {RPA_FLOW_VERSION}")
+print(f"[serve] RPA flow version: {flow_version()}")
 # Say which engine will actually run and whether anything truncates it. The old
 # line printed "Recipe player: 1" even when the recorded flow was in charge,
 # which is how a stop gate stayed invisible for weeks.

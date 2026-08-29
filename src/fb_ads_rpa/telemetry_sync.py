@@ -126,13 +126,97 @@ def write_cursor(n: int) -> None:
         pass
 
 
-def _flow_version() -> str:
+_VERSION_CACHE: str | None = None
+
+
+def _git(*args: str) -> str:
+    """One git command in the checkout, or "" — never raises, never blocks long.
+
+    Popen flags keep a console window from flashing on a buyer's screen every
+    time the launcher starts.
+    """
+    import subprocess
+
+    root = Path(__file__).resolve().parents[2]
+    kwargs: dict[str, Any] = {}
+    if hasattr(subprocess, "CREATE_NO_WINDOW"):  # Windows
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    try:
+        out = subprocess.run(
+            ["git", *args],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=5,
+            **kwargs,
+        )
+        return out.stdout.strip() if out.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def flow_version() -> str:
+    """What code this run actually executed — not just what it calls itself.
+
+    RPA_FLOW_VERSION is a hand-written label: it says which flow logic is
+    intended, and it deliberately does not move on every commit. That makes it
+    useless on its own for telling two installs apart. On 2026-08-29 the
+    constant read "v96" while the tag rpa-v96-spend-confirmed-2026-08-24 was
+    33 commits behind HEAD, 8 of them in RPA code — two different things both
+    calling themselves v96.
+
+    That is survivable with one machine and a git prompt. With ACL on ten
+    buyers' machines, telemetry is the only channel back, and ten reports all
+    reading "v96" cannot be compared: one buyer has not launched in a month,
+    one updated last night, and one had an update rolled back by the check in
+    start_dashboard.bat. The commit hash is what makes their reports
+    comparable, and it is the one thing a person cannot mistype.
+
+    Returns e.g. "v96+8@22aea04" — intended flow, commits touching RPA since
+    the last tagged-good point, actual commit. A trailing "*" means the
+    checkout has uncommitted edits, i.e. a developer machine, not a buyer's.
+
+    Falls back to the bare label when git is unavailable: a buyer may well be
+    handed a folder rather than a clone, and a version string is not worth an
+    exception on the way to a run. Computed once per process.
+    """
+    global _VERSION_CACHE
+    if _VERSION_CACHE is not None:
+        return _VERSION_CACHE
+
     try:
         from src.fb_ads_rpa.ads_manager_flow import RPA_FLOW_VERSION
 
-        return RPA_FLOW_VERSION
+        base = RPA_FLOW_VERSION
     except Exception:
-        return ""
+        base = ""
+
+    head = _git("rev-parse", "--short", "HEAD")
+    if not head:
+        _VERSION_CACHE = base
+        return _VERSION_CACHE
+
+    version = base or "?"
+    tag = _git("describe", "--tags", "--abbrev=0")
+    if tag:
+        # Scoped to the RPA tree on purpose: this string describes the flow,
+        # so dashboard-only commits should not inflate it.
+        ahead = _git("rev-list", "--count", f"{tag}..HEAD", "--", "src/fb_ads_rpa")
+        if ahead and ahead != "0":
+            version = f"{version}+{ahead}"
+    version = f"{version}@{head}"
+    # Local edits to CODE, which is the only thing the flag is meant to say.
+    # Both exclusions are load-bearing: runs drop diagnostics into output/ as
+    # untracked files, and rewrite tracked ones there too, so a plain dirty
+    # check would raise the flag on every buyer machine and mean nothing.
+    if _git(
+        "status", "--porcelain", "--untracked-files=no",
+        "--", "src", "config", "scripts", "serve.py", "start_dashboard.bat",
+    ):
+        version += "*"
+
+    _VERSION_CACHE = version
+    return version
 
 
 def to_row(rec: dict[str, Any], label: str, machine_id: str, version: str) -> list[str]:
@@ -162,7 +246,7 @@ def pending(limit: int | None = None, *, since: int | None = None) -> tuple[list
     if limit is not None:
         slice_ = slice_[:limit]
     label, machine_id = machine_identity()
-    version = _flow_version()
+    version = flow_version()
     return [to_row(r, label, machine_id, version) for r in slice_], start + len(slice_)
 
 
@@ -196,7 +280,7 @@ def fetch_rows(*, local: bool = False) -> tuple[list[dict[str, str]], str]:
                 pass  # fall through to local
 
     label, machine_id = machine_identity()
-    version = _flow_version()
+    version = flow_version()
     rows = []
     for rec in run_telemetry.load():
         ok = rec.get("ok")
@@ -440,3 +524,7 @@ def upload(*, limit: int | None = 2000, dry_run: bool = False) -> dict[str, Any]
     result["sent"] = len(rows)
     result["cursor_after"] = end
     return result
+
+
+# Kept so anything importing the old private name keeps working.
+_flow_version = flow_version
