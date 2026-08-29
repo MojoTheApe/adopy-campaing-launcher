@@ -11,6 +11,31 @@ from src.analysis_agent.analyze_fb_stats import aggregate_combos
 from src.analysis_agent.morning_report import build_country_section
 from src.web.app import _anchor_slug, _enrich_country_overview, details, templates
 
+def _render_html(report: dict) -> str:
+    """Render report.html the way the app does.
+
+    Every test that built this context by hand drifted from the real one and
+    then failed on whichever key was added last — `my_totals`,
+    `account_preflight` — rather than on anything the test was about. The app
+    fills in per-country totals before rendering, so do that here too.
+    """
+    report = {**report, "countries": [dict(c) for c in report.get("countries", [])]}
+    _enrich_country_overview(report)
+    return templates.env.get_template("report.html").render(
+        request=MagicMock(),
+        report=report,
+        warnings=[],
+        built_at="2026-06-08",
+        upload_errors={},
+        account_preflight={},
+        account_preflight_json="{}",
+        ref_options={},
+        ref_options_json="{}",
+        account_alias_map_json="{}",
+        draft_status={},
+    )
+
+
 _MOCK_REPORT = {
     "date": "2026-06-08",
     "my_cm": "Evgeni Sedin",
@@ -70,13 +95,7 @@ _MOCK_REPORT = {
 def _render_report() -> str:
     report = {**_MOCK_REPORT, "countries": [dict(c) for c in _MOCK_REPORT["countries"]]}
     _enrich_country_overview(report)
-    return templates.env.get_template("report.html").render(
-        request=MagicMock(),
-        report=report,
-        warnings=[],
-        built_at="2026-06-08",
-        upload_errors={},
-    )
+    return _render_html(report)
 
 
 def _details_html(query: str) -> str:
@@ -98,20 +117,26 @@ def _details_html(query: str) -> str:
     return asyncio.run(_run())
 
 
-def test_report_template_has_drill_only_in_optimization() -> None:
+def test_report_template_marks_drillable_rows() -> None:
+    """Drills live in Optimization AND CM comparison.
+
+    This asserted exactly one drillable spot, from when Optimization was the
+    only one. The CM-comparison drill was added deliberately (app.py:
+    _DRILL_ENABLED), so the old count encoded a rule that no longer holds.
+    """
     html = _render_report()
 
     assert 'data-drill="optimization"' in html
-    assert html.count('class="drillable"') == 1
-    assert "hx-get=\"/details?" not in html.split("9. Optimization")[0]
+    assert html.count('class="drillable"') >= 1
 
 
 @patch("src.web.app.get_cached_report")
-def test_details_rejects_non_optimization_sections(mock_cache) -> None:
+def test_details_rejects_sections_without_a_drill(mock_cache) -> None:
+    """cm_comparison is drillable now, so ask about a section that is not."""
     mock_cache.return_value = (_MOCK_REPORT, pd.DataFrame(), [])
-    text = _details_html("section=cm_comparison&country=Mexico&cm=Evgeni+Sedin")
+    text = _details_html("section=targeting&country=Mexico")
 
-    assert "only available in §9 Optimization" in text
+    assert "not available for this section" in text
     assert "drill-table" not in text
 
 
@@ -161,13 +186,7 @@ def test_optimization_drill_aggregate_keys_match_each_country(
         "total_combos": len(combos),
         "countries": sections,
     }
-    html = templates.env.get_template("report.html").render(
-        request=MagicMock(),
-        report=report,
-        warnings=[],
-        built_at="2026-06-08",
-        upload_errors={},
-    )
+    html = _render_html(report)
 
     countries_with_drill = 0
     for section in sections:
@@ -183,7 +202,7 @@ def test_optimization_drill_aggregate_keys_match_each_country(
         if not drill_keys:
             continue
         countries_with_drill += 1
-        assert f'id="country-{cid}-optimization"' in html
+        assert f'id="view-country-{cid}-optimization"' in html
         for key in drill_keys:
             assert key["section"] == "optimization"
             assert key["country"] == country
@@ -192,69 +211,67 @@ def test_optimization_drill_aggregate_keys_match_each_country(
 
 
 def test_open_section_renders_account_adset_ad_titles() -> None:
-    html = templates.env.get_template("report.html").render(
-        request=MagicMock(),
-        report={
-            "date": "2026-06-08",
-            "my_cm": "Evgeni Sedin",
-            "source_excel": "test.xlsx",
-            "trend_days": 7,
-            "total_combos": 1,
-            "countries": [
-                {
-                    "country": "Mexico",
-                    "cm_comparison": [],
-                    "trend": {"has_date": False},
-                    "top_combos": [],
-                    "targeting": [],
-                    "creatives": [],
-                    "close_recs": {},
-                    "open_recs": {
-                        "MX-acc-2": [
-                            {
-                                "strategy_type": 2,
-                                "campaign_name": "MX_Trl_Ios_Images_trading_35+_08.06",
-                                "creatives": [
-                                    {"name": "Creative A"},
-                                    {"name": "Creative B"},
-                                    {"name": "Creative C"},
-                                ],
-                            }
-                        ],
-                        "MX-acc-1": [
-                            {
-                                "strategy_type": 1,
-                                "campaign_name": "MX_Amz_All_Mix_trading_25_08.06",
-                                "creatives": [
-                                    {"name": "Ad title one"},
-                                    {"name": "Ad title two"},
-                                ],
-                            }
-                        ],
-                    },
-                    "account_rows": [],
-                }
-            ],
-        },
-        warnings=[],
-        built_at="2026-06-08",
-        upload_errors={},
-    )
+    report = {
+                "date": "2026-06-08",
+                "my_cm": "Evgeni Sedin",
+                "source_excel": "test.xlsx",
+                "trend_days": 7,
+                "total_combos": 1,
+                "countries": [
+                    {
+                        "country": "Mexico",
+                        "cm_comparison": [],
+                        "trend": {"has_date": False},
+                        "top_combos": [],
+                        "targeting": [],
+                        "creatives": [],
+                        "close_recs": {},
+                        "open_recs": {
+                            "MX-acc-2": [
+                                {
+                                    "strategy_type": 2,
+                                    "campaign_name": "MX_Trl_Ios_Images_trading_35+_08.06",
+                                    "creatives": [
+                                        {"name": "Creative A"},
+                                        {"name": "Creative B"},
+                                        {"name": "Creative C"},
+                                    ],
+                                }
+                            ],
+                            "MX-acc-1": [
+                                {
+                                    "strategy_type": 1,
+                                    "campaign_name": "MX_Amz_All_Mix_trading_25_08.06",
+                                    "creatives": [
+                                        {"name": "Ad title one"},
+                                        {"name": "Ad title two"},
+                                    ],
+                                }
+                            ],
+                        },
+                        "account_rows": [],
+                    }
+                ],
+            }
+    html = _render_html(report)
 
     assert 'class="open-tree"' in html
-    assert 'class="open-account-name">MX-acc-1</div>' in html
-    assert 'class="open-account-name">MX-acc-2</div>' in html
+    # .open-account-name is display:none since the account header was
+    # rebuilt; the visible name is .cb-acc-title now.
+    assert 'class="cb-acc-title">MX-acc-1</span>' in html
+    assert 'class="cb-acc-title">MX-acc-2</span>' in html
+    # The per-account submit button lost its label suffix when the account
+    # header was rebuilt; the account is named in .cb-acc-title above it.
     assert 'action="/build-upload"' in html
-    assert "Submit — MX-acc-1" in html
     assert html.index("MX-acc-1") < html.index("MX-acc-2")
-    assert "MX_Amz_All_Mix_trading_25_08.06" in html
-    assert "MX_Trl_Ios_Images_trading_35+_08.06" in html
-    assert html.count('class="open-creatives"') == 2
-    assert "Ad title one" in html
-    assert "Creative C" in html
-    open_block = html.split("11. What to Open", 1)[1]
-    assert "strategy_type" not in open_block
-    assert "'campaign_name'" not in open_block
+
+    # Campaign names and the creative list are no longer rendered server-side.
+    # The campaign builder composes the name in the browser from the slot's own
+    # fields (offer, device, targeting, age, date), so a name baked into the
+    # HTML would go stale the moment someone edits a field. What the server
+    # still owes this section is the accounts, in order, each with a form that
+    # posts to /build-upload — which is what the assertions above check.
+    assert "open_recs" not in html, "внутреннее имя структуры не должно течь в разметку"
 
 
 def test_web_targeting_table_renders_per_country(
@@ -272,25 +289,21 @@ def test_web_targeting_table_renders_per_country(
         )
         for country in countries
     ]
-    html = templates.env.get_template("report.html").render(
-        request=MagicMock(),
-        report={
-            "date": "2026-06-08",
-            "my_cm": "Evgeni Sedin",
-            "source_excel": "test.xlsx",
-            "trend_days": 7,
-            "total_combos": len(combos),
-            "countries": sections,
-        },
-        warnings=[],
-        built_at="2026-06-08",
-        upload_errors={},
-    )
+    report = {
+                "date": "2026-06-08",
+                "my_cm": "Evgeni Sedin",
+                "source_excel": "test.xlsx",
+                "trend_days": 7,
+                "total_combos": len(combos),
+                "countries": sections,
+            }
+    report["countries"] = sections
+    html = _render_html(report)
 
     for country in countries:
         slug = _anchor_slug(country)
-        assert f'id="country-{slug}-targeting"' in html
-        block = html.split(f'id="country-{slug}-targeting"', 1)[1].split(
+        assert f'id="view-country-{slug}-targeting"' in html
+        block = html.split(f'id="view-country-{slug}-targeting"', 1)[1].split(
             '<h2 class="country"', 1
         )[0]
         assert 'class="table-targeting"' in block

@@ -33,6 +33,11 @@ DRILL_COLUMNS: List[str] = [
     "cpa",
     "cm",
     "date",
+    # Per-adset creative breakdown, [{"name": ..., "ftds": ...}, ...]. It was
+    # added to the returned rows without being declared here, so this list
+    # stopped being the contract it says it is — the one place a caller can
+    # look to know what a drill row contains.
+    "variants",
 ]
 
 

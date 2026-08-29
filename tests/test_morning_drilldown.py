@@ -15,12 +15,24 @@ from src.analysis_agent.morning_drilldown import (
 
 # ── dispatch ───────────────────────────────────────────────────────────────────
 
-def test_cm_section_returns_rows(enriched_df: pd.DataFrame) -> None:
+def test_cm_section_returns_one_row_per_account_and_adset(enriched_df: pd.DataFrame) -> None:
+    """Identity is the PAIR, not the ad-set name.
+
+    This asserted 4 rows back when grouping was by ad-set name alone. That
+    grouping was wrong and was fixed on 2026-08-17: the naming convention
+    repeats ad-set names across accounts, so one account's deposits were being
+    reported under another's. The fixture holds two (account, ad-set) pairs for
+    this CM, so two rows is the correct answer — counting rows was never the
+    point, so assert the property instead of the number.
+    """
     rows = get_underlying_rows(
         enriched_df, section="cm_comparison",
         country="Mexico", cm="Evgeni Sedin",
     )
-    assert len(rows) == 4
+    keys = [(r["account"], r["adset"]) for r in rows]
+    assert len(keys) == len(set(keys)), "одна пара аккаунт+адсет попала в дрилл дважды"
+    assert len(rows) == 2
+    assert all(r["ftds"] > 0 for r in rows), "дрилл показывает только строки с депозитами"
 
 
 def test_trend_section_returns_rows(enriched_df: pd.DataFrame) -> None:
@@ -144,8 +156,19 @@ def test_no_pandas_native_types_in_output(enriched_df: pd.DataFrame) -> None:
         enriched_df, section="cm_comparison",
         country="Mexico", cm="Evgeni Sedin",
     )
+    def _native(v) -> bool:
+        # `variants` is a list of small dicts, which Jinja2 handles fine. The
+        # point of this test is that pandas/numpy scalars (NaT, NaN, Timestamp,
+        # int64) never reach a template — so look inside containers rather than
+        # rejecting them.
+        if v is None or isinstance(v, (str, int, float, bool)):
+            return True
+        if isinstance(v, (list, tuple)):
+            return all(_native(x) for x in v)
+        if isinstance(v, dict):
+            return all(_native(x) for x in v.values())
+        return False
+
     for r in rows:
-        for v in r.values():
-            assert v is None or isinstance(v, (str, int, float)), (
-                f"non-native type in drill output: {type(v).__name__}"
-            )
+        for key, v in r.items():
+            assert _native(v), f"non-native type in drill output: {key}={type(v).__name__}"

@@ -80,7 +80,7 @@ def test_parse_adset_name_keeps_mix_pipe_after_mix_media_type() -> None:
     assert parsed == ("KW", "ios", "Mix|Reading", "30")
 
 
-def test_parse_adset_name_keeps_slash_targeting_token() -> None:
+def test_parse_adset_name_normalizes_slash_to_pipe() -> None:
     parsed = parse_adset_name(
         "KW_TRL_All_IMG_Mix1/iOS_25_3.5",
         DEVICE_KW,
@@ -89,7 +89,10 @@ def test_parse_adset_name_keeps_slash_targeting_token() -> None:
         creative_prefixes=CREATIVE_PREFIXES,
     )
 
-    assert parsed == ("KW", "all", "Mix1/iOS", "25")
+    # `/`, `\` and `|` are the same AND-group separator; commit 2971a82
+    # made the parser display them all as `|` so the same targeting is not
+    # counted as three different ones. This asserted the pre-2971a82 shape.
+    assert parsed == ("KW", "all", "Mix1|iOS", "25")
 
 
 def test_parse_adset_name_keeps_concatenated_mix_targeting() -> None:
@@ -101,7 +104,7 @@ def test_parse_adset_name_keeps_concatenated_mix_targeting() -> None:
         creative_prefixes=CREATIVE_PREFIXES,
     )
 
-    assert parsed == ("KW", "all", "MixReading/iOS", "25")
+    assert parsed == ("KW", "all", "MixReading|iOS", "25")  # см. коммит 2971a82
 
 
 def test_parse_adset_name_fallback_keeps_raw_adset_name() -> None:

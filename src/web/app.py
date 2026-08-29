@@ -1330,7 +1330,14 @@ async def account_map_patch(request: Request) -> JSONResponse:
                 new_row[field] = val
 
         # Accept a pasted Ads Manager URL, a bare number, or act_<digits>.
-        act_raw = new_row.get("ad_account_id", "")
+        #
+        # Only what the caller actually sent is validated. This used to check
+        # whatever ended up in the row, including a value carried over from the
+        # file — so connecting a Multilogin profile to an account whose stored
+        # id was malformed failed with an error about the cabinet, which the
+        # caller had not mentioned and could not fix from that screen. Validate
+        # input, not storage.
+        act_raw = (data.get("ad_account_id") or "").strip()
         if act_raw:
             act = normalise_ad_account_id(act_raw)
             if not act:
@@ -1779,6 +1786,14 @@ async def build_upload(request: Request) -> Response:
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
 
+    # The parser returns the country CODE ("MX"), which the RPA needs — without
+    # it the audience Language step was silently skipped. But the template looks
+    # errors up by the country NAME it renders the section under ("Mexico"), so
+    # keying them by the code meant no error was EVER displayed: a build that
+    # failed validation came back as the plain report page with nothing to say
+    # why. Key by what the reader's section is keyed by.
+    err_key = (form.get("country") or "").strip() or country
+
     if not country or not account_label:
         return _render_report(
             request,
@@ -1787,7 +1802,7 @@ async def build_upload(request: Request) -> Response:
     if not slots:
         return _render_report(
             request,
-            upload_errors={country: {account_label: ["Add at least one campaign slot."]}},
+            upload_errors={err_key: {account_label: ["Add at least one campaign slot."]}},
         )
 
     errors, xlsx_bytes, filename = assemble_from_form_slots(
@@ -1798,7 +1813,7 @@ async def build_upload(request: Request) -> Response:
     if errors:
         return _render_report(
             request,
-            upload_errors={country: {account_label: errors}},
+            upload_errors={err_key: {account_label: errors}},
         )
 
     return Response(

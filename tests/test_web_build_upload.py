@@ -6,7 +6,32 @@ from unittest.mock import AsyncMock, MagicMock
 
 from starlette.datastructures import FormData
 
-from src.web.app import build_upload, templates
+from src.web.app import _enrich_country_overview, build_upload, templates
+
+def _render_html(report: dict) -> str:
+    """Render report.html the way the app does.
+
+    Every test that built this context by hand drifted from the real one and
+    then failed on whichever key was added last — `my_totals`,
+    `account_preflight` — rather than on anything the test was about. The app
+    fills in per-country totals before rendering, so do that here too.
+    """
+    report = {**report, "countries": [dict(c) for c in report.get("countries", [])]}
+    _enrich_country_overview(report)
+    return templates.env.get_template("report.html").render(
+        request=MagicMock(),
+        report=report,
+        warnings=[],
+        built_at="2026-06-08",
+        upload_errors={},
+        account_preflight={},
+        account_preflight_json="{}",
+        ref_options={},
+        ref_options_json="{}",
+        account_alias_map_json="{}",
+        draft_status={},
+    )
+
 
 
 def _minimal_report() -> dict:
@@ -56,20 +81,24 @@ def test_build_upload_requires_strategy(monkeypatch) -> None:
     )
     resp = asyncio.run(build_upload(request))
     assert resp.status_code == 200
-    assert b"Select at least one strategy" in resp.body
+    # The campaign builder replaced "strategies" with campaign slots, so the
+    # message changed. Kept as a test because the panel it renders into was
+    # dead: errors were keyed by country CODE while the template looks them up
+    # by country NAME, so a failed build silently returned the plain page.
+    assert b"Add at least one campaign slot" in resp.body
+    assert b"Cannot build upload" in resp.body
 
 
 def test_build_upload_renders_form_controls() -> None:
-    html = templates.env.get_template("report.html").render(
-        request=MagicMock(),
-        report=_minimal_report(),
-        warnings=[],
-        built_at="2026-06-08",
-        upload_errors={},
-    )
+    """The form must carry the fields the server parser reads.
+
+    The per-campaign inputs (camp_N_ad_M_*) are built in the browser as slots
+    are added, so asserting `campaign_name_1` or `title_1_0` in the static HTML
+    tested a form shape that stopped existing when the campaign builder
+    replaced the strategy checkboxes. What the server still depends on is the
+    hidden trio below — _parse_build_upload_form reads exactly these.
+    """
+    html = _render_html(_minimal_report())
     assert 'action="/build-upload"' in html
-    assert 'data-open-form' in html
-    assert 'name="strategy"' in html
-    assert "Submit — MX-acc-1" in html
-    assert 'name="campaign_name_1"' in html
-    assert 'name="title_1_0"' in html
+    for field in ("country", "account_label", "camp_count"):
+        assert f'name="{field}"' in html, f"форма не отправляет {field}, а парсер его читает"
