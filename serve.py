@@ -24,9 +24,12 @@ if str(_root) not in sys.path:
 os.chdir(_root)
 
 try:
-    from dotenv import load_dotenv
-    load_dotenv(_root / ".env")
-except ImportError:
+    # Machine-local settings first, checkout .env second — see
+    # config.paths.get_env_files. Keeps a buyer's configuration outside the
+    # folder that updates overwrite.
+    from config.paths import load_env
+    load_env()
+except Exception:
     pass
 
 # The engine a fresh install runs. recorded_flow is the one every verified run

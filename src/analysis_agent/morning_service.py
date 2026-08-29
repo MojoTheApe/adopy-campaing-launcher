@@ -25,7 +25,7 @@ _PROJ_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJ_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJ_ROOT))
 
-from config.paths import get_excel_path
+from config.paths import get_ad_account_map_path, get_excel_path
 from src.analysis_agent.analyze_fb_stats import (
     compute_metrics,
     enrich_structure,
@@ -59,8 +59,15 @@ def _fallback_accounts_from_csv(cm_name: str) -> List[Dict[str, Any]]:
 
     Returns minimal account-row dicts compatible with gsheet_accounts format,
     all marked is_ready=True so they appear in the campaign builder.
+
+    Goes through the canonical resolver rather than building the path here.
+    The map moved out of the checkout to the machine-local ACL folder on
+    2026-08-25, and
+    this line still pointed at the old location — so during a Sheets outage the
+    buyer's accounts would have vanished from the campaign builder even though
+    a perfectly good map was sitting on the machine (audit finding F-07).
     """
-    csv_path = _PROJ_ROOT / "config" / "ad_account_map.csv"
+    csv_path = Path(get_ad_account_map_path())
     rows: List[Dict[str, Any]] = []
     if not csv_path.exists():
         return rows

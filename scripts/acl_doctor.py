@@ -23,20 +23,18 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv(_ROOT / ".env")
-except Exception:  # pragma: no cover - .env is optional for the check itself
-    pass
-
 from config.paths import (  # noqa: E402
     get_ad_account_map_path,
     get_creatives_root,
+    get_env_files,
     get_excel_path,
     get_local_config_dir,
     get_upload_fb_excel_path,
+    load_env,
+    migrate_legacy_account_map,
 )
+
+_ENV_LOADED = load_env()
 
 OK, MISSING, WARN = "OK", "MISSING", "WARN"
 _failed = 0
@@ -177,14 +175,48 @@ def check_telemetry() -> None:
     )
 
 
+def check_env_location() -> None:
+    """Warn while the only settings file sits inside the checkout (F-09).
+
+    Not an error: it works, and every install today is in exactly this state.
+    But the checkout is the folder updates rewrite and a re-clone replaces, so
+    settings kept there are one routine operation away from gone.
+    """
+    files = get_env_files()
+    local = os.path.join(get_local_config_dir(), ".env")
+    if local in files:
+        report(OK, "Settings location", f"machine-local — {local}")
+        return
+    if not files:
+        report(WARN, "Settings location", "no .env found in either location")
+        return
+    report(
+        WARN,
+        "Settings location",
+        f"only inside the checkout — {files[0]}",
+        f"Copy it to {local}. That copy wins, and it survives updates, "
+        "re-cloning and git clean. The checkout one keeps working meanwhile.",
+    )
+
+
 def main() -> int:
     print(f"ACL doctor — checkout {_ROOT}")
     print(f"Machine config dir: {get_local_config_dir()}")
+    # Which .env actually took effect. Two possible locations is one too many to
+    # keep in your head when a setting "isn't being picked up".
+    for f in _ENV_LOADED:
+        print(f"Settings loaded:    {f}")
+    if not _ENV_LOADED:
+        print("Settings loaded:    none — no .env in either location")
+    moved = migrate_legacy_account_map()
+    if moved:
+        print(f"Migration:          {moved}")
     print()
 
     check_python()
     check_playwright()
     check_account_map()
+    check_env_location()
     check_env_key(
         "MULTILOGIN_AUTOMATION_TOKEN_A",
         required=True,
