@@ -5693,7 +5693,15 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         + 'прервёт RPA; окно Multilogin останется открытым</span></div>';
     }
     (job.results || []).forEach(function(r) {
-      var icon = r.success ? '✅' : '❌';
+      // Three states, not two. `success` only says the automation reached the
+      // end and a draft exists; `publishable` says a human may send it out.
+      // This used to pick the checkmark from `success` alone and then render
+      // the error text in the SUCCESS colour — so "DO NOT PUBLISH AS IS"
+      // appeared green next to a tick. Older stored jobs have no publishable
+      // field, so fall back to success for them.
+      var blocked = !!(r.blocking_failures && r.blocking_failures.length)
+                    || (r.publishable === false && r.success);
+      var icon = !r.success ? '❌' : (blocked ? '⚠️' : '✅');
       html += '<div class="cb-status-row">';
       html += '<span class="cb-status-icon">' + icon + '</span>';
       html += '<span class="cb-status-name">' + (r.campaign_name || '?') + '</span>';
@@ -5701,10 +5709,22 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         html += '<span class="cb-status-id">campaign_id: ' + r.campaign_id + '</span>';
       }
       html += '</div>';
-      if (!r.success && r.error) {
-        html += '<div class="cb-status-err">' + r.error + '</div>';
-      } else if (r.success && r.error) {
-        html += '<div class="cb-status-err" style="color:var(--ok,#4caf50);border-color:var(--ok,#4caf50)">' + r.error + '</div>';
+      if (r.error) {
+        // Green is reserved for a finished, publishable draft — an
+        // informational note such as the dry-run message. Anything blocking
+        // stays in the alarm colour.
+        var errStyle = (r.success && !blocked)
+          ? ' style="color:var(--ok,#4caf50);border-color:var(--ok,#4caf50)"'
+          : '';
+        html += '<div class="cb-status-err"' + errStyle + '>' + r.error + '</div>';
+      }
+      if (r.blocking_failures && r.blocking_failures.length) {
+        html += '<div class="cb-status-err">Не публиковать: '
+             + r.blocking_failures.join(', ') + '</div>';
+      }
+      if (r.warnings && r.warnings.length) {
+        html += '<div class="cb-status-err" style="color:#b45309;border-color:#b45309">'
+             + 'Предупреждения: ' + r.warnings.join(', ') + '</div>';
       }
       if (r.steps_completed && r.steps_completed.length) {
         var stepsHtml = r.steps_completed.join(' → ');

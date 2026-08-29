@@ -152,11 +152,32 @@ class RpaPublishResult:
     # only trace of that was a telemetry line nobody reads before clicking
     # Publish (run 58c3cb9b53c6: ad3 had no media, result said success).
     warnings: list[str] = field(default_factory=list)
+    # Steps whose failure makes the draft unsafe to publish, as opposed to
+    # merely imperfect. Separate from `warnings` because the operator needs to
+    # know which of the two they are looking at without reading the text.
+    blocking_failures: list[str] = field(default_factory=list)
+
+    @property
+    def publishable(self) -> bool:
+        """Did the run finish AND produce a draft a human may publish?
+
+        `success` answers only the first half — the automation reached the end
+        and a draft exists. Treating it as the second half is how a draft whose
+        ad had no creative came back green. Keep the two apart: `success` is
+        about execution, `publishable` is about the campaign.
+        """
+        return bool(self.success) and not self.blocking_failures
 
     def to_job_dict(self) -> dict[str, Any]:
         return {
             "campaign_name": self.campaign_name,
             "success": self.success,
+            # Everything the operator needs in order NOT to publish a broken
+            # draft. `warnings` existed on the object but was never serialized,
+            # so the layer that shows results to a human never received it.
+            "publishable": self.publishable,
+            "warnings": self.warnings,
+            "blocking_failures": self.blocking_failures,
             "campaign_id": self.campaign_id,
             "adset_id": self.adset_id,
             "creative_id": None,

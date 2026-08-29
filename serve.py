@@ -29,11 +29,26 @@ try:
 except ImportError:
     pass
 
-# Recipe Player ON by default so dashboard RPA uses the golden path.
-os.environ.setdefault("FB_RPA_RECIPE_PLAYER", "1")
-# Gate: Campaign name + budget → Ad set name → Conversion location Single → Website.
-# (Not "Website and instant forms".) Clear FB_RPA_RECIPE_STOP_AFTER= to run full recipe.
-os.environ.setdefault("FB_RPA_RECIPE_STOP_AFTER", "s12_conversion_location")
+# The engine a fresh install runs. recorded_flow is the one every verified run
+# used, including the 43/43 run that produced live spend (tag
+# rpa-v96-spend-confirmed-2026-08-24).
+#
+# It used to default to the recipe player WITH a development stop gate at
+# s12_conversion_location — a gate from the days when the goal was to reach
+# Conversion location cleanly three times. On this machine the gate was
+# invisible because .env sets FB_RPA_ENGINE=recorded_flow, but .env.example
+# ships that line empty: a buyer's fresh install would have stopped after
+# conversion location, building no audience, ads, creatives, copy or
+# destination, while the operator believed they had asked for a full campaign.
+os.environ.setdefault("FB_RPA_ENGINE", "recorded_flow")
+
+_engine = (os.environ.get("FB_RPA_ENGINE") or "").strip().lower()
+
+# The stop gate belongs to the recipe player and applies only when someone
+# deliberately selects that engine. It must never narrow the default path.
+if _engine != "recorded_flow":
+    os.environ.setdefault("FB_RPA_RECIPE_PLAYER", "1")
+    os.environ.setdefault("FB_RPA_RECIPE_STOP_AFTER", "s12_conversion_location")
 
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 
@@ -42,7 +57,13 @@ ensure_playwright_browsers_path()
 from src.fb_ads_rpa.ads_manager_flow import RPA_FLOW_VERSION
 
 print(f"[serve] RPA flow version: {RPA_FLOW_VERSION}")
-print(f"[serve] Recipe player: {os.environ.get('FB_RPA_RECIPE_PLAYER', '1')}")
+# Say which engine will actually run and whether anything truncates it. The old
+# line printed "Recipe player: 1" even when the recorded flow was in charge,
+# which is how a stop gate stayed invisible for weeks.
+_stop = (os.environ.get("FB_RPA_RECIPE_STOP_AFTER") or "").strip()
+print(f"[serve] RPA engine: {_engine or 'recipe_player (default)'}")
+if _stop and _engine != "recorded_flow":
+    print(f"[serve] WARNING: partial run — recipe stops after '{_stop}'")
 
 import uvicorn
 

@@ -316,7 +316,15 @@ class RpaPublisher:
             account_label=account_label,
             country=country,
             activate=activate,
-            preview_mode=not self.dry_run,
+            # Never weaken validation for a run that drives a browser. This
+            # read `not self.dry_run`, which inverted the two: a REAL run got
+            # preview leniency — creative paths synthesised without checking
+            # the file exists, a missing Multilogin profile_id downgraded from
+            # error to warning — while the supposedly safer dry run got the
+            # strict checks. A dry run opens the same browser and needs the
+            # same real files; only the callers that render a plan without a
+            # browser (dashboard preview, `--preview-only`) pass True.
+            preview_mode=False,
         )
         results: list[RpaPublishResult] = []
         try:

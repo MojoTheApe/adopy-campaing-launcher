@@ -2232,6 +2232,7 @@ class AdsManagerFlow:
                     if "creative_upload" in f or "destination" in f
                 ]
                 if blocking:
+                    result.blocking_failures.extend(blocking)
                     note = (
                         "DO NOT PUBLISH AS IS — these ad-level steps failed: "
                         + ", ".join(blocking)
