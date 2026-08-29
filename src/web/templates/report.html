@@ -1469,6 +1469,7 @@ async function dashRefresh(ev) {
   <div class="sidebar-label">Main</div>
   <button type="button" class="sidebar-link sidebar-home active" data-view="home">🏠 Home</button>
   <button type="button" class="sidebar-link" data-view="targets">🎯 Таргеты</button>
+  <button type="button" class="sidebar-link" data-view="accounts">🔌 Аккаунты</button>
 
   <div class="sidebar-label">Countries</div>
   {% for c in report.countries %}
@@ -1506,6 +1507,18 @@ async function dashRefresh(ev) {
 <main class="main-content">
 
 {# ── Home view ─────────────────────────────────────────────────── #}
+<div id="view-accounts" class="view-panel">
+  <h2 class="view-title">Аккаунты <span class="hint">подключение к этой машине</span></h2>
+  <p style="color:var(--muted);max-width:76ch">
+    Слева то, что говорит общая таблица: какие аккаунты у вас есть и в каком они
+    состоянии. Справа то, что знает <b>эта машина</b>: как до аккаунта дотянуться.
+    Аккаунт может быть жив в таблице и при этом непригоден здесь — если для него
+    нет профиля Multilogin.
+  </p>
+  <div id="ac-msg" style="margin:0.5rem 0;font-size:0.85rem"></div>
+  <div id="ac-list">Загрузка…</div>
+</div>
+
 <div id="view-targets" class="view-panel">
   <h2 class="view-title">Таргеты <span class="hint">общая библиотека — видна всем байерам</span></h2>
   <p style="color:var(--muted);max-width:70ch">
@@ -5892,6 +5905,128 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   }
   poll();
 }
+
+// ── Аккаунты: подключение к этой машине ──────────────────────────────────
+(function () {
+  var loaded = false, openProfiles = [];
+
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  function say(t, kind) {
+    var el = document.getElementById('ac-msg'); if (!el) return;
+    el.style.color = kind === 'err' ? '#b91c1c' : (kind === 'ok' ? 'var(--ok,#4caf50)' : 'var(--muted)');
+    el.textContent = t || '';
+  }
+
+  function profileOptions(current) {
+    // Offer the profiles open right now: connecting an account means opening
+    // its profile anyway, and 140 bare UUIDs would be no more usable than
+    // typing one. Multilogin gives us no names through its API.
+    var out = '<option value="">— выберите профиль —</option>';
+    openProfiles.forEach(function (p) {
+      var taken = p.taken_by ? ' (занят: ' + p.taken_by + ')' : '';
+      var sel = (p.profile_id === current) ? ' selected' : '';
+      out += '<option value="' + esc(p.profile_id) + '"' + sel + '>'
+           + esc(p.profile_id.slice(0, 8)) + '…' + esc(taken) + '</option>';
+    });
+    if (current && !openProfiles.some(function (p) { return p.profile_id === current; })) {
+      out += '<option value="' + esc(current) + '" selected>' + esc(current.slice(0, 8)) + '… (сохранён)</option>';
+    }
+    return out;
+  }
+
+  function render(d) {
+    var box = document.getElementById('ac-list'); if (!box) return;
+    if (!d || !d.ok) {
+      box.innerHTML = '<p style="color:#b91c1c">' + esc((d && d.error) || 'Не удалось загрузить') + '</p>';
+      return;
+    }
+    openProfiles = d.open_profiles || [];
+    var accs = d.accounts || [];
+    var connected = accs.filter(function (a) { return a.connected; }).length;
+
+    var html = '<p style="color:var(--muted);font-size:0.85rem">Подключено <b>'
+      + connected + '</b> из ' + accs.length
+      + ' · открытых профилей Multilogin: ' + openProfiles.length
+      + '<br>карта этой машины: <code>' + esc(d.map_path) + '</code></p>';
+
+    if (!openProfiles.length) {
+      html += '<p style="color:#b45309;font-size:0.85rem">Ни один профиль Multilogin не открыт — '
+            + 'откройте профиль аккаунта, и он появится в списке выбора.</p>';
+    }
+
+    html += '<table><thead><tr><th>Аккаунт</th><th>Страна</th><th>Статус</th>'
+         + '<th>ad_account_id</th><th>Профиль Multilogin</th><th></th></tr></thead><tbody>';
+    accs.forEach(function (a) {
+      var badge = a.connected
+        ? '<span style="color:var(--good,#16a34a)">✓ подключён</span>'
+        : '<span style="color:#b45309">не хватает: ' + esc(a.missing.join(', ')) + '</span>';
+      html += '<tr data-label="' + esc(a.label) + '">'
+        + '<td><b>' + esc(a.label) + '</b><div style="font-size:0.72rem">' + badge + '</div></td>'
+        + '<td>' + esc(a.country) + '</td>'
+        + '<td>' + esc(a.status) + '</td>'
+        + '<td><input class="ac-adid" type="text" style="width:11rem" value="' + esc(a.ad_account_id)
+        + '" placeholder="act_123…"></td>'
+        + '<td><select class="ac-prof" style="max-width:16rem">' + profileOptions(a.profile_id) + '</select></td>'
+        + '<td><button type="button" class="btn ac-save">Сохранить</button>'
+        + '<span class="ac-row-msg" style="margin-left:0.5rem;font-size:0.75rem"></span></td>'
+        + '</tr>';
+    });
+    box.innerHTML = html + '</tbody></table>';
+  }
+
+  function load(force) {
+    if (loaded && !force) return;
+    var box = document.getElementById('ac-list');
+    if (box) box.textContent = 'Загрузка…';
+    fetch('/api/accounts-overview').then(function (r) { return r.json(); })
+      .then(function (d) { loaded = true; render(d); })
+      .catch(function (e) {
+        if (box) box.innerHTML = '<p style="color:#b91c1c">' + esc(e) + '</p>';
+      });
+  }
+
+  function save(btn) {
+    var row = btn.closest('tr'); if (!row) return;
+    var label = row.getAttribute('data-label');
+    var adid = (row.querySelector('.ac-adid') || {}).value || '';
+    var prof = (row.querySelector('.ac-prof') || {}).value || '';
+    var msg = row.querySelector('.ac-row-msg');
+    var picked = openProfiles.filter(function (p) { return p.profile_id === prof; })[0];
+
+    var payload = { account_name: label };
+    if (adid.trim()) payload.ad_account_id = adid.trim();
+    if (prof.trim()) payload.profile_id = prof.trim();
+    // folder_id is derived from the profile's own path — never typed.
+    if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
+
+    btn.disabled = true;
+    if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'Сохраняю…'; }
+    fetch('/account-map-patch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        btn.disabled = false;
+        if (!d.ok) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = d.error || 'ошибка'; } return; }
+        if (msg) { msg.style.color = 'var(--ok,#4caf50)'; msg.textContent = '✓'; }
+        load(true);
+      })
+      .catch(function (e) {
+        btn.disabled = false;
+        if (msg) { msg.style.color = '#b91c1c'; msg.textContent = String(e); }
+      });
+  }
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (t && t.classList && t.classList.contains('ac-save')) { save(t); return; }
+    if (t && t.getAttribute && t.getAttribute('data-view') === 'accounts') { load(false); }
+  });
+})();
 
 // ── Таргеты: общая библиотека ────────────────────────────────────────────
 // Список грузится по требованию, а не на каждой загрузке страницы: он живёт

@@ -911,6 +911,73 @@ async def api_resolve_targeting(text: str = "") -> JSONResponse:
     return JSONResponse(resolve_interest_alias(text))
 
 
+@app.get("/api/accounts-overview")
+async def api_accounts_overview() -> JSONResponse:
+    """Every account this buyer has, and whether this machine can reach it.
+
+    Two halves that were never shown together: the shared sheet says which
+    accounts exist and what state they are in; the machine-local map says how
+    to reach them (ad account id, Multilogin profile). An account can be
+    perfectly healthy in the sheet and unusable here because the local map has
+    no profile for it — which is exactly the case the operator needs to see.
+    """
+    from src.analysis_agent.gsheet_accounts import fetch_account_rows
+    from src.fb_ads_rpa.mlx_profiles import folder_id_for, open_profile_ids
+
+    map_path = get_ad_account_map_path()
+    account_map = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+
+    try:
+        sheet_rows = fetch_account_rows()
+    except Exception as exc:  # noqa: BLE001 — reported, never fatal
+        return JSONResponse(
+            {"ok": False, "error": f"Не удалось прочитать таблицу аккаунтов: {exc}",
+             "accounts": [], "open_profiles": [], "map_path": map_path},
+            status_code=200,
+        )
+
+    open_ids = open_profile_ids()
+    # Profiles already spoken for, so the picker can say so instead of letting
+    # one profile be attached to two accounts.
+    taken = {
+        (getattr(e, "profile_id", "") or "").strip(): label
+        for label, e in account_map.items()
+        if (getattr(e, "profile_id", "") or "").strip()
+    }
+
+    accounts = []
+    for row in sheet_rows:
+        label = (row.get("account_label") or row.get("alias") or "").strip()
+        entry = resolve_account_entry(account_map, label) if label else None
+        ad_id = (getattr(entry, "ad_account_id", "") or "").strip() if entry else ""
+        profile_id = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
+        missing = [n for n, v in (("ad_account_id", ad_id), ("profile_id", profile_id)) if not v]
+        accounts.append({
+            "label": label,
+            "country": row.get("country_code") or "",
+            "stock": row.get("stock") or "",
+            "status": row.get("account_status") or "",
+            "ad_account_id": ad_id,
+            "profile_id": profile_id,
+            "profile_open": profile_id in open_ids,
+            "missing": missing,
+            "connected": not missing,
+        })
+    accounts.sort(key=lambda a: (a["connected"], a["label"].lower()))
+
+    return JSONResponse({
+        "ok": True,
+        "map_path": map_path,
+        "accounts": accounts,
+        # folder_id comes off the profile's own path, so the operator never
+        # has to find or type it.
+        "open_profiles": [
+            {"profile_id": pid, "folder_id": folder_id_for(pid), "taken_by": taken.get(pid, "")}
+            for pid in open_ids
+        ],
+    })
+
+
 @app.get("/api/targeting-profiles")
 async def api_targeting_profiles() -> JSONResponse:
     """The shared targeting library, as every buyer sees it.
