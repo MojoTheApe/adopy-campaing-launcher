@@ -1078,7 +1078,7 @@ async def api_accounts_overview() -> JSONResponse:
         accounts.append({
             "label": label,
             "owner": owner,
-            "country": "",
+            "country": (getattr(entry, "country", "") or ""),
             "stock": "",
             "status": "",
             "ad_account_id": ad_id,
@@ -1262,7 +1262,12 @@ async def account_map_patch(request: Request) -> JSONResponse:
         for field in ("ad_account_id", "folder_id", "profile_id", "page_id", "multilogin_instance", "country", "page_name"):
             val = (data.get(field) or "").strip()
             if val:
-                new_row[field] = val.upper() if field == "country" else val
+                # Uppercase two-letter country CODES ("cl" -> "CL"), but leave
+                # full names alone: the dashboard now offers them from the
+                # sheet ("Chile"), and "CHILE" would sit oddly beside them.
+                if field == "country" and len(val) == 2 and val.isalpha():
+                    val = val.upper()
+                new_row[field] = val
 
         # Accept a pasted Ads Manager URL, a bare number, or act_<digits>.
         act_raw = new_row.get("ad_account_id", "")

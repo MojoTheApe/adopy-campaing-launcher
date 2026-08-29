@@ -20,6 +20,11 @@ class AccountMapEntry:
     # Facebook Page display name — used only by the Campaign Builder's visual
     # ad preview (Feed/Reels mockup), not part of the real publish flow.
     page_name: str | None = None
+    # Which country this account is worked in. Informational: the dashboard
+    # groups by it and pre-fills it when an account is connected from inside a
+    # country section. The CSV has carried this column all along without
+    # anything reading it.
+    country: str | None = None
 
 
 def load_ad_account_map(path: str | Path) -> dict[str, AccountMapEntry]:
@@ -52,6 +57,7 @@ def load_ad_account_map(path: str | Path) -> dict[str, AccountMapEntry]:
                 proxy_user=(row.get("proxy_user") or row.get("proxy_username") or "").strip() or None,
                 proxy_pass=(row.get("proxy_pass") or row.get("proxy_password") or "").strip() or None,
                 page_name=(row.get("page_name") or "").strip() or None,
+                country=(row.get("country") or "").strip() or None,
             )
     return out
 

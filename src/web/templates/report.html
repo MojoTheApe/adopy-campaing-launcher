@@ -1541,6 +1541,11 @@ async function dashRefresh(ev) {
         <div style="font-size:0.75rem;color:var(--muted)">Профиль Multilogin</div>
         <select id="ac-new-prof" style="width:100%"></select>
       </label>
+      <label style="flex:0 0 10rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Страна — необязательно</div>
+        <input id="ac-new-country" type="text" list="ac-countries" placeholder="напр. Chile" style="width:100%" autocomplete="off">
+        <datalist id="ac-countries"></datalist>
+      </label>
       <button type="button" id="ac-add-btn" class="btn">Добавить</button>
     </div>
     <div style="margin-top:0.5rem;font-size:0.75rem;color:var(--muted)">
@@ -1896,6 +1901,27 @@ async function dashRefresh(ev) {
 {% if c.account_rows %}
 <div id="view-country-{{ cid }}-accounts" class="view-panel" data-country="{{ cid }}">
 <h2 class="view-title">{{ c.country }}: {{ n_accounts }} Account Statuses</h2>
+
+<div class="ac-country-add" data-country-name="{{ c.country }}"
+     style="margin:0.6rem 0 1rem;padding:0.7rem 0.9rem;border:1px solid var(--border);border-radius:6px">
+  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-end">
+    <label style="flex:1 1 15rem">
+      <div style="font-size:0.72rem;color:var(--muted)">Подключить аккаунт к {{ c.country }}</div>
+      <input class="acq-label" type="text" placeholder="название аккаунта" style="width:100%" autocomplete="off">
+    </label>
+    <label style="flex:1 1 13rem">
+      <div style="font-size:0.72rem;color:var(--muted)">Кабинет — ссылка или act_…</div>
+      <input class="acq-adid" type="text" placeholder="вставьте ссылку из Ads Manager" style="width:100%">
+    </label>
+    <label style="flex:0 0 13rem">
+      <div style="font-size:0.72rem;color:var(--muted)">Профиль Multilogin</div>
+      <select class="acq-prof" style="width:100%"></select>
+    </label>
+    <button type="button" class="btn acq-add">Добавить</button>
+    <span class="acq-msg" style="font-size:0.75rem"></span>
+  </div>
+</div>
+
 <table>
   <thead><tr><th>Account</th><th>Cost</th><th>Asset</th><th>To Do</th><th>✓</th></tr></thead>
   <tbody>
@@ -6080,6 +6106,17 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
 
     refreshBulk();
     knownLabels = (d.suggestions || []).concat(accs.map(function (a) { return a.label; }));
+
+    var cdl = document.getElementById('ac-countries');
+    if (cdl) {
+      cdl.innerHTML = '';
+      var seen = {};
+      accs.forEach(function (a) {
+        if (!a.country || seen[a.country]) return;
+        seen[a.country] = 1;
+        var o = document.createElement('option'); o.value = a.country; cdl.appendChild(o);
+      });
+    }
     var dl = document.getElementById('ac-known-labels');
     if (dl) {
       dl.innerHTML = '';
@@ -6155,13 +6192,18 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var label = (document.getElementById('ac-new-label') || {}).value || '';
     var adid = (document.getElementById('ac-new-adid') || {}).value || '';
     var prof = (document.getElementById('ac-new-prof') || {}).value || '';
+    var country = (document.getElementById('ac-new-country') || {}).value || '';
     if (!label.trim()) { say('Укажите название аккаунта', 'err'); return; }
+    // Без кабинета строка запишется, но в списке не появится: карта пропускает
+    // записи без ad_account_id. Молчаливо исчезнувший аккаунт хуже отказа.
+    if (!adid.trim()) { say('Укажите кабинет — без него аккаунт не появится в списке', 'err'); return; }
     var picked = openProfiles.filter(function (p) { return p.profile_id === prof; })[0];
 
     var payload = { account_name: label.trim() };
     if (adid.trim()) payload.ad_account_id = adid.trim();
     if (prof.trim()) payload.profile_id = prof.trim();
     if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
+    if (country.trim()) payload.country = country.trim();
 
     var btn = document.getElementById('ac-add-btn');
     if (btn) btn.disabled = true;
@@ -6244,6 +6286,65 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       .catch(function (e) { btn.disabled = false; say(String(e), 'err'); });
   }
 
+  // ── Добавление прямо из раздела страны ────────────────────────────────
+  // Та же запись в ту же карту, только страна проставляется сама: человек уже
+  // находится в разделе конкретной страны, спрашивать её ещё раз незачем.
+  function fillCountryProfileSelects() {
+    document.querySelectorAll('.ac-country-add .acq-prof').forEach(function (sel) {
+      if (sel.options.length && sel.dataset.filled === String(openProfiles.length)) return;
+      sel.innerHTML = profileOptions('');
+      sel.dataset.filled = String(openProfiles.length);
+    });
+  }
+
+  function loadProfilesForCountryForms() {
+    if (openProfiles.length) { fillCountryProfileSelects(); return; }
+    fetch('/api/accounts-overview').then(function (r) { return r.json(); })
+      .then(function (d) {
+        openProfiles = d.open_profiles || [];
+        fillCountryProfileSelects();
+      })
+      .catch(function () { /* форма всё равно позволит ввести вручную */ });
+  }
+
+  function addFromCountry(btn) {
+    var box = btn.closest('.ac-country-add'); if (!box) return;
+    var country = box.getAttribute('data-country-name') || '';
+    var label = (box.querySelector('.acq-label') || {}).value || '';
+    var adid = (box.querySelector('.acq-adid') || {}).value || '';
+    var prof = (box.querySelector('.acq-prof') || {}).value || '';
+    var msg = box.querySelector('.acq-msg');
+    var show = function (t, kind) {
+      if (!msg) return;
+      msg.style.color = kind === 'err' ? '#b91c1c' : (kind === 'ok' ? 'var(--ok,#4caf50)' : 'var(--muted)');
+      msg.textContent = t || '';
+    };
+    if (!label.trim()) { show('Укажите название', 'err'); return; }
+    if (!adid.trim()) { show('Нужен кабинет — вставьте ссылку', 'err'); return; }
+
+    var picked = openProfiles.filter(function (p) { return p.profile_id === prof; })[0];
+    var payload = { account_name: label.trim(), country: country };
+    if (adid.trim()) payload.ad_account_id = adid.trim();
+    if (prof.trim()) payload.profile_id = prof.trim();
+    if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
+
+    btn.disabled = true;
+    show('Добавляю…');
+    fetch('/account-map-patch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        btn.disabled = false;
+        if (!d.ok) { show(d.error || 'не удалось', 'err'); return; }
+        show('✓ добавлен в ' + country, 'ok');
+        box.querySelector('.acq-label').value = '';
+        box.querySelector('.acq-adid').value = '';
+        loaded = false;  // общий список пересоберётся при следующем открытии
+      })
+      .catch(function (e) { btn.disabled = false; show(String(e), 'err'); });
+  }
+
   document.addEventListener('input', function (ev) {
     if (ev.target && ev.target.id === 'ac-new-label') checkLabel();
   });
@@ -6262,6 +6363,10 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   document.addEventListener('click', function (ev) {
     var t = ev.target;
     if (t && t.id === 'ac-add-btn') { addManual(); return; }
+    if (t && t.classList && t.classList.contains('acq-add')) { addFromCountry(t); return; }
+    if (t && t.getAttribute && (t.getAttribute('data-view') || '').indexOf('-accounts') !== -1) {
+      loadProfilesForCountryForms();
+    }
     if (t && t.classList && t.classList.contains('ac-save')) { save(t); return; }
     if (t && t.id === 'ac-bulk-drop') { removeMany(selected()); return; }
     if (t && t.id === 'ac-bulk-clear') {
