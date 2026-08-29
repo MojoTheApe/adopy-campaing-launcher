@@ -992,7 +992,11 @@ async def api_accounts_overview() -> JSONResponse:
     """
     from src.analysis_agent.analyze_fb_stats import normalize_account_alias
     from src.analysis_agent.gsheet_accounts import fetch_account_rows
-    from src.fb_ads_rpa.mlx_profiles import folder_id_for, open_profile_ids
+    from src.fb_ads_rpa.mlx_profiles import (
+        folder_id_for,
+        open_profiles_detailed,
+        profile_name_key,
+    )
     from src.web.buyer import get_selected_cm
 
     map_path = get_ad_account_map_path()
@@ -1030,7 +1034,8 @@ async def api_accounts_overview() -> JSONResponse:
         owner_by_alias = {}
 
     selected_cm = (get_selected_cm() or "").strip()
-    open_ids = open_profile_ids()
+    open_detail = open_profiles_detailed()
+    open_ids = [p["profile_id"] for p in open_detail]
     # Profiles already spoken for, so the picker can say so instead of letting
     # one profile be attached to two accounts.
     taken = {
@@ -1089,6 +1094,26 @@ async def api_accounts_overview() -> JSONResponse:
             "local_only": True,
         })
 
+    # Suggest a profile for rows that have none: "KLD_BFL_W27" and
+    # "FacebookMKTOBFLW27 SV Ait" are plainly the same account, and matching
+    # them saves the operator from choosing among identical-looking ids.
+    # Only when exactly ONE open profile matches — two accounts can share a
+    # key ("FacebookElf191 SA" / "FacebookElf191 PE"), and guessing there
+    # would attach a campaign to the wrong browser.
+    by_key: dict[str, list[str]] = {}
+    for p in open_detail:
+        k = profile_name_key(p.get("name") or "")
+        if k:
+            by_key.setdefault(k, []).append(p["profile_id"])
+    for a in accounts:
+        a["suggested_profile"] = ""
+        if a["profile_id"]:
+            continue
+        k = profile_name_key((a["label"] or "").split(" ")[0])
+        hits = by_key.get(k, []) if k else []
+        if len(hits) == 1:
+            a["suggested_profile"] = hits[0]
+
     accounts.sort(key=lambda a: (a["connected"], a["label"].lower()))
 
     # Accounts this buyer actually runs (they appear in the stats) but which
@@ -1114,8 +1139,18 @@ async def api_accounts_overview() -> JSONResponse:
         # folder_id comes off the profile's own path, so the operator never
         # has to find or type it.
         "open_profiles": [
-            {"profile_id": pid, "folder_id": folder_id_for(pid), "taken_by": taken.get(pid, "")}
-            for pid in open_ids
+            {
+                "profile_id": p["profile_id"],
+                # The Multilogin profile NAME, read off the browser window
+                # title — the only place it is available, since the profile
+                # API answers 404/403 with the token we have. A dropdown of
+                # bare UUIDs told the operator nothing.
+                "name": p.get("name") or "",
+                "key": profile_name_key(p.get("name") or ""),
+                "folder_id": folder_id_for(p["profile_id"]),
+                "taken_by": taken.get(p["profile_id"], ""),
+            }
+            for p in open_detail
         ],
     })
 

@@ -6033,19 +6033,22 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     el.textContent = t || '';
   }
 
-  function profileOptions(current) {
-    // Offer the profiles open right now: connecting an account means opening
-    // its profile anyway, and 140 bare UUIDs would be no more usable than
-    // typing one. Multilogin gives us no names through its API.
+  function profileOptions(current, suggested) {
+    // Profiles open right now, shown by NAME: connecting an account means
+    // opening its profile anyway, and the name is what the operator
+    // recognises. Ids are kept as the value, never as the label.
     var out = '<option value="">— выберите профиль —</option>';
     openProfiles.forEach(function (p) {
-      var taken = p.taken_by ? ' (занят: ' + p.taken_by + ')' : '';
-      var sel = (p.profile_id === current) ? ' selected' : '';
+      var shown = p.name || (p.profile_id.slice(0, 8) + '…');
+      var note = p.taken_by ? ' · занят: ' + p.taken_by
+               : (p.profile_id === suggested ? ' · похоже, этот' : '');
+      var sel = (p.profile_id === current || (!current && p.profile_id === suggested)) ? ' selected' : '';
       out += '<option value="' + esc(p.profile_id) + '"' + sel + '>'
-           + esc(p.profile_id.slice(0, 8)) + '…' + esc(taken) + '</option>';
+           + esc(shown) + esc(note) + '</option>';
     });
     if (current && !openProfiles.some(function (p) { return p.profile_id === current; })) {
-      out += '<option value="' + esc(current) + '" selected>' + esc(current.slice(0, 8)) + '… (сохранён)</option>';
+      out += '<option value="' + esc(current) + '" selected>'
+           + esc(current.slice(0, 8)) + '… (сохранён, профиль не открыт)</option>';
     }
     return out;
   }
@@ -6091,7 +6094,8 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         + '<td>' + esc(a.status) + '</td>'
         + '<td><input class="ac-adid" type="text" style="width:13rem" value="' + esc(a.ad_account_id)
         + '" placeholder="ссылка или act_…" title="Можно вставить адрес страницы Ads Manager целиком"></td>'
-        + '<td><select class="ac-prof" style="max-width:16rem">' + profileOptions(a.profile_id) + '</select></td>'
+        + '<td><select class="ac-prof" style="max-width:17rem">'
+        + profileOptions(a.profile_id, a.suggested_profile) + '</select></td>'
         + '<td><button type="button" class="btn ac-save">Сохранить</button>'
         + '<span class="ac-row-msg" style="margin-left:0.5rem;font-size:0.75rem"></span></td>'
         + '<td>' + (removable
@@ -6102,7 +6106,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     box.innerHTML = html + '</tbody></table>';
 
     var newSel = document.getElementById('ac-new-prof');
-    if (newSel) newSel.innerHTML = profileOptions('');
+    if (newSel) newSel.innerHTML = profileOptions('', '');
 
     refreshBulk();
     knownLabels = (d.suggestions || []).concat(accs.map(function (a) { return a.label; }));
@@ -6292,7 +6296,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   function fillCountryProfileSelects() {
     document.querySelectorAll('.ac-country-add .acq-prof').forEach(function (sel) {
       if (sel.options.length && sel.dataset.filled === String(openProfiles.length)) return;
-      sel.innerHTML = profileOptions('');
+      sel.innerHTML = profileOptions('', '');
       sel.dataset.filled = String(openProfiles.length);
     });
   }

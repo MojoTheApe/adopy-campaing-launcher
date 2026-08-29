@@ -109,3 +109,107 @@ def folder_id_for(profile_id: str) -> str:
             if len(folder) == 36 and folder.count("-") == 4:
                 return folder
     return ""
+
+
+def _window_titles_by_pid() -> dict[int, str]:
+    """Visible top-level window titles, keyed by owning process id.
+
+    Multilogin puts the PROFILE NAME at the front of its window title
+    ("KLD_BFL_W27: (28) Ads Manager … - Mimic"), which is the only place a
+    human-readable name is available at all — the profile-listing API answers
+    404/403 with the token we hold. Without it the picker can only offer bare
+    UUIDs, which is no better than typing one.
+
+    ctypes rather than pywin32: no dependency to add for a few lines, and this
+    runs on the operator's own machine only.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    titles: dict[int, str] = {}
+    try:
+        user32 = ctypes.windll.user32
+    except Exception:
+        return titles
+
+    WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def _cb(hwnd, _lparam):
+        try:
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            if not length:
+                return True
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            # First window wins: a browser has one main window and several
+            # helper ones, and the main window is enumerated first.
+            titles.setdefault(int(pid.value), buf.value)
+        except Exception:
+            pass
+        return True
+
+    try:
+        user32.EnumWindows(WNDENUMPROC(_cb), 0)
+    except Exception:
+        pass
+    return titles
+
+
+def _name_from_title(title: str) -> str:
+    """Profile name out of a Mimic window title, or "" when it isn't one."""
+    text = (title or "").strip()
+    if not text or ":" not in text:
+        return ""
+    name = text.split(":", 1)[0].strip()
+    # Guard against ordinary page titles that merely contain a colon.
+    return name if name and len(name) <= 60 and " " not in name else ""
+
+
+def open_profiles_detailed() -> list[dict]:
+    """Open profiles as {profile_id, name}, name empty when it can't be read."""
+    try:
+        import psutil
+    except Exception:
+        return [{"profile_id": p, "name": ""} for p in open_profile_ids()]
+
+    known = all_profile_ids()
+    titles = _window_titles_by_pid()
+    by_profile: dict[str, str] = {}
+
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            if "chrome" not in (proc.info.get("name") or "").lower():
+                continue
+            args = proc.info.get("cmdline") or []
+            udd = next((a.split("=", 1)[1] for a in args if a.startswith("--user-data-dir=")), "")
+            if not udd or "mlx" not in udd.lower():
+                continue
+            short = os.path.basename(udd.rstrip("\\/"))
+            full = short if short in known else _expand_short_name(short, known)
+            if not full:
+                continue
+            name = _name_from_title(titles.get(int(proc.info["pid"]), ""))
+            if name and not by_profile.get(full):
+                by_profile[full] = name
+            by_profile.setdefault(full, "")
+        except Exception:
+            continue
+
+    return [{"profile_id": pid, "name": nm} for pid, nm in by_profile.items()]
+
+
+def profile_name_key(name: str) -> str:
+    """Trailing letter+digits token of a profile name — its identity.
+
+    Multilogin names read "KLD_BFL_W27" while the same account is
+    "FacebookMKTOBFLW27 SV Ait" in the sheet. The prefixes differ and always
+    will; what matches is the tail, so compare on that alone.
+    """
+    import re as _re
+
+    m = _re.search(r"([A-Za-z])(\d{1,4})\s*$", (name or "").strip())
+    return (m.group(1) + m.group(2)).upper() if m else ""
