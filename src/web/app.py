@@ -1034,6 +1034,25 @@ async def api_accounts_overview() -> JSONResponse:
     except Exception:
         owner_by_alias = {}
 
+    # Full country name per account, taken from the stats where the account
+    # and the country sit in the same row. The sheet only gives a code ("CO",
+    # "SV"), and guessing the country from a code is exactly how "CO" would
+    # land in Costa Rica instead of Colombia.
+    country_by_alias: dict[str, str] = {}
+    try:
+        _r2, stats_df2, _w2 = get_cached_report()
+        if stats_df2 is not None and {"Account Alias", "Country"} <= set(stats_df2.columns):
+            pairs2 = stats_df2[["Account Alias", "Country"]].fillna("").astype(str)
+            tally: dict[str, dict[str, int]] = {}
+            for alias, ctry in pairs2.itertuples(index=False):
+                key, name = normalize_account_alias(alias), ctry.strip()
+                if not key or not name:
+                    continue
+                tally.setdefault(key, {})[name] = tally.setdefault(key, {}).get(name, 0) + 1
+            country_by_alias = {k: max(v, key=v.get) for k, v in tally.items()}
+    except Exception:
+        country_by_alias = {}
+
     selected_cm = (get_selected_cm() or "").strip()
     open_detail = open_profiles_detailed()
     open_ids = [p["profile_id"] for p in open_detail]
@@ -1058,6 +1077,7 @@ async def api_accounts_overview() -> JSONResponse:
         accounts.append({
             "label": label,
             "owner": owner,
+            "country_name": country_by_alias.get(normalize_account_alias(label), ""),
             "country": row.get("country_code") or "",
             "stock": row.get("stock") or "",
             "status": row.get("account_status") or "",
@@ -1084,6 +1104,7 @@ async def api_accounts_overview() -> JSONResponse:
         accounts.append({
             "label": label,
             "owner": owner,
+            "country_name": country_by_alias.get(normalize_account_alias(label), ""),
             "country": (getattr(entry, "country", "") or ""),
             "stock": "",
             "status": "",

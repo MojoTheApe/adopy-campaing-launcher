@@ -1400,6 +1400,175 @@
         transition: none;
       }
     }
+
+    /* ── Аккаунты: подключение ────────────────────────────────────────── */
+    .acc-intro {
+      color: var(--muted);
+      max-width: 74ch;
+      margin: 0 0 var(--space-lg);
+    }
+
+    .acc-connect {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      padding: var(--space-lg) var(--space-xl) var(--space-xl);
+      margin-bottom: var(--space-xl);
+      max-width: 68rem;
+    }
+    .acc-connect h3 {
+      margin: 0 0 var(--space-xs);
+      font-size: 0.95rem;
+      letter-spacing: -0.01em;
+    }
+    .acc-connect .acc-sub {
+      margin: 0 0 var(--space-lg);
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    /* One row, one baseline. Fields were wrapping at different heights
+       because each carried its own label block of a different length. */
+    .acc-form {
+      display: grid;
+      grid-template-columns: minmax(15rem, 1.4fr) minmax(9rem, 0.8fr) auto;
+      gap: var(--space-md) var(--space-lg);
+      align-items: end;
+    }
+    .acc-field { display: flex; flex-direction: column; gap: var(--space-xs); min-width: 0; }
+    .acc-field > label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .acc-field select,
+    .acc-field input[type="text"] {
+      width: 100%;
+      height: 34px;
+      padding: 0 var(--space-sm);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--bg-elev);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.85rem;
+    }
+    .acc-field select:focus-visible,
+    .acc-field input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      border-color: var(--accent);
+    }
+    .acc-form .acc-submit {
+      height: 34px;
+      padding: 0 var(--space-lg);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-sm);
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter 0.15s var(--ease-out);
+    }
+    .acc-form .acc-submit:hover:not(:disabled) { filter: brightness(1.08); }
+    .acc-form .acc-submit:disabled { opacity: 0.55; cursor: default; }
+
+    /* What the chosen profile resolved to — the whole point of picking it. */
+    .acc-derived {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-xs) var(--space-lg);
+      min-height: 1.4rem;
+      font-size: 0.83rem;
+      color: var(--muted);
+    }
+    .acc-derived b { color: var(--text); font-weight: 600; }
+    .acc-derived code {
+      font-size: 0.8rem;
+      background: var(--bg-subtle);
+      border-radius: var(--radius-sm);
+      padding: 1px 6px;
+    }
+    .acc-derived .acc-edit {
+      background: none; border: 0; padding: 0;
+      color: var(--accent); font: inherit; font-size: 0.8rem;
+      cursor: pointer; text-decoration: underline;
+    }
+    .acc-manual { display: none; grid-column: 1 / -1; }
+    .acc-manual.open { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); }
+
+    .acc-note { grid-column: 1 / -1; font-size: 0.78rem; color: var(--muted); margin: 0; }
+    .acc-msg { grid-column: 1 / -1; font-size: 0.82rem; min-height: 1.1rem; }
+
+    /* ── Сводка и таблица ─────────────────────────────────────────────── */
+    .acc-stats {
+      display: flex; flex-wrap: wrap; align-items: baseline;
+      gap: var(--space-xs) var(--space-lg);
+      margin: 0 0 var(--space-md);
+      font-size: 0.84rem; color: var(--muted);
+    }
+    .acc-stats .acc-big { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+    .acc-stats code { font-size: 0.76rem; }
+
+    .acc-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    .acc-table th {
+      text-align: left; font-size: 0.7rem; font-weight: 600;
+      letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted);
+      padding: 0 var(--space-md) var(--space-sm) 0;
+      border-bottom: 1px solid var(--border-strong); white-space: nowrap;
+    }
+    .acc-table td {
+      padding: var(--space-sm) var(--space-md) var(--space-sm) 0;
+      border-bottom: 1px solid var(--border); vertical-align: middle;
+    }
+    .acc-table tbody tr:hover { background: var(--bg-hover); }
+    .acc-table .acc-name { font-weight: 600; color: var(--text); }
+    .acc-table .acc-meta { font-size: 0.74rem; color: var(--muted); }
+    .acc-table input[type="text"], .acc-table select {
+      height: 30px; padding: 0 var(--space-sm); font-size: 0.8rem;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg-elev); color: var(--text); font-family: inherit;
+    }
+    .acc-table .col-pick { width: 2rem; }
+    .acc-table .col-act  { text-align: right; white-space: nowrap; }
+
+    .acc-pill {
+      display: inline-block; font-size: 0.68rem; font-weight: 600;
+      letter-spacing: 0.03em; padding: 2px 7px; border-radius: 999px;
+    }
+    .acc-pill.ok   { background: var(--good-soft); color: var(--good); }
+    .acc-pill.todo { background: var(--warn-soft); color: var(--warn); }
+    .acc-pill.local{ background: var(--bg-subtle); color: var(--muted); }
+
+    .acc-btn {
+      height: 28px; padding: 0 var(--space-md); font: inherit; font-size: 0.78rem;
+      border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      background: var(--bg-elev); color: var(--text); cursor: pointer;
+    }
+    .acc-btn:hover { background: var(--bg-hover); }
+    .acc-btn.danger { border-color: var(--bad); color: var(--bad); }
+    .acc-btn.danger:hover { background: var(--bad-soft); }
+
+    .acc-bulk {
+      display: none; align-items: center; gap: var(--space-md);
+      background: var(--accent-soft); border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: var(--space-sm) var(--space-md); margin-bottom: var(--space-md);
+      font-size: 0.84rem;
+    }
+    .acc-bulk.on { display: flex; }
+
+    @media (max-width: 860px) {
+      .acc-form { grid-template-columns: 1fr; }
+      .acc-manual.open { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -1517,51 +1686,61 @@ async function dashRefresh(ev) {
 {# ── Home view ─────────────────────────────────────────────────── #}
 <div id="view-accounts" class="view-panel">
   <h2 class="view-title">Аккаунты <span class="hint">подключение к этой машине</span></h2>
-  <p style="color:var(--muted);max-width:76ch">
+  <p class="acc-intro">
     Слева то, что говорит общая таблица: какие аккаунты у вас есть и в каком они
     состоянии. Справа то, что знает <b>эта машина</b>: как до аккаунта дотянуться.
     Аккаунт может быть жив в таблице и при этом непригоден здесь — если для него
     нет профиля Multilogin.
   </p>
-  <div id="ac-add-box" style="margin:0.9rem 0;padding:0.9rem 1rem;border:1px solid var(--border);border-radius:6px;max-width:76ch">
-    <div style="font-weight:600;font-size:0.9rem;margin-bottom:0.5rem">Добавить аккаунт вручную</div>
-    <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:flex-end">
-      <label style="flex:1 1 16rem">
-        <div style="font-size:0.75rem;color:var(--muted)">Название как в таблице</div>
-        <input id="ac-new-label" type="text" list="ac-known-labels"
-               placeholder="начните вводить — подскажем" style="width:100%" autocomplete="off">
-        <datalist id="ac-known-labels"></datalist>
-        <div id="ac-label-hint" style="font-size:0.72rem;margin-top:0.2rem"></div>
-      </label>
-      <label style="flex:0 0 11rem">
-        <div style="font-size:0.75rem;color:var(--muted)">Рекламный кабинет</div>
-        <input id="ac-new-adid" type="text" placeholder="подставится по профилю" style="width:100%"
-               title="Заполняется само, когда выбран профиль. Иначе откройте кабинет в Ads Manager и вставьте сюда адрес из адресной строки.">
-      </label>
-      <label style="flex:0 0 15rem">
-        <div style="font-size:0.75rem;color:var(--muted)">Профиль Multilogin</div>
-        <select id="ac-new-prof" style="width:100%"></select>
-      </label>
-      <label style="flex:0 0 10rem">
-        <div style="font-size:0.75rem;color:var(--muted)">Страна — необязательно</div>
-        <input id="ac-new-country" type="text" list="ac-countries" placeholder="напр. Chile" style="width:100%" autocomplete="off">
+
+  <section class="acc-connect">
+    <h3>Подключить аккаунт</h3>
+    <p class="acc-sub">Выберите открытый профиль — остальное определится само.</p>
+
+    <div class="acc-form">
+      <div class="acc-field">
+        <label for="ac-new-prof">Профиль Multilogin</label>
+        <select id="ac-new-prof"></select>
+      </div>
+      <div class="acc-field">
+        <label for="ac-new-country">Страна · необязательно</label>
+        <input id="ac-new-country" type="text" list="ac-countries" placeholder="напр. Chile" autocomplete="off">
         <datalist id="ac-countries"></datalist>
-      </label>
-      <button type="button" id="ac-add-btn" class="btn">Добавить</button>
+      </div>
+      <button type="button" id="ac-add-btn" class="acc-submit">Подключить</button>
+
+      <div class="acc-derived" id="ac-derived">
+        <span id="ac-derived-text">Профиль не выбран.</span>
+        <button type="button" class="acc-edit" id="ac-toggle-manual">задать вручную</button>
+      </div>
+
+      <div class="acc-manual" id="ac-manual">
+        <div class="acc-field">
+          <label for="ac-new-label">Название аккаунта</label>
+          <input id="ac-new-label" type="text" list="ac-known-labels" placeholder="как в таблице" autocomplete="off">
+          <datalist id="ac-known-labels"></datalist>
+          <div id="ac-label-hint" style="font-size:0.72rem"></div>
+        </div>
+        <div class="acc-field">
+          <label for="ac-new-adid">Рекламный кабинет</label>
+          <input id="ac-new-adid" type="text" placeholder="адрес из Ads Manager или act_…">
+        </div>
+      </div>
+
+      <p class="acc-note">
+        Имя и кабинет берутся из выбранного профиля: имя — из его названия, кабинет —
+        из истории этого же профиля. Если что-то не определилось, нажмите «задать вручную».
+      </p>
+      <div class="acc-msg" id="ac-msg"></div>
     </div>
-    <div style="margin-top:0.5rem;font-size:0.75rem;color:var(--muted)">
-      Нужно, когда аккаунта ещё нет в общей таблице. Запись идёт только в карту этой машины.<br>
-      Кабинет подставляется сам по выбранному профилю. Если не подставился — откройте нужный
-      кабинет в Ads Manager и вставьте сюда адрес из адресной строки браузера целиком.
-    </div>
+  </section>
+
+  <div class="acc-bulk" id="ac-bulk">
+    <span id="ac-bulk-count"></span>
+    <button type="button" id="ac-bulk-drop" class="acc-btn danger">Убрать выбранные</button>
+    <button type="button" id="ac-bulk-clear" class="acc-btn">Снять выделение</button>
   </div>
 
-  <div id="ac-bulk" style="display:none;margin:0.5rem 0;padding:0.5rem 0.8rem;border:1px solid var(--border);border-radius:6px;align-items:center;gap:0.7rem">
-    <span id="ac-bulk-count" style="font-size:0.85rem"></span>
-    <button type="button" id="ac-bulk-drop" class="btn">Убрать выбранные</button>
-    <button type="button" id="ac-bulk-clear" class="btn" style="background:transparent">Снять выделение</button>
-  </div>
-  <div id="ac-msg" style="margin:0.5rem 0;font-size:0.85rem"></div>
   <div id="ac-list">Загрузка…</div>
 </div>
 
@@ -1923,6 +2102,7 @@ async function dashRefresh(ev) {
     <button type="button" class="btn acq-add">Добавить</button>
     <span class="acq-msg" style="font-size:0.75rem"></span>
   </div>
+  <div class="acq-connected" style="margin-top:0.6rem;font-size:0.8rem;color:var(--muted)"></div>
 </div>
 
 <table>
@@ -6022,6 +6202,10 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
 })();
 
 // ── Аккаунты: подключение к этой машине ──────────────────────────────────
+// Одно решение оператора — какой профиль. Имя аккаунта и рекламный кабинет
+// выводятся из него: имя из названия профиля, кабинет из истории того же
+// профиля. Ручной ввод остаётся, но убран с глаз: он нужен, только когда
+// вывести не удалось.
 (function () {
   var loaded = false, openProfiles = [], knownLabels = [];
 
@@ -6030,53 +6214,46 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
+  function el(id) { return document.getElementById(id); }
   function say(t, kind) {
-    var el = document.getElementById('ac-msg'); if (!el) return;
-    el.style.color = kind === 'err' ? '#b91c1c' : (kind === 'ok' ? 'var(--ok,#4caf50)' : 'var(--muted)');
-    el.textContent = t || '';
+    var m = el('ac-msg'); if (!m) return;
+    m.style.color = kind === 'err' ? 'var(--bad)' : (kind === 'ok' ? 'var(--good)' : 'var(--muted)');
+    m.textContent = t || '';
+  }
+
+  function tailKey(label) {
+    var m = String(label || '').split(' ')[0].match(/([A-Za-z])(\d{1,4})$/);
+    return m ? (m[1] + m[2]).toUpperCase() : '';
+  }
+
+  function detectedFor(profileId) {
+    var p = openProfiles.filter(function (x) { return x.profile_id === profileId; })[0];
+    return (p && p.ad_account_id) || '';
   }
 
   function accountForProfile(profileId) {
     var p = openProfiles.filter(function (x) { return x.profile_id === profileId; })[0];
     if (!p || !p.key) return '';
-    var tail = function (label) {
-      var m = String(label || '').split(' ')[0].match(/([A-Za-z])(\d{1,4})$/);
-      return m ? (m[1] + m[2]).toUpperCase() : '';
-    };
-    var hits = knownLabels.filter(function (l) { return tail(l) === p.key; });
-    // The same account shows up twice — as the sheet label
-    // ("FacebookMKTOBFLW27 SV Ait") and as the bare stats alias
-    // ("FacebookMKTOBFLW27"). Collapse those before judging ambiguity, or a
-    // perfectly clear match reads as two candidates and nothing is offered.
+    var hits = knownLabels.filter(function (l) { return tailKey(l) === p.key; });
+    // Один аккаунт встречается дважды: полным именем из таблицы и коротким из
+    // статистики. Схлопываем, иначе ясное совпадение читается как спорное.
     var byBase = {};
     hits.forEach(function (l) {
       var base = String(l).split(' ')[0].toLowerCase();
-      // Prefer the fuller label: it is the one the map and the sheet use.
       if (!byBase[base] || l.length > byBase[base].length) byBase[base] = l;
     });
-    var unique = Object.keys(byBase).map(function (k) { return byBase[k]; });
-    // Still refuse when two genuinely different accounts share a tail.
-    return unique.length === 1 ? unique[0] : '';
-  }
-
-  function detectedFor(profileId) {
-    if (!profileId) return '';
-    var p = openProfiles.filter(function (x) { return x.profile_id === profileId; })[0];
-    return (p && p.ad_account_id) || '';
+    var uniq = Object.keys(byBase).map(function (k) { return byBase[k]; });
+    return uniq.length === 1 ? uniq[0] : '';
   }
 
   function profileOptions(current, suggested) {
-    // Profiles open right now, shown by NAME: connecting an account means
-    // opening its profile anyway, and the name is what the operator
-    // recognises. Ids are kept as the value, never as the label.
     var out = '<option value="">— выберите профиль —</option>';
     openProfiles.forEach(function (p) {
       var shown = p.name || (p.profile_id.slice(0, 8) + '…');
       var note = p.taken_by ? ' · занят: ' + p.taken_by
                : (p.profile_id === suggested ? ' · похоже, этот' : '');
       var sel = (p.profile_id === current || (!current && p.profile_id === suggested)) ? ' selected' : '';
-      out += '<option value="' + esc(p.profile_id) + '"' + sel + '>'
-           + esc(shown) + esc(note) + '</option>';
+      out += '<option value="' + esc(p.profile_id) + '"' + sel + '>' + esc(shown + note) + '</option>';
     });
     if (current && !openProfiles.some(function (p) { return p.profile_id === current; })) {
       out += '<option value="' + esc(current) + '" selected>'
@@ -6085,96 +6262,166 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     return out;
   }
 
+  function checkLabel() {
+    var inp = el('ac-new-label'), hint = el('ac-label-hint');
+    if (!inp || !hint) return;
+    var v = (inp.value || '').trim();
+    if (!v) { hint.textContent = ''; return; }
+    var norm = function (x) { return x.toLowerCase().replace(/[^a-z0-9]/g, ''); };
+    var hit = knownLabels.some(function (k) { return norm(k) === norm(v); });
+    hint.style.color = hit ? 'var(--good)' : 'var(--warn)';
+    hint.textContent = hit ? '✓ такой аккаунт известен'
+                           : 'нет ни в таблице, ни в статистике — проверьте написание';
+  }
+
+  function syncDerived() {
+    var pid = (el('ac-new-prof') || {}).value || '';
+    var nameField = el('ac-new-label'), adField = el('ac-new-adid');
+    var text = el('ac-derived-text');
+    if (!text) return;
+    if (!pid) { text.textContent = 'Профиль не выбран.'; return; }
+
+    var guessName = accountForProfile(pid);
+    var guessAd = detectedFor(pid);
+    if (nameField && !nameField.dataset.touched) nameField.value = guessName;
+    if (adField && !adField.dataset.touched) adField.value = guessAd;
+
+    var name = (nameField && nameField.value) || guessName;
+    var ad = (adField && adField.value) || guessAd;
+    var parts = [];
+    parts.push(name ? 'Аккаунт: <b>' + esc(name) + '</b>'
+                    : '<span style="color:var(--warn)">имя не определилось</span>');
+    parts.push(ad ? 'Кабинет: <code>' + esc(ad) + '</code>'
+                  : '<span style="color:var(--warn)">кабинет не определился</span>');
+    text.innerHTML = parts.join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+    if (nameField && nameField.value) checkLabel();
+  }
+
+  function openManual() {
+    var box = el('ac-manual'); if (box) box.classList.add('open');
+  }
+
+  function addManual() {
+    var pid = (el('ac-new-prof') || {}).value || '';
+    var name = ((el('ac-new-label') || {}).value || '').trim() || accountForProfile(pid);
+    var ad = ((el('ac-new-adid') || {}).value || '').trim() || detectedFor(pid);
+    var country = ((el('ac-new-country') || {}).value || '').trim();
+
+    if (!name) { say('Имя не определилось — задайте вручную', 'err'); openManual(); return; }
+    // Строка без кабинета запишется, но в списке не появится: карта пропускает
+    // записи без ad_account_id. Молча исчезнувший аккаунт хуже отказа.
+    if (!ad) { say('Кабинет не определился — задайте вручную', 'err'); openManual(); return; }
+
+    var picked = openProfiles.filter(function (p) { return p.profile_id === pid; })[0];
+    var payload = { account_name: name, ad_account_id: ad };
+    if (pid) payload.profile_id = pid;
+    if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
+    if (country) payload.country = country;
+
+    var btn = el('ac-add-btn');
+    if (btn) btn.disabled = true;
+    say('Подключаю…');
+    fetch('/account-map-patch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (btn) btn.disabled = false;
+        if (!d.ok) { say(d.error || 'не удалось', 'err'); return; }
+        say('Подключён: ' + name, 'ok');
+        ['ac-new-label', 'ac-new-adid', 'ac-new-country'].forEach(function (id) {
+          var f = el(id); if (f) { f.value = ''; delete f.dataset.touched; }
+        });
+        var ps = el('ac-new-prof'); if (ps) ps.value = '';
+        syncDerived();
+        load(true);
+      })
+      .catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); });
+  }
+
   function render(d) {
-    var box = document.getElementById('ac-list'); if (!box) return;
+    var box = el('ac-list'); if (!box) return;
     if (!d || !d.ok) {
-      box.innerHTML = '<p style="color:#b91c1c">' + esc((d && d.error) || 'Не удалось загрузить') + '</p>';
+      box.innerHTML = '<p style="color:var(--bad)">' + esc((d && d.error) || 'Не удалось загрузить') + '</p>';
       return;
     }
     openProfiles = d.open_profiles || [];
     var accs = d.accounts || [];
+    knownLabels = (d.suggestions || []).concat(accs.map(function (a) { return a.label; }));
     var connected = accs.filter(function (a) { return a.connected; }).length;
 
-    var html = '<p style="color:var(--muted);font-size:0.85rem">Подключено <b>'
-      + connected + '</b> из ' + accs.length
-      + ' · открытых профилей Multilogin: ' + openProfiles.length
-      + '<br>карта этой машины: <code>' + esc(d.map_path) + '</code></p>';
+    var html = '<div class="acc-stats">'
+      + '<span><span class="acc-big">' + connected + '</span> из ' + accs.length + ' подключено</span>'
+      + '<span>открытых профилей: <b>' + openProfiles.length + '</b></span>'
+      + '<span>карта: <code>' + esc(d.map_path) + '</code></span>'
+      + '</div>';
 
     if (!openProfiles.length) {
-      html += '<p style="color:#b45309;font-size:0.85rem">Ни один профиль Multilogin не открыт — '
-            + 'откройте профиль аккаунта, и он появится в списке выбора.</p>';
+      html += '<p style="color:var(--warn);font-size:0.84rem">Ни один профиль Multilogin не открыт — '
+            + 'откройте профиль аккаунта, и он появится в выборе.</p>';
     }
 
-    html += '<table><thead><tr>'
-         + '<th style="width:1.6rem"><input type="checkbox" id="ac-check-all" title="Выбрать все, которые можно убрать"></th>'
-         + '<th>Аккаунт</th><th>Страна</th><th>Статус</th>'
-         + '<th>ad_account_id</th><th>Профиль Multilogin</th><th></th><th></th></tr></thead><tbody>';
+    html += '<table class="acc-table"><thead><tr>'
+      + '<th class="col-pick"><input type="checkbox" id="ac-check-all" title="Выбрать все, которые можно убрать"></th>'
+      + '<th>Аккаунт</th><th>Страна</th><th>Кабинет</th><th>Профиль</th><th class="col-act"></th>'
+      + '</tr></thead><tbody>';
+
     accs.forEach(function (a) {
-      var badge = a.connected
-        ? '<span style="color:var(--good,#16a34a)">✓ подключён</span>'
-        : '<span style="color:#b45309">не хватает: ' + esc(a.missing.join(', ')) + '</span>';
-      if (a.local_only) {
-        badge += ' <span style="color:var(--muted)">· только на этой машине</span>';
-      }
       var removable = a.connected || a.local_only;
+      var pill = a.connected
+        ? '<span class="acc-pill ok">подключён</span>'
+        : '<span class="acc-pill todo">нет: ' + esc(a.missing.join(', ')) + '</span>';
+      var local = a.local_only ? ' <span class="acc-pill local">только здесь</span>' : '';
       html += '<tr data-label="' + esc(a.label) + '">'
-        + '<td>' + (removable
-            ? '<input type="checkbox" class="ac-check" aria-label="выбрать ' + esc(a.label) + '">'
-            : '') + '</td>'
-        + '<td><b>' + esc(a.label) + '</b><div style="font-size:0.72rem">' + badge + '</div></td>'
-        + '<td>' + esc(a.country) + '</td>'
-        + '<td>' + esc(a.status) + '</td>'
-        + '<td><input class="ac-adid" type="text" style="width:13rem" value="'
+        + '<td class="col-pick">' + (removable
+            ? '<input type="checkbox" class="ac-check" aria-label="выбрать ' + esc(a.label) + '">' : '') + '</td>'
+        + '<td><div class="acc-name">' + esc(a.label) + '</div>'
+        + '<div class="acc-meta">' + pill + local + '</div></td>'
+        + '<td>' + esc(a.country || '—') + '</td>'
+        + '<td><input class="ac-adid" type="text" style="width:12rem" value="'
         + esc(a.ad_account_id || detectedFor(a.suggested_profile))
-        + '" placeholder="ссылка или act_…" title="Можно вставить адрес страницы Ads Manager целиком. '
-        + 'Если профиль подобран, кабинет подставлен из его истории."></td>'
-        + '<td><select class="ac-prof" style="max-width:17rem">'
+        + '" placeholder="ссылка или act_…"></td>'
+        + '<td><select class="ac-prof" style="max-width:15rem">'
         + profileOptions(a.profile_id, a.suggested_profile) + '</select></td>'
-        + '<td><button type="button" class="btn ac-save">Сохранить</button>'
-        + '<span class="ac-row-msg" style="margin-left:0.5rem;font-size:0.75rem"></span></td>'
-        + '<td>' + (removable
-            ? '<button type="button" class="btn ac-drop" title="Убрать из карты этой машины">Убрать</button>'
-            : '') + '</td>'
+        + '<td class="col-act"><button type="button" class="acc-btn ac-save">Сохранить</button>'
+        + (removable ? ' <button type="button" class="acc-btn danger ac-drop">Убрать</button>' : '')
+        + ' <span class="ac-row-msg acc-meta"></span></td>'
         + '</tr>';
     });
     box.innerHTML = html + '</tbody></table>';
 
-    var newSel = document.getElementById('ac-new-prof');
-    if (newSel) newSel.innerHTML = profileOptions('', '');
+    var ps = el('ac-new-prof');
+    if (ps) { var keep = ps.value; ps.innerHTML = profileOptions('', ''); ps.value = keep; }
 
-    refreshBulk();
-    knownLabels = (d.suggestions || []).concat(accs.map(function (a) { return a.label; }));
-
-    var cdl = document.getElementById('ac-countries');
+    var cdl = el('ac-countries');
     if (cdl) {
-      cdl.innerHTML = '';
-      var seen = {};
+      cdl.innerHTML = ''; var seen = {};
       accs.forEach(function (a) {
         if (!a.country || seen[a.country]) return;
         seen[a.country] = 1;
         var o = document.createElement('option'); o.value = a.country; cdl.appendChild(o);
       });
     }
-    var dl = document.getElementById('ac-known-labels');
-    if (dl) {
-      dl.innerHTML = '';
-      (d.suggestions || []).forEach(function (name) {
-        var o = document.createElement('option');
-        o.value = name;
-        o.label = 'есть в статистике, здесь не подключён';
-        dl.appendChild(o);
+    var ldl = el('ac-known-labels');
+    if (ldl) {
+      ldl.innerHTML = '';
+      (d.suggestions || []).forEach(function (n) {
+        var o = document.createElement('option'); o.value = n;
+        o.label = 'есть в статистике, здесь не подключён'; ldl.appendChild(o);
       });
     }
+    refreshBulk();
+    syncDerived();
+    fillCountryConnected(accs);
   }
 
   function load(force) {
     if (loaded && !force) return;
-    var box = document.getElementById('ac-list');
-    if (box) box.textContent = 'Загрузка…';
+    var box = el('ac-list'); if (box) box.textContent = 'Загрузка…';
     fetch('/api/accounts-overview').then(function (r) { return r.json(); })
       .then(function (d) { loaded = true; render(d); })
       .catch(function (e) {
-        if (box) box.innerHTML = '<p style="color:#b91c1c">' + esc(e) + '</p>';
+        if (box) box.innerHTML = '<p style="color:var(--bad)">' + esc(e) + '</p>';
       });
   }
 
@@ -6189,91 +6436,37 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var payload = { account_name: label };
     if (adid.trim()) payload.ad_account_id = adid.trim();
     if (prof.trim()) payload.profile_id = prof.trim();
-    // folder_id is derived from the profile's own path — never typed.
     if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
 
     btn.disabled = true;
-    if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'Сохраняю…'; }
+    if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'сохраняю…'; }
     fetch('/account-map-patch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).then(function (r) { return r.json(); })
       .then(function (d) {
         btn.disabled = false;
-        if (!d.ok) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = d.error || 'ошибка'; } return; }
-        if (msg) { msg.style.color = 'var(--ok,#4caf50)'; msg.textContent = '✓'; }
+        if (!d.ok) { if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = d.error || 'ошибка'; } return; }
+        if (msg) { msg.style.color = 'var(--good)'; msg.textContent = '✓'; }
         load(true);
       })
       .catch(function (e) {
         btn.disabled = false;
-        if (msg) { msg.style.color = '#b91c1c'; msg.textContent = String(e); }
+        if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = String(e); }
       });
   }
 
-  function checkLabel() {
-    var inp = document.getElementById('ac-new-label');
-    var hint = document.getElementById('ac-label-hint');
-    if (!inp || !hint) return;
-    var v = (inp.value || '').trim();
-    if (!v) { hint.textContent = ''; return; }
-    var norm = function (x) { return x.toLowerCase().replace(/[^a-z0-9]/g, ''); };
-    var hit = knownLabels.some(function (k) { return norm(k) === norm(v); });
-    // A soft warning, not a block: a genuinely new account has no history yet
-    // and must still be addable.
-    hint.style.color = hit ? 'var(--ok,#4caf50)' : '#b45309';
-    hint.textContent = hit
-      ? '✓ такой аккаунт известен'
-      : 'такого имени нет ни в таблице, ни в статистике — проверьте написание';
-  }
-
-  function addManual() {
-    var label = (document.getElementById('ac-new-label') || {}).value || '';
-    var adid = (document.getElementById('ac-new-adid') || {}).value || '';
-    var prof = (document.getElementById('ac-new-prof') || {}).value || '';
-    var country = (document.getElementById('ac-new-country') || {}).value || '';
-    if (!label.trim()) { say('Укажите название аккаунта', 'err'); return; }
-    // Без кабинета строка запишется, но в списке не появится: карта пропускает
-    // записи без ad_account_id. Молчаливо исчезнувший аккаунт хуже отказа.
-    if (!adid.trim()) { say('Укажите кабинет — без него аккаунт не появится в списке', 'err'); return; }
-    var picked = openProfiles.filter(function (p) { return p.profile_id === prof; })[0];
-
-    var payload = { account_name: label.trim() };
-    if (adid.trim()) payload.ad_account_id = adid.trim();
-    if (prof.trim()) payload.profile_id = prof.trim();
-    if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
-    if (country.trim()) payload.country = country.trim();
-
-    var btn = document.getElementById('ac-add-btn');
-    if (btn) btn.disabled = true;
-    say('Добавляю…');
-    fetch('/account-map-patch', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (btn) btn.disabled = false;
-        if (!d.ok) { say(d.error || 'не удалось', 'err'); return; }
-        say('Добавлен: ' + payload.account_name, 'ok');
-        ['ac-new-label', 'ac-new-adid'].forEach(function (id) {
-          var el = document.getElementById(id); if (el) el.value = '';
-        });
-        load(true);
-      })
-      .catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); });
-  }
-
   function selected() {
-    return [...document.querySelectorAll('#ac-list .ac-check:checked')]
+    return [].slice.call(document.querySelectorAll('#ac-list .ac-check:checked'))
       .map(function (c) { return c.closest('tr').getAttribute('data-label'); })
       .filter(Boolean);
   }
 
   function refreshBulk() {
-    var bar = document.getElementById('ac-bulk');
-    var label = document.getElementById('ac-bulk-count');
+    var bar = el('ac-bulk'), label = el('ac-bulk-count');
     if (!bar || !label) return;
     var n = selected().length;
-    bar.style.display = n ? 'flex' : 'none';
+    bar.classList.toggle('on', n > 0);
     label.textContent = 'Выбрано: ' + n;
   }
 
@@ -6283,8 +6476,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     if (!window.confirm('Убрать ' + labels.length + ' аккаунт(ов) из карты ЭТОЙ машины?'
         + String.fromCharCode(10, 10) + list + String.fromCharCode(10, 10)
         + 'Записи в общей таблице не изменятся.')) return;
-
-    var btn = document.getElementById('ac-bulk-drop');
+    var btn = el('ac-bulk-drop');
     if (btn) btn.disabled = true;
     say('Убираю ' + labels.length + '…');
     fetch('/account-map-remove', {
@@ -6294,10 +6486,9 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       .then(function (d) {
         if (btn) btn.disabled = false;
         if (!d.ok) { say(d.error || 'не удалось', 'err'); return; }
-        var msg = 'Убрано: ' + (d.removed || []).length;
-        if ((d.missing || []).length) msg += ' · не найдено: ' + d.missing.join(', ');
-        say(msg, 'ok');
-        load(true);
+        var m = 'Убрано: ' + (d.removed || []).length;
+        if ((d.missing || []).length) m += ' · не найдено: ' + d.missing.join(', ');
+        say(m, 'ok'); load(true);
       })
       .catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); });
   }
@@ -6305,9 +6496,8 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   function drop(btn) {
     var row = btn.closest('tr'); if (!row) return;
     var label = row.getAttribute('data-label');
-    // Say plainly what this does: the shared record is untouched, only this
-    // machine forgets how to reach the account.
-    if (!window.confirm('Убрать «' + label + '» из карты ЭТОЙ машины?' + String.fromCharCode(10, 10)
+    if (!window.confirm('Убрать «' + label + '» из карты ЭТОЙ машины?'
+        + String.fromCharCode(10, 10)
         + 'Аккаунт останется в общей таблице со всей историей — просто этот '
         + 'компьютер перестанет знать, как до него дотянуться.')) return;
     btn.disabled = true;
@@ -6318,18 +6508,59 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       .then(function (d) {
         btn.disabled = false;
         if (!d.ok) { say(d.error || 'не удалось', 'err'); return; }
-        say('Убран: ' + label, 'ok');
-        load(true);
+        say('Убран: ' + label, 'ok'); load(true);
       })
       .catch(function (e) { btn.disabled = false; say(String(e), 'err'); });
   }
 
-  // ── Добавление прямо из раздела страны ────────────────────────────────
-  // Та же запись в ту же карту, только страна проставляется сама: человек уже
-  // находится в разделе конкретной страны, спрашивать её ещё раз незачем.
+  // Страна у аккаунта приходит кодом («UAE»), а раздел назван полностью
+  // («United Arab Emirates»). Сравниваем терпимо: точное совпадение, префикс
+  // или аббревиатура по первым буквам слов.
+  function countryMatches(accountCountry, panelName) {
+    var a = String(accountCountry || '').trim().toLowerCase();
+    var b = String(panelName || '').trim().toLowerCase();
+    if (!a || !b) return false;
+    var norm = function (x) { return x.replace(/[^a-z0-9]/g, ''); };
+    var na = norm(a), nb = norm(b);
+    if (na === nb) return true;
+    // Префикс — только для достаточно длинных строк. Для двухбуквенных кодов
+    // он опасен: «CO» (Colombia) начинает «Costa Rica», и аккаунт уехал бы в
+    // чужую страну. Коды сверяем аббревиатурой по первым буквам слов.
+    if (na.length >= 4 && nb.length >= 4
+        && (nb.indexOf(na) === 0 || na.indexOf(nb) === 0)) return true;
+    var acronym = b.split(/[^a-z]+/).filter(Boolean).map(function (w) { return w[0]; }).join('');
+    return acronym.length > 1 && acronym === na;
+  }
+
+  // Раздел «Accounts» внутри страны рендерится на сервере из общей таблицы и
+  // про карту этой машины ничего не знает. Поэтому только что подключённый
+  // аккаунт там не появлялся — показываем его отдельной строкой.
+  function fillCountryConnected(accs) {
+    document.querySelectorAll('.ac-country-add').forEach(function (box) {
+      var out = box.querySelector('.acq-connected');
+      if (!out) return;
+      var name = box.getAttribute('data-country-name') || '';
+      var mine = (accs || []).filter(function (a) {
+        // Приоритет у таблицы: она говорит, за какой страной аккаунт закреплён
+        // СЕЙЧАС. Статистика историческая — аккаунт мог работать в Mexico год
+        // назад и быть переведён в Colombia, и тогда «самая частая страна» в
+        // статистике назвала бы прошлое. Её используем только когда в таблице
+        // страны нет.
+        if (!a.connected) return false;
+        return countryMatches(a.country || a.country_name, name);
+      });
+      if (!mine.length) {
+        out.innerHTML = 'Подключённых на этой машине аккаунтов для ' + esc(name) + ' пока нет.';
+        return;
+      }
+      out.innerHTML = 'Подключено на этой машине: '
+        + mine.map(function (a) { return '<b>' + esc(a.label) + '</b>'; }).join(', ');
+    });
+  }
+
   function fillCountryProfileSelects() {
     document.querySelectorAll('.ac-country-add .acq-prof').forEach(function (sel) {
-      if (sel.options.length && sel.dataset.filled === String(openProfiles.length)) return;
+      if (sel.dataset.filled === String(openProfiles.length)) return;
       sel.innerHTML = profileOptions('', '');
       sel.dataset.filled = String(openProfiles.length);
     });
@@ -6340,34 +6571,33 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     fetch('/api/accounts-overview').then(function (r) { return r.json(); })
       .then(function (d) {
         openProfiles = d.open_profiles || [];
+        knownLabels = (d.suggestions || []).concat((d.accounts || []).map(function (a) { return a.label; }));
         fillCountryProfileSelects();
-      })
-      .catch(function () { /* форма всё равно позволит ввести вручную */ });
+        fillCountryConnected(d.accounts || []);
+      }).catch(function () {});
   }
 
   function addFromCountry(btn) {
     var box = btn.closest('.ac-country-add'); if (!box) return;
     var country = box.getAttribute('data-country-name') || '';
-    var label = (box.querySelector('.acq-label') || {}).value || '';
-    var adid = (box.querySelector('.acq-adid') || {}).value || '';
     var prof = (box.querySelector('.acq-prof') || {}).value || '';
+    var label = ((box.querySelector('.acq-label') || {}).value || '').trim() || accountForProfile(prof);
+    var adid = ((box.querySelector('.acq-adid') || {}).value || '').trim() || detectedFor(prof);
     var msg = box.querySelector('.acq-msg');
     var show = function (t, kind) {
       if (!msg) return;
-      msg.style.color = kind === 'err' ? '#b91c1c' : (kind === 'ok' ? 'var(--ok,#4caf50)' : 'var(--muted)');
+      msg.style.color = kind === 'err' ? 'var(--bad)' : (kind === 'ok' ? 'var(--good)' : 'var(--muted)');
       msg.textContent = t || '';
     };
-    if (!label.trim()) { show('Укажите название', 'err'); return; }
-    if (!adid.trim()) { show('Нужен кабинет — вставьте ссылку', 'err'); return; }
+    if (!label) { show('Выберите профиль или укажите название', 'err'); return; }
+    if (!adid) { show('Кабинет не определился — вставьте ссылку', 'err'); return; }
 
     var picked = openProfiles.filter(function (p) { return p.profile_id === prof; })[0];
-    var payload = { account_name: label.trim(), country: country };
-    if (adid.trim()) payload.ad_account_id = adid.trim();
-    if (prof.trim()) payload.profile_id = prof.trim();
+    var payload = { account_name: label, ad_account_id: adid, country: country };
+    if (prof) payload.profile_id = prof;
     if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
 
-    btn.disabled = true;
-    show('Добавляю…');
+    btn.disabled = true; show('Подключаю…');
     fetch('/account-map-patch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -6375,67 +6605,63 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       .then(function (d) {
         btn.disabled = false;
         if (!d.ok) { show(d.error || 'не удалось', 'err'); return; }
-        show('✓ добавлен в ' + country, 'ok');
+        show('✓ ' + label + ' → ' + country, 'ok');
         box.querySelector('.acq-label').value = '';
         box.querySelector('.acq-adid').value = '';
-        loaded = false;  // общий список пересоберётся при следующем открытии
+        loaded = false;
+        fetch('/api/accounts-overview').then(function (r) { return r.json(); })
+          .then(function (fresh) { fillCountryConnected(fresh.accounts || []); })
+          .catch(function () {});
       })
       .catch(function (e) { btn.disabled = false; show(String(e), 'err'); });
   }
 
   document.addEventListener('input', function (ev) {
-    if (ev.target && ev.target.id === 'ac-new-label') checkLabel();
+    var t = ev.target; if (!t) return;
+    if (t.id === 'ac-new-label') { t.dataset.touched = '1'; checkLabel(); }
+    if (t.id === 'ac-new-adid') { t.dataset.touched = '1'; }
   });
 
   document.addEventListener('change', function (ev) {
-    var t = ev.target;
-    if (!t) return;
-    // Choosing a profile fills the cabinet from that profile's history, but
-    // never overwrites something already typed or saved.
-    var isProfileSelect = t.id === 'ac-new-prof'
-      || (t.classList && (t.classList.contains('ac-prof') || t.classList.contains('acq-prof')));
-    if (isProfileSelect) {
-      var scope = t.closest('tr') || t.closest('.ac-country-add') || t.closest('#ac-add-box');
-      var field = scope && (scope.querySelector('.ac-adid')
-                         || scope.querySelector('.acq-adid')
-                         || scope.querySelector('#ac-new-adid'));
+    var t = ev.target; if (!t) return;
+
+    if (t.id === 'ac-new-prof') {
+      ['ac-new-label', 'ac-new-adid'].forEach(function (id) {
+        var f = el(id); if (f) delete f.dataset.touched;
+      });
+      syncDerived();
+      return;
+    }
+    if (t.classList && (t.classList.contains('ac-prof') || t.classList.contains('acq-prof'))) {
+      var scope = t.closest('tr') || t.closest('.ac-country-add');
+      var field = scope && (scope.querySelector('.ac-adid') || scope.querySelector('.acq-adid'));
       var det = detectedFor(t.value);
       if (field && det && !field.value.trim()) field.value = det;
-
-      // In the manual form there is no row to take the account from, so the
-      // profile is the only clue we have — offer the account whose name
-      // matches it, since that is almost always the one being added.
-      var nameField = scope && scope.querySelector('#ac-new-label');
-      if (nameField && !nameField.value.trim()) {
-        var guess = accountForProfile(t.value);
-        if (guess) { nameField.value = guess; checkLabel(); }
-      }
+      return;
     }
     if (t.id === 'ac-check-all') {
       document.querySelectorAll('#ac-list .ac-check').forEach(function (c) { c.checked = t.checked; });
-      refreshBulk();
-      return;
+      refreshBulk(); return;
     }
     if (t.classList && t.classList.contains('ac-check')) refreshBulk();
   });
 
   document.addEventListener('click', function (ev) {
-    var t = ev.target;
-    if (t && t.id === 'ac-add-btn') { addManual(); return; }
-    if (t && t.classList && t.classList.contains('acq-add')) { addFromCountry(t); return; }
-    if (t && t.getAttribute && (t.getAttribute('data-view') || '').indexOf('-accounts') !== -1) {
-      loadProfilesForCountryForms();
-    }
-    if (t && t.classList && t.classList.contains('ac-save')) { save(t); return; }
-    if (t && t.id === 'ac-bulk-drop') { removeMany(selected()); return; }
-    if (t && t.id === 'ac-bulk-clear') {
+    var t = ev.target; if (!t) return;
+    if (t.id === 'ac-add-btn') { addManual(); return; }
+    if (t.id === 'ac-toggle-manual') { el('ac-manual').classList.toggle('open'); return; }
+    if (t.id === 'ac-bulk-drop') { removeMany(selected()); return; }
+    if (t.id === 'ac-bulk-clear') {
       document.querySelectorAll('#ac-list .ac-check, #ac-check-all')
         .forEach(function (c) { c.checked = false; });
-      refreshBulk();
-      return;
+      refreshBulk(); return;
     }
-    if (t && t.classList && t.classList.contains('ac-drop')) { drop(t); return; }
-    if (t && t.getAttribute && t.getAttribute('data-view') === 'accounts') { load(false); }
+    if (t.classList && t.classList.contains('acq-add')) { addFromCountry(t); return; }
+    if (t.classList && t.classList.contains('ac-save')) { save(t); return; }
+    if (t.classList && t.classList.contains('ac-drop')) { drop(t); return; }
+    var view = t.getAttribute && t.getAttribute('data-view');
+    if (view === 'accounts') { load(false); return; }
+    if (view && view.indexOf('-accounts') !== -1) { loadProfilesForCountryForms(); }
   });
 })();
 
