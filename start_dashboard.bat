@@ -48,17 +48,7 @@ REM a fresh install. Failure here is never fatal: a buyer who cannot reach
 REM GitHub still needs to launch campaigns.
 if exist "%LOCALAPPDATA%\ACL\auto_update" (
     git rev-parse --git-dir >nul 2>&1
-    if not errorlevel 1 (
-        echo Checking for updates...
-        for /f "delims=" %%h in ('git rev-parse HEAD 2^>nul') do set "HEAD_BEFORE=%%h"
-        git pull --ff-only >nul 2>&1
-        if errorlevel 1 (
-            echo   could not update - continuing with the installed version.
-        ) else (
-            for /f "delims=" %%h in ('git rev-parse HEAD 2^>nul') do set "HEAD_AFTER=%%h"
-            call :after_pull
-        )
-    )
+    if not errorlevel 1 call :update
 )
 
 echo Stopping any stale process on port %PORT%...
@@ -118,17 +108,80 @@ timeout /t 30 >nul
 goto hold
 
 REM ---------------------------------------------------------------------------
-REM Reached only via `call` above. Reinstalling dependencies costs seconds, so
-REM do it only when the pull actually brought something new - otherwise every
-REM single launch would pay for a no-op resolve.
-:after_pull
+REM Reached only via `call` above.
+REM
+REM The order here is the whole point. New code is downloaded but NOT activated
+REM until its dependencies are installed and the result is shown to start. The
+REM previous version pulled first and only warned when the install failed, which
+REM left the machine running new code against old libraries. That does not fail
+REM at update time - it fails next morning, as a ModuleNotFoundError with
+REM nothing in it to suggest last night's update, on a machine that is not in
+REM the room with us.
+REM
+REM A buyer who cannot be updated is not blocked: they keep working on the
+REM version that was running yesterday, which is the one we know works.
+:update
+echo Checking for updates...
+for /f "delims=" %%h in ('git rev-parse HEAD 2^>nul') do set "HEAD_BEFORE=%%h"
+
+REM fetch, not pull: this downloads without touching the working tree, which is
+REM what makes "check before activating" possible at all.
+git fetch --quiet
+if errorlevel 1 (
+    echo   could not reach GitHub - continuing with the installed version.
+    exit /b 0
+)
+
+for /f "delims=" %%u in ('git rev-parse --abbrev-ref --symbolic-full-name @{u} 2^>nul') do set "UPSTREAM=%%u"
+if not defined UPSTREAM (
+    echo   no upstream branch - skipping update.
+    exit /b 0
+)
+for /f "delims=" %%h in ('git rev-parse %UPSTREAM% 2^>nul') do set "HEAD_AFTER=%%h"
 if "%HEAD_BEFORE%"=="%HEAD_AFTER%" (
     echo   already up to date.
     exit /b 0
 )
-echo   updated. Refreshing dependencies...
-"%PY%" -m pip install --disable-pip-version-check -q -r requirements.txt
+
+REM The incoming requirements.txt, read out of the fetched commit without
+REM checking it out. Falls back to the installed one if the new version has no
+REM such file, so an empty temp file can never pass as "nothing to install".
+echo   new version available - installing its dependencies first...
+set "REQ=%TEMP%\acl_requirements_incoming.txt"
+git show %UPSTREAM%:requirements.txt > "%REQ%" 2>nul
+if errorlevel 1 copy /y requirements.txt "%REQ%" >nul
+
+"%PY%" -m pip install --disable-pip-version-check -q -r "%REQ%"
 if errorlevel 1 (
-    echo   WARNING: dependency refresh failed - the app may not start.
+    echo.
+    echo   WARNING: the new version's dependencies could not be installed.
+    echo   The update was NOT applied - you are still on the working version.
+    echo   Run install_acl.bat once you have a connection to try again.
+    echo.
+    exit /b 0
 )
+
+git merge --ff-only %UPSTREAM% >nul 2>&1
+if errorlevel 1 (
+    echo   local changes block the update - continuing with the installed version.
+    exit /b 0
+)
+
+REM Installed cleanly is not the same as starts. Import the dashboard and RPA
+REM entry points before declaring the new version good.
+"%PY%" scripts\acl_smoke.py >nul 2>&1
+if errorlevel 1 (
+    echo   WARNING: the new version does not start on this machine - rolling back.
+    REM --keep, never --hard: it refuses rather than destroying local work if
+    REM this ever runs somewhere that has any.
+    git reset --keep %HEAD_BEFORE% >nul 2>&1
+    if errorlevel 1 (
+        echo   ROLLBACK FAILED. Run install_acl.bat, and send this line on.
+        exit /b 0
+    )
+    echo   rolled back to the previous working version.
+    exit /b 0
+)
+
+echo   updated and verified.
 exit /b 0
