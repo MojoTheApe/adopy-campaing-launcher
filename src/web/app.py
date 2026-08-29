@@ -1036,6 +1036,34 @@ async def api_accounts_overview() -> JSONResponse:
             "missing": missing,
             "connected": not missing,
         })
+    # Accounts this machine knows but the sheet does not. Someone added them
+    # here on purpose — leaving them out would make them impossible to see,
+    # edit or disconnect from the only screen that manages the map.
+    listed = {a["label"] for a in accounts}
+    for label, entry in account_map.items():
+        label = (label or "").strip()
+        if not label or label in listed:
+            continue
+        owner = owner_by_alias.get(normalize_account_alias(label), "")
+        if selected_cm and owner and owner != selected_cm:
+            continue
+        ad_id = (getattr(entry, "ad_account_id", "") or "").strip()
+        profile_id = (getattr(entry, "profile_id", "") or "").strip()
+        missing = [n for n, v in (("ad_account_id", ad_id), ("profile_id", profile_id)) if not v]
+        accounts.append({
+            "label": label,
+            "owner": owner,
+            "country": "",
+            "stock": "",
+            "status": "",
+            "ad_account_id": ad_id,
+            "profile_id": profile_id,
+            "profile_open": profile_id in open_ids,
+            "missing": missing,
+            "connected": not missing,
+            "local_only": True,
+        })
+
     accounts.sort(key=lambda a: (a["connected"], a["label"].lower()))
 
     return JSONResponse({
@@ -1223,6 +1251,53 @@ async def account_map_patch(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": f"Failed to save: {exc}"}, status_code=500)
 
     return JSONResponse({"ok": True, "saved": new_row["account_name"]})
+
+
+@app.post("/account-map-remove")
+async def account_map_remove(request: Request) -> JSONResponse:
+    """Disconnect an account from THIS machine. Body JSON: {account_name}.
+
+    Removes the row from the machine-local map only. The account keeps
+    existing in the company's sheet, keeps its history and its campaigns —
+    this machine simply stops knowing how to reach it. Nothing here can or
+    should delete a shared record.
+    """
+    import csv as _csv
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    account_name = (data.get("account_name") or "").strip()
+    if not account_name:
+        return JSONResponse({"ok": False, "error": "account_name is required"}, status_code=400)
+
+    map_path = Path(get_ad_account_map_path())
+    if not map_path.is_file():
+        return JSONResponse({"ok": False, "error": "Карта аккаунтов не найдена"}, status_code=404)
+
+    try:
+        with open(map_path, encoding="utf-8-sig", newline="") as f:
+            reader = _csv.DictReader(f)
+            fieldnames = reader.fieldnames or []
+            rows = list(reader)
+
+        kept = [r for r in rows if (r.get("account_name") or "").strip() != account_name]
+        if len(kept) == len(rows):
+            return JSONResponse(
+                {"ok": False, "error": f"«{account_name}» нет в карте этой машины"},
+                status_code=404,
+            )
+
+        with open(map_path, "w", encoding="utf-8", newline="") as f:
+            writer = _csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(kept)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    return JSONResponse({"ok": True, "removed": account_name, "left": len(kept)})
 
 
 @app.post("/account-link-patch")

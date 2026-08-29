@@ -1523,6 +1523,28 @@ async function dashRefresh(ev) {
     Аккаунт может быть жив в таблице и при этом непригоден здесь — если для него
     нет профиля Multilogin.
   </p>
+  <div id="ac-add-box" style="margin:0.9rem 0;padding:0.9rem 1rem;border:1px solid var(--border);border-radius:6px;max-width:76ch">
+    <div style="font-weight:600;font-size:0.9rem;margin-bottom:0.5rem">Добавить аккаунт вручную</div>
+    <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:flex-end">
+      <label style="flex:1 1 16rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Название как в таблице</div>
+        <input id="ac-new-label" type="text" placeholder="FacebookXX123 CO Dav" style="width:100%">
+      </label>
+      <label style="flex:0 0 11rem">
+        <div style="font-size:0.75rem;color:var(--muted)">ad_account_id</div>
+        <input id="ac-new-adid" type="text" placeholder="act_123…" style="width:100%">
+      </label>
+      <label style="flex:0 0 15rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Профиль Multilogin</div>
+        <select id="ac-new-prof" style="width:100%"></select>
+      </label>
+      <button type="button" id="ac-add-btn" class="btn">Добавить</button>
+    </div>
+    <div style="margin-top:0.5rem;font-size:0.75rem;color:var(--muted)">
+      Нужно, когда аккаунта ещё нет в общей таблице. Запись идёт только в карту этой машины.
+    </div>
+  </div>
+
   <div id="ac-msg" style="margin:0.5rem 0;font-size:0.85rem"></div>
   <div id="ac-list">Загрузка…</div>
 </div>
@@ -6014,11 +6036,14 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     }
 
     html += '<table><thead><tr><th>Аккаунт</th><th>Страна</th><th>Статус</th>'
-         + '<th>ad_account_id</th><th>Профиль Multilogin</th><th></th></tr></thead><tbody>';
+         + '<th>ad_account_id</th><th>Профиль Multilogin</th><th></th><th></th></tr></thead><tbody>';
     accs.forEach(function (a) {
       var badge = a.connected
         ? '<span style="color:var(--good,#16a34a)">✓ подключён</span>'
         : '<span style="color:#b45309">не хватает: ' + esc(a.missing.join(', ')) + '</span>';
+      if (a.local_only) {
+        badge += ' <span style="color:var(--muted)">· только на этой машине</span>';
+      }
       html += '<tr data-label="' + esc(a.label) + '">'
         + '<td><b>' + esc(a.label) + '</b><div style="font-size:0.72rem">' + badge + '</div></td>'
         + '<td>' + esc(a.country) + '</td>'
@@ -6028,9 +6053,15 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         + '<td><select class="ac-prof" style="max-width:16rem">' + profileOptions(a.profile_id) + '</select></td>'
         + '<td><button type="button" class="btn ac-save">Сохранить</button>'
         + '<span class="ac-row-msg" style="margin-left:0.5rem;font-size:0.75rem"></span></td>'
+        + '<td>' + (a.connected || a.local_only
+            ? '<button type="button" class="btn ac-drop" title="Убрать из карты этой машины">Убрать</button>'
+            : '') + '</td>'
         + '</tr>';
     });
     box.innerHTML = html + '</tbody></table>';
+
+    var newSel = document.getElementById('ac-new-prof');
+    if (newSel) newSel.innerHTML = profileOptions('');
   }
 
   function load(force) {
@@ -6076,9 +6107,64 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       });
   }
 
+  function addManual() {
+    var label = (document.getElementById('ac-new-label') || {}).value || '';
+    var adid = (document.getElementById('ac-new-adid') || {}).value || '';
+    var prof = (document.getElementById('ac-new-prof') || {}).value || '';
+    if (!label.trim()) { say('Укажите название аккаунта', 'err'); return; }
+    var picked = openProfiles.filter(function (p) { return p.profile_id === prof; })[0];
+
+    var payload = { account_name: label.trim() };
+    if (adid.trim()) payload.ad_account_id = adid.trim();
+    if (prof.trim()) payload.profile_id = prof.trim();
+    if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
+
+    var btn = document.getElementById('ac-add-btn');
+    if (btn) btn.disabled = true;
+    say('Добавляю…');
+    fetch('/account-map-patch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (btn) btn.disabled = false;
+        if (!d.ok) { say(d.error || 'не удалось', 'err'); return; }
+        say('Добавлен: ' + payload.account_name, 'ok');
+        ['ac-new-label', 'ac-new-adid'].forEach(function (id) {
+          var el = document.getElementById(id); if (el) el.value = '';
+        });
+        load(true);
+      })
+      .catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); });
+  }
+
+  function drop(btn) {
+    var row = btn.closest('tr'); if (!row) return;
+    var label = row.getAttribute('data-label');
+    // Say plainly what this does: the shared record is untouched, only this
+    // machine forgets how to reach the account.
+    if (!window.confirm('Убрать «' + label + '» из карты ЭТОЙ машины?' + String.fromCharCode(10, 10)
+        + 'Аккаунт останется в общей таблице со всей историей — просто этот '
+        + 'компьютер перестанет знать, как до него дотянуться.')) return;
+    btn.disabled = true;
+    fetch('/account-map-remove', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_name: label })
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        btn.disabled = false;
+        if (!d.ok) { say(d.error || 'не удалось', 'err'); return; }
+        say('Убран: ' + label, 'ok');
+        load(true);
+      })
+      .catch(function (e) { btn.disabled = false; say(String(e), 'err'); });
+  }
+
   document.addEventListener('click', function (ev) {
     var t = ev.target;
+    if (t && t.id === 'ac-add-btn') { addManual(); return; }
     if (t && t.classList && t.classList.contains('ac-save')) { save(t); return; }
+    if (t && t.classList && t.classList.contains('ac-drop')) { drop(t); return; }
     if (t && t.getAttribute && t.getAttribute('data-view') === 'accounts') { load(false); }
   });
 })();
