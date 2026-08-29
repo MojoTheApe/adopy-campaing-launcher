@@ -1468,6 +1468,7 @@ async function dashRefresh(ev) {
 <aside class="sidebar" aria-label="Dashboard navigation">
   <div class="sidebar-label">Main</div>
   <button type="button" class="sidebar-link sidebar-home active" data-view="home">🏠 Home</button>
+  <button type="button" class="sidebar-link" data-view="targets">🎯 Таргеты</button>
 
   <div class="sidebar-label">Countries</div>
   {% for c in report.countries %}
@@ -1505,6 +1506,35 @@ async function dashRefresh(ev) {
 <main class="main-content">
 
 {# ── Home view ─────────────────────────────────────────────────── #}
+<div id="view-targets" class="view-panel">
+  <h2 class="view-title">Таргеты <span class="hint">общая библиотека — видна всем байерам</span></h2>
+  <p style="color:var(--muted);max-width:70ch">
+    Один список на всю команду. Добавленный здесь таргет сразу доступен всем
+    и подставляется в сборщик кампаний — открывать таблицу вручную не нужно.
+  </p>
+
+  <div id="tg-add-box" style="margin:1rem 0;padding:0.9rem 1rem;border:1px solid var(--border);border-radius:6px;max-width:70ch">
+    <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:flex-end">
+      <label style="flex:0 0 12rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Название</div>
+        <input id="tg-name" type="text" placeholder="напр. Investment" style="width:100%">
+      </label>
+      <label style="flex:1 1 22rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Интересы через запятую</div>
+        <input id="tg-interests" type="text" placeholder="Investment, Trading, Finance" style="width:100%">
+      </label>
+      <label style="flex:1 1 14rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Сужение (необязательно)</div>
+        <input id="tg-narrow" type="text" placeholder="" style="width:100%">
+      </label>
+      <button type="button" id="tg-add-btn" class="btn">Добавить</button>
+    </div>
+    <div id="tg-msg" style="margin-top:0.6rem;font-size:0.85rem"></div>
+  </div>
+
+  <div id="tg-list">Загрузка…</div>
+</div>
+
 <div id="view-home" class="view-panel active">
   <div id="goals-panel"></div>
   <div class="home-overview">
@@ -5862,6 +5892,108 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   }
   poll();
 }
+
+// ── Таргеты: общая библиотека ────────────────────────────────────────────
+// Список грузится по требованию, а не на каждой загрузке страницы: он живёт
+// в Google Sheets, и тянуть его ради раздела, в который никто не зашёл, —
+// лишняя секунда старта для всех.
+(function () {
+  var loaded = false;
+
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function say(text, kind) {
+    var el = document.getElementById('tg-msg');
+    if (!el) return;
+    var color = kind === 'err' ? '#b91c1c' : (kind === 'ok' ? 'var(--ok,#4caf50)' : 'var(--muted)');
+    el.style.color = color;
+    el.textContent = text || '';
+  }
+
+  function render(data) {
+    var box = document.getElementById('tg-list');
+    if (!box) return;
+    var list = (data && data.profiles) || [];
+    if (!list.length) {
+      box.innerHTML = '<p><em>Библиотека пуста или таблица недоступна.</em></p>';
+      return;
+    }
+    var html = '<p style="color:var(--muted);font-size:0.85rem">Всего: ' + list.length + '</p>'
+      + '<table><thead><tr><th>Название</th><th>Интересы</th><th>Сужение</th></tr></thead><tbody>';
+    list.forEach(function (p) {
+      html += '<tr><td><b>' + esc(p.name) + '</b></td><td>' + esc(p.interests)
+           + '</td><td>' + esc(p.narrow || '—') + '</td></tr>';
+    });
+    box.innerHTML = html + '</tbody></table>';
+
+    // The form needs the machine's Google write token; say so plainly rather
+    // than letting someone type a profile and only then hit the error.
+    if (data && data.can_add === false) {
+      var addBox = document.getElementById('tg-add-box');
+      if (addBox) {
+        addBox.style.opacity = '0.55';
+        var btn = document.getElementById('tg-add-btn');
+        if (btn) btn.disabled = true;
+        say('Добавление недоступно: на этой машине нет доступа Google на запись. '
+          + 'Выполните один раз: python scripts/acl_telemetry_upload.py', 'err');
+      }
+    }
+  }
+
+  function load(force) {
+    if (loaded && !force) return;
+    var box = document.getElementById('tg-list');
+    if (box) box.textContent = 'Загрузка…';
+    fetch('/api/targeting-profiles')
+      .then(function (r) { return r.json(); })
+      .then(function (d) { loaded = true; render(d); })
+      .catch(function (e) {
+        if (box) box.innerHTML = '<p style="color:#b91c1c">Не удалось загрузить: ' + esc(e) + '</p>';
+      });
+  }
+
+  function add() {
+    var name = (document.getElementById('tg-name') || {}).value || '';
+    var interests = (document.getElementById('tg-interests') || {}).value || '';
+    var narrow = (document.getElementById('tg-narrow') || {}).value || '';
+    var btn = document.getElementById('tg-add-btn');
+    if (btn) btn.disabled = true;
+    say('Сохраняю…');
+    fetch('/api/targeting-profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, interests: interests, narrow: narrow })
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (btn) btn.disabled = false;
+        if (!res.ok || !res.d.ok) { say(res.d.error || 'Не удалось сохранить', 'err'); return; }
+        say('Добавлено: ' + res.d.profile.name + ' — теперь видно всем', 'ok');
+        ['tg-name', 'tg-interests', 'tg-narrow'].forEach(function (id) {
+          var el = document.getElementById(id); if (el) el.value = '';
+        });
+        load(true);
+      })
+      .catch(function (e) {
+        if (btn) btn.disabled = false;
+        say('Ошибка сети: ' + e, 'err');
+      });
+  }
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (t && t.id === 'tg-add-btn') { add(); return; }
+    if (t && t.getAttribute && t.getAttribute('data-view') === 'targets') { load(false); }
+  });
+
+  if ((location.hash || '').indexOf('targets') !== -1) {
+    document.addEventListener('DOMContentLoaded', function () { load(false); });
+  }
+})();
 </script>
 
 </body>

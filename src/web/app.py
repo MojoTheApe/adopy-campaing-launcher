@@ -911,6 +911,69 @@ async def api_resolve_targeting(text: str = "") -> JSONResponse:
     return JSONResponse(resolve_interest_alias(text))
 
 
+@app.get("/api/targeting-profiles")
+async def api_targeting_profiles() -> JSONResponse:
+    """The shared targeting library, as every buyer sees it.
+
+    One tab in one spreadsheet is the source of truth for the whole team, so
+    what this returns is identical on every machine — that is what makes a
+    profile added here immediately usable by everyone.
+    """
+    from src.analysis_agent.gsheet_targeting import load_targeting_profiles
+    from src.analysis_agent.gsheet_write import is_authorised
+
+    profiles = load_targeting_profiles()
+    return JSONResponse({
+        "ok": True,
+        # Adding requires the machine's Google write token. Report it up front
+        # so the UI can explain why the form is unavailable instead of failing
+        # only once someone has typed a profile.
+        "can_add": is_authorised(),
+        "profiles": [
+            {"name": p.name, "interests": p.interests, "narrow": p.narrow}
+            for p in sorted(profiles.values(), key=lambda x: x.name.lower())
+        ],
+    })
+
+
+@app.post("/api/targeting-profiles")
+async def api_add_targeting_profile(request: Request) -> JSONResponse:
+    """Add one profile to the shared library.
+
+    Body JSON: {name, interests, narrow?}
+    """
+    from src.analysis_agent.gsheet_targeting import (
+        TargetingWriteError,
+        add_targeting_profile,
+    )
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    try:
+        profile = add_targeting_profile(
+            data.get("name") or "",
+            data.get("interests") or "",
+            data.get("narrow") or "",
+        )
+    except TargetingWriteError as exc:
+        # Operator-actionable: wrong input, duplicate name, or missing consent.
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    return JSONResponse({
+        "ok": True,
+        "profile": {
+            "name": profile.name,
+            "interests": profile.interests,
+            "narrow": profile.narrow,
+        },
+    })
+
+
 @app.get("/api/parse-adset")
 async def api_parse_adset(name: str = "") -> JSONResponse:
     """Parse a raw Meta ad set name into (country_code, device, age, targeting)

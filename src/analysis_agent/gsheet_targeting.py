@@ -137,3 +137,63 @@ def lookup_targeting_interests(targeting_name: str) -> str:
         if t in name or name in t:
             return prof.interests
     return ""
+
+
+class TargetingWriteError(RuntimeError):
+    """Adding a profile failed for a reason the operator can act on."""
+
+
+def add_targeting_profile(name: str, interests: str, narrow: str = "") -> TargetingProfile:
+    """Append one profile to the shared tab and return it.
+
+    The tab is already shared by the whole team, so a profile added here is
+    immediately visible to every buyer — that is the point. Appending (rather
+    than rewriting a range) is what makes concurrent edits safe: two buyers
+    adding at the same moment get two rows, never a lost one.
+
+    Refuses duplicates by name: the loader silently keeps the first row when a
+    name repeats, so a duplicate would look accepted and then be ignored.
+    """
+    from src.analysis_agent.gsheet_write import get_write_service, resolve_tab
+
+    clean_name = (name or "").strip()
+    clean_interests = _clean_names(interests or "")
+    clean_narrow = _clean_names(narrow or "")
+
+    if not clean_name:
+        raise TargetingWriteError("Название таргета не может быть пустым.")
+    if not clean_interests:
+        raise TargetingWriteError("Укажите хотя бы один интерес.")
+
+    existing = load_targeting_profiles(force=True)
+    clash = next((k for k in existing if k.strip().lower() == clean_name.lower()), None)
+    if clash:
+        raise TargetingWriteError(
+            f"Таргет «{clash}» уже есть — выберите другое название или "
+            f"отредактируйте существующий в таблице."
+        )
+
+    sheet_id = os.environ.get("GSHEET_TARGETING_SPREADSHEET_ID") or _DEFAULT_SPREADSHEET_ID
+    tab = os.environ.get("GSHEET_TARGETING_TAB") or _DEFAULT_TAB
+
+    try:
+        svc = get_write_service()
+        actual = resolve_tab(svc, sheet_id, tab)
+        if actual is None:
+            raise TargetingWriteError(f"Вкладка «{tab}» не найдена в таблице таргетов.")
+        svc.spreadsheets().values().append(
+            spreadsheetId=sheet_id,
+            range=f"'{actual}'!A:C",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [[clean_name, clean_interests, clean_narrow]]},
+        ).execute()
+    except TargetingWriteError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — surfaced to the operator as text
+        raise TargetingWriteError(f"Google Sheets отказал в записи: {exc}") from exc
+
+    # Drop the cache so the new profile is visible without waiting out the TTL.
+    load_targeting_profiles(force=True)
+    _log(f"added targeting profile {clean_name!r}")
+    return TargetingProfile(name=clean_name, interests=clean_interests, narrow=clean_narrow)
