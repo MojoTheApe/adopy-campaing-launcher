@@ -911,6 +911,50 @@ async def api_resolve_targeting(text: str = "") -> JSONResponse:
     return JSONResponse(resolve_interest_alias(text))
 
 
+@app.get("/api/buyers")
+async def api_buyers() -> JSONResponse:
+    """The campaign managers present in the stats, and who is selected here.
+
+    The list comes from the workbook's own CM column, so a new buyer shows up
+    as soon as their first row lands — nothing to configure.
+    """
+    from src.web.buyer import default_cm, get_selected_cm, known_cms
+
+    try:
+        _report, df, _warnings = get_cached_report()
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": str(exc), "buyers": []}, status_code=200)
+
+    return JSONResponse({
+        "ok": True,
+        "buyers": known_cms(df),
+        "selected": get_selected_cm(),
+        "default": default_cm(),
+    })
+
+
+@app.post("/api/buyers")
+async def api_select_buyer(request: Request) -> JSONResponse:
+    """Switch whose dashboard is shown. Body JSON: {name}.
+
+    Switching reuses the parsed workbook and only reassembles the report, so
+    it costs seconds rather than a cold start.
+    """
+    from src.web.buyer import set_selected_cm
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    selected = set_selected_cm(data.get("name") or "")
+    try:
+        get_cached_report(my_cm=selected)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": str(exc), "selected": selected}, status_code=200)
+    return JSONResponse({"ok": True, "selected": selected})
+
+
 @app.get("/api/accounts-overview")
 async def api_accounts_overview() -> JSONResponse:
     """Every account this buyer has, and whether this machine can reach it.
@@ -921,8 +965,10 @@ async def api_accounts_overview() -> JSONResponse:
     perfectly healthy in the sheet and unusable here because the local map has
     no profile for it — which is exactly the case the operator needs to see.
     """
+    from src.analysis_agent.analyze_fb_stats import normalize_account_alias
     from src.analysis_agent.gsheet_accounts import fetch_account_rows
     from src.fb_ads_rpa.mlx_profiles import folder_id_for, open_profile_ids
+    from src.web.buyer import get_selected_cm
 
     map_path = get_ad_account_map_path()
     account_map = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
@@ -936,6 +982,29 @@ async def api_accounts_overview() -> JSONResponse:
             status_code=200,
         )
 
+    # Ownership comes from the STATS workbook's CM column, not from the
+    # accounts sheet — that sheet has no owner column, so its whole tab is
+    # attributed to one name and every buyer would see the same list.
+    # Accounts that never appear in the stats keep an empty owner and stay
+    # visible: hiding one would make it impossible to connect.
+    owner_by_alias: dict[str, str] = {}
+    try:
+        _r, stats_df, _w = get_cached_report()
+        if stats_df is not None and {"Account Alias", "CM"} <= set(stats_df.columns):
+            pairs = stats_df[["Account Alias", "CM"]].fillna("").astype(str)
+            counts: dict[str, dict[str, int]] = {}
+            for alias, cm in pairs.itertuples(index=False):
+                key, name = normalize_account_alias(alias), cm.strip()
+                if not key or not name:
+                    continue
+                counts.setdefault(key, {})[name] = counts.setdefault(key, {}).get(name, 0) + 1
+            # A handful of accounts changed hands and carry two managers; the
+            # one with more rows is the current owner.
+            owner_by_alias = {k: max(v, key=v.get) for k, v in counts.items()}
+    except Exception:
+        owner_by_alias = {}
+
+    selected_cm = (get_selected_cm() or "").strip()
     open_ids = open_profile_ids()
     # Profiles already spoken for, so the picker can say so instead of letting
     # one profile be attached to two accounts.
@@ -952,8 +1021,12 @@ async def api_accounts_overview() -> JSONResponse:
         ad_id = (getattr(entry, "ad_account_id", "") or "").strip() if entry else ""
         profile_id = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
         missing = [n for n, v in (("ad_account_id", ad_id), ("profile_id", profile_id)) if not v]
+        owner = owner_by_alias.get(normalize_account_alias(label), "")
+        if selected_cm and owner and owner != selected_cm:
+            continue
         accounts.append({
             "label": label,
+            "owner": owner,
             "country": row.get("country_code") or "",
             "stock": row.get("stock") or "",
             "status": row.get("account_status") or "",

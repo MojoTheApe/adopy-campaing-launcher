@@ -1413,6 +1413,14 @@
       <span class="brand-meta" title="Source: {{ report.source_excel }}">{{ report.date }}<span class="meta-sep">·</span>CM <strong>{{ report.my_cm }}</strong><span class="meta-sep">·</span>Trend <strong>{{ report.trend_days }}d</strong><span class="meta-sep">·</span><strong>{{ report.total_combos }}</strong> combos{% if built_at %}<span class="meta-sep">·</span>Updated <strong>{{ built_at }}</strong>{% endif %}</span>
     </div>
   </div>
+  <div class="buyer-pick" style="margin-left:auto;display:flex;align-items:center;gap:0.45rem">
+    <label for="buyer-select" style="font-size:0.78rem;color:var(--muted)">Байер</label>
+    <select id="buyer-select" style="font-size:0.82rem;max-width:14rem"
+            title="Чью картину показывать: аккаунты, оптимизация, сравнение с командой">
+      <option value="{{ report.my_cm }}">{{ report.my_cm }}</option>
+    </select>
+    <span id="buyer-msg" style="font-size:0.75rem;color:var(--muted)"></span>
+  </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
     <button type="submit" id="dash-refresh-btn">Refresh</button>
   </form>
@@ -5905,6 +5913,53 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   }
   poll();
 }
+
+// ── Выбор байера ─────────────────────────────────────────────────────────
+// Список берётся из колонки CM самой статистики, а не из настройки: новый
+// байер появляется в тот момент, когда в отчёт попадает его первая строка.
+(function () {
+  var sel = document.getElementById('buyer-select');
+  var msg = document.getElementById('buyer-msg');
+  if (!sel) return;
+
+  function say(t, kind) {
+    if (!msg) return;
+    msg.style.color = kind === 'err' ? '#b91c1c' : 'var(--muted)';
+    msg.textContent = t || '';
+  }
+
+  fetch('/api/buyers').then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.ok || !(d.buyers || []).length) return;
+      sel.innerHTML = '';
+      d.buyers.forEach(function (name) {
+        var o = document.createElement('option');
+        o.value = name;
+        o.textContent = name + (name === d.default ? ' (по умолчанию)' : '');
+        if (name === d.selected) o.selected = true;
+        sel.appendChild(o);
+      });
+    })
+    .catch(function () { /* оставляем текущего — список не обязателен для работы */ });
+
+  sel.addEventListener('change', function () {
+    var name = sel.value;
+    sel.disabled = true;
+    // Switching reuses the parsed workbook, so this is seconds, not a cold
+    // start — but it is not instant, and silence would read as a hang.
+    say('Переключаю на ' + name + '…');
+    fetch('/api/buyers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name })
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { sel.disabled = false; say(d.error || 'не удалось', 'err'); return; }
+        say('Обновляю…');
+        location.reload();
+      })
+      .catch(function (e) { sel.disabled = false; say(String(e), 'err'); });
+  });
+})();
 
 // ── Аккаунты: подключение к этой машине ──────────────────────────────────
 (function () {

@@ -26,9 +26,13 @@ from src.analysis_agent.morning_service import (
 )
 
 
+# Reports are cached PER campaign manager: the enriched DataFrame is the
+# expensive part and is the same for everyone, while the report assembled on
+# top of it is per-CM. Keying only by the Excel file meant switching buyer
+# would have thrown away the parsed workbook and re-read ~71k rows each time.
 _CACHE: Dict[str, Any] = {
     "key": None,            # (excel_path, mtime) for full report — None means empty
-    "report": None,         # dict
+    "reports": {},          # cm -> report dict
     "df": None,             # pd.DataFrame (same as excel_df when warm)
     "warnings": [],         # list[str]
     "built_at": None,       # ISO datetime string
@@ -44,7 +48,7 @@ def _current_key(excel_path: str) -> Optional[Tuple[str, float]]:
 
 
 def get_cached_report(
-    *, force_rebuild: bool = False
+    *, force_rebuild: bool = False, my_cm: Optional[str] = None
 ) -> Tuple[Dict[str, Any], pd.DataFrame, List[str]]:
     """Return the latest (report, df, warnings).
 
@@ -55,13 +59,19 @@ def get_cached_report(
     excel_path = _resolve_excel_path(None)
     expected_key = _current_key(excel_path)
 
+    if my_cm is None:
+        from src.web.buyer import get_selected_cm
+
+        my_cm = get_selected_cm()
+    cm_key = (my_cm or "").strip()
+
     if (
         not force_rebuild
         and _CACHE["key"] is not None
         and _CACHE["key"] == expected_key
-        and _CACHE["report"] is not None
+        and cm_key in _CACHE["reports"]
     ):
-        return _CACHE["report"], _CACHE["df"], _CACHE["warnings"]
+        return _CACHE["reports"][cm_key], _CACHE["df"], _CACHE["warnings"]
 
     reused_df = None
     if (
@@ -71,10 +81,13 @@ def get_cached_report(
     ):
         reused_df = _CACHE["excel_df"]
 
-    report, df, warnings = load_morning_report(enriched_df=reused_df)
+    report, df, warnings = load_morning_report(enriched_df=reused_df, my_cm=cm_key or None)
 
+    # A new workbook invalidates every buyer's report, not just this one.
+    if _CACHE["key"] != expected_key:
+        _CACHE["reports"] = {}
     _CACHE["key"] = expected_key
-    _CACHE["report"] = report
+    _CACHE["reports"][cm_key] = report
     _CACHE["df"] = df
     _CACHE["warnings"] = warnings
     _CACHE["excel_key"] = expected_key
@@ -93,7 +106,7 @@ def cache_clear(*, keep_excel_df: bool = False) -> None:
     excel_key = _CACHE.get("excel_key") if keep_excel_df else None
     excel_df = _CACHE.get("excel_df") if keep_excel_df else None
     _CACHE["key"] = None
-    _CACHE["report"] = None
+    _CACHE["reports"] = {}
     _CACHE["df"] = None
     _CACHE["warnings"] = []
     _CACHE["built_at"] = None
