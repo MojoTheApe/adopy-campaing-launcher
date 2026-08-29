@@ -911,6 +911,31 @@ async def api_resolve_targeting(text: str = "") -> JSONResponse:
     return JSONResponse(resolve_interest_alias(text))
 
 
+def normalise_ad_account_id(raw: str) -> str:
+    """Accept whatever the operator has in hand and return `act_<digits>`.
+
+    The only field still typed by hand when connecting an account, and the
+    thing people have in front of them is rarely the bare id — it is the Ads
+    Manager URL. So take the id out of anything that contains it:
+
+        https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1374118070911270&…
+        act_1374118070911270
+        1374118070911270
+
+    Returns "" when there is no plausible id, so the caller can say so instead
+    of writing a broken row.
+
+    Replaces `act.lstrip('act_')`, which strips any leading run of the
+    characters a/c/t/_ rather than the prefix — wrong for ids that happen to
+    start with those characters, and no help at all with a URL.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    m = re.search(r"act[=_](\d{6,})", text) or re.search(r"(?<!\d)(\d{8,})(?!\d)", text)
+    return f"act_{m.group(1)}" if m else ""
+
+
 @app.get("/api/buyers")
 async def api_buyers() -> JSONResponse:
     """The campaign managers present in the stats, and who is selected here.
@@ -1223,10 +1248,33 @@ async def account_map_patch(request: Request) -> JSONResponse:
             if val:
                 new_row[field] = val.upper() if field == "country" else val
 
-        # Ensure act_ prefix
-        act = new_row.get("ad_account_id", "")
-        if act and not act.startswith("act_"):
-            new_row["ad_account_id"] = f"act_{act.lstrip('act_')}"
+        # Accept a pasted Ads Manager URL, a bare number, or act_<digits>.
+        act_raw = new_row.get("ad_account_id", "")
+        if act_raw:
+            act = normalise_ad_account_id(act_raw)
+            if not act:
+                return JSONResponse(
+                    {"ok": False,
+                     "error": "Не удалось разобрать ad_account_id. Вставьте ссылку из "
+                              "Ads Manager, либо номер кабинета."},
+                    status_code=400,
+                )
+            # A second account pointing at the same ad account is almost always
+            # a paste into the wrong row, and it would send campaigns somewhere
+            # nobody intended.
+            clash = next(
+                (r.get("account_name") for i, r in enumerate(rows)
+                 if i != existing_idx and (r.get("ad_account_id") or "").strip() == act),
+                None,
+            )
+            if clash:
+                return JSONResponse(
+                    {"ok": False,
+                     "error": f"Этот кабинет уже привязан к «{clash}». "
+                              f"Проверьте, туда ли вставили."},
+                    status_code=400,
+                )
+            new_row["ad_account_id"] = act
 
         if existing_idx is not None:
             rows[existing_idx] = new_row

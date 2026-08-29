@@ -1531,8 +1531,8 @@ async function dashRefresh(ev) {
         <input id="ac-new-label" type="text" placeholder="FacebookXX123 CO Dav" style="width:100%">
       </label>
       <label style="flex:0 0 11rem">
-        <div style="font-size:0.75rem;color:var(--muted)">ad_account_id</div>
-        <input id="ac-new-adid" type="text" placeholder="act_123…" style="width:100%">
+        <div style="font-size:0.75rem;color:var(--muted)">Кабинет — вставьте ссылку</div>
+        <input id="ac-new-adid" type="text" placeholder="ссылка из Ads Manager или act_…" style="width:100%">
       </label>
       <label style="flex:0 0 15rem">
         <div style="font-size:0.75rem;color:var(--muted)">Профиль Multilogin</div>
@@ -1541,7 +1541,8 @@ async function dashRefresh(ev) {
       <button type="button" id="ac-add-btn" class="btn">Добавить</button>
     </div>
     <div style="margin-top:0.5rem;font-size:0.75rem;color:var(--muted)">
-      Нужно, когда аккаунта ещё нет в общей таблице. Запись идёт только в карту этой машины.
+      Нужно, когда аккаунта ещё нет в общей таблице. Запись идёт только в карту этой машины.<br>
+      В поле кабинета можно вставить целиком адрес страницы Ads Manager — номер возьмётся из него.
     </div>
   </div>
 
@@ -6048,8 +6049,8 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         + '<td><b>' + esc(a.label) + '</b><div style="font-size:0.72rem">' + badge + '</div></td>'
         + '<td>' + esc(a.country) + '</td>'
         + '<td>' + esc(a.status) + '</td>'
-        + '<td><input class="ac-adid" type="text" style="width:11rem" value="' + esc(a.ad_account_id)
-        + '" placeholder="act_123…"></td>'
+        + '<td><input class="ac-adid" type="text" style="width:13rem" value="' + esc(a.ad_account_id)
+        + '" placeholder="ссылка или act_…" title="Можно вставить адрес страницы Ads Manager целиком"></td>'
         + '<td><select class="ac-prof" style="max-width:16rem">' + profileOptions(a.profile_id) + '</select></td>'
         + '<td><button type="button" class="btn ac-save">Сохранить</button>'
         + '<span class="ac-row-msg" style="margin-left:0.5rem;font-size:0.75rem"></span></td>'
