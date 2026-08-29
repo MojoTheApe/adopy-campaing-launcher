@@ -12,6 +12,7 @@ RPA_FLOW_VERSION = "v96"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
+from src.fb_ads_rpa import failure_policy
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.page_diagnostics import diagnose_and_recover
 from src.fb_ads_rpa.meta_dom import (
@@ -2227,16 +2228,17 @@ class AdsManagerFlow:
             if ad_soft_fails:
                 result.warnings.extend(ad_soft_fails)
                 result.steps_completed.append("ad_level_soft_fails:" + ",".join(ad_soft_fails))
-                blocking = [
-                    f for f in ad_soft_fails
-                    if "creative_upload" in f or "destination" in f
-                ]
+                # Severity comes from failure_policy, not from matching
+                # substrings here: the names are produced in meta_dom, and a
+                # rename there used to turn blocking into non-blocking with
+                # nothing to notice. Anything unclassified blocks by default.
+                blocking, _warn_only = failure_policy.split(ad_soft_fails)
                 if blocking:
                     result.blocking_failures.extend(blocking)
                     note = (
-                        "DO NOT PUBLISH AS IS — these ad-level steps failed: "
-                        + ", ".join(blocking)
-                        + ". Check the draft in Ads Manager first."
+                        "DO NOT PUBLISH AS IS — these steps failed:\n"
+                        + failure_policy.describe(ad_soft_fails)
+                        + "\nCheck the draft in Ads Manager first."
                     )
                     result.error = f"{result.error} | {note}" if result.error else note
             return result
