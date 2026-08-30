@@ -4575,6 +4575,76 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   };
 
   // ── Save individual account map field (folder_id / profile_id / ad_account_id) ──
+  // ── Keep the Campaign Builder honest after an account is connected ─────
+  //
+  // The builder's per-account config block is rendered server-side, so once a
+  // page is open it keeps whatever state it was born with. Accounts are
+  // connected in the Accounts section, which never touched the builder — so
+  // after connecting, the builder still said "требует настройки" with empty
+  // fields for an account that was fully configured. It looked exactly like
+  // the builder failing to read ad_account_id, and the only cure was knowing
+  // to reload.
+  //
+  // Re-reads the same endpoint the Accounts section uses and brings the
+  // builder up to date in place: clears the resolved fields and flips the
+  // header badge. Silent on failure — this is a refresh, not an action.
+  window.aclRefreshBuilderConfig = function () {
+    fetch('/api/accounts-overview')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.ok) return;
+        (d.accounts || []).forEach(function (a) {
+          var missing = a.missing || [];
+          // Matched on data-acc-label, not on the visible text: the label is
+          // what the server keys the block on, and reading it back out of the
+          // heading would break the day the heading gains an icon.
+          var rows = document.querySelectorAll(
+            '.cb-acc-row[data-acc-label="' + String(a.label).replace(/"/g, '\\"') + '"]');
+          rows.forEach(function (row) {
+            // Drop the input rows for fields that are now set.
+            row.querySelectorAll('.cb-map-input').forEach(function (inp) {
+              var f = inp.dataset.field;
+              if (!f || missing.indexOf(f) !== -1) return;
+              var fieldRow = inp.closest('.cb-map-field-row');
+              if (!fieldRow) return;
+              var lbl = fieldRow.querySelector('.cb-map-field-label');
+              fieldRow.innerHTML =
+                (lbl ? lbl.outerHTML : '<span class="cb-map-field-label">' + f + '</span>')
+                + '<span class="cb-pf-ok" style="font-size:0.72rem">✓ set</span>';
+            });
+
+            // Badges, once nothing required is missing. Two of them: the
+            // accordion header, and the "⚙ Account требует настройки" strip on
+            // the config block itself — leaving the second one saying the
+            // account needs setting up, while every field under it reads
+            // "✓ set", is its own kind of confusing.
+            //
+            // The tracking-link "Missing" marker is deliberately left alone:
+            // that field is not part of missing_map_fields and really can still
+            // be empty.
+            if (!missing.length) {
+              var meta = row.querySelector('.cb-acc-meta');
+              var hdrErr = meta && meta.querySelector('.cb-pf-err');
+              if (hdrErr) {
+                hdrErr.outerHTML =
+                  '<span style="font-size:0.7rem;color:var(--good)">✓ config ok</span>';
+              }
+              // All of them, not the first: the first .cb-pf-err in the block
+              // is the tracking-link "Missing" marker, so a querySelector here
+              // matched that, hit the guard, and silently never fixed the strip
+              // it was written for.
+              row.querySelectorAll('.cb-preflight .cb-pf-err').forEach(function (b) {
+                if (/настройки/.test(b.textContent || '')) {
+                  b.outerHTML = '<span class="cb-pf-ok">настроен ✓</span>';
+                }
+              });
+            }
+          });
+        });
+      })
+      .catch(function () { /* refresh only — never interrupt the operator */ });
+  };
+
   window.cbSaveOneMapField = function(btn, accountName, fieldName) {
     var fieldRow = btn.closest('.cb-map-field-row');
     var input = fieldRow ? fieldRow.querySelector('.cb-map-input') : null;
@@ -6335,6 +6405,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         var ps = el('ac-new-prof'); if (ps) ps.value = '';
         syncDerived();
         load(true);
+        aclRefreshBuilderConfig();
       })
       .catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); });
   }
@@ -6449,6 +6520,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         if (!d.ok) { if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = d.error || 'ошибка'; } return; }
         if (msg) { msg.style.color = 'var(--good)'; msg.textContent = '✓'; }
         load(true);
+        aclRefreshBuilderConfig();
       })
       .catch(function (e) {
         btn.disabled = false;
