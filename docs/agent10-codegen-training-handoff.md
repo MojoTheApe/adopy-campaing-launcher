@@ -149,8 +149,8 @@ it's accurate regardless.
 2. **Live-verify the "Further limit the reach" reopen fix** in
    `meta_dom.py` (see above) — this is the immediate next milestone, one
    step past where testing stalled all of 2026-07-22/23. Test against
-   `FacebookDQ204 CR` (act_1566229345092982, profile_id
-   `c21d4ddf-b705-478c-85ad-4ddf8a22955f`, already filled into
+   `FacebookDQ204 CR` (act_1234567890123456, profile_id
+   `550e8400-e29b-41d4-a716-446655440000`, already filled into
    `config/ad_account_map.csv` this session) or `FacebookUL921 CR Ait`
    (the original, much more heavily-used test account).
 3. **If it works**, use the dashboard's "Record clicks" button (now fixed)

@@ -36,6 +36,15 @@ if not errorlevel 1 (
     exit /b 0
 )
 
+REM ----------------------------------------------------------- Machine config
+REM Move this machine's own config out of the checkout, BEFORE the update step.
+REM Until now the only thing that did this was the doctor, which many machines
+REM never run, so a pre-2026-08-25 install kept its account map inside the
+REM folder a re-clone replaces and git clean empties. Doing it first also keeps
+REM the ordering right for anything we drop from git later: a merge does delete
+REM a file the incoming commit removed. No-op once the machine is migrated.
+"%PY%" scripts\acl_migrate_config.py
+
 REM ---------------------------------------------------------------- Updates
 REM Deliberately placed AFTER the already-running check: we only update when we
 REM are about to start the server anyway. Pulling new code out from under a

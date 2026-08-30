@@ -45,6 +45,13 @@ jobs:
       # Same check the launcher runs before it lets a new version become the
       # installed one, so CI fails on exactly what would block a buyer's update.
       # No browsers are installed: this imports Playwright, it does not drive it.
+      # ACL is pushed to a repository outside developers read and copied onto
+      # every buyer's machine, so the tree must not carry credentials or the
+      # identifiers saying which real ad accounts anyone works in. First run of
+      # this found live cabinets in two handoff docs and in a docstring.
+      - name: Data and secret scan
+        run: python scripts/acl_scan_secrets.py
+
       - name: Smoke check (does ACL start?)
         run: python scripts/acl_smoke.py
 

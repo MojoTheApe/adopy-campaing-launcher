@@ -918,9 +918,9 @@ def normalise_ad_account_id(raw: str) -> str:
     thing people have in front of them is rarely the bare id — it is the Ads
     Manager URL. So take the id out of anything that contains it:
 
-        https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1374118070911270&…
-        act_1374118070911270
-        1374118070911270
+        https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1234567890123456&…
+        act_1234567890123456
+        1234567890123456
 
     Returns "" when there is no plausible id, so the caller can say so instead
     of writing a broken row.

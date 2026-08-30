@@ -28,7 +28,7 @@ Location → **Website**.
   `Get-CimInstance Win32_Process -Filter "Name='python.exe' AND CommandLine LIKE '%serve.py%'" | Stop-Process -Force`.
 - **`.env` already has `FB_RPA_ENGINE=recorded_flow` set** — this selects the
   new engine described below over the old recipe player. Leave it as-is.
-- **Test account used today:** `FacebookUL921 CR Ait` (act_1337558731168884,
+- **Test account used today:** `FacebookUL921 CR Ait` (act_1234567890123456,
   country CR). Its Facebook Page ("Dough Joy") has **not accepted Meta's Lead
   Generation Terms of Service** — a real, account-level blocker unrelated to
   our code, shows as a red "Terms of Service Not Accepted" box once you reach
@@ -171,7 +171,7 @@ it, don't go back to guessing:**
   for whichever account you test next). If in doubt, ask before touching an
   already-open profile.
 - **`ad_account_map.csv`** needs `multilogin_instance` (usually `A`) and
-  `folder_id` (usually `3ef7f42d-a910-441f-b935-845a11fff08e` for this
+  `folder_id` (usually `550e8400-e29b-41d4-a716-446655440000` for this
   workspace) filled in for the MLX stop/restart API to work — one account
   (`FacebookUL921 CR Ait`) was missing both today and that's what caused the
   404.
