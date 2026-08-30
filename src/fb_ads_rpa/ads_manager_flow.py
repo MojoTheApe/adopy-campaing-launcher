@@ -74,6 +74,46 @@ class AdsManagerFlowError(RuntimeError):
         self.screenshot = screenshot
 
 
+def apply_step_failures(result: RpaPublishResult, failures: list[str]) -> RpaPublishResult:
+    """Record which steps failed, and say whether the draft may be published.
+
+    Reaching the ad level is not the same as building a publishable draft. An
+    ad whose creative or destination step failed still counts as "reached_ad",
+    and the run then reported `success=True` while the draft carried an ad with
+    no media (run 58c3cb9b53c6, ad3) — which the operator would only discover
+    after publishing it. That is the first of the two defects recorded in the
+    tag rpa-v96-spend-confirmed-2026-08-24.
+
+    `success` is deliberately left alone: the draft does exist, and flipping it
+    would invite a re-run that builds a duplicate. What changes is
+    `publishable` — the draft is there, and it must not go out untouched.
+
+    Lives here as a function rather than inline in the flow so it can be tested
+    without a browser: the failure it guards against is silence, and silence is
+    exactly what an end-to-end test is worst at noticing.
+    """
+    if not failures:
+        return result
+
+    result.warnings.extend(failures)
+    result.steps_completed.append("ad_level_soft_fails:" + ",".join(failures))
+
+    # Severity comes from failure_policy, not from matching substrings here:
+    # the names are produced in meta_dom, and a rename there used to turn
+    # blocking into non-blocking with nothing to notice. Anything unclassified
+    # blocks by default.
+    blocking, _warn_only = failure_policy.split(failures)
+    if blocking:
+        result.blocking_failures.extend(blocking)
+        note = (
+            "DO NOT PUBLISH AS IS — these steps failed:\n"
+            + failure_policy.describe(failures)
+            + "\nCheck the draft in Ads Manager first."
+        )
+        result.error = f"{result.error} | {note}" if result.error else note
+    return result
+
+
 def _act_numeric(ad_account_id: str) -> str:
     return re.sub(r"^act_", "", (ad_account_id or "").strip())
 
@@ -2225,22 +2265,7 @@ class AdsManagerFlow:
             # Keep success as-is (the draft does exist, and flipping it would
             # invite a re-run that builds a duplicate), but say plainly that
             # this one must not go out untouched.
-            if ad_soft_fails:
-                result.warnings.extend(ad_soft_fails)
-                result.steps_completed.append("ad_level_soft_fails:" + ",".join(ad_soft_fails))
-                # Severity comes from failure_policy, not from matching
-                # substrings here: the names are produced in meta_dom, and a
-                # rename there used to turn blocking into non-blocking with
-                # nothing to notice. Anything unclassified blocks by default.
-                blocking, _warn_only = failure_policy.split(ad_soft_fails)
-                if blocking:
-                    result.blocking_failures.extend(blocking)
-                    note = (
-                        "DO NOT PUBLISH AS IS — these steps failed:\n"
-                        + failure_policy.describe(ad_soft_fails)
-                        + "\nCheck the draft in Ads Manager first."
-                    )
-                    result.error = f"{result.error} | {note}" if result.error else note
+            apply_step_failures(result, ad_soft_fails)
             return result
 
         # LLM agent (opt-in, FB_RPA_ENGINE=llm_agent): live Claude-driven loop —
