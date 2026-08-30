@@ -100,15 +100,25 @@ def _tracked_files() -> list[str]:
         ["git", "ls-files"], cwd=str(_ROOT), capture_output=True, text=True, timeout=60
     )
     if out.returncode != 0:
-        print("не удалось получить список файлов из git — пропускаю проверку")
-        return []
+        raise RuntimeError(
+            "не удалось получить список файлов из git — сканировать нечего.\n"
+            "Проверка, которая молча рапортует «чисто», когда она ничего не "
+            "смотрела, опаснее её отсутствия: зелёная галочка появляется, а "
+            "гарантии за ней нет."
+        )
     return [f for f in out.stdout.splitlines() if f.strip()]
 
 
 def main() -> int:
     findings: list[str] = []
 
-    for rel in _tracked_files():
+    try:
+        tracked = _tracked_files()
+    except RuntimeError as exc:
+        print(exc)
+        return 1
+
+    for rel in tracked:
         if rel in _ALLOW_PATHS:
             continue
         path = _ROOT / rel
