@@ -28,6 +28,37 @@ def _ad_set(targeting: str) -> AdSetDraft:
     return AdSetDraft(name="Test Ad Set", targeting_label=targeting)
 
 
+# ── how these tests changed ───────────────────────────────────────────────────
+#
+# They used to patch `_fill_first` and assert it was called once per interest.
+# The step no longer works that way: Ads Manager accepts the whole
+# comma-separated group pasted into the Detailed Targeting field and surfaces
+# every match at once, which is faster and steadier than typing term by term,
+# so `_fill_first` is now only a fallback. Mocking it meant asserting HOW the
+# step is implemented, and the tests broke on a deliberate improvement while
+# saying nothing about whether targeting still ends up correct.
+#
+# What matters and is asserted below: what text reaches the field, that `|`,
+# `\` and `[AND]` all split into AND-groups, that a second group clicks Narrow
+# further, and that one failed group does not abort the rest.
+
+import contextlib
+
+
+@contextlib.contextmanager
+def _typed(flow):
+    """Capture the strings the step sends to the Detailed Targeting field."""
+    sent: list[str] = []
+
+    def _fake_fill(page, text):
+        sent.append(text)
+        return True
+
+    with patch("src.fb_ads_rpa.ads_manager_flow.fill_targeting_interest", _fake_fill),          patch("src.fb_ads_rpa.ads_manager_flow.open_detailed_targeting_field", return_value=True),          patch("src.fb_ads_rpa.ads_manager_flow.pick_first_suggestion", return_value=True),          patch("src.fb_ads_rpa.ads_manager_flow._click_first") as click,          patch("src.fb_ads_rpa.ads_manager_flow.pause_medium"),          patch("src.fb_ads_rpa.ads_manager_flow.pause_short"),          patch.object(flow, "_shot"):
+        yield sent, click
+
+
+
 # ── empty targeting ──────────────────────────────────────────────────────────
 
 def test_empty_targeting_skipped():
@@ -49,109 +80,13 @@ def test_whitespace_targeting_skipped():
 
 # ── single term ──────────────────────────────────────────────────────────────
 
-def test_single_term_fills_and_selects():
-    flow = _make_flow()
-    result = RpaPublishResult(campaign_name="T")
-
-    with patch("src.fb_ads_rpa.ads_manager_flow._fill_first") as mock_fill, \
-         patch("src.fb_ads_rpa.ads_manager_flow._click_first") as mock_click, \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_medium"), \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_short"), \
-         patch.object(flow, "_shot"):
-        flow._fill_detailed_targeting(_ad_set("Amazon"), result)
-
-    mock_fill.assert_called_once()
-    args = mock_fill.call_args[0]
-    assert args[2] == "Amazon"
-    # suggestion click + no narrow_further (single group)
-    assert "targeting_g1_t1:Amazon" in result.steps_completed
-
 
 # ── multiple terms ───────────────────────────────────────────────────────────
-
-def test_multiple_terms_each_filled():
-    flow = _make_flow()
-    result = RpaPublishResult(campaign_name="T")
-
-    with patch("src.fb_ads_rpa.ads_manager_flow._fill_first") as mock_fill, \
-         patch("src.fb_ads_rpa.ads_manager_flow._click_first"), \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_medium"), \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_short"), \
-         patch.object(flow, "_shot"):
-        flow._fill_detailed_targeting(_ad_set("Amazon, Online Shopping, Finance"), result)
-
-    assert mock_fill.call_count == 3
-    terms_filled = [c[0][2] for c in mock_fill.call_args_list]
-    assert terms_filled == ["Amazon", "Online Shopping", "Finance"]
-    assert "targeting_g1_t1:Amazon" in result.steps_completed
-    assert "targeting_g1_t2:Online Shopping" in result.steps_completed
-    assert "targeting_g1_t3:Finance" in result.steps_completed
 
 
 # ── [AND] groups — Narrow further ────────────────────────────────────────────
 
-def test_and_group_clicks_narrow_further():
-    """[AND] marker triggers 'Narrow further' click before second group."""
-    flow = _make_flow()
-    result = RpaPublishResult(campaign_name="T")
 
-    with patch("src.fb_ads_rpa.ads_manager_flow._fill_first") as mock_fill, \
-         patch("src.fb_ads_rpa.ads_manager_flow._click_first") as mock_click, \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_medium"), \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_short"), \
-         patch.object(flow, "_shot"):
-        flow._fill_detailed_targeting(
-            _ad_set("Amazon, Online Shopping [AND] Finance, Investing"),
-            result,
-        )
-
-    terms_filled = [c[0][2] for c in mock_fill.call_args_list]
-    assert terms_filled == ["Amazon", "Online Shopping", "Finance", "Investing"]
-
-    # narrow_further button should have been clicked once (for the second group)
-    narrow_clicks = [
-        c for c in mock_click.call_args_list
-        if "Narrow further" in str(c)
-    ]
-    assert len(narrow_clicks) == 1
-
-    assert "targeting_g2_narrow_further" in result.steps_completed
-    assert "targeting_g1_t1:Amazon" in result.steps_completed
-    assert "targeting_g2_t1:Finance" in result.steps_completed
-
-
-def test_pipe_separator_equals_and():
-    """`|` in targeting string is treated as AND-group (Narrow further)."""
-    flow = _make_flow()
-    result = RpaPublishResult(campaign_name="T")
-
-    with patch("src.fb_ads_rpa.ads_manager_flow._fill_first") as mock_fill, \
-         patch("src.fb_ads_rpa.ads_manager_flow._click_first"), \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_medium"), \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_short"), \
-         patch.object(flow, "_shot"):
-        flow._fill_detailed_targeting(_ad_set("Amazon, Online Shopping | Finance"), result)
-
-    terms_filled = [c[0][2] for c in mock_fill.call_args_list]
-    assert terms_filled == ["Amazon", "Online Shopping", "Finance"]
-    assert "targeting_g2_narrow_further" in result.steps_completed
-
-
-def test_backslash_separator_equals_pipe():
-    """`\\` in targeting string normalizes to `|` (AND-group)."""
-    flow = _make_flow()
-    result = RpaPublishResult(campaign_name="T")
-
-    with patch("src.fb_ads_rpa.ads_manager_flow._fill_first") as mock_fill, \
-         patch("src.fb_ads_rpa.ads_manager_flow._click_first"), \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_medium"), \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_short"), \
-         patch.object(flow, "_shot"):
-        flow._fill_detailed_targeting(_ad_set(r"Amazon, Online Shopping\Finance"), result)
-
-    terms_filled = [c[0][2] for c in mock_fill.call_args_list]
-    assert terms_filled == ["Amazon", "Online Shopping", "Finance"]
-    assert "targeting_g2_narrow_further" in result.steps_completed
 
 
 def test_no_and_no_narrow_further():
@@ -172,21 +107,62 @@ def test_no_and_no_narrow_further():
 
 # ── failed term: continues to next ───────────────────────────────────────────
 
-def test_failed_term_continues():
+
+# ── what reaches the targeting field ─────────────────────────────────────────
+
+def test_single_group_is_pasted_whole():
     flow = _make_flow()
     result = RpaPublishResult(campaign_name="T")
+    with _typed(flow) as (sent, _click):
+        flow._fill_detailed_targeting(_ad_set("Amazon, Online Shopping"), result)
 
-    def fill_side_effect(page, sels, value, **kw):
-        if value == "BadTerm":
-            raise AdsManagerFlowError("not found")
+    assert sent == ["Amazon, Online Shopping"], "группа должна уходить одной строкой"
+    assert any(s.startswith("targeting_g1_dom_interest") for s in result.steps_completed)
 
-    with patch("src.fb_ads_rpa.ads_manager_flow._fill_first", side_effect=fill_side_effect), \
-         patch("src.fb_ads_rpa.ads_manager_flow._click_first"), \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_medium"), \
-         patch("src.fb_ads_rpa.ads_manager_flow.pause_short"), \
-         patch.object(flow, "_shot"):
-        flow._fill_detailed_targeting(_ad_set("Amazon, BadTerm, Finance"), result)
 
-    assert "targeting_g1_t1:Amazon" in result.steps_completed
-    assert any("targeting_g1_t2_failed" in s for s in result.steps_completed)
-    assert "targeting_g1_t3:Finance" in result.steps_completed
+@pytest.mark.parametrize(
+    "written",
+    ["Amazon, Online Shopping [AND] Finance",
+     "Amazon, Online Shopping | Finance",
+     r"Amazon, Online Shopping\Finance"],
+)
+def test_all_three_and_separators_split_into_two_groups(written):
+    """`[AND]`, `|` and `\` are the same instruction written three ways.
+
+    The sheet is filled by hand, so all three occur; treating one of them as
+    part of an interest name would send the campaign at a different audience
+    than the one that was asked for.
+    """
+    flow = _make_flow()
+    result = RpaPublishResult(campaign_name="T")
+    with _typed(flow) as (sent, _click):
+        flow._fill_detailed_targeting(_ad_set(written), result)
+
+    assert len(sent) == 2, f"{written!r} не распалось на две группы: {sent}"
+    assert "Finance" in sent[1]
+    assert "targeting_g2_narrow_further" in result.steps_completed
+
+
+def test_single_group_never_narrows():
+    flow = _make_flow()
+    result = RpaPublishResult(campaign_name="T")
+    with _typed(flow) as (_sent, _click):
+        flow._fill_detailed_targeting(_ad_set("Amazon, Finance, Investing"), result)
+
+    assert not [s for s in result.steps_completed if "narrow_further" in s]
+
+
+def test_one_failing_group_does_not_abort_the_rest():
+    """A group that will not paste must not cost us the other one."""
+    flow = _make_flow()
+    result = RpaPublishResult(campaign_name="T")
+    calls: list[str] = []
+
+    def _fill_first_fails(page, text):
+        calls.append(text)
+        return len(calls) > 1  # первая группа не вставилась
+
+    with patch("src.fb_ads_rpa.ads_manager_flow.fill_targeting_interest", _fill_first_fails),          patch("src.fb_ads_rpa.ads_manager_flow.open_detailed_targeting_field", return_value=True),          patch("src.fb_ads_rpa.ads_manager_flow.pick_first_suggestion", return_value=True),          patch("src.fb_ads_rpa.ads_manager_flow._click_first"),          patch("src.fb_ads_rpa.ads_manager_flow._fill_first"),          patch("src.fb_ads_rpa.ads_manager_flow.pause_medium"),          patch("src.fb_ads_rpa.ads_manager_flow.pause_short"),          patch.object(flow, "_shot"):
+        flow._fill_detailed_targeting(_ad_set("Amazon [AND] Finance"), result)
+
+    assert "Finance" in calls, "после неудачи первой группы вторая не была даже испробована"
