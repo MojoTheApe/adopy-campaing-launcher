@@ -23,6 +23,15 @@ import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+# Windows consoles are not UTF-8 by default. This script died on CI printing
+# its own all-clear line — the scan passed, the build went red. See
+# scripts/_console.py.
+from scripts._console import use_utf8  # noqa: E402
+
+use_utf8()
 
 # Files that legitimately talk ABOUT identifiers without containing real ones:
 # documentation quoting a URL shape, tests using obviously-fake short ids.

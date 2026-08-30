@@ -24,6 +24,11 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
 
+    # Belt and braces alongside scripts/_console.py: the runner's console is not
+    # UTF-8, and a Russian line printed by any step would abort it.
+    env:
+      PYTHONIOENCODING: utf-8
+
     steps:
       - uses: actions/checkout@v4
         with:

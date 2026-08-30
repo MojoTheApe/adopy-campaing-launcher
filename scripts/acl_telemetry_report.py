@@ -31,6 +31,12 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+# Windows consoles are not UTF-8 by default; without this a Russian line
+# aborts the script instead of printing. See scripts/_console.py.
+from scripts._console import use_utf8  # noqa: E402
+
+use_utf8()
+
 try:
     from dotenv import load_dotenv
 
