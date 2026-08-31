@@ -990,6 +990,11 @@ async def api_accounts_overview() -> JSONResponse:
     perfectly healthy in the sheet and unusable here because the local map has
     no profile for it — which is exactly the case the operator needs to see.
     """
+    from src.analysis_agent.account_country import (
+        country_from_stats,
+        primary_country,
+        resolve_countries,
+    )
     from src.analysis_agent.analyze_fb_stats import normalize_account_alias
     from src.analysis_agent.gsheet_accounts import fetch_account_rows
     from src.fb_ads_rpa.mlx_profiles import (
@@ -1034,24 +1039,43 @@ async def api_accounts_overview() -> JSONResponse:
     except Exception:
         owner_by_alias = {}
 
-    # Full country name per account, taken from the stats where the account
-    # and the country sit in the same row. The sheet only gives a code ("CO",
-    # "SV"), and guessing the country from a code is exactly how "CO" would
-    # land in Costa Rica instead of Colombia.
+    # Which country an account belongs to. Three sources, and the order between
+    # them matters more than any of them:
+    #
+    #   1. the country SECTION of the accounts sheet — the operator maintains
+    #      it, and it is the only statement of intent we have;
+    #   2. failing that, the account's own recent stats — by LATEST DATE, not by
+    #      how many rows each country has;
+    #   3. never the suffix in the account label.
+    #
+    # The suffix ("… CL ML", "… PA Amz") looks authoritative and is not: it is
+    # typed by hand, sometimes wrong, and accounts move between countries while
+    # the name stays. Reading a country off it produced seven "mismatches" out
+    # of twenty-four accounts on 2026-08-30 — every one of them the label being
+    # stale, not the account being wrong.
+    #
+    # Latest date rather than most frequent, because an account that moved has
+    # more history in the country it LEFT. FacebookElf303 has 46 Chile rows and
+    # 4 Panama, and the newest day is mostly Panama: counting rows answers
+    # "where has it been", and the question is "where is it now".
+    # Country per account. The rule and its reasons live in
+    # analysis_agent/account_country.py — the short version: the sheet's country
+    # section wins, recent stats fill the gaps, and the suffix in the label is
+    # never a source.
     country_by_alias: dict[str, str] = {}
     try:
         _r2, stats_df2, _w2 = get_cached_report()
         if stats_df2 is not None and {"Account Alias", "Country"} <= set(stats_df2.columns):
-            pairs2 = stats_df2[["Account Alias", "Country"]].fillna("").astype(str)
-            tally: dict[str, dict[str, int]] = {}
-            for alias, ctry in pairs2.itertuples(index=False):
-                key, name = normalize_account_alias(alias), ctry.strip()
-                if not key or not name:
-                    continue
-                tally.setdefault(key, {})[name] = tally.setdefault(key, {}).get(name, 0) + 1
-            country_by_alias = {k: max(v, key=v.get) for k, v in tally.items()}
+            has_date = "Date" in stats_df2.columns
+            wanted = ["Account Alias", "Country"] + (["Date"] if has_date else [])
+            frame = stats_df2[wanted]
+            if has_date:
+                frame = frame.sort_values("Date", kind="stable")
+            country_by_alias = country_from_stats(list(frame.itertuples(index=False)))
     except Exception:
         country_by_alias = {}
+    _resolved = resolve_countries(country_by_alias, sheet_rows)
+    country_by_alias = primary_country(_resolved)
 
     selected_cm = (get_selected_cm() or "").strip()
     open_detail = open_profiles_detailed()

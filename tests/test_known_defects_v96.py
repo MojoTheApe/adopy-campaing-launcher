@@ -17,7 +17,7 @@ some list is non-empty.
 """
 from __future__ import annotations
 
-from src.analysis_agent.account_label_check import disagreements, label_country_code
+from src.analysis_agent.account_country import country_from_stats, resolve_countries
 from src.fb_ads_rpa.ads_manager_flow import apply_step_failures
 from src.fb_ads_rpa.draft import RpaPublishResult
 
@@ -85,35 +85,113 @@ def test_the_verdict_reaches_the_dashboard():
     assert job["blocking_failures"] == ["destination_sweep:no url"]
 
 
-# ── Defect 2: an account label claiming the wrong country ────────────────────
+# ── Defect 2: an account attributed to the wrong country ────────────────────
+#
+# The tag recorded it as "FacebookElf303 помечен PA Amz, фактически Chile/BCI",
+# and the obvious reading — the label is wrong, so check labels — is the wrong
+# one. Accounts move between countries, and the suffix is typed by hand and
+# stays put. Treating it as data produced seven "mismatches" out of twenty-four
+# accounts, all of them stale labels rather than wrong accounts.
+#
+# The rule that actually holds: the sheet's country section wins, recent stats
+# fill the gaps, the label suffix is never a source.
 
-def test_the_recorded_mislabel_is_detected():
-    """FacebookElf303 was labelled PA (Panama) while its data is Chile."""
-    found = disagreements([
-        {"label": "FacebookElf303 PA Amz", "country_name": "Chile"},
+def test_the_sheet_decides_the_country():
+    """The operator maintains the sheet; it is the only statement of intent."""
+    stats = country_from_stats([("FacebookElf303 PA Amz", "Panama", "2026-08-25")])
+    res = resolve_countries(stats, [
+        {"account_label": "FacebookElf303 PA Amz", "country_code": "Chile", "account_status": "Active"},
     ])
-    assert len(found) == 1
-    assert found[0]["claims"] == "Panama"
-    assert found[0]["actually"] == "Chile"
+    assert res["FacebookElf303"]["country"] == "Chile"
 
 
-def test_an_agreeing_label_is_not_reported():
-    assert disagreements([{"label": "FacebookUL921 CR Ait", "country_name": "Costa Rica"}]) == []
+def test_the_label_suffix_is_never_the_source():
+    """The recorded defect, stated as the rule that prevents it.
+
+    The label says PA. Nothing in the resolution may reach for it: the sheet is
+    silent here, so the answer must come from the stats.
+    """
+    stats = country_from_stats([("FacebookElf303 PA Amz", "Chile", "2026-08-23")])
+    res = resolve_countries(stats, [])
+    assert res["FacebookElf303"]["country"] == "Chile", "суффикс метки просочился в ответ"
 
 
-def test_a_label_without_a_country_claims_nothing():
-    """Silence is not a disagreement — most labels simply do not say."""
-    assert label_country_code("FacebookMKTOBFLW07") == ""
-    assert disagreements([{"label": "FacebookMKTOBFLW07", "country_name": "Kuwait"}]) == []
+def test_the_newest_day_wins_not_the_biggest_pile():
+    """An account that moved has more history in the country it left."""
+    rows = [("FacebookElf303 PA Amz", "Chile", f"2026-08-{d:02d}") for d in range(1, 24)]
+    rows.append(("FacebookElf303 PA Amz", "Panama", "2026-08-25"))
+    assert country_from_stats(rows)["FacebookElf303"] == "Panama"
 
 
-def test_the_asset_token_is_not_read_as_a_country():
-    """`Ait`, `Amz`, `ML` are assets. Reading one as a country code would make
-    every annotated account look mislabelled and bury the real cases."""
-    assert label_country_code("FacebookMKTOBFLV37 EC Ait") == "EC"
-    assert disagreements([{"label": "FacebookMKTOBFLV37 EC Ait", "country_name": "Ecuador"}]) == []
+def test_a_moved_account_leaves_its_old_country_behind():
+    """Real case, FacebookMKTOBFLW06: Chile marked Dead, UAE marked New.
+
+    That is what a move looks like on paper, and it must resolve to one country
+    without any hesitation — the dead row is history, not an alternative.
+    """
+    res = resolve_countries({}, [
+        {"account_label": "FacebookMKTOBFLW06 CL ML", "country_code": "Chile", "account_status": "Dead"},
+        {"account_label": "FacebookMKTOBFLW06", "country_code": "UAE", "account_status": "New"},
+    ])
+    entry = res["FacebookMKTOBFLW06"]
+    assert entry["country"] == "UAE"
+    assert entry["countries"] == ["UAE"]
+    assert entry["ambiguous"] is False
 
 
-def test_accounts_without_data_are_not_accused():
-    """A newly connected account has no stats yet; that is not a mismatch."""
-    assert disagreements([{"label": "FacebookElf303 PA Amz", "country_name": ""}]) == []
+def test_an_account_can_run_two_countries_at_once():
+    """Real case, FacebookMKTOBFLV37: Ecuador and Costa Rica, both Active.
+
+    Five of fourteen accounts look like this. Forcing one answer and hiding the
+    other is how a campaign gets aimed at the wrong market, so the single value
+    is the recent one AND the pair is reported alongside it.
+    """
+    stats = country_from_stats([("FacebookMKTOBFLV37", "Ecuador", "2026-08-30")])
+    res = resolve_countries(stats, [
+        {"account_label": "FacebookMKTOBFLV37 EC Ait", "country_code": "Ecuador", "account_status": "Active"},
+        {"account_label": "FacebookMKTOBFLV37 CR Ait", "country_code": "Costa Rica", "account_status": "Active"},
+    ])
+    entry = res["FacebookMKTOBFLV37"]
+    assert entry["ambiguous"] is True
+    assert set(entry["countries"]) == {"Ecuador", "Costa Rica"}
+    assert entry["country"] == "Ecuador", "выбирать между живыми странами должны свежие данные"
+
+
+def test_nothing_is_guessed_when_the_stats_are_silent():
+    """Two live countries and no recent data: better empty than invented.
+
+    A guess here is not a cosmetic error — it decides which market a campaign
+    is built for.
+    """
+    res = resolve_countries({}, [
+        {"account_label": "FacebookX1 EC Ait", "country_code": "Ecuador", "account_status": "Active"},
+        {"account_label": "FacebookX1 CR Ait", "country_code": "Costa Rica", "account_status": "Active"},
+    ])
+    assert res["FacebookX1"]["country"] == ""
+    assert res["FacebookX1"]["ambiguous"] is True
+
+
+def test_the_account_name_is_the_identity():
+    """Same account, three spellings of the annotation — one key."""
+    stats = country_from_stats([("FacebookElf303", "Chile", "2026-08-25")])
+    res = resolve_countries(stats, [
+        {"account_label": "FacebookElf303 PA Amz", "country_code": "Panama", "account_status": "Active"},
+    ])
+    assert list(res) == ["FacebookElf303"]
+    assert res["FacebookElf303"]["country"] == "Panama"
+
+
+def test_an_account_the_sheet_does_not_mention_keeps_its_stats_answer():
+    stats = country_from_stats([("FacebookMKTOBFLW72", "Kuwait", "2026-08-30")])
+    res = resolve_countries(stats, [
+        {"account_label": "FacebookElf303 PA Amz", "country_code": "Chile", "account_status": "Active"},
+    ])
+    assert res["FacebookMKTOBFLW72"]["country"] == "Kuwait"
+
+
+def test_an_account_dead_everywhere_still_says_where_it_was():
+    """Showing nothing would be worse than showing where it last ran."""
+    res = resolve_countries({}, [
+        {"account_label": "FacebookOld CL ML", "country_code": "Chile", "account_status": "Dead"},
+    ])
+    assert res["FacebookOld"]["country"] == "Chile"
