@@ -44,25 +44,38 @@ Return a JSON object with exactly these keys:
 Respond ONLY with the JSON object, no markdown fences."""
 
 
-def _extract_video_frame(video_path: Path) -> Optional[bytes]:
-    """Extract first keyframe from video as JPEG bytes. Requires opencv-python."""
+def _extract_video_frame(video_path: Path) -> tuple[Optional[bytes], str]:
+    """First keyframe of a video as JPEG bytes, plus a reason when there is none.
+
+    A fifth of the creatives library is video (1020 files of 4952 on
+    2026-08-31), so this is not an edge case. The caller used to turn every
+    failure here into "Cannot encode file: name.mp4" — which names the file and
+    not the cause, and nobody would ever connect that to a missing package.
+    """
     try:
         import cv2  # type: ignore
+    except ImportError:
+        return None, (
+            "разбор видео требует opencv: pip install opencv-python-headless"
+        )
+    try:
         cap = cv2.VideoCapture(str(video_path))
         success, frame = cap.read()
         cap.release()
         if not success:
-            return None
+            return None, "не удалось прочитать первый кадр — файл повреждён или пуст"
         _, buf = cv2.imencode(".jpg", frame)
-        return buf.tobytes()
-    except ImportError:
-        return None
-    except Exception:
-        return None
+        return buf.tobytes(), ""
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
 
 
-def _file_to_base64(path: Path) -> Optional[tuple[str, str]]:
-    """Return (base64_data, mime_type) for an image or video frame."""
+def _file_to_base64(path: Path) -> tuple[Optional[tuple[str, str]], str]:
+    """((base64, mime), "") for an image or video frame, or (None, reason).
+
+    The reason travels with the failure so the operator is told what to do
+    about it, instead of reading "Cannot encode file" and guessing.
+    """
     ext = path.suffix.lower()
 
     if ext in SUPPORTED_IMAGE_EXTS:
@@ -72,15 +85,17 @@ def _file_to_base64(path: Path) -> Optional[tuple[str, str]]:
         }
         mime = mime_map.get(ext, "image/jpeg")
         with open(path, "rb") as f:
-            return base64.b64encode(f.read()).decode(), mime
+            return (base64.b64encode(f.read()).decode(), mime), ""
 
     if ext in SUPPORTED_VIDEO_EXTS:
-        frame_bytes = _extract_video_frame(path)
+        frame_bytes, why = _extract_video_frame(path)
         if frame_bytes:
-            return base64.b64encode(frame_bytes).decode(), "image/jpeg"
-        return None
+            return (base64.b64encode(frame_bytes).decode(), "image/jpeg"), ""
+        return None, why
 
-    return None
+    # Кавычки внутри f-строки только одинарные: вложенные двойные разрешены
+    # с Python 3.12, а установщик объявляет минимумом 3.11.
+    return None, f"формат {ext or 'без расширения'} не поддерживается"
 
 
 def analyze(
@@ -98,9 +113,9 @@ def analyze(
     if not key:
         return _empty_analysis("OPENAI_API_KEY not set")
 
-    encoded = _file_to_base64(file_path)
+    encoded, why = _file_to_base64(file_path)
     if encoded is None:
-        return _empty_analysis(f"Cannot encode file: {file_path.name}")
+        return _empty_analysis(f"{file_path.name}: {why}")
 
     b64_data, mime_type = encoded
 
