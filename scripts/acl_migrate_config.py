@@ -21,6 +21,7 @@ convenience move must not be able to stop someone from launching campaigns.
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -35,18 +36,41 @@ from scripts._console import use_utf8  # noqa: E402
 use_utf8()
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Migrate/provision durable ACL machine config")
+    parser.add_argument(
+        "--provision",
+        action="store_true",
+        help="also create safe machine-local examples when no legacy files exist",
+    )
+    args = parser.parse_args(argv)
     try:
-        from config.paths import get_ad_account_map_path, migrate_legacy_account_map
+        from config.paths import (
+            ensure_machine_config,
+            get_ad_account_map_path,
+            get_env_files,
+            migrate_legacy_account_map,
+            migrate_legacy_env,
+        )
 
-        note = migrate_legacy_account_map()
-        if note:
-            print(f"  config: {note}")
+        if args.provision:
+            notes = ensure_machine_config()
         else:
-            where = get_ad_account_map_path()
-            print(f"  config: account map already on this machine — {where}")
-    except Exception as exc:  # never block the launch
+            notes = []
+            env_note = migrate_legacy_env(create_from_example=False)
+            map_note = migrate_legacy_account_map()
+            if env_note:
+                notes.append(env_note)
+            if map_note:
+                notes.append(map_note)
+        for note in notes:
+            print(f"  config: {note}")
+        if not notes:
+            print(f"  config: account map — {get_ad_account_map_path()}")
+            print(f"  config: settings — {(get_env_files() or ['not found'])[0]}")
+    except Exception as exc:
         print(f"  config: could not check the account map ({type(exc).__name__}: {exc})")
+        return 1
     return 0
 
 

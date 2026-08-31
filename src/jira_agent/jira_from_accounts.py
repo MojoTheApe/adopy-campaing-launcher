@@ -19,9 +19,10 @@ if str(_proj_root) not in sys.path:
 
 # Load .env from project root so JIRA_EMAIL / JIRA_API_TOKEN need not be set each time
 try:
-    from dotenv import load_dotenv
-    load_dotenv(_proj_root / ".env")
-except ImportError:
+    from config.paths import load_env
+
+    load_env()
+except Exception:
     pass
 
 from openpyxl import load_workbook

@@ -10,6 +10,7 @@ Routes:
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import os
 import re
@@ -17,7 +18,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -46,7 +47,14 @@ from src.creative_agent.vision_analyzer import analyze as vision_analyze
 from src.creative_agent.prompt_generator import generate_brief
 from src.upload_agent.build_upload_excel import load_reference_data
 from src.campaign_bridge.open_rec_mapper import parse_creative_from_ad_title
-from config.paths import get_upload_fb_excel_path, get_creatives_root, get_ad_account_map_path
+from config.paths import (
+    get_ad_account_map_path,
+    get_creatives_root,
+    get_draft_status_path,
+    get_upload_fb_excel_path,
+    update_machine_env,
+    write_csv_atomic,
+)
 from src.campaign_bridge.link_validation import classify_link
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
 from src.web.adset_helpers import parse_adset_for_builder, resolve_interest_alias
@@ -61,7 +69,6 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
 _FAVICON = _STATIC_DIR / "favicon.svg"
 _FAVICON_ICO = _STATIC_DIR / "favicon.ico"
-_DRAFT_STATUS_PATH = _PROJ_ROOT / "output" / "draft_status.json"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 
@@ -85,6 +92,7 @@ def _write_link_to_excel(account_name: str, link: str) -> str | None:
 
     wb = _lw(excel_path, read_only=False, data_only=False)
     if "Accounts" not in wb.sheetnames:
+        wb.close()
         return None
 
     ws = wb["Accounts"]
@@ -99,6 +107,7 @@ def _write_link_to_excel(account_name: str, link: str) -> str | None:
             link_col = col
 
     if not account_col or not link_col:
+        wb.close()
         return None
 
     # Find matching row (case-insensitive, partial match same as get_account_info)
@@ -116,10 +125,25 @@ def _write_link_to_excel(account_name: str, link: str) -> str | None:
             break
 
     if matched_row is None:
+        wb.close()
         return None
 
     ws.cell(row=matched_row, column=link_col).value = link.strip() or None
-    wb.save(excel_path)
+    # Save beside the workbook and replace only after openpyxl produced a
+    # complete ZIP. A crash during wb.save() must not destroy the operator's
+    # Upload FB source file.
+    target = Path(excel_path)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{target.stem}.", suffix=f".tmp{target.suffix}", dir=target.parent
+    )
+    os.close(fd)
+    temp_path = Path(temp_name)
+    try:
+        wb.save(temp_path)
+        os.replace(temp_path, target)
+    finally:
+        wb.close()
+        temp_path.unlink(missing_ok=True)
 
     # Invalidate ref caches so the next dashboard load picks up the new link
     global _ref_full_cache, _ref_full_mtime, _ref_opts_cache, _ref_opts_mtime
@@ -132,12 +156,14 @@ def _write_link_to_excel(account_name: str, link: str) -> str | None:
 
 
 def _load_draft_status() -> dict:
-    """Load per-account draft-ready status from output/draft_status.json."""
-    if not _DRAFT_STATUS_PATH.is_file():
+    """Load the machine's last explicit ready/blocked campaign verdict."""
+    path = Path(get_draft_status_path())
+    if not path.is_file():
         return {}
     try:
-        with open(_DRAFT_STATUS_PATH, encoding="utf-8") as f:
-            return json.load(f)
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
@@ -344,7 +370,6 @@ templates.env.filters["fmt_usd"] = fmt_usd
 templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")
 templates.env.filters["creative_type"] = lambda name: parse_creative_from_ad_title(name)[0]
 templates.env.filters["creative_id"] = lambda name: parse_creative_from_ad_title(name)[1]
-templates.env.filters["tojson"] = lambda obj: json.dumps(obj, ensure_ascii=False, default=str)
 
 # Drill fragment column counts per section — keep in sync with report.html
 # table headers. The detail <td colspan> must match the parent table's
@@ -364,11 +389,82 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 _MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
+def _is_loopback_host(value: str | None) -> bool:
+    """Accept localhost names and literal loopback IPs, including [::1]."""
+    if not value:
+        return False
+    try:
+        host = urlsplit(f"//{value}").hostname
+    except Exception:
+        return False
+    if not host:
+        return False
+    host = host.rstrip(".").lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _is_loopback_url(value: str | None) -> bool:
+    if not value:
+        return False
+    try:
+        return _is_loopback_host(urlsplit(value).netloc)
+    except Exception:
+        return False
+
+
+def _secure_headers(response: Response) -> Response:
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; "
+        "script-src 'self' 'unsafe-inline' https://unpkg.com; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+        "media-src 'self' blob:; connect-src 'self'"
+    )
+    return response
+
+
+@app.middleware("http")
+async def local_dashboard_boundary(request: Request, call_next):
+    """Reject DNS-rebinding hosts and cross-site browser mutations."""
+    if not _is_loopback_host(request.headers.get("host")):
+        return _secure_headers(
+            JSONResponse({"error": "Local dashboard host required"}, status_code=400)
+        )
+
+    if request.method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+        origin = request.headers.get("origin")
+        referer = request.headers.get("referer")
+        fetch_site = (request.headers.get("sec-fetch-site") or "").strip().lower()
+        origin_ok = not origin or _is_loopback_url(origin)
+        referer_ok = not referer or _is_loopback_url(referer)
+        if fetch_site == "cross-site" or not origin_ok or not referer_ok:
+            return _secure_headers(
+                JSONResponse({"error": "Cross-site request blocked"}, status_code=403)
+            )
+
+    return _secure_headers(await call_next(request))
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon() -> FileResponse:
     if _FAVICON_ICO.is_file():
         return FileResponse(_FAVICON_ICO, media_type="image/x-icon")
     return FileResponse(_FAVICON, media_type="image/svg+xml")
+
+
+@app.get("/health", include_in_schema=False)
+async def health() -> JSONResponse:
+    """Fast identity check for the Windows launcher; never loads workbooks."""
+    return JSONResponse({"app": "ACL", "ok": True})
 
 
 def _enrich_country_overview(report: Dict[str, Any]) -> None:
@@ -436,10 +532,10 @@ def _render_report(
             "built_at": cache_built_at(),
             "upload_errors": upload_errors or {},
             "ref_options": ref_opts,
-            "ref_options_json": json.dumps(ref_opts, ensure_ascii=False),
+            "ref_options_json": ref_opts,
             "account_preflight": account_preflight,
-            "account_preflight_json": json.dumps(account_preflight, ensure_ascii=False),
-            "account_alias_map_json": json.dumps(account_alias_map, ensure_ascii=False),
+            "account_preflight_json": account_preflight,
+            "account_alias_map_json": account_alias_map,
             "draft_status": draft_status,
         },
     )
@@ -1403,11 +1499,7 @@ async def account_map_patch(request: Request) -> JSONResponse:
         else:
             rows.append(new_row)
 
-        map_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(map_path, "w", encoding="utf-8", newline="") as f:
-            writer = _csv.DictWriter(f, fieldnames=_FIELDNAMES, extrasaction="ignore")
-            writer.writeheader()
-            writer.writerows(rows)
+        write_csv_atomic(map_path, _FIELDNAMES, rows)
     except PermissionError:
         # Same class of bug fixed in /account-link-patch below: an unhandled
         # exception here previously made FastAPI's default 500 come back as
@@ -1477,10 +1569,7 @@ async def account_map_remove(request: Request) -> JSONResponse:
                 status_code=404,
             )
 
-        with open(map_path, "w", encoding="utf-8", newline="") as f:
-            writer = _csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-            writer.writeheader()
-            writer.writerows(kept)
+        write_csv_atomic(map_path, fieldnames, kept)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
@@ -1751,8 +1840,7 @@ async def preview_publish(request: Request) -> JSONResponse:
         else:
             plan = preview_jobs(slots, account_label=account_label, country=country)
     except Exception as e:
-        import traceback
-        return JSONResponse({"error": str(e), "detail": traceback.format_exc()})
+        return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"plan": plan, "account": account_label, "country": country})
 
 
@@ -1764,8 +1852,12 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     via_ml = (form.get("via_multilogin") or "1").strip() not in ("0", "false", "no")
     activate = (form.get("activate") or "0").strip() in ("1", "true", "yes")
     dry_run = (form.get("dry_run") or "0").strip() in ("1", "true", "yes")
-    hand_off = (form.get("hand_off") or "0").strip() in ("1", "true", "yes")
     user_confirmed = (form.get("user_confirmed") or "0").strip() in ("1", "true", "yes")
+    if activate:
+        return JSONResponse(
+            {"error": "Live activation is disabled: ACL creates draft-only campaigns."},
+            status_code=403,
+        )
     if not user_confirmed:
         return JSONResponse(
             {"error": "Publish blocked: confirm in the dashboard UI first (user_confirmed=0)."},
@@ -1773,13 +1865,19 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
         )
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
-    job_id = start_job(
-        account_label, country, slots,
-        via_multilogin=via_ml,
-        activate=activate,
-        dry_run=dry_run,
-        hand_off=hand_off,
-    )
+    try:
+        job_id = start_job(
+            account_label,
+            country,
+            slots,
+            via_multilogin=via_ml,
+            activate=False,
+            dry_run=dry_run,
+            # The server owns this safety decision; a client cannot opt out.
+            hand_off=True,
+        )
+    except (RuntimeError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
     if use_rpa_publish():
         from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
 
@@ -1788,7 +1886,7 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
                 slots,
                 account_label=account_label,
                 country=country,
-                activate=activate,
+                activate=False,
             )
         )
     else:
@@ -1999,7 +2097,7 @@ async def multilogin_start_direct(request: Request) -> JSONResponse:
 
 @app.post("/multilogin-save-token")
 async def multilogin_save_token(request: Request) -> JSONResponse:
-    """Save a manually pasted automation token to .env.
+    """Save a manually pasted token to machine-local configuration.
 
     Body JSON: {token: str, instance?: 'A'|'B'}
     """
@@ -2016,23 +2114,13 @@ async def multilogin_save_token(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "token is required"})
 
     env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
-    env_path = _PROJ_ROOT / ".env"
     try:
-        lines: list[str] = []
-        if env_path.is_file():
-            lines = env_path.read_text(encoding="utf-8").splitlines()
-        updated = False
-        for i, line in enumerate(lines):
-            if line.startswith(f"{env_key}="):
-                lines[i] = f"{env_key}={token}"
-                updated = True
-                break
-        if not updated:
-            lines.append(f"{env_key}={token}")
-        env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        os.environ[env_key] = token
+        update_machine_env({env_key: token})
     except Exception as exc:
-        return JSONResponse({"ok": False, "error": f"Failed to write .env: {exc}"})
+        return JSONResponse(
+            {"ok": False, "error": f"Failed to save machine settings: {exc}"},
+            status_code=500,
+        )
 
     return JSONResponse({"ok": True, "instance": instance, "env_key": env_key})
 
@@ -2043,7 +2131,7 @@ async def multilogin_signin(request: Request) -> JSONResponse:
 
     Body JSON: {email, password, save_token?: bool}
     Credentials are used for a single API call and never persisted.
-    If save_token is true, updates MULTILOGIN_AUTOMATION_TOKEN_A in .env.
+    If save_token is true, updates the token in machine-local settings.
     """
     try:
         data = await request.json()
@@ -2078,7 +2166,7 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     if r.status_code != 200:
         body = r.json() if "application/json" in r.headers.get("content-type", "") else {}
         msg = (body.get("status") or {}).get("message") or r.text[:300]
-        return JSONResponse({"ok": False, "error": f"Sign-in failed [{r.status_code}]: {msg}", "debug_body": body})
+        return JSONResponse({"ok": False, "error": f"Sign-in failed [{r.status_code}]: {msg}"})
 
     bearer = ((r.json().get("data") or {}).get("token") or "").strip()
     if not bearer:
@@ -2098,26 +2186,20 @@ async def multilogin_signin(request: Request) -> JSONResponse:
 
     working_token = auto_token or bearer
 
-    # Step 3 — save token to .env
+    # Step 3 — save token outside the checkout. Never claim success when the
+    # token works for this request but could not be persisted for next launch.
     env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
     if save_token and auto_token:
-        # Update both .env file and live os.environ so /multilogin-search works immediately
-        os.environ[env_key] = auto_token
-        env_path = _PROJ_ROOT / ".env"
         try:
-            if env_path.is_file():
-                lines = env_path.read_text(encoding="utf-8").splitlines()
-                updated = False
-                for i, line in enumerate(lines):
-                    if line.startswith(f"{env_key}="):
-                        lines[i] = f"{env_key}={auto_token}"
-                        updated = True
-                        break
-                if not updated:
-                    lines.append(f"{env_key}={auto_token}")
-                env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        except Exception as e:
-            print(f"[multilogin-signin] Failed to write .env: {e}", file=sys.stderr)
+            update_machine_env({env_key: auto_token})
+        except Exception as exc:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": f"Signed in, but failed to save machine settings: {exc}",
+                },
+                status_code=500,
+            )
 
     auth_h2 = {**H, "Authorization": f"Bearer {working_token}"}
 

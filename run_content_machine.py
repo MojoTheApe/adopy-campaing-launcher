@@ -40,8 +40,9 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(_ROOT))
 
-from dotenv import load_dotenv
-load_dotenv(_ROOT / ".env")
+from config.paths import load_env
+
+load_env()
 
 from src.content_machine.config import ContentMachineConfig
 from src.content_machine.content_language import get_content_language

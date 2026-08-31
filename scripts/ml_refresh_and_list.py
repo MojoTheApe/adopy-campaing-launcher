@@ -20,9 +20,10 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 try:
-    from dotenv import load_dotenv
-    load_dotenv(_ROOT / ".env")
-except ImportError:
+    from config.paths import load_env
+
+    load_env()
+except Exception:
     pass
 
 MLX_API = "https://api.multilogin.com"

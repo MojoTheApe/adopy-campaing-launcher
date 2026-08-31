@@ -29,6 +29,7 @@ _PACKAGES = [
     "fastapi",
     "uvicorn",
     "jinja2",
+    "multipart",
     "pandas",
     "openpyxl",
     "dotenv",
@@ -45,6 +46,8 @@ _MODULES = [
     "src.web.app",
     "src.analysis_agent.morning_report",
     "src.fb_ads_rpa.ads_manager_flow",
+    "src.fb_ads_rpa.retry_policy",
+    "scripts.acl_runtime_manager",
 ]
 
 

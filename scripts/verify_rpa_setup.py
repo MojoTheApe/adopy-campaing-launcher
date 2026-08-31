@@ -10,10 +10,10 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 try:
-    from dotenv import load_dotenv
+    from config.paths import load_env
 
-    load_dotenv(_ROOT / ".env")
-except ImportError:
+    load_env()
+except Exception:
     pass
 
 

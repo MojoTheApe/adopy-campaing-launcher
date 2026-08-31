@@ -8,13 +8,17 @@ made for diagnostics.
   python scripts/acl_telemetry_upload.py             # send what's new
   python scripts/acl_telemetry_upload.py --status    # is this machine set up?
 
-Setup is a one-time job on the Google side, done once for the whole team:
-  1. Create a Google Cloud service account, download its JSON key.
-  2. Save the key as <machine config dir>\\telemetry_service_account.json
-     (see `python scripts/acl_doctor.py` for that folder).
-  3. Create the spreadsheet, share it with the service account's e-mail as
-     Editor, and put its id in .env as GSHEET_TELEMETRY_ID.
-The tab and its header row are created automatically on the first upload.
+Supported setup under the current Adopy Workspace policy:
+  1. Put the shared OAuth client JSON at config/oauth_client.json, or set
+     GSHEET_OAUTH_CLIENT in the machine-local .env.
+  2. Put the shared spreadsheet id in GSHEET_TELEMETRY_ID.
+  3. Run this command once and complete browser consent as the employee using
+     the machine. The write token is stored outside the checkout at
+     <machine config dir>/token_telemetry.json.
+
+Service-account/webhook transports remain implemented for a future policy
+change, but they are not the supported setup today. The tab and header row are
+created automatically on first upload.
 """
 from __future__ import annotations
 
@@ -33,9 +37,9 @@ from scripts._console import use_utf8  # noqa: E402
 use_utf8()
 
 try:
-    from dotenv import load_dotenv
+    from config.paths import load_env
 
-    load_dotenv(_ROOT / ".env")
+    load_env()
 except Exception:
     pass
 

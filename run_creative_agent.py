@@ -28,9 +28,10 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 try:
-    from dotenv import load_dotenv
-    load_dotenv(_ROOT / ".env")
-except ImportError:
+    from config.paths import load_env
+
+    load_env()
+except Exception:
     pass
 
 from src.creative_agent.creative_scanner import scan_file, scan_input_dir, SUPPORTED_EXTS

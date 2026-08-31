@@ -19,6 +19,12 @@ if errorlevel 1 (
     exit /b 1
 )
 for /f "tokens=*" %%v in ('python --version') do echo Using %%v
+python -c "import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)"
+if errorlevel 1 (
+    echo ERROR: ACL requires Python 3.11 or newer.
+    pause
+    exit /b 1
+)
 
 REM ------------------------------------------------------- Isolated environment
 REM ACL gets its own .venv so a buyer's other Python work cannot pull a
@@ -26,8 +32,8 @@ REM different pandas/playwright under it, and so an ACL upgrade cannot break
 REM anything else on their machine. Verified 2026-08-25: a clean venv built
 REM from requirements.txt imports every dashboard and RPA module.
 REM
-REM An existing install without .venv keeps working exactly as before - the
-REM launcher only prefers .venv when it is actually there.
+REM Existing installs create or reuse this bootstrap .venv. The launcher has
+REM no system-Python fallback, so a partial environment can never look ready.
 set "PY=python"
 if exist ".venv\Scripts\python.exe" (
     echo Using existing .venv
@@ -36,12 +42,31 @@ if exist ".venv\Scripts\python.exe" (
     echo Creating .venv ...
     python -m venv .venv
     if errorlevel 1 (
-        echo WARNING: could not create .venv - installing into the system Python instead.
-    ) else (
-        set "PY=.venv\Scripts\python.exe"
+        echo ERROR: could not create ACL's isolated .venv.
+        echo The system Python was NOT modified. Fix Python/permissions and retry.
+        pause
+        exit /b 1
     )
+    set "PY=.venv\Scripts\python.exe"
 )
 
+REM A manual repair must not install packages for a candidate whose previous
+REM dashboard launch never became healthy. Recover first, then restart this
+REM installer from the restored checkout so even the batch file is N-1.
+if not exist "scripts\acl_runtime_manager.py" goto dependencies
+"%PY%" scripts\acl_runtime_manager.py recover-pending
+if errorlevel 10 (
+    echo Restarting installer from the restored ACL release...
+    start "" "%~f0"
+    exit /b 0
+)
+if errorlevel 1 (
+    echo ERROR: an unfinished ACL update could not be recovered safely.
+    pause
+    exit /b 1
+)
+
+:dependencies
 REM ------------------------------------------------------------ Dependencies
 REM Versions are pinned in requirements.txt on purpose - see the note there.
 echo.
@@ -55,33 +80,33 @@ if errorlevel 1 (
 )
 echo Dependencies OK.
 
+"%PY%" scripts\acl_smoke.py
+if errorlevel 1 (
+    echo ERROR: dependencies installed, but this ACL version does not start.
+    pause
+    exit /b 1
+)
+
 REM ------------------------------------------------- Machine-local config dir
 REM Deliberately OUTSIDE this folder: re-cloning or moving the checkout must
 REM never take a buyer's accounts and tokens with it.
 set "ACLDIR=%LOCALAPPDATA%\ACL"
-if not exist "%ACLDIR%" mkdir "%ACLDIR%"
 echo.
 echo Machine config: %ACLDIR%
 
-if not exist "%ACLDIR%\ad_account_map.csv" (
-    copy /y "config\ad_account_map.example.csv" "%ACLDIR%\ad_account_map.csv" >nul
-    echo   created ad_account_map.csv from the example - FILL IN YOUR ACCOUNTS
-) else (
-    echo   ad_account_map.csv already present - left untouched
+REM Migrate legacy real files BEFORE creating examples, then provision only
+REM what is still missing. This prevents a placeholder destination from hiding
+REM a buyer's existing account map.
+"%PY%" scripts\acl_migrate_config.py --provision
+if errorlevel 1 (
+    echo ERROR: machine configuration could not be provisioned safely.
+    pause
+    exit /b 1
 )
 
-if not exist ".env" (
-    copy /y ".env.example" ".env" >nul
-    echo   created .env from the example - ADD YOUR MULTILOGIN TOKEN
-    REM Fresh install = a buyer machine, which should follow the shared repo.
-    REM The marker is a file rather than a variable because .bat cannot read
-    REM .env. An existing install never reaches this branch, so a developer's
-    REM checkout is never switched to auto-update behind their back.
-    echo auto-update enabled by install_acl.bat> "%ACLDIR%\auto_update"
-    echo   auto-update ON - this machine will pull updates on start
-) else (
-    echo   .env already present - left untouched
-)
+REM Fleet auto-update stays OFF until this checkout is enrolled in a promoted
+REM stable channel. Following an arbitrary feature branch is not a release.
+echo   auto-update OFF - enable only after stable-channel enrollment
 
 REM ------------------------------------------------------------------ Check
 echo.

@@ -16,9 +16,9 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from dotenv import load_dotenv
+from config.paths import load_env
 
-load_dotenv(_ROOT / ".env")
+load_env()
 
 from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
@@ -50,16 +50,15 @@ def _demo_slots() -> list[dict]:
     ]
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="RPA publish PoC (Playwright + antidetect)")
     p.add_argument("--account", required=True, help="Account label from ad_account_map.csv")
     p.add_argument("--country", default="MX", help="Country code")
     p.add_argument("--slots-json", help="JSON file with dashboard slot list")
     p.add_argument("--dry-run", action="store_true", help="Open Ads Manager, stop before Publish")
     p.add_argument("--preview-only", action="store_true", help="No browser — validate drafts only")
-    p.add_argument("--activate", action="store_true", help="Set status ACTIVE instead of PAUSED")
     p.add_argument("--browser", choices=("multilogin", "dolphin"), help="Override FB_BROWSER_PROVIDER")
-    args = p.parse_args()
+    args = p.parse_args(argv)
 
     slots = _demo_slots()
     if args.slots_json:
@@ -72,7 +71,7 @@ def main() -> int:
             slots,
             account_label=args.account,
             country=args.country,
-            activate=args.activate,
+            activate=False,
             preview_mode=True,
         )
         print(json.dumps(preview_campaign_drafts(drafts), indent=2, ensure_ascii=False))
@@ -83,11 +82,17 @@ def main() -> int:
         slots,
         account_label=args.account,
         country=args.country,
-        activate=args.activate,
+        activate=False,
     )
     for r in results:
         print(json.dumps(r.to_job_dict(), indent=2, ensure_ascii=False))
-    return 0 if all(r.success for r in results) else 1
+    if any(not r.success for r in results):
+        return 1
+    # A draft was created but must not be treated as a successful operator
+    # outcome.  Keep this distinct from execution failure for support scripts.
+    if any(not r.publishable for r in results):
+        return 2
+    return 0
 
 
 if __name__ == "__main__":

@@ -177,7 +177,7 @@ def test_requirements_carry_nothing_only_the_rest_of_the_repo_needs():
         ship_names |= {_dist(n) for n in hard | soft}
     # Server and template plumbing is pulled in by FastAPI rather than imported
     # by name anywhere in our code.
-    ship_names |= {"uvicorn", "jinja2", "google-auth-httplib2"}
+    ship_names |= {"uvicorn", "jinja2", "google-auth-httplib2", "python-multipart"}
 
     stray = sorted(r for r in reqs if r not in ship_names)
     assert not stray, (

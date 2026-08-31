@@ -2,8 +2,8 @@
 import os, sys, json, base64
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from dotenv import load_dotenv
-load_dotenv(Path(__file__).parents[1] / ".env")
+from config.paths import load_env
+load_env()
 import requests
 
 TOKEN = os.environ.get("MULTILOGIN_AUTOMATION_TOKEN_A", "")

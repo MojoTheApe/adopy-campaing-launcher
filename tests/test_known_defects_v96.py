@@ -64,16 +64,12 @@ def test_later_ads_are_covered_too():
     assert result.publishable is False
 
 
-def test_a_wider_audience_is_a_warning_not_a_block():
-    """Not everything that failed makes a draft unsafe.
-
-    A test that blocked on everything would pass the two above while making the
-    whole mechanism useless — every run would say "do not publish".
-    """
+def test_a_wider_audience_is_not_publishable():
+    """Requested age/language failures change spend and must fail closed."""
     result = apply_step_failures(_reached_ad_level(), ["audience_age", "languages"])
-    assert result.publishable is True
-    assert result.warnings == ["audience_age", "languages"]
-    assert result.blocking_failures == []
+    assert result.publishable is False
+    assert result.warnings == []
+    assert result.blocking_failures == ["audience_age", "languages"]
 
 
 def test_the_verdict_reaches_the_dashboard():
