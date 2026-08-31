@@ -1102,6 +1102,11 @@ async def api_accounts_overview() -> JSONResponse:
             "label": label,
             "owner": owner,
             "country_name": country_by_alias.get(normalize_account_alias(label), ""),
+            # An account can belong to two countries at once — five of fourteen
+            # do. Showing only one hides the other, and the hidden one is a
+            # market someone might build a campaign for.
+            "countries": _resolved.get(normalize_account_alias(label), {}).get("countries", []),
+            "country_ambiguous": _resolved.get(normalize_account_alias(label), {}).get("ambiguous", False),
             "country": row.get("country_code") or "",
             "stock": row.get("stock") or "",
             "status": row.get("account_status") or "",
@@ -1129,6 +1134,11 @@ async def api_accounts_overview() -> JSONResponse:
             "label": label,
             "owner": owner,
             "country_name": country_by_alias.get(normalize_account_alias(label), ""),
+            # An account can belong to two countries at once — five of fourteen
+            # do. Showing only one hides the other, and the hidden one is a
+            # market someone might build a campaign for.
+            "countries": _resolved.get(normalize_account_alias(label), {}).get("countries", []),
+            "country_ambiguous": _resolved.get(normalize_account_alias(label), {}).get("ambiguous", False),
             "country": (getattr(entry, "country", "") or ""),
             "stock": "",
             "status": "",

@@ -6448,7 +6448,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
             ? '<input type="checkbox" class="ac-check" aria-label="выбрать ' + esc(a.label) + '">' : '') + '</td>'
         + '<td><div class="acc-name">' + esc(a.label) + '</div>'
         + '<div class="acc-meta">' + pill + local + '</div></td>'
-        + '<td>' + esc(a.country || '—') + '</td>'
+        + '<td>' + countryCell(a) + '</td>'
         + '<td><input class="ac-adid" type="text" style="width:12rem" value="'
         + esc(a.ad_account_id || detectedFor(a.suggested_profile))
         + '" placeholder="ссылка или act_…"></td>'
@@ -6585,6 +6585,26 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       .catch(function (e) { btn.disabled = false; say(String(e), 'err'); });
   }
 
+  // Страна в списке аккаунтов. У аккаунта их может быть две сразу — пять из
+  // четырнадцати в таблице стоят под двумя странами. Показать одну значит
+  // спрятать вторую, а спрятанная — это рынок, под который кто-то может начать
+  // собирать кампанию.
+  //
+  // Первой идёт та, где аккаунт крутился последней (её выбирает сервер по дате
+  // из статистики); остальные приписываются следом.
+  function countryCell(a) {
+    var list = (a.countries || []).filter(Boolean);
+    if (!list.length) return esc(a.country || a.country_name || '—');
+    var main = a.country_name && list.indexOf(a.country_name) !== -1 ? a.country_name : list[0];
+    var rest = list.filter(function (c) { return c !== main; });
+    var html = esc(main);
+    if (rest.length) {
+      html += ' <span class="acc-pill" title="аккаунт числится и здесь">+ '
+            + rest.map(esc).join(', ') + '</span>';
+    }
+    return html;
+  }
+
   // Страна у аккаунта приходит кодом («UAE»), а раздел назван полностью
   // («United Arab Emirates»). Сравниваем терпимо: точное совпадение, префикс
   // или аббревиатура по первым буквам слов.
@@ -6619,7 +6639,12 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         // статистике назвала бы прошлое. Её используем только когда в таблице
         // страны нет.
         if (!a.connected) return false;
-        return countryMatches(a.country || a.country_name, name);
+        // Все страны аккаунта, а не одна: аккаунт, ведущий два рынка, должен
+        // быть виден в обоих разделах — иначе в одном он выглядит
+        // неподключённым, и его подключат второй раз.
+        var all = (a.countries && a.countries.length)
+          ? a.countries : [a.country || a.country_name];
+        return all.some(function (c) { return countryMatches(c, name); });
       });
       if (!mine.length) {
         out.innerHTML = 'Подключённых на этой машине аккаунтов для ' + esc(name) + ' пока нет.';
