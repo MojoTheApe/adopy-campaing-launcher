@@ -12,7 +12,7 @@ RPA_FLOW_VERSION = "v96"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
-from src.fb_ads_rpa import failure_policy
+from src.fb_ads_rpa import failure_policy, retry_policy
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.page_diagnostics import diagnose_and_recover
 from src.fb_ads_rpa.meta_dom import (
@@ -2185,39 +2185,11 @@ class AdsManagerFlow:
                 for extra in ad_set.ads[1:]
             ]
 
-            # These are all pre-audience "setup" steps (campaign objective,
-            # name, budget, ad set name, conversion location) — confirmed
-            # live 2026-07-28 that a transient hiccup on any one of them
-            # (proxy/timing, not a real code bug: the very next campaign in
-            # the same dashboard job sailed through the identical step
-            # seconds later) is fixed 100% of the time by simply retrying
-            # the whole campaign fresh from the campaigns list, exactly
-            # what the user was doing by hand from the dashboard. Once past
-            # this point the flow is in the soft-fail Audience/Ad-level
-            # zone, which already tolerates individual field failures
-            # without needing a whole-campaign retry.
-            _EARLY_SETUP_STEPS = {
-                "create",
-                "objective_leads",
-                "objective_continue",
-                "campaign_name",
-                "daily_budget",
-                "next_to_adset",
-                "adset_name",
-                "conversion_location_open",
-                "conversion_website",
-                "conversion_website_verify",
-                "further_limit_reach",
-                "further_limit_reach_radio",
-                "further_limit_reach_continue",
-                # Added 2026-07-29 (Test145): the editor drawer can close
-                # mid-audience-setup (transient), leaving every later step
-                # failing against the bare ad-sets list. next_to_ad is now
-                # a hard fail in the recorded flow, and re-running the
-                # whole campaign is exactly the right recovery for it.
-                "next_to_ad",
-            }
-            max_attempts = 3
+            # Retry scope is deliberately centralised. Early setup failures
+            # may rebuild the campaign shell; after audience/ad work starts,
+            # replaying the whole flow could duplicate drafts or ads. Those
+            # later failures remain attached to a blocked draft for review.
+            max_attempts = retry_policy.MAX_CAMPAIGN_ATTEMPTS
             fail_step = ""
             ad_soft_fails: list[str] = []
             for attempt in range(1, max_attempts + 1):
@@ -2246,11 +2218,28 @@ class AdsManagerFlow:
                     additional_ads=additional_ads,
                     soft_fails_out=ad_soft_fails,
                 )
-                if not fail_step or fail_step not in _EARLY_SETUP_STEPS:
+                if not fail_step:
                     break
-                result.steps_completed.append(f"recorded_flow_retry:{fail_step}:attempt{attempt}")
-                if attempt < max_attempts:
-                    time.sleep(1.5)
+                decision = retry_policy.disposition(fail_step)
+                if decision.action != retry_policy.RETRY_CAMPAIGN:
+                    result.steps_completed.append(
+                        f"recorded_flow_retry_blocked:{fail_step}:{decision.action}"
+                    )
+                    break
+                result.steps_completed.append(
+                    f"recorded_flow_attempt_failed:{fail_step}:attempt{attempt}"
+                )
+                if not retry_policy.should_retry_campaign(
+                    fail_step, completed_attempts=attempt
+                ):
+                    result.steps_completed.append(
+                        f"recorded_flow_retry_exhausted:{fail_step}:attempt{attempt}"
+                    )
+                    break
+                result.steps_completed.append(
+                    f"recorded_flow_retry_scheduled:{fail_step}:attempt{attempt + 1}"
+                )
+                time.sleep(1.5)
 
             result.steps_completed.append("recorded_flow:reached_ad" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step

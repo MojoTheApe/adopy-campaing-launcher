@@ -32,8 +32,8 @@ REM different pandas/playwright under it, and so an ACL upgrade cannot break
 REM anything else on their machine. Verified 2026-08-25: a clean venv built
 REM from requirements.txt imports every dashboard and RPA module.
 REM
-REM An existing install without .venv keeps working exactly as before - the
-REM launcher only prefers .venv when it is actually there.
+REM Existing installs create or reuse this bootstrap .venv. The launcher has
+REM no system-Python fallback, so a partial environment can never look ready.
 set "PY=python"
 if exist ".venv\Scripts\python.exe" (
     echo Using existing .venv
@@ -50,6 +50,23 @@ if exist ".venv\Scripts\python.exe" (
     set "PY=.venv\Scripts\python.exe"
 )
 
+REM A manual repair must not install packages for a candidate whose previous
+REM dashboard launch never became healthy. Recover first, then restart this
+REM installer from the restored checkout so even the batch file is N-1.
+if not exist "scripts\acl_runtime_manager.py" goto dependencies
+"%PY%" scripts\acl_runtime_manager.py recover-pending
+if errorlevel 10 (
+    echo Restarting installer from the restored ACL release...
+    start "" "%~f0"
+    exit /b 0
+)
+if errorlevel 1 (
+    echo ERROR: an unfinished ACL update could not be recovered safely.
+    pause
+    exit /b 1
+)
+
+:dependencies
 REM ------------------------------------------------------------ Dependencies
 REM Versions are pinned in requirements.txt on purpose - see the note there.
 echo.

@@ -2782,7 +2782,7 @@ def run_recorded_campaign_flow(
         diag={"soft_fails": ad_level_fails} if ad_level_fails else None,
     )
     # Hand the failures back to the caller as well. Telemetry alone is not a
-    # warning: nobody reads rpa_telemetry.jsonl in the seconds between a run
+    # safety control: nobody reads rpa_telemetry.jsonl in the seconds between a run
     # finishing and the operator clicking Publish, so an ad that ended up with
     # no creative was indistinguishable from a clean run.
     if soft_fails_out is not None:
@@ -2790,8 +2790,9 @@ def run_recorded_campaign_flow(
         # output/debug_audience_soft_fails.txt, which means a run that failed to
         # set the target country was indistinguishable from a clean one — the
         # operator saw success and published a campaign aimed at the wrong
-        # market. Severity is decided in one place, failure_policy, so most of
-        # these stay warnings; location and the conversion event do not.
+        # market. Severity is decided in one place, failure_policy. Every
+        # currently emitted field failure blocks publication; execution only
+        # continues so the operator receives a useful draft and full defect list.
         soft_fails_out.extend(soft_fails)
         soft_fails_out.extend(ad_level_fails)
 

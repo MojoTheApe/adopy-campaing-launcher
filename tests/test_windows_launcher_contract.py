@@ -35,12 +35,34 @@ def test_auto_update_uses_only_the_promoted_channel_and_gate() -> None:
     assert "git reset --hard" not in launcher
 
 
+def test_auto_update_uses_sha_versioned_runtime_not_the_working_venv() -> None:
+    launcher = _text("start_dashboard.bat")
+
+    assert "scripts\\acl_runtime_manager.py prepare --sha" in launcher
+    assert "scripts\\acl_runtime_manager.py mark-pending" in launcher
+    assert "scripts\\acl_runtime_manager.py activate --sha" in launcher
+    assert "scripts\\acl_runtime_manager.py confirm-running" in launcher
+    assert "scripts\\acl_runtime_manager.py recover-pending" in launcher
+    assert "%LOCALAPPDATA%\\ACL\\runtimes\\%HEAD_AFTER%" in launcher
+    update_block = launcher.split(":update", 1)[1]
+    assert '"%PY%" -m pip install' not in update_block
+    assert '"%BOOTSTRAP_PY%" -m pip install' not in update_block
+
+
+def test_failed_candidate_is_not_retried_forever() -> None:
+    manager = _text("scripts/acl_runtime_manager.py")
+
+    assert "is_quarantined" in manager
+    assert "candidate never reached confirmed ACL health" in manager
+
+
 def test_installer_does_not_silently_enable_fleet_updates() -> None:
     installer = _text("install_acl.bat")
 
     assert "auto-update OFF" in installer
     assert "scripts\\acl_smoke.py" in installer
     assert "type nul" not in installer
+    assert "scripts\\acl_runtime_manager.py recover-pending" in installer
 
 
 def test_stable_enrollment_requires_exact_promoted_release() -> None:

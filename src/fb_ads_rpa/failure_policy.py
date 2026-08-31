@@ -30,6 +30,8 @@ table is the record of every one we have decided is not.
 """
 from __future__ import annotations
 
+import re
+
 BLOCKING = "blocking"
 WARNING = "warning"
 
@@ -100,6 +102,47 @@ POLICY: dict[str, tuple[str, str]] = {
     ),
 }
 
+# Additional ads are emitted as ad2_*, ad3_* and so on. Keep their policy
+# canonical instead of relying on the unknown-failure fallback: blocking is
+# the same verdict, but the operator needs a useful explanation and a rename
+# must be caught by tests.
+PER_AD_POLICY: dict[str, tuple[str, str]] = {
+    "create": (
+        BLOCKING,
+        "the requested ad shell was not created, so the campaign contains "
+        "fewer ads than the approved input specification",
+    ),
+    "name": (
+        BLOCKING,
+        "the ad name was not verified, so the operator cannot reliably match "
+        "the draft to its approved source row",
+    ),
+    "creative_upload": POLICY["creative_upload"],
+    "copy": (
+        BLOCKING,
+        "the approved primary text or headline was not verified on the ad",
+    ),
+    "destination": (
+        BLOCKING,
+        "the ad destination was not verified, so leads may be sent to the "
+        "wrong place or into an Instant Form",
+    ),
+}
+
+_PER_AD_NAME = re.compile(
+    r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination)$"
+)
+
+
+def _lookup(name: str) -> tuple[str, str] | None:
+    known = POLICY.get(name)
+    if known:
+        return known
+    per_ad = _PER_AD_NAME.fullmatch(name)
+    if per_ad:
+        return PER_AD_POLICY[per_ad.group(1)]
+    return None
+
 
 def base_name(failure: str) -> str:
     """The step name, without the ":detail" a caller may have appended."""
@@ -111,7 +154,7 @@ def severity(failure: str) -> str:
     name = base_name(failure)
     if not name:
         return BLOCKING
-    known = POLICY.get(name)
+    known = _lookup(name)
     if known:
         return known[0]
     # Ad-level steps are produced per ad and carry the ad's tag as a prefix
@@ -125,7 +168,7 @@ def severity(failure: str) -> str:
 def reason(failure: str) -> str:
     """Why this failure has the severity it has — for the operator, not a log."""
     name = base_name(failure)
-    known = POLICY.get(name)
+    known = _lookup(name)
     if known:
         return known[1]
     for candidate, (_level, why) in POLICY.items():

@@ -78,3 +78,6 @@ def test_every_entry_carries_a_reason():
     for name, (level, why) in fp.POLICY.items():
         assert level in (fp.BLOCKING, fp.WARNING), name
         assert why and len(why) > 20, f"{name}: severity без объяснения"
+    for name, (level, why) in fp.PER_AD_POLICY.items():
+        assert level in (fp.BLOCKING, fp.WARNING), name
+        assert why and len(why) > 20, f"per-ad {name}: severity без объяснения"

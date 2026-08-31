@@ -19,8 +19,9 @@ if not exist ".venv\Scripts\python.exe" (
     exit /b 1
 )
 
-set "PY=.venv\Scripts\python.exe"
-"%PY%" -c "import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)"
+set "BOOTSTRAP_PY=.venv\Scripts\python.exe"
+set "PY=%BOOTSTRAP_PY%"
+"%BOOTSTRAP_PY%" -c "import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)"
 if errorlevel 1 (
     echo ERROR: ACL requires Python 3.11 or newer. Run install_acl.bat.
     pause
@@ -37,6 +38,15 @@ if not errorlevel 1 (
     findstr /c:"ACL" "%HEALTH_FILE%" >nul 2>&1
     if not errorlevel 1 (
         del "%HEALTH_FILE%" >nul 2>&1
+        REM A healthy ACL process is sufficient evidence to confirm a pending
+        REM release even if the previous launcher window closed one line early.
+        "%BOOTSTRAP_PY%" scripts\acl_runtime_manager.py confirm-running >nul 2>&1
+        if errorlevel 1 (
+            echo ERROR: the running dashboard's release could not be confirmed.
+            echo Close it and send this window to support before using ACL.
+            pause
+            exit /b 1
+        )
         echo Dashboard is already running - opening it.
         start "" "%URL%"
         timeout /t 2 >nul
@@ -44,6 +54,35 @@ if not errorlevel 1 (
     )
 )
 del "%HEALTH_FILE%" >nul 2>&1
+
+REM --------------------------------------------------------- Release recovery
+REM An update is pending until the new dashboard answers ACL's own /health.
+REM If the previous launch died or was closed before that point, restore the
+REM old commit before importing any code. Exit 10 means a reset happened; start
+REM a fresh copy so cmd.exe reads the restored launcher rather than continuing
+REM through a batch file that changed underneath it.
+"%BOOTSTRAP_PY%" scripts\acl_runtime_manager.py recover-pending
+set "RECOVERY_RC=%ERRORLEVEL%"
+if "%RECOVERY_RC%"=="10" (
+    echo Restarting the restored ACL release...
+    start "" "%~f0"
+    exit /b 0
+)
+if not "%RECOVERY_RC%"=="0" (
+    echo ERROR: an unfinished ACL update could not be recovered safely.
+    echo Do not edit or delete the update marker. Send this window to support.
+    pause
+    exit /b 1
+)
+
+REM Use an immutable runtime only when this exact commit passed dependency and
+REM smoke validation. Initial/manual installs continue to use bootstrap .venv.
+set "CURRENT_SHA="
+for /f "delims=" %%h in ('git rev-parse HEAD 2^>nul') do set "CURRENT_SHA=%%h"
+if defined CURRENT_SHA (
+    "%BOOTSTRAP_PY%" scripts\acl_runtime_manager.py check-active --sha "%CURRENT_SHA%" >nul 2>&1
+    if not errorlevel 1 set "PY=%LOCALAPPDATA%\ACL\runtimes\%CURRENT_SHA%\Scripts\python.exe"
+)
 
 REM ----------------------------------------------------------- Machine config
 REM Move this machine's own config out of the checkout, BEFORE the update step.
@@ -67,11 +106,19 @@ REM and would then load a file that changed mid-flight.
 REM
 REM Only on machines the installer marked. A developer checkout must never be
 REM git-pulled from under someone mid-edit, so the marker is written solely on
-REM a fresh install. Failure here is never fatal: a buyer who cannot reach
-REM GitHub still needs to launch campaigns.
+REM a fresh install. Network/release-gate failures keep the installed version.
+REM A candidate that was already activated and then failed is rolled back and
+REM this invocation stops so the restored launcher can be read from disk.
 if exist "%LOCALAPPDATA%\ACL\auto_update" (
     git rev-parse --git-dir >nul 2>&1
     if not errorlevel 1 call :update
+    if errorlevel 20 (
+        echo.
+        echo The failed candidate was rolled back and quarantined.
+        echo Start ACL again to use the restored release.
+        pause
+        exit /b 1
+    )
 )
 
 netstat -aon | findstr /r /c:":%PORT% .*LISTENING" >nul 2>&1
@@ -99,12 +146,20 @@ if %TRIES% GEQ 90 (
     echo.
     echo Server did not come up within 90s. Run this to see why:
     echo     python serve.py --port %PORT%
+    echo The pending release will be rolled back automatically on the next start.
     pause
     exit /b 1
 )
 goto waitup
 
 :isup
+"%BOOTSTRAP_PY%" scripts\acl_runtime_manager.py confirm-running >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: ACL is healthy, but its release marker could not be confirmed.
+    echo Close this window and send the error to support before using the dashboard.
+    pause
+    exit /b 1
+)
 echo Dashboard is up - opening browser.
 start "" "%URL%"
 echo.
@@ -159,45 +214,63 @@ if errorlevel 1 (
     exit /b 0
 )
 
-REM The incoming requirements.txt, read out of the fetched commit without
-REM checking it out. Falls back to the installed one if the new version has no
-REM such file, so an empty temp file can never pass as "nothing to install".
-echo   new version available - installing its dependencies first...
+REM The incoming requirements.txt is read from the fetched commit without
+REM checking it out. Dependencies go into an immutable runtime named by the
+REM candidate SHA; the working .venv and the N-1 runtime are never modified.
+echo   new version available - preparing its isolated runtime...
 set "REQ=%TEMP%\acl_requirements_incoming.txt"
 git show %STABLE_REF%:requirements.txt > "%REQ%" 2>nul
 if errorlevel 1 copy /y requirements.txt "%REQ%" >nul
 
-"%PY%" -m pip install --disable-pip-version-check -q -r "%REQ%"
+"%BOOTSTRAP_PY%" scripts\acl_runtime_manager.py prepare --sha "%HEAD_AFTER%" --requirements "%REQ%"
 if errorlevel 1 (
     echo.
-    echo   WARNING: the new version's dependencies could not be installed.
+    echo   WARNING: the new version's isolated runtime could not be prepared.
     echo   The update was NOT applied - you are still on the working version.
-    echo   Run install_acl.bat once you have a connection to try again.
+    echo   A quarantined release remains skipped until a newer release arrives.
     echo.
+    exit /b 0
+)
+
+set "RUNTIME_NEXT=%LOCALAPPDATA%\ACL\runtimes\%HEAD_AFTER%\Scripts\python.exe"
+"%BOOTSTRAP_PY%" scripts\acl_runtime_manager.py mark-pending --previous "%HEAD_BEFORE%" --candidate "%HEAD_AFTER%"
+if errorlevel 1 (
+    echo   recoverable update marker could not be written - update skipped.
     exit /b 0
 )
 
 git merge --ff-only %STABLE_REF% >nul 2>&1
 if errorlevel 1 (
     echo   local changes block the update - continuing with the installed version.
+    "%BOOTSTRAP_PY%" scripts\acl_runtime_manager.py recover-pending >nul 2>&1
     exit /b 0
 )
 
 REM Installed cleanly is not the same as starts. Import the dashboard and RPA
 REM entry points before declaring the new version good.
-"%PY%" scripts\acl_smoke.py >nul 2>&1
+"%RUNTIME_NEXT%" scripts\acl_smoke.py >nul 2>&1
 if errorlevel 1 (
     echo   WARNING: the new version does not start on this machine - rolling back.
-    REM --keep, never --hard: it refuses rather than destroying local work if
-    REM this ever runs somewhere that has any.
-    git reset --keep %HEAD_BEFORE% >nul 2>&1
-    if errorlevel 1 (
+    "%BOOTSTRAP_PY%" scripts\acl_runtime_manager.py recover-pending >nul 2>&1
+    if not errorlevel 10 (
         echo   ROLLBACK FAILED. Run install_acl.bat, and send this line on.
-        exit /b 0
+        exit /b 20
     )
-    echo   rolled back to the previous working version.
-    exit /b 0
+    echo   rolled back to the previous working version; candidate quarantined.
+    exit /b 20
 )
 
-echo   updated and verified.
+"%RUNTIME_NEXT%" scripts\acl_runtime_manager.py activate --sha "%HEAD_AFTER%" >nul 2>&1
+if errorlevel 1 (
+    echo   WARNING: the new runtime could not be activated - rolling back.
+    "%BOOTSTRAP_PY%" scripts\acl_runtime_manager.py recover-pending >nul 2>&1
+    if not errorlevel 10 (
+        echo   ROLLBACK FAILED. Run install_acl.bat, and send this line on.
+        exit /b 20
+    )
+    exit /b 20
+)
+
+set "PY=%RUNTIME_NEXT%"
+echo   updated and smoke-verified; awaiting dashboard health confirmation.
 exit /b 0

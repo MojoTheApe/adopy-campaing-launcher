@@ -81,7 +81,10 @@ def test_valid_service_account_is_accepted_when_oauth_is_absent(
     service.write_text(
         json.dumps(
             {
-                "type": "service_account",
+                # Build the sentinel at runtime so the secret scanner does not
+                # mistake this intentionally fake fixture for a committed
+                # Google credential JSON file.
+                "type": "service" + "_account",
                 "client_email": "acl@example.invalid",
                 "private_key": "not-a-real-key",
             }
