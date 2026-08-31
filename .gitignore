@@ -7,8 +7,6 @@ venv/
 env/
 
 # Generated reports (optional: commit sample reports if needed)
-output/*.txt
-output/*.md
 
 # Excel temp / личные данные (раскомментируй, если не хочешь коммитить xlsx)
 # *.xlsx
@@ -32,7 +30,6 @@ config/ad_account_map.csv
 
 # Agent 10: сохранённая сессия браузера FB Ads Manager + прогоны (скриншоты/trace)
 .auth/
-output/fb_publish_runs/
 
 # Архив статистики для дневника креативов (накапливается локально, крупный)
 data/*.sqlite3
@@ -54,20 +51,10 @@ data/*.sqlite3
 Thumbs.db
 
 # Excel lock/temp files
-output/~$*
 
 # RPA runtime artifacts (regenerated every run — screenshots, evidence packs,
 # per-account learned recipe dumps, job/test logs)
-output/rpa_screenshots/
-output/rpa_evidence/
-output/rpa_recipes/
-output/draft_status.json
-output/dry_run_slots_cl.json
-output/publish_dry_run.json
-output/test_publish_log.jsonl
 # Per-run RPA telemetry (local diagnostic data, grows every run)
-output/rpa_telemetry.jsonl
-output/*.xlsx
 serve_out.log
 serve_err.log
 serve_recipe_player.log
@@ -104,3 +91,15 @@ telemetry_service_account.json
 machine_id.txt
 telemetry_cursor.json
 token_telemetry.json
+
+# ── output/ ──────────────────────────────────────────────────────────────────
+# Всё содержимое — следы прогонов: скриншоты, дампы, планы, логи. Раньше здесь
+# был список частных правил, и 13 файлов всё равно оказались под гитом: они
+# переписывались каждым прогоном, поэтому признак «есть локальные правки» в
+# строке версии потока приходилось сужать вручную, чтобы он не горел всегда.
+#
+# Проверено 31.08: ни на один из них не ссылается ни код, ни тесты. То, что
+# выглядело ссылками, оказалось путями ЗАПИСИ (unknown_targets.log,
+# upload_plan.xlsx), а тест контекст-пака создаёт свой файл во временной папке.
+output/*
+!output/.gitkeep

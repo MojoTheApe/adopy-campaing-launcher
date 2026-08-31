@@ -1,3 +1,0 @@
-# Knowledge Agent Auto Context
-
-Hook failed open: JSONDecodeError: Expecting value: line 1 column 1 (char 0)

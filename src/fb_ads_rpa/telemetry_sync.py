@@ -206,9 +206,13 @@ def flow_version() -> str:
             version = f"{version}+{ahead}"
     version = f"{version}@{head}"
     # Local edits to CODE, which is the only thing the flag is meant to say.
-    # Both exclusions are load-bearing: runs drop diagnostics into output/ as
-    # untracked files, and rewrite tracked ones there too, so a plain dirty
-    # check would raise the flag on every buyer machine and mean nothing.
+    #
+    # The scope was originally a workaround: runs rewrote tracked files in
+    # output/, so a plain dirty check raised the flag on every machine and meant
+    # nothing. Those files left git on 2026-08-31, so the workaround is no
+    # longer needed — but the scope stays, because "the code differs" is a
+    # sharper statement than "something in the folder differs", and it is what
+    # the flag claims.
     if _git(
         "status", "--porcelain", "--untracked-files=no",
         "--", "src", "config", "scripts", "serve.py", "start_dashboard.bat",
