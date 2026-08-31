@@ -43,9 +43,25 @@ except Exception:
 # ships that line empty: a buyer's fresh install would have stopped after
 # conversion location, building no audience, ads, creatives, copy or
 # destination, while the operator believed they had asked for a full campaign.
-os.environ.setdefault("FB_RPA_ENGINE", "recorded_flow")
+_engine = (os.environ.get("FB_RPA_ENGINE") or "").strip().lower() or "recorded_flow"
+os.environ["FB_RPA_ENGINE"] = _engine
 
-_engine = (os.environ.get("FB_RPA_ENGINE") or "").strip().lower()
+_backend = (os.environ.get("FB_PUBLISH_BACKEND") or "rpa").strip().lower()
+if _backend != "rpa":
+    raise SystemExit(
+        "[serve] Refusing to start: FB_PUBLISH_BACKEND must be 'rpa'. "
+        "The legacy live Meta API backend is disabled."
+    )
+
+# Experimental engines remain available to developers from the terminal, but
+# a campaign-manager launcher must not silently switch ten machines away from
+# the only end-to-end flow with production evidence.
+_allow_experimental = (os.environ.get("ACL_ALLOW_EXPERIMENTAL_RPA") or "").strip().lower()
+if _engine != "recorded_flow" and _allow_experimental not in {"1", "true", "yes"}:
+    raise SystemExit(
+        f"[serve] Refusing to start unsupported RPA engine '{_engine}'. "
+        "Set FB_RPA_ENGINE=recorded_flow."
+    )
 
 # The stop gate belongs to the recipe player and applies only when someone
 # deliberately selects that engine. It must never narrow the default path.

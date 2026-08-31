@@ -5,11 +5,16 @@ Output: output/management_report_<date>.xlsx
 import os, sys
 from datetime import datetime
 from pathlib import Path
+import sys
+
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import pandas as pd
-from dotenv import load_dotenv
+from config.paths import load_env
 
-load_dotenv()
+load_env()
 
 try:
     import openpyxl

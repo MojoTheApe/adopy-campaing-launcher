@@ -39,11 +39,11 @@ def test_wrong_country_blocks():
     assert fp.severity("conversion_event") == fp.BLOCKING
 
 
-def test_wider_delivery_only_warns():
-    """Broader than asked is worth saying, but the campaign is not broken."""
+def test_wider_delivery_blocks():
+    """Broader than requested changes spend and is not silently publishable."""
     for name in ("audience_age", "languages", "placements", "devices_ios",
                  "targeting_open", "targeting_none_added"):
-        assert fp.severity(name) == fp.WARNING, name
+        assert fp.severity(name) == fp.BLOCKING, name
 
 
 def test_unknown_failures_block():
@@ -61,16 +61,15 @@ def test_unknown_failures_block():
 def test_split_keeps_everything():
     fails = ["audience_age", "ad_creative_upload:x", "languages", "audience_location"]
     blocking, warnings = fp.split(fails)
-    assert blocking == ["ad_creative_upload:x", "audience_location"]
-    assert warnings == ["audience_age", "languages"]
+    assert blocking == fails
+    assert warnings == []
     assert len(blocking) + len(warnings) == len(fails)
 
 
 def test_describe_explains_why_not_just_what():
     """The operator reads this instead of the code, so it must carry a reason."""
-    text = fp.describe(["ad_creative_upload", "audience_age"])
+    text = fp.describe(["ad_creative_upload"])
     assert "ad_creative_upload" in text
-    assert "audience_age" not in text, "не блокирующие не должны попадать в стоп-текст"
     assert len(text.split("—", 1)[1].strip()) > 20, "нет объяснения, только имя шага"
 
 

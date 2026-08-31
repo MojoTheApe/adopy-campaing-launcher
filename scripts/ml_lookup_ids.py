@@ -16,10 +16,10 @@ if str(_root) not in sys.path:
 os.chdir(_root)
 
 try:
-    from dotenv import load_dotenv
+    from config.paths import load_env
 
-    load_dotenv(_root / ".env")
-except ImportError:
+    load_env()
+except Exception:
     pass
 
 MLX_API = "https://api.multilogin.com"

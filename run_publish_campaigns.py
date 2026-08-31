@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Agent 9: publish Agent 8 upload Excel via Meta Marketing API."""
+"""Legacy Agent 9 plan/validation CLI.
+
+Live Meta API creation is intentionally not exposed by the ACL distribution.
+Campaign managers create drafts through the dashboard RPA and a human performs
+the final Publish action in Meta.
+"""
 from __future__ import annotations
 
 import argparse
@@ -18,35 +23,22 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 try:
-    from dotenv import load_dotenv
+    from config.paths import load_env
 
-    load_dotenv(_root / ".env")
-except ImportError:
+    load_env()
+except Exception:
     pass
 
-from src.meta_campaign_agent.meta_client import MetaGraphError
-from src.meta_campaign_agent.publish import build_dry_run_report, live_report_to_json, publish_live, report_to_json
+from src.meta_campaign_agent.publish import build_dry_run_report, report_to_json
 
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Agent 9: Meta API publish from Agent 8 upload Excel",
+        description="Agent 9 legacy plan validation (live Meta API creation disabled)",
     )
     p.add_argument("-i", "--input", required=True, help="Agent 8 output .xlsx")
     p.add_argument("--account", help="Only one account sheet (partial name match)")
     p.add_argument("--dry-run", action="store_true", help="Print JSON plan; no Graph API calls")
-    p.add_argument(
-        "--via-multilogin",
-        action="store_true",
-        help="Per account: start ML profile, route Meta API via profile proxy, stop profile",
-    )
-    p.add_argument(
-        "--confirm",
-        action="store_true",
-        help="Required for live publish (creates real campaigns in Meta)",
-    )
-    p.add_argument("--activate", action="store_true", help="Create objects as ACTIVE (default PAUSED)")
-    p.add_argument("--limit", type=int, default=None, help="Publish at most N ready rows")
     p.add_argument("--creatives-root", help="Override FB_CREATIVES_ROOT")
     p.add_argument(
         "-e",
@@ -76,7 +68,7 @@ def main() -> int:
             creatives_root=args.creatives_root,
             ad_account_map_path=args.account_map,
             upload_fb_excel=args.upload_excel,
-            activate=args.activate,
+            activate=False,
         )
         text = report_to_json(report)
         if args.output:
@@ -93,42 +85,12 @@ def main() -> int:
         )
         return 0 if report.error_count == 0 else 2
 
-    if not args.confirm:
-        print(
-            "Live publish creates real Meta objects. Re-run with --confirm (and optional --limit 1 for a safe test).",
-            file=sys.stderr,
-        )
-        return 1
-
-    try:
-        live = publish_live(
-            str(input_path),
-            account_filter=args.account,
-            creatives_root=args.creatives_root,
-            ad_account_map_path=args.account_map,
-            upload_fb_excel=args.upload_excel,
-            activate=args.activate,
-            limit=args.limit,
-            via_multilogin=args.via_multilogin,
-        )
-    except MetaGraphError as e:
-        print(f"Meta error: {e}", file=sys.stderr)
-        return 1
-
-    text = live_report_to_json(live)
-    if args.output:
-        out = Path(args.output)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(text, encoding="utf-8")
-        print(f"Publish report saved: {out}")
-    else:
-        print(text)
-
     print(
-        f"\nPublished: {live.success_count}/{len(live.results)} ok. Log: {live.log_path}",
+        "Live Meta API creation is disabled in ACL. Use --dry-run to validate "
+        "the plan, then use Campaign Builder to create a draft for manual review.",
         file=sys.stderr,
     )
-    return 0 if live.failure_count == 0 else 2
+    return 1
 
 
 if __name__ == "__main__":

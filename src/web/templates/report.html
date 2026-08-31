@@ -8,6 +8,13 @@
   <script src="https://unpkg.com/htmx.org@1.9.10"
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
           crossorigin="anonymous"></script>
+  <script>
+    function aclEscHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+      });
+    }
+  </script>
   <style>
     :root {
       --bg: #f4f5f7;
@@ -489,6 +496,11 @@
       margin-left: 0.6rem; vertical-align: middle; cursor: default;
     }
     .cb-draft-ts { color: var(--muted); font-weight: 400; font-size: 0.65rem; }
+    .cb-draft-badge-blocked {
+      background: color-mix(in srgb, var(--bad) 12%, transparent);
+      border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+      color: var(--bad);
+    }
 
     /* Pre-flight panel (link + account map) */
     .cb-preflight {
@@ -1873,7 +1885,7 @@ async function dashRefresh(ev) {
 {% if c.asset_variants %}
 {# tojson is already HTML-safe (escapes < > & to \uXXXX); `safe` stops the
    autoescaper from entity-encoding the quotes, which broke JSON.parse. #}
-<script type="application/json" id="asset-variants-{{ cid }}">{{ c.asset_variants | tojson | safe }}</script>
+<script type="application/json" id="asset-variants-{{ cid }}">{{ c.asset_variants | tojson }}</script>
 {% endif %}
 <table>
   <thead><tr>
@@ -2287,9 +2299,15 @@ async function dashRefresh(ev) {
         {% else %}
           <span style="font-size:0.7rem;color:var(--good)">✓ config ok</span>
         {% endif %}
-        {% if ds %}
+        {% if ds and ds.state == 'ready' %}
           <span class="cb-draft-badge" title="{{ ds.campaign_names | join(', ') }}">
             ✓ Draft ready · {{ ds.count }} campaign{{ 's' if ds.count != 1 else '' }}
+            <span class="cb-draft-ts">{{ ds.ts[:16].replace('T',' ') }} UTC</span>
+          </span>
+        {% elif ds %}
+          <span class="cb-draft-badge cb-draft-badge-blocked"
+                title="{{ (ds.blocking_failures or ds.errors or ds.campaign_names) | join(', ') }}">
+            ❌ Draft blocked · do not publish
             <span class="cb-draft-ts">{{ ds.ts[:16].replace('T',' ') }} UTC</span>
           </span>
         {% endif %}
@@ -2589,7 +2607,7 @@ async function dashRefresh(ev) {
   var GRAND_FTD = 190;
   var TREND_DAYS = {{ report.trend_days | int }};
   var ACT_RAW = [
-    {% for c in report.countries %}{% set my = c.cm_comparison | selectattr('is_me') | list %}{n:"{{ c.country | replace('"', '\\"') }}",dep:{{ my|sum(attribute='deposits')|int }},leads:{{ my|sum(attribute='leads')|int }},spend:{{ my|sum(attribute='spend')|round(2) }}},
+    {% for c in report.countries %}{% set my = c.cm_comparison | selectattr('is_me') | list %}{n:{{ c.country | tojson }},dep:{{ my|sum(attribute='deposits')|int }},leads:{{ my|sum(attribute='leads')|int }},spend:{{ my|sum(attribute='spend')|round(2) }}},
     {% endfor %}
   ];
   var ACT = {};
@@ -3095,6 +3113,23 @@ function mlTokenFirst(cid) {
     });
 }
 
+function mlProfileRowsHtml(profiles, folderMap, instance) {
+  return (profiles || []).map(function(p) {
+    var folderName = folderMap[p.folder_id] || p.folder_id || '—';
+    var pName = p.name || '—';
+    return '<div class="ml-profile-row" data-pname="' + aclEscHtml(pName.toLowerCase()) + '">'
+      + '<span class="ml-profile-name">' + aclEscHtml(pName) + '</span>'
+      + '<span class="ml-profile-id">folder: ' + aclEscHtml(folderName) + '</span>'
+      + '<button class="ml-profile-use-btn"'
+      + ' data-folder-id="' + aclEscHtml(p.folder_id || '') + '"'
+      + ' data-profile-id="' + aclEscHtml(p.profile_id || '') + '"'
+      + ' data-instance="' + aclEscHtml(instance) + '"'
+      + ' data-profile-name="' + aclEscHtml(pName) + '"'
+      + ' onclick="mlUseProfile(this.dataset.folderId,this.dataset.profileId,this.dataset.instance,this.dataset.profileName,this)">Use</button>'
+      + '</div>';
+  }).join('');
+}
+
 function mlListProfiles(cid) {
   var instance = _mlInstance[cid] || 'A';
   var profilesDiv = document.getElementById('ml-profiles-' + cid);
@@ -3108,7 +3143,7 @@ function mlListProfiles(cid) {
   .then(function(r) { return r.json(); })
   .then(function(data) {
     if (!data.ok) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + (data.error || 'Ошибка') + '</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(data.error || 'Ошибка') + '</span>';
       return;
     }
     if (statusEl) statusEl.innerHTML = '';
@@ -3131,23 +3166,12 @@ function mlListProfiles(cid) {
       + ' oninput="(function(v){document.querySelectorAll(\'#ml-profile-list-' + cid + ' .ml-profile-row\')'
       + '.forEach(function(r){r.style.display = r.dataset.pname.indexOf(v.toLowerCase()) >= 0 ? \'\' : \'none\'})})(this.value)">'
       + '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
-    profiles.forEach(function(p) {
-      var folderName = folderMap[p.folder_id] || p.folder_id || '—';
-      var pName = (p.name || '—');
-      html += '<div class="ml-profile-row" data-pname="' + pName.toLowerCase() + '">'
-        + '<span class="ml-profile-name">' + pName + '</span>'
-        + '<span class="ml-profile-id">folder: ' + folderName + '</span>'
-        + '<button class="ml-profile-use-btn" onclick="mlUseProfile(\''
-          + (p.folder_id||'') + '\',\'' + (p.profile_id||'') + '\',\'' + instance + '\','
-          + JSON.stringify(pName) + ',this)">'
-        + 'Use</button>'
-        + '</div>';
-    });
+    html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     profilesDiv.innerHTML = html;
   })
   .catch(function(e) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + e.message + '</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(e.message) + '</span>';
   });
 }
 
@@ -3177,10 +3201,10 @@ function mlSignin(cid) {
   .then(function(data) {
     if (btn) btn.disabled = false;
     if (!data.ok) {
-      if (status) status.innerHTML = '<span style="color:var(--bad)">⚠ ' + (data.error || 'Unknown error') + '</span>';
+      if (status) status.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(data.error || 'Unknown error') + '</span>';
       return;
     }
-    var saved = data.token_saved ? ' · token saved to .env (Instance ' + instance + ', 1 month)' : '';
+    var saved = data.token_saved ? ' · token saved in machine settings (Instance ' + instance + ', 1 month)' : '';
     if (status) status.innerHTML = '<span style="color:var(--good)">✓ Instance ' + instance + ' connected' + saved + '</span>';
 
     // Clear password
@@ -3198,7 +3222,7 @@ function mlSignin(cid) {
       var dbg = (data.debug || []).join(' | ');
       profilesDiv.innerHTML = '<span style="color:var(--warn);font-size:0.73rem">'
         + '⚠ Профили не найдены. Попробуй набрать имя профиля в поиске ниже.<br>'
-        + '<span style="color:var(--muted);font-size:0.68rem">debug: ' + dbg + '</span>'
+        + '<span style="color:var(--muted);font-size:0.68rem">debug: ' + aclEscHtml(dbg) + '</span>'
         + '</span>'
         + '<div style="margin-top:0.5rem">'
         + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Поиск профиля по имени (напр. FacebookUL869)…" style="width:100%;font-size:0.75rem">'
@@ -3236,7 +3260,7 @@ function mlSignin(cid) {
 
     if (autoLinked.length) {
       profilesDiv.innerHTML = '<span style="color:var(--good);font-size:0.73rem">'
-        + '✓ Автоматически привязаны: ' + autoLinked.join(', ') + '</span>';
+        + '✓ Автоматически привязаны: ' + autoLinked.map(aclEscHtml).join(', ') + '</span>';
       return;
     }
 
@@ -3248,23 +3272,12 @@ function mlSignin(cid) {
       + profiles.length + ' profile(s) from Instance ' + instance
       + ' — найди нужный и нажми Use</div>';
     html += '<input id="' + searchId + '" type="text" placeholder="Фильтр по имени профиля…" value="'
-      + firstAccTitle.replace(/"/g, '&quot;') + '"'
+      + aclEscHtml(firstAccTitle) + '"'
       + ' style="width:100%;box-sizing:border-box;margin-bottom:0.4rem;padding:0.28rem 0.5rem;'
       + 'background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.75rem"'
       + ' oninput="mlFilterProfiles(\'' + cid + '\')">';
     html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
-    profiles.forEach(function(p) {
-      var folderName = folderMap[p.folder_id] || p.folder_id || '—';
-      var pName = (p.name || '—');
-      html += '<div class="ml-profile-row" data-pname="' + pName.toLowerCase() + '">'
-        + '<span class="ml-profile-name">' + pName + '</span>'
-        + '<span class="ml-profile-id">folder: ' + folderName + '</span>'
-        + '<button class="ml-profile-use-btn" onclick="mlUseProfile(\''
-          + (p.folder_id||'') + '\',\'' + (p.profile_id||'') + '\',\'' + instance + '\','
-          + JSON.stringify(pName) + ',this)">'
-        + 'Use</button>'
-        + '</div>';
-    });
+    html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     profilesDiv.innerHTML = html;
     // Apply initial filter
@@ -3272,7 +3285,7 @@ function mlSignin(cid) {
   })
   .catch(function(err) {
     if (btn) btn.disabled = false;
-    if (status) status.innerHTML = '<span style="color:var(--bad)">Network error: ' + err + '</span>';
+    if (status) status.innerHTML = '<span style="color:var(--bad)">Network error: ' + aclEscHtml(err) + '</span>';
   });
 }
 
@@ -3310,10 +3323,10 @@ function mlManualSave(cid) {
 
   function doSave(accLabel) {
     var bodyHtml =
-      'Аккаунт: <strong style="color:var(--accent)">' + accLabel + '</strong><br><br>'
+      'Аккаунт: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br><br>'
       + '<span style="color:var(--muted);font-size:0.71rem">'
-      + 'folder_id: ' + folderId + '<br>'
-      + 'profile_id: ' + profileId
+      + 'folder_id: ' + aclEscHtml(folderId) + '<br>'
+      + 'profile_id: ' + aclEscHtml(profileId)
       + '</span><br><br>'
       + '<span style="color:var(--warn);font-size:0.74rem">⚠ Перезапишет текущие IDs в ad_account_map.csv</span>';
     _safeConfirm('Сохранить IDs вручную?', bodyHtml, function() {
@@ -3321,7 +3334,7 @@ function mlManualSave(cid) {
       _mlSaveIds(accLabel, folderId, profileId, 'A', null);
       // Show success after short delay
       setTimeout(function() {
-        if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Сохранено для ' + accLabel + '</span>';
+        if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Сохранено для ' + aclEscHtml(accLabel) + '</span>';
       }, 800);
     }, { confirmLabel: 'Сохранить' });
   }
@@ -3374,7 +3387,7 @@ function mlSearchByTerm(cid, instance) {
   if (!term) { alert('Введи поисковый запрос'); return; }
   var profilesDiv = document.getElementById('ml-profiles-' + cid);
   var statusEl = document.getElementById('ml-status-' + cid);
-  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Ищу "' + term + '"…</span>';
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Ищу "' + aclEscHtml(term) + '"…</span>';
 
   // Re-use last successful token from .env via a separate search call
   fetch('/multilogin-search', {
@@ -3385,7 +3398,7 @@ function mlSearchByTerm(cid, instance) {
   .then(function(r) { return r.json(); })
   .then(function(data) {
     if (!data.ok) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + (data.error || 'Ошибка') + '</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(data.error || 'Ошибка') + '</span>';
       return;
     }
     var profiles = data.profiles || [];
@@ -3393,31 +3406,20 @@ function mlSearchByTerm(cid, instance) {
     var folderMap = {};
     folders.forEach(function(f) { folderMap[f.folder_id] = f.name; });
     if (!profiles.length) {
-      if (profilesDiv) profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">По запросу "' + term + '" ничего не найдено.</span>';
+      if (profilesDiv) profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">По запросу "' + aclEscHtml(term) + '" ничего не найдено.</span>';
       return;
     }
     // Render same profile list as main signin
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
-      + profiles.length + ' результат(ов) по "' + term + '"</div>';
+      + profiles.length + ' результат(ов) по "' + aclEscHtml(term) + '"</div>';
     html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
-    profiles.forEach(function(p) {
-      var folderName = folderMap[p.folder_id] || p.folder_id || '—';
-      var pName = (p.name || '—');
-      html += '<div class="ml-profile-row" data-pname="' + pName.toLowerCase() + '">'
-        + '<span class="ml-profile-name">' + pName + '</span>'
-        + '<span class="ml-profile-id">folder: ' + folderName + '</span>'
-        + '<button class="ml-profile-use-btn" onclick="mlUseProfile(\''
-          + (p.folder_id||'') + '\',\'' + (p.profile_id||'') + '\',\'' + instance + '\','
-          + JSON.stringify(pName) + ',this)">'
-        + 'Use</button>'
-        + '</div>';
-    });
+    html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     if (profilesDiv) profilesDiv.innerHTML = html;
     if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ найдено ' + profiles.length + '</span>';
   })
   .catch(function(e) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + e.message + '</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + aclEscHtml(e.message) + '</span>';
   });
 }
 
@@ -3442,11 +3444,11 @@ function mlStartDirect(cid) {
         '<span style="color:#4caf50">✓ Запущен — CDP: ' + (d.cdp_url || '') + '</span>';
     } else {
       if (statusEl) statusEl.innerHTML =
-        '<span style="color:var(--bad)">⚠ ' + (d.error || 'ошибка') + '</span>';
+        '<span style="color:var(--bad)">⚠ ' + aclEscHtml(d.error || 'ошибка') + '</span>';
     }
   })
   .catch(function(e) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + e.message + '</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + aclEscHtml(e.message) + '</span>';
   });
 }
 
@@ -3465,12 +3467,12 @@ function mlSaveToken(cid) {
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.ok) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Токен сохранён в .env</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Токен сохранён в настройках машины</span>';
     } else {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + (d.error || 'Ошибка') + '</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(d.error || 'Ошибка') + '</span>';
     }
   })
-  .catch(function(e) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + e.message + '</span>'; });
+  .catch(function(e) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + aclEscHtml(e.message) + '</span>'; });
 }
 
 function mlTestToken(cid) {
@@ -3487,8 +3489,8 @@ function mlTestToken(cid) {
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
-    if (!d.ok) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + (d.error||'Ошибка') + '</span>'; return; }
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Токен сохранён — загружаю профили…</span>';
+    if (!d.ok) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(d.error||'Ошибка') + '</span>'; return; }
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Токен сохранён в настройках машины — загружаю профили…</span>';
     return fetch('/multilogin-search', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -3500,7 +3502,7 @@ function mlTestToken(cid) {
     if (!data) return;
     var profilesDiv = document.getElementById('ml-profiles-' + cid);
     if (!data.ok) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + (data.error||'Ошибка при проверке токена') + '</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(data.error||'Ошибка при проверке токена') + '</span>';
       return;
     }
     var profiles = data.profiles || [];
@@ -3517,28 +3519,18 @@ function mlTestToken(cid) {
     var firstAccTitle = ((_cpanel.querySelector('.cb-acc-title')||{}).textContent||'').split(' ')[0];
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' profile(s) — найди нужный и нажми Use</div>';
-    html += '<input type="text" placeholder="Фильтр…" value="' + firstAccTitle.replace(/"/g,'&quot;') + '"'
+    html += '<input type="text" placeholder="Фильтр…" value="' + aclEscHtml(firstAccTitle) + '"'
       + ' id="ml-search-' + cid + '"'
       + ' style="width:100%;box-sizing:border-box;margin-bottom:0.4rem;padding:0.28rem 0.5rem;'
       + 'background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.75rem"'
       + ' oninput="mlFilterProfiles(\'' + cid + '\')">';
     html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
-    profiles.forEach(function(p) {
-      var folderName = folderMap[p.folder_id] || p.folder_id || '—';
-      var pName = (p.name || '—');
-      html += '<div class="ml-profile-row" data-pname="' + pName.toLowerCase() + '">'
-        + '<span class="ml-profile-name">' + pName + '</span>'
-        + '<span class="ml-profile-id">folder: ' + folderName + '</span>'
-        + '<button class="ml-profile-use-btn" onclick="mlUseProfile(\''
-          + (p.folder_id||'') + '\',\'' + (p.profile_id||'') + '\',\'' + instance + '\','
-          + JSON.stringify(pName) + ',this)">Use</button>'
-        + '</div>';
-    });
+    html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     if (profilesDiv) profilesDiv.innerHTML = html;
     mlFilterProfiles(cid);
   })
-  .catch(function(e) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + e.message + '</span>'; });
+  .catch(function(e) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + aclEscHtml(e.message) + '</span>'; });
 }
 
 function mlFilterProfiles(cid) {
@@ -3570,11 +3562,11 @@ function mlUseProfile(folderId, profileId, instance, profileName, btn) {
 
   function confirmAndSave(accLabel) {
     var bodyHtml =
-      'ML-профиль: <strong style="color:var(--accent)">' + pName + '</strong><br>'
-      + 'FB-аккаунт: <strong style="color:var(--accent)">' + accLabel + '</strong><br><br>'
+      'ML-профиль: <strong style="color:var(--accent)">' + aclEscHtml(pName) + '</strong><br>'
+      + 'FB-аккаунт: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br><br>'
       + '<span style="color:var(--muted);font-size:0.71rem">'
-      + 'folder_id: ' + folderId + '<br>'
-      + 'profile_id: ' + profileId
+      + 'folder_id: ' + aclEscHtml(folderId) + '<br>'
+      + 'profile_id: ' + aclEscHtml(profileId)
       + '</span><br><br>'
       + '<span style="color:var(--warn);font-size:0.74rem">⚠ Это перезапишет текущие IDs в config/ad_account_map.csv</span>';
     _safeConfirm('Привязать профиль к аккаунту?', bodyHtml, function() {
@@ -3666,7 +3658,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
     // Flash confirmation in ML status line
     document.querySelectorAll('[id^="ml-status-"]').forEach(function(s) {
-      s.innerHTML += ' <span style="color:var(--good)">· saved to ' + accLabel + ' ✓</span>';
+      s.innerHTML += ' <span style="color:var(--good)">· saved to ' + aclEscHtml(accLabel) + ' ✓</span>';
     });
   })
   .catch(function(e) {
@@ -3678,18 +3670,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 // ── Campaign Builder JS ───────────────────────────────────────────────
 (function () {
   var REF = null;
-  try { REF = {{ ref_options_json | safe }}; } catch(e) {}
+  try { REF = {{ ref_options_json | tojson }}; } catch(e) {}
 
   // {country_slug: {account_alias: account_label}} — resolves the "Account
   // Alias" strings shown in Combos/CM-drill rows to the Builder's accordion key.
   var ACCOUNT_ALIAS_MAP = {};
-  try { ACCOUNT_ALIAS_MAP = {{ account_alias_map_json | safe }}; } catch(e) {}
+  try { ACCOUNT_ALIAS_MAP = {{ account_alias_map_json | tojson }}; } catch(e) {}
 
   // {account_label: {page_name, ...}} — used by the visual ad preview to show
   // the right Page name without a second round-trip. window-scoped: cbPreview()
   // (below) lives in a separate top-level scope, outside this IIFE.
   window.ACCOUNT_PREFLIGHT = {};
-  try { window.ACCOUNT_PREFLIGHT = {{ account_preflight_json | safe }}; } catch(e) {}
+  try { window.ACCOUNT_PREFLIGHT = {{ account_preflight_json | tojson }}; } catch(e) {}
 
   // Keep in sync with the server-rendered <select> options in report.html's
   // cb-ad-row markup — preview-only, not part of the real publish payload.
@@ -3735,9 +3727,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var isDup = basenameCounts[f.filename.toLowerCase()] > 1;
       var val   = isDup ? f.rel_path : f.filename;
       var label = isDup
-        ? f.filename + ' <span style="color:var(--accent);font-size:0.68rem">(' + f.folder + ')</span>'
-        : (f.folder ? f.filename + ' <span style="color:var(--muted);font-size:0.7rem">(' + f.folder + ')</span>' : f.filename);
-      return '<div class="cb-sel-opt" data-val="' + val + '" style="font-size:0.72rem">' + label + '</div>';
+        ? aclEscHtml(f.filename) + ' <span style="color:var(--accent);font-size:0.68rem">(' + aclEscHtml(f.folder) + ')</span>'
+        : (f.folder ? aclEscHtml(f.filename) + ' <span style="color:var(--muted);font-size:0.7rem">(' + aclEscHtml(f.folder) + ')</span>' : aclEscHtml(f.filename));
+      return '<div class="cb-sel-opt" data-val="' + aclEscHtml(val) + '" style="font-size:0.72rem">' + label + '</div>';
     }).join('');
     if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:0.72rem;pointer-events:none">No files found</div>';
 
@@ -3951,9 +3943,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
     var html = matches.map(function(t) {
       var preview = (t.headline || '').slice(0, 60) + ((t.headline || '').length > 60 ? '…' : '');
-      return '<div class="cb-sel-opt" data-val="' + t.ad_title + '" style="font-size:0.72rem">' +
-        t.ad_title +
-        (preview ? '<br><span style="font-size:0.66rem;color:var(--muted)">' + preview + '</span>' : '') +
+      return '<div class="cb-sel-opt" data-val="' + aclEscHtml(t.ad_title) + '" style="font-size:0.72rem">' +
+        aclEscHtml(t.ad_title) +
+        (preview ? '<br><span style="font-size:0.66rem;color:var(--muted)">' + aclEscHtml(preview) + '</span>' : '') +
         '</div>';
     }).join('');
     if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:0.72rem;pointer-events:none">No ad titles found</div>';
@@ -4200,10 +4192,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
     var html = matches.map(function(t) {
       var preview = (t.fb_interest || '').slice(0, 60) + ((t.fb_interest || '').length > 60 ? '…' : '');
-      return '<div class="cb-sel-opt cb-targeting-opt" data-code="' + t.code + '" data-interest="' + (t.fb_interest || '') + '">' +
-        '<span style="font-weight:600">' + t.code + '</span>' +
-        (t.label && t.label !== t.code ? ' <span style="color:var(--muted)">(' + t.label + ')</span>' : '') +
-        '<br><span style="font-size:0.67rem;color:var(--muted)">' + preview + '</span>' +
+      return '<div class="cb-sel-opt cb-targeting-opt" data-code="' + aclEscHtml(t.code) + '" data-interest="' + aclEscHtml(t.fb_interest || '') + '">' +
+        '<span style="font-weight:600">' + aclEscHtml(t.code) + '</span>' +
+        (t.label && t.label !== t.code ? ' <span style="color:var(--muted)">(' + aclEscHtml(t.label) + ')</span>' : '') +
+        '<br><span style="font-size:0.67rem;color:var(--muted)">' + aclEscHtml(preview) + '</span>' +
         '</div>';
     }).join('');
     if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);pointer-events:none">No targets found</div>';
@@ -5650,8 +5642,7 @@ window.cbPreview = function(form) {
     .then(function(data) {
       if (!data) { panel.innerHTML = '<span class="cb-preview-errors">Empty response from server</span>'; return; }
       if (data.error) {
-        var detail = data.detail ? '<pre style="font-size:0.65rem;color:var(--muted);white-space:pre-wrap;margin-top:0.4rem">' + data.detail + '</pre>' : '';
-        panel.innerHTML = '<span class="cb-preview-errors">⚠ ' + data.error + '</span>' + detail;
+        panel.innerHTML = '<span class="cb-preview-errors">⚠ ' + aclEscHtml(data.error) + '</span>';
         return;
       }
       var plan = data.plan || [];
@@ -5669,7 +5660,7 @@ window.cbPreview = function(form) {
         html += '<div style="background:var(--bg-hover);padding:0.3rem 0.6rem;display:flex;align-items:center;gap:0.5rem">';
         html += '<span style="font-weight:bold;color:' + (hasErr ? 'var(--bad)' : 'var(--accent)') + '">';
         html += (hasErr ? '❌' : '✓') + ' Campaign ' + (i + 1) + '</span>';
-        html += '<span style="font-size:0.72rem;color:var(--muted)">' + (p['Campaign Name'] || '') + '</span>';
+        html += '<span style="font-size:0.72rem;color:var(--muted)">' + aclEscHtml(p['Campaign Name'] || '') + '</span>';
         html += '</div>';
         // Two-column key/value grid
         html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0">';
@@ -5682,8 +5673,8 @@ window.cbPreview = function(form) {
           var bg = ki % 4 < 2 ? 'var(--bg-elev)' : 'var(--bg)';
           var valColor = isError ? 'var(--bad)' : (isMissing ? 'var(--muted)' : 'var(--text)');
           html += '<div style="display:contents">';
-          html += '<div style="background:' + bg + ';padding:0.18rem 0.55rem;color:var(--muted);font-size:0.7rem;border-bottom:1px solid var(--border)">' + k + '</div>';
-          html += '<div style="background:' + bg + ';padding:0.18rem 0.55rem;color:' + valColor + ';font-size:0.72rem;border-bottom:1px solid var(--border);word-break:break-all">' + (v || '—') + '</div>';
+          html += '<div style="background:' + bg + ';padding:0.18rem 0.55rem;color:var(--muted);font-size:0.7rem;border-bottom:1px solid var(--border)">' + aclEscHtml(k) + '</div>';
+          html += '<div style="background:' + bg + ';padding:0.18rem 0.55rem;color:' + valColor + ';font-size:0.72rem;border-bottom:1px solid var(--border);word-break:break-all">' + aclEscHtml(v || '—') + '</div>';
           html += '</div>';
         });
         html += '</div>';
@@ -5691,7 +5682,7 @@ window.cbPreview = function(form) {
         if (hasErr) {
           html += '<div style="padding:0.3rem 0.6rem;background:#1a0606">';
           p.errors.forEach(function(e) {
-            html += '<div class="cb-preview-errors">⚠ ' + e + '</div>';
+            html += '<div class="cb-preview-errors">⚠ ' + aclEscHtml(e) + '</div>';
           });
           html += '</div>';
         }
@@ -5699,7 +5690,7 @@ window.cbPreview = function(form) {
         if (hasWarn) {
           html += '<div style="padding:0.3rem 0.6rem;background:#1a1200">';
           p.warnings.forEach(function(w) {
-            html += '<div style="color:var(--warn);font-size:0.72rem">⚡ ' + w + '</div>';
+            html += '<div style="color:var(--warn);font-size:0.72rem">⚡ ' + aclEscHtml(w) + '</div>';
           });
           html += '</div>';
         }
@@ -5736,7 +5727,7 @@ window.cbPreview = function(form) {
       });
     })
     .catch(function(e) {
-      panel.innerHTML = '<span class="cb-preview-errors">Request failed: ' + e.message + '</span>';
+      panel.innerHTML = '<span class="cb-preview-errors">Request failed: ' + aclEscHtml(e.message) + '</span>';
     });
 };
 
@@ -5854,9 +5845,9 @@ function _rpaLabRender(panel, s) {
   if (!panel) return;
   panel.style.display = 'block';
   var html = '<div style="font-weight:600;margin-bottom:0.35rem">🧪 Website Lab'
-    + (s.winner ? ' — <span style="color:var(--good)">winner: ' + s.winner + '</span>' : '')
+    + (s.winner ? ' — <span style="color:var(--good)">winner: ' + aclEscHtml(s.winner) + '</span>' : '')
     + '</div>';
-  html += '<div style="color:var(--muted);margin-bottom:0.4rem">' + (s.message || '') + '</div>';
+  html += '<div style="color:var(--muted);margin-bottom:0.4rem">' + aclEscHtml(s.message || '') + '</div>';
   html += '<div style="margin-bottom:0.45rem">'
     + '<button type="button" onclick="rpaWebsiteLabRunAll(this)" style="margin-right:0.3rem;padding:0.2rem 0.55rem;font-size:0.72rem;background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer">▶ Run all A→F</button>'
     + '<button type="button" onclick="rpaWebsiteLabPrepare(this)" style="margin-right:0.3rem;padding:0.2rem 0.55rem;font-size:0.72rem;background:#334155;color:#fff;border:none;border-radius:4px;cursor:pointer">Prepare menu</button>';
@@ -5864,15 +5855,15 @@ function _rpaLabRender(panel, s) {
   var meta = s.step_meta || {};
   order.forEach(function(st) {
     var title = (meta[st] && meta[st].title) ? meta[st].title : st;
-    html += '<button type="button" onclick="rpaWebsiteLabStep(\'' + st + '\', this)" title="' + title.replace(/"/g,'&quot;') + '"'
+    html += '<button type="button" data-step="' + aclEscHtml(st) + '" onclick="rpaWebsiteLabStep(this.dataset.step, this)" title="' + aclEscHtml(title) + '"'
       + ' style="margin:0.15rem 0.2rem 0 0;padding:0.2rem 0.45rem;font-size:0.72rem;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;cursor:pointer">'
-      + st + '</button>';
+      + aclEscHtml(st) + '</button>';
   });
   html += '</div>';
   html += '<div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.3rem">'
     + 'selected=' + (s.website_selected ? '✓' : '✗')
     + ' · menu=' + (s.menu_open ? 'open' : 'closed')
-    + (s.current_step ? ' · running ' + s.current_step : '')
+    + (s.current_step ? ' · running ' + aclEscHtml(s.current_step) : '')
     + '</div>';
   var steps = s.steps || [];
   if (steps.length) {
@@ -5880,17 +5871,17 @@ function _rpaLabRender(panel, s) {
     steps.forEach(function(st) {
       var mark = st.ok || st.website_selected ? '✓' : '✗';
       var clr = st.ok || st.website_selected ? 'var(--good)' : 'var(--bad)';
-      html += '<li style="margin:0.15rem 0;color:' + clr + '"><strong>' + st.step + '</strong> '
-        + (st.title || '') + ' — ' + mark + ' '
-        + '<span style="color:var(--muted)">' + (st.detail || '') + '</span></li>';
+      html += '<li style="margin:0.15rem 0;color:' + clr + '"><strong>' + aclEscHtml(st.step) + '</strong> '
+        + aclEscHtml(st.title || '') + ' — ' + mark + ' '
+        + '<span style="color:var(--muted)">' + aclEscHtml(st.detail || '') + '</span></li>';
     });
     html += '</ol>';
   }
   if (s.golden_locator) {
     html += '<pre style="margin-top:0.4rem;white-space:pre-wrap;font-size:0.68rem;background:#0f172a;color:#cbd5e1;padding:0.4rem;border-radius:4px;max-height:120px;overflow:auto">'
-      + JSON.stringify(s.golden_locator, null, 2) + '</pre>';
+      + aclEscHtml(JSON.stringify(s.golden_locator, null, 2)) + '</pre>';
   }
-  if (s.error) html += '<div style="color:var(--bad);margin-top:0.3rem">⚠ ' + s.error + '</div>';
+  if (s.error) html += '<div style="color:var(--bad);margin-top:0.3rem">⚠ ' + aclEscHtml(s.error) + '</div>';
   panel.innerHTML = html;
 }
 
@@ -5978,8 +5969,8 @@ window.cbPublish = function(form) {
   var campCount = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '1'), 10) || 1;
 
   var bodyHtml =
-    'Аккаунт: <strong style="color:var(--accent)">' + accLabel + '</strong><br>'
-    + 'Страна: <strong>' + country + '</strong><br>'
+    'Аккаунт: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br>'
+    + 'Страна: <strong>' + aclEscHtml(country) + '</strong><br>'
     + 'Кампаний: <strong>' + campCount + '</strong><br><br>'
     + '<span style="color:var(--muted);font-size:0.85rem">RPA подключится к профилю Multilogin через MLX automation '
     + '(профиль можно не открывать заранее; если открыт вручную — окно может перезапуститься).</span><br><br>'
@@ -6012,14 +6003,14 @@ function _doCbPublish(form) {
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.error) {
-        statusPanel.innerHTML = '<span class="cb-status-fatal">Error: ' + data.error + '</span>';
+        statusPanel.innerHTML = '<span class="cb-status-fatal">Error: ' + aclEscHtml(data.error) + '</span>';
         if (publishBtn) publishBtn.disabled = false;
         return;
       }
       cbPollJob(data.job_id, statusPanel, publishBtn);
     })
     .catch(function(e) {
-      statusPanel.innerHTML = '<span class="cb-status-fatal">Request failed: ' + e.message + '</span>';
+      statusPanel.innerHTML = '<span class="cb-status-fatal">Request failed: ' + aclEscHtml(e.message) + '</span>';
       if (publishBtn) publishBtn.disabled = false;
     });
 }
@@ -6031,17 +6022,20 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var done = job.done_count || 0;
     var total = job.total || 0;
     var hasFatal = (job.errors || []).length > 0;
+    var jobPublishable = job.publishable === true;
     var isCancelled = job.status === 'cancelled';
     var isCancelling = job.status === 'cancelling';
     var isRunning = job.status === 'running' || job.status === 'pending' || isCancelling;
     var statusIcon = isCancelled ? '⏹'
       : (isCancelling ? '⏹'
-      : (job.status === 'done' ? (hasFatal ? '❌' : '✓') : '⏳'));
+      : (job.status === 'done' ? (jobPublishable ? '✓' : '❌') : '⏳'));
     var doneLabel = isCancelled ? 'остановлено'
       : (isCancelling ? 'останавливаю… (окно Multilogin останется открытым)'
       : (job.status === 'done'
-        ? (hasFatal ? 'есть ошибки'
-          : 'draft готов — кампания в Ads Manager, Publish не нажат')
+        ? (jobPublishable
+          ? 'draft готов — кампания в Ads Manager, Publish не нажат'
+          : (hasFatal ? 'есть ошибки — не публиковать'
+            : 'draft заблокирован — не публиковать'))
         : 'в процессе… (может занять 1–3 мин)'));
     var html = '<div class="cb-status-title">' + statusIcon + ' ' + done + '/' + total + ' — ' + doneLabel + '</div>';
     if (isRunning && !isCancelling) {
@@ -6059,15 +6053,18 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       // This used to pick the checkmark from `success` alone and then render
       // the error text in the SUCCESS colour — so "DO NOT PUBLISH AS IS"
       // appeared green next to a tick. Older stored jobs have no publishable
-      // field, so fall back to success for them.
+      // field. Missing publishability now fails closed: a stale or incomplete
+      // producer must never receive a green verdict.
       var blocked = !!(r.blocking_failures && r.blocking_failures.length)
-                    || (r.publishable === false && r.success);
-      var icon = !r.success ? '❌' : (blocked ? '⚠️' : '✅');
+                    || (r.publishable !== true && r.success);
+      var warningOnly = r.publishable === true
+                        && !!(r.warnings && r.warnings.length);
+      var icon = !r.success ? '❌' : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅'));
       html += '<div class="cb-status-row">';
       html += '<span class="cb-status-icon">' + icon + '</span>';
-      html += '<span class="cb-status-name">' + (r.campaign_name || '?') + '</span>';
+      html += '<span class="cb-status-name">' + aclEscHtml(r.campaign_name || '?') + '</span>';
       if (r.success && r.campaign_id) {
-        html += '<span class="cb-status-id">campaign_id: ' + r.campaign_id + '</span>';
+        html += '<span class="cb-status-id">campaign_id: ' + aclEscHtml(r.campaign_id) + '</span>';
       }
       html += '</div>';
       if (r.error) {
@@ -6077,18 +6074,18 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         var errStyle = (r.success && !blocked)
           ? ' style="color:var(--ok,#4caf50);border-color:var(--ok,#4caf50)"'
           : '';
-        html += '<div class="cb-status-err"' + errStyle + '>' + r.error + '</div>';
+        html += '<div class="cb-status-err"' + errStyle + '>' + aclEscHtml(r.error) + '</div>';
       }
       if (r.blocking_failures && r.blocking_failures.length) {
         html += '<div class="cb-status-err">Не публиковать: '
-             + r.blocking_failures.join(', ') + '</div>';
+             + r.blocking_failures.map(aclEscHtml).join(', ') + '</div>';
       }
       if (r.warnings && r.warnings.length) {
         html += '<div class="cb-status-err" style="color:#b45309;border-color:#b45309">'
-             + 'Предупреждения: ' + r.warnings.join(', ') + '</div>';
+             + 'Предупреждения: ' + r.warnings.map(aclEscHtml).join(', ') + '</div>';
       }
       if (r.steps_completed && r.steps_completed.length) {
-        var stepsHtml = r.steps_completed.join(' → ');
+        var stepsHtml = r.steps_completed.map(aclEscHtml).join(' → ');
         var teachWaiting = r.steps_completed.indexOf('teach_mode_website_waiting') !== -1
           && r.steps_completed.indexOf('conversion_location_website_teach') === -1
           && r.steps_completed.indexOf('teach_mode_website_still_failed') === -1;
@@ -6101,7 +6098,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       }
     });
     (job.errors || []).forEach(function(e) {
-      html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + e + '</div>';
+      html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + aclEscHtml(e) + '</div>';
     });
     return html;
   }
@@ -6217,7 +6214,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         }
       })
       .catch(function(e) {
-        statusPanel.innerHTML += '<div class="cb-status-fatal">Polling error: ' + e.message + '</div>';
+        statusPanel.innerHTML += '<div class="cb-status-fatal">Polling error: ' + aclEscHtml(e.message) + '</div>';
         setTimeout(poll, 5000);
       });
   }

@@ -16,9 +16,10 @@ if str(_root) not in sys.path:
 os.chdir(_root)
 
 try:
-    from dotenv import load_dotenv
-    load_dotenv(_root / ".env")
-except ImportError:
+    from config.paths import load_env
+
+    load_env()
+except Exception:
     pass
 
 import requests

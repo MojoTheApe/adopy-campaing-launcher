@@ -64,35 +64,39 @@ POLICY: dict[str, tuple[str, str]] = {
         "this is also the step Meta's 2026-08-24 redesign broke",
     ),
     "audience_age": (
-        WARNING,
-        "age falls back to a wider range than asked — worth knowing, but the "
-        "campaign is still aimed at the right market",
+        BLOCKING,
+        "the requested age range was not verified; a wider audience changes "
+        "delivery and may spend outside the campaign manager's specification",
     ),
     "languages": (
-        WARNING,
-        "no language restriction; reach is wider than intended, not wrong",
+        BLOCKING,
+        "the requested language restriction was not verified, so delivery can "
+        "reach people outside the approved audience",
     ),
     "targeting_open": (
-        WARNING,
-        "the detailed-targeting panel would not open — the adset runs broad, "
-        "which is a normal way to run",
+        BLOCKING,
+        "the detailed-targeting panel did not open, so requested targeting "
+        "could not be applied or verified",
     ),
     "targeting_none_added": (
-        WARNING,
-        "no interests were added — again broad, deliberate in many campaigns",
+        BLOCKING,
+        "none of the requested interests were added; broad delivery is only "
+        "valid when the input specification explicitly requests broad targeting",
     ),
     "targeting": (
-        WARNING,
-        "detailed targeting failed as a whole; same reasoning as the two above",
+        BLOCKING,
+        "detailed targeting failed as a whole and no longer matches the input "
+        "campaign specification",
     ),
     "placements": (
-        WARNING,
-        "placements stay on Advantage+ instead of the manual set — a difference "
-        "in delivery, not a broken campaign",
+        BLOCKING,
+        "the requested manual placements were not verified; leaving Advantage+ "
+        "changes where budget can be spent",
     ),
     "devices_ios": (
-        WARNING,
-        "the iOS-only device filter did not apply; delivery is wider",
+        BLOCKING,
+        "the requested iOS-only filter did not apply, so delivery can spend on "
+        "unapproved devices",
     ),
 }
 

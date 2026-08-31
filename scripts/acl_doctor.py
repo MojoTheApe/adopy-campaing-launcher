@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import os
+import json
 import sys
 from pathlib import Path
 
@@ -35,12 +36,12 @@ from config.paths import (  # noqa: E402
     get_env_files,
     get_excel_path,
     get_local_config_dir,
+    get_machine_env_path,
     get_upload_fb_excel_path,
+    inspect_account_map,
+    ensure_machine_config,
     load_env,
-    migrate_legacy_account_map,
 )
-
-_ENV_LOADED = load_env()
 
 OK, MISSING, WARN = "OK", "MISSING", "WARN"
 _failed = 0
@@ -81,23 +82,24 @@ def check_account_map() -> None:
             f"Copy {_ROOT / 'config' / 'ad_account_map.example.csv'} there and fill in your accounts.",
         )
         return
-    try:
-        import csv
-
-        with open(path, newline="", encoding="utf-8-sig") as f:
-            rows = [r for r in csv.DictReader(f) if (r.get("account_name") or "").strip()]
-    except Exception as exc:
-        report(MISSING, "Account map", f"{path} — unreadable: {exc}", "Fix the CSV or re-copy the example.")
-        return
-    no_profile = [r["account_name"] for r in rows if not (r.get("profile_id") or "").strip()]
-    report(OK, "Account map", f"{len(rows)} account(s) — {path}")
-    if no_profile:
+    info = inspect_account_map(path)
+    if not info["valid"]:
         report(
-            WARN,
-            "Accounts without a Multilogin profile_id",
-            ", ".join(no_profile[:5]) + ("..." if len(no_profile) > 5 else ""),
-            "RPA cannot open a browser session for these until profile_id is set.",
+            MISSING,
+            "Account map",
+            f"{path} — {'; '.join(info['errors'])}",
+            "Replace the example values and use act_<digits> ad account IDs.",
         )
+        return
+    if info["missing_profile_rows"]:
+        report(
+            MISSING,
+            "Account map",
+            f"{info['missing_profile_rows']} of {info['rows']} account(s) have no Multilogin profile_id — {path}",
+            "Fill profile_id for every account the campaign manager can select.",
+        )
+        return
+    report(OK, "Account map", f"{info['rows']} complete account(s) — {path}")
 
 
 def check_env_key(name: str, *, required: bool, fix: str) -> None:
@@ -131,27 +133,65 @@ def check_playwright() -> None:
         report(MISSING, "Playwright", "not installed", "pip install -r requirements.txt")
 
 
+def check_form_parser() -> None:
+    """Starlette accepts POST forms only when python-multipart is installed."""
+    try:
+        import multipart
+
+        report(OK, "Dashboard form parser", getattr(multipart, "__version__", "installed"))
+    except Exception:
+        report(
+            MISSING,
+            "Dashboard form parser",
+            "python-multipart is not installed",
+            "Run install_acl.bat again (or pip install -r requirements.txt).",
+        )
+
+
+def _resolve_checkout_path(raw: str) -> str:
+    return raw if os.path.isabs(raw) else str(_ROOT / raw)
+
+
+def _valid_google_json(path: str) -> bool:
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return False
+        if data.get("type") == "service_account":
+            return bool(data.get("client_email") and data.get("private_key"))
+        client = data.get("installed") or data.get("web")
+        return isinstance(client, dict) and bool(client.get("client_id") and client.get("client_secret"))
+    except Exception:
+        return False
+
+
 def check_google_client() -> None:
-    """The OAuth client file every Google integration needs, and git never ships.
+    """Accept either supported Google credential mode and validate its shape.
 
     It is in .gitignore, so a fresh clone has nothing to authorise with: neither
     the dashboard's sheet reads nor telemetry upload would work, and both fail
     far from here with a message about credentials rather than about a missing
     file. Someone has to hand this file to each machine.
     """
-    path = os.environ.get("GSHEET_OAUTH_CLIENT", "").strip() or "config/oauth_client.json"
-    if not os.path.isabs(path):
-        path = str(_ROOT / path)
-    if os.path.exists(path):
-        report(OK, "Google OAuth client", path)
-    else:
-        report(
-            MISSING,
-            "Google OAuth client",
-            path,
-            "Not in git by design — copy it from another ACL machine or ask whoever "
-            "set up the Google project. Sheets access (dashboard + telemetry) needs it.",
-        )
+    oauth = _resolve_checkout_path(
+        os.environ.get("GSHEET_OAUTH_CLIENT", "").strip() or "config/oauth_client.json"
+    )
+    service = _resolve_checkout_path(
+        os.environ.get("GOOGLE_CREDENTIALS_JSON", "").strip()
+        or "config/google_credentials.json"
+    )
+    for label, path in (("OAuth", oauth), ("service account", service)):
+        if os.path.isfile(path) and _valid_google_json(path):
+            report(OK, "Google credentials", f"{label} — {path}")
+            return
+    present_invalid = [path for path in (oauth, service) if os.path.exists(path)]
+    detail = "invalid JSON/credential shape: " + ", ".join(present_invalid) if present_invalid else f"not found: {oauth} or {service}"
+    report(
+        MISSING,
+        "Google credentials",
+        detail,
+        "Copy a valid OAuth client or service-account JSON to this machine; it is not shipped in git.",
+    )
 
 
 def check_telemetry() -> None:
@@ -182,69 +222,137 @@ def check_telemetry() -> None:
 
 
 def check_env_location() -> None:
-    """Warn while the only settings file sits inside the checkout (F-09).
-
-    Not an error: it works, and every install today is in exactly this state.
-    But the checkout is the folder updates rewrite and a re-clone replaces, so
-    settings kept there are one routine operation away from gone.
-    """
+    """Production installs must keep their settings outside the checkout."""
     files = get_env_files()
-    local = os.path.join(get_local_config_dir(), ".env")
+    local = get_machine_env_path()
     if local in files:
         report(OK, "Settings location", f"machine-local — {local}")
         return
     if not files:
-        report(WARN, "Settings location", "no .env found in either location")
+        report(
+            MISSING,
+            "Settings location",
+            "no machine-local .env",
+            "Run python scripts/acl_migrate_config.py --provision.",
+        )
         return
     report(
-        WARN,
+        MISSING,
         "Settings location",
         f"only inside the checkout — {files[0]}",
-        f"Copy it to {local}. That copy wins, and it survives updates, "
-        "re-cloning and git clean. The checkout one keeps working meanwhile.",
+        f"Run python scripts/acl_migrate_config.py --provision to move it to {local}.",
+    )
+
+
+def check_runtime_safety() -> None:
+    backend = (os.environ.get("FB_PUBLISH_BACKEND") or "rpa").strip().lower()
+    if backend == "rpa":
+        report(OK, "Publish backend", "draft-only RPA")
+    else:
+        report(
+            MISSING,
+            "Publish backend",
+            backend,
+            "Set FB_PUBLISH_BACKEND=rpa; the legacy live Meta API backend is disabled.",
+        )
+
+    engine = (os.environ.get("FB_RPA_ENGINE") or "").strip().lower()
+    if engine == "recorded_flow":
+        report(OK, "RPA engine", engine)
+    else:
+        report(
+            MISSING,
+            "RPA engine",
+            engine or "empty",
+            "Set FB_RPA_ENGINE=recorded_flow; it is the only production-verified full flow.",
+        )
+
+
+def check_campaign_manager_identity() -> None:
+    value = (os.environ.get("MY_CM_NAME") or "").strip()
+    if value and value.lower() not in {"your name", "your_name", "example"}:
+        report(OK, "Campaign manager identity", "MY_CM_NAME is set")
+    else:
+        report(
+            MISSING,
+            "Campaign manager identity",
+            "MY_CM_NAME is not configured",
+            "Set it exactly as the campaign manager name appears in the stats workbook.",
+        )
+
+
+def check_accounts_sheet() -> None:
+    value = (os.environ.get("GSHEET_ACCOUNTS_ID") or "").strip()
+    if value and "your_" not in value.lower() and "example" not in value.lower():
+        report(OK, "Accounts Google Sheet", "GSHEET_ACCOUNTS_ID is set")
+    else:
+        report(
+            MISSING,
+            "Accounts Google Sheet",
+            "GSHEET_ACCOUNTS_ID is missing or still an example",
+            "Set the real spreadsheet ID in the machine-local .env.",
+        )
+
+
+def check_multilogin_token() -> None:
+    from src.fb_ads_rpa.config import get_browser_provider
+
+    provider = get_browser_provider()
+    required = provider in {"multilogin", "multilogin_attach"}
+    check_env_key(
+        "MULTILOGIN_AUTOMATION_TOKEN_A",
+        required=required,
+        fix=f"Provider {provider} needs an automation token; connect Multilogin in the dashboard.",
     )
 
 
 def main() -> int:
+    global _failed
+    _failed = 0
+    try:
+        notes = ensure_machine_config()
+    except Exception as exc:
+        notes = [f"machine config provisioning failed: {exc}"]
+    loaded = load_env()
+
     print(f"ACL doctor — checkout {_ROOT}")
     print(f"Machine config dir: {get_local_config_dir()}")
     # Which .env actually took effect. Two possible locations is one too many to
     # keep in your head when a setting "isn't being picked up".
-    for f in _ENV_LOADED:
+    for f in loaded:
         print(f"Settings loaded:    {f}")
-    if not _ENV_LOADED:
+    if not loaded:
         print("Settings loaded:    none — no .env in either location")
-    moved = migrate_legacy_account_map()
-    if moved:
-        print(f"Migration:          {moved}")
+    for note in notes:
+        print(f"Migration:          {note}")
     print()
 
     check_python()
     check_playwright()
+    check_form_parser()
     check_account_map()
     check_env_location()
-    check_env_key(
-        "MULTILOGIN_AUTOMATION_TOKEN_A",
-        required=True,
-        fix="Add it to .env — RPA opens browser profiles through the Multilogin API.",
-    )
+    check_runtime_safety()
+    check_multilogin_token()
     check_multilogin()
+    check_campaign_manager_identity()
+    check_accounts_sheet()
     check_path(
         "Stats workbook",
         get_excel_path(),
-        required=False,
+        required=True,
         fix="Set FB_STATS_EXCEL in .env if your report workbook lives elsewhere.",
     )
     check_path(
         "Upload FB workbook",
         get_upload_fb_excel_path(),
-        required=False,
+        required=True,
         fix="Set UPLOAD_FB_EXCEL in .env if yours lives elsewhere.",
     )
     check_path(
         "Creatives folder",
         get_creatives_root(),
-        required=False,
+        required=True,
         fix="Set FB_CREATIVES_ROOT in .env — RPA looks up creative files by name here.",
     )
     check_google_client()

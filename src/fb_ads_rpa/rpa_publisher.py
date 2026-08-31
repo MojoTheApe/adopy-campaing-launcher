@@ -263,6 +263,10 @@ class RpaPublisher:
             self._entry = None
 
     def publish_draft(self, draft: CampaignDraft) -> RpaPublishResult:
+        if (draft.status or "").strip().upper() != "DRAFT":
+            raise ValueError(
+                "ACL is draft-only: ACTIVE campaigns are not accepted by the RPA publisher"
+            )
         if draft.errors:
             return RpaPublishResult(
                 campaign_name=draft.name,
@@ -292,10 +296,14 @@ class RpaPublisher:
                 raise self._mlx_fallback_error(exc, re_exc) from re_exc
             flow = AdsManagerFlow(conn.page, selectors_path=self.selectors_path)
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
-        if self.hand_off and result.success:
+        if self.hand_off and result.publishable:
             result.error = "Draft ready — browser left open, Meta Publish was not clicked"
-            # Keep success=True so the UI shows it as complete, not failed
-        elif self.dry_run and result.success:
+        elif self.hand_off and result.success:
+            # A draft can exist while being unsafe to publish.  Never replace
+            # the blocking verdict with a reassuring hand-off message.
+            note = "Browser left open for manual review; this draft is NOT publishable."
+            result.error = f"{result.error}\n{note}" if result.error else note
+        elif self.dry_run and result.publishable:
             provider = getattr(self._conn, "provider", "unknown") if self._conn else "unknown"
             result.error = (
                 "Dry run complete — browser left open, Publish NOT clicked. "
@@ -311,6 +319,10 @@ class RpaPublisher:
         country: str,
         activate: bool = False,
     ) -> list[RpaPublishResult]:
+        if activate:
+            raise ValueError(
+                "ACL is draft-only: activate=True is disabled in the campaign-manager build"
+            )
         drafts = self.build_drafts(
             slots,
             account_label=account_label,

@@ -1,7 +1,8 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from dotenv import load_dotenv; load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+from config.paths import load_env
+load_env()
 from config.paths import get_upload_fb_excel_path
 from src.upload_agent.build_upload_excel import load_reference_data, get_account_info
 

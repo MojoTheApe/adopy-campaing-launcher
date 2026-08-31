@@ -48,9 +48,10 @@ if str(_PROJ_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJ_ROOT))
 
 try:
-    from dotenv import load_dotenv
-    load_dotenv(_PROJ_ROOT / ".env")
-except ImportError:
+    from config.paths import load_env
+
+    load_env()
+except Exception:
     pass
 
 _KB_JSON = _PROJ_ROOT / "config" / "knowledge_base.json"

@@ -29,6 +29,7 @@ _PACKAGES = [
     "fastapi",
     "uvicorn",
     "jinja2",
+    "multipart",
     "pandas",
     "openpyxl",
     "dotenv",

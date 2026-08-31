@@ -95,14 +95,14 @@ def apply_step_failures(result: RpaPublishResult, failures: list[str]) -> RpaPub
     if not failures:
         return result
 
-    result.warnings.extend(failures)
     result.steps_completed.append("ad_level_soft_fails:" + ",".join(failures))
 
     # Severity comes from failure_policy, not from matching substrings here:
     # the names are produced in meta_dom, and a rename there used to turn
     # blocking into non-blocking with nothing to notice. Anything unclassified
     # blocks by default.
-    blocking, _warn_only = failure_policy.split(failures)
+    blocking, warn_only = failure_policy.split(failures)
+    result.warnings.extend(warn_only)
     if blocking:
         result.blocking_failures.extend(blocking)
         note = (

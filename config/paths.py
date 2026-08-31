@@ -1,5 +1,17 @@
-"""Paths and file locations. Excel paths can be overridden via env vars."""
+"""Paths and durable per-machine configuration for ACL.
+
+Code is updated/re-cloned; account maps, tokens and operator settings are not.
+All writers therefore target the OS-local ACL directory and use atomic file
+replacement.  Checkout-local files are read only as a one-time legacy source.
+"""
+import csv
+import io
+import json
 import os
+import re
+import shutil
+import uuid
+from pathlib import Path
 
 # Единственный док с отчётом (фиксируем): cursor example.xlsx на рабочем столе.
 #
@@ -18,7 +30,10 @@ STATS_FILENAME_DEFAULT = os.path.basename(EXCEL_PATH_DEFAULT)
 
 UPLOAD_FB_EXCEL_DEFAULT = os.path.join(_DESKTOP, "Upluad FB.xlsx")
 CREATIVES_ROOT_DEFAULT = os.path.join(_DESKTOP, "Creatives")
-AD_ACCOUNT_MAP_DEFAULT = os.path.join(os.path.dirname(__file__), "ad_account_map.csv")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+AD_ACCOUNT_MAP_DEFAULT = str(PROJECT_ROOT / "config" / "ad_account_map.csv")
+AD_ACCOUNT_MAP_EXAMPLE = str(PROJECT_ROOT / "config" / "ad_account_map.example.csv")
+ENV_EXAMPLE = str(PROJECT_ROOT / ".env.example")
 
 
 def get_excel_path() -> str:
@@ -64,6 +79,119 @@ def get_local_config_dir() -> str:
     return os.path.join(os.path.expanduser("~"), ".config", "acl")
 
 
+def get_machine_env_path() -> str:
+    return os.path.join(get_local_config_dir(), ".env")
+
+
+def get_repo_env_path() -> str:
+    return str(PROJECT_ROOT / ".env")
+
+
+def get_draft_status_path() -> str:
+    """Persistent operator verdicts survive an update or re-clone."""
+    return os.path.join(get_local_config_dir(), "draft_status.json")
+
+
+def _atomic_write(path: str | Path, data: bytes) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with open(temp, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp, target)
+    finally:
+        try:
+            temp.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def _atomic_copy(source: str | Path, destination: str | Path) -> None:
+    _atomic_write(destination, Path(source).read_bytes())
+
+
+def write_csv_atomic(
+    path: str | Path,
+    fieldnames: list[str],
+    rows: list[dict[str, object]],
+) -> None:
+    """Replace a machine CSV without leaving a partial file after a crash."""
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    _atomic_write(path, stream.getvalue().encode("utf-8"))
+
+
+def inspect_account_map(path: str | Path) -> dict[str, object]:
+    """Validate schema and placeholders without exposing any secret values."""
+    result: dict[str, object] = {
+        "valid": False,
+        "rows": 0,
+        "placeholder_rows": 0,
+        "only_placeholders": False,
+        "missing_profile_rows": 0,
+        "invalid_ad_account_rows": 0,
+        "errors": [],
+    }
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as fh:
+            reader = csv.DictReader(fh)
+            headers = set(reader.fieldnames or [])
+            missing_headers = sorted({"account_name", "ad_account_id"} - headers)
+            if missing_headers:
+                result["errors"] = ["missing columns: " + ", ".join(missing_headers)]
+                return result
+            rows = [row for row in reader if (row.get("account_name") or "").strip()]
+    except Exception as exc:
+        result["errors"] = [f"unreadable CSV: {type(exc).__name__}: {exc}"]
+        return result
+
+    placeholders = 0
+    missing_profiles = 0
+    invalid_ad_accounts = 0
+    for row in rows:
+        joined = " ".join(str(value or "").strip().lower() for value in row.values())
+        if any(
+            marker in joined
+            for marker in (
+                "act_1234567890",
+                "your-profile-uuid",
+                "your-folder-uuid",
+                "proxy.example.com",
+            )
+        ):
+            placeholders += 1
+        if not (row.get("profile_id") or "").strip():
+            missing_profiles += 1
+        ad_account_id = (row.get("ad_account_id") or "").strip()
+        if not re.fullmatch(r"act_\d+", ad_account_id):
+            invalid_ad_accounts += 1
+
+    errors: list[str] = []
+    if not rows:
+        errors.append("no account rows")
+    if placeholders:
+        errors.append(f"{placeholders} placeholder row(s)")
+    if invalid_ad_accounts:
+        errors.append(f"{invalid_ad_accounts} invalid ad_account_id row(s)")
+    result.update(
+        {
+            "valid": bool(rows) and placeholders == 0 and invalid_ad_accounts == 0,
+            "rows": len(rows),
+            "placeholder_rows": placeholders,
+            "only_placeholders": bool(rows) and placeholders == len(rows),
+            "missing_profile_rows": missing_profiles,
+            "invalid_ad_account_rows": invalid_ad_accounts,
+            "errors": errors,
+        }
+    )
+    return result
+
+
 def get_ad_account_map_path() -> str:
     """CSV mapping Excel sheet name (account) -> act_* ad account id.
 
@@ -107,34 +235,162 @@ def migrate_legacy_account_map() -> str:
     human-readable note, or "" when there was nothing to do.
     """
     local = os.path.join(get_local_config_dir(), "ad_account_map.csv")
-    if os.path.exists(local) or not os.path.exists(AD_ACCOUNT_MAP_DEFAULT):
-        return ""
-    try:
-        import shutil
+    legacy = AD_ACCOUNT_MAP_DEFAULT
+    local_info = inspect_account_map(local) if os.path.exists(local) else None
+    legacy_info = inspect_account_map(legacy) if os.path.exists(legacy) else None
 
-        os.makedirs(os.path.dirname(local), exist_ok=True)
-        shutil.copyfile(AD_ACCOUNT_MAP_DEFAULT, local)
+    if local_info and local_info.get("valid"):
+        return ""
+    if not legacy_info or not legacy_info.get("valid"):
+        if local_info and not local_info.get("valid"):
+            return "machine account map needs attention; no valid legacy map was copied"
+        return ""
+
+    # A fresh installer used to create the placeholder destination before this
+    # migration ran.  That exact state must not mask a real legacy map.
+    if local_info and not local_info.get("only_placeholders"):
+        return "machine account map is invalid; left untouched for manual recovery"
+    try:
+        Path(local).parent.mkdir(parents=True, exist_ok=True)
+        if os.path.exists(local):
+            backup = f"{local}.pre-migration.bak"
+            if not os.path.exists(backup):
+                shutil.copy2(local, backup)
+        _atomic_copy(legacy, local)
     except Exception as exc:  # never block start-up over a convenience move
         return f"could not copy the account map to {local}: {exc}"
-    return f"account map copied out of the checkout to {local}"
+    return f"validated account map copied out of the checkout to {local}"
+
+
+_ENV_KEY = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+def _dotenv_line(key: str, value: str) -> str:
+    # JSON double-quoted strings are accepted by python-dotenv and keep tokens
+    # containing spaces, #, quotes or backslashes unambiguous.
+    import json
+
+    return f"{key}={json.dumps(value, ensure_ascii=False)}"
+
+
+def update_machine_env(values: dict[str, str]) -> str:
+    """Atomically update machine-local `.env`; never write secrets to checkout."""
+    for key in values:
+        if not _ENV_KEY.fullmatch(key):
+            raise ValueError(f"invalid environment key: {key!r}")
+
+    target = Path(get_machine_env_path())
+    if not target.exists():
+        migrate_legacy_env(create_from_example=True)
+    lines = target.read_text(encoding="utf-8").splitlines() if target.exists() else []
+    pending = dict(values)
+    out: list[str] = []
+    for line in lines:
+        match = re.match(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", line)
+        key = match.group(1) if match else None
+        if key in pending:
+            out.append(_dotenv_line(key, pending.pop(key)))
+        else:
+            out.append(line)
+    if pending and out and out[-1].strip():
+        out.append("")
+    out.extend(_dotenv_line(key, value) for key, value in pending.items())
+    _atomic_write(target, ("\n".join(out).rstrip() + "\n").encode("utf-8"))
+    for key, value in values.items():
+        os.environ[key] = value
+    return str(target)
+
+
+def _read_env_value(path: str | Path, key: str) -> str | None:
+    try:
+        from dotenv import dotenv_values
+
+        value = dotenv_values(path).get(key)
+        return None if value is None else str(value)
+    except Exception:
+        return None
+
+
+def migrate_legacy_env(*, create_from_example: bool = False) -> str:
+    """Copy checkout `.env` to the machine once, then normalize old defaults."""
+    local = Path(get_machine_env_path())
+    source: Path | None = None
+    note = ""
+    if not local.exists():
+        repo = Path(get_repo_env_path())
+        example = Path(ENV_EXAMPLE)
+        if repo.is_file():
+            source = repo
+            note = f"settings copied out of the checkout to {local}"
+        elif create_from_example and example.is_file():
+            source = example
+            note = f"machine settings created from the safe example at {local}"
+        if source is not None:
+            _atomic_copy(source, local)
+
+    if local.exists():
+        engine = (_read_env_value(local, "FB_RPA_ENGINE") or "").strip().lower()
+        if not engine:
+            update_machine_env({"FB_RPA_ENGINE": "recorded_flow"})
+            suffix = "legacy blank RPA engine normalized to recorded_flow"
+            note = f"{note}; {suffix}" if note else suffix
+    return note
+
+
+def migrate_legacy_draft_status() -> str:
+    """Copy the last dashboard verdict out of the checkout, once.
+
+    The file contains no credentials, but it is operator state: an update or
+    re-clone must not silently erase a blocked verdict and make yesterday's
+    campaign look unreviewed.  Invalid JSON is deliberately ignored rather
+    than copied into the machine configuration.
+    """
+    local = Path(get_draft_status_path())
+    legacy = PROJECT_ROOT / "output" / "draft_status.json"
+    if local.exists() or not legacy.is_file():
+        return ""
+    try:
+        payload = json.loads(legacy.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return "legacy draft status is invalid; left in the checkout"
+        _atomic_copy(legacy, local)
+    except Exception as exc:
+        return f"could not copy draft status to {local}: {exc}"
+    return f"draft status copied out of the checkout to {local}"
+
+
+def ensure_machine_config() -> list[str]:
+    """Idempotent install/upgrade provisioning, migration before examples."""
+    Path(get_local_config_dir()).mkdir(parents=True, exist_ok=True)
+    notes: list[str] = []
+    env_note = migrate_legacy_env(create_from_example=True)
+    if env_note:
+        notes.append(env_note)
+    map_note = migrate_legacy_account_map()
+    if map_note:
+        notes.append(map_note)
+    status_note = migrate_legacy_draft_status()
+    if status_note:
+        notes.append(status_note)
+    local_map = Path(get_local_config_dir()) / "ad_account_map.csv"
+    if not local_map.exists() and Path(AD_ACCOUNT_MAP_EXAMPLE).is_file():
+        _atomic_copy(AD_ACCOUNT_MAP_EXAMPLE, local_map)
+        notes.append(f"account map example created at {local_map}; replace placeholders")
+    return notes
 
 
 def get_env_files() -> list[str]:
     """`.env` files to load, in the order they should be applied.
 
-    Machine-local first so it wins: `python-dotenv` does not overwrite a value
-    that is already set, so whichever file is loaded first decides. Settings
-    belong to the machine, not to the code — an update, a re-clone or a
-    `git clean` in the checkout must not take a buyer's configuration with it.
-
-    The checkout `.env` stays supported as the second entry so every existing
-    install keeps working with no action from anyone.
+    Once the machine-local file exists it is the only file loaded. Checkout
+    `.env` is a legacy fallback only until migration; layering both lets a stale
+    checkout silently fill keys that an operator deliberately removed locally.
     """
-    files = []
-    local = os.path.join(get_local_config_dir(), ".env")
+    local = get_machine_env_path()
     if os.path.exists(local):
-        files.append(local)
-    repo = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+        return [local]
+    files = []
+    repo = get_repo_env_path()
     if os.path.exists(repo):
         files.append(repo)
     return files

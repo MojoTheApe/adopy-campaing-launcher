@@ -29,6 +29,11 @@ jobs:
     env:
       PYTHONIOENCODING: utf-8
 
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,14 +43,14 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
+          pip install -r requirements-dev.txt
 
       # Same check the launcher runs before it lets a new version become the
       # installed one, so CI fails on exactly what would block a buyer's update.

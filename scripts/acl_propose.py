@@ -38,9 +38,9 @@ from scripts._console import use_utf8  # noqa: E402
 use_utf8()
 
 try:
-    from dotenv import load_dotenv
+    from config.paths import load_env
 
-    load_dotenv(_ROOT / ".env")
+    load_env()
 except Exception:
     pass
 

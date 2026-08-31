@@ -8,6 +8,7 @@
 -r requirements.txt
 
 pytest==9.0.3
+httpx==0.28.1          # real ASGI/HTTP endpoint tests (not mocked Request.form)
 
 # Used only by one-off scripts, not by the dashboard or RPA:
 #   Pillow   -> scripts/convert_favicon_to_ico.py

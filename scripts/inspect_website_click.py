@@ -12,8 +12,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from dotenv import load_dotenv
-load_dotenv()
+from config.paths import load_env
+load_env()
 
 from playwright.sync_api import sync_playwright
 

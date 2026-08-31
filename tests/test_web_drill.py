@@ -28,10 +28,10 @@ def _render_html(report: dict) -> str:
         built_at="2026-06-08",
         upload_errors={},
         account_preflight={},
-        account_preflight_json="{}",
+        account_preflight_json={},
         ref_options={},
-        ref_options_json="{}",
-        account_alias_map_json="{}",
+        ref_options_json={},
+        account_alias_map_json={},
         draft_status={},
     )
 
