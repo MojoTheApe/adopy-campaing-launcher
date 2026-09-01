@@ -1858,7 +1858,7 @@ async function dashRefresh(ev) {
         hx-get="/details?{{ row.aggregate_key | agg_qs }}"
         hx-target="closest tr"
         hx-swap="afterend"
-        hx-trigger="click"
+        hx-trigger="click[aclDrillToggle(this)]"
         {% endif %}>
       <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}</td>
       <td class="num">{{ row.deposits }}</td>
@@ -2160,7 +2160,7 @@ async function dashRefresh(ev) {
             hx-get="/details?{{ r.aggregate_key | agg_qs }}"
             hx-target="closest tr"
             hx-swap="afterend"
-            hx-trigger="click"
+            hx-trigger="click[aclDrillToggle(this)]"
             {% endif %}>
           <td class="adset">{{ r.adset_name[:60] }}</td>
           <td class="num">{{ r.spend | fmt_usd }}</td>
@@ -6581,6 +6581,28 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       })
       .catch(function (e) { btn.disabled = false; say(String(e), 'err'); });
   }
+
+  // Клик по строке дрилла: открыть или закрыть, а не открывать ещё раз.
+  //
+  // Дрилл вставляется htmx-ом как `hx-swap="afterend"` — то есть КАЖДЫЙ клик
+  // добавлял ещё одну копию под строкой. Пять кликов — пять одинаковых блоков
+  // «8 ads» подряд, и закрыть их можно было только по одному крестиком.
+  //
+  // Возвращает false, когда блок уже открыт: htmx не отправляет запрос, а мы
+  // просто убираем вставленное. Вложенные дриллы уезжают вместе с родителем,
+  // потому что лежат внутри него.
+  window.aclDrillToggle = function (row) {
+    try {
+      var next = row && row.nextElementSibling;
+      if (next && next.classList && next.classList.contains('drill-detail')) {
+        next.remove();
+        row.classList.remove('drill-open');
+        return false;
+      }
+      if (row) row.classList.add('drill-open');
+    } catch (e) { /* при любой неожиданности пусть работает как раньше */ }
+    return true;
+  };
 
   // Страна в списке аккаунтов. У аккаунта их может быть две сразу — пять из
   // четырнадцати в таблице стоят под двумя странами. Показать одну значит
