@@ -92,6 +92,31 @@ def get_draft_status_path() -> str:
     return os.path.join(get_local_config_dir(), "draft_status.json")
 
 
+def get_google_oauth_client_path() -> str:
+    """OAuth client JSON used by the dashboard and telemetry consent flows.
+
+    New installs keep it with machine configuration. Existing installs may
+    still have the ignored legacy file inside ``config/``; it remains a
+    read-only fallback until the migration copies it out of the checkout.
+    """
+    explicit = os.environ.get("GSHEET_OAUTH_CLIENT", "").strip()
+    if explicit:
+        return explicit if os.path.isabs(explicit) else str(PROJECT_ROOT / explicit)
+    local = os.path.join(get_local_config_dir(), "oauth_client.json")
+    if os.path.isfile(local):
+        return local
+    legacy = str(PROJECT_ROOT / "config" / "oauth_client.json")
+    return legacy if os.path.isfile(legacy) else local
+
+
+def get_google_oauth_token_path() -> str:
+    """Read-only Sheets token, always machine-local unless explicitly set."""
+    explicit = os.environ.get("GSHEET_OAUTH_TOKEN", "").strip()
+    if explicit:
+        return explicit if os.path.isabs(explicit) else str(PROJECT_ROOT / explicit)
+    return os.path.join(get_local_config_dir(), "token_accounts.json")
+
+
 def _atomic_write(path: str | Path, data: bytes) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -359,6 +384,32 @@ def migrate_legacy_draft_status() -> str:
     return f"draft status copied out of the checkout to {local}"
 
 
+def migrate_legacy_google_oauth() -> list[str]:
+    """Copy ignored OAuth files out of the checkout without deleting sources."""
+    notes: list[str] = []
+    pairs = (
+        (
+            PROJECT_ROOT / "config" / "oauth_client.json",
+            Path(get_local_config_dir()) / "oauth_client.json",
+            "OAuth client",
+        ),
+        (
+            PROJECT_ROOT / "config" / "token_accounts.json",
+            Path(get_google_oauth_token_path()),
+            "Google read token",
+        ),
+    )
+    for source, destination, label in pairs:
+        if destination.exists() or not source.is_file() or source.resolve() == destination.resolve():
+            continue
+        try:
+            _atomic_copy(source, destination)
+            notes.append(f"{label} copied out of the checkout to {destination}")
+        except Exception as exc:
+            notes.append(f"could not migrate {label} to {destination}: {exc}")
+    return notes
+
+
 def ensure_machine_config() -> list[str]:
     """Idempotent install/upgrade provisioning, migration before examples."""
     Path(get_local_config_dir()).mkdir(parents=True, exist_ok=True)
@@ -372,6 +423,7 @@ def ensure_machine_config() -> list[str]:
     status_note = migrate_legacy_draft_status()
     if status_note:
         notes.append(status_note)
+    notes.extend(migrate_legacy_google_oauth())
     local_map = Path(get_local_config_dir()) / "ad_account_map.csv"
     if not local_map.exists() and Path(AD_ACCOUNT_MAP_EXAMPLE).is_file():
         _atomic_copy(AD_ACCOUNT_MAP_EXAMPLE, local_map)

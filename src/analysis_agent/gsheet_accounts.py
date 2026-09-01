@@ -5,12 +5,12 @@ Environment variables (from .env):
     GSHEET_ACCOUNTS_SHEET   — Tab name, or "auto_last" for the **rightmost** tab
                              (by `SheetProperties.index`, i.e. left-to-right order in the UI)
     MY_CM_NAME              — Your CM name as it appears in column A (default: Evgeni Sedin)
-    GSHEET_OAUTH_CLIENT     — Path to OAuth client JSON (default: config/oauth_client.json)
-    GSHEET_OAUTH_TOKEN      — Path to saved OAuth token (default: config/token_accounts.json)
+    GSHEET_OAUTH_CLIENT     — Optional override for the machine-local OAuth client JSON
+    GSHEET_OAUTH_TOKEN      — Optional override for the machine-local saved OAuth token
     GOOGLE_CREDENTIALS_JSON — Path to service-account JSON (fallback if OAuth client not found)
 
 Auth mode (auto-detected):
-    If config/oauth_client.json exists → OAuth2 user login (opens browser on first run).
+    If the machine-local OAuth client exists → user login (opens browser on first run).
     Otherwise → service account via GOOGLE_CREDENTIALS_JSON.
 
 Sheet layout (last/today's tab):
@@ -179,13 +179,23 @@ def _build_sheets_service_sa(credentials_path: str):
 
 def _build_sheets_service(
     credentials_path: str,
-    oauth_client_path: str = "config/oauth_client.json",
-    token_path: str = "config/token_accounts.json",
+    oauth_client_path: Optional[str] = None,
+    token_path: Optional[str] = None,
 ):
     """Auto-detect auth mode and return a Sheets API service.
 
-    Prefers OAuth2 (oauth_client.json) over service account.
+    Prefers the machine-local OAuth2 files over a service account. Optional
+    paths exist for focused tests and legacy callers.
     """
+    if oauth_client_path is None or token_path is None:
+        from config.paths import (
+            get_google_oauth_client_path,
+            get_google_oauth_token_path,
+        )
+
+        oauth_client_path = oauth_client_path or get_google_oauth_client_path()
+        token_path = token_path or get_google_oauth_token_path()
+
     oauth_file = Path(oauth_client_path)
     if not oauth_file.is_absolute():
         oauth_file = _PROJ_ROOT / oauth_file
@@ -458,7 +468,13 @@ def fetch_account_rows(
         )
         return []
 
-    service = _build_sheets_service(creds)
+    from config.paths import get_google_oauth_client_path, get_google_oauth_token_path
+
+    service = _build_sheets_service(
+        creds,
+        get_google_oauth_client_path(),
+        get_google_oauth_token_path(),
+    )
     if service is None:
         return []
 

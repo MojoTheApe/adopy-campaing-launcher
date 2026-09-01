@@ -35,6 +35,7 @@ from config.paths import (  # noqa: E402
     get_creatives_root,
     get_env_files,
     get_excel_path,
+    get_google_oauth_client_path,
     get_local_config_dir,
     get_machine_env_path,
     get_upload_fb_excel_path,
@@ -173,9 +174,7 @@ def check_google_client() -> None:
     far from here with a message about credentials rather than about a missing
     file. Someone has to hand this file to each machine.
     """
-    oauth = _resolve_checkout_path(
-        os.environ.get("GSHEET_OAUTH_CLIENT", "").strip() or "config/oauth_client.json"
-    )
+    oauth = get_google_oauth_client_path()
     service = _resolve_checkout_path(
         os.environ.get("GOOGLE_CREDENTIALS_JSON", "").strip()
         or "config/google_credentials.json"

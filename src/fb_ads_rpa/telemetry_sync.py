@@ -347,10 +347,9 @@ def config_status() -> dict[str, Any]:
 
 
 def _oauth_client_path() -> str:
-    raw = (os.environ.get("GSHEET_OAUTH_CLIENT") or "config/oauth_client.json").strip()
-    if os.path.isabs(raw):
-        return raw
-    return str(Path(__file__).resolve().parents[2] / raw)
+    from config.paths import get_google_oauth_client_path
+
+    return get_google_oauth_client_path()
 
 
 def _service_oauth(sheet_id: str):
@@ -369,7 +368,7 @@ def _service_oauth(sheet_id: str):
     Multilogin token.
 
     Deliberately a SEPARATE token file from the dashboard's
-    config/token_accounts.json: that one is read-only and works today, and
+    <local config dir>/token_accounts.json: that one is read-only and works today, and
     widening its scope would force a re-consent before the dashboard could
     read anything again.
     """

@@ -18,10 +18,11 @@ _cache_time: float = 0.0
 
 
 def _build_service():
+    from config.paths import get_google_oauth_client_path, get_google_oauth_token_path
     from src.analysis_agent.gsheet_accounts import _build_sheets_service_oauth
 
-    client_path = os.environ.get("GSHEET_OAUTH_CLIENT", "config/oauth_client.json")
-    token_path = os.environ.get("GSHEET_OAUTH_TOKEN", "config/token_accounts.json")
+    client_path = get_google_oauth_client_path()
+    token_path = get_google_oauth_token_path()
     return _build_sheets_service_oauth(client_path, token_path)
 
 

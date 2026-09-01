@@ -18,7 +18,6 @@ dashboard offline until the operator finished a browser flow.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 _SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -32,10 +31,9 @@ def _token_path() -> Path:
 
 
 def _oauth_client_path() -> str:
-    raw = (os.environ.get("GSHEET_OAUTH_CLIENT") or "config/oauth_client.json").strip()
-    if os.path.isabs(raw):
-        return raw
-    return str(Path(__file__).resolve().parents[2] / raw)
+    from config.paths import get_google_oauth_client_path
+
+    return get_google_oauth_client_path()
 
 
 def is_authorised() -> bool:
