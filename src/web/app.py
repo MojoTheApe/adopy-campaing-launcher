@@ -1615,7 +1615,22 @@ async def account_link_patch(request: Request) -> JSONResponse:
         excel_path = get_upload_fb_excel_path()
         if not os.path.isfile(excel_path):
             return JSONResponse({"ok": False, "error": "Upload FB.xlsx not found"}, status_code=404)
-        return JSONResponse({"ok": False, "error": f"Account '{account_name}' not found in Accounts sheet"}, status_code=404)
+        # Say WHERE and WHAT TO DO. The old text named neither the file nor the
+        # remedy, and the account can legitimately be fully configured on this
+        # machine while simply having no row in the workbook — which is exactly
+        # what "not found" looked like: a defect rather than missing data.
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": (
+                    f"Аккаунта «{account_name}» нет в листе Accounts книги "
+                    f"{excel_path}. Трекинг-ссылка хранится там, поэтому "
+                    "сохранять её некуда: добавьте строку с этим именем в "
+                    "колонку Account и повторите."
+                ),
+            },
+            status_code=404,
+        )
 
     status = classify_link(link)
     return JSONResponse({"ok": True, "account": matched, "link_status": status})
