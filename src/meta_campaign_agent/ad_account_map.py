@@ -25,6 +25,16 @@ class AccountMapEntry:
     # country section. The CSV has carried this column all along without
     # anything reading it.
     country: str | None = None
+    # Tracking link, pixel and domain used to live ONLY in the Accounts sheet of
+    # Upload FB.xlsx. An account connected on the dashboard in one click was
+    # therefore unusable until someone also added a row to that workbook by
+    # hand — and the only sign of it was a refusal to save the tracking link,
+    # long after the account looked fully configured. These columns let the
+    # machine's own map answer instead; the workbook still wins where it has a
+    # row, so nothing changes for accounts that already live there.
+    tracking_link: str | None = None
+    pixel_id: str | None = None
+    domain: str | None = None
 
 
 def load_ad_account_map(path: str | Path) -> dict[str, AccountMapEntry]:
@@ -58,6 +68,9 @@ def load_ad_account_map(path: str | Path) -> dict[str, AccountMapEntry]:
                 proxy_pass=(row.get("proxy_pass") or row.get("proxy_password") or "").strip() or None,
                 page_name=(row.get("page_name") or "").strip() or None,
                 country=(row.get("country") or "").strip() or None,
+                tracking_link=(row.get("tracking_link") or row.get("link") or "").strip() or None,
+                pixel_id=(row.get("pixel_id") or row.get("pixel") or "").strip() or None,
+                domain=(row.get("domain") or "").strip() or None,
             )
     return out
 

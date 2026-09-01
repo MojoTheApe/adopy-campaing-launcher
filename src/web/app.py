@@ -78,6 +78,48 @@ _ref_full_cache: dict | None = None
 _ref_full_mtime: float = -1.0
 
 
+def _save_link_to_machine_map(account_name: str, link: str) -> bool:
+    """Store the tracking link on this machine, for an account the workbook
+    does not carry. Returns False when the account is not in the map either —
+    then there is genuinely nothing to attach the link to.
+
+    Rewrites the whole CSV rather than patching a line: the file is a dozen
+    rows, and a half-written map is worse than a slow one.
+    """
+    import csv as _csv
+
+    map_path = Path(get_ad_account_map_path())
+    if not map_path.is_file():
+        return False
+    with open(map_path, newline="", encoding="utf-8-sig") as f:
+        reader = _csv.DictReader(f)
+        rows = list(reader)
+        fieldnames = list(reader.fieldnames or [])
+    if not fieldnames:
+        return False
+    if "tracking_link" not in fieldnames:
+        fieldnames.append("tracking_link")
+
+    name_lower = (account_name or "").strip().lower()
+    hit = None
+    for row in rows:
+        key = (row.get("account_name") or "").strip().lower()
+        if key and (key == name_lower or key in name_lower or name_lower in key):
+            hit = row
+            break
+    if hit is None:
+        return False
+
+    hit["tracking_link"] = (link or "").strip()
+    tmp = map_path.with_name(f".{map_path.name}.tmp")
+    with open(tmp, "w", newline="", encoding="utf-8") as f:
+        writer = _csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+    os.replace(tmp, map_path)
+    return True
+
+
 def _write_link_to_excel(account_name: str, link: str) -> str | None:
     """Write tracking link to Upload FB.xlsx → Accounts sheet → Link column.
 
@@ -1615,18 +1657,34 @@ async def account_link_patch(request: Request) -> JSONResponse:
         excel_path = get_upload_fb_excel_path()
         if not os.path.isfile(excel_path):
             return JSONResponse({"ok": False, "error": "Upload FB.xlsx not found"}, status_code=404)
-        # Say WHERE and WHAT TO DO. The old text named neither the file nor the
-        # remedy, and the account can legitimately be fully configured on this
-        # machine while simply having no row in the workbook — which is exactly
-        # what "not found" looked like: a defect rather than missing data.
+        # The workbook has no row for this account. That used to be the end of
+        # it — a refusal, long after the account looked fully configured, for a
+        # file the operator had not been told to edit. Save into the machine's
+        # own account map instead: the workbook stays the shared source of
+        # truth wherever it HAS a row, and an account connected on the
+        # dashboard stops depending on someone editing a spreadsheet by hand.
+        try:
+            saved = _save_link_to_machine_map(account_name, link)
+        except Exception as exc:
+            return JSONResponse(
+                {"ok": False, "error": f"Не удалось сохранить ссылку на этой машине: {exc}"},
+                status_code=500,
+            )
+        if saved:
+            return JSONResponse({
+                "ok": True,
+                "account": account_name,
+                "link_status": classify_link(link),
+                "stored_in": "machine",
+                "note": "Аккаунта нет в Upload FB.xlsx — ссылка сохранена в карте этой машины.",
+            })
         return JSONResponse(
             {
                 "ok": False,
                 "error": (
-                    f"Аккаунта «{account_name}» нет в листе Accounts книги "
-                    f"{excel_path}. Трекинг-ссылка хранится там, поэтому "
-                    "сохранять её некуда: добавьте строку с этим именем в "
-                    "колонку Account и повторите."
+                    f"Аккаунта «{account_name}» нет ни в листе Accounts книги "
+                    f"{excel_path}, ни в карте аккаунтов этой машины. "
+                    "Подключите аккаунт в разделе «Аккаунты» и повторите."
                 ),
             },
             status_code=404,

@@ -284,7 +284,38 @@ def get_account_info(ref: dict, account_name: str) -> dict[str, Any]:
                 if (key or "").upper().split()[:1] == [token]]
         if len(hits) == 1:
             return hits[0]
-    return {"pixel": None, "domain": None, "link": None}
+    # Nothing in the workbook: ask this machine's account map before giving up.
+    #
+    # The workbook stays the shared source of truth and wins wherever it has a
+    # row. But an account connected on the dashboard exists only in the map
+    # until someone edits the workbook by hand, and until then it was unusable:
+    # no tracking link, no pixel, and the only symptom was a refusal to save
+    # the link — long after the account looked fully configured.
+    return _account_info_from_machine_map(name)
+
+
+def _account_info_from_machine_map(account_name: str) -> dict[str, Any]:
+    """Tracking link / pixel / domain from the machine's own account map."""
+    empty = {"pixel": None, "domain": None, "link": None}
+    try:
+        from config.paths import get_ad_account_map_path
+        from src.meta_campaign_agent.ad_account_map import (
+            load_ad_account_map,
+            resolve_account_entry,
+        )
+
+        entry = resolve_account_entry(
+            load_ad_account_map(get_ad_account_map_path()), account_name
+        )
+    except Exception:
+        return empty
+    if entry is None:
+        return empty
+    return {
+        "pixel": getattr(entry, "pixel_id", None),
+        "domain": getattr(entry, "domain", None),
+        "link": getattr(entry, "tracking_link", None),
+    }
 
 
 def build_campaign_name(country: str, asset: str, os: str, creative: str, creative_number: str, targeting: str, age: str, date: str = "") -> str:
