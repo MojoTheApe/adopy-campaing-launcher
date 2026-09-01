@@ -138,7 +138,8 @@ flowchart TB
 | Библиотека таргетов | `GSHEET_TARGETING_SPREADSHEET_ID` / `GSHEET_TARGETING_TAB` | `analysis_agent/gsheet_targeting.py` |
 | Тексты объявлений | `GSHEET_ADCOPY_ID` (иначе `GSHEET_TARGETS_ID`) / `GSHEET_ADCOPY_SHEET`, по умолчанию вкладка `ad texts` | `web/ad_copy_gsheet.py` |
 
-Токен чтения: `config/token_accounts.json`, права **только на чтение**.
+OAuth-клиент: `%LOCALAPPDATA%\ACL\oauth_client.json`. Токен чтения:
+`%LOCALAPPDATA%\ACL\token_accounts.json`, права **только на чтение**.
 
 Лист аккаунтов берётся с **самой правой вкладки** — они именуются по дате
 (`27.08`), и правая всегда свежая.

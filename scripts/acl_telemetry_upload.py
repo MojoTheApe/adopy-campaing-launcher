@@ -9,8 +9,9 @@ made for diagnostics.
   python scripts/acl_telemetry_upload.py --status    # is this machine set up?
 
 Supported setup under the current Adopy Workspace policy:
-  1. Put the shared OAuth client JSON at config/oauth_client.json, or set
-     GSHEET_OAUTH_CLIENT in the machine-local .env.
+  1. Put the shared OAuth client JSON at
+     <machine config dir>/oauth_client.json, or set GSHEET_OAUTH_CLIENT in the
+     machine-local .env.
   2. Put the shared spreadsheet id in GSHEET_TELEMETRY_ID.
   3. Run this command once and complete browser consent as the employee using
      the machine. The write token is stored outside the checkout at

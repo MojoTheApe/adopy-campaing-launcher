@@ -108,3 +108,25 @@ def test_invalid_google_json_fails_readiness(tmp_path, monkeypatch) -> None:
     doctor.check_google_client()
 
     assert doctor._failed == 1
+
+
+def test_machine_local_oauth_is_accepted(tmp_path, monkeypatch) -> None:
+    oauth = tmp_path / "ACL" / "oauth_client.json"
+    oauth.parent.mkdir()
+    oauth.write_text(
+        json.dumps(
+            {
+                "installed": {
+                    "client_id": "fake.apps.example.invalid",
+                    "client_secret": "not-a-real-secret",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(doctor, "get_google_oauth_client_path", lambda: str(oauth))
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_JSON", str(tmp_path / "absent.json"))
+
+    doctor.check_google_client()
+
+    assert doctor._failed == 0

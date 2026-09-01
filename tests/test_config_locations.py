@@ -26,6 +26,8 @@ def local_dir(tmp_path, monkeypatch):
     d = tmp_path / "ACL"
     monkeypatch.setenv("ACL_CONFIG_DIR", str(d))
     monkeypatch.delenv("META_AD_ACCOUNT_MAP_PATH", raising=False)
+    monkeypatch.delenv("GSHEET_OAUTH_CLIENT", raising=False)
+    monkeypatch.delenv("GSHEET_OAUTH_TOKEN", raising=False)
     return d
 
 
@@ -236,3 +238,38 @@ def test_provision_migrates_real_map_before_creating_example(local_dir, tmp_path
 
     assert "Real" in (local_dir / "ad_account_map.csv").read_text(encoding="utf-8")
     assert "Example" not in (local_dir / "ad_account_map.csv").read_text(encoding="utf-8")
+
+
+def test_google_oauth_defaults_are_machine_local(local_dir, tmp_path, monkeypatch):
+    checkout = tmp_path / "empty-checkout"
+    checkout.mkdir()
+    monkeypatch.setattr(paths, "PROJECT_ROOT", checkout)
+
+    assert paths.get_google_oauth_client_path() == str(local_dir / "oauth_client.json")
+    assert paths.get_google_oauth_token_path() == str(local_dir / "token_accounts.json")
+
+
+def test_google_oauth_explicit_paths_win(local_dir, tmp_path, monkeypatch):
+    client = tmp_path / "custom-client.json"
+    token = tmp_path / "custom-token.json"
+    monkeypatch.setenv("GSHEET_OAUTH_CLIENT", str(client))
+    monkeypatch.setenv("GSHEET_OAUTH_TOKEN", str(token))
+
+    assert paths.get_google_oauth_client_path() == str(client)
+    assert paths.get_google_oauth_token_path() == str(token)
+
+
+def test_legacy_google_oauth_files_move_out_of_checkout(local_dir, tmp_path, monkeypatch):
+    checkout = tmp_path / "checkout"
+    legacy_config = checkout / "config"
+    legacy_config.mkdir(parents=True)
+    (legacy_config / "oauth_client.json").write_text('{"installed": {}}', encoding="utf-8")
+    (legacy_config / "token_accounts.json").write_text('{"token": "fake"}', encoding="utf-8")
+    monkeypatch.setattr(paths, "PROJECT_ROOT", checkout)
+
+    notes = paths.migrate_legacy_google_oauth()
+
+    assert len(notes) == 2
+    assert (local_dir / "oauth_client.json").read_bytes() == (legacy_config / "oauth_client.json").read_bytes()
+    assert (local_dir / "token_accounts.json").read_bytes() == (legacy_config / "token_accounts.json").read_bytes()
+    assert paths.migrate_legacy_google_oauth() == []
