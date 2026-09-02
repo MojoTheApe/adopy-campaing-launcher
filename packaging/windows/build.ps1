@@ -1,0 +1,50 @@
+[CmdletBinding()]
+param(
+    [string]$Version = "0.1.0-spike"
+)
+
+$ErrorActionPreference = "Stop"
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
+$BuildRoot = Join-Path $PSScriptRoot ".build"
+$ArtifactRoot = Join-Path $PSScriptRoot ".artifacts"
+$ManifestPath = Join-Path $BuildRoot "acl-build-manifest.json"
+$DistPath = Join-Path $ArtifactRoot "dist"
+$WorkPath = Join-Path $BuildRoot "pyinstaller"
+$SpecPath = Join-Path $PSScriptRoot "acl_windows.spec"
+
+function Assert-LastExitCode([string]$Step) {
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Step failed with exit code $LASTEXITCODE"
+    }
+}
+
+Push-Location $RepoRoot
+try {
+    python packaging/windows/verify_core_isolation.py
+    Assert-LastExitCode "Installer isolation check"
+
+    New-Item -ItemType Directory -Force -Path $BuildRoot | Out-Null
+    New-Item -ItemType Directory -Force -Path $ArtifactRoot | Out-Null
+
+    python packaging/windows/build_manifest.py --version $Version --output $ManifestPath
+    Assert-LastExitCode "Build manifest generation"
+
+    $env:ACL_BUILD_MANIFEST = $ManifestPath
+    python -m PyInstaller `
+        --noconfirm `
+        --clean `
+        --distpath $DistPath `
+        --workpath $WorkPath `
+        $SpecPath
+    Assert-LastExitCode "PyInstaller bundle"
+
+    $Executable = Join-Path $DistPath "ACL/ACL.exe"
+    if (-not (Test-Path $Executable -PathType Leaf)) {
+        throw "Expected executable was not produced: $Executable"
+    }
+    Write-Host "ACL Windows bundle created: $Executable"
+}
+finally {
+    Remove-Item Env:ACL_BUILD_MANIFEST -ErrorAction SilentlyContinue
+    Pop-Location
+}

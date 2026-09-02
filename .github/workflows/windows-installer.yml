@@ -35,3 +35,51 @@ jobs:
 
       - name: Compile packaging tools
         run: python -m compileall -q packaging/windows
+
+  phase-2-packaging-spike:
+    name: Build and boot frozen Windows bundle
+    needs: phase-1-isolation
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install frozen runtime and packager
+        run: python -m pip install -r requirements.txt PyInstaller==6.22.2
+
+      - name: Build onedir bundle
+        shell: pwsh
+        run: ./packaging/windows/build.ps1 -Version "0.1.0-spike.${{ github.run_number }}"
+
+      - name: Test the packaged executable
+        shell: pwsh
+        run: ./packaging/windows/test_bundle.ps1
+
+      - name: Create downloadable archive
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path packaging/windows/.artifacts/dist/ACL `
+            -DestinationPath packaging/windows/.artifacts/ACL-Windows-spike.zip
+
+      - name: Upload packaging spike
+        uses: actions/upload-artifact@v4
+        with:
+          name: ACL-Windows-spike-${{ github.run_number }}
+          path: |
+            packaging/windows/.artifacts/ACL-Windows-spike.zip
+            packaging/windows/.build/acl-build-manifest.json
+            packaging/windows/.artifacts/test-logs/
+          if-no-files-found: error
+          retention-days: 14
