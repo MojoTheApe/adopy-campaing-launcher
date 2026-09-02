@@ -21,6 +21,8 @@ Build and test the Phase 2 packaging spike on Windows:
 python -m pip install -r requirements.txt PyInstaller==6.22.2
 ./packaging/windows/build.ps1 -Version "0.1.0-spike.local"
 ./packaging/windows/test_bundle.ps1
+./packaging/windows/build_installer.ps1 -Version "0.1.0-spike.local"
+./packaging/windows/test_installer.ps1 -Version "0.1.0-spike.local"
 ```
 
 The result is an unpacked, self-contained application at
@@ -28,9 +30,12 @@ The result is an unpacked, self-contained application at
 runtime dependencies; Git and a system Python installation are not required
 on the campaign manager's computer.
 
-This is deliberately an auditable packaging spike, not yet the campaign
-manager installer. CI proves that the frozen pilot baseline can be packaged,
-that its dashboard and RPA modules import from the package, and that the
-packaged executable serves a healthy local dashboard. The next phase wraps
-this validated directory in a signed-style installer flow with shortcuts,
-preflight checks, repair/uninstall, and an explicit update channel.
+The Inno Setup build creates a non-admin per-user installer under
+`packaging/windows/.artifacts/installer/`. It installs versioned program files
+under `%LOCALAPPDATA%\Programs\ACL`, creates Start Menu and optional desktop
+shortcuts, and keeps all user configuration under `%LOCALAPPDATA%\ACL`.
+
+CI proves that the frozen pilot baseline can be packaged, installed without a
+source checkout, started twice, repaired, and uninstalled while preserving an
+existing configuration sentinel. Automatic updates remain disabled for the
+installer pilot.

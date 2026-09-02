@@ -37,10 +37,12 @@ jobs:
         run: python -m compileall -q packaging/windows
 
   phase-2-packaging-spike:
-    name: Build and boot frozen Windows bundle
+    name: Build, install, repair, and uninstall
     needs: phase-1-isolation
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
+    env:
+      ACL_PACKAGE_VERSION: 0.1.0-alpha.${{ github.run_number }}
 
     steps:
       - name: Check out full history
@@ -60,11 +62,19 @@ jobs:
 
       - name: Build onedir bundle
         shell: pwsh
-        run: ./packaging/windows/build.ps1 -Version "0.1.0-spike.${{ github.run_number }}"
+        run: ./packaging/windows/build.ps1 -Version "$env:ACL_PACKAGE_VERSION"
 
       - name: Test the packaged executable
         shell: pwsh
         run: ./packaging/windows/test_bundle.ps1
+
+      - name: Build per-user Windows installer
+        shell: pwsh
+        run: ./packaging/windows/build_installer.ps1 -Version "$env:ACL_PACKAGE_VERSION"
+
+      - name: Test install, launch, repair, and uninstall
+        shell: pwsh
+        run: ./packaging/windows/test_installer.ps1 -Version "$env:ACL_PACKAGE_VERSION"
 
       - name: Create downloadable archive
         shell: pwsh
@@ -79,7 +89,10 @@ jobs:
           name: ACL-Windows-spike-${{ github.run_number }}
           path: |
             packaging/windows/.artifacts/ACL-Windows-spike.zip
+            packaging/windows/.artifacts/installer/ACL-Setup-*.exe
             packaging/windows/.build/acl-build-manifest.json
+            packaging/windows/.build/current.json
             packaging/windows/.artifacts/test-logs/
+            packaging/windows/.artifacts/installer-test-logs/
           if-no-files-found: error
           retention-days: 14

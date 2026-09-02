@@ -30,6 +30,15 @@ class BuildManifestTests(unittest.TestCase):
         self.assertEqual(payload["built_at_utc"], "2026-09-02T10:00:00+00:00")
         self.assertEqual(payload["pyinstaller_version"], "6.test")
 
+        current = build_manifest.build_current_payload(payload)
+        self.assertEqual(current["version"], "0.1.0-test")
+        self.assertEqual(current["relative_path"], r"versions\0.1.0-test")
+        self.assertEqual(current["source_sha"], "f" * 40)
+
+    def test_version_cannot_escape_versioned_install_directory(self):
+        with self.assertRaises(ValueError):
+            build_manifest.build_payload(r"..\outside")
+
 
 if __name__ == "__main__":
     unittest.main()

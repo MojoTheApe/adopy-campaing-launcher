@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[1]
+VERSION_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z._-]{0,63}\Z")
 
 
 def _git_sha() -> str:
@@ -34,6 +36,8 @@ def _pyinstaller_version() -> str:
 
 
 def build_payload(version: str, built_at_utc: str | None = None) -> dict[str, object]:
+    if not VERSION_PATTERN.fullmatch(version):
+        raise ValueError("version must contain only letters, digits, dot, dash, and underscore")
     baseline = json.loads((SCRIPT_DIR / "baseline.json").read_text(encoding="utf-8"))
     return {
         "schema": 1,
@@ -49,18 +53,38 @@ def build_payload(version: str, built_at_utc: str | None = None) -> dict[str, ob
     }
 
 
+def build_current_payload(build: dict[str, object]) -> dict[str, object]:
+    version = str(build["version"])
+    return {
+        "schema": 1,
+        "version": version,
+        "source_sha": build["installer_source_sha"],
+        "core_baseline_sha": build["core_baseline_sha"],
+        "relative_path": f"versions\\{version}",
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--current-output", type=Path)
     args = parser.parse_args()
 
+    payload = build_payload(args.version)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
-        json.dumps(build_payload(args.version), indent=2, sort_keys=True) + "\n",
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     print(f"Wrote build manifest: {args.output}")
+    if args.current_output:
+        args.current_output.parent.mkdir(parents=True, exist_ok=True)
+        args.current_output.write_text(
+            json.dumps(build_current_payload(payload), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Wrote current version pointer: {args.current_output}")
     return 0
 
 

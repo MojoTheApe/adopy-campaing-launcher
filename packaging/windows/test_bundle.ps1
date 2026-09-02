@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 if (-not $BundleDirectory) {
     $BundleDirectory = Join-Path $PSScriptRoot ".artifacts/dist/ACL"
 }
-$Executable = Join-Path $BundleDirectory "ACL.exe"
+$Executable = Join-Path $BundleDirectory "ACLConsole.exe"
 $LogDirectory = Join-Path $PSScriptRoot ".artifacts/test-logs"
 $StdoutLog = Join-Path $LogDirectory "acl.stdout.log"
 $StderrLog = Join-Path $LogDirectory "acl.stderr.log"
