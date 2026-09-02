@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "baseline_sha": "efa636bfcaf3ce44c57a13ad94e1b6b7ecfc41e8",
+  "baseline_branch": "feature/campaign-builder-dashboard-and-rpa-adlevel",
+  "implementation_branch": "codex/acl-windows-installer-v1",
+  "allowed_exact_paths": [
+    ".github/workflows/windows-installer.yml"
+  ],
+  "allowed_path_prefixes": [
+    "packaging/windows/"
+  ]
+}
