@@ -83,36 +83,34 @@ It builds its own Python environment, installs everything, and runs a check.
 
 ---
 
-## Step 4 — Put your settings in
+## Step 4 — Put your files and your name in
 
-Open the machine folder:
+**A. Put these three on your Desktop, with exactly these names:**
+
+```
+cursor example.xlsx
+Upluad FB.xlsx
+Creatives          (the folder)
+```
+
+ACL looks there by itself. Nothing to configure — as long as the names match.
+
+**B. Copy `oauth_client.json`** (the file from Evgeni) into the machine folder:
 
 ```powershell
 explorer $env:LOCALAPPDATA\ACL
 ```
 
-**A. Copy `oauth_client.json`** (the file from Evgeni) into that folder.
-
-**B. Open `.env` in Notepad** and set these lines:
+**C. Open `.env` in that same folder** and set one line:
 
 ```
 MY_CM_NAME=Your Name Exactly As In The Workbook
-GSHEET_ACCOUNTS_ID=paste-the-sheet-id-here
-MULTILOGIN_AUTOMATION_TOKEN_A=paste-the-token-here
-
-FB_PUBLISH_BACKEND=rpa
-FB_RPA_ENGINE=recorded_flow
-
-FB_STATS_EXCEL=C:/Users/YOURNAME/Desktop/cursor example.xlsx
-UPLOAD_FB_EXCEL=C:/Users/YOURNAME/Desktop/Upluad FB.xlsx
-FB_CREATIVES_ROOT=C:/Users/YOURNAME/Desktop/Creatives
 ```
 
-Three rules for this file:
+Save it as `.env`, not `.env.txt`.
 
-- Use **forward slashes** in paths, and write the full path — `%USERPROFILE%` does not work here.
-- The Sheet ID is only the part between `/d/` and `/edit`, not the whole link.
-- Save as `.env`, not `.env.txt`.
+> The **Multilogin token** is not typed into this file — you paste it into the
+> dashboard in Step 6, in the Multilogin panel.
 
 ---
 
@@ -163,7 +161,7 @@ In the dashboard, open the **Аккаунты** section and pick your open Multi
 |---|---|
 | `python is not recognized` | Close and reopen PowerShell. Still missing — restart Windows. |
 | GitHub asks for a password | Sign in with the company GitHub account Evgeni gave access to |
-| Doctor says a file is missing | Fix that exact path in `.env` — full path, forward slashes |
+| Doctor says a file is missing | Check the name on your Desktop matches exactly, including the space in `cursor example.xlsx` |
 | Doctor says Multilogin profiles missing | Open each of your profiles once in Multilogin Desktop |
 | Port 9090 is busy | Close the other ACL window |
 | Dashboard closes immediately | Run `start_dashboard.bat` again, photograph the last line, send it to Evgeni |

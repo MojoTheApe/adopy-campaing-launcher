@@ -433,6 +433,9 @@ def _apply_cm_filter(
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
+DEFAULT_ACCOUNTS_SHEET_ID = "1BSQvO219ybFn0zKiT5T6ayfwy0AuIrzKh_RCXDit3Es"
+
+
 def fetch_account_rows(
     sheet_id: Optional[str] = None,
     sheet_name: Optional[str] = None,
@@ -453,7 +456,14 @@ def fetch_account_rows(
         is_ready.
         Returns empty list on any error (caller decides whether to continue without GSheet).
     """
-    sid = sheet_id or os.environ.get("GSHEET_ACCOUNTS_ID", "").strip()
+    # The company's accounts spreadsheet is the SAME sheet for every campaign
+    # manager, so asking each of them to paste its id during setup only creates
+    # a way to get it wrong. Same precedent as the targeting sheet, which has
+    # carried its id in code since the beginning. Access is still decided by
+    # Google permissions on the person's own account — an id is not a key.
+    #
+    # GSHEET_ACCOUNTS_ID still overrides, for anyone pointing at a copy.
+    sid = sheet_id or os.environ.get("GSHEET_ACCOUNTS_ID", "").strip() or DEFAULT_ACCOUNTS_SHEET_ID
     sname = sheet_name or os.environ.get("GSHEET_ACCOUNTS_SHEET", "auto_last").strip()
     creds = credentials_path or os.environ.get(
         "GOOGLE_CREDENTIALS_JSON", "config/google_credentials.json"
