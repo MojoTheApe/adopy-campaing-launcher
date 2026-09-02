@@ -1150,7 +1150,7 @@ async def api_accounts_overview() -> JSONResponse:
         sheet_rows = fetch_account_rows()
     except Exception as exc:  # noqa: BLE001 — reported, never fatal
         return JSONResponse(
-            {"ok": False, "error": f"Не удалось прочитать таблицу аккаунтов: {exc}",
+            {"ok": False, "error": f"Could not read the accounts sheet: {exc}",
              "accounts": [], "open_profiles": [], "map_path": map_path},
             status_code=200,
         )
@@ -1515,8 +1515,8 @@ async def account_map_patch(request: Request) -> JSONResponse:
             if not act:
                 return JSONResponse(
                     {"ok": False,
-                     "error": "Не удалось разобрать ad_account_id. Вставьте ссылку из "
-                              "Ads Manager, либо номер кабинета."},
+                     "error": "Could not read the ad_account_id. Paste the link from "
+                              "Ads Manager, or the ad account number."},
                     status_code=400,
                 )
             # A second account pointing at the same ad account is almost always
@@ -1530,8 +1530,8 @@ async def account_map_patch(request: Request) -> JSONResponse:
             if clash:
                 return JSONResponse(
                     {"ok": False,
-                     "error": f"Этот кабинет уже привязан к «{clash}». "
-                              f"Проверьте, туда ли вставили."},
+                     "error": f"This ad account is already linked to \"{clash}\". "
+                              f"Check that you pasted it in the right row."},
                     status_code=400,
                 )
             new_row["ad_account_id"] = act
@@ -1584,13 +1584,13 @@ async def account_map_remove(request: Request) -> JSONResponse:
 
     if not wanted:
         return JSONResponse(
-            {"ok": False, "error": "account_name или account_names обязательны"},
+            {"ok": False, "error": "account_name or account_names is required"},
             status_code=400,
         )
 
     map_path = Path(get_ad_account_map_path())
     if not map_path.is_file():
-        return JSONResponse({"ok": False, "error": "Карта аккаунтов не найдена"}, status_code=404)
+        return JSONResponse({"ok": False, "error": "Account map not found"}, status_code=404)
 
     try:
         with open(map_path, encoding="utf-8-sig", newline="") as f:
@@ -1607,7 +1607,7 @@ async def account_map_remove(request: Request) -> JSONResponse:
         if not removed:
             shown = "«" + "», «".join(wanted[:3]) + "»"
             return JSONResponse(
-                {"ok": False, "error": f"{shown} нет в карте этой машины"},
+                {"ok": False, "error": f"{shown} is not in the map of this machine"},
                 status_code=404,
             )
 
@@ -1667,7 +1667,7 @@ async def account_link_patch(request: Request) -> JSONResponse:
             saved = _save_link_to_machine_map(account_name, link)
         except Exception as exc:
             return JSONResponse(
-                {"ok": False, "error": f"Не удалось сохранить ссылку на этой машине: {exc}"},
+                {"ok": False, "error": f"Could not save the link on this machine: {exc}"},
                 status_code=500,
             )
         if saved:
@@ -1676,15 +1676,15 @@ async def account_link_patch(request: Request) -> JSONResponse:
                 "account": account_name,
                 "link_status": classify_link(link),
                 "stored_in": "machine",
-                "note": "Аккаунта нет в Upload FB.xlsx — ссылка сохранена в карте этой машины.",
+                "note": "The account is not in Upload FB.xlsx — the link was saved in the map of this machine.",
             })
         return JSONResponse(
             {
                 "ok": False,
                 "error": (
-                    f"Аккаунта «{account_name}» нет ни в листе Accounts книги "
-                    f"{excel_path}, ни в карте аккаунтов этой машины. "
-                    "Подключите аккаунт в разделе «Аккаунты» и повторите."
+                    f"Account \"{account_name}\" is in neither the Accounts sheet of "
+                    f"{excel_path} nor the account map of this machine. "
+                    "Connect the account in the Accounts section and try again."
                 ),
             },
             status_code=404,
@@ -2137,7 +2137,7 @@ async def multilogin_search(request: Request) -> JSONResponse:
             timeout=15,
         )
         if rp.status_code == 401:
-            return JSONResponse({"ok": False, "error": "Токен истёк — войди заново через Connect"})
+            return JSONResponse({"ok": False, "error": "The token has expired — sign in again through Connect"})
         if rp.status_code == 200:
             pd = rp.json().get("data") or {}
             raw_p = pd.get("profiles") if isinstance(pd, dict) else pd

@@ -1184,9 +1184,9 @@
       font-size: 0.78rem;
       font-weight: normal;
     }
-    details[open] .brief-toggle-label { content: 'свернуть ▴'; }
-    details.brief-details[open] .brief-toggle-label::before { content: 'свернуть ▴'; }
-    details.brief-details:not([open]) .brief-toggle-label::before { content: 'развернуть ▾'; }
+    details[open] .brief-toggle-label { content: 'collapse ▴'; }
+    details.brief-details[open] .brief-toggle-label::before { content: 'collapse ▴'; }
+    details.brief-details:not([open]) .brief-toggle-label::before { content: 'expand ▾'; }
     .brief-toggle-label { font-size: 0; }  /* hide original text, use ::before */
     .brief-toggle-label::before { font-size: 0.78rem; }
     .brief-body {
@@ -1595,9 +1595,9 @@
     </div>
   </div>
   <div class="buyer-pick" style="margin-left:auto;display:flex;align-items:center;gap:0.45rem">
-    <label for="buyer-select" style="font-size:0.78rem;color:var(--muted)">Байер</label>
+    <label for="buyer-select" style="font-size:0.78rem;color:var(--muted)">Buyer</label>
     <select id="buyer-select" style="font-size:0.82rem;max-width:14rem"
-            title="Чью картину показывать: аккаунты, оптимизация, сравнение с командой">
+            title="Whose view to show: accounts, optimization, team comparison">
       <option value="{{ report.my_cm }}">{{ report.my_cm }}</option>
     </select>
     <span id="buyer-msg" style="font-size:0.75rem;color:var(--muted)"></span>
@@ -1657,8 +1657,8 @@ async function dashRefresh(ev) {
 <aside class="sidebar" aria-label="Dashboard navigation">
   <div class="sidebar-label">Main</div>
   <button type="button" class="sidebar-link sidebar-home active" data-view="home">🏠 Home</button>
-  <button type="button" class="sidebar-link" data-view="targets">🎯 Таргеты</button>
-  <button type="button" class="sidebar-link" data-view="accounts">🔌 Аккаунты</button>
+  <button type="button" class="sidebar-link" data-view="targets">🎯 Targeting</button>
+  <button type="button" class="sidebar-link" data-view="accounts">🔌 Accounts</button>
 
   <div class="sidebar-label">Countries</div>
   {% for c in report.countries %}
@@ -1697,51 +1697,51 @@ async function dashRefresh(ev) {
 
 {# ── Home view ─────────────────────────────────────────────────── #}
 <div id="view-accounts" class="view-panel">
-  <h2 class="view-title">Аккаунты <span class="hint">подключение к этой машине</span></h2>
+  <h2 class="view-title">Accounts <span class="hint">connect them to this machine</span></h2>
   <p class="acc-intro">
-    Слева то, что говорит общая таблица: какие аккаунты у вас есть и в каком они
-    состоянии. Справа то, что знает <b>эта машина</b>: как до аккаунта дотянуться.
-    Аккаунт может быть жив в таблице и при этом непригоден здесь — если для него
-    нет профиля Multilogin.
+    On the left, what the shared sheet says: which accounts you have and what state
+    they are in. On the right, what <b>this machine</b> knows: how to reach them.
+    An account can be alive in the sheet and still unusable here — if it has no
+    Multilogin profile.
   </p>
 
   <section class="acc-connect">
-    <h3>Подключить аккаунт</h3>
-    <p class="acc-sub">Выберите открытый профиль — остальное определится само.</p>
+    <h3>Connect an account</h3>
+    <p class="acc-sub">Pick an open profile — everything else is worked out for you.</p>
 
     <div class="acc-form">
       <div class="acc-field">
-        <label for="ac-new-prof">Профиль Multilogin</label>
+        <label for="ac-new-prof">Multilogin profile</label>
         <select id="ac-new-prof"></select>
       </div>
       <div class="acc-field">
-        <label for="ac-new-country">Страна · необязательно</label>
-        <input id="ac-new-country" type="text" list="ac-countries" placeholder="напр. Chile" autocomplete="off">
+        <label for="ac-new-country">Country · optional</label>
+        <input id="ac-new-country" type="text" list="ac-countries" placeholder="e.g. Chile" autocomplete="off">
         <datalist id="ac-countries"></datalist>
       </div>
-      <button type="button" id="ac-add-btn" class="acc-submit">Подключить</button>
+      <button type="button" id="ac-add-btn" class="acc-submit">Connect</button>
 
       <div class="acc-derived" id="ac-derived">
-        <span id="ac-derived-text">Профиль не выбран.</span>
-        <button type="button" class="acc-edit" id="ac-toggle-manual">задать вручную</button>
+        <span id="ac-derived-text">No profile selected.</span>
+        <button type="button" class="acc-edit" id="ac-toggle-manual">enter manually</button>
       </div>
 
       <div class="acc-manual" id="ac-manual">
         <div class="acc-field">
-          <label for="ac-new-label">Название аккаунта</label>
-          <input id="ac-new-label" type="text" list="ac-known-labels" placeholder="как в таблице" autocomplete="off">
+          <label for="ac-new-label">Account name</label>
+          <input id="ac-new-label" type="text" list="ac-known-labels" placeholder="as in the sheet" autocomplete="off">
           <datalist id="ac-known-labels"></datalist>
           <div id="ac-label-hint" style="font-size:0.72rem"></div>
         </div>
         <div class="acc-field">
-          <label for="ac-new-adid">Рекламный кабинет</label>
-          <input id="ac-new-adid" type="text" placeholder="адрес из Ads Manager или act_…">
+          <label for="ac-new-adid">Ad account</label>
+          <input id="ac-new-adid" type="text" placeholder="Ads Manager link or act_…">
         </div>
       </div>
 
       <p class="acc-note">
-        Имя и кабинет берутся из выбранного профиля: имя — из его названия, кабинет —
-        из истории этого же профиля. Если что-то не определилось, нажмите «задать вручную».
+        Name and ad account come from the profile you pick: the name from its title, the
+        ad account from that profile's own history. If something is missing, use "enter manually".
       </p>
       <div class="acc-msg" id="ac-msg"></div>
     </div>
@@ -1749,40 +1749,40 @@ async function dashRefresh(ev) {
 
   <div class="acc-bulk" id="ac-bulk">
     <span id="ac-bulk-count"></span>
-    <button type="button" id="ac-bulk-drop" class="acc-btn danger">Убрать выбранные</button>
-    <button type="button" id="ac-bulk-clear" class="acc-btn">Снять выделение</button>
+    <button type="button" id="ac-bulk-drop" class="acc-btn danger">Remove selected</button>
+    <button type="button" id="ac-bulk-clear" class="acc-btn">Clear selection</button>
   </div>
 
-  <div id="ac-list">Загрузка…</div>
+  <div id="ac-list">Loading…</div>
 </div>
 
 <div id="view-targets" class="view-panel">
-  <h2 class="view-title">Таргеты <span class="hint">общая библиотека — видна всем байерам</span></h2>
+  <h2 class="view-title">Targeting <span class="hint">shared library — visible to every buyer</span></h2>
   <p style="color:var(--muted);max-width:70ch">
-    Один список на всю команду. Добавленный здесь таргет сразу доступен всем
-    и подставляется в сборщик кампаний — открывать таблицу вручную не нужно.
+    One list for the whole team. Targeting added here is available to everyone at
+    once and appears in the campaign builder — no need to open the sheet by hand.
   </p>
 
   <div id="tg-add-box" style="margin:1rem 0;padding:0.9rem 1rem;border:1px solid var(--border);border-radius:6px;max-width:70ch">
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:flex-end">
       <label style="flex:0 0 12rem">
-        <div style="font-size:0.75rem;color:var(--muted)">Название</div>
-        <input id="tg-name" type="text" placeholder="напр. Investment" style="width:100%">
+        <div style="font-size:0.75rem;color:var(--muted)">Name</div>
+        <input id="tg-name" type="text" placeholder="e.g. Investment" style="width:100%">
       </label>
       <label style="flex:1 1 22rem">
-        <div style="font-size:0.75rem;color:var(--muted)">Интересы через запятую</div>
+        <div style="font-size:0.75rem;color:var(--muted)">Interests, comma separated</div>
         <input id="tg-interests" type="text" placeholder="Investment, Trading, Finance" style="width:100%">
       </label>
       <label style="flex:1 1 14rem">
-        <div style="font-size:0.75rem;color:var(--muted)">Сужение (необязательно)</div>
+        <div style="font-size:0.75rem;color:var(--muted)">Narrowing (optional)</div>
         <input id="tg-narrow" type="text" placeholder="" style="width:100%">
       </label>
-      <button type="button" id="tg-add-btn" class="btn">Добавить</button>
+      <button type="button" id="tg-add-btn" class="btn">Add</button>
     </div>
     <div id="tg-msg" style="margin-top:0.6rem;font-size:0.85rem"></div>
   </div>
 
-  <div id="tg-list">Загрузка…</div>
+  <div id="tg-list">Loading…</div>
 </div>
 
 <div id="view-home" class="view-panel active">
@@ -1899,7 +1899,7 @@ async function dashRefresh(ev) {
   {% for row in c.asset_summary %}
     {% set cr = (row.deposits / row.leads * 100) if row.leads > 0 else 0 %}
     <tr class="asset-row" onclick="assetVariantToggle(this, '{{ cid }}')" data-offer="{{ row.offer | e }}"
-        title="Показать распределение по лендингам">
+        title="Show the breakdown by landing page">
       <td>{{ row.offer }} <span class="asset-caret">▸</span></td>
       <td class="num">{{ row.leads }}</td>
       <td class="num">{{ row.deposits }}</td>
@@ -1915,10 +1915,10 @@ async function dashRefresh(ev) {
 {# ── Section {{ n_landings }}: Landings (Variant) ───────────────────── #}
 {% if c.variants %}
 <div id="view-country-{{ cid }}-landings" class="view-panel" data-country="{{ cid }}">
-<h2 class="view-title">{{ c.country }}: {{ n_landings }} Landings <span class="hint">разбивка по посадочным страницам</span></h2>
+<h2 class="view-title">{{ c.country }}: {{ n_landings }} Landings <span class="hint">breakdown by landing page</span></h2>
 <table>
   <thead><tr>
-    <th>Лендинг</th>
+    <th>Landing</th>
     <th class="num">Leads</th>
     <th class="num">Deposits</th>
     <th class="num">CR</th>
@@ -1930,7 +1930,7 @@ async function dashRefresh(ev) {
   <tbody>
   {% for row in c.variants %}
     <tr{% if row.is_untagged %} class="lp-untagged"{% endif %}>
-      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (без лендинга)</span>{% else %}{{ row.variant }}{% endif %}</td>
+      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% endif %}</td>
       <td class="num">{{ row.leads }}</td>
       <td class="num {% if row.deposits > 0 %}good{% elif row.spend > 0 %}bad{% endif %}">{{ row.deposits }}</td>
       <td class="num">{% if row.cr is not none %}{{ '%.1f' % row.cr }}%{% else %}—{% endif %}</td>
@@ -1943,7 +1943,7 @@ async function dashRefresh(ev) {
   </tbody>
 </table>
 <p style="font-size:0.72rem;color:var(--muted);margin-top:0.4rem">
-  Разметка лендингов ведётся с 30.07 — всё, что открутилось раньше, попадает в строку «без лендинга».
+  Landing tagging started on 30.07 — anything that ran earlier falls into the "no landing" row.
 </p>
 </div>
 {% endif %}
@@ -1978,7 +1978,7 @@ async function dashRefresh(ev) {
           <td><button type="button" class="cb-cart-btn" data-kind="campaign" data-source="combo"
                       data-country="{{ cid }}" data-country-name="{{ c.country }}"
                       data-payload='{{ row | tojson | e }}'
-                      title="В сборку: новая кампания">+ 🛒</button></td>
+                      title="Add to build: new campaign">+ 🛒</button></td>
         </tr>
       {% endfor %}
       </tbody>
@@ -2019,7 +2019,7 @@ async function dashRefresh(ev) {
       <td><button type="button" class="cb-cart-btn" data-kind="campaign" data-source="combo"
                   data-country="{{ cid }}" data-country-name="{{ c.country }}"
                   data-payload='{{ row | tojson | e }}'
-                  title="В сборку: новая кампания">+ 🛒</button></td>
+                  title="Add to build: new campaign">+ 🛒</button></td>
     </tr>
   {% endfor %}
   </tbody>
@@ -2079,7 +2079,7 @@ async function dashRefresh(ev) {
       <td><button type="button" class="cb-cart-btn" data-kind="ad" data-source="creative"
                   data-country="{{ cid }}" data-country-name="{{ c.country }}"
                   data-payload='{{ row | tojson | e }}'
-                  title="В сборку: объявление в последнюю кампанию">+ 🛒</button></td>
+                  title="Add to build: ad in the last campaign">+ 🛒</button></td>
     </tr>
   {% endfor %}
   </tbody>
@@ -2099,19 +2099,19 @@ async function dashRefresh(ev) {
      style="margin:0.6rem 0 1rem;padding:0.7rem 0.9rem;border:1px solid var(--border);border-radius:6px">
   <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-end">
     <label style="flex:1 1 15rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Подключить аккаунт к {{ c.country }}</div>
-      <input class="acq-label" type="text" placeholder="название аккаунта" style="width:100%" autocomplete="off">
+      <div style="font-size:0.72rem;color:var(--muted)">Connect an account to {{ c.country }}</div>
+      <input class="acq-label" type="text" placeholder="account name" style="width:100%" autocomplete="off">
     </label>
     <label style="flex:1 1 13rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Рекламный кабинет</div>
-      <input class="acq-adid" type="text" placeholder="подставится по профилю" style="width:100%"
-             title="Заполняется само по выбранному профилю. Иначе вставьте адрес из адресной строки Ads Manager.">
+      <div style="font-size:0.72rem;color:var(--muted)">Ad account</div>
+      <input class="acq-adid" type="text" placeholder="filled in from the profile" style="width:100%"
+             title="Filled in automatically from the profile you pick. Otherwise paste the address from the Ads Manager address bar.">
     </label>
     <label style="flex:0 0 13rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Профиль Multilogin</div>
+      <div style="font-size:0.72rem;color:var(--muted)">Multilogin profile</div>
       <select class="acq-prof" style="width:100%"></select>
     </label>
-    <button type="button" class="btn acq-add">Добавить</button>
+    <button type="button" class="btn acq-add">Add</button>
     <span class="acq-msg" style="font-size:0.75rem"></span>
   </div>
   <div class="acq-connected" style="margin-top:0.6rem;font-size:0.8rem;color:var(--muted)"></div>
@@ -2176,7 +2176,7 @@ async function dashRefresh(ev) {
   {% endif %}
 {% endfor %}
 {% else %}
-<p class="empty-hint">Нет ад-сетов для оптимизации по этой стране — ни один из аккаунтов не набрал статистики, попадающей под правила закрытия. Если это выглядит неверно, проверь, что аккаунты есть во вкладке GSheet, и нажми <strong>Refresh</strong>.</p>
+<p class="empty-hint">No ad sets to optimize in this country — none of the accounts has enough data to fall under the closing rules. If that looks wrong, check the accounts are on the GSheet tab and press <strong>Refresh</strong>.</p>
 {% endif %}
 </div>
 
@@ -2221,19 +2221,19 @@ async function dashRefresh(ev) {
     {# ── Attach-only workflow ── #}
     <details style="margin-top:0.6rem" id="ml-direct-section-{{ cid }}" open>
       <summary style="font-size:0.72rem;color:#4caf50;cursor:pointer;user-select:none;font-weight:600">
-        ✓ Как запускать RPA (Multilogin)
+        ✓ How to run the RPA (Multilogin)
       </summary>
       <div style="margin-top:0.5rem;padding:0.5rem;background:#0a2a14;border-radius:6px;border:1px solid #1a5a2a">
         <p style="font-size:0.72rem;color:#8fd4a0;margin:0 0 0.4rem">
-          <strong>1.</strong> Перед Publish профиль в MLX Desktop лучше <strong>не открывать вручную</strong> (RPA стартует сам с CDP).<br>
-          <strong>2.</strong> Campaign Builder → <strong>Preview</strong> → <strong>Publish</strong> (подтверди в модалке).<br>
-          <strong>3.</strong> RPA откроет профиль через <strong>MLX automation API</strong>, зальёт кампанию и
-          <strong>не закроет окно</strong> — проверь, что Facebook залогинен в нужный аккаунт.
+          <strong>1.</strong> Before Publish it is better <strong>not to open the profile by hand</strong> in MLX Desktop (the RPA starts it itself with CDP).<br>
+          <strong>2.</strong> Campaign Builder → <strong>Preview</strong> → <strong>Publish</strong> (confirm in the dialog).<br>
+          <strong>3.</strong> The RPA opens the profile through the <strong>MLX automation API</strong>, builds the campaign and
+          <strong>leaves the window open</strong> — check that Facebook is signed in to the right account.
         </p>
         <p style="font-size:0.72rem;color:#8fd4a0;margin:0">
-          ⚠️ Ручной «Quick launch» из MLX Desktop <strong>не даёт CDP</strong> — RPA не сможет к нему подключиться.
-          Если профиль уже открыт вручную, RPA может перезапустить <strong>только его</strong> ради CDP (куки сохранятся).
-          После любого исхода окно Multilogin <strong>остаётся открытым</strong> — не закрываем.
+          ⚠️ A manual "Quick launch" from MLX Desktop <strong>gives no CDP</strong> — the RPA cannot attach to it.
+          If the profile is already open by hand, the RPA may restart <strong>only that one</strong> to get CDP (cookies are kept).
+          Either way the Multilogin window <strong>stays open</strong> — do not close it.
         </p>
       </div>
     </details>
@@ -2241,13 +2241,13 @@ async function dashRefresh(ev) {
     {# ── Paste token directly (no password needed) ── #}
     <details style="margin-top:0.6rem">
       <summary style="font-size:0.72rem;color:var(--muted);cursor:pointer;user-select:none">
-        🔑 Вставить automation token напрямую (если нет пароля)
+        🔑 Paste the automation token directly (if you have no password)
       </summary>
       <div style="margin-top:0.5rem">
         <p style="font-size:0.71rem;color:var(--muted);margin:0 0 0.4rem">
-          Попроси у владельца воркспейса Multilogin X токен
-          (<strong>Settings → Automation → Generate Token</strong>) и вставь сюда.
-          Токен сохранится в <code>.env</code> и будет использоваться для запуска профилей.
+          Ask the owner of the Multilogin X workspace for a token
+          (<strong>Settings → Automation → Generate Token</strong>) and paste it here.
+          The token is saved to <code>.env</code> and used to start profiles.
         </p>
         <textarea id="ml-token-paste-{{ cid }}" rows="3"
           placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9…"
@@ -2257,10 +2257,10 @@ async function dashRefresh(ev) {
         <div style="display:flex;gap:0.5rem;margin-top:0.35rem;align-items:center">
           <button type="button" class="ml-connect-btn"
                   style="padding:0.28rem 0.8rem;font-size:0.75rem"
-                  onclick="mlSaveToken('{{ cid }}')">💾 Сохранить токен</button>
+                  onclick="mlSaveToken('{{ cid }}')">💾 Save token</button>
           <button type="button" class="ml-connect-btn"
                   style="padding:0.28rem 0.8rem;font-size:0.75rem;background:var(--bg-hover)"
-                  onclick="mlTestToken('{{ cid }}')">🔍 Проверить + загрузить профили</button>
+                  onclick="mlTestToken('{{ cid }}')">🔍 Check + load profiles</button>
           <span id="ml-token-status-{{ cid }}" style="font-size:0.72rem"></span>
         </div>
       </div>
@@ -2329,10 +2329,10 @@ async function dashRefresh(ev) {
               onclick="this.closest('.cb-preflight').classList.toggle('cb-preflight-collapsed')">
         <span class="cb-preflight-caret">▸</span> ⚙ Account
         {% if pf_ok %}
-          <span class="cb-pf-ok">настроен ✓</span>
-          <span style="color:var(--muted);font-weight:400">· tracking, ids, page — заполнены</span>
+          <span class="cb-pf-ok">configured ✓</span>
+          <span style="color:var(--muted);font-weight:400">· tracking, ids, page — all set</span>
         {% else %}
-          <span class="cb-pf-err">требует настройки</span>
+          <span class="cb-pf-err">needs setup</span>
         {% endif %}
       </button>
       <div class="cb-preflight-body">
@@ -2544,10 +2544,10 @@ async function dashRefresh(ev) {
               onclick="cbPreview(this.closest('form'))">Preview</button>
       <button type="button" class="cb-publish-btn" disabled
               onclick="cbPublish(this.closest('form'))"
-              title="Поднимает кампанию через Multilogin и оставляет черновик в Ads Manager (Publish в Facebook не жмёт).">Publish</button>
+              title="Builds the campaign through Multilogin and leaves a draft in Ads Manager (does not click Publish in Facebook).">Publish</button>
       <button type="button" id="rpa-takeover-btn"
               style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#b45309;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
-              onclick="rpaTakeover()">⏸ Пауза RPA</button>
+              onclick="rpaTakeover()">⏸ Pause RPA</button>
       {# Record clicks / Website Lab dev tools removed from the builder UI
          2026-08-02 (user: "убираем ненужные кнопки, записи и шаги") — the
          /rpa-record and /rpa-website-lab endpoints and their JS stay for
@@ -2917,7 +2917,7 @@ async function dashRefresh(ev) {
 // Assets: click a row -> expand the landing-page (Variant) breakdown for
 // that asset with Leads / Deposits / CR / Spend / CPL / CPA per landing.
 // Aggregates are embedded per-country as JSON (offer x variant rows);
-// untagged history (variant "") shows as "— (без лендинга)" so the
+// untagged history (variant "") shows as "— (no landing)" so the
 // breakdown always adds up to the asset's totals.
 function assetVariantToggle(tr, cid) {
   var next = tr.nextElementSibling;
@@ -2947,7 +2947,7 @@ function assetVariantToggle(tr, cid) {
     return (y.deposits - x.deposits) || (y.leads - x.leads) || (y.spend - x.spend);
   });
   var render = function(r, cls) {
-    var name = r.variant ? esc(r.variant) : '— (без лендинга)';
+    var name = r.variant ? esc(r.variant) : '— (no landing)';
     var cr = r.leads > 0 ? (r.deposits / r.leads * 100).toFixed(1) + '%' : '—';
     var cpl = r.leads > 0 ? fmtUsd(r.spend / r.leads) : '—';
     var cpa = r.deposits > 0 ? fmtUsd(r.spend / r.deposits) : '—';
@@ -2962,18 +2962,18 @@ function assetVariantToggle(tr, cid) {
   var total = rows.reduce(function(a, r) {
     a.leads += r.leads || 0; a.deposits += r.deposits || 0; a.spend += r.spend || 0;
     return a;
-  }, { variant: 'Всего', leads: 0, deposits: 0, spend: 0 });
+  }, { variant: 'Total', leads: 0, deposits: 0, spend: 0 });
   var body = rows.map(function(r) { return render(r); }).join('')
-    || '<tr><td colspan="7" style="color:var(--muted)">Нет данных по лендингам</td></tr>';
+    || '<tr><td colspan="7" style="color:var(--muted)">No landing data</td></tr>';
   var detail = document.createElement('tr');
   detail.className = 'asset-variant-detail';
   detail.innerHTML = '<td colspan="5"><div class="asset-variant-inner">'
     + '<table class="asset-variant-table"><thead><tr>'
-    + '<th>Лендинг</th><th class="num">Leads</th><th class="num">Deposits</th>'
+    + '<th>Landing</th><th class="num">Leads</th><th class="num">Deposits</th>'
     + '<th class="num">CR</th><th class="num">Spend</th><th class="num">CPL</th><th class="num">CPA</th>'
     + '</tr></thead><tbody>' + body + (rows.length > 1 ? render(total, 'asset-variant-total') : '')
     + '</tbody></table>'
-    + '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem">Разметка лендингов ведётся с 30.07 — старые строки попадают в «— (без лендинга)».</div>'
+    + '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem">Landing tagging started on 30.07 — older rows fall into "— (no landing)".</div>'
     + '</div></td>';
   tr.after(detail);
   tr.classList.add('asset-open');
@@ -3077,7 +3077,7 @@ function mlTokenFirst(cid) {
   var creds = document.getElementById('ml-cred-fields-' + cid);
   if (!banner || !creds) return;
   banner.style.display = 'block';
-  banner.innerHTML = '<span style="color:var(--muted)">Проверяю сохранённый токен…</span>';
+  banner.innerHTML = '<span style="color:var(--muted)">Checking the saved token…</span>';
 
   fetch('/multilogin-token-status?instance=' + instance)
     .then(function(r) { return r.json(); })
@@ -3087,22 +3087,22 @@ function mlTokenFirst(cid) {
         if (d.expires_at) {
           try {
             var dt = new Date(d.expires_at);
-            until = ' · до ' + dt.getDate() + '.' + ('0' + (dt.getMonth() + 1)).slice(-2);
+            until = ' · until ' + dt.getDate() + '.' + ('0' + (dt.getMonth() + 1)).slice(-2);
           } catch (e) {}
         }
         creds.style.display = 'none';
-        banner.innerHTML = '<span style="color:var(--good)">✓ Подключено по сохранённому токену'
+        banner.innerHTML = '<span style="color:var(--good)">✓ Connected with the saved token'
           + ' (Instance ' + instance + until + ')</span>'
           + ' <button type="button" class="ml-connect-btn" style="margin-left:0.5rem;font-size:0.72rem;padding:0.2rem 0.6rem"'
-          + ' onclick="mlListProfiles(\'' + cid + '\')">Профили</button>'
+          + ' onclick="mlListProfiles(\'' + cid + '\')">Profiles</button>'
           + ' <a href="#" style="margin-left:0.5rem;font-size:0.7rem;color:var(--muted)"'
           + ' onclick="event.preventDefault();this.parentNode.style.display=\'none\';'
-          + 'document.getElementById(\'ml-cred-fields-' + cid + '\').style.display=\'block\'">другой аккаунт</a>';
+          + 'document.getElementById(\'ml-cred-fields-' + cid + '\').style.display=\'block\'">another account</a>';
         mlListProfiles(cid);  // decision: alive token → straight to profiles
       } else {
         creds.style.display = 'block';
         banner.innerHTML = d.has_token
-          ? '<span style="color:var(--warn)">⚠ Сохранённый токен истёк — введи логин и пароль (раз в месяц)</span>'
+          ? '<span style="color:var(--warn)">⚠ The saved token has expired — enter login and password (once a month)</span>'
           : '';
         if (!d.has_token) banner.style.display = 'none';
       }
@@ -3134,7 +3134,7 @@ function mlListProfiles(cid) {
   var instance = _mlInstance[cid] || 'A';
   var profilesDiv = document.getElementById('ml-profiles-' + cid);
   var statusEl = document.getElementById('ml-status-' + cid);
-  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Загружаю профили…</span>';
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Loading profiles…</span>';
   fetch('/multilogin-search', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -3143,7 +3143,7 @@ function mlListProfiles(cid) {
   .then(function(r) { return r.json(); })
   .then(function(data) {
     if (!data.ok) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(data.error || 'Ошибка') + '</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(data.error || 'Error') + '</span>';
       return;
     }
     if (statusEl) statusEl.innerHTML = '';
@@ -3153,16 +3153,16 @@ function mlListProfiles(cid) {
     folders.forEach(function(f) { folderMap[f.folder_id] = f.name; });
     if (!profilesDiv) return;
     if (!profiles.length) {
-      profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">Профили не найдены.</span>'
+      profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">No profiles found.</span>'
         + '<div style="margin-top:0.5rem">'
-        + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Поиск профиля по имени…" style="width:100%;font-size:0.75rem">'
+        + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Search a profile by name…" style="width:100%;font-size:0.75rem">'
         + '<button type="button" class="ml-connect-btn" style="margin-top:0.35rem;font-size:0.75rem"'
-        + ' onclick="mlSearchByTerm(\'' + cid + '\', \'' + instance + '\')">🔍 Найти</button></div>';
+        + ' onclick="mlSearchByTerm(\'' + cid + '\', \'' + instance + '\')">🔍 Search</button></div>';
       return;
     }
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
-      + profiles.length + ' профил(ей)</div>'
-      + '<input type="text" class="cb-input" placeholder="фильтр по имени…" style="width:100%;font-size:0.74rem;margin-bottom:0.35rem"'
+      + profiles.length + ' profile(s)</div>'
+      + '<input type="text" class="cb-input" placeholder="filter by name…" style="width:100%;font-size:0.74rem;margin-bottom:0.35rem"'
       + ' oninput="(function(v){document.querySelectorAll(\'#ml-profile-list-' + cid + ' .ml-profile-row\')'
       + '.forEach(function(r){r.style.display = r.dataset.pname.indexOf(v.toLowerCase()) >= 0 ? \'\' : \'none\'})})(this.value)">'
       + '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
@@ -3221,13 +3221,13 @@ function mlSignin(cid) {
     if (!profiles.length) {
       var dbg = (data.debug || []).join(' | ');
       profilesDiv.innerHTML = '<span style="color:var(--warn);font-size:0.73rem">'
-        + '⚠ Профили не найдены. Попробуй набрать имя профиля в поиске ниже.<br>'
+        + '⚠ No profiles found. Try typing a profile name in the search below.<br>'
         + '<span style="color:var(--muted);font-size:0.68rem">debug: ' + aclEscHtml(dbg) + '</span>'
         + '</span>'
         + '<div style="margin-top:0.5rem">'
-        + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Поиск профиля по имени (напр. FacebookUL869)…" style="width:100%;font-size:0.75rem">'
+        + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Search a profile by name (e.g. FacebookUL869)…" style="width:100%;font-size:0.75rem">'
         + '<button type="button" class="ml-connect-btn" style="margin-top:0.35rem;font-size:0.75rem" '
-        + 'onclick="mlSearchByTerm(\'' + cid + '\', \'' + instance + '\')">🔍 Найти</button>'
+        + 'onclick="mlSearchByTerm(\'' + cid + '\', \'' + instance + '\')">🔍 Search</button>'
         + '</div>';
       return;
     }
@@ -3260,7 +3260,7 @@ function mlSignin(cid) {
 
     if (autoLinked.length) {
       profilesDiv.innerHTML = '<span style="color:var(--good);font-size:0.73rem">'
-        + '✓ Автоматически привязаны: ' + autoLinked.map(aclEscHtml).join(', ') + '</span>';
+        + '✓ Linked automatically: ' + autoLinked.map(aclEscHtml).join(', ') + '</span>';
       return;
     }
 
@@ -3270,8 +3270,8 @@ function mlSignin(cid) {
 
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' profile(s) from Instance ' + instance
-      + ' — найди нужный и нажми Use</div>';
-    html += '<input id="' + searchId + '" type="text" placeholder="Фильтр по имени профиля…" value="'
+      + ' — find the one you need and press Use</div>';
+    html += '<input id="' + searchId + '" type="text" placeholder="Filter by profile name…" value="'
       + aclEscHtml(firstAccTitle) + '"'
       + ' style="width:100%;box-sizing:border-box;margin-bottom:0.4rem;padding:0.28rem 0.5rem;'
       + 'background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.75rem"'
@@ -3298,14 +3298,14 @@ function mlManualSave(cid) {
   profileId = profileId.trim();
 
   if (!profileId) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Заполни profile_id</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Fill in profile_id</span>';
     return;
   }
 
   // Validate UUID format (loosely)
   var uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRe.test(profileId) || (folderId && !uuidRe.test(folderId))) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--warn)">⚠ Не похоже на UUID — проверь значения</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--warn)">⚠ Does not look like a UUID — check the values</span>';
   }
 
   // Scope to the current country panel so we never pick accounts from another geo.
@@ -3317,26 +3317,26 @@ function mlManualSave(cid) {
     .filter(Boolean);
 
   if (!accTitles.length) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Аккаунты не найдены на странице</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">No accounts found on the page</span>';
     return;
   }
 
   function doSave(accLabel) {
     var bodyHtml =
-      'Аккаунт: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br><br>'
+      'Account: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br><br>'
       + '<span style="color:var(--muted);font-size:0.71rem">'
       + 'folder_id: ' + aclEscHtml(folderId) + '<br>'
       + 'profile_id: ' + aclEscHtml(profileId)
       + '</span><br><br>'
-      + '<span style="color:var(--warn);font-size:0.74rem">⚠ Перезапишет текущие IDs в ad_account_map.csv</span>';
-    _safeConfirm('Сохранить IDs вручную?', bodyHtml, function() {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Сохраняю…</span>';
+      + '<span style="color:var(--warn);font-size:0.74rem">⚠ This overwrites the current IDs in ad_account_map.csv</span>';
+    _safeConfirm('Save IDs manually?', bodyHtml, function() {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Saving…</span>';
       _mlSaveIds(accLabel, folderId, profileId, 'A', null);
       // Show success after short delay
       setTimeout(function() {
-        if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Сохранено для ' + aclEscHtml(accLabel) + '</span>';
+        if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Saved for ' + aclEscHtml(accLabel) + '</span>';
       }, 800);
-    }, { confirmLabel: 'Сохранить' });
+    }, { confirmLabel: 'Save' });
   }
 
   if (accTitles.length === 1) {
@@ -3384,10 +3384,10 @@ function mlManualSave(cid) {
 function mlSearchByTerm(cid, instance) {
   var input = document.getElementById('ml-search-manual-' + cid);
   var term = input ? input.value.trim() : '';
-  if (!term) { alert('Введи поисковый запрос'); return; }
+  if (!term) { alert('Type something to search for'); return; }
   var profilesDiv = document.getElementById('ml-profiles-' + cid);
   var statusEl = document.getElementById('ml-status-' + cid);
-  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Ищу "' + aclEscHtml(term) + '"…</span>';
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Searching for "' + aclEscHtml(term) + '"…</span>';
 
   // Re-use last successful token from .env via a separate search call
   fetch('/multilogin-search', {
@@ -3398,7 +3398,7 @@ function mlSearchByTerm(cid, instance) {
   .then(function(r) { return r.json(); })
   .then(function(data) {
     if (!data.ok) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(data.error || 'Ошибка') + '</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(data.error || 'Error') + '</span>';
       return;
     }
     var profiles = data.profiles || [];
@@ -3406,20 +3406,20 @@ function mlSearchByTerm(cid, instance) {
     var folderMap = {};
     folders.forEach(function(f) { folderMap[f.folder_id] = f.name; });
     if (!profiles.length) {
-      if (profilesDiv) profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">По запросу "' + aclEscHtml(term) + '" ничего не найдено.</span>';
+      if (profilesDiv) profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">Nothing found for "' + aclEscHtml(term) + '" found nothing.</span>';
       return;
     }
     // Render same profile list as main signin
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
-      + profiles.length + ' результат(ов) по "' + aclEscHtml(term) + '"</div>';
+      + profiles.length + ' result(s) for "' + aclEscHtml(term) + '"</div>';
     html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
     html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     if (profilesDiv) profilesDiv.innerHTML = html;
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ найдено ' + profiles.length + '</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ found ' + profiles.length + '</span>';
   })
   .catch(function(e) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + aclEscHtml(e.message) + '</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Error: ' + aclEscHtml(e.message) + '</span>';
   });
 }
 
@@ -3428,10 +3428,10 @@ function mlStartDirect(cid) {
   var statusEl = document.getElementById('ml-direct-status-' + cid);
   var accountLabel = inputEl ? inputEl.value.trim() : '';
   if (!accountLabel) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Введи имя аккаунта</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Type the account name</span>';
     return;
   }
-  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Перезапускаю браузер…</span>';
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Restarting the browser…</span>';
   fetch('/multilogin-start-direct', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -3441,14 +3441,14 @@ function mlStartDirect(cid) {
   .then(function(d) {
     if (d.ok) {
       if (statusEl) statusEl.innerHTML =
-        '<span style="color:#4caf50">✓ Запущен — CDP: ' + (d.cdp_url || '') + '</span>';
+        '<span style="color:#4caf50">✓ Started — CDP: ' + (d.cdp_url || '') + '</span>';
     } else {
       if (statusEl) statusEl.innerHTML =
-        '<span style="color:var(--bad)">⚠ ' + aclEscHtml(d.error || 'ошибка') + '</span>';
+        '<span style="color:var(--bad)">⚠ ' + aclEscHtml(d.error || 'error') + '</span>';
     }
   })
   .catch(function(e) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + aclEscHtml(e.message) + '</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Error: ' + aclEscHtml(e.message) + '</span>';
   });
 }
 
@@ -3456,9 +3456,9 @@ function mlSaveToken(cid) {
   var ta = document.getElementById('ml-token-paste-' + cid);
   var statusEl = document.getElementById('ml-token-status-' + cid);
   var token = ta ? ta.value.trim() : '';
-  if (!token) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Вставь токен</span>'; return; }
+  if (!token) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Paste the token</span>'; return; }
   var instance = _mlInstance[cid] || 'A';
-  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Сохраняю…</span>';
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Saving…</span>';
   fetch('/multilogin-save-token', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -3467,12 +3467,12 @@ function mlSaveToken(cid) {
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.ok) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Токен сохранён в настройках машины</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Token saved in the machine settings</span>';
     } else {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(d.error || 'Ошибка') + '</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(d.error || 'Error') + '</span>';
     }
   })
-  .catch(function(e) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + aclEscHtml(e.message) + '</span>'; });
+  .catch(function(e) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Error: ' + aclEscHtml(e.message) + '</span>'; });
 }
 
 function mlTestToken(cid) {
@@ -3480,8 +3480,8 @@ function mlTestToken(cid) {
   var statusEl = document.getElementById('ml-token-status-' + cid);
   var token = ta ? ta.value.trim() : '';
   var instance = _mlInstance[cid] || 'A';
-  if (!token) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Вставь токен</span>'; return; }
-  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Сохраняю и проверяю…</span>';
+  if (!token) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Paste the token</span>'; return; }
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Saving and checking…</span>';
   fetch('/multilogin-save-token', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -3489,8 +3489,8 @@ function mlTestToken(cid) {
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
-    if (!d.ok) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(d.error||'Ошибка') + '</span>'; return; }
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Токен сохранён в настройках машины — загружаю профили…</span>';
+    if (!d.ok) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(d.error||'Error') + '</span>'; return; }
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Token saved in the machine settings — loading profiles…</span>';
     return fetch('/multilogin-search', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -3502,24 +3502,24 @@ function mlTestToken(cid) {
     if (!data) return;
     var profilesDiv = document.getElementById('ml-profiles-' + cid);
     if (!data.ok) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(data.error||'Ошибка при проверке токена') + '</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(data.error||'Error while checking the token') + '</span>';
       return;
     }
     var profiles = data.profiles || [];
     var folders  = data.folders  || [];
     var folderMap = {};
     folders.forEach(function(f) { folderMap[f.folder_id] = f.name; });
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Токен рабочий — ' + profiles.length + ' профиль(ей) загружено</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Token works — ' + profiles.length + ' profile(s) loaded</span>';
     if (!profiles.length) {
-      if (profilesDiv) profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">Профили не найдены (проверь workspace).</span>';
+      if (profilesDiv) profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">No profiles found (check the workspace).</span>';
       return;
     }
     // Scope to current country panel for default filter value.
     var _cpanel = document.getElementById('view-country-' + cid + '-open') || document;
     var firstAccTitle = ((_cpanel.querySelector('.cb-acc-title')||{}).textContent||'').split(' ')[0];
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
-      + profiles.length + ' profile(s) — найди нужный и нажми Use</div>';
-    html += '<input type="text" placeholder="Фильтр…" value="' + aclEscHtml(firstAccTitle) + '"'
+      + profiles.length + ' profile(s) — find the one you need and press Use</div>';
+    html += '<input type="text" placeholder="Filter…" value="' + aclEscHtml(firstAccTitle) + '"'
       + ' id="ml-search-' + cid + '"'
       + ' style="width:100%;box-sizing:border-box;margin-bottom:0.4rem;padding:0.28rem 0.5rem;'
       + 'background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.75rem"'
@@ -3530,7 +3530,7 @@ function mlTestToken(cid) {
     if (profilesDiv) profilesDiv.innerHTML = html;
     mlFilterProfiles(cid);
   })
-  .catch(function(e) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Ошибка: ' + aclEscHtml(e.message) + '</span>'; });
+  .catch(function(e) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Error: ' + aclEscHtml(e.message) + '</span>'; });
 }
 
 function mlFilterProfiles(cid) {
@@ -3562,16 +3562,16 @@ function mlUseProfile(folderId, profileId, instance, profileName, btn) {
 
   function confirmAndSave(accLabel) {
     var bodyHtml =
-      'ML-профиль: <strong style="color:var(--accent)">' + aclEscHtml(pName) + '</strong><br>'
-      + 'FB-аккаунт: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br><br>'
+      'ML profile: <strong style="color:var(--accent)">' + aclEscHtml(pName) + '</strong><br>'
+      + 'FB account: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br><br>'
       + '<span style="color:var(--muted);font-size:0.71rem">'
       + 'folder_id: ' + aclEscHtml(folderId) + '<br>'
       + 'profile_id: ' + aclEscHtml(profileId)
       + '</span><br><br>'
-      + '<span style="color:var(--warn);font-size:0.74rem">⚠ Это перезапишет текущие IDs в config/ad_account_map.csv</span>';
-    _safeConfirm('Привязать профиль к аккаунту?', bodyHtml, function() {
+      + '<span style="color:var(--warn);font-size:0.74rem">⚠ This overwrites the current IDs in config/ad_account_map.csv</span>';
+    _safeConfirm('Link this profile to the account?', bodyHtml, function() {
       _mlSaveIds(accLabel, folderId, profileId, inst, btn);
-    }, { confirmLabel: 'Сохранить' });
+    }, { confirmLabel: 'Save' });
   }
 
   if (accTitles.length === 1) {
@@ -3816,13 +3816,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
           media = '<img class="cbp-media" src="' + cbpEsc(url) + '" loading="lazy" alt="">';
         }
       } else {
-        media = '<div class="cbp-media-skel">выбери файл…</div>';
+        media = '<div class="cbp-media-skel">pick a file…</div>';
       }
 
       var copy = copyVal ? AD_TITLES.find(function(t) { return t.ad_title === copyVal; }) : null;
       var bodyHtml = copy && copy.body
         ? cbpEsc(copy.body)
-        : (copyVal ? cbpEsc(copyVal) : '<span class="cbp-skel-text">выбери текст…</span>');
+        : (copyVal ? cbpEsc(copyVal) : '<span class="cbp-skel-text">pick the copy…</span>');
       var headlineHtml = copy && copy.headline
         ? cbpEsc(copy.headline)
         : '<span class="cbp-skel-text">headline</span>';
@@ -4626,8 +4626,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
               // matched that, hit the guard, and silently never fixed the strip
               // it was written for.
               row.querySelectorAll('.cb-preflight .cb-pf-err').forEach(function (b) {
-                if (/настройки/.test(b.textContent || '')) {
-                  b.outerHTML = '<span class="cb-pf-ok">настроен ✓</span>';
+                if (/needs setup/.test(b.textContent || '')) {
+                  b.outerHTML = '<span class="cb-pf-ok">configured ✓</span>';
                 }
               });
             }
@@ -5334,10 +5334,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       return '<option value="' + escHtml(o.label) + '"' + (o.label === label ? ' selected' : '') + '>'
         + escHtml(o.label) + (o.loaded ? '' : ' (needs refresh)') + '</option>';
     }).join('');
-    bar.innerHTML = '<span class="cb-cart-count">🛒 Собираю в:</span>'
+    bar.innerHTML = '<span class="cb-cart-count">🛒 Building for:</span>'
       + '<select id="cb-cart-acc" class="cb-select" style="max-width:190px;font-size:0.74rem">' + optHtml + '</select>'
-      + '<span class="cb-cart-count">' + n.camps + ' камп · ' + n.ads + ' ад</span>'
-      + '<button type="button" id="cb-cart-open"' + (n.camps ? '' : ' disabled') + '>Открыть в билдере</button>'
+      + '<span class="cb-cart-count">' + n.camps + ' camp · ' + n.ads + ' ads</span>'
+      + '<button type="button" id="cb-cart-open"' + (n.camps ? '' : ' disabled') + '>Open in builder</button>'
       + '<button type="button" id="cb-cart-clear" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4)"'
       + (n.camps ? '' : ' disabled') + '>×</button>';
     bar.querySelector('#cb-cart-acc').onchange = function() {
@@ -5348,7 +5348,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     bar.querySelector('#cb-cart-clear').onclick = function() {
       delete all[country + '|' + label];
       cbCartSaveAll(all);
-      cbCartToast('Сборка очищена');
+      cbCartToast('Build cleared');
       cbCartBarRender();
     };
   }
@@ -5359,7 +5359,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var country = btn.dataset.country;
     var options = accountOptionsFor(country);
     var label = cbCartAccGet(country) || (options[0] && options[0].label) || '';
-    if (!label) { cbCartToast('Для этой страны нет аккаунтов'); return; }
+    if (!label) { cbCartToast('No accounts for this country'); return; }
     cbCartAccSet(country, label);
     var payload = {};
     try { payload = JSON.parse(btn.dataset.payload || '{}'); } catch (err) {}
@@ -5368,12 +5368,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var entry = all[key] || (all[key] = { country: country, accountLabel: label, campaigns: [] });
     if (btn.dataset.kind === 'campaign') {
       entry.campaigns.push({ src: { source: btn.dataset.source, payload: payload }, ads: [] });
-      cbCartToast('+ Кампания ' + entry.campaigns.length + ' → ' + label);
+      cbCartToast('+ Campaign ' + entry.campaigns.length + ' → ' + label);
     } else {
       var last = entry.campaigns[entry.campaigns.length - 1];
       if (!last) { last = { src: null, ads: [] }; entry.campaigns.push(last); }
       last.ads.push({ source: btn.dataset.source, payload: payload });
-      cbCartToast('+ Ad → Кампания ' + entry.campaigns.length + ' (' + label + ')');
+      cbCartToast('+ Ad → Campaign ' + entry.campaigns.length + ' (' + label + ')');
     }
     cbCartSaveAll(all);
     _cbCartTouched = true;
@@ -5397,11 +5397,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var label = cbCartAccGet(country);
     var all = cbCartLoadAll();
     var entry = all[country + '|' + label];
-    if (!entry || !entry.campaigns.length) { cbCartToast('Сборка пуста'); return; }
+    if (!entry || !entry.campaigns.length) { cbCartToast('Nothing in the build'); return; }
     var row = findAccountRow(country, label);
     if (!row) {
       sessionStorage.setItem('cbCartPending', JSON.stringify({ country: country, accountLabel: label }));
-      cbCartToast('Аккаунт не загружен — обновляю страницу…');
+      cbCartToast('Account not loaded — reloading the page…');
       fetch('/refresh', { method: 'POST' }).then(function() { location.reload(); }).catch(function() { location.reload(); });
       return;
     }
@@ -5475,7 +5475,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       cbCartBarRender();
       cbpRenderAll();
       row.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      cbCartToast('Собрано: ' + entry.campaigns.length + ' камп. → проверь и жми Preview');
+      cbCartToast('Built: ' + entry.campaigns.length + ' camp. → check it and press Preview');
     });
   }
 
@@ -5740,14 +5740,14 @@ window.rpaTakeover = function() {
       body: JSON.stringify({action:'pause'}) })
       .then(function() {
         _rpaPaused = true;
-        if (btn) { btn.textContent = '▶ Возобновить RPA'; btn.style.background = '#15803d'; }
+        if (btn) { btn.textContent = '▶ Resume RPA'; btn.style.background = '#15803d'; }
       });
   } else {
     fetch('/rpa-takeover', { method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({action:'resume'}) })
       .then(function() {
         _rpaPaused = false;
-        if (btn) { btn.textContent = '⏸ Пауза RPA'; btn.style.background = '#b45309'; }
+        if (btn) { btn.textContent = '⏸ Pause RPA'; btn.style.background = '#b45309'; }
       });
   }
 };
@@ -5969,15 +5969,15 @@ window.cbPublish = function(form) {
   var campCount = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '1'), 10) || 1;
 
   var bodyHtml =
-    'Аккаунт: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br>'
-    + 'Страна: <strong>' + aclEscHtml(country) + '</strong><br>'
-    + 'Кампаний: <strong>' + campCount + '</strong><br><br>'
-    + '<span style="color:var(--muted);font-size:0.85rem">RPA подключится к профилю Multilogin через MLX automation '
-    + '(профиль можно не открывать заранее; если открыт вручную — окно может перезапуститься).</span><br><br>'
-    + 'Режим: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
-    + 'Draft — RPA заполнит кампанию и оставит черновик в Ads Manager (кнопку Publish в Facebook не нажимает)</span>';
+    'Account: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br>'
+    + 'Country: <strong>' + aclEscHtml(country) + '</strong><br>'
+    + 'Campaigns: <strong>' + campCount + '</strong><br><br>'
+    + '<span style="color:var(--muted);font-size:0.85rem">The RPA attaches to the Multilogin profile through MLX automation '
+    + '(no need to open the profile first; if it is open by hand the window may restart).</span><br><br>'
+    + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
+    + 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)</span>';
 
-  _safeConfirm('Поднять кампанию как draft?', bodyHtml, function() {
+  _safeConfirm('Build this campaign as a draft?', bodyHtml, function() {
     _doCbPublish(form);
   }, { confirmLabel: 'Publish → draft' });
 };
@@ -5988,7 +5988,7 @@ function _doCbPublish(form) {
   if (!statusPanel) return;
 
   statusPanel.style.display = 'block';
-  statusPanel.innerHTML = '<div class="cb-status-title">Поднимаю кампанию (draft)…</div>';
+  statusPanel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
   if (publishBtn) publishBtn.disabled = true;
 
   var fd = cbCollectFormData(form);
@@ -6029,23 +6029,23 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var statusIcon = isCancelled ? '⏹'
       : (isCancelling ? '⏹'
       : (job.status === 'done' ? (jobPublishable ? '✓' : '❌') : '⏳'));
-    var doneLabel = isCancelled ? 'остановлено'
-      : (isCancelling ? 'останавливаю… (окно Multilogin останется открытым)'
+    var doneLabel = isCancelled ? 'stopped'
+      : (isCancelling ? 'stopping… (the Multilogin window stays open)'
       : (job.status === 'done'
         ? (jobPublishable
-          ? 'draft готов — кампания в Ads Manager, Publish не нажат'
-          : (hasFatal ? 'есть ошибки — не публиковать'
-            : 'draft заблокирован — не публиковать'))
-        : 'в процессе… (может занять 1–3 мин)'));
+          ? 'draft ready — the campaign is in Ads Manager, Publish was not clicked'
+          : (hasFatal ? 'errors — do not publish'
+            : 'draft blocked — do not publish'))
+        : 'running… (can take 1–3 min)'));
     var html = '<div class="cb-status-title">' + statusIcon + ' ' + done + '/' + total + ' — ' + doneLabel + '</div>';
     if (isRunning && !isCancelling) {
       html += '<div style="margin:0.5rem 0">'
         + '<button type="button" id="' + stopBtnId + '" '
         + 'style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#7f1d1d;color:#fff;'
         + 'border:1px solid #b91c1c;border-radius:4px;cursor:pointer">'
-        + '⏹ Остановить процесс</button>'
+        + '⏹ Stop the run</button>'
         + '<span style="font-size:0.7rem;color:var(--muted);margin-left:0.5rem">'
-        + 'прервёт RPA; окно Multilogin останется открытым</span></div>';
+        + 'stops the RPA; the Multilogin window stays open</span></div>';
     }
     (job.results || []).forEach(function(r) {
       // Three states, not two. `success` only says the automation reached the
@@ -6077,12 +6077,12 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         html += '<div class="cb-status-err"' + errStyle + '>' + aclEscHtml(r.error) + '</div>';
       }
       if (r.blocking_failures && r.blocking_failures.length) {
-        html += '<div class="cb-status-err">Не публиковать: '
+        html += '<div class="cb-status-err">Do not publish: '
              + r.blocking_failures.map(aclEscHtml).join(', ') + '</div>';
       }
       if (r.warnings && r.warnings.length) {
         html += '<div class="cb-status-err" style="color:#b45309;border-color:#b45309">'
-             + 'Предупреждения: ' + r.warnings.map(aclEscHtml).join(', ') + '</div>';
+             + 'Warnings: ' + r.warnings.map(aclEscHtml).join(', ') + '</div>';
       }
       if (r.steps_completed && r.steps_completed.length) {
         var stepsHtml = r.steps_completed.map(aclEscHtml).join(' → ');
@@ -6091,10 +6091,10 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
           && r.steps_completed.indexOf('teach_mode_website_still_failed') === -1;
         var teachCapture = r.steps_completed.indexOf('teach_website_captured') !== -1;
         var extra = teachWaiting
-          ? ' <span style="color:#3b82f6;font-weight:600">⏸ ждём клик Website</span>'
-          : (teachCapture ? ' <span style="color:#22c55e">✓ Website локатор захвачен</span>' : '');
+          ? ' <span style="color:#3b82f6;font-weight:600">⏸ waiting for a Website click</span>'
+          : (teachCapture ? ' <span style="color:#22c55e">✓ Website locator captured</span>' : '');
         html += '<div class="cb-status-steps" style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem">'
-          + 'Шаги: ' + stepsHtml + extra + '</div>';
+          + 'Steps: ' + stepsHtml + extra + '</div>';
       }
     });
     (job.errors || []).forEach(function(e) {
@@ -6109,12 +6109,12 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     stopBtn._bound = true;
     stopBtn.addEventListener('click', function() {
       stopBtn.disabled = true;
-      stopBtn.textContent = 'Останавливаю…';
+      stopBtn.textContent = 'Stopping…';
       fetch('/publish-jobs/' + jobId + '/cancel', { method: 'POST' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
           if (!data.ok) {
-            stopBtn.textContent = '⏹ Ошибка: ' + (data.error || '?');
+            stopBtn.textContent = '⏹ Error: ' + (data.error || '?');
             stopBtn.disabled = false;
           }
         })
@@ -6140,15 +6140,15 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
               + 'z-index:9999;background:#1e3a5f;color:#fff;border:2px solid #3b82f6;'
               + 'border-radius:10px;padding:1rem 1.5rem;max-width:480px;text-align:center;'
               + 'box-shadow:0 4px 24px rgba(0,0,0,0.5);font-size:0.92rem;line-height:1.5';
-            banner.innerHTML = '<strong style="font-size:1rem">Нужен ваш клик</strong><br>'
-              + 'RPA не смог выбрать <b>Website</b> автоматически.<br>'
-              + 'Кликни <b>Website</b> в открытом меню браузера, затем нажми кнопку ниже.<br><br>'
+            banner.innerHTML = '<strong style="font-size:1rem">We need your click</strong><br>'
+              + 'The RPA could not select <b>Website</b> on its own.<br>'
+              + 'Click <b>Website</b> in the open browser menu, then press the button below.<br><br>'
               + '<button onclick="rpaTeachResume()" style="padding:0.5rem 1.2rem;'
               + 'background:#3b82f6;color:#fff;border:none;border-radius:6px;'
-              + 'cursor:pointer;font-weight:700;font-size:0.9rem">Я кликнул Website — продолжить</button>'
+              + 'cursor:pointer;font-weight:700;font-size:0.9rem">I clicked Website — continue</button>'
               + '<button onclick="document.getElementById(\'rpa-teach-banner\').remove()" '
               + 'style="margin-left:0.7rem;padding:0.5rem 0.8rem;background:transparent;'
-              + 'color:#93c5fd;border:1px solid #3b82f6;border-radius:6px;cursor:pointer;font-size:0.85rem">Скрыть</button>';
+              + 'color:#93c5fd;border:1px solid #3b82f6;border-radius:6px;cursor:pointer;font-size:0.85rem">Hide</button>';
             document.body.appendChild(banner);
           }
           _teachBannerShown = true;
@@ -6163,15 +6163,15 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   window.rpaTeachResume = function() {
     var banner = document.getElementById('rpa-teach-banner');
     if (banner) {
-      banner.innerHTML = '<span style="color:#93c5fd">⏳ Возобновляю RPA…</span>';
+      banner.innerHTML = '<span style="color:#93c5fd">⏳ Resuming the RPA…</span>';
     }
     fetch('/rpa-teach/resume', { method: 'POST' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (banner) banner.remove();
-        if (!d.ok) { alert('Ошибка resume: ' + (d.error || '?')); }
+        if (!d.ok) { alert('Resume error: ' + (d.error || '?')); }
       })
-      .catch(function(e) { alert('Ошибка: ' + e.message); });
+      .catch(function(e) { alert('Error: ' + e.message); });
   };
 
   // Scroll to the status panel ONCE, when polling starts. Scrolling on
@@ -6186,7 +6186,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         // id is gone forever. Stop politely instead of polling a 404 (or
         // spamming "Failed to fetch" while the server is mid-restart).
         if (r.status === 404) {
-          statusPanel.innerHTML += '<div class="cb-status-fatal">Дешборд был перезапущен — статус этого прогона потерян. Обновите страницу (F5).</div>';
+          statusPanel.innerHTML += '<div class="cb-status-fatal">The dashboard was restarted — the status of this run is lost. Reload the page (F5).</div>';
           if (publishBtn) publishBtn.disabled = false;
           return null;
         }
@@ -6242,7 +6242,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       d.buyers.forEach(function (name) {
         var o = document.createElement('option');
         o.value = name;
-        o.textContent = name + (name === d.default ? ' (по умолчанию)' : '');
+        o.textContent = name + (name === d.default ? ' (default)' : '');
         if (name === d.selected) o.selected = true;
         sel.appendChild(o);
       });
@@ -6254,14 +6254,14 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     sel.disabled = true;
     // Switching reuses the parsed workbook, so this is seconds, not a cold
     // start — but it is not instant, and silence would read as a hang.
-    say('Переключаю на ' + name + '…');
+    say('Switching to ' + name + '…');
     fetch('/api/buyers', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: name })
     }).then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { sel.disabled = false; say(d.error || 'не удалось', 'err'); return; }
-        say('Обновляю…');
+        if (!d.ok) { sel.disabled = false; say(d.error || 'failed', 'err'); return; }
+        say('Refreshing…');
         location.reload();
       })
       .catch(function (e) { sel.disabled = false; say(String(e), 'err'); });
@@ -6314,17 +6314,17 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   }
 
   function profileOptions(current, suggested) {
-    var out = '<option value="">— выберите профиль —</option>';
+    var out = '<option value="">— pick a profile —</option>';
     openProfiles.forEach(function (p) {
       var shown = p.name || (p.profile_id.slice(0, 8) + '…');
-      var note = p.taken_by ? ' · занят: ' + p.taken_by
-               : (p.profile_id === suggested ? ' · похоже, этот' : '');
+      var note = p.taken_by ? ' · taken by: ' + p.taken_by
+               : (p.profile_id === suggested ? ' · looks like this one' : '');
       var sel = (p.profile_id === current || (!current && p.profile_id === suggested)) ? ' selected' : '';
       out += '<option value="' + esc(p.profile_id) + '"' + sel + '>' + esc(shown + note) + '</option>';
     });
     if (current && !openProfiles.some(function (p) { return p.profile_id === current; })) {
       out += '<option value="' + esc(current) + '" selected>'
-           + esc(current.slice(0, 8)) + '… (сохранён, профиль не открыт)</option>';
+           + esc(current.slice(0, 8)) + '… (saved, profile not open)</option>';
     }
     return out;
   }
@@ -6337,8 +6337,8 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var norm = function (x) { return x.toLowerCase().replace(/[^a-z0-9]/g, ''); };
     var hit = knownLabels.some(function (k) { return norm(k) === norm(v); });
     hint.style.color = hit ? 'var(--good)' : 'var(--warn)';
-    hint.textContent = hit ? '✓ такой аккаунт известен'
-                           : 'нет ни в таблице, ни в статистике — проверьте написание';
+    hint.textContent = hit ? '✓ this account is known'
+                           : 'not in the sheet and not in the stats — check the spelling';
   }
 
   function syncDerived() {
@@ -6346,7 +6346,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var nameField = el('ac-new-label'), adField = el('ac-new-adid');
     var text = el('ac-derived-text');
     if (!text) return;
-    if (!pid) { text.textContent = 'Профиль не выбран.'; return; }
+    if (!pid) { text.textContent = 'No profile selected.'; return; }
 
     var guessName = accountForProfile(pid);
     var guessAd = detectedFor(pid);
@@ -6356,10 +6356,10 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var name = (nameField && nameField.value) || guessName;
     var ad = (adField && adField.value) || guessAd;
     var parts = [];
-    parts.push(name ? 'Аккаунт: <b>' + esc(name) + '</b>'
-                    : '<span style="color:var(--warn)">имя не определилось</span>');
-    parts.push(ad ? 'Кабинет: <code>' + esc(ad) + '</code>'
-                  : '<span style="color:var(--warn)">кабинет не определился</span>');
+    parts.push(name ? 'Account: <b>' + esc(name) + '</b>'
+                    : '<span style="color:var(--warn)">name could not be worked out</span>');
+    parts.push(ad ? 'Ad account: <code>' + esc(ad) + '</code>'
+                  : '<span style="color:var(--warn)">ad account could not be worked out</span>');
     text.innerHTML = parts.join('&nbsp;&nbsp;·&nbsp;&nbsp;');
     if (nameField && nameField.value) checkLabel();
   }
@@ -6374,10 +6374,10 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var ad = ((el('ac-new-adid') || {}).value || '').trim() || detectedFor(pid);
     var country = ((el('ac-new-country') || {}).value || '').trim();
 
-    if (!name) { say('Имя не определилось — задайте вручную', 'err'); openManual(); return; }
+    if (!name) { say('Name could not be worked out — enter it manually', 'err'); openManual(); return; }
     // Строка без кабинета запишется, но в списке не появится: карта пропускает
     // записи без ad_account_id. Молча исчезнувший аккаунт хуже отказа.
-    if (!ad) { say('Кабинет не определился — задайте вручную', 'err'); openManual(); return; }
+    if (!ad) { say('Ad account could not be worked out — enter it manually', 'err'); openManual(); return; }
 
     var picked = openProfiles.filter(function (p) { return p.profile_id === pid; })[0];
     var payload = { account_name: name, ad_account_id: ad };
@@ -6387,15 +6387,15 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
 
     var btn = el('ac-add-btn');
     if (btn) btn.disabled = true;
-    say('Подключаю…');
+    say('Connecting…');
     fetch('/account-map-patch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).then(function (r) { return r.json(); })
       .then(function (d) {
         if (btn) btn.disabled = false;
-        if (!d.ok) { say(d.error || 'не удалось', 'err'); return; }
-        say('Подключён: ' + name, 'ok');
+        if (!d.ok) { say(d.error || 'failed', 'err'); return; }
+        say('Connected: ' + name, 'ok');
         ['ac-new-label', 'ac-new-adid', 'ac-new-country'].forEach(function (id) {
           var f = el(id); if (f) { f.value = ''; delete f.dataset.touched; }
         });
@@ -6410,7 +6410,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   function render(d) {
     var box = el('ac-list'); if (!box) return;
     if (!d || !d.ok) {
-      box.innerHTML = '<p style="color:var(--bad)">' + esc((d && d.error) || 'Не удалось загрузить') + '</p>';
+      box.innerHTML = '<p style="color:var(--bad)">' + esc((d && d.error) || 'Could not load') + '</p>';
       return;
     }
     openProfiles = d.open_profiles || [];
@@ -6419,40 +6419,40 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var connected = accs.filter(function (a) { return a.connected; }).length;
 
     var html = '<div class="acc-stats">'
-      + '<span><span class="acc-big">' + connected + '</span> из ' + accs.length + ' подключено</span>'
-      + '<span>открытых профилей: <b>' + openProfiles.length + '</b></span>'
-      + '<span>карта: <code>' + esc(d.map_path) + '</code></span>'
+      + '<span><span class="acc-big">' + connected + '</span> of ' + accs.length + ' connected</span>'
+      + '<span>open profiles: <b>' + openProfiles.length + '</b></span>'
+      + '<span>map: <code>' + esc(d.map_path) + '</code></span>'
       + '</div>';
 
     if (!openProfiles.length) {
-      html += '<p style="color:var(--warn);font-size:0.84rem">Ни один профиль Multilogin не открыт — '
-            + 'откройте профиль аккаунта, и он появится в выборе.</p>';
+      html += '<p style="color:var(--warn);font-size:0.84rem">No Multilogin profile is open — '
+            + 'open the profile for that account and it will appear in the list.</p>';
     }
 
     html += '<table class="acc-table"><thead><tr>'
-      + '<th class="col-pick"><input type="checkbox" id="ac-check-all" title="Выбрать все, которые можно убрать"></th>'
-      + '<th>Аккаунт</th><th>Страна</th><th>Кабинет</th><th>Профиль</th><th class="col-act"></th>'
+      + '<th class="col-pick"><input type="checkbox" id="ac-check-all" title="Select everything that can be removed"></th>'
+      + '<th>Account</th><th>Country</th><th>Ad account</th><th>Profile</th><th class="col-act"></th>'
       + '</tr></thead><tbody>';
 
     accs.forEach(function (a) {
       var removable = a.connected || a.local_only;
       var pill = a.connected
-        ? '<span class="acc-pill ok">подключён</span>'
-        : '<span class="acc-pill todo">нет: ' + esc(a.missing.join(', ')) + '</span>';
-      var local = a.local_only ? ' <span class="acc-pill local">только здесь</span>' : '';
+        ? '<span class="acc-pill ok">connected</span>'
+        : '<span class="acc-pill todo">missing: ' + esc(a.missing.join(', ')) + '</span>';
+      var local = a.local_only ? ' <span class="acc-pill local">only here</span>' : '';
       html += '<tr data-label="' + esc(a.label) + '">'
         + '<td class="col-pick">' + (removable
-            ? '<input type="checkbox" class="ac-check" aria-label="выбрать ' + esc(a.label) + '">' : '') + '</td>'
+            ? '<input type="checkbox" class="ac-check" aria-label="select ' + esc(a.label) + '">' : '') + '</td>'
         + '<td><div class="acc-name">' + esc(a.label) + '</div>'
         + '<div class="acc-meta">' + pill + local + '</div></td>'
         + '<td>' + countryCell(a) + '</td>'
         + '<td><input class="ac-adid" type="text" style="width:12rem" value="'
         + esc(a.ad_account_id || detectedFor(a.suggested_profile))
-        + '" placeholder="ссылка или act_…"></td>'
+        + '" placeholder="link or act_…"></td>'
         + '<td><select class="ac-prof" style="max-width:15rem">'
         + profileOptions(a.profile_id, a.suggested_profile) + '</select></td>'
-        + '<td class="col-act"><button type="button" class="acc-btn ac-save">Сохранить</button>'
-        + (removable ? ' <button type="button" class="acc-btn danger ac-drop">Убрать</button>' : '')
+        + '<td class="col-act"><button type="button" class="acc-btn ac-save">Save</button>'
+        + (removable ? ' <button type="button" class="acc-btn danger ac-drop">Remove</button>' : '')
         + ' <span class="ac-row-msg acc-meta"></span></td>'
         + '</tr>';
     });
@@ -6475,7 +6475,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       ldl.innerHTML = '';
       (d.suggestions || []).forEach(function (n) {
         var o = document.createElement('option'); o.value = n;
-        o.label = 'есть в статистике, здесь не подключён'; ldl.appendChild(o);
+        o.label = 'in the stats, not connected here'; ldl.appendChild(o);
       });
     }
     refreshBulk();
@@ -6485,7 +6485,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
 
   function load(force) {
     if (loaded && !force) return;
-    var box = el('ac-list'); if (box) box.textContent = 'Загрузка…';
+    var box = el('ac-list'); if (box) box.textContent = 'Loading…';
     fetch('/api/accounts-overview').then(function (r) { return r.json(); })
       .then(function (d) { loaded = true; render(d); })
       .catch(function (e) {
@@ -6507,14 +6507,14 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
 
     btn.disabled = true;
-    if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'сохраняю…'; }
+    if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'saving…'; }
     fetch('/account-map-patch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).then(function (r) { return r.json(); })
       .then(function (d) {
         btn.disabled = false;
-        if (!d.ok) { if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = d.error || 'ошибка'; } return; }
+        if (!d.ok) { if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = d.error || 'error'; } return; }
         if (msg) { msg.style.color = 'var(--good)'; msg.textContent = '✓'; }
         load(true);
         aclRefreshBuilderConfig();
@@ -6536,27 +6536,27 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     if (!bar || !label) return;
     var n = selected().length;
     bar.classList.toggle('on', n > 0);
-    label.textContent = 'Выбрано: ' + n;
+    label.textContent = 'Selected: ' + n;
   }
 
   function removeMany(labels) {
     if (!labels.length) return;
-    var list = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ' и ещё ' + (labels.length - 8) : '');
-    if (!window.confirm('Убрать ' + labels.length + ' аккаунт(ов) из карты ЭТОЙ машины?'
+    var list = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ' and ' + (labels.length - 8) + ' more' : '');
+    if (!window.confirm('Remove ' + labels.length + ' account(s) from the map of THIS machine?'
         + String.fromCharCode(10, 10) + list + String.fromCharCode(10, 10)
-        + 'Записи в общей таблице не изменятся.')) return;
+        + 'Nothing in the shared sheet changes.')) return;
     var btn = el('ac-bulk-drop');
     if (btn) btn.disabled = true;
-    say('Убираю ' + labels.length + '…');
+    say('Removing ' + labels.length + '…');
     fetch('/account-map-remove', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ account_names: labels })
     }).then(function (r) { return r.json(); })
       .then(function (d) {
         if (btn) btn.disabled = false;
-        if (!d.ok) { say(d.error || 'не удалось', 'err'); return; }
-        var m = 'Убрано: ' + (d.removed || []).length;
-        if ((d.missing || []).length) m += ' · не найдено: ' + d.missing.join(', ');
+        if (!d.ok) { say(d.error || 'failed', 'err'); return; }
+        var m = 'Removed: ' + (d.removed || []).length;
+        if ((d.missing || []).length) m += ' · not found: ' + d.missing.join(', ');
         say(m, 'ok'); load(true);
       })
       .catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); });
@@ -6565,10 +6565,10 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   function drop(btn) {
     var row = btn.closest('tr'); if (!row) return;
     var label = row.getAttribute('data-label');
-    if (!window.confirm('Убрать «' + label + '» из карты ЭТОЙ машины?'
+    if (!window.confirm('Remove "' + label + '" from the map of THIS machine?'
         + String.fromCharCode(10, 10)
-        + 'Аккаунт останется в общей таблице со всей историей — просто этот '
-        + 'компьютер перестанет знать, как до него дотянуться.')) return;
+        + 'The account stays in the shared sheet with all its history — this '
+        + 'computer simply stops knowing how to reach it.')) return;
     btn.disabled = true;
     fetch('/account-map-remove', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -6576,8 +6576,8 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     }).then(function (r) { return r.json(); })
       .then(function (d) {
         btn.disabled = false;
-        if (!d.ok) { say(d.error || 'не удалось', 'err'); return; }
-        say('Убран: ' + label, 'ok'); load(true);
+        if (!d.ok) { say(d.error || 'failed', 'err'); return; }
+        say('Removed: ' + label, 'ok'); load(true);
       })
       .catch(function (e) { btn.disabled = false; say(String(e), 'err'); });
   }
@@ -6618,7 +6618,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var rest = list.filter(function (c) { return c !== main; });
     var html = esc(main);
     if (rest.length) {
-      html += ' <span class="acc-pill" title="аккаунт числится и здесь">+ '
+      html += ' <span class="acc-pill" title="the account is listed here too">+ '
             + rest.map(esc).join(', ') + '</span>';
     }
     return html;
@@ -6666,10 +6666,10 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         return all.some(function (c) { return countryMatches(c, name); });
       });
       if (!mine.length) {
-        out.innerHTML = 'Подключённых на этой машине аккаунтов для ' + esc(name) + ' пока нет.';
+        out.innerHTML = 'No accounts connected on this machine for ' + esc(name) + ' yet.';
         return;
       }
-      out.innerHTML = 'Подключено на этой машине: '
+      out.innerHTML = 'Connected on this machine: '
         + mine.map(function (a) { return '<b>' + esc(a.label) + '</b>'; }).join(', ');
     });
   }
@@ -6705,22 +6705,22 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       msg.style.color = kind === 'err' ? 'var(--bad)' : (kind === 'ok' ? 'var(--good)' : 'var(--muted)');
       msg.textContent = t || '';
     };
-    if (!label) { show('Выберите профиль или укажите название', 'err'); return; }
-    if (!adid) { show('Кабинет не определился — вставьте ссылку', 'err'); return; }
+    if (!label) { show('Pick a profile or type a name', 'err'); return; }
+    if (!adid) { show('Ad account could not be worked out — paste the link', 'err'); return; }
 
     var picked = openProfiles.filter(function (p) { return p.profile_id === prof; })[0];
     var payload = { account_name: label, ad_account_id: adid, country: country };
     if (prof) payload.profile_id = prof;
     if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
 
-    btn.disabled = true; show('Подключаю…');
+    btn.disabled = true; show('Connecting…');
     fetch('/account-map-patch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).then(function (r) { return r.json(); })
       .then(function (d) {
         btn.disabled = false;
-        if (!d.ok) { show(d.error || 'не удалось', 'err'); return; }
+        if (!d.ok) { show(d.error || 'failed', 'err'); return; }
         show('✓ ' + label + ' → ' + country, 'ok');
         box.querySelector('.acq-label').value = '';
         box.querySelector('.acq-adid').value = '';
@@ -6807,11 +6807,11 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     if (!box) return;
     var list = (data && data.profiles) || [];
     if (!list.length) {
-      box.innerHTML = '<p><em>Библиотека пуста или таблица недоступна.</em></p>';
+      box.innerHTML = '<p><em>The library is empty or the sheet is unavailable.</em></p>';
       return;
     }
-    var html = '<p style="color:var(--muted);font-size:0.85rem">Всего: ' + list.length + '</p>'
-      + '<table><thead><tr><th>Название</th><th>Интересы</th><th>Сужение</th></tr></thead><tbody>';
+    var html = '<p style="color:var(--muted);font-size:0.85rem">Total: ' + list.length + '</p>'
+      + '<table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th></tr></thead><tbody>';
     list.forEach(function (p) {
       html += '<tr><td><b>' + esc(p.name) + '</b></td><td>' + esc(p.interests)
            + '</td><td>' + esc(p.narrow || '—') + '</td></tr>';
@@ -6826,8 +6826,8 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         addBox.style.opacity = '0.55';
         var btn = document.getElementById('tg-add-btn');
         if (btn) btn.disabled = true;
-        say('Добавление недоступно: на этой машине нет доступа Google на запись. '
-          + 'Выполните один раз: python scripts/acl_telemetry_upload.py', 'err');
+        say('Adding is unavailable: this machine has no Google write access. '
+          + 'Run once: python scripts/acl_telemetry_upload.py', 'err');
       }
     }
   }
@@ -6835,12 +6835,12 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   function load(force) {
     if (loaded && !force) return;
     var box = document.getElementById('tg-list');
-    if (box) box.textContent = 'Загрузка…';
+    if (box) box.textContent = 'Loading…';
     fetch('/api/targeting-profiles')
       .then(function (r) { return r.json(); })
       .then(function (d) { loaded = true; render(d); })
       .catch(function (e) {
-        if (box) box.innerHTML = '<p style="color:#b91c1c">Не удалось загрузить: ' + esc(e) + '</p>';
+        if (box) box.innerHTML = '<p style="color:#b91c1c">Could not load: ' + esc(e) + '</p>';
       });
   }
 
@@ -6850,7 +6850,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var narrow = (document.getElementById('tg-narrow') || {}).value || '';
     var btn = document.getElementById('tg-add-btn');
     if (btn) btn.disabled = true;
-    say('Сохраняю…');
+    say('Saving…');
     fetch('/api/targeting-profiles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -6859,8 +6859,8 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (btn) btn.disabled = false;
-        if (!res.ok || !res.d.ok) { say(res.d.error || 'Не удалось сохранить', 'err'); return; }
-        say('Добавлено: ' + res.d.profile.name + ' — теперь видно всем', 'ok');
+        if (!res.ok || !res.d.ok) { say(res.d.error || 'Could not save', 'err'); return; }
+        say('Added: ' + res.d.profile.name + ' — now visible to everyone', 'ok');
         ['tg-name', 'tg-interests', 'tg-narrow'].forEach(function (id) {
           var el = document.getElementById(id); if (el) el.value = '';
         });
@@ -6868,7 +6868,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       })
       .catch(function (e) {
         if (btn) btn.disabled = false;
-        say('Ошибка сети: ' + e, 'err');
+        say('Network error: ' + e, 'err');
       });
   }
 

@@ -88,7 +88,7 @@
               <td><button type="button" class="cb-cart-btn" data-kind="ad" data-source="ad"
                           data-country="{{ country | anchor_slug }}" data-country-name="{{ country }}"
                           data-payload='{{ r | tojson | e }}'
-                          title="В сборку: объявление в последнюю кампанию">+ 🛒</button></td>
+                          title="Add to build: ad in the last campaign">+ 🛒</button></td>
               {% elif section == 'cm_comparison' %}
               <td class="adset" style="max-width:300px;word-break:break-word">
                 {{ r.adset or '' }}
