@@ -1,0 +1,156 @@
+"""The header's Update button: what it offers, and what it refuses.
+
+Updating restarts the dashboard. Every refusal tested here is a case where
+clicking would have stopped a server that then never came back, or interrupted
+a campaign run halfway through Ads Manager. Those are the failures that cost a
+campaign manager their morning, and none of them is visible from the button.
+
+The happy path is tested with the process-exit stubbed out, for the obvious
+reason.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+
+import httpx
+import pytest
+
+from src.web import acl_update
+from src.web.app import app
+
+
+async def _request(method: str, path: str, **kwargs) -> httpx.Response:
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+        return await client.request(method, path, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _isolate(monkeypatch, tmp_path):
+    """Never touch this machine's real ACL config dir, and never inherit a cache."""
+    monkeypatch.setattr(acl_update, "get_local_config_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(acl_update, "schedule_exit", lambda *a, **k: None)
+    monkeypatch.setenv(acl_update.SUPERVISED_ENV, "1")
+    acl_update.forget_cache()
+    yield
+    acl_update.forget_cache()
+
+
+def _offer(**over):
+    state = {
+        "ok": True,
+        "available": True,
+        "current": {"sha": "a" * 40, "short": "a" * 12, "tag": "acl-release-2026-09-01"},
+        "candidate": {"sha": "b" * 40, "short": "b" * 12, "tag": "acl-release-2026-09-02"},
+        "note": "Update available.",
+        "supervised": True,
+    }
+    state.update(over)
+    return state
+
+
+# ── the marker, which is the whole contract with the launcher ──────────────
+
+def test_request_restart_writes_a_marker_the_launcher_looks_for(tmp_path):
+    path = acl_update.request_restart(target="acl-release-2026-09-02")
+
+    assert path == tmp_path / acl_update.RESTART_MARKER
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["reason"] == "update"
+    assert payload["target"] == "acl-release-2026-09-02"
+
+
+# ── refusals ───────────────────────────────────────────────────────────────
+
+def test_update_is_refused_when_no_launcher_is_watching(monkeypatch, tmp_path):
+    """Started from a terminal, exiting would leave no dashboard and no restart."""
+    monkeypatch.delenv(acl_update.SUPERVISED_ENV, raising=False)
+    monkeypatch.setattr(acl_update, "check", lambda **k: _offer())
+
+    response = asyncio.run(_request("POST", "/acl/update/apply"))
+
+    assert response.status_code == 409
+    assert "launcher" in response.json()["error"]
+    assert not (tmp_path / acl_update.RESTART_MARKER).exists()
+
+
+def test_update_is_refused_while_a_campaign_job_is_running(monkeypatch, tmp_path):
+    """A restart mid-run abandons a half-built campaign in Ads Manager."""
+    monkeypatch.setattr("src.web.publish_jobs.active_job_count", lambda: 2)
+    monkeypatch.setattr(acl_update, "check", lambda **k: _offer())
+
+    response = asyncio.run(_request("POST", "/acl/update/apply"))
+
+    assert response.status_code == 409
+    assert "2 campaign job(s)" in response.json()["error"]
+    assert not (tmp_path / acl_update.RESTART_MARKER).exists()
+
+
+def test_update_is_refused_when_the_gate_offers_nothing(monkeypatch, tmp_path):
+    monkeypatch.setattr("src.web.publish_jobs.active_job_count", lambda: 0)
+    monkeypatch.setattr(
+        acl_update,
+        "check",
+        lambda **k: _offer(available=False, candidate=None, note="ACL is up to date."),
+    )
+
+    response = asyncio.run(_request("POST", "/acl/update/apply"))
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "ACL is up to date."
+    assert not (tmp_path / acl_update.RESTART_MARKER).exists()
+
+
+# ── the happy path ─────────────────────────────────────────────────────────
+
+def test_accepted_update_leaves_the_marker_and_names_the_release(monkeypatch, tmp_path):
+    monkeypatch.setattr("src.web.publish_jobs.active_job_count", lambda: 0)
+    monkeypatch.setattr(acl_update, "check", lambda **k: _offer())
+
+    response = asyncio.run(_request("POST", "/acl/update/apply"))
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "target": "acl-release-2026-09-02"}
+    payload = json.loads((tmp_path / acl_update.RESTART_MARKER).read_text(encoding="utf-8"))
+    assert payload["target"] == "acl-release-2026-09-02"
+
+
+# ── the check, which runs on every page load ───────────────────────────────
+
+def test_check_never_breaks_the_page_when_git_is_unusable(monkeypatch):
+    """No network, no git, a zip download — the dashboard still has to render."""
+    monkeypatch.setattr(acl_update, "_git_out", lambda *a, **k: "")
+
+    response = asyncio.run(_request("GET", "/acl/update/check?fetch=0"))
+
+    assert response.status_code == 200
+    assert response.json()["available"] is False
+
+
+def test_check_offers_nothing_for_a_commit_that_is_not_a_release(monkeypatch):
+    """A newer commit on master is not the same thing as a promoted release."""
+    monkeypatch.setattr(
+        acl_update,
+        "_git_out",
+        lambda *a, **k: "b" * 40 if a[:2] == ("rev-parse", "origin/master^{commit}") else "a" * 40,
+    )
+    monkeypatch.setattr(acl_update, "_git", lambda *a, **k: pytest.fail("must not fetch"))
+    monkeypatch.setattr(
+        "scripts.acl_update_gate.validate_candidate",
+        lambda *a, **k: (False, "origin/master is not the exact target of an ACL release tag"),
+    )
+
+    result = acl_update.check(fetch=False, use_cache=False)
+
+    assert result["available"] is False
+    assert "not a promoted release" in result["note"]
+
+
+def test_check_reports_nothing_to_do_when_head_is_the_channel(monkeypatch):
+    monkeypatch.setattr(acl_update, "_git_out", lambda *a, **k: "a" * 40)
+
+    result = acl_update.check(fetch=False, use_cache=False)
+
+    assert result["available"] is False
+    assert result["note"] == "ACL is up to date."

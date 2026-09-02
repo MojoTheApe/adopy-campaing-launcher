@@ -108,6 +108,17 @@ def cancel_job(job_id: str) -> dict[str, Any]:
     return {"ok": True, "job_id": job_id}
 
 
+def active_job_count() -> int:
+    """Jobs still working. An ACL update restarts the server, and a restart in
+    the middle of a run leaves a half-built campaign in Ads Manager with nobody
+    watching — so the update button asks this first."""
+    with _jobs_lock:
+        return sum(
+            1 for job in _jobs.values()
+            if job.get("status") in {"pending", "running", "cancelling"}
+        )
+
+
 def _is_cancelled(job_id: str) -> bool:
     with _jobs_lock:
         job = _jobs.get(job_id)

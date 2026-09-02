@@ -509,6 +509,72 @@ async def health() -> JSONResponse:
     return JSONResponse({"app": "ACL", "ok": True})
 
 
+@app.get("/acl/update/check")
+async def acl_update_check(request: Request) -> JSONResponse:
+    """Is a newer promoted release waiting? Answers the header's Update button.
+
+    Reached on every page load, so it must never raise and never block for long:
+    a machine with no network still has a dashboard to run.
+    """
+    from src.web import acl_update
+
+    skip_fetch = (request.query_params.get("fetch") or "1").strip().lower() in {"0", "false", "no"}
+    try:
+        return JSONResponse(acl_update.check(fetch=not skip_fetch))
+    except Exception as exc:  # pragma: no cover - defensive
+        return JSONResponse(
+            {"ok": False, "available": False, "note": f"Update check failed: {exc}"}
+        )
+
+
+@app.post("/acl/update/apply")
+async def acl_update_apply() -> JSONResponse:
+    """Hand the update to the launcher and stop, so it can restart us into it.
+
+    Every refusal below is a case where clicking would have produced a dashboard
+    that does not come back: no supervising launcher, a run in flight, or a
+    candidate the launcher would reject anyway.
+    """
+    from src.web import acl_update
+    from src.web.publish_jobs import active_job_count
+
+    if not acl_update.is_supervised():
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "ACL was not started by its launcher, so nothing would "
+                         "bring it back. Start it from the desktop shortcut and "
+                         "try again.",
+            },
+            status_code=409,
+        )
+
+    busy = active_job_count()
+    if busy:
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": f"{busy} campaign job(s) still running. Updating restarts "
+                         "ACL, which would abandon them half-built.",
+            },
+            status_code=409,
+        )
+
+    acl_update.forget_cache()
+    state = acl_update.check(fetch=True, use_cache=False)
+    if not state.get("available"):
+        return JSONResponse(
+            {"ok": False, "error": state.get("note") or "No promoted release to install."},
+            status_code=400,
+        )
+
+    candidate = state.get("candidate") or {}
+    target = candidate.get("tag") or candidate.get("short") or ""
+    acl_update.request_restart(target=target)
+    acl_update.schedule_exit()
+    return JSONResponse({"ok": True, "target": target})
+
+
 def _enrich_country_overview(report: Dict[str, Any]) -> None:
     """Ensure per-country my_totals / my_spend for home overview (cached reports)."""
     for country in report.get("countries", []):

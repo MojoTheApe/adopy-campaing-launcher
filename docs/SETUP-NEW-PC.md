@@ -2,7 +2,7 @@
 
 Windows 10/11. About 30 minutes. No coding needed.
 
-**Release to install: `acl-release-2026-09-01`**
+**Release to install: `acl-release-2026-09-02b`**
 
 ---
 
@@ -12,7 +12,6 @@ You cannot finish without them. They are deliberately not in GitHub.
 
 - [ ] GitHub access to `MojoTheApe/adopy-campaing-launcher`
 - [ ] **Your CM name** — exact spelling from the stats workbook
-- [ ] **Accounts Google Sheet ID**
 - [ ] **`oauth_client.json`** file
 - [ ] **Multilogin** login, your profile names, and the automation token
 - [ ] The three work files: `cursor example.xlsx`, `Upluad FB.xlsx`, `Creatives` folder
@@ -24,9 +23,9 @@ Get the token and the OAuth file through the password manager — never by chat 
 ## Step 1 — Install three programs
 
 **Why these:** ACL is a Python program, so a machine without Python has nothing
-to run it with. Git is how ACL is downloaded **and how it updates itself** —
-the launcher checks for a new approved release every time it starts, and
-refuses anything that is not a verified one. Both are one-time installs.
+to run it with. Git is how ACL is downloaded **and how it updates** —
+the dashboard offers an **Update** button when a verified new release
+exists, and refuses anything that is not one. Both are one-time installs.
 
 Open **PowerShell** from the Start menu and paste these two lines:
 
@@ -143,7 +142,26 @@ Google will ask you to sign in once. Use your company account and approve read-o
 
 ## Step 7 — Connect your accounts
 
-In the dashboard, open the **Аккаунты** section and pick your open Multilogin profile for each account. That is all — you do **not** need to edit any spreadsheet.
+In the dashboard, open the **Accounts** section and pick your open Multilogin profile for each account. That is all — you do **not** need to edit any spreadsheet.
+
+---
+
+## Keeping ACL up to date
+
+When a new verified release exists, an **Update** button appears in the
+dashboard header, next to Refresh. Press it and confirm. ACL restarts itself and
+the page reloads on its own — usually under a minute. Do not close the black
+window while it works.
+
+If the new version does not start, ACL puts the old one back by itself and says
+so in the black window. You are never left without a working dashboard.
+
+The button is absent when there is nothing to install, and it refuses while a
+campaign run is in progress — a restart mid-run would leave a half-built
+campaign in Ads Manager.
+
+Nothing updates on its own. Nothing you configured is touched: your name, files,
+accounts and tokens live outside the ACL folder.
 
 ---
 

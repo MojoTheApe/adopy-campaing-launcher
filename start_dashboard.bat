@@ -109,7 +109,18 @@ REM git-pulled from under someone mid-edit, so the marker is written solely on
 REM a fresh install. Network/release-gate failures keep the installed version.
 REM A candidate that was already activated and then failed is rolled back and
 REM this invocation stops so the restored launcher can be read from disk.
-if exist "%LOCALAPPDATA%\ACL\auto_update" (
+REM Two ways in. `auto_update` is fleet enrollment and stays off. `update_once`
+REM is written by the launcher itself when the dashboard's Update button asked
+REM for a restart - a deliberate click, not a background surprise. It is deleted
+REM BEFORE the update runs: a candidate that fails must not be retried on every
+REM start for the rest of the machine's life.
+set "UPDATE_NOW="
+if exist "%LOCALAPPDATA%\ACL\auto_update" set "UPDATE_NOW=1"
+if exist "%LOCALAPPDATA%\ACL\update_once" (
+    del "%LOCALAPPDATA%\ACL\update_once" >nul 2>&1
+    set "UPDATE_NOW=1"
+)
+if defined UPDATE_NOW (
     git rev-parse --git-dir >nul 2>&1
     if not errorlevel 1 call :update
     if errorlevel 20 (
@@ -132,6 +143,10 @@ if not errorlevel 1 (
 
 :portfree
 echo Starting server on port %PORT%...
+REM Tells the dashboard a launcher is watching it, which is what makes the
+REM header's Update button safe to offer: without this the button would stop a
+REM server nothing would ever start again.
+set "ACL_SUPERVISED=1"
 start "" /b "%PY%" serve.py --port %PORT%
 
 REM Open the browser once ACL's lightweight health route answers. The report
@@ -165,10 +180,43 @@ start "" "%URL%"
 echo.
 echo Keep this window open. Close it to stop the dashboard.
 echo.
-REM Hold the window so closing it also stops the server.
+REM Hold the window so closing it also stops the server - and watch for the one
+REM thing the dashboard cannot do for itself. Clicking Update in the header
+REM writes this marker and exits the server; the update then runs here, on the
+REM same gated path as a normal start, with the same rollback.
+set "RESTART_MARKER=%LOCALAPPDATA%\ACL\restart_request.json"
 :hold
-timeout /t 30 >nul
-goto hold
+timeout /t 3 >nul
+if not exist "%RESTART_MARKER%" goto hold
+
+REM Swap the markers before doing anything else. Leaving the request file in
+REM place would restart this machine forever if the next step failed.
+del "%RESTART_MARKER%" >nul 2>&1
+echo requested by the dashboard>"%LOCALAPPDATA%\ACL\update_once"
+
+echo.
+echo Update requested from the dashboard - restarting ACL...
+REM Wait for the old server to release the port. Relaunching first would find a
+REM healthy dashboard, decide there is nothing to do, and open the browser on
+REM the version we were asked to replace.
+set /a WAIT=0
+:waitdown
+curl -fsS -o nul -m 2 "%HEALTH_URL%" 2>nul
+if errorlevel 1 goto isdown
+set /a WAIT+=1
+if %WAIT% GEQ 30 (
+    echo.
+    echo ERROR: the dashboard did not stop, so it was not updated.
+    echo Close this window and start ACL again.
+    pause
+    exit /b 1
+)
+timeout /t 1 >nul
+goto waitdown
+
+:isdown
+start "" "%~f0"
+exit /b 0
 
 REM ---------------------------------------------------------------------------
 REM Reached only via `call` above.

@@ -284,7 +284,20 @@
     }
     .brand-meta strong { color: var(--text); font-weight: 500; }
     .brand-meta .meta-sep { margin: 0 0.45rem; color: var(--border-strong); }
-    form.refresh { margin-left: auto; }
+    form.refresh { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+    /* Shown only when a promoted release is actually waiting, so an ordinary
+       day's header carries no extra control at all. */
+    form.refresh button.acl-update {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+    }
+    form.refresh button.acl-update:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      filter: brightness(1.1);
+    }
+    form.refresh button[hidden] { display: none; }
     form.refresh button {
       background: var(--bg-elev);
       color: var(--accent);
@@ -1603,6 +1616,7 @@
     <span id="buyer-msg" style="font-size:0.75rem;color:var(--muted)"></span>
   </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
+    <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
     <button type="submit" id="dash-refresh-btn">Refresh</button>
   </form>
 </header>
@@ -1640,6 +1654,94 @@ async function dashRefresh(ev) {
   }
   return false;
 }
+
+// ── Update to a newer ACL release ────────────────────────────────────────
+// Refresh reloads the DATA; this reloads ACL itself. They stay two buttons on
+// purpose: Refresh is pressed many times a day, and a code update restarts the
+// server, so putting them on one control would restart ACL every time someone
+// wanted fresh numbers.
+//
+// The button is absent unless a promoted release is actually waiting, so it can
+// never be the control that "does nothing when I press it".
+(function aclUpdateControl() {
+  var btn = document.getElementById('acl-update-btn');
+  if (!btn) return;
+
+  fetch('/acl/update/check', { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (s) {
+      if (!s || !s.available || !s.supervised) return;
+      var name = (s.candidate && (s.candidate.tag || s.candidate.short)) || '';
+      btn.textContent = 'Update ACL';
+      btn.title = 'A newer release is available' + (name ? ': ' + name : '')
+        + '. Installing takes a minute and restarts the dashboard.';
+      btn.hidden = false;
+      btn.dataset.target = name;
+    })
+    .catch(function () { /* offline, or not a git install — no button, no noise */ });
+
+  btn.addEventListener('click', function () {
+    if (btn.disabled) return;
+    var name = btn.dataset.target || 'the latest release';
+    if (!confirm('Update ACL to ' + name + '?\n\n'
+      + 'The dashboard will restart and this page will reload by itself. '
+      + 'It usually takes under a minute. Do not close the black ACL window.')) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Updating…';
+    fetch('/acl/update/apply', {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+    })
+      .then(function (r) { return r.json().catch(function () { return null; }); })
+      .then(function (data) {
+        if (!data || data.ok !== true) {
+          btn.disabled = false;
+          btn.textContent = 'Update ACL';
+          alert('Update not started: ' + ((data && data.error) || 'unknown error'));
+          return;
+        }
+        aclWaitForRestart();
+      })
+      .catch(function () {
+        // The server may well have exited before the reply reached us; that is
+        // success, not failure, so wait rather than reporting an error.
+        aclWaitForRestart();
+      });
+  });
+
+  // The launcher builds an isolated runtime for the new release before starting
+  // it, which on a slow machine is a few minutes of nothing to see. Say so, and
+  // keep saying it, rather than leaving a frozen page.
+  function aclWaitForRestart() {
+    var started = Date.now();
+    var LIMIT_MS = 10 * 60 * 1000;
+    var wentDown = false;
+    (function poll() {
+      var secs = Math.round((Date.now() - started) / 1000);
+      btn.textContent = 'Updating… ' + secs + 's';
+      if (Date.now() - started > LIMIT_MS) {
+        btn.disabled = false;
+        btn.textContent = 'Update ACL';
+        alert('ACL did not come back within 10 minutes. Check the black ACL '
+          + 'window — it says what happened, and the previous version is '
+          + 'restored automatically if the new one did not start.');
+        return;
+      }
+      fetch('/health', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (h) {
+          // Only reload once the server has actually gone away and returned.
+          // Without this the first poll finds the old process still shutting
+          // down and reloads straight back onto the version we are replacing.
+          if (h && h.ok && wentDown) { location.reload(); return; }
+          setTimeout(poll, 2000);
+        })
+        .catch(function () { wentDown = true; setTimeout(poll, 2000); });
+    })();
+  }
+})();
 </script>
 
 {% if warnings %}

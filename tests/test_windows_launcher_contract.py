@@ -65,6 +65,51 @@ def test_installer_does_not_silently_enable_fleet_updates() -> None:
     assert "scripts\\acl_runtime_manager.py recover-pending" in installer
 
 
+def test_dashboard_button_update_is_a_one_shot_that_cannot_loop() -> None:
+    """The marker is consumed BEFORE the update, not after it succeeds.
+
+    Otherwise a candidate that fails to build would be retried on every single
+    start, for the rest of that machine's life, with the buyer watching a minute
+    of "checking for updates" before every morning's work.
+    """
+    launcher = _text("start_dashboard.bat")
+
+    update_once = launcher.index('del "%LOCALAPPDATA%\\ACL\\update_once"')
+    assert update_once < launcher.index("call :update")
+    assert 'del "%RESTART_MARKER%"' in launcher
+
+
+def test_dashboard_restart_waits_for_the_old_server_to_stop() -> None:
+    """Relaunching too early finds a healthy dashboard and skips the update."""
+    launcher = _text("start_dashboard.bat")
+
+    waitdown = launcher.index(":waitdown")
+    assert launcher.index('start "" "%~f0"', waitdown) > waitdown
+    assert "the dashboard did not stop, so it was not updated" in launcher
+
+
+def test_only_the_launcher_declares_itself_the_supervisor() -> None:
+    """The Update button is offered on the strength of this flag alone."""
+    launcher = _text("start_dashboard.bat")
+
+    assert 'set "ACL_SUPERVISED=1"' in launcher
+    assert launcher.index('set "ACL_SUPERVISED=1"') < launcher.index("serve.py --port %PORT%")
+    assert "ACL_SUPERVISED" not in _text("serve.py")
+
+
+def test_the_dashboard_never_moves_its_own_working_tree() -> None:
+    """Only the launcher updates code, because only it can roll the update back.
+
+    A live server that replaces its own files keeps serving from whatever it
+    already imported and loads the new version for anything imported later —
+    two releases answering the same page, with no way back.
+    """
+    module = _text("src/web/acl_update.py")
+
+    for forbidden in ("checkout", "merge", "reset", "pull", "clean", "stash"):
+        assert f'"{forbidden}"' not in module, f"the dashboard must not run git {forbidden}"
+
+
 def test_stable_enrollment_requires_exact_promoted_release() -> None:
     enrollment = _text("enable_stable_updates.bat")
 
