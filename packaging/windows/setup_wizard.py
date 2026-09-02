@@ -254,6 +254,25 @@ def write_ready_state(config_directory: str | Path, version: str) -> None:
     os.replace(temp, path)
 
 
+def sanitized_setup_summary(pack: SetupPack, version: str) -> str:
+    """Return a support-safe completion summary with no identity or identifiers."""
+    instances = sorted({assignment.multilogin_instance for assignment in pack.accounts})
+    return "\n".join(
+        (
+            "ACL setup summary",
+            f"Installer version: {version}",
+            "Status: ready",
+            f"Assigned accounts: {len(pack.accounts)} (labels and IDs omitted)",
+            f"Multilogin instances: {', '.join(instances)}",
+            "Google Sheet: read verified (ID omitted)",
+            "Local workbooks and Creatives folder: validated (paths omitted)",
+            "Safety mode: RPA / recorded_flow / attach-only",
+            "Automatic updates: disabled",
+            "Campaign actions during setup: none",
+        )
+    )
+
+
 class SetupWizard:
     STEPS = (
         "Welcome",
@@ -480,6 +499,19 @@ class SetupWizard:
         self._text("ACL setup is complete on this computer.", bold=True, color="#17663a")
         self._text("No campaign action was performed. The first campaign run must remain supervised.")
         self._text("Click Close; ACL will open the local dashboard.")
+        self.tk.Button(
+            self.body,
+            text="Copy sanitized setup summary",
+            command=self._copy_summary,
+        ).pack(anchor="w", pady=10)
+
+    def _copy_summary(self) -> None:
+        if not self.pack:
+            return
+        version = self.version_text.splitlines()[0].removeprefix("ACL ")
+        self.root.clipboard_clear()
+        self.root.clipboard_append(sanitized_setup_summary(self.pack, version))
+        self.status.set("Sanitized setup summary copied.")
 
     def _run_worker(self, work: Callable[[], str], done: Callable[[str], None]) -> None:
         if self.busy:

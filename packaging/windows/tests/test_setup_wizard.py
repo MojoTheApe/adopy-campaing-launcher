@@ -13,11 +13,13 @@ if str(PACKAGING_DIR) not in sys.path:
 
 from setup_wizard import (
     WizardValidationError,
+    sanitized_setup_summary,
     setup_is_complete,
     validate_creatives_directory,
     validate_stats_workbook,
     write_ready_state,
 )
+from setup_pack import validate_setup_document
 
 
 class SetupWizardTests(unittest.TestCase):
@@ -41,6 +43,32 @@ class SetupWizardTests(unittest.TestCase):
     def test_missing_stats_workbook_is_actionable(self):
         with self.assertRaisesRegex(WizardValidationError, "does not exist"):
             validate_stats_workbook("missing.xlsx")
+
+    def test_setup_summary_omits_identity_and_account_identifiers(self):
+        account_id = "act_" + ("7" * 15)
+        sheet_id = "sheet" + ("x" * 30)
+        pack = validate_setup_document(
+            {
+                "schema": 1,
+                "campaign_manager": {"name": "Private Person", "accounts_sheet": sheet_id},
+                "accounts": [
+                    {
+                        "account_name": "Private Account Label",
+                        "ad_account_id": account_id,
+                        "page_id": "7" * 15,
+                        "multilogin_instance": "A",
+                        "folder_id": "private-folder-id",
+                        "profile_id": "private-profile-id",
+                    }
+                ],
+            }
+        )
+        summary = sanitized_setup_summary(pack, "0.1.0-test")
+        self.assertNotIn("Private Person", summary)
+        self.assertNotIn("Private Account Label", summary)
+        self.assertNotIn(account_id, summary)
+        self.assertNotIn(sheet_id, summary)
+        self.assertIn("Assigned accounts: 1", summary)
 
 
 if __name__ == "__main__":
