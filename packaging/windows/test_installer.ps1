@@ -60,8 +60,10 @@ if (-not ((Get-Content $Sentinel -Raw).Contains("preserve-me"))) {
 }
 
 $StartMenuShortcut = Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs/ACL/Open ACL.lnk"
+$SetupShortcut = Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs/ACL/Setup ACL.lnk"
 $DesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "ACL.lnk"
 Assert-Exists $StartMenuShortcut "Start Menu shortcut"
+Assert-Exists $SetupShortcut "Setup Wizard shortcut"
 Assert-Exists $DesktopShortcut "Desktop shortcut"
 
 Write-Host "Proving the installed bundle does not need Python or Git on PATH..."
@@ -119,6 +121,7 @@ if (Test-Path $InstallDirectory) { throw "Version directory remains after uninst
 if (Test-Path $CurrentManifest) { throw "current.json remains after uninstall: $CurrentManifest" }
 Assert-Exists $Sentinel "Preserved machine configuration"
 if (Test-Path $StartMenuShortcut) { throw "Start Menu shortcut remains after uninstall." }
+if (Test-Path $SetupShortcut) { throw "Setup Wizard shortcut remains after uninstall." }
 if (Test-Path $DesktopShortcut) { throw "Desktop shortcut remains after uninstall." }
 
 Write-Host "ACL installer install/launch/repair/uninstall test OK."

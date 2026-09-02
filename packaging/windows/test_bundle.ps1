@@ -31,6 +31,10 @@ Write-Host "Checking packaged imports..."
 & $Executable --smoke-check
 Assert-LastExitCode "Packaged import smoke check"
 
+Write-Host "Checking packaged Setup Wizard imports..."
+& $Executable --wizard-smoke-check
+Assert-LastExitCode "Packaged Setup Wizard import check"
+
 New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
 Remove-Item $StdoutLog, $StderrLog -Force -ErrorAction SilentlyContinue
 

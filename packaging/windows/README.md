@@ -39,3 +39,22 @@ CI proves that the frozen pilot baseline can be packaged, installed without a
 source checkout, started twice, repaired, and uninstalled while preserving an
 existing configuration sentinel. Automatic updates remain disabled for the
 installer pilot.
+
+## Campaign-manager setup pack
+
+The recommended first-run path uses a personal `.aclsetup` ZIP. Support starts
+from `setup-pack.example.json`, replaces every example value, adds the approved
+OAuth client, and runs:
+
+```powershell
+python packaging/windows/create_setup_pack.py `
+  --setup-json path/to/setup.json `
+  --oauth-client path/to/oauth_client.json `
+  --output path/to/campaign-manager.aclsetup
+```
+
+The utility and first-run wizard reject unknown fields, archive path traversal,
+placeholder values, duplicate account labels/IDs, missing Multilogin mappings,
+and Google user tokens. Valid configuration is written transactionally under
+`%LOCALAPPDATA%\ACL`; the wizard fixes the production safety mode and cannot
+execute campaign actions.

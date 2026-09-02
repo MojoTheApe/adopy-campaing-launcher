@@ -41,6 +41,9 @@ datas = [
 # Uvicorn chooses its event loop, HTTP implementation and lifespan handler at
 # runtime. PyInstaller cannot infer those string-based imports statically.
 hiddenimports = collect_submodules("uvicorn") + playwright_hiddenimports + [
+    "setup_pack",
+    "setup_wizard",
+    "tkinter",
     "scripts.acl_runtime_manager",
     "scripts.acl_smoke",
     "src.analysis_agent.morning_report",

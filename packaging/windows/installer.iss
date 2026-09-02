@@ -61,6 +61,7 @@ Source: "{#CurrentManifest}"; DestDir: "{localappdata}\Programs\ACL"; DestName: 
 
 [Icons]
 Name: "{autoprograms}\ACL\Open ACL"; Filename: "{app}\ACL.exe"; WorkingDir: "{localappdata}\ACL\workspace"
+Name: "{autoprograms}\ACL\Setup ACL"; Filename: "{app}\ACL.exe"; Parameters: "--setup"
 Name: "{autoprograms}\ACL\Settings"; Filename: "{app}\ACL.exe"; Parameters: "--settings"
 Name: "{autoprograms}\ACL\Diagnostics"; Filename: "{app}\ACL.exe"; Parameters: "--diagnostics"
 Name: "{autoprograms}\ACL\Uninstall ACL"; Filename: "{uninstallexe}"

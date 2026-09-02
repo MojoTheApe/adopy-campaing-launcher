@@ -315,16 +315,35 @@ def main() -> int:
         from scripts.acl_smoke import main as smoke_main
 
         return smoke_main()
+    if "--wizard-smoke-check" in args:
+        import tkinter  # noqa: F401
+        from setup_pack import validate_setup_document  # noqa: F401
+        from setup_wizard import setup_is_complete  # noqa: F401
+
+        if sys.stdout is not None:
+            print("ACL Setup Wizard import check OK.")
+        return 0
     if "--stop-server" in args:
         return _stop_server()
     if "--settings" in args:
         return _open_local_directory("")
     if "--diagnostics" in args:
         return _open_local_directory("diagnostics")
+    if "--setup" in args:
+        from setup_wizard import run_setup_wizard
+
+        run_setup_wizard(_local_acl_dir(), _version_text())
+        return 0
     if "--launcher-test" in args:
         return _launch_normal(open_browser=False)
     if "--server" in args or "--no-browser" in args:
         return _run_server(args)
+    if not _is_acl_healthy(DEFAULT_PORT):
+        from setup_wizard import run_setup_wizard, setup_is_complete
+
+        if not setup_is_complete(_local_acl_dir()):
+            if not run_setup_wizard(_local_acl_dir(), _version_text()):
+                return 0
     return _launch_normal()
 
 
