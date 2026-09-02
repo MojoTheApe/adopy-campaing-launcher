@@ -7,9 +7,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from openpyxl import Workbook
-
-
 PACKAGING_DIR = Path(__file__).resolve().parents[1]
 if str(PACKAGING_DIR) not in sys.path:
     sys.path.insert(0, str(PACKAGING_DIR))
@@ -68,6 +65,10 @@ class SetupWizardTests(unittest.TestCase):
         self.assertEqual(validate_campaign_manager_name("  Anna Smith  "), "Anna Smith")
 
     def test_manual_setup_discovers_only_this_managers_accounts(self):
+        try:
+            from openpyxl import Workbook
+        except ImportError:
+            self.skipTest("openpyxl is installed in the packaging job")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             stats = root / "stats.xlsx"
