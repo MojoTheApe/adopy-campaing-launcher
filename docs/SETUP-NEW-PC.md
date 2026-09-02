@@ -23,20 +23,42 @@ Get the token and the OAuth file through the password manager — never by chat 
 
 ## Step 1 — Install three programs
 
-| Program | Notes |
-|---|---|
-| **Git for Windows** | Default options are fine |
-| **Python 3.11 or newer, 64-bit** | Tick **"Add python.exe to PATH"** during install |
-| **Multilogin Desktop** | Sign in, open each of your profiles once, close them, leave the app running |
+**Why these:** ACL is a Python program, so a machine without Python has nothing
+to run it with. Git is how ACL is downloaded **and how it updates itself** —
+the launcher checks for a new approved release every time it starts, and
+refuses anything that is not a verified one. Both are one-time installs.
 
-Check in PowerShell:
+Open **PowerShell** from the Start menu and paste these two lines:
+
+```powershell
+winget install --id Git.Git -e
+winget install --id Python.Python.3.13 -e
+```
+
+Then **close PowerShell and open it again**, and check both are there:
 
 ```powershell
 git --version
 python --version
 ```
 
-If `python` is not recognised, re-run the Python installer with "Add to PATH" ticked and restart Windows.
+You should see a version number for each. If `python` is not recognised even
+after reopening PowerShell, restart Windows and try again.
+
+<details>
+<summary>If winget is not available on this PC</summary>
+
+Download and run the installers by hand:
+
+- **Git for Windows** — https://git-scm.com/download/win — default options are fine
+- **Python 3.11 or newer, 64-bit** — https://www.python.org/downloads/ —
+  **tick "Add python.exe to PATH"** on the first installer screen
+
+</details>
+
+**Third program: Multilogin Desktop.** Install it, sign in to the workspace,
+open each of your assigned profiles once so it exists on this PC, close them,
+and leave Multilogin Desktop running.
 
 ---
 
@@ -139,7 +161,7 @@ In the dashboard, open the **Аккаунты** section and pick your open Multi
 
 | Problem | Fix |
 |---|---|
-| `python is not recognized` | Reinstall Python with "Add to PATH", restart Windows |
+| `python is not recognized` | Close and reopen PowerShell. Still missing — restart Windows. |
 | GitHub asks for a password | Sign in with the company GitHub account Evgeni gave access to |
 | Doctor says a file is missing | Fix that exact path in `.env` — full path, forward slashes |
 | Doctor says Multilogin profiles missing | Open each of your profiles once in Multilogin Desktop |
