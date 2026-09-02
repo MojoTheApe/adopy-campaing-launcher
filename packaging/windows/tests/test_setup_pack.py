@@ -16,6 +16,7 @@ from setup_pack import SetupPackError, apply_setup_pack, load_setup_pack
 
 
 def valid_document() -> dict:
+    ad_account_id = "act_" + ("9" * 15)
     return {
         "schema": 1,
         "campaign_manager": {
@@ -25,11 +26,11 @@ def valid_document() -> dict:
         "accounts": [
             {
                 "account_name": "FacebookACL574 EC",
-                "ad_account_id": "act_987654321098765",
-                "page_id": "987654321098765",
+                "ad_account_id": ad_account_id,
+                "page_id": "9" * 15,
                 "multilogin_instance": "A",
-                "folder_id": "11111111-1111-4111-8111-111111111111",
-                "profile_id": "22222222-2222-4222-8222-222222222222",
+                "folder_id": "test-folder-id-111",
+                "profile_id": "test-profile-id-222",
             }
         ],
     }
@@ -51,7 +52,7 @@ class SetupPackTests(unittest.TestCase):
 
         self.assertEqual(pack.campaign_manager_name, "Dmitry Operator")
         self.assertEqual(pack.accounts[0].multilogin_instance, "A")
-        self.assertEqual(pack.accounts[0].ad_account_id, "act_987654321098765")
+        self.assertEqual(pack.accounts[0].ad_account_id, "act_" + ("9" * 15))
 
     def test_unknown_fields_and_duplicate_accounts_are_rejected(self):
         document = valid_document()
@@ -64,7 +65,7 @@ class SetupPackTests(unittest.TestCase):
 
         document = valid_document()
         document["accounts"].append(dict(document["accounts"][0]))
-        document["accounts"][1]["profile_id"] = "33333333-3333-4333-8333-333333333333"
+        document["accounts"][1]["profile_id"] = "test-profile-id-333"
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "duplicate.aclsetup"
             write_pack(path, document)
@@ -118,7 +119,7 @@ class SetupPackTests(unittest.TestCase):
             self.assertIn('FB_RPA_ENGINE="recorded_flow"', env)
             self.assertIn('FB_PUBLISH_BACKEND="rpa"', env)
             account_map = (config / "ad_account_map.csv").read_text(encoding="utf-8")
-            self.assertIn("FacebookACL574 EC,act_987654321098765", account_map)
+            self.assertIn("FacebookACL574 EC,act_" + ("9" * 15), account_map)
 
 
 if __name__ == "__main__":

@@ -35,6 +35,10 @@ Write-Host "Checking packaged Setup Wizard imports..."
 & $Executable --wizard-smoke-check
 Assert-LastExitCode "Packaged Setup Wizard import check"
 
+Write-Host "Checking sanitized diagnostic export..."
+& $Executable --diagnostics-smoke-check
+Assert-LastExitCode "Packaged diagnostic export check"
+
 New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
 Remove-Item $StdoutLog, $StderrLog -Force -ErrorAction SilentlyContinue
 

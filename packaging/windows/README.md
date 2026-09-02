@@ -58,3 +58,11 @@ placeholder values, duplicate account labels/IDs, missing Multilogin mappings,
 and Google user tokens. Valid configuration is written transactionally under
 `%LOCALAPPDATA%\ACL`; the wizard fixes the production safety mode and cannot
 execute campaign actions.
+
+## Support diagnostics
+
+The Start Menu action `Create diagnostic bundle` writes a bounded ZIP under
+`%LOCALAPPDATA%\ACL\diagnostics`. It contains version/platform/readiness facts
+and sanitized recent launcher logs. It never includes `.env`, account-map
+rows, OAuth clients, Google tokens, or Multilogin token values. A final denylist
+scan aborts export if a prohibited token/account pattern survives sanitizing.

@@ -19,7 +19,7 @@ OAUTH_DOCUMENT = "oauth_client.json"
 ALLOWED_ARCHIVE_FILES = {SETUP_DOCUMENT, OAUTH_DOCUMENT}
 SHEET_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{20,200}\Z")
 OBJECT_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{8,128}\Z")
-AD_ACCOUNT_PATTERN = re.compile(r"act_\d+\Z")
+AD_ACCOUNT_PATTERN = re.compile(r"act_\d{10,20}\Z")
 PAGE_ID_PATTERN = re.compile(r"\d+\Z")
 PLACEHOLDER_MARKERS = (
     "assigned account",

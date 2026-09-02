@@ -323,6 +323,15 @@ def main() -> int:
         if sys.stdout is not None:
             print("ACL Setup Wizard import check OK.")
         return 0
+    if "--export-diagnostics" in args or "--diagnostics-smoke-check" in args:
+        from diagnostics import export_diagnostics
+
+        output = export_diagnostics(_local_acl_dir(), _manifest_path())
+        if "--diagnostics-smoke-check" in args and sys.stdout is not None:
+            print(f"ACL diagnostic export OK: {output}")
+        else:
+            _show_message("ACL diagnostics", f"Sanitized diagnostic bundle created:\n\n{output}")
+        return 0
     if "--stop-server" in args:
         return _stop_server()
     if "--settings" in args:
