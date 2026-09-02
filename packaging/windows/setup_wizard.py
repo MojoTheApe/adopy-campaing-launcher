@@ -13,7 +13,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from setup_pack import SetupPack, SetupPackError, apply_setup_pack, load_setup_pack
+from machine_config import (
+    AccountAssignment,
+    MachineConfiguration,
+    MachineConfigError,
+    apply_machine_configuration,
+    extract_sheet_id,
+    validate_oauth_client,
+)
 
 
 STATS_COLUMNS = {
@@ -110,6 +117,136 @@ def validate_creatives_directory(path: str) -> str:
     return str(directory.resolve())
 
 
+def validate_campaign_manager_name(value: str) -> str:
+    name = (value or "").strip()
+    if len(name) < 2:
+        raise WizardValidationError("Enter your name exactly as it appears in the Stats workbook.")
+    if len(name) > 120:
+        raise WizardValidationError("Campaign manager name is too long.")
+    if any(marker in name.casefold() for marker in ("campaign manager name", "your name", "example")):
+        raise WizardValidationError("Replace the example campaign manager name with your own name.")
+    return name
+
+
+def validate_google_access_file(path: str) -> tuple[str, bytes]:
+    client_path = Path(path)
+    if not client_path.is_file():
+        raise WizardValidationError("Choose the company Google access file supplied by support.")
+    try:
+        raw = client_path.read_bytes()
+        validate_oauth_client(raw)
+    except MachineConfigError as exc:
+        raise WizardValidationError(f"The company Google access file is invalid: {exc}") from exc
+    return str(client_path.resolve()), raw
+
+
+def _normalise_ad_account_id(raw: str) -> str:
+    import re
+
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    match = re.search(r"act[=_](\d{6,})", text, re.IGNORECASE) or re.search(
+        r"(?<!\d)(\d{8,})(?!\d)", text
+    )
+    return f"act_{match.group(1)}" if match else ""
+
+
+def build_manual_setup(
+    *,
+    campaign_manager_name: str,
+    accounts_sheet: str,
+    oauth_client_path: str,
+    stats_workbook: str,
+    upload_workbook: str,
+) -> MachineConfiguration:
+    """Build machine configuration from fields entered in the setup wizard.
+
+    Account labels come from the Stats workbook and ad-account IDs are filled
+    from the Upload FB workbook when available. Multilogin profile connections
+    remain blank intentionally: ACL's Accounts screen lets the user connect an
+    open, human-readable profile without ever typing a UUID.
+    """
+    from openpyxl import load_workbook
+
+    name = validate_campaign_manager_name(campaign_manager_name)
+    try:
+        sheet_id = extract_sheet_id(accounts_sheet)
+    except MachineConfigError as exc:
+        raise WizardValidationError(str(exc)) from exc
+    _oauth_path, oauth_raw = validate_google_access_file(oauth_client_path)
+
+    workbook = load_workbook(stats_workbook, read_only=True, data_only=True)
+    try:
+        sheet = workbook[workbook.sheetnames[0]]
+        rows = sheet.iter_rows(values_only=True)
+        headers = [str(value or "").strip() for value in next(rows)]
+        by_name = {header.casefold(): index for index, header in enumerate(headers)}
+        if "cm" not in by_name or "account alias" not in by_name:
+            raise WizardValidationError("Stats workbook is missing CM or Account Alias columns.")
+        cm_index = by_name["cm"]
+        account_index = by_name["account alias"]
+        aliases: dict[str, str] = {}
+        for row in rows:
+            manager = str(row[cm_index] or "").strip() if cm_index < len(row) else ""
+            alias = str(row[account_index] or "").strip() if account_index < len(row) else ""
+            if manager.casefold() == name.casefold() and alias:
+                aliases.setdefault(alias.casefold(), alias)
+    finally:
+        workbook.close()
+
+    if not aliases:
+        raise WizardValidationError(
+            "No accounts were found for this campaign manager in the Stats workbook. "
+            "Check the name or ask support."
+        )
+
+    upload_book = load_workbook(upload_workbook, read_only=True, data_only=True)
+    try:
+        account_sheet = upload_book["Accounts"]
+        upload_rows = account_sheet.iter_rows(values_only=True)
+        upload_headers = [str(value or "").strip().casefold() for value in next(upload_rows)]
+        if "account" not in upload_headers:
+            raise WizardValidationError("Upload FB workbook Accounts sheet is missing the Account column.")
+        account_col = upload_headers.index("account")
+        ad_id_col = upload_headers.index("ad account id") if "ad account id" in upload_headers else None
+        upload_ids: dict[str, str] = {}
+        token_ids: dict[str, set[str]] = {}
+        for row in upload_rows:
+            label = str(row[account_col] or "").strip() if account_col < len(row) else ""
+            raw_id = (
+                str(row[ad_id_col] or "").strip()
+                if ad_id_col is not None and ad_id_col < len(row)
+                else ""
+            )
+            normalized_id = _normalise_ad_account_id(raw_id)
+            if not label or not normalized_id:
+                continue
+            upload_ids[label.casefold()] = normalized_id
+            token = label.split()[0].casefold()
+            token_ids.setdefault(token, set()).add(normalized_id)
+    finally:
+        upload_book.close()
+
+    assignments = []
+    for alias in sorted(aliases.values(), key=str.casefold):
+        ad_account_id = upload_ids.get(alias.casefold(), "")
+        if not ad_account_id:
+            matches = token_ids.get(alias.split()[0].casefold(), set())
+            ad_account_id = next(iter(matches)) if len(matches) == 1 else ""
+        assignments.append(
+            AccountAssignment(
+                account_name=alias,
+                ad_account_id=ad_account_id,
+                page_id="",
+                multilogin_instance="A",
+                folder_id="",
+                profile_id="",
+            )
+        )
+    return MachineConfiguration(name, sheet_id, tuple(assignments), oauth_raw)
+
+
 def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[ReadinessCheck]:
     config_dir = Path(config_directory)
     checks: list[ReadinessCheck] = []
@@ -152,22 +289,22 @@ def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[
     return checks
 
 
-def test_google_read_access(pack: SetupPack, config_directory: str | Path) -> str:
+def test_google_read_access(configuration: MachineConfiguration, config_directory: str | Path) -> str:
     """Run read-only OAuth and verify that the assigned spreadsheet is readable."""
     config_dir = Path(config_directory)
     config_dir.mkdir(parents=True, exist_ok=True)
     existing_client = config_dir / "oauth_client.json"
     temporary_client: Path | None = None
-    if pack.oauth_client is not None:
+    if configuration.oauth_client:
         handle, temp_name = tempfile.mkstemp(prefix="acl-oauth-client-", suffix=".json")
         with os.fdopen(handle, "wb") as stream:
-            stream.write(pack.oauth_client)
+            stream.write(configuration.oauth_client)
         client_path = Path(temp_name)
         temporary_client = client_path
     elif existing_client.is_file():
         client_path = existing_client
     else:
-        raise WizardValidationError("The setup pack does not contain a Google OAuth client.")
+        raise WizardValidationError("The company Google access file is missing.")
 
     try:
         from src.analysis_agent.gsheet_accounts import _build_sheets_service_oauth
@@ -179,7 +316,7 @@ def test_google_read_access(pack: SetupPack, config_directory: str | Path) -> st
         if service is None:
             raise WizardValidationError("Google authorization did not complete.")
         service.spreadsheets().get(
-            spreadsheetId=pack.accounts_sheet_id,
+            spreadsheetId=configuration.accounts_sheet_id,
             fields="spreadsheetId",
         ).execute()
         return "Company Google Sheet is readable with read-only access."
@@ -192,51 +329,39 @@ def test_google_read_access(pack: SetupPack, config_directory: str | Path) -> st
             temporary_client.unlink(missing_ok=True)
 
 
-def test_multilogin_access(pack: SetupPack, tokens: dict[str, str]) -> str:
-    """Validate tokens and confirm every assigned folder/profile is returned."""
-    import requests
+def test_multilogin_access(tokens: dict[str, str]) -> str:
+    """Validate at least one Multilogin automation token.
 
-    matched = 0
-    for instance in sorted({assignment.multilogin_instance for assignment in pack.accounts}):
-        token = tokens.get(instance, "").strip()
-        if not token:
-            raise WizardValidationError(f"Multilogin token {instance} is required.")
+    Individual ad-account/profile connections are completed in ACL's Accounts
+    screen after setup, where the user can choose an open profile by name.
+    """
+    import urllib.error
+    import urllib.request
+
+    provided = {instance: token.strip() for instance, token in tokens.items() if token.strip()}
+    if not provided:
+        raise WizardValidationError("Paste the Multilogin access code supplied by support.")
+    verified = []
+    for instance, token in sorted(provided.items()):
         try:
-            response = requests.get(
-                "https://launcher.mlx.yt:45001/api/v2/profile",
+            request = urllib.request.Request(
+                "https://api.multilogin.com/workspace/folders",
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-                timeout=30,
             )
-        except requests.RequestException as exc:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                status = int(getattr(response, "status", 200))
+        except urllib.error.HTTPError as exc:
+            status = exc.code
+        except (OSError, urllib.error.URLError) as exc:
             raise WizardValidationError(
                 "Cannot reach Multilogin Launcher. Make sure Multilogin is installed, running, and signed in."
             ) from exc
-        if response.status_code == 401:
+        if status == 401:
             raise WizardValidationError(f"Multilogin rejected token {instance}.")
-        if response.status_code >= 400:
-            raise WizardValidationError(f"Multilogin returned HTTP {response.status_code}.")
-        body = response.json()
-        profiles = body if isinstance(body, list) else body.get("data") or body.get("profiles") or []
-        returned = {
-            (
-                str(profile.get("folder_id") or profile.get("folderId") or ""),
-                str(profile.get("profile_id") or profile.get("uuid") or profile.get("id") or ""),
-            )
-            for profile in profiles
-            if isinstance(profile, dict)
-        }
-        expected = {
-            (assignment.folder_id, assignment.profile_id)
-            for assignment in pack.accounts
-            if assignment.multilogin_instance == instance
-        }
-        missing = expected - returned
-        if missing:
-            raise WizardValidationError(
-                f"Multilogin instance {instance} is missing {len(missing)} assigned profile(s)."
-            )
-        matched += len(expected)
-    return f"Matched all {matched} assigned Multilogin profile(s)."
+        if status >= 400:
+            raise WizardValidationError(f"Multilogin returned HTTP {status}.")
+        verified.append(instance)
+    return f"Multilogin connection verified ({', '.join(verified)})."
 
 
 def write_ready_state(config_directory: str | Path, version: str) -> None:
@@ -254,15 +379,15 @@ def write_ready_state(config_directory: str | Path, version: str) -> None:
     os.replace(temp, path)
 
 
-def sanitized_setup_summary(pack: SetupPack, version: str) -> str:
+def sanitized_setup_summary(configuration: MachineConfiguration, version: str) -> str:
     """Return a support-safe completion summary with no identity or identifiers."""
-    instances = sorted({assignment.multilogin_instance for assignment in pack.accounts})
+    instances = sorted({assignment.multilogin_instance for assignment in configuration.accounts})
     return "\n".join(
         (
-            "ACL setup summary",
+            "Adopy Campaign Launcher setup summary",
             f"Installer version: {version}",
-            "Status: ready",
-            f"Assigned accounts: {len(pack.accounts)} (labels and IDs omitted)",
+            "Status: base setup ready; account connection continues in the dashboard",
+            f"Assigned accounts: {len(configuration.accounts)} (labels and IDs omitted)",
             f"Multilogin instances: {', '.join(instances)}",
             "Google Sheet: read verified (ID omitted)",
             "Local workbooks and Creatives folder: validated (paths omitted)",
@@ -277,7 +402,7 @@ class SetupWizard:
     STEPS = (
         "Welcome",
         "System check",
-        "Setup pack",
+        "Your workspace",
         "Local files",
         "Google access",
         "Multilogin",
@@ -293,20 +418,23 @@ class SetupWizard:
         self.config_directory = config_directory
         self.version_text = version_text
         self.step = 0
-        self.pack: SetupPack | None = None
+        self.configuration: MachineConfiguration | None = None
         self.google_ok = False
         self.multilogin_ok = False
         self.completed = False
         self.busy = False
-        self.pack_path = tk.StringVar()
-        self.stats_path = tk.StringVar()
-        self.upload_path = tk.StringVar()
-        self.creatives_path = tk.StringVar()
+        self.campaign_manager_name = tk.StringVar(value=self._existing_env_value("MY_CM_NAME"))
+        self.accounts_sheet = tk.StringVar(value=self._existing_env_value("GSHEET_ACCOUNTS_ID"))
+        existing_oauth = self.config_directory / "oauth_client.json"
+        self.oauth_client_path = tk.StringVar(value=str(existing_oauth) if existing_oauth.is_file() else "")
+        self.stats_path = tk.StringVar(value=self._existing_env_value("FB_STATS_EXCEL"))
+        self.upload_path = tk.StringVar(value=self._existing_env_value("UPLOAD_FB_EXCEL"))
+        self.creatives_path = tk.StringVar(value=self._existing_env_value("FB_CREATIVES_ROOT"))
         self.token_a = tk.StringVar(value=self._existing_env_value("MULTILOGIN_AUTOMATION_TOKEN_A"))
         self.token_b = tk.StringVar(value=self._existing_env_value("MULTILOGIN_AUTOMATION_TOKEN_B"))
         self.status = tk.StringVar()
 
-        root.title("ACL Setup")
+        root.title("Adopy Campaign Launcher Setup")
         root.geometry("780x590")
         root.minsize(720, 540)
         root.protocol("WM_DELETE_WINDOW", self._close)
@@ -375,7 +503,7 @@ class SetupWizard:
         renderers: tuple[Callable[[], None], ...] = (
             self._welcome,
             self._system,
-            self._pack,
+            self._identity,
             self._files,
             self._google,
             self._multilogin,
@@ -385,7 +513,7 @@ class SetupWizard:
         renderers[self.step]()
 
     def _welcome(self) -> None:
-        self._text("Set up ACL on this computer", bold=True)
+        self._text("Set up Adopy Campaign Launcher on this computer", bold=True)
         self._text(self.version_text)
         self._text(
             "This wizard only configures the local application. It cannot create, publish, or change a campaign."
@@ -394,39 +522,33 @@ class SetupWizard:
 
     def _system(self) -> None:
         self.system_checks = system_readiness(self.config_directory)
-        self._text("ACL checks this computer automatically; Python and Git are not prerequisites.")
+        self._text("The installer checks this computer automatically; Python and Git are not prerequisites.")
         for check in self.system_checks:
             self._text(
                 f"{'✓' if check.ok else '✕'}  {check.label} — {check.detail}",
                 color="#17663a" if check.ok else "#9b1c1c",
             )
 
-    def _pack(self) -> None:
+    def _identity(self) -> None:
         from tkinter import filedialog
 
-        self._text("Choose the personal .aclsetup file supplied through the approved company channel.")
+        self._text("Enter your own workspace details. The installer creates the technical settings for you.")
+        self.tk.Label(self.body, text="Your name (as written in the Stats workbook)", anchor="w").pack(fill="x")
+        self.tk.Entry(self.body, textvariable=self.campaign_manager_name).pack(fill="x", pady=(2, 12))
+        self.tk.Label(self.body, text="Company Accounts Google Sheet link", anchor="w").pack(fill="x")
+        self.tk.Entry(self.body, textvariable=self.accounts_sheet).pack(fill="x", pady=(2, 12))
+        self.tk.Label(self.body, text="Company Google access file", anchor="w").pack(fill="x")
         row = self.tk.Frame(self.body)
-        row.pack(fill="x", pady=(8, 16))
-        self.tk.Entry(row, textvariable=self.pack_path).pack(side="left", fill="x", expand=True)
+        row.pack(fill="x", pady=(2, 12))
+        self.tk.Entry(row, textvariable=self.oauth_client_path).pack(side="left", fill="x", expand=True)
 
         def choose() -> None:
-            selected = filedialog.askopenfilename(filetypes=[("ACL setup pack", "*.aclsetup")])
-            if not selected:
-                return
-            self.pack_path.set(selected)
-            try:
-                self.pack = load_setup_pack(selected)
-                self.status.set("")
-                self._render()
-            except SetupPackError as exc:
-                self.pack = None
-                self.status.set(str(exc))
+            selected = filedialog.askopenfilename(filetypes=[("Google access file", "*.json")])
+            if selected:
+                self.oauth_client_path.set(selected)
 
         self.tk.Button(row, text="Browse…", command=choose).pack(side="left", padx=(8, 0))
-        if self.pack:
-            self._text(f"Campaign manager: {self.pack.campaign_manager_name}", bold=True, color="#17663a")
-            self._text(f"Assigned accounts: {len(self.pack.accounts)}")
-            self._text("No Google user token, Multilogin password, or Meta credential is stored in this pack.")
+        self._text("Choose the Google access file supplied by support. You do not need to open or edit it.")
 
     def _path_row(self, label: str, variable, directory: bool = False) -> None:
         from tkinter import filedialog
@@ -454,7 +576,7 @@ class SetupWizard:
         self._path_row("Creatives folder", self.creatives_path, directory=True)
 
     def _google(self) -> None:
-        self._text("ACL requests read-only Google Sheets access using the company OAuth client.")
+        self._text("The launcher requests read-only Google Sheets access using the company access file.")
         self._text("Sign in only with the approved company Google account. The token remains on this computer.")
         if self.google_ok:
             self._text("✓ Google Sheet read verified", bold=True, color="#17663a")
@@ -468,15 +590,14 @@ class SetupWizard:
     def _multilogin(self) -> None:
         self._text("Open Multilogin Desktop and sign in. Paste only the approved automation token; never a password.")
         for instance, variable in (("A", self.token_a), ("B", self.token_b)):
-            if self.pack and not any(a.multilogin_instance == instance for a in self.pack.accounts):
-                continue
-            self.tk.Label(self.body, text=f"Multilogin token {instance}", anchor="w").pack(fill="x")
+            suffix = "" if instance == "A" else " (optional)"
+            self.tk.Label(self.body, text=f"Multilogin access code{suffix}", anchor="w").pack(fill="x")
             self.tk.Entry(self.body, textvariable=variable, show="•").pack(fill="x", pady=(2, 10))
         if self.multilogin_ok:
-            self._text("✓ Every assigned Multilogin profile matched", bold=True, color="#17663a")
+            self._text("✓ Multilogin connection verified", bold=True, color="#17663a")
         self.tk.Button(
             self.body,
-            text="Test Multilogin profiles",
+            text="Test Multilogin connection",
             command=self._start_multilogin_check,
             state="disabled" if self.busy else "normal",
         ).pack(anchor="w", pady=10)
@@ -484,21 +605,24 @@ class SetupWizard:
     def _readiness(self) -> None:
         checks = [
             ("Runtime", all(check.ok for check in getattr(self, "system_checks", []))),
-            ("Identity and accounts", self.pack is not None),
+            ("Your workspace", self.configuration is not None),
             ("Local files", bool(self.stats_path.get() and self.upload_path.get() and self.creatives_path.get())),
             ("Google", self.google_ok),
             ("Multilogin", self.multilogin_ok),
             ("Safety mode", True),
         ]
-        self._text("ACL will be enabled only when every required group is ready.")
+        self._text("The launcher will open only when every required group is ready.")
         for label, ok in checks:
             self._text(f"{'✓' if ok else '✕'}  {label}", color="#17663a" if ok else "#9b1c1c")
         self._text("Safety: RPA / recorded_flow / Multilogin attach-only", color="#17663a")
+        if self.configuration:
+            self._text(f"Found {len(self.configuration.accounts)} account(s) for this campaign manager.")
+            self._text("After the launcher opens, connect each account to its Multilogin profile on the Accounts screen.")
 
     def _finish(self) -> None:
-        self._text("ACL setup is complete on this computer.", bold=True, color="#17663a")
+        self._text("Adopy Campaign Launcher is ready on this computer.", bold=True, color="#17663a")
         self._text("No campaign action was performed. The first campaign run must remain supervised.")
-        self._text("Click Close; ACL will open the local dashboard.")
+        self._text("Click Close to open the dashboard. Open Accounts to connect your Multilogin profiles.")
         self.tk.Button(
             self.body,
             text="Copy sanitized setup summary",
@@ -506,11 +630,11 @@ class SetupWizard:
         ).pack(anchor="w", pady=10)
 
     def _copy_summary(self) -> None:
-        if not self.pack:
+        if not self.configuration:
             return
-        version = self.version_text.splitlines()[0].removeprefix("ACL ")
+        version = self.version_text.splitlines()[0].rsplit(" ", 1)[-1]
         self.root.clipboard_clear()
-        self.root.clipboard_append(sanitized_setup_summary(self.pack, version))
+        self.root.clipboard_append(sanitized_setup_summary(self.configuration, version))
         self.status.set("Sanitized setup summary copied.")
 
     def _run_worker(self, work: Callable[[], str], done: Callable[[str], None]) -> None:
@@ -541,55 +665,64 @@ class SetupWizard:
         self._render()
 
     def _start_google_check(self) -> None:
-        if not self.pack:
-            self.status.set("Choose and validate the setup pack first.")
+        if not self.configuration:
+            self.status.set("Complete your workspace and local files first.")
             return
 
         def done(_message: str) -> None:
             self.google_ok = True
 
-        self._run_worker(lambda: test_google_read_access(self.pack, self.config_directory), done)
+        self._run_worker(lambda: test_google_read_access(self.configuration, self.config_directory), done)
 
     def _tokens(self) -> dict[str, str]:
         return {"A": self.token_a.get().strip(), "B": self.token_b.get().strip()}
 
     def _start_multilogin_check(self) -> None:
-        if not self.pack:
-            self.status.set("Choose and validate the setup pack first.")
-            return
-
         def done(_message: str) -> None:
             self.multilogin_ok = True
 
-        self._run_worker(lambda: test_multilogin_access(self.pack, self._tokens()), done)
+        self._run_worker(lambda: test_multilogin_access(self._tokens()), done)
 
     def _validate_step(self) -> None:
         if self.step == 1:
             failed = [check.label for check in self.system_checks if not check.ok]
             if failed:
                 raise WizardValidationError("Resolve failed system checks: " + ", ".join(failed))
-        elif self.step == 2 and not self.pack:
-            raise WizardValidationError("Choose a valid personal .aclsetup file.")
+        elif self.step == 2:
+            self.campaign_manager_name.set(validate_campaign_manager_name(self.campaign_manager_name.get()))
+            try:
+                self.accounts_sheet.set(extract_sheet_id(self.accounts_sheet.get()))
+            except MachineConfigError as exc:
+                raise WizardValidationError(str(exc)) from exc
+            oauth_path, _raw = validate_google_access_file(self.oauth_client_path.get())
+            self.oauth_client_path.set(oauth_path)
         elif self.step == 3:
             self.stats_path.set(validate_stats_workbook(self.stats_path.get()))
             self.upload_path.set(validate_upload_workbook(self.upload_path.get()))
             self.creatives_path.set(validate_creatives_directory(self.creatives_path.get()))
+            self.configuration = build_manual_setup(
+                campaign_manager_name=self.campaign_manager_name.get(),
+                accounts_sheet=self.accounts_sheet.get(),
+                oauth_client_path=self.oauth_client_path.get(),
+                stats_workbook=self.stats_path.get(),
+                upload_workbook=self.upload_path.get(),
+            )
         elif self.step == 4 and not self.google_ok:
             raise WizardValidationError("Connect Google and verify the company Sheet before continuing.")
         elif self.step == 5 and not self.multilogin_ok:
-            raise WizardValidationError("Test every assigned Multilogin profile before continuing.")
+            raise WizardValidationError("Test the Multilogin connection before continuing.")
         elif self.step == 6:
-            if not self.pack:
-                raise WizardValidationError("Setup pack is missing.")
-            apply_setup_pack(
-                self.pack,
+            if not self.configuration:
+                raise WizardValidationError("Workspace settings are incomplete.")
+            apply_machine_configuration(
+                self.configuration,
                 self.config_directory,
                 stats_workbook=self.stats_path.get(),
                 upload_workbook=self.upload_path.get(),
                 creatives_directory=self.creatives_path.get(),
                 multilogin_tokens=self._tokens(),
             )
-            version = self.version_text.splitlines()[0].removeprefix("ACL ")
+            version = self.version_text.splitlines()[0].rsplit(" ", 1)[-1]
             write_ready_state(self.config_directory, version)
             self.completed = True
 
@@ -599,7 +732,7 @@ class SetupWizard:
             return
         try:
             self._validate_step()
-        except (WizardValidationError, SetupPackError, OSError) as exc:
+        except (WizardValidationError, MachineConfigError, OSError) as exc:
             self.status.set(str(exc))
             return
         self.step += 1

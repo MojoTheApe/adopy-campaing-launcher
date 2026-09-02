@@ -41,7 +41,7 @@ def build_payload(version: str, built_at_utc: str | None = None) -> dict[str, ob
     baseline = json.loads((SCRIPT_DIR / "baseline.json").read_text(encoding="utf-8"))
     return {
         "schema": 1,
-        "product": "ACL Campaign Launcher",
+        "product": "Adopy Campaign Launcher",
         "version": version,
         "channel": "windows-packaging-spike",
         "core_baseline_sha": baseline["baseline_sha"],

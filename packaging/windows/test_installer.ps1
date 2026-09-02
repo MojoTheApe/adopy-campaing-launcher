@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 $ArtifactRoot = Join-Path $PSScriptRoot ".artifacts"
 $LogDirectory = Join-Path $ArtifactRoot "installer-test-logs"
 if (-not $InstallerPath) {
-    $InstallerPath = Join-Path $ArtifactRoot "installer/ACL-Setup-$Version.exe"
+    $InstallerPath = Join-Path $ArtifactRoot "installer/Adopy-Campaign-Launcher-Setup-$Version.exe"
 }
 $ProgramRoot = Join-Path $env:LOCALAPPDATA "Programs/ACL"
 $InstallDirectory = Join-Path $ProgramRoot "versions/$Version"
@@ -59,9 +59,9 @@ if (-not ((Get-Content $Sentinel -Raw).Contains("preserve-me"))) {
     throw "Existing machine configuration was overwritten during install."
 }
 
-$StartMenuShortcut = Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs/ACL/Open ACL.lnk"
-$SetupShortcut = Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs/ACL/Setup ACL.lnk"
-$DesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "ACL.lnk"
+$StartMenuShortcut = Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs/Adopy Campaign Launcher/Open Campaign Launcher.lnk"
+$SetupShortcut = Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs/Adopy Campaign Launcher/Setup Campaign Launcher.lnk"
+$DesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Adopy Campaign Launcher.lnk"
 Assert-Exists $StartMenuShortcut "Start Menu shortcut"
 Assert-Exists $SetupShortcut "Setup Wizard shortcut"
 Assert-Exists $DesktopShortcut "Desktop shortcut"

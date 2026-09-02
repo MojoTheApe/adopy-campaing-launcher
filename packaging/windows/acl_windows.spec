@@ -42,7 +42,7 @@ datas = [
 # runtime. PyInstaller cannot infer those string-based imports statically.
 hiddenimports = collect_submodules("uvicorn") + playwright_hiddenimports + [
     "diagnostics",
-    "setup_pack",
+    "machine_config",
     "setup_wizard",
     "tkinter",
     "scripts.acl_runtime_manager",

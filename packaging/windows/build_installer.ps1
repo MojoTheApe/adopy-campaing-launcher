@@ -56,8 +56,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup build failed with exit code $LASTEXITCODE"
 }
 
-$Installer = Join-Path $OutputDirectory "ACL-Setup-$Version.exe"
+$Installer = Join-Path $OutputDirectory "Adopy-Campaign-Launcher-Setup-$Version.exe"
 if (-not (Test-Path $Installer -PathType Leaf)) {
     throw "Expected installer was not produced: $Installer"
 }
-Write-Host "ACL per-user installer created: $Installer"
+Write-Host "Adopy Campaign Launcher per-user installer created: $Installer"

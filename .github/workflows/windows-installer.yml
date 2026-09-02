@@ -92,7 +92,7 @@ jobs:
           name: ACL-Windows-spike-${{ github.run_number }}
           path: |
             packaging/windows/.artifacts/ACL-Windows-spike.zip
-            packaging/windows/.artifacts/installer/ACL-Setup-*.exe
+            packaging/windows/.artifacts/installer/Adopy-Campaign-Launcher-Setup-*.exe
             packaging/windows/.build/acl-build-manifest.json
             packaging/windows/.build/current.json
             packaging/windows/.artifacts/test-logs/

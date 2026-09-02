@@ -40,24 +40,25 @@ source checkout, started twice, repaired, and uninstalled while preserving an
 existing configuration sentinel. Automatic updates remain disabled for the
 installer pilot.
 
-## Campaign-manager setup pack
+## Universal first-run setup
 
-The recommended first-run path uses a personal `.aclsetup` ZIP. Support starts
-from `setup-pack.example.json`, replaces every example value, adds the approved
-OAuth client, and runs:
+The same installer is distributed to every campaign manager. No personal
+configuration package is required. On first launch, the setup wizard asks the
+user to:
 
-```powershell
-python packaging/windows/create_setup_pack.py `
-  --setup-json path/to/setup.json `
-  --oauth-client path/to/oauth_client.json `
-  --output path/to/campaign-manager.aclsetup
-```
+1. enter their name as it appears in the Stats workbook;
+2. paste the company Accounts Google Sheet link;
+3. choose the company Google access JSON supplied by support;
+4. choose the Stats workbook, Upload FB workbook, and Creatives folder;
+5. complete read-only Google authorization;
+6. paste and test their Multilogin automation token.
 
-The utility and first-run wizard reject unknown fields, archive path traversal,
-placeholder values, duplicate account labels/IDs, missing Multilogin mappings,
-and Google user tokens. Valid configuration is written transactionally under
-`%LOCALAPPDATA%\ACL`; the wizard fixes the production safety mode and cannot
-execute campaign actions.
+The wizard derives the manager's account labels from the Stats workbook and
+fills available ad-account IDs from the Upload FB workbook. It writes the
+machine-local configuration transactionally under `%LOCALAPPDATA%\ACL` and
+fixes the production safety mode. After the dashboard opens, the user connects
+each account to an open Multilogin profile through the existing Accounts UI;
+they never edit `.env`, CSV, JSON, or profile UUIDs.
 
 ## Support diagnostics
 

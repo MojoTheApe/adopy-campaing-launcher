@@ -1,6 +1,6 @@
 ; ACL per-user Windows installer. All operational runtime sources remain frozen.
-#define MyAppName "ACL Campaign Launcher"
-#define MyAppPublisher "ACL"
+#define MyAppName "Adopy Campaign Launcher"
+#define MyAppPublisher "Adopy"
 
 #ifndef MyAppVersion
   #define MyAppVersion "0.1.0-dev"
@@ -25,7 +25,7 @@ AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\ACL\versions\{#MyAppVersion}
-DefaultGroupName=ACL
+DefaultGroupName=Adopy Campaign Launcher
 UsePreviousAppDir=no
 DisableDirPage=yes
 DisableProgramGroupPage=yes
@@ -34,7 +34,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 OutputDir={#InstallerOutputDir}
-OutputBaseFilename=ACL-Setup-{#MyAppVersion}
+OutputBaseFilename=Adopy-Campaign-Launcher-Setup-{#MyAppVersion}
 SetupIconFile={#ProjectRoot}\assets\dashboard.ico
 UninstallDisplayIcon={app}\ACL.exe
 UninstallFilesDir={localappdata}\Programs\ACL
@@ -60,16 +60,16 @@ Source: "{#BundleDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Source: "{#CurrentManifest}"; DestDir: "{localappdata}\Programs\ACL"; DestName: "current.json"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\ACL\Open ACL"; Filename: "{app}\ACL.exe"; WorkingDir: "{localappdata}\ACL\workspace"
-Name: "{autoprograms}\ACL\Setup ACL"; Filename: "{app}\ACL.exe"; Parameters: "--setup"
-Name: "{autoprograms}\ACL\Settings"; Filename: "{app}\ACL.exe"; Parameters: "--settings"
-Name: "{autoprograms}\ACL\Diagnostics"; Filename: "{app}\ACL.exe"; Parameters: "--diagnostics"
-Name: "{autoprograms}\ACL\Create diagnostic bundle"; Filename: "{app}\ACL.exe"; Parameters: "--export-diagnostics"
-Name: "{autoprograms}\ACL\Uninstall ACL"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\ACL"; Filename: "{app}\ACL.exe"; WorkingDir: "{localappdata}\ACL\workspace"; Tasks: desktopicon
+Name: "{autoprograms}\Adopy Campaign Launcher\Open Campaign Launcher"; Filename: "{app}\ACL.exe"; WorkingDir: "{localappdata}\ACL\workspace"
+Name: "{autoprograms}\Adopy Campaign Launcher\Setup Campaign Launcher"; Filename: "{app}\ACL.exe"; Parameters: "--setup"
+Name: "{autoprograms}\Adopy Campaign Launcher\Settings"; Filename: "{app}\ACL.exe"; Parameters: "--settings"
+Name: "{autoprograms}\Adopy Campaign Launcher\Diagnostics"; Filename: "{app}\ACL.exe"; Parameters: "--diagnostics"
+Name: "{autoprograms}\Adopy Campaign Launcher\Create diagnostic bundle"; Filename: "{app}\ACL.exe"; Parameters: "--export-diagnostics"
+Name: "{autoprograms}\Adopy Campaign Launcher\Uninstall"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\Adopy Campaign Launcher"; Filename: "{app}\ACL.exe"; WorkingDir: "{localappdata}\ACL\workspace"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\ACL.exe"; Description: "Open ACL"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ACL.exe"; Description: "Open Adopy Campaign Launcher"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{app}\ACL.exe"; Parameters: "--stop-server"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopACLServer"

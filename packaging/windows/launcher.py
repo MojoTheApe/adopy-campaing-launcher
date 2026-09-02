@@ -46,7 +46,7 @@ def _version_text() -> str:
     payload = _version_payload()
     return "\n".join(
         (
-            f"ACL {payload.get('version', 'unknown')}",
+            f"Adopy Campaign Launcher {payload.get('version', 'unknown')}",
             f"pilot core: {payload.get('core_baseline_sha', 'unknown')}",
             f"installer source: {payload.get('installer_source_sha', 'unknown')}",
         )
@@ -74,14 +74,14 @@ def _print_version() -> int:
         message = _version_text()
     except Exception as exc:
         _show_message(
-            "ACL version error",
+            "Adopy Campaign Launcher version error",
             f"Version metadata is unavailable.\n\n{type(exc).__name__}: {exc}",
             error=True,
         )
         return 1
 
     if sys.stdout is None:
-        _show_message("ACL version", message)
+        _show_message("Adopy Campaign Launcher version", message)
     else:
         print(message)
     return 0
@@ -229,8 +229,8 @@ def _launch_normal(*, open_browser: bool = True) -> int:
         return 0
     if _port_is_in_use(port):
         _show_message(
-            "ACL cannot start",
-            f"Port {port} is already used by another application. ACL did not stop it. "
+            "Adopy Campaign Launcher cannot start",
+            f"Port {port} is already used by another application. The launcher did not stop it. "
             "Close that application or contact support, then try again.",
             error=True,
         )
@@ -260,7 +260,7 @@ def _launch_normal(*, open_browser: bool = True) -> int:
         time.sleep(0.5)
 
     _show_message(
-        "ACL did not start",
+        "Adopy Campaign Launcher did not start",
         "The local dashboard could not start. No campaign action was performed.\n\n"
         f"Diagnostics: {_logs_dir()}",
         error=True,
@@ -293,7 +293,7 @@ def _stop_server() -> int:
         # module availability affect launcher import.
         if type(exc).__name__ == "NoSuchProcess":
             return 0
-        _show_message("ACL stop failed", f"Could not stop ACL safely.\n\n{exc}", error=True)
+        _show_message("Adopy Campaign Launcher stop failed", f"Could not stop the launcher safely.\n\n{exc}", error=True)
         return 1
 
 
@@ -303,7 +303,7 @@ def _open_local_directory(name: str) -> int:
     if hasattr(os, "startfile"):
         os.startfile(path)  # type: ignore[attr-defined]
         return 0
-    _show_message("ACL folder", str(path))
+    _show_message("Adopy Campaign Launcher folder", str(path))
     return 0
 
 
@@ -317,20 +317,20 @@ def main() -> int:
         return smoke_main()
     if "--wizard-smoke-check" in args:
         import tkinter  # noqa: F401
-        from setup_pack import validate_setup_document  # noqa: F401
+        from machine_config import validate_oauth_client  # noqa: F401
         from setup_wizard import setup_is_complete  # noqa: F401
 
         if sys.stdout is not None:
-            print("ACL Setup Wizard import check OK.")
+            print("Adopy Campaign Launcher Setup import check OK.")
         return 0
     if "--export-diagnostics" in args or "--diagnostics-smoke-check" in args:
         from diagnostics import export_diagnostics
 
         output = export_diagnostics(_local_acl_dir(), _manifest_path())
         if "--diagnostics-smoke-check" in args and sys.stdout is not None:
-            print(f"ACL diagnostic export OK: {output}")
+            print(f"Adopy Campaign Launcher diagnostic export OK: {output}")
         else:
-            _show_message("ACL diagnostics", f"Sanitized diagnostic bundle created:\n\n{output}")
+            _show_message("Adopy Campaign Launcher diagnostics", f"Sanitized diagnostic bundle created:\n\n{output}")
         return 0
     if "--stop-server" in args:
         return _stop_server()
