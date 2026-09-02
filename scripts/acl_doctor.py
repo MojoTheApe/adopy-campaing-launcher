@@ -281,16 +281,31 @@ def check_campaign_manager_identity() -> None:
 
 
 def check_accounts_sheet() -> None:
+    """The accounts spreadsheet — from .env, or the built-in company default.
+
+    The sheet is the same one for every campaign manager, so the id now ships in
+    the code and no install has to paste it. This check used to demand the env
+    var regardless, which failed a machine that was in fact perfectly able to
+    read the sheet — a red line for a problem that did not exist.
+    """
     value = (os.environ.get("GSHEET_ACCOUNTS_ID") or "").strip()
     if value and "your_" not in value.lower() and "example" not in value.lower():
         report(OK, "Accounts Google Sheet", "GSHEET_ACCOUNTS_ID is set")
-    else:
-        report(
-            MISSING,
-            "Accounts Google Sheet",
-            "GSHEET_ACCOUNTS_ID is missing or still an example",
-            "Set the real spreadsheet ID in the machine-local .env.",
-        )
+        return
+    try:
+        from src.analysis_agent.gsheet_accounts import DEFAULT_ACCOUNTS_SHEET_ID
+
+        if DEFAULT_ACCOUNTS_SHEET_ID:
+            report(OK, "Accounts Google Sheet", "using the built-in company sheet")
+            return
+    except Exception:
+        pass
+    report(
+        MISSING,
+        "Accounts Google Sheet",
+        "GSHEET_ACCOUNTS_ID is missing or still an example",
+        "Set the real spreadsheet ID in the machine-local .env.",
+    )
 
 
 def check_multilogin_token() -> None:
