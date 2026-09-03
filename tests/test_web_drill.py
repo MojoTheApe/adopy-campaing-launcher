@@ -13,7 +13,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 
 from src.analysis_agent.analyze_fb_stats import aggregate_combos
 from src.analysis_agent.morning_report import build_country_section
-from src.web.app import _anchor_slug, _enrich_country_overview, details, templates
+from src.web.app import mlx_instance_labels, _anchor_slug, _enrich_country_overview, details, templates
 
 def _render_html(report: dict) -> str:
     """Render report.html the way the app does.
@@ -26,6 +26,7 @@ def _render_html(report: dict) -> str:
     report = {**report, "countries": [dict(c) for c in report.get("countries", [])]}
     _enrich_country_overview(report)
     return templates.env.get_template("report.html").render(
+        mlx_labels=mlx_instance_labels(),
         request=MagicMock(),
         report=report,
         warnings=[],

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from starlette.datastructures import FormData
 
-from src.web.app import _enrich_country_overview, build_upload, templates
+from src.web.app import mlx_instance_labels, _enrich_country_overview, build_upload, templates
 
 def _render_html(report: dict) -> str:
     """Render report.html the way the app does.
@@ -19,6 +19,7 @@ def _render_html(report: dict) -> str:
     report = {**report, "countries": [dict(c) for c in report.get("countries", [])]}
     _enrich_country_overview(report)
     return templates.env.get_template("report.html").render(
+        mlx_labels=mlx_instance_labels(),
         request=MagicMock(),
         report=report,
         warnings=[],

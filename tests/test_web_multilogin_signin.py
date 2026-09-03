@@ -96,6 +96,43 @@ def test_signin_with_a_token_saves_it_and_reports_no_problem(monkeypatch):
     assert saved == [{"MULTILOGIN_AUTOMATION_TOKEN_A": "automation-xyz"}]
 
 
+def test_the_two_multilogin_accounts_are_named_not_lettered():
+    """"Instance A" names a slot in a config file, not anything anyone can recognise.
+
+    Picking the wrong one is not a typo, it is a day: on 2026-09-03 the token for
+    the Inhouse account was renewed with the KLD account's password, and every
+    error along the way named something else — no token, no rights, expired plan.
+    """
+    from unittest.mock import MagicMock
+
+    from src.web.app import _enrich_country_overview, mlx_instance_labels, templates
+    from tests.test_web_drill import _MOCK_REPORT
+
+    assert mlx_instance_labels() == {"A": "Inhouse", "B": "KLD"}
+
+    report = {**_MOCK_REPORT, "countries": [dict(c) for c in _MOCK_REPORT["countries"]]}
+    _enrich_country_overview(report)
+    context = dict(
+        request=MagicMock(), report=report, warnings=[], built_at="x", upload_errors={},
+        account_preflight={}, account_preflight_json={}, ref_options={},
+        ref_options_json={}, account_alias_map_json={}, draft_status={},
+    )
+    template = templates.env.get_template("report.html")
+
+    rendered = template.render(**context, mlx_labels=mlx_instance_labels())
+    assert ">Inhouse<" in rendered and ">KLD<" in rendered
+    assert "Instance A" not in rendered
+    # The slot ids stay A and B: they are written in every machine's
+    # ad_account_map.csv and in the environment keys. Renaming those would mean
+    # a migration on every install, for a label.
+    assert 'data-inst="A"' in rendered and 'data-inst="B"' in rendered
+
+    # Templates reload per request, Python only on restart. Between updating the
+    # files and restarting the server the report must still render.
+    stale_server = template.render(**context)
+    assert ">Inhouse<" in stale_server and ">KLD<" in stale_server
+
+
 def test_the_panel_does_not_show_success_when_no_token_was_saved():
     """A green tick differing only by a trailing clause is not a warning."""
     template = (_ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")

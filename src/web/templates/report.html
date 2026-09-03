@@ -1597,6 +1597,11 @@
   </style>
 </head>
 <body>
+{# Имена аккаунтов Multilogin. Значение приходит из app.py, но шаблон
+   перечитывается на каждый запрос, а Python — только при перезапуске: между
+   обновлением файлов и рестартом сервера отчёт обязан рендериться, а не падать
+   на невидимой переменной. #}
+{%- set mlx = mlx_labels or {'A': 'Inhouse', 'B': 'KLD'} %}
 
 <div class="page-top">
 <header class="page-header">
@@ -2302,8 +2307,8 @@ async function dashRefresh(ev) {
     </p>
     <div class="ml-connect-fields">
       <div class="ml-instance-toggle" id="ml-instance-{{ cid }}">
-        <button type="button" class="ml-inst-btn ml-inst-active" data-inst="A" onclick="mlSetInstance('{{ cid }}','A')">Instance A</button>
-        <button type="button" class="ml-inst-btn" data-inst="B" onclick="mlSetInstance('{{ cid }}','B')">Instance B</button>
+        <button type="button" class="ml-inst-btn ml-inst-active" data-inst="A" onclick="mlSetInstance('{{ cid }}','A')" title="Multilogin account A">{{ mlx['A'] }}</button>
+        <button type="button" class="ml-inst-btn" data-inst="B" onclick="mlSetInstance('{{ cid }}','B')" title="Multilogin account B">{{ mlx['B'] }}</button>
       </div>
       {# Token-first (grill 2026-08-02, Q1=a): the credential form is shown
          only when the saved monthly token is dead — mlTokenFirst() decides. #}
@@ -3143,6 +3148,13 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
 }
 
 // ── Multilogin connect ────────────────────────────────────────────────
+// Слоты в конфигурации и в карте аккаунтов остаются A и B — меняются только
+// имена, которые видит человек. Иначе выбор аккаунта выглядит как выбор буквы,
+// а ошибиться буквой стоит дня: 2026-09-03 токен слота A перевыпускали паролем
+// от аккаунта слота B, и каждая ошибка по дороге называлась чем-то другим.
+var ACL_MLX_LABELS = {{ mlx | tojson }};
+function mlLabel(inst) { return ACL_MLX_LABELS[inst] || ('Instance ' + inst); }
+
 var _mlInstance = {};  // cid → 'A' | 'B'
 
 function mlTogglePanel(cid) {
@@ -3194,7 +3206,7 @@ function mlTokenFirst(cid) {
         }
         creds.style.display = 'none';
         banner.innerHTML = '<span style="color:var(--good)">✓ Connected with the saved token'
-          + ' (Instance ' + instance + until + ')</span>'
+          + ' (' + mlLabel(instance) + until + ')</span>'
           + ' <button type="button" class="ml-connect-btn" style="margin-left:0.5rem;font-size:0.72rem;padding:0.2rem 0.6rem"'
           + ' onclick="mlListProfiles(\'' + cid + '\')">Profiles</button>'
           + ' <a href="#" style="margin-left:0.5rem;font-size:0.7rem;color:var(--muted)"'
@@ -3291,7 +3303,7 @@ function mlSignin(cid) {
     if (status) status.innerHTML = '<span style="color:var(--bad)">Enter email and password.</span>';
     return;
   }
-  if (status) status.innerHTML = '<span style="color:var(--muted)">Connecting to Instance ' + instance + '…</span>';
+  if (status) status.innerHTML = '<span style="color:var(--muted)">Connecting to ' + mlLabel(instance) + '…</span>';
   if (btn) btn.disabled = true;
 
   fetch('/multilogin-signin', {
@@ -3314,7 +3326,7 @@ function mlSignin(cid) {
     // Without the token the RPA cannot start a single profile, so say so here.
     if (status) {
       if (data.token_saved) {
-        status.innerHTML = '<span style="color:var(--good)">✓ Instance ' + instance
+        status.innerHTML = '<span style="color:var(--good)">✓ ' + mlLabel(instance)
           + ' connected · token saved in machine settings (1 month)</span>';
       } else {
         status.innerHTML = '<span style="color:var(--warn)">⚠ Signed in, but NO automation token — '
@@ -3389,7 +3401,7 @@ function mlSignin(cid) {
     var searchId = 'ml-search-' + cid;
 
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
-      + profiles.length + ' profile(s) from Instance ' + instance
+      + profiles.length + ' profile(s) from ' + mlLabel(instance)
       + ' — find the one you need and press Use</div>';
     html += '<input id="' + searchId + '" type="text" placeholder="Filter by profile name…" value="'
       + aclEscHtml(firstAccTitle) + '"'

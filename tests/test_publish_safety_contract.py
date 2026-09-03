@@ -12,7 +12,7 @@ import pytest
 from scripts import run_rpa_publish
 from src.fb_ads_rpa.draft import CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
-from src.web.app import app
+from src.web.app import mlx_instance_labels, app
 from src.web.app import _enrich_country_overview, templates
 from src.web.publish_jobs import (
     _summarize_results,
@@ -110,6 +110,7 @@ def _render_badge(status: dict) -> str:
     }
     _enrich_country_overview(report)
     return templates.env.get_template("report.html").render(
+        mlx_labels=mlx_instance_labels(),
         request=MagicMock(),
         report=report,
         warnings=[],

@@ -503,6 +503,25 @@ async def favicon() -> FileResponse:
     return FileResponse(_FAVICON, media_type="image/svg+xml")
 
 
+def mlx_instance_labels() -> dict[str, str]:
+    """Human names for the two Multilogin accounts.
+
+    "Instance A" and "Instance B" name a slot in a config file, not anything a
+    campaign manager can recognise — and picking the wrong one is not a typo, it
+    is a whole day: on 2026-09-03 the token for the Inhouse account was renewed
+    with the KLD account's password, and every error along the way named
+    something else (no token, no rights, expired plan).
+
+    The slot ids stay A and B: they are written in ad_account_map.csv on every
+    machine and in the environment keys. Only the labels change, so nothing has
+    to be migrated and an old checkout keeps working.
+    """
+    return {
+        "A": (os.environ.get("ACL_MLX_LABEL_A") or "").strip() or "Inhouse",
+        "B": (os.environ.get("ACL_MLX_LABEL_B") or "").strip() or "KLD",
+    }
+
+
 @app.get("/health", include_in_schema=False)
 async def health() -> JSONResponse:
     """Fast identity check for the Windows launcher; never loads workbooks."""
@@ -645,6 +664,7 @@ def _render_report(
             "account_preflight_json": account_preflight,
             "account_alias_map_json": account_alias_map,
             "draft_status": draft_status,
+            "mlx_labels": mlx_instance_labels(),
         },
     )
 
