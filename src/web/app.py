@@ -503,6 +503,59 @@ async def favicon() -> FileResponse:
     return FileResponse(_FAVICON, media_type="image/svg+xml")
 
 
+# Multilogin refuses anything above 100 with a plain "limit invalid" 400 — and
+# the panel asked for 200, so profile listing has been answering "no profiles
+# found" for every workspace, whatever the token. A workspace with more than a
+# hundred profiles then needs paging rather than a bigger page.
+_MLX_PAGE = 100
+_MLX_MAX_PROFILES = 2000
+
+
+def _mlx_extract_profiles(body: dict) -> list[dict]:
+    data = body.get("data") or {}
+    raw = data.get("profiles") if isinstance(data, dict) else data
+    if not raw and isinstance(data, dict):
+        raw = data.get("items") or data.get("list") or []
+    return [
+        {
+            "profile_id": p.get("profile_id") or p.get("uuid") or p.get("id") or "",
+            "folder_id": p.get("folder_id") or p.get("folderID") or "",
+            "name": p.get("name") or p.get("profile_name") or "",
+        }
+        for p in (raw if isinstance(raw, list) else [])
+        if (p.get("profile_id") or p.get("uuid") or p.get("id"))
+    ]
+
+
+def _mlx_search_all(requests_mod, headers: dict, search_text: str) -> tuple[list[dict], str]:
+    """Every profile the token can see, paged. Returns (profiles, error)."""
+    found: list[dict] = []
+    offset = 0
+    while offset < _MLX_MAX_PROFILES:
+        r = requests_mod.post(
+            f"{MLX_API_BASE}/profile/search",
+            headers=headers,
+            json={"limit": _MLX_PAGE, "offset": offset, "search_text": search_text},
+            timeout=20,
+        )
+        if r.status_code != 200:
+            detail = ""
+            try:
+                detail = ((r.json().get("status") or {}).get("message") or "").strip()
+            except Exception:
+                detail = (r.text or "")[:200]
+            return found, f"HTTP {r.status_code}" + (f": {detail}" if detail else "")
+        page = _mlx_extract_profiles(r.json())
+        found.extend(page)
+        if len(page) < _MLX_PAGE:
+            break
+        offset += _MLX_PAGE
+    return found, ""
+
+
+MLX_API_BASE = "https://api.multilogin.com"
+
+
 def mlx_instance_labels() -> dict[str, str]:
     """Human names for the two Multilogin accounts.
 
@@ -2214,45 +2267,15 @@ async def multilogin_search(request: Request) -> JSONResponse:
     except Exception:
         pass
 
-    profiles: list[dict] = []
-    try:
-        rp = _req.post(
-            f"{MLX_API}/profile/search",
-            headers=H,
-            json={"limit": 100, "offset": 0, "search_text": search_text},
-            timeout=15,
-        )
-        if rp.status_code == 401:
-            return JSONResponse({"ok": False, "error": "The token has expired — sign in again through Connect"})
-        if rp.status_code != 200:
-            # Anything else used to fall through to an empty list, so "no access
-            # to this workspace" and "the listing endpoint is having a bad day"
-            # arrived as the same silent "0 profiles". They lead to opposite
-            # actions, so say which one this is.
-            detail = ""
-            try:
-                detail = ((rp.json().get("status") or {}).get("message") or "").strip()
-            except Exception:
-                detail = (rp.text or "")[:200]
-            return JSONResponse({
-                "ok": False,
-                "error": f"Multilogin refused the profile list [{rp.status_code}]"
-                         + (f": {detail}" if detail else ""),
-            })
-        if rp.status_code == 200:
-            pd = rp.json().get("data") or {}
-            raw_p = pd.get("profiles") if isinstance(pd, dict) else pd
-            profiles = [
-                {
-                    "profile_id": p.get("profile_id") or p.get("uuid") or p.get("id") or "",
-                    "folder_id": p.get("folder_id") or p.get("folderID") or "",
-                    "name": p.get("name") or p.get("profile_name") or "",
-                }
-                for p in (raw_p if isinstance(raw_p, list) else [])
-                if (p.get("profile_id") or p.get("uuid") or p.get("id"))
-            ]
-    except Exception as exc:
-        return JSONResponse({"ok": False, "error": str(exc)})
+    # A 401 here means the saved automation token is dead; anything else is
+    # Multilogin refusing, and it says why. Both used to arrive as "0 profiles".
+    profiles, error = _mlx_search_all(_req, H, search_text)
+    if error:
+        if error.startswith("HTTP 401"):
+            return JSONResponse(
+                {"ok": False, "error": "The token has expired — sign in again through Connect"}
+            )
+        return JSONResponse({"ok": False, "error": f"Multilogin refused the profile list [{error}]"})
 
     return JSONResponse({"ok": True, "profiles": profiles, "folders": folders})
 
@@ -2410,63 +2433,18 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     except Exception:
         pass
 
-    # Step 5 — list profiles (try multiple endpoints for sub-accounts)
-    profiles: list[dict] = []
+    # Step 5 — list profiles.
+    #
+    # One request, paged. The three fallbacks that used to live here were built
+    # around a mystery — "sub-accounts may need a search term", "some MLX
+    # versions" — and none of them was the answer: every attempt asked for 200
+    # profiles, and Multilogin refuses anything over 100 with a flat
+    # "limit invalid". So all three failed identically, for the same reason, and
+    # the panel reported "No profiles found" for workspaces that were full.
+    profiles, profiles_error = _mlx_search_all(_req, auth_h2, "")
     profile_debug: list[str] = []
-
-    def _extract_profiles(body: dict) -> list[dict]:
-        data = body.get("data") or {}
-        raw = data.get("profiles") if isinstance(data, dict) else (data if isinstance(data, list) else [])
-        if not raw and isinstance(data, dict):
-            raw = data.get("items") or data.get("list") or []
-        return [
-            {
-                "profile_id": p.get("profile_id") or p.get("uuid") or p.get("id") or "",
-                "folder_id": p.get("folder_id") or p.get("folderID") or "",
-                "name": p.get("name") or p.get("profile_name") or "",
-            }
-            for p in (raw if isinstance(raw, list) else [])
-            if (p.get("profile_id") or p.get("uuid") or p.get("id"))
-        ]
-
-    # Try 1: POST /profile/search with empty string (workspace owners)
-    try:
-        rp = _req.post(
-            f"{MLX_API}/profile/search",
-            headers=auth_h2,
-            json={"limit": 200, "offset": 0, "search_text": ""},
-            timeout=20,
-        )
-        profile_debug.append(f"search(empty) -> {rp.status_code}")
-        if rp.status_code == 200:
-            profiles = _extract_profiles(rp.json())
-    except Exception as exc:
-        profile_debug.append(f"search(empty) -> err:{exc}")
-
-    # Try 2: POST /profile/search with "facebook" (sub-accounts may need search term)
-    if not profiles:
-        try:
-            rp2 = _req.post(
-                f"{MLX_API}/profile/search",
-                headers=auth_h2,
-                json={"limit": 200, "offset": 0, "search_text": "facebook"},
-                timeout=20,
-            )
-            profile_debug.append(f"search(facebook) -> {rp2.status_code}")
-            if rp2.status_code == 200:
-                profiles = _extract_profiles(rp2.json())
-        except Exception as exc:
-            profile_debug.append(f"search(facebook) -> err:{exc}")
-
-    # Try 3: GET /profile (older endpoint, some MLX versions)
-    if not profiles:
-        try:
-            rp3 = _req.get(f"{MLX_API}/profile", headers=auth_h2, timeout=20)
-            profile_debug.append(f"GET /profile -> {rp3.status_code}: {rp3.text[:120]}")
-            if rp3.status_code == 200:
-                profiles = _extract_profiles(rp3.json())
-        except Exception as exc:
-            profile_debug.append(f"GET /profile -> err:{exc}")
+    if profiles_error:
+        profile_debug.append(f"search -> {profiles_error}")
 
     return JSONResponse({
         "ok": True,
