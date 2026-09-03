@@ -2,7 +2,7 @@
 
 Windows 10/11. About 30 minutes. No coding needed.
 
-**Release to install: `acl-release-2026-09-03c`**
+**Release to install: `acl-release-2026-09-03d`**
 
 ---
 
