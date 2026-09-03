@@ -2204,6 +2204,21 @@ async def multilogin_search(request: Request) -> JSONResponse:
         )
         if rp.status_code == 401:
             return JSONResponse({"ok": False, "error": "The token has expired — sign in again through Connect"})
+        if rp.status_code != 200:
+            # Anything else used to fall through to an empty list, so "no access
+            # to this workspace" and "the listing endpoint is having a bad day"
+            # arrived as the same silent "0 profiles". They lead to opposite
+            # actions, so say which one this is.
+            detail = ""
+            try:
+                detail = ((rp.json().get("status") or {}).get("message") or "").strip()
+            except Exception:
+                detail = (rp.text or "")[:200]
+            return JSONResponse({
+                "ok": False,
+                "error": f"Multilogin refused the profile list [{rp.status_code}]"
+                         + (f": {detail}" if detail else ""),
+            })
         if rp.status_code == 200:
             pd = rp.json().get("data") or {}
             raw_p = pd.get("profiles") if isinstance(pd, dict) else pd
