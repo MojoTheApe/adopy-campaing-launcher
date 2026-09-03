@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import re
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
+
+_ROOT = Path(__file__).resolve().parents[1]
 
 from src.analysis_agent.analyze_fb_stats import aggregate_combos
 from src.analysis_agent.morning_report import build_country_section
@@ -115,6 +119,55 @@ def _details_html(query: str) -> str:
         return response.body.decode()
 
     return asyncio.run(_run())
+
+
+def test_no_template_uses_an_htmx_feature_the_dashboard_csp_forbids() -> None:
+    """htmx compiles these attributes with new Function; our CSP has no unsafe-eval.
+
+    This is not a style rule. The drill toggle was written as
+    `hx-trigger="click[aclDrillToggle(this)]"` and the predicate never ran once:
+    the browser refused to compile it, htmx swallowed the EvalError, and the
+    function we wrote to stop the duplicate rows was dead code. Closing a drill
+    still appeared to work, by accident, deeper inside htmx — while every close
+    fired a second request to the server and the outcome depended on which
+    response landed first. That is what "sometimes it doesn't open" was.
+
+    A failure of this kind is invisible: nothing throws where the code is, the
+    page keeps working, and only the console knows. So it is caught here.
+    """
+    forbidden = {
+        "hx-on": "runs its body through eval",
+        "hx-vals": "only the js: form needs eval, but it is the easy one to reach for",
+        "hx-headers": "same as hx-vals",
+    }
+    offenders: list[str] = []
+    for path in sorted((_ROOT / "src" / "web" / "templates").glob("*.html")):
+        text = path.read_text(encoding="utf-8")
+        for line_no, line in enumerate(text.splitlines(), 1):
+            if line.lstrip().startswith(("//", "*", "/*", "#")):
+                continue  # a comment explaining the rule is not a violation of it
+            if re.search(r'hx-trigger="[^"]*\[', line):
+                offenders.append(f"{path.name}:{line_no} hx-trigger predicate — compiled with new Function")
+            for attr, why in forbidden.items():
+                if re.search(rf'\b{attr}(:[\w-]+)?=', line) and "js:" in line:
+                    offenders.append(f"{path.name}:{line_no} {attr} — {why}")
+
+    assert not offenders, (
+        "Эти атрибуты htmx требуют eval, а CSP дешборда его не даёт — они не "
+        "сработают ни разу и провалятся молча:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_drill_toggle_is_a_real_listener_not_an_htmx_predicate() -> None:
+    """The close must happen in our own code, before htmx sees the click."""
+    template = (_ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+
+    handler = template.index("document.addEventListener('click', function (ev) {")
+    body = template[handler:handler + 1200]
+    assert "tr.drillable" in body
+    assert "drill-detail" in body
+    # Without this htmx still fires the request on the closing click.
+    assert "ev.stopPropagation();" in body
 
 
 def test_report_template_marks_drillable_rows() -> None:

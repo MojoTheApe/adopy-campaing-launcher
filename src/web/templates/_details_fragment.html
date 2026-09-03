@@ -69,7 +69,7 @@
               hx-get="/details?section=optimization&country={{ country | urlencode }}&account={{ r.account | urlencode }}&adset={{ r.adset | urlencode }}&ncols=6"
               hx-target="closest tr"
               hx-swap="afterend"
-              hx-trigger="click[aclDrillToggle(this)]"
+              hx-trigger="click"
               style="cursor:pointer"
               {% endif %}
               {% if section == 'optimization' %}

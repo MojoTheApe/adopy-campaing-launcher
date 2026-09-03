@@ -1960,7 +1960,7 @@ async function dashRefresh(ev) {
         hx-get="/details?{{ row.aggregate_key | agg_qs }}"
         hx-target="closest tr"
         hx-swap="afterend"
-        hx-trigger="click[aclDrillToggle(this)]"
+        hx-trigger="click"
         {% endif %}>
       <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}</td>
       <td class="num">{{ row.deposits }}</td>
@@ -2262,7 +2262,7 @@ async function dashRefresh(ev) {
             hx-get="/details?{{ r.aggregate_key | agg_qs }}"
             hx-target="closest tr"
             hx-swap="afterend"
-            hx-trigger="click[aclDrillToggle(this)]"
+            hx-trigger="click"
             {% endif %}>
           <td class="adset">{{ r.adset_name[:60] }}</td>
           <td class="num">{{ r.spend | fmt_usd }}</td>
@@ -6693,18 +6693,36 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   // Возвращает false, когда блок уже открыт: htmx не отправляет запрос, а мы
   // просто убираем вставленное. Вложенные дриллы уезжают вместе с родителем,
   // потому что лежат внутри него.
-  window.aclDrillToggle = function (row) {
+  // Раньше это висело на предикате htmx: hx-trigger="click[aclDrillToggle(this)]".
+  // Так делать нельзя, и провал был тихим. htmx компилирует такой предикат
+  // через new Function, а дешборд отдаёт CSP без 'unsafe-eval' — предикат не
+  // собирался НИ РАЗУ, функция не вызывалась ни разу, и в консоли лежало два
+  // десятка EvalError, которых никто не читал. Закрытие всё же происходило —
+  // но по стечению обстоятельств внутри htmx, а не потому, что мы его написали:
+  // запрос уходил на сервер и на открытие, и на закрытие, и порядок ответа
+  // решал, что увидит человек. Отсюда «иногда не открывается».
+  //
+  // Слушатель на фазе перехвата у document срабатывает ДО обработчика htmx на
+  // самой строке. Если блок уже открыт — убираем его и глушим событие, так что
+  // htmx о клике не узнаёт и запрос не уходит вовсе. Никакого eval, никакой
+  // зависимости от внутренностей библиотеки.
+  document.addEventListener('click', function (ev) {
     try {
-      var next = row && row.nextElementSibling;
+      var target = ev.target;
+      if (!target || !target.closest) return;
+      var row = target.closest('tr.drillable');
+      if (!row || !row.hasAttribute('hx-get')) return;
+      var next = row.nextElementSibling;
       if (next && next.classList && next.classList.contains('drill-detail')) {
         next.remove();
         row.classList.remove('drill-open');
-        return false;
+        ev.preventDefault();
+        ev.stopPropagation();
+        return;
       }
-      if (row) row.classList.add('drill-open');
-    } catch (e) { /* при любой неожиданности пусть работает как раньше */ }
-    return true;
-  };
+      row.classList.add('drill-open');
+    } catch (e) { /* при любой неожиданности пусть открывается как раньше */ }
+  }, true);
 
   // Страна в списке аккаунтов. У аккаунта их может быть две сразу — пять из
   // четырнадцати в таблице стоят под двумя странами. Показать одну значит
