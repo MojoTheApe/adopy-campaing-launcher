@@ -3306,8 +3306,26 @@ function mlSignin(cid) {
       if (status) status.innerHTML = '<span style="color:var(--bad)">⚠ ' + aclEscHtml(data.error || 'Unknown error') + '</span>';
       return;
     }
-    var saved = data.token_saved ? ' · token saved in machine settings (Instance ' + instance + ', 1 month)' : '';
-    if (status) status.innerHTML = '<span style="color:var(--good)">✓ Instance ' + instance + ' connected' + saved + '</span>';
+    // Signing in is not the same as getting an automation token: only the
+    // workspace owner may mint one, so a team member's correct password gets
+    // this far and no further. This used to print the same green "connected"
+    // either way, differing only by a trailing clause nobody reads — so the
+    // operator saw success, pressed Publish, and got "TOKEN_A is not set".
+    // Without the token the RPA cannot start a single profile, so say so here.
+    if (status) {
+      if (data.token_saved) {
+        status.innerHTML = '<span style="color:var(--good)">✓ Instance ' + instance
+          + ' connected · token saved in machine settings (1 month)</span>';
+      } else {
+        status.innerHTML = '<span style="color:var(--warn)">⚠ Signed in, but NO automation token — '
+          + 'the RPA still cannot start profiles.</span>'
+          + (data.token_error ? '<br><span style="color:var(--muted);font-size:0.7rem">'
+              + aclEscHtml(data.token_error) + '</span>' : '')
+          + '<br><span style="font-size:0.7rem">Usually only the workspace owner can generate one: '
+          + 'Multilogin <strong>Settings → Automation → Generate Token</strong>, then paste it under '
+          + '<strong>“Paste the automation token directly”</strong> below.</span>';
+      }
+    }
 
     // Clear password
     var passEl = document.getElementById('ml-pass-' + cid);

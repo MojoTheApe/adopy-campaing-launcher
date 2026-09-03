@@ -2313,15 +2313,33 @@ async def multilogin_signin(request: Request) -> JSONResponse:
 
     auth_h = {**H, "Authorization": f"Bearer {bearer}"}
 
-    # Step 2 — get automation token (1 month)
+    # Step 2 — get automation token (1 month).
+    #
+    # Signing in and being allowed to MINT an automation token are two different
+    # permissions: only the workspace owner has the second one. A team member's
+    # correct password therefore gets this far and no further. That distinction
+    # has to survive to the page — the RPA cannot start a single profile without
+    # this token, and "connected" with no token is the same as not connected.
     auto_token = ""
+    token_error = ""
     try:
         r2 = _req.get(f"{MLX_API}/workspace/automation_token?expiration_period=1mo", headers=auth_h, timeout=20)
         if r2.status_code == 200:
             d2 = r2.json().get("data") or {}
             auto_token = d2.get("token") or d2.get("automation_token") or ""
-    except Exception:
-        pass
+            if not auto_token:
+                token_error = "Multilogin returned no automation token for this account."
+        else:
+            detail = ""
+            try:
+                detail = ((r2.json().get("status") or {}).get("message") or "").strip()
+            except Exception:
+                detail = (r2.text or "")[:200]
+            token_error = f"Multilogin refused to issue an automation token [{r2.status_code}]"
+            if detail:
+                token_error += f": {detail}"
+    except Exception as exc:
+        token_error = f"Could not reach Multilogin for the automation token: {exc}"
 
     working_token = auto_token or bearer
 
@@ -2419,6 +2437,10 @@ async def multilogin_signin(request: Request) -> JSONResponse:
         "ok": True,
         "instance": instance,
         "token_saved": save_token and bool(auto_token),
+        # Why there is no token, in the account's own words. Without this the
+        # page could only say "not saved", which reads as a detail rather than
+        # as the reason the next Publish will fail.
+        "token_error": token_error if (save_token and not auto_token) else "",
         "folders": folders,
         "profiles": profiles,
         "debug": profile_debug,
