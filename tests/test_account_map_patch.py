@@ -84,6 +84,47 @@ def test_update_existing_account_preserves_other_fields(tmp_path) -> None:
     assert row["country"] == "MX"
 
 
+def test_columns_this_route_does_not_know_about_survive(tmp_path) -> None:
+    """Linking a Multilogin profile must not erase the tracking link.
+
+    The writer emits a fixed column list, and anything missing from it is
+    dropped from EVERY row in the file. `tracking_link` is added by a different
+    route, so one click on "Use" wiped the link for every account at once. The
+    account then refused to publish with "Link empty in Upload FB Accounts
+    sheet" — a message pointing at a spreadsheet, nowhere near the click that
+    caused it. Found on a second campaign manager's first run, 2026-09-03.
+    """
+    csv_path = tmp_path / "ad_account_map.csv"
+    fieldnames = ["account_name", "ad_account_id", "profile_id", "tracking_link", "pixel_id"]
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow({
+            "account_name": "KeepMyLink", "ad_account_id": "act_222",
+            "profile_id": "", "tracking_link": "https://tkr.example.com/abc?fbclid={fbclid}",
+            "pixel_id": "999",
+        })
+        writer.writerow({
+            "account_name": "Neighbour", "ad_account_id": "act_333",
+            "profile_id": "", "tracking_link": "https://tkr.example.com/xyz",
+            "pixel_id": "",
+        })
+
+    with patch("src.web.app.get_ad_account_map_path", return_value=str(csv_path)):
+        _patch_request({"account_name": "KeepMyLink", "profile_id": "p-1", "multilogin_instance": "B"})
+
+    rows = _read_rows(csv_path)
+    touched = next(r for r in rows if r["account_name"] == "KeepMyLink")
+    assert touched["profile_id"] == "p-1"
+    assert touched["multilogin_instance"] == "B"
+    assert touched["tracking_link"] == "https://tkr.example.com/abc?fbclid={fbclid}"
+    assert touched["pixel_id"] == "999"
+
+    # The row nobody asked about is the one that made this a fleet-wide wipe.
+    untouched = next(r for r in rows if r["account_name"] == "Neighbour")
+    assert untouched["tracking_link"] == "https://tkr.example.com/xyz"
+
+
 def test_missing_account_name_is_rejected(tmp_path) -> None:
     csv_path = tmp_path / "ad_account_map.csv"
     with patch("src.web.app.get_ad_account_map_path", return_value=str(csv_path)):

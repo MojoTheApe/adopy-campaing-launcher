@@ -1623,10 +1623,21 @@ async def account_map_patch(request: Request) -> JSONResponse:
     try:
         # Read existing rows
         rows: list[dict] = []
+        existing_columns: list[str] = []
         if map_path.is_file():
             with open(map_path, encoding="utf-8-sig", newline="") as f:
                 reader = _csv.DictReader(f)
                 rows = list(reader)
+                existing_columns = list(reader.fieldnames or [])
+
+        # Keep every column the file already has. This list is what the writer
+        # emits, and anything missing from it is dropped from EVERY row in the
+        # file — so linking one Multilogin profile used to erase `tracking_link`
+        # for all accounts at once, because the column was added elsewhere
+        # (_save_link_to_machine_map) and never added here. The account then
+        # failed to publish with "Link empty in Upload FB Accounts sheet",
+        # nowhere near the click that caused it.
+        fieldnames = list(_FIELDNAMES) + [c for c in existing_columns if c not in _FIELDNAMES]
 
         # Upsert: find existing row by account_name (case-insensitive) or append
         name_lower = account_name.lower()
@@ -1636,7 +1647,7 @@ async def account_map_patch(request: Request) -> JSONResponse:
                 existing_idx = i
                 break
 
-        new_row: dict = {f: "" for f in _FIELDNAMES}
+        new_row: dict = {f: "" for f in fieldnames}
         if existing_idx is not None:
             new_row.update(rows[existing_idx])
 
@@ -1691,7 +1702,7 @@ async def account_map_patch(request: Request) -> JSONResponse:
         else:
             rows.append(new_row)
 
-        write_csv_atomic(map_path, _FIELDNAMES, rows)
+        write_csv_atomic(map_path, fieldnames, rows)
     except PermissionError:
         # Same class of bug fixed in /account-link-patch below: an unhandled
         # exception here previously made FastAPI's default 500 come back as
