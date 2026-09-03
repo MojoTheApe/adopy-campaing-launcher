@@ -80,6 +80,27 @@ def _describe(sha: str) -> dict[str, str]:
     return {"sha": sha, "short": sha[:12], "tag": _release_tag(sha)}
 
 
+_installed: dict[str, str] | None = None
+
+
+def installed() -> dict[str, str]:
+    """Which release this dashboard is running.
+
+    Shown in the header because there was nowhere to look. On 2026-09-03 a second
+    campaign manager was asked three times whether he had updated, and neither of
+    us could tell: restarting the dashboard changes nothing about the version, so
+    "I reopened it" and "I updated it" look identical from both sides.
+
+    Cached: a running process cannot change its own checkout — the launcher
+    updates the code and then starts a new one.
+    """
+    global _installed
+    if _installed is None:
+        head = _git_out("rev-parse", "HEAD").lower()
+        _installed = _describe(head) if head else {"sha": "", "short": "", "tag": ""}
+    return dict(_installed)
+
+
 def is_supervised() -> bool:
     return (os.environ.get(SUPERVISED_ENV) or "").strip() == "1"
 

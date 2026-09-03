@@ -556,6 +556,16 @@ def _mlx_search_all(requests_mod, headers: dict, search_text: str) -> tuple[list
 MLX_API_BASE = "https://api.multilogin.com"
 
 
+def _installed_release() -> dict[str, str]:
+    """Never let the header break the report if git is unavailable."""
+    try:
+        from src.web import acl_update
+
+        return acl_update.installed()
+    except Exception:  # pragma: no cover - defensive
+        return {"sha": "", "short": "", "tag": ""}
+
+
 def mlx_instance_labels() -> dict[str, str]:
     """Human names for the two Multilogin accounts.
 
@@ -718,6 +728,7 @@ def _render_report(
             "account_alias_map_json": account_alias_map,
             "draft_status": draft_status,
             "mlx_labels": mlx_instance_labels(),
+            "installed_release": _installed_release(),
         },
     )
 

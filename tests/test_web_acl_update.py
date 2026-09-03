@@ -116,6 +116,42 @@ def test_accepted_update_leaves_the_marker_and_names_the_release(monkeypatch, tm
     assert payload["target"] == "acl-release-2026-09-02"
 
 
+def test_the_header_says_which_release_is_installed():
+    """There was nowhere to look, and that cost an afternoon.
+
+    A second campaign manager was asked three times whether he had updated, and
+    neither side could tell: restarting the dashboard changes nothing about the
+    version, so "I reopened it" and "I updated it" look the same from both ends.
+    """
+    import re
+    from unittest.mock import MagicMock
+
+    from src.web.app import _enrich_country_overview, mlx_instance_labels, templates
+    from tests.test_web_drill import _MOCK_REPORT
+
+    report = {**_MOCK_REPORT, "countries": [dict(c) for c in _MOCK_REPORT["countries"]]}
+    _enrich_country_overview(report)
+    context = dict(
+        request=MagicMock(), report=report, warnings=[], built_at="x", upload_errors={},
+        account_preflight={}, account_preflight_json={}, ref_options={},
+        ref_options_json={}, account_alias_map_json={}, draft_status={},
+        mlx_labels=mlx_instance_labels(),
+    )
+    template = templates.env.get_template("report.html")
+
+    shown = template.render(**context, installed_release={"tag": "acl-release-2026-09-03c", "short": "abc123"})
+    assert re.search(r'id="acl-version"[^>]*>acl-release-2026-09-03c<', shown)
+
+    # A checkout with no release tag still has to say something truthful.
+    untagged = template.render(**context, installed_release={"tag": "", "short": "abc123def456"})
+    assert re.search(r'id="acl-version"[^>]*>abc123def456<', untagged)
+
+    # Templates reload per request, Python only on restart: between the two the
+    # header must render rather than take the report down with it.
+    stale_server = template.render(**context)
+    assert re.search(r'id="acl-version"[^>]*>unknown build<', stale_server)
+
+
 # ── the check, which runs on every page load ───────────────────────────────
 
 def test_check_never_breaks_the_page_when_git_is_unusable(monkeypatch):

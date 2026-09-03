@@ -1602,6 +1602,7 @@
    обновлением файлов и рестартом сервера отчёт обязан рендериться, а не падать
    на невидимой переменной. #}
 {%- set mlx = mlx_labels or {'A': 'Inhouse', 'B': 'KLD'} %}
+{%- set rel = installed_release or {} %}
 
 <div class="page-top">
 <header class="page-header">
@@ -1609,7 +1610,7 @@
     <img src="/static/logo.svg" alt="ACL" class="brand-logo" width="36" height="36">
     <div class="brand-text">
       <h1>Adopy Campaigns Launcher</h1>
-      <span class="brand-meta" title="Source: {{ report.source_excel }}">{{ report.date }}<span class="meta-sep">·</span>CM <strong>{{ report.my_cm }}</strong><span class="meta-sep">·</span>Trend <strong>{{ report.trend_days }}d</strong><span class="meta-sep">·</span><strong>{{ report.total_combos }}</strong> combos{% if built_at %}<span class="meta-sep">·</span>Updated <strong>{{ built_at }}</strong>{% endif %}</span>
+      <span class="brand-meta" title="Source: {{ report.source_excel }}">{{ report.date }}<span class="meta-sep">·</span>CM <strong>{{ report.my_cm }}</strong><span class="meta-sep">·</span>Trend <strong>{{ report.trend_days }}d</strong><span class="meta-sep">·</span><strong>{{ report.total_combos }}</strong> combos{% if built_at %}<span class="meta-sep">·</span>Updated <strong>{{ built_at }}</strong>{% endif %}<span class="meta-sep">·</span><span id="acl-version" title="Installed ACL release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</span></span>
     </div>
   </div>
   <div class="buyer-pick" style="margin-left:auto;display:flex;align-items:center;gap:0.45rem">
