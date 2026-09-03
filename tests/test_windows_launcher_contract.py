@@ -115,3 +115,29 @@ def test_stable_enrollment_requires_exact_promoted_release() -> None:
 
     assert "--candidate origin/master --enroll" in enrollment
     assert "auto_update" in enrollment
+
+
+def test_the_dashboard_prints_acls_own_log() -> None:
+    """A silent run is an undiagnosable one.
+
+    Every RPA step is recorded with log.info(...), and nothing in the server
+    process configured logging — so Python's last-resort handler printed
+    WARNING and above and dropped the rest. A run started from the launcher
+    showed nothing but the browser polling for job status, and when one stalled
+    there was no record of what it had been doing.
+    """
+    import logging
+
+    serve = _text("serve.py")
+    assert "_configure_logging()" in serve
+    assert serve.index("_configure_logging()") < serve.index("uvicorn.run(")
+
+    namespace: dict = {"logging": logging, "sys": __import__("sys")}
+    source = serve[serve.index("def _configure_logging"):serve.index("def main(")]
+    exec(compile(source, "serve.py", "exec"), namespace)
+    namespace["_configure_logging"]()
+
+    # Ours speaks at INFO; third-party stays at WARNING or the one line that
+    # matters is buried under playwright and urllib3.
+    assert logging.getLogger("src.fb_ads_rpa.ads_manager_flow").isEnabledFor(logging.INFO)
+    assert not logging.getLogger("urllib3.connectionpool").isEnabledFor(logging.INFO)

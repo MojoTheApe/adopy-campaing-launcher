@@ -87,9 +87,39 @@ print(f"[serve] RPA engine: {_engine or 'recipe_player (default)'}")
 if _stop and _engine != "recorded_flow":
     print(f"[serve] WARNING: partial run — recipe stops after '{_stop}'")
 
+import logging
+
 import uvicorn
 
 _DEFAULT_PORT = 9090
+
+
+def _configure_logging() -> None:
+    """Send ACL's own step log to this window.
+
+    Every step the RPA takes is recorded with log.info(...) — which profile it
+    opened, which field it filled, what it is waiting for. Those lines went
+    nowhere: nothing in this process ever configured logging, so Python's
+    last-resort handler printed WARNING and above and dropped the rest. A run
+    started from the launcher was therefore silent, and the window showed
+    nothing but the browser polling for job status.
+
+    Found on 2026-09-03, watching a stalled run on another machine with no
+    record of what it had been doing — the console had the answer and was
+    throwing it away.
+
+    Third-party loggers stay at WARNING: playwright and urllib3 at INFO bury
+    the one line that matters.
+    """
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s", datefmt="%H:%M:%S")
+    )
+    root = logging.getLogger()
+    if not any(isinstance(h, logging.StreamHandler) for h in root.handlers):
+        root.addHandler(handler)
+    root.setLevel(logging.WARNING)
+    logging.getLogger("src").setLevel(logging.INFO)
 
 
 def _pick_port(host: str, preferred: int, *, scan: int = 20) -> int:
@@ -142,6 +172,8 @@ def main() -> None:
         help="Do not open the browser automatically",
     )
     args = parser.parse_args()
+
+    _configure_logging()
 
     port = _pick_port(args.host, args.port)
     url = f"http://{args.host}:{port}/"
