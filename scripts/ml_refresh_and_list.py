@@ -19,20 +19,23 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-try:
-    from config.paths import load_env
+from config.paths import get_machine_env_path, load_env, update_machine_env
 
-    load_env()
-except Exception:
-    pass
+load_env()
 
 MLX_API = "https://api.multilogin.com"
 HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
 
 
 def signin(email: str, password: str) -> str:
-    """Sign in and return a short-lived bearer token."""
-    password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+    """Sign in and return a short-lived bearer token.
+
+    MD5, not SHA-256: that is what the Multilogin X API asks for. The dashboard
+    was corrected on 2026-07-13 (commit 3126015) and this script was not, so it
+    has been failing sign-in ever since — which is exactly the kind of thing you
+    find out on the day you need it as a second opinion.
+    """
+    password_hash = hashlib.md5(password.encode("utf-8")).hexdigest()
     r = requests.post(
         f"{MLX_API}/user/signin",
         headers=HEADERS,
@@ -51,16 +54,31 @@ def signin(email: str, password: str) -> str:
 
 
 def get_automation_token(bearer: str, period: str = "1mo") -> str:
+    """Mint an automation token, and SAY what happened when it fails.
+
+    This used to return "" for every non-200, so "Multilogin refuses this
+    account" and "we asked for a period it no longer accepts" looked identical
+    from the outside. That silence is why 2026-09-03 was spent guessing at
+    subscriptions and permissions instead of reading one line of JSON.
+
+    The periods are tried in order because an unaccepted `expiration_period` is
+    a 400 on an endpoint that is otherwise working perfectly.
+    """
     h = {**HEADERS, "Authorization": f"Bearer {bearer}"}
-    r = requests.get(
-        f"{MLX_API}/workspace/automation_token?expiration_period={period}",
-        headers=h,
-        timeout=30,
-    )
-    if r.status_code != 200:
-        return ""
-    data = r.json().get("data") or {}
-    return data.get("token") or data.get("automation_token") or ""
+    tried = [period] + [p for p in ("1m", "30d", "1w", "1d") if p != period]
+    for attempt in tried:
+        url = f"{MLX_API}/workspace/automation_token?expiration_period={attempt}"
+        r = requests.get(url, headers=h, timeout=30)
+        if r.status_code == 200:
+            data = r.json().get("data") or {}
+            token = data.get("token") or data.get("automation_token") or ""
+            if token:
+                print(f"  [ok] expiration_period={attempt}")
+                return token
+            print(f"  [warn] expiration_period={attempt}: HTTP 200 but no token in {r.text[:200]}")
+            continue
+        print(f"  [warn] expiration_period={attempt}: HTTP {r.status_code} {r.text[:200]}")
+    return ""
 
 
 def list_folders(bearer: str) -> list[dict]:
@@ -97,21 +115,33 @@ def search_profiles(bearer: str, search: str = "") -> list[dict]:
 
 
 def update_env_token(token: str) -> None:
-    env_path = _ROOT / ".env"
-    if not env_path.is_file():
-        print(f"  [skip] .env not found at {env_path}")
-        return
-    lines = env_path.read_text(encoding="utf-8").splitlines()
-    updated = False
-    for i, line in enumerate(lines):
-        if line.startswith("MULTILOGIN_AUTOMATION_TOKEN_A="):
-            lines[i] = f"MULTILOGIN_AUTOMATION_TOKEN_A={token}"
-            updated = True
-            break
-    if not updated:
-        lines.append(f"MULTILOGIN_AUTOMATION_TOKEN_A={token}")
-    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"  [ok] .env updated with new automation token")
+    """Write the token where THIS machine actually reads it from.
+
+    There are two possible locations and they differ per machine: a migrated
+    install keeps settings in %LOCALAPPDATA%\\ACL\\.env, an older one still has
+    them inside the checkout. Writing to the wrong one produces a token that is
+    saved, correct, and completely ignored.
+    """
+    import re
+
+    key = "MULTILOGIN_AUTOMATION_TOKEN_A"
+    pattern = re.compile(rf"^\s*(?:export\s+)?{key}\s*=")
+    for path in (Path(get_machine_env_path()), _ROOT / ".env"):
+        if not path.is_file():
+            continue
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for i, line in enumerate(lines):
+            if pattern.match(line):
+                lines[i] = f'{key}={json.dumps(token, ensure_ascii=False)}'
+                path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                print(f"  [ok] token updated in {path}")
+                return
+    # Nowhere to update — put it in the machine-local file, which is where a
+    # current install expects it.
+    try:
+        print(f"  [ok] token saved to {update_machine_env({key: token})}")
+    except Exception as exc:
+        print(f"  [fail] could not save the token: {exc}")
 
 
 def main() -> None:
