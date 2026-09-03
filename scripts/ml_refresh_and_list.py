@@ -27,7 +27,7 @@ MLX_API = "https://api.multilogin.com"
 HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
 
 
-def signin(email: str, password: str) -> str:
+def signin(email: str, password: str) -> tuple[str, str]:
     """Sign in and return a short-lived bearer token.
 
     MD5, not SHA-256: that is what the Multilogin X API asks for. The dashboard
@@ -50,7 +50,12 @@ def signin(email: str, password: str) -> str:
     token = data.get("token") or ""
     if not token:
         sys.exit(f"Sign-in: no token in response: {r.text[:300]}")
-    return token
+    # The refresh token is what lets you move to another workspace later. It was
+    # being thrown away here, which is why switching looked impossible.
+    refresh = data.get("refresh_token") or data.get("refreshToken") or ""
+    if not refresh:
+        print(f"  [warn] sign-in returned no refresh_token — switching workspace will not work")
+    return token, refresh
 
 
 def get_automation_token(bearer: str, period: str = "1mo") -> str:
@@ -139,7 +144,7 @@ def list_workspaces(bearer: str) -> list[dict]:
     return out
 
 
-def switch_workspace(bearer: str, email: str, workspace_id: str) -> str:
+def switch_workspace(bearer: str, email: str, workspace_id: str, refresh: str) -> tuple[str, str]:
     """Re-issue the sign-in token against a specific workspace.
 
     Sign-in puts you in exactly one workspace — the account's own. An account
@@ -147,26 +152,26 @@ def switch_workspace(bearer: str, email: str, workspace_id: str) -> str:
     then sees an empty world: no profiles, and no right to mint an automation
     token, because the token would be for the wrong workspace. Everything after
     that looks like a permissions or subscription problem and is neither.
+
+    The API asks for all three of email, workspace_id and refresh_token; the
+    refresh token comes from sign-in and was previously discarded.
     """
+    if not refresh:
+        print("  [warn] no refresh_token from sign-in — cannot switch workspace")
+        return "", ""
     h = {**HEADERS, "Authorization": f"Bearer {bearer}"}
-    bodies = [
-        {"email": email, "workspace_id": workspace_id},
-        {"workspace_id": workspace_id},
-        {"workspaceID": workspace_id},
-        {"email": email, "workspaceID": workspace_id},
-    ]
-    for body in bodies:
-        r = requests.post(f"{MLX_API}/user/refresh_token", headers=h, json=body, timeout=30)
-        if r.status_code == 200:
-            data = r.json().get("data") or {}
-            token = data.get("token") or ""
-            if token:
-                print(f"  [ok] switched with {sorted(body)}")
-                return token
-            print(f"  [warn] {sorted(body)}: HTTP 200 but no token — {r.text[:200]}")
-            continue
-        print(f"  [warn] {sorted(body)}: HTTP {r.status_code} {r.text[:200]}")
-    return ""
+    body = {"email": email, "workspace_id": workspace_id, "refresh_token": refresh}
+    r = requests.post(f"{MLX_API}/user/refresh_token", headers=h, json=body, timeout=30)
+    if r.status_code != 200:
+        print(f"  [warn] switch: HTTP {r.status_code} {r.text[:300]}")
+        return "", ""
+    data = r.json().get("data") or {}
+    token = data.get("token") or ""
+    new_refresh = data.get("refresh_token") or data.get("refreshToken") or refresh
+    if not token:
+        print(f"  [warn] switch: HTTP 200 but no token — {r.text[:300]}")
+        return "", ""
+    return token, new_refresh
 
 
 def list_folders(bearer: str) -> list[dict]:
@@ -202,17 +207,26 @@ def search_profiles(bearer: str, search: str = "") -> list[dict]:
     return data if isinstance(data, list) else []
 
 
-def update_env_token(token: str) -> None:
+def update_env_token(token: str, slot: str = "A") -> None:
     """Write the token where THIS machine actually reads it from.
 
     There are two possible locations and they differ per machine: a migrated
     install keeps settings in %LOCALAPPDATA%\\ACL\\.env, an older one still has
     them inside the checkout. Writing to the wrong one produces a token that is
     saved, correct, and completely ignored.
+
+    The slot matters just as much. A and B hold two different Multilogin
+    accounts — Inhouse and KLD — and every account in ad_account_map.csv points
+    at one of them. This used to write to A unconditionally, which silently
+    replaces the Inhouse token with a KLD one: the RPA then opens the wrong
+    company's profiles with a token that authenticates perfectly.
     """
     import re
 
-    key = "MULTILOGIN_AUTOMATION_TOKEN_A"
+    slot = (slot or "A").strip().upper()
+    if slot not in ("A", "B"):
+        raise ValueError(f"slot must be A or B, got {slot!r}")
+    key = f"MULTILOGIN_AUTOMATION_TOKEN_{slot}"
     pattern = re.compile(rf"^\s*(?:export\s+)?{key}\s*=")
     for path in (Path(get_machine_env_path()), _ROOT / ".env"):
         if not path.is_file():
@@ -244,7 +258,7 @@ def main() -> None:
         sys.exit("Password is required.")
 
     print("\nSigning in...")
-    bearer = signin(email, password)
+    bearer, refresh = signin(email, password)
     print("  [ok] signed in\n")
 
     print("Who this sign-in belongs to...")
@@ -260,7 +274,7 @@ def main() -> None:
         if pick.isdigit() and 1 <= int(pick) <= len(spaces):
             chosen = spaces[int(pick) - 1]
             print(f"  Switching to {chosen['name']} ({chosen['id']})...")
-            switched = switch_workspace(bearer, email, chosen["id"])
+            switched, refresh = switch_workspace(bearer, email, chosen["id"], refresh)
             if switched:
                 bearer = switched
                 print("  Now signed in against that workspace:")
@@ -272,9 +286,13 @@ def main() -> None:
     auto_token = get_automation_token(bearer, "1mo")
     if auto_token:
         print(f"  [ok] automation token obtained")
-        save = input("  Save to fb_agents/.env? [Y/n]: ").strip().lower()
-        if save in ("", "y", "yes"):
-            update_env_token(auto_token)
+        print("  Which Multilogin account is this token for?")
+        print("    A) Inhouse    B) KLD")
+        slot = input("  Slot [A/B, Enter = do not save]: ").strip().upper()
+        if slot in ("A", "B"):
+            update_env_token(auto_token, slot)
+        else:
+            print("  [skip] not saved")
     else:
         print("  [warn] could not get automation token, using short-lived token")
         auto_token = bearer
