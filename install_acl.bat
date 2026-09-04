@@ -122,9 +122,19 @@ echo.
 if %RC% NEQ 0 (
     echo Install finished, but something required is still missing - see [FAIL] above.
     echo Fix those, then run this file again.
-) else (
-    echo ACL is ready. Start it with start_dashboard.bat
+    echo.
+    pause
+    exit /b %RC%
 )
+
+REM Green check, so open it. "ACL is ready. Start it with start_dashboard.bat"
+REM ended the install one step short of anything a person could look at, and
+REM that step is where a new campaign manager stalls: the installer said ready,
+REM the screen said nothing, and the next move was to ask someone.
+echo ACL is ready - starting the dashboard...
+start "" "%~dp0start_dashboard.bat"
+echo.
+echo A second window has opened. Keep it open - closing it stops ACL.
 echo.
 pause
-exit /b %RC%
+exit /b 0

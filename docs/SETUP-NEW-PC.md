@@ -1,6 +1,6 @@
 # ACL — Setup on a New Computer
 
-Windows 10/11. About 30 minutes. No coding needed.
+Windows 10/11. About 15 minutes. No coding, no terminal.
 
 **Release to install: `acl-release-2026-09-03e`**
 
@@ -20,69 +20,40 @@ Get the token and the OAuth file through the password manager — never by chat 
 
 ---
 
-## Step 1 — Install three programs
+## Step 1 — Run one file
 
-**Why these:** ACL is a Python program, so a machine without Python has nothing
-to run it with. Git is how ACL is downloaded **and how it updates** —
-the dashboard offers an **Update** button when a verified new release
-exists, and refuses anything that is not one. Both are one-time installs.
+Ask Evgeni for **`Install ACL.bat`** and double-click it.
 
-Open **PowerShell** from the Start menu and paste these two lines:
+It does everything that used to be four separate steps: installs Python and Git
+if they are missing, downloads ACL, installs it, makes a desktop shortcut, checks
+the machine, and opens the dashboard.
 
-```powershell
-winget install --id Git.Git -e
-winget install --id Python.Python.3.13 -e
-```
+**If it says Python or Git was installed and the window reopens** — that is
+correct and expected. A program installed a moment ago is not on the PATH of a
+window that was already open, so the file restarts itself once to pick it up.
+Let the new window finish.
 
-Then **close PowerShell and open it again**, and check both are there:
+**A GitHub sign-in window may open.** Use the company GitHub account you were
+given access with.
 
-```powershell
-git --version
-python --version
-```
-
-You should see a version number for each. If `python` is not recognised even
-after reopening PowerShell, restart Windows and try again.
+It is safe to run again at any time: an existing installation is updated, never
+re-downloaded, and your settings are never touched.
 
 <details>
 <summary>If winget is not available on this PC</summary>
 
-Download and run the installers by hand:
+The file will say so and stop without changing anything. Update **App Installer**
+from the Microsoft Store and run it again, or install these two by hand and then
+re-run it:
 
-- **Git for Windows** — https://git-scm.com/download/win — default options are fine
-- **Python 3.11 or newer, 64-bit** — https://www.python.org/downloads/ —
-  **tick "Add python.exe to PATH"** on the first installer screen
+* Python 3.11+ — https://www.python.org/downloads/ (tick **Add python.exe to PATH**)
+* Git — https://git-scm.com/download/win
 
 </details>
 
-**Third program: Multilogin Desktop.** Install it, sign in to the workspace,
-open each of your assigned profiles once so it exists on this PC, close them,
-and leave Multilogin Desktop running.
-
 ---
 
-## Step 2 — Download ACL
-
-```powershell
-cd $env:USERPROFILE\Documents
-git clone https://github.com/MojoTheApe/adopy-campaing-launcher.git ACL
-cd ACL
-git checkout acl-release-2026-09-01
-```
-
----
-
-## Step 3 — Install it
-
-Double-click **`install_acl.bat`** in the `ACL` folder.
-
-It builds its own Python environment, installs everything, and runs a check.
-
-**The first run will show FAIL lines. That is normal** — your settings are not in place yet. What matters is that it says `Dependencies OK`.
-
----
-
-## Step 4 — Put your files and your name in
+## Step 2 — Put your files and your name in
 
 **A. Put these three on your Desktop, with exactly these names:**
 
@@ -109,11 +80,14 @@ MY_CM_NAME=Your Name Exactly As In The Workbook
 Save it as `.env`, not `.env.txt`.
 
 > The **Multilogin token** is not typed into this file — you paste it into the
-> dashboard in Step 6, in the Multilogin panel.
+> dashboard in Step 5, in the Multilogin panel.
 
 ---
 
-## Step 5 — Check the machine
+## Step 3 — Check the machine (only if something looks wrong)
+
+Step 1 already ran this check and showed the result. Run it again whenever
+you change a file or a setting:
 
 ```powershell
 cd $env:USERPROFILE\Documents\ACL
@@ -130,7 +104,7 @@ A `[warn] Telemetry upload` line is fine. A `[FAIL]` line is not — it tells yo
 
 ---
 
-## Step 6 — Start the dashboard
+## Step 4 — Start the dashboard
 
 Double-click **`start_dashboard.bat`**.
 
@@ -140,7 +114,7 @@ Google will ask you to sign in once. Use your company account and approve read-o
 
 ---
 
-## Step 7 — Connect your accounts
+## Step 5 — Connect your accounts
 
 In the dashboard, open the **Accounts** section and pick your open Multilogin profile for each account. That is all — you do **not** need to edit any spreadsheet.
 
