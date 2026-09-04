@@ -1,0 +1,201 @@
+"""Where each ad account is used: its countries and its assets.
+
+The account map answers a different question and must keep answering it. The RPA
+asks "which country is this campaign for" — one value, chosen per publish, and
+`ad_account_map.csv` carries it in a single `country` column. The dashboard asks
+"where is this account used", and the answer is genuinely several countries and
+several assets at once. Squeezing the second question into the first column is
+what makes an account disappear from one country the moment it is added to
+another.
+
+So links live here, in their own store, owned by the dashboard. Nothing in the
+RPA changes: it keeps reading the column it always read.
+
+One store, two screens. The account map on Home and the per-country account list
+are not two lists kept in step — they are two views over these rows. Adding a
+link in either place adds it once; removing it removes it once. Two lists that
+synchronise always drift, and the drift is discovered by someone who trusted the
+wrong one.
+
+Format: one row per link, so a link can be added or removed without rewriting
+anything else.
+
+    account_name,kind,value
+    FacebookUL869,country,Chile
+    FacebookUL869,country,Peru
+    FacebookUL869,asset,Ait
+"""
+from __future__ import annotations
+
+import csv
+import os
+import uuid
+from pathlib import Path
+
+from config.paths import get_ad_account_map_path, get_local_config_dir
+
+FIELDNAMES = ["account_name", "kind", "value"]
+KINDS = ("country", "asset")
+
+_SEEDED_MARK = ".account_links.seeded"
+
+
+def links_path() -> Path:
+    return Path(get_local_config_dir()) / "account_links.csv"
+
+
+def _norm(value: str) -> str:
+    return (value or "").strip()
+
+
+def _key(account: str, kind: str, value: str) -> tuple[str, str, str]:
+    """Case-insensitive identity. "chile" and "Chile" are one link, not two."""
+    return (_norm(account).lower(), _norm(kind).lower(), _norm(value).lower())
+
+
+def load() -> list[dict[str, str]]:
+    path = links_path()
+    if not path.is_file():
+        return []
+    with path.open(encoding="utf-8-sig", newline="") as fh:
+        rows = []
+        for row in csv.DictReader(fh):
+            account = _norm(row.get("account_name"))
+            kind = _norm(row.get("kind")).lower()
+            value = _norm(row.get("value"))
+            if account and kind in KINDS and value:
+                rows.append({"account_name": account, "kind": kind, "value": value})
+        return rows
+
+
+def _write(rows: list[dict[str, str]]) -> None:
+    path = links_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with open(temp, "w", encoding="utf-8", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=FIELDNAMES, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def link(account: str, kind: str, value: str) -> bool:
+    """Add one link. Returns False if it was already there."""
+    kind = _norm(kind).lower()
+    if kind not in KINDS:
+        raise ValueError(f"kind must be one of {KINDS}, got {kind!r}")
+    account, value = _norm(account), _norm(value)
+    if not account or not value:
+        raise ValueError("account and value are both required")
+    rows = load()
+    if any(_key(**r) == _key(account, kind, value) for r in _rows_as_kwargs(rows)):
+        return False
+    rows.append({"account_name": account, "kind": kind, "value": value})
+    _write(rows)
+    return True
+
+
+def unlink(account: str, kind: str, value: str) -> bool:
+    """Remove one link. The account itself is never deleted here — it keeps its
+    row in the account map, its profile and its history, and simply stops being
+    listed under this country or asset."""
+    target = _key(account, kind, value)
+    rows = load()
+    kept = [r for r in rows if _key(r["account_name"], r["kind"], r["value"]) != target]
+    if len(kept) == len(rows):
+        return False
+    _write(kept)
+    return True
+
+
+def unlink_all_for(kind: str, value: str) -> list[str]:
+    """Drop a country or asset entirely. Returns the accounts that were on it.
+
+    They are what falls into Available accounts — still configured, still
+    connected to their Multilogin profile, just not placed anywhere. The caller
+    is expected to have warned about any that are still running campaigns.
+    """
+    kind, value = _norm(kind).lower(), _norm(value)
+    rows = load()
+    freed = [r["account_name"] for r in rows if r["kind"] == kind and _norm(r["value"]).lower() == value.lower()]
+    if freed:
+        _write([r for r in rows if not (r["kind"] == kind and _norm(r["value"]).lower() == value.lower())])
+    return sorted(set(freed))
+
+
+def _rows_as_kwargs(rows: list[dict[str, str]]):
+    for r in rows:
+        yield {"account": r["account_name"], "kind": r["kind"], "value": r["value"]}
+
+
+def values_for(account: str, kind: str) -> list[str]:
+    """Every country (or asset) this account is placed in."""
+    account, kind = _norm(account).lower(), _norm(kind).lower()
+    return sorted(
+        {r["value"] for r in load() if r["account_name"].lower() == account and r["kind"] == kind}
+    )
+
+
+def accounts_for(kind: str, value: str) -> list[str]:
+    kind, value = _norm(kind).lower(), _norm(value).lower()
+    return sorted(
+        {r["account_name"] for r in load() if r["kind"] == kind and r["value"].lower() == value}
+    )
+
+
+def all_values(kind: str) -> list[str]:
+    kind = _norm(kind).lower()
+    return sorted({r["value"] for r in load() if r["kind"] == kind}, key=str.casefold)
+
+
+def available_accounts(known_accounts: list[str]) -> list[str]:
+    """Accounts placed in no country — the Available accounts list.
+
+    Deliberately keyed on country alone: an account tagged with an asset but no
+    country still has nowhere to run, and hiding it from this list is how it
+    stays forgotten.
+    """
+    placed = {r["account_name"].lower() for r in load() if r["kind"] == "country"}
+    return sorted({a for a in known_accounts if _norm(a) and _norm(a).lower() not in placed})
+
+
+def seed_from_account_map() -> int:
+    """Carry the existing single-country column into links, once.
+
+    Every machine already has accounts placed in a country — in the one column
+    the map has always had. Starting from an empty store would present a working
+    install as if nothing were configured, and someone would place two dozen
+    accounts by hand for no reason.
+
+    Runs once; the marker sits next to the store so a later manual removal of a
+    link is not undone on the next start.
+    """
+    marker = links_path().with_name(_SEEDED_MARK)
+    if marker.exists() or links_path().exists():
+        return 0
+    map_path = Path(get_ad_account_map_path())
+    if not map_path.is_file():
+        return 0
+    rows: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    with map_path.open(encoding="utf-8-sig", newline="") as fh:
+        for row in csv.DictReader(fh):
+            account = _norm(row.get("account_name"))
+            country = _norm(row.get("country"))
+            if not account or not country:
+                continue
+            k = _key(account, "country", country)
+            if k in seen:
+                continue
+            seen.add(k)
+            rows.append({"account_name": account, "kind": "country", "value": country})
+    if rows:
+        _write(rows)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("seeded from ad_account_map.csv\n", encoding="utf-8")
+    return len(rows)
