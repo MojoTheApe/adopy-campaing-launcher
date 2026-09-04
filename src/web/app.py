@@ -231,6 +231,102 @@ def _get_upload_ref_cached() -> dict:
         return {}
 
 
+def _build_account_map_view(report: dict) -> dict:
+    """The account map on Home: every country, its accounts, and what they did.
+
+    Countries come from the links store, not from the workbook, because the two
+    answer different questions. The workbook says where money was spent; the
+    links say where this team decided to work. A country that was opened
+    yesterday has no spend yet and must still appear, and a country that was
+    closed must stop appearing even while last week's numbers are still in the
+    file.
+
+    Numbers come from the workbook, per account per country — leads, deposits,
+    spend, CPL, CPA, CR are already computed there, so nothing is recalculated
+    here and the map cannot disagree with the rest of the page.
+    """
+    from src.web import account_links
+
+    try:
+        account_links.seed_from_account_map()
+    except Exception:  # pragma: no cover - a missing map must not blank the page
+        pass
+
+    # account performance per (country, account), straight from the report.
+    #
+    # Keyed by BOTH the full name and the two-letter code: the account map has
+    # always stored codes ("CR"), the workbook and the report use full names
+    # ("Costa Rica"), and matching on one of them alone silently produces a map
+    # where every account says "no data" — which reads as a data problem rather
+    # than as a join that missed.
+    per_country: dict[str, dict[str, dict]] = {}
+    labels_in_report: set[str] = set()
+    display_name: dict[str, str] = {}
+    for country in report.get("countries", []):
+        name = (country.get("country") or "").strip()
+        bucket: dict[str, dict] = {}
+        for row in country.get("account_rows") or []:
+            label = (row.get("account_label") or "").strip()
+            if not label:
+                continue
+            labels_in_report.add(label)
+            bucket[label] = row.get("account_excel") or {}
+        for key in {name.casefold(), _country_code(name).casefold()}:
+            if key:
+                per_country[key] = bucket
+                display_name.setdefault(key, name)
+
+    map_path = get_ad_account_map_path()
+    known = list(load_ad_account_map(map_path)) if os.path.isfile(map_path) else []
+    all_known = sorted(set(known) | labels_in_report, key=str.casefold)
+
+    countries: list[dict] = []
+    for stored in account_links.all_values("country"):
+        key = stored.casefold()
+        stats = per_country.get(key, {})
+        # Show the country the way the rest of the page shows it. The map stores
+        # whatever was typed when the account was connected — often a code — and
+        # a Home screen reading "CR" next to a sidebar reading "Costa Rica"
+        # invites the reader to wonder whether they are the same place.
+        country_name = display_name.get(key, stored)
+        rows = []
+        for label in account_links.accounts_for("country", stored):
+            excel = stats.get(label) or {}
+            rows.append({
+                "account": label,
+                "assets": account_links.values_for(label, "asset"),
+                "countries": [
+                    display_name.get(v.casefold(), v)
+                    for v in account_links.values_for(label, "country")
+                ],
+                "spend": excel.get("spend"),
+                "leads": excel.get("leads"),
+                "deposits": excel.get("deposits"),
+                "cpl": excel.get("cpl"),
+                "cpa": excel.get("cpa"),
+                "cr": excel.get("cr"),
+                "has_data": bool(excel.get("has_data")),
+            })
+        countries.append({
+            # `country` is what the reader sees, `key` is what the store knows.
+            # They differ whenever the account map holds a code ("KW") and the
+            # report holds a name ("Kuwait") — and a button that sends the label
+            # instead of the key returns HTTP 200 having changed nothing.
+            "country": country_name,
+            "key": stored,
+            "rows": rows,
+            "spend": sum(r["spend"] or 0 for r in rows),
+            "leads": sum(r["leads"] or 0 for r in rows),
+            "deposits": sum(r["deposits"] or 0 for r in rows),
+        })
+
+    available = [
+        {"account": label, "assets": account_links.values_for(label, "asset")}
+        for label in account_links.available_accounts(all_known)
+    ]
+    return {"countries": countries, "available": available, "all_accounts": all_known}
+
+
 def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     """Return preflight info per account:
     {acc_label: {link, link_status, missing_map_fields: [str], has_map_entry}}
@@ -729,6 +825,7 @@ def _render_report(
             "draft_status": draft_status,
             "mlx_labels": mlx_instance_labels(),
             "installed_release": _installed_release(),
+            "account_map": _build_account_map_view(report),
         },
     )
 
@@ -1716,6 +1813,92 @@ async def account_map_patch(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": f"Failed to save: {exc}"}, status_code=500)
 
     return JSONResponse({"ok": True, "saved": new_row["account_name"]})
+
+
+@app.post("/account-links")
+async def account_links_edit(request: Request) -> JSONResponse:
+    """Place an account in a country or an asset, or take it out again.
+
+    Body: {action: "link"|"unlink"|"close", kind: "country"|"asset",
+           value: str, account?: str, confirm?: bool}
+
+    Nothing here deletes an account. "unlink" takes it out of one country;
+    "close" retires the country and every account on it falls into Available
+    accounts, keeping its profile, proxy and history. An account that is
+    spending today is not moved without an explicit confirmation — the map is
+    also how somebody notices that a country still has money running through it.
+    """
+    from src.web import account_links
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    action = (data.get("action") or "").strip().lower()
+    kind = (data.get("kind") or "country").strip().lower()
+    value = (data.get("value") or "").strip()
+    account = (data.get("account") or "").strip()
+    confirm = bool(data.get("confirm"))
+
+    if kind not in account_links.KINDS:
+        return JSONResponse({"ok": False, "error": f"Unknown kind {kind!r}"}, status_code=400)
+    if not value:
+        return JSONResponse({"ok": False, "error": "A country or asset name is required"}, status_code=400)
+
+    try:
+        if action == "link":
+            if not account:
+                return JSONResponse({"ok": False, "error": "Pick an account first"}, status_code=400)
+            added = account_links.link(account, kind, value)
+            return JSONResponse({"ok": True, "changed": added})
+
+        if action in ("unlink", "close"):
+            spending = _accounts_spending_today(
+                [account] if action == "unlink" else account_links.accounts_for(kind, value)
+            )
+            if spending and not confirm:
+                names = ", ".join(spending[:4]) + ("…" if len(spending) > 4 else "")
+                return JSONResponse({
+                    "ok": False,
+                    "needs_confirm": True,
+                    "error": f"{names} spent money today. Taking {'it' if len(spending) == 1 else 'them'} "
+                             f"out does not stop anything — the campaigns keep running, "
+                             f"they just stop being listed here.",
+                }, status_code=409)
+
+            if action == "unlink":
+                if not account:
+                    return JSONResponse({"ok": False, "error": "Pick an account first"}, status_code=400)
+                return JSONResponse({"ok": True, "changed": account_links.unlink(account, kind, value)})
+
+            freed = account_links.unlink_all_for(kind, value)
+            return JSONResponse({"ok": True, "changed": bool(freed), "freed": freed})
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:  # pragma: no cover - defensive
+        return JSONResponse({"ok": False, "error": f"Could not save: {exc}"}, status_code=500)
+
+    return JSONResponse({"ok": False, "error": f"Unknown action {action!r}"}, status_code=400)
+
+
+def _accounts_spending_today(accounts: list[str]) -> list[str]:
+    """Which of these accounts has spend in today's workbook."""
+    try:
+        report, _df, _warnings = get_cached_report()
+    except Exception:
+        return []
+    wanted = {a.strip().casefold() for a in accounts if a and a.strip()}
+    spending: set[str] = set()
+    for country in report.get("countries", []):
+        for row in country.get("account_rows") or []:
+            label = (row.get("account_label") or "").strip()
+            if label.casefold() not in wanted:
+                continue
+            excel = row.get("account_excel") or {}
+            if (excel.get("spend") or 0) > 0:
+                spending.add(label)
+    return sorted(spending)
 
 
 @app.post("/account-map-remove")

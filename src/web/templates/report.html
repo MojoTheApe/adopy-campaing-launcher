@@ -1239,6 +1239,77 @@
       color: var(--muted);
     }
 
+    /* ── Account map (Home) ───────────────────────────────────────────
+       Читается как таблица ведения аккаунтов, а не как отчёт: страна —
+       заголовок группы, аккаунты под ней, свободные внизу отдельно. */
+    .amap { margin-top: var(--space-lg); }
+    .amap-head {
+      display: flex; align-items: baseline; gap: var(--space-md);
+      margin-bottom: var(--space-sm);
+    }
+    .amap-head h3 { margin: 0; }
+    .amap-head .amap-note { font-size: 0.78rem; color: var(--muted); }
+    .amap-country {
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      background: var(--bg-elev); margin-bottom: var(--space-md);
+      overflow: hidden;
+    }
+    .amap-country > summary {
+      display: flex; align-items: center; gap: var(--space-md);
+      padding: 0.55rem 0.85rem; cursor: pointer; user-select: none;
+      background: var(--bg-subtle); font-weight: 600; font-size: 0.9rem;
+    }
+    .amap-country > summary::-webkit-details-marker { display: none; }
+    .amap-country > summary::before { content: '▸'; color: var(--muted); font-size: 0.75rem; }
+    .amap-country[open] > summary::before { content: '▾'; }
+    .amap-sum {
+      margin-left: auto; display: flex; gap: 1.1rem;
+      font-weight: 400; font-size: 0.78rem; color: var(--muted);
+    }
+    .amap-sum b { color: var(--text); font-weight: 600; }
+    .amap table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .amap th {
+      text-align: left; font-weight: 500; font-size: 0.7rem;
+      text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
+      padding: 0.4rem 0.85rem; border-bottom: 1px solid var(--border);
+    }
+    .amap td { padding: 0.42rem 0.85rem; border-bottom: 1px solid var(--border); }
+    .amap tbody tr:last-child td { border-bottom: 0; }
+    .amap tbody tr:hover { background: var(--bg-hover); }
+    .amap .amap-acc { font-weight: 500; }
+    .amap .amap-tags { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; }
+    .amap-tag {
+      font-size: 0.68rem; padding: 0.05rem 0.35rem; border-radius: 3px;
+      background: var(--bg-subtle); color: var(--muted); white-space: nowrap;
+    }
+    .amap-tag.other { background: var(--accent-soft); color: var(--accent); }
+    .amap .nodata { color: var(--muted); }
+    .amap-available > summary { background: var(--bg-subtle); }
+    .amap-btn {
+      background: none; border: 1px solid var(--border-strong);
+      color: var(--muted); border-radius: var(--radius-sm);
+      font: inherit; font-size: 0.72rem; padding: 0.1rem 0.45rem;
+      cursor: pointer; line-height: 1.5;
+    }
+    .amap-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .amap-btn.danger:hover { border-color: var(--bad); color: var(--bad); }
+    .amap-x {
+      background: none; border: 0; color: var(--border-strong);
+      cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.2rem;
+    }
+    .amap-x:hover { color: var(--bad); }
+    .amap-add { display: flex; gap: 0.4rem; align-items: center; padding: 0.5rem 0.85rem; }
+    .amap-add select, .amap-add input {
+      font: inherit; font-size: 0.78rem; padding: 0.18rem 0.35rem;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg); color: var(--text); max-width: 15rem;
+    }
+    .amap-msg { font-size: 0.75rem; color: var(--muted); margin-left: 0.3rem; }
+    .amap-msg.bad { color: var(--bad); }
+    .amap-empty {
+      padding: 0.7rem 0.85rem; font-size: 0.8rem; color: var(--muted);
+    }
+
     /* ── Goals Progress Panel ── */
     .goals-panel {
       background: var(--bg-elev);
@@ -1603,6 +1674,7 @@
    на невидимой переменной. #}
 {%- set mlx = mlx_labels or {'A': 'Inhouse', 'B': 'KLD'} %}
 {%- set rel = installed_release or {} %}
+{%- set amap = account_map or {'countries': [], 'available': []} %}
 
 <div class="page-top">
 <header class="page-header">
@@ -1923,6 +1995,131 @@ async function dashRefresh(ev) {
     </table>
   </div>
 </div>
+
+  {# ── Account map ──────────────────────────────────────────────────────
+     Одно хранилище, два экрана: эта карта и список аккаунтов внутри страны
+     читают одни и те же связи. Страны берутся из связей, а не из книги:
+     открытая вчера страна ещё без расходов должна быть видна, а закрытая —
+     исчезнуть, даже пока в файле лежат прошлонедельные числа. #}
+  <div class="amap">
+    <div class="amap-head">
+      <h3>Account map</h3>
+      <span class="amap-note">{{ amap.countries | length }} countries · numbers from the stats workbook</span>
+      <span class="amap-add" style="padding:0;margin-left:auto">
+        <input type="text" id="amap-new-country" placeholder="new country…" size="14">
+        <select id="amap-new-country-acc">
+          <option value="">first account…</option>
+          {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
+        </select>
+        <button type="button" class="amap-btn" onclick="amapAddCountry()">Add country</button>
+        <span class="amap-msg" id="amap-new-msg"></span>
+      </span>
+    </div>
+
+    {% for c in amap.countries %}
+    <details class="amap-country" {% if loop.index <= 3 %}open{% endif %}>
+      <summary>
+        {{ c.country }}
+        <span class="amap-sum">
+          <span>accounts <b>{{ c.rows | length }}</b></span>
+          <span>spend <b>{{ c.spend | fmt_usd }}</b></span>
+          <span>leads <b>{{ c.leads }}</b></span>
+          <span>FTD <b>{{ c.deposits }}</b></span>
+          <button type="button" class="amap-btn danger"
+                  onclick="event.preventDefault();event.stopPropagation();amapClose('country','{{ c.key | e }}','{{ c.country | e }}')"
+                  title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>
+        </span>
+      </summary>
+      {% if c.rows %}
+      <table>
+        <thead><tr>
+          <th>Account</th>
+          <th>Asset</th>
+          <th>Also in</th>
+          <th class="num">Spend</th>
+          <th class="num">Leads</th>
+          <th class="num">FTD</th>
+          <th class="num">CPL</th>
+          <th class="num">CPA</th>
+          <th class="num">CR</th>
+        </tr></thead>
+        <tbody>
+        {% for r in c.rows %}
+          <tr>
+            <td class="amap-acc">
+              <button type="button" class="amap-x" title="Take out of {{ c.country }}"
+                      onclick="amapUnlink('{{ r.account | e }}','country','{{ c.key | e }}')">×</button>
+              {{ r.account }}
+            </td>
+            <td>
+              {% if r.assets %}<span class="amap-tags">{% for a in r.assets %}<span class="amap-tag">{{ a }}</span>{% endfor %}</span>
+              {% else %}<span class="nodata">—</span>{% endif %}
+            </td>
+            <td>
+              {% set others = r.countries | reject('equalto', c.country) | list %}
+              {% if others %}<span class="amap-tags">{% for o in others %}<span class="amap-tag other">{{ o }}</span>{% endfor %}</span>
+              {% else %}<span class="nodata">—</span>{% endif %}
+            </td>
+            {% if r.has_data %}
+            <td class="num">{{ r.spend | fmt_usd }}</td>
+            <td class="num">{{ r.leads }}</td>
+            <td class="num">{{ r.deposits }}</td>
+            <td class="num">{% if r.cpl %}{{ r.cpl | fmt_usd }}{% else %}—{% endif %}</td>
+            <td class="num">{% if r.cpa %}{{ r.cpa | fmt_usd }}{% else %}—{% endif %}</td>
+            <td class="num">{% if r.cr %}{{ '%.1f' % r.cr }}%{% else %}—{% endif %}</td>
+            {% else %}
+            <td class="num nodata" colspan="6">no data in the workbook for this date</td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="amap-empty">No accounts placed in this country yet.</div>
+      {% endif %}
+      <div class="amap-add">
+        <select data-amap-pick="{{ c.key | e }}">
+          <option value="">+ add account…</option>
+          {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
+        </select>
+        <button type="button" class="amap-btn"
+                onclick="amapLink(this.previousElementSibling,'country','{{ c.key | e }}')">Add</button>
+        <span class="amap-msg"></span>
+      </div>
+    </details>
+    {% endfor %}
+
+    {% if not amap.countries %}
+    <div class="amap-country"><div class="amap-empty">
+      No countries yet. Accounts get placed into countries from a country's Accounts section.
+    </div></div>
+    {% endif %}
+
+    {# Свободные аккаунты: настроены и подключены, но не размещены ни в одной
+       стране. Сюда же падают аккаунты закрытой страны — связь снимается,
+       аккаунт остаётся. #}
+    <details class="amap-country amap-available" {% if amap.available %}open{% endif %}>
+      <summary>
+        Available accounts
+        <span class="amap-sum"><span><b>{{ amap.available | length }}</b> not placed</span></span>
+      </summary>
+      {% if amap.available %}
+      <table>
+        <thead><tr><th>Account</th><th>Asset</th></tr></thead>
+        <tbody>
+        {% for r in amap.available %}
+          <tr>
+            <td class="amap-acc">{{ r.account }}</td>
+            <td>{% if r.assets %}<span class="amap-tags">{% for a in r.assets %}<span class="amap-tag">{{ a }}</span>{% endfor %}</span>{% else %}<span class="nodata">—</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="amap-empty">Every configured account is placed in a country.</div>
+      {% endif %}
+    </details>
+  </div>
 
 {% for c in report.countries %}
 {% set cid = c.country | anchor_slug %}
@@ -3146,6 +3343,73 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
   overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
   function onKey(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } }
   document.addEventListener('keydown', onKey);
+}
+
+// ── Account map: placing accounts in countries ───────────────────────
+// Одно хранилище, два экрана. Любое изменение здесь — одна связь, и после
+// перезагрузки её видят и карта на главной, и список аккаунтов внутри страны.
+async function amapSend(body, msgEl) {
+  if (msgEl) { msgEl.textContent = 'saving…'; msgEl.className = 'amap-msg'; }
+  var r = await fetch('/account-links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(body)
+  });
+  var data = null;
+  try { data = await r.json(); } catch (e) { data = null; }
+  if (data && data.ok) { location.reload(); return true; }
+
+  // Счёт идёт на деньги: аккаунт, который сегодня тратил, не убирается
+  // молча. Подтверждение спрашивается один раз и с текстом, который
+  // объясняет, что именно НЕ произойдёт — кампании продолжат работать.
+  if (data && data.needs_confirm) {
+    if (confirm(data.error + '
+
+Take it out anyway?')) {
+      body.confirm = true;
+      return amapSend(body, msgEl);
+    }
+    if (msgEl) msgEl.textContent = '';
+    return false;
+  }
+  if (msgEl) {
+    msgEl.textContent = (data && data.error) ? data.error : ('error ' + r.status);
+    msgEl.className = 'amap-msg bad';
+  } else {
+    alert((data && data.error) ? data.error : ('Could not save (HTTP ' + r.status + ')'));
+  }
+  return false;
+}
+
+function amapLink(select, kind, value) {
+  var account = select ? select.value : '';
+  var msg = select && select.parentElement ? select.parentElement.querySelector('.amap-msg') : null;
+  if (!account) { if (msg) { msg.textContent = 'pick an account first'; msg.className = 'amap-msg bad'; } return; }
+  amapSend({ action: 'link', kind: kind, value: value, account: account }, msg);
+}
+
+function amapUnlink(account, kind, value) {
+  amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null);
+}
+
+function amapClose(kind, value, label) {
+  if (!confirm('Retire ' + (label || value) + '?
+
+Its accounts move to Available accounts. '
+    + 'Nothing is deleted — they keep their Multilogin profile, proxy and history.')) return;
+  amapSend({ action: 'close', kind: kind, value: value }, null);
+}
+
+function amapAddCountry() {
+  var name = (document.getElementById('amap-new-country').value || '').trim();
+  var acc = document.getElementById('amap-new-country-acc').value || '';
+  var msg = document.getElementById('amap-new-msg');
+  if (!name) { msg.textContent = 'name the country'; msg.className = 'amap-msg bad'; return; }
+  // Страна существует ровно постольку, поскольку в ней есть аккаунт: пустых
+  // групп в карте не бывает, иначе они копятся и никто не помнит, зачем.
+  if (!acc) { msg.textContent = 'pick the first account for it'; msg.className = 'amap-msg bad'; return; }
+  amapSend({ action: 'link', kind: 'country', value: name, account: acc }, msg);
 }
 
 // ── Multilogin connect ────────────────────────────────────────────────
