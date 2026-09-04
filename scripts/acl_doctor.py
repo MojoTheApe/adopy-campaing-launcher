@@ -204,19 +204,30 @@ def check_telemetry() -> None:
     status = telemetry_sync.config_status()
     if status["configured"]:
         pending, _ = telemetry_sync.pending(limit=None)
-        report(OK, "Telemetry upload", f"{label} ({machine_id}) — {len(pending)} record(s) pending")
+        report(
+            OK,
+            "Telemetry upload",
+            f"on — {label} ({machine_id}), {len(pending)} record(s) pending",
+        )
+        # Said out loud on every machine, not buried in a document. Adopy's
+        # policy leaves no anonymous transport, so records are written to the
+        # shared sheet as the person signed in here — that is something they
+        # are entitled to read on their own screen rather than be told once.
+        print("       -> which steps ran, whether each passed, how long it took")
+        print("       -> written to the shared sheet under YOUR Google account")
+        print("       -> no ad accounts, creatives, links or ad text are sent")
         return
     missing = []
     if not status["sheet_id"]:
         missing.append("GSHEET_TELEMETRY_ID not set")
     if not status["key_exists"]:
-        missing.append(f"key missing at {status['key_path']}")
+        missing.append(f"no Google credentials for the upload")
     report(
         WARN,
         "Telemetry upload",
         "off — " + "; ".join(missing),
-        "Optional. Turning it on lets one Meta UI change be spotted across all "
-        "machines at once instead of debugged separately on each.",
+        "Without it, a Meta UI change has to be debugged separately on every "
+        "machine instead of being spotted across all of them at once.",
     )
 
 
