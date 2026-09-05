@@ -3173,7 +3173,9 @@ async function dashRefresh(ev) {
     h += '</div></div>';
   }
   h += '</div></div>';
-  document.getElementById('goals-panel').innerHTML = h;
+  // Большая панель уехала с главной — её заменила компактная полоса.
+  var gp = document.getElementById('goals-panel');
+  if (gp) gp.innerHTML = h;
 
   document.querySelectorAll('.goals-country-slot').forEach(function (slot) {
     var cName = slot.dataset.countryName;
@@ -3524,9 +3526,7 @@ function goalMenu(chip, goal) {
     goalCloseMenu();
     // Цель — не страна. Удаление снимает цель и не трогает ни аккаунты, ни
     // историю, ни раздел страны; сказать это до нажатия, а не после.
-    if (!confirm('Stop tracking a goal for ' + goal.country + '?
-
-'
+    if (!confirm('Stop tracking a goal for ' + goal.country + '?\n\n'
       + 'Its accounts, history and country section stay exactly as they are — '
       + 'it just stops being a target.')) return;
     goalSend({ action: 'delete', country: goal.country });
@@ -3607,9 +3607,7 @@ async function amapSend(body, msgEl) {
   // молча. Подтверждение спрашивается один раз и с текстом, который
   // объясняет, что именно НЕ произойдёт — кампании продолжат работать.
   if (data && data.needs_confirm) {
-    if (confirm(data.error + '
-
-Take it out anyway?')) {
+    if (confirm(data.error + '\n\nTake it out anyway?')) {
       body.confirm = true;
       return amapSend(body, msgEl);
     }
@@ -3637,9 +3635,7 @@ function amapUnlink(account, kind, value) {
 }
 
 function amapClose(kind, value, label) {
-  if (!confirm('Retire ' + (label || value) + '?
-
-Its accounts move to Available accounts. '
+  if (!confirm('Retire ' + (label || value) + '?\n\nIts accounts move to Available accounts. '
     + 'Nothing is deleted — they keep their Multilogin profile, proxy and history.')) return;
   amapSend({ action: 'close', kind: kind, value: value }, null);
 }
@@ -3715,9 +3711,7 @@ async function amapConnect(box, profile, instance, btn) {
   var act = (d.ad_account_id || '').trim();
   if (!act) {
     act = (prompt('This profile has never been opened on this machine, so its ad '
-      + 'account is unknown.
-
-Paste the Ads Manager link or the account number:', '') || '').trim();
+      + 'account is unknown.\n\nPaste the Ads Manager link or the account number:', '') || '').trim();
     if (!act) return;
   }
   btn.disabled = true; msg.textContent = 'connecting…'; msg.className = 'amap-msg';
