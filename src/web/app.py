@@ -1815,6 +1815,64 @@ async def account_map_patch(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "saved": new_row["account_name"]})
 
 
+@app.get("/mlx-profile-details")
+async def mlx_profile_details(profile_id: str = "", name: str = "") -> JSONResponse:
+    """What this machine already knows about a Multilogin profile.
+
+    The ad account id is read from the profile's own browser history: every Ads
+    Manager URL carries `act=<id>`, so the answer is on disk. Nothing is driven
+    and nothing is fetched — polling a live account through its browser is what
+    preceded a checkpoint on 2026-08-25.
+
+    That also sets the limit: history exists only for a profile this machine has
+    opened. A profile found by searching Multilogin's cloud but never opened
+    here has no history, so the id comes back empty and somebody types it.
+    """
+    from src.fb_ads_rpa import mlx_profiles
+
+    pid = (profile_id or "").strip()
+    if not pid:
+        return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
+    try:
+        act = mlx_profiles.ad_account_id_for(pid)
+    except Exception:
+        act = ""
+    try:
+        folder = mlx_profiles.folder_id_for(pid)
+    except Exception:
+        folder = ""
+    return JSONResponse({
+        "ok": True,
+        "ad_account_id": act,
+        "folder_id": folder,
+        "opened_here": bool(act or folder),
+        "suggested_name": _account_name_from_profile(name),
+    })
+
+
+def _account_name_from_profile(profile_name: str) -> str:
+    """Guess the ad account's name from the Multilogin profile's.
+
+    The two are named by the same convention with different prefixes —
+    `KLD_BFL_X01` is the profile for `FacebookMKTOBFLX01`. What ties them is the
+    tail: a letter followed by digits. Matching on that is how the dashboard
+    already pairs the two elsewhere, so a suggestion is worth offering — but only
+    as a prefilled field somebody can correct, never as a silent decision.
+    """
+    import re as _re
+
+    tail = _re.search(r"([A-Za-z]\d{2,4})\s*$", (profile_name or "").strip())
+    if not tail:
+        return ""
+    map_path = get_ad_account_map_path()
+    known = list(load_ad_account_map(map_path)) if os.path.isfile(map_path) else []
+    wanted = tail.group(1).casefold()
+    for label in known:
+        if label.casefold().endswith(wanted):
+            return label
+    return ""
+
+
 @app.post("/account-links")
 async def account_links_edit(request: Request) -> JSONResponse:
     """Place an account in a country or an asset, or take it out again.

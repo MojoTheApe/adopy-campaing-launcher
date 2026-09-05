@@ -1306,6 +1306,19 @@
     }
     .amap-msg { font-size: 0.75rem; color: var(--muted); margin-left: 0.3rem; }
     .amap-msg.bad { color: var(--bad); }
+    .amap-hits {
+      flex-basis: 100%; margin-top: 0.4rem; display: flex;
+      flex-direction: column; gap: 0.2rem;
+    }
+    .amap-hit {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: 0.78rem; padding: 0.25rem 0.4rem;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg);
+    }
+    .amap-hit b { font-weight: 600; }
+    .amap-hit .amap-hint { color: var(--muted); font-size: 0.72rem; margin-left: auto; }
+    .amap-add { flex-wrap: wrap; }
     .amap-empty {
       padding: 0.7rem 0.85rem; font-size: 0.8rem; color: var(--muted);
     }
@@ -2077,14 +2090,22 @@ async function dashRefresh(ev) {
       {% else %}
       <div class="amap-empty">No accounts placed in this country yet.</div>
       {% endif %}
-      <div class="amap-add">
-        <select data-amap-pick="{{ c.key | e }}">
-          <option value="">+ add account…</option>
+      <div class="amap-add" data-amap-country="{{ c.key | e }}">
+        <select class="amap-known">
+          <option value="">already connected…</option>
           {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
         </select>
         <button type="button" class="amap-btn"
                 onclick="amapLink(this.previousElementSibling,'country','{{ c.key | e }}')">Add</button>
+        <span style="color:var(--border-strong)">|</span>
+        <select class="amap-inst" title="Which Multilogin account to search">
+          <option value="A">{{ mlx['A'] }}</option>
+          <option value="B">{{ mlx['B'] }}</option>
+        </select>
+        <input type="text" class="amap-find" placeholder="find in Multilogin: X01" size="10">
+        <button type="button" class="amap-btn" onclick="amapFind(this)">Search</button>
         <span class="amap-msg"></span>
+        <div class="amap-hits" hidden></div>
       </div>
     </details>
     {% endfor %}
@@ -3399,6 +3420,102 @@ function amapClose(kind, value, label) {
 Its accounts move to Available accounts. '
     + 'Nothing is deleted — they keep their Multilogin profile, proxy and history.')) return;
   amapSend({ action: 'close', kind: kind, value: value }, null);
+}
+
+// Найти профиль в Multilogin и подключить его к стране одним движением.
+// Поиск идёт по хвосту имени — «X01» находит KLD_BFL_X01, — потому что именно
+// хвост человек и помнит. Ищется ТОЛЬКО в выбранном аккаунте Multilogin:
+// профиль из Inhouse не найдётся под токеном KLD, и это надо видеть, а не
+// гадать, почему «ничего не нашлось».
+async function amapFind(btn) {
+  var box = btn.closest('.amap-add');
+  var q = (box.querySelector('.amap-find').value || '').trim();
+  var inst = box.querySelector('.amap-inst').value || 'A';
+  var msg = box.querySelector('.amap-msg');
+  var hits = box.querySelector('.amap-hits');
+  hits.hidden = true; hits.innerHTML = '';
+  if (q.length < 2) { msg.textContent = 'type at least 2 characters'; msg.className = 'amap-msg bad'; return; }
+  msg.textContent = 'searching ' + (ACL_MLX_LABELS[inst] || inst) + '…'; msg.className = 'amap-msg';
+
+  var r = await fetch('/multilogin-search', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ search_text: q, instance: inst })
+  });
+  var data = null; try { data = await r.json(); } catch (e) {}
+  if (!data || !data.ok) {
+    msg.textContent = (data && data.error) ? data.error : ('error ' + r.status);
+    msg.className = 'amap-msg bad';
+    return;
+  }
+  var profiles = data.profiles || [];
+  if (!profiles.length) {
+    msg.textContent = 'nothing in ' + (ACL_MLX_LABELS[inst] || inst) + ' matches "' + q + '"';
+    msg.className = 'amap-msg';
+    return;
+  }
+  msg.textContent = profiles.length + ' found';
+  hits.hidden = false;
+  profiles.slice(0, 12).forEach(function (p) {
+    var row = document.createElement('div');
+    row.className = 'amap-hit';
+    row.innerHTML = '<b>' + aclEscHtml(p.name || '(unnamed)') + '</b>'
+      + '<span class="amap-hint">checking this machine…</span>';
+    var btnAdd = document.createElement('button');
+    btnAdd.type = 'button'; btnAdd.className = 'amap-btn'; btnAdd.textContent = 'Connect';
+    btnAdd.onclick = function () { amapConnect(box, p, inst, btnAdd); };
+    row.appendChild(btnAdd);
+    hits.appendChild(row);
+
+    // Кабинет читается из локальной истории профиля — значит он известен
+    // только для профиля, который на этой машине уже открывали. Сказать это
+    // до нажатия, а не после.
+    fetch('/mlx-profile-details?profile_id=' + encodeURIComponent(p.profile_id)
+          + '&name=' + encodeURIComponent(p.name || ''))
+      .then(function (x) { return x.json(); })
+      .then(function (d) {
+        p._details = d;
+        var hint = row.querySelector('.amap-hint');
+        if (d && d.ad_account_id) hint.textContent = d.ad_account_id + (d.suggested_name ? ' · ' + d.suggested_name : '');
+        else hint.textContent = 'never opened here — ad account id needed';
+      })
+      .catch(function () { row.querySelector('.amap-hint').textContent = ''; });
+  });
+}
+
+async function amapConnect(box, profile, instance, btn) {
+  var country = box.getAttribute('data-amap-country');
+  var msg = box.querySelector('.amap-msg');
+  var d = profile._details || {};
+  var name = d.suggested_name || profile.name || '';
+  name = (prompt('Ad account name, exactly as it appears in the stats workbook:', name) || '').trim();
+  if (!name) return;
+  var act = (d.ad_account_id || '').trim();
+  if (!act) {
+    act = (prompt('This profile has never been opened on this machine, so its ad '
+      + 'account is unknown.
+
+Paste the Ads Manager link or the account number:', '') || '').trim();
+    if (!act) return;
+  }
+  btn.disabled = true; msg.textContent = 'connecting…'; msg.className = 'amap-msg';
+
+  var patch = await fetch('/account-map-patch', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+    body: JSON.stringify({
+      account_name: name, ad_account_id: act,
+      profile_id: profile.profile_id, folder_id: profile.folder_id || d.folder_id || '',
+      multilogin_instance: instance, country: country
+    })
+  });
+  var pd = null; try { pd = await patch.json(); } catch (e) {}
+  if (!pd || !pd.ok) {
+    btn.disabled = false;
+    msg.textContent = (pd && pd.error) ? pd.error : ('could not save (HTTP ' + patch.status + ')');
+    msg.className = 'amap-msg bad';
+    return;
+  }
+  amapSend({ action: 'link', kind: 'country', value: country, account: name }, msg);
 }
 
 function amapAddCountry() {
