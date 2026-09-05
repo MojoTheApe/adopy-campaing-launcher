@@ -231,6 +231,55 @@ def _get_upload_ref_cached() -> dict:
         return {}
 
 
+def _build_goals_view(report: dict) -> dict:
+    """Each country's target next to what actually happened, ready to render.
+
+    Progress is computed here rather than in the page so the compact strip and
+    any future screen cannot drift apart — and so a country with a target but no
+    data still appears, at zero, instead of vanishing on the day it matters most.
+    """
+    from src.web import goals as goals_store
+
+    cm = (os.environ.get("MY_CM_NAME") or "").strip()
+    actual: dict[str, dict] = {}
+    for country in report.get("countries", []):
+        name = (country.get("country") or "").strip()
+        totals = country.get("my_totals") or {}
+        for key in {name.casefold(), _country_code(name).casefold()}:
+            if key:
+                actual[key] = totals
+
+    rows = []
+    for goal in goals_store.for_cm(cm):
+        name = (goal.get("country") or "").strip()
+        got = actual.get(name.casefold()) or actual.get((goal.get("code") or "").casefold()) or {}
+        target = int(goal.get("ftd") or 0)
+        deposits = int(got.get("deposits") or 0)
+        leads = int(got.get("leads") or 0)
+        spend = float(got.get("spend") or 0.0)
+        rows.append({
+            **goal,
+            "deposits": deposits,
+            "leads": leads,
+            "spend": spend,
+            "cpa_actual": (spend / deposits) if deposits else None,
+            "cr_actual": (deposits / leads * 100.0) if leads else None,
+            "pct": min(100, round(deposits / target * 100)) if target else None,
+        })
+
+    rows.sort(key=lambda r: (r.get("market") or "", r.get("country") or ""))
+    total_target = sum(int(r.get("ftd") or 0) for r in rows)
+    total_deposits = sum(r["deposits"] for r in rows)
+    return {
+        "cm": cm,
+        "rows": rows,
+        "target": total_target,
+        "deposits": total_deposits,
+        "pct": min(100, round(total_deposits / total_target * 100)) if total_target else None,
+        "team_lead": goals_store.is_team_lead(),
+    }
+
+
 def _build_account_map_view(report: dict) -> dict:
     """The account map on Home: every country, its accounts, and what they did.
 
@@ -826,6 +875,7 @@ def _render_report(
             "mlx_labels": mlx_instance_labels(),
             "installed_release": _installed_release(),
             "account_map": _build_account_map_view(report),
+            "goals": _build_goals_view(report),
         },
     )
 
@@ -1813,6 +1863,60 @@ async def account_map_patch(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": f"Failed to save: {exc}"}, status_code=500)
 
     return JSONResponse({"ok": True, "saved": new_row["account_name"]})
+
+
+@app.get("/goals")
+async def goals_read(cm: str = "") -> JSONResponse:
+    from src.web import goals as goals_store
+
+    who = (cm or "").strip() or (os.environ.get("MY_CM_NAME") or "").strip()
+    return JSONResponse({
+        "ok": True,
+        "cm": who,
+        "goals": goals_store.for_cm(who),
+        "team_lead": goals_store.is_team_lead(),
+    })
+
+
+@app.post("/goals")
+async def goals_write(request: Request) -> JSONResponse:
+    """Add, change or drop one country's target.
+
+    Body: {cm?, action: "save"|"delete", goal?: {...}, country?: str}
+
+    Editing somebody else's goals needs the team-lead flag. That flag is an
+    agreement, not a lock — the dashboard has no sign-in, so anyone who can
+    reach the file can change any of it. It exists so the UI does not invite
+    a mistake, not because it prevents one.
+    """
+    from src.web import goals as goals_store
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    me = (os.environ.get("MY_CM_NAME") or "").strip()
+    who = (data.get("cm") or "").strip() or me
+    if who.casefold() != me.casefold() and not goals_store.is_team_lead():
+        return JSONResponse(
+            {"ok": False, "error": f"These are {who}'s goals. Only a team lead edits somebody else's."},
+            status_code=403,
+        )
+
+    action = (data.get("action") or "save").strip().lower()
+    try:
+        if action == "delete":
+            country = (data.get("country") or "").strip()
+            if not country:
+                return JSONResponse({"ok": False, "error": "Which country?"}, status_code=400)
+            return JSONResponse({"ok": True, "goals": goals_store.delete(who, country)})
+        goal = data.get("goal") or {}
+        return JSONResponse({"ok": True, "goals": goals_store.upsert(who, goal)})
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:  # pragma: no cover - defensive
+        return JSONResponse({"ok": False, "error": f"Could not save: {exc}"}, status_code=500)
 
 
 @app.get("/mlx-profile-details")

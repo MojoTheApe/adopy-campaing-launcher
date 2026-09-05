@@ -1239,6 +1239,72 @@
       color: var(--muted);
     }
 
+    .cov > summary {
+      cursor: pointer; user-select: none; display: flex;
+      align-items: baseline; gap: 0.6rem; margin-bottom: 0.4rem;
+    }
+    .cov > summary::-webkit-details-marker { display: none; }
+    .cov > summary::before { content: '▾'; color: var(--muted); font-size: 0.7rem; }
+    .cov:not([open]) > summary::before { content: '▸'; }
+    .cov-note { font-size: 0.76rem; color: var(--muted); }
+    .cov-table { font-size: 0.82rem; }
+    .cov-table td, .cov-table th { padding-top: 0.28rem; padding-bottom: 0.28rem; }
+
+    /* ── Goals: полоса стран вместо двух колонок с таблицами ──────────
+       Раньше это была решётка 2×N с подтаблицами на пол-экрана. Цель одна и
+       та же — «сколько из скольких», — и на неё хватает строки. #}*/
+    .gstrip {
+      display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: stretch;
+      margin-bottom: var(--space-md);
+    }
+    .gstrip-total {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.35rem 0.7rem; border-radius: var(--radius-md);
+      background: var(--bg-subtle); border: 1px solid var(--border);
+      font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+    }
+    .gchip {
+      position: relative; display: flex; align-items: baseline; gap: 0.4rem;
+      padding: 0.3rem 0.6rem 0.42rem; border-radius: var(--radius-md);
+      border: 1px solid var(--border); background: var(--bg-elev);
+      font-size: 0.8rem; cursor: pointer; overflow: hidden;
+      font-family: inherit; color: var(--text); text-align: left;
+    }
+    .gchip:hover { border-color: var(--accent); }
+    .gchip .gcode { font-weight: 600; letter-spacing: 0.02em; }
+    .gchip .gnum { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .gchip .gpct { color: var(--muted); font-size: 0.72rem; }
+    .gchip .gbar {
+      position: absolute; left: 0; bottom: 0; height: 2px;
+      background: var(--accent); transition: width 200ms var(--ease-out);
+    }
+    .gchip.done .gbar { background: var(--good); }
+    .gchip.none .gbar { background: var(--border-strong); }
+    .gchip-add { border-style: dashed; color: var(--muted); }
+    .gmenu {
+      position: absolute; z-index: 40; min-width: 12rem;
+      background: var(--bg-elev); border: 1px solid var(--border);
+      border-radius: var(--radius-md); box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,.14));
+      padding: 0.4rem; display: flex; flex-direction: column; gap: 0.2rem;
+    }
+    .gmenu .gmenu-head {
+      font-size: 0.72rem; color: var(--muted); padding: 0.1rem 0.4rem 0.3rem;
+      border-bottom: 1px solid var(--border); margin-bottom: 0.2rem;
+    }
+    .gmenu button {
+      background: none; border: 0; text-align: left; font: inherit;
+      font-size: 0.8rem; padding: 0.25rem 0.4rem; border-radius: var(--radius-sm);
+      cursor: pointer; color: var(--text);
+    }
+    .gmenu button:hover { background: var(--bg-hover); }
+    .gmenu button.danger:hover { color: var(--bad); }
+    .gform { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.5rem; align-items: center; padding: 0.2rem 0.4rem; }
+    .gform label { font-size: 0.74rem; color: var(--muted); }
+    .gform input { font: inherit; font-size: 0.78rem; padding: 0.15rem 0.3rem;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg); color: var(--text); width: 100%; }
+    .gform .gform-actions { grid-column: 1 / -1; display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.3rem; }
+
     /* ── Account map (Home) ───────────────────────────────────────────
        Читается как таблица ведения аккаунтов, а не как отчёт: страна —
        заголовок группы, аккаунты под ней, свободные внизу отдельно. */
@@ -1711,6 +1777,8 @@
 {%- set mlx = mlx_labels or {'A': 'Inhouse', 'B': 'KLD'} %}
 {%- set rel = installed_release or {} %}
 {%- set amap = account_map or {'countries': [], 'available': []} %}
+{%- set gv = goals or {'rows': [], 'target': 0, 'deposits': 0, 'pct': none,
+                       'cm': '', 'team_lead': false} %}
 
 <div class="page-top">
 <header class="page-header">
@@ -2002,20 +2070,44 @@ async function dashRefresh(ev) {
 </div>
 
 <div id="view-home" class="view-panel active">
-  <div id="goals-panel"></div>
-  <div class="home-overview">
-    <h3>Countries overview</h3>
-    <table>
+  {# ── Goals: одна полоса вместо решётки на пол-экрана ────────────────────
+     Кнопка на страну, под ней прогресс. Клик открывает Edit / Delete. #}
+  <div class="gstrip">
+    <div class="gstrip-total">
+      <span>FTD</span>
+      <span style="font-variant-numeric:tabular-nums">{{ gv.deposits }} / {{ gv.target }}</span>
+      {% if gv.pct is not none %}<span style="color:var(--muted);font-weight:400">{{ gv.pct }}%</span>{% endif %}
+    </div>
+    {% for g in gv.rows %}
+    <button type="button"
+            class="gchip {% if g.pct == 100 %}done{% elif not g.deposits %}none{% endif %}"
+            onclick="goalMenu(this, {{ g | tojson }})"
+            title="{{ g.country }} · target {{ g.ftd }} FTD{% if g.cpa %} · CPA ≤ {{ g.cpa | int }}{% endif %}">
+      <span class="gcode">{{ g.code or g.country[:2] | upper }}</span>
+      <span class="gnum">{{ g.deposits }}/{{ g.ftd }}</span>
+      {% if g.pct is not none %}<span class="gpct">{{ g.pct }}%</span>{% endif %}
+      <span class="gbar" style="width: {{ g.pct or 0 }}%"></span>
+    </button>
+    {% endfor %}
+    <button type="button" class="gchip gchip-add" onclick="goalEdit(null)">+ country</button>
+  </div>
+  {# Страны, где сегодня были деньги. Остальные не скрыты — они ниже, в карте
+     аккаунтов, где им и место: тут сводка за день, там ведение. #}
+  <details class="home-overview cov" open>
+    <summary><h3 style="display:inline;font-size:0.95rem">Countries overview</h3>
+      <span class="cov-note">{{ report.countries | selectattr('my_spend') | list | length }} with spend today</span>
+    </summary>
+    <table class="cov-table">
       <thead><tr>
         <th>Country</th>
         <th class="num">Spend</th>
-        <th class="num">Deposits</th>
+        <th class="num">Dep</th>
         <th class="num">Leads</th>
         <th class="num">CPA</th>
         <th class="num">CR</th>
       </tr></thead>
       <tbody>
-      {% for c in report.countries | sort(attribute='my_spend', reverse=true) %}
+      {% for c in report.countries | selectattr('my_spend') | sort(attribute='my_spend', reverse=true) %}
       {% set mt = c.my_totals %}
       {% set cid = c.country | anchor_slug %}
         <tr class="overview-row" style="cursor:pointer" data-view="country-{{ cid }}-cm">
@@ -2029,7 +2121,7 @@ async function dashRefresh(ev) {
       {% endfor %}
       </tbody>
     </table>
-  </div>
+  </details>
 </div>
 
   {# ── Account map ──────────────────────────────────────────────────────
@@ -2948,26 +3040,28 @@ async function dashRefresh(ev) {
 
 <script>
 (function () {
-  var GOALS = {
-    GCC: {
-      total_ftd: 50,
-      geos: [
-        { code:"KW",  names:["Kuwait","KW"],                    ftd:15, cpa:3000, cr:3.0, ld:16 },
-        { code:"UAE", names:["UAE","United Arab Emirates","AE"], ftd:20, cpa:3000, cr:2.0, ld:33 },
-        { code:"SA",  names:["Saudi Arabia","SA"],               ftd:15, cpa:1500, cr:2.5, ld:19 }
-      ]
-    },
-    Latam: {
-      total_ftd: 140,
-      geos: [
-        { code:"CL", names:["Chile","CL"],    ftd:20, cpa:1000, cr:2.0, ld:32  },
-        { code:"CO", names:["Colombia","CO"],  ftd:40, cpa:1000, cr:1.3, ld:99  },
-        { code:"EC", names:["Ecuador","EC"],   ftd:40, cpa:1000, cr:2.0, ld:65  },
-        { code:"MX", names:["Mexico","MX"],    ftd:40, cpa:1000, cr:1.0, ld:129 }
-      ]
-    }
-  };
-  var GRAND_FTD = 190;
+  // Раньше здесь лежал литерал: чтобы добавить страну, надо было править
+  // HTML, и у всех машин были одни и те же числа независимо от того, чьи они.
+  // Теперь цели приходят с сервера из хранилища кампейн-менеджера, поэтому
+  // правка на главной видна и в разделе страны — иначе это два экрана с
+  // расходящимися числами, и один из них врёт.
+  var GOALS = (function () {
+    var byMarket = {};
+    {% for g in gv.rows %}
+    (function (g) {
+      var m = g.market || 'Other';
+      if (!byMarket[m]) byMarket[m] = { total_ftd: 0, geos: [] };
+      byMarket[m].total_ftd += (g.ftd || 0);
+      byMarket[m].geos.push({
+        code: g.code || (g.country || '').slice(0, 2).toUpperCase(),
+        names: [g.country, g.code].filter(Boolean),
+        ftd: g.ftd || 0, cpa: g.cpa, cr: g.cr, ld: g.leads_per_day
+      });
+    })({{ g | tojson }});
+    {% endfor %}
+    return byMarket;
+  })();
+  var GRAND_FTD = {{ gv.target | int }};
   var TREND_DAYS = {{ report.trend_days | int }};
   var ACT_RAW = [
     {% for c in report.countries %}{% set my = c.cm_comparison | selectattr('is_me') | list %}{n:{{ c.country | tojson }},dep:{{ my|sum(attribute='deposits')|int }},leads:{{ my|sum(attribute='leads')|int }},spend:{{ my|sum(attribute='spend')|round(2) }}},
@@ -3401,6 +3495,97 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
   overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
   function onKey(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } }
   document.addEventListener('keydown', onKey);
+}
+
+// ── Goals: меню на чипе, правка и удаление ───────────────────────────
+var _gTeamLead = {{ gv.team_lead | tojson }};
+var _gCm = {{ gv.cm | tojson }};
+
+function goalCloseMenu() {
+  var m = document.querySelector('.gmenu');
+  if (m) m.remove();
+}
+document.addEventListener('click', function (e) {
+  if (!e.target.closest || (!e.target.closest('.gmenu') && !e.target.closest('.gchip'))) goalCloseMenu();
+}, true);
+
+function goalMenu(chip, goal) {
+  goalCloseMenu();
+  var m = document.createElement('div');
+  m.className = 'gmenu';
+  m.innerHTML = '<div class="gmenu-head">' + aclEscHtml(goal.country)
+    + ' · ' + goal.deposits + ' of ' + goal.ftd + ' FTD</div>';
+  var edit = document.createElement('button');
+  edit.type = 'button'; edit.textContent = 'Edit target…';
+  edit.onclick = function () { goalCloseMenu(); goalEdit(goal); };
+  var del = document.createElement('button');
+  del.type = 'button'; del.className = 'danger'; del.textContent = 'Delete';
+  del.onclick = function () {
+    goalCloseMenu();
+    // Цель — не страна. Удаление снимает цель и не трогает ни аккаунты, ни
+    // историю, ни раздел страны; сказать это до нажатия, а не после.
+    if (!confirm('Stop tracking a goal for ' + goal.country + '?
+
+'
+      + 'Its accounts, history and country section stay exactly as they are — '
+      + 'it just stops being a target.')) return;
+    goalSend({ action: 'delete', country: goal.country });
+  };
+  m.appendChild(edit); m.appendChild(del);
+  document.body.appendChild(m);
+  var r = chip.getBoundingClientRect();
+  m.style.left = Math.min(r.left, innerWidth - m.offsetWidth - 12) + 'px';
+  m.style.top = (r.bottom + window.scrollY + 4) + 'px';
+}
+
+function goalEdit(goal) {
+  goalCloseMenu();
+  var g = goal || { country: '', code: '', market: 'Other', ftd: '', cpa: '', cr: '', leads_per_day: '' };
+  var m = document.createElement('div');
+  m.className = 'gmenu';
+  m.style.minWidth = '17rem';
+  function field(key, label, ph) {
+    return '<label for="gf-' + key + '">' + label + '</label>'
+      + '<input id="gf-' + key + '" value="' + aclEscHtml(g[key] === null || g[key] === undefined ? '' : String(g[key]))
+      + '" placeholder="' + (ph || '') + '"' + (key === 'country' && goal ? ' readonly' : '') + '>';
+  }
+  m.innerHTML = '<div class="gmenu-head">' + (goal ? 'Edit ' + aclEscHtml(g.country) : 'New country goal') + '</div>'
+    + '<div class="gform">'
+    + field('country', 'Country', 'Peru')
+    + field('code', 'Code', 'PE')
+    + field('market', 'Market', 'Latam')
+    + field('ftd', 'FTD target', '20')
+    + field('cpa', 'CPA ≤', '1000')
+    + field('cr', 'CR % ≥', '2.0')
+    + field('leads_per_day', 'Leads / day', '32')
+    + '<div class="gform-actions">'
+    + '<button type="button" id="gf-cancel">Cancel</button>'
+    + '<button type="button" id="gf-save" class="amap-btn">Save</button>'
+    + '</div></div>';
+  document.body.appendChild(m);
+  m.style.left = Math.max(12, Math.min(innerWidth / 2 - 140, innerWidth - 300)) + 'px';
+  m.style.top = (window.scrollY + 120) + 'px';
+  m.querySelector('#gf-cancel').onclick = goalCloseMenu;
+  m.querySelector('#gf-save').onclick = function () {
+    var out = {};
+    ['country','code','market','ftd','cpa','cr','leads_per_day'].forEach(function (k) {
+      var v = (m.querySelector('#gf-' + k).value || '').trim();
+      out[k] = v === '' ? null : v;
+    });
+    goalSend({ action: 'save', goal: out });
+  };
+  m.querySelector('#gf-' + (goal ? 'ftd' : 'country')).focus();
+}
+
+async function goalSend(body) {
+  body.cm = _gCm;
+  var r = await fetch('/goals', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: JSON.stringify(body)
+  });
+  var d = null; try { d = await r.json(); } catch (e) {}
+  if (d && d.ok) { goalCloseMenu(); location.reload(); return; }
+  alert((d && d.error) ? d.error : ('Could not save (HTTP ' + r.status + ')'));
 }
 
 // ── Account map: placing accounts in countries ───────────────────────
