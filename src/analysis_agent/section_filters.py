@@ -155,6 +155,18 @@ def filter_creative_rows(
     return df[mask]
 
 
+def filter_account_rows(df: pd.DataFrame, country: str, account: str) -> pd.DataFrame:
+    """Every row of one account in one country — the account map's drill.
+
+    Same shape as the CM drill one level up: aggregated into campaigns and ad
+    sets, each of which drills further into its ads. The account map asks the
+    same question the CM comparison asks, just sliced by account instead of by
+    person, so it reuses that path rather than inventing a second one.
+    """
+    mask = (df["Country Final"] == country) & alias_matches(df["Account Alias"], account)
+    return df[mask]
+
+
 def filter_optimization_rows(
     df: pd.DataFrame,
     country: str,

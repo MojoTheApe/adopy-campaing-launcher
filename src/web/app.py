@@ -992,7 +992,7 @@ async def details(request: Request) -> HTMLResponse:
     country = params.pop("country", "")
     # Optional ncols override (used for nested drill-downs, e.g. ads inside CM campaigns)
     ncols_override = params.pop("ncols", None)
-    _DRILL_ENABLED = {"optimization", "cm_comparison"}
+    _DRILL_ENABLED = {"optimization", "cm_comparison", "account"}
     if section not in _DRILL_ENABLED:
         ncols = 6
         return templates.TemplateResponse(

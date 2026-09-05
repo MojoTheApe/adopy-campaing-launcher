@@ -1277,6 +1277,29 @@
     .amap tbody tr:last-child td { border-bottom: 0; }
     .amap tbody tr:hover { background: var(--bg-hover); }
     .amap .amap-acc { font-weight: 500; }
+    /* Одинаковая сетка во всех странах: без table-layout:fixed каждая таблица
+       считает ширины по своему содержимому, и колонки соседних стран не
+       совпадают — читается как съехавшая вёрстка, потому что она и съехала. */
+    .amap table.amap-grid { table-layout: fixed; }
+    .amap table.amap-grid td, .amap table.amap-grid th {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .amap td.amap-acc { white-space: normal; }
+    .amap-caret {
+      background: none; border: 0; color: var(--muted); cursor: pointer;
+      font-size: 0.7rem; padding: 0 0.3rem 0 0; line-height: 1;
+    }
+    .amap-caret:hover { color: var(--accent); }
+    tr.amap-open .amap-caret { transform: rotate(90deg); display: inline-block; }
+    .amap-caret-off { color: var(--border-strong); padding-right: 0.3rem; font-size: 0.7rem; }
+    .amap-actions { text-align: right; }
+    .amap .amap-x {
+      background: none; border: 1px solid var(--border-strong);
+      color: var(--muted); border-radius: var(--radius-sm);
+      font: inherit; font-size: 0.7rem; padding: 0.05rem 0.4rem;
+      cursor: pointer; line-height: 1.6;
+    }
+    .amap .amap-x:hover { border-color: var(--bad); color: var(--bad); background: var(--bg); }
     .amap .amap-tags { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; }
     .amap-tag {
       font-size: 0.68rem; padding: 0.05rem 0.35rem; border-radius: 3px;
@@ -2044,7 +2067,13 @@ async function dashRefresh(ev) {
         </span>
       </summary>
       {% if c.rows %}
-      <table>
+      <table class="amap-grid">
+        <colgroup>
+          <col style="width:26%"><col style="width:10%"><col style="width:10%">
+          <col style="width:9%"><col style="width:7%"><col style="width:6%">
+          <col style="width:7%"><col style="width:8%"><col style="width:7%">
+          <col style="width:10%">
+        </colgroup>
         <thead><tr>
           <th>Account</th>
           <th>Asset</th>
@@ -2055,13 +2084,17 @@ async function dashRefresh(ev) {
           <th class="num">CPL</th>
           <th class="num">CPA</th>
           <th class="num">CR</th>
+          <th></th>
         </tr></thead>
         <tbody>
         {% for r in c.rows %}
           <tr>
             <td class="amap-acc">
-              <button type="button" class="amap-x" title="Take out of {{ c.country }}"
-                      onclick="amapUnlink('{{ r.account | e }}','country','{{ c.key | e }}')">×</button>
+              {% if r.has_data %}
+              <button type="button" class="amap-caret" aria-label="Campaigns of {{ r.account }}"
+                      hx-get="/details?section=account&country={{ c.country | urlencode }}&account={{ r.account | urlencode }}&ncols=10"
+                      hx-target="closest tr" hx-swap="afterend" hx-trigger="click">▸</button>
+              {% else %}<span class="amap-caret-off">·</span>{% endif %}
               {{ r.account }}
             </td>
             <td>
@@ -2073,20 +2106,24 @@ async function dashRefresh(ev) {
               {% if others %}<span class="amap-tags">{% for o in others %}<span class="amap-tag other">{{ o }}</span>{% endfor %}</span>
               {% else %}<span class="nodata">—</span>{% endif %}
             </td>
-            {% if r.has_data %}
-            <td class="num">{{ r.spend | fmt_usd }}</td>
-            <td class="num">{{ r.leads }}</td>
-            <td class="num">{{ r.deposits }}</td>
-            <td class="num">{% if r.cpl %}{{ r.cpl | fmt_usd }}{% else %}—{% endif %}</td>
-            <td class="num">{% if r.cpa %}{{ r.cpa | fmt_usd }}{% else %}—{% endif %}</td>
-            <td class="num">{% if r.cr %}{{ '%.1f' % r.cr }}%{% else %}—{% endif %}</td>
-            {% else %}
-            <td class="num nodata" colspan="6">no data in the workbook for this date</td>
-            {% endif %}
+            <td class="num">{% if r.has_data %}{{ r.spend | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data %}{{ r.leads }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data %}{{ r.deposits }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data and r.cpl %}{{ r.cpl | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data and r.cpa %}{{ r.cpa | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data and r.cr %}{{ '%.1f' % r.cr }}%{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="amap-actions">
+              <button type="button" class="amap-x" title="Take {{ r.account }} out of {{ c.country }}"
+                      onclick="amapUnlink('{{ r.account | e }}','country','{{ c.key | e }}')">Remove</button>
+            </td>
           </tr>
         {% endfor %}
         </tbody>
       </table>
+      {% set blank = c.rows | rejectattr('has_data') | list | length %}
+      {% if blank %}
+      <div class="amap-empty">{{ blank }} of {{ c.rows | length }} accounts have no rows in the workbook for this date.</div>
+      {% endif %}
       {% else %}
       <div class="amap-empty">No accounts placed in this country yet.</div>
       {% endif %}
@@ -7122,17 +7159,24 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     try {
       var target = ev.target;
       if (!target || !target.closest) return;
-      var row = target.closest('tr.drillable');
-      if (!row || !row.hasAttribute('hx-get')) return;
+      // Строка целиком (дриллы отчёта) либо кнопка-стрелка внутри строки
+      // (карта аккаунтов). Логика одна: открыто — закрываем и глушим событие,
+      // чтобы htmx о клике не узнал и второй запрос не ушёл.
+      var opener = target.closest('tr.drillable[hx-get], [hx-get][hx-swap="afterend"]');
+      if (!opener) return;
+      var row = opener.tagName === 'TR' ? opener : opener.closest('tr');
+      if (!row) return;
       var next = row.nextElementSibling;
       if (next && next.classList && next.classList.contains('drill-detail')) {
         next.remove();
         row.classList.remove('drill-open');
+        row.classList.remove('amap-open');
         ev.preventDefault();
         ev.stopPropagation();
         return;
       }
       row.classList.add('drill-open');
+      if (opener.tagName !== 'TR') row.classList.add('amap-open');
     } catch (e) { /* при любой неожиданности пусть открывается как раньше */ }
   }, true);
 
