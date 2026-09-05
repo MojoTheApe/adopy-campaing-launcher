@@ -2122,7 +2122,6 @@ async function dashRefresh(ev) {
       </tbody>
     </table>
   </details>
-</div>
 
   {# ── Account map ──────────────────────────────────────────────────────
      Одно хранилище, два экрана: эта карта и список аккаунтов внутри страны
@@ -2270,6 +2269,7 @@ async function dashRefresh(ev) {
       {% endif %}
     </details>
   </div>
+</div>
 
 {% for c in report.countries %}
 {% set cid = c.country | anchor_slug %}
