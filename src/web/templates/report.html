@@ -1374,6 +1374,41 @@
     .amap-tag.other { background: var(--accent-soft); color: var(--accent); }
     .amap .nodata { color: var(--muted); }
     .amap-available > summary { background: var(--bg-subtle); }
+    /* ── Календарь периода ────────────────────────────────────────────
+       Дни, которых нет в книге, не кликаются. Предлагать полный месяц, когда
+       в файле два дня, — значит приглашать выбрать день и решить, что аккаунты
+       умерли: данных там не было никогда, и сказать это надо до клика. */
+    .amap-cal {
+      position: absolute; z-index: 40; padding: 0.6rem;
+      background: var(--bg-elev); border: 1px solid var(--border);
+      border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0,0,0,.14);
+      font-size: 0.8rem; min-width: 15rem;
+    }
+    .amap-cal-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 0.5rem; margin-bottom: 0.4rem; font-weight: 600;
+    }
+    .amap-cal-head button {
+      background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+      color: var(--muted); cursor: pointer; font: inherit; padding: 0 0.4rem;
+    }
+    .amap-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .amap-cal-grid .dow {
+      font-size: 0.64rem; color: var(--muted); text-align: center; padding-bottom: 0.2rem;
+    }
+    .amap-cal-grid button {
+      font: inherit; font-size: 0.75rem; padding: 0.22rem 0; border-radius: var(--radius-sm);
+      border: 1px solid transparent; background: none; color: var(--text); cursor: pointer;
+    }
+    .amap-cal-grid button:disabled { color: var(--border-strong); cursor: default; }
+    .amap-cal-grid button.has:hover { border-color: var(--accent); }
+    .amap-cal-grid button.sel { background: var(--accent); color: #fff; }
+    .amap-cal-grid button.inrange { background: var(--accent-soft); }
+    .amap-cal-foot {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 0.5rem; gap: 0.5rem; color: var(--muted); font-size: 0.72rem;
+    }
+
     .amap-btn {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -1776,7 +1811,8 @@
    на невидимой переменной. #}
 {%- set mlx = mlx_labels or {'A': 'Inhouse', 'B': 'KLD'} %}
 {%- set rel = installed_release or {} %}
-{%- set amap = account_map or {'countries': [], 'available': []} %}
+{%- set amap = account_map or {'countries': [], 'available': [], 'all_accounts': [],
+                              'dates': [], 'date_from': '', 'date_to': ''} %}
 {%- set gv = goals or {'rows': [], 'target': 0, 'deposits': 0, 'pct': none,
                        'cm': '', 'team_lead': false} %}
 
@@ -2123,152 +2159,7 @@ async function dashRefresh(ev) {
     </table>
   </details>
 
-  {# ── Account map ──────────────────────────────────────────────────────
-     Одно хранилище, два экрана: эта карта и список аккаунтов внутри страны
-     читают одни и те же связи. Страны берутся из связей, а не из книги:
-     открытая вчера страна ещё без расходов должна быть видна, а закрытая —
-     исчезнуть, даже пока в файле лежат прошлонедельные числа. #}
-  <div class="amap">
-    <div class="amap-head">
-      <h3>Account map</h3>
-      <span class="amap-note">{{ amap.countries | length }} countries · numbers from the stats workbook</span>
-      <span class="amap-add" style="padding:0;margin-left:auto">
-        <input type="text" id="amap-new-country" placeholder="new country…" size="14">
-        <select id="amap-new-country-acc">
-          <option value="">first account…</option>
-          {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
-        </select>
-        <button type="button" class="amap-btn" onclick="amapAddCountry()">Add country</button>
-        <span class="amap-msg" id="amap-new-msg"></span>
-      </span>
-    </div>
-
-    {% for c in amap.countries %}
-    <details class="amap-country" {% if loop.index <= 3 %}open{% endif %}>
-      <summary>
-        {{ c.country }}
-        <span class="amap-sum">
-          <span>accounts <b>{{ c.rows | length }}</b></span>
-          <span>spend <b>{{ c.spend | fmt_usd }}</b></span>
-          <span>leads <b>{{ c.leads }}</b></span>
-          <span>FTD <b>{{ c.deposits }}</b></span>
-          <button type="button" class="amap-btn danger"
-                  onclick="event.preventDefault();event.stopPropagation();amapClose('country','{{ c.key | e }}','{{ c.country | e }}')"
-                  title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>
-        </span>
-      </summary>
-      {% if c.rows %}
-      <table class="amap-grid">
-        <colgroup>
-          <col style="width:26%"><col style="width:10%"><col style="width:10%">
-          <col style="width:9%"><col style="width:7%"><col style="width:6%">
-          <col style="width:7%"><col style="width:8%"><col style="width:7%">
-          <col style="width:10%">
-        </colgroup>
-        <thead><tr>
-          <th>Account</th>
-          <th>Asset</th>
-          <th>Also in</th>
-          <th class="num">Spend</th>
-          <th class="num">Leads</th>
-          <th class="num">FTD</th>
-          <th class="num">CPL</th>
-          <th class="num">CPA</th>
-          <th class="num">CR</th>
-          <th></th>
-        </tr></thead>
-        <tbody>
-        {% for r in c.rows %}
-          <tr>
-            <td class="amap-acc">
-              {% if r.has_data %}
-              <button type="button" class="amap-caret" aria-label="Campaigns of {{ r.account }}"
-                      hx-get="/details?section=account&country={{ c.country | urlencode }}&account={{ r.account | urlencode }}&ncols=10"
-                      hx-target="closest tr" hx-swap="afterend" hx-trigger="click">▸</button>
-              {% else %}<span class="amap-caret-off">·</span>{% endif %}
-              {{ r.account }}
-            </td>
-            <td>
-              {% if r.assets %}<span class="amap-tags">{% for a in r.assets %}<span class="amap-tag">{{ a }}</span>{% endfor %}</span>
-              {% else %}<span class="nodata">—</span>{% endif %}
-            </td>
-            <td>
-              {% set others = r.countries | reject('equalto', c.country) | list %}
-              {% if others %}<span class="amap-tags">{% for o in others %}<span class="amap-tag other">{{ o }}</span>{% endfor %}</span>
-              {% else %}<span class="nodata">—</span>{% endif %}
-            </td>
-            <td class="num">{% if r.has_data %}{{ r.spend | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data %}{{ r.leads }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data %}{{ r.deposits }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and r.cpl %}{{ r.cpl | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and r.cpa %}{{ r.cpa | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and r.cr %}{{ '%.1f' % r.cr }}%{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="amap-actions">
-              <button type="button" class="amap-x" title="Take {{ r.account }} out of {{ c.country }}"
-                      onclick="amapUnlink('{{ r.account | e }}','country','{{ c.key | e }}')">Remove</button>
-            </td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% set blank = c.rows | rejectattr('has_data') | list | length %}
-      {% if blank %}
-      <div class="amap-empty">{{ blank }} of {{ c.rows | length }} accounts have no rows in the workbook for this date.</div>
-      {% endif %}
-      {% else %}
-      <div class="amap-empty">No accounts placed in this country yet.</div>
-      {% endif %}
-      <div class="amap-add" data-amap-country="{{ c.key | e }}">
-        <select class="amap-known">
-          <option value="">already connected…</option>
-          {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
-        </select>
-        <button type="button" class="amap-btn"
-                onclick="amapLink(this.previousElementSibling,'country','{{ c.key | e }}')">Add</button>
-        <span style="color:var(--border-strong)">|</span>
-        <select class="amap-inst" title="Which Multilogin account to search">
-          <option value="A">{{ mlx['A'] }}</option>
-          <option value="B">{{ mlx['B'] }}</option>
-        </select>
-        <input type="text" class="amap-find" placeholder="find in Multilogin: X01" size="10">
-        <button type="button" class="amap-btn" onclick="amapFind(this)">Search</button>
-        <span class="amap-msg"></span>
-        <div class="amap-hits" hidden></div>
-      </div>
-    </details>
-    {% endfor %}
-
-    {% if not amap.countries %}
-    <div class="amap-country"><div class="amap-empty">
-      No countries yet. Accounts get placed into countries from a country's Accounts section.
-    </div></div>
-    {% endif %}
-
-    {# Свободные аккаунты: настроены и подключены, но не размещены ни в одной
-       стране. Сюда же падают аккаунты закрытой страны — связь снимается,
-       аккаунт остаётся. #}
-    <details class="amap-country amap-available" {% if amap.available %}open{% endif %}>
-      <summary>
-        Available accounts
-        <span class="amap-sum"><span><b>{{ amap.available | length }}</b> not placed</span></span>
-      </summary>
-      {% if amap.available %}
-      <table>
-        <thead><tr><th>Account</th><th>Asset</th></tr></thead>
-        <tbody>
-        {% for r in amap.available %}
-          <tr>
-            <td class="amap-acc">{{ r.account }}</td>
-            <td>{% if r.assets %}<span class="amap-tags">{% for a in r.assets %}<span class="amap-tag">{{ a }}</span>{% endfor %}</span>{% else %}<span class="nodata">—</span>{% endif %}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="amap-empty">Every configured account is placed in a country.</div>
-      {% endif %}
-    </details>
-  </div>
+  <div id="amap-slot">{% include "_account_map.html" %}</div>
 </div>
 
 {% for c in report.countries %}
@@ -2344,7 +2235,7 @@ async function dashRefresh(ev) {
 {% endif %}
 <table>
   <thead><tr>
-    <th>Asset</th>
+    <th>Ad Asset</th>
     <th class="num">Leads</th>
     <th class="num">Deposits</th>
     <th class="num">CR</th>
@@ -2573,7 +2464,7 @@ async function dashRefresh(ev) {
 </div>
 
 <table>
-  <thead><tr><th>Account</th><th>Cost</th><th>Asset</th><th>To Do</th><th>✓</th></tr></thead>
+  <thead><tr><th>Account</th><th>Cost</th><th>Ad Asset</th><th>To Do</th><th>✓</th></tr></thead>
   <tbody>
   {% for r in c.account_rows %}
     <tr>
@@ -3497,6 +3388,96 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
   overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
   function onKey(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } }
   document.addEventListener('keydown', onKey);
+}
+
+// ── Календарь периода для карты аккаунтов ────────────────────────────
+var _amapPick = { from: '', to: '' };
+
+function amapDates() {
+  var el = document.getElementById('amap-dates');
+  try { return el ? JSON.parse(el.textContent) : []; } catch (e) { return []; }
+}
+
+function amapCalendar(btn) {
+  var open = document.querySelector('.amap-cal');
+  if (open) { open.remove(); return; }
+  var have = amapDates();
+  if (!have.length) { alert('The workbook has no dates to choose from.'); return; }
+
+  var month = new Date(have[have.length - 1] + 'T00:00:00');
+  month.setDate(1);
+  var box = document.createElement('div');
+  box.className = 'amap-cal';
+  document.body.appendChild(box);
+  var r = btn.getBoundingClientRect();
+  box.style.left = Math.max(8, Math.min(r.left, innerWidth - 260)) + 'px';
+  box.style.top = (r.bottom + window.scrollY + 6) + 'px';
+
+  function iso(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+      + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function draw() {
+    var first = new Date(month.getFullYear(), month.getMonth(), 1);
+    var days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+    var lead = (first.getDay() + 6) % 7; // неделя с понедельника
+    var title = first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    var html = '<div class="amap-cal-head"><button type="button" data-step="-1">‹</button>'
+      + '<span>' + title + '</span>'
+      + '<button type="button" data-step="1">›</button></div><div class="amap-cal-grid">';
+    ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(function (d) { html += '<div class="dow">' + d + '</div>'; });
+    for (var i = 0; i < lead; i++) html += '<div></div>';
+    for (var day = 1; day <= days; day++) {
+      var key = iso(new Date(month.getFullYear(), month.getMonth(), day));
+      var has = have.indexOf(key) !== -1;
+      var cls = has ? 'has' : '';
+      if (key === _amapPick.from || key === _amapPick.to) cls += ' sel';
+      else if (_amapPick.from && _amapPick.to && key > _amapPick.from && key < _amapPick.to) cls += ' inrange';
+      html += '<button type="button" class="' + cls + '" data-day="' + key + '"'
+        + (has ? '' : ' disabled title="no rows in the workbook"') + '>' + day + '</button>';
+    }
+    html += '</div><div class="amap-cal-foot"><span>' + have.length + ' days in the workbook</span>'
+      + '<button type="button" class="amap-btn" data-all="1">All dates</button></div>';
+    box.innerHTML = html;
+
+    box.querySelectorAll('[data-step]').forEach(function (b) {
+      b.onclick = function () { month.setMonth(month.getMonth() + Number(b.dataset.step)); draw(); };
+    });
+    box.querySelector('[data-all]').onclick = function () { amapApply('', ''); };
+    box.querySelectorAll('[data-day]:not([disabled])').forEach(function (b) {
+      b.onclick = function () {
+        var d = b.dataset.day;
+        // Первый клик задаёт начало, второй — конец. Клик раньше начала
+        // начинает выбор заново, а не даёт перевёрнутый период.
+        if (!_amapPick.from || _amapPick.to || d < _amapPick.from) {
+          _amapPick = { from: d, to: '' };
+          draw();
+        } else {
+          _amapPick.to = d;
+          amapApply(_amapPick.from, _amapPick.to);
+        }
+      };
+    });
+  }
+  draw();
+}
+
+async function amapApply(from, to) {
+  var cal = document.querySelector('.amap-cal');
+  if (cal) cal.remove();
+  _amapPick = { from: from, to: to };
+  var slot = document.getElementById('amap-slot');
+  if (!slot) return;
+  slot.style.opacity = '0.5';
+  var url = '/account-map?date_from=' + encodeURIComponent(from) + '&date_to=' + encodeURIComponent(to);
+  try {
+    var r = await fetch(url, { credentials: 'same-origin' });
+    slot.innerHTML = await r.text();
+  } catch (e) {
+    alert('Could not load that period: ' + (e && e.message ? e.message : e));
+  }
+  slot.style.opacity = '';
 }
 
 // ── Goals: меню на чипе, правка и удаление ───────────────────────────

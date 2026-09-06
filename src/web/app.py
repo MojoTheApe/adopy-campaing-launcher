@@ -280,7 +280,44 @@ def _build_goals_view(report: dict) -> dict:
     }
 
 
-def _build_account_map_view(report: dict) -> dict:
+def _workbook_dates(df) -> list[str]:
+    """Every date the workbook actually has, as ISO strings.
+
+    The calendar greys out everything else. Offering a full month when the file
+    holds two days is an invitation to pick a day and conclude the accounts are
+    dead — the data was never there, and the screen should say so before the
+    click, not after.
+    """
+    try:
+        import pandas as pd
+
+        if df is None or "Date" not in getattr(df, "columns", []):
+            return []
+        days = pd.to_datetime(df["Date"], errors="coerce").dt.date.dropna()
+        return sorted({d.isoformat() for d in days})
+    except Exception:
+        return []
+
+
+def _filter_by_period(df, date_from: str, date_to: str):
+    """Rows inside [from, to]. Either end may be blank — then it is not bounded."""
+    if df is None or not (date_from or date_to) or "Date" not in getattr(df, "columns", []):
+        return df
+    try:
+        import pandas as pd
+
+        days = pd.to_datetime(df["Date"], errors="coerce").dt.date
+        mask = days.notna()
+        if date_from:
+            mask &= days >= pd.to_datetime(date_from).date()
+        if date_to:
+            mask &= days <= pd.to_datetime(date_to).date()
+        return df[mask]
+    except Exception:
+        return df
+
+
+def _build_account_map_view(report: dict, df=None, date_from: str = "", date_to: str = "") -> dict:
     """The account map on Home: every country, its accounts, and what they did.
 
     Countries come from the links store, not from the workbook, because the two
@@ -308,6 +345,8 @@ def _build_account_map_view(report: dict) -> dict:
     # ("Costa Rica"), and matching on one of them alone silently produces a map
     # where every account says "no data" — which reads as a data problem rather
     # than as a join that missed.
+    period = _filter_by_period(df, date_from, date_to) if (date_from or date_to) else None
+
     per_country: dict[str, dict[str, dict]] = {}
     labels_in_report: set[str] = set()
     display_name: dict[str, str] = {}
@@ -319,7 +358,17 @@ def _build_account_map_view(report: dict) -> dict:
             if not label:
                 continue
             labels_in_report.add(label)
-            bucket[label] = row.get("account_excel") or {}
+            if period is None:
+                bucket[label] = row.get("account_excel") or {}
+            else:
+                # Пересчёт за выбранный период тем же кодом, что считает всё
+                # остальное на странице: две формулы для одного числа рано или
+                # поздно разойдутся, и разойдутся молча.
+                from src.analysis_agent.morning_report import build_account_performance_summary
+
+                bucket[label] = build_account_performance_summary(
+                    period, name, (row.get("alias") or label)
+                )
         for key in {name.casefold(), _country_code(name).casefold()}:
             if key:
                 per_country[key] = bucket
@@ -373,7 +422,14 @@ def _build_account_map_view(report: dict) -> dict:
         {"account": label, "assets": account_links.values_for(label, "asset")}
         for label in account_links.available_accounts(all_known)
     ]
-    return {"countries": countries, "available": available, "all_accounts": all_known}
+    return {
+        "countries": countries,
+        "available": available,
+        "all_accounts": all_known,
+        "dates": _workbook_dates(df),
+        "date_from": date_from,
+        "date_to": date_to,
+    }
 
 
 def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
@@ -874,7 +930,7 @@ def _render_report(
             "draft_status": draft_status,
             "mlx_labels": mlx_instance_labels(),
             "installed_release": _installed_release(),
-            "account_map": _build_account_map_view(report),
+            "account_map": _build_account_map_view(report, _df),
             "goals": _build_goals_view(report),
         },
     )
@@ -1863,6 +1919,30 @@ async def account_map_patch(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": f"Failed to save: {exc}"}, status_code=500)
 
     return JSONResponse({"ok": True, "saved": new_row["account_name"]})
+
+
+@app.get("/account-map")
+async def account_map_fragment(request: Request, date_from: str = "", date_to: str = "") -> Response:
+    """The account map alone, recomputed for a period.
+
+    A fragment rather than a page reload: rebuilding the whole report to change
+    a date range costs six seconds and throws away the reader's scroll position
+    for a question that only concerns one block.
+    """
+    try:
+        report, df, _warnings = get_cached_report()
+    except Exception as exc:
+        return HTMLResponse(f'<div class="amap-empty">Could not read the workbook: {exc}</div>')
+
+    _enrich_country_overview(report)
+    return templates.TemplateResponse(
+        "_account_map.html",
+        {
+            "request": request,
+            "amap": _build_account_map_view(report, df, date_from.strip(), date_to.strip()),
+            "mlx": mlx_instance_labels(),
+        },
+    )
 
 
 @app.get("/goals")
