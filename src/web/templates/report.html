@@ -1408,6 +1408,14 @@
       text-align: center;
     }
     .amap-cal-arrow { color: var(--muted); }
+    .amap-cal-x {
+      background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+      color: var(--muted); cursor: pointer; font-size: 1.05rem; line-height: 1;
+      padding: 0 0.35rem;
+    }
+    .amap-cal-x:hover { border-color: var(--border-strong); color: var(--text); }
+    .period-pick { display: flex; align-items: center; }
+    .period-pick .amap-cal-btn { font-size: 0.78rem; padding: 0.18rem 0.6rem; }
     .amap-cal-nav {
       background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
       color: var(--muted); cursor: pointer; font: inherit; padding: 0 0.45rem;
@@ -1848,6 +1856,7 @@
 {%- set rel = installed_release or {} %}
 {%- set amap = account_map or {'countries': [], 'available': [], 'all_accounts': [],
                               'dates': [], 'date_from': '', 'date_to': ''} %}
+{%- set pd = period or {'date_from': '', 'date_to': '', 'span': ''} %}
 {%- set gv = goals or {'rows': [], 'target': 0, 'deposits': 0, 'pct': none,
                        'cm': '', 'team_lead': false} %}
 
@@ -1860,7 +1869,16 @@
       <span class="brand-meta" title="Source: {{ report.source_excel }}">{{ report.date }}<span class="meta-sep">·</span>CM <strong>{{ report.my_cm }}</strong><span class="meta-sep">·</span>Trend <strong>{{ report.trend_days }}d</strong><span class="meta-sep">·</span><strong>{{ report.total_combos }}</strong> combos{% if built_at %}<span class="meta-sep">·</span>Updated <strong>{{ built_at }}</strong>{% endif %}<span class="meta-sep">·</span><span id="acl-version" title="Installed ACL release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</span></span>
     </div>
   </div>
-  <div class="buyer-pick" style="margin-left:auto;display:flex;align-items:center;gap:0.45rem">
+  {#- Период стоит в шапке, а не над секцией: он меняет каждое число на
+      странице, а элемент внутри блока читался бы как принадлежащий блоку. -#}
+  <div class="period-pick" style="margin-left:auto">
+    <button type="button" class="amap-btn amap-cal-btn" onclick="amapCalendar(this)"
+            title="Which days every number on this page counts">
+      📅 {% if pd.span == 'all' %}all dates{% elif pd.date_from or pd.date_to %}{{ pd.date_from or '…' }} → {{ pd.date_to or '…' }}{% else %}all dates{% endif %}
+    </button>
+    <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
+  </div>
+  <div class="buyer-pick" style="display:flex;align-items:center;gap:0.45rem">
     <label for="buyer-select" style="font-size:0.78rem;color:var(--muted)">Buyer</label>
     <select id="buyer-select" style="font-size:0.82rem;max-width:14rem"
             title="Whose view to show: accounts, optimization, team comparison">
@@ -3426,7 +3444,7 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
 }
 
 // ── Календарь периода для карты аккаунтов ────────────────────────────
-var _amapPick = { from: '{{ amap.date_from }}', to: '{{ amap.date_to }}', span: '{{ amap.span }}' };
+var _amapPick = { from: '{{ pd.date_from }}', to: '{{ pd.date_to }}', span: '{{ pd.span }}' };
 
 function amapDates() {
   var el = document.getElementById('amap-dates');
@@ -3552,6 +3570,7 @@ function amapCalendar(btn) {
       + '<span class="amap-cal-field">' + shown.b + '</span>'
       + '<button type="button" class="amap-cal-nav" data-step="-1" title="earlier">‹</button>'
       + '<button type="button" class="amap-cal-nav" data-step="1" title="later">›</button>'
+      + '<button type="button" class="amap-cal-x" data-close="1" title="Close">×</button>'
       + '</div><div class="amap-cal-months">'
       + monthHtml(left) + monthHtml(right)
       + '</div><div class="amap-cal-foot">'
@@ -3581,6 +3600,9 @@ function amapCalendar(btn) {
         draw();
       };
     });
+    // Крестик и Cancel закрывают одинаково — но крестик стоит там, где его
+    // ищут не думая, а Cancel рядом с Apply отвечает на «а если передумал».
+    box.querySelector('[data-close]').onclick = function () { box.remove(); };
     box.querySelector('[data-cancel]').onclick = function () { box.remove(); };
     box.querySelector('[data-apply]').onclick = function () {
       // Начали период и не закончили — концом считается его начало: один день.
@@ -3591,23 +3613,22 @@ function amapCalendar(btn) {
   draw();
 }
 
-async function amapApply(from, to, span) {
+/* Период меняет каждое число на странице, а не одну секцию, поэтому страница
+   перезагружается целиком. Подменять фрагменты по одному значило бы держать
+   на экране числа за разные периоды, пока догружаются остальные, — и в этот
+   момент любые два соседних блока выглядели бы одинаково достоверно. */
+function amapApply(from, to, span) {
   var cal = document.querySelector('.amap-cal');
   if (cal) cal.remove();
   _amapPick = { from: from, to: to, span: span || '' };
-  var slot = document.getElementById('amap-slot');
-  if (!slot) return;
-  slot.style.opacity = '0.5';
-  var url = '/account-map?date_from=' + encodeURIComponent(from)
-    + '&date_to=' + encodeURIComponent(to)
-    + '&span=' + encodeURIComponent(span || '');
-  try {
-    var r = await fetch(url, { credentials: 'same-origin' });
-    slot.innerHTML = await r.text();
-  } catch (e) {
-    alert('Could not load that period: ' + (e && e.message ? e.message : e));
+  var q = [];
+  if (span === 'all') q.push('span=all');
+  else {
+    if (from) q.push('date_from=' + encodeURIComponent(from));
+    if (to) q.push('date_to=' + encodeURIComponent(to));
   }
-  slot.style.opacity = '';
+  var hash = window.location.hash || '';
+  window.location.href = window.location.pathname + (q.length ? '?' + q.join('&') : '') + hash;
 }
 
 // ── Goals: меню на чипе, правка и удаление ───────────────────────────

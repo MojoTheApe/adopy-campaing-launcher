@@ -9,11 +9,9 @@
     <div class="amap-head">
       <h3>Account map</h3>
       <span class="amap-note">{{ amap.countries | length }} countries · numbers from the stats workbook</span>
-      <button type="button" class="amap-btn amap-cal-btn" onclick="amapCalendar(this)"
-              title="Which days to count">
-        📅 {% if amap.span == 'all' %}all dates{% elif amap.date_from or amap.date_to %}{{ amap.date_from or '…' }} → {{ amap.date_to or '…' }}{% else %}all dates{% endif %}
-      </button>
-      <script type="application/json" id="amap-dates">{{ amap.dates | tojson }}</script>
+      {#- Выбор периода переехал в шапку: он меняет всю страницу, а не эту
+          секцию. Здесь остаётся только то, за какие дни показаны числа. -#}
+      <span class="amap-note">{% if amap.span == 'all' %}all dates{% elif amap.date_from or amap.date_to %}{{ amap.date_from or '…' }} → {{ amap.date_to or '…' }}{% else %}all dates{% endif %}</span>
       <span class="amap-add" style="padding:0;margin-left:auto">
         <input type="text" id="amap-new-country" placeholder="new country…" size="14">
         <select id="amap-new-country-acc">

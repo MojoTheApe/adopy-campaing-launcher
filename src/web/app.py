@@ -311,6 +311,68 @@ def _month_to_date(dates: list[str]) -> tuple[str, str]:
     return last[:7] + "-01", last
 
 
+def resolve_period(df, date_from: str, date_to: str, span: str) -> tuple[str, str]:
+    """Какой период показывать: выбранный, «все даты» или умолчание.
+
+    Одно место на весь дешборд — иначе шапка и карта аккаунтов рано или поздно
+    начнут показывать разные месяцы и оба будут выглядеть правдой.
+    """
+    if span == "all":
+        return "", ""
+    if date_from or date_to:
+        return date_from, date_to
+    return _month_to_date(_workbook_dates(df))
+
+
+#: отчёты за период — ключ (excel mtime, менеджер, период). Пересборка стоит
+#: около секунды, и без кэша она случалась бы на каждом переключении вкладки.
+_PERIOD_CACHE: dict[tuple, dict] = {}
+_PERIOD_CACHE_MAX = 8
+
+
+def report_for_period(report: dict, df, date_from: str, date_to: str) -> dict:
+    """Тот же отчёт, посчитанный только по строкам внутри периода.
+
+    Excel уже разобран и лежит в кэше — здесь пересобирается только сам отчёт.
+    Без периода возвращается ровно то, что пришло: ни лишней работы, ни риска
+    разойтись с общим кэшем.
+    """
+    if df is None or not (date_from or date_to):
+        return report
+
+    from src.web.buyer import get_selected_cm
+
+    key = (
+        report.get("source_excel"),
+        len(df),
+        (get_selected_cm() or ""),
+        date_from,
+        date_to,
+    )
+    hit = _PERIOD_CACHE.get(key)
+    if hit is not None:
+        return hit
+
+    rows = _filter_by_period(df, date_from, date_to)
+    try:
+        from src.analysis_agent.morning_service import load_morning_report
+
+        scoped, _df, _warnings = load_morning_report(
+            enriched_df=rows, account_rows_cached=report.get("_account_rows")
+        )
+    except Exception:
+        # Период — это способ посмотреть, а не условие работы: если пересборка
+        # не удалась, честнее показать полный отчёт, чем пустую страницу.
+        return report
+
+    scoped["period_from"] = date_from
+    scoped["period_to"] = date_to
+    if len(_PERIOD_CACHE) >= _PERIOD_CACHE_MAX:
+        _PERIOD_CACHE.pop(next(iter(_PERIOD_CACHE)))
+    _PERIOD_CACHE[key] = scoped
+    return scoped
+
+
 def _filter_by_period(df, date_from: str, date_to: str):
     """Rows inside [from, to]. Either end may be blank — then it is not bounded."""
     if df is None or not (date_from or date_to) or "Date" not in getattr(df, "columns", []):
@@ -898,6 +960,9 @@ def _render_report(
     request: Request,
     *,
     upload_errors: dict[str, dict[str, list[str]]] | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    span: str = "",
 ) -> HTMLResponse:
     try:
         report, _df, warnings = get_cached_report()
@@ -913,6 +978,13 @@ def _render_report(
             {"request": request, "title": "Excel format problem", "message": str(e)},
             status_code=200,
         )
+
+    # Период выбирается один раз на всю страницу: карта аккаунтов, обзор
+    # стран и рекомендации должны говорить об одних и тех же днях. Раньше он
+    # менял только карту, и две секции рядом отвечали на разные вопросы,
+    # выглядя одинаково достоверно.
+    date_from, date_to = resolve_period(_df, date_from.strip(), date_to.strip(), span.strip())
+    report = report_for_period(report, _df, date_from, date_to)
 
     _enrich_country_overview(report)
     ref_opts = _load_ref_options()
@@ -957,7 +1029,8 @@ def _render_report(
             "draft_status": draft_status,
             "mlx_labels": mlx_instance_labels(),
             "installed_release": _installed_release(),
-            "account_map": _build_account_map_view(report, _df),
+            "account_map": _build_account_map_view(report, _df, date_from, date_to, span),
+            "period": {"date_from": date_from, "date_to": date_to, "span": span},
             "goals": _build_goals_view(report),
         },
     )
@@ -1108,8 +1181,10 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    return _render_report(request)
+async def index(
+    request: Request, date_from: str = "", date_to: str = "", span: str = ""
+) -> HTMLResponse:
+    return _render_report(request, date_from=date_from, date_to=date_to, span=span)
 
 
 @app.get("/details", response_class=HTMLResponse)

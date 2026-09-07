@@ -141,6 +141,7 @@ def load_morning_report(
     with_news: bool = False,
     news_fetcher: Optional[NewsFetcher] = None,
     enriched_df: Optional[pd.DataFrame] = None,
+    account_rows_cached: Optional[List[Dict[str, Any]]] = None,
 ) -> Tuple[Dict[str, Any], pd.DataFrame, List[str]]:
     """Build the full morning report from current Excel + GSheet state.
 
@@ -182,6 +183,11 @@ def load_morning_report(
         warnings.append("GSheet skipped (skip_gsheet=True)")
         if enriched_df is None:
             enriched_df = _load_enriched_df(resolved_excel)
+    elif account_rows_cached is not None:
+        # Строки GSheet не зависят от дат. Пересобирая тот же отчёт за другой
+        # период, ходить за ними второй раз незачем — а с пропуском GSheet
+        # целиком погасли бы секции 6-9, что выглядело бы как «данных нет».
+        account_rows = list(account_rows_cached)
     elif enriched_df is not None:
         try:
             account_rows = _fetch_gsheet()
@@ -274,4 +280,6 @@ def load_morning_report(
                     warnings.append(warning)
     # Provide the source Excel path on the report for the renderer header.
     report["source_excel"] = resolved_excel
+    # для пересборки за период: см. account_rows_cached выше
+    report["_account_rows"] = account_rows
     return report, enriched_df, warnings
