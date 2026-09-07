@@ -33,10 +33,17 @@ updated: 2026-09-07
       Вторая строка примечания.
 - [ ] `acl-103` Live spend from the account #next @analysis
 
+- [ ] `acl-104` Split into parts #next @dashboard needs:acl-112
+  - [x] `acl-104a` Первая часть сделана
+        Примечание подзадачи.
+  - [ ] `acl-104b` Вторая часть needs:acl-111
+  - [ ] Часть без id — коммитом не отметить
+
 ### Open/close ads/ad sets
 
 - [ ] `acl-111` Pause an ad set #blocked @analysis
 - [ ] `acl-112` Request ads_management #next @ops
+  - [x] `acl-112a` Всё сделано, родитель закрыт сам собой
 
 ## 2 · Texts
 > Новые материалы.
@@ -94,8 +101,84 @@ def test_blocked_survives_parsing():
 
 
 def test_progress_counts_only_that_area():
-    assert board().areas[0].progress == (1, 4)
+    # acl-101 отмечен рукой, acl-112 закрыт единственной сделанной частью
+    assert board().areas[0].progress == (2, 5)
     assert board().areas[1].progress == (0, 1)
+
+
+def test_subtasks_hang_off_their_task():
+    t = board().by_id("acl-104")
+    assert [s.id for s in t.subs] == ["acl-104a", "acl-104b", ""]
+    assert t.sub_progress == (1, 3)
+    assert not t.is_done
+
+
+def test_subtask_note_stays_on_the_subtask():
+    b = board()
+    assert b.by_id("acl-104a").note == "Примечание подзадачи."
+    assert b.by_id("acl-104").note == ""
+
+
+def test_all_parts_done_closes_the_task():
+    t = board().by_id("acl-112")
+    assert t.is_done and not t.done
+
+
+def test_needs_is_parsed_and_leaves_the_title_clean():
+    b = board()
+    assert b.by_id("acl-104").needs == ["acl-112"]
+    assert b.by_id("acl-104").title == "Split into parts"
+    assert b.by_id("acl-104b").needs == ["acl-111"]
+    assert b.by_id("acl-104b").title == "Вторая часть"
+
+
+def test_subtask_inherits_the_track():
+    assert board().by_id("acl-104a").track == "dashboard"
+
+
+def test_by_id_finds_subtasks_but_area_progress_does_not_count_them():
+    b = board()
+    assert b.by_id("acl-104a") is not None
+    assert b.parent_of("acl-104a").id == "acl-104"
+    assert b.parent_of("acl-104") is None
+    assert all(t.id in {"acl-101", "acl-103", "acl-104", "acl-111", "acl-112", "acl-501"}
+               for t in b.tasks)
+
+
+def test_commit_ticks_a_subtask_without_touching_the_parent():
+    new, ticked = acl_board.apply_commit(SAMPLE, "abc1234", "acl-104b сделано")
+    assert ticked == ["acl-104b"]
+    b = acl_board.parse(new)
+    assert b.by_id("acl-104b").is_done
+    assert not b.by_id("acl-104").is_done  # часть без id ещё открыта
+
+
+def test_last_part_closes_the_parent_too():
+    once, _ = acl_board.apply_commit(SAMPLE, "abc1234", "acl-104b готово")
+    text = once.replace("- [ ] Часть без id", "- [x] Часть без id")
+    b = acl_board.parse(text)
+    assert b.by_id("acl-104").is_done
+    line = next(l for l in text.splitlines() if "`acl-104`" in l and l.startswith("- ["))
+    assert line.startswith("- [ ]")  # в файле галочка не ставилась — её выводит доска
+
+
+def test_parent_line_is_ticked_when_a_commit_closes_the_last_part():
+    text = SAMPLE.replace("- [ ] Часть без id — коммитом не отметить",
+                          "- [x] Часть без id — коммитом не отметить")
+    new, ticked = acl_board.apply_commit(text, "abc1234", "acl-104b готово")
+    assert ticked == ["acl-104b"]
+    parent_line = next(
+        l for l in new.splitlines() if "`acl-104`" in l and l.startswith("- [")
+    )
+    assert parent_line.startswith("- [x]")
+    assert "#shipped" in parent_line
+
+
+def test_subtask_line_gets_no_status_tag():
+    new, _ = acl_board.apply_commit(SAMPLE, "abc1234", "acl-104b готово")
+    line = next(l for l in new.splitlines() if "`acl-104b`" in l)
+    assert line.strip().startswith("- [x]")
+    assert "#shipped" not in line
 
 
 @pytest.mark.parametrize(
@@ -105,8 +188,13 @@ def test_progress_counts_only_that_area():
         ("fix: acl-111 и acl-112 одним куском", ["acl-111", "acl-112"]),
         ("рефакторинг без задач", []),
         ("ACL-103 в верхнем регистре", ["acl-103"]),
-        ("не путать с acl-1030x", []),
+        # одна буква после номера — подзадача, две и больше — уже не id
+        ("не путать с acl-103xy", []),
+        ("и с acl-103-beta", []),
         ("acl-103 дважды acl-103", ["acl-103"]),
+        ("подзадача acl-104b", ["acl-104b"]),
+        ("acl-104 и acl-104b рядом", ["acl-104", "acl-104b"]),
+        ("тег релиза acl-release-2026-09-03e не задача", []),
     ],
 )
 def test_ids_in_commit(message, expected):
@@ -130,7 +218,7 @@ def test_apply_commit_ticks_and_logs():
 
 def test_apply_commit_replaces_the_old_status_tag():
     new, _ = acl_board.apply_commit(SAMPLE, "abc1234", "acl-111 закрыто")
-    line = next(l for l in new.splitlines() if "acl-111" in l)
+    line = next(l for l in new.splitlines() if "`acl-111`" in l)
     assert "#blocked" not in line
     assert line.count("#shipped") == 1
 

@@ -51,13 +51,15 @@ TRACK_LABEL = {
     "ops": "Ops",
 }
 
-ID_RE = re.compile(r"`(acl-\d+)`")
+ID_RE = re.compile(r"`(acl-\d+[a-z]?)`")
 TASK_RE = re.compile(r"^-\s*\[( |x|X)\]\s*(.+)$")
+SUB_RE = re.compile(r"^\s+-\s*\[( |x|X)\]\s*(.+)$")
 AREA_RE = re.compile(r"^##\s+(\d+)\s*[·.·-]\s*(.+)$")
 CAP_RE = re.compile(r"^###\s+(.+)$")
 BLURB_RE = re.compile(r"^>\s*(.+)$")
 TAG_RE = re.compile(r"(?<!\w)#([a-z][a-z0-9-]*)")
 TRACK_RE = re.compile(r"(?<!\w)@([a-z][a-z0-9-]*)")
+NEEDS_RE = re.compile(r"needs:(acl-\d+[a-z]?)")
 
 
 @dataclass
@@ -69,10 +71,19 @@ class Task:
     note: str = ""
     done: bool = False
     line: int = 0
+    subs: list["Task"] = field(default_factory=list)
+    needs: list[str] = field(default_factory=list)
 
     @property
     def is_done(self) -> bool:
-        return self.done or self.status == "shipped"
+        if self.done or self.status == "shipped":
+            return True
+        # задача, у которой сделаны все части, сделана — это факт, не оценка
+        return bool(self.subs) and all(s.is_done for s in self.subs)
+
+    @property
+    def sub_progress(self) -> tuple[int, int]:
+        return sum(1 for s in self.subs if s.is_done), len(self.subs)
 
 
 @dataclass
@@ -106,18 +117,35 @@ class Board:
 
     @property
     def tasks(self) -> list[Task]:
+        """Только верхний уровень — по нему считается прогресс областей."""
         return [t for a in self.areas for t in a.tasks]
 
-    def by_id(self, task_id: str) -> Task | None:
+    @property
+    def all_tasks(self) -> list[Task]:
+        """Вместе с подзадачами — по ним ищут id и отмечают коммитом."""
+        out: list[Task] = []
         for t in self.tasks:
+            out.append(t)
+            out.extend(t.subs)
+        return out
+
+    def by_id(self, task_id: str) -> Task | None:
+        for t in self.all_tasks:
             if t.id == task_id:
+                return t
+        return None
+
+    def parent_of(self, task_id: str) -> Task | None:
+        for t in self.tasks:
+            if any(s.id == task_id for s in t.subs):
                 return t
         return None
 
     def counts(self) -> dict[str, int]:
         out = {s: 0 for s in STATUSES}
         for t in self.tasks:
-            out[t.status] = out.get(t.status, 0) + 1
+            status = "shipped" if t.is_done else t.status
+            out[status] = out.get(status, 0) + 1
         return out
 
 
@@ -129,8 +157,8 @@ def board_path() -> Path:
     return Path(raw) if raw else DEFAULT_BOARD
 
 
-def _strip_markers(text: str) -> tuple[str, str, str]:
-    """Выдрать из строки статус и трек, вернуть остаток как заголовок."""
+def _strip_markers(text: str) -> tuple[str, str, str, list[str]]:
+    """Выдрать статус, трек и зависимости; остаток вернуть как заголовок."""
     status = ""
     track = ""
     for tag in TAG_RE.findall(text):
@@ -139,10 +167,15 @@ def _strip_markers(text: str) -> tuple[str, str, str]:
     for t in TRACK_RE.findall(text):
         if t in TRACK_LABEL:
             track = t
-    title = TAG_RE.sub("", text)
+    needs: list[str] = []
+    for dep in NEEDS_RE.findall(text):
+        if dep not in needs:
+            needs.append(dep)
+    title = NEEDS_RE.sub("", text)
+    title = TAG_RE.sub("", title)
     title = TRACK_RE.sub("", title)
     title = re.sub(r"\s{2,}", " ", title).strip(" ·—-")
-    return title.strip(), status, track
+    return title.strip(), status, track, needs
 
 
 def parse(text: str) -> Board:
@@ -150,14 +183,15 @@ def parse(text: str) -> Board:
     area: Area | None = None
     cap: Capability | None = None
     task: Task | None = None
+    note_at: Task | None = None  # примечание цепляется к последней строке — задаче или подзадаче
     note_lines: list[str] = []
     in_front = False
     in_fence = False
 
     def flush_note() -> None:
         nonlocal note_lines
-        if task is not None and note_lines:
-            task.note = " ".join(l.strip() for l in note_lines).strip()
+        if note_at is not None and note_lines:
+            note_at.note = " ".join(l.strip() for l in note_lines).strip()
         note_lines = []
 
     for n, raw in enumerate(text.splitlines(), start=1):
@@ -184,7 +218,7 @@ def parse(text: str) -> Board:
         m = AREA_RE.match(line)
         if m:
             flush_note()
-            task = None
+            task = note_at = None
             area = Area(number=m.group(1), title=m.group(2).strip())
             board.areas.append(area)
             cap = None
@@ -193,7 +227,7 @@ def parse(text: str) -> Board:
         m = CAP_RE.match(line)
         if m and area is not None:
             flush_note()
-            task = None
+            task = note_at = None
             cap = Capability(title=m.group(1).strip())
             area.caps.append(cap)
             continue
@@ -203,16 +237,38 @@ def parse(text: str) -> Board:
             area.blurb = m.group(1).strip()
             continue
 
+        m = SUB_RE.match(line)
+        if m and task is not None:
+            flush_note()
+            body = m.group(2)
+            ids = ID_RE.findall(body)
+            body = ID_RE.sub("", body, count=1) if ids else body
+            title, status, track, needs = _strip_markers(body)
+            done = m.group(1).lower() == "x"
+            task.subs.append(
+                Task(
+                    id=ids[0] if ids else "",
+                    title=title,
+                    status=status or ("shipped" if done else DEFAULT_STATUS),
+                    track=track or task.track,
+                    done=done,
+                    line=n,
+                    needs=needs,
+                )
+            )
+            note_at = task.subs[-1]
+            continue
+
         m = TASK_RE.match(line)
         if m and area is not None:
             flush_note()
             body = m.group(2)
             ids = ID_RE.findall(body)
             if not ids:
-                task = None
+                task = note_at = None
                 continue
             body = ID_RE.sub("", body, count=1)
-            title, status, track = _strip_markers(body)
+            title, status, track, needs = _strip_markers(body)
             done = m.group(1).lower() == "x"
             if not status:
                 status = "shipped" if done else DEFAULT_STATUS
@@ -222,9 +278,16 @@ def parse(text: str) -> Board:
                 cap = Capability(title="")
                 area.caps.append(cap)
             task = Task(
-                id=ids[0], title=title, status=status, track=track, done=done, line=n
+                id=ids[0],
+                title=title,
+                status=status,
+                track=track,
+                done=done,
+                line=n,
+                needs=needs,
             )
             cap.tasks.append(task)
+            note_at = task
             continue
 
         if task is not None and raw.startswith((" ", "\t")) and line.strip():
@@ -233,7 +296,7 @@ def parse(text: str) -> Board:
 
         if not line.strip():
             flush_note()
-            task = None
+            task = note_at = None
 
     flush_note()
     return board
@@ -244,7 +307,7 @@ def parse(text: str) -> Board:
 
 def ids_in_commit(message: str) -> list[str]:
     """Идентификаторы задач, упомянутые в сообщении коммита."""
-    found = re.findall(r"(?<![\w-])(acl-\d+)(?![\w-])", message, flags=re.IGNORECASE)
+    found = re.findall(r"(?<![\w-])(acl-\d+[a-z]?)(?![\w-])", message, flags=re.IGNORECASE)
     seen: list[str] = []
     for f in found:
         f = f.lower()
@@ -278,20 +341,30 @@ def apply_commit(text: str, sha: str, message: str, when: str = "") -> tuple[str
     lines = text.splitlines()
     ticked: list[str] = []
 
+    def tick(task: Task, add_tag: bool) -> None:
+        idx = task.line - 1
+        line = lines[idx].replace("- [ ]", "- [x]", 1)
+        line = TAG_RE.sub(
+            lambda m: "#shipped" if m.group(1) in STATUSES else m.group(0), line
+        )
+        if add_tag and "#shipped" not in line:
+            line = line.rstrip() + " #shipped"
+        lines[idx] = line
+
     for task_id in ids:
         task = board.by_id(task_id)
         if task is None or task.is_done:
             continue
-        idx = task.line - 1
-        line = lines[idx]
-        line = line.replace("- [ ]", "- [x]", 1)
-        line = TAG_RE.sub(
-            lambda m: "#shipped" if m.group(1) in STATUSES else m.group(0), line
-        )
-        if "#shipped" not in line:
-            line = line.rstrip() + " #shipped"
-        lines[idx] = line
+        # у подзадач статус не пишем — он читается по галочке, строка и так узкая
+        tick(task, add_tag=board.parent_of(task_id) is None)
+        task.done = True
         ticked.append(task_id)
+
+        # закрылась последняя часть — родитель закрыт вместе с ней
+        parent = board.parent_of(task_id)
+        if parent is not None and parent.is_done and not parent.done:
+            tick(parent, add_tag=True)
+            parent.done = True
 
     if not ticked:
         return text, []
@@ -334,22 +407,49 @@ def _rich(s: str) -> str:
     return re.sub(r"`([^`]+)`", r"<code>\1</code>", _esc(s))
 
 
+def _subs(task: Task) -> str:
+    if not task.subs:
+        return ""
+    rows = []
+    for s in task.subs:
+        box = "☑" if s.is_done else "☐"
+        sid = f"<code>{_esc(s.id)}</code>" if s.id else ""
+        note = f'<span class="sub-note">{_rich(s.note)}</span>' if s.note else ""
+        needs = _needs(s)
+        rows.append(
+            f'<li class="{"done" if s.is_done else "open"}">'
+            f'<span class="box" aria-hidden="true">{box}</span>'
+            f'<span class="sub-body">{sid}{_rich(s.title)}{note}{needs}</span></li>'
+        )
+    return f'<ul class="subs">{"".join(rows)}</ul>'
+
+
+def _needs(task: Task) -> str:
+    if not task.needs:
+        return ""
+    deps = " ".join(f"<code>{_esc(d)}</code>" for d in task.needs)
+    return f'<span class="needs">waits on {deps}</span>'
+
+
 def _card(task: Task, tilt: int) -> str:
-    note = (
-        f'<p class="note">{_rich(task.note)}</p>' if task.note else ""
-    )
+    note = f'<p class="note">{_rich(task.note)}</p>' if task.note else ""
     track = (
         f'<span class="track">{_esc(TRACK_LABEL.get(task.track, task.track))}</span>'
         if task.track
         else ""
     )
     tick = '<span class="tick" aria-hidden="true">✓</span>' if task.is_done else ""
+    done, total = task.sub_progress
+    meter = f'<span class="count">{done}/{total}</span>' if total else ""
+    status = "shipped" if task.is_done else task.status
     return (
-        f'<article class="pin s-{task.status}" style="--tilt:{tilt / 10:.1f}deg" '
-        f'data-status="{task.status}" data-track="{_esc(task.track)}">'
+        f'<article class="pin s-{status}" style="--tilt:{tilt / 10:.1f}deg" '
+        f'data-status="{status}" data-track="{_esc(task.track)}">'
         f'<header><code>{_esc(task.id)}</code>{track}</header>'
         f'<h4>{tick}{_rich(task.title)}</h4>{note}'
-        f'<footer>{_esc(STATUS_LABEL.get(task.status, task.status))}</footer>'
+        f'{_subs(task)}'
+        f'<footer>{_esc(STATUS_LABEL.get(status, status))}'
+        f'{_needs(task)}{meter}</footer>'
         "</article>"
     )
 
@@ -547,9 +647,27 @@ nav.areas a:hover {{ color: var(--ink); text-decoration: underline;
 .pin h4 code, .pin .note code {{ font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: .84em; opacity: 1; background: rgba(127,127,127,.16);
   padding: 0 3px; border-radius: 2px; overflow-wrap: anywhere; }}
+.subs {{ list-style: none; margin: 9px 0 0; padding: 8px 0 0;
+  border-top: 1px dashed var(--edge); display: flex; flex-direction: column; gap: 6px; }}
+.subs li {{ display: flex; gap: 6px; font-size: 12.5px; line-height: 1.35; }}
+.subs .box {{ flex: none; opacity: .6; font-size: 12px; line-height: 1.4; }}
+.subs li.done {{ opacity: .58; }}
+.subs li.done .sub-body {{ text-decoration: line-through;
+  text-decoration-thickness: 1px; }}
+.subs code {{ font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 9.5px;
+  opacity: .6; margin-right: 5px; }}
+.sub-note {{ display: block; font-size: 11.5px; opacity: .72; margin-top: 2px;
+  text-decoration: none; }}
+.needs {{ display: inline-block; font-size: 9.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .07em; opacity: .8; }}
+.subs .needs {{ display: block; margin-top: 3px; text-decoration: none; }}
+.needs code {{ font-size: 9.5px; opacity: 1; margin: 0 0 0 2px; }}
 .pin footer {{ margin-top: 9px; padding-top: 7px; border-top: 1px solid var(--edge);
   font-size: 9.5px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .09em; opacity: .68; }}
+  letter-spacing: .09em; opacity: .68; display: flex; gap: 10px;
+  align-items: baseline; flex-wrap: wrap; }}
+.pin footer .count {{ margin-left: auto; font-variant-numeric: tabular-nums;
+  opacity: .85; }}
 .pin.hide {{ display: none; }}
 
 .s-shipped {{ --bg: var(--pin-shipped-bg); --fg: var(--pin-shipped-ink); --edge: var(--pin-shipped-edge); }}
