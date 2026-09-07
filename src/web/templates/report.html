@@ -3463,23 +3463,30 @@ function amapShift(d, n) {
 }
 
 /* Готовые периоды — те же, что в BI компании, чтобы человек не переучивался.
-   Считаются от настоящего сегодня, а не от последнего дня книги: если файл
-   отстал, «Yesterday» окажется без данных и погаснет — и это правда, которую
-   надо показать. Подставить вместо неё ближайший день с данными значило бы
-   спрятать то, что книга не обновлена. */
-function amapPresets() {
+   Начало считается от настоящего сегодня, а не от последнего дня книги: если
+   файл отстал, «Yesterday» окажется без данных и погаснет — и это правда,
+   которую надо показать. Подставить вместо неё ближайший день с данными
+   значило бы спрятать то, что книга не обновлена.
+
+   А вот конец подрезается последним днём книги. Иначе «This month» тянулся бы
+   до сегодня, умолчание — до последнего дня книги, и два одинаковых по смыслу
+   периода не совпадали бы: страница открывалась на месяце, а пресет «This
+   month» при этом не был подсвечен. Подрезка конца ничего не прячет —
+   «Yesterday» на отставшей книге по-прежнему остаётся пустым и гаснет. */
+function amapPresets(last) {
   var t = new Date(); t.setHours(0, 0, 0, 0);
+  var cut = function (iso) { return (last && iso > last) ? last : iso; };
   var y = amapShift(t, -1);
   var weekStart = amapShift(t, -((t.getDay() + 6) % 7));
   var lastWeekEnd = amapShift(weekStart, -1);
   var q = Math.floor(t.getMonth() / 3) * 3;
   return [
-    { key: 'yesterday', label: 'Yesterday', from: amapIso(y), to: amapIso(y) },
-    { key: 'last7', label: 'Last 7 days', from: amapIso(amapShift(t, -7)), to: amapIso(y) },
-    { key: 'lastweek', label: 'Last week', from: amapIso(amapShift(lastWeekEnd, -6)), to: amapIso(lastWeekEnd) },
-    { key: 'month', label: 'This month', from: amapIso(new Date(t.getFullYear(), t.getMonth(), 1)), to: amapIso(t) },
-    { key: 'quarter', label: 'This quarter', from: amapIso(new Date(t.getFullYear(), q, 1)), to: amapIso(t) },
-    { key: 'year', label: 'This year', from: amapIso(new Date(t.getFullYear(), 0, 1)), to: amapIso(t) },
+    { key: 'yesterday', label: 'Yesterday', from: amapIso(y), to: cut(amapIso(y)) },
+    { key: 'last7', label: 'Last 7 days', from: amapIso(amapShift(t, -7)), to: cut(amapIso(y)) },
+    { key: 'lastweek', label: 'Last week', from: amapIso(amapShift(lastWeekEnd, -6)), to: cut(amapIso(lastWeekEnd)) },
+    { key: 'month', label: 'This month', from: amapIso(new Date(t.getFullYear(), t.getMonth(), 1)), to: cut(amapIso(t)) },
+    { key: 'quarter', label: 'This quarter', from: amapIso(new Date(t.getFullYear(), q, 1)), to: cut(amapIso(t)) },
+    { key: 'year', label: 'This year', from: amapIso(new Date(t.getFullYear(), 0, 1)), to: cut(amapIso(t)) },
     { key: 'all', label: 'All dates', from: '', to: '', span: 'all' }
   ];
 }
@@ -3496,7 +3503,7 @@ function amapCalendar(btn) {
   var draft = { from: _amapPick.from, to: _amapPick.to, span: _amapPick.span || '' };
   var right = new Date((have[have.length - 1]) + 'T00:00:00');
   right.setDate(1);
-  var presets = amapPresets();
+  var presets = amapPresets(have[have.length - 1]);
 
   var box = document.createElement('div');
   box.className = 'amap-cal';
