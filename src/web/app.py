@@ -2122,31 +2122,6 @@ async def account_spend_open_profile(request: Request) -> JSONResponse:
     return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
 
 
-@app.get("/account-probe/workbook-name")
-async def account_probe_workbook_name(profile: str = "") -> JSONResponse:
-    """Как профиль Multilogin называется в книге статистики.
-
-    Карта соединяется с книгой по имени аккаунта. Имя профиля туда не подходит,
-    и аккаунт с неверным именем навсегда показывает «нет строк за эту дату» —
-    что читается как отсутствие расходов, а не как несведённые имена.
-    """
-    from src.analysis_agent import account_spend
-
-    profile = profile.strip()
-    if not profile:
-        return JSONResponse({"ok": False, "error": "profile is required"}, status_code=400)
-    try:
-        _report, df, _warnings = get_cached_report()
-        aliases = sorted(
-            {str(x).strip() for x in df["Account Alias"].dropna().unique() if str(x).strip()}
-        )
-    except Exception as exc:  # noqa: BLE001 — без книги просто не подсказываем
-        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
-    return JSONResponse(
-        {"ok": True, "names": account_spend.suggest_workbook_names(profile, aliases)}
-    )
-
-
 @app.post("/account-probe/ad-account")
 async def account_probe_ad_account(request: Request) -> JSONResponse:
     """Спросить у открытого профиля, какой у него рекламный кабинет.

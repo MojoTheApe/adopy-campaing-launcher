@@ -298,40 +298,6 @@ def _attach_only(entry, account_label: str):
     )
 
 
-def _squash(name: str) -> str:
-    """Только буквы и цифры, в верхнем регистре — разделители у всех свои."""
-    return "".join(ch for ch in (name or "") if ch.isalnum()).upper()
-
-
-def suggest_workbook_names(profile_name: str, aliases: list[str], limit: int = 5) -> list[str]:
-    """Как этот профиль называется в книге статистики.
-
-    У аккаунта два имени: `KLD_BFL_X84` в Multilogin и `FacebookMKTOBFLX84` в
-    книге. Раньше подключение предлагало первое, и оно уходило в карту — а
-    карта соединяется с книгой именно по имени. Аккаунт после этого навсегда
-    показывает «нет строк за эту дату», и выглядит это как отсутствие расходов,
-    а не как несведённые имена.
-
-    Ищем по самому длинному общему хвосту: `KLDBFLX84` → `BFLX84`, и это
-    содержится в `FACEBOOKMKTOBFLX84`. Короче трёх символов не берём: `84`
-    совпало бы с половиной книги, а `X84` — уже нет.
-
-    Возвращаем список, а не одно имя: угадали мы или нет, решает человек, и
-    подставить молча значит завести ещё одно место, где неверное выглядит
-    верным.
-    """
-    needle = _squash(profile_name)
-    if len(needle) < 3:
-        return []
-    pairs = [(a, _squash(a)) for a in aliases if _squash(a)]
-    for size in range(len(needle), 2, -1):
-        tail = needle[-size:]
-        hits = [a for a, sq in pairs if tail in sq]
-        if hits:
-            return sorted(set(hits), key=lambda a: (len(a), a.lower()))[:limit]
-    return []
-
-
 def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -> dict:
     """Спросить у самого аккаунта, какой у него номер.
 
