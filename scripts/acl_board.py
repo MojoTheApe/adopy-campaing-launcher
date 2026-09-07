@@ -574,7 +574,7 @@ def render(board: Board) -> str:
         for a in board.areas
     )
 
-    return _PAGE.format(
+    return _PAGE.replace("__FAVICON__", _FAVICON).format(
         title=_esc(board.title),
         updated=_esc(board.updated or date.today().isoformat()),
         shipped=shipped,
@@ -586,7 +586,23 @@ def render(board: Board) -> str:
     )
 
 
+#: Четыре полоски снизу вверх: заблокировано, следующее, на ревью, роздано.
+#: Не украшение — та же лестница состояний, что и на самой доске, поэтому и
+#: цвета взяты из её палитры, только насыщеннее: приглушённые на 16 пикселях
+#: превращаются в грязь.
+_FAVICON = (
+    "data:image/svg+xml,"
+    "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E"
+    "%3Crect width='16' height='16' rx='3' fill='%23f2f4f5'/%3E"
+    "%3Crect x='2' y='11.4' width='12' height='2.6' rx='1.3' fill='%23b3372c'/%3E"
+    "%3Crect x='2' y='7.9' width='12' height='2.6' rx='1.3' fill='%232b5b96'/%3E"
+    "%3Crect x='2' y='4.4' width='12' height='2.6' rx='1.3' fill='%23d99b00'/%3E"
+    "%3Crect x='2' y='0.9' width='12' height='2.6' rx='1.3' fill='%232f7a3d'/%3E"
+    "%3C/svg%3E"
+)
+
 _PAGE = """<title>ACL Task Wall</title>
+<link rel="icon" type="image/svg+xml" href="__FAVICON__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
