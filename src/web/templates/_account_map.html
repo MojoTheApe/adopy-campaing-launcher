@@ -39,11 +39,14 @@
       </summary>
       {% if c.rows %}
       <table class="amap-grid">
+        {#- Одиннадцать колонок и одиннадцать долей. Когда добавилась «On
+            account», colgroup остался на десяти: ширины сложились в 100% без
+            последней, и колонка с кнопками уехала за правый край. -#}
         <colgroup>
-          <col style="width:26%"><col style="width:10%"><col style="width:10%">
-          <col style="width:9%"><col style="width:7%"><col style="width:6%">
-          <col style="width:7%"><col style="width:8%"><col style="width:7%">
-          <col style="width:10%">
+          <col style="width:22%"><col style="width:9%"><col style="width:9%">
+          <col style="width:8%"><col style="width:6%"><col style="width:5%">
+          <col style="width:6%"><col style="width:7%"><col style="width:6%">
+          <col style="width:8%"><col style="width:14%">
         </colgroup>
         <thead><tr>
           <th>Account</th>
@@ -84,24 +87,28 @@
             <td class="num">{% if r.has_data and r.cpl %}{{ r.cpl | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
             <td class="num">{% if r.has_data and r.cpa %}{{ r.cpa | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
             <td class="num">{% if r.has_data and r.cr %}{{ '%.1f' % r.cr }}%{% else %}<span class="nodata">—</span>{% endif %}</td>
-            {#- Спенд, прочитанный прямо с аккаунта. Только по нажатию: обход
-                аккаунтов по расписанию уже приводил к чекпоинту. -#}
+            {#- Число живёт в своей колонке, кнопки — в своей. Раньше кнопка
+                чтения стояла внутри числовой колонки, а «убрать» уезжало за
+                правый край таблицы: контрол, которого не видно, всё равно что
+                отсутствует. -#}
+            {%- set sr = (amap.live or {}).get(r.account) -%}
             <td class="num amap-live" data-account="{{ r.account | e }}">
-              {%- set sr = (amap.live or {}).get(r.account) -%}
               {%- if sr and sr.state == 'ok' -%}
                 <span class="amap-live-ok" title="{{ sr.day }} · read {{ sr.finished_at }} · {{ sr.how }}">{{ sr.spend | fmt_usd }}</span>
-              {%- elif sr and sr.state == 'running' -%}
-                <span class="amap-live-run">reading…</span>
-              {%- elif sr and sr.state == 'failed' -%}
-                <button type="button" class="amap-btn amap-live-bad" title="{{ sr.error }}"
-                        onclick="amapReadSpend(this)">failed · retry</button>
-              {%- else -%}
-                <button type="button" class="amap-btn" title="Open this account in its Multilogin profile and read yesterday's spend"
-                        onclick="amapReadSpend(this)">Read</button>
-              {%- endif -%}
+              {%- else -%}<span class="nodata">—</span>{%- endif -%}
             </td>
             <td class="amap-actions">
-              <button type="button" class="amap-x" title="Take {{ r.account }} out of {{ c.country }}"
+              {%- if sr and sr.state == 'running' -%}
+                <button type="button" class="amap-btn amap-read" disabled>reading…</button>
+              {%- elif sr and sr.state == 'failed' -%}
+                <button type="button" class="amap-btn amap-read amap-live-bad" title="{{ sr.error }}"
+                        onclick="amapReadSpend(this)">failed · retry</button>
+              {%- else -%}
+                <button type="button" class="amap-btn amap-read" title="Read yesterday's spend in this account's own Multilogin window"
+                        onclick="amapReadSpend(this)">Read</button>
+              {%- endif -%}
+              <button type="button" class="amap-x"
+                      title="Take {{ r.account }} out of {{ c.country }}. The country stays; the account keeps its Multilogin profile, its proxy and its history, and moves to Available accounts."
                       onclick="amapUnlink('{{ r.account | e }}','country','{{ c.key | e }}')">Remove</button>
             </td>
           </tr>

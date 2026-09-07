@@ -3647,25 +3647,34 @@ function amapApply(from, to, span) {
    в одном вызове: страница, замершая на минуту, неотличима от сломанной.
 
    Опрашивается только то, что сейчас читается, и только пока читается. */
+function amapSpendCell(btn) {
+  var row = btn.closest('tr');
+  return row ? row.querySelector('.amap-live') : null;
+}
+
 function amapReadSpend(btn) {
-  var cell = btn.closest('.amap-live');
+  var cell = amapSpendCell(btn);
   var account = cell && cell.dataset.account;
   if (!account) return;
-  cell.innerHTML = '<span class="amap-live-run">reading…</span>';
+  var extra = btn.parentNode.querySelector('.amap-openprof');
+  if (extra) extra.remove();
+  btn.disabled = true;
+  btn.className = 'amap-btn amap-read';
+  btn.textContent = 'reading…';
   var body = new FormData();
   body.append('account', account);
   fetch('/account-spend/read', { method: 'POST', body: body, credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (j) {
       if (!j.ok) throw new Error(j.error || 'refused');
-      amapPollSpend(account, cell, 0);
+      amapPollSpend(account, cell, btn, 0);
     })
-    .catch(function (e) { amapSpendFailed(cell, String(e && e.message || e)); });
+    .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
 }
 
-function amapPollSpend(account, cell, tries) {
+function amapPollSpend(account, cell, btn, tries) {
   if (tries > 120) {  // ~6 минут: дольше живой прогон не длится
-    amapSpendFailed(cell, 'no answer after six minutes — check the launcher window');
+    amapSpendFailed(btn, cell, 'no answer after six minutes — check the launcher window');
     return;
   }
   setTimeout(function () {
@@ -3673,50 +3682,76 @@ function amapPollSpend(account, cell, tries) {
       .then(function (r) { return r.json(); })
       .then(function (j) {
         var s = j.reading || {};
-        if (s.state === 'running') { amapPollSpend(account, cell, tries + 1); return; }
+        if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1); return; }
         if (s.state === 'ok') {
           var money = (s.currency === 'USD' || !s.currency ? '$' : '') + Number(s.spend).toLocaleString();
           cell.innerHTML = '<span class="amap-live-ok"></span>';
           var ok = cell.firstChild;
           ok.textContent = money;
           ok.title = s.day + ' · read ' + s.finished_at + ' · ' + s.took_s + 's · ' + s.how;
+          btn.disabled = false;
+          btn.className = 'amap-btn amap-read';
+          btn.textContent = 'Read';
+          btn.title = 'Read again';
           return;
         }
-        amapSpendFailed(cell, s.error || 'failed');
+        amapSpendFailed(btn, cell, s.error || 'failed');
       })
-      .catch(function (e) { amapSpendFailed(cell, String(e && e.message || e)); });
+      .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
   }, 3000);
 }
 
-function amapSpendFailed(cell, why) {
-  /* Если прицепиться не к чему, «retry» ничего не изменит: нужно сначала
+function amapSpendFailed(btn, cell, why) {
+  btn.disabled = false;
+  btn.className = 'amap-btn amap-read amap-live-bad';
+  btn.textContent = 'failed · retry';
+  btn.title = why;
+  /* Если прицепиться не к чему, «retry» ничего не изменит: сначала нужно
      поднять профиль автоматизацией. Кнопка появляется ровно в этом случае. */
-  var needsProfile = /профил|profile/i.test(why || '');
-  cell.innerHTML = '<button type="button" class="amap-btn amap-live-bad" onclick="amapReadSpend(this)">failed · retry</button>'
-    + (needsProfile ? ' <button type="button" class="amap-btn" onclick="amapOpenProfile(this)">open profile</button>' : '');
-  cell.querySelector('button').title = why;
+  if (/профил|profile/i.test(why || '') && !btn.parentNode.querySelector('.amap-openprof')) {
+    var open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'amap-btn amap-openprof';
+    open.textContent = 'open profile';
+    open.onclick = function () { amapOpenProfile(open); };
+    btn.parentNode.insertBefore(open, btn.nextSibling);
+  }
 }
 
 function amapOpenProfile(btn) {
-  var cell = btn.closest('.amap-live');
+  var cell = amapSpendCell(btn);
   var account = cell && cell.dataset.account;
   if (!account) return;
-  var was = cell.innerHTML;
-  cell.innerHTML = '<span class="amap-live-run">opening…</span>';
+  var read = btn.parentNode.querySelector('.amap-read');
+  btn.disabled = true;
+  btn.textContent = 'opening…';
   var body = new FormData();
   body.append('account', account);
   fetch('/account-spend/open-profile', { method: 'POST', body: body, credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (j) {
       if (j.ok) {
-        cell.innerHTML = '<button type="button" class="amap-btn" onclick="amapReadSpend(this)">Read</button>';
-        cell.querySelector('button').title = j.message || '';
+        btn.remove();
+        if (read) {
+          read.disabled = false;
+          read.className = 'amap-btn amap-read';
+          read.textContent = 'Read';
+          read.title = j.message || '';
+        }
       } else {
-        amapSpendFailed(cell, j.message || j.error || 'could not open the profile');
+        btn.disabled = false;
+        btn.textContent = 'open profile';
+        btn.title = j.message || j.error || 'could not open the profile';
+        if (read) read.title = btn.title;
       }
     })
-    .catch(function (e) { cell.innerHTML = was; alert('Could not open the profile: ' + (e && e.message || e)); });
+    .catch(function (e) {
+      btn.disabled = false;
+      btn.textContent = 'open profile';
+      alert('Could not open the profile: ' + (e && e.message || e));
+    });
 }
+
 
 // ── Goals: меню на чипе, правка и удаление ───────────────────────────
 var _gTeamLead = {{ gv.team_lead | tojson }};
