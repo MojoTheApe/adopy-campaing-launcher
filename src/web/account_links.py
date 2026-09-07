@@ -74,7 +74,12 @@ def load() -> list[dict[str, str]]:
 def _write(rows: list[dict[str, str]]) -> None:
     path = links_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    # Короткое служебное имя, а не `.{имя}.{32 hex}.tmp`: у Windows предел
+    # пути 260 символов, и каталог рантайма — `.{sha40}.staging-{uuid32}` —
+    # съедает 82 из них. Длинное имя упирало запись в FileNotFoundError, и
+    # ровно на этом сборка Windows была красной. Уникальности восьми
+    # шестнадцатеричных знаков внутри одного каталога довольно.
+    temp = path.with_name(f".{uuid.uuid4().hex[:8]}.tmp")
     try:
         with open(temp, "w", encoding="utf-8", newline="") as fh:
             writer = csv.DictWriter(fh, fieldnames=FIELDNAMES, extrasaction="ignore")

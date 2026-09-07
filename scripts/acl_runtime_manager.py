@@ -62,7 +62,12 @@ def pending_path() -> Path:
 
 def _atomic_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    # Короткое служебное имя, а не `.{имя}.{32 hex}.tmp`: у Windows предел
+    # пути 260 символов, и каталог рантайма — `.{sha40}.staging-{uuid32}` —
+    # съедает 82 из них. Длинное имя упирало запись в FileNotFoundError, и
+    # ровно на этом сборка Windows была красной. Уникальности восьми
+    # шестнадцатеричных знаков внутри одного каталога довольно.
+    temp = path.with_name(f".{uuid.uuid4().hex[:8]}.tmp")
     try:
         with open(temp, "w", encoding="utf-8", newline="\n") as fh:
             json.dump(payload, fh, ensure_ascii=False, indent=2, sort_keys=True)
