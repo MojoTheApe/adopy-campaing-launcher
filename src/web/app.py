@@ -1248,6 +1248,14 @@ async def details(request: Request) -> HTMLResponse:
     params = dict(request.query_params)
     section = params.pop("section", "")
     country = params.pop("country", "")
+    # Раскрытие обязано резать те же дни, что и строка над ним. Пока период
+    # менял только страницу, а /details читал весь файл, строка говорила про
+    # выбранные шесть дней, а панель под ней — про все тридцать семь, и обе
+    # выглядели одинаково достоверно. Для строки, которой в другом отрезке
+    # нет, ответ вовсе приходил пустым — и это читалось как «не открывается».
+    _p_from = params.pop("date_from", "")
+    _p_to = params.pop("date_to", "")
+    _p_span = params.pop("span", "")
     # Optional ncols override (used for nested drill-downs, e.g. ads inside CM campaigns)
     ncols_override = params.pop("ncols", None)
     _DRILL_ENABLED = {"optimization", "cm_comparison", "account"}
@@ -1270,6 +1278,7 @@ async def details(request: Request) -> HTMLResponse:
         ncols = _NCOLS_BY_SECTION.get(section, 7)
     try:
         _report, df, _warnings = get_cached_report()
+        df = _filter_by_period(df, *resolve_period(df, _p_from, _p_to, _p_span))
     except (FileNotFoundError, ValueError):
         # Cache build failed — return a no-op fragment so the table layout
         # stays intact and the user is invited to fix the / page first.

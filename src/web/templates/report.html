@@ -3331,6 +3331,19 @@ async function dashRefresh(ev) {
 
 <script>
 (function () {
+  /* Период страницы едет с каждым раскрытием. Иначе строка говорит про
+     выбранные дни, а панель под ней — про весь файл, и обе выглядят
+     одинаково достоверно. Один обработчик вместо правки двух десятков
+     адресов в разметке: забыть один из них было бы легко, а незаметно. */
+  document.body.addEventListener("htmx:configRequest", function (evt) {
+    var path = evt.detail && evt.detail.path;
+    if (!path || path.indexOf("/details") !== 0) return;
+    var p = window._amapPick || {};
+    if (p.span === "all") { evt.detail.parameters["span"] = "all"; return; }
+    if (p.from) evt.detail.parameters["date_from"] = p.from;
+    if (p.to) evt.detail.parameters["date_to"] = p.to;
+  });
+
   // Drill-down toggle for cm_comparison and optimization: one open panel per section.
   document.body.addEventListener("htmx:beforeRequest", function (evt) {
     const el = evt.detail.elt;
@@ -7649,6 +7662,13 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       // чтобы htmx о клике не узнал и второй запрос не ушёл.
       var opener = target.closest('tr.drillable[hx-get], [hx-get][hx-swap="afterend"]');
       if (!opener) return;
+      /* У раскрытий с data-drill свой переключатель — он отменяет запрос на
+         htmx:beforeRequest, то есть средствами самого htmx. Два владельца
+         одного поведения гонялись: иногда второй клик закрывал панель, иногда
+         закрывал и тут же открывал заново, и снаружи это выглядело как
+         «кнопка не работает». Здесь остаются только те, у кого владельца нет —
+         каретки в карте аккаунтов. */
+      if (opener.getAttribute('data-drill')) return;
       var row = opener.tagName === 'TR' ? opener : opener.closest('tr');
       if (!row) return;
       var next = row.nextElementSibling;
