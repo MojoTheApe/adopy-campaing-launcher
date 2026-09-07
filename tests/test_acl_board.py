@@ -184,16 +184,24 @@ def test_subtask_line_gets_no_status_tag():
 @pytest.mark.parametrize(
     "message, expected",
     [
-        ("feat: живой спенд acl-103", ["acl-103"]),
+        # закрывающее слово обязательно — с обеих сторон от id
+        ("feat: живой спенд, closes acl-103", ["acl-103"]),
+        ("Board: acl-103", ["acl-103"]),
         ("fix: acl-111 и acl-112 одним куском", ["acl-111", "acl-112"]),
+        ("acl-103 закрыто", ["acl-103"]),
+        ("acl-104b готово", ["acl-104b"]),
+        ("сделано acl-104 и acl-104b", ["acl-104", "acl-104b"]),
+        ("CLOSES ACL-103 в верхнем регистре", ["acl-103"]),
+        ("closes acl-103 дважды closes acl-103", ["acl-103"]),
+        # упоминания — не закрытия; на этом уже обожглись
         ("рефакторинг без задач", []),
-        ("ACL-103 в верхнем регистре", ["acl-103"]),
+        ("зависимость needs:acl-105 в любой строке", []),
+        ("правил разбор acl-103, но не доделал", []),
+        ("готовлюсь к acl-103", []),
+        ("префикс не слово: prefix acl-103", []),
         # одна буква после номера — подзадача, две и больше — уже не id
-        ("не путать с acl-103xy", []),
-        ("и с acl-103-beta", []),
-        ("acl-103 дважды acl-103", ["acl-103"]),
-        ("подзадача acl-104b", ["acl-104b"]),
-        ("acl-104 и acl-104b рядом", ["acl-104", "acl-104b"]),
+        ("closes acl-103xy", []),
+        ("closes acl-103-beta", []),
         ("тег релиза acl-release-2026-09-03e не задача", []),
     ],
 )
@@ -203,7 +211,7 @@ def test_ids_in_commit(message, expected):
 
 def test_apply_commit_ticks_and_logs():
     new, ticked = acl_board.apply_commit(
-        SAMPLE, "abc1234", "feat: живой спенд acl-103", when="2026-09-08"
+        SAMPLE, "abc1234", "feat: живой спенд, closes acl-103", when="2026-09-08"
     )
     assert ticked == ["acl-103"]
     task = acl_board.parse(new).by_id("acl-103")
@@ -231,7 +239,7 @@ def test_apply_commit_is_idempotent():
 
 
 def test_unknown_id_changes_nothing():
-    new, ticked = acl_board.apply_commit(SAMPLE, "abc1234", "acl-999 такой задачи нет")
+    new, ticked = acl_board.apply_commit(SAMPLE, "abc1234", "closes acl-999 — такой задачи нет")
     assert ticked == [] and new == SAMPLE
 
 

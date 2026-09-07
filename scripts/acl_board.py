@@ -305,14 +305,41 @@ def parse(text: str) -> Board:
 # ─────────────────────────── коммиты ───────────────────────────
 
 
+#: id со всеми границами — «acl-103xy» и «acl-103-beta» сюда не попадают
+_ID_IN_TEXT = re.compile(r"(?<![\w-])(acl-\d+[a-z]?)(?![\w-])", flags=re.IGNORECASE)
+
+#: «closes acl-103», «Board: acl-104, acl-105», «сделано acl-111 и acl-112»
+_CLOSER_BEFORE = re.compile(
+    r"(?<![\w-])(?:closes?d?|fix(?:e[sd])?|done|board|закрыв\w*|закрыт\w*|сделан\w*)"
+    r"\s*:?\s*(?:acl-\d+[a-z]?[\s,]*(?:и\s+)?)*$",
+    flags=re.IGNORECASE,
+)
+#: «acl-103 закрыто», «acl-104b готово»
+_CLOSER_AFTER = re.compile(
+    r"^(?:[\s,]*(?:и\s+)?acl-\d+[a-z]?)*[\s,]*"
+    r"(?:closed|done|fixed|закрыт\w*|сделан\w*|готов\w*)(?![\w-])",
+    flags=re.IGNORECASE,
+)
+
+
 def ids_in_commit(message: str) -> list[str]:
-    """Идентификаторы задач, упомянутые в сообщении коммита."""
-    found = re.findall(r"(?<![\w-])(acl-\d+[a-z]?)(?![\w-])", message, flags=re.IGNORECASE)
+    """Задачи, которые коммит объявляет закрытыми.
+
+    Одного упоминания id мало — рядом должно стоять закрывающее слово. Иначе
+    любой текст, где задача просто названа (пример в документации, объяснение
+    зависимости), молча ставил бы галочку. Так и случилось при первом же
+    применении: коммит со строкой «needs:acl-105» закрыл acl-105.
+    """
     seen: list[str] = []
-    for f in found:
-        f = f.lower()
-        if f not in seen:
-            seen.append(f)
+    for m in _ID_IN_TEXT.finditer(message):
+        if not (
+            _CLOSER_BEFORE.search(message[: m.start()])
+            or _CLOSER_AFTER.match(message[m.end() :])
+        ):
+            continue
+        low = m.group(1).lower()
+        if low not in seen:
+            seen.append(low)
     return seen
 
 
