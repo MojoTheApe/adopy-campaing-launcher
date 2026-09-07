@@ -63,7 +63,10 @@ def load() -> list[dict[str, str]]:
             account = _norm(row.get("account_name"))
             kind = _norm(row.get("kind")).lower()
             value = _norm(row.get("value"))
-            if account and kind in KINDS and value:
+            # Пустое имя аккаунта — не мусор, а заглушка: страна заведена,
+            # аккаунтов в ней пока нет. Без неё пустой стране негде лежать, и
+            # завести её можно было только вместе с первым аккаунтом.
+            if kind in KINDS and value:
                 rows.append({"account_name": account, "kind": kind, "value": value})
         return rows
 
@@ -84,6 +87,30 @@ def _write(rows: list[dict[str, str]]) -> None:
         temp.unlink(missing_ok=True)
 
 
+def add_value(kind: str, value: str) -> bool:
+    """Завести страну (или ассет) без аккаунтов. False — если уже есть.
+
+    Пустая группа копится и забывается — довод, по которому раньше страну
+    нельзя было создать без первого аккаунта. Но он стоил другого: аккаунт
+    приходится выбирать из уже известных ещё до того, как его подключили из
+    Multilogin, то есть порядок «сначала страна, потом аккаунт» был запрещён
+    без всякой на то причины. Пустая страна видна на экране и закрывается
+    одной кнопкой — этого достаточно, чтобы она не потерялась.
+    """
+    kind = _norm(kind).lower()
+    if kind not in KINDS:
+        raise ValueError(f"kind must be one of {KINDS}, got {kind!r}")
+    value = _norm(value)
+    if not value:
+        raise ValueError("value is required")
+    rows = load()
+    if any(r["kind"] == kind and r["value"].lower() == value.lower() for r in rows):
+        return False
+    rows.append({"account_name": "", "kind": kind, "value": value})
+    _write(rows)
+    return True
+
+
 def link(account: str, kind: str, value: str) -> bool:
     """Add one link. Returns False if it was already there."""
     kind = _norm(kind).lower()
@@ -96,6 +123,11 @@ def link(account: str, kind: str, value: str) -> bool:
     if any(_key(**r) == _key(account, kind, value) for r in _rows_as_kwargs(rows)):
         return False
     rows.append({"account_name": account, "kind": kind, "value": value})
+    # Заглушка больше не нужна: у страны появился настоящий аккаунт.
+    rows = [
+        r for r in rows
+        if r["account_name"] or not (r["kind"] == kind and r["value"].lower() == value.lower())
+    ]
     _write(rows)
     return True
 
@@ -109,6 +141,15 @@ def unlink(account: str, kind: str, value: str) -> bool:
     kept = [r for r in rows if _key(r["account_name"], r["kind"], r["value"]) != target]
     if len(kept) == len(rows):
         return False
+    # Снятый последний аккаунт не должен уносить с собой страну: для этого есть
+    # отдельная кнопка Close. Раньше страна исчезала молча, вместе с тем, что о
+    # ней знали.
+    kind_l, value_l = _norm(kind).lower(), _norm(value).lower()
+    if not any(
+        r["account_name"] and r["kind"] == kind_l and r["value"].lower() == value_l
+        for r in kept
+    ):
+        kept.append({"account_name": "", "kind": kind_l, "value": _norm(value)})
     _write(kept)
     return True
 
@@ -122,9 +163,14 @@ def unlink_all_for(kind: str, value: str) -> list[str]:
     """
     kind, value = _norm(kind).lower(), _norm(value)
     rows = load()
-    freed = [r["account_name"] for r in rows if r["kind"] == kind and _norm(r["value"]).lower() == value.lower()]
-    if freed:
-        _write([r for r in rows if not (r["kind"] == kind and _norm(r["value"]).lower() == value.lower())])
+    freed = [
+        r["account_name"]
+        for r in rows
+        if r["kind"] == kind and _norm(r["value"]).lower() == value.lower() and r["account_name"]
+    ]
+    kept = [r for r in rows if not (r["kind"] == kind and _norm(r["value"]).lower() == value.lower())]
+    if len(kept) != len(rows):
+        _write(kept)
     return sorted(set(freed))
 
 
@@ -144,7 +190,11 @@ def values_for(account: str, kind: str) -> list[str]:
 def accounts_for(kind: str, value: str) -> list[str]:
     kind, value = _norm(kind).lower(), _norm(value).lower()
     return sorted(
-        {r["account_name"] for r in load() if r["kind"] == kind and r["value"].lower() == value}
+        {
+            r["account_name"]
+            for r in load()
+            if r["kind"] == kind and r["value"].lower() == value and r["account_name"]
+        }
     )
 
 
@@ -160,7 +210,7 @@ def available_accounts(known_accounts: list[str]) -> list[str]:
     country still has nowhere to run, and hiding it from this list is how it
     stays forgotten.
     """
-    placed = {r["account_name"].lower() for r in load() if r["kind"] == "country"}
+    placed = {r["account_name"].lower() for r in load() if r["kind"] == "country" and r["account_name"]}
     return sorted({a for a in known_accounts if _norm(a) and _norm(a).lower() not in placed})
 
 

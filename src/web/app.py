@@ -2244,6 +2244,12 @@ async def account_links_edit(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "A country or asset name is required"}, status_code=400)
 
     try:
+        if action == "add":
+            # Страна без аккаунтов: сначала заводим место, потом подключаем в
+            # него аккаунт из Multilogin. Обратный порядок требовал выбрать
+            # аккаунт из уже известных — то есть до подключения нового.
+            return JSONResponse({"ok": True, "changed": account_links.add_value(kind, value)})
+
         if action == "link":
             if not account:
                 return JSONResponse({"ok": False, "error": "Pick an account first"}, status_code=400)
@@ -2269,8 +2275,12 @@ async def account_links_edit(request: Request) -> JSONResponse:
                     return JSONResponse({"ok": False, "error": "Pick an account first"}, status_code=400)
                 return JSONResponse({"ok": True, "changed": account_links.unlink(account, kind, value)})
 
+            # «Изменилось» — про страну, а не про освобождённые аккаунты:
+            # у пустой страны их нет, и ответ «ничего не поменялось» после
+            # её удаления был бы неправдой.
+            existed = any(v.lower() == value.lower() for v in account_links.all_values(kind))
             freed = account_links.unlink_all_for(kind, value)
-            return JSONResponse({"ok": True, "changed": bool(freed), "freed": freed})
+            return JSONResponse({"ok": True, "changed": existed, "freed": freed})
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:  # pragma: no cover - defensive

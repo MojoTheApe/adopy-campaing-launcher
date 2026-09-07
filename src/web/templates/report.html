@@ -3933,10 +3933,11 @@ function amapAddCountry() {
   var acc = document.getElementById('amap-new-country-acc').value || '';
   var msg = document.getElementById('amap-new-msg');
   if (!name) { msg.textContent = 'name the country'; msg.className = 'amap-msg bad'; return; }
-  // Страна существует ровно постольку, поскольку в ней есть аккаунт: пустых
-  // групп в карте не бывает, иначе они копятся и никто не помнит, зачем.
-  if (!acc) { msg.textContent = 'pick the first account for it'; msg.className = 'amap-msg bad'; return; }
-  amapSend({ action: 'link', kind: 'country', value: name, account: acc }, msg);
+  // Аккаунт необязателен. Порядок «сначала страна, потом аккаунт из
+  // Multilogin» — обычный: аккаунта, который ещё не подключён, в списке
+  // известных и не может быть.
+  if (acc) amapSend({ action: 'link', kind: 'country', value: name, account: acc }, msg);
+  else amapSend({ action: 'add', kind: 'country', value: name }, msg);
 }
 
 // ── Multilogin connect ────────────────────────────────────────────────

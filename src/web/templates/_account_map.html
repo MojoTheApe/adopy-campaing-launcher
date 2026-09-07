@@ -15,7 +15,7 @@
       <span class="amap-add" style="padding:0;margin-left:auto">
         <input type="text" id="amap-new-country" placeholder="new country…" size="14">
         <select id="amap-new-country-acc">
-          <option value="">first account…</option>
+          <option value="">no account yet</option>
           {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
         </select>
         <button type="button" class="amap-btn" onclick="amapAddCountry()">Add country</button>

@@ -113,3 +113,61 @@ def test_rows_survive_a_reread_exactly():
     assert links.load() == [
         {"account_name": "Acc One", "kind": "country", "value": "Costa Rica"}
     ]
+
+
+# ── страна без аккаунтов ──────────────────────────────────────────────
+#
+# Порядок «сначала страна, потом аккаунт из Multilogin» раньше был запрещён:
+# завести страну можно было только вместе с аккаунтом из списка известных —
+# то есть с тем, который уже подключён. Новый аккаунт в этот список попасть
+# ещё не мог, и порядок работы приходилось выворачивать наизнанку.
+
+
+def test_a_country_can_exist_with_no_accounts():
+    assert links.add_value("country", "Colombia") is True
+    assert links.all_values("country") == ["Colombia"]
+    assert links.accounts_for("country", "Colombia") == []
+
+
+def test_adding_the_same_country_twice_changes_nothing():
+    links.add_value("country", "Colombia")
+    assert links.add_value("country", "colombia") is False
+    assert links.all_values("country") == ["Colombia"]
+
+
+def test_an_empty_country_needs_a_name():
+    import pytest
+
+    with pytest.raises(ValueError):
+        links.add_value("country", "   ")
+
+
+def test_the_placeholder_is_not_an_account():
+    links.add_value("country", "Colombia")
+    assert links.available_accounts(["AccOne"]) == ["AccOne"]
+    assert links.accounts_for("country", "Colombia") == []
+
+
+def test_the_first_real_account_replaces_the_placeholder():
+    links.add_value("country", "Colombia")
+    links.link("AccOne", "country", "Colombia")
+    assert links.accounts_for("country", "Colombia") == ["AccOne"]
+    assert [r for r in links.load() if not r["account_name"]] == []
+
+
+def test_removing_the_last_account_keeps_the_country():
+    links.link("AccOne", "country", "Colombia")
+    links.unlink("AccOne", "country", "Colombia")
+    assert links.all_values("country") == ["Colombia"]
+    assert links.accounts_for("country", "Colombia") == []
+
+
+def test_close_removes_a_country_that_never_had_accounts():
+    links.add_value("country", "Colombia")
+    assert links.unlink_all_for("country", "Colombia") == []
+    assert links.all_values("country") == []
+
+
+def test_an_asset_can_also_be_created_empty():
+    assert links.add_value("asset", "Ait") is True
+    assert links.all_values("asset") == ["Ait"]
