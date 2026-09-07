@@ -185,3 +185,73 @@ def test_an_account_without_an_id_fails_before_any_browser_opens(monkeypatch):
     monkeypatch.setattr(sp, "_entry_for", lambda account: Entry())
     out = sp.read_via_rpa("Acc", "2026-09-06")
     assert out.state == "failed" and "ad_account_id" in out.error
+
+
+# ── прицепиться, но не перезапускать ──────────────────────────────────
+#
+# Перезапуск профиля ради одного числа разлогинил x01. Ветка перезапуска
+# вдобавок умеет терять прокси аккаунта. Поэтому чтение либо цепляется к
+# уже открытому окну, либо не происходит вовсе.
+
+
+class _Entry:
+    ad_account_id = "act_1"
+    profile_id = "p-1"
+
+
+def _fake_browser(monkeypatch, *, attach, running, has_dir=True):
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    class Direct:
+        def _try_attach_existing(self, profile_id, udd):
+            return attach
+
+        def _profile_process_running(self, udd, profile_id):
+            return running
+
+    monkeypatch.setattr(rpa_browser, "MultiloginDirectCDPProvider", Direct)
+    monkeypatch.setattr(
+        rpa_browser, "_find_mlx_profile_dir", lambda pid: ("/profiles/" + pid) if has_dir else None
+    )
+
+
+def test_an_entry_without_a_profile_cannot_be_attached():
+    with pytest.raises(sp.ProfileNotAttachable, match="profile_id"):
+        sp._attach_only(_Entry.__new__(type("E", (), {"profile_id": ""})), "Acc")
+
+
+def test_an_open_automation_profile_is_reused(monkeypatch):
+    marker = object()
+    _fake_browser(monkeypatch, attach=marker, running=True)
+    assert sp._attach_only(_Entry(), "Acc") is marker
+
+
+def test_a_hand_opened_profile_is_refused_not_restarted(monkeypatch):
+    _fake_browser(monkeypatch, attach=None, running=True)
+    with pytest.raises(sp.ProfileNotAttachable) as exc:
+        sp._attach_only(_Entry(), "Acc")
+    assert "вручную" in str(exc.value)
+    assert "Перезапускать не будем" in str(exc.value)
+
+
+def test_a_closed_profile_says_so(monkeypatch):
+    _fake_browser(monkeypatch, attach=None, running=False)
+    with pytest.raises(sp.ProfileNotAttachable, match="не открыт"):
+        sp._attach_only(_Entry(), "Acc")
+
+
+def test_a_missing_profile_directory_is_named(monkeypatch):
+    _fake_browser(monkeypatch, attach=None, running=False, has_dir=False)
+    with pytest.raises(sp.ProfileNotAttachable, match="папка профиля"):
+        sp._attach_only(_Entry(), "Acc")
+
+
+def test_the_refusal_becomes_a_readable_failure_not_a_crash(monkeypatch):
+    monkeypatch.setattr(sp, "_entry_for", lambda account: _Entry())
+
+    def refuse(entry, label):
+        raise sp.ProfileNotAttachable("профиль не открыт")
+
+    monkeypatch.setattr(sp, "_attach_only", refuse)
+    out = sp.read_via_rpa("Acc", "2026-09-06")
+    assert out.state == "failed" and out.error == "профиль не открыт"

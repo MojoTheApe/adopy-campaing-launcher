@@ -8,9 +8,10 @@
 * **Только по нажатию.** Никаких таймеров и фоновых обходов: опрос Ads Manager
   по расписанию уже предшествовал чекпоинту на телефон. Нажатие человека —
   человеческое поведение, расписание — нет.
-* **Только через профиль.** Аккаунт открывается провайдером RPA, то есть в
-  Multilogin с прокси этого аккаунта. Обычный браузер не годится ни при каких
-  обстоятельствах.
+* **Только прицепиться, никогда не перезапускать.** Профиль должен быть уже
+  открыт автоматизацией; читаем в этом же окне. Перезапуск ради одного числа
+  разлогинивает аккаунт — так и вышло на x01, — а ветка перезапуска вдобавок
+  умеет терять прокси. Обычный браузер не годится ни при каких обстоятельствах.
 * **Число без подтверждённого периода — не число.** Прежде чем вернуть спенд,
   на странице сверяется показанный диапазон дат. Иначе достаточно смены
   параметра в URL, чтобы получить чужой день с видом правильного ответа.
@@ -191,6 +192,68 @@ def _entry_for(account: str):
     return entries.get(account)
 
 
+class ProfileNotAttachable(RuntimeError):
+    """Профиль есть, но прицепиться к нему нельзя — а перезапускать мы не станем."""
+
+
+def _attach_only(entry, account_label: str):
+    """Подключиться к уже открытому профилю. Никогда его не перезапускать.
+
+    Обычный путь RPA, не сумев прицепиться, останавливает профиль через API
+    Multilogin и поднимает заново с автоматизацией. Для публикации это
+    оправдано — там ради этого и приходят. Ради одного числа за вчера — нет:
+    перезапуск разлогинивает аккаунт (так и вышло на x01), а ветка
+    перезапуска вдобавок умеет терять прокси аккаунта.
+
+    Прицепиться можно только к профилю, поднятому автоматизацией: у окна,
+    открытого руками в MLX Desktop, нет отладочного порта, и это свойство
+    Multilogin, а не наше решение.
+
+    Зовём внутренности чужого трека сознательно и в одном месте: публичного
+    «прицепись, но не поднимай» там пока нет — заведено как `acl-108e`.
+    """
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    profile_id = (getattr(entry, "profile_id", "") or "").strip()
+    if not profile_id:
+        raise ProfileNotAttachable(f"у {account_label} не заполнен profile_id")
+
+    find_dir = getattr(rpa_browser, "_find_mlx_profile_dir", None)
+    direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
+    if find_dir is None or direct_cls is None:
+        raise ProfileNotAttachable(
+            "слой браузера RPA изменился — обновите подключение (см. acl-108e)"
+        )
+
+    udd = find_dir(profile_id)
+    if udd is None:
+        raise ProfileNotAttachable(
+            f"папка профиля {profile_id} не найдена — открыт ли этот профиль на этой машине?"
+        )
+
+    direct = direct_cls()
+    conn = direct._try_attach_existing(profile_id, str(udd))
+    if conn is not None:
+        return conn
+
+    running = False
+    try:
+        running = bool(direct._profile_process_running(str(udd), profile_id))
+    except Exception:
+        pass
+    if running:
+        raise ProfileNotAttachable(
+            f"{account_label}: профиль открыт вручную в MLX Desktop — у такого окна нет "
+            "отладочного порта, прицепиться не к чему. Перезапускать не будем: "
+            "именно перезапуск разлогинил x01. Закройте профиль и откройте его "
+            "автоматизацией — дальше чтения будут цепляться к этому же окну."
+        )
+    raise ProfileNotAttachable(
+        f"{account_label}: профиль не открыт. Откройте его автоматизацией и оставьте окно — "
+        "чтение прицепится к нему, ничего не перезапуская."
+    )
+
+
 def read_via_rpa(account: str, day: str) -> SpendReading:
     """Открыть аккаунт в его профиле и прочитать спенд за день."""
     out = SpendReading(account=account, day=day, source="rpa", state="failed")
@@ -204,11 +267,13 @@ def read_via_rpa(account: str, day: str) -> SpendReading:
         out.error = f"у {account} не заполнен ad_account_id"
         return out
 
-    from src.fb_ads_rpa.browser import get_browser_provider
-
     conn = None
     try:
-        conn = get_browser_provider().open(entry, account)
+        try:
+            conn = _attach_only(entry, account)
+        except ProfileNotAttachable as exc:
+            out.error = str(exc)
+            return out
         page = conn.page
         page.goto(_url(act, day), timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
 
