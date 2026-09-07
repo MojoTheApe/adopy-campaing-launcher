@@ -4016,8 +4016,31 @@ async function amapConnect(box, profile, instance, btn) {
   var country = box.getAttribute('data-amap-country');
   var msg = box.querySelector('.amap-msg');
   var d = profile._details || {};
+  /* Имя из книги, а не имя профиля. Карта соединяется с книгой по имени, и
+     профильное `KLD_BFL_X84` вместо книжного `FacebookMKTOBFLX84` означает
+     аккаунт, который навсегда показывает «нет строк за эту дату» — а это
+     читается как отсутствие расходов, а не как несведённые имена. */
   var name = d.suggested_name || profile.name || '';
-  name = (prompt('Ad account name, exactly as it appears in the stats workbook:', name) || '').trim();
+  var head = 'Ad account name, exactly as it appears in the stats workbook:';
+  try {
+    var sug = await (await fetch('/account-probe/workbook-name?profile='
+      + encodeURIComponent(profile.name || ''), { credentials: 'same-origin' })).json();
+    if (sug && sug.ok && sug.names && sug.names.length) {
+      name = sug.names[0];
+      head = 'Ad account name, as it appears in the stats workbook.
+'
+        + (sug.names.length > 1
+            ? 'The workbook has ' + sug.names.length + ' names like this profile:
+  '
+              + sug.names.join('
+  ')
+            : 'Found in the workbook: ' + sug.names[0])
+        + '
+
+Change it if this is the wrong one:';
+    }
+  } catch (e) { /* без подсказки — просто спросим как раньше */ }
+  name = (prompt(head, name) || '').trim();
   if (!name) return;
   var act = (d.ad_account_id || '').trim();
   if (!act) {
