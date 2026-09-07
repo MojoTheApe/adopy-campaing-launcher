@@ -417,13 +417,16 @@ def apply_commit(
         task = board.by_id(task_id)
         if task is None or task.is_done:
             continue
-        # у подзадач статус не пишем — он читается по галочке, строка и так узкая
-        tick(task, add_tag=board.parent_of(task_id) is None)
+        # У подзадач статус обычно не пишем: `shipped` читается по галочке, а
+        # строка и так узкая. Но `review` галочка не несёт — «сделано» и
+        # «доехало» это разные вещи, — и без тега подзадача в ветке выглядела
+        # бы розданной. Так и вышло с acl-108a.
+        parent = board.parent_of(task_id)
+        tick(task, add_tag=parent is None or landed != "shipped")
         task.done = True
         ticked.append(task_id)
 
         # закрылась последняя часть — родитель закрыт вместе с ней
-        parent = board.parent_of(task_id)
         if parent is not None and parent.is_done and not parent.done:
             tick(parent, add_tag=True)
             parent.done = True

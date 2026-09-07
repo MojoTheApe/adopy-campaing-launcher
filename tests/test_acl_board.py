@@ -355,3 +355,22 @@ def test_render_shows_review_on_a_ticked_task():
     html = acl_board.render(acl_board.parse(BRANCHED))
     assert 'data-status="review"' in html
     assert "In review" in html
+
+
+def test_a_subtask_closed_on_a_branch_says_review():
+    """«Сделано» и «доехало» — разные вещи, и галочка второе не несёт."""
+    new, ticked = acl_board.apply_commit(
+        SAMPLE, "abc1234", "closes acl-104b", branch="feature/x"
+    )
+    assert ticked == ["acl-104b"]
+    line = next(l for l in new.splitlines() if "`acl-104b`" in l)
+    assert line.strip().startswith("- [x]")
+    assert "#review" in line
+    assert acl_board.parse(new).by_id("acl-104b").shown_status == "review"
+
+
+def test_a_subtask_closed_on_master_stays_bare():
+    new, _ = acl_board.apply_commit(SAMPLE, "abc1234", "closes acl-104b", branch="master")
+    line = next(l for l in new.splitlines() if "`acl-104b`" in l)
+    assert "#shipped" not in line
+    assert acl_board.parse(new).by_id("acl-104b").shown_status == "shipped"
