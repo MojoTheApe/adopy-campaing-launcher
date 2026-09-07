@@ -73,13 +73,28 @@ class Task:
     line: int = 0
     subs: list["Task"] = field(default_factory=list)
     needs: list[str] = field(default_factory=list)
+    explicit: bool = False  # статус написан рукой, а не выведен из галочки
 
     @property
     def is_done(self) -> bool:
+        """Работа закончена. Это не то же самое, что «доехало до людей»."""
         if self.done or self.status == "shipped":
             return True
         # задача, у которой сделаны все части, сделана — это факт, не оценка
         return bool(self.subs) and all(s.is_done for s in self.subs)
+
+    @property
+    def shown_status(self) -> str:
+        """Что показывать на доске.
+
+        Галочка и статус — про разное: галочка про то, доделана ли работа,
+        статус — про то, где она лежит. `- [x] … #review` значит «готово, но
+        живёт в ветке и ещё не влито», и раньше галочка молча переписывала это
+        в shipped: задача выглядела доехавшей до людей, ничего им не доехав.
+        """
+        if self.explicit:
+            return self.status
+        return "shipped" if self.is_done else self.status
 
     @property
     def sub_progress(self) -> tuple[int, int]:
@@ -144,8 +159,7 @@ class Board:
     def counts(self) -> dict[str, int]:
         out = {s: 0 for s in STATUSES}
         for t in self.tasks:
-            status = "shipped" if t.is_done else t.status
-            out[status] = out.get(status, 0) + 1
+            out[t.shown_status] = out.get(t.shown_status, 0) + 1
         return out
 
 
@@ -254,6 +268,7 @@ def parse(text: str) -> Board:
                     done=done,
                     line=n,
                     needs=needs,
+                    explicit=bool(status),
                 )
             )
             note_at = task.subs[-1]
@@ -270,10 +285,9 @@ def parse(text: str) -> Board:
             body = ID_RE.sub("", body, count=1)
             title, status, track, needs = _strip_markers(body)
             done = m.group(1).lower() == "x"
+            explicit = bool(status)
             if not status:
                 status = "shipped" if done else DEFAULT_STATUS
-            if done:
-                status = "shipped"
             if cap is None:
                 cap = Capability(title="")
                 area.caps.append(cap)
@@ -285,6 +299,7 @@ def parse(text: str) -> Board:
                 done=done,
                 line=n,
                 needs=needs,
+                explicit=explicit,
             )
             cap.tasks.append(task)
             note_at = task
@@ -357,14 +372,34 @@ def head_commit(repo: Path, rev: str = "HEAD") -> tuple[str, str]:
     return sha.strip(), message.strip()
 
 
-def apply_commit(text: str, sha: str, message: str, when: str = "") -> tuple[str, list[str]]:
-    """Отметить задачи, названные в коммите, и записать строку в журнал."""
+def branch_of(repo: Path) -> str:
+    out = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    return out.stdout.strip() if out.returncode == 0 else ""
+
+
+MAIN_BRANCHES = {"master", "main"}
+
+
+def apply_commit(
+    text: str, sha: str, message: str, when: str = "", branch: str = "master"
+) -> tuple[str, list[str]]:
+    """Отметить задачи, названные в коммите, и записать строку в журнал.
+
+    Коммит в ветку — это «сделано», но не «доехало»: слить в master значит
+    раздать всем машинам, и до этого задача ждёт ревью. Поэтому статус
+    ставится по ветке, а не по факту коммита.
+    """
     board = parse(text)
     ids = [i for i in ids_in_commit(message) if board.by_id(i)]
     if not ids:
         return text, []
 
     when = when or date.today().isoformat()
+    landed = "shipped" if branch in MAIN_BRANCHES else "review"
     lines = text.splitlines()
     ticked: list[str] = []
 
@@ -372,10 +407,10 @@ def apply_commit(text: str, sha: str, message: str, when: str = "") -> tuple[str
         idx = task.line - 1
         line = lines[idx].replace("- [ ]", "- [x]", 1)
         line = TAG_RE.sub(
-            lambda m: "#shipped" if m.group(1) in STATUSES else m.group(0), line
+            lambda m: "#" + landed if m.group(1) in STATUSES else m.group(0), line
         )
-        if add_tag and "#shipped" not in line:
-            line = line.rstrip() + " #shipped"
+        if add_tag and "#" + landed not in line:
+            line = line.rstrip() + " #" + landed
         lines[idx] = line
 
     for task_id in ids:
@@ -397,7 +432,12 @@ def apply_commit(text: str, sha: str, message: str, when: str = "") -> tuple[str
         return text, []
 
     subject = message.splitlines()[0].strip()
-    entry = f"- {when} · `{sha}` · " + ", ".join(f"`{i}`" for i in ticked) + f" — {subject}"
+    where = "" if branch in MAIN_BRANCHES else f" · `{branch}`"
+    entry = (
+        f"- {when} · `{sha}`" + where + " · "
+        + ", ".join(f"`{i}`" for i in ticked)
+        + f" — {subject}"
+    )
     try:
         at = next(i for i, l in enumerate(lines) if l.strip() == "## Log")
     except StopIteration:
@@ -468,7 +508,7 @@ def _card(task: Task, tilt: int) -> str:
     tick = '<span class="tick" aria-hidden="true">✓</span>' if task.is_done else ""
     done, total = task.sub_progress
     meter = f'<span class="count">{done}/{total}</span>' if total else ""
-    status = "shipped" if task.is_done else task.status
+    status = task.shown_status
     return (
         f'<article class="pin s-{status}" style="--tilt:{tilt / 10:.1f}deg" '
         f'data-status="{status}" data-track="{_esc(task.track)}">'
@@ -820,11 +860,15 @@ def cmd_sync(args: argparse.Namespace, repo: Path) -> int:
     except RuntimeError as exc:
         print(f"не смог прочитать коммит: {exc}", file=sys.stderr)
         return 0
+    # ветку передаёт хук: скрипт может лежать в другом worktree, и его
+    # собственная ветка ничего не говорит о том, куда лёг коммит
+    branch = (getattr(args, "branch", "") or "").strip() or branch_of(repo)
     text = src.read_text(encoding="utf-8")
-    new, ticked = apply_commit(text, sha, message)
+    new, ticked = apply_commit(text, sha, message, branch=branch)
     if ticked:
         src.write_text(new, encoding="utf-8")
-        print("отмечено: " + ", ".join(ticked))
+        where = "shipped" if branch in MAIN_BRANCHES else f"ждёт ревью в {branch}"
+        print(f"отмечено ({where}): " + ", ".join(ticked))
     else:
         print("в коммите нет id задач — доска не тронута")
     board = parse(new)
@@ -876,6 +920,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--check", action="store_true", help="разобрать и напечатать")
     p.add_argument("--install-hook", action="store_true", help="поставить post-commit")
     p.add_argument("--rev", default="HEAD", help="какой коммит читать при --sync")
+    p.add_argument("--branch", default="", help="ветка коммита (её передаёт хук)")
     p.add_argument("--out", default="", help="куда положить HTML")
     args = p.parse_args(argv)
 

@@ -25,5 +25,7 @@ py="$home/.venv/Scripts/python.exe"
 [ -x "$py" ] || py="$repo/.venv/bin/python"
 [ -x "$py" ] || py=python
 
-"$py" "$script" --sync --rev "$sha" 2>&1 | sed 's/^/[доска] /'
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+"$py" "$script" --sync --rev "$sha" --branch "$branch" 2>&1 | sed 's/^/[доска] /'
 exit 0

@@ -282,3 +282,76 @@ def test_sync_without_the_vault_does_not_fail_the_commit(monkeypatch, tmp_path):
     monkeypatch.setenv(acl_board.BOARD_ENV, str(tmp_path / "нет-такого.md"))
     args = type("A", (), {"rev": "HEAD", "out": ""})()
     assert acl_board.cmd_sync(args, tmp_path) == 0
+
+
+# ── галочка и статус — про разное ────────────────────────────────────
+
+
+BRANCHED = """## 1 · Область
+### Способность
+
+- [x] `acl-201` Готово, но живёт в ветке #review @dashboard
+- [x] `acl-202` Готово и роздано
+- [ ] `acl-203` Ещё нет #next
+  - [x] `acl-203a` Часть готова в ветке #review
+
+## Log
+
+"""
+
+
+def test_a_ticked_task_keeps_the_status_written_by_hand():
+    b = acl_board.parse(BRANCHED)
+    t = b.by_id("acl-201")
+    assert t.is_done, "работа сделана"
+    assert t.shown_status == "review", "но не влита — доска не должна врать"
+
+
+def test_a_ticked_task_without_a_tag_is_shipped():
+    assert acl_board.parse(BRANCHED).by_id("acl-202").shown_status == "shipped"
+
+
+def test_all_parts_done_does_not_override_a_hand_written_status():
+    sub = acl_board.parse(BRANCHED).by_id("acl-203a")
+    assert sub.is_done and sub.shown_status == "review"
+
+
+def test_counts_use_the_shown_status():
+    counts = acl_board.parse(BRANCHED).counts()
+    assert counts["review"] == 1 and counts["shipped"] == 1
+
+
+def test_a_commit_on_a_feature_branch_marks_review_not_shipped():
+    new, ticked = acl_board.apply_commit(
+        SAMPLE, "abc1234", "closes acl-103", branch="feature/timeframe"
+    )
+    assert ticked == ["acl-103"]
+    line = next(l for l in new.splitlines() if "`acl-103`" in l)
+    assert "#review" in line and "#shipped" not in line
+    assert acl_board.parse(new).by_id("acl-103").shown_status == "review"
+
+
+def test_a_commit_on_master_marks_shipped():
+    new, _ = acl_board.apply_commit(SAMPLE, "abc1234", "closes acl-103", branch="master")
+    line = next(l for l in new.splitlines() if "`acl-103`" in l)
+    assert "#shipped" in line
+
+
+def test_the_log_says_which_branch_when_it_is_not_master():
+    new, _ = acl_board.apply_commit(
+        SAMPLE, "abc1234", "closes acl-103", when="2026-09-07", branch="feature/x"
+    )
+    entry = next(l for l in new.splitlines() if l.startswith("- 2026-09-07"))
+    assert "`feature/x`" in entry
+    on_master, _ = acl_board.apply_commit(
+        SAMPLE, "abc1234", "closes acl-103", when="2026-09-07", branch="master"
+    )
+    assert "feature" not in next(
+        l for l in on_master.splitlines() if l.startswith("- 2026-09-07")
+    )
+
+
+def test_render_shows_review_on_a_ticked_task():
+    html = acl_board.render(acl_board.parse(BRANCHED))
+    assert 'data-status="review"' in html
+    assert "In review" in html
