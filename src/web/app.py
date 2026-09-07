@@ -299,6 +299,18 @@ def _workbook_dates(df) -> list[str]:
         return []
 
 
+def _month_to_date(dates: list[str]) -> tuple[str, str]:
+    """Месяц по текущее число: с первого дня месяца последнего дня книги.
+
+    Считается от книги, а не от календаря: если файл заканчивается позавчера,
+    период до сегодня показал бы два пустых дня и выглядел бы как провал.
+    """
+    if not dates:
+        return "", ""
+    last = dates[-1]
+    return last[:7] + "-01", last
+
+
 def _filter_by_period(df, date_from: str, date_to: str):
     """Rows inside [from, to]. Either end may be blank — then it is not bounded."""
     if df is None or not (date_from or date_to) or "Date" not in getattr(df, "columns", []):
@@ -317,7 +329,13 @@ def _filter_by_period(df, date_from: str, date_to: str):
         return df
 
 
-def _build_account_map_view(report: dict, df=None, date_from: str = "", date_to: str = "") -> dict:
+def _build_account_map_view(
+    report: dict,
+    df=None,
+    date_from: str = "",
+    date_to: str = "",
+    span: str = "",
+) -> dict:
     """The account map on Home: every country, its accounts, and what they did.
 
     Countries come from the links store, not from the workbook, because the two
@@ -345,6 +363,14 @@ def _build_account_map_view(report: dict, df=None, date_from: str = "", date_to:
     # ("Costa Rica"), and matching on one of them alone silently produces a map
     # where every account says "no data" — which reads as a data problem rather
     # than as a join that missed.
+    # Ничего не выбрано — это не «покажи всё». Пустой период молча складывал
+    # каждый день книги в одно число, и никто этого не выбирал; месяц по
+    # текущее число — тот ответ, который человек и имеет в виду. «Все даты»
+    # остаются, но теперь их надо попросить (span=all).
+    dates = _workbook_dates(df)
+    if not date_from and not date_to and span != "all":
+        date_from, date_to = _month_to_date(dates)
+
     period = _filter_by_period(df, date_from, date_to) if (date_from or date_to) else None
 
     per_country: dict[str, dict[str, dict]] = {}
@@ -426,9 +452,10 @@ def _build_account_map_view(report: dict, df=None, date_from: str = "", date_to:
         "countries": countries,
         "available": available,
         "all_accounts": all_known,
-        "dates": _workbook_dates(df),
+        "dates": dates,
         "date_from": date_from,
         "date_to": date_to,
+        "span": span,
     }
 
 
@@ -1922,7 +1949,9 @@ async def account_map_patch(request: Request) -> JSONResponse:
 
 
 @app.get("/account-map")
-async def account_map_fragment(request: Request, date_from: str = "", date_to: str = "") -> Response:
+async def account_map_fragment(
+    request: Request, date_from: str = "", date_to: str = "", span: str = ""
+) -> Response:
     """The account map alone, recomputed for a period.
 
     A fragment rather than a page reload: rebuilding the whole report to change
@@ -1939,7 +1968,9 @@ async def account_map_fragment(request: Request, date_from: str = "", date_to: s
         "_account_map.html",
         {
             "request": request,
-            "amap": _build_account_map_view(report, df, date_from.strip(), date_to.strip()),
+            "amap": _build_account_map_view(
+                report, df, date_from.strip(), date_to.strip(), span.strip()
+            ),
             "mlx": mlx_instance_labels(),
         },
     )

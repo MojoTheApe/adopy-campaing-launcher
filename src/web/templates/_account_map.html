@@ -11,7 +11,7 @@
       <span class="amap-note">{{ amap.countries | length }} countries · numbers from the stats workbook</span>
       <button type="button" class="amap-btn amap-cal-btn" onclick="amapCalendar(this)"
               title="Which days to count">
-        📅 {% if amap.date_from or amap.date_to %}{{ amap.date_from or '…' }} → {{ amap.date_to or '…' }}{% else %}all dates{% endif %}
+        📅 {% if amap.span == 'all' %}all dates{% elif amap.date_from or amap.date_to %}{{ amap.date_from or '…' }} → {{ amap.date_to or '…' }}{% else %}all dates{% endif %}
       </button>
       <script type="application/json" id="amap-dates">{{ amap.dates | tojson }}</script>
       <span class="amap-add" style="padding:0;margin-left:auto">

@@ -1379,18 +1379,44 @@
        в файле два дня, — значит приглашать выбрать день и решить, что аккаунты
        умерли: данных там не было никогда, и сказать это надо до клика. */
     .amap-cal {
-      position: absolute; z-index: 40; padding: 0.6rem;
+      position: absolute; z-index: 40; padding: 0.7rem;
       background: var(--bg-elev); border: 1px solid var(--border);
       border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0,0,0,.14);
-      font-size: 0.8rem; min-width: 15rem;
+      font-size: 0.8rem;
     }
-    .amap-cal-head {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 0.5rem; margin-bottom: 0.4rem; font-weight: 600;
+    .amap-cal-wrap { display: flex; gap: 0.8rem; align-items: stretch; }
+    .amap-cal-presets {
+      display: flex; flex-direction: column; gap: 2px; min-width: 8rem;
+      border-right: 1px solid var(--border); padding-right: 0.7rem;
     }
-    .amap-cal-head button {
+    .amap-cal-presets button {
+      font: inherit; font-size: 0.75rem; text-align: left; cursor: pointer;
+      background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+      color: var(--text); padding: 0.22rem 0.4rem; white-space: nowrap;
+    }
+    .amap-cal-presets button:hover:not(:disabled) { border-color: var(--accent); }
+    .amap-cal-presets button.on { background: var(--accent); color: #fff; }
+    .amap-cal-presets button:disabled {
+      color: var(--border-strong); cursor: default; text-decoration: line-through;
+    }
+    .amap-cal-inputs {
+      display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.55rem;
+    }
+    .amap-cal-field {
+      border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      padding: 0.16rem 0.5rem; font-variant-numeric: tabular-nums; min-width: 6.6rem;
+      text-align: center;
+    }
+    .amap-cal-arrow { color: var(--muted); }
+    .amap-cal-nav {
       background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
-      color: var(--muted); cursor: pointer; font: inherit; padding: 0 0.4rem;
+      color: var(--muted); cursor: pointer; font: inherit; padding: 0 0.45rem;
+    }
+    .amap-cal-nav:first-of-type { margin-left: auto; }
+    .amap-cal-months { display: flex; gap: 1rem; }
+    .amap-cal-month { min-width: 12.5rem; }
+    .amap-cal-mtitle {
+      font-weight: 600; text-align: center; margin-bottom: 0.35rem;
     }
     .amap-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
     .amap-cal-grid .dow {
@@ -1400,13 +1426,22 @@
       font: inherit; font-size: 0.75rem; padding: 0.22rem 0; border-radius: var(--radius-sm);
       border: 1px solid transparent; background: none; color: var(--text); cursor: pointer;
     }
-    .amap-cal-grid button:disabled { color: var(--border-strong); cursor: default; }
+    /* Дни, которых нет в книге, зачёркнуты, а не просто бледные: серое читается
+       как «неяркое», зачёркнутое — как «этого нет». Разница видна до клика. */
+    .amap-cal-grid button:disabled {
+      color: var(--border-strong); cursor: default; text-decoration: line-through;
+    }
     .amap-cal-grid button.has:hover { border-color: var(--accent); }
     .amap-cal-grid button.sel { background: var(--accent); color: #fff; }
     .amap-cal-grid button.inrange { background: var(--accent-soft); }
     .amap-cal-foot {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-top: 0.5rem; gap: 0.5rem; color: var(--muted); font-size: 0.72rem;
+      display: flex; align-items: center; margin-top: 0.6rem; gap: 0.5rem;
+      color: var(--muted); font-size: 0.72rem;
+    }
+    .amap-cal-foot .amap-btn { margin-left: 0; }
+    .amap-cal-foot .amap-btn[data-cancel] { margin-left: auto; }
+    .amap-btn.primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
     }
 
     .amap-btn {
@@ -3391,11 +3426,44 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
 }
 
 // ── Календарь периода для карты аккаунтов ────────────────────────────
-var _amapPick = { from: '', to: '' };
+var _amapPick = { from: '{{ amap.date_from }}', to: '{{ amap.date_to }}', span: '{{ amap.span }}' };
 
 function amapDates() {
   var el = document.getElementById('amap-dates');
   try { return el ? JSON.parse(el.textContent) : []; } catch (e) { return []; }
+}
+
+function amapIso(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+    + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function amapShift(d, n) {
+  var x = new Date(d.getTime());
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+/* Готовые периоды — те же, что в BI компании, чтобы человек не переучивался.
+   Считаются от настоящего сегодня, а не от последнего дня книги: если файл
+   отстал, «Yesterday» окажется без данных и погаснет — и это правда, которую
+   надо показать. Подставить вместо неё ближайший день с данными значило бы
+   спрятать то, что книга не обновлена. */
+function amapPresets() {
+  var t = new Date(); t.setHours(0, 0, 0, 0);
+  var y = amapShift(t, -1);
+  var weekStart = amapShift(t, -((t.getDay() + 6) % 7));
+  var lastWeekEnd = amapShift(weekStart, -1);
+  var q = Math.floor(t.getMonth() / 3) * 3;
+  return [
+    { key: 'yesterday', label: 'Yesterday', from: amapIso(y), to: amapIso(y) },
+    { key: 'last7', label: 'Last 7 days', from: amapIso(amapShift(t, -7)), to: amapIso(y) },
+    { key: 'lastweek', label: 'Last week', from: amapIso(amapShift(lastWeekEnd, -6)), to: amapIso(lastWeekEnd) },
+    { key: 'month', label: 'This month', from: amapIso(new Date(t.getFullYear(), t.getMonth(), 1)), to: amapIso(t) },
+    { key: 'quarter', label: 'This quarter', from: amapIso(new Date(t.getFullYear(), q, 1)), to: amapIso(t) },
+    { key: 'year', label: 'This year', from: amapIso(new Date(t.getFullYear(), 0, 1)), to: amapIso(t) },
+    { key: 'all', label: 'All dates', from: '', to: '', span: 'all' }
+  ];
 }
 
 function amapCalendar(btn) {
@@ -3404,73 +3472,135 @@ function amapCalendar(btn) {
   var have = amapDates();
   if (!have.length) { alert('The workbook has no dates to choose from.'); return; }
 
-  var month = new Date(have[have.length - 1] + 'T00:00:00');
-  month.setDate(1);
+  /* Выбор живёт в черновике, пока не нажали Apply. Раньше второй клик по дате
+     грузил период немедленно: увидеть, что выбрал, было негде, а закрыть окно
+     после первого клика — значило потерять его молча. */
+  var draft = { from: _amapPick.from, to: _amapPick.to, span: _amapPick.span || '' };
+  var right = new Date((have[have.length - 1]) + 'T00:00:00');
+  right.setDate(1);
+  var presets = amapPresets();
+
   var box = document.createElement('div');
   box.className = 'amap-cal';
   document.body.appendChild(box);
   var r = btn.getBoundingClientRect();
-  box.style.left = Math.max(8, Math.min(r.left, innerWidth - 260)) + 'px';
+  box.style.left = Math.max(8, Math.min(r.left, innerWidth - 620)) + 'px';
   box.style.top = (r.bottom + window.scrollY + 6) + 'px';
 
-  function iso(d) {
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
-      + '-' + String(d.getDate()).padStart(2, '0');
+  function hasData(p) {
+    if (p.key === 'all') return true;
+    for (var i = 0; i < have.length; i++) {
+      if (have[i] >= p.from && have[i] <= p.to) return true;
+    }
+    return false;
+  }
+
+  function activePreset() {
+    if (draft.span === 'all') return 'all';
+    for (var i = 0; i < presets.length; i++) {
+      if (presets[i].key !== 'all' && presets[i].from === draft.from && presets[i].to === draft.to) {
+        return presets[i].key;
+      }
+    }
+    return '';
+  }
+
+  function monthHtml(base) {
+    var first = new Date(base.getFullYear(), base.getMonth(), 1);
+    var days = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    var lead = (first.getDay() + 6) % 7; // неделя с понедельника
+    var title = first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    var h = '<div class="amap-cal-month"><div class="amap-cal-mtitle">' + title + '</div>'
+      + '<div class="amap-cal-grid">';
+    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function (d) {
+      h += '<div class="dow">' + d + '</div>';
+    });
+    for (var i = 0; i < lead; i++) h += '<div></div>';
+    for (var day = 1; day <= days; day++) {
+      var key = amapIso(new Date(base.getFullYear(), base.getMonth(), day));
+      var has = have.indexOf(key) !== -1;
+      var cls = has ? 'has' : '';
+      if (draft.span !== 'all') {
+        if (key === draft.from || key === draft.to) cls += ' sel';
+        else if (draft.from && draft.to && key > draft.from && key < draft.to) cls += ' inrange';
+      }
+      h += '<button type="button" class="' + cls + '" data-day="' + key + '"'
+        + (has ? '' : ' disabled title="no rows in the workbook"') + '>' + day + '</button>';
+    }
+    return h + '</div></div>';
   }
 
   function draw() {
-    var first = new Date(month.getFullYear(), month.getMonth(), 1);
-    var days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-    var lead = (first.getDay() + 6) % 7; // неделя с понедельника
-    var title = first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-    var html = '<div class="amap-cal-head"><button type="button" data-step="-1">‹</button>'
-      + '<span>' + title + '</span>'
-      + '<button type="button" data-step="1">›</button></div><div class="amap-cal-grid">';
-    ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(function (d) { html += '<div class="dow">' + d + '</div>'; });
-    for (var i = 0; i < lead; i++) html += '<div></div>';
-    for (var day = 1; day <= days; day++) {
-      var key = iso(new Date(month.getFullYear(), month.getMonth(), day));
-      var has = have.indexOf(key) !== -1;
-      var cls = has ? 'has' : '';
-      if (key === _amapPick.from || key === _amapPick.to) cls += ' sel';
-      else if (_amapPick.from && _amapPick.to && key > _amapPick.from && key < _amapPick.to) cls += ' inrange';
-      html += '<button type="button" class="' + cls + '" data-day="' + key + '"'
-        + (has ? '' : ' disabled title="no rows in the workbook"') + '>' + day + '</button>';
-    }
-    html += '</div><div class="amap-cal-foot"><span>' + have.length + ' days in the workbook</span>'
-      + '<button type="button" class="amap-btn" data-all="1">All dates</button></div>';
-    box.innerHTML = html;
+    var active = activePreset();
+    var left = new Date(right.getFullYear(), right.getMonth() - 1, 1);
+    var shown = draft.span === 'all'
+      ? { a: 'all dates', b: 'all dates' }
+      : { a: draft.from || '…', b: draft.to || '…' };
+
+    var h = '<div class="amap-cal-wrap"><div class="amap-cal-presets">';
+    presets.forEach(function (p) {
+      var live = hasData(p);
+      h += '<button type="button" data-preset="' + p.key + '"'
+        + ' class="' + (active === p.key ? 'on' : '') + '"'
+        + (live ? '' : ' disabled title="no rows in the workbook for this period"')
+        + '>' + p.label + '</button>';
+    });
+    h += '</div><div class="amap-cal-main">'
+      + '<div class="amap-cal-inputs">'
+      + '<span class="amap-cal-field">' + shown.a + '</span>'
+      + '<span class="amap-cal-arrow">→</span>'
+      + '<span class="amap-cal-field">' + shown.b + '</span>'
+      + '<button type="button" class="amap-cal-nav" data-step="-1" title="earlier">‹</button>'
+      + '<button type="button" class="amap-cal-nav" data-step="1" title="later">›</button>'
+      + '</div><div class="amap-cal-months">'
+      + monthHtml(left) + monthHtml(right)
+      + '</div><div class="amap-cal-foot">'
+      + '<span>' + have.length + ' days in the workbook</span>'
+      + '<button type="button" class="amap-btn" data-cancel="1">Cancel</button>'
+      + '<button type="button" class="amap-btn primary" data-apply="1">Apply</button>'
+      + '</div></div></div>';
+    box.innerHTML = h;
 
     box.querySelectorAll('[data-step]').forEach(function (b) {
-      b.onclick = function () { month.setMonth(month.getMonth() + Number(b.dataset.step)); draw(); };
+      b.onclick = function () { right.setMonth(right.getMonth() + Number(b.dataset.step)); draw(); };
     });
-    box.querySelector('[data-all]').onclick = function () { amapApply('', ''); };
+    box.querySelectorAll('[data-preset]:not([disabled])').forEach(function (b) {
+      b.onclick = function () {
+        var p = presets.filter(function (x) { return x.key === b.dataset.preset; })[0];
+        draft = { from: p.from, to: p.to, span: p.span || '' };
+        draw();
+      };
+    });
     box.querySelectorAll('[data-day]:not([disabled])').forEach(function (b) {
       b.onclick = function () {
         var d = b.dataset.day;
         // Первый клик задаёт начало, второй — конец. Клик раньше начала
         // начинает выбор заново, а не даёт перевёрнутый период.
-        if (!_amapPick.from || _amapPick.to || d < _amapPick.from) {
-          _amapPick = { from: d, to: '' };
-          draw();
-        } else {
-          _amapPick.to = d;
-          amapApply(_amapPick.from, _amapPick.to);
-        }
+        if (!draft.from || draft.to || d < draft.from) draft = { from: d, to: '', span: '' };
+        else { draft.to = d; draft.span = ''; }
+        draw();
       };
     });
+    box.querySelector('[data-cancel]').onclick = function () { box.remove(); };
+    box.querySelector('[data-apply]').onclick = function () {
+      // Начали период и не закончили — концом считается его начало: один день.
+      var to = draft.to || draft.from;
+      amapApply(draft.from, to, draft.span);
+    };
   }
   draw();
 }
 
-async function amapApply(from, to) {
+async function amapApply(from, to, span) {
   var cal = document.querySelector('.amap-cal');
   if (cal) cal.remove();
-  _amapPick = { from: from, to: to };
+  _amapPick = { from: from, to: to, span: span || '' };
   var slot = document.getElementById('amap-slot');
   if (!slot) return;
   slot.style.opacity = '0.5';
-  var url = '/account-map?date_from=' + encodeURIComponent(from) + '&date_to=' + encodeURIComponent(to);
+  var url = '/account-map?date_from=' + encodeURIComponent(from)
+    + '&date_to=' + encodeURIComponent(to)
+    + '&span=' + encodeURIComponent(span || '');
   try {
     var r = await fetch(url, { credentials: 'same-origin' });
     slot.innerHTML = await r.text();
