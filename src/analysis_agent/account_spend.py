@@ -1,0 +1,370 @@
+"""Спенд, прочитанный прямо с рекламного аккаунта.
+
+Маршрутов будет два — браузер в профиле Multilogin и токен Marketing API, —
+и оба обязаны отвечать одинаково. Здесь описан общий ответ и сделан первый.
+
+Три правила, которые здесь не обсуждаются:
+
+* **Только по нажатию.** Никаких таймеров и фоновых обходов: опрос Ads Manager
+  по расписанию уже предшествовал чекпоинту на телефон. Нажатие человека —
+  человеческое поведение, расписание — нет.
+* **Только через профиль.** Аккаунт открывается провайдером RPA, то есть в
+  Multilogin с прокси этого аккаунта. Обычный браузер не годится ни при каких
+  обстоятельствах.
+* **Число без подтверждённого периода — не число.** Прежде чем вернуть спенд,
+  на странице сверяется показанный диапазон дат. Иначе достаточно смены
+  параметра в URL, чтобы получить чужой день с видом правильного ответа.
+"""
+from __future__ import annotations
+
+import json
+import threading
+import time
+from dataclasses import asdict, dataclass, field
+from datetime import date, timedelta
+from pathlib import Path
+from typing import Any, Callable
+
+from config import paths
+
+ADS_MANAGER = "https://adsmanager.facebook.com/adsmanager/manage/campaigns"
+
+#: сколько ждать таблицу — профиль поднимается небыстро, а спешка тут ничего
+#: не экономит: читаем мы по одному аккаунту и по просьбе человека
+TABLE_TIMEOUT_MS = 90_000
+
+
+def yesterday(today: date | None = None) -> str:
+    return ((today or date.today()) - timedelta(days=1)).isoformat()
+
+
+@dataclass
+class SpendReading:
+    """Один ответ на вопрос «сколько потратил этот аккаунт за этот день»."""
+
+    account: str
+    day: str
+    source: str = "rpa"           # rpa | token
+    spend: float | None = None
+    currency: str = ""
+    state: str = "idle"           # idle | running | ok | failed
+    how: str = ""                 # каким приёмом прочитано — чтобы знать, что сломалось
+    error: str = ""
+    started_at: str = ""
+    finished_at: str = ""
+    took_s: float = 0.0
+    shot: str = ""                # скриншот при неудаче
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+# ─────────────────────────── хранилище ───────────────────────────
+
+
+def _store_path() -> Path:
+    # get_local_config_dir отдаёт строку, а не Path
+    return Path(paths.get_local_config_dir()) / "account_spend.json"
+
+
+def _load_all() -> dict[str, dict]:
+    p = _store_path()
+    if not p.is_file():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        # Испорченный файл — это потеря последних показаний, а не повод
+        # уронить страницу: прочитаем заново по кнопке.
+        return {}
+
+
+def _save_all(data: dict[str, dict]) -> None:
+    p = _store_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
+
+
+def _key(account: str, day: str) -> str:
+    return f"{account}|{day}"
+
+
+def get_reading(account: str, day: str) -> SpendReading:
+    raw = _load_all().get(_key(account, day))
+    if not raw:
+        return SpendReading(account=account, day=day)
+    known = {f.name for f in SpendReading.__dataclass_fields__.values()}
+    return SpendReading(**{k: v for k, v in raw.items() if k in known})
+
+
+def all_readings(day: str) -> dict[str, SpendReading]:
+    out: dict[str, SpendReading] = {}
+    known = {f.name for f in SpendReading.__dataclass_fields__.values()}
+    for key, raw in _load_all().items():
+        acc, _, d = key.partition("|")
+        if d == day:
+            out[acc] = SpendReading(**{k: v for k, v in raw.items() if k in known})
+    return out
+
+
+def _put(reading: SpendReading) -> None:
+    data = _load_all()
+    data[_key(reading.account, reading.day)] = reading.to_dict()
+    _save_all(data)
+
+
+# ─────────────────────────── очередь ───────────────────────────
+
+#: один браузер за раз. Два профиля, поднятых одновременно с одной машины,
+#: это не «быстрее», это две сессии подряд с одного устройства.
+_LOCK = threading.Lock()
+_RUNNING: set[str] = set()
+
+
+def is_running(account: str, day: str) -> bool:
+    return _key(account, day) in _RUNNING
+
+
+def running_now() -> list[str]:
+    return sorted(k.split("|")[0] for k in _RUNNING)
+
+
+def start_read(
+    account: str,
+    day: str = "",
+    *,
+    reader: Callable[[str, str], SpendReading] | None = None,
+) -> SpendReading:
+    """Поставить чтение в работу и сразу вернуть его состояние.
+
+    Чтение идёт в отдельном потоке: профиль поднимается десятки секунд, и
+    держать всё это время страницу — значит показать человеку зависший
+    дешборд вместо ответа.
+    """
+    day = day or yesterday()
+    key = _key(account, day)
+    if key in _RUNNING:
+        return get_reading(account, day)
+
+    reading = SpendReading(
+        account=account, day=day, state="running", started_at=_now()
+    )
+    _RUNNING.add(key)
+    _put(reading)
+
+    fn = reader or read_via_rpa
+
+    def run() -> None:
+        started = time.time()
+        try:
+            with _LOCK:
+                done = fn(account, day)
+        except Exception as exc:  # noqa: BLE001 — падение чтения не должно ронять сервер
+            done = SpendReading(
+                account=account, day=day, state="failed", error=f"{type(exc).__name__}: {exc}"
+            )
+        done.started_at = reading.started_at
+        done.finished_at = _now()
+        done.took_s = round(time.time() - started, 1)
+        _RUNNING.discard(key)
+        _put(done)
+
+    threading.Thread(target=run, name=f"spend:{account}", daemon=True).start()
+    return reading
+
+
+def _now() -> str:
+    from datetime import datetime
+
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+# ─────────────────────────── маршрут RPA ───────────────────────────
+
+
+def _entry_for(account: str):
+    from src.meta_campaign_agent.ad_account_map import load_ad_account_map
+
+    entries = load_ad_account_map(paths.get_ad_account_map_path())
+    return entries.get(account)
+
+
+def read_via_rpa(account: str, day: str) -> SpendReading:
+    """Открыть аккаунт в его профиле и прочитать спенд за день."""
+    out = SpendReading(account=account, day=day, source="rpa", state="failed")
+
+    entry = _entry_for(account)
+    if entry is None:
+        out.error = f"{account} нет в карте аккаунтов"
+        return out
+    act = (entry.ad_account_id or "").strip()
+    if not act:
+        out.error = f"у {account} не заполнен ad_account_id"
+        return out
+
+    from src.fb_ads_rpa.browser import get_browser_provider
+
+    conn = None
+    try:
+        conn = get_browser_provider().open(entry, account)
+        page = conn.page
+        page.goto(_url(act, day), timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+
+        shown = _shown_period(page)
+        if not _period_matches(shown, day):
+            out.error = (
+                f"на экране период «{shown or 'не найден'}», а спрашивали {day} — "
+                "число не берём"
+            )
+            out.shot = _shoot(page, account, day)
+            return out
+
+        spend, how = _read_total(page)
+        if spend is None:
+            out.error = "не нашёл итоговую строку со спендом"
+            out.how = how
+            out.shot = _shoot(page, account, day)
+            return out
+
+        out.spend = spend
+        out.currency = _currency(page)
+        out.how = how
+        out.state = "ok"
+        return out
+    finally:
+        if conn is not None:
+            # Окно остаётся открытым: профиль, закрытый сразу после захода,
+            # выглядит хуже, чем человек, который посмотрел и ушёл.
+            try:
+                conn.close(keep_browser_open=True)
+            except Exception:
+                pass
+
+
+def _url(act: str, day: str) -> str:
+    act_id = act if act.startswith("act_") else f"act_{act}"
+    return f"{ADS_MANAGER}?act={act_id}&date={day}_{day}"
+
+
+def _shown_period(page) -> str:
+    """Что за период показывает сама страница."""
+    for sel in (
+        '[aria-label*="Date"], [aria-label*="date range" i]',
+        'div[role="button"][aria-label*="Date"]',
+        'span:has-text("Yesterday")',
+    ):
+        try:
+            el = page.query_selector(sel)
+            if el:
+                text = (el.get_attribute("aria-label") or el.inner_text() or "").strip()
+                if text:
+                    return text
+        except Exception:
+            continue
+    return ""
+
+
+def _period_matches(shown: str, day: str) -> bool:
+    """Совпадает ли показанный период с запрошенным днём.
+
+    Сверка нарочно грубая: нам нужно поймать «страница показывает не то»,
+    а не разобрать все формы записи дат в интерфейсе Meta.
+    """
+    if not shown:
+        return False
+    y, m, d = day.split("-")
+    months = (
+        "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+    )
+    month = months[int(m) - 1]
+    day_no_zero = str(int(d))
+    lowered = shown.lower()
+    if day in lowered:
+        return True
+    if month.lower() in lowered and day_no_zero in lowered and y in lowered:
+        return True
+    # «Yesterday» — ровно то, что мы и просим, когда day это вчера
+    return "yesterday" in lowered and day == yesterday()
+
+
+def _read_total(page) -> tuple[float | None, str]:
+    """Итоговый спенд со сводной строки таблицы."""
+    try:
+        page.wait_for_selector('div[role="table"], [role="grid"]', timeout=TABLE_TIMEOUT_MS)
+    except Exception:
+        return None, "таблица не появилась"
+
+    # 1. Сводная строка — та, что говорит «Results from N campaigns».
+    try:
+        rows = page.query_selector_all('div[role="row"]')
+        for row in rows:
+            text = (row.inner_text() or "").replace("\n", " ")
+            if "results from" in text.lower():
+                value = _first_money(text)
+                if value is not None:
+                    return value, "сводная строка «Results from»"
+    except Exception:
+        pass
+
+    # 2. Колонка «Amount spent» по её заголовку.
+    try:
+        head = page.query_selector('[aria-label*="Amount spent" i], div[role="columnheader"]:has-text("Amount spent")')
+        if head is not None:
+            col = head.get_attribute("aria-colindex")
+            if col:
+                cell = page.query_selector(f'div[role="row"]:last-of-type [aria-colindex="{col}"]')
+                if cell is not None:
+                    value = _first_money(cell.inner_text() or "")
+                    if value is not None:
+                        return value, "колонка «Amount spent» по aria-colindex"
+    except Exception:
+        pass
+
+    return None, "ни сводной строки, ни колонки «Amount spent»"
+
+
+def _first_money(text: str) -> float | None:
+    """Деньги из строки ячейки.
+
+    Знак валюты обязателен, а без него годится только число, которое само по
+    себе выглядит суммой — с разделителем разрядов или копейками. Иначе из
+    «Results from 4 campaigns $12,044.00» берётся «4»: количество кампаний,
+    выданное за спенд аккаунта, и выглядит оно совершенно правдоподобно.
+    """
+    import re
+
+    number = r"\d{1,3}(?:[,\s]\d{3})*(?:\.\d{1,2})?|\d+\.\d{1,2}"
+    signed = re.search(rf"[$€£₪]\s*({number})", text)
+    m = signed or re.search(rf"(?<![\d.,])(\d{{1,3}}(?:[,\s]\d{{3}})+(?:\.\d{{1,2}})?|\d+\.\d{{1,2}})", text)
+    if not m:
+        return None
+    try:
+        return float(m.group(1).replace(",", "").replace(" ", ""))
+    except ValueError:
+        return None
+
+
+def _currency(page) -> str:
+    try:
+        text = page.inner_text("body")[:4000]
+        for sign, code in (("$", "USD"), ("€", "EUR"), ("£", "GBP"), ("₪", "ILS")):
+            if sign in text:
+                return code
+    except Exception:
+        pass
+    return ""
+
+
+def _shoot(page, account: str, day: str) -> str:
+    """Снимок при неудаче: первый живой прогон стоит тестового аккаунта."""
+    try:
+        out = Path(paths.get_local_config_dir()) / "spend_shots"
+        out.mkdir(parents=True, exist_ok=True)
+        safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in account)
+        target = out / f"{safe}_{day}.png"
+        page.screenshot(path=str(target), full_page=False)
+        return str(target)
+    except Exception:
+        return ""

@@ -515,10 +515,22 @@ def _build_account_map_view(
         "available": available,
         "all_accounts": all_known,
         "dates": dates,
+        "live": _live_spend(),
         "date_from": date_from,
         "date_to": date_to,
         "span": span,
     }
+
+
+
+def _live_spend() -> dict[str, dict]:
+    """Последние показания спенда, снятые прямо с аккаунтов, за вчера."""
+    try:
+        from src.analysis_agent import account_spend
+
+        return {a: r.to_dict() for a, r in account_spend.all_readings(account_spend.yesterday()).items()}
+    except Exception:  # pragma: no cover - показания не должны ронять страницу
+        return {}
 
 
 def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
@@ -2021,6 +2033,43 @@ async def account_map_patch(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": f"Failed to save: {exc}"}, status_code=500)
 
     return JSONResponse({"ok": True, "saved": new_row["account_name"]})
+
+
+
+@app.post("/account-spend/read")
+async def account_spend_read(request: Request) -> JSONResponse:
+    """Прочитать спенд с аккаунта. Только по нажатию человека.
+
+    Никакого расписания: обход живых аккаунтов по таймеру уже однажды
+    предшествовал чекпоинту на телефон, и это не повторяется.
+    """
+    from src.analysis_agent import account_spend
+
+    form = await request.form()
+    account = (form.get("account") or "").strip()
+    day = (form.get("day") or "").strip() or account_spend.yesterday()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+
+    reading = account_spend.start_read(account, day)
+    return JSONResponse({"ok": True, "reading": reading.to_dict()})
+
+
+@app.get("/account-spend/status")
+async def account_spend_status(account: str = "", day: str = "") -> JSONResponse:
+    from src.analysis_agent import account_spend
+
+    day = day.strip() or account_spend.yesterday()
+    if account.strip():
+        return JSONResponse({"ok": True, "reading": account_spend.get_reading(account.strip(), day).to_dict()})
+    return JSONResponse(
+        {
+            "ok": True,
+            "day": day,
+            "running": account_spend.running_now(),
+            "readings": {a: r.to_dict() for a, r in account_spend.all_readings(day).items()},
+        }
+    )
 
 
 @app.get("/account-map")

@@ -55,6 +55,7 @@
           <th class="num">CPL</th>
           <th class="num">CPA</th>
           <th class="num">CR</th>
+          <th class="num" title="Spend read from the ad account itself, not from the workbook">On account</th>
           <th></th>
         </tr></thead>
         <tbody>
@@ -63,7 +64,7 @@
             <td class="amap-acc">
               {% if r.has_data %}
               <button type="button" class="amap-caret" aria-label="Campaigns of {{ r.account }}"
-                      hx-get="/details?section=account&country={{ c.country | urlencode }}&account={{ r.account | urlencode }}&ncols=10"
+                      hx-get="/details?section=account&country={{ c.country | urlencode }}&account={{ r.account | urlencode }}&ncols=11"
                       hx-target="closest tr" hx-swap="afterend" hx-trigger="click">▸</button>
               {% else %}<span class="amap-caret-off">·</span>{% endif %}
               {{ r.account }}
@@ -83,6 +84,22 @@
             <td class="num">{% if r.has_data and r.cpl %}{{ r.cpl | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
             <td class="num">{% if r.has_data and r.cpa %}{{ r.cpa | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
             <td class="num">{% if r.has_data and r.cr %}{{ '%.1f' % r.cr }}%{% else %}<span class="nodata">—</span>{% endif %}</td>
+            {#- Спенд, прочитанный прямо с аккаунта. Только по нажатию: обход
+                аккаунтов по расписанию уже приводил к чекпоинту. -#}
+            <td class="num amap-live" data-account="{{ r.account | e }}">
+              {%- set sr = (amap.live or {}).get(r.account) -%}
+              {%- if sr and sr.state == 'ok' -%}
+                <span class="amap-live-ok" title="{{ sr.day }} · read {{ sr.finished_at }} · {{ sr.how }}">{{ sr.spend | fmt_usd }}</span>
+              {%- elif sr and sr.state == 'running' -%}
+                <span class="amap-live-run">reading…</span>
+              {%- elif sr and sr.state == 'failed' -%}
+                <button type="button" class="amap-btn amap-live-bad" title="{{ sr.error }}"
+                        onclick="amapReadSpend(this)">failed · retry</button>
+              {%- else -%}
+                <button type="button" class="amap-btn" title="Open this account in its Multilogin profile and read yesterday's spend"
+                        onclick="amapReadSpend(this)">Read</button>
+              {%- endif -%}
+            </td>
             <td class="amap-actions">
               <button type="button" class="amap-x" title="Take {{ r.account }} out of {{ c.country }}"
                       onclick="amapUnlink('{{ r.account | e }}','country','{{ c.key | e }}')">Remove</button>

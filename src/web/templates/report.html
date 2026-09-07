@@ -1452,6 +1452,9 @@
       background: var(--accent); border-color: var(--accent); color: #fff;
     }
 
+    .amap-live-ok { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .amap-live-run { color: var(--muted); font-size: 0.78rem; }
+    .amap-live-bad { color: var(--danger, #a4362f); border-color: var(--danger, #a4362f); }
     .amap-btn {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -3636,6 +3639,58 @@ function amapApply(from, to, span) {
   }
   var hash = window.location.hash || '';
   window.location.href = window.location.pathname + (q.length ? '?' + q.join('&') : '') + hash;
+}
+
+/* ── Спенд прямо с аккаунта ───────────────────────────────────────────
+   Кнопка поднимает профиль Multilogin и читает Ads Manager. Это десятки
+   секунд, поэтому запрос уходит и мы спрашиваем состояние, а не ждём ответа
+   в одном вызове: страница, замершая на минуту, неотличима от сломанной.
+
+   Опрашивается только то, что сейчас читается, и только пока читается. */
+function amapReadSpend(btn) {
+  var cell = btn.closest('.amap-live');
+  var account = cell && cell.dataset.account;
+  if (!account) return;
+  cell.innerHTML = '<span class="amap-live-run">reading…</span>';
+  var body = new FormData();
+  body.append('account', account);
+  fetch('/account-spend/read', { method: 'POST', body: body, credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) throw new Error(j.error || 'refused');
+      amapPollSpend(account, cell, 0);
+    })
+    .catch(function (e) { amapSpendFailed(cell, String(e && e.message || e)); });
+}
+
+function amapPollSpend(account, cell, tries) {
+  if (tries > 120) {  // ~6 минут: дольше живой прогон не длится
+    amapSpendFailed(cell, 'no answer after six minutes — check the launcher window');
+    return;
+  }
+  setTimeout(function () {
+    fetch('/account-spend/status?account=' + encodeURIComponent(account), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var s = j.reading || {};
+        if (s.state === 'running') { amapPollSpend(account, cell, tries + 1); return; }
+        if (s.state === 'ok') {
+          var money = (s.currency === 'USD' || !s.currency ? '$' : '') + Number(s.spend).toLocaleString();
+          cell.innerHTML = '<span class="amap-live-ok"></span>';
+          var ok = cell.firstChild;
+          ok.textContent = money;
+          ok.title = s.day + ' · read ' + s.finished_at + ' · ' + s.took_s + 's · ' + s.how;
+          return;
+        }
+        amapSpendFailed(cell, s.error || 'failed');
+      })
+      .catch(function (e) { amapSpendFailed(cell, String(e && e.message || e)); });
+  }, 3000);
+}
+
+function amapSpendFailed(cell, why) {
+  cell.innerHTML = '<button type="button" class="amap-btn amap-live-bad" onclick="amapReadSpend(this)">failed · retry</button>';
+  cell.querySelector('button').title = why;
 }
 
 // ── Goals: меню на чипе, правка и удаление ───────────────────────────
