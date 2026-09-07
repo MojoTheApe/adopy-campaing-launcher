@@ -482,6 +482,15 @@ def read_via_rpa(account: str, day: str) -> SpendReading:
         page = conn.page
         page.goto(_url(act, day), timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
 
+        # Ads Manager рисуется скриптом, и `domcontentloaded` на нём не значит
+        # почти ничего: первый прогон 2026-09-07 проверил период через четыре
+        # секунды после перехода, когда на экране был спиннер и пустой скелет.
+        # Ждём саму таблицу, и только потом спрашиваем, какой период показан.
+        if not _wait_for_grid(page):
+            out.error = "Ads Manager не отрисовался за отведённое время"
+            out.shot = _shoot(page, account, day)
+            return out
+
         shown = _shown_period(page)
         if not _period_matches(shown, day):
             out.error = (
@@ -518,8 +527,35 @@ def _url(act: str, day: str) -> str:
     return f"{ADS_MANAGER}?act={act_id}&date={day}_{day}"
 
 
-def _shown_period(page) -> str:
-    """Что за период показывает сама страница."""
+def _wait_for_grid(page) -> bool:
+    """Дождаться таблицы кампаний — признак, что страница ожила."""
+    try:
+        page.wait_for_selector(
+            'div[role="table"], [role="grid"], [aria-label*="Amount spent" i]',
+            timeout=TABLE_TIMEOUT_MS,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _shown_period(page, tries: int = 12) -> str:
+    """Что за период показывает сама страница.
+
+    Несколько попыток: таблица появляется раньше шапки с датами, и один
+    промах здесь стоил бы отказа на полностью исправной странице.
+    """
+    import time
+
+    for _ in range(tries):
+        found = _period_once(page)
+        if found:
+            return found
+        time.sleep(0.5)
+    return ""
+
+
+def _period_once(page) -> str:
     for sel in (
         '[aria-label*="Date"], [aria-label*="date range" i]',
         'div[role="button"][aria-label*="Date"]',
@@ -533,6 +569,23 @@ def _shown_period(page) -> str:
                     return text
         except Exception:
             continue
+
+    # Запасной путь, и на деле основной: кнопка периода — просто кнопка с
+    # датой внутри, без aria-label, за который цеплялись выше. Снимок первого
+    # живого прогона показал ровно это: справа вверху «Sep 6, 2026».
+    try:
+        import re as _r
+
+        pat = _r.compile(
+            r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},\s*\d{4}",
+            _r.I,
+        )
+        for el in page.query_selector_all('div[role="button"], [role="combobox"]'):
+            text = " ".join((el.inner_text() or "").split())
+            if 0 < len(text) < 80 and pat.search(text):
+                return text
+    except Exception:
+        pass
     return ""
 
 
@@ -559,40 +612,127 @@ def _period_matches(shown: str, day: str) -> bool:
     return "yesterday" in lowered and day == yesterday()
 
 
-def _read_total(page) -> tuple[float | None, str]:
-    """Итоговый спенд со сводной строки таблицы."""
+#: сумма, которую страница сама подписывает «Total spent». Берём именно её, а
+#: не первое число со знаком валюты: рядом стоят дневные бюджеты и цены за
+#: результат, и первое попавшееся оказалось бы бюджетом одной кампании.
+_TOTAL_SPENT = None
+
+
+def _total_spent_re():
+    global _TOTAL_SPENT
+    if _TOTAL_SPENT is None:
+        import re
+
+        _TOTAL_SPENT = re.compile(r"([$€£₪]\s*[\d,]+(?:\.\d{1,2})?)\s*Total spent")
+    return _TOTAL_SPENT
+
+
+def _spend_on_screen(page) -> float | None:
+    """Найти на странице сумму, подписанную «Total spent».
+
+    Ищем по всей строке итогов, а не по одному узлу: копий надписи «Results
+    from N campaigns» полтора десятка, часть невидима, а часть занимает только
+    левую половину строки и суммы в себе не содержит. Один прогон уже сорвался
+    именно на этом — узел был выбран правильный по тексту и бесполезный по
+    ширине.
+    """
+    pat = _total_spent_re()
     try:
-        page.wait_for_selector('div[role="table"], [role="grid"]', timeout=TABLE_TIMEOUT_MS)
+        for cand in page.query_selector_all("div, span"):
+            try:
+                text = " ".join((cand.inner_text() or "").split())
+            except Exception:
+                continue
+            if "Total spent" not in text or len(text) > 600:
+                continue
+            m = pat.search(text)
+            if m:
+                return _first_money(m.group(1))
     except Exception:
+        pass
+    return None
+
+
+def _totals_label(page):
+    """Надпись «Results from N campaigns» — за неё берётся курсор.
+
+    Число кампаний каждый раз своё, поэтому цепляемся за начало текста. Из
+    полутора десятков копий годится та, у которой есть размеры на экране:
+    невидимую навести курсором нельзя, и попытка стоила бы тридцати секунд
+    ожидания.
+    """
+    found = None
+    try:
+        for cand in page.query_selector_all("div, span"):
+            try:
+                text = " ".join((cand.inner_text() or "").split())
+                if not text.startswith("Results from") or "campaign" not in text:
+                    continue
+                if cand.is_visible() and cand.bounding_box():
+                    found = cand
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return found
+
+
+def _read_total(page) -> tuple[float | None, str]:
+    """Итоговый спенд из строки итогов.
+
+    На таких аккаунтах итоги свёрнуты: видно «Results from N campaigns», а сумм
+    нет. Их показывает кнопка **View results**, которая появляется только при
+    наведении курсора на эту надпись — подсказал пользователь 2026-09-07, и без
+    этого читать было нечего.
+
+    Раскрытие запоминается: на уже раскрытом аккаунте кнопки не будет вовсе,
+    там написано «Hide results». Поэтому сперва смотрим, нет ли суммы прямо
+    сейчас, и только потом трогаем мышь.
+    """
+    if not _wait_for_grid(page):
         return None, "таблица не появилась"
 
-    # 1. Сводная строка — та, что говорит «Results from N campaigns».
+    value = _spend_on_screen(page)
+    if value is not None:
+        return value, "строка итогов, «Total spent»"
+
+    label = _totals_label(page)
+    if label is None:
+        return None, "строка «Results from …» не найдена"
+
     try:
-        rows = page.query_selector_all('div[role="row"]')
-        for row in rows:
-            text = (row.inner_text() or "").replace("\n", " ")
-            if "results from" in text.lower():
-                value = _first_money(text)
-                if value is not None:
-                    return value, "сводная строка «Results from»"
+        label.scroll_into_view_if_needed(timeout=5_000)
+        label.hover(timeout=5_000)
+    except Exception:
+        return None, "к надписи итогов не удалось подвести курсор"
+
+    _sleep(1.5)
+    clicked = False
+    try:
+        for b in page.query_selector_all('[role="button"]'):
+            try:
+                if " ".join((b.inner_text() or "").split()) == "View results" and b.is_visible():
+                    b.click(timeout=5_000)
+                    clicked = True
+                    break
+            except Exception:
+                continue
     except Exception:
         pass
+    if not clicked:
+        return None, "кнопки «View results» не появилось при наведении"
 
-    # 2. Колонка «Amount spent» по её заголовку.
-    try:
-        head = page.query_selector('[aria-label*="Amount spent" i], div[role="columnheader"]:has-text("Amount spent")')
-        if head is not None:
-            col = head.get_attribute("aria-colindex")
-            if col:
-                cell = page.query_selector(f'div[role="row"]:last-of-type [aria-colindex="{col}"]')
-                if cell is not None:
-                    value = _first_money(cell.inner_text() or "")
-                    if value is not None:
-                        return value, "колонка «Amount spent» по aria-colindex"
-    except Exception:
-        pass
+    _sleep(3)
+    value = _spend_on_screen(page)
+    if value is None:
+        return None, "итоги раскрыты, но суммы рядом с «Total spent» нет"
+    return value, "строка итогов раскрыта наведением, «Total spent»"
 
-    return None, "ни сводной строки, ни колонки «Amount spent»"
+
+def _sleep(seconds: float) -> None:
+    import time
+
+    time.sleep(seconds)
 
 
 def _first_money(text: str) -> float | None:
