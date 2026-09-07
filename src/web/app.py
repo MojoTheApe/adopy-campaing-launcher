@@ -516,7 +516,7 @@ def _build_account_map_view(
         "available": available,
         "all_accounts": all_known,
         "dates": dates,
-        "live": _live_spend(),
+        "live": _live_spend(date_from, date_to),
         "date_from": date_from,
         "date_to": date_to,
         "span": span,
@@ -524,12 +524,16 @@ def _build_account_map_view(
 
 
 
-def _live_spend() -> dict[str, dict]:
-    """Последние показания спенда, снятые прямо с аккаунтов, за вчера."""
+def _live_spend(date_from: str = "", date_to: str = "") -> dict[str, dict]:
+    """Показания спенда, снятые с аккаунтов за тот же период, что на экране."""
     try:
         from src.analysis_agent import account_spend
 
-        return {a: r.to_dict() for a, r in account_spend.all_readings(account_spend.yesterday()).items()}
+        date_from = date_from or account_spend.yesterday()
+        return {
+            a: r.to_dict()
+            for a, r in account_spend.all_readings(date_from, date_to or date_from).items()
+        }
     except Exception:  # pragma: no cover - показания не должны ронять страницу
         return {}
 
@@ -2095,11 +2099,15 @@ async def account_spend_read(request: Request) -> JSONResponse:
 
     form = await request.form()
     account = (form.get("account") or "").strip()
-    day = (form.get("day") or "").strip() or account_spend.yesterday()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    # Период приходит с экрана: число, снятое не за тот отрезок, который
+    # показан рядом, выглядело бы расхождением источников, а было бы ответом
+    # на другой вопрос.
+    date_from = (form.get("date_from") or "").strip() or account_spend.yesterday()
+    date_to = (form.get("date_to") or "").strip() or date_from
 
-    reading = account_spend.start_read(account, day)
+    reading = account_spend.start_read(account, date_from, date_to)
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
 
 
@@ -2147,18 +2155,28 @@ async def account_probe_ad_account(request: Request) -> JSONResponse:
 
 
 @app.get("/account-spend/status")
-async def account_spend_status(account: str = "", day: str = "") -> JSONResponse:
+async def account_spend_status(
+    account: str = "", date_from: str = "", date_to: str = ""
+) -> JSONResponse:
     from src.analysis_agent import account_spend
 
-    day = day.strip() or account_spend.yesterday()
+    date_from = date_from.strip() or account_spend.yesterday()
+    date_to = date_to.strip() or date_from
     if account.strip():
-        return JSONResponse({"ok": True, "reading": account_spend.get_reading(account.strip(), day).to_dict()})
+        return JSONResponse({
+            "ok": True,
+            "reading": account_spend.get_reading(account.strip(), date_from, date_to).to_dict(),
+        })
     return JSONResponse(
         {
             "ok": True,
-            "day": day,
+            "date_from": date_from,
+            "date_to": date_to,
             "running": account_spend.running_now(),
-            "readings": {a: r.to_dict() for a, r in account_spend.all_readings(day).items()},
+            "readings": {
+                a: r.to_dict()
+                for a, r in account_spend.all_readings(date_from, date_to).items()
+            },
         }
     )
 

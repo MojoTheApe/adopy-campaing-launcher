@@ -30,61 +30,61 @@ def test_yesterday_is_the_day_before():
 
 
 def test_an_unread_account_is_idle():
-    r = sp.get_reading("Acc", "2026-09-06")
+    r = sp.get_reading("Acc", "2026-09-06", "2026-09-06")
     assert r.state == "idle" and r.spend is None
 
 
 def test_a_reading_survives_a_restart():
-    sp._put(sp.SpendReading(account="Acc", day="2026-09-06", spend=1234.5, state="ok"))
-    again = sp.get_reading("Acc", "2026-09-06")
+    sp._put(sp.SpendReading(account="Acc", date_from="2026-09-06", date_to="2026-09-06", spend=1234.5, state="ok"))
+    again = sp.get_reading("Acc", "2026-09-06", "2026-09-06")
     assert again.spend == 1234.5 and again.state == "ok"
 
 
 def test_readings_are_kept_per_day():
-    sp._put(sp.SpendReading(account="Acc", day="2026-09-05", spend=1.0, state="ok"))
-    sp._put(sp.SpendReading(account="Acc", day="2026-09-06", spend=2.0, state="ok"))
-    assert sp.get_reading("Acc", "2026-09-05").spend == 1.0
-    assert sp.all_readings("2026-09-06")["Acc"].spend == 2.0
-    assert "Acc" in sp.all_readings("2026-09-05")
+    sp._put(sp.SpendReading(account="Acc", date_from="2026-09-05", date_to="2026-09-05", spend=1.0, state="ok"))
+    sp._put(sp.SpendReading(account="Acc", date_from="2026-09-06", date_to="2026-09-06", spend=2.0, state="ok"))
+    assert sp.get_reading("Acc", "2026-09-05", "2026-09-05").spend == 1.0
+    assert sp.all_readings("2026-09-06", "2026-09-06")["Acc"].spend == 2.0
+    assert "Acc" in sp.all_readings("2026-09-05", "2026-09-05")
 
 
 def test_a_corrupt_store_loses_readings_but_not_the_page(store):
     (store / "account_spend.json").write_text("{ не json", encoding="utf-8")
-    assert sp.all_readings("2026-09-06") == {}
+    assert sp.all_readings("2026-09-06", "2026-09-06") == {}
 
 
 def test_unknown_fields_in_the_store_are_ignored():
-    sp._save_all({"Acc|2026-09-06": {"account": "Acc", "day": "2026-09-06", "who_knows": 1}})
-    assert sp.get_reading("Acc", "2026-09-06").account == "Acc"
+    sp._save_all({"Acc|2026-09-06|2026-09-06": {"account": "Acc", "date_from": "2026-09-06", "date_to": "2026-09-06", "who_knows": 1}})
+    assert sp.get_reading("Acc", "2026-09-06", "2026-09-06").account == "Acc"
 
 
 # ── очередь ───────────────────────────────────────────────────────────
 
 
 def _fake(result: sp.SpendReading):
-    def reader(account: str, day: str) -> sp.SpendReading:
+    def reader(account: str, a: str, b: str) -> sp.SpendReading:
         return result
 
     return reader
 
 
 def test_start_read_runs_and_stores(monkeypatch):
-    done = sp.SpendReading(account="Acc", day="2026-09-06", spend=42.0, state="ok", how="test")
-    first = sp.start_read("Acc", "2026-09-06", reader=_fake(done))
+    done = sp.SpendReading(account="Acc", date_from="2026-09-06", date_to="2026-09-06", spend=42.0, state="ok", how="test")
+    first = sp.start_read("Acc", "2026-09-06", "2026-09-06", reader=_fake(done))
     assert first.state == "running"
     _settle()
-    saved = sp.get_reading("Acc", "2026-09-06")
+    saved = sp.get_reading("Acc", "2026-09-06", "2026-09-06")
     assert saved.state == "ok" and saved.spend == 42.0
     assert saved.finished_at and saved.took_s >= 0
 
 
 def test_a_reader_that_raises_becomes_a_failed_reading():
-    def boom(account: str, day: str) -> sp.SpendReading:
+    def boom(account: str, a: str, b: str) -> sp.SpendReading:
         raise RuntimeError("профиль не поднялся")
 
-    sp.start_read("Acc", "2026-09-06", reader=boom)
+    sp.start_read("Acc", "2026-09-06", "2026-09-06", reader=boom)
     _settle()
-    saved = sp.get_reading("Acc", "2026-09-06")
+    saved = sp.get_reading("Acc", "2026-09-06", "2026-09-06")
     assert saved.state == "failed"
     assert "профиль не поднялся" in saved.error
 
@@ -94,13 +94,13 @@ def test_the_same_account_is_not_started_twice():
 
     gate = threading.Event()
 
-    def slow(account: str, day: str) -> sp.SpendReading:
+    def slow(account: str, a: str, b: str) -> sp.SpendReading:
         gate.wait(2)
-        return sp.SpendReading(account=account, day=day, state="ok", spend=1.0)
+        return sp.SpendReading(account=account, date_from=a, date_to=b, state="ok", spend=1.0)
 
-    sp.start_read("Acc", "2026-09-06", reader=slow)
-    assert sp.is_running("Acc", "2026-09-06")
-    second = sp.start_read("Acc", "2026-09-06", reader=slow)
+    sp.start_read("Acc", "2026-09-06", "2026-09-06", reader=slow)
+    assert sp.is_running("Acc", "2026-09-06", "2026-09-06")
+    second = sp.start_read("Acc", "2026-09-06", "2026-09-06", reader=slow)
     assert second.state == "running"
     assert sp.running_now() == ["Acc"]
     gate.set()
@@ -138,8 +138,8 @@ def test_a_period_that_is_not_the_one_asked_for_is_refused(shown, day, ok):
 
 
 def test_yesterday_on_screen_counts_only_when_we_asked_for_yesterday():
-    assert sp._period_matches("Yesterday", sp.yesterday()) is True
-    assert sp._period_matches("Yesterday", "2020-01-01") is False
+    assert sp._period_matches("Yesterday", sp.yesterday(), sp.yesterday()) is True
+    assert sp._period_matches("Yesterday", "2020-01-01", "2020-01-01") is False
 
 
 # ── разбор числа ──────────────────────────────────────────────────────
@@ -163,18 +163,18 @@ def test_money_is_read_out_of_the_cell(text, value):
     assert sp._first_money(text) == value
 
 
-def test_url_carries_the_day_on_both_ends():
-    url = sp._url("act_123", "2026-09-06")
-    assert "act=act_123" in url and "date=2026-09-06_2026-09-06" in url
+def test_url_carries_the_account_and_the_day():
+    url = sp._url("act_123", "2026-09-06", "2026-09-06")
+    assert "act=act_123" in url and "date=2026-09-06_2026-09-07" in url
 
 
 def test_url_adds_the_act_prefix_when_the_map_lacks_it():
-    assert "act=act_123" in sp._url("123", "2026-09-06")
+    assert "act=act_123" in sp._url("123", "2026-09-06", "2026-09-06")
 
 
 def test_a_missing_account_fails_before_any_browser_opens(monkeypatch):
     monkeypatch.setattr(sp, "_entry_for", lambda account: None)
-    out = sp.read_via_rpa("Нет такого", "2026-09-06")
+    out = sp.read_via_rpa("Нет такого", "2026-09-06", "2026-09-06")
     assert out.state == "failed" and "нет в карте" in out.error
 
 
@@ -183,7 +183,7 @@ def test_an_account_without_an_id_fails_before_any_browser_opens(monkeypatch):
         ad_account_id = ""
 
     monkeypatch.setattr(sp, "_entry_for", lambda account: Entry())
-    out = sp.read_via_rpa("Acc", "2026-09-06")
+    out = sp.read_via_rpa("Acc", "2026-09-06", "2026-09-06")
     assert out.state == "failed" and "ad_account_id" in out.error
 
 
@@ -255,7 +255,7 @@ def test_the_refusal_becomes_a_readable_failure_not_a_crash(monkeypatch):
         raise sp.ProfileNotAttachable("профиль не открыт")
 
     monkeypatch.setattr(sp, "_attach_only", refuse)
-    out = sp.read_via_rpa("Acc", "2026-09-06")
+    out = sp.read_via_rpa("Acc", "2026-09-06", "2026-09-06")
     assert out.state == "failed" and out.error == "профиль не открыт"
 
 
@@ -366,3 +366,39 @@ def test_a_profile_that_was_never_opened_here_has_no_directory(tmp_path, monkeyp
 def test_no_mlx_home_is_not_a_crash(tmp_path, monkeypatch):
     monkeypatch.setenv("MLX_HOME", str(tmp_path / "нет-такого"))
     assert sp._mlx_profile_dir("p-1") is None
+
+
+# ── период приходит с экрана ──────────────────────────────────────────
+
+
+def test_a_range_is_kept_apart_from_a_single_day():
+    sp._put(sp.SpendReading(account="Acc", date_from="2026-09-06", date_to="2026-09-06", spend=1.0, state="ok"))
+    sp._put(sp.SpendReading(account="Acc", date_from="2026-09-01", date_to="2026-09-06", spend=9.0, state="ok"))
+    assert sp.get_reading("Acc", "2026-09-06", "2026-09-06").spend == 1.0
+    assert sp.get_reading("Acc", "2026-09-01", "2026-09-06").spend == 9.0
+    assert "Acc" not in sp.all_readings("2026-09-05", "2026-09-05")
+
+
+def test_a_single_day_refuses_a_range_on_screen():
+    """Месяц на экране не должен сойти за день по совпадению числа и года."""
+    assert sp._period_matches("Sep 1, 2026 - Sep 30, 2026", "2026-09-01", "2026-09-01") is False
+    assert sp._period_matches("Sep 1, 2026", "2026-09-01", "2026-09-01") is True
+
+
+def test_a_range_needs_both_ends_on_screen():
+    assert sp._period_matches("Sep 1, 2026 - Sep 6, 2026", "2026-09-01", "2026-09-06") is True
+    assert sp._period_matches("Sep 6, 2026", "2026-09-01", "2026-09-06") is False
+
+
+def test_the_url_end_is_exclusive_so_the_last_day_survives():
+    """Проверено на живом аккаунте: date=…_06 показывает по пятое."""
+    assert "date=2026-09-01_2026-09-07" in sp._url("act_1", "2026-09-01", "2026-09-06")
+    assert "date=2026-09-06_2026-09-07" in sp._url("act_1", "2026-09-06")
+
+
+def test_the_url_end_crosses_a_month():
+    assert "date=2026-08-01_2026-09-01" in sp._url("act_1", "2026-08-01", "2026-08-31")
+
+
+def test_a_broken_date_does_not_break_the_url():
+    assert "date=нет_нет" in sp._url("act_1", "нет", "нет")

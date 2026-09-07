@@ -60,7 +60,7 @@
             {%- set sr = (amap.live or {}).get(r.account) -%}
             <td class="num amap-live" data-account="{{ r.account | e }}">
               {%- if sr and sr.state == 'ok' -%}
-                <span class="amap-live-ok" title="{{ sr.day }} · read {{ sr.finished_at }} · {{ sr.how }}">{{ sr.spend | fmt_usd }}</span>
+                <span class="amap-live-ok" title="{% if sr.date_from == sr.date_to %}{{ sr.date_from }}{% else %}{{ sr.date_from }}…{{ sr.date_to }}{% endif %} · read {{ sr.finished_at }} · {{ sr.how }}">{{ sr.spend | fmt_usd }}</span>
               {%- else -%}<span class="nodata">—</span>{%- endif -%}
             </td>
             <td class="amap-actions">

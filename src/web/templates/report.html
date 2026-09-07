@@ -1890,7 +1890,7 @@
   <div class="period-pick" style="margin-left:auto">
     <button type="button" class="amap-btn amap-cal-btn" onclick="amapCalendar(this)"
             title="Which days every number on this page counts">
-      📅 {% if pd.span == 'all' %}all dates{% elif pd.date_from or pd.date_to %}{{ pd.date_from or '…' }} → {{ pd.date_to or '…' }}{% else %}all dates{% endif %}
+      📅 {% if pd.span == 'all' %}all dates{% elif pd.date_from and pd.date_from == pd.date_to %}{{ pd.date_from }}{% elif pd.date_from or pd.date_to %}{{ pd.date_from or '…' }} → {{ pd.date_to or '…' }}{% else %}all dates{% endif %}
     </button>
     <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
   </div>
@@ -3618,6 +3618,9 @@ function amapCalendar(btn) {
   function draw() {
     var active = activePreset();
     var left = new Date(right.getFullYear(), right.getMonth() - 1, 1);
+    /* Один день — одна дата. «2026-09-06 → 2026-09-06» читается как диапазон
+       из двух дней и заставляет вчитываться, чтобы понять, что это один. */
+    var oneDay = draft.span !== 'all' && draft.from && draft.from === draft.to;
     var shown = draft.span === 'all'
       ? { a: 'all dates', b: 'all dates' }
       : { a: draft.from || '…', b: draft.to || '…' };
@@ -3633,8 +3636,8 @@ function amapCalendar(btn) {
     h += '</div><div class="amap-cal-main">'
       + '<div class="amap-cal-inputs">'
       + '<span class="amap-cal-field">' + shown.a + '</span>'
-      + '<span class="amap-cal-arrow">→</span>'
-      + '<span class="amap-cal-field">' + shown.b + '</span>'
+      + (oneDay ? '' : '<span class="amap-cal-arrow">→</span>'
+                       + '<span class="amap-cal-field">' + shown.b + '</span>')
       + '<button type="button" class="amap-cal-nav" data-step="-1" title="earlier">‹</button>'
       + '<button type="button" class="amap-cal-nav" data-step="1" title="later">›</button>'
       + '<button type="button" class="amap-cal-x" data-close="1" title="Close">×</button>'
@@ -3704,6 +3707,15 @@ function amapApply(from, to, span) {
    в одном вызове: страница, замершая на минуту, неотличима от сломанной.
 
    Опрашивается только то, что сейчас читается, и только пока читается. */
+/* Период страницы одним местом. Читает то же состояние, что рисует шапку, —
+   иначе кнопка и подпись рядом с ней рано или поздно разойдутся. */
+function amapPeriod() {
+  var p = window._amapPick || {};
+  if (p.span === 'all') return { from: '', to: '' };
+  var from = p.from || '';
+  return { from: from, to: p.to || from };
+}
+
 function amapSpendCell(btn) {
   var row = btn.closest('tr');
   return row ? row.querySelector('.amap-live') : null;
@@ -3718,8 +3730,14 @@ function amapReadSpend(btn) {
   btn.disabled = true;
   btn.className = 'amap-btn amap-read';
   btn.textContent = 'reading…';
+  /* Период берём тот же, что показан в шапке: число за другой отрезок
+     выглядело бы расхождением источников, а было бы ответом на другой
+     вопрос. */
+  var per = amapPeriod();
   var body = new FormData();
   body.append('account', account);
+  body.append('date_from', per.from);
+  body.append('date_to', per.to);
   fetch('/account-spend/read', { method: 'POST', body: body, credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (j) {
@@ -3735,7 +3753,10 @@ function amapPollSpend(account, cell, btn, tries) {
     return;
   }
   setTimeout(function () {
-    fetch('/account-spend/status?account=' + encodeURIComponent(account), { credentials: 'same-origin' })
+    var per = amapPeriod();
+    fetch('/account-spend/status?account=' + encodeURIComponent(account)
+          + '&date_from=' + encodeURIComponent(per.from)
+          + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         var s = j.reading || {};
@@ -3745,7 +3766,8 @@ function amapPollSpend(account, cell, btn, tries) {
           cell.innerHTML = '<span class="amap-live-ok"></span>';
           var ok = cell.firstChild;
           ok.textContent = money;
-          ok.title = s.day + ' · read ' + s.finished_at + ' · ' + s.took_s + 's · ' + s.how;
+          var when = s.date_from === s.date_to ? s.date_from : (s.date_from + '…' + s.date_to);
+          ok.title = when + ' · read ' + s.finished_at + ' · ' + s.took_s + 's · ' + s.how;
           btn.disabled = false;
           btn.className = 'amap-btn amap-read';
           btn.textContent = 'Read';

@@ -45,7 +45,8 @@ class SpendReading:
     """Один ответ на вопрос «сколько потратил этот аккаунт за этот день»."""
 
     account: str
-    day: str
+    date_from: str
+    date_to: str
     source: str = "rpa"           # rpa | token
     spend: float | None = None
     currency: str = ""
@@ -89,31 +90,34 @@ def _save_all(data: dict[str, dict]) -> None:
     tmp.replace(p)
 
 
-def _key(account: str, day: str) -> str:
-    return f"{account}|{day}"
+def _key(account: str, date_from: str, date_to: str) -> str:
+    return f"{account}|{date_from}|{date_to}"
 
 
-def get_reading(account: str, day: str) -> SpendReading:
-    raw = _load_all().get(_key(account, day))
+def get_reading(account: str, date_from: str, date_to: str) -> SpendReading:
+    raw = _load_all().get(_key(account, date_from, date_to))
     if not raw:
-        return SpendReading(account=account, day=day)
+        return SpendReading(account=account, date_from=date_from, date_to=date_to)
     known = {f.name for f in SpendReading.__dataclass_fields__.values()}
     return SpendReading(**{k: v for k, v in raw.items() if k in known})
 
 
-def all_readings(day: str) -> dict[str, SpendReading]:
+def all_readings(date_from: str, date_to: str) -> dict[str, SpendReading]:
+    """Показания за один и тот же период — тот, что выбран на дешборде."""
     out: dict[str, SpendReading] = {}
     known = {f.name for f in SpendReading.__dataclass_fields__.values()}
+    want = f"|{date_from}|{date_to}"
     for key, raw in _load_all().items():
-        acc, _, d = key.partition("|")
-        if d == day:
-            out[acc] = SpendReading(**{k: v for k, v in raw.items() if k in known})
+        if key.endswith(want):
+            out[key[: -len(want)]] = SpendReading(
+                **{k: v for k, v in raw.items() if k in known}
+            )
     return out
 
 
 def _put(reading: SpendReading) -> None:
     data = _load_all()
-    data[_key(reading.account, reading.day)] = reading.to_dict()
+    data[_key(reading.account, reading.date_from, reading.date_to)] = reading.to_dict()
     _save_all(data)
 
 
@@ -125,8 +129,8 @@ _LOCK = threading.Lock()
 _RUNNING: set[str] = set()
 
 
-def is_running(account: str, day: str) -> bool:
-    return _key(account, day) in _RUNNING
+def is_running(account: str, date_from: str, date_to: str) -> bool:
+    return _key(account, date_from, date_to) in _RUNNING
 
 
 def running_now() -> list[str]:
@@ -135,9 +139,10 @@ def running_now() -> list[str]:
 
 def start_read(
     account: str,
-    day: str = "",
+    date_from: str = "",
+    date_to: str = "",
     *,
-    reader: Callable[[str, str], SpendReading] | None = None,
+    reader: Callable[[str, str, str], SpendReading] | None = None,
 ) -> SpendReading:
     """Поставить чтение в работу и сразу вернуть его состояние.
 
@@ -145,13 +150,15 @@ def start_read(
     держать всё это время страницу — значит показать человеку зависший
     дешборд вместо ответа.
     """
-    day = day or yesterday()
-    key = _key(account, day)
+    date_from = date_from or yesterday()
+    date_to = date_to or date_from
+    key = _key(account, date_from, date_to)
     if key in _RUNNING:
-        return get_reading(account, day)
+        return get_reading(account, date_from, date_to)
 
     reading = SpendReading(
-        account=account, day=day, state="running", started_at=_now()
+        account=account, date_from=date_from, date_to=date_to,
+        state="running", started_at=_now(),
     )
     _RUNNING.add(key)
     _put(reading)
@@ -162,10 +169,11 @@ def start_read(
         started = time.time()
         try:
             with _LOCK:
-                done = fn(account, day)
+                done = fn(account, date_from, date_to)
         except Exception as exc:  # noqa: BLE001 — падение чтения не должно ронять сервер
             done = SpendReading(
-                account=account, day=day, state="failed", error=f"{type(exc).__name__}: {exc}"
+                account=account, date_from=date_from, date_to=date_to,
+                state="failed", error=f"{type(exc).__name__}: {exc}",
             )
         done.started_at = reading.started_at
         done.finished_at = _now()
@@ -459,9 +467,18 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     return True, "профиль открыт — залогиньтесь, если нужно, и оставьте окно"
 
 
-def read_via_rpa(account: str, day: str) -> SpendReading:
-    """Открыть аккаунт в его профиле и прочитать спенд за день."""
-    out = SpendReading(account=account, day=day, source="rpa", state="failed")
+def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReading:
+    """Прочитать спенд аккаунта за период, выбранный на дешборде.
+
+    Период приходит с экрана, а не берётся за вчера: число, снятое не за тот
+    отрезок, что показан рядом, выглядело бы как расхождение источников — а на
+    деле было бы ответом на другой вопрос.
+    """
+    date_to = date_to or date_from
+    out = SpendReading(
+        account=account, date_from=date_from, date_to=date_to,
+        source="rpa", state="failed",
+    )
 
     entry = _entry_for(account)
     if entry is None:
@@ -480,7 +497,7 @@ def read_via_rpa(account: str, day: str) -> SpendReading:
             out.error = str(exc)
             return out
         page = conn.page
-        page.goto(_url(act, day), timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        page.goto(_url(act, date_from, date_to), timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
 
         # Ads Manager рисуется скриптом, и `domcontentloaded` на нём не значит
         # почти ничего: первый прогон 2026-09-07 проверил период через четыре
@@ -492,19 +509,20 @@ def read_via_rpa(account: str, day: str) -> SpendReading:
             return out
 
         shown = _shown_period(page)
-        if not _period_matches(shown, day):
+        if not _period_matches(shown, date_from, date_to):
+            asked = date_from if date_from == date_to else f"{date_from}…{date_to}"
             out.error = (
-                f"на экране период «{shown or 'не найден'}», а спрашивали {day} — "
+                f"на экране период «{shown or 'не найден'}», а спрашивали {asked} — "
                 "число не берём"
             )
-            out.shot = _shoot(page, account, day)
+            out.shot = _shoot(page, account, date_from)
             return out
 
         spend, how = _read_total(page)
         if spend is None:
             out.error = "не нашёл итоговую строку со спендом"
             out.how = how
-            out.shot = _shoot(page, account, day)
+            out.shot = _shoot(page, account, date_from)
             return out
 
         out.spend = spend
@@ -522,9 +540,28 @@ def read_via_rpa(account: str, day: str) -> SpendReading:
                 pass
 
 
-def _url(act: str, day: str) -> str:
+def _url(act: str, date_from: str, date_to: str = "") -> str:
+    """Адрес Ads Manager на нужный период.
+
+    **Конец в этом параметре исключающий.** Проверено на живом аккаунте
+    2026-09-07: `date=2026-09-01_2026-09-06` показывает «Sep 1 – Sep 5», а
+    `..._2026-09-07` — «Sep 1 – Sep 6». Поэтому к концу прибавляется день, и
+    тогда один день укладывается в то же правило: `06_07` — это шестое.
+
+    Без этого шесть дней превращались в пять, а сумма выходила за другой
+    отрезок и выглядела правильной: 67.87 вместо числа, включающего 259.48 за
+    шестое. Сверка периода на экране это ловит, но лучше не создавать повода.
+    """
+    from datetime import date as _date, timedelta as _td
+
     act_id = act if act.startswith("act_") else f"act_{act}"
-    return f"{ADS_MANAGER}?act={act_id}&date={day}_{day}"
+    end = date_to or date_from
+    try:
+        y, m, d = (int(x) for x in end.split("-"))
+        end = (_date(y, m, d) + _td(days=1)).isoformat()
+    except Exception:
+        pass
+    return f"{ADS_MANAGER}?act={act_id}&date={date_from}_{end}"
 
 
 def _wait_for_grid(page) -> bool:
@@ -589,27 +626,59 @@ def _period_once(page) -> str:
     return ""
 
 
-def _period_matches(shown: str, day: str) -> bool:
-    """Совпадает ли показанный период с запрошенным днём.
-
-    Сверка нарочно грубая: нам нужно поймать «страница показывает не то»,
-    а не разобрать все формы записи дат в интерфейсе Meta.
-    """
-    if not shown:
-        return False
-    y, m, d = day.split("-")
-    months = (
-        "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+_MONTHS = {
+    m.lower(): i
+    for i, m in enumerate(
+        "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(), start=1
     )
-    month = months[int(m) - 1]
-    day_no_zero = str(int(d))
-    lowered = shown.lower()
-    if day in lowered:
-        return True
-    if month.lower() in lowered and day_no_zero in lowered and y in lowered:
-        return True
-    # «Yesterday» — ровно то, что мы и просим, когда day это вчера
-    return "yesterday" in lowered and day == yesterday()
+}
+
+
+def _dates_in(text: str) -> list[str]:
+    """Все даты из подписи периода, приведённые к ISO.
+
+    Разбираем по-настоящему, а не ищем подстроки. Прежняя проверка спрашивала,
+    есть ли в тексте месяц, число и год по отдельности, — и «Sep 1, 2026 – Sep
+    5, 2026» сошло за конец «2026-09-06», потому что цифра 6 нашлась внутри
+    года. Меня попросили шесть дней, Ads Manager показал пять, сверка сказала
+    «совпадает», и вернулась сумма за другой отрезок с видом правильной.
+    """
+    import re
+
+    out: list[str] = []
+    for m in re.finditer(r"(\d{4})-(\d{2})-(\d{2})", text):
+        out.append(m.group(0))
+    for m in re.finditer(
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+(\d{1,2}),?\s*(\d{4})",
+        text,
+        re.I,
+    ):
+        month = _MONTHS[m.group(1)[:3].lower()]
+        out.append(f"{int(m.group(3)):04d}-{month:02d}-{int(m.group(2)):02d}")
+    seen: list[str] = []
+    for d in out:
+        if d not in seen:
+            seen.append(d)
+    return seen
+
+
+def _period_matches(shown: str, date_from: str, date_to: str = "") -> bool:
+    """Совпадает ли показанный период с запрошенным — точно, а не примерно.
+
+    Экран должен назвать ровно те даты, о которых спросили: одну для дня, обе
+    для отрезка. Ни больше, ни меньше. Любое расхождение значит, что число
+    рядом отвечает на другой вопрос, и брать его нельзя.
+    """
+    if not shown or not date_from:
+        return False
+    date_to = date_to or date_from
+    found = _dates_in(shown)
+    if not found:
+        # «Yesterday» — единственная подпись без даты, которую мы принимаем,
+        # и только когда именно вчера и спрашивали.
+        return "yesterday" in shown.lower() and date_from == date_to == yesterday()
+    want = [date_from] if date_from == date_to else [date_from, date_to]
+    return sorted(found) == sorted(want)
 
 
 #: сумма, которую страница сама подписывает «Total spent». Берём именно её, а

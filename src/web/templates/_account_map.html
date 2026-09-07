@@ -11,7 +11,7 @@
       <span class="amap-note">{{ amap.countries | length }} countries · numbers from the stats workbook</span>
       {#- Выбор периода переехал в шапку: он меняет всю страницу, а не эту
           секцию. Здесь остаётся только то, за какие дни показаны числа. -#}
-      <span class="amap-note">{% if amap.span == 'all' %}all dates{% elif amap.date_from or amap.date_to %}{{ amap.date_from or '…' }} → {{ amap.date_to or '…' }}{% else %}all dates{% endif %}</span>
+      <span class="amap-note">{% if amap.span == 'all' %}all dates{% elif amap.date_from and amap.date_from == amap.date_to %}{{ amap.date_from }}{% elif amap.date_from or amap.date_to %}{{ amap.date_from or '…' }} → {{ amap.date_to or '…' }}{% else %}all dates{% endif %}</span>
       <span class="amap-add" style="padding:0;margin-left:auto">
         <input type="text" id="amap-new-country" placeholder="new country…" size="14">
         <select id="amap-new-country-acc">
