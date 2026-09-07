@@ -254,6 +254,60 @@ def _attach_only(entry, account_label: str):
     )
 
 
+def open_for_automation(account: str) -> tuple[bool, str]:
+    """Поднять профиль автоматизацией и оставить окно открытым.
+
+    Недостающее звено: прицепиться можно только к профилю, поднятому
+    автоматизацией, а поднимал такой профиль до сих пор только путь публикации.
+    Здесь он поднимается и больше ничего не делается — человек логинится, если
+    надо, и окно остаётся; дальше чтения цепляются к нему.
+
+    Закрытый профиль просто запускается — это не перезапуск, и разлогинить
+    он не может. А вот открытый руками пришлось бы остановить и поднять
+    заново: ровно то, что разлогинило x01. Такой мы трогать отказываемся.
+    """
+    entry = _entry_for(account)
+    if entry is None:
+        return False, f"{account} нет в карте аккаунтов"
+    profile_id = (getattr(entry, "profile_id", "") or "").strip()
+    if not profile_id:
+        return False, f"у {account} не заполнен profile_id"
+
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    find_dir = getattr(rpa_browser, "_find_mlx_profile_dir", None)
+    direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
+    if find_dir is None or direct_cls is None:
+        return False, "слой браузера RPA изменился (см. acl-108e)"
+    udd = find_dir(profile_id)
+    if udd is None:
+        return False, f"папка профиля {profile_id} не найдена"
+
+    direct = direct_cls()
+    if direct._try_attach_existing(profile_id, str(udd)) is not None:
+        return True, "профиль уже открыт автоматизацией — можно читать"
+    try:
+        if direct._profile_process_running(str(udd), profile_id):
+            return False, (
+                f"{account}: профиль открыт вручную в MLX Desktop. Поднять его "
+                "автоматизацией можно только остановив — а это разлогинивает. "
+                "Закройте окно в MLX Desktop и нажмите ещё раз."
+            )
+    except Exception:
+        pass
+
+    try:
+        conn = rpa_browser.get_browser_provider("multilogin_attach").open(entry, account)
+    except Exception as exc:  # noqa: BLE001
+        return False, f"{type(exc).__name__}: {exc}"
+    try:
+        # Окно остаётся человеку: отключаемся, не закрывая браузер.
+        conn.close(keep_browser_open=True)
+    except Exception:
+        pass
+    return True, "профиль открыт — залогиньтесь, если нужно, и оставьте окно"
+
+
 def read_via_rpa(account: str, day: str) -> SpendReading:
     """Открыть аккаунт в его профиле и прочитать спенд за день."""
     out = SpendReading(account=account, day=day, source="rpa", state="failed")

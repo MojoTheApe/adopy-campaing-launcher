@@ -3689,8 +3689,33 @@ function amapPollSpend(account, cell, tries) {
 }
 
 function amapSpendFailed(cell, why) {
-  cell.innerHTML = '<button type="button" class="amap-btn amap-live-bad" onclick="amapReadSpend(this)">failed · retry</button>';
+  /* Если прицепиться не к чему, «retry» ничего не изменит: нужно сначала
+     поднять профиль автоматизацией. Кнопка появляется ровно в этом случае. */
+  var needsProfile = /профил|profile/i.test(why || '');
+  cell.innerHTML = '<button type="button" class="amap-btn amap-live-bad" onclick="amapReadSpend(this)">failed · retry</button>'
+    + (needsProfile ? ' <button type="button" class="amap-btn" onclick="amapOpenProfile(this)">open profile</button>' : '');
   cell.querySelector('button').title = why;
+}
+
+function amapOpenProfile(btn) {
+  var cell = btn.closest('.amap-live');
+  var account = cell && cell.dataset.account;
+  if (!account) return;
+  var was = cell.innerHTML;
+  cell.innerHTML = '<span class="amap-live-run">opening…</span>';
+  var body = new FormData();
+  body.append('account', account);
+  fetch('/account-spend/open-profile', { method: 'POST', body: body, credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (j.ok) {
+        cell.innerHTML = '<button type="button" class="amap-btn" onclick="amapReadSpend(this)">Read</button>';
+        cell.querySelector('button').title = j.message || '';
+      } else {
+        amapSpendFailed(cell, j.message || j.error || 'could not open the profile');
+      }
+    })
+    .catch(function (e) { cell.innerHTML = was; alert('Could not open the profile: ' + (e && e.message || e)); });
 }
 
 // ── Goals: меню на чипе, правка и удаление ───────────────────────────

@@ -2055,6 +2055,26 @@ async def account_spend_read(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
 
 
+@app.post("/account-spend/open-profile")
+async def account_spend_open_profile(request: Request) -> JSONResponse:
+    """Поднять профиль аккаунта автоматизацией и оставить окно открытым.
+
+    Чтение умеет только цепляться к уже открытому окну — перезапуск ради
+    одного числа разлогинивает аккаунт. Поднять профиль так, чтобы к нему
+    можно было прицепиться, до сих пор умел только путь публикации.
+    """
+    from src.analysis_agent import account_spend
+
+    form = await request.form()
+    account = (form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    # to_thread, а не starlette: свежая установка не должна зависеть от
+    # пакета, которого нет в requirements.txt
+    ok, message = await asyncio.to_thread(account_spend.open_for_automation, account)
+    return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
+
+
 @app.get("/account-spend/status")
 async def account_spend_status(account: str = "", day: str = "") -> JSONResponse:
     from src.analysis_agent import account_spend
