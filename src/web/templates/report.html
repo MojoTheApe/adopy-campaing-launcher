@@ -3956,6 +3956,71 @@ function amapClose(kind, value, label) {
 // хвост человек и помнит. Ищется ТОЛЬКО в выбранном аккаунте Multilogin:
 // профиль из Inhouse не найдётся под токеном KLD, и это надо видеть, а не
 // гадать, почему «ничего не нашлось».
+/* Отбор профилей по мере ввода.
+   Список тянется один раз на инстанс и живёт в памяти страницы: 334 профиля
+   в KLD, и запрашивать их на каждую нажатую букву значило бы триста запросов
+   к Multilogin ради того, что уже лежит рядом.
+
+   Порядок выдачи: сначала те, чьё имя КОНЧАЕТСЯ введённым — аккаунт различают
+   последние знаки, `X84`, — потом просто содержащие. Иначе `84` первым делом
+   покажет что-нибудь вроде `KLD_BFL_8412`, а нужный уедет вниз. */
+var _mlxCache = {};   // инстанс -> массив профилей
+var _mlxLoading = {}; // инстанс -> Promise
+
+function amapProfiles(inst) {
+  if (_mlxCache[inst]) return Promise.resolve(_mlxCache[inst]);
+  if (_mlxLoading[inst]) return _mlxLoading[inst];
+  _mlxLoading[inst] = fetch('/multilogin-search', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ search_text: '', instance: inst })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) throw new Error((d && d.error) || 'Multilogin did not answer');
+    _mlxCache[inst] = d.profiles || [];
+    delete _mlxLoading[inst];
+    return _mlxCache[inst];
+  }).catch(function (e) { delete _mlxLoading[inst]; throw e; });
+  return _mlxLoading[inst];
+}
+
+function amapRank(profiles, q) {
+  var needle = q.toLowerCase();
+  var ends = [], has = [];
+  profiles.forEach(function (p) {
+    var n = (p.name || '').toLowerCase();
+    if (n.endsWith(needle)) ends.push(p);
+    else if (n.indexOf(needle) !== -1) has.push(p);
+  });
+  return ends.concat(has);
+}
+
+function amapFilter(input) {
+  var box = input.closest('.amap-add');
+  var inst = box.querySelector('.amap-inst').value || 'A';
+  var msg = box.querySelector('.amap-msg');
+  var q = (input.value || '').trim();
+  var hits = box.querySelector('.amap-hits');
+
+  if (!q) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
+  msg.className = 'amap-msg';
+  msg.textContent = _mlxCache[inst] ? '' : ('loading ' + (ACL_MLX_LABELS[inst] || inst) + '…');
+
+  amapProfiles(inst).then(function (all) {
+    // пока грузилось, могли набрать ещё — берём то, что в поле сейчас
+    var now = (input.value || '').trim();
+    if (!now) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
+    var found = amapRank(all, now);
+    msg.textContent = found.length
+      ? found.length + ' of ' + all.length
+      : 'nothing in ' + (ACL_MLX_LABELS[inst] || inst) + ' ends with or contains "' + now + '"';
+    amapRenderHits(box, hits, found.slice(0, 12), inst);
+  }).catch(function (e) {
+    hits.hidden = true; hits.innerHTML = '';
+    msg.textContent = String(e && e.message || e);
+    msg.className = 'amap-msg bad';
+  });
+}
+
 async function amapFind(btn) {
   var box = btn.closest('.amap-add');
   var q = (box.querySelector('.amap-find').value || '').trim();
@@ -3984,8 +4049,16 @@ async function amapFind(btn) {
     return;
   }
   msg.textContent = profiles.length + ' found';
-  hits.hidden = false;
-  profiles.slice(0, 12).forEach(function (p) {
+  _mlxCache[inst] = profiles;   // отбор по вводу возьмёт этот же список
+  amapRenderHits(box, hits, profiles.slice(0, 12), inst);
+}
+
+/* Один рисовальщик на оба пути — и на кнопку, и на ввод. Две копии этой
+   разметки разошлись бы, и заметил бы это тот, кто поверил не той. */
+function amapRenderHits(box, hits, profiles, inst) {
+  hits.innerHTML = '';
+  hits.hidden = !profiles.length;
+  profiles.forEach(function (p) {
     var row = document.createElement('div');
     row.className = 'amap-hit';
     row.innerHTML = '<b>' + aclEscHtml(p.name || '(unnamed)') + '</b>'
@@ -3996,20 +4069,22 @@ async function amapFind(btn) {
     row.appendChild(btnAdd);
     hits.appendChild(row);
 
-    // Кабинет читается из локальной истории профиля — значит он известен
-    // только для профиля, который на этой машине уже открывали. Сказать это
-    // до нажатия, а не после.
+    // Кабинет известен только для профиля, который на этой машине открывали:
+    // он читается из его же истории. Сказать это до нажатия, а не после.
+    if (p._details) { amapHint(row, p._details); return; }
     fetch('/mlx-profile-details?profile_id=' + encodeURIComponent(p.profile_id)
           + '&name=' + encodeURIComponent(p.name || ''))
       .then(function (x) { return x.json(); })
-      .then(function (d) {
-        p._details = d;
-        var hint = row.querySelector('.amap-hint');
-        if (d && d.ad_account_id) hint.textContent = d.ad_account_id + (d.suggested_name ? ' · ' + d.suggested_name : '');
-        else hint.textContent = 'never opened here — ad account id needed';
-      })
+      .then(function (d) { p._details = d; amapHint(row, d); })
       .catch(function () { row.querySelector('.amap-hint').textContent = ''; });
   });
+}
+
+function amapHint(row, d) {
+  var hint = row.querySelector('.amap-hint');
+  if (!hint) return;
+  if (d && d.ad_account_id) hint.textContent = d.ad_account_id + (d.suggested_name ? ' · ' + d.suggested_name : '');
+  else hint.textContent = 'never opened here — the ad account will be read from it';
 }
 
 async function amapConnect(box, profile, instance, btn) {

@@ -13,6 +13,7 @@ import asyncio
 import ipaddress
 import json
 import os
+import re as _re
 import re
 import sys
 import tempfile
@@ -2977,7 +2978,13 @@ async def multilogin_search(request: Request) -> JSONResponse:
             return JSONResponse(
                 {"ok": False, "error": "The token has expired — sign in again through Connect"}
             )
-        return JSONResponse({"ok": False, "error": f"Multilogin refused the profile list [{error}]"})
+        # Multilogin отвечает и HTML-страницей ошибки. Вывалить её в подпись
+        # под полем — значит показать человеку разметку вместо причины.
+        clean = _re.sub(r"<[^>]+>", " ", error)
+        clean = _re.sub(r"\s+", " ", clean).strip()
+        if len(clean) > 160:
+            clean = clean[:160].rstrip() + "…"
+        return JSONResponse({"ok": False, "error": f"Multilogin refused the profile list: {clean}"})
 
     return JSONResponse({"ok": True, "profiles": profiles, "folders": folders})
 

@@ -9,10 +9,10 @@
             account», colgroup остался на десяти: ширины сложились в 100% без
             последней, и колонка с кнопками уехала за правый край. -#}
         <colgroup>
-          <col style="width:22%"><col style="width:9%"><col style="width:9%">
+          <col style="width:19%"><col style="width:8%"><col style="width:8%">
           <col style="width:8%"><col style="width:6%"><col style="width:5%">
-          <col style="width:6%"><col style="width:7%"><col style="width:6%">
-          <col style="width:8%"><col style="width:14%">
+          <col style="width:6%"><col style="width:6%"><col style="width:6%">
+          <col style="width:8%"><col style="width:20%">
         </colgroup>
         <thead><tr>
           <th>Account</th>
@@ -69,6 +69,14 @@
               {%- elif sr and sr.state == 'failed' -%}
                 <button type="button" class="amap-btn amap-read amap-live-bad" title="{{ sr.error }}"
                         onclick="amapReadSpend(this)">failed · retry</button>
+                {#- Отказ, сохранённый до перезагрузки, терял кнопку открытия
+                    профиля: её дорисовывал только JS после живой попытки. А
+                    именно она и нужна, когда причина в профиле. -#}
+                {%- if 'профил' in sr.error or 'profile' in sr.error %}
+                <button type="button" class="amap-btn amap-openprof"
+                        title="Start this account's profile with automation and leave the window open"
+                        onclick="amapOpenProfile(this)">open profile</button>
+                {%- endif %}
               {%- else -%}
                 <button type="button" class="amap-btn amap-read" title="Read yesterday's spend in this account's own Multilogin window"
                         onclick="amapReadSpend(this)">Read</button>
@@ -100,8 +108,13 @@
           <option value="A">{{ mlx['A'] }}</option>
           <option value="B">{{ mlx['B'] }}</option>
         </select>
-        <input type="text" class="amap-find" placeholder="find in Multilogin: X01" size="10">
-        <button type="button" class="amap-btn" onclick="amapFind(this)">Search</button>
+        {#- Отбор идёт по мере ввода. Список профилей тянется один раз на
+            инстанс и фильтруется на месте: так отклик мгновенный, а Multilogin
+            не дёргается на каждую букву. Кнопка осталась для перезагрузки
+            списка, когда профиль только что завели. -#}
+        <input type="text" class="amap-find" placeholder="last letters: X84" size="10"
+               oninput="amapFilter(this)" onfocus="amapFilter(this)" autocomplete="off">
+        <button type="button" class="amap-btn" onclick="amapFind(this)" title="Reload the profile list from Multilogin">Reload</button>
         <span class="amap-msg"></span>
         <div class="amap-hits" hidden></div>
       </div>
