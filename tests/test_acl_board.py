@@ -1,0 +1,188 @@
+"""Доска задач: разбор разметки, отметка по коммиту, сборка витрины."""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from scripts import acl_board  # noqa: E402
+
+
+SAMPLE = """---
+board: ACL
+updated: 2026-09-07
+---
+
+# ACL — Task Board
+
+Вводный текст, который не должен попасть в задачи.
+
+```
+- [ ] `acl-000` пример внутри забора #next
+```
+
+## 1 · Complete account control
+> Аккаунт читается и управляется без человека.
+
+### Check Spend & Metrics
+
+- [x] `acl-101` Spend from the workbook #shipped @analysis
+      Первая строка примечания.
+      Вторая строка примечания.
+- [ ] `acl-103` Live spend from the account #next @analysis
+
+### Open/close ads/ad sets
+
+- [ ] `acl-111` Pause an ad set #blocked @analysis
+- [ ] `acl-112` Request ads_management #next @ops
+
+## 2 · Texts
+> Новые материалы.
+
+### Create new headlines
+
+- [ ] `acl-501` Headlines from winners
+
+## Log
+
+"""
+
+
+def board():
+    return acl_board.parse(SAMPLE)
+
+
+def test_areas_and_capabilities():
+    b = board()
+    assert [a.number for a in b.areas] == ["1", "2"]
+    assert b.areas[0].title == "Complete account control"
+    assert b.areas[0].blurb.startswith("Аккаунт читается")
+    assert [c.title for c in b.areas[0].caps] == [
+        "Check Spend & Metrics",
+        "Open/close ads/ad sets",
+    ]
+
+
+def test_fenced_example_is_not_a_task():
+    assert board().by_id("acl-000") is None
+
+
+def test_title_has_no_markers_left():
+    t = board().by_id("acl-101")
+    assert t.title == "Spend from the workbook"
+    assert t.status == "shipped"
+    assert t.track == "analysis"
+    assert t.is_done
+
+
+def test_note_joins_indented_lines():
+    assert board().by_id("acl-101").note == (
+        "Первая строка примечания. Вторая строка примечания."
+    )
+
+
+def test_missing_status_defaults_to_idea():
+    t = board().by_id("acl-501")
+    assert t.status == "idea"
+    assert not t.is_done
+
+
+def test_blocked_survives_parsing():
+    assert board().by_id("acl-111").status == "blocked"
+
+
+def test_progress_counts_only_that_area():
+    assert board().areas[0].progress == (1, 4)
+    assert board().areas[1].progress == (0, 1)
+
+
+@pytest.mark.parametrize(
+    "message, expected",
+    [
+        ("feat: живой спенд acl-103", ["acl-103"]),
+        ("fix: acl-111 и acl-112 одним куском", ["acl-111", "acl-112"]),
+        ("рефакторинг без задач", []),
+        ("ACL-103 в верхнем регистре", ["acl-103"]),
+        ("не путать с acl-1030x", []),
+        ("acl-103 дважды acl-103", ["acl-103"]),
+    ],
+)
+def test_ids_in_commit(message, expected):
+    assert acl_board.ids_in_commit(message) == expected
+
+
+def test_apply_commit_ticks_and_logs():
+    new, ticked = acl_board.apply_commit(
+        SAMPLE, "abc1234", "feat: живой спенд acl-103", when="2026-09-08"
+    )
+    assert ticked == ["acl-103"]
+    task = acl_board.parse(new).by_id("acl-103")
+    assert task.is_done and task.status == "shipped"
+    assert "- [x] `acl-103`" in new
+    assert "`abc1234`" in new
+    after_log = new.splitlines()[new.splitlines().index("## Log") + 1 :]
+    first_entry = next(l for l in after_log if l.startswith("- "))
+    assert first_entry.startswith("- 2026-09-08")
+    assert "updated: 2026-09-08" in new
+
+
+def test_apply_commit_replaces_the_old_status_tag():
+    new, _ = acl_board.apply_commit(SAMPLE, "abc1234", "acl-111 закрыто")
+    line = next(l for l in new.splitlines() if "acl-111" in l)
+    assert "#blocked" not in line
+    assert line.count("#shipped") == 1
+
+
+def test_apply_commit_is_idempotent():
+    once, _ = acl_board.apply_commit(SAMPLE, "abc1234", "acl-103 готово")
+    twice, ticked = acl_board.apply_commit(once, "def5678", "acl-103 готово")
+    assert ticked == []
+    assert twice == once
+
+
+def test_unknown_id_changes_nothing():
+    new, ticked = acl_board.apply_commit(SAMPLE, "abc1234", "acl-999 такой задачи нет")
+    assert ticked == [] and new == SAMPLE
+
+
+def test_render_is_whole_and_escapes():
+    text = SAMPLE.replace("Headlines from winners", "Headlines <b>& sons</b>")
+    html = acl_board.render(acl_board.parse(text))
+    assert "<title>ACL Task Wall</title>" in html
+    assert "Headlines &lt;b&gt;&amp; sons&lt;/b&gt;" in html
+    assert "Complete account control" in html
+    assert html.count('class="area"') == 2
+    assert "{" not in html.split("<style>")[0]
+
+
+def test_render_marks_every_task_with_its_status():
+    html = acl_board.render(board())
+    for status in ("shipped", "next", "blocked", "idea"):
+        assert f'data-status="{status}"' in html
+
+
+def test_render_survives_an_empty_board():
+    html = acl_board.render(acl_board.parse("# пусто\n"))
+    assert "<title>" in html
+
+
+def test_tilts_repeat_so_the_wall_does_not_jitter():
+    a = [next(g) for g in [acl_board._tilts()] * 1 for _ in range(12)]
+    b = []
+    gen = acl_board._tilts()
+    for _ in range(12):
+        b.append(next(gen))
+    assert a == b
+
+
+def test_board_path_honours_the_env(monkeypatch, tmp_path):
+    monkeypatch.setenv(acl_board.BOARD_ENV, str(tmp_path / "b.md"))
+    assert acl_board.board_path() == tmp_path / "b.md"
+
+
+def test_sync_without_the_vault_does_not_fail_the_commit(monkeypatch, tmp_path):
+    monkeypatch.setenv(acl_board.BOARD_ENV, str(tmp_path / "нет-такого.md"))
+    args = type("A", (), {"rev": "HEAD", "out": ""})()
+    assert acl_board.cmd_sync(args, tmp_path) == 0

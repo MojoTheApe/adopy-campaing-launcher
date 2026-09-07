@@ -1,0 +1,16 @@
+#!/bin/sh
+# Отметить на доске задачи, названные в сообщении коммита, и пересобрать витрину.
+#
+# Ставится так (в каждом чекауте и в каждом worktree отдельно):
+#     python scripts/acl_board.py --install-hook
+#
+# Хук никогда не валит коммит: доска — заметка о работе, а не её условие.
+
+repo=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+
+py="$repo/.venv/Scripts/python.exe"
+[ -x "$py" ] || py="$repo/.venv/bin/python"
+[ -x "$py" ] || py=python
+
+"$py" "$repo/scripts/acl_board.py" --sync 2>&1 | sed 's/^/[доска] /'
+exit 0
