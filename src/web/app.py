@@ -2122,6 +2122,29 @@ async def account_spend_open_profile(request: Request) -> JSONResponse:
     return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
 
 
+@app.post("/account-probe/ad-account")
+async def account_probe_ad_account(request: Request) -> JSONResponse:
+    """Спросить у открытого профиля, какой у него рекламный кабинет.
+
+    Подключая аккаунт, дешборд до сих пор просил человека вставить номер, если
+    профиль на этой машине не открывали. Номер знает сам кабинет — Ads Manager
+    называет его в своём адресе.
+    """
+    from src.analysis_agent import account_spend
+
+    form = await request.form()
+    profile_id = (form.get("profile_id") or "").strip()
+    if not profile_id:
+        return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
+    found = await asyncio.to_thread(
+        account_spend.read_ad_account,
+        profile_id,
+        (form.get("folder_id") or "").strip(),
+        (form.get("instance") or "A").strip(),
+    )
+    return JSONResponse(found)
+
+
 @app.get("/account-spend/status")
 async def account_spend_status(account: str = "", day: str = "") -> JSONResponse:
     from src.analysis_agent import account_spend

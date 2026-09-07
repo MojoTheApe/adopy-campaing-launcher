@@ -4021,8 +4021,40 @@ async function amapConnect(box, profile, instance, btn) {
   if (!name) return;
   var act = (d.ad_account_id || '').trim();
   if (!act) {
-    act = (prompt('This profile has never been opened on this machine, so its ad '
-      + 'account is unknown.\n\nPaste the Ads Manager link or the account number:', '') || '').trim();
+    /* Спрашивать в последнюю очередь. Номер знает сам кабинет: Ads Manager
+       называет его в собственном адресе, и профиль всё равно приходится
+       открыть, чтобы с аккаунтом что-то делать. Раньше здесь сразу просили
+       вставить ссылку — то есть просили человека сходить и посмотреть за
+       машину.
+
+       Прочитанное всё равно показываем: у профиля может быть несколько
+       кабинетов, открывается тот, что по умолчанию. Подставить молча значит
+       время от времени брать не тот, и на экране об этом ничего не скажет. */
+    msg.textContent = 'asking the open profile…';
+    msg.className = 'amap-msg';
+    var probe = new FormData();
+    probe.append('profile_id', profile.profile_id);
+    probe.append('folder_id', profile.folder_id || d.folder_id || '');
+    probe.append('instance', instance);
+    var found = null;
+    try {
+      var pr = await fetch('/account-probe/ad-account', { method: 'POST', body: probe, credentials: 'same-origin' });
+      found = await pr.json();
+    } catch (e) { found = { ok: false, error: String(e && e.message || e) }; }
+    msg.textContent = '';
+
+    var head, seed;
+    if (found && found.ok) {
+      head = 'The open profile says its ad account is:'
+        + (found.account_name ? '\n' + found.account_name : '');
+      seed = found.act;
+    } else {
+      head = 'Could not read it from the profile:\n' + ((found && found.error) || 'unknown')
+        + '\n\nOpen the profile with automation and try again, or paste the '
+        + 'Ads Manager link or the account number:';
+      seed = '';
+    }
+    act = (prompt(head, seed) || '').trim();
     if (!act) return;
   }
   btn.disabled = true; msg.textContent = 'connecting…'; msg.className = 'amap-msg';

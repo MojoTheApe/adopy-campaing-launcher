@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -196,6 +197,50 @@ class ProfileNotAttachable(RuntimeError):
     """Профиль есть, но прицепиться к нему нельзя — а перезапускать мы не станем."""
 
 
+def _mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
+    """Папка профиля Multilogin — по адресу, а не обходом дерева.
+
+    Штатный `_find_mlx_profile_dir` делает `rglob` по всему `~/mlx/profiles`, а
+    там лежат полные каталоги Chrome. Замерено на этой машине: **около десяти
+    секунд на каждый вызов**, и не только на первый. Адресный поиск — 0.001 с,
+    ответ тот же.
+
+    Путь описан в самом слое RPA: `profiles/{ws}/{folder_id}/{profile_id}`.
+    Раскладку проверяем в трёх видах, все — на глубину не больше двух уровней.
+
+    Живёт здесь, а не в `src/fb_ads_rpa`, потому что тот файл принадлежит
+    другому треку. Эти десять секунд платит и каждый прогон публикации —
+    заведено как `acl-144`.
+    """
+    profile_id = (profile_id or "").strip()
+    if not profile_id:
+        return None
+    root = Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx"))) / "profiles"
+    if not root.is_dir():
+        return None
+    folder_id = (folder_id or "").strip()
+    try:
+        for ws in root.iterdir():
+            if not ws.is_dir():
+                continue
+            if folder_id:
+                p = ws / folder_id / profile_id
+                if p.is_dir():
+                    return p
+            p = ws / profile_id
+            if p.is_dir():
+                return p
+            for folder in ws.iterdir():
+                if not folder.is_dir():
+                    continue
+                p = folder / profile_id
+                if p.is_dir():
+                    return p
+    except OSError:
+        return None
+    return None
+
+
 def _attach_only(entry, account_label: str):
     """Подключиться к уже открытому профилю. Никогда его не перезапускать.
 
@@ -218,14 +263,13 @@ def _attach_only(entry, account_label: str):
     if not profile_id:
         raise ProfileNotAttachable(f"у {account_label} не заполнен profile_id")
 
-    find_dir = getattr(rpa_browser, "_find_mlx_profile_dir", None)
     direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
-    if find_dir is None or direct_cls is None:
+    if direct_cls is None:
         raise ProfileNotAttachable(
             "слой браузера RPA изменился — обновите подключение (см. acl-108e)"
         )
 
-    udd = find_dir(profile_id)
+    udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
     if udd is None:
         raise ProfileNotAttachable(
             f"папка профиля {profile_id} не найдена — открыт ли этот профиль на этой машине?"
@@ -254,6 +298,114 @@ def _attach_only(entry, account_label: str):
     )
 
 
+def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -> dict:
+    """Спросить у самого аккаунта, какой у него номер.
+
+    Ads Manager называет рекламный кабинет в собственном адресе: открыв его без
+    параметров, попадаешь на кабинет по умолчанию и `act=` оказывается в URL.
+    Это первичный источник — в отличие от номера, перепечатанного человеком в
+    таблицу или в тикет, который может с ним разойтись.
+
+    Профиль должен быть уже открыт автоматизацией; перезапускать мы его не
+    станем и здесь — по той же причине, по которой не перезапускаем ради
+    спенда.
+
+    Возвращает словарь, а не пару: у ответа три исхода — прочитали, не смогли
+    прицепиться, прицепились но номера не увидели, — и каждый требует своего
+    объяснения на экране.
+    """
+    out = {"ok": False, "act": "", "account_name": "", "error": ""}
+    profile_id = (profile_id or "").strip()
+    if not profile_id:
+        out["error"] = "не задан profile_id"
+        return out
+
+    entry = _probe_entry(profile_id, folder_id, instance)
+    conn = None
+    try:
+        try:
+            conn = _attach_only(entry, f"profile {profile_id[:8]}")
+        except ProfileNotAttachable as exc:
+            out["error"] = str(exc)
+            return out
+
+        page = conn.page
+        page.goto(ADS_MANAGER, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        act = _act_from_url(page)
+        if not act:
+            out["error"] = (
+                "Ads Manager открылся, но номера кабинета в адресе нет — "
+                "возможно, у этого профиля нет доступа ни к одному кабинету"
+            )
+            return out
+        out["act"] = act
+        out["account_name"] = _ads_manager_account_name(page)
+        out["ok"] = True
+        return out
+    except Exception as exc:  # noqa: BLE001 — чтение не должно ронять сервер
+        out["error"] = f"{type(exc).__name__}: {exc}"
+        return out
+    finally:
+        if conn is not None:
+            try:
+                conn.close(keep_browser_open=True)
+            except Exception:
+                pass
+
+
+def _probe_entry(profile_id: str, folder_id: str, instance: str):
+    """Запись карты для профиля, которого в карте ещё нет.
+
+    Подключение как раз и создаёт эту строку, поэтому взять её неоткуда —
+    собираем ровно то, что нужно провайдеру, чтобы открыть профиль.
+    """
+    from src.meta_campaign_agent.ad_account_map import AccountMapEntry
+
+    return AccountMapEntry(
+        ad_account_id="",
+        profile_id=profile_id,
+        folder_id=(folder_id or "").strip() or None,
+        multilogin_instance=(instance or "A").strip() or "A",
+    )
+
+
+def _act_from_url(page, tries: int = 20) -> str:
+    """Дождаться, пока Ads Manager сам подставит кабинет в адрес."""
+    import re
+    import time
+
+    for _ in range(tries):
+        m = re.search(r"[?&]act=(?:act_)?(\d+)", page.url or "")
+        if m:
+            return "act_" + m.group(1)
+        time.sleep(0.5)
+    return ""
+
+
+def _ads_manager_account_name(page) -> str:
+    """Имя кабинета с экрана — чтобы человек увидел, что подтверждает.
+
+    Профиль может видеть несколько кабинетов, и открывается тот, что по
+    умолчанию. Номер без имени человеку ни о чём не говорит, а подставить его
+    молча значит время от времени выбирать не тот кабинет так, что на экране
+    об этом ничего не сказано.
+    """
+    for sel in (
+        '[aria-label*="Ad account" i]',
+        '[data-testid*="account_selector" i]',
+        'div[role="button"]:has-text("act_")',
+    ):
+        try:
+            el = page.query_selector(sel)
+            if el:
+                text = (el.get_attribute("aria-label") or el.inner_text() or "").strip()
+                if text and len(text) < 120:
+                    return text.replace("\n", " ")
+        except Exception:
+            continue
+    return ""
+
+
 def open_for_automation(account: str) -> tuple[bool, str]:
     """Поднять профиль автоматизацией и оставить окно открытым.
 
@@ -275,11 +427,10 @@ def open_for_automation(account: str) -> tuple[bool, str]:
 
     from src.fb_ads_rpa import browser as rpa_browser
 
-    find_dir = getattr(rpa_browser, "_find_mlx_profile_dir", None)
     direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
-    if find_dir is None or direct_cls is None:
+    if direct_cls is None:
         return False, "слой браузера RPA изменился (см. acl-108e)"
-    udd = find_dir(profile_id)
+    udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
     if udd is None:
         return False, f"папка профиля {profile_id} не найдена"
 

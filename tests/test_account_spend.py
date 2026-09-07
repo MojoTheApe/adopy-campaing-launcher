@@ -210,8 +210,10 @@ def _fake_browser(monkeypatch, *, attach, running, has_dir=True):
             return running
 
     monkeypatch.setattr(rpa_browser, "MultiloginDirectCDPProvider", Direct)
+    # папку ищем сами — обход всего дерева стоил десять секунд на вызов
     monkeypatch.setattr(
-        rpa_browser, "_find_mlx_profile_dir", lambda pid: ("/profiles/" + pid) if has_dir else None
+        sp, "_mlx_profile_dir",
+        lambda pid, folder_id="": ("/profiles/" + pid) if has_dir else None,
     )
 
 
@@ -255,3 +257,112 @@ def test_the_refusal_becomes_a_readable_failure_not_a_crash(monkeypatch):
     monkeypatch.setattr(sp, "_attach_only", refuse)
     out = sp.read_via_rpa("Acc", "2026-09-06")
     assert out.state == "failed" and out.error == "профиль не открыт"
+
+
+# ── номер кабинета спрашиваем у самого кабинета ───────────────────────
+
+
+def test_the_ad_account_comes_out_of_the_url():
+    class Page:
+        url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=2057738684835381&nav=1"
+
+    assert sp._act_from_url(Page(), tries=1) == "act_2057738684835381"
+
+
+def test_an_already_prefixed_act_is_not_doubled():
+    class Page:
+        url = "https://adsmanager.facebook.com/x?act=act_123&y=2"
+
+    assert sp._act_from_url(Page(), tries=1) == "act_123"
+
+
+def test_no_account_in_the_url_is_not_a_number():
+    class Page:
+        url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns"
+
+    assert sp._act_from_url(Page(), tries=1) == ""
+
+
+def test_a_probe_without_a_profile_asks_no_browser():
+    out = sp.read_ad_account("")
+    assert out["ok"] is False and "profile_id" in out["error"]
+
+
+def test_a_profile_that_cannot_be_attached_is_explained(monkeypatch):
+    def refuse(entry, label):
+        raise sp.ProfileNotAttachable("профиль не открыт")
+
+    monkeypatch.setattr(sp, "_attach_only", refuse)
+    monkeypatch.setattr(sp, "_probe_entry", lambda *a, **k: object())
+    out = sp.read_ad_account("p-1")
+    assert out == {"ok": False, "act": "", "account_name": "", "error": "профиль не открыт"}
+
+
+def test_attached_but_no_account_says_so(monkeypatch):
+    class Page:
+        url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns"
+
+        def goto(self, *a, **k):
+            return None
+
+        def query_selector(self, sel):
+            return None
+
+    class Conn:
+        page = Page()
+
+        def close(self, **k):
+            return None
+
+    monkeypatch.setattr(sp, "_probe_entry", lambda *a, **k: object())
+    monkeypatch.setattr(sp, "_attach_only", lambda entry, label: Conn())
+    monkeypatch.setattr(sp, "_act_from_url", lambda page, tries=20: "")
+    out = sp.read_ad_account("p-1")
+    assert out["ok"] is False and "номера кабинета в адресе нет" in out["error"]
+
+
+def test_a_good_probe_returns_the_number_and_the_name(monkeypatch):
+    class Page:
+        def goto(self, *a, **k):
+            return None
+
+    class Conn:
+        page = Page()
+
+        def close(self, **k):
+            return None
+
+    monkeypatch.setattr(sp, "_probe_entry", lambda *a, **k: object())
+    monkeypatch.setattr(sp, "_attach_only", lambda entry, label: Conn())
+    monkeypatch.setattr(sp, "_act_from_url", lambda page, tries=20: "act_777")
+    monkeypatch.setattr(sp, "_ads_manager_account_name", lambda page: "KLD BFL X84")
+    out = sp.read_ad_account("p-1", "folder-1", "B")
+    assert out["ok"] and out["act"] == "act_777" and out["account_name"] == "KLD BFL X84"
+
+
+def test_the_profile_directory_is_found_by_address_not_by_walking(tmp_path, monkeypatch):
+    """Штатный обход дерева стоил ~10 секунд на вызов, и на каждый прогон тоже."""
+    monkeypatch.setenv("MLX_HOME", str(tmp_path))
+    wanted = tmp_path / "profiles" / "ws-1" / "folder-1" / "p-1"
+    wanted.mkdir(parents=True)
+    assert sp._mlx_profile_dir("p-1", "folder-1") == wanted
+    # без folder_id тоже находит — на один уровень глубже, всё ещё без rglob
+    assert sp._mlx_profile_dir("p-1") == wanted
+
+
+def test_the_profile_directory_layout_without_a_folder(tmp_path, monkeypatch):
+    monkeypatch.setenv("MLX_HOME", str(tmp_path))
+    flat = tmp_path / "profiles" / "ws-1" / "p-2"
+    flat.mkdir(parents=True)
+    assert sp._mlx_profile_dir("p-2") == flat
+
+
+def test_a_profile_that_was_never_opened_here_has_no_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("MLX_HOME", str(tmp_path))
+    (tmp_path / "profiles" / "ws-1").mkdir(parents=True)
+    assert sp._mlx_profile_dir("p-3") is None
+
+
+def test_no_mlx_home_is_not_a_crash(tmp_path, monkeypatch):
+    monkeypatch.setenv("MLX_HOME", str(tmp_path / "нет-такого"))
+    assert sp._mlx_profile_dir("p-1") is None
