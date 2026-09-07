@@ -533,6 +533,41 @@ def _live_spend() -> dict[str, dict]:
         return {}
 
 
+
+def _sidebar_countries(report: dict, amap: dict) -> list[dict]:
+    """Страны для бокового списка: сначала те, где идут деньги.
+
+    Порядок по расходу, а не по алфавиту: алфавит ничего не говорит, а список
+    из двадцати стран человек читает сверху. Подсвечены те, где страна живая —
+    либо на ней есть спенд, либо её завели руками в карте аккаунтов. Второе
+    важно само по себе: страну открывают до первого доллара, и до него она
+    выглядела бы такой же мёртвой, как закрытая полгода назад.
+    """
+    placed = {
+        (c.get("country") or "").strip().lower()
+        for c in (amap or {}).get("countries", [])
+    }
+    rows = []
+    for c in report.get("countries", []):
+        name = (c.get("country") or "").strip()
+        spend = float(c.get("my_spend") or 0)
+        rows.append(
+            {
+                "c": c,
+                "spend": spend,
+                "active": spend > 0 or name.lower() in placed,
+                "in_map": name.lower() in placed,
+            }
+        )
+    # Сначала живые — по расходу, потом остальные по алфавиту. Страна,
+    # открытая вчера и ещё без доллара, стоит выше двадцати мёртвых:
+    # именно её сегодня и открывают.
+    rows.sort(
+        key=lambda r: (not r["active"], -r["spend"], (r["c"].get("country") or "").lower())
+    )
+    return rows
+
+
 def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     """Return preflight info per account:
     {acc_label: {link, link_status, missing_map_fields: [str], has_map_entry}}
@@ -1010,6 +1045,8 @@ def _render_report(
 
     account_preflight = _build_account_preflight(all_account_labels)
     draft_status = _load_draft_status()
+    # Один раз: карту читают и шаблон, и боковой список стран.
+    _account_map_view = _build_account_map_view(report, _df, date_from, date_to, span)
 
     # {country_slug: {account_alias: account_label}} — lets client JS resolve the
     # "Account Alias" strings shown in Combos/CM-drill rows to the accordion key
@@ -1041,7 +1078,8 @@ def _render_report(
             "draft_status": draft_status,
             "mlx_labels": mlx_instance_labels(),
             "installed_release": _installed_release(),
-            "account_map": _build_account_map_view(report, _df, date_from, date_to, span),
+            "account_map": _account_map_view,
+            "sidebar_countries": _sidebar_countries(report, _account_map_view),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
             "goals": _build_goals_view(report),
         },

@@ -160,6 +160,15 @@
       cursor: pointer;
     }
     .sidebar-country-btn:hover { background: var(--bg-hover); color: var(--accent); }
+    /* Живая страна: на ней либо идут деньги, либо её открыли руками в карте
+       аккаунтов. Второе важно само по себе — страну заводят до первого
+       доллара, и до него она выглядела бы как закрытая полгода назад. */
+    .sidebar-country-btn.live { font-weight: 600; color: var(--text); }
+    .sidebar-country-btn.live::before {
+      content: ""; display: inline-block; width: 5px; height: 5px;
+      border-radius: 50%; background: var(--accent); margin-right: 6px;
+      vertical-align: middle;
+    }
     .sidebar-country-btn:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 1px;
@@ -1408,6 +1417,10 @@
       text-align: center;
     }
     .amap-cal-arrow { color: var(--muted); }
+    .amap-inline-title {
+      margin: 1.6rem 0 0.6rem; font-size: 0.95rem; font-weight: 600;
+    }
+    .amap-inline { margin-bottom: 0.5rem; }
     .amap-cal-x {
       background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
       color: var(--muted); cursor: pointer; font-size: 1.05rem; line-height: 1;
@@ -2037,7 +2050,14 @@ async function dashRefresh(ev) {
   <button type="button" class="sidebar-link" data-view="accounts">🔌 Accounts</button>
 
   <div class="sidebar-label">Countries</div>
-  {% for c in report.countries %}
+  {#- Порядок по расходу, а не по алфавиту: алфавит ничего не говорит, а
+      список из двадцати стран человек читает сверху. Список приходит готовым
+      из app.py; запасной путь нужен на случай, когда шаблон обновился, а
+      сервер ещё нет — тогда порядок прежний, но страница цела. -#}
+  {%- set scs = sidebar_countries %}
+  {%- if not scs %}{% set scs = [] %}{% for c in report.countries %}{% set _ = scs.append({'c': c, 'active': false}) %}{% endfor %}{% endif %}
+  {% for s in scs %}
+  {% set c = s.c %}
   {% set cid = c.country | anchor_slug %}
   {% set sec = namespace(n=0) %}
   {% set sec.n = sec.n + 1 %}{% set n_cm = sec.n %}
@@ -2051,7 +2071,8 @@ async function dashRefresh(ev) {
   {% set sec.n = sec.n + 1 %}{% set n_optimization = sec.n %}
   {% set sec.n = sec.n + 1 %}{% set n_builder = sec.n %}
   <div class="sidebar-country" data-country="{{ cid }}">
-    <button type="button" class="sidebar-country-btn" data-country="{{ cid }}">{{ c.country }}</button>
+    <button type="button" class="sidebar-country-btn{% if s.active %} live{% endif %}" data-country="{{ cid }}"
+            {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{{ c.country }}</button>
     <div class="sidebar-sections">
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-goals">My Goals</button>
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-cm">{{ n_cm }} CM</button>
@@ -2276,6 +2297,29 @@ async function dashRefresh(ev) {
   {% endfor %}
   </tbody>
 </table>
+
+{#- ── Карта аккаунтов этой страны ────────────────────────────────────
+    Тот же блок, что на Home, только про одну страну: разметка одна на два
+    экрана, потому что две копии разошлись бы, и заметил бы это тот, кто
+    поверил не той. Страну, которой ещё нет в карте, здесь же можно завести —
+    иначе за этим пришлось бы уходить на Home и искать её среди двадцати. -#}
+{%- set mc = (amap.countries | selectattr('country', 'equalto', c.country) | list | first) if amap.countries else none %}
+<h3 class="amap-inline-title">Accounts in {{ c.country }}</h3>
+<div class="amap amap-inline">
+  {%- if mc %}
+    {% include "_account_map_country.html" %}
+  {%- else %}
+  <div class="amap-empty">
+    {{ c.country }} is not on the account map yet — the workbook has rows for it,
+    but nobody has placed an account here.
+  </div>
+  <div class="amap-add">
+    <button type="button" class="amap-btn"
+            onclick="amapAddThisCountry('{{ c.country | e }}', this)">Add {{ c.country }} to the account map</button>
+    <span class="amap-msg"></span>
+  </div>
+  {%- endif %}
+</div>
 </div>
 
 {# ── Section {{ n_assets }}: Asset summary ─────────────────────────── #}
@@ -3986,6 +4030,13 @@ async function amapConnect(box, profile, instance, btn) {
     return;
   }
   amapSend({ action: 'link', kind: 'country', value: country, account: name }, msg);
+}
+
+function amapAddThisCountry(name, btn) {
+  /* Завести страну прямо с её вкладки. Без этого пришлось бы уходить на Home
+     и искать её среди двадцати — ради строки, которую видно отсюда. */
+  var msg = btn.parentNode.querySelector('.amap-msg');
+  amapSend({ action: 'add', kind: 'country', value: name }, msg);
 }
 
 function amapAddCountry() {
