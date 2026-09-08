@@ -1,152 +1,189 @@
 @echo off
 setlocal EnableExtensions
 title Install Adopy Campaigns Launcher
+set "ACL_BOOTSTRAP_FILE=%~f0"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$source = Get-Content -LiteralPath $env:ACL_BOOTSTRAP_FILE -Raw; & ([ScriptBlock]::Create(($source -split '(?m)^# ACL_POWERSHELL_BEGIN\r?$', 2)[1]))"
+set "ACL_INSTALL_RC=%ERRORLEVEL%"
+if not "%ACL_INSTALL_RC%"=="0" pause
+exit /b %ACL_INSTALL_RC%
+# ACL_POWERSHELL_BEGIN
+$ErrorActionPreference = 'Stop'
 
-REM ---------------------------------------------------------------------------
-REM The one file a campaign manager receives. Everything a person had to do by
-REM hand — install Python, install Git, reopen the terminal because PATH was
-REM stale, clone, run the installer, make a shortcut — happens here.
-REM
-REM The PATH problem is the reason this exists at all. `winget install` puts
-REM python.exe on the PATH of FUTURE processes, not this one, so a script that
-REM installs Python and then calls it fails on the machine it just prepared.
-REM That cost the second campaign manager two attempts and an hour. So after
-REM installing anything, this file restarts ITSELF in a new window, which is the
-REM only way a batch file gets a fresh environment.
-REM
-REM Safe to run again: an existing checkout is updated, not re-cloned, and
-REM nothing here touches the machine's settings in %LOCALAPPDATA%\ACL.
-REM ---------------------------------------------------------------------------
+# Standalone bootstrap: this entire file can be sent to a new campaign manager.
+# No restart loop and no dependency on scripts from an unverified checkout.
+function Update-AclPath {
+    $parts = @([Environment]::GetEnvironmentVariable('Path', 'Machine'),
+               [Environment]::GetEnvironmentVariable('Path', 'User'), $env:Path)
+    $env:Path = ($parts | Where-Object { $_ }) -join ';'
+}
 
-set "REPO=https://github.com/MojoTheApe/adopy-campaing-launcher.git"
-set "TARGET=%USERPROFILE%\Documents\ACL"
+function Invoke-AclProbe([string]$Executable, [string[]]$ProbeArgs) {
+    $oldPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = & $Executable @ProbeArgs 2>$null
+        return @{ Code = $LASTEXITCODE; Output = ($output -join "`n").Trim() }
+    } finally { $ErrorActionPreference = $oldPreference }
+}
 
-echo.
-echo  Adopy Campaigns Launcher
-echo  Install
-echo  ========================
-echo.
-echo  Installing into: %TARGET%
-echo.
+function Find-AclPython {
+    $candidates = @()
+    $command = Get-Command python.exe -ErrorAction SilentlyContinue
+    if ($command) { $candidates += $command.Source }
+    $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
+    if ($launcher) {
+        foreach ($version in @('-3.13', '-3.12', '-3.11')) {
+            $probe = Invoke-AclProbe $launcher.Source @($version, '-c', 'import sys; print(sys.executable)')
+            if ($probe.Code -eq 0 -and $probe.Output) { $candidates += [string]$probe.Output }
+        }
+    }
+    foreach ($root in @('HKCU:\Software\Python\PythonCore', 'HKLM:\Software\Python\PythonCore', 'HKLM:\Software\WOW6432Node\Python\PythonCore')) {
+        foreach ($version in @(Get-ChildItem $root -ErrorAction SilentlyContinue | Sort-Object PSChildName -Descending)) {
+            $key = Get-Item ($version.PSPath + '\InstallPath') -ErrorAction SilentlyContinue
+            if ($key) { $candidates += Join-Path ($key.GetValue('')) 'python.exe' }
+        }
+    }
+    foreach ($pattern in @("$env:LOCALAPPDATA\Programs\Python\Python*\python.exe", "$env:ProgramFiles\Python*\python.exe")) {
+        $candidates += @(Get-Item $pattern -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | ForEach-Object { $_.FullName })
+    }
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+        if ($candidate -match '\\WindowsApps\\' -or !(Test-Path -LiteralPath $candidate)) { continue }
+        $probe = Invoke-AclProbe $candidate @('-c', 'import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)')
+        if ($probe.Code -eq 0) { return $candidate }
+    }
+    return $null
+}
 
-REM ------------------------------------------------------------------ winget
-where winget >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: winget is not available on this computer, so Python and Git
-    echo cannot be installed automatically.
-    echo.
-    echo Update "App Installer" from the Microsoft Store, then run this file
-    echo again. If that is not possible, install these two by hand and re-run:
-    echo   https://www.python.org/downloads/   ^(tick "Add python.exe to PATH"^)
-    echo   https://git-scm.com/download/win
-    echo.
-    pause
-    exit /b 1
-)
+function Find-AclGit {
+    $candidates = @()
+    $command = Get-Command git.exe -ErrorAction SilentlyContinue
+    if ($command) { $candidates += $command.Source }
+    $candidates += @("$env:ProgramFiles\Git\cmd\git.exe", "$env:LOCALAPPDATA\Programs\Git\cmd\git.exe")
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+        if (!(Test-Path -LiteralPath $candidate)) { continue }
+        $probe = Invoke-AclProbe $candidate @('--version')
+        if ($probe.Code -eq 0) { return $candidate }
+    }
+    return $null
+}
 
-REM ------------------------------------------------------------------ Python
-set "NEEDRESTART="
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo Python is not installed. Installing it now, this takes a few minutes...
-    winget install --id Python.Python.3.13 -e --accept-source-agreements --accept-package-agreements
-    set "NEEDRESTART=1"
-) else (
-    python -c "import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)" >nul 2>&1
-    if errorlevel 1 (
-        echo The installed Python is older than 3.11. Installing a current one...
-        winget install --id Python.Python.3.13 -e --accept-source-agreements --accept-package-agreements
-        set "NEEDRESTART=1"
-    ) else (
-        for /f "tokens=*" %%v in ('python --version') do echo Found %%v
-    )
-)
+function Install-AclDependency([string]$Id) {
+    $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+    if (!$winget) {
+        throw "Missing $Id and winget is unavailable. Install Python 3.11+ from python.org and Git from git-scm.com, then run this file again. Existing Python/Git do not require winget."
+    }
+    Write-Host "Installing $Id ..."
+    & $winget.Source install --id $Id -e --accept-source-agreements --accept-package-agreements | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "Installation of $Id failed or was cancelled (exit $LASTEXITCODE). Fix it and rerun this file." }
+    Update-AclPath
+}
 
-REM --------------------------------------------------------------------- Git
-git --version >nul 2>&1
-if errorlevel 1 (
-    echo Git is not installed. Installing it now...
-    winget install --id Git.Git -e --accept-source-agreements --accept-package-agreements
-    set "NEEDRESTART=1"
-) else (
-    for /f "tokens=*" %%v in ('git --version') do echo Found %%v
-)
+function Get-AclTools {
+    Update-AclPath
+    $python = Find-AclPython
+    if (!$python) {
+        Install-AclDependency 'Python.Python.3.13'
+        $python = Find-AclPython
+        if (!$python) { throw 'Python installation finished but a working Python 3.11+ was not found. Restart Windows or repair Python, then rerun this file.' }
+    }
+    $git = Find-AclGit
+    if (!$git) {
+        Install-AclDependency 'Git.Git'
+        $git = Find-AclGit
+        if (!$git) { throw 'Git installation finished but git.exe was not found. Restart Windows or repair Git, then rerun this file.' }
+    }
+    # install_acl.bat invokes python/git by name; pin them to the verified tools.
+    $env:Path = (Split-Path $python) + ';' + (Split-Path $git) + ';' + $env:Path
+    return @{ Python = $python; Git = $git }
+}
 
-REM A new PATH reaches this window only through a new window.
-if defined NEEDRESTART (
-    echo.
-    echo  Python/Git installed. Reopening to pick them up...
-    echo  A new window will continue the installation.
-    timeout /t 3 >nul
-    start "" "%~f0"
-    exit /b 0
-)
+function Assert-AclStopped {
+    # serve.py may have been launched with a relative path, so cwd cannot be
+    # inferred from CommandLine. Conservatively stop for any ACL-style server.
+    $servers = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+        $_.Name -match '^(pythonw?|acl).*\.exe$' -and
+        ($_.CommandLine -match '(^|[\s"\\/])serve\.py([\s"]|$)' -or $_.CommandLine -match 'src\.web\.app:app')
+    })
+    $listener = @(Get-NetTCPConnection -State Listen -LocalPort 9090 -ErrorAction SilentlyContinue)
+    if ($servers.Count -or $listener.Count) {
+        throw 'ACL or another service is running (server/port 9090). Close the ACL launcher and finish any RPA job, then rerun the installer. No checkout or dependencies were changed.'
+    }
+}
 
-REM ------------------------------------------------------------ Get the code
-echo.
-if exist "%TARGET%\.git" (
-    echo Updating the existing installation...
-    git -C "%TARGET%" fetch --quiet origin master --tags
-    if errorlevel 1 (
-        echo.
-        echo ERROR: could not reach GitHub. Check the connection and sign-in.
-        pause
-        exit /b 1
-    )
-) else (
-    if exist "%TARGET%" (
-        echo ERROR: %TARGET% already exists but is not an ACL installation.
-        echo Rename or remove that folder, then run this file again.
-        echo Nothing was changed.
-        pause
-        exit /b 1
-    )
-    echo Downloading ACL. A sign-in window may open - use the company GitHub account.
-    git clone --quiet "%REPO%" "%TARGET%"
-    if errorlevel 1 (
-        echo.
-        echo ERROR: download failed. Most often this is GitHub access:
-        echo ask for access to the repository, then run this file again.
-        pause
-        exit /b 1
-    )
-)
+function Invoke-AclGit([string]$Git, [string]$Target, [string[]]$GitArgs) {
+    $output = & $Git -C $Target @GitArgs 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "Git failed ($($GitArgs -join ' ')): $output" }
+    return ($output -join "`n").Trim()
+}
 
-REM Install the release, not whatever master happens to be. A release tag is a
-REM commit that passed the build and was promoted on purpose.
-set "TAG="
-for /f "delims=" %%t in ('git -C "%TARGET%" tag --points-at origin/master --list acl-release-* 2^>nul') do set "TAG=%%t"
-if defined TAG (
-    echo Installing release %TAG%
-    git -C "%TARGET%" checkout --quiet "%TAG%"
-) else (
-    echo   no release tag on the channel head - installing the channel itself
-    git -C "%TARGET%" checkout --quiet master
-    git -C "%TARGET%" merge --ff-only --quiet origin/master
-)
-if errorlevel 1 (
-    echo.
-    echo ERROR: could not switch to the release. If ACL is running, close its
-    echo black window and run this file again.
-    pause
-    exit /b 1
-)
+function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
+    # Same gate as scripts/acl_update_gate.py: exact promoted master head,
+    # fast-forward, annotated release tag, success + Actions URL in annotation.
+    $sha = Invoke-AclGit $Git $Target @('rev-parse', 'origin/master^{commit}')
+    if ($sha -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve the production release.' }
+    if (!$FreshInstall) {
+        $dirty = Invoke-AclGit $Git $Target @('status', '--porcelain', '--untracked-files=no')
+        if ($dirty) { throw 'Tracked local changes present. Save/review them before updating ACL.' }
+        Invoke-AclGit $Git $Target @('merge-base', '--is-ancestor', 'HEAD', $sha) | Out-Null
+    }
+    $tags = (Invoke-AclGit $Git $Target @('tag', '--points-at', $sha, '--list', 'acl-release-*')) -split "`n"
+    foreach ($tag in $tags) {
+        if (!$tag) { continue }
+        if ((Invoke-AclGit $Git $Target @('cat-file', '-t', $tag)) -ne 'tag') { continue }
+        $annotation = Invoke-AclGit $Git $Target @('cat-file', '-p', $tag)
+        if ($annotation -match "(?m)^object $sha`$" -and
+            $annotation -match '(?i)\bsuccess\b' -and
+            $annotation -match 'github\.com/.+/actions/runs/\d+') {
+            return @{ Sha = $sha; Tag = $tag }
+        }
+    }
+    throw 'Production has no verified annotated ACL release tag with a successful CI run URL. Nothing will be installed from an untagged branch.'
+}
 
-REM ---------------------------------------------------------------- Shortcut
-REM Before the installer, not after: the installer ends by starting the
-REM dashboard and holding the window, so anything queued behind it would wait
-REM for a keypress the person has no reason to expect.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%TARGET%\scripts\install_dashboard_shortcut.ps1" >nul 2>&1
-if errorlevel 1 (
-    echo   note: the desktop shortcut could not be created; start ACL with
-    echo   %TARGET%\start_dashboard.bat
-) else (
-    echo Desktop shortcut created.
-)
+function Install-Acl {
+    $repo = 'https://github.com/MojoTheApe/adopy-campaing-launcher.git'
+    $target = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'ACL'
+    Write-Host "Adopy Campaigns Launcher - installing into $target"
+    Assert-AclStopped
+    $tools = Get-AclTools
+    $fresh = !(Test-Path -LiteralPath (Join-Path $target '.git'))
+    if ($fresh -and (Test-Path -LiteralPath $target)) {
+        throw "$target already exists but is not an ACL installation. Nothing was changed. Choose another folder for those files before retrying."
+    }
+    $checkout = $target
+    if ($fresh) { $checkout = Join-Path ([IO.Path]::GetTempPath()) ('acl-install-' + [guid]::NewGuid().ToString('N')) }
+    try {
+        if ($fresh) {
+            # Start from production even though GitHub's default is a feature.
+            & $tools.Git clone --quiet --no-checkout --branch master $repo $checkout
+            if ($LASTEXITCODE -ne 0) { throw 'Download failed. Check GitHub access and connection.' }
+        } else {
+            $remote = Invoke-AclGit $tools.Git $checkout @('remote', 'get-url', 'origin')
+            if ($remote -notmatch '^https://github\.com/MojoTheApe/adopy-campaing-launcher(?:\.git)?/?$' -and
+                $remote -notmatch '^git@github\.com:MojoTheApe/adopy-campaing-launcher(?:\.git)?$') {
+                throw 'This folder has a different Git origin; refusing to update it.'
+            }
+        }
+        Invoke-AclGit $tools.Git $checkout @('fetch', '--quiet', 'origin', 'master:refs/remotes/origin/master', '--tags') | Out-Null
+        $release = Get-AclRelease $tools.Git $checkout $fresh
+        Assert-AclStopped
+        Write-Host "Installing release $($release.Tag) ($($release.Sha))"
+        Invoke-AclGit $tools.Git $checkout @('checkout', '--quiet', '--detach', $release.Sha) | Out-Null
+        if ($fresh) { Move-Item -LiteralPath $checkout -Destination $target }
+    } finally {
+        # Only this invocation's disposable clone is removed; never the install.
+        if ($fresh -and (Test-Path -LiteralPath $checkout)) { Remove-Item -LiteralPath $checkout -Recurse -Force }
+    }
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $target 'scripts\install_dashboard_shortcut.ps1')
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Desktop shortcut could not be created; use start_dashboard.bat.' }
+    & (Join-Path $target 'install_acl.bat')
+    if ($LASTEXITCODE -ne 0) { throw "ACL setup did not pass (exit $LASTEXITCODE). See the checks above." }
+}
 
-REM ------------------------------------- Install dependencies, check, and run
-REM install_acl.bat owns the rest: dependencies, machine configuration, the
-REM doctor, and — when the doctor is green — starting the dashboard.
-echo.
-call "%TARGET%\install_acl.bat"
-exit /b %ERRORLEVEL%
+try {
+    Install-Acl
+    exit 0
+} catch {
+    Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}

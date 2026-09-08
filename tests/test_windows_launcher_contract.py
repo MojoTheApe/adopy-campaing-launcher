@@ -143,40 +143,21 @@ def test_the_dashboard_prints_acls_own_log() -> None:
     assert not logging.getLogger("urllib3.connectionpool").isEnabledFor(logging.INFO)
 
 
-def test_bootstrap_installs_a_release_not_a_moving_branch() -> None:
-    """A person's first install must land on a commit that passed the build."""
-    boot = _text("Install ACL.bat")
-
-    assert "tag --points-at origin/master --list acl-release-*" in boot
-    assert 'checkout --quiet "%TAG%"' in boot
-    assert "git pull" not in boot
-    assert "reset --hard" not in boot
-
-
-def test_bootstrap_reopens_itself_after_installing_python() -> None:
-    """`winget install` puts python.exe on the PATH of FUTURE processes.
-
-    A script that installs Python and then calls it fails on the machine it just
-    prepared — which is exactly what happened to the second campaign manager,
-    twice. A new window is the only way a batch file gets a fresh environment.
-    """
-    boot = _text("Install ACL.bat")
-
-    assert "NEEDRESTART" in boot
-    restart = boot.index('start "" "%~f0"')
-    assert boot.index("winget install --id Python.Python.3.13") < restart
-    assert boot.index("git clone", restart) > restart, "cloning must wait for the new window"
-
-
-def test_bootstrap_refuses_a_folder_that_is_not_an_acl_install() -> None:
-    """Documents\ACL may already hold something. Never write into it blind."""
-    boot = _text("Install ACL.bat")
-
-    assert 'if exist "%TARGET%\.git"' in boot
-    assert "already exists but is not an ACL installation" in boot
-    assert "Nothing was changed" in boot
-    for destructive in ("rmdir", "del /", "rd /s"):
-        assert destructive not in boot, f"the bootstrap must not {destructive}"
+def test_bootstrap_scenarios_on_windows() -> None:
+    import shutil
+    import subprocess
+    import sys
+    import pytest
+    if sys.platform != "win32":
+        pytest.skip("Standalone bootstrap uses native Windows PowerShell")
+    powershell = shutil.which("powershell.exe")
+    assert powershell, "Windows PowerShell is required by the installer"
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run([powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                             str(root / "tests/bootstrap_windows_harness.ps1"),
+                             "-Bootstrap", str(root / "Install ACL.bat")],
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_a_green_install_opens_the_dashboard_itself() -> None:
