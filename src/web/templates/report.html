@@ -5,6 +5,22 @@
   <link rel="icon" href="/favicon.ico?v=acl" sizes="32x32">
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   <title>Adopy Campaigns Launcher — {{ report.date }}</title>
+  <script>
+    /* Тема выставляется здесь, в <head>, а не после загрузки страницы.
+       Иначе ночью экран на мгновение вспыхивает светлым — ровно то, от чего
+       тёмную тему и включают. */
+    (function () {
+      try {
+        var saved = localStorage.getItem('acl.theme');
+        if (saved !== 'dark' && saved !== 'light') {
+          saved = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', saved);
+      } catch (e) {
+        /* приватное окно или запрет на хранилище — остаётся светлая */
+      }
+    })();
+  </script>
   <script src="https://unpkg.com/htmx.org@1.9.10"
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
           crossorigin="anonymous"></script>
@@ -45,6 +61,64 @@
       --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
       --shadow-md: 0 4px 14px rgba(16, 24, 40, 0.07);
       --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+
+      /* Имена, которыми код уже пользовался, не имея их объявленными.
+         `var(--danger)` встречалось в трёх местах: запасное значение
+         работало, поэтому никто не замечал, что самого токена нет — и в тёмной
+         теме эти места остались бы светлыми. */
+      --danger: #dc2626;
+      --ok: #059669;
+      --accent-strong: #1d4ed8;
+      --on-accent: #ffffff;
+    }
+
+    /* ── Тёмная тема ────────────────────────────────────────────────────
+       Собрана по разбору того, что об этом известно: Material 3 (dark
+       theme), IBM Carbon g100, GitHub Primer dark. Четыре правила оттуда,
+       которые здесь и применены:
+
+       1. Основа — не чёрный. Чистый #000 на OLED даёт ореол вокруг букв, а
+          тени на нём перестают быть видны. Основа #0f1216, слегка холодная,
+          под синий акцент продукта.
+       2. Возвышение — светлотой, а не тенью. Карточка, шапка и боковая
+          колонка светлее фона; на тёмном тень почти не читается.
+       3. Текст — не чистый белый. #e4e8ef даёт 15:1 к фону и не жжёт глаза
+          так, как #fff, а приглушённый #99a4b4 держит 7.4:1 — это AAA для
+          вторичного текста, которого здесь много в таблицах.
+       4. Акценты — приглушить. Насыщенный синий var(--accent) на тёмном вибрирует;
+          взят светлее и мягче, 7.4:1 к карточке.
+
+       Проверено расчётом контраста, а не на глаз: все пары текста проходят
+       AA, почти все AAA. Границы намеренно тише порога для текста — это
+       разделители строк в плотных таблицах, и на 3:1 они кричали бы.
+
+       Макет объявления (.fb-feed-*) в тёмную тему НЕ переводится. Это
+       изображение ленты Facebook, а не наш интерфейс: перекрасить его значит
+       показать байеру то, чего он никогда не увидит у себя. */
+    :root[data-theme="dark"] {
+      --bg: #0f1216;
+      --bg-elev: #171b22;
+      --bg-hover: #1e242d;
+      --bg-subtle: #232a35;
+      --border: #2b323d;
+      --border-strong: #5b6779;
+      --text: #e4e8ef;
+      --muted: #99a4b4;
+      --accent: #7aa9ff;
+      --accent-strong: #a8c6ff;
+      --accent-soft: #172238;
+      --on-accent: #0f1216;
+      --good: #5fd39a;
+      --ok: #5fd39a;
+      --good-soft: #10281e;
+      --bad: #ff8079;
+      --danger: #ff8079;
+      --bad-soft: #2a1618;
+      --warn: #e5b544;
+      --warn-soft: #2a2113;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+      --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.55);
+      color-scheme: dark;
     }
     * { box-sizing: border-box; }
     body {
@@ -127,7 +201,7 @@
     }
     .sidebar-link.sidebar-home.active {
       background: var(--accent);
-      color: #fff;
+      color: var(--on-accent);
       border-color: var(--accent);
     }
     .sidebar-link.sidebar-home:hover:not(.active) { background: var(--bg-hover); color: var(--text); }
@@ -320,16 +394,33 @@
     .buyer-pick label { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
     .buyer-pick select { font-size: 0.82rem; max-width: 14rem; }
     .buyer-pick #buyer-msg { font-size: 0.75rem; color: var(--muted); }
-    /* Место под переключатель темы: ширина занята заранее, чтобы шапка не
-       перестроилась у людей на глазах, когда он появится. */
-    .theme-slot { width: 30px; height: 30px; flex: none; }
+    /* Переключатель темы. Ширина была занята заранее, поэтому шапка не
+       перестроилась, когда он появился. */
+    .theme-slot {
+      width: 30px; height: 30px; flex: none;
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 0; cursor: pointer;
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      transition: color 150ms var(--ease-out), border-color 150ms var(--ease-out),
+                  background 150ms var(--ease-out);
+    }
+    .theme-slot:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg-hover); }
+    .theme-slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .theme-slot svg { fill: currentColor; }
+    /* Показывается то, на что переключишь, а не то, что стоит сейчас: кнопка
+       обещает действие. Днём — луна, ночью — солнце. */
+    .theme-slot .t-moon { display: none; }
+    :root[data-theme="dark"] .theme-slot .t-sun { display: none; }
+    :root[data-theme="dark"] .theme-slot .t-moon { display: inline; }
 
     form.refresh { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
     /* Shown only when a promoted release is actually waiting, so an ordinary
        day's header carries no extra control at all. */
     form.refresh button.acl-update {
       background: var(--accent);
-      color: #ffffff;
+      color: var(--on-accent);
       border-color: var(--accent);
     }
     form.refresh button.acl-update:hover {
@@ -516,7 +607,7 @@
       margin-top: 0.65rem;
       padding: 0.45rem 1rem;
       background: var(--accent);
-      color: #fff;
+      color: var(--on-accent);
       border: none;
       border-radius: var(--radius-sm);
       font-size: 0.8125rem;
@@ -525,7 +616,7 @@
       cursor: pointer;
       transition: background 150ms var(--ease-out), transform 100ms var(--ease-out);
     }
-    .open-submit:not(:disabled):hover { background: #1d4ed8; }
+    .open-submit:not(:disabled):hover { background: var(--accent-strong); }
     .open-submit:not(:disabled):active { transform: scale(0.97); }
     .open-submit:disabled { opacity: 0.4; cursor: not-allowed; }
     .upload-errors {
@@ -579,19 +670,19 @@
     .cb-map-input  { min-width: 13rem; font-size: 0.78rem; }
     .cb-map-save-btn {
       padding: 0.25rem 0.7rem; font-size: 0.75rem; font-family: inherit;
-      background: var(--accent); color: #fff; border: none;
+      background: var(--accent); color: var(--on-accent); border: none;
       border-radius: var(--radius-sm); cursor: pointer; font-weight: 500;
     }
-    .cb-map-save-btn:hover { background: #1d4ed8; }
+    .cb-map-save-btn:hover { background: var(--accent-strong); }
     .cb-map-save-status { font-size: 0.75rem; }
     /* Per-field save button */
     .cb-field-save-btn {
       padding: 0.2rem 0.65rem; font-size: 0.73rem; font-family: inherit;
-      background: var(--accent); color: #fff; border: none;
+      background: var(--accent); color: var(--on-accent); border: none;
       border-radius: var(--radius-sm); cursor: pointer; font-weight: 500;
       white-space: nowrap; flex-shrink: 0;
     }
-    .cb-field-save-btn:hover { background: #1d4ed8; }
+    .cb-field-save-btn:hover { background: var(--accent-strong); }
     .cb-field-save-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     .cb-field-status { font-size: 0.72rem; min-width: 4rem; }
     /* Account map field rows */
@@ -628,13 +719,13 @@
       background: var(--bg-elev); color: var(--muted); border: none; cursor: pointer;
     }
     .ml-inst-btn + .ml-inst-btn { border-left: 1px solid var(--border); }
-    .ml-inst-btn.ml-inst-active { background: #1d4ed8; color: #fff; }
+    .ml-inst-btn.ml-inst-active { background: var(--accent-strong); color: #fff; }
     .ml-inst-btn:hover:not(.ml-inst-active) { background: var(--bg-hover); }
     .ml-connect-btn {
       padding: 0.25rem 0.75rem; font-size: 0.76rem; font-weight: 600;
       background: #065f46; color: #fff; border: none; border-radius: 4px; cursor: pointer;
     }
-    .ml-connect-btn:hover { background: #047857; }
+    .ml-connect-btn:hover { background: var(--good); }
     .ml-connect-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     .ml-profile-row {
       display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.4rem;
@@ -645,7 +736,7 @@
     .ml-profile-row .ml-profile-id { color: var(--muted); font-family: monospace; font-size: 0.68rem; }
     .ml-profile-use-btn {
       margin-left: auto; padding: 0.15rem 0.5rem; font-size: 0.68rem;
-      background: #1d4ed8; color: #fff; border: none; border-radius: 3px; cursor: pointer;
+      background: var(--accent-strong); color: #fff; border: none; border-radius: 3px; cursor: pointer;
       white-space: nowrap;
     }
     .ml-profile-use-btn:hover { background: #1e40af; }
@@ -958,7 +1049,7 @@
       font-family: inherit; font-size: 0.76rem; font-weight: 600; border-radius: 5px; cursor: pointer; padding: 0.35rem 0.75rem;
       background: var(--accent); border: none; color: #fff;
     }
-    .cb-cart-bar button:hover { background: #1d4ed8; }
+    .cb-cart-bar button:hover { background: var(--accent-strong); }
     .cb-send-modal-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,0.72);
       z-index: 9999; display: flex; align-items: center; justify-content: center;
@@ -1139,7 +1230,7 @@
       transition: background 150ms var(--ease-out), transform 100ms var(--ease-out);
     }
     .cb-publish-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-    .cb-publish-btn:not(:disabled):hover { background: #047857; }
+    .cb-publish-btn:not(:disabled):hover { background: var(--good); }
     .cb-publish-btn:not(:disabled):active { transform: scale(0.97); }
     .cb-activate-label { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 0.3rem; cursor: pointer; }
 
@@ -1156,7 +1247,7 @@
       background: var(--bg-elev); color: var(--muted); border: none; cursor: pointer;
     }
     .cb-preview-toggle-btn + .cb-preview-toggle-btn { border-left: 1px solid var(--border-strong); }
-    .cb-preview-toggle-btn.cb-preview-toggle-active { background: var(--accent); color: #fff; }
+    .cb-preview-toggle-btn.cb-preview-toggle-active { background: var(--accent); color: var(--on-accent); }
     .cb-visual-preview { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.6rem; }
     .cb-visual-empty { color: var(--muted); font-size: 0.75rem; padding: 0.5rem 0; }
 
@@ -1166,7 +1257,7 @@
     }
     .fb-feed-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.7rem 0.4rem; }
     .fb-feed-avatar {
-      width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg,#2563eb,#1e3a8a);
+      width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg,var(--accent),#1e3a8a);
       color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0;
     }
     .fb-feed-page-name { font-size: 0.8rem; font-weight: 700; line-height: 1.2; }
@@ -1190,7 +1281,7 @@
     .fb-reels-scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, transparent 20%, transparent 55%, rgba(0,0,0,0.75) 100%); }
     .fb-reels-top { position: absolute; top: 0.5rem; left: 0.5rem; right: 0.5rem; display: flex; align-items: center; gap: 0.35rem; }
     .fb-reels-avatar {
-      width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg,#2563eb,#1e3a8a);
+      width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg,var(--accent),#1e3a8a);
       color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.62rem; flex-shrink: 0; border: 1.5px solid #fff;
     }
     .fb-reels-page-name { color: #fff; font-size: 0.68rem; font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
@@ -1393,7 +1484,7 @@
     .amap-st.ok { background: var(--bg-subtle); color: var(--muted); }
     .amap-st.dim { color: var(--muted); }
     .amap-st.bad {
-      background: var(--danger, #a4362f); color: #fff; font-weight: 500;
+      background: var(--danger); color: #fff; font-weight: 500;
     }
     .amap td { padding: 0.42rem 0.85rem; border-bottom: 1px solid var(--border); }
     .amap tbody tr:last-child td { border-bottom: 0; }
@@ -1533,7 +1624,7 @@
       color: var(--border-strong); cursor: default; text-decoration: line-through;
     }
     .amap-cal-grid button.has:hover { border-color: var(--accent); }
-    .amap-cal-grid button.sel { background: var(--accent); color: #fff; }
+    .amap-cal-grid button.sel { background: var(--accent); color: var(--on-accent); }
     .amap-cal-grid button.inrange { background: var(--accent-soft); }
     .amap-cal-foot {
       display: flex; align-items: center; margin-top: 0.6rem; gap: 0.5rem;
@@ -1547,7 +1638,7 @@
 
     .amap-live-ok { font-variant-numeric: tabular-nums; font-weight: 600; }
     .amap-live-run { color: var(--muted); font-size: 0.78rem; }
-    .amap-live-bad { color: var(--danger, #a4362f); border-color: var(--danger, #a4362f); }
+    .amap-live-bad { color: var(--danger); border-color: var(--danger); }
     .amap-btn {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -1840,7 +1931,7 @@
       border: 1px solid var(--accent);
       border-radius: var(--radius-sm);
       background: var(--accent);
-      color: #fff;
+      color: var(--on-accent);
       font: inherit;
       font-size: 0.85rem;
       font-weight: 600;
@@ -1997,7 +2088,15 @@
     {#- Место под переключатель темы. Пусто нарочно: сам переключатель — это
         следующая задача раздела «Дизайн», а место оставлено сейчас, чтобы
         шапка не перестроилась у людей на глазах, когда он появится. -#}
-    <div class="theme-slot" aria-hidden="true"></div>
+    <button type="button" id="theme-toggle" class="theme-slot"
+            aria-label="Switch between light and dark" aria-pressed="false"
+            title="Light / dark">
+      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+        <path class="t-sun" d="M10 4.6a5.4 5.4 0 100 10.8 5.4 5.4 0 000-10.8zm0 1.8a3.6 3.6 0 110 7.2 3.6 3.6 0 010-7.2z"/>
+        <path class="t-sun" d="M10 0h0v2.6h0zM10 17.4h0V20h0zM0 10v0h2.6v0zM17.4 10v0H20v0zM2.9 2.9l1.9 1.9-.1.1-1.9-1.9zM15.2 15.2l1.9 1.9-1.9-1.9zM17.1 2.9l-1.9 1.9 1.9-1.9zM4.8 15.2l-1.9 1.9 1.9-1.9z"/>
+        <path class="t-moon" d="M13.6 12.4A6.2 6.2 0 018 4.2a6.4 6.4 0 102 12.2 6.2 6.2 0 003.6-4z"/>
+      </svg>
+    </button>
   </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
     <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
@@ -2763,7 +2862,7 @@ async function dashRefresh(ev) {
 
     {# ── Attach-only workflow ── #}
     <details style="margin-top:0.6rem" id="ml-direct-section-{{ cid }}" open>
-      <summary style="font-size:0.72rem;color:#4caf50;cursor:pointer;user-select:none;font-weight:600">
+      <summary style="font-size:0.72rem;color:var(--ok);cursor:pointer;user-select:none;font-weight:600">
         ✓ How to run the RPA (Multilogin)
       </summary>
       <div style="margin-top:0.5rem;padding:0.5rem;background:#0a2a14;border-radius:6px;border:1px solid #1a5a2a">
@@ -3910,6 +4009,45 @@ if (document.readyState === 'loading') {
   amapWatchOpen();
 }
 
+/* Переключатель темы: две темы, выбор запоминается.
+
+   Без сохранённого выбора берётся системная — человек, у которого вся система
+   тёмная, не должен объяснять это каждому приложению отдельно. Нажатие делает
+   выбор явным и с этого момента системную больше не слушает: если он один раз
+   сказал «светлая», значит светлая. */
+(function () {
+  var KEY = 'acl.theme';
+
+  function current() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  }
+
+  function apply(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    var btn = document.getElementById('theme-toggle');
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(theme === 'dark'));
+      btn.title = theme === 'dark' ? 'Switch to light' : 'Switch to dark';
+    }
+    try { localStorage.setItem(KEY, theme); } catch (e) {}
+  }
+
+  function wire() {
+    var btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    apply(current());
+    btn.addEventListener('click', function () {
+      apply(current() === 'dark' ? 'light' : 'dark');
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire);
+  } else {
+    wire();
+  }
+})();
+
 function amapPeriod() {
   var p = window._amapPick || {};
   if (p.span === 'all') return { from: '', to: '' };
@@ -4835,7 +4973,7 @@ function mlStartDirect(cid) {
   .then(function(d) {
     if (d.ok) {
       if (statusEl) statusEl.innerHTML =
-        '<span style="color:#4caf50">✓ Started — CDP: ' + (d.cdp_url || '') + '</span>';
+        '<span style="color:var(--ok)">✓ Started — CDP: ' + (d.cdp_url || '') + '</span>';
     } else {
       if (statusEl) statusEl.innerHTML =
         '<span style="color:var(--bad)">⚠ ' + aclEscHtml(d.error || 'error') + '</span>';
@@ -7162,10 +7300,10 @@ function _rpaRecordSetUI(running, message) {
   document.querySelectorAll('.rpa-record-btn').forEach(function(btn) {
     if (running) {
       btn.textContent = '⏹ Stop record';
-      btn.style.background = '#b91c1c';
+      btn.style.background = 'var(--danger)';
     } else {
       btn.textContent = '⏺ Record clicks';
-      btn.style.background = '#1d4ed8';
+      btn.style.background = 'var(--accent-strong)';
     }
   });
   document.querySelectorAll('.rpa-record-status').forEach(function(el) {
@@ -7436,7 +7574,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       html += '<div style="margin:0.5rem 0">'
         + '<button type="button" id="' + stopBtnId + '" '
         + 'style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#7f1d1d;color:#fff;'
-        + 'border:1px solid #b91c1c;border-radius:4px;cursor:pointer">'
+        + 'border:1px solid var(--danger);border-radius:4px;cursor:pointer">'
         + '⏹ Stop the run</button>'
         + '<span style="font-size:0.7rem;color:var(--muted);margin-left:0.5rem">'
         + 'stops the RPA; the Multilogin window stays open</span></div>';
@@ -7466,7 +7604,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         // informational note such as the dry-run message. Anything blocking
         // stays in the alarm colour.
         var errStyle = (r.success && !blocked)
-          ? ' style="color:var(--ok,#4caf50);border-color:var(--ok,#4caf50)"'
+          ? ' style="color:var(--ok);border-color:var(--ok)"'
           : '';
         html += '<div class="cb-status-err"' + errStyle + '>' + aclEscHtml(r.error) + '</div>';
       }
@@ -7625,7 +7763,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
 
   function say(t, kind) {
     if (!msg) return;
-    msg.style.color = kind === 'err' ? '#b91c1c' : 'var(--muted)';
+    msg.style.color = kind === 'err' ? 'var(--danger)' : 'var(--muted)';
     msg.textContent = t || '';
   }
 
@@ -8223,7 +8361,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   function say(text, kind) {
     var el = document.getElementById('tg-msg');
     if (!el) return;
-    var color = kind === 'err' ? '#b91c1c' : (kind === 'ok' ? 'var(--ok,#4caf50)' : 'var(--muted)');
+    var color = kind === 'err' ? 'var(--danger)' : (kind === 'ok' ? 'var(--ok)' : 'var(--muted)');
     el.style.color = color;
     el.textContent = text || '';
   }
@@ -8243,10 +8381,10 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
        аудиториям жить под разными именами. */
     var warn = '';
     if ((dup.names || []).length) {
-      warn += '<p style="color:#b91c1c">Same name twice: ' + esc((dup.names || []).join(', ')) + '</p>';
+      warn += '<p style="color:var(--danger)">Same name twice: ' + esc((dup.names || []).join(', ')) + '</p>';
     }
     (dup.sets || []).forEach(function (names) {
-      warn += '<p style="color:#b91c1c">Same set of interests: ' + esc(names.join(' = ')) + '</p>';
+      warn += '<p style="color:var(--danger)">Same set of interests: ' + esc(names.join(' = ')) + '</p>';
     });
     var html = warn
       + '<p style="color:var(--muted);font-size:0.85rem">Total: ' + list.length
@@ -8277,7 +8415,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       .then(function (r) { return r.json(); })
       .then(function (d) { loaded = true; render(d); })
       .catch(function (e) {
-        if (box) box.innerHTML = '<p style="color:#b91c1c">Could not load: ' + esc(e) + '</p>';
+        if (box) box.innerHTML = '<p style="color:var(--danger)">Could not load: ' + esc(e) + '</p>';
       });
   }
 
