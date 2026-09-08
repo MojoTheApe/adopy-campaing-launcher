@@ -46,7 +46,12 @@ def account_map(span="", live=None):
 def test_rendered_inline_handlers_keep_quotes_and_argument_values(tmp_path):
     amap = account_map()
     goal = dict(country=amap["countries"][0]["country"], ftd=5, cpa=10, deposits=0, pct=0, code="CI")
-    report = dict(countries=[], draft_status={})
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from copy import deepcopy
+    from test_web_drill import _MOCK_REPORT
+    report = deepcopy(_MOCK_REPORT)
+    app._enrich_country_overview(report)
     rendered = app.templates.env.get_template("report.html").render(
         request=MagicMock(), report=report, warnings=[], built_at="test", upload_errors={},
         account_preflight={}, account_preflight_json={}, ref_options={}, ref_options_json={},
@@ -57,7 +62,10 @@ def test_rendered_inline_handlers_keep_quotes_and_argument_values(tmp_path):
     parser = Handlers(); parser.feed(rendered)
     wanted = [h for h in parser.handlers if any(fn + "(" in h for fn in ("goalMenu", "amapUnlink", "amapLink", "amapClose"))]
     assert len(wanted) >= 4
-    source = "const assert=require('assert/strict'); const calls=[];\n"
+    source = "const assert=require('assert/strict'), vm=require('vm'); const calls=[];\n"
+    from test_report_scripts_parse import _SCRIPT
+    for block in _SCRIPT.findall(rendered):
+        source += "new vm.Script(" + json.dumps(block) + ");\n"
     source += "const goalMenu=(...a)=>calls.push(['goal',a[1]]), amapUnlink=(...a)=>calls.push(['unlink',...a]), amapLink=(...a)=>calls.push(['link',...a]), amapClose=(...a)=>calls.push(['close',...a]);\n"
     source += "const event={preventDefault(){},stopPropagation(){}};\n"
     for h in wanted:

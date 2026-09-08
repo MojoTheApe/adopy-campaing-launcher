@@ -3097,7 +3097,7 @@ async function dashRefresh(ev) {
         names: [g.country, g.code].filter(Boolean),
         ftd: g.ftd || 0, cpa: g.cpa, cr: g.cr, ld: g.leads_per_day
       });
-    })({{ g | tojson | forceescape }});
+    })({{ g | tojson }});
     {% endfor %}
     return byMarket;
   })();
