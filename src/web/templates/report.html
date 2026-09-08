@@ -2626,44 +2626,18 @@ async function dashRefresh(ev) {
 </div>
 </div>
 <div class="manage-part">
-<h2 class="view-title">{{ c.country }}: Account Statuses</h2>
+{#- Секция «Account Statuses» убрана 8 сентября.
 
-<div class="ac-country-add" data-country-name="{{ c.country }}"
-     style="margin:0.6rem 0 1rem;padding:0.7rem 0.9rem;border:1px solid var(--border);border-radius:6px">
-  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-end">
-    <label style="flex:1 1 15rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Connect an account to {{ c.country }}</div>
-      <input class="acq-label" type="text" placeholder="account name" style="width:100%" autocomplete="off">
-    </label>
-    <label style="flex:1 1 13rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Ad account</div>
-      <input class="acq-adid" type="text" placeholder="filled in from the profile" style="width:100%"
-             title="Filled in automatically from the profile you pick. Otherwise paste the address from the Ads Manager address bar.">
-    </label>
-    <label style="flex:0 0 13rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Multilogin profile</div>
-      <select class="acq-prof" style="width:100%"></select>
-    </label>
-    <button type="button" class="btn acq-add">Add</button>
-    <span class="acq-msg" style="font-size:0.75rem"></span>
-  </div>
-  <div class="acq-connected" style="margin-top:0.6rem;font-size:0.8rem;color:var(--muted)"></div>
-</div>
+    В ней тот же аккаунт описывался второй раз: свои числа (`Cost` — тот же
+    спенд), своя колонка Ad Asset, которую просили убрать с карты, и своя
+    форма подключения. Форма была хуже той, что на карте: та ищет профиль по
+    последним буквам и **читает номер кабинета из его же истории**, а эта
+    просила номер руками.
 
-<table>
-  <thead><tr><th>Account</th><th>Cost</th><th>Ad Asset</th><th>To Do</th><th>✓</th></tr></thead>
-  <tbody>
-  {% for r in c.account_rows %}
-    <tr>
-      <td>{{ r.account_label }}</td>
-      <td class="num">{{ r.cost | fmt_usd }}</td>
-      <td>{{ r.stock or '—' }}</td>
-      <td>{{ r.to_do_display }}</td>
-      <td>{% if r.is_ready %}✅{% else %}❌{% endif %}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+    Уникальными здесь были только «To Do» и «готов» — они переехали в таблицу
+    аккаунтов выше, к статусу. Одно место подключения вместо двух, одна строка
+    на аккаунт вместо двух. -#}
+
 </div>
 <details class="manage-builder" id="manage-builder-{{ cid }}">
   {#- Билдер — не панель, а страница: свои слоты, аккордеон аккаунтов,
