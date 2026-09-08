@@ -204,30 +204,30 @@ def check_telemetry() -> None:
     status = telemetry_sync.config_status()
     if status["configured"]:
         pending, _ = telemetry_sync.pending(limit=None)
+        needs_auth = status.get("transport") == "oauth" and not status.get("oauth_authorised")
         report(
-            OK,
+            WARN if needs_auth else OK,
             "Telemetry upload",
-            f"on — {label} ({machine_id}), {len(pending)} record(s) pending",
+            ("Google authorization needed" if needs_auth else "transport configured; access is checked on upload")
+            + f" — {label} ({machine_id}), {len(pending)} record(s) pending",
         )
-        # Said out loud on every machine, not buried in a document. Adopy's
-        # policy leaves no anonymous transport, so records are written to the
-        # shared sheet as the person signed in here — that is something they
-        # are entitled to read on their own screen rather than be told once.
+        print("       -> manual upload only; no automatic sender is running")
+        print("       -> run: python scripts/acl_telemetry_upload.py (Google sign-in on first upload)")
         print("       -> which steps ran, whether each passed, how long it took")
-        print("       -> written to the shared sheet under YOUR Google account")
+        if status.get("transport") == "oauth":
+            print("       -> uploaded rows are written under YOUR Google account")
         print("       -> no ad accounts, creatives, links or ad text are sent")
         return
     missing = []
     if not status["sheet_id"]:
         missing.append("GSHEET_TELEMETRY_ID not set")
-    if not status["key_exists"]:
-        missing.append(f"no Google credentials for the upload")
+    if not status["key_exists"] and not status.get("oauth_client_exists"):
+        missing.append("no Google credentials for the upload")
     report(
         WARN,
         "Telemetry upload",
         "off — " + "; ".join(missing),
-        "Without it, a Meta UI change has to be debugged separately on every "
-        "machine instead of being spotted across all of them at once.",
+        "Local records stay on this machine until a manual upload is configured.",
     )
 
 

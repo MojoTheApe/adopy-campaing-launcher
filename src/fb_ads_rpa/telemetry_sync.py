@@ -340,10 +340,23 @@ def config_status() -> dict[str, Any]:
         "oauth_client": client_path,
         "oauth_client_exists": os.path.exists(client_path),
         "oauth_token": str(_local(_TOKEN_FILE)),
-        "oauth_authorised": os.path.exists(_local(_TOKEN_FILE)),
+        "oauth_authorised": _has_oauth_token(),
+        "automatic_upload": False,
         "transport": transport,
         "configured": bool(transport),
     }
+
+
+def _has_oauth_token() -> bool:
+    """Local evidence only; the next explicit upload verifies remote access."""
+    try:
+        token = json.loads(_local(_TOKEN_FILE).read_text(encoding="utf-8"))
+        scopes = token.get("scopes") or []
+        if isinstance(scopes, str):
+            scopes = scopes.split()
+        return bool(token.get("refresh_token") and token.get("client_id") and token.get("client_secret") and set(_SCOPES).issubset(scopes))
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 def _oauth_client_path() -> str:

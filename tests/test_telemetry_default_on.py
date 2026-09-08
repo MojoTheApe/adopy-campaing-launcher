@@ -58,3 +58,33 @@ def test_the_doctor_says_what_leaves_the_machine():
     # And it must sit on the branch that reports telemetry as ON, not in the
     # branch nobody reaches once the default is in place.
     assert said.index("under YOUR Google account") < said.index('"off — "')
+
+
+@pytest.mark.parametrize("authorised", [False, True])
+def test_doctor_distinguishes_authorization_from_manual_upload(monkeypatch, capsys, authorised):
+    from scripts import acl_doctor
+    from src.fb_ads_rpa import telemetry_sync
+    monkeypatch.setattr(telemetry_sync, "machine_identity", lambda: ("test", "fixture"))
+    monkeypatch.setattr(telemetry_sync, "pending", lambda **kw: ([{}, {}], "test"))
+    monkeypatch.setattr(telemetry_sync, "config_status", lambda: dict(configured=True, transport="oauth", oauth_authorised=authorised))
+    acl_doctor.check_telemetry()
+    shown=capsys.readouterr().out
+    assert "manual upload only" in shown
+    assert "no automatic sender" in shown
+    assert "under YOUR Google account" in shown
+    assert ("authorization needed" in shown) is (not authorised)
+
+
+def test_readonly_or_broken_token_does_not_count_as_upload_authorization(tmp_path, monkeypatch):
+    import json
+    from src.fb_ads_rpa import telemetry_sync as sync
+    monkeypatch.setattr(sync, "_local", lambda filename: tmp_path / filename)
+    token=tmp_path / sync._TOKEN_FILE
+    token.write_text("{", encoding="utf-8")
+    assert not sync._has_oauth_token()
+    data=dict(refresh_token="fixture",client_id="fixture",client_secret="fixture",scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"])
+    token.write_text(json.dumps(data), encoding="utf-8")
+    assert not sync._has_oauth_token()
+    data["scopes"]=sync._SCOPES
+    token.write_text(json.dumps(data), encoding="utf-8")
+    assert sync._has_oauth_token()
