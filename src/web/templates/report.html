@@ -3801,6 +3801,45 @@ function amapApply(from, to, span) {
    Опрашивается только то, что сейчас читается, и только пока читается. */
 /* Период страницы одним местом. Читает то же состояние, что рисует шапку, —
    иначе кнопка и подпись рядом с ней рано или поздно разойдутся. */
+/* Раскрытые страны переживают перезагрузку.
+
+   Блоки свёрнуты по умолчанию, но дешборд перезагружает себя сам, и человек,
+   работающий внутри страны, терял бы её на каждом обновлении. Хранится только
+   список раскрытых ключей и только в этом браузере. */
+var AMAP_OPEN_KEY = 'acl.amap.open';
+
+function amapOpenList() {
+  try {
+    var raw = localStorage.getItem(AMAP_OPEN_KEY);
+    var list = raw ? JSON.parse(raw) : [];
+    return Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+  } catch (e) {
+    return [];   // приватное окно или запрет на хранилище — просто без памяти
+  }
+}
+
+function amapWatchOpen() {
+  var known = amapOpenList();
+  var blocks = document.querySelectorAll('details.amap-country[data-country]');
+  Array.prototype.forEach.call(blocks, function (d) {
+    var key = d.getAttribute('data-country');
+    if (known.indexOf(key) !== -1) d.open = true;
+    d.addEventListener('toggle', function () {
+      var now = amapOpenList();
+      var at = now.indexOf(key);
+      if (d.open && at === -1) now.push(key);
+      if (!d.open && at !== -1) now.splice(at, 1);
+      try { localStorage.setItem(AMAP_OPEN_KEY, JSON.stringify(now)); } catch (e) {}
+    });
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', amapWatchOpen);
+} else {
+  amapWatchOpen();
+}
+
 function amapPeriod() {
   var p = window._amapPick || {};
   if (p.span === 'all') return { from: '', to: '' };

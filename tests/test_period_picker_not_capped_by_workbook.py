@@ -94,3 +94,20 @@ def test_a_failed_read_names_its_reason_in_the_cell():
     fn = fn[: fn.index("\nfunction ")]
     assert "cell.innerHTML" in fn, "причина снова только в подсказке к кнопке"
     assert "снимок" in fn, "снимок экрана снова негде увидеть"
+
+
+def test_country_blocks_are_collapsed_by_default():
+    """Открытость блока не должна зависеть от места страны в списке.
+
+    Было `{% if loop.index <= 3 %}open{% endif %}`: первые три страны всегда
+    раскрыты, остальные нет. На экране это выглядит как случайность — правила
+    не видно, а порядок стран им управляет. Сводка в заголовке отвечает на
+    вопрос «что здесь» без раскрытия.
+    """
+    t = (TPL.parent / "_account_map.html").read_text(encoding="utf-8")
+    block = t[t.index("<details class=\"amap-country\""):]
+    block = block[: block.index("</summary>")]
+    assert "open" not in block.replace("amap-openprof", ""), (
+        "блок страны снова раскрыт разметкой: " + block[:200]
+    )
+    assert "data-country" in block, "исчез ключ, по которому помнится раскрытое"
