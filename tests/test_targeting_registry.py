@@ -80,7 +80,8 @@ def test_a_taken_name_is_refused_separately():
 def test_a_target_is_not_its_own_duplicate_when_edited():
     tr.add("A", "один, два")
     tr.update("A", "A renamed", "два, один")
-    assert [t.name for t in tr.all_targets()] == ["A renamed"]
+    # пробел в имени превращается в подчёркивание — см. campaign_safe_name
+    assert [t.name for t in tr.all_targets()] == ["A_renamed"]
 
 
 def test_editing_into_someone_elses_set_is_refused():
@@ -135,3 +136,40 @@ def test_sharing_says_nothing_when_it_worked(monkeypatch):
 
     monkeypatch.setattr(g, "add_targeting_profile", lambda *a, **k: None)
     assert tr.share(tr.Target(name="A", interests="один")) == ""
+
+
+def test_a_space_in_the_name_would_break_the_campaign_name():
+    """Название кампании — это части, склеенные подчёркиванием.
+
+    `cbUpdateName` собирает `страна_ассет_ОС_тип_ТАРГЕТ_возраст_дата`. Пробел
+    внутри имени таргета попадает внутрь части, и название перестаёт
+    разбираться обратно: `KW_Ait_All_Image_Investment Plus_35_0809` — это уже
+    не семь частей.
+    """
+    assert tr.campaign_safe_name("Investment Plus") == "Investment_Plus"
+    assert tr.campaign_safe_name("  Main   1  ") == "Main_1"
+    assert tr.campaign_safe_name("Well - being") == "Well_-_being"
+
+
+def test_the_safe_name_does_not_pile_up_underscores():
+    assert tr.campaign_safe_name("a  b") == "a_b"
+    assert tr.campaign_safe_name("_a_") == "a"
+
+
+def test_a_name_of_only_spaces_is_refused():
+    with pytest.raises(tr.TargetingError):
+        tr.add("   ", "один")
+
+
+def test_the_rule_applies_when_adding():
+    t = tr.add("Investment Plus", "один, два")
+    assert t.name == "Investment_Plus"
+    assert [x.name for x in tr.all_targets()] == ["Investment_Plus"]
+
+
+def test_two_names_differing_only_by_a_space_collide():
+    """`Main 1` и `Main_1` — после правила одно и то же имя."""
+    tr.add("Main_1", "один")
+    with pytest.raises(tr.TargetingError) as e:
+        tr.add("Main 1", "два, три")
+    assert "занято" in str(e.value).lower()

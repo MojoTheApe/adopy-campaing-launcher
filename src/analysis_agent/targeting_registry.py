@@ -72,6 +72,24 @@ def normalise_one(name: str) -> str:
     return _SPACE_RE.sub(" ", text).strip().casefold()
 
 
+def campaign_safe_name(name: str) -> str:
+    """Имя таргета в виде, который не ломает название кампании.
+
+    Название кампании собирается склейкой частей через подчёркивание:
+    `parts.join('_')` в `cbUpdateName` — страна, ассет, ОС, тип креатива,
+    **таргет**, возраст, дата. Пробел внутри имени таргета попадает внутрь
+    части, и название перестаёт разбираться обратно: `KW_Ait_All_Image_
+    Investment Plus_35_0809` — уже не семь частей, а семь и половина.
+
+    Поэтому пробелы становятся подчёркиванием. Остальное не трогаем: дефисы и
+    цифры разбору не мешают, а чистить имя дальше значило бы переименовывать
+    таргеты за человека.
+    """
+    text = _SPACE_RE.sub("_", (name or "").strip())
+    text = re.sub(r"_{2,}", "_", text)
+    return text.strip("_")
+
+
 def split_values(raw: str) -> list[str]:
     """Строку через запятую — в список значений, без пустых."""
     return [v.strip() for v in (raw or "").split(",") if v.strip()]
@@ -139,7 +157,7 @@ def find_duplicate(interests: str, narrow: str = "", *, ignore: str = "") -> Tar
 
 
 def _check(name: str, interests: str, narrow: str, *, ignore: str = "") -> None:
-    if not name.strip():
+    if not campaign_safe_name(name):
         raise TargetingError("У таргета должно быть название.")
     if not split_values(interests):
         raise TargetingError("Укажите хотя бы один интерес.")
@@ -147,8 +165,9 @@ def _check(name: str, interests: str, narrow: str, *, ignore: str = "") -> None:
     existing = {t.name.casefold() for t in all_targets()}
     if ignore:
         existing.discard(ignore.casefold())
-    if name.strip().casefold() in existing:
-        raise TargetingError(f"Имя «{name.strip()}» уже занято другим таргетом.")
+    safe = campaign_safe_name(name)
+    if safe.casefold() in existing:
+        raise TargetingError(f"Имя «{safe}» уже занято другим таргетом.")
 
     twin = find_duplicate(interests, narrow, ignore=ignore)
     if twin is not None:
@@ -179,7 +198,7 @@ def share(target: Target) -> str:
 def add(name: str, interests: str, narrow: str = "", *, source: str = "dashboard") -> Target:
     _check(name, interests, narrow)
     t = Target(
-        name=name.strip(),
+        name=campaign_safe_name(name),
         interests=", ".join(split_values(interests)),
         narrow=", ".join(split_values(narrow)),
         added_at=time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -198,7 +217,7 @@ def update(old_name: str, name: str, interests: str, narrow: str = "") -> Target
     _check(name, interests, narrow, ignore=old_name)
     was = data.pop(old_name)
     t = Target(
-        name=name.strip(),
+        name=campaign_safe_name(name),
         interests=", ".join(split_values(interests)),
         narrow=", ".join(split_values(narrow)),
         added_at=str(was.get("added_at") or ""),
@@ -236,3 +255,81 @@ def import_targets(profiles: Iterable) -> int:
         except TargetingError:
             continue
     return added
+
+
+# ─────────────────────── общая библиотека ───────────────────────
+#
+# Таблица — общая библиотека команды, реестр — копия на этой машине. Одна
+# правда, а не две: копия сверяется с таблицей при каждом открытии раздела,
+# поэтому чужое добавление и чужое удаление доходят одинаково. Пока копия была
+# самостоятельным хранилищем, «у меня есть» и «есть у всех» расходились молча.
+
+
+def push_all(*, snapshot: bool = False) -> tuple[int, str]:
+    """Отдать весь реестр в общую таблицу. Возвращает (сколько строк, снимок).
+
+    `snapshot=True` — перед записью снять копию нынешнего содержимого. Нужно
+    там, где таблицу переписывают целиком по чьему-то решению: откатить такое
+    больше нечем. На обычной правке снимок не делается, иначе за день их
+    накопятся десятки и нужный потеряется среди них.
+    """
+    from src.analysis_agent import gsheet_targeting as g
+
+    backup = g.snapshot_tab() if snapshot else ""
+    rows = [(t.name, t.interests, t.narrow) for t in all_targets()]
+    written = g.replace_all_profiles(rows)
+    return written, backup
+
+
+def with_shared(mutate):
+    """Правка так, чтобы её увидели все, а чужую не затереть.
+
+    Порядок именно такой: сперва забрать чужие изменения, потом применить своё,
+    потом отдать всё обратно.
+
+    Иначе получается беззвучная потеря. Заберёшь после своего удаления — чужая
+    копия вернёт удалённое, и оно воскреснет. Не заберёшь вовсе — полная
+    перезапись сотрёт таргет, который в эту минуту завёл кто-то другой.
+    Дописыванием строк такого не случалось, но дописыванием нельзя удалять, а
+    удаление обязано доходить до всех наравне с добавлением.
+
+    Возвращает `(результат, ошибка_раздачи)`. Ошибка не глотается: «сохранено
+    здесь» и «увидели все» — разные вещи, и человек должен знать, какая из них
+    с ним случилась.
+    """
+    pulled, pull_error = pull_from_sheet()
+    result = mutate()
+    try:
+        push_all()
+    except Exception as exc:  # noqa: BLE001 — текст уходит человеку
+        return result, str(exc)
+    if pull_error and not pulled:
+        return result, f"чужие изменения забрать не удалось: {pull_error}"
+    return result, ""
+
+
+def pull_from_sheet() -> tuple[int, str]:
+    """Привести копию в точное соответствие таблице. Возвращает (сколько, ошибка).
+
+    Именно в точное: чужое удаление обязано доходить так же, как чужое
+    добавление. Если таблица не прочиталась — копия не трогается, и ошибка
+    возвращается наверх, а не выдаётся за пустую библиотеку.
+    """
+    from src.analysis_agent import gsheet_targeting as g
+
+    profiles = g.load_targeting_profiles(force=True)
+    if not profiles:
+        return 0, (g.last_error or "таблица пуста")
+
+    data = {}
+    for p in profiles.values():
+        t = Target(
+            name=campaign_safe_name(p.name),
+            interests=", ".join(split_values(p.interests)),
+            narrow=", ".join(split_values(p.narrow)),
+            added_at=time.strftime("%Y-%m-%d %H:%M:%S"),
+            source="sheet",
+        )
+        data[t.name] = t.to_dict()
+    _save_raw(data)
+    return len(data), ""

@@ -2013,35 +2013,25 @@ async def api_accounts_overview() -> JSONResponse:
 
 
 @app.get("/api/targeting-profiles")
-async def api_targeting_profiles() -> JSONResponse:
-    """Реестр таргетов. Хранится у нас, а не в чужой таблице.
+async def api_targeting_profiles(refresh: int = 0) -> JSONResponse:
+    """Библиотека таргетов: общая таблица, копия на этой машине.
 
-    Раньше источником была вкладка Google Sheets, и библиотека была заложницей
-    чужого доступа: 8 сентября лист начал отвечать `403`, а на экране стояло
-    «empty or the sheet is unavailable» — одна строка про две разные беды.
-    Теперь таблица участвует только в первом наполнении, и её недоступность
-    называется вслух, а не выдаётся за пустоту.
+    Одна правда, а не две. Копия сверяется с таблицей при открытии раздела,
+    поэтому чужое добавление и чужое удаление доходят одинаково. Пока копия
+    была самостоятельным хранилищем, «у меня есть» и «есть у всех» расходились
+    молча — и 8 сентября разошлись на 48 таргетов.
+
+    Когда таблица не читается, показываем копию и говорим, что случилось:
+    «пусто» и «не достучались» требуют разных действий.
     """
-    from src.analysis_agent import gsheet_targeting, targeting_registry
+    from src.analysis_agent import targeting_registry
 
+    pulled, error = targeting_registry.pull_from_sheet()
     targets = targeting_registry.all_targets()
-    sheet: dict[str, object] = {"tried": False, "error": "", "imported": 0}
-
-    # За таблицей идём только когда реестр пуст: наполнить его один раз имеет
-    # смысл, ходить туда на каждом открытии — нет.
-    if not targets:
-        sheet["tried"] = True
-        from_sheet = gsheet_targeting.load_targeting_profiles(force=True)
-        sheet["error"] = gsheet_targeting.last_error
-        if from_sheet:
-            sheet["imported"] = targeting_registry.import_targets(from_sheet.values())
-            targets = targeting_registry.all_targets()
-
     return JSONResponse({
         "ok": True,
-        # Добавлять можно всегда: реестр наш, чужой токен для этого не нужен.
         "can_add": True,
-        "sheet": sheet,
+        "sheet": {"tried": True, "error": error, "pulled": pulled},
         "profiles": [
             {
                 "name": t.name,
@@ -2080,16 +2070,17 @@ async def api_edit_targeting_profile(request: Request) -> JSONResponse:
 
     try:
         if action == "delete":
-            tr.remove(name)
-            return JSONResponse({"ok": True, "removed": name})
+            _, shared_error = tr.with_shared(lambda: tr.remove(name))
+            return JSONResponse(
+                {"ok": True, "removed": name,
+                 "shared": not shared_error, "shared_error": shared_error}
+            )
         if action == "update":
-            target = tr.update(data.get("was") or name, name, interests, narrow)
+            target, shared_error = tr.with_shared(
+                lambda: tr.update(data.get("was") or name, name, interests, narrow)
+            )
         elif action == "add":
-            target = tr.add(name, interests, narrow)
-            # Реестр на этой машине — половина дела. Пока таргета нет в общей
-            # таблице, его не видит никто, кроме автора, и молчать об этом
-            # нельзя: «сохранено» и «увидят все» — разные вещи.
-            shared_error = tr.share(target)
+            target, shared_error = tr.with_shared(lambda: tr.add(name, interests, narrow))
         else:
             return JSONResponse(
                 {"ok": False, "error": f"Неизвестное действие: {action}"}, status_code=400

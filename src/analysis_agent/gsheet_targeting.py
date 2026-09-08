@@ -254,3 +254,80 @@ def add_targeting_profile(name: str, interests: str, narrow: str = "") -> Target
     load_targeting_profiles(force=True)
     _log(f"added targeting profile {clean_name!r}")
     return TargetingProfile(name=clean_name, interests=clean_interests, narrow=clean_narrow)
+
+
+def snapshot_tab() -> str:
+    """Сохранить нынешнее содержимое вкладки в файл. Возвращает путь.
+
+    Перезапись общей таблицы затрагивает всю команду, и «откатить» её нечем,
+    кроме такого снимка. Делается до записи, а не после.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    from config import paths as _paths
+
+    sheet_id = os.environ.get("GSHEET_TARGETING_SPREADSHEET_ID") or _DEFAULT_SPREADSHEET_ID
+    tab = os.environ.get("GSHEET_TARGETING_TAB") or _DEFAULT_TAB
+    rows = []
+    for label, svc in _sheets_services():
+        try:
+            actual = _resolve(svc, sheet_id, tab)
+            rows = (
+                svc.spreadsheets().values()
+                .get(spreadsheetId=sheet_id, range=f"'{actual}'!A1:C500")
+                .execute().get("values", [])
+            )
+            break
+        except Exception as exc:
+            _log(f"snapshot: {label} refused ({exc!r})")
+    out = _Path(_paths.get_local_config_dir()) / (
+        "targeting_sheet_backup_" + time.strftime("%Y%m%d_%H%M%S") + ".json"
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(_json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+    _log(f"snapshot of {len(rows)} rows -> {out}")
+    return str(out)
+
+
+def _resolve(svc, sheet_id: str, tab: str) -> str:
+    meta = svc.spreadsheets().get(spreadsheetId=sheet_id).execute()
+    titles = [s["properties"]["title"] for s in meta.get("sheets", [])]
+    actual = next((t for t in titles if t.strip().lower() == tab.strip().lower()), None)
+    if actual is None:
+        raise TargetingWriteError(f"Вкладки «{tab}» нет в таблице (есть: {', '.join(titles)}).")
+    return actual
+
+
+def replace_all_profiles(rows: list[tuple[str, str, str]]) -> int:
+    """Переписать вкладку целиком. Возвращает число записанных строк.
+
+    Целиком, а не построчно: удаление таргета должно доходить до всех так же,
+    как добавление, а дописыванием строк удалить нельзя.
+
+    Чем это оплачено: два человека, пишущие одновременно, могут затереть работу
+    друг друга — дописывание строк такого не позволяло. Поэтому перед записью
+    вызывающий обязан слить чужие изменения к себе; race остаётся открытым как
+    `acl-333`.
+    """
+    from src.analysis_agent.gsheet_write import get_write_service
+
+    sheet_id = os.environ.get("GSHEET_TARGETING_SPREADSHEET_ID") or _DEFAULT_SPREADSHEET_ID
+    tab = os.environ.get("GSHEET_TARGETING_TAB") or _DEFAULT_TAB
+    svc = get_write_service()
+    actual = _resolve(svc, sheet_id, tab)
+
+    body = [[n, i, w] for (n, i, w) in rows]
+    svc.spreadsheets().values().clear(
+        spreadsheetId=sheet_id, range=f"'{actual}'!A2:C500", body={}
+    ).execute()
+    if body:
+        svc.spreadsheets().values().update(
+            spreadsheetId=sheet_id,
+            range=f"'{actual}'!A2",
+            valueInputOption="RAW",
+            body={"values": body},
+        ).execute()
+    load_targeting_profiles(force=True)
+    _log(f"replaced tab {actual!r} with {len(body)} rows")
+    return len(body)
