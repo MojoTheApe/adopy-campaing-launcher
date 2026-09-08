@@ -2014,53 +2014,83 @@ async def api_accounts_overview() -> JSONResponse:
 
 @app.get("/api/targeting-profiles")
 async def api_targeting_profiles() -> JSONResponse:
-    """The shared targeting library, as every buyer sees it.
+    """Реестр таргетов. Хранится у нас, а не в чужой таблице.
 
-    One tab in one spreadsheet is the source of truth for the whole team, so
-    what this returns is identical on every machine — that is what makes a
-    profile added here immediately usable by everyone.
+    Раньше источником была вкладка Google Sheets, и библиотека была заложницей
+    чужого доступа: 8 сентября лист начал отвечать `403`, а на экране стояло
+    «empty or the sheet is unavailable» — одна строка про две разные беды.
+    Теперь таблица участвует только в первом наполнении, и её недоступность
+    называется вслух, а не выдаётся за пустоту.
     """
-    from src.analysis_agent.gsheet_targeting import load_targeting_profiles
-    from src.analysis_agent.gsheet_write import is_authorised
+    from src.analysis_agent import gsheet_targeting, targeting_registry
 
-    profiles = load_targeting_profiles()
+    targets = targeting_registry.all_targets()
+    sheet: dict[str, object] = {"tried": False, "error": "", "imported": 0}
+
+    # За таблицей идём только когда реестр пуст: наполнить его один раз имеет
+    # смысл, ходить туда на каждом открытии — нет.
+    if not targets:
+        sheet["tried"] = True
+        from_sheet = gsheet_targeting.load_targeting_profiles(force=True)
+        sheet["error"] = gsheet_targeting.last_error
+        if from_sheet:
+            sheet["imported"] = targeting_registry.import_targets(from_sheet.values())
+            targets = targeting_registry.all_targets()
+
     return JSONResponse({
         "ok": True,
-        # Adding requires the machine's Google write token. Report it up front
-        # so the UI can explain why the form is unavailable instead of failing
-        # only once someone has typed a profile.
-        "can_add": is_authorised(),
+        # Добавлять можно всегда: реестр наш, чужой токен для этого не нужен.
+        "can_add": True,
+        "sheet": sheet,
         "profiles": [
-            {"name": p.name, "interests": p.interests, "narrow": p.narrow}
-            for p in sorted(profiles.values(), key=lambda x: x.name.lower())
+            {
+                "name": t.name,
+                "interests": t.interests,
+                "narrow": t.narrow,
+                "added_at": t.added_at,
+                "source": t.source,
+            }
+            for t in targets
         ],
     })
 
 
 @app.post("/api/targeting-profiles")
-async def api_add_targeting_profile(request: Request) -> JSONResponse:
-    """Add one profile to the shared library.
+async def api_edit_targeting_profile(request: Request) -> JSONResponse:
+    """Завести таргет, поправить его или убрать.
 
-    Body JSON: {name, interests, narrow?}
+    Тело: `{action: add|update|delete, name, interests?, narrow?, was?}`.
+
+    Уникальность считает реестр: таргет — это набор интересов, и перестановка
+    значений нового таргета не делает. Отказ называет, с чем именно совпало, —
+    иначе человеку остаётся гадать, какой из полусотни он повторил.
     """
-    from src.analysis_agent.gsheet_targeting import (
-        TargetingWriteError,
-        add_targeting_profile,
-    )
+    from src.analysis_agent import targeting_registry as tr
 
     try:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
 
+    action = (data.get("action") or "add").strip().lower()
+    name = data.get("name") or ""
+    interests = data.get("interests") or ""
+    narrow = data.get("narrow") or ""
+
     try:
-        profile = add_targeting_profile(
-            data.get("name") or "",
-            data.get("interests") or "",
-            data.get("narrow") or "",
-        )
-    except TargetingWriteError as exc:
-        # Operator-actionable: wrong input, duplicate name, or missing consent.
+        if action == "delete":
+            tr.remove(name)
+            return JSONResponse({"ok": True, "removed": name})
+        if action == "update":
+            target = tr.update(data.get("was") or name, name, interests, narrow)
+        elif action == "add":
+            target = tr.add(name, interests, narrow)
+        else:
+            return JSONResponse(
+                {"ok": False, "error": f"Неизвестное действие: {action}"}, status_code=400
+            )
+    except tr.TargetingError as exc:
+        # Человеку есть что поправить: пустое поле, занятое имя, повтор набора.
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
@@ -2068,9 +2098,11 @@ async def api_add_targeting_profile(request: Request) -> JSONResponse:
     return JSONResponse({
         "ok": True,
         "profile": {
-            "name": profile.name,
-            "interests": profile.interests,
-            "narrow": profile.narrow,
+            "name": target.name,
+            "interests": target.interests,
+            "narrow": target.narrow,
+            "added_at": target.added_at,
+            "source": target.source,
         },
     })
 

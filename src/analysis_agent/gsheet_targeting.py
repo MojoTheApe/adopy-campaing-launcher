@@ -51,6 +51,14 @@ class _Cache:
 
 _cache = _Cache()
 
+#: Почему последняя загрузка не удалась — пусто, если удалась.
+#:
+#: Раньше отказ и пустая вкладка выглядели одинаково: обе давали `{}`. На
+#: экране это превращалось в «empty or the sheet is unavailable» — одну строку
+#: про две разные беды, требующие разных действий. Кто читал её 8 сентября,
+#: когда лист начал отвечать `403`, не мог узнать, что случилось.
+last_error: str = ""
+
 
 def _log(msg: str) -> None:
     print(f"[gsheet_targeting] {msg}", file=sys.stderr)
@@ -64,7 +72,12 @@ def _clean_names(raw: str) -> str:
 
 def load_targeting_profiles(*, force: bool = False) -> dict[str, TargetingProfile]:
     """Load all profiles, cached for a few minutes. {} on any failure —
-    callers treat that as "fall back to the Excel source"."""
+    callers treat that as "fall back to the Excel source".
+
+    Почему не удалось — в `last_error`: пустая вкладка и отказ в доступе дают
+    одинаковый `{}`, а действий требуют разных.
+    """
+    global last_error
     now = time.time()
     if not force and _cache.profiles and now - _cache.loaded_at < _CACHE_TTL_S:
         return _cache.profiles
@@ -83,6 +96,7 @@ def load_targeting_profiles(*, force: bool = False) -> dict[str, TargetingProfil
             (t for t in titles if t.strip().lower() == tab.strip().lower()), None
         )
         if actual is None:
+            last_error = f"вкладки «{tab}» нет в таблице (есть: {', '.join(titles)})"
             _log(f"tab {tab!r} not found (have: {titles}) — falling back")
             return {}
 
@@ -94,6 +108,7 @@ def load_targeting_profiles(*, force: bool = False) -> dict[str, TargetingProfil
             .get("values", [])
         )
     except Exception as exc:
+        last_error = f"{type(exc).__name__}: {exc}"
         _log(f"load failed ({exc!r}) — falling back")
         return {}
 
@@ -113,6 +128,7 @@ def load_targeting_profiles(*, force: bool = False) -> dict[str, TargetingProfil
             narrow=_clean_names(row[2] if len(row) > 2 else ""),
         )
 
+    last_error = ""
     _cache.profiles = profiles
     _cache.loaded_at = now
     _log(f"loaded {len(profiles)} targeting profiles from tab {actual!r}")

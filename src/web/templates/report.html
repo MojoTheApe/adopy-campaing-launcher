@@ -8184,30 +8184,44 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var box = document.getElementById('tg-list');
     if (!box) return;
     var list = (data && data.profiles) || [];
+    var sheet = (data && data.sheet) || {};
     if (!list.length) {
-      box.innerHTML = '<p><em>The library is empty or the sheet is unavailable.</em></p>';
+      /* «Пусто» и «не достучались» — разные беды, и делать с ними надо разное.
+         Одной строкой «empty or the sheet is unavailable» они были неразличимы:
+         8 сентября таблица начала отвечать 403, а на экране стояло слово
+         «empty», и понять это было неоткуда. */
+      if (sheet.error) {
+        box.innerHTML = '<p><b>The registry is empty, and the old spreadsheet '
+          + 'could not be read.</b></p><p style="color:var(--muted);font-size:0.85rem">'
+          + esc(sheet.error) + '</p><p style="color:var(--muted);font-size:0.85rem">'
+          + 'Nothing was lost — the sheet is only used to seed the registry once. '
+          + 'Add targets below; they are stored here and no longer depend on it.</p>';
+      } else {
+        box.innerHTML = '<p><em>The registry is empty. Add the first target below.</em></p>';
+      }
       return;
     }
-    var html = '<p style="color:var(--muted);font-size:0.85rem">Total: ' + list.length + '</p>'
-      + '<table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th></tr></thead><tbody>';
+    var note = sheet.imported
+      ? ' · ' + sheet.imported + ' brought over from the old spreadsheet'
+      : '';
+    var html = '<p style="color:var(--muted);font-size:0.85rem">Total: ' + list.length
+      + note + '</p>'
+      + '<table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th><th></th></tr>'
+      + '</thead><tbody>';
     list.forEach(function (p) {
-      html += '<tr><td><b>' + esc(p.name) + '</b></td><td>' + esc(p.interests)
-           + '</td><td>' + esc(p.narrow || '—') + '</td></tr>';
+      html += '<tr data-name="' + esc(p.name) + '">'
+           + '<td><b>' + esc(p.name) + '</b></td>'
+           + '<td>' + esc(p.interests) + '</td>'
+           + '<td>' + esc(p.narrow || '—') + '</td>'
+           + '<td style="text-align:right;white-space:nowrap">'
+           + '<button type="button" class="amap-btn" data-tg-edit="' + esc(p.name) + '">Edit</button> '
+           + '<button type="button" class="amap-x" data-tg-del="' + esc(p.name) + '">Remove</button>'
+           + '</td></tr>';
     });
     box.innerHTML = html + '</tbody></table>';
 
-    // The form needs the machine's Google write token; say so plainly rather
-    // than letting someone type a profile and only then hit the error.
-    if (data && data.can_add === false) {
-      var addBox = document.getElementById('tg-add-box');
-      if (addBox) {
-        addBox.style.opacity = '0.55';
-        var btn = document.getElementById('tg-add-btn');
-        if (btn) btn.disabled = true;
-        say('Adding is unavailable: this machine has no Google write access. '
-          + 'Run once: python scripts/acl_telemetry_upload.py', 'err');
-      }
-    }
+    /* Форма больше не зависит от чужого токена: реестр лежит на этой машине,
+       и добавить таргет можно всегда. */
   }
 
   function load(force) {
@@ -8222,26 +8236,42 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       });
   }
 
-  function add() {
-    var name = (document.getElementById('tg-name') || {}).value || '';
-    var interests = (document.getElementById('tg-interests') || {}).value || '';
-    var narrow = (document.getElementById('tg-narrow') || {}).value || '';
+  /* Что правим сейчас: пусто — заводим новый, имя — меняем существующий.
+     Без этого «Add» на заполненной форме молча заводил бы второй таргет, а
+     человек считал бы, что поправил первый. */
+  var editing = '';
+
+  function fields() {
+    return {
+      name: (document.getElementById('tg-name') || {}).value || '',
+      interests: (document.getElementById('tg-interests') || {}).value || '',
+      narrow: (document.getElementById('tg-narrow') || {}).value || ''
+    };
+  }
+
+  function clearForm() {
+    ['tg-name', 'tg-interests', 'tg-narrow'].forEach(function (id) {
+      var el = document.getElementById(id); if (el) el.value = '';
+    });
+    editing = '';
+    var btn = document.getElementById('tg-add-btn');
+    if (btn) btn.textContent = 'Add';
+  }
+
+  function send(body, done) {
     var btn = document.getElementById('tg-add-btn');
     if (btn) btn.disabled = true;
     say('Saving…');
     fetch('/api/targeting-profiles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, interests: interests, narrow: narrow })
+      body: JSON.stringify(body)
     })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (btn) btn.disabled = false;
         if (!res.ok || !res.d.ok) { say(res.d.error || 'Could not save', 'err'); return; }
-        say('Added: ' + res.d.profile.name + ' — now visible to everyone', 'ok');
-        ['tg-name', 'tg-interests', 'tg-narrow'].forEach(function (id) {
-          var el = document.getElementById(id); if (el) el.value = '';
-        });
+        done(res.d);
         load(true);
       })
       .catch(function (e) {
@@ -8250,10 +8280,52 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       });
   }
 
+  function save() {
+    var f = fields();
+    var body = editing
+      ? { action: 'update', was: editing, name: f.name, interests: f.interests, narrow: f.narrow }
+      : { action: 'add', name: f.name, interests: f.interests, narrow: f.narrow };
+    var was = editing;
+    send(body, function (d) {
+      say((was ? 'Updated: ' : 'Added: ') + d.profile.name, 'ok');
+      clearForm();
+    });
+  }
+
+  function startEdit(name) {
+    var row = document.querySelector('[data-name="' + name.replace(/"/g, '\\"') + '"]');
+    if (!row) return;
+    var cells = row.querySelectorAll('td');
+    document.getElementById('tg-name').value = name;
+    document.getElementById('tg-interests').value = cells[1].textContent.trim();
+    var nar = cells[2].textContent.trim();
+    document.getElementById('tg-narrow').value = nar === '—' ? '' : nar;
+    editing = name;
+    var btn = document.getElementById('tg-add-btn');
+    if (btn) btn.textContent = 'Save';
+    say('Editing «' + name + '» — clear the name field to add a new one instead.');
+    var box = document.getElementById('tg-add-box');
+    if (box) box.scrollIntoView({ block: 'nearest' });
+  }
+
   document.addEventListener('click', function (ev) {
     var t = ev.target;
-    if (t && t.id === 'tg-add-btn') { add(); return; }
-    if (t && t.getAttribute && t.getAttribute('data-view') === 'targets') { load(false); }
+    if (!t || !t.getAttribute) return;
+    if (t.id === 'tg-add-btn') { save(); return; }
+    var edit = t.getAttribute('data-tg-edit');
+    if (edit) { startEdit(edit); return; }
+    var del = t.getAttribute('data-tg-del');
+    if (del) {
+      /* Удаление спрашивают: реестр общий, и убранный кем-то таргет пропадёт
+         у всех, кто им пользовался. */
+      if (!confirm('Remove «' + del + '» from the registry?')) return;
+      send({ action: 'delete', name: del }, function () {
+        say('Removed: ' + del, 'ok');
+        if (editing === del) clearForm();
+      });
+      return;
+    }
+    if (t.getAttribute('data-view') === 'targets') { load(false); }
   });
 
   if ((location.hash || '').indexOf('targets') !== -1) {
