@@ -3247,9 +3247,27 @@ async function dashRefresh(ev) {
 </div>
 {% endif %}
 
+{# Пустой отчёт: сказать, почему пусто, и не прятать карту аккаунтов.
+
+   Раньше здесь стояло «No country data found. Check Excel path and filters» —
+   и это уводило чинить здоровый файл. Выбрав сегодняшний день, человек видел
+   диагноз про путь к Excel, хотя книга просто ещё не знает сегодня.
+
+   Вместе с отчётом исчезала и карта аккаунтов, а на ней кнопка Read — та
+   самая, ради которой сегодняшний день и выбирают: она читает не книгу, а
+   Ads Manager. Экран прятал ровно то, что продолжало работать. #}
 {% if not report.countries %}
 <div class="page-top">
-<p style="color: var(--muted)">No country data found. Check Excel path and filters.</p>
+  {% if account_map and account_map.date_from %}
+  <p style="color: var(--muted)">
+    The workbook has no rows for <b>{{ account_map.date_from }}{% if account_map.date_to and account_map.date_to != account_map.date_from %} → {{ account_map.date_to }}{% endif %}</b>.
+    {% if account_map.dates %}It runs to {{ account_map.dates[-1] }}.{% endif %}
+    Pick another period, or read the spend straight from an account below.
+  </p>
+  {% else %}
+  <p style="color: var(--muted)">No country data found. Check the Excel path and the filters.</p>
+  {% endif %}
+  <div id="amap-slot">{% include "_account_map.html" %}</div>
 </div>
 {% endif %}
 

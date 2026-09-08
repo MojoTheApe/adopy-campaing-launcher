@@ -58,3 +58,24 @@ def test_a_day_without_rows_is_marked_not_forbidden():
     """Пометка нужна: человек должен видеть, что дешборд про день не знает."""
     body = _picker()
     assert "' thin'" in body, "исчезла пометка дней и пресетов без данных в книге"
+
+
+def test_an_empty_period_still_shows_the_account_map():
+    """Пустой период не должен прятать то, что от книги не зависит.
+
+    Выбрав сегодняшний день, человек получал «No country data found. Check
+    Excel path and filters» — диагноз про здоровый файл — и вместе с отчётом
+    терял карту аккаунтов, а на ней кнопку Read. Именно она читает Ads
+    Manager, а не книгу, и именно ради неё сегодняшний день и выбирают: экран
+    прятал ровно то, что продолжало работать.
+    """
+    t = TPL.read_text(encoding="utf-8")
+    start = t.index("{% if not report.countries %}")
+    # до следующего <script>, а не до первого {% endif %}: внутри блока есть
+    # вложенное условие, и срез по первому endif обрывался прямо перед тем,
+    # что проверяется. Первая версия этого сторожа так и упала.
+    empty = t[start : t.index("<script>", start)]
+    assert "_account_map.html" in empty, "карта аккаунтов снова спрятана пустым периодом"
+    assert "account_map.date_from" in empty, (
+        "пустой отчёт снова не называет период — а человек пойдёт чинить файл"
+    )
