@@ -560,16 +560,21 @@ def render(board: Board) -> str:
                 f'<div class="pins">{cards}</div></section>'
             )
         blurb = f'<p class="blurb">{_esc(area.blurb)}</p>' if area.blurb else ""
+        # Область свёрнута: видны заголовок, подзаголовок и счётчик, а карточки
+        # открывает стрелка. Шесть областей и шестьдесят с лишним задач разом —
+        # это стена, по которой нельзя вести взглядом; свёрнутая, она за один
+        # экран отвечает, из чего состоит система и сколько где сделано.
         areas_html.append(
-            f'<section class="area" id="area-{area.number}">'
-            f'<div class="area-head">'
+            f'<details class="area" id="area-{area.number}" data-area="{_esc(area.number)}">'
+            f'<summary class="area-head">'
+            f'<span class="area-caret" aria-hidden="true"></span>'
             f'<div class="area-id">{_esc(area.number)}</div>'
             f'<div class="area-name"><h2>{_esc(area.title)}</h2>{blurb}</div>'
             f'<div class="area-meter"><div class="bar"><span style="width:{pct}%"></span></div>'
             f'<div class="ratio">{done}<i>/{tot}</i></div></div>'
-            f"</div>"
+            f"</summary>"
             f'<div class="caps">{"".join(caps)}</div>'
-            f"</section>"
+            f"</details>"
         )
 
     nav = "".join(
@@ -585,6 +590,10 @@ def render(board: Board) -> str:
         pct=round(shipped / total * 100) if total else 0,
         legend=legend,
         nav=nav,
+        # Число областей считается, а не написано словом: в подзаголовке
+        # стояло «Five areas», когда их было уже шесть. Мелочь, которая учит
+        # не верить остальному тексту на странице.
+        area_count=len(board.areas),
         areas="".join(areas_html),
     )
 
@@ -693,7 +702,21 @@ nav.areas a:hover {{ color: var(--ink); text-decoration: underline;
 
 .area {{ margin-top: 52px; scroll-margin-top: 20px; }}
 .area-head {{ display: flex; gap: 18px; align-items: flex-start;
-  border-bottom: 1px solid var(--rule); padding-bottom: 12px; }}
+  border-bottom: 1px solid var(--rule); padding-bottom: 12px;
+  cursor: pointer; list-style: none; user-select: none; }}
+/* Стрелка своя: у встроенного маркера ни цвета, ни места не выбрать, а в
+   Safari он ещё и рисуется треугольником поверх нашей вёрстки. */
+.area-head::-webkit-details-marker {{ display: none; }}
+.area-head::marker {{ content: ""; }}
+.area-caret {{ width: 9px; height: 9px; margin-top: 11px; flex: none;
+  border-right: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3);
+  transform: rotate(-45deg); transition: transform .15s ease; }}
+.area[open] > .area-head .area-caret {{ transform: rotate(45deg); }}
+.area-head:hover .area-caret {{ border-color: var(--ink); }}
+.area[open] > .area-head {{ border-bottom-color: var(--rule); }}
+@media (prefers-reduced-motion: reduce) {{
+  .area-caret {{ transition: none; }}
+}}
 .area-id {{ font-family: "Familjen Grotesk", sans-serif; font-weight: 700;
   font-size: 30px; line-height: 1; color: var(--ink-3);
   font-variant-numeric: tabular-nums; min-width: 28px; }}
@@ -775,9 +798,9 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
   <header class="top">
     <div>
       <h1>ACL Task Wall</h1>
-      <p class="sub">Five areas of the system, the capabilities each is made of,
-      and every task hanging off them. Edited in Obsidian; this wall is built
-      from that file.</p>
+      <p class="sub">{area_count} areas of the system, the capabilities each is made of,
+      and every task hanging off them. Open an area to see its tasks. Edited in
+      Obsidian; this wall is built from that file.</p>
     </div>
     <div class="score">
       <div class="cap-label">Shipped</div>
@@ -800,25 +823,88 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
 
 <script>
 (function () {{
-  var active = null;
+  /* Области свёрнуты. Шестьдесят задач разом — это стена, по которой нельзя
+     вести взглядом; свёрнутая, она за один экран отвечает, из чего состоит
+     система и сколько где сделано. Раскрытое человеком запоминается. */
+  var KEY = 'acl.wall.open';
+  var areas = Array.prototype.slice.call(document.querySelectorAll('details.area'));
   var chips = Array.prototype.slice.call(document.querySelectorAll('.chip'));
+  var active = null;
+  var known = [];
+
+  function stored() {{
+    try {{
+      var raw = localStorage.getItem(KEY);
+      var list = raw ? JSON.parse(raw) : [];
+      return Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+    }} catch (e) {{
+      return [];   // приватное окно или запрет на хранилище — просто без памяти
+    }}
+  }}
+
+  function remember() {{
+    // Под фильтром области открыты не человеком, а фильтром: запоминать это
+    // значило бы выдать чужой выбор за его собственный.
+    if (active) return;
+    try {{
+      localStorage.setItem(KEY, JSON.stringify(
+        areas.filter(function (a) {{ return a.open; }})
+             .map(function (a) {{ return a.getAttribute('data-area'); }})));
+    }} catch (e) {{}}
+  }}
+
+  known = stored();
+  areas.forEach(function (a) {{
+    if (known.indexOf(a.getAttribute('data-area')) !== -1) a.open = true;
+    a.addEventListener('toggle', remember);
+  }});
+
+  function apply() {{
+    document.querySelectorAll('.pin').forEach(function (pin) {{
+      pin.classList.toggle('hide', !!active && pin.dataset.status !== active);
+    }});
+    document.querySelectorAll('.cap').forEach(function (cap) {{
+      cap.style.display = cap.querySelector('.pin:not(.hide)') ? '' : 'none';
+    }});
+    areas.forEach(function (a) {{
+      if (!active) {{
+        a.style.display = '';
+        a.open = known.indexOf(a.getAttribute('data-area')) !== -1;
+        return;
+      }}
+      var any = a.querySelector('.pin:not(.hide)');
+      a.style.display = any ? '' : 'none';
+      /* Найденное надо показать. Свёрнутая область под фильтром выглядит как
+         «фильтр ничего не нашёл»: нажатие есть, ответа нет. */
+      a.open = !!any;
+    }});
+  }}
+
   chips.forEach(function (chip) {{
     chip.setAttribute('aria-pressed', 'false');
     chip.addEventListener('click', function () {{
       var want = chip.dataset.filter;
       active = (active === want) ? null : want;
+      if (!active) known = stored();
       chips.forEach(function (c) {{
         c.setAttribute('aria-pressed', String(c.dataset.filter === active));
       }});
-      document.querySelectorAll('.pin').forEach(function (pin) {{
-        pin.classList.toggle('hide', !!active && pin.dataset.status !== active);
-      }});
-      document.querySelectorAll('.cap').forEach(function (cap) {{
-        var any = cap.querySelector('.pin:not(.hide)');
-        cap.style.display = any ? '' : 'none';
-      }});
+      apply();
     }});
   }});
+
+  /* Ссылка в оглавлении обязана раскрывать область: иначе якорь приводит к
+     закрытой шапке, и переход выглядит промахом. */
+  document.querySelectorAll('nav.areas a').forEach(function (link) {{
+    link.addEventListener('click', function () {{
+      var el = document.querySelector(link.getAttribute('href'));
+      if (el) el.open = true;
+    }});
+  }});
+  if (location.hash) {{
+    var at = document.querySelector(location.hash);
+    if (at && at.classList.contains('area')) at.open = true;
+  }}
 }})();
 </script>
 """
