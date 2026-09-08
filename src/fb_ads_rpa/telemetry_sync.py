@@ -191,6 +191,12 @@ def flow_version() -> str:
     except Exception:
         base = ""
 
+    from src.packaged_runtime import build_identity
+    packaged = build_identity()
+    if packaged:
+        _VERSION_CACHE = f"{base or '?'}@{packaged['short']}"
+        return _VERSION_CACHE
+
     head = _git("rev-parse", "--short", "HEAD")
     if not head:
         _VERSION_CACHE = base

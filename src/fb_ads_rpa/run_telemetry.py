@@ -29,7 +29,8 @@ from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parents[2]
-TELEMETRY_PATH = _ROOT / "output" / "rpa_telemetry.jsonl"
+from config.paths import get_runtime_workspace
+TELEMETRY_PATH = get_runtime_workspace() / "output" / "rpa_telemetry.jsonl"
 
 
 def new_run_id() -> str:
