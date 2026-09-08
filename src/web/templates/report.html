@@ -2203,10 +2203,11 @@ async function dashRefresh(ev) {
 </div>
 
 <div id="view-targets" class="view-panel">
-  <h2 class="view-title">Targeting <span class="hint">shared library — visible to every buyer</span></h2>
+  <h2 class="view-title">Targeting <span class="hint">shared profiles and local changes</span></h2>
   <p style="color:var(--muted);max-width:70ch">
-    One list for the whole team. Targeting added here is available to everyone at
-    once and appears in the campaign builder — no need to open the sheet by hand.
+    New profiles are saved here and sent to the shared library. Other machines
+    receive them on refresh. Edit and Remove apply only to this machine.
+    Saved local profiles remain available when Google Sheets is unavailable.
   </p>
 
   <div id="tg-add-box" style="margin:1rem 0;padding:0.9rem 1rem;border:1px solid var(--border);border-radius:6px;max-width:70ch">
@@ -2224,6 +2225,8 @@ async function dashRefresh(ev) {
         <input id="tg-narrow" type="text" placeholder="" style="width:100%">
       </label>
       <button type="button" id="tg-add-btn" class="btn">Add</button>
+      <button type="button" id="tg-cancel-btn" class="btn" hidden>Cancel edit</button>
+      <button type="button" id="tg-refresh-btn" class="btn">Refresh shared library</button>
     </div>
     <div id="tg-msg" style="margin-top:0.6rem;font-size:0.85rem"></div>
   </div>
@@ -8177,105 +8180,86 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
 })();
 
 // ── Таргеты: общая библиотека ────────────────────────────────────────────
-// Список грузится по требованию, а не на каждой загрузке страницы: он живёт
-// в Google Sheets, и тянуть его ради раздела, в который никто не зашёл, —
-// лишняя секунда старта для всех.
+// Targeting library UI. Keep selected records as data, never in CSS selectors.
 (function () {
-  var loaded = false;
-
-  function esc(v) {
-    return String(v == null ? '' : v)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  var profiles = [], editing = '', pending = false;
+  function el(id) { return document.getElementById(id); }
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function say(text, error) { el('tg-msg').textContent = text || ''; el('tg-msg').style.color = error ? '#b91c1c' : 'var(--muted)'; }
+  function busy(value) {
+    pending = value;
+    document.querySelectorAll('#view-targets button, #view-targets input').forEach(function (b) { b.disabled = value; });
   }
-
-  function say(text, kind) {
-    var el = document.getElementById('tg-msg');
-    if (!el) return;
-    var color = kind === 'err' ? '#b91c1c' : (kind === 'ok' ? 'var(--ok,#4caf50)' : 'var(--muted)');
-    el.style.color = color;
-    el.textContent = text || '';
-  }
-
   function render(data) {
-    var box = document.getElementById('tg-list');
-    if (!box) return;
-    var list = (data && data.profiles) || [];
-    if (!list.length) {
-      box.innerHTML = '<p><em>The library is empty or the sheet is unavailable.</em></p>';
-      return;
-    }
-    var html = '<p style="color:var(--muted);font-size:0.85rem">Total: ' + list.length + '</p>'
-      + '<table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th></tr></thead><tbody>';
-    list.forEach(function (p) {
-      html += '<tr><td><b>' + esc(p.name) + '</b></td><td>' + esc(p.interests)
-           + '</td><td>' + esc(p.narrow || '—') + '</td></tr>';
+    profiles = data.profiles || [];
+    var error = (data.sheet || {}).error;
+    var html = error ? '<p style="color:#b91c1c">Shared library could not be refreshed: ' + esc(error) + '. Showing saved local profiles.</p>' : '';
+    html += '<p>Total: ' + profiles.length + '</p><table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th><th>Status</th><th></th></tr></thead><tbody>';
+    profiles.forEach(function (p) {
+      html += '<tr><td><b>' + esc(p.name) + '</b></td><td>' + esc(p.interests) + '</td><td>' + esc(p.narrow || '—') + '</td>'
+        + '<td>' + (p.shared ? 'Shared copy' : 'Local only') + (p.shared_error ? '<br>' + esc(p.shared_error) : '') + '</td><td>'
+        + '<button type="button" data-tg-edit="' + esc(p.name) + '">Edit locally</button> '
+        + '<button type="button" data-tg-del="' + esc(p.name) + '">Remove locally</button> '
+        + (p.shared ? '' : '<button type="button" data-tg-share="' + esc(p.name) + '">Share / retry</button>') + '</td></tr>';
     });
-    box.innerHTML = html + '</tbody></table>';
-
-    // The form needs the machine's Google write token; say so plainly rather
-    // than letting someone type a profile and only then hit the error.
-    if (data && data.can_add === false) {
-      var addBox = document.getElementById('tg-add-box');
-      if (addBox) {
-        addBox.style.opacity = '0.55';
-        var btn = document.getElementById('tg-add-btn');
-        if (btn) btn.disabled = true;
-        say('Adding is unavailable: this machine has no Google write access. '
-          + 'Run once: python scripts/acl_telemetry_upload.py', 'err');
-      }
-    }
+    el('tg-list').innerHTML = html + '</tbody></table>';
   }
-
-  function load(force) {
-    if (loaded && !force) return;
-    var box = document.getElementById('tg-list');
-    if (box) box.textContent = 'Loading…';
-    fetch('/api/targeting-profiles')
-      .then(function (r) { return r.json(); })
-      .then(function (d) { loaded = true; render(d); })
-      .catch(function (e) {
-        if (box) box.innerHTML = '<p style="color:#b91c1c">Could not load: ' + esc(e) + '</p>';
-      });
+  async function load(force) {
+    if (pending) return;
+    busy(true);
+    try {
+      var r = await fetch('/api/targeting-profiles' + (force ? '?force=true' : ''));
+      var d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'Could not load');
+      render(d);
+    } catch (e) { say(String(e), true); }
+    finally { busy(false); }
   }
-
-  function add() {
-    var name = (document.getElementById('tg-name') || {}).value || '';
-    var interests = (document.getElementById('tg-interests') || {}).value || '';
-    var narrow = (document.getElementById('tg-narrow') || {}).value || '';
-    var btn = document.getElementById('tg-add-btn');
-    if (btn) btn.disabled = true;
-    say('Saving…');
-    fetch('/api/targeting-profiles', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, interests: interests, narrow: narrow })
-    })
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
-      .then(function (res) {
-        if (btn) btn.disabled = false;
-        if (!res.ok || !res.d.ok) { say(res.d.error || 'Could not save', 'err'); return; }
-        say('Added: ' + res.d.profile.name + ' — now visible to everyone', 'ok');
-        ['tg-name', 'tg-interests', 'tg-narrow'].forEach(function (id) {
-          var el = document.getElementById(id); if (el) el.value = '';
-        });
-        load(true);
-      })
-      .catch(function (e) {
-        if (btn) btn.disabled = false;
-        say('Network error: ' + e, 'err');
-      });
+  function clearForm() {
+    ['tg-name', 'tg-interests', 'tg-narrow'].forEach(function (id) { el(id).value = ''; });
+    editing = '';
+    el('tg-add-btn').textContent = 'Add';
+    el('tg-cancel-btn').hidden = true;
   }
-
+  async function send(body) {
+    if (pending) return;
+    busy(true); say('Saving…');
+    var saved = false;
+    try {
+      var r = await fetch('/api/targeting-profiles', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+      var d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'Could not save');
+      saved = true;
+      if (body.action === 'delete') say('Removed from this machine: ' + body.name);
+      else if (body.action === 'update') say('Updated on this machine. The shared profile is unchanged.');
+      else say(d.shared ? 'Saved in the shared library. Other machines receive it on refresh.' : 'Saved locally. Sharing failed; use Share / retry. ' + (d.shared_error || ''), !d.shared);
+      if (body.action !== 'share') clearForm();
+    } catch (e) { say(String(e), true); }
+    finally { busy(false); }
+    if (saved) await load(false);
+  }
+  function startEdit(name) {
+    var p = profiles.find(function (p) { return p.name === name; });
+    if (!p) return;
+    el('tg-name').value = p.name; el('tg-interests').value = p.interests; el('tg-narrow').value = p.narrow || '';
+    editing = name; el('tg-add-btn').textContent = 'Save locally'; el('tg-cancel-btn').hidden = false;
+    say('Editing on this machine: ' + name + '. Use Cancel edit to add a new profile.');
+  }
   document.addEventListener('click', function (ev) {
     var t = ev.target;
-    if (t && t.id === 'tg-add-btn') { add(); return; }
-    if (t && t.getAttribute && t.getAttribute('data-view') === 'targets') { load(false); }
+    if (!t || !t.getAttribute || pending) return;
+    if (t.id === 'tg-add-btn') { send({action:editing ? 'update' : 'add', was:editing, name:el('tg-name').value, interests:el('tg-interests').value, narrow:el('tg-narrow').value}); return; }
+    if (t.id === 'tg-cancel-btn') { clearForm(); say(''); return; }
+    if (t.id === 'tg-refresh-btn') { load(true); return; }
+    var name = t.getAttribute('data-tg-edit');
+    if (name) { startEdit(name); return; }
+    name = t.getAttribute('data-tg-del');
+    if (name) { if (confirm('Remove «' + name + '» from this machine? The shared profile remains available to others.')) send({action:'delete', name:name}); return; }
+    name = t.getAttribute('data-tg-share');
+    if (name) { send({action:'share', name:name}); return; }
+    if (t.getAttribute('data-view') === 'targets') load(false);
   });
-
-  if ((location.hash || '').indexOf('targets') !== -1) {
-    document.addEventListener('DOMContentLoaded', function () { load(false); });
-  }
+  if ((location.hash || '').indexOf('targets') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
 })();
 </script>
 
