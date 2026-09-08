@@ -13,6 +13,7 @@ import threading
 import time
 import unicodedata
 from contextlib import contextmanager
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
@@ -137,6 +138,42 @@ def _save_raw(data: dict) -> None:
 def all_targets() -> list[Target]:
     with _transaction():
         return sorted((Target(**v) for v in _load_raw()["targets"].values()), key=lambda t: normalise_one(t.name))
+
+
+def duplicates(targets: Iterable[Target] | None = None) -> dict[str, list]:
+    """Inspect existing aliases without deleting or rewriting any saved profile."""
+    targets = list(targets) if targets is not None else all_targets()
+    names = Counter(normalise_one(t.name) for t in targets)
+    sets = defaultdict(list)
+    for t in targets:
+        sets[fingerprint(t.interests, t.narrow)].append(t.name)
+    return {"names": sorted(n for n, count in names.items() if count > 1),
+            "sets": [group for group in sets.values() if len(group) > 1]}
+
+
+def push_all(*, snapshot: bool = True) -> tuple[int, str]:
+    """Explicit export of one consistent local snapshot, always with a backup."""
+    if not snapshot:
+        raise TargetingError("Полная выгрузка разрешена только с резервной копией таблицы.")
+    from src.analysis_agent.gsheet_targeting import export_profiles
+    targets = all_targets()  # corrupt storage must fail before touching Sheets
+    written, backup = export_profiles([(t.name, t.interests, t.narrow) for t in targets])
+    # Preserve edits/removals made while the network request was in flight.
+    try:
+        with _transaction():
+            data = _load_raw()
+            for t in targets:
+                current = data["targets"].get(t.name)
+                if current and (current["interests"], current["narrow"]) == (t.interests, t.narrow):
+                    current.update(shared=True, shared_error="", source="sheet")
+                    data["hidden"] = [n for n in data["hidden"] if n != normalise_one(t.name)]
+            _save_raw(data)
+    except Exception as exc:
+        raise TargetingError(
+            f"Экспорт выполнен ({written} таргетов), но локальный статус не сохранён: {exc}. "
+            f"Резервная копия: {backup}. Повторять экспорт для сохранения статуса не нужно."
+        ) from exc
+    return written, backup
 
 
 def find_duplicate(interests: str, narrow: str = "", *, ignore: str = "") -> Target | None:

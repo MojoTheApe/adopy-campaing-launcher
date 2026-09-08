@@ -21,10 +21,13 @@ Env overrides:
 from __future__ import annotations
 
 import os
+import json
 import re
 import sys
+import tempfile
 import time
 import threading
+from pathlib import Path
 from functools import wraps
 from dataclasses import dataclass, field
 
@@ -252,3 +255,114 @@ def add_targeting_profile(name: str, interests: str, narrow: str = "") -> Target
     _cache.loaded_at = 0
     _log(f"added targeting profile {clean_name!r}")
     return TargetingProfile(name=clean_name, interests=clean_interests, narrow=clean_narrow)
+
+
+def _export_destination() -> tuple[str, str]:
+    sheet_id = os.environ.get("GSHEET_TARGETING_SPREADSHEET_ID") or _DEFAULT_SPREADSHEET_ID
+    tab = os.environ.get("GSHEET_TARGETING_TAB") or _DEFAULT_TAB
+    return sheet_id, tab
+
+
+def _tab_properties(svc, sheet_id: str, tab: str) -> dict:
+    meta = svc.spreadsheets().get(spreadsheetId=sheet_id).execute()
+    for sheet in meta.get("sheets", []):
+        props = sheet["properties"]
+        if props["title"].strip().casefold() == tab.strip().casefold():
+            return props
+    raise TargetingWriteError(f"Вкладки «{tab}» нет в таблице.")
+
+
+def _snapshot(svc, sheet_id: str, title: str) -> str:
+    """Read successfully before creating a durable, uniquely named backup."""
+    from config import paths
+    quoted = title.replace("'", "''")
+    rows = svc.spreadsheets().values().get(
+        spreadsheetId=sheet_id, range=f"'{quoted}'!A1:C", valueRenderOption="FORMULA",
+    ).execute().get("values", [])
+    if not isinstance(rows, list) or any(not isinstance(row, list) for row in rows):
+        raise TargetingWriteError("Некорректный ответ Google при создании резервной копии.")
+    directory = Path(paths.get_local_config_dir())
+    directory.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=directory,
+                prefix="targeting_sheet_backup_" + time.strftime("%Y%m%d_%H%M%S") + "_",
+                suffix=".tmp", delete=False) as f:
+            temporary = Path(f.name)
+            json.dump(rows, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        out = temporary.with_suffix(".json")
+        temporary.replace(out)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    _log(f"snapshot of {len(rows)} rows -> {out}")
+    return str(out)
+
+
+@_serialized
+def snapshot_tab() -> str:
+    """Save all A:C values/formulas; refuse to fabricate a backup on read failure."""
+    sheet_id, tab = _export_destination()
+    errors = []
+    for label, svc in _sheets_services():
+        try:
+            props = _tab_properties(svc, sheet_id, tab)
+            return _snapshot(svc, sheet_id, props["title"])
+        except Exception as exc:
+            errors.append(f"{label}: {exc}")
+            _log(f"snapshot: {label} refused ({exc!r})")
+    raise TargetingWriteError("Резервная копия не создана: " + ("; ".join(errors) or "нет доступа к таблице"))
+
+
+@_serialized
+def export_profiles(rows: list[tuple[str, str, str]]) -> tuple[int, str]:
+    """Explicit whole-library export with mandatory backup and an atomic batch.
+
+    Serializes this process's Sheets writers; it is not a cross-machine lock.
+    Other editors must pause while an operator replaces the shared library.
+    """
+    from src.analysis_agent.gsheet_write import get_write_service
+    if any(len(row) != 3 or any(not isinstance(v, str) for v in row)
+           or not row[0].strip() or not row[1].strip() for row in rows):
+        raise TargetingWriteError("Для экспорта нужны название, интересы и строка сужения каждого таргета.")
+    sheet_id, tab = _export_destination()
+    svc = get_write_service()
+    props = _tab_properties(svc, sheet_id, tab)
+    grid = props.get("gridProperties", {})
+    tab_id, old_rows, old_columns = props.get("sheetId"), grid.get("rowCount"), grid.get("columnCount")
+    if any(type(v) is not int for v in (tab_id, old_rows, old_columns)) or old_rows < 1 or old_columns < 1:
+        raise TargetingWriteError("Не удалось определить размер вкладки; экспорт отменён.")
+    # The same authenticated client and resolved tab are used for backup and write.
+    # Any failed read or local disk write stops here, before any Sheets mutation.
+    backup = _snapshot(svc, sheet_id, props["title"])
+    height = max(old_rows, len(rows) + 1, 2)
+    requests = []
+    for dimension, missing in (("ROWS", height - old_rows), ("COLUMNS", 3 - old_columns)):
+        if missing > 0:
+            requests.append({"appendDimension": {"sheetId": tab_id, "dimension": dimension, "length": missing}})
+    # updateCells with a range clears the requested fields in uncovered cells.
+    # Expansion, values and trailing-row clearing belong to ONE atomic batch.
+    requests.append({"updateCells": {
+        "range": {"sheetId": tab_id, "startRowIndex": 1, "endRowIndex": height,
+                  "startColumnIndex": 0, "endColumnIndex": 3},
+        "rows": [{"values": [{"userEnteredValue": {"stringValue": v}} if v else {} for v in row]} for row in rows],
+        "fields": "userEnteredValue",
+    }})
+    try:
+        svc.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body={"requests": requests}).execute()
+    except Exception as exc:
+        raise TargetingWriteError(
+            f"Экспорт не подтверждён: {exc}. Резервная копия: {backup}. "
+            "Проверьте таблицу перед повтором — при потере ответа запись могла завершиться."
+        ) from exc
+    finally:
+        _cache.loaded_at = 0  # includes uncertain writes with a lost response
+    _log(f"exported {len(rows)} profiles to {props['title']!r}")
+    return len(rows), backup
+
+
+def replace_all_profiles(rows: list[tuple[str, str, str]]) -> int:
+    """Compatibility entry point; a full replacement always creates a backup."""
+    return export_profiles(rows)[0]

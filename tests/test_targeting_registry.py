@@ -135,3 +135,72 @@ def test_sharing_says_nothing_when_it_worked(monkeypatch):
 
     monkeypatch.setattr(g, "add_targeting_profile", lambda *a, **k: None)
     assert tr.share(tr.Target(name="A", interests="один")) == ""
+
+
+@pytest.mark.parametrize("name", ["Investment Plus", "Main 1", "Well - being"])
+def test_saved_names_round_trip_through_campaign_analytics(name):
+    from src.analysis_agent.creative_verdicts import parse_adset
+    from src.upload_agent.build_upload_excel import build_campaign_name
+    target = tr.add(name, "Finance")
+    assert target.name == name
+    campaign = build_campaign_name("KW", "Ait", "All", "Image", "42", target.name, "35")
+    assert parse_adset(campaign) == (name.lower(), "35")
+
+
+def test_a_name_of_only_spaces_is_refused():
+    with pytest.raises(tr.TargetingError):
+        tr.add("   ", "один")
+
+
+def test_an_existing_underscore_name_is_not_silently_renamed():
+    t = tr.add("_Existing_Name_", "один, два")
+    assert tr.lookup(t.name).name == "_Existing_Name_"
+
+
+def test_names_differing_only_by_spacing_collide():
+    tr.add("Main 1", "один")
+    with pytest.raises(tr.TargetingError) as e:
+        tr.add(" Main  1 ", "два, три")
+    assert "занято" in str(e.value).lower()
+
+
+def test_the_registry_reports_a_repeated_name():
+    """Осмотр целиком, а не только правило при заведении.
+
+    Файл можно поправить руками, а прежние записи могли лечь до того, как
+    правило появилось. Молчать о повторе — значит дать двум одинаковым
+    аудиториям жить под разными именами.
+    """
+    tr._save_raw({
+        "A": {"name": "A", "interests": "один"},
+        "a": {"name": "a", "interests": "два"},
+    })
+    assert tr.duplicates()["names"] == ["a"]
+
+
+def test_the_registry_reports_a_repeated_set():
+    tr._save_raw({
+        "A": {"name": "A", "interests": "один, два"},
+        "B": {"name": "B", "interests": "два, один"},
+    })
+    sets = tr.duplicates()["sets"]
+    assert len(sets) == 1 and sorted(sets[0]) == ["A", "B"]
+
+
+def test_a_clean_registry_reports_nothing():
+    tr.add("A", "один")
+    tr.add("B", "два")
+    assert tr.duplicates() == {"names": [], "sets": []}
+
+
+def test_the_same_set_in_a_different_order_cannot_be_added():
+    """Главное правило, названное пользователем дважды."""
+    tr.add("Первый", "один, два, три, четыре")
+    with pytest.raises(tr.TargetingError):
+        tr.add("Второй", "четыре, два, один, три")
+
+
+def test_the_same_name_cannot_be_added():
+    tr.add("Первый", "один, два")
+    with pytest.raises(tr.TargetingError):
+        tr.add("первый", "три, четыре")
