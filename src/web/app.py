@@ -481,6 +481,72 @@ def _build_account_map_view(
     known = list(load_ad_account_map(map_path)) if os.path.isfile(map_path) else []
     all_known = sorted(set(known) | labels_in_report, key=str.casefold)
 
+    # Названия стран и имена аккаунтов берём из самой книги, а не только из
+    # отчёта. Отчёт строится за сегодня: 8 сентября книга заканчивалась 7-м, в
+    # отчёте не было ни одной страны — и карта показывала сплошные прочерки при
+    # любом совпадении имён. Числа карты не должны зависеть от того, случился ли
+    # сегодня хоть один лид.
+    wb_country: dict[str, str] = {}
+    wb_aliases: dict[str, list[str]] = {}
+    try:
+        if df is not None and "Country Final" in df.columns:
+            for name in {str(c).strip() for c in df["Country Final"].dropna()}:
+                if not name:
+                    continue
+                wb_country.setdefault(name.casefold(), name)
+                wb_country.setdefault(_country_code(name).casefold(), name)
+                wb_aliases[name] = sorted(
+                    {
+                        str(a).strip()
+                        for a in df.loc[df["Country Final"] == name, "Account Alias"].dropna()
+                        if str(a).strip()
+                    }
+                )
+    except Exception:  # pragma: no cover - кривая книга не должна гасить карту
+        wb_country, wb_aliases = {}, {}
+
+    frame = period if period is not None else df
+
+    def _numbers(country_name: str, alias: str) -> dict:
+        """Числа одного аккаунта прямо из книги за выбранный период.
+
+        Тем же кодом, что считает страницу: `alias_matches` слепа к хвостам
+        вроде «EC Ait», так что подключённое имя сходится с книжным само.
+        """
+        if frame is None or not country_name or not alias:
+            return {}
+        try:
+            from src.analysis_agent.morning_report import build_account_performance_summary
+
+            return build_account_performance_summary(frame, country_name, alias)
+        except Exception:  # pragma: no cover
+            return {}
+
+    def _elsewhere(country_name: str, alias: str) -> dict[str, float]:
+        """Где ещё в книге лежат числа этого аккаунта за тот же период.
+
+        Без этого «строк нет» и «строки есть, но под другой страной» выглядят
+        одинаково — прочерком. А это разные вещи: во втором случае аккаунт
+        привязан не туда, и человеку надо чинить привязку, а не искать данные.
+        """
+        if frame is None or not alias:
+            return {}
+        try:
+            from src.analysis_agent.analyze_fb_stats import alias_matches
+
+            hit = frame[alias_matches(frame["Account Alias"], alias)]
+            if hit.empty:
+                return {}
+            here = (country_name or "").strip().casefold()
+            out: dict[str, float] = {}
+            for name, spend in hit.groupby("Country Final")["$ Spend"].sum().items():
+                label = str(name).strip()
+                if label and label.casefold() != here and float(spend):
+                    out[label] = round(float(spend), 2)
+            return out
+        except Exception:  # pragma: no cover
+            return {}
+
     countries: list[dict] = []
     for stored in account_links.all_values("country"):
         key = stored.casefold()
@@ -489,12 +555,26 @@ def _build_account_map_view(
         # whatever was typed when the account was connected — often a code — and
         # a Home screen reading "CR" next to a sidebar reading "Costa Rica"
         # invites the reader to wonder whether they are the same place.
-        country_name = display_name.get(key, stored)
+        country_name = display_name.get(key) or wb_country.get(key, stored)
         rows = []
         for label in account_links.accounts_for("country", stored):
-            excel = stats.get(label) or {}
+            excel = _numbers(country_name, label) or stats.get(label) or {}
+            # Имя из Multilogin (`KLD_BFL_X84`) с книжным (`FacebookMKTOBFLX84`)
+            # не сходится ничем, кроме хвоста — того самого, которым аккаунт и
+            # называют вслух. Это уже догадка, поэтому она идёт последней, берётся
+            # только при единственном совпадении и всегда подписывается на экране.
+            alias = ""
+            if not excel.get("has_data"):
+                alias = _alias_by_tail(label, wb_aliases.get(country_name, []))
+                if alias:
+                    excel = _numbers(country_name, alias) or excel
             rows.append({
                 "account": label,
+                # чем именно подставлены числа — чтобы совпадение по хвосту
+                # никогда не выглядело как имя самого аккаунта
+                "workbook_alias": alias,
+                # страны, под которыми числа этого аккаунта лежат на самом деле
+                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, label),
                 "assets": account_links.values_for(label, "asset"),
                 "countries": [
                     display_name.get(v.casefold(), v)
@@ -1143,6 +1223,40 @@ _COUNTRY_CODES: dict[str, str] = {
     "vietnam": "VN", "viet nam": "VN", "yemen": "YE", "zambia": "ZM",
     "zimbabwe": "ZW",
 }
+
+
+def _account_tail(name: str) -> str:
+    """Последние три знака имени — то, чем аккаунты различают на слух.
+
+    Книга знает аккаунт как `FacebookMKTOBFLX84`, Multilogin — как
+    `KLD_BFL_X84`. Общего у них ровно хвост, и именно им человек называет
+    аккаунт вслух: «икс восемьдесят четыре». Поиск профиля на этой же странице
+    давно устроен так же — «last letters: X84».
+    """
+    import re as _re
+
+    core = _re.sub(r"[^A-Za-z0-9]", "", name or "")
+    return core[-3:].upper() if len(core) >= 3 else ""
+
+
+def _alias_by_tail(label: str, known: dict) -> str:
+    """Имя из книги для подключённого аккаунта — или пусто.
+
+    Совпадение принимается только единственное. Два имени с одним хвостом —
+    это не «выберем первое»: подставленное наугад число выглядит точно так же,
+    как правильное, и проверить его человеку будет нечем.
+    """
+    tail = _account_tail(label)
+    if not tail:
+        return ""
+    # Само имя из кандидатов исключается: свой хвост у него, разумеется,
+    # единственный, и аккаунт «совпадал» сам с собой — на экране появлялась
+    # подпись «= KLD_BFL_X01», объясняющая ровно ничего.
+    hits = [
+        a for a in known
+        if _account_tail(a) == tail and a.casefold() != (label or "").casefold()
+    ]
+    return hits[0] if len(hits) == 1 else ""
 
 
 def _country_code(name: str) -> str:
