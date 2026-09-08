@@ -9,8 +9,14 @@
       <div class="drill-header">
         <span class="drill-count">
           {% if rows %}
-            {% if section in ('cm_comparison', 'account') %}
+            {# У сравнения менеджеров и у раскрытия аккаунта вид один, а вопрос
+               разный: там спрашивают, у кого депозиты, здесь — что аккаунт
+               крутил. Подпись «with deposits» под строками без единого
+               депозита была бы неправдой, и притом убедительной. #}
+            {% if section == 'cm_comparison' %}
               {{ rows|length }} campaign{{ '' if rows|length == 1 else 's' }} with deposits
+            {% elif section == 'account' %}
+              {{ rows|length }} ad set{{ '' if rows|length == 1 else 's' }}
             {% else %}
               {{ rows|length }} ad{{ '' if rows|length == 1 else 's' }}
             {% endif %}

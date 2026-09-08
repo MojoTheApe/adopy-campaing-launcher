@@ -565,8 +565,11 @@ def _build_account_map_view(
             # только при единственном совпадении и всегда подписывается на экране.
             alias = ""
             if not excel.get("has_data"):
-                alias = _alias_by_tail(label, wb_aliases.get(country_name, []))
-                if alias:
+                # Тот же разрешатель, что и у раскрытия объявлений: два способа
+                # отвечать на один вопрос однажды разойдутся, и разойдутся молча.
+                resolved = workbook_alias_for(frame, country_name, label)
+                if resolved and resolved.casefold() != label.casefold():
+                    alias = resolved
                     excel = _numbers(country_name, alias) or excel
             rows.append({
                 "account": label,
@@ -1272,6 +1275,36 @@ def _alias_by_tail(label: str, known: dict) -> str:
     return hits[0] if len(hits) == 1 else ""
 
 
+def workbook_alias_for(df, country: str, label: str) -> str:
+    """Имя, под которым книга знает подключённый аккаунт.
+
+    Подключённый носит имя из Multilogin (`KLD_BFL_X01`), книга — своё
+    (`FacebookMKTOBFLX01`). Общего у них только хвост.
+
+    Одно место на обе надобности — числа в карте и раскрытие объявлений под
+    строкой. Пока перевод имени жил только в карте, числа находились, а
+    раскрытие приходило пустым: строка показывала $1,795 и говорила, что
+    объявлений нет. Разошедшиеся способы отвечать на один вопрос — это не две
+    ошибки, а одна, повторённая дважды.
+    """
+    if df is None or not label:
+        return label
+    try:
+        from src.analysis_agent.analyze_fb_stats import alias_matches
+
+        sub = df[df["Country Final"] == country] if "Country Final" in df.columns else df
+        if sub.empty:
+            return label
+        if bool(alias_matches(sub["Account Alias"], label).any()):
+            return label
+        names = sorted(
+            {str(a).strip() for a in sub["Account Alias"].dropna() if str(a).strip()}
+        )
+        return _alias_by_tail(label, names) or label
+    except Exception:  # pragma: no cover - перевод имени не должен ронять страницу
+        return label
+
+
 def _country_code(name: str) -> str:
     """Return 2-letter ISO code for a country name, or uppercase 2-char fallback."""
     if not name:
@@ -1440,6 +1473,11 @@ async def details(request: Request) -> HTMLResponse:
             },
         )
 
+    if section == "account" and params.get("account"):
+        # То же имя, что ищут числа в карте: иначе строка показывает спенд, а
+        # раскрытие под ней отвечает «нет строк» — и это читается как поломка
+        # раскрытия, а не как разошедшиеся имена.
+        params["account"] = workbook_alias_for(df, country, params["account"])
     rows = get_underlying_rows(df, section=section, country=country, **params)
     return templates.TemplateResponse(
         "_details_fragment.html",
