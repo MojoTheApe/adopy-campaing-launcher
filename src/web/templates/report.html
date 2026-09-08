@@ -394,26 +394,47 @@
     .buyer-pick label { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
     .buyer-pick select { font-size: 0.82rem; max-width: 14rem; }
     .buyer-pick #buyer-msg { font-size: 0.75rem; color: var(--muted); }
-    /* Переключатель темы. Ширина была занята заранее, поэтому шапка не
-       перестроилась, когда он появился. */
-    .theme-slot {
-      width: 30px; height: 30px; flex: none;
-      display: inline-flex; align-items: center; justify-content: center;
-      padding: 0; cursor: pointer;
-      background: transparent; color: var(--muted);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      transition: color 150ms var(--ease-out), border-color 150ms var(--ease-out),
-                  background 150ms var(--ease-out);
+    /* Переключатель темы: дорожка с бегунком. Иконка сообщала состояние одним
+       знаком, и какое именно — приходилось угадывать. Здесь положение видно
+       сразу, и обе стороны подписаны рисунком: слева день, справа ночь.
+
+       Ширина в шапке была занята заранее, поэтому появление переключателя
+       ничего не сдвинуло. */
+    .theme-switch {
+      flex: none; padding: 0; border: 0; background: none; cursor: pointer;
+      line-height: 0; border-radius: 999px;
     }
-    .theme-slot:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg-hover); }
-    .theme-slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .theme-slot svg { fill: currentColor; }
-    /* Показывается то, на что переключишь, а не то, что стоит сейчас: кнопка
-       обещает действие. Днём — луна, ночью — солнце. */
-    .theme-slot .t-moon { display: none; }
-    :root[data-theme="dark"] .theme-slot .t-sun { display: none; }
-    :root[data-theme="dark"] .theme-slot .t-moon { display: inline; }
+    .theme-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .ts-track {
+      position: relative; display: inline-flex; align-items: center;
+      justify-content: space-between;
+      width: 46px; height: 24px; padding: 0 5px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      transition: background 180ms var(--ease-out), border-color 180ms var(--ease-out);
+    }
+    .theme-switch:hover .ts-track { border-color: var(--border-strong); }
+    .ts-ico { position: relative; z-index: 1; color: var(--muted); fill: currentColor; transition: color 180ms var(--ease-out); }
+    /* Ярче та сторона, которая сейчас выбрана: переключатель показывает
+       состояние, а не только предлагает действие. */
+    .ts-sun { color: var(--warn); }
+    .ts-moon { opacity: 0.45; }
+    :root[data-theme="dark"] .ts-sun { color: var(--muted); opacity: 0.45; }
+    :root[data-theme="dark"] .ts-moon { color: var(--accent); opacity: 1; }
+    .ts-knob {
+      position: absolute; top: 50%; left: 2px;
+      width: 18px; height: 18px; margin-top: -9px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border-strong);
+      border-radius: 50%;
+      box-shadow: var(--shadow-sm);
+      transition: transform 180ms var(--ease-out);
+    }
+    :root[data-theme="dark"] .ts-knob { transform: translateX(22px); }
+    @media (prefers-reduced-motion: reduce) {
+      .ts-knob, .ts-track, .ts-ico { transition: none; }
+    }
 
     form.refresh { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
     /* Shown only when a promoted release is actually waiting, so an ordinary
@@ -2088,14 +2109,23 @@
     {#- Место под переключатель темы. Пусто нарочно: сам переключатель — это
         следующая задача раздела «Дизайн», а место оставлено сейчас, чтобы
         шапка не перестроилась у людей на глазах, когда он появится. -#}
-    <button type="button" id="theme-toggle" class="theme-slot"
-            aria-label="Switch between light and dark" aria-pressed="false"
-            title="Light / dark">
-      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-        <path class="t-sun" d="M10 4.6a5.4 5.4 0 100 10.8 5.4 5.4 0 000-10.8zm0 1.8a3.6 3.6 0 110 7.2 3.6 3.6 0 010-7.2z"/>
-        <path class="t-sun" d="M10 0h0v2.6h0zM10 17.4h0V20h0zM0 10v0h2.6v0zM17.4 10v0H20v0zM2.9 2.9l1.9 1.9-.1.1-1.9-1.9zM15.2 15.2l1.9 1.9-1.9-1.9zM17.1 2.9l-1.9 1.9 1.9-1.9zM4.8 15.2l-1.9 1.9 1.9-1.9z"/>
-        <path class="t-moon" d="M13.6 12.4A6.2 6.2 0 018 4.2a6.4 6.4 0 102 12.2 6.2 6.2 0 003.6-4z"/>
-      </svg>
+    {#- Переключатель, а не иконка. Иконка сообщала состояние одним знаком, и
+        какое именно — приходилось угадывать. У дорожки с бегунком положение
+        видно сразу: слева день, справа ночь. -#}
+    <button type="button" id="theme-toggle" class="theme-switch" role="switch"
+            aria-checked="false" aria-label="Dark theme" title="Light / dark">
+      <span class="ts-track">
+        <svg class="ts-ico ts-sun" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+          <circle cx="6" cy="6" r="2.6"/>
+          <g stroke="currentColor" stroke-width="1.1" stroke-linecap="round">
+            <path d="M6 .8v1.4M6 9.8v1.4M.8 6h1.4M9.8 6h1.4M2.3 2.3l1 1M8.7 8.7l1 1M9.7 2.3l-1 1M3.3 8.7l-1 1"/>
+          </g>
+        </svg>
+        <svg class="ts-ico ts-moon" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+          <path d="M8.4 7.6A4.2 4.2 0 014.6 1.9a4.3 4.3 0 101.5 8.2 4.2 4.2 0 002.3-2.5z"/>
+        </svg>
+        <span class="ts-knob"></span>
+      </span>
     </button>
   </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
@@ -4026,7 +4056,9 @@ if (document.readyState === 'loading') {
     document.documentElement.setAttribute('data-theme', theme);
     var btn = document.getElementById('theme-toggle');
     if (btn) {
-      btn.setAttribute('aria-pressed', String(theme === 'dark'));
+      // role="switch" читается с экрана как «включено/выключено», а не как
+      // кнопка, которую нажали, — состояние здесь важнее действия.
+      btn.setAttribute('aria-checked', String(theme === 'dark'));
       btn.title = theme === 'dark' ? 'Switch to light' : 'Switch to dark';
     }
     try { localStorage.setItem(KEY, theme); } catch (e) {}

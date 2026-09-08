@@ -120,6 +120,10 @@ def test_the_switch_exists_in_the_header():
     header = t[t.index('<header class="page-header">'): t.index("</header>")]
     assert 'id="theme-toggle"' in header, "переключателя нет в шапке"
     assert "aria-label" in header, "у переключателя нет имени для чтения с экрана"
+    assert 'role="switch"' in header, (
+        "это снова кнопка, а не переключатель: состояние важнее действия"
+    )
+    assert "ts-knob" in header, "у переключателя нет бегунка — положение не видно"
 
 
 def test_an_unreadable_storage_does_not_break_the_page():

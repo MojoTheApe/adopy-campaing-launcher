@@ -46,8 +46,8 @@ def test_the_counters_are_gone():
 
 
 def test_room_is_kept_for_the_theme_switch():
-    """Место занято заранее, чтобы шапка не перестроилась на глазах."""
-    assert "theme-slot" in _header(), "исчезло место под переключатель темы"
+    """Место было занято заранее, и переключатель встал в него, ничего не сдвинув."""
+    assert "theme-switch" in _header(), "исчез переключатель темы из шапки"
 
 
 def test_the_routine_csv_line_is_not_a_warning():
