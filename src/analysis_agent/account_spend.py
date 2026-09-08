@@ -19,6 +19,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import tempfile
 import os
 import threading
 import time
@@ -28,6 +30,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 from config import paths
+from src.fb_ads_rpa.operations import browser_operation, serialized_browser
+
+_STORE_LOCK = threading.RLock()
+_UNSAVED: dict[str, "SpendReading"] = {}
+log = logging.getLogger(__name__)
 
 ADS_MANAGER = "https://adsmanager.facebook.com/adsmanager/manage/campaigns"
 
@@ -94,9 +101,17 @@ def _load_all() -> dict[str, dict]:
 def _save_all(data: dict[str, dict]) -> None:
     p = _store_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(p)
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=p.parent, prefix=p.name + ".", suffix=".tmp", delete=False) as handle:
+            tmp = Path(handle.name)
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, p)
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
 
 
 def _key(account: str, date_from: str, date_to: str) -> str:
@@ -104,24 +119,32 @@ def _key(account: str, date_from: str, date_to: str) -> str:
 
 
 def get_reading(account: str, date_from: str, date_to: str) -> SpendReading:
-    raw = _load_all().get(_key(account, date_from, date_to))
-    if not raw:
-        return SpendReading(account=account, date_from=date_from, date_to=date_to)
-    known = {f.name for f in SpendReading.__dataclass_fields__.values()}
-    return SpendReading(**{k: v for k, v in raw.items() if k in known})
+    with _STORE_LOCK:
+        key = _key(account, date_from, date_to)
+        if key in _UNSAVED:
+            return _UNSAVED[key]
+        raw = _load_all().get(key)
+        if not raw:
+            return SpendReading(account=account, date_from=date_from, date_to=date_to)
+        return _restore_reading(key, raw)
+
+
+def _restore_reading(key: str, raw: dict) -> SpendReading:
+    known = SpendReading.__dataclass_fields__
+    reading = SpendReading(**{k: v for k, v in raw.items() if k in known})
+    if reading.state == "running" and key not in _RUNNING:
+        reading.state = "failed"
+        reading.error = "Reading was interrupted. You can retry."
+    return reading
 
 
 def all_readings(date_from: str, date_to: str) -> dict[str, SpendReading]:
-    """Показания за один и тот же период — тот, что выбран на дешборде."""
-    out: dict[str, SpendReading] = {}
-    known = {f.name for f in SpendReading.__dataclass_fields__.values()}
-    want = f"|{date_from}|{date_to}"
-    for key, raw in _load_all().items():
-        if key.endswith(want):
-            out[key[: -len(want)]] = SpendReading(
-                **{k: v for k, v in raw.items() if k in known}
-            )
-    return out
+    """Readings for the exact dashboard period, recovering interrupted jobs."""
+    with _STORE_LOCK:
+        want = f"|{date_from}|{date_to}"
+        out = {key[:-len(want)]: _restore_reading(key, raw) for key, raw in _load_all().items() if key.endswith(want)}
+        out.update({r.account: r for key, r in _UNSAVED.items() if key.endswith(want)})
+        return out
 
 
 #: Состояние кабинета хранится отдельно от показаний спенда и без периода.
@@ -132,15 +155,18 @@ _STATUS_PREFIX = "status|"
 
 
 def _put(reading: SpendReading) -> None:
-    data = _load_all()
-    data[_key(reading.account, reading.date_from, reading.date_to)] = reading.to_dict()
-    if reading.status:
-        data[_STATUS_PREFIX + reading.account] = {
-            "status": reading.status,
-            "status_text": reading.status_text,
-            "at": reading.finished_at or _now(),
-        }
-    _save_all(data)
+    with _STORE_LOCK:
+        data = _load_all()
+        key = _key(reading.account, reading.date_from, reading.date_to)
+        data[key] = reading.to_dict()
+        if reading.status:
+            data[_STATUS_PREFIX + reading.account] = {
+                "status": reading.status,
+                "status_text": reading.status_text,
+                "at": reading.finished_at or _now(),
+            }
+        _save_all(data)
+        _UNSAVED.pop(key, None)
 
 
 def get_status(account: str) -> dict[str, str]:
@@ -163,16 +189,18 @@ def get_status(account: str) -> dict[str, str]:
 
 #: один браузер за раз. Два профиля, поднятых одновременно с одной машины,
 #: это не «быстрее», это две сессии подряд с одного устройства.
-_LOCK = threading.Lock()
+_LOCK = browser_operation
 _RUNNING: set[str] = set()
 
 
 def is_running(account: str, date_from: str, date_to: str) -> bool:
-    return _key(account, date_from, date_to) in _RUNNING
+    with _STORE_LOCK:
+        return _key(account, date_from, date_to) in _RUNNING
 
 
 def running_now() -> list[str]:
-    return sorted(k.split("|")[0] for k in _RUNNING)
+    with _STORE_LOCK:
+        return sorted(k.split("|")[0] for k in _RUNNING)
 
 
 def start_read(
@@ -191,15 +219,19 @@ def start_read(
     date_from = date_from or yesterday()
     date_to = date_to or date_from
     key = _key(account, date_from, date_to)
-    if key in _RUNNING:
-        return get_reading(account, date_from, date_to)
-
-    reading = SpendReading(
-        account=account, date_from=date_from, date_to=date_to,
-        state="running", started_at=_now(),
-    )
-    _RUNNING.add(key)
-    _put(reading)
+    with _STORE_LOCK:
+        if key in _RUNNING:
+            return get_reading(account, date_from, date_to)
+        reading = SpendReading(
+            account=account, date_from=date_from, date_to=date_to,
+            state="running", started_at=_now(),
+        )
+        _RUNNING.add(key)
+        try:
+            _put(reading)
+        except Exception:
+            _RUNNING.discard(key)
+            raise
 
     fn = reader or read_via_rpa
 
@@ -216,10 +248,23 @@ def start_read(
         done.started_at = reading.started_at
         done.finished_at = _now()
         done.took_s = round(time.time() - started, 1)
-        _RUNNING.discard(key)
-        _put(done)
+        with _STORE_LOCK:
+            try:
+                _put(done)
+            except Exception:
+                log.exception("Could not persist completed spend reading")
+                done.state = "failed"
+                done.error = "Could not save the reading. Check free disk space and retry."
+                _UNSAVED[key] = done
+            finally:
+                _RUNNING.discard(key)
 
-    threading.Thread(target=run, name=f"spend:{account}", daemon=True).start()
+    try:
+        threading.Thread(target=run, name=f"spend:{account}", daemon=True).start()
+    except Exception:
+        with _STORE_LOCK:
+            _RUNNING.discard(key)
+        raise
     return reading
 
 
@@ -322,7 +367,7 @@ def _attach_only(entry, account_label: str):
         )
 
     direct = direct_cls()
-    conn = direct._try_attach_existing(profile_id, str(udd))
+    conn = direct._try_attach_existing(profile_id, str(udd), strict_profile=True, new_page=True)
     if conn is not None:
         return conn
 
@@ -344,6 +389,7 @@ def _attach_only(entry, account_label: str):
     )
 
 
+@serialized_browser
 def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -> dict:
     """Спросить у самого аккаунта, какой у него номер.
 
@@ -393,6 +439,10 @@ def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -
         return out
     finally:
         if conn is not None:
+            try:
+                conn.page.close()
+            except Exception:
+                pass
             try:
                 conn.close(keep_browser_open=True)
             except Exception:
@@ -452,6 +502,7 @@ def _ads_manager_account_name(page) -> str:
     return ""
 
 
+@serialized_browser
 def open_for_automation(account: str) -> tuple[bool, str]:
     """Поднять профиль автоматизацией и оставить окно открытым.
 
@@ -481,7 +532,9 @@ def open_for_automation(account: str) -> tuple[bool, str]:
         return False, f"папка профиля {profile_id} не найдена"
 
     direct = direct_cls()
-    if direct._try_attach_existing(profile_id, str(udd)) is not None:
+    attached = direct._try_attach_existing(profile_id, str(udd), strict_profile=True)
+    if attached is not None:
+        attached.close(keep_browser_open=True)
         return True, "профиль уже открыт автоматизацией — можно читать"
     try:
         if direct._profile_process_running(str(udd), profile_id):
@@ -505,6 +558,7 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     return True, "профиль открыт — залогиньтесь, если нужно, и оставьте окно"
 
 
+@serialized_browser
 def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReading:
     """Прочитать спенд аккаунта за период, выбранный на дешборде.
 
@@ -541,7 +595,12 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         # почти ничего: первый прогон 2026-09-07 проверил период через четыре
         # секунды после перехода, когда на экране был спиннер и пустой скелет.
         # Ждём саму таблицу, и только потом спрашиваем, какой период показан.
-        if not _wait_for_grid(page):
+        grid_ready = _wait_for_grid(page)
+        expected_act = act if act.startswith("act_") else "act_" + act
+        if _act_from_url(page, tries=1) != expected_act:
+            out.error = "Ads Manager opened a different account; reading refused."
+            return out
+        if not grid_ready:
             # Статус спрашиваем и здесь: у отключённого кабинета таблицы может
             # не быть вовсе, а знать о нём надо именно тогда.
             out.status, out.status_text = _read_status(page)
@@ -573,6 +632,10 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
             out.shot = _shoot(page, account, date_from)
             return out
 
+        if _act_from_url(page, tries=1) != expected_act or not _period_matches(_shown_period(page), date_from, date_to):
+            out.status = out.status_text = ""
+            out.error = "Account or period changed during reading; result refused."
+            return out
         out.spend = spend
         out.currency = _currency(page)
         out.how = how
@@ -580,6 +643,10 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         return out
     finally:
         if conn is not None:
+            try:
+                conn.page.close()
+            except Exception:
+                pass
             # Окно остаётся открытым: профиль, закрытый сразу после захода,
             # выглядит хуже, чем человек, который посмотрел и ушёл.
             try:
@@ -822,6 +889,7 @@ def _scan_totals(page) -> tuple[float | None, bool]:
     except Exception:
         return None, False
     raw = (found or {}).get("spend") or ""
+    page._acl_spend_currency = next((code for sign, code in (("$", "USD"), ("€", "EUR"), ("£", "GBP"), ("₪", "ILS")) if raw.strip().startswith(sign)), "")
     return (_first_money(raw) if raw else None), bool((found or {}).get("label"))
 
 
@@ -907,9 +975,10 @@ def _first_money(text: str) -> float | None:
     """
     import re
 
-    number = r"\d{1,3}(?:[,\s]\d{3})*(?:\.\d{1,2})?|\d+\.\d{1,2}"
+    text = " ".join(text.split())
+    number = r"(?:\d{1,3}(?:[, ]\d{3})+|\d+)(?:\.\d{1,2})?(?![\d.,])"
     signed = re.search(rf"[$€£₪]\s*({number})", text)
-    m = signed or re.search(rf"(?<![\d.,])(\d{{1,3}}(?:[,\s]\d{{3}})+(?:\.\d{{1,2}})?|\d+\.\d{{1,2}})", text)
+    m = signed or re.search(r"(?<![\d.,])(\d{1,3}(?:[, ]\d{3})+(?:\.\d{1,2})?|\d+\.\d{1,2})(?![\d.,])", text)
     if not m:
         return None
     try:
@@ -919,14 +988,8 @@ def _first_money(text: str) -> float | None:
 
 
 def _currency(page) -> str:
-    try:
-        text = page.inner_text("body")[:4000]
-        for sign, code in (("$", "USD"), ("€", "EUR"), ("£", "GBP"), ("₪", "ILS")):
-            if sign in text:
-                return code
-    except Exception:
-        pass
-    return ""
+    # Bound to the exact totals cell, never to an unrelated dollar sign in body.
+    return getattr(page, "_acl_spend_currency", "")
 
 
 def _shoot(page, account: str, day: str) -> str:

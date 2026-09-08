@@ -14,6 +14,7 @@ from src.fb_ads_rpa.browser import (
 from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
 from src.fb_ads_rpa.config import get_browser_provider as get_browser_provider_name, get_mlx_attach_only
 from src.fb_ads_rpa.draft import CampaignDraft, RpaPublishResult
+from src.fb_ads_rpa.operations import serialized_browser
 from src.fb_ads_rpa.enrich_draft import enrich_campaign_drafts
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
 
@@ -262,6 +263,7 @@ class RpaPublisher:
                 pass
             self._entry = None
 
+    @serialized_browser
     def publish_draft(self, draft: CampaignDraft) -> RpaPublishResult:
         if (draft.status or "").strip().upper() != "DRAFT":
             raise ValueError(
@@ -311,6 +313,7 @@ class RpaPublisher:
             )
         return result
 
+    @serialized_browser
     def publish_slots(
         self,
         slots: list[dict[str, Any]],

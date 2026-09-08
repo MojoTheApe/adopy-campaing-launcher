@@ -203,7 +203,7 @@ def _fake_browser(monkeypatch, *, attach, running, has_dir=True):
     from src.fb_ads_rpa import browser as rpa_browser
 
     class Direct:
-        def _try_attach_existing(self, profile_id, udd):
+        def _try_attach_existing(self, profile_id, udd, **kwargs):
             return attach
 
         def _profile_process_running(self, udd, profile_id):
