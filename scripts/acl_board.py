@@ -960,6 +960,41 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
 # ─────────────────────────── команды ───────────────────────────
 
 
+#: Копия доски внутри репозитория. Источник живёт в Obsidian, у которого нет
+#: ни гита, ни корзины: 8 сентября одна неудачная правка вырезала из доски
+#: целую область, и восстановилось это только потому, что незадолго до того
+#: была опубликована витрина, а в её HTML осталось содержимое. Удача, а не
+#: запасной план.
+#:
+#: Копия не источник и им не станет: её пишет сборка, читать её как истину
+#: нельзя. Она нужна ровно для одного — чтобы у плана работ была история и те
+#: же три адреса, что у кода.
+SNAPSHOT = Path("docs") / "task-board-snapshot.md"
+
+
+def snapshot_path(repo: Path) -> Path:
+    return repo / SNAPSHOT
+
+
+def write_snapshot(repo: Path, text: str) -> Path | None:
+    """Положить копию доски рядом с кодом. Ошибка не должна ломать сборку.
+
+    Возвращает путь, если файл изменился, иначе `None`: переписывать
+    неизменившийся файл значит показывать его в `git status` на каждом
+    коммите, и человек перестанет читать это место.
+    """
+    try:
+        out = snapshot_path(repo)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if out.is_file() and out.read_text(encoding="utf-8") == text:
+            return None
+        out.write_text(text, encoding="utf-8")
+        return out
+    except Exception as exc:  # pragma: no cover - копия важна, но не важнее сборки
+        print(f"копию доски записать не удалось: {exc}", file=sys.stderr)
+        return None
+
+
 def default_out(repo: Path) -> Path:
     raw = os.environ.get(OUT_ENV)
     return Path(raw) if raw else repo / "output" / "acl_task_wall.html"
@@ -970,10 +1005,13 @@ def cmd_render(args: argparse.Namespace, repo: Path) -> int:
     if not src.exists():
         print(f"нет файла доски: {src}", file=sys.stderr)
         return 2
-    board = parse(src.read_text(encoding="utf-8"))
+    raw = src.read_text(encoding="utf-8")
+    board = parse(raw)
     out = Path(args.out) if args.out else default_out(repo)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(board), encoding="utf-8")
+    if write_snapshot(repo, raw) is not None:
+        print(f"копия доски обновлена: {SNAPSHOT.as_posix()} — её надо закоммитить")
     done = sum(1 for t in board.tasks if t.is_done)
     print(f"доска собрана: {out}")
     print(f"  {len(board.areas)} областей, {len(board.tasks)} задач, {done} сделано")
@@ -1064,6 +1102,11 @@ def cmd_sync(args: argparse.Namespace, repo: Path) -> int:
     out = default_out(repo)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(board), encoding="utf-8")
+    # Хук идёт после коммита, поэтому копия войдёт в следующий: отставание
+    # ровно в один коммит. Это несравнимо лучше, чем один файл на одном диске,
+    # и об отставании сказано вслух, а не спрятано.
+    if write_snapshot(repo, new) is not None:
+        print(f"копия доски обновлена: {SNAPSHOT.as_posix()} — войдёт в следующий коммит")
     return 0
 
 
