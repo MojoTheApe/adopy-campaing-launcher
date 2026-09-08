@@ -159,6 +159,23 @@ def _check(name: str, interests: str, narrow: str, *, ignore: str = "") -> None:
         )
 
 
+def share(target: Target) -> str:
+    """Отправить таргет в общую таблицу. Возвращает ошибку или пустую строку.
+
+    Реестр на этой машине — только половина дела: таргет, которого нет в общей
+    таблице, не увидит никто, кроме автора. Ошибка возвращается, а не глотается,
+    потому что «сохранено здесь» и «увидят все» — разные вещи, и человек должен
+    знать, которая из них с ним случилась.
+    """
+    try:
+        from src.analysis_agent.gsheet_targeting import add_targeting_profile
+
+        add_targeting_profile(target.name, target.interests, target.narrow)
+        return ""
+    except Exception as exc:  # noqa: BLE001 — текст уходит человеку
+        return str(exc)
+
+
 def add(name: str, interests: str, narrow: str = "", *, source: str = "dashboard") -> Target:
     _check(name, interests, narrow)
     t = Target(

@@ -2073,6 +2073,7 @@ async def api_edit_targeting_profile(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
 
     action = (data.get("action") or "add").strip().lower()
+    shared_error = ""
     name = data.get("name") or ""
     interests = data.get("interests") or ""
     narrow = data.get("narrow") or ""
@@ -2085,6 +2086,10 @@ async def api_edit_targeting_profile(request: Request) -> JSONResponse:
             target = tr.update(data.get("was") or name, name, interests, narrow)
         elif action == "add":
             target = tr.add(name, interests, narrow)
+            # Реестр на этой машине — половина дела. Пока таргета нет в общей
+            # таблице, его не видит никто, кроме автора, и молчать об этом
+            # нельзя: «сохранено» и «увидят все» — разные вещи.
+            shared_error = tr.share(target)
         else:
             return JSONResponse(
                 {"ok": False, "error": f"Неизвестное действие: {action}"}, status_code=400
@@ -2097,6 +2102,10 @@ async def api_edit_targeting_profile(request: Request) -> JSONResponse:
 
     return JSONResponse({
         "ok": True,
+        # Дошло ли до общей таблицы. Пусто — дошло; текст — сохранено только
+        # здесь, и человеку надо это знать, а не догадываться.
+        "shared": not shared_error,
+        "shared_error": shared_error,
         "profile": {
             "name": target.name,
             "interests": target.interests,

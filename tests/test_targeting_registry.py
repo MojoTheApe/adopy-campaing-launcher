@@ -111,3 +111,27 @@ def test_an_empty_target_is_refused():
         tr.add("", "один")
     with pytest.raises(tr.TargetingError):
         tr.add("A", "   ")
+
+
+def test_sharing_reports_failure_instead_of_swallowing_it(monkeypatch):
+    """«Сохранено здесь» и «увидят все» — разные вещи.
+
+    Молчаливый отказ общей таблицы выглядел бы как успех, и таргет, которого
+    не увидит никто, кроме автора, считался бы розданным.
+    """
+    t = tr.Target(name="A", interests="один, два")
+
+    import src.analysis_agent.gsheet_targeting as g
+
+    def boom(*a, **k):
+        raise RuntimeError("Google отказал")
+
+    monkeypatch.setattr(g, "add_targeting_profile", boom)
+    assert "Google отказал" in tr.share(t)
+
+
+def test_sharing_says_nothing_when_it_worked(monkeypatch):
+    import src.analysis_agent.gsheet_targeting as g
+
+    monkeypatch.setattr(g, "add_targeting_profile", lambda *a, **k: None)
+    assert tr.share(tr.Target(name="A", interests="один")) == ""

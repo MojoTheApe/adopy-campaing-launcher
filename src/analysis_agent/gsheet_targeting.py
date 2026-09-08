@@ -70,6 +70,36 @@ def _clean_names(raw: str) -> str:
     return ", ".join(n for n in names if n)
 
 
+def _sheets_services():
+    """Ключи к таблице по порядку: сервисный аккаунт, затем токен сотрудника.
+
+    8 сентября таргеты «исчезли» с дешборда. На деле лист отвечал сервисному
+    аккаунту `403 The caller does not have permission` — политика Adopy, — и
+    загрузчик молча возвращал пустой словарь. При этом в том же коде всё время
+    жил рабочий путь: токен сотрудника, которым дешборд писал в эту же таблицу.
+    Одна таблица, два ключа, и читали мы тем, который отобрали.
+
+    Ключей именно два и пробуются оба **на самом запросе**, а не при создании
+    клиента: сервисный клиент собирается без единой жалобы, и `403` прилетает
+    только на первом обращении. Проверка «удалось ли создать» здесь ничего не
+    значит и однажды уже ввела меня в заблуждение.
+    """
+    out = []
+    try:
+        from src.analysis_agent.gsheet_accounts import _build_sheets_service
+
+        out.append(("сервисный аккаунт", _build_sheets_service("config/google_credentials.json")))
+    except Exception as exc:
+        _log(f"service account unavailable: {exc!r}")
+    try:
+        from src.analysis_agent.gsheet_write import get_write_service
+
+        out.append(("токен сотрудника", get_write_service()))
+    except Exception as exc:
+        _log(f"employee token unavailable: {exc!r}")
+    return out
+
+
 def load_targeting_profiles(*, force: bool = False) -> dict[str, TargetingProfile]:
     """Load all profiles, cached for a few minutes. {} on any failure —
     callers treat that as "fall back to the Excel source".
@@ -82,34 +112,45 @@ def load_targeting_profiles(*, force: bool = False) -> dict[str, TargetingProfil
     if not force and _cache.profiles and now - _cache.loaded_at < _CACHE_TTL_S:
         return _cache.profiles
 
-    try:
-        from src.analysis_agent.gsheet_accounts import _build_sheets_service
+    sheet_id = os.environ.get("GSHEET_TARGETING_SPREADSHEET_ID") or _DEFAULT_SPREADSHEET_ID
+    tab = os.environ.get("GSHEET_TARGETING_TAB") or _DEFAULT_TAB
 
-        svc = _build_sheets_service("config/google_credentials.json")
-        sheet_id = os.environ.get("GSHEET_TARGETING_SPREADSHEET_ID") or _DEFAULT_SPREADSHEET_ID
-        tab = os.environ.get("GSHEET_TARGETING_TAB") or _DEFAULT_TAB
+    services = _sheets_services()
+    if not services:
+        last_error = "нечем открыть таблицу: ни сервисного аккаунта, ни токена сотрудника"
+        return {}
 
-        # Tolerate tab renames that only change case/whitespace.
-        meta = svc.spreadsheets().get(spreadsheetId=sheet_id).execute()
-        titles = [s["properties"]["title"] for s in meta.get("sheets", [])]
-        actual = next(
-            (t for t in titles if t.strip().lower() == tab.strip().lower()), None
-        )
-        if actual is None:
-            last_error = f"вкладки «{tab}» нет в таблице (есть: {', '.join(titles)})"
-            _log(f"tab {tab!r} not found (have: {titles}) — falling back")
-            return {}
+    rows = None
+    actual = None
+    troubles = []
+    for label, svc in services:
+        try:
+            # Tolerate tab renames that only change case/whitespace.
+            meta = svc.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            titles = [s["properties"]["title"] for s in meta.get("sheets", [])]
+            actual = next(
+                (t for t in titles if t.strip().lower() == tab.strip().lower()), None
+            )
+            if actual is None:
+                last_error = f"вкладки «{tab}» нет в таблице (есть: {', '.join(titles)})"
+                _log(f"tab {tab!r} not found (have: {titles}) — falling back")
+                return {}
+            rows = (
+                svc.spreadsheets()
+                .values()
+                .get(spreadsheetId=sheet_id, range=f"'{actual}'!A2:C500")
+                .execute()
+                .get("values", [])
+            )
+            if label != services[0][0]:
+                _log(f"read with {label} after {services[0][0]} was refused")
+            break
+        except Exception as exc:
+            troubles.append(f"{label}: {exc}")
+            _log(f"{label} refused ({exc!r})")
 
-        rows = (
-            svc.spreadsheets()
-            .values()
-            .get(spreadsheetId=sheet_id, range=f"'{actual}'!A2:C500")
-            .execute()
-            .get("values", [])
-        )
-    except Exception as exc:
-        last_error = f"{type(exc).__name__}: {exc}"
-        _log(f"load failed ({exc!r}) — falling back")
+    if rows is None:
+        last_error = "; ".join(troubles)
         return {}
 
     profiles: dict[str, TargetingProfile] = {}
