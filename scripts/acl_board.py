@@ -512,15 +512,31 @@ def _card(task: Task, tilt: int) -> str:
     done, total = task.sub_progress
     meter = f'<span class="count">{done}/{total}</span>' if total else ""
     status = task.shown_status
-    return (
-        f'<article class="pin s-{status}" style="--tilt:{tilt / 10:.1f}deg" '
-        f'data-status="{status}" data-track="{_esc(task.track)}">'
+    subs = _subs(task)
+    body = f"{note}{subs}"
+    head = (
         f'<header><code>{_esc(task.id)}</code>{track}</header>'
-        f'<h4>{tick}{_rich(task.title)}</h4>{note}'
-        f'{_subs(task)}'
+        f'<h4>{tick}{_rich(task.title)}</h4>'
         f'<footer>{_esc(STATUS_LABEL.get(status, status))}'
-        f'{_needs(task)}{meter}</footer>'
-        "</article>"
+        f"{_needs(task)}{meter}</footer>"
+    )
+    attrs = (
+        f'class="pin s-{status}" style="--tilt:{tilt / 10:.1f}deg" '
+        f'data-status="{status}" data-track="{_esc(task.track)}" '
+        f'data-id="{_esc(task.id)}"'
+    )
+    # Карточка без примечания и подзадач не сворачивается: стрелка, за которой
+    # ничего нет, обещает содержимое и не отдаёт его. Свёрнутой карточкой
+    # остаётся видно всё, чем задачу опознают, — номер, трек, название, статус
+    # и счётчик частей.
+    if not body:
+        return f"<article {attrs}>{head}</article>"
+    return (
+        f"<details {attrs}>"
+        f'<summary class="pin-head"><span class="pin-caret" aria-hidden="true"></span>'
+        f"{head}</summary>"
+        f'<div class="pin-body">{body}</div>'
+        f"</details>"
     )
 
 
@@ -613,7 +629,8 @@ _FAVICON = (
     "%3C/svg%3E"
 )
 
-_PAGE = """<title>ACL Task Wall</title>
+_PAGE = """<meta charset="utf-8">
+<title>ACL Task Wall</title>
 <link rel="icon" type="image/svg+xml" href="__FAVICON__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -778,6 +795,21 @@ nav.areas a:hover {{ color: var(--ink); text-decoration: underline;
 .pin footer .count {{ margin-left: auto; font-variant-numeric: tabular-nums;
   opacity: .85; }}
 .pin.hide {{ display: none; }}
+/* Свёрнутая карточка. Шапка кликабельна целиком: попадать в маленькую стрелку
+   на стикере шириной в колонку — работа, которой человек не просил. */
+.pin-head {{ cursor: pointer; list-style: none; display: block;
+  position: relative; padding-right: 16px; }}
+.pin-head::-webkit-details-marker {{ display: none; }}
+.pin-head::marker {{ content: ""; }}
+.pin-caret {{ position: absolute; top: 4px; right: 0; width: 6px; height: 6px;
+  border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor;
+  opacity: .45; transform: rotate(-45deg); transition: transform .15s ease; }}
+.pin[open] > .pin-head .pin-caret {{ transform: rotate(45deg); opacity: .7; }}
+.pin-head:hover .pin-caret {{ opacity: .9; }}
+/* Подзадачи и примечание живут внутри раскрытой части и не должны прилипать
+   к подвалу шапки. */
+.pin-body > .note:first-child {{ margin-top: 9px; }}
+@media (prefers-reduced-motion: reduce) {{ .pin-caret {{ transition: none; }} }}
 
 .s-shipped {{ --bg: var(--pin-shipped-bg); --fg: var(--pin-shipped-ink); --edge: var(--pin-shipped-edge); }}
 .s-review  {{ --bg: var(--pin-review-bg);  --fg: var(--pin-review-ink);  --edge: var(--pin-review-edge); }}
@@ -826,15 +858,17 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
   /* Области свёрнуты. Шестьдесят задач разом — это стена, по которой нельзя
      вести взглядом; свёрнутая, она за один экран отвечает, из чего состоит
      система и сколько где сделано. Раскрытое человеком запоминается. */
-  var KEY = 'acl.wall.open';
+  var AREA_KEY = 'acl.wall.open';
+  var PIN_KEY = 'acl.wall.pins';
   var areas = Array.prototype.slice.call(document.querySelectorAll('details.area'));
+  var pins = Array.prototype.slice.call(document.querySelectorAll('details.pin'));
   var chips = Array.prototype.slice.call(document.querySelectorAll('.chip'));
   var active = null;
   var known = [];
 
-  function stored() {{
+  function stored(key) {{
     try {{
-      var raw = localStorage.getItem(KEY);
+      var raw = localStorage.getItem(key);
       var list = raw ? JSON.parse(raw) : [];
       return Object.prototype.toString.call(list) === '[object Array]' ? list : [];
     }} catch (e) {{
@@ -842,22 +876,28 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
     }}
   }}
 
-  function remember() {{
-    // Под фильтром области открыты не человеком, а фильтром: запоминать это
-    // значило бы выдать чужой выбор за его собственный.
-    if (active) return;
-    try {{
-      localStorage.setItem(KEY, JSON.stringify(
-        areas.filter(function (a) {{ return a.open; }})
-             .map(function (a) {{ return a.getAttribute('data-area'); }})));
-    }} catch (e) {{}}
+  /* Один механизм на области и карточки: две разные памяти о том же самом
+     разошлись бы, и заметил бы это тот, кто поверил не той. */
+  function watch(nodes, key, attr) {{
+    var seen = stored(key);
+    nodes.forEach(function (n) {{
+      if (seen.indexOf(n.getAttribute(attr)) !== -1) n.open = true;
+      n.addEventListener('toggle', function () {{
+        // Под фильтром открыто не человеком, а фильтром: запоминать это
+        // значило бы выдать чужой выбор за его собственный.
+        if (active) return;
+        try {{
+          localStorage.setItem(key, JSON.stringify(
+            nodes.filter(function (x) {{ return x.open; }})
+                 .map(function (x) {{ return x.getAttribute(attr); }})));
+        }} catch (e) {{}}
+      }});
+    }});
+    return seen;
   }}
 
-  known = stored();
-  areas.forEach(function (a) {{
-    if (known.indexOf(a.getAttribute('data-area')) !== -1) a.open = true;
-    a.addEventListener('toggle', remember);
-  }});
+  known = watch(areas, AREA_KEY, 'data-area');
+  watch(pins, PIN_KEY, 'data-id');
 
   function apply() {{
     document.querySelectorAll('.pin').forEach(function (pin) {{

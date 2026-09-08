@@ -33,7 +33,11 @@ board: ACL
 ### Some capability
 
 - [x] `acl-001` A finished thing #shipped @dashboard
+      Why it was done, and what it cost.
 - [ ] `acl-002` An unfinished thing #next @rpa
+  - [x] `acl-002a` The first half
+  - [ ] `acl-002b` The second half
+- [ ] `acl-004` Nothing to expand #later @ops
 
 ## 2 · Second area
 
@@ -107,3 +111,61 @@ def test_the_intro_counts_the_areas_it_shows():
     """
     html = _html()
     assert "2 areas of the system" in html, "число областей снова написано на глаз"
+
+
+def test_a_card_with_a_note_folds():
+    """Карточку тоже сворачиваем: развёрнутая область — снова стена текста."""
+    html = _html()
+    assert '<details class="pin' in html, "карточка перестала сворачиваться"
+    assert 'class="pin-head"' in html, "у карточки нет кликабельной шапки"
+    assert "pin-caret" in html, "у карточки нет стрелки"
+
+
+def _tag_of(html: str, task_id: str) -> str:
+    """Каким тегом отрисована карточка задачи."""
+    m = re.search(rf'<(\w+) class="pin[^"]*"[^>]*data-id="{task_id}"', html)
+    assert m, f"карточки {task_id} нет на витрине"
+    return m.group(1)
+
+
+def test_a_card_with_nothing_inside_stays_flat():
+    """Стрелка, за которой пусто, обещает содержимое и не отдаёт его."""
+    html = _html()
+    assert _tag_of(html, "acl-004") == "article", (
+        "карточка без примечания и подзадач стала сворачиваемой"
+    )
+    assert _tag_of(html, "acl-001") == "details", "карточка с примечанием не сворачивается"
+    assert _tag_of(html, "acl-002") == "details", "карточка с подзадачами не сворачивается"
+
+
+def test_the_collapsed_card_still_shows_what_identifies_it():
+    """Свёрнутой видно номер, название, статус и счётчик частей."""
+    html = _html()
+    head = html[html.index('class="pin-head"'):]
+    head = head[: head.index("</summary>")]
+    assert "acl-001" in head or "acl-002" in head, "номер задачи спрятан внутрь"
+    assert "<h4>" in head, "название спрятано внутрь"
+    assert "<footer>" in head, "статус спрятан внутрь"
+
+
+def test_one_memory_mechanism_for_areas_and_cards():
+    """Две разные памяти о том же самом разошлись бы."""
+    script = _SCRIPT.findall(_html())[0]
+    assert script.count("function watch(") == 1, "память снова написана дважды"
+    assert "watch(areas," in script and "watch(pins," in script
+
+
+def test_the_page_declares_its_encoding():
+    """Без этого страница читается только там, где кодировку шлёт сервер.
+
+    Витрину открывают и с диска, и с чужой машины, и показывают начальству.
+    До этой правки `<meta charset>` не было вовсе: на claude.ai всё выглядело
+    целым, потому что кодировку присылал их сервер, а с простого сервера
+    каждая галочка, тире и кириллица рассыпались в «âœ“» и «â€"». Ошибка,
+    которую видно только там, где её никто не проверяет.
+    """
+    html = _html()
+    assert '<meta charset="utf-8">' in html.lower(), "страница не объявляет кодировку"
+    assert html.lower().index("charset") < html.lower().index("<title"), (
+        "объявление кодировки должно идти до заголовка"
+    )
