@@ -448,6 +448,17 @@ def get_env_files() -> list[str]:
     return files
 
 
+# The telemetry spreadsheet is the same one for every campaign manager, exactly
+# like the accounts sheet. Leaving it as a setting meant every fresh install
+# arrived with telemetry off and nobody knowing it existed: on 2026-09-04 the
+# fleet was two machines and one of them had never sent a row, so a stalled run
+# on the other could only be investigated through screenshots.
+#
+# A spreadsheet id is not a secret — access is controlled by who the sheet is
+# shared with — and DEFAULT_ACCOUNTS_SHEET_ID already sets this precedent.
+DEFAULT_TELEMETRY_SHEET_ID = "1M0FYL0EnxWFtTsCmKvFwJwuV0l2jWyvHmxfQdwcH6bs"
+
+
 def load_env() -> list[str]:
     """Load the machine's settings. Returns the files actually loaded."""
     try:
@@ -461,6 +472,12 @@ def load_env() -> list[str]:
             loaded.append(f)
         except Exception:
             continue
+    # Fill in what every machine shares, after the machine's own files so a
+    # deliberate local value always wins. Set on the environment rather than
+    # read at each call site: telemetry belongs to the RPA track, and this way
+    # it needs no change there to start reporting.
+    if not (os.environ.get("GSHEET_TELEMETRY_ID") or "").strip():
+        os.environ["GSHEET_TELEMETRY_ID"] = DEFAULT_TELEMETRY_SHEET_ID
     return loaded
 
 
