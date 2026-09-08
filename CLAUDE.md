@@ -1,89 +1,14 @@
-# fb_agents — правила репозитория
+# ACL: инструкции для Claude
 
-В этом чекауте (`C:\fb_agents`) параллельно работают **две сессии агентов**:
-дешборд-сессия и RPA-сессия. Правила ниже обязательны для обеих. Контекст
-решений — Obsidian: `Kuwait Forms\дешборд\Дешборд — План работ.md`.
+Перед изменениями прочитайте [общие правила совместной разработки](docs/DEVELOPMENT_WORKFLOW.md).
+Тот же документ указан в `AGENTS.md` для Codex. Не поддерживайте отдельную
+копию правил и не восстанавливайте старое постоянное разделение файлов между
+дешборд- и RPA-сессиями: владельцы определяются текущей задачей.
 
-## Владение файлами (кто что правит)
+Production — `master` в `MojoTheApe/adopy-campaing-launcher`; явно указывайте
+базу PR. Машинные пути и дополнительные push-адреса проверяются в конкретном
+клоне, а не копируются из исторического Windows-чекаута.
 
-| Путь | Хозяин |
-|---|---|
-| `src/web/**`, `src/analysis_agent/**`, `src/upload_agent/**`, `src/knowledge_agent/**`, `scripts/sync_*`, `serve.py` | **Дешборд-сессия** |
-| `src/fb_ads_rpa/**`, `src/meta_campaign_agent/**`, `config/rpa_*`, `config/ads_manager_selectors.yaml`, `config/rpa_forbidden_zones.yaml`, `scripts/run_rpa_publish.py` | **RPA-сессия** |
-| `tests/**` | Каждая сессия — тесты своего кода |
-
-Не хозяин файла → не правишь его. Если задача требует чужой файл — останови
-работу и скажи пользователю, что это таск другого трека.
-
-## Общие файлы (правишь → коммитишь сразу, отдельным коммитом)
-
-- `config/paths.py`
-- `config/knowledge_base.json`
-
-## Машинные файлы (НЕ коммитить — у каждого своя копия)
-
-Разделение «код в гите, машинное локально» — условие раздачи ACL байерам:
-у десяти человек десять разных карт аккаунтов, а рабочий репозиторий
-читают посторонние разработчики.
-
-- `.env`, `config/token_accounts.json`, `config/google_credentials.json`
-- `config/ad_account_map.csv` — выведен из-под гита 2026-08-25. Живёт в
-  `%LOCALAPPDATA%\ACL\` (см. `config.paths.get_local_config_dir`);
-  шаблон — `config/ad_account_map.example.csv`. Копия в `config/` пока
-  оставлена на диске: `src/analysis_agent/morning_service.py:63` читает
-  её в обход `paths.py`, и без этой копии дешборд сломается.
-  **Таск дешборд-трека:** перевести это место на
-  `config.paths.get_ad_account_map_path()`, после чего копию в `config/`
-  можно удалить. Не коммитить файл обратно.
-
-## Git — жёсткие запреты (обе сессии)
-
-- НИКОГДА: `git add -A`, `git add .` — только явные имена файлов.
-- НИКОГДА: `git stash`, `git checkout .`, `git checkout -- <path>`,
-  `git reset --hard`, `git clean` — в дереве всегда есть незакоммиченная
-  работа второй сессии (так уже был потерян `src/fb_ads_rpa/obsidian_sync.py`).
-- НЕ переключать ветку в этом чекауте (`git checkout <branch>`) по той же
-  причине: файлы меняются под второй сессией на ходу. Новая ветка — новая
-  рабочая папка: `git worktree add ../acl-<фича> -b feature/<фича>`, по
-  завершении `git worktree remove ../acl-<фича>`. Правила веток, ревью и
-  выпуска релизов — `docs/BRANCHING.md`.
-- `git status` покажет чужие изменения (файлы второй сессии, `output/*`) —
-  никогда не стейджить их и не «чинить».
-- `output/**` не коммитить (диагностические артефакты прогонов), кроме
-  осознанно нужных файлов.
-- Push только в `origin` — но у него теперь ТРИ push-адреса, и один
-  `git push` уходит во все (решение пользователя 2026-08-25):
-  `JenyaFarber/fb_agents`, `evgenis-ctrl/fb_agents` и рабочий
-  `MojoTheApe/adopy-campaing-launcher`, куда получат доступ разработчики.
-  Не «чинить» это обратно в один адрес. Отдельный remote `origin-old`
-  трогать не нужно — его адрес уже входит в push-список `origin`.
-- Голый `git push` работает правильно ТОЛЬКО из-за
-  `remote.pushDefault = origin`. Без него команда идёт по upstream ветки,
-  а upstream у всех веток здесь — `origin-old`, то есть один адрес из
-  трёх, молча (2026-08-27: `git push --dry-run` рапортовал
-  «Everything up-to-date», ничего никуда не отправив). Это НАСТРОЙКА
-  КЛОНА, в гит она не попадает: после `git clone` её надо задать заново:
-
-      git remote set-url --add --push origin https://github.com/JenyaFarber/fb_agents.git
-      git remote set-url --add --push origin https://github.com/evgenis-ctrl/fb_agents.git
-      git remote set-url --add --push origin https://github.com/MojoTheApe/adopy-campaing-launcher.git
-      git config remote.pushDefault origin
-
-  Проверка, что всё три адреса на месте: `git push --dry-run -v` должен
-  напечатать три строки `Pushing to …`.
-- Раз рабочий репозиторий видят посторонние разработчики: ничего
-  секретного в коммиты. `.env`, токены и credentials не отслеживаются —
-  так и оставить. `config/ad_account_map.csv` отслеживается и содержит
-  `ad_account_id` и `profile_id` (колонки прокси пустые) — прежде чем
-  добавлять туда логины/пароли прокси, файл надо вывести из-под гита.
-
-## Прочее
-
-- Дешборд: template-правки `report.html` подхватываются без рестарта;
-  правки Python требуют перезапуска `serve.py` — предупреждать пользователя
-  (рестарт сбрасывает in-memory кэш отчёта).
-- Каждое изменение дешборда/RPA после завершения логируется в Obsidian
-  (дневники `Дешборд — Дневник изменений` / `RPA Publish — Дневник тестов`) —
-  постоянное правило пользователя.
-- Точки входа для продолжения работы: `/dashboard-work` (дешборд-трек),
-  `/rpa-campaign-test` (RPA-трек).
+Технический контекст: [распространение](docs/DISTRIBUTION.md),
+[история релизов](docs/RELEASES.md). Конкретные указания пользователя и
+согласованные исключения имеют приоритет над общими правилами процесса.
