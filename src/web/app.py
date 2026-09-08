@@ -2096,6 +2096,58 @@ async def api_edit_targeting_profile(request: Request) -> JSONResponse:
     return await run_in_threadpool(_edit_targeting_profile, data)
 
 
+@app.get("/api/ad-texts")
+def api_ad_texts(force: bool = False) -> JSONResponse:
+    """Библиотека рекламных текстов. Чтение вкладки — в рабочем пуле FastAPI."""
+    from src.analysis_agent import ad_text_registry as ar
+    try:
+        sheet = ar.refresh(force=force)
+        texts = ar.all_texts()
+        return JSONResponse({"ok": True, "sheet": sheet,
+                             "duplicates": ar.duplicates(texts),
+                             "texts": [t.to_dict() for t in texts]})
+    except ar.AdTextError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
+
+
+_AD_TEXT_FIELDS = ("action", "name", "headline", "body", "description",
+                   "asset", "language", "was")
+
+
+def _edit_ad_text(data: dict) -> JSONResponse:
+    from src.analysis_agent import ad_text_registry as ar
+    if not isinstance(data, dict) or any(not isinstance(data.get(k, ""), str) for k in _AD_TEXT_FIELDS):
+        return JSONResponse({"ok": False, "error": "Expected an object with string fields"}, status_code=400)
+    action = (data.get("action") or "add").strip().lower()
+    name, headline, body, description, asset, language = (
+        data.get(k, "") for k in ("name", "headline", "body", "description", "asset", "language"))
+    try:
+        if action == "delete":
+            ar.remove(name)
+            return JSONResponse({"ok": True, "removed": name})
+        if action == "update":
+            text = ar.update(data.get("was") or name, name, headline, body, description, asset, language)
+        elif action == "add":
+            text = ar.add(name, headline, body, description, asset, language)
+        else:
+            raise ar.AdTextError(f"Неизвестное действие: {action}")
+    except ar.AdTextError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    return JSONResponse({"ok": True, "text": text.to_dict()})
+
+
+@app.post("/api/ad-texts")
+async def api_edit_ad_text(request: Request) -> JSONResponse:
+    from starlette.concurrency import run_in_threadpool
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    return await run_in_threadpool(_edit_ad_text, data)
+
+
 @app.get("/api/parse-adset")
 async def api_parse_adset(name: str = "") -> JSONResponse:
     """Parse a raw Meta ad set name into (country_code, device, age, targeting)
