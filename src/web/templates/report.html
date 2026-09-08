@@ -1,3 +1,36 @@
+    var list = (data && data.profiles) || [];
+    var dup = (data && data.duplicates) || {};
+    if (!list.length) {
+      box.innerHTML = '<p><em>The library is empty. Add the first target below.</em></p>';
+      return;
+    }
+    /* Повторы осматриваются целиком, а не только не допускаются при
+       заведении: файл можно поправить руками, а прежние записи могли лечь до
+       того, как правило появилось. Молчать о них — значит дать двум
+       одинаковым аудиториям жить под разными именами. */
+    var warn = '';
+    if ((dup.names || []).length) {
+      warn += '<p style="color:#b91c1c">Same name twice: ' + esc((dup.names || []).join(', ')) + '</p>';
+    }
+    ((dup.sets) || []).forEach(function (names) {
+      warn += '<p style="color:#b91c1c">Same set of interests: ' + esc(names.join(' = ')) + '</p>';
+    });
+
+    var html = warn
+      + '<p style="color:var(--muted);font-size:0.85rem">Total: ' + list.length
+      + ' · stored on this machine</p>'
+      + '<table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th><th></th></tr>'
+      + '</thead><tbody>';
+    list.forEach(function (p) {
+      html += '<tr data-name="' + esc(p.name) + '">'
+           + '<td><b>' + esc(p.name) + '</b></td>'
+           + '<td>' + esc(p.interests) + '</td>'
+           + '<td>' + esc(p.narrow || '—') + '</td>'
+           + '<td style="text-align:right;white-space:nowrap">'
+           + '<button type="button" class="amap-btn" data-tg-edit="' + esc(p.name) + '">Edit</button> '
+           + '<button type="button" class="amap-x" data-tg-del="' + esc(p.name) + '">Remove</button>'
+           + '</td></tr>';
+    });
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8290,13 +8323,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       /* «Сохранено здесь» и «увидят все» — разные вещи. Пока таргета нет в
          общей таблице, его не видит никто, кроме автора, и одно слово «Added»
          на оба случая скрыло бы ровно то, ради чего таргет и заводят. */
-      if (d.shared === false) {
-        say((was ? 'Updated' : 'Added') + ' here only — other machines will not see it. '
-          + (d.shared_error || ''), 'err');
-      } else {
-        say((was ? 'Updated: ' : 'Added: ') + d.profile.name
-          + (was ? '' : ' — shared with everyone'), 'ok');
-      }
+      say((was ? 'Updated: ' : 'Added: ') + d.profile.name, 'ok');
       clearForm();
     });
   }

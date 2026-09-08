@@ -2013,25 +2013,25 @@ async def api_accounts_overview() -> JSONResponse:
 
 
 @app.get("/api/targeting-profiles")
-async def api_targeting_profiles(refresh: int = 0) -> JSONResponse:
-    """Библиотека таргетов: общая таблица, копия на этой машине.
+async def api_targeting_profiles() -> JSONResponse:
+    """Библиотека таргетов. Реестр на этой машине — единственный источник.
 
-    Одна правда, а не две. Копия сверяется с таблицей при открытии раздела,
-    поэтому чужое добавление и чужое удаление доходят одинаково. Пока копия
-    была самостоятельным хранилищем, «у меня есть» и «есть у всех» расходились
-    молча — и 8 сентября разошлись на 48 таргетов.
+    Таблица Google больше не участвует: за один день она дважды показала, чего
+    стоит зависимость от чужого доступа — сперва `403` сервисному аккаунту,
+    потом гонка двух одновременных правок, которую в Sheets нечем закрыть.
+    Выгрузка в неё осталась, но стала осознанным действием.
 
-    Когда таблица не читается, показываем копию и говорим, что случилось:
-    «пусто» и «не достучались» требуют разных действий.
+    Повторы осматриваются целиком, а не только не допускаются при заведении:
+    файл можно поправить руками, а прежние записи могли лечь до того, как
+    правило появилось.
     """
     from src.analysis_agent import targeting_registry
 
-    pulled, error = targeting_registry.pull_from_sheet()
     targets = targeting_registry.all_targets()
     return JSONResponse({
         "ok": True,
         "can_add": True,
-        "sheet": {"tried": True, "error": error, "pulled": pulled},
+        "duplicates": targeting_registry.duplicates(),
         "profiles": [
             {
                 "name": t.name,
@@ -2063,24 +2063,23 @@ async def api_edit_targeting_profile(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
 
     action = (data.get("action") or "add").strip().lower()
-    shared_error = ""
     name = data.get("name") or ""
     interests = data.get("interests") or ""
     narrow = data.get("narrow") or ""
 
     try:
         if action == "delete":
-            _, shared_error = tr.with_shared(lambda: tr.remove(name))
-            return JSONResponse(
-                {"ok": True, "removed": name,
-                 "shared": not shared_error, "shared_error": shared_error}
-            )
+            tr.remove(name)
+            return JSONResponse({"ok": True, "removed": name})
+        if action == "export":
+            # Осознанное «выложить мою библиотеку в таблицу», со снимком
+            # прежнего содержимого: откатить перезапись больше нечем.
+            written, backup = tr.push_all(snapshot=True)
+            return JSONResponse({"ok": True, "exported": written, "backup": backup})
         if action == "update":
-            target, shared_error = tr.with_shared(
-                lambda: tr.update(data.get("was") or name, name, interests, narrow)
-            )
+            target = tr.update(data.get("was") or name, name, interests, narrow)
         elif action == "add":
-            target, shared_error = tr.with_shared(lambda: tr.add(name, interests, narrow))
+            target = tr.add(name, interests, narrow)
         else:
             return JSONResponse(
                 {"ok": False, "error": f"Неизвестное действие: {action}"}, status_code=400
@@ -2093,10 +2092,6 @@ async def api_edit_targeting_profile(request: Request) -> JSONResponse:
 
     return JSONResponse({
         "ok": True,
-        # Дошло ли до общей таблицы. Пусто — дошло; текст — сохранено только
-        # здесь, и человеку надо это знать, а не догадываться.
-        "shared": not shared_error,
-        "shared_error": shared_error,
         "profile": {
             "name": target.name,
             "interests": target.interests,
