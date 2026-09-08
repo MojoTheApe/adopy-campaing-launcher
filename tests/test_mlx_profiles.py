@@ -25,9 +25,19 @@ sys.path.insert(0, str(ROOT))
 
 from src.fb_ads_rpa import mlx_profiles as mp  # noqa: E402
 
-WS = "11111111-1111-1111-1111-111111111111"
-FOLDER = "22222222-2222-2222-2222-222222222222"
-PROFILE = "359d3e44-aaaa-bbbb-cccc-1234567890ab"
+#: Значения собираются из частей нарочно. Проверка секретов ищет в
+#: отслеживаемых файлах то, что похоже на id профиля Multilogin и на номер
+#: рекламного кабинета, — и справедливо: эти файлы уезжают и в рабочий
+#: репозиторий, который читают посторонние, и на машину каждого байера.
+#: Первая версия этого теста несла настоящий `act=…`, взятый со снимка живого
+#: аккаунта, и проверка её остановила.
+WS = "-".join(["w" * 8, "w" * 4, "w" * 4, "w" * 4, "w" * 12])
+FOLDER = "-".join(["f" * 8, "f" * 4, "f" * 4, "f" * 4, "f" * 12])
+PROFILE = "profile-" + "one"
+TWIN = "profile-" + "two"          # то же начало, другой профиль
+ACC = "9" * 12                     # выдуманный номер кабинета
+OTHER_ACC = "8" * 12
+AM = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?" + "act="
 
 
 @pytest.fixture()
@@ -56,7 +66,7 @@ def test_a_missing_root_is_empty_not_an_error(tmp_path, monkeypatch):
 def test_profiles_come_newest_first(mlx_home):
     """Тот, которым только что пользовались, и есть подключаемый."""
     root = mlx_home / "profiles" / WS / FOLDER
-    old = root / "aaaaaaaa-0000-0000-0000-000000000000"
+    old = root / "profile-older"
     old.mkdir()
     os.utime(old, (1, 1))                      # заведомо старее
     ids = mp.all_profile_ids()
@@ -69,7 +79,7 @@ def test_profiles_come_newest_first(mlx_home):
 
 def test_a_short_name_expands_to_its_only_match():
     """Windows сокращает путь до `359D3E~1` — по нему и находим профиль."""
-    assert mp._expand_short_name("359D3E~1", [PROFILE]) == PROFILE
+    assert mp._expand_short_name(PROFILE[:7].upper() + "~1", [PROFILE]) == PROFILE
 
 
 def test_an_ambiguous_short_name_returns_nothing():
@@ -78,8 +88,7 @@ def test_an_ambiguous_short_name_returns_nothing():
     Взять первый значит открыть кабинет из чужой личности: другой отпечаток,
     другой прокси, другой IP. «Не знаю» здесь — единственный верный ответ.
     """
-    twin = "359d3e99-0000-0000-0000-000000000000"
-    assert mp._expand_short_name("359D3E~1", [PROFILE, twin]) is None
+    assert mp._expand_short_name(PROFILE[:7].upper() + "~1", [PROFILE, TWIN]) is None
 
 
 def test_an_empty_short_name_returns_nothing():
@@ -161,19 +170,19 @@ def test_the_ad_account_is_read_from_the_profiles_own_history(mlx_home):
     2026-08-25, и это место намеренно так не делает.
     """
     _history(mlx_home / "profiles" / WS / FOLDER / PROFILE, [
-        ("https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1482029437017540", 30),
+        (AM + ACC, 30),
     ])
-    assert mp.ad_account_id_for(PROFILE) == "act_1482029437017540"
+    assert mp.ad_account_id_for(PROFILE) == "act_" + ACC
 
 
 def test_one_stray_click_does_not_rename_the_owner(mlx_home):
     """Берётся тот номер, что встречается чаще, а не самый свежий."""
     _history(mlx_home / "profiles" / WS / FOLDER / PROFILE, [
-        ("https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=999888777666", 99),
-        ("https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1482029437017540", 30),
-        ("https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1482029437017540", 20),
+        (AM + OTHER_ACC, 99),
+        (AM + ACC, 30),
+        (AM + ACC, 20),
     ])
-    assert mp.ad_account_id_for(PROFILE) == "act_1482029437017540"
+    assert mp.ad_account_id_for(PROFILE) == "act_" + ACC
 
 
 def test_no_history_means_no_answer(mlx_home):

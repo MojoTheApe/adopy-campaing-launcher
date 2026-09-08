@@ -38,7 +38,7 @@ from src.fb_ads_rpa.browser import MultiloginDirectCDPProvider  # noqa: E402
 class _Entry:
     """Строка карты аккаунтов — ровно то, что читает провайдер."""
 
-    def __init__(self, profile_id="359d3e44-aaaa-bbbb-cccc-1234567890ab"):
+    def __init__(self, profile_id="profile-under-test"):
         self.profile_id = profile_id
 
 
