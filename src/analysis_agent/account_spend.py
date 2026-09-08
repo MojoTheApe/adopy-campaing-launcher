@@ -64,6 +64,8 @@ class SpendReading:
     finished_at: str = ""
     took_s: float = 0.0
     shot: str = ""                # скриншот при неудаче
+    status: str = ""              # см. _read_status: clear | disabled | restricted | review | unknown
+    status_text: str = ""         # словами страницы — человеку с этим идти и разбираться
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -122,10 +124,39 @@ def all_readings(date_from: str, date_to: str) -> dict[str, SpendReading]:
     return out
 
 
+#: Состояние кабинета хранится отдельно от показаний спенда и без периода.
+#: Спенд отвечает на вопрос «сколько за эти дни», состояние — «что с ним
+#: сейчас». Сложи их в один ключ — и колонка статуса пустела бы при каждом
+#: другом отрезке, хотя кабинет как был отключён, так и остался.
+_STATUS_PREFIX = "status|"
+
+
 def _put(reading: SpendReading) -> None:
     data = _load_all()
     data[_key(reading.account, reading.date_from, reading.date_to)] = reading.to_dict()
+    if reading.status:
+        data[_STATUS_PREFIX + reading.account] = {
+            "status": reading.status,
+            "status_text": reading.status_text,
+            "at": reading.finished_at or _now(),
+        }
     _save_all(data)
+
+
+def get_status(account: str) -> dict[str, str]:
+    """Последнее известное состояние кабинета — или пусто, если не спрашивали.
+
+    Пусто и `clear` — разное. Первое значит «не смотрели», второе — «смотрели,
+    предупреждений не было». Экран обязан их различать.
+    """
+    raw = _load_all().get(_STATUS_PREFIX + account)
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        "status": str(raw.get("status") or ""),
+        "status_text": str(raw.get("status_text") or ""),
+        "at": str(raw.get("at") or ""),
+    }
 
 
 # ─────────────────────────── очередь ───────────────────────────
@@ -511,9 +542,19 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         # секунды после перехода, когда на экране был спиннер и пустой скелет.
         # Ждём саму таблицу, и только потом спрашиваем, какой период показан.
         if not _wait_for_grid(page):
+            # Статус спрашиваем и здесь: у отключённого кабинета таблицы может
+            # не быть вовсе, а знать о нём надо именно тогда.
+            out.status, out.status_text = _read_status(page)
             out.error = "Ads Manager не отрисовался за отведённое время"
-            out.shot = _shoot(page, account, day)
+            # было `day` — переменной, которой здесь нет. Ошибка жила только на
+            # пути отказа, то есть ровно там, где снимок и нужен: вместо
+            # «не отрисовался» человек получил бы NameError.
+            out.shot = _shoot(page, account, date_from)
             return out
+
+        # Один заход — оба ответа. Отдельный визит ради состояния кабинета
+        # ничем не оправдан: каждое касание живого аккаунта чего-то стоит.
+        out.status, out.status_text = _read_status(page)
 
         shown = _shown_period(page)
         if not _period_matches(shown, date_from, date_to):
@@ -545,6 +586,54 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
                 conn.close(keep_browser_open=True)
             except Exception:
                 pass
+
+
+#: Что Ads Manager пишет человеку, когда с кабинетом что-то не так. Ищем его
+#: же слова, а не код: баннер написан для человека, и с ним человеку и идти
+#: разбираться. Порядок важен — «disabled» весомее «review».
+_STATUS_SIGNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("disabled", (
+        "ad account is disabled",
+        "ad account was disabled",
+        "account has been disabled",
+        "this ad account is disabled",
+    )),
+    ("restricted", (
+        "account is restricted",
+        "restricted from advertising",
+        "advertising access is restricted",
+    )),
+    ("review", (
+        "account is under review",
+        "is being reviewed",
+    )),
+)
+
+
+def _read_status(page) -> tuple[str, str]:
+    """Состояние кабинета — словами самой страницы.
+
+    Отсутствие предупреждения **не значит «активен»**: баннер мог не успеть
+    появиться, вёрстка Meta меняется, а формулировку могли поменять вчера.
+    Поэтому чистая страница — это `clear`, «предупреждений не видно», и ничего
+    больше. Написать здесь `active` значило бы выдать незнание за проверку —
+    именно тот вид ошибки, которая выглядит нормальным результатом.
+    """
+    try:
+        raw = page.inner_text("body") or ""
+    except Exception:
+        return "unknown", ""
+    flat = " ".join(raw.split())
+    if not flat:
+        return "unknown", ""
+    low = flat.lower()
+    for state, phrases in _STATUS_SIGNS:
+        for phrase in phrases:
+            at = low.find(phrase)
+            if at != -1:
+                start = max(0, at - 60)
+                return state, flat[start : at + len(phrase) + 140].strip()
+    return "clear", ""
 
 
 def _url(act: str, date_from: str, date_to: str = "") -> str:

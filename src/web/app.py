@@ -575,6 +575,9 @@ def _build_account_map_view(
                 "workbook_alias": alias,
                 # страны, под которыми числа этого аккаунта лежат на самом деле
                 "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, label),
+                # состояние кабинета — без периода: спенд отвечает «сколько за
+                # эти дни», состояние — «что с ним сейчас»
+                "status": _account_status(label),
                 "assets": account_links.values_for(label, "asset"),
                 "countries": [
                     display_name.get(v.casefold(), v)
@@ -1223,6 +1226,16 @@ _COUNTRY_CODES: dict[str, str] = {
     "vietnam": "VN", "viet nam": "VN", "yemen": "YE", "zambia": "ZM",
     "zimbabwe": "ZW",
 }
+
+
+def _account_status(account: str) -> dict:
+    """Последнее известное состояние кабинета, прочитанное с него самого."""
+    try:
+        from src.analysis_agent import account_spend
+
+        return account_spend.get_status(account)
+    except Exception:  # pragma: no cover - карта важнее одной колонки
+        return {}
 
 
 def _account_tail(name: str) -> str:
