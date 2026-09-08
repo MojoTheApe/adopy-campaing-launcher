@@ -394,6 +394,36 @@
     .buyer-pick label { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
     .buyer-pick select { font-size: 0.82rem; max-width: 14rem; }
     .buyer-pick #buyer-msg { font-size: 0.75rem; color: var(--muted); }
+    /* Manage: четыре бывших экрана на одной странице. Разделены воздухом и
+       линией, а не рамками: рамка вокруг каждого превратила бы страницу в
+       четыре карточки, то есть в те же четыре экрана, только сразу. */
+    .manage-part {
+      margin-top: var(--space-xl);
+      padding-top: var(--space-lg);
+      border-top: 1px solid var(--border);
+    }
+    .manage-builder {
+      margin-top: var(--space-xl);
+      padding-top: var(--space-lg);
+      border-top: 1px solid var(--border);
+    }
+    .manage-builder-head {
+      display: flex; align-items: center; gap: 0.5rem;
+      cursor: pointer; list-style: none; user-select: none;
+      font-size: 0.95rem; color: var(--text);
+    }
+    .manage-builder-head::-webkit-details-marker { display: none; }
+    .manage-builder-head::marker { content: ""; }
+    .manage-builder-head .hint { color: var(--muted); font-weight: 400; font-size: 0.8rem; }
+    .manage-builder-caret {
+      width: 8px; height: 8px; flex: none;
+      border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+      transform: rotate(-45deg); transition: transform .15s var(--ease-out);
+    }
+    .manage-builder[open] > .manage-builder-head .manage-builder-caret { transform: rotate(45deg); }
+    .manage-builder-head:hover .manage-builder-caret { border-color: var(--text); }
+    @media (prefers-reduced-motion: reduce) { .manage-builder-caret { transition: none; } }
+
     /* Переключатель темы: дорожка с бегунком. Иконка сообщала состояние одним
        знаком, и какое именно — приходилось угадывать. Здесь положение видно
        сразу, и обе стороны подписаны рисунком: слева день, справа ночь.
@@ -2285,32 +2315,31 @@ async function dashRefresh(ev) {
   {% for s in scs %}
   {% set c = s.c %}
   {% set cid = c.country | anchor_slug %}
+  {#- Тот же счёт, что и у панелей ниже. Их два, и разойдясь, они дали бы в
+      списке одни номера, а в заголовках другие. -#}
   {% set sec = namespace(n=0) %}
-  {% set sec.n = sec.n + 1 %}{% set n_cm = sec.n %}
   {% if c.asset_summary %}{% set sec.n = sec.n + 1 %}{% set n_assets = sec.n %}{% endif %}
   {% if c.variants %}{% set sec.n = sec.n + 1 %}{% set n_landings = sec.n %}{% endif %}
   {% if c.trend.has_date %}{% set sec.n = sec.n + 1 %}{% set n_trend = sec.n %}{% endif %}
   {% set sec.n = sec.n + 1 %}{% set n_combos = sec.n %}
   {% if c.targeting %}{% set sec.n = sec.n + 1 %}{% set n_targeting = sec.n %}{% endif %}
   {% set sec.n = sec.n + 1 %}{% set n_creatives = sec.n %}
-  {% if c.account_rows %}{% set sec.n = sec.n + 1 %}{% set n_accounts = sec.n %}{% endif %}
   {% set sec.n = sec.n + 1 %}{% set n_optimization = sec.n %}
-  {% set sec.n = sec.n + 1 %}{% set n_builder = sec.n %}
   <div class="sidebar-country" data-country="{{ cid }}">
     <button type="button" class="sidebar-country-btn{% if s.active %} live{% endif %}" data-country="{{ cid }}"
             {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{{ c.country }}</button>
     <div class="sidebar-sections">
-      <button type="button" class="sidebar-link" data-view="country-{{ cid }}-goals">My Goals</button>
-      <button type="button" class="sidebar-link" data-view="country-{{ cid }}-cm">{{ n_cm }} CM</button>
+      {#- Одна дверь вместо четырёх. My Goals, CM, Accounts и Campaign Builder
+          отвечали на один вопрос — как идёт страна и что с этим делать, — и
+          стоили четырёх кликов по экранам, которые никогда не видны рядом. -#}
+      <button type="button" class="sidebar-link" data-view="country-{{ cid }}-manage">Manage</button>
       {% if c.asset_summary %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-assets">{{ n_assets }} Assets</button>{% endif %}
       {% if c.variants %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-landings">{{ n_landings }} Landings</button>{% endif %}
       {% if c.trend.has_date %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-trend">{{ n_trend }} Trend</button>{% endif %}
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-combos">{{ n_combos }} Combos</button>
       {% if c.targeting %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-targeting">{{ n_targeting }} Targeting</button>{% endif %}
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-creatives">{{ n_creatives }} Creatives</button>
-      {% if c.account_rows %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-accounts">{{ n_accounts }} Accounts</button>{% endif %}
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-optimization">{{ n_optimization }} Optimization</button>
-      <button type="button" class="sidebar-link sidebar-link-builder" data-view="country-{{ cid }}-open">🚀 {{ n_builder }} Campaign Builder</button>
     </div>
   </div>
   {% endfor %}
@@ -2449,7 +2478,7 @@ async function dashRefresh(ev) {
       {% for c in report.countries | selectattr('my_spend') | sort(attribute='my_spend', reverse=true) %}
       {% set mt = c.my_totals %}
       {% set cid = c.country | anchor_slug %}
-        <tr class="overview-row" style="cursor:pointer" data-view="country-{{ cid }}-cm">
+        <tr class="overview-row" style="cursor:pointer" data-view="country-{{ cid }}-manage">
           <td>{{ c.country }}</td>
           <td class="num">{{ mt.spend | fmt_usd }}</td>
           <td class="num">{{ mt.deposits }}</td>
@@ -2467,27 +2496,37 @@ async function dashRefresh(ev) {
 
 {% for c in report.countries %}
 {% set cid = c.country | anchor_slug %}
+{#- Номера тратятся только на то, что осталось в левой панели. Слитые в
+    Manage разделы номера не занимают: иначе список читался бы «2, 3, 4, 5, 6,
+    7, 9» — дыра, за которой человек будет искать пропавший пункт. -#}
 {% set sec = namespace(n=0) %}
-{% set sec.n = sec.n + 1 %}{% set n_cm = sec.n %}
+{% set n_cm = 0 %}{% set n_accounts = 0 %}{% set n_builder = 0 %}
 {% if c.asset_summary %}{% set sec.n = sec.n + 1 %}{% set n_assets = sec.n %}{% endif %}
-  {% if c.variants %}{% set sec.n = sec.n + 1 %}{% set n_landings = sec.n %}{% endif %}
+{% if c.variants %}{% set sec.n = sec.n + 1 %}{% set n_landings = sec.n %}{% endif %}
 {% if c.trend.has_date %}{% set sec.n = sec.n + 1 %}{% set n_trend = sec.n %}{% endif %}
 {% set sec.n = sec.n + 1 %}{% set n_combos = sec.n %}
 {% if c.targeting %}{% set sec.n = sec.n + 1 %}{% set n_targeting = sec.n %}{% endif %}
 {% set sec.n = sec.n + 1 %}{% set n_creatives = sec.n %}
-{% if c.account_rows %}{% set sec.n = sec.n + 1 %}{% set n_accounts = sec.n %}{% endif %}
 {% set sec.n = sec.n + 1 %}{% set n_optimization = sec.n %}
-{% set sec.n = sec.n + 1 %}{% set n_builder = sec.n %}
 
 {# ── My Goals view ── #}
-<div id="view-country-{{ cid }}-goals" class="view-panel" data-country="{{ cid }}">
+{#- Считается до Manage, а не после: билдер переехал вверх, а этот расчёт
+    остался внизу — и `has_open` было ложным, отчего билдер молча рисовал
+    пустое место вместо дерева аккаунтов. -#}
+{% set _has_recs = (c.open_recs.values() | map('length') | sum > 0) if c.open_recs else false %}
+{% set _has_fallback_accs = is_fallback_mode and (c.open_recs | length > 0) %}
+{% set has_open = _has_recs or _has_fallback_accs %}
+<div id="view-country-{{ cid }}-manage" class="view-panel" data-country="{{ cid }}">
+{#- Manage: одна страница вместо четырёх. Читается сверху вниз так, как
+    идёт работа: цель месяца по стране, сравнение менеджеров, аккаунты с
+    их цифрами и состоянием — и билдер последним. Раньше это были четыре
+    входа в левой панели, и один аккаунт описывался дважды в двух местах. -#}
+
   <h2 class="view-title">{{ c.country }}: My Goals</h2>
   <div class="goals-country-slot" data-country-name="{{ c.country }}"></div>
-</div>
 
-{# ── Section {{ n_cm }}: CM comparison ─────────────────────────────── #}
-<div id="view-country-{{ cid }}-cm" class="view-panel" data-country="{{ cid }}">
-<h2 class="view-title">{{ c.country }}: {{ n_cm }} CM Comparison</h2>
+<div class="manage-part">
+<h2 class="view-title">{{ c.country }}: CM Comparison</h2>
 <table>
   <thead><tr>
     <th>CM</th>
@@ -2547,225 +2586,8 @@ async function dashRefresh(ev) {
   {%- endif %}
 </div>
 </div>
-
-{# ── Section {{ n_assets }}: Asset summary ─────────────────────────── #}
-{% if c.asset_summary %}
-<div id="view-country-{{ cid }}-assets" class="view-panel" data-country="{{ cid }}">
-<h2 class="view-title">{{ c.country }}: {{ n_assets }} Assets
-  <a href="/export/assets" style="margin-left:0.75rem;font-size:0.75rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0.15rem 0.5rem;text-decoration:none;" title="Download Excel">⬇ xlsx</a>
-</h2>
-{% if c.asset_variants %}
-{# tojson is already HTML-safe (escapes < > & to \uXXXX); `safe` stops the
-   autoescaper from entity-encoding the quotes, which broke JSON.parse. #}
-<script type="application/json" id="asset-variants-{{ cid }}">{{ c.asset_variants | tojson }}</script>
-{% endif %}
-<table>
-  <thead><tr>
-    <th>Ad Asset</th>
-    <th class="num">Leads</th>
-    <th class="num">Deposits</th>
-    <th class="num">CR</th>
-    <th class="num">Player Value</th>
-  </tr></thead>
-  <tbody id="asset-tbody-{{ cid }}">
-  {% for row in c.asset_summary %}
-    {% set cr = (row.deposits / row.leads * 100) if row.leads > 0 else 0 %}
-    <tr class="asset-row" onclick="assetVariantToggle(this, '{{ cid }}')" data-offer="{{ row.offer | e }}"
-        title="Show the breakdown by landing page">
-      <td>{{ row.offer }} <span class="asset-caret">▸</span></td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ '%.1f' % cr }}%</td>
-      <td class="num">{{ row.net | fmt_usd }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% endif %}
-
-{# ── Section {{ n_landings }}: Landings (Variant) ───────────────────── #}
-{% if c.variants %}
-<div id="view-country-{{ cid }}-landings" class="view-panel" data-country="{{ cid }}">
-<h2 class="view-title">{{ c.country }}: {{ n_landings }} Landings <span class="hint">breakdown by landing page</span></h2>
-<table>
-  <thead><tr>
-    <th>Landing</th>
-    <th class="num">Leads</th>
-    <th class="num">Deposits</th>
-    <th class="num">CR</th>
-    <th class="num">Spend</th>
-    <th class="num">CPL</th>
-    <th class="num">CPA</th>
-    <th class="num">Net</th>
-  </tr></thead>
-  <tbody>
-  {% for row in c.variants %}
-    <tr{% if row.is_untagged %} class="lp-untagged"{% endif %}>
-      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% endif %}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num {% if row.deposits > 0 %}good{% elif row.spend > 0 %}bad{% endif %}">{{ row.deposits }}</td>
-      <td class="num">{% if row.cr is not none %}{{ '%.1f' % row.cr }}%{% else %}—{% endif %}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td class="num">{% if row.cpl is not none %}{{ row.cpl | fmt_usd }}{% else %}—{% endif %}</td>
-      <td class="num">{% if row.cpa is not none %}{{ row.cpa | fmt_usd }}{% else %}—{% endif %}</td>
-      <td class="num">{{ row.net | fmt_usd }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-<p style="font-size:0.72rem;color:var(--muted);margin-top:0.4rem">
-  Landing tagging started on 30.07 — anything that ran earlier falls into the "no landing" row.
-</p>
-</div>
-{% endif %}
-
-{# ── Section {{ n_trend }}: Trend ───────────────────────────────────── #}
-{% if c.trend.has_date %}
-<div id="view-country-{{ cid }}-trend" class="view-panel" data-country="{{ cid }}">
-<h2 class="view-title">{{ c.country }}: {{ n_trend }} Recent Trend <span class="hint">{{ c.trend.period_label }}</span></h2>
-{% for label, key in [('Trending up', 'trending_up'), ('Stable', 'stable')] %}
-  {% set rows = c.trend[key] %}
-  {% if rows %}
-    <h3 class="section" style="margin-top:0.8rem">↪ {{ label }} ({{ rows|length }})</h3>
-    <table>
-      <thead><tr>
-        <th>Offer</th>
-        <th>Device</th>
-        <th>Interest</th>
-        <th>Creative</th>
-        <th class="num">Total dep</th>
-        <th class="num">Recent dep</th>
-        <th></th>
-      </tr></thead>
-      <tbody>
-      {% for row in rows %}
-        <tr>
-          <td>{{ row.offer or '—' }}</td>
-          <td>{{ row.device or '—' }}</td>
-          <td>{{ row.interest or '—' }}</td>
-          <td>{{ row.creative or '—' }}</td>
-          <td class="num">{{ row.deposits_total }}</td>
-          <td class="num">{{ row.deposits_recent }}</td>
-          <td><button type="button" class="cb-cart-btn" data-kind="campaign" data-source="combo"
-                      data-country="{{ cid }}" data-country-name="{{ c.country }}"
-                      data-payload='{{ row | tojson | e }}'
-                      title="Add to build: new campaign">+ 🛒</button></td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  {% endif %}
-{% endfor %}
-</div>
-{% endif %}
-
-{# ── Section {{ n_combos }}: Top combos ────────────────────────────── #}
-<div id="view-country-{{ cid }}-combos" class="view-panel" data-country="{{ cid }}">
-<h2 class="view-title">{{ c.country }}: {{ n_combos }} Top Combos</h2>
-<table>
-  <thead><tr>
-    <th>Offer</th>
-    <th>Device</th>
-    <th>Interest</th>
-    <th>Age</th>
-    <th>Creative</th>
-    <th>Cat</th>
-    <th class="num">Dep</th>
-    <th class="num">Leads</th>
-    <th class="num">Spend</th>
-    <th></th>
-  </tr></thead>
-  <tbody>
-  {% for row in c.top_combos %}
-    <tr>
-      <td>{{ row.offer or '—' }}</td>
-      <td>{{ row.device or '—' }}</td>
-      <td>{{ row.interest or '—' }}</td>
-      <td>{{ row.age or '—' }}</td>
-      <td class="adset">{{ row.creative or '—' }}</td>
-      <td>{{ row.category }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td><button type="button" class="cb-cart-btn" data-kind="campaign" data-source="combo"
-                  data-country="{{ cid }}" data-country-name="{{ c.country }}"
-                  data-payload='{{ row | tojson | e }}'
-                  title="Add to build: new campaign">+ 🛒</button></td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-
-{# ── Section {{ n_targeting }}: Targeting ──────────────────────────── #}
-{% if c.targeting %}
-<div id="view-country-{{ cid }}-targeting" class="view-panel" data-country="{{ cid }}">
-<h2 class="view-title">{{ c.country }}: {{ n_targeting }} Targeting</h2>
-<table class="table-targeting">
-  <thead><tr>
-    <th>Target</th>
-    <th class="num">Dep</th>
-    <th class="num">Leads</th>
-    <th class="num">Spend</th>
-    <th class="num">CPA</th>
-  </tr></thead>
-  <tbody>
-  {% for row in c.targeting %}
-    <tr>
-      <td class="interest-cell" title="{{ row.interest }}">{{ row.interest }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td class="num">{{ row.cpa | fmt_usd }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% endif %}
-
-{# ── Section {{ n_creatives }}: Creatives ──────────────────────────── #}
-<div id="view-country-{{ cid }}-creatives" class="view-panel" data-country="{{ cid }}">
-<h2 class="view-title">{{ c.country }}: {{ n_creatives }} Creative breakdown</h2>
-{% if c.creatives %}
-<table>
-  <thead><tr>
-    <th>Creative</th>
-    <th>Text</th>
-    <th class="num">Deposits</th>
-    <th class="num">Leads</th>
-    <th class="num">Spend</th>
-    <th class="num">CPA</th>
-    <th></th>
-  </tr></thead>
-  <tbody>
-  {% for row in c.creatives %}
-    <tr title="{{ row.ad_title }}">
-      <td>{{ row.creative_id or row.ad_title }}</td>
-      <td>{{ row.text_name or '—' }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td class="num">{{ row.cpa | fmt_usd }}</td>
-      <td><button type="button" class="cb-cart-btn" data-kind="ad" data-source="creative"
-                  data-country="{{ cid }}" data-country-name="{{ c.country }}"
-                  data-payload='{{ row | tojson | e }}'
-                  title="Add to build: ad in the last campaign">+ 🛒</button></td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p><em>No creative data.</em></p>
-{% endif %}
-</div>
-
-
-{# ── Section {{ n_accounts }}: Account Statuses ────────────────────── #}
-{% if c.account_rows %}
-<div id="view-country-{{ cid }}-accounts" class="view-panel" data-country="{{ cid }}">
-<h2 class="view-title">{{ c.country }}: {{ n_accounts }} Account Statuses</h2>
+<div class="manage-part">
+<h2 class="view-title">{{ c.country }}: Account Statuses</h2>
 
 <div class="ac-country-add" data-country-name="{{ c.country }}"
      style="margin:0.6rem 0 1rem;padding:0.7rem 0.9rem;border:1px solid var(--border);border-radius:6px">
@@ -2804,59 +2626,17 @@ async function dashRefresh(ev) {
   </tbody>
 </table>
 </div>
-{% endif %}
+<details class="manage-builder" id="manage-builder-{{ cid }}">
+  {#- Билдер — не панель, а страница: свои слоты, аккордеон аккаунтов,
+      предпросмотр и публикация. Свёрнут, иначе у Manage не видно дна;
+      раскрытое состояние запоминается, как у стран на карте. -#}
+  <summary class="manage-builder-head">
+    <span class="manage-builder-caret" aria-hidden="true"></span>
+    <b>Campaign Builder</b>
+    <span class="hint">build a campaign for {{ c.country }}</span>
+  </summary>
 
-{% set has_close = c.close_recs.values() | map('length') | sum > 0 if c.close_recs else false %}
-<div id="view-country-{{ cid }}-optimization" class="view-panel" data-country="{{ cid }}">
-<h2 class="view-title">{{ c.country }}: {{ n_optimization }} Optimization <span class="hint">click ad set row to drill into ads</span></h2>
-{% if has_close %}
-{% for label in c.close_recs.keys() | sort %}
-  {% set recs = c.close_recs[label] %}
-  {% if recs %}
-    <p><strong>{{ label }}</strong></p>
-    <table>
-      <thead><tr>
-        <th>Ad set name</th>
-        <th class="num">Spend</th>
-        <th class="num">Leads</th>
-        <th class="num">FTDs</th>
-        <th class="num">CPL</th>
-        <th class="num">CPA</th>
-        <th>Reason</th>
-      </tr></thead>
-      <tbody>
-      {% for r in recs | sort(attribute='spend', reverse=True) %}
-        <tr class="drillable"
-            data-drill="optimization"
-            {% if r.aggregate_key is defined %}
-            hx-get="/details?{{ r.aggregate_key | agg_qs }}"
-            hx-target="closest tr"
-            hx-swap="afterend"
-            hx-trigger="click"
-            {% endif %}>
-          <td class="adset">{{ r.adset_name[:60] }}</td>
-          <td class="num">{{ r.spend | fmt_usd }}</td>
-          <td class="num">{{ r.leads }}</td>
-          <td class="num {% if r.deposits == 0 and r.spend > 0 %}bad{% elif r.deposits > 0 %}good{% endif %}">{{ r.deposits }}</td>
-          <td class="num">{{ r.cpl | fmt_usd }}</td>
-          <td class="num">{{ r.cpa | fmt_usd }}</td>
-          <td class="{% if r.reason %}bad{% endif %}">{{ r.reason or '' }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  {% endif %}
-{% endfor %}
-{% else %}
-<p class="empty-hint">No ad sets to optimize in this country — none of the accounts has enough data to fall under the closing rules. If that looks wrong, check the accounts are on the GSheet tab and press <strong>Refresh</strong>.</p>
-{% endif %}
-</div>
-
-{% set _has_recs = (c.open_recs.values() | map('length') | sum > 0) if c.open_recs else false %}
-{% set _has_fallback_accs = is_fallback_mode and (c.open_recs | length > 0) %}
-{% set has_open = _has_recs or _has_fallback_accs %}
-<div id="view-country-{{ cid }}-open" class="view-panel" data-country="{{ cid }}">
-<h2 class="view-title">{{ c.country }}: {{ n_builder }} Campaign Builder</h2>
+<h2 class="view-title">{{ c.country }}: Campaign Builder</h2>
 
 {# ── Multilogin connect panel ── #}
 <div class="ml-connect-panel" id="ml-connect-{{ cid }}">
@@ -3251,7 +3031,280 @@ async function dashRefresh(ev) {
 {% else %}
 <p class="empty-hint">No open recommendations. Account statuses were not loaded from GSheet for this country. Check the GSheet tab and press <strong>Refresh</strong>.</p>
 {% endif %}
+
+</details>
 </div>
+
+
+{# ── CM comparison ─────────────────────────────── #}
+
+
+{# ── Section {{ n_assets }}: Asset summary ─────────────────────────── #}
+{% if c.asset_summary %}
+<div id="view-country-{{ cid }}-assets" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: {{ n_assets }} Assets
+  <a href="/export/assets" style="margin-left:0.75rem;font-size:0.75rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0.15rem 0.5rem;text-decoration:none;" title="Download Excel">⬇ xlsx</a>
+</h2>
+{% if c.asset_variants %}
+{# tojson is already HTML-safe (escapes < > & to \uXXXX); `safe` stops the
+   autoescaper from entity-encoding the quotes, which broke JSON.parse. #}
+<script type="application/json" id="asset-variants-{{ cid }}">{{ c.asset_variants | tojson }}</script>
+{% endif %}
+<table>
+  <thead><tr>
+    <th>Ad Asset</th>
+    <th class="num">Leads</th>
+    <th class="num">Deposits</th>
+    <th class="num">CR</th>
+    <th class="num">Player Value</th>
+  </tr></thead>
+  <tbody id="asset-tbody-{{ cid }}">
+  {% for row in c.asset_summary %}
+    {% set cr = (row.deposits / row.leads * 100) if row.leads > 0 else 0 %}
+    <tr class="asset-row" onclick="assetVariantToggle(this, '{{ cid }}')" data-offer="{{ row.offer | e }}"
+        title="Show the breakdown by landing page">
+      <td>{{ row.offer }} <span class="asset-caret">▸</span></td>
+      <td class="num">{{ row.leads }}</td>
+      <td class="num">{{ row.deposits }}</td>
+      <td class="num">{{ '%.1f' % cr }}%</td>
+      <td class="num">{{ row.net | fmt_usd }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{# ── Section {{ n_landings }}: Landings (Variant) ───────────────────── #}
+{% if c.variants %}
+<div id="view-country-{{ cid }}-landings" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: {{ n_landings }} Landings <span class="hint">breakdown by landing page</span></h2>
+<table>
+  <thead><tr>
+    <th>Landing</th>
+    <th class="num">Leads</th>
+    <th class="num">Deposits</th>
+    <th class="num">CR</th>
+    <th class="num">Spend</th>
+    <th class="num">CPL</th>
+    <th class="num">CPA</th>
+    <th class="num">Net</th>
+  </tr></thead>
+  <tbody>
+  {% for row in c.variants %}
+    <tr{% if row.is_untagged %} class="lp-untagged"{% endif %}>
+      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% endif %}</td>
+      <td class="num">{{ row.leads }}</td>
+      <td class="num {% if row.deposits > 0 %}good{% elif row.spend > 0 %}bad{% endif %}">{{ row.deposits }}</td>
+      <td class="num">{% if row.cr is not none %}{{ '%.1f' % row.cr }}%{% else %}—{% endif %}</td>
+      <td class="num">{{ row.spend | fmt_usd }}</td>
+      <td class="num">{% if row.cpl is not none %}{{ row.cpl | fmt_usd }}{% else %}—{% endif %}</td>
+      <td class="num">{% if row.cpa is not none %}{{ row.cpa | fmt_usd }}{% else %}—{% endif %}</td>
+      <td class="num">{{ row.net | fmt_usd }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p style="font-size:0.72rem;color:var(--muted);margin-top:0.4rem">
+  Landing tagging started on 30.07 — anything that ran earlier falls into the "no landing" row.
+</p>
+</div>
+{% endif %}
+
+{# ── Section {{ n_trend }}: Trend ───────────────────────────────────── #}
+{% if c.trend.has_date %}
+<div id="view-country-{{ cid }}-trend" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: {{ n_trend }} Recent Trend <span class="hint">{{ c.trend.period_label }}</span></h2>
+{% for label, key in [('Trending up', 'trending_up'), ('Stable', 'stable')] %}
+  {% set rows = c.trend[key] %}
+  {% if rows %}
+    <h3 class="section" style="margin-top:0.8rem">↪ {{ label }} ({{ rows|length }})</h3>
+    <table>
+      <thead><tr>
+        <th>Offer</th>
+        <th>Device</th>
+        <th>Interest</th>
+        <th>Creative</th>
+        <th class="num">Total dep</th>
+        <th class="num">Recent dep</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          <td>{{ row.offer or '—' }}</td>
+          <td>{{ row.device or '—' }}</td>
+          <td>{{ row.interest or '—' }}</td>
+          <td>{{ row.creative or '—' }}</td>
+          <td class="num">{{ row.deposits_total }}</td>
+          <td class="num">{{ row.deposits_recent }}</td>
+          <td><button type="button" class="cb-cart-btn" data-kind="campaign" data-source="combo"
+                      data-country="{{ cid }}" data-country-name="{{ c.country }}"
+                      data-payload='{{ row | tojson | e }}'
+                      title="Add to build: new campaign">+ 🛒</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endfor %}
+</div>
+{% endif %}
+
+{# ── Section {{ n_combos }}: Top combos ────────────────────────────── #}
+<div id="view-country-{{ cid }}-combos" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: {{ n_combos }} Top Combos</h2>
+<table>
+  <thead><tr>
+    <th>Offer</th>
+    <th>Device</th>
+    <th>Interest</th>
+    <th>Age</th>
+    <th>Creative</th>
+    <th>Cat</th>
+    <th class="num">Dep</th>
+    <th class="num">Leads</th>
+    <th class="num">Spend</th>
+    <th></th>
+  </tr></thead>
+  <tbody>
+  {% for row in c.top_combos %}
+    <tr>
+      <td>{{ row.offer or '—' }}</td>
+      <td>{{ row.device or '—' }}</td>
+      <td>{{ row.interest or '—' }}</td>
+      <td>{{ row.age or '—' }}</td>
+      <td class="adset">{{ row.creative or '—' }}</td>
+      <td>{{ row.category }}</td>
+      <td class="num">{{ row.deposits }}</td>
+      <td class="num">{{ row.leads }}</td>
+      <td class="num">{{ row.spend | fmt_usd }}</td>
+      <td><button type="button" class="cb-cart-btn" data-kind="campaign" data-source="combo"
+                  data-country="{{ cid }}" data-country-name="{{ c.country }}"
+                  data-payload='{{ row | tojson | e }}'
+                  title="Add to build: new campaign">+ 🛒</button></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{# ── Section {{ n_targeting }}: Targeting ──────────────────────────── #}
+{% if c.targeting %}
+<div id="view-country-{{ cid }}-targeting" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: {{ n_targeting }} Targeting</h2>
+<table class="table-targeting">
+  <thead><tr>
+    <th>Target</th>
+    <th class="num">Dep</th>
+    <th class="num">Leads</th>
+    <th class="num">Spend</th>
+    <th class="num">CPA</th>
+  </tr></thead>
+  <tbody>
+  {% for row in c.targeting %}
+    <tr>
+      <td class="interest-cell" title="{{ row.interest }}">{{ row.interest }}</td>
+      <td class="num">{{ row.deposits }}</td>
+      <td class="num">{{ row.leads }}</td>
+      <td class="num">{{ row.spend | fmt_usd }}</td>
+      <td class="num">{{ row.cpa | fmt_usd }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{# ── Section {{ n_creatives }}: Creatives ──────────────────────────── #}
+<div id="view-country-{{ cid }}-creatives" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: {{ n_creatives }} Creative breakdown</h2>
+{% if c.creatives %}
+<table>
+  <thead><tr>
+    <th>Creative</th>
+    <th>Text</th>
+    <th class="num">Deposits</th>
+    <th class="num">Leads</th>
+    <th class="num">Spend</th>
+    <th class="num">CPA</th>
+    <th></th>
+  </tr></thead>
+  <tbody>
+  {% for row in c.creatives %}
+    <tr title="{{ row.ad_title }}">
+      <td>{{ row.creative_id or row.ad_title }}</td>
+      <td>{{ row.text_name or '—' }}</td>
+      <td class="num">{{ row.deposits }}</td>
+      <td class="num">{{ row.leads }}</td>
+      <td class="num">{{ row.spend | fmt_usd }}</td>
+      <td class="num">{{ row.cpa | fmt_usd }}</td>
+      <td><button type="button" class="cb-cart-btn" data-kind="ad" data-source="creative"
+                  data-country="{{ cid }}" data-country-name="{{ c.country }}"
+                  data-payload='{{ row | tojson | e }}'
+                  title="Add to build: ad in the last campaign">+ 🛒</button></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p><em>No creative data.</em></p>
+{% endif %}
+</div>
+
+
+{# ── Account Statuses ────────────────────── #}
+{% if c.account_rows %}
+
+{% endif %}
+
+{% set has_close = c.close_recs.values() | map('length') | sum > 0 if c.close_recs else false %}
+<div id="view-country-{{ cid }}-optimization" class="view-panel" data-country="{{ cid }}">
+<h2 class="view-title">{{ c.country }}: {{ n_optimization }} Optimization <span class="hint">click ad set row to drill into ads</span></h2>
+{% if has_close %}
+{% for label in c.close_recs.keys() | sort %}
+  {% set recs = c.close_recs[label] %}
+  {% if recs %}
+    <p><strong>{{ label }}</strong></p>
+    <table>
+      <thead><tr>
+        <th>Ad set name</th>
+        <th class="num">Spend</th>
+        <th class="num">Leads</th>
+        <th class="num">FTDs</th>
+        <th class="num">CPL</th>
+        <th class="num">CPA</th>
+        <th>Reason</th>
+      </tr></thead>
+      <tbody>
+      {% for r in recs | sort(attribute='spend', reverse=True) %}
+        <tr class="drillable"
+            data-drill="optimization"
+            {% if r.aggregate_key is defined %}
+            hx-get="/details?{{ r.aggregate_key | agg_qs }}"
+            hx-target="closest tr"
+            hx-swap="afterend"
+            hx-trigger="click"
+            {% endif %}>
+          <td class="adset">{{ r.adset_name[:60] }}</td>
+          <td class="num">{{ r.spend | fmt_usd }}</td>
+          <td class="num">{{ r.leads }}</td>
+          <td class="num {% if r.deposits == 0 and r.spend > 0 %}bad{% elif r.deposits > 0 %}good{% endif %}">{{ r.deposits }}</td>
+          <td class="num">{{ r.cpl | fmt_usd }}</td>
+          <td class="num">{{ r.cpa | fmt_usd }}</td>
+          <td class="{% if r.reason %}bad{% endif %}">{{ r.reason or '' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endfor %}
+{% else %}
+<p class="empty-hint">No ad sets to optimize in this country — none of the accounts has enough data to fall under the closing rules. If that looks wrong, check the accounts are on the GSheet tab and press <strong>Refresh</strong>.</p>
+{% endif %}
+</div>
+
+
 
 {% endfor %}
 
@@ -3506,7 +3559,22 @@ async function dashRefresh(ev) {
     document.querySelector('.sidebar-home')?.classList.toggle('active', viewId === 'home');
   }
 
+  /* Слитые экраны отвечают на свои прежние адреса. `#country-kw-goals`,
+     `-cm`, `-accounts`, `-open` лежат в закладках и в логике обновления
+     страницы: без этого обновление посреди сборки кампании выбросило бы на
+     пустой вид. */
+  var MERGED_INTO_MANAGE = ['goals', 'cm', 'accounts', 'open'];
+
+  function resolveView(viewId) {
+    var m = /^country-(.+)-([a-z]+)$/.exec(viewId || '');
+    if (m && MERGED_INTO_MANAGE.indexOf(m[2]) !== -1) {
+      return 'country-' + m[1] + '-manage';
+    }
+    return viewId;
+  }
+
   function showView(viewId, pushHash) {
+    viewId = resolveView(viewId);
     var panel = document.getElementById('view-' + viewId);
     if (!panel) return false;
 
@@ -3550,7 +3618,7 @@ async function dashRefresh(ev) {
 
       expandCountry(countryId);
       if (currentViewCountry() !== countryId) {
-        showView('country-' + countryId + '-cm', true);
+        showView('country-' + countryId + '-manage', true);
       }
     });
   });
@@ -4070,6 +4138,37 @@ if (document.readyState === 'loading') {
     apply(current());
     btn.addEventListener('click', function () {
       apply(current() === 'dark' ? 'light' : 'dark');
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire);
+  } else {
+    wire();
+  }
+})();
+
+/* Раскрытие билдера переживает перезагрузку — тем же способом, что страны на
+   карте аккаунтов. Дешборд обновляет себя сам, и схлопывать билдер посреди
+   сборки кампании значило бы менять одну помеху на другую. */
+(function () {
+  var KEY = 'acl.manage.builder';
+
+  function wire() {
+    var open = [];
+    try {
+      var raw = localStorage.getItem(KEY);
+      var list = raw ? JSON.parse(raw) : [];
+      if (Object.prototype.toString.call(list) === '[object Array]') open = list;
+    } catch (e) {}
+    var boxes = document.querySelectorAll('details.manage-builder[id]');
+    Array.prototype.forEach.call(boxes, function (d) {
+      if (open.indexOf(d.id) !== -1) d.open = true;
+      d.addEventListener('toggle', function () {
+        var now = [];
+        Array.prototype.forEach.call(boxes, function (x) { if (x.open) now.push(x.id); });
+        try { localStorage.setItem(KEY, JSON.stringify(now)); } catch (e) {}
+      });
     });
   }
 
