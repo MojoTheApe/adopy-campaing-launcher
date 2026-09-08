@@ -1,36 +1,3 @@
-    var list = (data && data.profiles) || [];
-    var dup = (data && data.duplicates) || {};
-    if (!list.length) {
-      box.innerHTML = '<p><em>The library is empty. Add the first target below.</em></p>';
-      return;
-    }
-    /* Повторы осматриваются целиком, а не только не допускаются при
-       заведении: файл можно поправить руками, а прежние записи могли лечь до
-       того, как правило появилось. Молчать о них — значит дать двум
-       одинаковым аудиториям жить под разными именами. */
-    var warn = '';
-    if ((dup.names || []).length) {
-      warn += '<p style="color:#b91c1c">Same name twice: ' + esc((dup.names || []).join(', ')) + '</p>';
-    }
-    ((dup.sets) || []).forEach(function (names) {
-      warn += '<p style="color:#b91c1c">Same set of interests: ' + esc(names.join(' = ')) + '</p>';
-    });
-
-    var html = warn
-      + '<p style="color:var(--muted);font-size:0.85rem">Total: ' + list.length
-      + ' · stored on this machine</p>'
-      + '<table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th><th></th></tr>'
-      + '</thead><tbody>';
-    list.forEach(function (p) {
-      html += '<tr data-name="' + esc(p.name) + '">'
-           + '<td><b>' + esc(p.name) + '</b></td>'
-           + '<td>' + esc(p.interests) + '</td>'
-           + '<td>' + esc(p.narrow || '—') + '</td>'
-           + '<td style="text-align:right;white-space:nowrap">'
-           + '<button type="button" class="amap-btn" data-tg-edit="' + esc(p.name) + '">Edit</button> '
-           + '<button type="button" class="amap-x" data-tg-del="' + esc(p.name) + '">Remove</button>'
-           + '</td></tr>';
-    });
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -293,7 +260,7 @@
     .brand-lockup {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 0.7rem;
       min-width: 0;
     }
     .brand-logo {
@@ -301,31 +268,62 @@
       height: 36px;
       flex-shrink: 0;
       border-radius: 9px;
-      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.18);
     }
     .brand-text {
       display: flex;
       flex-direction: column;
-      gap: 0.2rem;
+      gap: 0.15rem;
       min-width: 0;
     }
+    /* Начертание: «Adopy» несёт вес, остальное — спокойнее. Одно название, а
+       не два слова подряд одинаковой громкости. */
     header.page-header h1 {
-      font-size: 1rem;
+      font-size: 1.02rem;
       font-weight: 650;
+      letter-spacing: -0.012em;
       margin: 0;
       color: var(--text);
-      letter-spacing: -0.02em;
-      line-height: 1.2;
-      text-wrap: balance;
+      white-space: nowrap;
     }
+    header.page-header h1 span { font-weight: 500; color: var(--muted); }
+
+    /* Две подписанные величины. Подпись приглушена, значение — нет: читают
+       здесь значение, а подпись только объясняет, какое именно. */
     .brand-meta {
-      font-size: 0.75rem;
-      color: var(--muted);
-      letter-spacing: 0.01em;
-      cursor: default;
+      display: flex;
+      align-items: baseline;
+      gap: 0.3rem 0.5rem;
+      margin: 0;
+      font-size: 0.735rem;
+      line-height: 1.3;
+      flex-wrap: wrap;
     }
-    .brand-meta strong { color: var(--text); font-weight: 500; }
-    .brand-meta .meta-sep { margin: 0 0.45rem; color: var(--border-strong); }
+    .brand-meta dt { color: var(--muted); }
+    .brand-meta dd {
+      margin: 0 0.55rem 0 0;
+      color: var(--text);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+    .brand-meta dd:last-child { margin-right: 0; }
+
+    /* Правый угол шапки: период, под кем смотрим, место под тему. Отделён от
+       названия автоматическим отступом, а не пустотой на глаз. */
+    .head-tools {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+    .buyer-pick { display: flex; align-items: center; gap: 0.45rem; }
+    .buyer-pick label { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+    .buyer-pick select { font-size: 0.82rem; max-width: 14rem; }
+    .buyer-pick #buyer-msg { font-size: 0.75rem; color: var(--muted); }
+    /* Место под переключатель темы: ширина занята заранее, чтобы шапка не
+       перестроилась у людей на глазах, когда он появится. */
+    .theme-slot { width: 30px; height: 30px; flex: none; }
+
     form.refresh { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
     /* Shown only when a promoted release is actually waiting, so an ordinary
        day's header carries no extra control at all. */
@@ -1961,28 +1959,45 @@
 <div class="page-top">
 <header class="page-header">
   <div class="brand-lockup">
-    <img src="/static/logo.svg" alt="ACL" class="brand-logo" width="36" height="36">
+    <img src="/static/logo.svg" alt="" class="brand-logo" width="36" height="36">
     <div class="brand-text">
-      <h1>Adopy Campaigns Launcher</h1>
-      <span class="brand-meta" title="Source: {{ report.source_excel }}">{{ report.date }}<span class="meta-sep">·</span>CM <strong>{{ report.my_cm }}</strong><span class="meta-sep">·</span>Trend <strong>{{ report.trend_days }}d</strong><span class="meta-sep">·</span><strong>{{ report.total_combos }}</strong> combos{% if built_at %}<span class="meta-sep">·</span>Updated <strong>{{ built_at }}</strong>{% endif %}<span class="meta-sep">·</span><span id="acl-version" title="Installed ACL release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</span></span>
+      <h1>Adopy <span>Campaigns Launcher</span></h1>
+      {#- Две подписанные величины вместо ленты через точки. Обе нужны в один
+          и тот же момент — когда обновление сломало работу и надо понять, что
+          стоит и когда встало, чтобы откатиться. Без подписи «Updated 2026-09-08
+          · acl-release-2026-09-03e» читается как одно смазанное сообщение. -#}
+      <dl class="brand-meta">
+        <dt>Last updated:</dt>
+        <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd>
+        <dt>Version:</dt>
+        <dd id="acl-version" title="Installed ACL release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd>
+      </dl>
     </div>
   </div>
   {#- Период стоит в шапке, а не над секцией: он меняет каждое число на
       странице, а элемент внутри блока читался бы как принадлежащий блоку. -#}
-  <div class="period-pick" style="margin-left:auto">
-    <button type="button" class="amap-btn amap-cal-btn" onclick="amapCalendar(this)"
-            title="Which days every number on this page counts">
-      📅 {% if pd.span == 'all' %}all dates{% elif pd.date_from and pd.date_from == pd.date_to %}{{ pd.date_from }}{% elif pd.date_from or pd.date_to %}{{ pd.date_from or '…' }} → {{ pd.date_to or '…' }}{% else %}all dates{% endif %}
-    </button>
-    <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
-  </div>
-  <div class="buyer-pick" style="display:flex;align-items:center;gap:0.45rem">
-    <label for="buyer-select" style="font-size:0.78rem;color:var(--muted)">Buyer</label>
-    <select id="buyer-select" style="font-size:0.82rem;max-width:14rem"
-            title="Whose view to show: accounts, optimization, team comparison">
-      <option value="{{ report.my_cm }}">{{ report.my_cm }}</option>
-    </select>
-    <span id="buyer-msg" style="font-size:0.75rem;color:var(--muted)"></span>
+  <div class="head-tools">
+    <div class="period-pick">
+      <button type="button" class="amap-btn amap-cal-btn" onclick="amapCalendar(this)"
+              title="Which days every number on this page counts">
+        📅 {% if pd.span == 'all' %}all dates{% elif pd.date_from and pd.date_from == pd.date_to %}{{ pd.date_from }}{% elif pd.date_from or pd.date_to %}{{ pd.date_from or '…' }} → {{ pd.date_to or '…' }}{% else %}all dates{% endif %}
+      </button>
+      <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
+    </div>
+    {#- «Под кем смотрим» — отдельный элемент, а не строчка под логотипом.
+        Это не свойство продукта, а положение зрителя, и меняется оно чаще,
+        чем всё остальное в шапке. -#}
+    <div class="buyer-pick">
+      <label for="buyer-select">Logged as</label>
+      <select id="buyer-select" title="Whose view to show: accounts, optimization, team comparison">
+        <option value="{{ report.my_cm }}">{{ report.my_cm }}</option>
+      </select>
+      <span id="buyer-msg"></span>
+    </div>
+    {#- Место под переключатель темы. Пусто нарочно: сам переключатель — это
+        следующая задача раздела «Дизайн», а место оставлено сейчас, чтобы
+        шапка не перестроилась у людей на глазах, когда он появится. -#}
+    <div class="theme-slot" aria-hidden="true"></div>
   </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
     <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
@@ -8217,28 +8232,25 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     var box = document.getElementById('tg-list');
     if (!box) return;
     var list = (data && data.profiles) || [];
-    var sheet = (data && data.sheet) || {};
+    var dup = (data && data.duplicates) || {};
     if (!list.length) {
-      /* «Пусто» и «не достучались» — разные беды, и делать с ними надо разное.
-         Одной строкой «empty or the sheet is unavailable» они были неразличимы:
-         8 сентября таблица начала отвечать 403, а на экране стояло слово
-         «empty», и понять это было неоткуда. */
-      if (sheet.error) {
-        box.innerHTML = '<p><b>The registry is empty, and the old spreadsheet '
-          + 'could not be read.</b></p><p style="color:var(--muted);font-size:0.85rem">'
-          + esc(sheet.error) + '</p><p style="color:var(--muted);font-size:0.85rem">'
-          + 'Nothing was lost — the sheet is only used to seed the registry once. '
-          + 'Add targets below; they are stored here and no longer depend on it.</p>';
-      } else {
-        box.innerHTML = '<p><em>The registry is empty. Add the first target below.</em></p>';
-      }
+      box.innerHTML = '<p><em>The library is empty. Add the first target below.</em></p>';
       return;
     }
-    var note = sheet.imported
-      ? ' · ' + sheet.imported + ' brought over from the old spreadsheet'
-      : '';
-    var html = '<p style="color:var(--muted);font-size:0.85rem">Total: ' + list.length
-      + note + '</p>'
+    /* Повторы осматриваются целиком, а не только не допускаются при заведении:
+       файл можно поправить руками, а прежние записи могли лечь до того, как
+       правило появилось. Молчать о них — значит дать двум одинаковым
+       аудиториям жить под разными именами. */
+    var warn = '';
+    if ((dup.names || []).length) {
+      warn += '<p style="color:#b91c1c">Same name twice: ' + esc((dup.names || []).join(', ')) + '</p>';
+    }
+    (dup.sets || []).forEach(function (names) {
+      warn += '<p style="color:#b91c1c">Same set of interests: ' + esc(names.join(' = ')) + '</p>';
+    });
+    var html = warn
+      + '<p style="color:var(--muted);font-size:0.85rem">Total: ' + list.length
+      + ' · stored on this machine</p>'
       + '<table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th><th></th></tr>'
       + '</thead><tbody>';
     list.forEach(function (p) {

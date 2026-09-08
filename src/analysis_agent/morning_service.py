@@ -235,9 +235,12 @@ def load_morning_report(
     if new_from_csv:
         account_rows = account_rows + new_from_csv
         fallback_mode = True
-        warnings.append(
-            f"Added {len(new_from_csv)} account(s) from ad_account_map.csv not present in today's GSheet."
-        )
+        # Предупреждения здесь нет намеренно. Аккаунты из карты, которых нет в
+        # сегодняшнем листе, добавляются каждый день — это обычная работа, а не
+        # событие. Полоса «Added 13 account(s)…» висела над дешбордом всегда,
+        # убрать её было нельзя, и она приучала не читать это место вовсе. Тогда
+        # настоящее предупреждение, встав туда же, тоже осталось бы непрочитанным.
+        # Сами аккаунты видны там, где они и нужны, — на карте аккаунтов.
 
     assert enriched_df is not None
 

@@ -23,6 +23,10 @@ from pathlib import Path
 
 import pytest
 
+#: сам шаблон — две проверки ниже смотрят на исходник, а не на отрисовку:
+#: мусор перед доктайпом виден именно в файле
+TPL = Path(__file__).resolve().parent.parent / "src" / "web" / "templates" / "report.html"
+
 _SCRIPT = re.compile(
     r"<script(?![^>]*\bsrc=)(?![^>]*type=\"application/json\")[^>]*>(.*?)</script>",
     re.S,
@@ -70,3 +74,31 @@ def test_every_script_in_the_rendered_page_parses():
         "страница отдаёт браузеру нерабочий JavaScript — сломанный блок "
         "выключает всё, что в нём объявлено:\n\n" + "\n\n".join(broken)
     )
+
+
+def test_the_template_starts_with_the_doctype():
+    """Ничего не должно стоять перед `<!DOCTYPE html>`.
+
+    Сегодня туда попали тридцать три строки JavaScript, и браузер показал их
+    текстом поверх дешборда. Причина в моём же способе правки: срез шаблона
+    оказался пустым, а `str.replace("", новое, 1)` молча вставляет текст в
+    начало файла — тихая правка не туда, без единой жалобы.
+
+    Прошлый сторож на разбор скриптов этого не поймал: мусор лежал **вне**
+    `<script>`, а он проверяет содержимое скриптов. Проверка была и случай не
+    покрывала — поэтому здесь проверяется само начало файла.
+    """
+    raw = TPL.read_text(encoding="utf-8")
+    assert raw.lstrip().startswith("<!DOCTYPE html>"), (
+        "перед доктайпом что-то появилось: " + raw[:200]
+    )
+
+
+def test_no_stray_javascript_outside_a_script_tag():
+    """То же самое, но по существу: код в тексте страницы."""
+    import re as _re
+
+    raw = TPL.read_text(encoding="utf-8")
+    without = _re.sub(r"<script[^>]*>.*?</script>", "", raw, flags=_re.S)
+    for needle in ("var list =", "function render(", "box.innerHTML ="):
+        assert needle not in without, f"«{needle}» оказалось вне <script>"
