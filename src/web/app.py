@@ -2012,8 +2012,10 @@ def api_targeting_profiles(force: bool = False) -> JSONResponse:
     from src.analysis_agent import targeting_registry as tr
     try:
         sheet = tr.refresh(force=force)
+        targets = tr.all_targets()
         return JSONResponse({"ok": True, "can_add": True, "sheet": sheet,
-                             "profiles": [t.to_dict() for t in tr.all_targets()]})
+                             "duplicates": tr.duplicates(targets),
+                             "profiles": [t.to_dict() for t in targets]})
     except tr.TargetingError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
 
@@ -2021,7 +2023,7 @@ def api_targeting_profiles(force: bool = False) -> JSONResponse:
 def _edit_targeting_profile(data: dict) -> JSONResponse:
     from src.analysis_agent import targeting_registry as tr
     if not isinstance(data, dict) or any(not isinstance(data.get(k, ""), str)
-            for k in ("action", "name", "interests", "narrow", "was")):
+            for k in ("action", "name", "interests", "narrow", "was", "confirmation")):
         return JSONResponse({"ok": False, "error": "Expected an object with string fields"}, status_code=400)
     action = (data.get("action") or "add").strip().lower()
     name, interests, narrow = (data.get(k, "") for k in ("name", "interests", "narrow"))
@@ -2029,6 +2031,11 @@ def _edit_targeting_profile(data: dict) -> JSONResponse:
         if action == "delete":
             tr.remove(name)
             return JSONResponse({"ok": True, "removed": name, "scope": "local"})
+        if action == "export":
+            if data.get("confirmation") != "replace_shared_library":
+                raise tr.TargetingError("Подтвердите замену всей общей таблицы локальной библиотекой.")
+            written, backup = tr.push_all()
+            return JSONResponse({"ok": True, "exported": written, "backup": backup})
         if action == "update":
             target = tr.update(data.get("was") or name, name, interests, narrow)
         elif action == "add":
