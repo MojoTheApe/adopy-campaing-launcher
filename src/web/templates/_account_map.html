@@ -41,7 +41,7 @@
           <span>leads <b>{{ mc.leads }}</b></span>
           <span>FTD <b>{{ mc.deposits }}</b></span>
           <button type="button" class="amap-btn danger"
-                  onclick="event.preventDefault();event.stopPropagation();amapClose('country','{{ mc.key | e }}','{{ mc.country | e }}')"
+                  onclick="event.preventDefault();event.stopPropagation();amapClose('country',{{ mc.key | tojson | forceescape }},{{ mc.country | tojson | forceescape }})"
                   title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>
         </span>
       </summary>

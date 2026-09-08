@@ -25,3 +25,16 @@ def fmt_usd(value: Any) -> str:
     if math.isnan(num):
         return "—"
     return f"${math.ceil(num):,}"
+
+
+def fmt_currency(value: Any, currency: str = "") -> str:
+    """Live account totals keep cents and the source currency; no conversion."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    if not math.isfinite(number):
+        return "—"
+    code = str(currency or "").upper()
+    label = code if len(code) == 3 and code.isascii() and code.isalpha() else "currency unknown"
+    return f"{label} {number:,.2f}"

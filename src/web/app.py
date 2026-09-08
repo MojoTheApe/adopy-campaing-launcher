@@ -40,7 +40,7 @@ from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.web.publish_jobs import get_job, start_job, cancel_job
 from src.web.cache import cache_built_at, cache_clear, get_cached_report
-from src.analysis_agent.money_format import fmt_usd
+from src.analysis_agent.money_format import fmt_usd, fmt_currency
 from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
 from src.creative_agent.audience_builder import build_audience_profile
 from src.creative_agent.stats_correlator import correlate
@@ -621,7 +621,7 @@ def _build_account_map_view(
         "available": available,
         "all_accounts": all_known,
         "dates": dates,
-        "live": _live_spend(date_from, date_to),
+        "live": {} if span == "all" else _live_spend(date_from, date_to),
         "date_from": date_from,
         "date_to": date_to,
         "span": span,
@@ -634,7 +634,8 @@ def _live_spend(date_from: str = "", date_to: str = "") -> dict[str, dict]:
     try:
         from src.analysis_agent import account_spend
 
-        date_from = date_from or account_spend.yesterday()
+        if not date_from:
+            return {}
         return {
             a: r.to_dict()
             for a, r in account_spend.all_readings(date_from, date_to or date_from).items()
@@ -856,6 +857,7 @@ from urllib.parse import quote as _url_quote
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
 templates.env.filters["fmt_usd"] = fmt_usd
+templates.env.filters["fmt_currency"] = fmt_currency
 templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")
 templates.env.filters["creative_type"] = lambda name: parse_creative_from_ad_title(name)[0]
 templates.env.filters["creative_id"] = lambda name: parse_creative_from_ad_title(name)[1]
@@ -2244,6 +2246,18 @@ async def account_map_patch(request: Request) -> JSONResponse:
 
 
 
+def _spend_period(date_from: str, date_to: str, span: str = "") -> tuple[str, str]:
+    from datetime import date
+
+    if span == "all" or not date_from.strip():
+        raise ValueError("Live account spend requires a date range. Select dates instead of Maximum.")
+    start = date.fromisoformat(date_from.strip())
+    end = date.fromisoformat(date_to.strip() or date_from.strip())
+    if end < start:
+        raise ValueError("End date must be on or after start date.")
+    return start.isoformat(), end.isoformat()
+
+
 @app.post("/account-spend/read")
 async def account_spend_read(request: Request) -> JSONResponse:
     """Прочитать спенд с аккаунта. Только по нажатию человека.
@@ -2260,10 +2274,14 @@ async def account_spend_read(request: Request) -> JSONResponse:
     # Период приходит с экрана: число, снятое не за тот отрезок, который
     # показан рядом, выглядело бы расхождением источников, а было бы ответом
     # на другой вопрос.
-    date_from = (form.get("date_from") or "").strip() or account_spend.yesterday()
-    date_to = (form.get("date_to") or "").strip() or date_from
-
-    reading = account_spend.start_read(account, date_from, date_to)
+    try:
+        date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""), str(form.get("span") or ""))
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    try:
+        reading = account_spend.start_read(account, date_from, date_to)
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Could not start or save the reading. Check disk space and retry."}, status_code=503)
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
 
 
@@ -2312,12 +2330,14 @@ async def account_probe_ad_account(request: Request) -> JSONResponse:
 
 @app.get("/account-spend/status")
 async def account_spend_status(
-    account: str = "", date_from: str = "", date_to: str = ""
+    account: str = "", date_from: str = "", date_to: str = "", span: str = ""
 ) -> JSONResponse:
     from src.analysis_agent import account_spend
 
-    date_from = date_from.strip() or account_spend.yesterday()
-    date_to = date_to.strip() or date_from
+    try:
+        date_from, date_to = _spend_period(date_from, date_to, span)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     if account.strip():
         return JSONResponse({
             "ok": True,

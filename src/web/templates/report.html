@@ -2243,7 +2243,7 @@ async function dashRefresh(ev) {
     {% for g in gv.rows %}
     <button type="button"
             class="gchip {% if g.pct == 100 %}done{% elif not g.deposits %}none{% endif %}"
-            onclick="goalMenu(this, {{ g | tojson }})"
+            onclick="goalMenu(this, {{ g | tojson | forceescape }})"
             title="{{ g.country }} · target {{ g.ftd }} FTD{% if g.cpa %} · CPA ≤ {{ g.cpa | int }}{% endif %}">
       <span class="gcode">{{ g.code or g.country[:2] | upper }}</span>
       <span class="gnum">{{ g.deposits }}/{{ g.ftd }}</span>
@@ -2364,7 +2364,7 @@ async function dashRefresh(ev) {
   </div>
   <div class="amap-add">
     <button type="button" class="amap-btn"
-            onclick="amapAddThisCountry('{{ c.country | e }}', this)">Add {{ c.country }} to the account map</button>
+            onclick="amapAddThisCountry({{ c.country | tojson | forceescape }}, this)">Add {{ c.country }} to the account map</button>
     <span class="amap-msg"></span>
   </div>
   {%- endif %}
@@ -2848,7 +2848,7 @@ async function dashRefresh(ev) {
                  value="{{ pf.link }}"
                  placeholder="https://keitaro.example.com/…">
           <button type="button" class="cb-field-save-btn"
-                  onclick="cbSaveTrackingLink(this, '{{ acc_label | e }}')">Save</button>
+                  onclick="cbSaveTrackingLink(this, {{ acc_label | tojson | forceescape }})">Save</button>
         </div>
       </div>
 
@@ -2868,7 +2868,7 @@ async function dashRefresh(ev) {
             <span style="font-size:0.68rem;color:var(--muted);white-space:nowrap">from Upload FB</span>
             {% endif %}
             <button type="button" class="cb-field-save-btn"
-                    onclick="cbSaveOneMapField(this, '{{ acc_label | e }}', 'ad_account_id')">Save</button>
+                    onclick="cbSaveOneMapField(this, {{ acc_label | tojson | forceescape }}, 'ad_account_id')">Save</button>
             <span class="cb-field-status"></span>
           </div>
           {% endif %}
@@ -2881,7 +2881,7 @@ async function dashRefresh(ev) {
                      value="" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                      style="font-family:monospace;font-size:0.72rem">
               <button type="button" class="cb-field-save-btn"
-                      onclick="cbSaveOneMapField(this, '{{ acc_label | e }}', 'profile_id')">Save</button>
+                      onclick="cbSaveOneMapField(this, {{ acc_label | tojson | forceescape }}, 'profile_id')">Save</button>
               <span class="cb-field-status"></span>
             {% else %}
               <span class="cb-pf-ok" style="font-size:0.72rem">✓ set</span>
@@ -2895,7 +2895,7 @@ async function dashRefresh(ev) {
               <input type="text" class="cb-input cb-map-input" data-field="page_name"
                      value="" placeholder="e.g. Global Trading Academy">
               <button type="button" class="cb-field-save-btn"
-                      onclick="cbSaveOneMapField(this, '{{ acc_label | e }}', 'page_name')">Save</button>
+                      onclick="cbSaveOneMapField(this, {{ acc_label | tojson | forceescape }}, 'page_name')">Save</button>
               <span class="cb-field-status"></span>
             {% else %}
               <span class="cb-pf-ok" style="font-size:0.72rem">✓ {{ pf.page_name }}</span>
@@ -3097,7 +3097,7 @@ async function dashRefresh(ev) {
         names: [g.country, g.code].filter(Boolean),
         ftd: g.ftd || 0, cpa: g.cpa, cr: g.cr, ld: g.leads_per_day
       });
-    })({{ g | tojson }});
+    })({{ g | tojson | forceescape }});
     {% endfor %}
     return byMarket;
   })();
@@ -3864,9 +3864,9 @@ if (document.readyState === 'loading') {
 
 function amapPeriod() {
   var p = window._amapPick || {};
-  if (p.span === 'all') return { from: '', to: '' };
+  if (p.span === 'all') return { from: '', to: '', span: 'all' };
   var from = p.from || '';
-  return { from: from, to: p.to || from };
+  return { from: from, to: p.to || from, span: p.span || '' };
 }
 
 function amapSpendCell(btn) {
@@ -3878,6 +3878,8 @@ function amapReadSpend(btn) {
   var cell = amapSpendCell(btn);
   var account = cell && cell.dataset.account;
   if (!account) return;
+  var per = amapPeriod();
+  if (!per.from || per.span === 'all') return;
   var extra = btn.parentNode.querySelector('.amap-openprof');
   if (extra) extra.remove();
   btn.disabled = true;
@@ -3886,52 +3888,85 @@ function amapReadSpend(btn) {
   /* Период берём тот же, что показан в шапке: число за другой отрезок
      выглядело бы расхождением источников, а было бы ответом на другой
      вопрос. */
-  var per = amapPeriod();
   var body = new FormData();
   body.append('account', account);
   body.append('date_from', per.from);
   body.append('date_to', per.to);
+  body.append('span', per.span);
   fetch('/account-spend/read', { method: 'POST', body: body, credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (j) {
       if (!j.ok) throw new Error(j.error || 'refused');
-      amapPollSpend(account, cell, btn, 0);
+      amapPollSpend(account, cell, btn, 0, per);
     })
     .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
 }
 
-function amapPollSpend(account, cell, btn, tries) {
-  if (tries > 120) {  // ~6 минут: дольше живой прогон не длится
-    amapSpendFailed(btn, cell, 'no answer after six minutes — check the launcher window');
+function amapMoney(spend, currency) {
+  var code = String(currency || '').toUpperCase();
+  return (/^[A-Z]{3}$/.test(code) ? code : 'currency unknown') + ' '
+    + Number(spend).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function amapApplyReading(account, s) {
+  document.querySelectorAll('.amap-live').forEach(function (cell) {
+    if (cell.dataset.account !== account) return;
+    var row = cell.closest('tr');
+    var btn = row.querySelector('.amap-read');
+    cell.dataset.running = s.state === 'running' ? '1' : '0';
+    if (s.status) {
+      var status = row.querySelector('.amap-status');
+      status.innerHTML = '<span></span>';
+      var label = status.firstChild;
+      label.className = 'amap-st ' + (s.status === 'clear' ? 'ok' : s.status === 'unknown' ? 'dim' : 'bad');
+      label.textContent = s.status === 'clear' ? 'no warning' : s.status === 'unknown' ? 'unreadable' : s.status;
+      label.title = (s.status_text || (s.status === 'clear' ? 'No warning on the page; not a verified active status' : s.status)) + ' · read ' + (s.finished_at || '');
+    }
+    if (s.state === 'running') {
+      btn.disabled = true; btn.textContent = 'reading…'; return;
+    }
+    if (s.state !== 'ok') { amapSpendFailed(btn, cell, s.error || 'failed', s.shot, s.how); return; }
+    cell.innerHTML = '<span class="amap-live-ok"></span>';
+    cell.firstChild.textContent = amapMoney(s.spend, s.currency);
+    cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how;
+    btn.disabled = false; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read'; btn.title = 'Read again';
+  });
+}
+
+function amapPollSpend(account, cell, btn, tries, per) {
+  per = per || amapPeriod();
+  if (!per.from || per.span === 'all') return;
+  if (tries > 120) {
+    amapApplyReading(account, {state: 'failed', error: 'no answer after six minutes — check the launcher window'});
     return;
   }
   setTimeout(function () {
-    var per = amapPeriod();
     fetch('/account-spend/status?account=' + encodeURIComponent(account)
           + '&date_from=' + encodeURIComponent(per.from)
           + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
+        if (!j.ok) throw new Error(j.error || 'Could not read status');
         var s = j.reading || {};
-        if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1); return; }
-        if (s.state === 'ok') {
-          var money = (s.currency === 'USD' || !s.currency ? '$' : '') + Number(s.spend).toLocaleString();
-          cell.innerHTML = '<span class="amap-live-ok"></span>';
-          var ok = cell.firstChild;
-          ok.textContent = money;
-          var when = s.date_from === s.date_to ? s.date_from : (s.date_from + '…' + s.date_to);
-          ok.title = when + ' · read ' + s.finished_at + ' · ' + s.took_s + 's · ' + s.how;
-          btn.disabled = false;
-          btn.className = 'amap-btn amap-read';
-          btn.textContent = 'Read';
-          btn.title = 'Read again';
-          return;
-        }
-        amapSpendFailed(btn, cell, s.error || 'failed', s.shot, s.how);
+        amapApplyReading(account, s);
+        if (s.state === 'running') amapPollSpend(account, cell, btn, tries + 1, per);
       })
-      .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
+      .catch(function (e) { amapApplyReading(account, {state: 'failed', error: String(e && e.message || e)}); });
   }, 3000);
 }
+
+function amapResumeReadings() {
+  var seen = {};
+  document.querySelectorAll('.amap-live[data-running="1"]').forEach(function (cell) {
+    var account = cell.dataset.account;
+    if (seen[account]) return;
+    seen[account] = true;
+    var btn = cell.closest('tr').querySelector('.amap-read');
+    amapPollSpend(account, cell, btn, 0, amapPeriod());
+  });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapResumeReadings);
+else amapResumeReadings();
 
 function amapSpendFailed(btn, cell, why, shot, how) {
   btn.disabled = false;
@@ -4153,20 +4188,22 @@ function amapClose(kind, value, label) {
 var _mlxCache = {};   // инстанс -> массив профилей
 var _mlxLoading = {}; // инстанс -> Promise
 
-function amapProfiles(inst) {
+function amapProfiles(inst, reload) {
+  if (reload) { delete _mlxCache[inst]; delete _mlxLoading[inst]; }
   if (_mlxCache[inst]) return Promise.resolve(_mlxCache[inst]);
   if (_mlxLoading[inst]) return _mlxLoading[inst];
-  _mlxLoading[inst] = fetch('/multilogin-search', {
+  var pending = fetch('/multilogin-search', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
     body: JSON.stringify({ search_text: '', instance: inst })
   }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d || !d.ok) throw new Error((d && d.error) || 'Multilogin did not answer');
-    _mlxCache[inst] = d.profiles || [];
-    delete _mlxLoading[inst];
-    return _mlxCache[inst];
-  }).catch(function (e) { delete _mlxLoading[inst]; throw e; });
-  return _mlxLoading[inst];
+    var profiles = d.profiles || [];
+    if (_mlxLoading[inst] === pending) { _mlxCache[inst] = profiles; delete _mlxLoading[inst]; }
+    return profiles;
+  }).catch(function (e) { if (_mlxLoading[inst] === pending) delete _mlxLoading[inst]; throw e; });
+  _mlxLoading[inst] = pending;
+  return pending;
 }
 
 function amapRank(profiles, q) {
@@ -4180,18 +4217,22 @@ function amapRank(profiles, q) {
   return ends.concat(has);
 }
 
-function amapFilter(input) {
+function amapFilter(input, reload) {
   var box = input.closest('.amap-add');
   var inst = box.querySelector('.amap-inst').value || 'A';
   var msg = box.querySelector('.amap-msg');
   var q = (input.value || '').trim();
   var hits = box.querySelector('.amap-hits');
+  var generation = box._amapGeneration = (box._amapGeneration || 0) + 1;
+  hits.hidden = true; hits.innerHTML = '';
+  function current() { return box._amapGeneration === generation && (box.querySelector('.amap-inst').value || 'A') === inst; }
 
   if (!q) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
   msg.className = 'amap-msg';
   msg.textContent = _mlxCache[inst] ? '' : ('loading ' + (ACL_MLX_LABELS[inst] || inst) + '…');
 
-  amapProfiles(inst).then(function (all) {
+  return amapProfiles(inst, reload).then(function (all) {
+    if (!current()) return;
     // пока грузилось, могли набрать ещё — берём то, что в поле сейчас
     var now = (input.value || '').trim();
     if (!now) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
@@ -4201,42 +4242,15 @@ function amapFilter(input) {
       : 'nothing in ' + (ACL_MLX_LABELS[inst] || inst) + ' ends with or contains "' + now + '"';
     amapRenderHits(box, hits, found.slice(0, 12), inst);
   }).catch(function (e) {
+    if (!current()) return;
     hits.hidden = true; hits.innerHTML = '';
     msg.textContent = String(e && e.message || e);
     msg.className = 'amap-msg bad';
   });
 }
 
-async function amapFind(btn) {
-  var box = btn.closest('.amap-add');
-  var q = (box.querySelector('.amap-find').value || '').trim();
-  var inst = box.querySelector('.amap-inst').value || 'A';
-  var msg = box.querySelector('.amap-msg');
-  var hits = box.querySelector('.amap-hits');
-  hits.hidden = true; hits.innerHTML = '';
-  if (q.length < 2) { msg.textContent = 'type at least 2 characters'; msg.className = 'amap-msg bad'; return; }
-  msg.textContent = 'searching ' + (ACL_MLX_LABELS[inst] || inst) + '…'; msg.className = 'amap-msg';
-
-  var r = await fetch('/multilogin-search', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ search_text: q, instance: inst })
-  });
-  var data = null; try { data = await r.json(); } catch (e) {}
-  if (!data || !data.ok) {
-    msg.textContent = (data && data.error) ? data.error : ('error ' + r.status);
-    msg.className = 'amap-msg bad';
-    return;
-  }
-  var profiles = data.profiles || [];
-  if (!profiles.length) {
-    msg.textContent = 'nothing in ' + (ACL_MLX_LABELS[inst] || inst) + ' matches "' + q + '"';
-    msg.className = 'amap-msg';
-    return;
-  }
-  msg.textContent = profiles.length + ' found';
-  _mlxCache[inst] = profiles;   // отбор по вводу возьмёт этот же список
-  amapRenderHits(box, hits, profiles.slice(0, 12), inst);
+function amapFind(btn) {
+  return amapFilter(btn.closest('.amap-add').querySelector('.amap-find'), true);
 }
 
 /* Один рисовальщик на оба пути — и на кнопку, и на ввод. Две копии этой
@@ -4251,7 +4265,10 @@ function amapRenderHits(box, hits, profiles, inst) {
       + '<span class="amap-hint">checking this machine…</span>';
     var btnAdd = document.createElement('button');
     btnAdd.type = 'button'; btnAdd.className = 'amap-btn'; btnAdd.textContent = 'Connect';
-    btnAdd.onclick = function () { amapConnect(box, p, inst, btnAdd); };
+    btnAdd.onclick = function () {
+      if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
+      amapConnect(box, p, inst, btnAdd);
+    };
     row.appendChild(btnAdd);
     hits.appendChild(row);
 
