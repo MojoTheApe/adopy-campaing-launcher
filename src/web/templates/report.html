@@ -1427,6 +1427,9 @@
       color: var(--text); padding: 0.1rem 0.2rem; flex: 1 1 auto; min-width: 0;
     }
     .amap-cal-inputs { margin: 0.6rem 0 0; }
+    /* Приглушённый, но живой: книга этого периода не знает, а аккаунт знает. */
+    .amap-cal-presets button.thin { color: var(--muted); }
+    .amap-cal-presets button.thin i { border-style: dashed; }
     .amap-cal-presets button:disabled {
       color: var(--border-strong); cursor: default; text-decoration: line-through;
     }
@@ -1471,6 +1474,8 @@
     }
     /* Дни, которых нет в книге, зачёркнуты, а не просто бледные: серое читается
        как «неяркое», зачёркнутое — как «этого нет». Разница видна до клика. */
+    /* Не «нельзя», а «дешборд не знает»: выбор остаётся возможным. */
+    .amap-cal-grid button.thin { color: var(--muted); opacity: .55; }
     .amap-cal-grid button:disabled {
       color: var(--border-strong); cursor: default; text-decoration: line-through;
     }
@@ -3558,7 +3563,12 @@ function amapShift(d, n) {
    отставшей книге по-прежнему остаётся пустым. */
 function amapPresets(last) {
   var t = new Date(); t.setHours(0, 0, 0, 0);
-  var cut = function (iso) { return (last && iso > last) ? last : iso; };
+  /* Подрезки по книге больше нет. Она была неверной с самого начала: книга
+     говорит, что знает дешборд, а не что можно спросить у аккаунта. Кнопка
+     Read ходит в Ads Manager, где вчера и сегодня есть всегда, — а пресеты
+     «Today» и «Yesterday» гасли, потому что файл статистики отстал на два
+     дня. Два источника, одно ограничение — так нельзя. */
+  var cut = function (iso) { return iso; };
   var y = amapShift(t, -1);
   var weekStart = amapShift(t, -t.getDay());              // неделя с воскресенья, как у Meta
   var lastWeekEnd = amapShift(weekStart, -1);
@@ -3598,7 +3608,10 @@ function amapCalendar(btn) {
   var draft = { from: _amapPick.from, to: _amapPick.to, span: _amapPick.span || '' };
   var last = have[have.length - 1];
   var first = have[0];
-  var right = new Date(last + 'T00:00:00');
+  /* Открываемся на месяце выбранного периода, а не на последнем месяце книги:
+     иначе на отставшей книге календарь показывал бы август, когда выбран
+     сентябрь, и сегодняшнего дня в нём просто не было бы видно. */
+  var right = new Date((_amapPick.to || _amapPick.from || last) + 'T00:00:00');
   right.setDate(1);
   var presets = amapPresets(last);
 
@@ -3656,8 +3669,11 @@ function amapCalendar(btn) {
         if (key === draft.from || key === draft.to) cls += ' sel';
         else if (draft.from && draft.to && key > draft.from && key < draft.to) cls += ' inrange';
       }
-      h += '<button type="button" class="' + cls + '" data-day="' + key + '"'
-        + (has ? '' : ' disabled title="no rows in the workbook"') + '>' + day + '</button>';
+      /* День без строк в книге выбирать можно: спенд с аккаунта читается за
+         любой день, а книга отстаёт на день-два почти всегда. Тонкой цифрой
+         показываем, что дешборд про этот день ничего не знает. */
+      h += '<button type="button" class="' + cls + (has ? '' : ' thin') + '" data-day="' + key + '"'
+        + (has ? '' : ' title="no rows in the workbook for this day"') + '>' + day + '</button>';
     }
     return h + '</div></div>';
   }
@@ -3671,10 +3687,12 @@ function amapCalendar(btn) {
 
     var h = '<div class="amap-cal-wrap"><div class="amap-cal-presets">';
     presets.forEach(function (p) {
+      /* Нет строк в книге — не повод запретить выбор: спенд с аккаунта
+         читается независимо. Помечаем, но не гасим. */
       var live = hasData(p);
       h += '<button type="button" data-preset="' + p.key + '"'
-        + ' class="' + (active === p.key ? 'on' : '') + '"'
-        + (live ? '' : ' disabled title="no rows in the workbook for this period"')
+        + ' class="' + (active === p.key ? 'on' : '') + (live ? '' : ' thin') + '"'
+        + (live ? '' : ' title="the workbook has no rows here — the dashboard numbers will be empty, but the spend can still be read from the account"')
         + '><i></i>' + p.label + '</button>';
     });
     h += '<button type="button" data-preset="custom" class="' + (active === 'custom' ? 'on' : '')
@@ -3688,7 +3706,8 @@ function amapCalendar(btn) {
       + '<button type="button" class="amap-cal-x" data-close="1" title="Close">×</button>'
       + '</div>'
       + '<div class="amap-cal-foot">'
-      + '<span>' + have.length + ' days in the workbook</span>'
+      + '<span>' + have.length + ' days in the workbook'
+        + (last < amapIso(new Date()) ? ', last ' + last : '') + '</span>'
       + '<button type="button" class="amap-btn" data-cancel="1">Cancel</button>'
       + '<button type="button" class="amap-btn primary" data-apply="1">Update</button>'
       + '</div></div></div>';
