@@ -79,3 +79,18 @@ def test_an_empty_period_still_shows_the_account_map():
     assert "account_map.date_from" in empty, (
         "пустой отчёт снова не называет период — а человек пойдёт чинить файл"
     )
+
+
+def test_a_failed_read_names_its_reason_in_the_cell():
+    """Неудача должна выглядеть неудачей с первого взгляда.
+
+    8 сентября чтение за 5–7 сентября сорвалось: строка итогов ещё не успела
+    появиться. На экране осталась кнопка «failed · retry», причина — только в
+    подсказке, а про сохранённый снимок узнать было неоткуда. Это читалось как
+    «ничего не произошло».
+    """
+    t = TPL.read_text(encoding="utf-8")
+    fn = t[t.index("function amapSpendFailed"):]
+    fn = fn[: fn.index("\nfunction ")]
+    assert "cell.innerHTML" in fn, "причина снова только в подсказке к кнопке"
+    assert "снимок" in fn, "снимок экрана снова негде увидеть"

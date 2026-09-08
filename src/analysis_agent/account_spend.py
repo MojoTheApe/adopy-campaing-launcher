@@ -35,6 +35,13 @@ ADS_MANAGER = "https://adsmanager.facebook.com/adsmanager/manage/campaigns"
 #: не экономит: читаем мы по одному аккаунту и по просьбе человека
 TABLE_TIMEOUT_MS = 90_000
 
+#: сколько секунд ждать строку итогов после таблицы. Она приходит отдельным
+#: запросом и позже строк: на снимке сорвавшегося прогона таблица нарисована, а
+#: над колонкой Results ещё крутится спиннер. Двадцати секунд хватает с запасом,
+#: а платит за ожидание только неудачный прогон — на удачном сумма находится с
+#: первой попытки.
+TOTALS_TRIES = 20
+
 
 def yesterday(today: date | None = None) -> str:
     return ((today or date.today()) - timedelta(days=1)).isoformat()
@@ -761,13 +768,23 @@ def _read_total(page) -> tuple[float | None, str]:
     if not _wait_for_grid(page):
         return None, "таблица не появилась"
 
-    value = _spend_on_screen(page)
-    if value is not None:
-        return value, "строка итогов, «Total spent»"
-
-    label = _totals_label(page)
+    # Итоги появляются позже таблицы: строки кампаний уже нарисованы, а над
+    # колонкой Results ещё крутится спиннер. Один взгляд сразу после таблицы
+    # приходился ровно на этот момент — 8 сентября прогон на 5–7 сентября так и
+    # сорвался с «строка не найдена», хотя страница была совершенно исправна и
+    # даты на ней стояли верные. У периода такая же повторная попытка есть с
+    # самого начала (`_shown_period`), у итогов её не было.
+    label = None
+    for _ in range(TOTALS_TRIES):
+        value = _spend_on_screen(page)
+        if value is not None:
+            return value, "строка итогов, «Total spent»"
+        label = _totals_label(page)
+        if label is not None:
+            break
+        _sleep(1)
     if label is None:
-        return None, "строка «Results from …» не найдена"
+        return None, f"строка «Results from …» не появилась за {TOTALS_TRIES} с"
 
     try:
         label.scroll_into_view_if_needed(timeout=5_000)

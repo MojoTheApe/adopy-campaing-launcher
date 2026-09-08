@@ -3866,17 +3866,29 @@ function amapPollSpend(account, cell, btn, tries) {
           btn.title = 'Read again';
           return;
         }
-        amapSpendFailed(btn, cell, s.error || 'failed');
+        amapSpendFailed(btn, cell, s.error || 'failed', s.shot, s.how);
       })
       .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
   }, 3000);
 }
 
-function amapSpendFailed(btn, cell, why) {
+function amapSpendFailed(btn, cell, why, shot, how) {
   btn.disabled = false;
   btn.className = 'amap-btn amap-read amap-live-bad';
   btn.textContent = 'failed · retry';
   btn.title = why;
+  /* Причина — в самой ячейке, а не только в подсказке к кнопке.
+     8 сентября прогон упал, ячейка осталась прежней, и это читалось как «не
+     зашло»: чтобы узнать причину, надо было догадаться навести курсор, а про
+     сохранённый снимок экрана узнать было неоткуда вовсе. Неудача должна
+     выглядеть неудачей с первого взгляда. */
+  if (cell) {
+    cell.innerHTML = '<span class="amap-live-bad"></span>';
+    var bad = cell.firstChild;
+    bad.textContent = why.length > 40 ? why.slice(0, 39) + '…' : why;
+    bad.title = why + (how ? ' · ' + how : '') + (shot ? '
+снимок: ' + shot : '');
+  }
   /* Если прицепиться не к чему, «retry» ничего не изменит: сначала нужно
      поднять профиль автоматизацией. Кнопка появляется ровно в этом случае. */
   if (/профил|profile/i.test(why || '') && !btn.parentNode.querySelector('.amap-openprof')) {
