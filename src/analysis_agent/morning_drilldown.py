@@ -124,7 +124,9 @@ def get_underlying_rows(
             )
         elif section == "account":
             filtered = filter_account_rows(df, country, kwargs["account"])
-            filtered = _aggregate_cm_drill_rows(filtered)
+            # Тот же вид, что у сравнения менеджеров, но без отбора по
+            # депозитам: здесь спрашивают, что аккаунт крутил.
+            filtered = _aggregate_cm_drill_rows(filtered, only_with_deposits=False)
         elif section == "optimization":
             filtered = filter_optimization_rows(
                 df, country, kwargs["account"], kwargs["adset"],
@@ -167,9 +169,10 @@ def _cm_row_to_dict(row: pd.Series) -> Dict[str, Any]:
     }
 
 
-def _aggregate_cm_drill_rows(filtered: pd.DataFrame) -> pd.DataFrame:
-    """One drill row per (Account Alias, Adset Name) for a CM; only rows with
-    FTDs > 0, sorted by FTDs desc.
+def _aggregate_cm_drill_rows(filtered: pd.DataFrame, *, only_with_deposits: bool = True) -> pd.DataFrame:
+    """One row per (Account Alias, Adset Name), sorted by deposits then spend.
+
+    CM comparisons include only rows with deposits; account drills include all.
 
     Grouping on Adset Name ALONE was wrong: the naming convention repeats the
     same ad-set name across accounts, so several accounts' rows collapsed into
@@ -197,10 +200,20 @@ def _aggregate_cm_drill_rows(filtered: pd.DataFrame) -> pd.DataFrame:
         )
         .reset_index()
     )
-    # Keep only adsets with at least 1 deposit
-    grouped = grouped[grouped["# FTDs"] > 0].copy()
+    # Оставить только адсеты хотя бы с одним депозитом — правило сравнения
+    # менеджеров, где вопрос именно «у кого депозиты».
+    #
+    # Раскрытие аккаунта задаёт другой вопрос: «что этот аккаунт крутил». Пока
+    # оно переиспользовало это правило целиком, аккаунт без депозитов отвечал
+    # «No matching rows» — и это читалось как поломка раскрытия, а не как
+    # «депозитов не было». Проверено на `KLD_BFL_X01`: 61 лид, 0 депозитов,
+    # 59 строк в книге и пустая панель под ними.
+    if only_with_deposits:
+        grouped = grouped[grouped["# FTDs"] > 0].copy()
+    else:
+        grouped = grouped.copy()
     grouped["CPA"] = grouped["$ Spend"] / grouped["# FTDs"].replace(0, pd.NA)
-    grouped = grouped.sort_values("# FTDs", ascending=False)
+    grouped = grouped.sort_values(["# FTDs", "$ Spend"], ascending=[False, False])
 
     # Landing-page (Variant) deposit breakdown per adset, for the chips in
     # the CM drill: [{"name": ..., "ftds": n}, ...] sorted by ftds desc.

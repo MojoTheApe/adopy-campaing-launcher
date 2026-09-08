@@ -495,7 +495,6 @@ def _build_account_map_view(
     # любом совпадении имён. Числа карты не должны зависеть от того, случился ли
     # сегодня хоть один лид.
     wb_country: dict[str, str] = {}
-    wb_aliases: dict[str, list[str]] = {}
     try:
         if df is not None and "Country Final" in df.columns:
             for name in {str(c).strip() for c in df["Country Final"].dropna()}:
@@ -503,15 +502,8 @@ def _build_account_map_view(
                     continue
                 wb_country.setdefault(name.casefold(), name)
                 wb_country.setdefault(_country_code(name).casefold(), name)
-                wb_aliases[name] = sorted(
-                    {
-                        str(a).strip()
-                        for a in df.loc[df["Country Final"] == name, "Account Alias"].dropna()
-                        if str(a).strip()
-                    }
-                )
     except Exception:  # pragma: no cover - кривая книга не должна гасить карту
-        wb_country, wb_aliases = {}, {}
+        wb_country = {}
 
     frame = period if period is not None else df
 
@@ -573,8 +565,13 @@ def _build_account_map_view(
             # только при единственном совпадении и всегда подписывается на экране.
             alias = ""
             if not excel.get("has_data"):
-                alias = _alias_by_tail(label, wb_aliases.get(country_name, []))
-                if alias:
+                # Тот же разрешатель, что и у раскрытия объявлений: два способа
+                # отвечать на один вопрос однажды разойдутся, и разойдутся молча.
+                # Resolve identity against the whole workbook. A date filter
+                # must not hide a collision or an older exact match.
+                resolved = workbook_alias_for(df, country_name, label)
+                if resolved and resolved.casefold() != label.casefold():
+                    alias = resolved
                     excel = _numbers(country_name, alias) or excel
             rows.append({
                 "account": label,
@@ -1266,6 +1263,36 @@ def _alias_by_tail(label: str, known: dict) -> str:
     return hits[0] if len(hits) == 1 else ""
 
 
+def workbook_alias_for(df, country: str, label: str) -> str:
+    """Имя, под которым книга знает подключённый аккаунт.
+
+    Подключённый носит имя из Multilogin (`KLD_BFL_X01`), книга — своё
+    (`FacebookMKTOBFLX01`). Общего у них только хвост.
+
+    Одно место на обе надобности — числа в карте и раскрытие объявлений под
+    строкой. Пока перевод имени жил только в карте, числа находились, а
+    раскрытие приходило пустым: строка показывала $1,795 и говорила, что
+    объявлений нет. Разошедшиеся способы отвечать на один вопрос — это не две
+    ошибки, а одна, повторённая дважды.
+    """
+    if df is None or not label:
+        return label
+    try:
+        from src.analysis_agent.analyze_fb_stats import alias_matches
+
+        sub = df[df["Country Final"] == country] if "Country Final" in df.columns else df
+        if sub.empty:
+            return label
+        if bool(alias_matches(sub["Account Alias"], label).any()):
+            return label
+        names = sorted(
+            {str(a).strip() for a in sub["Account Alias"].dropna() if str(a).strip()}
+        )
+        return _alias_by_tail(label, names) or label
+    except Exception:  # pragma: no cover - перевод имени не должен ронять страницу
+        return label
+
+
 def _country_code(name: str) -> str:
     """Return 2-letter ISO code for a country name, or uppercase 2-char fallback."""
     if not name:
@@ -1418,6 +1445,9 @@ async def details(request: Request) -> HTMLResponse:
         ncols = _NCOLS_BY_SECTION.get(section, 7)
     try:
         _report, df, _warnings = get_cached_report()
+        if section == "account" and params.get("account"):
+            # Use the same full-workbook identity as the map, then slice dates.
+            params["account"] = workbook_alias_for(df, country, params["account"])
         df = _filter_by_period(df, *resolve_period(df, _p_from, _p_to, _p_span))
     except (FileNotFoundError, ValueError):
         # Cache build failed — return a no-op fragment so the table layout

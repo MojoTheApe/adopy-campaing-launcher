@@ -5,6 +5,44 @@
   <link rel="icon" href="/favicon.ico?v=acl" sizes="32x32">
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   <title>Adopy Campaigns Launcher — {{ report.date }}</title>
+  <script>
+    // Apply before paint. Only a click pins the theme; otherwise follow the OS.
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem('acl.theme'); } catch (e) {}
+      var explicit = saved === 'dark' || saved === 'light';
+      var media = typeof matchMedia === 'function'
+        ? matchMedia('(prefers-color-scheme: dark)') : null;
+      var theme = explicit ? saved : (media && media.matches ? 'dark' : 'light');
+
+      function apply(value) {
+        theme = value;
+        document.documentElement.setAttribute('data-theme', theme);
+        var btn = document.getElementById('theme-toggle');
+        if (btn) {
+          btn.setAttribute('aria-checked', String(theme === 'dark'));
+          btn.title = theme === 'dark' ? 'Switch to light' : 'Switch to dark';
+        }
+      }
+      apply(theme);
+      if (media) media.addEventListener('change', function (event) {
+        if (!explicit) apply(event.matches ? 'dark' : 'light');
+      });
+      function wire() {
+        var btn = document.getElementById('theme-toggle');
+        if (!btn) return;
+        apply(theme);
+        btn.addEventListener('click', function () {
+          explicit = true;
+          apply(theme === 'dark' ? 'light' : 'dark');
+          try { localStorage.setItem('acl.theme', theme); } catch (e) {}
+        });
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', wire);
+      } else { wire(); }
+    })();
+  </script>
   <script src="https://unpkg.com/htmx.org@1.9.10"
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
           crossorigin="anonymous"></script>
@@ -45,6 +83,71 @@
       --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
       --shadow-md: 0 4px 14px rgba(16, 24, 40, 0.07);
       --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+
+      /* Имена, которыми код уже пользовался, не имея их объявленными.
+         `var(--danger)` встречалось в трёх местах: запасное значение
+         работало, поэтому никто не замечал, что самого токена нет — и в тёмной
+         теме эти места остались бы светлыми. */
+      --danger: #dc2626;
+      --ok: #059669;
+      --accent-strong: #1d4ed8;
+      --on-accent: #ffffff;
+      --good-fill: #047857;
+      --on-good: #ffffff;
+      --on-danger: #ffffff;
+      color-scheme: light;
+    }
+
+    /* ── Тёмная тема ────────────────────────────────────────────────────
+       Собрана по разбору того, что об этом известно: Material 3 (dark
+       theme), IBM Carbon g100, GitHub Primer dark. Четыре правила оттуда,
+       которые здесь и применены:
+
+       1. Основа — не чёрный. Чистый #000 на OLED даёт ореол вокруг букв, а
+          тени на нём перестают быть видны. Основа #0f1216, слегка холодная,
+          под синий акцент продукта.
+       2. Возвышение — светлотой, а не тенью. Карточка, шапка и боковая
+          колонка светлее фона; на тёмном тень почти не читается.
+       3. Текст — не чистый белый. #e4e8ef даёт 15:1 к фону и не жжёт глаза
+          так, как #fff, а приглушённый #99a4b4 держит 7.4:1 — это AAA для
+          вторичного текста, которого здесь много в таблицах.
+       4. Акценты — приглушить. Насыщенный синий var(--accent) на тёмном вибрирует;
+          взят светлее и мягче, 7.4:1 к карточке.
+
+       Проверено расчётом контраста, а не на глаз: все пары текста проходят
+       AA, почти все AAA. Границы намеренно тише порога для текста — это
+       разделители строк в плотных таблицах, и на 3:1 они кричали бы.
+
+       Макет объявления (.fb-feed-*) в тёмную тему НЕ переводится. Это
+       изображение ленты Facebook, а не наш интерфейс: перекрасить его значит
+       показать байеру то, чего он никогда не увидит у себя. */
+    :root[data-theme="dark"] {
+      --bg: #0f1216;
+      --bg-elev: #171b22;
+      --bg-hover: #1e242d;
+      --bg-subtle: #232a35;
+      --border: #2b323d;
+      --border-strong: #5b6779;
+      --text: #e4e8ef;
+      --muted: #99a4b4;
+      --accent: #7aa9ff;
+      --accent-strong: #a8c6ff;
+      --accent-soft: #172238;
+      --on-accent: #0f1216;
+      --good-fill: #5fd39a;
+      --on-good: #0f1216;
+      --on-danger: #0f1216;
+      --good: #5fd39a;
+      --ok: #5fd39a;
+      --good-soft: #10281e;
+      --bad: #ff8079;
+      --danger: #ff8079;
+      --bad-soft: #2a1618;
+      --warn: #e5b544;
+      --warn-soft: #2a2113;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+      --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.55);
+      color-scheme: dark;
     }
     * { box-sizing: border-box; }
     body {
@@ -127,7 +230,7 @@
     }
     .sidebar-link.sidebar-home.active {
       background: var(--accent);
-      color: #fff;
+      color: var(--on-accent);
       border-color: var(--accent);
     }
     .sidebar-link.sidebar-home:hover:not(.active) { background: var(--bg-hover); color: var(--text); }
@@ -260,7 +363,7 @@
     .brand-lockup {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 0.7rem;
       min-width: 0;
     }
     .brand-logo {
@@ -268,37 +371,106 @@
       height: 36px;
       flex-shrink: 0;
       border-radius: 9px;
-      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.18);
     }
     .brand-text {
       display: flex;
       flex-direction: column;
-      gap: 0.2rem;
+      gap: 0.15rem;
       min-width: 0;
     }
+    /* Начертание: «Adopy» несёт вес, остальное — спокойнее. Одно название, а
+       не два слова подряд одинаковой громкости. */
     header.page-header h1 {
-      font-size: 1rem;
+      font-size: 1.02rem;
       font-weight: 650;
+      letter-spacing: -0.012em;
       margin: 0;
       color: var(--text);
-      letter-spacing: -0.02em;
-      line-height: 1.2;
-      text-wrap: balance;
+      white-space: nowrap;
     }
+    header.page-header h1 span { font-weight: 500; color: var(--muted); }
+
+    /* Две подписанные величины. Подпись приглушена, значение — нет: читают
+       здесь значение, а подпись только объясняет, какое именно. */
     .brand-meta {
-      font-size: 0.75rem;
-      color: var(--muted);
-      letter-spacing: 0.01em;
-      cursor: default;
+      display: flex;
+      align-items: baseline;
+      gap: 0.3rem 0.5rem;
+      margin: 0;
+      font-size: 0.735rem;
+      line-height: 1.3;
+      flex-wrap: wrap;
     }
-    .brand-meta strong { color: var(--text); font-weight: 500; }
-    .brand-meta .meta-sep { margin: 0 0.45rem; color: var(--border-strong); }
+    .brand-meta dt { color: var(--muted); }
+    .brand-meta dd {
+      margin: 0 0.55rem 0 0;
+      color: var(--text);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+    .brand-meta dd:last-child { margin-right: 0; }
+
+    /* Правый угол шапки: период, под кем смотрим, место под тему. Отделён от
+       названия автоматическим отступом, а не пустотой на глаз. */
+    .head-tools {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+    .buyer-pick { display: flex; align-items: center; gap: 0.45rem; }
+    .buyer-pick label { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+    .buyer-pick select { font-size: 0.82rem; max-width: 14rem; }
+    .buyer-pick #buyer-msg { font-size: 0.75rem; color: var(--muted); }
+    /* Переключатель темы: дорожка с бегунком. Иконка сообщала состояние одним
+       знаком, и какое именно — приходилось угадывать. Здесь положение видно
+       сразу, и обе стороны подписаны рисунком: слева день, справа ночь.
+
+       Ширина в шапке была занята заранее, поэтому появление переключателя
+       ничего не сдвинуло. */
+    .theme-switch {
+      flex: none; padding: 0; border: 0; background: none; cursor: pointer;
+      line-height: 0; border-radius: 999px;
+    }
+    .theme-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .ts-track {
+      position: relative; display: inline-flex; align-items: center;
+      justify-content: space-between;
+      width: 46px; height: 24px; padding: 0 5px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      transition: background 180ms var(--ease-out), border-color 180ms var(--ease-out);
+    }
+    .theme-switch:hover .ts-track { border-color: var(--border-strong); }
+    .ts-ico { position: relative; z-index: 1; color: var(--muted); fill: currentColor; transition: color 180ms var(--ease-out); }
+    /* Ярче та сторона, которая сейчас выбрана: переключатель показывает
+       состояние, а не только предлагает действие. */
+    .ts-sun { color: var(--warn); }
+    .ts-moon { opacity: 0.45; }
+    :root[data-theme="dark"] .ts-sun { color: var(--muted); opacity: 0.45; }
+    :root[data-theme="dark"] .ts-moon { color: var(--accent); opacity: 1; }
+    .ts-knob {
+      position: absolute; top: 50%; left: 2px;
+      width: 18px; height: 18px; margin-top: -9px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border-strong);
+      border-radius: 50%;
+      box-shadow: var(--shadow-sm);
+      transition: transform 180ms var(--ease-out);
+    }
+    :root[data-theme="dark"] .ts-knob { transform: translateX(22px); }
+    @media (prefers-reduced-motion: reduce) {
+      .ts-knob, .ts-track, .ts-ico { transition: none; }
+    }
+
     form.refresh { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
     /* Shown only when a promoted release is actually waiting, so an ordinary
        day's header carries no extra control at all. */
     form.refresh button.acl-update {
       background: var(--accent);
-      color: #ffffff;
+      color: var(--on-accent);
       border-color: var(--accent);
     }
     form.refresh button.acl-update:hover {
@@ -485,7 +657,7 @@
       margin-top: 0.65rem;
       padding: 0.45rem 1rem;
       background: var(--accent);
-      color: #fff;
+      color: var(--on-accent);
       border: none;
       border-radius: var(--radius-sm);
       font-size: 0.8125rem;
@@ -494,7 +666,7 @@
       cursor: pointer;
       transition: background 150ms var(--ease-out), transform 100ms var(--ease-out);
     }
-    .open-submit:not(:disabled):hover { background: #1d4ed8; }
+    .open-submit:not(:disabled):hover { background: var(--accent-strong); }
     .open-submit:not(:disabled):active { transform: scale(0.97); }
     .open-submit:disabled { opacity: 0.4; cursor: not-allowed; }
     .upload-errors {
@@ -548,19 +720,19 @@
     .cb-map-input  { min-width: 13rem; font-size: 0.78rem; }
     .cb-map-save-btn {
       padding: 0.25rem 0.7rem; font-size: 0.75rem; font-family: inherit;
-      background: var(--accent); color: #fff; border: none;
+      background: var(--accent); color: var(--on-accent); border: none;
       border-radius: var(--radius-sm); cursor: pointer; font-weight: 500;
     }
-    .cb-map-save-btn:hover { background: #1d4ed8; }
+    .cb-map-save-btn:hover { background: var(--accent-strong); }
     .cb-map-save-status { font-size: 0.75rem; }
     /* Per-field save button */
     .cb-field-save-btn {
       padding: 0.2rem 0.65rem; font-size: 0.73rem; font-family: inherit;
-      background: var(--accent); color: #fff; border: none;
+      background: var(--accent); color: var(--on-accent); border: none;
       border-radius: var(--radius-sm); cursor: pointer; font-weight: 500;
       white-space: nowrap; flex-shrink: 0;
     }
-    .cb-field-save-btn:hover { background: #1d4ed8; }
+    .cb-field-save-btn:hover { background: var(--accent-strong); }
     .cb-field-save-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     .cb-field-status { font-size: 0.72rem; min-width: 4rem; }
     /* Account map field rows */
@@ -597,13 +769,13 @@
       background: var(--bg-elev); color: var(--muted); border: none; cursor: pointer;
     }
     .ml-inst-btn + .ml-inst-btn { border-left: 1px solid var(--border); }
-    .ml-inst-btn.ml-inst-active { background: #1d4ed8; color: #fff; }
+    .ml-inst-btn.ml-inst-active { background: var(--accent-strong); color: var(--on-accent); }
     .ml-inst-btn:hover:not(.ml-inst-active) { background: var(--bg-hover); }
     .ml-connect-btn {
       padding: 0.25rem 0.75rem; font-size: 0.76rem; font-weight: 600;
-      background: #065f46; color: #fff; border: none; border-radius: 4px; cursor: pointer;
+      background: var(--good-fill); color: var(--on-good); border: none; border-radius: 4px; cursor: pointer;
     }
-    .ml-connect-btn:hover { background: #047857; }
+    .ml-connect-btn:hover { background: var(--good-fill); }
     .ml-connect-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     .ml-profile-row {
       display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.4rem;
@@ -614,10 +786,10 @@
     .ml-profile-row .ml-profile-id { color: var(--muted); font-family: monospace; font-size: 0.68rem; }
     .ml-profile-use-btn {
       margin-left: auto; padding: 0.15rem 0.5rem; font-size: 0.68rem;
-      background: #1d4ed8; color: #fff; border: none; border-radius: 3px; cursor: pointer;
+      background: var(--accent-strong); color: var(--on-accent); border: none; border-radius: 3px; cursor: pointer;
       white-space: nowrap;
     }
-    .ml-profile-use-btn:hover { background: #1e40af; }
+    .ml-profile-use-btn:hover { background: var(--accent); }
     .ml-acc-picker { font-size: 0.74rem; }
 
     /* Campaign Builder slots */
@@ -807,13 +979,13 @@
     .cb-dup-btn {
       background: var(--accent);
       border: 1px solid var(--accent);
-      color: #fff;
+      color: var(--on-accent);
       font-weight: 600;
     }
     .cb-dup-btn:hover {
       background: color-mix(in srgb, var(--accent) 85%, #000);
       border-color: color-mix(in srgb, var(--accent) 85%, #000);
-      color: #fff;
+      color: var(--on-accent);
     }
 
     /* "Send to Builder" trigger + popup */
@@ -864,7 +1036,7 @@
       white-space: nowrap;
     }
     .cb-cart-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
-    .cb-cart-btn.cb-send-selected { background: var(--good); border-color: var(--good); color: #fff; }
+    .cb-cart-btn.cb-send-selected { background: var(--good-fill); border-color: var(--good); color: var(--on-good); }
     #cb-cart-toast {
       position: fixed;
       bottom: 4.2rem;
@@ -896,7 +1068,7 @@
     }
     .cb-send-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
     .cb-send-btn.cb-send-selected {
-      background: var(--good); border-color: var(--good); color: #fff;
+      background: var(--good-fill); border-color: var(--good); color: var(--on-good);
     }
     /* Whole-card accent for a pre-built (Send-to-Builder) slot that still
        needs review — not just the small badge line, the entire slot border/
@@ -925,9 +1097,9 @@
     .cb-cart-count { color: var(--text); font-weight: 600; white-space: nowrap; }
     .cb-cart-bar button {
       font-family: inherit; font-size: 0.76rem; font-weight: 600; border-radius: 5px; cursor: pointer; padding: 0.35rem 0.75rem;
-      background: var(--accent); border: none; color: #fff;
+      background: var(--accent); border: none; color: var(--on-accent);
     }
-    .cb-cart-bar button:hover { background: #1d4ed8; }
+    .cb-cart-bar button:hover { background: var(--accent-strong); }
     .cb-send-modal-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,0.72);
       z-index: 9999; display: flex; align-items: center; justify-content: center;
@@ -1096,9 +1268,9 @@
     .cb-preview-btn:hover { background: var(--accent-soft); }
     .cb-preview-btn:active { transform: scale(0.97); }
     .cb-publish-btn {
-      background: var(--good);
+      background: var(--good-fill);
       border: none;
-      color: #fff;
+      color: var(--on-good);
       border-radius: var(--radius-sm);
       padding: 0.45rem 0.9rem;
       font-size: 0.8125rem;
@@ -1108,7 +1280,7 @@
       transition: background 150ms var(--ease-out), transform 100ms var(--ease-out);
     }
     .cb-publish-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-    .cb-publish-btn:not(:disabled):hover { background: #047857; }
+    .cb-publish-btn:not(:disabled):hover { background: var(--good-fill); }
     .cb-publish-btn:not(:disabled):active { transform: scale(0.97); }
     .cb-activate-label { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 0.3rem; cursor: pointer; }
 
@@ -1125,12 +1297,12 @@
       background: var(--bg-elev); color: var(--muted); border: none; cursor: pointer;
     }
     .cb-preview-toggle-btn + .cb-preview-toggle-btn { border-left: 1px solid var(--border-strong); }
-    .cb-preview-toggle-btn.cb-preview-toggle-active { background: var(--accent); color: #fff; }
+    .cb-preview-toggle-btn.cb-preview-toggle-active { background: var(--accent); color: var(--on-accent); }
     .cb-visual-preview { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.6rem; }
     .cb-visual-empty { color: var(--muted); font-size: 0.75rem; padding: 0.5rem 0; }
 
     .fb-feed-preview {
-      width: 320px; background: #fff; color: #050505; border-radius: 8px;
+      width: 320px; background: #fff; color: #050505; color-scheme: light; border-radius: 8px;
       overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.35); font-family: Helvetica, Arial, sans-serif;
     }
     .fb-feed-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.7rem 0.4rem; }
@@ -1362,7 +1534,7 @@
     .amap-st.ok { background: var(--bg-subtle); color: var(--muted); }
     .amap-st.dim { color: var(--muted); }
     .amap-st.bad {
-      background: var(--danger, #a4362f); color: #fff; font-weight: 500;
+      background: var(--danger); color: var(--on-danger); font-weight: 500;
     }
     .amap td { padding: 0.42rem 0.85rem; border-bottom: 1px solid var(--border); }
     .amap tbody tr:last-child td { border-bottom: 0; }
@@ -1502,7 +1674,7 @@
       color: var(--border-strong); cursor: default; text-decoration: line-through;
     }
     .amap-cal-grid button.has:hover { border-color: var(--accent); }
-    .amap-cal-grid button.sel { background: var(--accent); color: #fff; }
+    .amap-cal-grid button.sel { background: var(--accent); color: var(--on-accent); }
     .amap-cal-grid button.inrange { background: var(--accent-soft); }
     .amap-cal-foot {
       display: flex; align-items: center; margin-top: 0.6rem; gap: 0.5rem;
@@ -1511,12 +1683,15 @@
     .amap-cal-foot .amap-btn { margin-left: 0; }
     .amap-cal-foot .amap-btn[data-cancel] { margin-left: auto; }
     .amap-btn.primary {
-      background: var(--accent); border-color: var(--accent); color: #fff;
+      background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+    }
+    .amap-btn.primary:hover {
+      background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent);
     }
 
     .amap-live-ok { font-variant-numeric: tabular-nums; font-weight: 600; }
     .amap-live-run { color: var(--muted); font-size: 0.78rem; }
-    .amap-live-bad { color: var(--danger, #a4362f); border-color: var(--danger, #a4362f); }
+    .amap-live-bad { color: var(--danger); border-color: var(--danger); }
     .amap-btn {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -1809,7 +1984,7 @@
       border: 1px solid var(--accent);
       border-radius: var(--radius-sm);
       background: var(--accent);
-      color: #fff;
+      color: var(--on-accent);
       font: inherit;
       font-size: 0.85rem;
       font-weight: 600;
@@ -1928,28 +2103,59 @@
 <div class="page-top">
 <header class="page-header">
   <div class="brand-lockup">
-    <img src="/static/logo.svg" alt="ACL" class="brand-logo" width="36" height="36">
+    <img src="/static/logo.svg" alt="" class="brand-logo" width="36" height="36">
     <div class="brand-text">
-      <h1>Adopy Campaigns Launcher</h1>
-      <span class="brand-meta" title="Source: {{ report.source_excel }}">{{ report.date }}<span class="meta-sep">·</span>CM <strong>{{ report.my_cm }}</strong><span class="meta-sep">·</span>Trend <strong>{{ report.trend_days }}d</strong><span class="meta-sep">·</span><strong>{{ report.total_combos }}</strong> combos{% if built_at %}<span class="meta-sep">·</span>Updated <strong>{{ built_at }}</strong>{% endif %}<span class="meta-sep">·</span><span id="acl-version" title="Installed ACL release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</span></span>
+      <h1>Adopy <span>Campaigns Launcher</span></h1>
+      {#- Две подписанные величины вместо ленты через точки. Обе нужны в один
+          и тот же момент — когда обновление сломало работу и надо понять, что
+          стоит и когда встало, чтобы откатиться. Без подписи «Updated 2026-09-08
+          · acl-release-2026-09-03e» читается как одно смазанное сообщение. -#}
+      <dl class="brand-meta">
+        <dt>Last updated:</dt>
+        <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd>
+        <dt>Version:</dt>
+        <dd id="acl-version" title="Installed ACL release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd>
+      </dl>
     </div>
   </div>
   {#- Период стоит в шапке, а не над секцией: он меняет каждое число на
       странице, а элемент внутри блока читался бы как принадлежащий блоку. -#}
-  <div class="period-pick" style="margin-left:auto">
-    <button type="button" class="amap-btn amap-cal-btn" onclick="amapCalendar(this)"
-            title="Which days every number on this page counts">
-      📅 {% if pd.span == 'all' %}all dates{% elif pd.date_from and pd.date_from == pd.date_to %}{{ pd.date_from }}{% elif pd.date_from or pd.date_to %}{{ pd.date_from or '…' }} → {{ pd.date_to or '…' }}{% else %}all dates{% endif %}
+  <div class="head-tools">
+    <div class="period-pick">
+      <button type="button" class="amap-btn amap-cal-btn" onclick="amapCalendar(this)"
+              title="Which days every number on this page counts">
+        📅 {% if pd.span == 'all' %}all dates{% elif pd.date_from and pd.date_from == pd.date_to %}{{ pd.date_from }}{% elif pd.date_from or pd.date_to %}{{ pd.date_from or '…' }} → {{ pd.date_to or '…' }}{% else %}all dates{% endif %}
+      </button>
+      <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
+    </div>
+    {#- «Под кем смотрим» — отдельный элемент, а не строчка под логотипом.
+        Это не свойство продукта, а положение зрителя, и меняется оно чаще,
+        чем всё остальное в шапке. -#}
+    <div class="buyer-pick">
+      <label for="buyer-select">Logged as</label>
+      <select id="buyer-select" title="Whose view to show: accounts, optimization, team comparison">
+        <option value="{{ report.my_cm }}">{{ report.my_cm }}</option>
+      </select>
+      <span id="buyer-msg"></span>
+    </div>
+    {#- Переключатель, а не иконка. Иконка сообщала состояние одним знаком, и
+        какое именно — приходилось угадывать. У дорожки с бегунком положение
+        видно сразу: слева день, справа ночь. -#}
+    <button type="button" id="theme-toggle" class="theme-switch" role="switch"
+            aria-checked="false" aria-label="Dark theme" title="Light / dark">
+      <span class="ts-track">
+        <svg class="ts-ico ts-sun" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+          <circle cx="6" cy="6" r="2.6"/>
+          <g stroke="currentColor" stroke-width="1.1" stroke-linecap="round">
+            <path d="M6 .8v1.4M6 9.8v1.4M.8 6h1.4M9.8 6h1.4M2.3 2.3l1 1M8.7 8.7l1 1M9.7 2.3l-1 1M3.3 8.7l-1 1"/>
+          </g>
+        </svg>
+        <svg class="ts-ico ts-moon" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+          <path d="M8.4 7.6A4.2 4.2 0 014.6 1.9a4.3 4.3 0 101.5 8.2 4.2 4.2 0 002.3-2.5z"/>
+        </svg>
+        <span class="ts-knob"></span>
+      </span>
     </button>
-    <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
-  </div>
-  <div class="buyer-pick" style="display:flex;align-items:center;gap:0.45rem">
-    <label for="buyer-select" style="font-size:0.78rem;color:var(--muted)">Buyer</label>
-    <select id="buyer-select" style="font-size:0.82rem;max-width:14rem"
-            title="Whose view to show: accounts, optimization, team comparison">
-      <option value="{{ report.my_cm }}">{{ report.my_cm }}</option>
-    </select>
-    <span id="buyer-msg" style="font-size:0.75rem;color:var(--muted)"></span>
   </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
     <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
@@ -2725,7 +2931,7 @@ async function dashRefresh(ev) {
 
     {# ── Attach-only workflow ── #}
     <details style="margin-top:0.6rem" id="ml-direct-section-{{ cid }}" open>
-      <summary style="font-size:0.72rem;color:#4caf50;cursor:pointer;user-select:none;font-weight:600">
+      <summary style="font-size:0.72rem;color:var(--ok);cursor:pointer;user-select:none;font-weight:600">
         ✓ How to run the RPA (Multilogin)
       </summary>
       <div style="margin-top:0.5rem;padding:0.5rem;background:#0a2a14;border-radius:6px;border:1px solid #1a5a2a">
@@ -3565,7 +3771,8 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
     + '<button id="sfc-cancel" style="padding:0.32rem 0.85rem;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text);cursor:pointer;font-size:0.77rem">Cancel</button>'
     + '<button id="sfc-ok" style="padding:0.32rem 0.85rem;background:'
     + (danger ? 'var(--bad)' : 'var(--accent)')
-    + ';border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.77rem;font-weight:700">' + confirmLabel + '</button>'
+    + ';border:none;border-radius:4px;color:' + (danger ? 'var(--on-danger)' : 'var(--on-accent)')
+    + ';cursor:pointer;font-size:0.77rem;font-weight:700">' + confirmLabel + '</button>'
     + '</div>';
 
   overlay.appendChild(box);
@@ -4814,7 +5021,7 @@ function mlStartDirect(cid) {
   .then(function(d) {
     if (d.ok) {
       if (statusEl) statusEl.innerHTML =
-        '<span style="color:#4caf50">✓ Started — CDP: ' + (d.cdp_url || '') + '</span>';
+        '<span style="color:var(--ok)">✓ Started — CDP: ' + (d.cdp_url || '') + '</span>';
     } else {
       if (statusEl) statusEl.innerHTML =
         '<span style="color:var(--bad)">⚠ ' + aclEscHtml(d.error || 'error') + '</span>';
@@ -6456,7 +6663,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       + '<div id="cb-send-status" class="cb-send-modal-msg"></div>'
       + '<div class="cb-send-modal-actions">'
       + '<button type="button" id="cb-send-cancel" style="padding:0.32rem 0.85rem;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text);cursor:pointer;font-size:0.77rem">Cancel</button>'
-      + '<button type="button" id="cb-send-build" style="padding:0.35rem 0.9rem;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.78rem;font-weight:600">Build</button>'
+      + '<button type="button" id="cb-send-build" style="padding:0.35rem 0.9rem;background:var(--accent);border:none;border-radius:4px;color:var(--on-accent);cursor:pointer;font-size:0.78rem;font-weight:600">Build</button>'
       + '</div>';
 
     box.querySelector('#cb-send-cancel').onclick = closeSendModal;
@@ -6711,7 +6918,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       + '<select id="cb-cart-acc" class="cb-select" style="max-width:190px;font-size:0.74rem">' + optHtml + '</select>'
       + '<span class="cb-cart-count">' + n.camps + ' camp · ' + n.ads + ' ads</span>'
       + '<button type="button" id="cb-cart-open"' + (n.camps ? '' : ' disabled') + '>Open in builder</button>'
-      + '<button type="button" id="cb-cart-clear" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4)"'
+      + '<button type="button" id="cb-cart-clear" style="background:transparent;color:var(--text);border:1px solid var(--border-strong)"'
       + (n.camps ? '' : ' disabled') + '>×</button>';
     bar.querySelector('#cb-cart-acc').onchange = function() {
       cbCartAccSet(country, this.value);
@@ -7141,10 +7348,12 @@ function _rpaRecordSetUI(running, message) {
   document.querySelectorAll('.rpa-record-btn').forEach(function(btn) {
     if (running) {
       btn.textContent = '⏹ Stop record';
-      btn.style.background = '#b91c1c';
+      btn.style.background = 'var(--danger)';
+      btn.style.color = 'var(--on-danger)';
     } else {
       btn.textContent = '⏺ Record clicks';
-      btn.style.background = '#1d4ed8';
+      btn.style.background = 'var(--accent-strong)';
+      btn.style.color = 'var(--on-accent)';
     }
   });
   document.querySelectorAll('.rpa-record-status').forEach(function(el) {
@@ -7415,7 +7624,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       html += '<div style="margin:0.5rem 0">'
         + '<button type="button" id="' + stopBtnId + '" '
         + 'style="padding:0.35rem 0.9rem;font-size:0.78rem;background:#7f1d1d;color:#fff;'
-        + 'border:1px solid #b91c1c;border-radius:4px;cursor:pointer">'
+        + 'border:1px solid var(--danger);border-radius:4px;cursor:pointer">'
         + '⏹ Stop the run</button>'
         + '<span style="font-size:0.7rem;color:var(--muted);margin-left:0.5rem">'
         + 'stops the RPA; the Multilogin window stays open</span></div>';
@@ -7445,7 +7654,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         // informational note such as the dry-run message. Anything blocking
         // stays in the alarm colour.
         var errStyle = (r.success && !blocked)
-          ? ' style="color:var(--ok,#4caf50);border-color:var(--ok,#4caf50)"'
+          ? ' style="color:var(--ok);border-color:var(--ok)"'
           : '';
         html += '<div class="cb-status-err"' + errStyle + '>' + aclEscHtml(r.error) + '</div>';
       }
@@ -7604,7 +7813,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
 
   function say(t, kind) {
     if (!msg) return;
-    msg.style.color = kind === 'err' ? '#b91c1c' : 'var(--muted)';
+    msg.style.color = kind === 'err' ? 'var(--danger)' : 'var(--muted)';
     msg.textContent = t || '';
   }
 
@@ -8192,7 +8401,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   var profiles = [], editing = '', pending = false, libraryLoaded = false;
   function el(id) { return document.getElementById(id); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-  function say(text, error) { el('tg-msg').textContent = text || ''; el('tg-msg').style.color = error ? '#b91c1c' : 'var(--muted)'; }
+  function say(text, error) { el('tg-msg').textContent = text || ''; el('tg-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
   function busy(value) {
     pending = value;
     document.querySelectorAll('#view-targets button, #view-targets input').forEach(function (b) { b.disabled = value; });
@@ -8201,11 +8410,11 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     profiles = data.profiles || [];
     libraryLoaded = true;
     var error = (data.sheet || {}).error;
-    var html = error ? '<p style="color:#b91c1c">Shared library could not be refreshed: ' + esc(error) + '. Showing saved local profiles.</p>' : '';
+    var html = error ? '<p style="color:var(--danger)">Shared library could not be refreshed: ' + esc(error) + '. Showing saved local profiles.</p>' : '';
     var duplicates = data.duplicates || {};
-    if ((duplicates.names || []).length) html += '<p style="color:#b91c1c">Same name twice: ' + esc(duplicates.names.join(', ')) + '</p>';
+    if ((duplicates.names || []).length) html += '<p style="color:var(--danger)">Same name twice: ' + esc(duplicates.names.join(', ')) + '</p>';
     (duplicates.sets || []).forEach(function (names) {
-      html += '<p style="color:#b91c1c">Same set of interests: ' + esc(names.join(' = ')) + '</p>';
+      html += '<p style="color:var(--danger)">Same set of interests: ' + esc(names.join(' = ')) + '</p>';
     });
     html += '<p>Total: ' + profiles.length + '</p><table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th><th>Status</th><th></th></tr></thead><tbody>';
     profiles.forEach(function (p) {
