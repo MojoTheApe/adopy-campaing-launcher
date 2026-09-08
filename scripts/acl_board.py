@@ -437,6 +437,10 @@ def apply_commit(
                 and parent.is_done and parent.shown_status != "shipped"):
             parent_status = "shipped" if all(s.shown_status == "shipped" for s in parent.subs) else "review"
             tick(parent, add_tag=True, status=parent_status)
+            # и в журнал: задача закончилась этим коммитом, а без записи
+            # карточка потом не знает, на какой ветке её искать
+            if parent.id not in ticked:
+                ticked.append(parent.id)
 
     if not ticked:
         return text, []
@@ -470,6 +474,36 @@ def apply_commit(
 
 def _bump_updated(text: str, when: str) -> str:
     return re.sub(r"^updated:.*$", f"updated: {when}", text, count=1, flags=re.MULTILINE)
+
+
+#: Где искать ветку на GitHub. Рабочий репозиторий, тот, куда получают доступ
+#: разработчики; переопределяется переменной окружения.
+REPO_URL = os.environ.get(
+    "ACL_REPO_URL", "https://github.com/MojoTheApe/adopy-campaing-launcher"
+).rstrip("/")
+
+#: строка журнала: «- 2026-09-08 · `e85e4ee` · `feature/…` · `acl-703b` — …»
+_LOG_LINE = re.compile(
+    r"^-\s*(\d{4}-\d{2}-\d{2})\s*·\s*`([0-9a-f]{6,40})`"
+    r"(?:\s*·\s*`([^`]+)`)?\s*·\s*(.+?)\s+—",
+    re.MULTILINE,
+)
+
+
+def landings(text: str) -> dict[str, dict[str, str]]:
+    """Где лежит работа по каждой задаче: коммит, ветка, день.
+
+    Берётся из журнала, который хук и так ведёт, а не из нового поля рядом с
+    задачей. Второе хранилище того же факта однажды разойдётся с первым, и
+    заметит это тот, кто поверит не тому.
+
+    Побеждает верхняя запись: журнал ведётся сверху вниз, новыми вперёд.
+    """
+    out: dict[str, dict[str, str]] = {}
+    for when, sha, branch, ids in _LOG_LINE.findall(text):
+        for task_id in re.findall(r"`(acl-\d+[a-z]?)`", ids):
+            out.setdefault(task_id.lower(), {"sha": sha, "branch": branch or "", "when": when})
+    return out
 
 
 # ─────────────────────────── витрина ───────────────────────────
@@ -508,7 +542,48 @@ def _needs(task: Task) -> str:
     return f'<span class="needs">waits on {deps}</span>'
 
 
-def _card(task: Task, tilt: int) -> str:
+def _where(task: Task, land: dict) -> str:
+    """Где искать работу задачи, ждущей ревью.
+
+    Ставится рядом со статусом, потому что читают их вместе: «в ревью» без
+    ответа на вопрос «где» — это состояние, с которым нечего делать.
+
+    Если записи нет, так и написано. Задача, помеченная в ревью рукой, а не
+    коммитом, ветки за собой не оставляет — и молчание здесь выглядело бы как
+    «ветки нет», а не как «мы её не записали».
+    """
+    if task.shown_status != "review":
+        return ""
+    at = land.get(task.id.lower())
+    if not at and task.subs:
+        # Родителя хук раньше закрывал молча, не называя в журнале. Ветку
+        # берём у частей — но только если они согласны между собой: разные
+        # ветки у частей это не «примерно там», а вопрос, на который у нас
+        # нет ответа.
+        seen = {
+            land[s.id.lower()]["branch"]
+            for s in task.subs
+            if s.id.lower() in land and land[s.id.lower()].get("branch")
+        }
+        if len(seen) == 1:
+            branch_only = seen.pop()
+            at = {"branch": branch_only, "sha": ""}
+    if not at:
+        return '<span class="where none" title="Помечено вручную, а не коммитом — ветка не записана">branch not recorded</span>'
+    branch, sha = at.get("branch", ""), at.get("sha", "")
+    if not branch:
+        return ""
+    short = branch.split("/", 1)[-1]
+    tail = f"<code>{_esc(sha)}</code>" if sha else ""
+    where = f" · commit {_esc(sha)}" if sha else ""
+    return (
+        f'<a class="where" href="{REPO_URL}/tree/{branch}" target="_blank" rel="noopener"'
+        f' title="{_esc(branch)}{where} — открыть ветку на GitHub">'
+        f"{_esc(short)}{tail}</a>"
+    )
+
+
+def _card(task: Task, tilt: int, land: dict | None = None) -> str:
     note = f'<p class="note">{_rich(task.note)}</p>' if task.note else ""
     track = (
         f'<span class="track">{_esc(TRACK_LABEL.get(task.track, task.track))}</span>'
@@ -525,7 +600,7 @@ def _card(task: Task, tilt: int) -> str:
         f'<header><code>{_esc(task.id)}</code>{track}</header>'
         f'<h4>{tick}{_rich(task.title)}</h4>'
         f'<footer>{_esc(STATUS_LABEL.get(status, status))}'
-        f"{_needs(task)}{meter}</footer>"
+        f"{_where(task, land or {})}{_needs(task)}{meter}</footer>"
     )
     attrs = (
         f'class="pin s-{status}" style="--tilt:{tilt / 10:.1f}deg" '
@@ -556,7 +631,8 @@ def _tilts() -> Iterable[int]:
         i += 1
 
 
-def render(board: Board) -> str:
+def render(board: Board, land: dict | None = None) -> str:
+    land = land or {}
     tilt = _tilts()
     counts = board.counts()
     total = len(board.tasks)
@@ -577,7 +653,7 @@ def render(board: Board) -> str:
         for cap in area.caps:
             if not cap.tasks:
                 continue
-            cards = "".join(_card(t, next(tilt)) for t in cap.tasks)
+            cards = "".join(_card(t, next(tilt), land) for t in cap.tasks)
             caps.append(
                 f'<section class="cap"><h3>{_esc(cap.title)}</h3>'
                 f'<div class="pins">{cards}</div></section>'
@@ -799,6 +875,15 @@ nav.areas a:hover {{ color: var(--ink); text-decoration: underline;
   font-size: 9.5px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .09em; opacity: .68; display: flex; gap: 10px;
   align-items: baseline; flex-wrap: wrap; }}
+/* Где искать работу: ветка и коммит рядом со статусом. Читают их вместе —
+   «в ревью» без ответа на «где» это состояние, с которым нечего делать. */
+.where {{ margin-left: 8px; font-size: 9.5px; letter-spacing: .02em;
+  color: inherit; opacity: .75; text-decoration: none; white-space: nowrap; }}
+.where:hover {{ opacity: 1; text-decoration: underline; text-underline-offset: 2px; }}
+.where code {{ margin-left: 5px; opacity: .8;
+  font-family: "JetBrains Mono", ui-monospace, monospace; }}
+/* Не записано — не то же самое, что «ветки нет». */
+.where.none {{ opacity: .5; font-style: italic; }}
 .pin footer .count {{ margin-left: auto; font-variant-numeric: tabular-nums;
   opacity: .85; }}
 .pin.hide {{ display: none; }}
@@ -970,10 +1055,11 @@ def cmd_render(args: argparse.Namespace, repo: Path) -> int:
     if not src.exists():
         print(f"нет файла доски: {src}", file=sys.stderr)
         return 2
-    board = parse(src.read_text(encoding="utf-8"))
+    raw = src.read_text(encoding="utf-8")
+    board = parse(raw)
     out = Path(args.out) if args.out else default_out(repo)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(board), encoding="utf-8")
+    out.write_text(render(board, landings(raw)), encoding="utf-8")
     done = sum(1 for t in board.tasks if t.is_done)
     print(f"доска собрана: {out}")
     print(f"  {len(board.areas)} областей, {len(board.tasks)} задач, {done} сделано")
@@ -1063,7 +1149,9 @@ def cmd_sync(args: argparse.Namespace, repo: Path) -> int:
     board = parse(new)
     out = default_out(repo)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(board), encoding="utf-8")
+    # журнал берём из обновлённого текста: свежая запись сделана только что,
+    # и по старому тексту карточка не узнала бы своей ветки
+    out.write_text(render(board, landings(new)), encoding="utf-8")
     return 0
 
 

@@ -191,3 +191,60 @@ def test_a_duplicate_id_in_subtasks_is_caught():
 
 def test_a_clean_board_has_no_duplicates():
     assert b.duplicate_ids(b.parse(_SAMPLE)) == []
+
+
+_WITH_LOG = _SAMPLE + """
+## Log
+
+- 2026-09-08 · `abc1234` · `feature/some-branch` · `acl-002` — feat: сделано
+"""
+
+
+def test_a_review_card_says_where_to_find_the_work():
+    """«В ревью» без ответа на «где» — состояние, с которым нечего делать."""
+    text = _WITH_LOG.replace("- [ ] `acl-002` An unfinished thing #next @rpa",
+                             "- [x] `acl-002` An unfinished thing #review @rpa")
+    html = b.render(b.parse(text), b.landings(text))
+    assert 'class="where" href' in html, "рядом со статусом нет ветки"
+    assert "some-branch" in html
+    assert "abc1234" in html
+
+
+def test_a_hand_marked_task_says_so_instead_of_staying_silent():
+    """Молчание читалось бы как «ветки нет», а не «мы её не записали»."""
+    text = _SAMPLE.replace("- [ ] `acl-002` An unfinished thing #next @rpa",
+                           "- [x] `acl-002` An unfinished thing #review @rpa")
+    html = b.render(b.parse(text), b.landings(text))
+    assert "branch not recorded" in html
+
+
+def test_the_branch_is_shown_only_for_review():
+    """У сделанного и розданного вопрос «где искать» уже не стоит."""
+    html = b.render(b.parse(_WITH_LOG), b.landings(_WITH_LOG))
+    assert 'class="where"' not in html, "ветка появилась там, где её не спрашивают"
+
+
+def test_a_mention_is_not_a_landing():
+    """Журнал ведёт хук, а он требует закрывающего слова.
+
+    Утром 8 сентября строка «needs:acl-105» отметила задачу сделанной, и это же
+    правило нарушила первая версия восстановления веток: она приписала карту
+    аккаунтов ветке доски, потому что та лишь называла номера в тексте.
+    """
+    assert b.ids_in_commit("правит `acl-102e` и `acl-102f` заодно") == []
+    assert b.ids_in_commit("board acl-102e") == ["acl-102e"]
+
+
+def test_a_parent_inherits_the_branch_only_when_its_parts_agree():
+    """Разные ветки у частей — это не «примерно там», а вопрос без ответа."""
+    text = (
+        "## 1 · Area\n\n### Cap\n\n"
+        "- [x] `acl-010` Parent #review\n"
+        "  - [x] `acl-010a` One\n"
+        "  - [x] `acl-010b` Two\n"
+        "\n## Log\n\n"
+        "- 2026-09-08 · `aaa1111` · `feature/one` · `acl-010a` — a\n"
+        "- 2026-09-08 · `bbb2222` · `feature/two` · `acl-010b` — b\n"
+    )
+    html = b.render(b.parse(text), b.landings(text))
+    assert "branch not recorded" in html, "родитель взял одну из двух разных веток"

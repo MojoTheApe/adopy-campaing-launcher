@@ -189,7 +189,9 @@ def test_parent_line_is_ticked_when_a_commit_closes_the_last_part():
     text = SAMPLE.replace("- [ ] Часть без id — коммитом не отметить",
                           "- [x] Часть без id — коммитом не отметить")
     new, ticked = acl_board.apply_commit(text, "abc1234", "acl-104b готово")
-    assert ticked == ["acl-104b"]
+    # родитель теперь тоже в списке: он закончился этим коммитом, и без записи
+    # в журнале его карточка не знала бы, на какой ветке искать работу
+    assert ticked == ["acl-104b", "acl-104"]
     parent_line = next(
         l for l in new.splitlines() if "`acl-104`" in l and l.startswith("- [")
     )
