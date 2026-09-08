@@ -688,69 +688,52 @@ def _period_matches(shown: str, date_from: str, date_to: str = "") -> bool:
     return sorted(found) == sorted(want)
 
 
-#: сумма, которую страница сама подписывает «Total spent». Берём именно её, а
-#: не первое число со знаком валюты: рядом стоят дневные бюджеты и цены за
-#: результат, и первое попавшееся оказалось бы бюджетом одной кампании.
-_TOTAL_SPENT = None
+#: Поиск строки итогов целиком внутри страницы — один вызов вместо обхода по
+#: узлу за раз. Обход `query_selector_all("div, span")` с `inner_text()` на
+#: каждом узле — это тысячи обращений к браузеру: пока он делался однократно,
+#: он стоил секунды, но повторные попытки (TOTALS_TRIES) умножили цену, и
+#: чтение за три дня заняло 175 секунд против 40 за один. Ждать надо страницу,
+#: а не собственный обход.
+#:
+#: Надпись помечается атрибутом, чтобы потом взять её обычным селектором: к ней
+#: ещё нужно подвести курсор, а через evaluate ручку не получить.
+_FIND_TOTALS_JS = r"""
+() => {
+  const out = {spend: null, label: false};
+  const money = /([$€£₪]\s*[\d,]+(?:\.\d{1,2})?)\s*Total spent/;
+  document.querySelectorAll('[data-acl-totals]').forEach(
+    e => e.removeAttribute('data-acl-totals'));
+  for (const n of document.querySelectorAll('div, span')) {
+    const t = (n.innerText || '').replace(/\s+/g, ' ').trim();
+    if (!t) continue;
+    if (out.spend === null && t.length <= 600 && t.indexOf('Total spent') !== -1) {
+      const m = t.match(money);
+      if (m) out.spend = m[1];
+    }
+    if (t.indexOf('Results from') === 0 && t.indexOf('campaign') !== -1) {
+      const r = n.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        // как и в прежнем обходе, побеждает последняя видимая копия
+        document.querySelectorAll('[data-acl-totals]').forEach(
+          e => e.removeAttribute('data-acl-totals'));
+        n.setAttribute('data-acl-totals', '1');
+        out.label = true;
+      }
+    }
+  }
+  return out;
+}
+"""
 
 
-def _total_spent_re():
-    global _TOTAL_SPENT
-    if _TOTAL_SPENT is None:
-        import re
-
-        _TOTAL_SPENT = re.compile(r"([$€£₪]\s*[\d,]+(?:\.\d{1,2})?)\s*Total spent")
-    return _TOTAL_SPENT
-
-
-def _spend_on_screen(page) -> float | None:
-    """Найти на странице сумму, подписанную «Total spent».
-
-    Ищем по всей строке итогов, а не по одному узлу: копий надписи «Results
-    from N campaigns» полтора десятка, часть невидима, а часть занимает только
-    левую половину строки и суммы в себе не содержит. Один прогон уже сорвался
-    именно на этом — узел был выбран правильный по тексту и бесполезный по
-    ширине.
-    """
-    pat = _total_spent_re()
+def _scan_totals(page) -> tuple[float | None, bool]:
+    """Сумма из строки итогов и есть ли надпись, за которую берётся курсор."""
     try:
-        for cand in page.query_selector_all("div, span"):
-            try:
-                text = " ".join((cand.inner_text() or "").split())
-            except Exception:
-                continue
-            if "Total spent" not in text or len(text) > 600:
-                continue
-            m = pat.search(text)
-            if m:
-                return _first_money(m.group(1))
+        found = page.evaluate(_FIND_TOTALS_JS)
     except Exception:
-        pass
-    return None
-
-
-def _totals_label(page):
-    """Надпись «Results from N campaigns» — за неё берётся курсор.
-
-    Число кампаний каждый раз своё, поэтому цепляемся за начало текста. Из
-    полутора десятков копий годится та, у которой есть размеры на экране:
-    невидимую навести курсором нельзя, и попытка стоила бы тридцати секунд
-    ожидания.
-    """
-    found = None
-    try:
-        for cand in page.query_selector_all("div, span"):
-            try:
-                text = " ".join((cand.inner_text() or "").split())
-                if not text.startswith("Results from") or "campaign" not in text:
-                    continue
-                if cand.is_visible() and cand.bounding_box():
-                    found = cand
-            except Exception:
-                continue
-    except Exception:
-        pass
-    return found
+        return None, False
+    raw = (found or {}).get("spend") or ""
+    return (_first_money(raw) if raw else None), bool((found or {}).get("label"))
 
 
 def _read_total(page) -> tuple[float | None, str]:
@@ -776,12 +759,13 @@ def _read_total(page) -> tuple[float | None, str]:
     # самого начала (`_shown_period`), у итогов её не было.
     label = None
     for _ in range(TOTALS_TRIES):
-        value = _spend_on_screen(page)
+        value, has_label = _scan_totals(page)
         if value is not None:
             return value, "строка итогов, «Total spent»"
-        label = _totals_label(page)
-        if label is not None:
-            break
+        if has_label:
+            label = page.query_selector('[data-acl-totals="1"]')
+            if label is not None:
+                break
         _sleep(1)
     if label is None:
         return None, f"строка «Results from …» не появилась за {TOTALS_TRIES} с"
@@ -808,11 +792,14 @@ def _read_total(page) -> tuple[float | None, str]:
     if not clicked:
         return None, "кнопки «View results» не появилось при наведении"
 
-    _sleep(3)
-    value = _spend_on_screen(page)
-    if value is None:
-        return None, "итоги раскрыты, но суммы рядом с «Total spent» нет"
-    return value, "строка итогов раскрыта наведением, «Total spent»"
+    # Сумма после раскрытия тоже приходит не мгновенно: фиксированная пауза
+    # была ставкой на то, что трёх секунд хватит.
+    for _ in range(TOTALS_TRIES):
+        value, _label = _scan_totals(page)
+        if value is not None:
+            return value, "строка итогов раскрыта наведением, «Total spent»"
+        _sleep(1)
+    return None, "итоги раскрыты, но суммы рядом с «Total spent» нет"
 
 
 def _sleep(seconds: float) -> None:
