@@ -403,19 +403,24 @@ def apply_commit(
     lines = text.splitlines()
     ticked: list[str] = []
 
-    def tick(task: Task, add_tag: bool) -> None:
+    def tick(task: Task, add_tag: bool, status: str = landed) -> None:
         idx = task.line - 1
         line = lines[idx].replace("- [ ]", "- [x]", 1)
         line = TAG_RE.sub(
-            lambda m: "#" + landed if m.group(1) in STATUSES else m.group(0), line
+            lambda m: "#" + status if m.group(1) in STATUSES else m.group(0), line
         )
-        if add_tag and "#" + landed not in line:
-            line = line.rstrip() + " #" + landed
+        if add_tag and "#" + status not in line:
+            line = line.rstrip() + " #" + status
         lines[idx] = line
+        task.done = True
+        task.status = status
+        task.explicit = True
 
     for task_id in ids:
         task = board.by_id(task_id)
-        if task is None or task.is_done:
+        if task is None or task.shown_status == "shipped" or (
+            task.is_done and task.shown_status == landed
+        ):
             continue
         # У подзадач статус обычно не пишем: `shipped` читается по галочке, а
         # строка и так узкая. Но `review` галочка не несёт — «сделано» и
@@ -423,13 +428,12 @@ def apply_commit(
         # бы розданной. Так и вышло с acl-108a.
         parent = board.parent_of(task_id)
         tick(task, add_tag=parent is None or landed != "shipped")
-        task.done = True
         ticked.append(task_id)
 
         # закрылась последняя часть — родитель закрыт вместе с ней
-        if parent is not None and parent.is_done and not parent.done:
-            tick(parent, add_tag=True)
-            parent.done = True
+        if parent is not None and parent.is_done and parent.shown_status != "shipped":
+            parent_status = "shipped" if all(s.shown_status == "shipped" for s in parent.subs) else "review"
+            tick(parent, add_tag=True, status=parent_status)
 
     if not ticked:
         return text, []
@@ -553,7 +557,7 @@ def render(board: Board) -> str:
     tilt = _tilts()
     counts = board.counts()
     total = len(board.tasks)
-    shipped = sum(1 for t in board.tasks if t.is_done)
+    shipped = sum(1 for t in board.tasks if t.shown_status == "shipped")
 
     legend = "".join(
         f'<button class="chip s-{s}" data-filter="{s}">{STATUS_LABEL[s]}'
@@ -925,7 +929,7 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
     chip.addEventListener('click', function () {{
       var want = chip.dataset.filter;
       active = (active === want) ? null : want;
-      if (!active) known = stored();
+      if (!active) known = stored(AREA_KEY);
       chips.forEach(function (c) {{
         c.setAttribute('aria-pressed', String(c.dataset.filter === active));
       }});

@@ -61,6 +61,29 @@ def board():
     return acl_board.parse(SAMPLE)
 
 
+def test_review_promotes_to_shipped_without_reopening_checkbox():
+    review, _ = acl_board.apply_commit(SAMPLE, "abc1", "closes acl-103", branch="feature/example")
+    shipped, changed = acl_board.apply_commit(review, "abc2", "closes acl-103", branch="master")
+    assert changed == ["acl-103"]
+    assert acl_board.parse(shipped).by_id("acl-103").shown_status == "shipped"
+    assert acl_board.apply_commit(shipped, "abc2", "closes acl-103", branch="master") == (shipped, [])
+    assert acl_board.apply_commit(shipped, "abc3", "closes acl-103", branch="feature/other") == (shipped, [])
+
+
+def test_parent_ships_only_when_all_review_children_have_landed():
+    text = "## 1 · A\n### B\n- [x] `acl-001` Parent #review\n  - [x] `acl-001a` A #review\n  - [x] `acl-001b` B #review\n"
+    first, _ = acl_board.apply_commit(text, "abc1", "closes acl-001a", branch="master")
+    assert acl_board.parse(first).by_id("acl-001").shown_status == "review"
+    second, _ = acl_board.apply_commit(first, "abc2", "closes acl-001b", branch="master")
+    assert acl_board.parse(second).by_id("acl-001").shown_status == "shipped"
+
+
+def test_shipped_headline_does_not_include_completed_review():
+    text = "## 1 · A\n### B\n- [x] `acl-001` Ready #review\n"
+    rendered = acl_board.render(acl_board.parse(text))
+    assert '<div class="big">0<i>/1</i></div>' in rendered
+
+
 def test_areas_and_capabilities():
     b = board()
     assert [a.number for a in b.areas] == ["1", "2"]
@@ -374,3 +397,43 @@ def test_a_subtask_closed_on_master_stays_bare():
     line = next(l for l in new.splitlines() if "`acl-104b`" in l)
     assert "#shipped" not in line
     assert acl_board.parse(new).by_id("acl-104b").shown_status == "shipped"
+
+
+def test_filter_preserves_expanded_areas(tmp_path):
+    import re
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node required for the generated board script")
+    script = tmp_path / "board.js"
+    script.write_text(re.search(r"<script>(.*?)</script>", acl_board.render(board()), re.S).group(1), encoding="utf-8")
+    subprocess.run([node, str(Path(__file__).with_name("board_filter_harness.cjs")), str(script)], check=True, capture_output=True, text=True)
+
+
+def test_hook_finds_neighbor_worktree_with_spaces_and_unicode(tmp_path):
+    import os
+    import shutil
+    import subprocess
+    shell, git = shutil.which("sh"), shutil.which("git")
+    if not shell or not git:
+        pytest.skip("Git and sh required")
+    primary = tmp_path / "production"
+    neighbor = tmp_path / "ACL задачи with spaces"
+    def run(*args):
+        return subprocess.run([git, "-C", str(primary), *args], check=True, capture_output=True, text=True)
+    primary.mkdir()
+    run("init")
+    run("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "fixture")
+    run("worktree", "add", "-b", "board", str(neighbor))
+    (neighbor / "scripts").mkdir()
+    (neighbor / "scripts/acl_board.py").write_text("# fixture", encoding="utf-8")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    fake = bindir / "python"
+    fake.write_text('#!/bin/sh\nprintf "SCRIPT=%s\\n" "$1"\n', encoding="utf-8")
+    fake.chmod(0o755)
+    result = subprocess.run([shell, str(Path(acl_board.__file__).parent / "hooks/post-commit")], cwd=primary,
+                            env=dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ["PATH"]),
+                            check=True, capture_output=True, text=True, encoding="utf-8")
+    assert "SCRIPT=" + str(neighbor / "scripts/acl_board.py").replace("\\", "/") in result.stdout.replace("\\", "/")

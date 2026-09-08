@@ -12,15 +12,25 @@ sha=$(git rev-parse HEAD 2>/dev/null) || exit 0
 # Хук лежит в общем .git/hooks и срабатывает во всех worktree, а скрипт есть
 # не в каждой ветке. Ищем его по соседям: объекты git у worktree общие, так что
 # любая копия скрипта разберёт коммит из любого из них.
-script=""
-for dir in "$repo" $(git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p'); do
-  if [ -f "$dir/scripts/acl_board.py" ]; then script="$dir/scripts/acl_board.py"; break; fi
-done
+script="$repo/scripts/acl_board.py"
+if [ ! -f "$script" ]; then
+  script=$(git -c core.quotePath=false worktree list --porcelain 2>/dev/null |
+    while IFS= read -r line; do
+      case "$line" in
+        ('worktree '*)
+          dir=${line#worktree }
+          if [ -f "$dir/scripts/acl_board.py" ]; then
+            printf '%s\n' "$dir/scripts/acl_board.py"
+            break
+          fi ;;
+      esac
+    done)
+fi
 [ -n "$script" ] || exit 0
 
-home=$(dirname "$(dirname "$script")")
-py="$home/.venv/Scripts/python.exe"
-[ -x "$py" ] || py="$home/.venv/bin/python"
+script_root=$(dirname "$(dirname "$script")")
+py="$script_root/.venv/Scripts/python.exe"
+[ -x "$py" ] || py="$script_root/.venv/bin/python"
 [ -x "$py" ] || py="$repo/.venv/Scripts/python.exe"
 [ -x "$py" ] || py="$repo/.venv/bin/python"
 [ -x "$py" ] || py=python
