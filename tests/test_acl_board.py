@@ -307,6 +307,56 @@ def test_sync_without_the_vault_does_not_fail_the_commit(monkeypatch, tmp_path):
     assert acl_board.cmd_sync(args, tmp_path) == 0
 
 
+AMBIGUOUS = ("## 1 · Area\n### Cap\n"
+             "- [ ] `acl-001` One\n"
+             "  - [ ] `acl-002a` First duplicate\n"
+             "- [ ] `acl-003` Two\n"
+             "  - [ ] `acl-002a` Second duplicate\n"
+             "- [ ] `acl-004` Unique\n")
+
+
+@pytest.mark.parametrize("branch", ["master", "feature/example"])
+def test_ambiguous_id_does_not_tick_or_log_either_task(branch):
+    assert acl_board.apply_commit(
+        AMBIGUOUS, "abc1234", "fix acl-002a", branch=branch,
+    ) == (AMBIGUOUS, [])
+
+
+def test_ambiguous_ids_do_not_block_unique_tasks_in_the_same_commit():
+    new, ticked = acl_board.apply_commit(AMBIGUOUS, "abc1234", "fix acl-002a, acl-004")
+    assert ticked == ["acl-004"]
+    before_unique = AMBIGUOUS.split("- [ ] `acl-004`")[0]
+    assert new.startswith(before_unique)
+    assert "- [x] `acl-004` Unique #shipped" in new
+
+
+def test_unique_child_does_not_automatically_tick_an_ambiguous_parent():
+    text = ("## 1 · Area\n### Cap\n"
+            "- [ ] `acl-001` Parent one\n"
+            "  - [ ] `acl-001a` Unique child\n"
+            "- [ ] `acl-001` Parent two\n")
+    new, ticked = acl_board.apply_commit(text, "abc1234", "fix acl-001a, acl-001")
+    assert ticked == ["acl-001a"]
+    assert "- [x] `acl-001a` Unique child" in new
+    assert "- [ ] `acl-001` Parent one" in new
+    assert "- [ ] `acl-001` Parent two" in new
+
+
+def test_sync_warns_and_preserves_board_with_only_ambiguous_ids(monkeypatch, tmp_path, capsys):
+    from argparse import Namespace
+    src = tmp_path / "board.md"
+    src.write_text(AMBIGUOUS, encoding="utf-8")
+    monkeypatch.setenv(acl_board.BOARD_ENV, str(src))
+    monkeypatch.setenv(acl_board.OUT_ENV, str(tmp_path / "wall.html"))
+    monkeypatch.setattr(acl_board, "head_commit", lambda *args: ("abc1234", "fix acl-002a"))
+    assert acl_board.cmd_sync(Namespace(rev="HEAD", branch="master"), tmp_path) == 0
+    assert src.read_text(encoding="utf-8") == AMBIGUOUS
+    output = capsys.readouterr().out
+    assert "пропущены" in output and "acl-002a" in output
+    assert "уже в этом состоянии" not in output
+    assert (tmp_path / "wall.html").is_file()
+
+
 # ── галочка и статус — про разное ────────────────────────────────────
 
 

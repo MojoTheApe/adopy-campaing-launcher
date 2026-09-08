@@ -18,6 +18,7 @@ import os
 import re
 import subprocess
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -394,7 +395,8 @@ def apply_commit(
     ставится по ветке, а не по факту коммита.
     """
     board = parse(text)
-    ids = [i for i in ids_in_commit(message) if board.by_id(i)]
+    ambiguous = set(duplicate_ids(board))
+    ids = [i for i in ids_in_commit(message) if i not in ambiguous and board.by_id(i)]
     if not ids:
         return text, []
 
@@ -431,7 +433,8 @@ def apply_commit(
         ticked.append(task_id)
 
         # закрылась последняя часть — родитель закрыт вместе с ней
-        if parent is not None and parent.is_done and parent.shown_status != "shipped":
+        if (parent is not None and parent.id not in ambiguous
+                and parent.is_done and parent.shown_status != "shipped"):
             parent_status = "shipped" if all(s.shown_status == "shipped" for s in parent.subs) else "review"
             tick(parent, add_tag=True, status=parent_status)
 
@@ -977,14 +980,29 @@ def cmd_render(args: argparse.Namespace, repo: Path) -> int:
     return 0
 
 
+def duplicate_ids(board: Board) -> list[str]:
+    """Номера, выданные дважды.
+
+    Считается по `all_tasks`, а не по верхнему уровню. Прежняя проверка брала
+    только верхний, и 8 сентября я дважды выдал занятый номер подзадаче —
+    `acl-142a` и `acl-142b` уже существовали в другом разделе. Сторож при этом
+    молчал, потому что смотрел не туда: проверка была, а случай не покрывала.
+
+    Повтор опасен не сам по себе. `by_id` возвращает первое совпадение, значит
+    коммит отметит чужую задачу, а в журнал ляжет строка, которая выглядит
+    правдой.
+    """
+    counts = Counter(t.id for t in board.all_tasks)
+    return sorted(i for i, count in counts.items() if count > 1)
+
+
 def cmd_check(args: argparse.Namespace, repo: Path) -> int:
     src = board_path()
     if not src.exists():
         print(f"нет файла доски: {src}", file=sys.stderr)
         return 2
     board = parse(src.read_text(encoding="utf-8"))
-    ids = [t.id for t in board.tasks]
-    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    dupes = duplicate_ids(board)
     for area in board.areas:
         done, tot = area.progress
         print(f"{area.number}. {area.title}  —  {done}/{tot}")
@@ -1013,6 +1031,12 @@ def cmd_sync(args: argparse.Namespace, repo: Path) -> int:
     # собственная ветка ничего не говорит о том, куда лёг коммит
     branch = (getattr(args, "branch", "") or "").strip() or branch_of(repo)
     text = src.read_text(encoding="utf-8")
+    # Хук — единственное, что запускается само. Проверку `--check` руками не
+    # зовут, поэтому о повторе номера сказать больше некому.
+    dupes = duplicate_ids(parse(text))
+    if dupes:
+        print("ВНИМАНИЕ, номер выдан дважды: " + ", ".join(dupes))
+        print("  задачи с этими номерами пропущены — исправьте повтор на доске")
     new, ticked = apply_commit(text, sha, message, branch=branch)
     if ticked:
         src.write_text(new, encoding="utf-8")
@@ -1029,11 +1053,13 @@ def cmd_sync(args: argparse.Namespace, repo: Path) -> int:
             print("в коммите нет id задач — доска не тронута")
         else:
             board = parse(text)
-            unknown = [i for i in named if board.by_id(i) is None]
+            eligible = [i for i in named if i not in dupes]
+            unknown = [i for i in eligible if board.by_id(i) is None]
             if unknown:
                 print("на доске нет таких задач: " + ", ".join(unknown))
-            else:
-                print("уже в этом состоянии: " + ", ".join(named))
+            unchanged = [i for i in eligible if i not in unknown]
+            if unchanged:
+                print("уже в этом состоянии: " + ", ".join(unchanged))
     board = parse(new)
     out = default_out(repo)
     out.parent.mkdir(parents=True, exist_ok=True)
