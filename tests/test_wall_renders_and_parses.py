@@ -169,3 +169,25 @@ def test_the_page_declares_its_encoding():
     assert html.lower().index("charset") < html.lower().index("<title"), (
         "объявление кодировки должно идти до заголовка"
     )
+
+
+def test_a_duplicate_id_in_subtasks_is_caught():
+    """Прежняя проверка смотрела только верхний уровень.
+
+    8 сентября номер был выдан дважды именно подзадаче, и сторож промолчал:
+    проверка была, а случай не покрывала. Повтор опасен тем, что `by_id`
+    возвращает первое совпадение — коммит отметит чужую задачу, а в журнал
+    ляжет строка, которая выглядит правдой.
+    """
+    text = (
+        "## 1 · Area\n\n### Cap\n\n"
+        "- [ ] `acl-001` One\n"
+        "  - [ ] `acl-002a` Same id here\n"
+        "- [ ] `acl-003` Two\n"
+        "  - [ ] `acl-002a` And here\n"
+    )
+    assert b.duplicate_ids(b.parse(text)) == ["acl-002a"]
+
+
+def test_a_clean_board_has_no_duplicates():
+    assert b.duplicate_ids(b.parse(_SAMPLE)) == []

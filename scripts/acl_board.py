@@ -973,14 +973,29 @@ def cmd_render(args: argparse.Namespace, repo: Path) -> int:
     return 0
 
 
+def duplicate_ids(board: Board) -> list[str]:
+    """Номера, выданные дважды.
+
+    Считается по `all_tasks`, а не по верхнему уровню. Прежняя проверка брала
+    только верхний, и 8 сентября я дважды выдал занятый номер подзадаче —
+    `acl-142a` и `acl-142b` уже существовали в другом разделе. Сторож при этом
+    молчал, потому что смотрел не туда: проверка была, а случай не покрывала.
+
+    Повтор опасен не сам по себе. `by_id` возвращает первое совпадение, значит
+    коммит отметит чужую задачу, а в журнал ляжет строка, которая выглядит
+    правдой.
+    """
+    ids = [t.id for t in board.all_tasks]
+    return sorted({i for i in ids if ids.count(i) > 1})
+
+
 def cmd_check(args: argparse.Namespace, repo: Path) -> int:
     src = board_path()
     if not src.exists():
         print(f"нет файла доски: {src}", file=sys.stderr)
         return 2
     board = parse(src.read_text(encoding="utf-8"))
-    ids = [t.id for t in board.tasks]
-    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    dupes = duplicate_ids(board)
     for area in board.areas:
         done, tot = area.progress
         print(f"{area.number}. {area.title}  —  {done}/{tot}")
@@ -1009,6 +1024,12 @@ def cmd_sync(args: argparse.Namespace, repo: Path) -> int:
     # собственная ветка ничего не говорит о том, куда лёг коммит
     branch = (getattr(args, "branch", "") or "").strip() or branch_of(repo)
     text = src.read_text(encoding="utf-8")
+    # Хук — единственное, что запускается само. Проверку `--check` руками не
+    # зовут, поэтому о повторе номера сказать больше некому.
+    dupes = duplicate_ids(parse(text))
+    if dupes:
+        print("ВНИМАНИЕ, номер выдан дважды: " + ", ".join(dupes))
+        print("  коммит отметит первую из них — почините доску")
     new, ticked = apply_commit(text, sha, message, branch=branch)
     if ticked:
         src.write_text(new, encoding="utf-8")
