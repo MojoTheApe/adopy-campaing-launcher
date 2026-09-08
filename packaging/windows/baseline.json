@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "baseline_sha": "6c21adfb68e2a8527dbbe2b53bc085d348064836",
+  "baseline_branch": "master",
+  "implementation_branch": "codex/windows-installer-integration",
+  "allowed_exact_paths": [
+    ".github/workflows/windows-installer.yml"
+  ],
+  "allowed_path_prefixes": [
+    "packaging/windows/"
+  ],
+  "runtime_policy": "integrated"
+}

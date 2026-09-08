@@ -95,6 +95,9 @@ def installed() -> dict[str, str]:
     updates the code and then starts a new one.
     """
     global _installed
+    if _installed is None and getattr(sys, "frozen", False):
+        from src.packaged_runtime import build_identity
+        _installed = build_identity() or {"sha": "", "short": "", "tag": "unknown Windows build"}
     if _installed is None:
         head = _git_out("rev-parse", "HEAD").lower()
         _installed = _describe(head) if head else {"sha": "", "short": "", "tag": ""}
@@ -102,7 +105,7 @@ def installed() -> dict[str, str]:
 
 
 def is_supervised() -> bool:
-    return (os.environ.get(SUPERVISED_ENV) or "").strip() == "1"
+    return not getattr(sys, "frozen", False) and (os.environ.get(SUPERVISED_ENV) or "").strip() == "1"
 
 
 def marker_path() -> Path:
@@ -141,6 +144,8 @@ def check(*, fetch: bool = True, use_cache: bool = True) -> dict[str, Any]:
 
 
 def _check_uncached(*, fetch: bool) -> dict[str, Any]:
+    if getattr(sys, "frozen", False):
+        return _no_update(installed(), "Windows preview: install updates with the approved Setup executable. Automatic updates are disabled.")
     head = _git_out("rev-parse", "HEAD").lower()
     if not head:
         # A zip download rather than a clone, or git missing from PATH. Not an

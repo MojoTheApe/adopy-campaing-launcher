@@ -1,0 +1,107 @@
+[CmdletBinding()]
+param(
+    [string]$BundleDirectory = "",
+    [int]$Port = 19090
+)
+
+$ErrorActionPreference = "Stop"
+if (-not $BundleDirectory) {
+    $BundleDirectory = Join-Path $PSScriptRoot ".artifacts/dist/ACL"
+}
+$Executable = Join-Path $BundleDirectory "ACLConsole.exe"
+$LogDirectory = Join-Path $PSScriptRoot ".artifacts/test-logs"
+$StdoutLog = Join-Path $LogDirectory "acl.stdout.log"
+$StderrLog = Join-Path $LogDirectory "acl.stderr.log"
+
+function Assert-LastExitCode([string]$Step) {
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Step failed with exit code $LASTEXITCODE"
+    }
+}
+
+if (-not (Test-Path $Executable -PathType Leaf)) {
+    throw "ACL executable not found: $Executable"
+}
+
+$SavedConfigDirectory = $env:ACL_CONFIG_DIR
+$env:ACL_CONFIG_DIR = Join-Path $PSScriptRoot ".artifacts/bundle-test-config"
+$env:ACL_NO_TELEMETRY = "1"
+New-Item -ItemType Directory -Force -Path $env:ACL_CONFIG_DIR | Out-Null
+$TargetFixture = '{"Local synthetic":{"name":"Local synthetic","interests":"Finance","narrow":"Owners"}}'
+Set-Content -Path (Join-Path $env:ACL_CONFIG_DIR "targeting_registry.json") -Value $TargetFixture -Encoding utf8
+Write-Host "Checking embedded version metadata..."
+& $Executable --acl-version
+Assert-LastExitCode "Version check"
+
+Write-Host "Checking packaged imports..."
+& $Executable --smoke-check
+Assert-LastExitCode "Packaged import smoke check"
+
+Write-Host "Checking packaged Setup Wizard imports..."
+& $Executable --wizard-smoke-check
+Assert-LastExitCode "Packaged Setup Wizard import check"
+
+Write-Host "Checking sanitized diagnostic export..."
+& $Executable --diagnostics-smoke-check
+Assert-LastExitCode "Packaged diagnostic export check"
+
+New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
+Remove-Item $StdoutLog, $StderrLog -Force -ErrorAction SilentlyContinue
+
+$Process = $null
+try {
+    Write-Host "Starting packaged dashboard on port $Port..."
+    $Process = Start-Process `
+        -FilePath $Executable `
+        -ArgumentList @("--no-browser", "--port", "$Port") `
+        -RedirectStandardOutput $StdoutLog `
+        -RedirectStandardError $StderrLog `
+        -PassThru
+
+    $Deadline = (Get-Date).AddSeconds(60)
+    $Healthy = $false
+    do {
+        if ($Process.HasExited) {
+            throw "ACL exited before its health endpoint became ready (exit $($Process.ExitCode))."
+        }
+        try {
+            $Response = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 2
+            if ($Response.ok -eq $true -and $Response.app -eq "ACL") {
+                $Healthy = $true
+                break
+            }
+        }
+        catch {
+            Start-Sleep -Milliseconds 500
+        }
+    } while ((Get-Date) -lt $Deadline)
+
+    if (-not $Healthy) {
+        throw "ACL health endpoint did not become ready within 60 seconds."
+    }
+    $Identity = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/acl/update/check" -TimeoutSec 10
+    $Manifest = Get-Content (Join-Path $BundleDirectory "_internal/acl-build-manifest.json") -Raw | ConvertFrom-Json
+    if ($Identity.current.sha -ne $Manifest.runtime_source_sha -or $Identity.available -or $Identity.supervised) {
+        throw "Packaged dashboard identity/update policy is wrong."
+    }
+    $Targets = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/targeting-profiles" -TimeoutSec 20
+    $LocalTarget = $Targets.profiles | Where-Object name -eq "Local synthetic"
+    if (-not $Targets.ok -or $LocalTarget.narrow -ne "Owners") {
+        throw "Packaged targeting library could not read its local profile."
+    }
+    Write-Host "ACL packaged health, source identity and targeting checks OK."
+}
+catch {
+    Write-Host "--- ACL stdout ---"
+    if (Test-Path $StdoutLog) { Get-Content $StdoutLog }
+    Write-Host "--- ACL stderr ---"
+    if (Test-Path $StderrLog) { Get-Content $StderrLog }
+    throw
+}
+finally {
+    $env:ACL_CONFIG_DIR = $SavedConfigDirectory
+    if ($Process -and -not $Process.HasExited) {
+        Stop-Process -Id $Process.Id -Force
+        $Process.WaitForExit()
+    }
+}

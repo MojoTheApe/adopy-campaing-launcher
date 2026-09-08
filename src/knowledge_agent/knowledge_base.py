@@ -23,7 +23,8 @@ from typing import Any, Dict, List, Optional, Tuple
 _PROJ_ROOT = Path(__file__).resolve().parents[2]
 _KB_JSON = _PROJ_ROOT / "config" / "knowledge_base.json"
 _KB_DIR = _PROJ_ROOT / "knowledge_base"
-_UNKNOWN_LOG = _PROJ_ROOT / "output" / "unknown_targets.log"
+from config.paths import get_runtime_workspace
+_UNKNOWN_LOG = get_runtime_workspace() / "output" / "unknown_targets.log"
 
 _MARKDOWN_FILES = {
     "targets": "targets.md",

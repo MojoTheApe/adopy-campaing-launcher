@@ -79,6 +79,14 @@ def get_local_config_dir() -> str:
     return os.path.join(os.path.expanduser("~"), ".config", "acl")
 
 
+def get_runtime_workspace() -> Path:
+    """Writable runtime data survives replacement of a frozen installation."""
+    import sys
+    if getattr(sys, "frozen", False):
+        return Path(get_local_config_dir()) / "workspace"
+    return PROJECT_ROOT
+
+
 def get_machine_env_path() -> str:
     return os.path.join(get_local_config_dir(), ".env")
 

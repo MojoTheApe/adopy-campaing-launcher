@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parents[2]
-RANKS_PATH = _ROOT / "config" / "rpa_variations" / "strategy_ranks.json"
+from config.paths import get_runtime_workspace
+RANKS_PATH = get_runtime_workspace() / "config" / "rpa_variations" / "strategy_ranks.json"
 
 
 def _now() -> str:
