@@ -204,19 +204,30 @@ def check_telemetry() -> None:
     status = telemetry_sync.config_status()
     if status["configured"]:
         pending, _ = telemetry_sync.pending(limit=None)
-        report(OK, "Telemetry upload", f"{label} ({machine_id}) — {len(pending)} record(s) pending")
+        needs_auth = status.get("transport") == "oauth" and not status.get("oauth_authorised")
+        report(
+            WARN if needs_auth else OK,
+            "Telemetry upload",
+            ("Google authorization needed" if needs_auth else "transport configured; access is checked on upload")
+            + f" — {label} ({machine_id}), {len(pending)} record(s) pending",
+        )
+        print("       -> manual upload only; no automatic sender is running")
+        print("       -> run: python scripts/acl_telemetry_upload.py (Google sign-in on first upload)")
+        print("       -> which steps ran, whether each passed, how long it took")
+        if status.get("transport") == "oauth":
+            print("       -> uploaded rows are written under YOUR Google account")
+        print("       -> no ad accounts, creatives, links or ad text are sent")
         return
     missing = []
     if not status["sheet_id"]:
         missing.append("GSHEET_TELEMETRY_ID not set")
-    if not status["key_exists"]:
-        missing.append(f"key missing at {status['key_path']}")
+    if not status["key_exists"] and not status.get("oauth_client_exists"):
+        missing.append("no Google credentials for the upload")
     report(
         WARN,
         "Telemetry upload",
         "off — " + "; ".join(missing),
-        "Optional. Turning it on lets one Meta UI change be spotted across all "
-        "machines at once instead of debugged separately on each.",
+        "Local records stay on this machine until a manual upload is configured.",
     )
 
 

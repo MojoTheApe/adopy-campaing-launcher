@@ -1,0 +1,41 @@
+#!/bin/sh
+# Отметить на доске задачи, названные в сообщении коммита, и пересобрать витрину.
+#
+# Ставится так (один раз на чекаут — хук общий для всех worktree):
+#     python scripts/acl_board.py --install-hook
+#
+# Хук никогда не валит коммит: доска — заметка о работе, а не её условие.
+
+repo=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+sha=$(git rev-parse HEAD 2>/dev/null) || exit 0
+
+# Хук лежит в общем .git/hooks и срабатывает во всех worktree, а скрипт есть
+# не в каждой ветке. Ищем его по соседям: объекты git у worktree общие, так что
+# любая копия скрипта разберёт коммит из любого из них.
+script="$repo/scripts/acl_board.py"
+if [ ! -f "$script" ]; then
+  script=$(git -c core.quotePath=false worktree list --porcelain 2>/dev/null |
+    while IFS= read -r line; do
+      case "$line" in
+        ('worktree '*)
+          dir=${line#worktree }
+          if [ -f "$dir/scripts/acl_board.py" ]; then
+            printf '%s\n' "$dir/scripts/acl_board.py"
+            break
+          fi ;;
+      esac
+    done)
+fi
+[ -n "$script" ] || exit 0
+
+script_root=$(dirname "$(dirname "$script")")
+py="$script_root/.venv/Scripts/python.exe"
+[ -x "$py" ] || py="$script_root/.venv/bin/python"
+[ -x "$py" ] || py="$repo/.venv/Scripts/python.exe"
+[ -x "$py" ] || py="$repo/.venv/bin/python"
+[ -x "$py" ] || py=python
+
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+"$py" "$script" --sync --rev "$sha" --branch "$branch" 2>&1 | sed 's/^/[доска] /'
+exit 0

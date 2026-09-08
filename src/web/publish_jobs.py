@@ -20,12 +20,13 @@ from config.paths import get_draft_status_path
 from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.draft import RpaPublishResult
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+from src.fb_ads_rpa.operations import browser_operation
 
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
 # Serialises actual publishing across jobs/accounts — see _run_job.
-_publish_serial = threading.Semaphore(1)
+_publish_serial = browser_operation
 _active_publishers: dict[str, RpaPublisher] = {}
 
 def _now_iso() -> str:

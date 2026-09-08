@@ -1,0 +1,187 @@
+"""Regression cases from the merge review; browser interactions are synthetic."""
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace as NS
+
+import pytest
+
+from src.analysis_agent import account_spend as sp
+from src.fb_ads_rpa import browser as br
+
+DAY = "2026-09-06"
+
+
+@pytest.fixture(autouse=True)
+def isolated_store(tmp_path, monkeypatch):
+    monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "spend.json")
+    sp._RUNNING.clear()
+    sp._UNSAVED.clear()
+    yield
+    for thread in threading.enumerate():
+        if thread.name.startswith("spend:"):
+            thread.join(3)
+    sp._UNSAVED.clear()
+
+
+def wait_workers():
+    for thread in threading.enumerate():
+        if thread.name.startswith("spend:"):
+            thread.join(3)
+            assert not thread.is_alive()
+
+
+@pytest.mark.parametrize("text,amount", [("$1234.56", 1234.56), ("€12044", 12044), ("$123456.78", 123456.78), ("₪1\u00a0234.50", 1234.5), ("$1,234,567.89", 1234567.89)])
+def test_full_amount_is_read(text, amount):
+    assert sp._first_money(text) == amount
+
+
+def test_currency_comes_from_the_total_not_other_page_amounts():
+    page = NS(evaluate=lambda js: {"spend": "€1234.56", "label": True}, inner_text=lambda _: "Budget $20.00")
+    assert sp._scan_totals(page) == (1234.56, True)
+    assert sp._currency(page) == "EUR"
+
+
+def test_concurrent_readings_and_statuses_survive():
+    gate = threading.Barrier(12)
+    def save(i):
+        gate.wait(3)
+        sp._put(sp.SpendReading(account=f"Acc{i}", date_from=DAY, date_to=DAY, spend=i, state="ok", status="clear"))
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        list(pool.map(save, range(12)))
+    assert len(sp.all_readings(DAY, DAY)) == 12
+    assert all(sp.get_status(f"Acc{i}")["status"] == "clear" for i in range(12))
+    assert not list(sp._store_path().parent.glob("*.tmp"))
+
+
+def test_restart_turns_orphaned_running_reading_into_retryable_failure():
+    sp._put(sp.SpendReading(account="Acc", date_from=DAY, date_to=DAY, state="running"))
+    assert sp.get_reading("Acc", DAY, DAY).state == "failed"
+    assert sp.all_readings(DAY, DAY)["Acc"].state == "failed"
+    sp.start_read("Acc", DAY, DAY, reader=lambda a, f, t: sp.SpendReading(a, f, t, state="ok", spend=7))
+    wait_workers()
+    assert sp.get_reading("Acc", DAY, DAY).spend == 7
+
+
+def test_failed_initial_save_does_not_leave_a_phantom_worker(monkeypatch):
+    def fail(_):
+        raise OSError("disk full")
+    monkeypatch.setattr(sp, "_save_all", fail)
+    with pytest.raises(OSError):
+        sp.start_read("Acc", DAY, DAY)
+    assert not sp.is_running("Acc", DAY, DAY)
+
+
+def test_failed_final_save_does_not_leave_reading_disabled(monkeypatch):
+    save = sp._save_all
+    def final_fails(data):
+        if next(iter(data.values()))["state"] != "running":
+            raise OSError("disk full")
+        save(data)
+    monkeypatch.setattr(sp, "_save_all", final_fails)
+    sp.start_read("Acc", DAY, DAY, reader=lambda a, f, t: sp.SpendReading(a, f, t, state="ok", spend=7))
+    wait_workers()
+    assert not sp.is_running("Acc", DAY, DAY)
+    assert sp.get_reading("Acc", DAY, DAY).state == "failed"
+    assert "save" in sp.get_reading("Acc", DAY, DAY).error
+
+
+def test_failed_thread_start_can_be_retried(monkeypatch):
+    def fail(self):
+        raise RuntimeError("thread limit")
+    monkeypatch.setattr(threading.Thread, "start", fail)
+    with pytest.raises(RuntimeError):
+        sp.start_read("Acc", DAY, DAY)
+    assert not sp.is_running("Acc", DAY, DAY)
+    assert sp.get_reading("Acc", DAY, DAY).state == "failed"
+
+
+def test_read_and_probe_wait_for_publish_lease(monkeypatch):
+    from src.web import publish_jobs
+    assert publish_jobs._publish_serial is sp._LOCK
+    entered = threading.Event()
+    def reader(a, f, t):
+        entered.set()
+        return sp.SpendReading(a, f, t, state="ok", spend=1)
+    with publish_jobs._publish_serial:
+        sp.start_read("Acc", DAY, DAY, reader=reader)
+        assert not entered.wait(.1)
+    assert entered.wait(2)
+    wait_workers()
+    entered.clear()
+    monkeypatch.setattr(sp, "_probe_entry", lambda *a: entered.set())
+    monkeypatch.setattr(sp, "_attach_only", lambda *a: (_ for _ in ()).throw(sp.ProfileNotAttachable("test")))
+    with publish_jobs._publish_serial:
+        thread = threading.Thread(target=sp.read_ad_account, args=("profile-a",))
+        thread.start()
+        assert not entered.wait(.1)
+    thread.join(2)
+    assert entered.is_set()
+
+
+def process(udd, port=19222, listening=True):
+    return NS(info={"exe": "/mlx/mimic/chrome", "cmdline": [f"--user-data-dir={udd}", f"--remote-debugging-port={port}"]},
+              net_connections=lambda **kw: [NS(status="LISTEN", laddr=NS(port=port))] if listening else [])
+
+
+def test_strict_attach_refuses_other_profiles_global_port(tmp_path, monkeypatch):
+    import psutil
+    wanted = tmp_path / "profile-a"
+    wanted.mkdir()
+    (wanted / "DevToolsActivePort").write_text("19222\n", encoding="utf-8")
+    monkeypatch.setattr(psutil, "process_iter", lambda _: [process(str(wanted), 0, False), process(str(tmp_path / "profile-b"))])
+    provider = br.MultiloginDirectCDPProvider()
+    monkeypatch.setattr(provider, "_cdp_accepting", lambda *a: True)
+    assert provider._discover_owned_debug_port(str(wanted)) is None
+    monkeypatch.setattr(psutil, "process_iter", lambda _: [process(str(wanted))])
+    assert provider._discover_owned_debug_port(str(wanted)) == 19222
+
+
+def test_attach_requests_owned_profile_and_new_tab(monkeypatch, tmp_path):
+    calls = []
+    class Direct:
+        def _try_attach_existing(self, *args, **kwargs):
+            calls.append(kwargs)
+            return NS()
+    monkeypatch.setattr(br, "MultiloginDirectCDPProvider", Direct)
+    monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a: tmp_path)
+    sp._attach_only(NS(profile_id="a"), "Acc")
+    assert calls == [{"strict_profile": True, "new_page": True}]
+
+
+def test_new_tab_does_not_use_or_close_draft(monkeypatch):
+    calls = []
+    old_page = NS()
+    new_page = NS()
+    context = NS(pages=[old_page], new_page=lambda: new_page)
+    browser = NS(contexts=[context])
+    pw = NS(chromium=NS(connect_over_cdp=lambda _: browser), stop=lambda: calls.append("stop"))
+    monkeypatch.setattr(br, "sync_playwright", lambda: NS(start=lambda: pw))
+    for name in ["ensure_playwright_browsers_path", "_stop_thread_playwright", "_reset_asyncio_running_loop", "_disable_background_throttling", "_ensure_wide_window", "_keep_renderer_active"]:
+        monkeypatch.setattr(br, name, lambda *a: None)
+    conn = br._connect_playwright(cdp_url="test", provider="multilogin_direct", debug_port="123", ws_endpoint=None, new_page=True)
+    assert conn.page is new_page
+    conn.close(keep_browser_open=True)
+    assert calls == ["stop"]
+
+
+@pytest.mark.parametrize("redirect_at", ["initial", "after_total", None])
+def test_account_identity_is_checked_and_only_owned_tab_is_closed(monkeypatch, redirect_at):
+    calls = []
+    page = NS(url="https://adsmanager.facebook.com/?act=111", goto=lambda *a, **kw: None, close=lambda: calls.append("tab closed"))
+    if redirect_at == "initial":
+        page.url = "https://adsmanager.facebook.com/?act=222"
+    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111"))
+    monkeypatch.setattr(sp, "_attach_only", lambda *a: NS(page=page, close=lambda **kw: calls.append(kw)))
+    monkeypatch.setattr(sp, "_wait_for_grid", lambda _: True)
+    monkeypatch.setattr(sp, "_read_status", lambda _: ("clear", ""))
+    monkeypatch.setattr(sp, "_shown_period", lambda _: DAY)
+    def total(_):
+        if redirect_at == "after_total":
+            page.url = "https://adsmanager.facebook.com/?act=222"
+        return 7, "test"
+    monkeypatch.setattr(sp, "_read_total", total)
+    out = sp.read_via_rpa("Acc", DAY, DAY)
+    assert out.state == ("failed" if redirect_at else "ok")
+    if redirect_at:
+        assert out.spend is None and not out.status
+    assert calls == ["tab closed", {"keep_browser_open": True}]

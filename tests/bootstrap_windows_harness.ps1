@@ -1,0 +1,93 @@
+param([string]$Bootstrap)
+$ErrorActionPreference = 'Stop'
+$source = Get-Content -LiteralPath $Bootstrap -Raw
+$payload = ($source -split '(?m)^# ACL_POWERSHELL_BEGIN\r?$', 2)[1]
+$tokens=$null; $errors=$null
+$ast = [System.Management.Automation.Language.Parser]::ParseInput($payload, [ref]$tokens, [ref]$errors)
+if ($errors.Count) { throw ($errors | Out-String) }
+# Load definitions only: tests must never launch a real installer or browser.
+foreach ($node in $ast.EndBlock.Statements) {
+    if ($node -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+        . ([ScriptBlock]::Create($node.Extent.Text))
+    }
+}
+function Assert($Condition, $Message) { if (!$Condition) { throw $Message } }
+function Expect-Failure([ScriptBlock]$Body, [string]$Pattern) {
+    try { & $Body } catch { Assert ($_.Exception.Message -match $Pattern) "Unexpected error: $_"; return }
+    throw "Expected refusal: $Pattern"
+}
+
+# Test each scenario in its own scope so overrides cannot leak to the next one.
+& {
+    function Update-AclPath {}
+    function Find-AclPython { 'C:\Python313\python.exe' }
+    function Find-AclGit { 'C:\Git\cmd\git.exe' }
+    function Install-AclDependency { throw 'winget must not be used when tools exist' }
+    $tools = Get-AclTools
+    Assert ($tools.Python -eq 'C:\Python313\python.exe') 'Manual Python not reused'
+    Assert ($env:Path.StartsWith('C:\Python313;C:\Git\cmd;')) 'Verified tools must win over stale PATH'
+}
+& {
+    function Update-AclPath {}
+    $script:pythonChecks = 0
+    $script:installs = @()
+    function Find-AclPython { $script:pythonChecks++; if ($script:pythonChecks -gt 1) { 'C:\NewPython\python.exe' } }
+    function Find-AclGit { 'C:\Git\git.exe' }
+    function Install-AclDependency([string]$Id) { $script:installs += $Id }
+    $tools = Get-AclTools
+    Assert ($tools.Python -eq 'C:\NewPython\python.exe') 'Python must be resolved again after install'
+    Assert ($script:installs.Count -eq 1) 'Dependency should be installed once'
+}
+& {
+    function Update-AclPath {}
+    function Find-AclPython { $null }
+    $script:installs = 0
+    function Install-AclDependency { $script:installs++ }
+    Expect-Failure { Get-AclTools } 'working Python'
+    Assert ($script:installs -eq 1) 'Missing PATH must not start an infinite reinstall loop'
+}
+& {
+    function Update-AclPath {}
+    function Find-AclPython { $null }
+    function Install-AclDependency { throw 'Installation cancelled' }
+    function Find-AclGit { throw 'must not continue after Python failure' }
+    Expect-Failure { Get-AclTools } 'cancelled'
+}
+& {
+    function Get-Command { $null }
+    Expect-Failure { Install-AclDependency 'Python.Python.3.13' } 'winget is unavailable'
+}
+& {
+    function Get-CimInstance { @([pscustomobject]@{Name='python.exe';CommandLine='python serve.py --port 9090'}) }
+    function Get-NetTCPConnection { @() }
+    Expect-Failure { Assert-AclStopped } 'running'
+}
+& {
+    function Get-CimInstance { @() }
+    function Get-NetTCPConnection { @([pscustomobject]@{LocalPort=9090}) }
+    Expect-Failure { Assert-AclStopped } 'running'
+}
+
+# Real, isolated Git repo: check the release gate against actual object types.
+$temp = Join-Path ([IO.Path]::GetTempPath()) ('acl-bootstrap-test-' + [guid]::NewGuid().ToString('N'))
+$git = (Get-Command git.exe).Source
+try {
+    New-Item -ItemType Directory -Path $temp | Out-Null
+    & $git -C $temp init --quiet
+    & $git -C $temp -c user.name=Test -c user.email=test@example.invalid commit --allow-empty --quiet -m fixture
+    $sha = (& $git -C $temp rev-parse HEAD).Trim()
+    & $git -C $temp update-ref refs/remotes/origin/master $sha
+    Expect-Failure { Get-AclRelease $git $temp $true } 'no verified annotated'
+    & $git -C $temp tag acl-release-test
+    Expect-Failure { Get-AclRelease $git $temp $true } 'no verified annotated'
+    & $git -C $temp tag -d acl-release-test | Out-Null
+    & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-test -m 'unverified release'
+    Expect-Failure { Get-AclRelease $git $temp $true } 'no verified annotated'
+    & $git -C $temp tag -d acl-release-test | Out-Null
+    & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-test -m 'CI success https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/123'
+    $release = Get-AclRelease $git $temp $true
+    Assert ($release.Sha -eq $sha) 'Annotated release must select its exact commit'
+    & $git -C $temp -c user.name=Test -c user.email=test@example.invalid commit --allow-empty --quiet -m divergence
+    Expect-Failure { Get-AclRelease $git $temp $false } 'Git failed'
+} finally { Remove-Item -LiteralPath $temp -Recurse -Force }
+Write-Host 'Bootstrap scenarios passed'

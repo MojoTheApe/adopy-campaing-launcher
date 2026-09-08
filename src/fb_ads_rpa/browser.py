@@ -233,6 +233,7 @@ class BrowserConnection:
     playwright: Playwright
     debug_port: str | None = None
     ws_endpoint: str | None = None
+    remote: bool = False
 
     def close(self, *, keep_browser_open: bool = False) -> None:
         """Close or disconnect from the browser.
@@ -243,10 +244,10 @@ class BrowserConnection:
         For persistent contexts (PlaywrightProfile) we must NOT call
         playwright.stop() — that would tear down the Chromium window.
         """
-        is_cdp = hasattr(self.browser, "disconnect")
+        is_cdp = self.remote or hasattr(self.browser, "disconnect")
         try:
             if keep_browser_open:
-                if is_cdp:
+                if hasattr(self.browser, "disconnect"):
                     self.browser.disconnect()
                 # else: persistent context — leave window open; skip stop below
             else:
@@ -486,7 +487,7 @@ def _ensure_wide_window(context, page) -> None:
         log.debug("ensure_wide_window skipped: %s", exc)
 
 
-def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None) -> BrowserConnection:
+def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None, new_page: bool = False) -> BrowserConnection:
     ensure_playwright_browsers_path()
     # Prior failed attach may have left sync Playwright's loop running in-thread.
     _stop_thread_playwright()
@@ -497,7 +498,7 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
         browser = pw.chromium.connect_over_cdp(cdp_url)
         if browser.contexts:
             context = browser.contexts[0]
-            page = context.pages[0] if context.pages else context.new_page()
+            page = context.new_page() if new_page or not context.pages else context.pages[0]
         else:
             context = browser.new_context()
             page = context.new_page()
@@ -517,6 +518,7 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
             playwright=pw,
             debug_port=debug_port,
             ws_endpoint=ws_endpoint,
+            remote=True,
         )
     except Exception:
         _stop_thread_playwright()
@@ -751,8 +753,44 @@ class MultiloginDirectCDPProvider:
             return self.CDP_PORT
         return None
 
+    def _discover_owned_debug_port(self, user_data_dir: str) -> int | None:
+        """Require a listening socket owned by this profile's Mimic process.
+
+        A global port or stale DevToolsActivePort file does not prove ownership.
+        If process inspection is unavailable, refuse the attach.
+        """
+        import psutil
+
+        def norm(value: str) -> str:
+            return os.path.normcase(os.path.abspath(value.strip('"'))).replace("\\", "/").rstrip("/").lower()
+
+        wanted = norm(user_data_dir)
+        for proc in psutil.process_iter(["name", "exe", "cmdline"]):
+            try:
+                exe = (proc.info.get("exe") or "").lower().replace("\\", "/")
+                if "mimic" not in exe and "/mlx/" not in exe:
+                    continue
+                args = proc.info.get("cmdline") or []
+                udd = next((a.split("=", 1)[1] for a in args if a.startswith("--user-data-dir=")), "")
+                if not udd and "--user-data-dir" in args:
+                    udd = args[args.index("--user-data-dir") + 1]
+                if not udd or norm(udd) != wanted:
+                    continue
+                raw = next((a.split("=", 1)[1] for a in args if a.startswith("--remote-debugging-port=")), "")
+                port = int(raw) if raw else 0
+                if port == 0:
+                    for path in (Path(user_data_dir) / "DevToolsActivePort", Path(user_data_dir) / "Default/DevToolsActivePort"):
+                        if path.is_file():
+                            port = int(path.read_text(encoding="utf-8").splitlines()[0])
+                            break
+                if port > 0 and any(c.status == psutil.CONN_LISTEN and c.laddr.port == port for c in proc.net_connections(kind="tcp")) and self._cdp_accepting(port):
+                    return port
+            except (OSError, ValueError, IndexError, psutil.Error):
+                continue
+        return None
+
     def _try_attach_existing(
-        self, profile_id: str, user_data_dir: str
+        self, profile_id: str, user_data_dir: str, *, strict_profile: bool = False, new_page: bool = False
     ) -> "BrowserConnection | None":
         """Reuse an already-running Mimic for this profile (do not kill/restart)."""
         import logging
@@ -760,7 +798,7 @@ class MultiloginDirectCDPProvider:
         log = logging.getLogger(__name__)
         if not self._profile_process_running(user_data_dir, profile_id):
             return None
-        port = self._discover_debug_port(user_data_dir, profile_id)
+        port = self._discover_owned_debug_port(user_data_dir) if strict_profile else self._discover_debug_port(user_data_dir, profile_id)
         if port is None:
             log.info(
                 "Profile %s is running but no CDP debug port found — will relaunch with debugging",
@@ -774,6 +812,7 @@ class MultiloginDirectCDPProvider:
                 provider="multilogin_direct",
                 debug_port=str(port),
                 ws_endpoint=None,
+                new_page=new_page,
             )
             log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
             return conn

@@ -141,3 +141,36 @@ def test_the_dashboard_prints_acls_own_log() -> None:
     # matters is buried under playwright and urllib3.
     assert logging.getLogger("src.fb_ads_rpa.ads_manager_flow").isEnabledFor(logging.INFO)
     assert not logging.getLogger("urllib3.connectionpool").isEnabledFor(logging.INFO)
+
+
+def test_bootstrap_scenarios_on_windows() -> None:
+    import shutil
+    import subprocess
+    import sys
+    import pytest
+    if sys.platform != "win32":
+        pytest.skip("Standalone bootstrap uses native Windows PowerShell")
+    powershell = shutil.which("powershell.exe")
+    assert powershell, "Windows PowerShell is required by the installer"
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run([powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                             str(root / "tests/bootstrap_windows_harness.ps1"),
+                             "-Bootstrap", str(root / "Install ACL.bat")],
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_green_install_opens_the_dashboard_itself() -> None:
+    """"Start it with start_dashboard.bat" ended the install one step short.
+
+    That step is where a new campaign manager stalls: the installer says ready,
+    the screen shows nothing, and the next move is to ask somebody.
+    """
+    installer = _text("install_acl.bat")
+
+    start = installer.index('start "" "%~dp0start_dashboard.bat"')
+    # Only on a green doctor: a failed check must not be followed by a dashboard
+    # that half-works, which reads as "it started, so it is fine".
+    failure_branch = installer.index("if %RC% NEQ 0")
+    assert failure_branch < start
+    assert installer.index("exit /b %RC%", failure_branch) < start

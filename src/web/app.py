@@ -13,6 +13,7 @@ import asyncio
 import ipaddress
 import json
 import os
+import re as _re
 import re
 import sys
 import tempfile
@@ -39,7 +40,7 @@ from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.web.publish_jobs import get_job, start_job, cancel_job
 from src.web.cache import cache_built_at, cache_clear, get_cached_report
-from src.analysis_agent.money_format import fmt_usd
+from src.analysis_agent.money_format import fmt_usd, fmt_currency
 from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
 from src.creative_agent.audience_builder import build_audience_profile
 from src.creative_agent.stats_correlator import correlate
@@ -231,6 +232,453 @@ def _get_upload_ref_cached() -> dict:
         return {}
 
 
+def _build_goals_view(report: dict) -> dict:
+    """Each country's target next to what actually happened, ready to render.
+
+    Progress is computed here rather than in the page so the compact strip and
+    any future screen cannot drift apart — and so a country with a target but no
+    data still appears, at zero, instead of vanishing on the day it matters most.
+    """
+    from src.web import goals as goals_store
+
+    cm = (report.get("my_cm") or os.environ.get("MY_CM_NAME") or "").strip()
+    actual: dict[str, dict] = {}
+    for country in report.get("countries", []):
+        name = (country.get("country") or "").strip()
+        totals = country.get("my_totals") or {}
+        for key in {name.casefold(), _country_code(name).casefold()}:
+            if key:
+                actual[key] = totals
+
+    rows = []
+    for goal in goals_store.for_cm(cm):
+        name = (goal.get("country") or "").strip()
+        got = actual.get(name.casefold()) or actual.get((goal.get("code") or "").casefold()) or {}
+        target = int(goal.get("ftd") or 0)
+        deposits = int(got.get("deposits") or 0)
+        leads = int(got.get("leads") or 0)
+        spend = float(got.get("spend") or 0.0)
+        rows.append({
+            **goal,
+            "deposits": deposits,
+            "leads": leads,
+            "spend": spend,
+            "cpa_actual": (spend / deposits) if deposits else None,
+            "cr_actual": (deposits / leads * 100.0) if leads else None,
+            "pct": min(100, round(deposits / target * 100)) if target else None,
+        })
+
+    rows.sort(key=lambda r: (r.get("market") or "", r.get("country") or ""))
+    total_target = sum(int(r.get("ftd") or 0) for r in rows)
+    total_deposits = sum(r["deposits"] for r in rows)
+    return {
+        "cm": cm,
+        "rows": rows,
+        "target": total_target,
+        "deposits": total_deposits,
+        "pct": min(100, round(total_deposits / total_target * 100)) if total_target else None,
+        "team_lead": goals_store.is_team_lead(),
+    }
+
+
+def _workbook_dates(df) -> list[str]:
+    """Every date the workbook actually has, as ISO strings.
+
+    The calendar greys out everything else. Offering a full month when the file
+    holds two days is an invitation to pick a day and conclude the accounts are
+    dead — the data was never there, and the screen should say so before the
+    click, not after.
+    """
+    try:
+        import pandas as pd
+
+        if df is None or "Date" not in getattr(df, "columns", []):
+            return []
+        days = pd.to_datetime(df["Date"], errors="coerce").dt.date.dropna()
+        return sorted({d.isoformat() for d in days})
+    except Exception:
+        return []
+
+
+def _month_to_date(dates: list[str]) -> tuple[str, str]:
+    """Месяц по текущее число — от календаря, а не от последнего дня книги.
+
+    Раньше считалось от книги: если файл отстал на два дня, период молча
+    заканчивался позавчера. Выглядело аккуратно и было неправдой — «месяц по
+    текущее число» показывал не по текущее число, а пресет «This month» в
+    календаре не совпадал с умолчанием, хотя называется так же.
+
+    Отставшая книга даёт в конце пустые дни — это видно в шапке по датам и
+    честнее, чем тихо сдвинутая граница. Но если в текущем месяце книга не
+    знает вообще ничего, дешборд открылся бы пустым, а причина была бы не
+    видна: тогда откатываемся на её последний месяц.
+    """
+    from datetime import date as _date
+
+    if not dates:
+        return "", ""
+    today = _date.today()
+    start = today.replace(day=1).isoformat()
+    end = today.isoformat()
+    if any(start <= d <= end for d in dates):
+        return start, end
+    last = dates[-1]
+    return last[:7] + "-01", last
+
+
+def resolve_period(df, date_from: str, date_to: str, span: str) -> tuple[str, str]:
+    """Какой период показывать: выбранный, «все даты» или умолчание.
+
+    Одно место на весь дешборд — иначе шапка и карта аккаунтов рано или поздно
+    начнут показывать разные месяцы и оба будут выглядеть правдой.
+    """
+    if span == "all":
+        return "", ""
+    if date_from or date_to:
+        return date_from, date_to
+    return _month_to_date(_workbook_dates(df))
+
+
+#: отчёты за период — ключ (excel mtime, менеджер, период). Пересборка стоит
+#: около секунды, и без кэша она случалась бы на каждом переключении вкладки.
+_PERIOD_CACHE: dict[tuple, dict] = {}
+_PERIOD_CACHE_MAX = 8
+
+
+class PeriodReportError(RuntimeError):
+    """A requested range could not be calculated; full totals cannot replace it."""
+
+
+def report_for_period(report: dict, df, date_from: str, date_to: str) -> dict:
+    """Тот же отчёт, посчитанный только по строкам внутри периода.
+
+    Excel уже разобран и лежит в кэше — здесь пересобирается только сам отчёт.
+    Без периода возвращается ровно то, что пришло: ни лишней работы, ни риска
+    разойтись с общим кэшем.
+    """
+    if df is None or not (date_from or date_to):
+        return report
+
+    from src.web.buyer import get_selected_cm
+
+    key = (
+        report.get("source_excel"),
+        report.get("_cache_revision"),
+        (report.get("my_cm") or get_selected_cm() or ""),
+        date_from,
+        date_to,
+    )
+    # Callers outside the main cache may supply a standalone report. Without
+    # a source revision it is safer to recalculate than to retain stale values.
+    cacheable = report.get("_cache_revision") is not None
+    hit = _PERIOD_CACHE.get(key) if cacheable else None
+    if hit is not None:
+        return hit
+
+    rows = _filter_by_period(df, date_from, date_to)
+    try:
+        from src.analysis_agent.morning_service import load_morning_report
+
+        scoped, _df, _warnings = load_morning_report(
+            excel_path=report.get("source_excel"),
+            my_cm=report.get("my_cm") or get_selected_cm(),
+            enriched_df=rows, account_rows_cached=report.get("_account_rows")
+        )
+    except Exception as exc:
+        raise PeriodReportError("Could not calculate the selected period. Refresh and try again.") from exc
+
+    scoped["period_from"] = date_from
+    scoped["period_to"] = date_to
+    if cacheable:
+        if len(_PERIOD_CACHE) >= _PERIOD_CACHE_MAX:
+            _PERIOD_CACHE.pop(next(iter(_PERIOD_CACHE)))
+        _PERIOD_CACHE[key] = scoped
+    return scoped
+
+
+def _filter_by_period(df, date_from: str, date_to: str):
+    """Rows inside [from, to]. Either end may be blank — then it is not bounded."""
+    if df is None or not (date_from or date_to) or "Date" not in getattr(df, "columns", []):
+        return df
+    try:
+        import pandas as pd
+
+        days = pd.to_datetime(df["Date"], errors="coerce").dt.date
+        mask = days.notna()
+        if date_from:
+            mask &= days >= pd.to_datetime(date_from).date()
+        if date_to:
+            mask &= days <= pd.to_datetime(date_to).date()
+        return df[mask]
+    except Exception:
+        return df
+
+
+def _build_account_map_view(
+    report: dict,
+    df=None,
+    date_from: str = "",
+    date_to: str = "",
+    span: str = "",
+) -> dict:
+    """The account map on Home: every country, its accounts, and what they did.
+
+    Countries come from the links store, not from the workbook, because the two
+    answer different questions. The workbook says where money was spent; the
+    links say where this team decided to work. A country that was opened
+    yesterday has no spend yet and must still appear, and a country that was
+    closed must stop appearing even while last week's numbers are still in the
+    file.
+
+    Numbers come from the workbook, per account per country — leads, deposits,
+    spend, CPL, CPA, CR are already computed there, so nothing is recalculated
+    here and the map cannot disagree with the rest of the page.
+    """
+    from src.web import account_links
+
+    try:
+        account_links.seed_from_account_map()
+    except Exception:  # pragma: no cover - a missing map must not blank the page
+        pass
+
+    # account performance per (country, account), straight from the report.
+    #
+    # Keyed by BOTH the full name and the two-letter code: the account map has
+    # always stored codes ("CR"), the workbook and the report use full names
+    # ("Costa Rica"), and matching on one of them alone silently produces a map
+    # where every account says "no data" — which reads as a data problem rather
+    # than as a join that missed.
+    # Ничего не выбрано — это не «покажи всё». Пустой период молча складывал
+    # каждый день книги в одно число, и никто этого не выбирал; месяц по
+    # текущее число — тот ответ, который человек и имеет в виду. «Все даты»
+    # остаются, но теперь их надо попросить (span=all).
+    dates = _workbook_dates(df)
+    if not date_from and not date_to and span != "all":
+        date_from, date_to = _month_to_date(dates)
+
+    period = _filter_by_period(df, date_from, date_to) if (date_from or date_to) else None
+
+    per_country: dict[str, dict[str, dict]] = {}
+    labels_in_report: set[str] = set()
+    display_name: dict[str, str] = {}
+    for country in report.get("countries", []):
+        name = (country.get("country") or "").strip()
+        bucket: dict[str, dict] = {}
+        for row in country.get("account_rows") or []:
+            label = (row.get("account_label") or "").strip()
+            if not label:
+                continue
+            labels_in_report.add(label)
+            if period is None:
+                bucket[label] = row.get("account_excel") or {}
+            else:
+                # Пересчёт за выбранный период тем же кодом, что считает всё
+                # остальное на странице: две формулы для одного числа рано или
+                # поздно разойдутся, и разойдутся молча.
+                from src.analysis_agent.morning_report import build_account_performance_summary
+
+                bucket[label] = build_account_performance_summary(
+                    period, name, (row.get("alias") or label)
+                )
+        for key in {name.casefold(), _country_code(name).casefold()}:
+            if key:
+                per_country[key] = bucket
+                display_name.setdefault(key, name)
+
+    map_path = get_ad_account_map_path()
+    known = list(load_ad_account_map(map_path)) if os.path.isfile(map_path) else []
+    all_known = sorted(set(known) | labels_in_report, key=str.casefold)
+
+    # Названия стран и имена аккаунтов берём из самой книги, а не только из
+    # отчёта. Отчёт строится за сегодня: 8 сентября книга заканчивалась 7-м, в
+    # отчёте не было ни одной страны — и карта показывала сплошные прочерки при
+    # любом совпадении имён. Числа карты не должны зависеть от того, случился ли
+    # сегодня хоть один лид.
+    wb_country: dict[str, str] = {}
+    wb_aliases: dict[str, list[str]] = {}
+    try:
+        if df is not None and "Country Final" in df.columns:
+            for name in {str(c).strip() for c in df["Country Final"].dropna()}:
+                if not name:
+                    continue
+                wb_country.setdefault(name.casefold(), name)
+                wb_country.setdefault(_country_code(name).casefold(), name)
+                wb_aliases[name] = sorted(
+                    {
+                        str(a).strip()
+                        for a in df.loc[df["Country Final"] == name, "Account Alias"].dropna()
+                        if str(a).strip()
+                    }
+                )
+    except Exception:  # pragma: no cover - кривая книга не должна гасить карту
+        wb_country, wb_aliases = {}, {}
+
+    frame = period if period is not None else df
+
+    def _numbers(country_name: str, alias: str) -> dict:
+        """Числа одного аккаунта прямо из книги за выбранный период.
+
+        Тем же кодом, что считает страницу: `alias_matches` слепа к хвостам
+        вроде «EC Ait», так что подключённое имя сходится с книжным само.
+        """
+        if frame is None or not country_name or not alias:
+            return {}
+        try:
+            from src.analysis_agent.morning_report import build_account_performance_summary
+
+            return build_account_performance_summary(frame, country_name, alias)
+        except Exception:  # pragma: no cover
+            return {}
+
+    def _elsewhere(country_name: str, alias: str) -> dict[str, float]:
+        """Где ещё в книге лежат числа этого аккаунта за тот же период.
+
+        Без этого «строк нет» и «строки есть, но под другой страной» выглядят
+        одинаково — прочерком. А это разные вещи: во втором случае аккаунт
+        привязан не туда, и человеку надо чинить привязку, а не искать данные.
+        """
+        if frame is None or not alias:
+            return {}
+        try:
+            from src.analysis_agent.analyze_fb_stats import alias_matches
+
+            hit = frame[alias_matches(frame["Account Alias"], alias)]
+            if hit.empty:
+                return {}
+            here = (country_name or "").strip().casefold()
+            out: dict[str, float] = {}
+            for name, spend in hit.groupby("Country Final")["$ Spend"].sum().items():
+                label = str(name).strip()
+                if label and label.casefold() != here and float(spend):
+                    out[label] = round(float(spend), 2)
+            return out
+        except Exception:  # pragma: no cover
+            return {}
+
+    countries: list[dict] = []
+    for stored in account_links.all_values("country"):
+        key = stored.casefold()
+        stats = per_country.get(key, {})
+        # Show the country the way the rest of the page shows it. The map stores
+        # whatever was typed when the account was connected — often a code — and
+        # a Home screen reading "CR" next to a sidebar reading "Costa Rica"
+        # invites the reader to wonder whether they are the same place.
+        country_name = display_name.get(key) or wb_country.get(key, stored)
+        rows = []
+        for label in account_links.accounts_for("country", stored):
+            excel = _numbers(country_name, label) or stats.get(label) or {}
+            # Имя из Multilogin (`KLD_BFL_X84`) с книжным (`FacebookMKTOBFLX84`)
+            # не сходится ничем, кроме хвоста — того самого, которым аккаунт и
+            # называют вслух. Это уже догадка, поэтому она идёт последней, берётся
+            # только при единственном совпадении и всегда подписывается на экране.
+            alias = ""
+            if not excel.get("has_data"):
+                alias = _alias_by_tail(label, wb_aliases.get(country_name, []))
+                if alias:
+                    excel = _numbers(country_name, alias) or excel
+            rows.append({
+                "account": label,
+                # чем именно подставлены числа — чтобы совпадение по хвосту
+                # никогда не выглядело как имя самого аккаунта
+                "workbook_alias": alias,
+                # страны, под которыми числа этого аккаунта лежат на самом деле
+                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, label),
+                # состояние кабинета — без периода: спенд отвечает «сколько за
+                # эти дни», состояние — «что с ним сейчас»
+                "status": _account_status(label),
+                "assets": account_links.values_for(label, "asset"),
+                "countries": [
+                    display_name.get(v.casefold(), v)
+                    for v in account_links.values_for(label, "country")
+                ],
+                "spend": excel.get("spend"),
+                "leads": excel.get("leads"),
+                "deposits": excel.get("deposits"),
+                "cpl": excel.get("cpl"),
+                "cpa": excel.get("cpa"),
+                "cr": excel.get("cr"),
+                "has_data": bool(excel.get("has_data")),
+            })
+        countries.append({
+            # `country` is what the reader sees, `key` is what the store knows.
+            # They differ whenever the account map holds a code ("KW") and the
+            # report holds a name ("Kuwait") — and a button that sends the label
+            # instead of the key returns HTTP 200 having changed nothing.
+            "country": country_name,
+            "key": stored,
+            "rows": rows,
+            "spend": sum(r["spend"] or 0 for r in rows),
+            "leads": sum(r["leads"] or 0 for r in rows),
+            "deposits": sum(r["deposits"] or 0 for r in rows),
+        })
+
+    available = [
+        {"account": label, "assets": account_links.values_for(label, "asset")}
+        for label in account_links.available_accounts(all_known)
+    ]
+    return {
+        "countries": countries,
+        "available": available,
+        "all_accounts": all_known,
+        "dates": dates,
+        "live": {} if span == "all" else _live_spend(date_from, date_to),
+        "date_from": date_from,
+        "date_to": date_to,
+        "span": span,
+    }
+
+
+
+def _live_spend(date_from: str = "", date_to: str = "") -> dict[str, dict]:
+    """Показания спенда, снятые с аккаунтов за тот же период, что на экране."""
+    try:
+        from src.analysis_agent import account_spend
+
+        if not date_from:
+            return {}
+        return {
+            a: r.to_dict()
+            for a, r in account_spend.all_readings(date_from, date_to or date_from).items()
+        }
+    except Exception:  # pragma: no cover - показания не должны ронять страницу
+        return {}
+
+
+
+def _sidebar_countries(report: dict, amap: dict) -> list[dict]:
+    """Страны для бокового списка: сначала те, где идут деньги.
+
+    Порядок по расходу, а не по алфавиту: алфавит ничего не говорит, а список
+    из двадцати стран человек читает сверху. Подсвечены те, где страна живая —
+    либо на ней есть спенд, либо её завели руками в карте аккаунтов. Второе
+    важно само по себе: страну открывают до первого доллара, и до него она
+    выглядела бы такой же мёртвой, как закрытая полгода назад.
+    """
+    placed = {
+        (c.get("country") or "").strip().lower()
+        for c in (amap or {}).get("countries", [])
+    }
+    rows = []
+    for c in report.get("countries", []):
+        name = (c.get("country") or "").strip()
+        spend = float(c.get("my_spend") or 0)
+        rows.append(
+            {
+                "c": c,
+                "spend": spend,
+                "active": spend > 0 or name.lower() in placed,
+                "in_map": name.lower() in placed,
+            }
+        )
+    # Сначала живые — по расходу, потом остальные по алфавиту. Страна,
+    # открытая вчера и ещё без доллара, стоит выше двадцати мёртвых:
+    # именно её сегодня и открывают.
+    rows.sort(
+        key=lambda r: (not r["active"], -r["spend"], (r["c"].get("country") or "").lower())
+    )
+    return rows
+
+
 def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     """Return preflight info per account:
     {acc_label: {link, link_status, missing_map_fields: [str], has_map_entry}}
@@ -409,6 +857,7 @@ from urllib.parse import quote as _url_quote
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
 templates.env.filters["fmt_usd"] = fmt_usd
+templates.env.filters["fmt_currency"] = fmt_currency
 templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")
 templates.env.filters["creative_type"] = lambda name: parse_creative_from_ad_title(name)[0]
 templates.env.filters["creative_id"] = lambda name: parse_creative_from_ad_title(name)[1]
@@ -670,6 +1119,9 @@ def _render_report(
     request: Request,
     *,
     upload_errors: dict[str, dict[str, list[str]]] | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    span: str = "",
 ) -> HTMLResponse:
     try:
         report, _df, warnings = get_cached_report()
@@ -686,6 +1138,20 @@ def _render_report(
             status_code=200,
         )
 
+    # Период выбирается один раз на всю страницу: карта аккаунтов, обзор
+    # стран и рекомендации должны говорить об одних и тех же днях. Раньше он
+    # менял только карту, и две секции рядом отвечали на разные вопросы,
+    # выглядя одинаково достоверно.
+    date_from, date_to = resolve_period(_df, date_from.strip(), date_to.strip(), span.strip())
+    try:
+        report = report_for_period(report, _df, date_from, date_to)
+    except PeriodReportError as exc:
+        return templates.TemplateResponse(
+            "error.html",
+            {"request": request, "title": "Period calculation failed", "message": str(exc)},
+            status_code=503,
+        )
+
     _enrich_country_overview(report)
     ref_opts = _load_ref_options()
 
@@ -698,6 +1164,8 @@ def _render_report(
 
     account_preflight = _build_account_preflight(all_account_labels)
     draft_status = _load_draft_status()
+    # Один раз: карту читают и шаблон, и боковой список стран.
+    _account_map_view = _build_account_map_view(report, _df, date_from, date_to, span)
 
     # {country_slug: {account_alias: account_label}} — lets client JS resolve the
     # "Account Alias" strings shown in Combos/CM-drill rows to the accordion key
@@ -729,6 +1197,10 @@ def _render_report(
             "draft_status": draft_status,
             "mlx_labels": mlx_instance_labels(),
             "installed_release": _installed_release(),
+            "account_map": _account_map_view,
+            "sidebar_countries": _sidebar_countries(report, _account_map_view),
+            "period": {"date_from": date_from, "date_to": date_to, "span": span},
+            "goals": _build_goals_view(report),
         },
     )
 
@@ -771,6 +1243,50 @@ _COUNTRY_CODES: dict[str, str] = {
     "vietnam": "VN", "viet nam": "VN", "yemen": "YE", "zambia": "ZM",
     "zimbabwe": "ZW",
 }
+
+
+def _account_status(account: str) -> dict:
+    """Последнее известное состояние кабинета, прочитанное с него самого."""
+    try:
+        from src.analysis_agent import account_spend
+
+        return account_spend.get_status(account)
+    except Exception:  # pragma: no cover - карта важнее одной колонки
+        return {}
+
+
+def _account_tail(name: str) -> str:
+    """Последние три знака имени — то, чем аккаунты различают на слух.
+
+    Книга знает аккаунт как `FacebookMKTOBFLX84`, Multilogin — как
+    `KLD_BFL_X84`. Общего у них ровно хвост, и именно им человек называет
+    аккаунт вслух: «икс восемьдесят четыре». Поиск профиля на этой же странице
+    давно устроен так же — «last letters: X84».
+    """
+    import re as _re
+
+    core = _re.sub(r"[^A-Za-z0-9]", "", name or "")
+    return core[-3:].upper() if len(core) >= 3 else ""
+
+
+def _alias_by_tail(label: str, known: dict) -> str:
+    """Имя из книги для подключённого аккаунта — или пусто.
+
+    Совпадение принимается только единственное. Два имени с одним хвостом —
+    это не «выберем первое»: подставленное наугад число выглядит точно так же,
+    как правильное, и проверить его человеку будет нечем.
+    """
+    tail = _account_tail(label)
+    if not tail:
+        return ""
+    # Само имя из кандидатов исключается: свой хвост у него, разумеется,
+    # единственный, и аккаунт «совпадал» сам с собой — на экране появлялась
+    # подпись «= KLD_BFL_X01», объясняющая ровно ничего.
+    hits = [
+        a for a in known
+        if _account_tail(a) == tail and a.casefold() != (label or "").casefold()
+    ]
+    return hits[0] if len(hits) == 1 else ""
 
 
 def _country_code(name: str) -> str:
@@ -878,8 +1394,10 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    return _render_report(request)
+async def index(
+    request: Request, date_from: str = "", date_to: str = "", span: str = ""
+) -> HTMLResponse:
+    return _render_report(request, date_from=date_from, date_to=date_to, span=span)
 
 
 @app.get("/details", response_class=HTMLResponse)
@@ -893,9 +1411,17 @@ async def details(request: Request) -> HTMLResponse:
     params = dict(request.query_params)
     section = params.pop("section", "")
     country = params.pop("country", "")
+    # Раскрытие обязано резать те же дни, что и строка над ним. Пока период
+    # менял только страницу, а /details читал весь файл, строка говорила про
+    # выбранные шесть дней, а панель под ней — про все тридцать семь, и обе
+    # выглядели одинаково достоверно. Для строки, которой в другом отрезке
+    # нет, ответ вовсе приходил пустым — и это читалось как «не открывается».
+    _p_from = params.pop("date_from", "")
+    _p_to = params.pop("date_to", "")
+    _p_span = params.pop("span", "")
     # Optional ncols override (used for nested drill-downs, e.g. ads inside CM campaigns)
     ncols_override = params.pop("ncols", None)
-    _DRILL_ENABLED = {"optimization", "cm_comparison"}
+    _DRILL_ENABLED = {"optimization", "cm_comparison", "account"}
     if section not in _DRILL_ENABLED:
         ncols = 6
         return templates.TemplateResponse(
@@ -915,6 +1441,7 @@ async def details(request: Request) -> HTMLResponse:
         ncols = _NCOLS_BY_SECTION.get(section, 7)
     try:
         _report, df, _warnings = get_cached_report()
+        df = _filter_by_period(df, *resolve_period(df, _p_from, _p_to, _p_span))
     except (FileNotFoundError, ValueError):
         # Cache build failed — return a no-op fragment so the table layout
         # stays intact and the user is invited to fix the / page first.
@@ -1718,6 +2245,354 @@ async def account_map_patch(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "saved": new_row["account_name"]})
 
 
+
+def _spend_period(date_from: str, date_to: str, span: str = "") -> tuple[str, str]:
+    from datetime import date
+
+    if span == "all" or not date_from.strip():
+        raise ValueError("Live account spend requires a date range. Select dates instead of Maximum.")
+    start = date.fromisoformat(date_from.strip())
+    end = date.fromisoformat(date_to.strip() or date_from.strip())
+    if end < start:
+        raise ValueError("End date must be on or after start date.")
+    return start.isoformat(), end.isoformat()
+
+
+@app.post("/account-spend/read")
+async def account_spend_read(request: Request) -> JSONResponse:
+    """Прочитать спенд с аккаунта. Только по нажатию человека.
+
+    Никакого расписания: обход живых аккаунтов по таймеру уже однажды
+    предшествовал чекпоинту на телефон, и это не повторяется.
+    """
+    from src.analysis_agent import account_spend
+
+    form = await request.form()
+    account = (form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    # Период приходит с экрана: число, снятое не за тот отрезок, который
+    # показан рядом, выглядело бы расхождением источников, а было бы ответом
+    # на другой вопрос.
+    try:
+        date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""), str(form.get("span") or ""))
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    try:
+        reading = account_spend.start_read(account, date_from, date_to)
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Could not start or save the reading. Check disk space and retry."}, status_code=503)
+    return JSONResponse({"ok": True, "reading": reading.to_dict()})
+
+
+@app.post("/account-spend/open-profile")
+async def account_spend_open_profile(request: Request) -> JSONResponse:
+    """Поднять профиль аккаунта автоматизацией и оставить окно открытым.
+
+    Чтение умеет только цепляться к уже открытому окну — перезапуск ради
+    одного числа разлогинивает аккаунт. Поднять профиль так, чтобы к нему
+    можно было прицепиться, до сих пор умел только путь публикации.
+    """
+    from src.analysis_agent import account_spend
+
+    form = await request.form()
+    account = (form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    # to_thread, а не starlette: свежая установка не должна зависеть от
+    # пакета, которого нет в requirements.txt
+    ok, message = await asyncio.to_thread(account_spend.open_for_automation, account)
+    return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
+
+
+@app.post("/account-probe/ad-account")
+async def account_probe_ad_account(request: Request) -> JSONResponse:
+    """Спросить у открытого профиля, какой у него рекламный кабинет.
+
+    Подключая аккаунт, дешборд до сих пор просил человека вставить номер, если
+    профиль на этой машине не открывали. Номер знает сам кабинет — Ads Manager
+    называет его в своём адресе.
+    """
+    from src.analysis_agent import account_spend
+
+    form = await request.form()
+    profile_id = (form.get("profile_id") or "").strip()
+    if not profile_id:
+        return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
+    found = await asyncio.to_thread(
+        account_spend.read_ad_account,
+        profile_id,
+        (form.get("folder_id") or "").strip(),
+        (form.get("instance") or "A").strip(),
+    )
+    return JSONResponse(found)
+
+
+@app.get("/account-spend/status")
+async def account_spend_status(
+    account: str = "", date_from: str = "", date_to: str = "", span: str = ""
+) -> JSONResponse:
+    from src.analysis_agent import account_spend
+
+    try:
+        date_from, date_to = _spend_period(date_from, date_to, span)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    if account.strip():
+        return JSONResponse({
+            "ok": True,
+            "reading": account_spend.get_reading(account.strip(), date_from, date_to).to_dict(),
+        })
+    return JSONResponse(
+        {
+            "ok": True,
+            "date_from": date_from,
+            "date_to": date_to,
+            "running": account_spend.running_now(),
+            "readings": {
+                a: r.to_dict()
+                for a, r in account_spend.all_readings(date_from, date_to).items()
+            },
+        }
+    )
+
+
+@app.get("/account-map")
+async def account_map_fragment(
+    request: Request, date_from: str = "", date_to: str = "", span: str = ""
+) -> Response:
+    """The account map alone, recomputed for a period.
+
+    A fragment rather than a page reload: rebuilding the whole report to change
+    a date range costs six seconds and throws away the reader's scroll position
+    for a question that only concerns one block.
+    """
+    try:
+        report, df, _warnings = get_cached_report()
+    except Exception as exc:
+        return HTMLResponse(f'<div class="amap-empty">Could not read the workbook: {exc}</div>')
+
+    _enrich_country_overview(report)
+    return templates.TemplateResponse(
+        "_account_map.html",
+        {
+            "request": request,
+            "amap": _build_account_map_view(
+                report, df, date_from.strip(), date_to.strip(), span.strip()
+            ),
+            "mlx": mlx_instance_labels(),
+        },
+    )
+
+
+@app.get("/goals")
+async def goals_read(cm: str = "") -> JSONResponse:
+    from src.web import goals as goals_store
+
+    who = (cm or "").strip() or (os.environ.get("MY_CM_NAME") or "").strip()
+    return JSONResponse({
+        "ok": True,
+        "cm": who,
+        "goals": goals_store.for_cm(who),
+        "team_lead": goals_store.is_team_lead(),
+    })
+
+
+@app.post("/goals")
+async def goals_write(request: Request) -> JSONResponse:
+    """Add, change or drop one country's target.
+
+    Body: {cm?, action: "save"|"delete", goal?: {...}, country?: str}
+
+    Editing somebody else's goals needs the team-lead flag. That flag is an
+    agreement, not a lock — the dashboard has no sign-in, so anyone who can
+    reach the file can change any of it. It exists so the UI does not invite
+    a mistake, not because it prevents one.
+    """
+    from src.web import goals as goals_store
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    me = (os.environ.get("MY_CM_NAME") or "").strip()
+    who = (data.get("cm") or "").strip() or me
+    if who.casefold() != me.casefold() and not goals_store.is_team_lead():
+        return JSONResponse(
+            {"ok": False, "error": f"These are {who}'s goals. Only a team lead edits somebody else's."},
+            status_code=403,
+        )
+
+    action = (data.get("action") or "save").strip().lower()
+    try:
+        if action == "delete":
+            country = (data.get("country") or "").strip()
+            if not country:
+                return JSONResponse({"ok": False, "error": "Which country?"}, status_code=400)
+            return JSONResponse({"ok": True, "goals": goals_store.delete(who, country)})
+        goal = data.get("goal") or {}
+        return JSONResponse({"ok": True, "goals": goals_store.upsert(who, goal)})
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:  # pragma: no cover - defensive
+        return JSONResponse({"ok": False, "error": f"Could not save: {exc}"}, status_code=500)
+
+
+@app.get("/mlx-profile-details")
+async def mlx_profile_details(profile_id: str = "", name: str = "") -> JSONResponse:
+    """What this machine already knows about a Multilogin profile.
+
+    The ad account id is read from the profile's own browser history: every Ads
+    Manager URL carries `act=<id>`, so the answer is on disk. Nothing is driven
+    and nothing is fetched — polling a live account through its browser is what
+    preceded a checkpoint on 2026-08-25.
+
+    That also sets the limit: history exists only for a profile this machine has
+    opened. A profile found by searching Multilogin's cloud but never opened
+    here has no history, so the id comes back empty and somebody types it.
+    """
+    from src.fb_ads_rpa import mlx_profiles
+
+    pid = (profile_id or "").strip()
+    if not pid:
+        return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
+    try:
+        act = mlx_profiles.ad_account_id_for(pid)
+    except Exception:
+        act = ""
+    try:
+        folder = mlx_profiles.folder_id_for(pid)
+    except Exception:
+        folder = ""
+    return JSONResponse({
+        "ok": True,
+        "ad_account_id": act,
+        "folder_id": folder,
+        "opened_here": bool(act or folder),
+        "suggested_name": _account_name_from_profile(name),
+    })
+
+
+def _account_name_from_profile(profile_name: str) -> str:
+    """Guess the ad account's name from the Multilogin profile's.
+
+    The two are named by the same convention with different prefixes —
+    `KLD_BFL_X01` is the profile for `FacebookMKTOBFLX01`. What ties them is the
+    tail: a letter followed by digits. Matching on that is how the dashboard
+    already pairs the two elsewhere, so a suggestion is worth offering — but only
+    as a prefilled field somebody can correct, never as a silent decision.
+    """
+    import re as _re
+
+    tail = _re.search(r"([A-Za-z]\d{2,4})\s*$", (profile_name or "").strip())
+    if not tail:
+        return ""
+    map_path = get_ad_account_map_path()
+    known = list(load_ad_account_map(map_path)) if os.path.isfile(map_path) else []
+    wanted = tail.group(1).casefold()
+    for label in known:
+        if label.casefold().endswith(wanted):
+            return label
+    return ""
+
+
+@app.post("/account-links")
+async def account_links_edit(request: Request) -> JSONResponse:
+    """Place an account in a country or an asset, or take it out again.
+
+    Body: {action: "link"|"unlink"|"close", kind: "country"|"asset",
+           value: str, account?: str, confirm?: bool}
+
+    Nothing here deletes an account. "unlink" takes it out of one country;
+    "close" retires the country and every account on it falls into Available
+    accounts, keeping its profile, proxy and history. An account that is
+    spending today is not moved without an explicit confirmation — the map is
+    also how somebody notices that a country still has money running through it.
+    """
+    from src.web import account_links
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    action = (data.get("action") or "").strip().lower()
+    kind = (data.get("kind") or "country").strip().lower()
+    value = (data.get("value") or "").strip()
+    account = (data.get("account") or "").strip()
+    confirm = bool(data.get("confirm"))
+
+    if kind not in account_links.KINDS:
+        return JSONResponse({"ok": False, "error": f"Unknown kind {kind!r}"}, status_code=400)
+    if not value:
+        return JSONResponse({"ok": False, "error": "A country or asset name is required"}, status_code=400)
+
+    try:
+        if action == "add":
+            # Страна без аккаунтов: сначала заводим место, потом подключаем в
+            # него аккаунт из Multilogin. Обратный порядок требовал выбрать
+            # аккаунт из уже известных — то есть до подключения нового.
+            return JSONResponse({"ok": True, "changed": account_links.add_value(kind, value)})
+
+        if action == "link":
+            if not account:
+                return JSONResponse({"ok": False, "error": "Pick an account first"}, status_code=400)
+            added = account_links.link(account, kind, value)
+            return JSONResponse({"ok": True, "changed": added})
+
+        if action in ("unlink", "close"):
+            spending = _accounts_spending_today(
+                [account] if action == "unlink" else account_links.accounts_for(kind, value)
+            )
+            if spending and not confirm:
+                names = ", ".join(spending[:4]) + ("…" if len(spending) > 4 else "")
+                return JSONResponse({
+                    "ok": False,
+                    "needs_confirm": True,
+                    "error": f"{names} spent money today. Taking {'it' if len(spending) == 1 else 'them'} "
+                             f"out does not stop anything — the campaigns keep running, "
+                             f"they just stop being listed here.",
+                }, status_code=409)
+
+            if action == "unlink":
+                if not account:
+                    return JSONResponse({"ok": False, "error": "Pick an account first"}, status_code=400)
+                return JSONResponse({"ok": True, "changed": account_links.unlink(account, kind, value)})
+
+            # «Изменилось» — про страну, а не про освобождённые аккаунты:
+            # у пустой страны их нет, и ответ «ничего не поменялось» после
+            # её удаления был бы неправдой.
+            existed = any(v.lower() == value.lower() for v in account_links.all_values(kind))
+            freed = account_links.unlink_all_for(kind, value)
+            return JSONResponse({"ok": True, "changed": existed, "freed": freed})
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:  # pragma: no cover - defensive
+        return JSONResponse({"ok": False, "error": f"Could not save: {exc}"}, status_code=500)
+
+    return JSONResponse({"ok": False, "error": f"Unknown action {action!r}"}, status_code=400)
+
+
+def _accounts_spending_today(accounts: list[str]) -> list[str]:
+    """Which of these accounts has spend in today's workbook."""
+    try:
+        report, _df, _warnings = get_cached_report()
+    except Exception:
+        return []
+    wanted = {a.strip().casefold() for a in accounts if a and a.strip()}
+    spending: set[str] = set()
+    for country in report.get("countries", []):
+        for row in country.get("account_rows") or []:
+            label = (row.get("account_label") or "").strip()
+            if label.casefold() not in wanted:
+                continue
+            excel = row.get("account_excel") or {}
+            if (excel.get("spend") or 0) > 0:
+                spending.add(label)
+    return sorted(spending)
+
+
 @app.post("/account-map-remove")
 async def account_map_remove(request: Request) -> JSONResponse:
     """Disconnect an account from THIS machine. Body JSON: {account_name}.
@@ -2297,7 +3172,13 @@ async def multilogin_search(request: Request) -> JSONResponse:
             return JSONResponse(
                 {"ok": False, "error": "The token has expired — sign in again through Connect"}
             )
-        return JSONResponse({"ok": False, "error": f"Multilogin refused the profile list [{error}]"})
+        # Multilogin отвечает и HTML-страницей ошибки. Вывалить её в подпись
+        # под полем — значит показать человеку разметку вместо причины.
+        clean = _re.sub(r"<[^>]+>", " ", error)
+        clean = _re.sub(r"\s+", " ", clean).strip()
+        if len(clean) > 160:
+            clean = clean[:160].rstrip() + "…"
+        return JSONResponse({"ok": False, "error": f"Multilogin refused the profile list: {clean}"})
 
     return JSONResponse({"ok": True, "profiles": profiles, "folders": folders})
 

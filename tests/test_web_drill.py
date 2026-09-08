@@ -159,16 +159,47 @@ def test_no_template_uses_an_htmx_feature_the_dashboard_csp_forbids() -> None:
     )
 
 
+def _drill_click_handler(template: str) -> str:
+    """Тело обработчика клика целиком.
+
+    Раньше здесь бралось 1200 символов от начала — и первый же добавленный
+    комментарий вытолкнул проверяемую строку за край окна. Тест падал не на
+    поведении, а на длине текста над ним.
+    """
+    start = template.index("document.addEventListener('click', function (ev) {")
+    end = template.index("}, true);", start)
+    return template[start:end]
+
+
 def test_drill_toggle_is_a_real_listener_not_an_htmx_predicate() -> None:
     """The close must happen in our own code, before htmx sees the click."""
     template = (_ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
 
-    handler = template.index("document.addEventListener('click', function (ev) {")
-    body = template[handler:handler + 1200]
+    body = _drill_click_handler(template)
     assert "tr.drillable" in body
     assert "drill-detail" in body
     # Without this htmx still fires the request on the closing click.
     assert "ev.stopPropagation();" in body
+
+
+def test_only_one_toggle_owns_a_drill() -> None:
+    """Переключатель у раскрытия должен быть один.
+
+    Их было два: этот обработчик снимал панель по клику, а родной отменял
+    запрос на htmx:beforeRequest. Они гонялись — на одной строке второй клик
+    закрывал, на другой закрывал и тут же открывал заново, и снаружи это
+    выглядело как «кнопка не работает».
+    """
+    template = (_ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+
+    body = _drill_click_handler(template)
+    assert "data-drill" in body, (
+        "обработчик клика обязан пропускать раскрытия с data-drill — у них "
+        "есть свой переключатель на htmx:beforeRequest"
+    )
+    # родной переключатель на месте и отменяет запрос средствами htmx
+    assert 'el.getAttribute("data-drill")' in template
+    assert "evt.preventDefault();" in template
 
 
 def test_report_template_marks_drillable_rows() -> None:

@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from src.analysis_agent.section_filters import (
+    filter_account_rows,
     filter_cm_rows,
     filter_combo_rows,
     filter_creative_rows,
@@ -121,6 +122,9 @@ def get_underlying_rows(
             filtered = filter_creative_rows(
                 df, country, kwargs["creative"], kwargs.get("text"),
             )
+        elif section == "account":
+            filtered = filter_account_rows(df, country, kwargs["account"])
+            filtered = _aggregate_cm_drill_rows(filtered)
         elif section == "optimization":
             filtered = filter_optimization_rows(
                 df, country, kwargs["account"], kwargs["adset"],
@@ -131,7 +135,7 @@ def get_underlying_rows(
     except KeyError:
         return []
 
-    if section == "cm_comparison":
+    if section in ("cm_comparison", "account"):
         return [_cm_row_to_dict(r) for _, r in filtered.iterrows()]
     return [_row_to_dict(r) for _, r in filtered.iterrows()]
 

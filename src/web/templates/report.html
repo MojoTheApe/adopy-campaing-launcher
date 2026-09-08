@@ -160,6 +160,15 @@
       cursor: pointer;
     }
     .sidebar-country-btn:hover { background: var(--bg-hover); color: var(--accent); }
+    /* Живая страна: на ней либо идут деньги, либо её открыли руками в карте
+       аккаунтов. Второе важно само по себе — страну заводят до первого
+       доллара, и до него она выглядела бы как закрытая полгода назад. */
+    .sidebar-country-btn.live { font-weight: 600; color: var(--text); }
+    .sidebar-country-btn.live::before {
+      content: ""; display: inline-block; width: 5px; height: 5px;
+      border-radius: 50%; background: var(--accent); margin-right: 6px;
+      vertical-align: middle;
+    }
     .sidebar-country-btn:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 1px;
@@ -1239,6 +1248,313 @@
       color: var(--muted);
     }
 
+    .cov > summary {
+      cursor: pointer; user-select: none; display: flex;
+      align-items: baseline; gap: 0.6rem; margin-bottom: 0.4rem;
+    }
+    .cov > summary::-webkit-details-marker { display: none; }
+    .cov > summary::before { content: '▾'; color: var(--muted); font-size: 0.7rem; }
+    .cov:not([open]) > summary::before { content: '▸'; }
+    .cov-note { font-size: 0.76rem; color: var(--muted); }
+    .cov-table { font-size: 0.82rem; }
+    .cov-table td, .cov-table th { padding-top: 0.28rem; padding-bottom: 0.28rem; }
+
+    /* ── Goals: полоса стран вместо двух колонок с таблицами ──────────
+       Раньше это была решётка 2×N с подтаблицами на пол-экрана. Цель одна и
+       та же — «сколько из скольких», — и на неё хватает строки. #}*/
+    .gstrip {
+      display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: stretch;
+      margin-bottom: var(--space-md);
+    }
+    .gstrip-total {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.35rem 0.7rem; border-radius: var(--radius-md);
+      background: var(--bg-subtle); border: 1px solid var(--border);
+      font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+    }
+    .gchip {
+      position: relative; display: flex; align-items: baseline; gap: 0.4rem;
+      padding: 0.3rem 0.6rem 0.42rem; border-radius: var(--radius-md);
+      border: 1px solid var(--border); background: var(--bg-elev);
+      font-size: 0.8rem; cursor: pointer; overflow: hidden;
+      font-family: inherit; color: var(--text); text-align: left;
+    }
+    .gchip:hover { border-color: var(--accent); }
+    .gchip .gcode { font-weight: 600; letter-spacing: 0.02em; }
+    .gchip .gnum { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .gchip .gpct { color: var(--muted); font-size: 0.72rem; }
+    .gchip .gbar {
+      position: absolute; left: 0; bottom: 0; height: 2px;
+      background: var(--accent); transition: width 200ms var(--ease-out);
+    }
+    .gchip.done .gbar { background: var(--good); }
+    .gchip.none .gbar { background: var(--border-strong); }
+    .gchip-add { border-style: dashed; color: var(--muted); }
+    .gmenu {
+      position: absolute; z-index: 40; min-width: 12rem;
+      background: var(--bg-elev); border: 1px solid var(--border);
+      border-radius: var(--radius-md); box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,.14));
+      padding: 0.4rem; display: flex; flex-direction: column; gap: 0.2rem;
+    }
+    .gmenu .gmenu-head {
+      font-size: 0.72rem; color: var(--muted); padding: 0.1rem 0.4rem 0.3rem;
+      border-bottom: 1px solid var(--border); margin-bottom: 0.2rem;
+    }
+    .gmenu button {
+      background: none; border: 0; text-align: left; font: inherit;
+      font-size: 0.8rem; padding: 0.25rem 0.4rem; border-radius: var(--radius-sm);
+      cursor: pointer; color: var(--text);
+    }
+    .gmenu button:hover { background: var(--bg-hover); }
+    .gmenu button.danger:hover { color: var(--bad); }
+    .gform { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.5rem; align-items: center; padding: 0.2rem 0.4rem; }
+    .gform label { font-size: 0.74rem; color: var(--muted); }
+    .gform input { font: inherit; font-size: 0.78rem; padding: 0.15rem 0.3rem;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg); color: var(--text); width: 100%; }
+    .gform .gform-actions { grid-column: 1 / -1; display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.3rem; }
+
+    /* ── Account map (Home) ───────────────────────────────────────────
+       Читается как таблица ведения аккаунтов, а не как отчёт: страна —
+       заголовок группы, аккаунты под ней, свободные внизу отдельно. */
+    .amap { margin-top: var(--space-lg); }
+    .amap-head {
+      display: flex; align-items: baseline; gap: var(--space-md);
+      margin-bottom: var(--space-sm);
+    }
+    .amap-head h3 { margin: 0; }
+    .amap-head .amap-note { font-size: 0.78rem; color: var(--muted); }
+    .amap-country {
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      background: var(--bg-elev); margin-bottom: var(--space-md);
+      overflow: hidden;
+    }
+    .amap-country > summary {
+      display: flex; align-items: center; gap: var(--space-md);
+      padding: 0.55rem 0.85rem; cursor: pointer; user-select: none;
+      background: var(--bg-subtle); font-weight: 600; font-size: 0.9rem;
+    }
+    .amap-country > summary::-webkit-details-marker { display: none; }
+    .amap-country > summary::before { content: '▸'; color: var(--muted); font-size: 0.75rem; }
+    .amap-country[open] > summary::before { content: '▾'; }
+    .amap-sum {
+      margin-left: auto; display: flex; gap: 1.1rem;
+      font-weight: 400; font-size: 0.78rem; color: var(--muted);
+    }
+    .amap-sum b { color: var(--text); font-weight: 600; }
+    .amap table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .amap th {
+      text-align: left; font-weight: 500; font-size: 0.7rem;
+      text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
+      padding: 0.4rem 0.85rem; border-bottom: 1px solid var(--border);
+    }
+    /* Число под своим заголовком. Общее правило `th.num` есть с самого начала,
+       но `.amap th` объявлено ниже при равной силе — и побеждало: подпись
+       уезжала влево, число оставалось справа, и читать колонку приходилось по
+       догадке. */
+    .amap th.num { text-align: right; }
+    /* Состояние кабинета. «no warning» намеренно приглушено: страница молчит
+       и когда всё хорошо, и когда баннер просто не тот, который мы знаем. */
+    .amap-st {
+      font-size: 0.68rem; padding: 0.05rem 0.35rem; border-radius: 3px;
+      white-space: nowrap;
+    }
+    .amap-st.ok { background: var(--bg-subtle); color: var(--muted); }
+    .amap-st.dim { color: var(--muted); }
+    .amap-st.bad {
+      background: var(--danger, #a4362f); color: #fff; font-weight: 500;
+    }
+    .amap td { padding: 0.42rem 0.85rem; border-bottom: 1px solid var(--border); }
+    .amap tbody tr:last-child td { border-bottom: 0; }
+    .amap tbody tr:hover { background: var(--bg-hover); }
+    .amap .amap-acc { font-weight: 500; }
+    /* Одинаковая сетка во всех странах: без table-layout:fixed каждая таблица
+       считает ширины по своему содержимому, и колонки соседних стран не
+       совпадают — читается как съехавшая вёрстка, потому что она и съехала. */
+    .amap table.amap-grid { table-layout: fixed; }
+    .amap table.amap-grid td, .amap table.amap-grid th {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .amap td.amap-acc { white-space: normal; }
+    .amap-caret {
+      background: none; border: 0; color: var(--muted); cursor: pointer;
+      font-size: 0.7rem; padding: 0 0.3rem 0 0; line-height: 1;
+    }
+    .amap-caret:hover { color: var(--accent); }
+    tr.amap-open .amap-caret { transform: rotate(90deg); display: inline-block; }
+    .amap-caret-off { color: var(--border-strong); padding-right: 0.3rem; font-size: 0.7rem; }
+    .amap-actions { text-align: right; }
+    .amap .amap-x {
+      background: none; border: 1px solid var(--border-strong);
+      color: var(--muted); border-radius: var(--radius-sm);
+      font: inherit; font-size: 0.7rem; padding: 0.05rem 0.4rem;
+      cursor: pointer; line-height: 1.6;
+    }
+    .amap .amap-x:hover { border-color: var(--bad); color: var(--bad); background: var(--bg); }
+    .amap .amap-tags { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; }
+    .amap-tag {
+      font-size: 0.68rem; padding: 0.05rem 0.35rem; border-radius: 3px;
+      background: var(--bg-subtle); color: var(--muted); white-space: nowrap;
+    }
+    /* Имя, под которым аккаунт лежит в книге. Приглушено: это пояснение к
+       числам, а не второе название аккаунта. */
+    .amap-alias {
+      font-size: 0.68rem; color: var(--muted); margin-left: 0.35rem;
+      white-space: nowrap;
+    }
+    .amap-tag.other { background: var(--accent-soft); color: var(--accent); }
+    .amap .nodata { color: var(--muted); }
+    .amap-available > summary { background: var(--bg-subtle); }
+    /* ── Календарь периода ────────────────────────────────────────────
+       Дни, которых нет в книге, не кликаются. Предлагать полный месяц, когда
+       в файле два дня, — значит приглашать выбрать день и решить, что аккаунты
+       умерли: данных там не было никогда, и сказать это надо до клика. */
+    .amap-cal {
+      position: absolute; z-index: 40; padding: 0.7rem;
+      background: var(--bg-elev); border: 1px solid var(--border);
+      border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0,0,0,.14);
+      font-size: 0.8rem;
+    }
+    .amap-cal-wrap { display: flex; gap: 0.8rem; align-items: stretch; }
+    .amap-cal-presets {
+      display: flex; flex-direction: column; gap: 1px; min-width: 10.5rem;
+      border-right: 1px solid var(--border); padding-right: 0.7rem;
+    }
+    .amap-cal-presets button {
+      font: inherit; font-size: 0.75rem; text-align: left; cursor: pointer;
+      background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+      color: var(--text); padding: 0.22rem 0.4rem; white-space: nowrap;
+    }
+    .amap-cal-presets button:hover:not(:disabled) { border-color: var(--accent); }
+    /* Кружок слева, как в Ads Manager: выбранное состояние видно и без
+       заливки всей строки — заливка на тринадцати пунктах превращает список
+       в пёстрое полотно. */
+    .amap-cal-presets button i {
+      display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+      border: 1px solid var(--border-strong); margin-right: 8px;
+      vertical-align: -2px; flex: none;
+    }
+    .amap-cal-presets button { display: flex; align-items: center; }
+    .amap-cal-presets button.on { color: var(--accent); font-weight: 600; }
+    .amap-cal-presets button.on i {
+      border-color: var(--accent); border-width: 4px;
+    }
+    .amap-cal-mhead {
+      display: flex; align-items: center; gap: 4px; margin-bottom: 0.45rem;
+    }
+    .amap-cal-mhead .amap-cal-nav { padding: 0 0.35rem; }
+    .amap-cal-pick {
+      font: inherit; font-size: 0.78rem; border: 1px solid var(--border);
+      border-radius: var(--radius-sm); background: var(--bg-elev);
+      color: var(--text); padding: 0.1rem 0.2rem; flex: 1 1 auto; min-width: 0;
+    }
+    .amap-cal-inputs { margin: 0.6rem 0 0; }
+    /* Приглушённый, но живой: книга этого периода не знает, а аккаунт знает. */
+    .amap-cal-presets button.thin { color: var(--muted); }
+    .amap-cal-presets button.thin i { border-style: dashed; }
+    .amap-cal-presets button:disabled {
+      color: var(--border-strong); cursor: default; text-decoration: line-through;
+    }
+    .amap-cal-inputs {
+      display: flex; align-items: center; gap: 0.4rem;
+    }
+    .amap-cal-field {
+      border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      padding: 0.16rem 0.5rem; font-variant-numeric: tabular-nums; min-width: 6.6rem;
+      text-align: center;
+    }
+    .amap-cal-arrow { color: var(--muted); }
+    .amap-inline-title {
+      margin: 1.6rem 0 0.6rem; font-size: 0.95rem; font-weight: 600;
+    }
+    .amap-inline { margin-bottom: 0.5rem; }
+    .amap-cal-x {
+      background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+      color: var(--muted); cursor: pointer; font-size: 1.05rem; line-height: 1;
+      padding: 0 0.35rem;
+    }
+    .amap-cal-x:hover { border-color: var(--border-strong); color: var(--text); }
+    .period-pick { display: flex; align-items: center; }
+    .period-pick .amap-cal-btn { font-size: 0.78rem; padding: 0.18rem 0.6rem; }
+    .amap-cal-nav {
+      background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+      color: var(--muted); cursor: pointer; font: inherit; padding: 0 0.45rem;
+    }
+    .amap-cal-x { margin-left: auto; }
+    .amap-cal-months { display: flex; gap: 1rem; }
+    .amap-cal-month { min-width: 12.5rem; }
+    .amap-cal-mtitle {
+      font-weight: 600; text-align: center; margin-bottom: 0.35rem;
+    }
+    .amap-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .amap-cal-grid .dow {
+      font-size: 0.64rem; color: var(--muted); text-align: center; padding-bottom: 0.2rem;
+    }
+    .amap-cal-grid button {
+      font: inherit; font-size: 0.75rem; padding: 0.22rem 0; border-radius: var(--radius-sm);
+      border: 1px solid transparent; background: none; color: var(--text); cursor: pointer;
+    }
+    /* Дни, которых нет в книге, зачёркнуты, а не просто бледные: серое читается
+       как «неяркое», зачёркнутое — как «этого нет». Разница видна до клика. */
+    /* Не «нельзя», а «дешборд не знает»: выбор остаётся возможным. */
+    .amap-cal-grid button.thin { color: var(--muted); opacity: .55; }
+    .amap-cal-grid button:disabled {
+      color: var(--border-strong); cursor: default; text-decoration: line-through;
+    }
+    .amap-cal-grid button.has:hover { border-color: var(--accent); }
+    .amap-cal-grid button.sel { background: var(--accent); color: #fff; }
+    .amap-cal-grid button.inrange { background: var(--accent-soft); }
+    .amap-cal-foot {
+      display: flex; align-items: center; margin-top: 0.6rem; gap: 0.5rem;
+      color: var(--muted); font-size: 0.72rem;
+    }
+    .amap-cal-foot .amap-btn { margin-left: 0; }
+    .amap-cal-foot .amap-btn[data-cancel] { margin-left: auto; }
+    .amap-btn.primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+
+    .amap-live-ok { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .amap-live-run { color: var(--muted); font-size: 0.78rem; }
+    .amap-live-bad { color: var(--danger, #a4362f); border-color: var(--danger, #a4362f); }
+    .amap-btn {
+      background: none; border: 1px solid var(--border-strong);
+      color: var(--muted); border-radius: var(--radius-sm);
+      font: inherit; font-size: 0.72rem; padding: 0.1rem 0.45rem;
+      cursor: pointer; line-height: 1.5;
+    }
+    .amap-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .amap-btn.danger:hover { border-color: var(--bad); color: var(--bad); }
+    .amap-x {
+      background: none; border: 0; color: var(--border-strong);
+      cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.2rem;
+    }
+    .amap-x:hover { color: var(--bad); }
+    .amap-add { display: flex; gap: 0.4rem; align-items: center; padding: 0.5rem 0.85rem; }
+    .amap-add select, .amap-add input {
+      font: inherit; font-size: 0.78rem; padding: 0.18rem 0.35rem;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg); color: var(--text); max-width: 15rem;
+    }
+    .amap-msg { font-size: 0.75rem; color: var(--muted); margin-left: 0.3rem; }
+    .amap-msg.bad { color: var(--bad); }
+    .amap-hits {
+      flex-basis: 100%; margin-top: 0.4rem; display: flex;
+      flex-direction: column; gap: 0.2rem;
+    }
+    .amap-hit {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: 0.78rem; padding: 0.25rem 0.4rem;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg);
+    }
+    .amap-hit b { font-weight: 600; }
+    .amap-hit .amap-hint { color: var(--muted); font-size: 0.72rem; margin-left: auto; }
+    .amap-add { flex-wrap: wrap; }
+    .amap-empty {
+      padding: 0.7rem 0.85rem; font-size: 0.8rem; color: var(--muted);
+    }
+
     /* ── Goals Progress Panel ── */
     .goals-panel {
       background: var(--bg-elev);
@@ -1603,6 +1919,11 @@
    на невидимой переменной. #}
 {%- set mlx = mlx_labels or {'A': 'Inhouse', 'B': 'KLD'} %}
 {%- set rel = installed_release or {} %}
+{%- set amap = account_map or {'countries': [], 'available': [], 'all_accounts': [],
+                              'dates': [], 'date_from': '', 'date_to': ''} %}
+{%- set pd = period or {'date_from': '', 'date_to': '', 'span': ''} %}
+{%- set gv = goals or {'rows': [], 'target': 0, 'deposits': 0, 'pct': none,
+                       'cm': '', 'team_lead': false} %}
 
 <div class="page-top">
 <header class="page-header">
@@ -1613,7 +1934,16 @@
       <span class="brand-meta" title="Source: {{ report.source_excel }}">{{ report.date }}<span class="meta-sep">·</span>CM <strong>{{ report.my_cm }}</strong><span class="meta-sep">·</span>Trend <strong>{{ report.trend_days }}d</strong><span class="meta-sep">·</span><strong>{{ report.total_combos }}</strong> combos{% if built_at %}<span class="meta-sep">·</span>Updated <strong>{{ built_at }}</strong>{% endif %}<span class="meta-sep">·</span><span id="acl-version" title="Installed ACL release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</span></span>
     </div>
   </div>
-  <div class="buyer-pick" style="margin-left:auto;display:flex;align-items:center;gap:0.45rem">
+  {#- Период стоит в шапке, а не над секцией: он меняет каждое число на
+      странице, а элемент внутри блока читался бы как принадлежащий блоку. -#}
+  <div class="period-pick" style="margin-left:auto">
+    <button type="button" class="amap-btn amap-cal-btn" onclick="amapCalendar(this)"
+            title="Which days every number on this page counts">
+      📅 {% if pd.span == 'all' %}all dates{% elif pd.date_from and pd.date_from == pd.date_to %}{{ pd.date_from }}{% elif pd.date_from or pd.date_to %}{{ pd.date_from or '…' }} → {{ pd.date_to or '…' }}{% else %}all dates{% endif %}
+    </button>
+    <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
+  </div>
+  <div class="buyer-pick" style="display:flex;align-items:center;gap:0.45rem">
     <label for="buyer-select" style="font-size:0.78rem;color:var(--muted)">Buyer</label>
     <select id="buyer-select" style="font-size:0.82rem;max-width:14rem"
             title="Whose view to show: accounts, optimization, team comparison">
@@ -1769,7 +2099,14 @@ async function dashRefresh(ev) {
   <button type="button" class="sidebar-link" data-view="accounts">🔌 Accounts</button>
 
   <div class="sidebar-label">Countries</div>
-  {% for c in report.countries %}
+  {#- Порядок по расходу, а не по алфавиту: алфавит ничего не говорит, а
+      список из двадцати стран человек читает сверху. Список приходит готовым
+      из app.py; запасной путь нужен на случай, когда шаблон обновился, а
+      сервер ещё нет — тогда порядок прежний, но страница цела. -#}
+  {%- set scs = sidebar_countries %}
+  {%- if not scs %}{% set scs = [] %}{% for c in report.countries %}{% set _ = scs.append({'c': c, 'active': false}) %}{% endfor %}{% endif %}
+  {% for s in scs %}
+  {% set c = s.c %}
   {% set cid = c.country | anchor_slug %}
   {% set sec = namespace(n=0) %}
   {% set sec.n = sec.n + 1 %}{% set n_cm = sec.n %}
@@ -1783,7 +2120,8 @@ async function dashRefresh(ev) {
   {% set sec.n = sec.n + 1 %}{% set n_optimization = sec.n %}
   {% set sec.n = sec.n + 1 %}{% set n_builder = sec.n %}
   <div class="sidebar-country" data-country="{{ cid }}">
-    <button type="button" class="sidebar-country-btn" data-country="{{ cid }}">{{ c.country }}</button>
+    <button type="button" class="sidebar-country-btn{% if s.active %} live{% endif %}" data-country="{{ cid }}"
+            {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{{ c.country }}</button>
     <div class="sidebar-sections">
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-goals">My Goals</button>
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-cm">{{ n_cm }} CM</button>
@@ -1894,20 +2232,44 @@ async function dashRefresh(ev) {
 </div>
 
 <div id="view-home" class="view-panel active">
-  <div id="goals-panel"></div>
-  <div class="home-overview">
-    <h3>Countries overview</h3>
-    <table>
+  {# ── Goals: одна полоса вместо решётки на пол-экрана ────────────────────
+     Кнопка на страну, под ней прогресс. Клик открывает Edit / Delete. #}
+  <div class="gstrip">
+    <div class="gstrip-total">
+      <span>FTD</span>
+      <span style="font-variant-numeric:tabular-nums">{{ gv.deposits }} / {{ gv.target }}</span>
+      {% if gv.pct is not none %}<span style="color:var(--muted);font-weight:400">{{ gv.pct }}%</span>{% endif %}
+    </div>
+    {% for g in gv.rows %}
+    <button type="button"
+            class="gchip {% if g.pct == 100 %}done{% elif not g.deposits %}none{% endif %}"
+            onclick="goalMenu(this, {{ g | tojson | forceescape }})"
+            title="{{ g.country }} · target {{ g.ftd }} FTD{% if g.cpa %} · CPA ≤ {{ g.cpa | int }}{% endif %}">
+      <span class="gcode">{{ g.code or g.country[:2] | upper }}</span>
+      <span class="gnum">{{ g.deposits }}/{{ g.ftd }}</span>
+      {% if g.pct is not none %}<span class="gpct">{{ g.pct }}%</span>{% endif %}
+      <span class="gbar" style="width: {{ g.pct or 0 }}%"></span>
+    </button>
+    {% endfor %}
+    <button type="button" class="gchip gchip-add" onclick="goalEdit(null)">+ country</button>
+  </div>
+  {# Страны, где сегодня были деньги. Остальные не скрыты — они ниже, в карте
+     аккаунтов, где им и место: тут сводка за день, там ведение. #}
+  <details class="home-overview cov" open>
+    <summary><h3 style="display:inline;font-size:0.95rem">Countries overview</h3>
+      <span class="cov-note">{{ report.countries | selectattr('my_spend') | list | length }} with spend today</span>
+    </summary>
+    <table class="cov-table">
       <thead><tr>
         <th>Country</th>
         <th class="num">Spend</th>
-        <th class="num">Deposits</th>
+        <th class="num">Dep</th>
         <th class="num">Leads</th>
         <th class="num">CPA</th>
         <th class="num">CR</th>
       </tr></thead>
       <tbody>
-      {% for c in report.countries | sort(attribute='my_spend', reverse=true) %}
+      {% for c in report.countries | selectattr('my_spend') | sort(attribute='my_spend', reverse=true) %}
       {% set mt = c.my_totals %}
       {% set cid = c.country | anchor_slug %}
         <tr class="overview-row" style="cursor:pointer" data-view="country-{{ cid }}-cm">
@@ -1921,7 +2283,9 @@ async function dashRefresh(ev) {
       {% endfor %}
       </tbody>
     </table>
-  </div>
+  </details>
+
+  <div id="amap-slot">{% include "_account_map.html" %}</div>
 </div>
 
 {% for c in report.countries %}
@@ -1982,6 +2346,29 @@ async function dashRefresh(ev) {
   {% endfor %}
   </tbody>
 </table>
+
+{#- ── Карта аккаунтов этой страны ────────────────────────────────────
+    Тот же блок, что на Home, только про одну страну: разметка одна на два
+    экрана, потому что две копии разошлись бы, и заметил бы это тот, кто
+    поверил не той. Страну, которой ещё нет в карте, здесь же можно завести —
+    иначе за этим пришлось бы уходить на Home и искать её среди двадцати. -#}
+{%- set mc = (amap.countries | selectattr('country', 'equalto', c.country) | list | first) if amap.countries else none %}
+<h3 class="amap-inline-title">Accounts in {{ c.country }}</h3>
+<div class="amap amap-inline">
+  {%- if mc %}
+    {% include "_account_map_country.html" %}
+  {%- else %}
+  <div class="amap-empty">
+    {{ c.country }} is not on the account map yet — the workbook has rows for it,
+    but nobody has placed an account here.
+  </div>
+  <div class="amap-add">
+    <button type="button" class="amap-btn"
+            onclick="amapAddThisCountry({{ c.country | tojson | forceescape }}, this)">Add {{ c.country }} to the account map</button>
+    <span class="amap-msg"></span>
+  </div>
+  {%- endif %}
+</div>
 </div>
 
 {# ── Section {{ n_assets }}: Asset summary ─────────────────────────── #}
@@ -1997,7 +2384,7 @@ async function dashRefresh(ev) {
 {% endif %}
 <table>
   <thead><tr>
-    <th>Asset</th>
+    <th>Ad Asset</th>
     <th class="num">Leads</th>
     <th class="num">Deposits</th>
     <th class="num">CR</th>
@@ -2226,7 +2613,7 @@ async function dashRefresh(ev) {
 </div>
 
 <table>
-  <thead><tr><th>Account</th><th>Cost</th><th>Asset</th><th>To Do</th><th>✓</th></tr></thead>
+  <thead><tr><th>Account</th><th>Cost</th><th>Ad Asset</th><th>To Do</th><th>✓</th></tr></thead>
   <tbody>
   {% for r in c.account_rows %}
     <tr>
@@ -2461,7 +2848,7 @@ async function dashRefresh(ev) {
                  value="{{ pf.link }}"
                  placeholder="https://keitaro.example.com/…">
           <button type="button" class="cb-field-save-btn"
-                  onclick="cbSaveTrackingLink(this, '{{ acc_label | e }}')">Save</button>
+                  onclick="cbSaveTrackingLink(this, {{ acc_label | tojson | forceescape }})">Save</button>
         </div>
       </div>
 
@@ -2481,7 +2868,7 @@ async function dashRefresh(ev) {
             <span style="font-size:0.68rem;color:var(--muted);white-space:nowrap">from Upload FB</span>
             {% endif %}
             <button type="button" class="cb-field-save-btn"
-                    onclick="cbSaveOneMapField(this, '{{ acc_label | e }}', 'ad_account_id')">Save</button>
+                    onclick="cbSaveOneMapField(this, {{ acc_label | tojson | forceescape }}, 'ad_account_id')">Save</button>
             <span class="cb-field-status"></span>
           </div>
           {% endif %}
@@ -2494,7 +2881,7 @@ async function dashRefresh(ev) {
                      value="" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                      style="font-family:monospace;font-size:0.72rem">
               <button type="button" class="cb-field-save-btn"
-                      onclick="cbSaveOneMapField(this, '{{ acc_label | e }}', 'profile_id')">Save</button>
+                      onclick="cbSaveOneMapField(this, {{ acc_label | tojson | forceescape }}, 'profile_id')">Save</button>
               <span class="cb-field-status"></span>
             {% else %}
               <span class="cb-pf-ok" style="font-size:0.72rem">✓ set</span>
@@ -2508,7 +2895,7 @@ async function dashRefresh(ev) {
               <input type="text" class="cb-input cb-map-input" data-field="page_name"
                      value="" placeholder="e.g. Global Trading Academy">
               <button type="button" class="cb-field-save-btn"
-                      onclick="cbSaveOneMapField(this, '{{ acc_label | e }}', 'page_name')">Save</button>
+                      onclick="cbSaveOneMapField(this, {{ acc_label | tojson | forceescape }}, 'page_name')">Save</button>
               <span class="cb-field-status"></span>
             {% else %}
               <span class="cb-pf-ok" style="font-size:0.72rem">✓ {{ pf.page_name }}</span>
@@ -2693,26 +3080,28 @@ async function dashRefresh(ev) {
 
 <script>
 (function () {
-  var GOALS = {
-    GCC: {
-      total_ftd: 50,
-      geos: [
-        { code:"KW",  names:["Kuwait","KW"],                    ftd:15, cpa:3000, cr:3.0, ld:16 },
-        { code:"UAE", names:["UAE","United Arab Emirates","AE"], ftd:20, cpa:3000, cr:2.0, ld:33 },
-        { code:"SA",  names:["Saudi Arabia","SA"],               ftd:15, cpa:1500, cr:2.5, ld:19 }
-      ]
-    },
-    Latam: {
-      total_ftd: 140,
-      geos: [
-        { code:"CL", names:["Chile","CL"],    ftd:20, cpa:1000, cr:2.0, ld:32  },
-        { code:"CO", names:["Colombia","CO"],  ftd:40, cpa:1000, cr:1.3, ld:99  },
-        { code:"EC", names:["Ecuador","EC"],   ftd:40, cpa:1000, cr:2.0, ld:65  },
-        { code:"MX", names:["Mexico","MX"],    ftd:40, cpa:1000, cr:1.0, ld:129 }
-      ]
-    }
-  };
-  var GRAND_FTD = 190;
+  // Раньше здесь лежал литерал: чтобы добавить страну, надо было править
+  // HTML, и у всех машин были одни и те же числа независимо от того, чьи они.
+  // Теперь цели приходят с сервера из хранилища кампейн-менеджера, поэтому
+  // правка на главной видна и в разделе страны — иначе это два экрана с
+  // расходящимися числами, и один из них врёт.
+  var GOALS = (function () {
+    var byMarket = {};
+    {% for g in gv.rows %}
+    (function (g) {
+      var m = g.market || 'Other';
+      if (!byMarket[m]) byMarket[m] = { total_ftd: 0, geos: [] };
+      byMarket[m].total_ftd += (g.ftd || 0);
+      byMarket[m].geos.push({
+        code: g.code || (g.country || '').slice(0, 2).toUpperCase(),
+        names: [g.country, g.code].filter(Boolean),
+        ftd: g.ftd || 0, cpa: g.cpa, cr: g.cr, ld: g.leads_per_day
+      });
+    })({{ g | tojson }});
+    {% endfor %}
+    return byMarket;
+  })();
+  var GRAND_FTD = {{ gv.target | int }};
   var TREND_DAYS = {{ report.trend_days | int }};
   var ACT_RAW = [
     {% for c in report.countries %}{% set my = c.cm_comparison | selectattr('is_me') | list %}{n:{{ c.country | tojson }},dep:{{ my|sum(attribute='deposits')|int }},leads:{{ my|sum(attribute='leads')|int }},spend:{{ my|sum(attribute='spend')|round(2) }}},
@@ -2824,7 +3213,9 @@ async function dashRefresh(ev) {
     h += '</div></div>';
   }
   h += '</div></div>';
-  document.getElementById('goals-panel').innerHTML = h;
+  // Большая панель уехала с главной — её заменила компактная полоса.
+  var gp = document.getElementById('goals-panel');
+  if (gp) gp.innerHTML = h;
 
   document.querySelectorAll('.goals-country-slot').forEach(function (slot) {
     var cName = slot.dataset.countryName;
@@ -2878,9 +3269,27 @@ async function dashRefresh(ev) {
 </div>
 {% endif %}
 
+{# Пустой отчёт: сказать, почему пусто, и не прятать карту аккаунтов.
+
+   Раньше здесь стояло «No country data found. Check Excel path and filters» —
+   и это уводило чинить здоровый файл. Выбрав сегодняшний день, человек видел
+   диагноз про путь к Excel, хотя книга просто ещё не знает сегодня.
+
+   Вместе с отчётом исчезала и карта аккаунтов, а на ней кнопка Read — та
+   самая, ради которой сегодняшний день и выбирают: она читает не книгу, а
+   Ads Manager. Экран прятал ровно то, что продолжало работать. #}
 {% if not report.countries %}
 <div class="page-top">
-<p style="color: var(--muted)">No country data found. Check Excel path and filters.</p>
+  {% if account_map and account_map.date_from %}
+  <p style="color: var(--muted)">
+    The workbook has no rows for <b>{{ account_map.date_from }}{% if account_map.date_to and account_map.date_to != account_map.date_from %} → {{ account_map.date_to }}{% endif %}</b>.
+    {% if account_map.dates %}It runs to {{ account_map.dates[-1] }}.{% endif %}
+    Pick another period, or read the spend straight from an account below.
+  </p>
+  {% else %}
+  <p style="color: var(--muted)">No country data found. Check the Excel path and the filters.</p>
+  {% endif %}
+  <div id="amap-slot">{% include "_account_map.html" %}</div>
 </div>
 {% endif %}
 
@@ -2989,6 +3398,19 @@ async function dashRefresh(ev) {
 
 <script>
 (function () {
+  /* Период страницы едет с каждым раскрытием. Иначе строка говорит про
+     выбранные дни, а панель под ней — про весь файл, и обе выглядят
+     одинаково достоверно. Один обработчик вместо правки двух десятков
+     адресов в разметке: забыть один из них было бы легко, а незаметно. */
+  document.body.addEventListener("htmx:configRequest", function (evt) {
+    var path = evt.detail && evt.detail.path;
+    if (!path || path.indexOf("/details") !== 0) return;
+    var p = window._amapPick || {};
+    if (p.span === "all") { evt.detail.parameters["span"] = "all"; return; }
+    if (p.from) evt.detail.parameters["date_from"] = p.from;
+    if (p.to) evt.detail.parameters["date_to"] = p.to;
+  });
+
   // Drill-down toggle for cm_comparison and optimization: one open panel per section.
   document.body.addEventListener("htmx:beforeRequest", function (evt) {
     const el = evt.detail.elt;
@@ -3146,6 +3568,814 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
   overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
   function onKey(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } }
   document.addEventListener('keydown', onKey);
+}
+
+// ── Календарь периода для карты аккаунтов ────────────────────────────
+var _amapPick = { from: '{{ pd.date_from }}', to: '{{ pd.date_to }}', span: '{{ pd.span }}' };
+
+function amapDates() {
+  var el = document.getElementById('amap-dates');
+  try { return el ? JSON.parse(el.textContent) : []; } catch (e) { return []; }
+}
+
+function amapIso(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+    + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function amapShift(d, n) {
+  var x = new Date(d.getTime());
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+/* Готовые периоды — как в Ads Manager, чтобы человек не переучивался между
+   двумя экранами, на которые смотрит подряд.
+
+   Начало считается от настоящего сегодня, а не от последнего дня книги: если
+   файл отстал, «Yesterday» окажется без данных и погаснет — и это правда,
+   которую надо показать. Подставить вместо него ближайший день с данными
+   значило бы спрятать то, что книга не обновлена.
+
+   А конец подрезается последним днём книги, иначе «This month» тянулся бы до
+   сегодня, умолчание — до последнего дня книги, и два одинаковых по смыслу
+   периода не совпадали бы. Подрезка ничего не прячет: «Yesterday» на
+   отставшей книге по-прежнему остаётся пустым. */
+function amapPresets(last) {
+  var t = new Date(); t.setHours(0, 0, 0, 0);
+  /* Подрезки по книге больше нет. Она была неверной с самого начала: книга
+     говорит, что знает дешборд, а не что можно спросить у аккаунта. Кнопка
+     Read ходит в Ads Manager, где вчера и сегодня есть всегда, — а пресеты
+     «Today» и «Yesterday» гасли, потому что файл статистики отстал на два
+     дня. Два источника, одно ограничение — так нельзя. */
+  var cut = function (iso) { return iso; };
+  var y = amapShift(t, -1);
+  var weekStart = amapShift(t, -t.getDay());              // неделя с воскресенья, как у Meta
+  var lastWeekEnd = amapShift(weekStart, -1);
+  var monthStart = new Date(t.getFullYear(), t.getMonth(), 1);
+  var lastMonthEnd = amapShift(monthStart, -1);
+  var lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1);
+  var back = function (n) { return { from: amapIso(amapShift(t, -n)), to: cut(amapIso(y)) }; };
+
+  return [
+    { key: 'today', label: 'Today', from: amapIso(t), to: cut(amapIso(t)) },
+    { key: 'yesterday', label: 'Yesterday', from: amapIso(y), to: cut(amapIso(y)) },
+    { key: 'todayyest', label: 'Today and yesterday', from: amapIso(y), to: cut(amapIso(t)) },
+    Object.assign({ key: 'last7', label: 'Last 7 days' }, back(7)),
+    Object.assign({ key: 'last14', label: 'Last 14 days' }, back(14)),
+    Object.assign({ key: 'last28', label: 'Last 28 days' }, back(28)),
+    Object.assign({ key: 'last30', label: 'Last 30 days' }, back(30)),
+    { key: 'thisweek', label: 'This week', from: amapIso(weekStart), to: cut(amapIso(t)) },
+    { key: 'lastweek', label: 'Last week', from: amapIso(amapShift(lastWeekEnd, -6)), to: cut(amapIso(lastWeekEnd)) },
+    { key: 'thismonth', label: 'This month', from: amapIso(monthStart), to: cut(amapIso(t)) },
+    { key: 'lastmonth', label: 'Last month', from: amapIso(lastMonthStart), to: cut(amapIso(lastMonthEnd)) },
+    { key: 'all', label: 'Maximum', from: '', to: '', span: 'all' }
+  ];
+}
+
+var AMAP_MONTHS = ['January','February','March','April','May','June',
+                   'July','August','September','October','November','December'];
+
+function amapCalendar(btn) {
+  var open = document.querySelector('.amap-cal');
+  if (open) { open.remove(); return; }
+  var have = amapDates();
+  if (!have.length) { alert('The workbook has no dates to choose from.'); return; }
+
+  /* Выбор живёт в черновике, пока не нажали Update. Раньше второй клик по дате
+     грузил период немедленно: увидеть, что выбрал, было негде, а закрыть окно
+     после первого клика — значило потерять его молча. */
+  var draft = { from: _amapPick.from, to: _amapPick.to, span: _amapPick.span || '' };
+  var last = have[have.length - 1];
+  var first = have[0];
+  /* Открываемся на месяце выбранного периода, а не на последнем месяце книги:
+     иначе на отставшей книге календарь показывал бы август, когда выбран
+     сентябрь, и сегодняшнего дня в нём просто не было бы видно. */
+  var right = new Date((_amapPick.to || _amapPick.from || last) + 'T00:00:00');
+  right.setDate(1);
+  var presets = amapPresets(last);
+
+  var box = document.createElement('div');
+  box.className = 'amap-cal';
+  document.body.appendChild(box);
+  var r = btn.getBoundingClientRect();
+  box.style.left = Math.max(8, Math.min(r.left - 260, innerWidth - 700)) + 'px';
+  box.style.top = (r.bottom + window.scrollY + 6) + 'px';
+
+  function hasData(p) {
+    if (p.key === 'all') return true;
+    for (var i = 0; i < have.length; i++) if (have[i] >= p.from && have[i] <= p.to) return true;
+    return false;
+  }
+
+  function activePreset() {
+    if (draft.span === 'all') return 'all';
+    for (var i = 0; i < presets.length; i++) {
+      if (presets[i].key !== 'all' && presets[i].from === draft.from && presets[i].to === draft.to) return presets[i].key;
+    }
+    return 'custom';
+  }
+
+  function monthPicker(base, side) {
+    var y0 = Number(first.slice(0, 4)), y1 = Number(last.slice(0, 4));
+    var years = '';
+    for (var yy = y0; yy <= Math.max(y1, base.getFullYear()); yy++) {
+      years += '<option value="' + yy + '"' + (yy === base.getFullYear() ? ' selected' : '') + '>' + yy + '</option>';
+    }
+    var months = '';
+    for (var mm = 0; mm < 12; mm++) {
+      months += '<option value="' + mm + '"' + (mm === base.getMonth() ? ' selected' : '') + '>' + AMAP_MONTHS[mm] + '</option>';
+    }
+    return '<select class="amap-cal-pick" data-side="' + side + '" data-part="m">' + months + '</select>'
+         + '<select class="amap-cal-pick" data-side="' + side + '" data-part="y">' + years + '</select>';
+  }
+
+  function monthHtml(base, side) {
+    var firstDay = new Date(base.getFullYear(), base.getMonth(), 1);
+    var days = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    var lead = firstDay.getDay();                 // неделя с воскресенья
+    var h = '<div class="amap-cal-month"><div class="amap-cal-mhead">'
+      + (side === 'l' ? '<button type="button" class="amap-cal-nav" data-step="-1" title="earlier">‹</button>' : '<span></span>')
+      + monthPicker(base, side)
+      + (side === 'r' ? '<button type="button" class="amap-cal-nav" data-step="1" title="later">›</button>' : '<span></span>')
+      + '</div><div class="amap-cal-grid">';
+    ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function (d) { h += '<div class="dow">' + d + '</div>'; });
+    for (var i = 0; i < lead; i++) h += '<div></div>';
+    for (var day = 1; day <= days; day++) {
+      var key = amapIso(new Date(base.getFullYear(), base.getMonth(), day));
+      var has = have.indexOf(key) !== -1;
+      var cls = has ? 'has' : '';
+      if (draft.span !== 'all') {
+        if (key === draft.from || key === draft.to) cls += ' sel';
+        else if (draft.from && draft.to && key > draft.from && key < draft.to) cls += ' inrange';
+      }
+      /* День без строк в книге выбирать можно: спенд с аккаунта читается за
+         любой день, а книга отстаёт на день-два почти всегда. Тонкой цифрой
+         показываем, что дешборд про этот день ничего не знает. */
+      h += '<button type="button" class="' + cls + (has ? '' : ' thin') + '" data-day="' + key + '"'
+        + (has ? '' : ' title="no rows in the workbook for this day"') + '>' + day + '</button>';
+    }
+    return h + '</div></div>';
+  }
+
+  function draw() {
+    var active = activePreset();
+    var left = new Date(right.getFullYear(), right.getMonth() - 1, 1);
+    var oneDay = draft.span !== 'all' && draft.from && draft.from === draft.to;
+    var a = draft.span === 'all' ? 'all dates' : (draft.from || '…');
+    var b = draft.span === 'all' ? '' : (draft.to || '…');
+
+    var h = '<div class="amap-cal-wrap"><div class="amap-cal-presets">';
+    presets.forEach(function (p) {
+      /* Нет строк в книге — не повод запретить выбор: спенд с аккаунта
+         читается независимо. Помечаем, но не гасим. */
+      var live = hasData(p);
+      h += '<button type="button" data-preset="' + p.key + '"'
+        + ' class="' + (active === p.key ? 'on' : '') + (live ? '' : ' thin') + '"'
+        + (live ? '' : ' title="the workbook has no rows here — the dashboard numbers will be empty, but the spend can still be read from the account"')
+        + '><i></i>' + p.label + '</button>';
+    });
+    h += '<button type="button" data-preset="custom" class="' + (active === 'custom' ? 'on' : '')
+      + '" title="Pick the days on the calendars"><i></i>Custom</button>';
+    h += '</div><div class="amap-cal-main">'
+      + '<div class="amap-cal-months">' + monthHtml(left, 'l') + monthHtml(right, 'r') + '</div>'
+      + '<div class="amap-cal-inputs">'
+      + '<span class="amap-cal-field">' + a + '</span>'
+      + (oneDay || draft.span === 'all' ? ''
+          : '<span class="amap-cal-arrow">–</span><span class="amap-cal-field">' + b + '</span>')
+      + '<button type="button" class="amap-cal-x" data-close="1" title="Close">×</button>'
+      + '</div>'
+      + '<div class="amap-cal-foot">'
+      + '<span>' + have.length + ' days in the workbook'
+        + (last < amapIso(new Date()) ? ', last ' + last : '') + '</span>'
+      + '<button type="button" class="amap-btn" data-cancel="1">Cancel</button>'
+      + '<button type="button" class="amap-btn primary" data-apply="1">Update</button>'
+      + '</div></div></div>';
+    box.innerHTML = h;
+
+    box.querySelectorAll('[data-step]').forEach(function (b) {
+      b.onclick = function () { right.setMonth(right.getMonth() + Number(b.dataset.step)); draw(); };
+    });
+    box.querySelectorAll('.amap-cal-pick').forEach(function (s) {
+      s.onchange = function () {
+        var side = s.dataset.side;
+        var base = side === 'r' ? right : new Date(right.getFullYear(), right.getMonth() - 1, 1);
+        if (s.dataset.part === 'm') base.setMonth(Number(s.value));
+        else base.setFullYear(Number(s.value));
+        // правый календарь ведущий: левый всегда месяцем раньше
+        right = side === 'r' ? new Date(base.getFullYear(), base.getMonth(), 1)
+                             : new Date(base.getFullYear(), base.getMonth() + 1, 1);
+        draw();
+      };
+    });
+    box.querySelectorAll('[data-preset]:not([disabled])').forEach(function (b) {
+      b.onclick = function () {
+        if (b.dataset.preset === 'custom') return;   // Custom — это просто «выбрано руками»
+        var p = presets.filter(function (x) { return x.key === b.dataset.preset; })[0];
+        draft = { from: p.from, to: p.to, span: p.span || '' };
+        if (p.from) { right = new Date(p.to + 'T00:00:00'); right.setDate(1); }
+        draw();
+      };
+    });
+    box.querySelectorAll('[data-day]:not([disabled])').forEach(function (b) {
+      b.onclick = function () {
+        var d = b.dataset.day;
+        // Первый клик задаёт начало, второй — конец. Клик раньше начала
+        // начинает выбор заново, а не даёт перевёрнутый период.
+        if (!draft.from || draft.to || d < draft.from) draft = { from: d, to: '', span: '' };
+        else { draft.to = d; draft.span = ''; }
+        draw();
+      };
+    });
+    box.querySelector('[data-close]').onclick = function () { box.remove(); };
+    box.querySelector('[data-cancel]').onclick = function () { box.remove(); };
+    box.querySelector('[data-apply]').onclick = function () {
+      // Начали период и не закончили — концом считается его начало: один день.
+      amapApply(draft.from, draft.to || draft.from, draft.span);
+    };
+  }
+  draw();
+}
+
+/* Период меняет каждое число на странице, а не одну секцию, поэтому страница
+   перезагружается целиком. Подменять фрагменты по одному значило бы держать
+   на экране числа за разные периоды, пока догружаются остальные, — и в этот
+   момент любые два соседних блока выглядели бы одинаково достоверно. */
+function amapApply(from, to, span) {
+  var cal = document.querySelector('.amap-cal');
+  if (cal) cal.remove();
+  _amapPick = { from: from, to: to, span: span || '' };
+  var q = [];
+  if (span === 'all') q.push('span=all');
+  else {
+    if (from) q.push('date_from=' + encodeURIComponent(from));
+    if (to) q.push('date_to=' + encodeURIComponent(to));
+  }
+  var hash = window.location.hash || '';
+  window.location.href = window.location.pathname + (q.length ? '?' + q.join('&') : '') + hash;
+}
+
+/* ── Спенд прямо с аккаунта ───────────────────────────────────────────
+   Кнопка поднимает профиль Multilogin и читает Ads Manager. Это десятки
+   секунд, поэтому запрос уходит и мы спрашиваем состояние, а не ждём ответа
+   в одном вызове: страница, замершая на минуту, неотличима от сломанной.
+
+   Опрашивается только то, что сейчас читается, и только пока читается. */
+/* Период страницы одним местом. Читает то же состояние, что рисует шапку, —
+   иначе кнопка и подпись рядом с ней рано или поздно разойдутся. */
+/* Раскрытые страны переживают перезагрузку.
+
+   Блоки свёрнуты по умолчанию, но дешборд перезагружает себя сам, и человек,
+   работающий внутри страны, терял бы её на каждом обновлении. Хранится только
+   список раскрытых ключей и только в этом браузере. */
+var AMAP_OPEN_KEY = 'acl.amap.open';
+
+function amapOpenList() {
+  try {
+    var raw = localStorage.getItem(AMAP_OPEN_KEY);
+    var list = raw ? JSON.parse(raw) : [];
+    return Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+  } catch (e) {
+    return [];   // приватное окно или запрет на хранилище — просто без памяти
+  }
+}
+
+function amapWatchOpen() {
+  var known = amapOpenList();
+  var blocks = document.querySelectorAll('details.amap-country[data-country]');
+  Array.prototype.forEach.call(blocks, function (d) {
+    var key = d.getAttribute('data-country');
+    if (known.indexOf(key) !== -1) d.open = true;
+    d.addEventListener('toggle', function () {
+      var now = amapOpenList();
+      var at = now.indexOf(key);
+      if (d.open && at === -1) now.push(key);
+      if (!d.open && at !== -1) now.splice(at, 1);
+      try { localStorage.setItem(AMAP_OPEN_KEY, JSON.stringify(now)); } catch (e) {}
+    });
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', amapWatchOpen);
+} else {
+  amapWatchOpen();
+}
+
+function amapPeriod() {
+  var p = window._amapPick || {};
+  if (p.span === 'all') return { from: '', to: '', span: 'all' };
+  var from = p.from || '';
+  return { from: from, to: p.to || from, span: p.span || '' };
+}
+
+function amapSpendCell(btn) {
+  var row = btn.closest('tr');
+  return row ? row.querySelector('.amap-live') : null;
+}
+
+function amapReadSpend(btn) {
+  var cell = amapSpendCell(btn);
+  var account = cell && cell.dataset.account;
+  if (!account) return;
+  var per = amapPeriod();
+  if (!per.from || per.span === 'all') return;
+  var extra = btn.parentNode.querySelector('.amap-openprof');
+  if (extra) extra.remove();
+  btn.disabled = true;
+  btn.className = 'amap-btn amap-read';
+  btn.textContent = 'reading…';
+  /* Период берём тот же, что показан в шапке: число за другой отрезок
+     выглядело бы расхождением источников, а было бы ответом на другой
+     вопрос. */
+  var body = new FormData();
+  body.append('account', account);
+  body.append('date_from', per.from);
+  body.append('date_to', per.to);
+  body.append('span', per.span);
+  fetch('/account-spend/read', { method: 'POST', body: body, credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) throw new Error(j.error || 'refused');
+      amapPollSpend(account, cell, btn, 0, per);
+    })
+    .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
+}
+
+function amapMoney(spend, currency) {
+  var code = String(currency || '').toUpperCase();
+  return (/^[A-Z]{3}$/.test(code) ? code : 'currency unknown') + ' '
+    + Number(spend).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function amapApplyReading(account, s) {
+  document.querySelectorAll('.amap-live').forEach(function (cell) {
+    if (cell.dataset.account !== account) return;
+    var row = cell.closest('tr');
+    var btn = row.querySelector('.amap-read');
+    cell.dataset.running = s.state === 'running' ? '1' : '0';
+    if (s.status) {
+      var status = row.querySelector('.amap-status');
+      status.innerHTML = '<span></span>';
+      var label = status.firstChild;
+      label.className = 'amap-st ' + (s.status === 'clear' ? 'ok' : s.status === 'unknown' ? 'dim' : 'bad');
+      label.textContent = s.status === 'clear' ? 'no warning' : s.status === 'unknown' ? 'unreadable' : s.status;
+      label.title = (s.status_text || (s.status === 'clear' ? 'No warning on the page; not a verified active status' : s.status)) + ' · read ' + (s.finished_at || '');
+    }
+    if (s.state === 'running') {
+      btn.disabled = true; btn.textContent = 'reading…'; return;
+    }
+    if (s.state !== 'ok') { amapSpendFailed(btn, cell, s.error || 'failed', s.shot, s.how); return; }
+    cell.innerHTML = '<span class="amap-live-ok"></span>';
+    cell.firstChild.textContent = amapMoney(s.spend, s.currency);
+    cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how;
+    btn.disabled = false; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read'; btn.title = 'Read again';
+  });
+}
+
+function amapPollSpend(account, cell, btn, tries, per) {
+  per = per || amapPeriod();
+  if (!per.from || per.span === 'all') return;
+  if (tries > 120) {
+    amapApplyReading(account, {state: 'failed', error: 'no answer after six minutes — check the launcher window'});
+    return;
+  }
+  setTimeout(function () {
+    fetch('/account-spend/status?account=' + encodeURIComponent(account)
+          + '&date_from=' + encodeURIComponent(per.from)
+          + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) throw new Error(j.error || 'Could not read status');
+        var s = j.reading || {};
+        amapApplyReading(account, s);
+        if (s.state === 'running') amapPollSpend(account, cell, btn, tries + 1, per);
+      })
+      .catch(function (e) { amapApplyReading(account, {state: 'failed', error: String(e && e.message || e)}); });
+  }, 3000);
+}
+
+function amapResumeReadings() {
+  var seen = {};
+  document.querySelectorAll('.amap-live[data-running="1"]').forEach(function (cell) {
+    var account = cell.dataset.account;
+    if (seen[account]) return;
+    seen[account] = true;
+    var btn = cell.closest('tr').querySelector('.amap-read');
+    amapPollSpend(account, cell, btn, 0, amapPeriod());
+  });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapResumeReadings);
+else amapResumeReadings();
+
+function amapSpendFailed(btn, cell, why, shot, how) {
+  btn.disabled = false;
+  btn.className = 'amap-btn amap-read amap-live-bad';
+  btn.textContent = 'failed · retry';
+  btn.title = why;
+  /* Причина — в самой ячейке, а не только в подсказке к кнопке.
+     8 сентября прогон упал, ячейка осталась прежней, и это читалось как «не
+     зашло»: чтобы узнать причину, надо было догадаться навести курсор, а про
+     сохранённый снимок экрана узнать было неоткуда вовсе. Неудача должна
+     выглядеть неудачей с первого взгляда. */
+  if (cell) {
+    cell.innerHTML = '<span class="amap-live-bad"></span>';
+    var bad = cell.firstChild;
+    bad.textContent = why.length > 40 ? why.slice(0, 39) + '…' : why;
+    bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'снимок: ' + shot : '');
+  }
+  /* Если прицепиться не к чему, «retry» ничего не изменит: сначала нужно
+     поднять профиль автоматизацией. Кнопка появляется ровно в этом случае. */
+  if (/профил|profile/i.test(why || '') && !btn.parentNode.querySelector('.amap-openprof')) {
+    var open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'amap-btn amap-openprof';
+    open.textContent = 'open profile';
+    open.onclick = function () { amapOpenProfile(open); };
+    btn.parentNode.insertBefore(open, btn.nextSibling);
+  }
+}
+
+function amapOpenProfile(btn) {
+  var cell = amapSpendCell(btn);
+  var account = cell && cell.dataset.account;
+  if (!account) return;
+  var read = btn.parentNode.querySelector('.amap-read');
+  btn.disabled = true;
+  btn.textContent = 'opening…';
+  var body = new FormData();
+  body.append('account', account);
+  fetch('/account-spend/open-profile', { method: 'POST', body: body, credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (j.ok) {
+        btn.remove();
+        if (read) {
+          read.disabled = false;
+          read.className = 'amap-btn amap-read';
+          read.textContent = 'Read';
+          read.title = j.message || '';
+        }
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'open profile';
+        btn.title = j.message || j.error || 'could not open the profile';
+        if (read) read.title = btn.title;
+      }
+    })
+    .catch(function (e) {
+      btn.disabled = false;
+      btn.textContent = 'open profile';
+      alert('Could not open the profile: ' + (e && e.message || e));
+    });
+}
+
+
+// ── Goals: меню на чипе, правка и удаление ───────────────────────────
+var _gTeamLead = {{ gv.team_lead | tojson }};
+var _gCm = {{ gv.cm | tojson }};
+
+function goalCloseMenu() {
+  var m = document.querySelector('.gmenu');
+  if (m) m.remove();
+}
+document.addEventListener('click', function (e) {
+  if (!e.target.closest || (!e.target.closest('.gmenu') && !e.target.closest('.gchip'))) goalCloseMenu();
+}, true);
+
+function goalMenu(chip, goal) {
+  goalCloseMenu();
+  var m = document.createElement('div');
+  m.className = 'gmenu';
+  m.innerHTML = '<div class="gmenu-head">' + aclEscHtml(goal.country)
+    + ' · ' + goal.deposits + ' of ' + goal.ftd + ' FTD</div>';
+  var edit = document.createElement('button');
+  edit.type = 'button'; edit.textContent = 'Edit target…';
+  edit.onclick = function () { goalCloseMenu(); goalEdit(goal); };
+  var del = document.createElement('button');
+  del.type = 'button'; del.className = 'danger'; del.textContent = 'Delete';
+  del.onclick = function () {
+    goalCloseMenu();
+    // Цель — не страна. Удаление снимает цель и не трогает ни аккаунты, ни
+    // историю, ни раздел страны; сказать это до нажатия, а не после.
+    if (!confirm('Stop tracking a goal for ' + goal.country + '?\n\n'
+      + 'Its accounts, history and country section stay exactly as they are — '
+      + 'it just stops being a target.')) return;
+    goalSend({ action: 'delete', country: goal.country });
+  };
+  m.appendChild(edit); m.appendChild(del);
+  document.body.appendChild(m);
+  var r = chip.getBoundingClientRect();
+  m.style.left = Math.min(r.left, innerWidth - m.offsetWidth - 12) + 'px';
+  m.style.top = (r.bottom + window.scrollY + 4) + 'px';
+}
+
+function goalEdit(goal) {
+  goalCloseMenu();
+  var g = goal || { country: '', code: '', market: 'Other', ftd: '', cpa: '', cr: '', leads_per_day: '' };
+  var m = document.createElement('div');
+  m.className = 'gmenu';
+  m.style.minWidth = '17rem';
+  function field(key, label, ph) {
+    return '<label for="gf-' + key + '">' + label + '</label>'
+      + '<input id="gf-' + key + '" value="' + aclEscHtml(g[key] === null || g[key] === undefined ? '' : String(g[key]))
+      + '" placeholder="' + (ph || '') + '"' + (key === 'country' && goal ? ' readonly' : '') + '>';
+  }
+  m.innerHTML = '<div class="gmenu-head">' + (goal ? 'Edit ' + aclEscHtml(g.country) : 'New country goal') + '</div>'
+    + '<div class="gform">'
+    + field('country', 'Country', 'Peru')
+    + field('code', 'Code', 'PE')
+    + field('market', 'Market', 'Latam')
+    + field('ftd', 'FTD target', '20')
+    + field('cpa', 'CPA ≤', '1000')
+    + field('cr', 'CR % ≥', '2.0')
+    + field('leads_per_day', 'Leads / day', '32')
+    + '<div class="gform-actions">'
+    + '<button type="button" id="gf-cancel">Cancel</button>'
+    + '<button type="button" id="gf-save" class="amap-btn">Save</button>'
+    + '</div></div>';
+  document.body.appendChild(m);
+  m.style.left = Math.max(12, Math.min(innerWidth / 2 - 140, innerWidth - 300)) + 'px';
+  m.style.top = (window.scrollY + 120) + 'px';
+  m.querySelector('#gf-cancel').onclick = goalCloseMenu;
+  m.querySelector('#gf-save').onclick = function () {
+    var out = {};
+    ['country','code','market','ftd','cpa','cr','leads_per_day'].forEach(function (k) {
+      var v = (m.querySelector('#gf-' + k).value || '').trim();
+      out[k] = v === '' ? null : v;
+    });
+    goalSend({ action: 'save', goal: out });
+  };
+  m.querySelector('#gf-' + (goal ? 'ftd' : 'country')).focus();
+}
+
+async function goalSend(body) {
+  body.cm = _gCm;
+  var r = await fetch('/goals', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: JSON.stringify(body)
+  });
+  var d = null; try { d = await r.json(); } catch (e) {}
+  if (d && d.ok) { goalCloseMenu(); location.reload(); return; }
+  alert((d && d.error) ? d.error : ('Could not save (HTTP ' + r.status + ')'));
+}
+
+// ── Account map: placing accounts in countries ───────────────────────
+// Одно хранилище, два экрана. Любое изменение здесь — одна связь, и после
+// перезагрузки её видят и карта на главной, и список аккаунтов внутри страны.
+async function amapSend(body, msgEl) {
+  if (msgEl) { msgEl.textContent = 'saving…'; msgEl.className = 'amap-msg'; }
+  var r = await fetch('/account-links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(body)
+  });
+  var data = null;
+  try { data = await r.json(); } catch (e) { data = null; }
+  if (data && data.ok) { location.reload(); return true; }
+
+  // Счёт идёт на деньги: аккаунт, который сегодня тратил, не убирается
+  // молча. Подтверждение спрашивается один раз и с текстом, который
+  // объясняет, что именно НЕ произойдёт — кампании продолжат работать.
+  if (data && data.needs_confirm) {
+    if (confirm(data.error + '\n\nTake it out anyway?')) {
+      body.confirm = true;
+      return amapSend(body, msgEl);
+    }
+    if (msgEl) msgEl.textContent = '';
+    return false;
+  }
+  if (msgEl) {
+    msgEl.textContent = (data && data.error) ? data.error : ('error ' + r.status);
+    msgEl.className = 'amap-msg bad';
+  } else {
+    alert((data && data.error) ? data.error : ('Could not save (HTTP ' + r.status + ')'));
+  }
+  return false;
+}
+
+function amapLink(select, kind, value) {
+  var account = select ? select.value : '';
+  var msg = select && select.parentElement ? select.parentElement.querySelector('.amap-msg') : null;
+  if (!account) { if (msg) { msg.textContent = 'pick an account first'; msg.className = 'amap-msg bad'; } return; }
+  amapSend({ action: 'link', kind: kind, value: value, account: account }, msg);
+}
+
+function amapUnlink(account, kind, value) {
+  amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null);
+}
+
+function amapClose(kind, value, label) {
+  if (!confirm('Retire ' + (label || value) + '?\n\nIts accounts move to Available accounts. '
+    + 'Nothing is deleted — they keep their Multilogin profile, proxy and history.')) return;
+  amapSend({ action: 'close', kind: kind, value: value }, null);
+}
+
+// Найти профиль в Multilogin и подключить его к стране одним движением.
+// Поиск идёт по хвосту имени — «X01» находит KLD_BFL_X01, — потому что именно
+// хвост человек и помнит. Ищется ТОЛЬКО в выбранном аккаунте Multilogin:
+// профиль из Inhouse не найдётся под токеном KLD, и это надо видеть, а не
+// гадать, почему «ничего не нашлось».
+/* Отбор профилей по мере ввода.
+   Список тянется один раз на инстанс и живёт в памяти страницы: 334 профиля
+   в KLD, и запрашивать их на каждую нажатую букву значило бы триста запросов
+   к Multilogin ради того, что уже лежит рядом.
+
+   Порядок выдачи: сначала те, чьё имя КОНЧАЕТСЯ введённым — аккаунт различают
+   последние знаки, `X84`, — потом просто содержащие. Иначе `84` первым делом
+   покажет что-нибудь вроде `KLD_BFL_8412`, а нужный уедет вниз. */
+var _mlxCache = {};   // инстанс -> массив профилей
+var _mlxLoading = {}; // инстанс -> Promise
+
+function amapProfiles(inst, reload) {
+  if (reload) { delete _mlxCache[inst]; delete _mlxLoading[inst]; }
+  if (_mlxCache[inst]) return Promise.resolve(_mlxCache[inst]);
+  if (_mlxLoading[inst]) return _mlxLoading[inst];
+  var pending = fetch('/multilogin-search', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ search_text: '', instance: inst })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) throw new Error((d && d.error) || 'Multilogin did not answer');
+    var profiles = d.profiles || [];
+    if (_mlxLoading[inst] === pending) { _mlxCache[inst] = profiles; delete _mlxLoading[inst]; }
+    return profiles;
+  }).catch(function (e) { if (_mlxLoading[inst] === pending) delete _mlxLoading[inst]; throw e; });
+  _mlxLoading[inst] = pending;
+  return pending;
+}
+
+function amapRank(profiles, q) {
+  var needle = q.toLowerCase();
+  var ends = [], has = [];
+  profiles.forEach(function (p) {
+    var n = (p.name || '').toLowerCase();
+    if (n.endsWith(needle)) ends.push(p);
+    else if (n.indexOf(needle) !== -1) has.push(p);
+  });
+  return ends.concat(has);
+}
+
+function amapFilter(input, reload) {
+  var box = input.closest('.amap-add');
+  var inst = box.querySelector('.amap-inst').value || 'A';
+  var msg = box.querySelector('.amap-msg');
+  var q = (input.value || '').trim();
+  var hits = box.querySelector('.amap-hits');
+  var generation = box._amapGeneration = (box._amapGeneration || 0) + 1;
+  hits.hidden = true; hits.innerHTML = '';
+  function current() { return box._amapGeneration === generation && (box.querySelector('.amap-inst').value || 'A') === inst; }
+
+  if (!q) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
+  msg.className = 'amap-msg';
+  msg.textContent = _mlxCache[inst] ? '' : ('loading ' + (ACL_MLX_LABELS[inst] || inst) + '…');
+
+  return amapProfiles(inst, reload).then(function (all) {
+    if (!current()) return;
+    // пока грузилось, могли набрать ещё — берём то, что в поле сейчас
+    var now = (input.value || '').trim();
+    if (!now) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
+    var found = amapRank(all, now);
+    msg.textContent = found.length
+      ? found.length + ' of ' + all.length
+      : 'nothing in ' + (ACL_MLX_LABELS[inst] || inst) + ' ends with or contains "' + now + '"';
+    amapRenderHits(box, hits, found.slice(0, 12), inst);
+  }).catch(function (e) {
+    if (!current()) return;
+    hits.hidden = true; hits.innerHTML = '';
+    msg.textContent = String(e && e.message || e);
+    msg.className = 'amap-msg bad';
+  });
+}
+
+function amapFind(btn) {
+  return amapFilter(btn.closest('.amap-add').querySelector('.amap-find'), true);
+}
+
+/* Один рисовальщик на оба пути — и на кнопку, и на ввод. Две копии этой
+   разметки разошлись бы, и заметил бы это тот, кто поверил не той. */
+function amapRenderHits(box, hits, profiles, inst) {
+  hits.innerHTML = '';
+  hits.hidden = !profiles.length;
+  profiles.forEach(function (p) {
+    var row = document.createElement('div');
+    row.className = 'amap-hit';
+    row.innerHTML = '<b>' + aclEscHtml(p.name || '(unnamed)') + '</b>'
+      + '<span class="amap-hint">checking this machine…</span>';
+    var btnAdd = document.createElement('button');
+    btnAdd.type = 'button'; btnAdd.className = 'amap-btn'; btnAdd.textContent = 'Connect';
+    btnAdd.onclick = function () {
+      if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
+      amapConnect(box, p, inst, btnAdd);
+    };
+    row.appendChild(btnAdd);
+    hits.appendChild(row);
+
+    // Кабинет известен только для профиля, который на этой машине открывали:
+    // он читается из его же истории. Сказать это до нажатия, а не после.
+    if (p._details) { amapHint(row, p._details); return; }
+    fetch('/mlx-profile-details?profile_id=' + encodeURIComponent(p.profile_id)
+          + '&name=' + encodeURIComponent(p.name || ''))
+      .then(function (x) { return x.json(); })
+      .then(function (d) { p._details = d; amapHint(row, d); })
+      .catch(function () { row.querySelector('.amap-hint').textContent = ''; });
+  });
+}
+
+function amapHint(row, d) {
+  var hint = row.querySelector('.amap-hint');
+  if (!hint) return;
+  if (d && d.ad_account_id) hint.textContent = d.ad_account_id + (d.suggested_name ? ' · ' + d.suggested_name : '');
+  else hint.textContent = 'never opened here — the ad account will be read from it';
+}
+
+async function amapConnect(box, profile, instance, btn) {
+  var country = box.getAttribute('data-amap-country');
+  var msg = box.querySelector('.amap-msg');
+  var d = profile._details || {};
+  /* Имя, каким его знает Multilogin. Решение пользователя 2026-09-07:
+     сверку с книгой убрали. Следствие записано как acl-145 — тринадцать
+     аккаунтов в карте записаны книжными именами, и связь с книгой идёт по
+     имени, поэтому новые под именем профиля своих чисел не увидят. */
+  var name = d.suggested_name || profile.name || '';
+  name = (prompt('Ad account name:', name) || '').trim();
+  if (!name) return;
+  var act = (d.ad_account_id || '').trim();
+  if (!act) {
+    /* Спрашивать в последнюю очередь. Номер знает сам кабинет: Ads Manager
+       называет его в собственном адресе, и профиль всё равно приходится
+       открыть, чтобы с аккаунтом что-то делать. Раньше здесь сразу просили
+       вставить ссылку — то есть просили человека сходить и посмотреть за
+       машину.
+
+       Прочитанное всё равно показываем: у профиля может быть несколько
+       кабинетов, открывается тот, что по умолчанию. Подставить молча значит
+       время от времени брать не тот, и на экране об этом ничего не скажет. */
+    msg.textContent = 'asking the open profile…';
+    msg.className = 'amap-msg';
+    var probe = new FormData();
+    probe.append('profile_id', profile.profile_id);
+    probe.append('folder_id', profile.folder_id || d.folder_id || '');
+    probe.append('instance', instance);
+    var found = null;
+    try {
+      var pr = await fetch('/account-probe/ad-account', { method: 'POST', body: probe, credentials: 'same-origin' });
+      found = await pr.json();
+    } catch (e) { found = { ok: false, error: String(e && e.message || e) }; }
+    msg.textContent = '';
+
+    var head, seed;
+    if (found && found.ok) {
+      head = 'The open profile says its ad account is:'
+        + (found.account_name ? '\n' + found.account_name : '');
+      seed = found.act;
+    } else {
+      head = 'Could not read it from the profile:\n' + ((found && found.error) || 'unknown')
+        + '\n\nOpen the profile with automation and try again, or paste the '
+        + 'Ads Manager link or the account number:';
+      seed = '';
+    }
+    act = (prompt(head, seed) || '').trim();
+    if (!act) return;
+  }
+  btn.disabled = true; msg.textContent = 'connecting…'; msg.className = 'amap-msg';
+
+  var patch = await fetch('/account-map-patch', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+    body: JSON.stringify({
+      account_name: name, ad_account_id: act,
+      profile_id: profile.profile_id, folder_id: profile.folder_id || d.folder_id || '',
+      multilogin_instance: instance, country: country
+    })
+  });
+  var pd = null; try { pd = await patch.json(); } catch (e) {}
+  if (!pd || !pd.ok) {
+    btn.disabled = false;
+    msg.textContent = (pd && pd.error) ? pd.error : ('could not save (HTTP ' + patch.status + ')');
+    msg.className = 'amap-msg bad';
+    return;
+  }
+  amapSend({ action: 'link', kind: 'country', value: country, account: name }, msg);
+}
+
+function amapAddThisCountry(name, btn) {
+  /* Завести страну прямо с её вкладки. Без этого пришлось бы уходить на Home
+     и искать её среди двадцати — ради строки, которую видно отсюда. */
+  var msg = btn.parentNode.querySelector('.amap-msg');
+  amapSend({ action: 'add', kind: 'country', value: name }, msg);
+}
+
+function amapAddCountry() {
+  var name = (document.getElementById('amap-new-country').value || '').trim();
+  var acc = document.getElementById('amap-new-country-acc').value || '';
+  var msg = document.getElementById('amap-new-msg');
+  if (!name) { msg.textContent = 'name the country'; msg.className = 'amap-msg bad'; return; }
+  // Аккаунт необязателен. Порядок «сначала страна, потом аккаунт из
+  // Multilogin» — обычный: аккаунта, который ещё не подключён, в списке
+  // известных и не может быть.
+  if (acc) amapSend({ action: 'link', kind: 'country', value: name, account: acc }, msg);
+  else amapSend({ action: 'add', kind: 'country', value: name }, msg);
 }
 
 // ── Multilogin connect ────────────────────────────────────────────────
@@ -6741,17 +7971,31 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     try {
       var target = ev.target;
       if (!target || !target.closest) return;
-      var row = target.closest('tr.drillable');
-      if (!row || !row.hasAttribute('hx-get')) return;
+      // Строка целиком (дриллы отчёта) либо кнопка-стрелка внутри строки
+      // (карта аккаунтов). Логика одна: открыто — закрываем и глушим событие,
+      // чтобы htmx о клике не узнал и второй запрос не ушёл.
+      var opener = target.closest('tr.drillable[hx-get], [hx-get][hx-swap="afterend"]');
+      if (!opener) return;
+      /* У раскрытий с data-drill свой переключатель — он отменяет запрос на
+         htmx:beforeRequest, то есть средствами самого htmx. Два владельца
+         одного поведения гонялись: иногда второй клик закрывал панель, иногда
+         закрывал и тут же открывал заново, и снаружи это выглядело как
+         «кнопка не работает». Здесь остаются только те, у кого владельца нет —
+         каретки в карте аккаунтов. */
+      if (opener.getAttribute('data-drill')) return;
+      var row = opener.tagName === 'TR' ? opener : opener.closest('tr');
+      if (!row) return;
       var next = row.nextElementSibling;
       if (next && next.classList && next.classList.contains('drill-detail')) {
         next.remove();
         row.classList.remove('drill-open');
+        row.classList.remove('amap-open');
         ev.preventDefault();
         ev.stopPropagation();
         return;
       }
       row.classList.add('drill-open');
+      if (opener.tagName !== 'TR') row.classList.add('amap-open');
     } catch (e) { /* при любой неожиданности пусть открывается как раньше */ }
   }, true);
 

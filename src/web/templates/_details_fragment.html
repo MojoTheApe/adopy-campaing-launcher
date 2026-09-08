@@ -9,7 +9,7 @@
       <div class="drill-header">
         <span class="drill-count">
           {% if rows %}
-            {% if section == 'cm_comparison' %}
+            {% if section in ('cm_comparison', 'account') %}
               {{ rows|length }} campaign{{ '' if rows|length == 1 else 's' }} with deposits
             {% else %}
               {{ rows|length }} ad{{ '' if rows|length == 1 else 's' }}
@@ -40,7 +40,7 @@
               <th class="num">CPA</th>
               <th>Date</th>
               <th></th>
-              {% elif section == 'cm_comparison' %}
+              {% elif section in ('cm_comparison', 'account') %}
               <th>Campaign / Ad set</th>
               <th>Account</th>
               <th class="num">Dep</th>
@@ -63,7 +63,7 @@
           <tbody>
           {% for r in rows %}
             <tr
-              {% if section == 'cm_comparison' and r.adset %}
+              {% if section in ('cm_comparison', 'account') and r.adset %}
               class="drillable"
               data-drill="optimization"
               hx-get="/details?section=optimization&country={{ country | urlencode }}&account={{ r.account | urlencode }}&adset={{ r.adset | urlencode }}&ncols=6"
@@ -89,7 +89,7 @@
                           data-country="{{ country | anchor_slug }}" data-country-name="{{ country }}"
                           data-payload='{{ r | tojson | e }}'
                           title="Add to build: ad in the last campaign">+ 🛒</button></td>
-              {% elif section == 'cm_comparison' %}
+              {% elif section in ('cm_comparison', 'account') %}
               <td class="adset" style="max-width:300px;word-break:break-word">
                 {{ r.adset or '' }}
                 {% if r.adset %}<span style="color:var(--muted);font-size:0.7rem;margin-left:4px">▸ ads</span>{% endif %}

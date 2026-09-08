@@ -1,0 +1,82 @@
+{# Карта аккаунтов. Отдельным файлом, потому что её же отдаёт маршрут
+   /account-map при смене периода — один источник разметки на оба пути. #}
+  {# ── Account map ──────────────────────────────────────────────────────
+     Одно хранилище, два экрана: эта карта и список аккаунтов внутри страны
+     читают одни и те же связи. Страны берутся из связей, а не из книги:
+     открытая вчера страна ещё без расходов должна быть видна, а закрытая —
+     исчезнуть, даже пока в файле лежат прошлонедельные числа. #}
+  <div class="amap">
+    <div class="amap-head">
+      <h3>Account map</h3>
+      <span class="amap-note">{{ amap.countries | length }} countries · numbers from the stats workbook</span>
+      {#- Выбор периода переехал в шапку: он меняет всю страницу, а не эту
+          секцию. Здесь остаётся только то, за какие дни показаны числа. -#}
+      <span class="amap-note">{% if amap.span == 'all' %}all dates{% elif amap.date_from and amap.date_from == amap.date_to %}{{ amap.date_from }}{% elif amap.date_from or amap.date_to %}{{ amap.date_from or '…' }} → {{ amap.date_to or '…' }}{% else %}all dates{% endif %}</span>
+      <span class="amap-add" style="padding:0;margin-left:auto">
+        <input type="text" id="amap-new-country" placeholder="new country…" size="14">
+        <select id="amap-new-country-acc">
+          <option value="">no account yet</option>
+          {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
+        </select>
+        <button type="button" class="amap-btn" onclick="amapAddCountry()">Add country</button>
+        <span class="amap-msg" id="amap-new-msg"></span>
+      </span>
+    </div>
+
+    {% for mc in amap.countries %}
+    {# Свёрнуто по умолчанию. Раньше открывались первые три страны — правило,
+       которого на экране не видно: часть блоков открыта, часть нет, и порядок
+       стран этим управляет. Сводка в заголовке (аккаунты, спенд, лиды, FTD)
+       отвечает на вопрос «что здесь» без раскрытия.
+
+       Раскрытое человеком запоминается: дешборд перезагружает себя сам, и
+       закрывать при этом страну, внутри которой человек работает, значило бы
+       менять одну помеху на другую. #}
+    <details class="amap-country" data-country="{{ mc.key | e }}">
+      <summary>
+        {{ mc.country }}
+        <span class="amap-sum">
+          <span>accounts <b>{{ mc.rows | length }}</b></span>
+          <span>spend <b>{{ mc.spend | fmt_usd }}</b></span>
+          <span>leads <b>{{ mc.leads }}</b></span>
+          <span>FTD <b>{{ mc.deposits }}</b></span>
+          <button type="button" class="amap-btn danger"
+                  onclick="event.preventDefault();event.stopPropagation();amapClose('country',{{ mc.key | tojson | forceescape }},{{ mc.country | tojson | forceescape }})"
+                  title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>
+        </span>
+      </summary>
+      {% include "_account_map_country.html" %}
+    </details>
+    {% endfor %}
+
+    {% if not amap.countries %}
+    <div class="amap-country"><div class="amap-empty">
+      No countries yet. Accounts get placed into countries from a country's Accounts section.
+    </div></div>
+    {% endif %}
+
+    {# Свободные аккаунты: настроены и подключены, но не размещены ни в одной
+       стране. Сюда же падают аккаунты закрытой страны — связь снимается,
+       аккаунт остаётся. #}
+    <details class="amap-country amap-available" {% if amap.available %}open{% endif %}>
+      <summary>
+        Available accounts
+        <span class="amap-sum"><span><b>{{ amap.available | length }}</b> not placed</span></span>
+      </summary>
+      {% if amap.available %}
+      <table>
+        <thead><tr><th>Account</th><th>Ad Asset</th></tr></thead>
+        <tbody>
+        {% for r in amap.available %}
+          <tr>
+            <td class="amap-acc">{{ r.account }}</td>
+            <td>{% if r.assets %}<span class="amap-tags">{% for a in r.assets %}<span class="amap-tag">{{ a }}</span>{% endfor %}</span>{% else %}<span class="nodata">—</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="amap-empty">Every configured account is placed in a country.</div>
+      {% endif %}
+    </details>
+  </div>
