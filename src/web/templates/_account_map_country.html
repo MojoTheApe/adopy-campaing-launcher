@@ -5,26 +5,26 @@
    той. Ожидает `mc` — страну из карты — и `amap`. #}
       {% if mc.rows %}
       <table class="amap-grid">
-        {#- Одиннадцать колонок и одиннадцать долей. Когда добавилась «On
-            account», colgroup остался на десяти: ширины сложились в 100% без
-            последней, и колонка с кнопками уехала за правый край. -#}
+        {#- Девять колонок и девять долей, в сумме ровно 100%. Когда-то доль
+            было на одну меньше, чем колонок: ширины сложились без последней, и
+            колонка с кнопками уехала за правый край. -#}
         <colgroup>
-          <col style="width:19%"><col style="width:8%"><col style="width:8%">
-          <col style="width:8%"><col style="width:6%"><col style="width:5%">
-          <col style="width:6%"><col style="width:6%"><col style="width:6%">
-          <col style="width:8%"><col style="width:20%">
+          <col style="width:30%"><col style="width:9%"><col style="width:9%">
+          <col style="width:7%"><col style="width:6%"><col style="width:7%">
+          <col style="width:7%"><col style="width:6%"><col style="width:19%">
         </colgroup>
+        {#- Два спенда стоят рядом и подписаны источником: один из книги
+            статистики, другой прочитан с самого кабинета. Порознь их легко
+            принять за одно и то же число, а расходятся они по делу. -#}
         <thead><tr>
           <th>Account</th>
-          <th>Ad Asset</th>
-          <th>Also in</th>
-          <th class="num">Spend</th>
+          <th class="num" title="Spend from the stats workbook for the chosen period">Spend</th>
+          <th class="num" title="Spend read from the ad account itself, by the Read button">On account</th>
           <th class="num">Leads</th>
           <th class="num">FTD</th>
           <th class="num">CPL</th>
           <th class="num">CPA</th>
           <th class="num">CR</th>
-          <th class="num" title="Spend read from the ad account itself, not from the workbook">On account</th>
           <th></th>
         </tr></thead>
         <tbody>
@@ -33,7 +33,7 @@
             <td class="amap-acc">
               {% if r.has_data %}
               <button type="button" class="amap-caret" aria-label="Campaigns of {{ r.account }}"
-                      hx-get="/details?section=account&country={{ mc.country | urlencode }}&account={{ r.account | urlencode }}&ncols=11"
+                      hx-get="/details?section=account&country={{ mc.country | urlencode }}&account={{ r.account | urlencode }}&ncols=9"
                       hx-target="closest tr" hx-swap="afterend" hx-trigger="click">▸</button>
               {% else %}<span class="amap-caret-off">·</span>{% endif %}
               {{ r.account }}
@@ -46,21 +46,7 @@
                  привязку, а не искать данные. #}
               {% if r.elsewhere %}<span class="amap-alias" title="This account has spend in the workbook, but filed under another country. Either the link is wrong, or the account really works there.">↗ {% for c, s in r.elsewhere.items() %}{{ c }} {{ s | fmt_usd }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
             </td>
-            <td>
-              {% if r.assets %}<span class="amap-tags">{% for a in r.assets %}<span class="amap-tag">{{ a }}</span>{% endfor %}</span>
-              {% else %}<span class="nodata">—</span>{% endif %}
-            </td>
-            <td>
-              {% set others = r.countries | reject('equalto', mc.country) | list %}
-              {% if others %}<span class="amap-tags">{% for o in others %}<span class="amap-tag other">{{ o }}</span>{% endfor %}</span>
-              {% else %}<span class="nodata">—</span>{% endif %}
-            </td>
             <td class="num">{% if r.has_data %}{{ r.spend | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data %}{{ r.leads }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data %}{{ r.deposits }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and r.cpl %}{{ r.cpl | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and r.cpa %}{{ r.cpa | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and r.cr %}{{ '%.1f' % r.cr }}%{% else %}<span class="nodata">—</span>{% endif %}</td>
             {#- Число живёт в своей колонке, кнопки — в своей. Раньше кнопка
                 чтения стояла внутри числовой колонки, а «убрать» уезжало за
                 правый край таблицы: контрол, которого не видно, всё равно что
@@ -71,6 +57,11 @@
                 <span class="amap-live-ok" title="{% if sr.date_from == sr.date_to %}{{ sr.date_from }}{% else %}{{ sr.date_from }}…{{ sr.date_to }}{% endif %} · read {{ sr.finished_at }} · {{ sr.how }}">{{ sr.spend | fmt_usd }}</span>
               {%- else -%}<span class="nodata">—</span>{%- endif -%}
             </td>
+            <td class="num">{% if r.has_data %}{{ r.leads }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data %}{{ r.deposits }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data and r.cpl %}{{ r.cpl | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data and r.cpa %}{{ r.cpa | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data and r.cr %}{{ '%.1f' % r.cr }}%{% else %}<span class="nodata">—</span>{% endif %}</td>
             <td class="amap-actions">
               {%- if sr and sr.state == 'running' -%}
                 <button type="button" class="amap-btn amap-read" disabled>reading…</button>
