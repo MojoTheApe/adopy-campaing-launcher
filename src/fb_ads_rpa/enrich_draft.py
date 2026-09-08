@@ -170,8 +170,9 @@ def enrich_campaign_drafts(
                     from src.analysis_agent.gsheet_targeting import lookup_targeting_interests
 
                     resolved = lookup_targeting_interests(ad_set.targeting_label)
-                except Exception:
-                    resolved = ""
+                except Exception as exc:
+                    draft.errors.append(f"Targeting library could not resolve {ad_set.targeting_label!r}: {exc}")
+                    continue
                 if resolved:
                     ad_set.targeting_label = resolved
                 elif ref:

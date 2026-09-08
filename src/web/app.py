@@ -735,24 +735,11 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
 
 
 def _load_sheet_targets() -> list[dict]:
-    """Targeting profiles from the Google Sheet "Detailed targeting" tab.
-
-    Same shape as _load_kb_targets(). The sheet loader keeps its own 5-min
-    cache, so calling this per request is cheap; [] on any failure so the
-    caller can fall back.
-    """
-    try:
-        from src.analysis_agent.gsheet_targeting import load_targeting_profiles
-
-        profiles = load_targeting_profiles()
-    except Exception:
-        return []
-    result = [
-        {"code": p.name, "label": p.name, "fb_interest": p.interests}
-        for p in profiles.values()
-    ]
-    result.sort(key=lambda x: x["code"].lower())
-    return result
+    """Local library plus refreshed shared entries, including narrowing."""
+    from src.analysis_agent import targeting_registry as tr
+    tr.refresh()
+    return [{"code": t.name, "label": t.name, "fb_interest": t.rpa_interests()}
+            for t in tr.all_targets()]
 
 
 def _load_kb_targets() -> list[dict]:
@@ -788,26 +775,24 @@ def _load_ref_options() -> dict:
     """
     global _ref_opts_cache, _ref_opts_mtime
     excel_path = get_upload_fb_excel_path()
+    from src.analysis_agent import targeting_registry as tr
+    library = _load_sheet_targets()
+    has_registry = tr._store().exists()
+    fallback_targets = library if has_registry or library else _load_kb_targets()
     empty: dict = {"ad_copies": [], "image_files": [], "video_files": [], "targetings": []}
     if not os.path.isfile(excel_path):
-        result = {**empty, "targetings": _load_kb_targets()}
+        result = {**empty, "targetings": fallback_targets}
         return result
     try:
         mtime = os.path.getmtime(excel_path)
     except OSError:
-        return {**empty, "targetings": _load_kb_targets()}
+        return {**empty, "targetings": fallback_targets}
     if _ref_opts_cache is not None and mtime == _ref_opts_mtime:
-        # targetings come from the Google Sheet (own 5-min cache) — refresh
-        # them independently of the Excel mtime this cache is keyed on, or
-        # sheet edits would stay invisible until the Excel file changes.
-        fresh = _load_sheet_targets()
-        if fresh:
-            return {**_ref_opts_cache, "targetings": fresh}
-        return _ref_opts_cache
+        return {**_ref_opts_cache, "targetings": fallback_targets}
     try:
         ref = load_reference_data(excel_path)
     except Exception:
-        return {**empty, "targetings": _load_kb_targets()}
+        return {**empty, "targetings": fallback_targets}
     ad_copies = sorted(ref.get("ad_copy") or {})
     image_files = [
         {"id": k, "filename": v}
@@ -817,18 +802,10 @@ def _load_ref_options() -> dict:
         {"id": k, "filename": v}
         for k, v in sorted((ref.get("video_files") or {}).items(), key=lambda x: x[0])
     ]
-    # Single source of truth (user direction 2026-07-30): the "Detailed
-    # targeting" tab of the shared Google Sheet — the same profiles the RPA
-    # resolves at publish time, so the picker can never offer a profile the
-    # publish path doesn't know. KB/Excel remain as fallbacks only.
-    targetings = _load_sheet_targets()
-    if not targetings:
-        targetings = _load_kb_targets()
-    if not targetings:
-        targetings = [
-            {"code": t, "label": t, "fb_interest": t}
-            for t in sorted(ref.get("interests") or {})
-        ]
+    targetings = fallback_targets
+    if not targetings and not has_registry:
+        targetings = [{"code": t, "label": t, "fb_interest": t}
+                      for t in sorted(ref.get("interests") or {})]
     result = {
         "ad_copies": ad_copies,
         "image_files": image_files,
@@ -2030,66 +2007,56 @@ async def api_accounts_overview() -> JSONResponse:
 
 
 @app.get("/api/targeting-profiles")
-async def api_targeting_profiles() -> JSONResponse:
-    """The shared targeting library, as every buyer sees it.
+def api_targeting_profiles(force: bool = False) -> JSONResponse:
+    """Run Sheets and disk I/O in FastAPI's worker pool."""
+    from src.analysis_agent import targeting_registry as tr
+    try:
+        sheet = tr.refresh(force=force)
+        return JSONResponse({"ok": True, "can_add": True, "sheet": sheet,
+                             "profiles": [t.to_dict() for t in tr.all_targets()]})
+    except tr.TargetingError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
 
-    One tab in one spreadsheet is the source of truth for the whole team, so
-    what this returns is identical on every machine — that is what makes a
-    profile added here immediately usable by everyone.
-    """
-    from src.analysis_agent.gsheet_targeting import load_targeting_profiles
-    from src.analysis_agent.gsheet_write import is_authorised
 
-    profiles = load_targeting_profiles()
-    return JSONResponse({
-        "ok": True,
-        # Adding requires the machine's Google write token. Report it up front
-        # so the UI can explain why the form is unavailable instead of failing
-        # only once someone has typed a profile.
-        "can_add": is_authorised(),
-        "profiles": [
-            {"name": p.name, "interests": p.interests, "narrow": p.narrow}
-            for p in sorted(profiles.values(), key=lambda x: x.name.lower())
-        ],
-    })
+def _edit_targeting_profile(data: dict) -> JSONResponse:
+    from src.analysis_agent import targeting_registry as tr
+    if not isinstance(data, dict) or any(not isinstance(data.get(k, ""), str)
+            for k in ("action", "name", "interests", "narrow", "was")):
+        return JSONResponse({"ok": False, "error": "Expected an object with string fields"}, status_code=400)
+    action = (data.get("action") or "add").strip().lower()
+    name, interests, narrow = (data.get(k, "") for k in ("name", "interests", "narrow"))
+    try:
+        if action == "delete":
+            tr.remove(name)
+            return JSONResponse({"ok": True, "removed": name, "scope": "local"})
+        if action == "update":
+            target = tr.update(data.get("was") or name, name, interests, narrow)
+        elif action == "add":
+            target = tr.add(name, interests, narrow)
+            tr.share(target)
+        elif action == "share":
+            target = tr.lookup(name)
+            if target is None:
+                raise tr.TargetingError("Таргет не найден.")
+            tr.share(target)
+        else:
+            raise tr.TargetingError(f"Неизвестное действие: {action}")
+    except tr.TargetingError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    return JSONResponse({"ok": True, "shared": target.shared,
+                         "shared_error": target.shared_error, "profile": target.to_dict()})
 
 
 @app.post("/api/targeting-profiles")
-async def api_add_targeting_profile(request: Request) -> JSONResponse:
-    """Add one profile to the shared library.
-
-    Body JSON: {name, interests, narrow?}
-    """
-    from src.analysis_agent.gsheet_targeting import (
-        TargetingWriteError,
-        add_targeting_profile,
-    )
-
+async def api_edit_targeting_profile(request: Request) -> JSONResponse:
+    from starlette.concurrency import run_in_threadpool
     try:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
-
-    try:
-        profile = add_targeting_profile(
-            data.get("name") or "",
-            data.get("interests") or "",
-            data.get("narrow") or "",
-        )
-    except TargetingWriteError as exc:
-        # Operator-actionable: wrong input, duplicate name, or missing consent.
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-    except Exception as exc:  # noqa: BLE001
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-
-    return JSONResponse({
-        "ok": True,
-        "profile": {
-            "name": profile.name,
-            "interests": profile.interests,
-            "narrow": profile.narrow,
-        },
-    })
+    return await run_in_threadpool(_edit_targeting_profile, data)
 
 
 @app.get("/api/parse-adset")
