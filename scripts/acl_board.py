@@ -889,7 +889,21 @@ def cmd_sync(args: argparse.Namespace, repo: Path) -> int:
         where = "shipped" if branch in MAIN_BRANCHES else f"ждёт ревью в {branch}"
         print(f"отмечено ({where}): " + ", ".join(ticked))
     else:
-        print("в коммите нет id задач — доска не тронута")
+        # Раньше здесь всегда печаталось «в коммите нет id задач». Причина
+        # называлась неверно: id мог быть найден и просто уже стоять в нужном
+        # состоянии. Человек читал «нет id», шёл искать опечатку в сообщении и
+        # переписывал коммит впустую — так и случилось 8 сентября. Ничего не
+        # делать — законный исход, но сказать о нём надо правду.
+        named = ids_in_commit(message)
+        if not named:
+            print("в коммите нет id задач — доска не тронута")
+        else:
+            board = parse(text)
+            unknown = [i for i in named if board.by_id(i) is None]
+            if unknown:
+                print("на доске нет таких задач: " + ", ".join(unknown))
+            else:
+                print("уже в этом состоянии: " + ", ".join(named))
     board = parse(new)
     out = default_out(repo)
     out.parent.mkdir(parents=True, exist_ok=True)
