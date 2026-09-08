@@ -3886,8 +3886,7 @@ function amapSpendFailed(btn, cell, why, shot, how) {
     cell.innerHTML = '<span class="amap-live-bad"></span>';
     var bad = cell.firstChild;
     bad.textContent = why.length > 40 ? why.slice(0, 39) + '…' : why;
-    bad.title = why + (how ? ' · ' + how : '') + (shot ? '
-снимок: ' + shot : '');
+    bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'снимок: ' + shot : '');
   }
   /* Если прицепиться не к чему, «retry» ничего не изменит: сначала нужно
      поднять профиль автоматизацией. Кнопка появляется ровно в этом случае. */
