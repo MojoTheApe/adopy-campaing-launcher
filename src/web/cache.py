@@ -16,6 +16,7 @@ state. Single-user, sub-second renders, low blast radius.
 from __future__ import annotations
 
 import os
+from itertools import count
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -30,6 +31,7 @@ from src.analysis_agent.morning_service import (
 # expensive part and is the same for everyone, while the report assembled on
 # top of it is per-CM. Keying only by the Excel file meant switching buyer
 # would have thrown away the parsed workbook and re-read ~71k rows each time.
+_REVISIONS = count(1)
 _CACHE: Dict[str, Any] = {
     "key": None,            # (excel_path, mtime) for full report — None means empty
     "reports": {},          # cm -> report dict
@@ -82,6 +84,9 @@ def get_cached_report(
         reused_df = _CACHE["excel_df"]
 
     report, df, warnings = load_morning_report(enriched_df=reused_df, my_cm=cm_key or None)
+    # Refresh can change values or account rows without changing the DF length.
+    # Derived period reports must belong to this exact rebuild.
+    report["_cache_revision"] = next(_REVISIONS)
 
     # A new workbook invalidates every buyer's report, not just this one.
     if _CACHE["key"] != expected_key:

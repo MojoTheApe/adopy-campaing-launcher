@@ -264,9 +264,9 @@ def test_the_refusal_becomes_a_readable_failure_not_a_crash(monkeypatch):
 
 def test_the_ad_account_comes_out_of_the_url():
     class Page:
-        url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=2057738684835381&nav=1"
+        url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=123&nav=1"
 
-    assert sp._act_from_url(Page(), tries=1) == "act_2057738684835381"
+    assert sp._act_from_url(Page(), tries=1) == "act_123"
 
 
 def test_an_already_prefixed_act_is_not_doubled():

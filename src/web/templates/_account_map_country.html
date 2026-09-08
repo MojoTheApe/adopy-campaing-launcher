@@ -39,7 +39,7 @@
             <td class="amap-acc">
               {% if r.has_data %}
               <button type="button" class="amap-caret" aria-label="Campaigns of {{ r.account }}"
-                      hx-get="/details?section=account&country={{ mc.country | urlencode }}&account={{ r.account | urlencode }}&ncols=10"
+                      hx-get="/details?section=account&country={{ mc.country | urlencode }}&account={{ (r.workbook_alias or r.account) | urlencode }}&ncols=10"
                       hx-target="closest tr" hx-swap="afterend" hx-trigger="click">▸</button>
               {% else %}<span class="amap-caret-off">·</span>{% endif %}
               {{ r.account }}

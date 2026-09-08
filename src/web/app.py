@@ -241,7 +241,7 @@ def _build_goals_view(report: dict) -> dict:
     """
     from src.web import goals as goals_store
 
-    cm = (os.environ.get("MY_CM_NAME") or "").strip()
+    cm = (report.get("my_cm") or os.environ.get("MY_CM_NAME") or "").strip()
     actual: dict[str, dict] = {}
     for country in report.get("countries", []):
         name = (country.get("country") or "").strip()
@@ -345,6 +345,10 @@ _PERIOD_CACHE: dict[tuple, dict] = {}
 _PERIOD_CACHE_MAX = 8
 
 
+class PeriodReportError(RuntimeError):
+    """A requested range could not be calculated; full totals cannot replace it."""
+
+
 def report_for_period(report: dict, df, date_from: str, date_to: str) -> dict:
     """Тот же отчёт, посчитанный только по строкам внутри периода.
 
@@ -359,12 +363,15 @@ def report_for_period(report: dict, df, date_from: str, date_to: str) -> dict:
 
     key = (
         report.get("source_excel"),
-        len(df),
-        (get_selected_cm() or ""),
+        report.get("_cache_revision"),
+        (report.get("my_cm") or get_selected_cm() or ""),
         date_from,
         date_to,
     )
-    hit = _PERIOD_CACHE.get(key)
+    # Callers outside the main cache may supply a standalone report. Without
+    # a source revision it is safer to recalculate than to retain stale values.
+    cacheable = report.get("_cache_revision") is not None
+    hit = _PERIOD_CACHE.get(key) if cacheable else None
     if hit is not None:
         return hit
 
@@ -373,18 +380,19 @@ def report_for_period(report: dict, df, date_from: str, date_to: str) -> dict:
         from src.analysis_agent.morning_service import load_morning_report
 
         scoped, _df, _warnings = load_morning_report(
+            excel_path=report.get("source_excel"),
+            my_cm=report.get("my_cm") or get_selected_cm(),
             enriched_df=rows, account_rows_cached=report.get("_account_rows")
         )
-    except Exception:
-        # Период — это способ посмотреть, а не условие работы: если пересборка
-        # не удалась, честнее показать полный отчёт, чем пустую страницу.
-        return report
+    except Exception as exc:
+        raise PeriodReportError("Could not calculate the selected period. Refresh and try again.") from exc
 
     scoped["period_from"] = date_from
     scoped["period_to"] = date_to
-    if len(_PERIOD_CACHE) >= _PERIOD_CACHE_MAX:
-        _PERIOD_CACHE.pop(next(iter(_PERIOD_CACHE)))
-    _PERIOD_CACHE[key] = scoped
+    if cacheable:
+        if len(_PERIOD_CACHE) >= _PERIOD_CACHE_MAX:
+            _PERIOD_CACHE.pop(next(iter(_PERIOD_CACHE)))
+        _PERIOD_CACHE[key] = scoped
     return scoped
 
 
@@ -1133,7 +1141,14 @@ def _render_report(
     # менял только карту, и две секции рядом отвечали на разные вопросы,
     # выглядя одинаково достоверно.
     date_from, date_to = resolve_period(_df, date_from.strip(), date_to.strip(), span.strip())
-    report = report_for_period(report, _df, date_from, date_to)
+    try:
+        report = report_for_period(report, _df, date_from, date_to)
+    except PeriodReportError as exc:
+        return templates.TemplateResponse(
+            "error.html",
+            {"request": request, "title": "Period calculation failed", "message": str(exc)},
+            status_code=503,
+        )
 
     _enrich_country_overview(report)
     ref_opts = _load_ref_options()
