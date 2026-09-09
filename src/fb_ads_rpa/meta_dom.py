@@ -2181,6 +2181,21 @@ def run_recorded_campaign_flow(
         # с вызовами, и новый шаг получит контекст, ничего для этого не делая.
         if ok is False and diag is None:
             diag = _telemetry.page_context(page) or None
+        # Разметка упавшего шага — на диск, рядом со скриншотом. По картинке
+        # селектор не напишешь: на вопрос «почему не нашлась кнопка» отвечает
+        # то, что было в DOM. Тот же снимок нужен стенду `acl-340`, без
+        # которого `meta_dom` не покрыть тестами.
+        if ok is False:
+            try:
+                from src.fb_ads_rpa import page_capture as _pages
+
+                saved = _pages.capture(
+                    page, step=step, run_id=run_id, campaign=campaign_name, diag=diag
+                )
+                if saved:
+                    diag = {**(diag or {}), "page": saved}
+            except Exception:
+                pass
         _telemetry.record(
             step,
             ok,
