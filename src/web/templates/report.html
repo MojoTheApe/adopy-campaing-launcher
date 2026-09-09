@@ -2939,14 +2939,19 @@ async function dashRefresh(ev) {
         data-language="{{ c.country | geo_language }}">
 
     {# ── Pre-flight panel: link + account map ── #}
-    {% set pf_ok = pf.link_status == 'tracking' and not pf.missing_map_fields and pf.page_name %}
+    {#- «Настроен» больше не требует имени страницы. Оно к публикации отношения
+        не имеет — плеер берёт первую доступную страницу в кабинете, — а
+        держало аккаунт в состоянии «needs setup» навсегда: заполнить его было
+        негде, кроме как здесь, и оно ничего не решало. Красная надпись при
+        полностью рабочем аккаунте — это не предупреждение, а шум. -#}
+    {% set pf_ok = pf.link_status == 'tracking' and not pf.missing_map_fields %}
     <div class="cb-preflight {% if pf_ok %}cb-preflight-collapsed{% endif %}">
       <button type="button" class="cb-preflight-toggle"
               onclick="this.closest('.cb-preflight').classList.toggle('cb-preflight-collapsed')">
         <span class="cb-preflight-caret">▸</span> ⚙ Account
         {% if pf_ok %}
           <span class="cb-pf-ok">configured ✓</span>
-          <span style="color:var(--muted);font-weight:400">· tracking, ids, page — all set</span>
+          <span style="color:var(--muted);font-weight:400">· tracking and ids — all set</span>
         {% else %}
           <span class="cb-pf-err">needs setup</span>
         {% endif %}
@@ -3009,31 +3014,6 @@ async function dashRefresh(ev) {
             {% endif %}
           </div>
 
-          {#- Page name к публикации отношения не имеет и стоял в блоке
-              «Account config» без единого признака этого: рядом с `profile_id`,
-              без которого прогон не пойдёт. Читалось как незаполненная
-              настройка аккаунта — за неё и приняли.
-
-              На деле плеер на `{{ '{{page_name}}' }}` возвращает `None` и берёт
-              **первую доступную страницу** в кабинете; имя из карты он не
-              спрашивает. Единственный потребитель — макет объявления справа,
-              где эта строка стоит над «Sponsored».
-
-              Поэтому не убрано, а подписано — как у соседнего поля CTA строкой
-              ниже. Удалить его значило бы навсегда оставить в макете слова
-              «Page name» вместо имени страницы. -#}
-          <div class="cb-map-field-row" id="cb-page-name-status-{{ acc_id }}">
-            <span class="cb-map-field-label">Page name <span style="color:var(--muted);font-weight:400">(preview only)</span></span>
-            {% if not pf.page_name %}
-              <input type="text" class="cb-input cb-map-input" data-field="page_name"
-                     value="" placeholder="e.g. Global Trading Academy">
-              <button type="button" class="cb-field-save-btn"
-                      onclick="cbSaveOneMapField(this, {{ acc_label | tojson | forceescape }}, 'page_name')">Save</button>
-              <span class="cb-field-status"></span>
-            {% else %}
-              <span class="cb-pf-ok" style="font-size:0.72rem">✓ {{ pf.page_name }}</span>
-            {% endif %}
-          </div>
 
         </div>
       </div>

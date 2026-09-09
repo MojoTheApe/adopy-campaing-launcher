@@ -307,13 +307,33 @@ def test_the_width_lives_in_one_place_not_in_a_template_attribute():
     )
 
 
-def test_page_name_says_it_does_not_affect_publishing():
-    """Оно стояло среди настроек аккаунта и читалось как обязательное.
+def test_the_page_name_field_is_gone_from_the_account_config():
+    """Оно стояло среди настроек, без которых прогон не пойдёт, и не делало ничего.
 
     Плеер на `page_name` возвращает `None` и берёт первую доступную страницу в
-    кабинете; поле кормит только макет объявления.
+    кабинете. Маленький макет рядом с объявлением показывает слово «Page name»
+    зашитым текстом и поля не читает вовсе. Оставалась вкладка Visual, где имя
+    подставляется, — но там уже есть запасной вариант: имя аккаунта.
     """
     page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
-    row = page[page.index('id="cb-page-name-status-'):]
-    row = row[: row.index("</div>")]
-    assert "preview only" in row, "поле снова выглядит настройкой, влияющей на заливку"
+    assert 'data-field="page_name"' not in page, "поле вернулось в настройки аккаунта"
+    assert "cb-page-name-status" not in page
+
+
+def test_a_missing_page_name_no_longer_says_the_account_needs_setup():
+    """Самое вредное следствие: аккаунт вечно «needs setup».
+
+    `pf_ok` требовал `pf.page_name`, а заполнить его было негде, кроме как в
+    том самом удалённом поле. Полностью рабочий аккаунт светился красным, и
+    предупреждение переставало что-либо значить.
+    """
+    page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    m = re.search(r"\{% set pf_ok = ([^%]*)%\}", page)
+    assert m, "не нашёл условие «аккаунт настроен»"
+    assert "page_name" not in m.group(1), "имя страницы снова решает, настроен ли аккаунт"
+
+
+def test_the_visual_preview_falls_back_to_the_account_label():
+    """Без поля макет во вкладке Visual должен показать имя аккаунта, а не пустоту."""
+    page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    assert "page_name) || accountLabel" in page, "запасного имени для макета нет"
