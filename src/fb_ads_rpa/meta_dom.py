@@ -3249,14 +3249,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
 
     # ── подпункты ────────────────────────────────────────────────────────
     report["expanded"] = {}
-    for name, want in _PLACEMENT_CATEGORIES.items():
-        if not want:
-            continue
-        report["expanded"][name] = _expand_category(name)
-        _sleep_h(0.4)
-
-    report["subitems_seen"] = _subitem_labels()
-    _dbg.append(f"subitems_seen={report['subitems_seen']}")
+    report["subitems_seen"] = []
 
     def _set(label: str, want_checked: bool) -> bool:
         # Найдено И нажато одним вызовом: снятие галочки перекладывает
@@ -3290,17 +3283,34 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         except Exception:
             return False
 
-    missing = []
-    for label in _SUBITEMS_ON:
-        if not _set(label, True):
-            missing.append(label)
-        _sleep_h(0.3)
-    for label in _SUBITEMS_OFF:
-        if not _set(label, False):
-            missing.append(label)
-        _sleep_h(0.3)
-    report["subitems_missing"] = missing
-    if missing:
+    # Категории ведут себя как гармошка: раскрытие следующей закрывает
+    # предыдущую. Проверено живым прогоном 9 сентября — код раскрыл все три
+    # подряд, а подпункты нашлись только у последней («Facebook in-stream
+    # reels», «Ads on Facebook Reels» — дети In-stream). Поэтому раскрываем
+    # и заполняем по одной: пока категория открыта, ставим её подпункты.
+    #
+    # Какой подпункт к какой категории относится, не задаём списком —
+    # спрашиваем страницу. Наш список имён от июля, и угадывать
+    # принадлежность значило бы добавить второе предположение к первому.
+    remaining_on = list(_SUBITEMS_ON)
+    remaining_off = list(_SUBITEMS_OFF)
+    for name, want in _PLACEMENT_CATEGORIES.items():
+        if not want:
+            continue
+        report["expanded"][name] = _expand_category(name)
+        _sleep_h(0.8)
+        here = _subitem_labels()
+        report["subitems_seen"].extend(x for x in here if x not in report["subitems_seen"])
+        for label in list(remaining_on):
+            if label in here and _set(label, True):
+                remaining_on.remove(label)
+        for label in list(remaining_off):
+            if label in here and _set(label, False):
+                remaining_off.remove(label)
+
+    report["subitems_missing"] = remaining_on + remaining_off
+    _dbg.append(f"subitems_seen={report['subitems_seen']}")
+    if report["subitems_missing"]:
         ok = False
 
     # «Allow limited spending to excluded placements»: в снимке 2026-09-09
@@ -4615,34 +4625,22 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
     expand/collapse dance if it's actually needed.
     """
     def _primary_text_visible() -> bool:
-        # Confirmed live (2026-07-27): a generic "any element whose text is
-        # exactly 'Primary text'" search is not specific enough — Test98's
-        # debug_ad_copy_locator_miss.json dump proved this check was
-        # reporting "visible" while `#creativeEditorComponent` (the ONLY
-        # container holding the real, editable "Tell people what your ad is
-        # about" combobox that fill_ad_copy() actually targets) was still
-        # `display: none`. There are up to 7 role=combobox elements on this
-        # page (multiple ad-copy text variation slots, decoy/preview panels,
-        # etc) — a decoy elsewhere satisfied the old text-only check. Check
-        # the SAME accessible-name combobox fill_ad_copy() will use, scoped
-        # to #creativeEditorComponent, plus no aria-hidden ancestor.
-        try:
-            return bool(
-                page.evaluate(
-                    "() => { const container = document.getElementById('creativeEditorComponent');"
-                    " if (!container) return false;"
-                    " const combos = [...container.querySelectorAll('[role=combobox]')];"
-                    " const el = combos.find(e => (e.getAttribute('aria-label') || '')"
-                    " .includes('Tell people what your ad is about') && e.offsetParent !== null);"
-                    " if (!el) return false;"
-                    " let cur = el;"
-                    " while (cur) { if (cur.getAttribute && cur.getAttribute('aria-hidden') === 'true') return false;"
-                    " cur = cur.parentElement; }"
-                    " return true; }"
-                )
-            )
-        except Exception:
-            return False
+        """Готово ли поле основного текста к вводу.
+
+        Переписано 2026-09-09. Прежняя проверка искала внутри
+        `#creativeEditorComponent` элемент с ролью `combobox` и именем «Tell
+        people what your ad is about». В разметке Meta на эту дату таких
+        **ноль**: поле стало голой `<textarea>` без роли и без имени.
+        Значит проверка не могла ответить «да» ни разу — и `fill_ad_copy`
+        выходил ещё до полей, не оставив в телеметрии ни строки о том,
+        почему. Прогон 9 сентября: шесть отказов, ни одной записи о стадиях.
+
+        Спрашиваем ровно то, что делает сам шаг: находится ли поле и
+        разложено ли оно. Прежняя забота про подставные поля (на странице
+        бывает до семи похожих) решается сама: `data-surface$="/message_field"`
+        на странице ровно один.
+        """
+        return mark_ad_copy_field(page, "message_field", _AD_COPY_FIELDS["message_field"], "probe")
 
     if _primary_text_visible():
         return True
@@ -4881,7 +4879,13 @@ _AD_COPY_FIELDS = {
 }
 
 
-def mark_ad_copy_field(page: Page, key: str, label: str | None, mark: str) -> bool:
+def mark_ad_copy_field(
+    page: Page,
+    key: str,
+    label: str | None,
+    mark: str,
+    placeholder: str | None = None,
+) -> bool:
     """Пометить поле объявления атрибутом, за который его возьмёт локатор.
 
     Написано 2026-09-09 по настоящей разметке (снимок прогона, фикстура
@@ -4918,7 +4922,7 @@ def mark_ad_copy_field(page: Page, key: str, label: str | None, mark: str) -> bo
         return bool(
             page.evaluate(
                 """
-                ([key, label, mark]) => {
+                ([key, label, mark, placeholder]) => {
                   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
                   const seen = (el) => {
                     const r = el.getBoundingClientRect();
@@ -4928,6 +4932,11 @@ def mark_ad_copy_field(page: Page, key: str, label: str | None, mark: str) -> bo
                     old.removeAttribute('data-rpa-field');
                   }
                   let host = key ? document.querySelector('[data-surface$="/' + key + '"]') : null;
+                  if (!host && placeholder) {
+                    const direct = [...document.querySelectorAll('[placeholder]')]
+                      .find(e => e.getAttribute('placeholder') === placeholder && seen(e));
+                    if (direct) { direct.setAttribute('data-rpa-field', mark); return true; }
+                  }
                   if (!host && label) {
                     const tag = [...document.querySelectorAll('div,span,label')].find(e =>
                       e.children.length === 0 && norm(e.textContent) === label);
@@ -4945,7 +4954,7 @@ def mark_ad_copy_field(page: Page, key: str, label: str | None, mark: str) -> bo
                   return true;
                 }
                 """,
-                [key, label, mark],
+                [key, label, mark, placeholder],
             )
         )
     except Exception:
@@ -5241,6 +5250,31 @@ def _select_browser_addon_none(page: Page) -> bool:
     return _browser_addon_none_checked(page) is not False
 
 
+_DESTINATION_PLACEHOLDER = "Enter the URL people visit after your ad"
+
+
+def destination_url_box(page: Page):
+    """Поле «Website URL» объявления — или `None`, если его нет на странице.
+
+    Одно место на весь файл. До 9 сентября 2026 поле искали в четырёх
+    местах по `placeholder="http://www.example.com/page"`, которого на
+    странице нет ни разу: Meta переписала подсказку. Отсюда не только отказ
+    самого шага — молча врала и проверка «записалось ли», потому что она
+    искала то же самое и всегда отвечала «нет», после чего запускался
+    ремонтный цикл поверх правильно заполненного поля.
+    """
+    if not mark_ad_copy_field(
+        page,
+        "pce_website_url_field",
+        None,
+        "dest",
+        placeholder=_DESTINATION_PLACEHOLDER,
+    ):
+        return None
+    box = page.locator('[data-rpa-field="dest"]').first
+    return box if box.count() else None
+
+
 def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     """Set the ad's destination to Website + Browser add-ons: None, with the
     real account tracking link — instead of the Instant Form Meta suggests
@@ -5286,8 +5320,22 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     # the URL stayed on its placeholder — caught only by the read-back
     # check below. Use the shared CDP-click helper instead, same as the
     # ad-copy fields.
+    # Подсказка в поле переписана Meta: «http://www.example.com/page» на
+    # странице 9 сентября 2026 не встречается ни разу, теперь там «Enter the
+    # URL people visit after your ad». Третий шаг подряд, упавший из-за
+    # переписанной формулировки, — поэтому ищем не по ней, а по разметочному
+    # имени Meta `pce_website_url_field`, и только запасным ходом по
+    # подсказке. Проверено стендом на настоящей разметке из снимка отказа.
     try:
-        url_box = page.get_by_placeholder("http://www.example.com/page").first
+        if not mark_ad_copy_field(
+            page,
+            "pce_website_url_field",
+            None,
+            "dest",
+            placeholder="Enter the URL people visit after your ad",
+        ):
+            return False
+        url_box = page.locator('[data-rpa-field="dest"]').first
         if not url_box.count():
             return False
         if _focus_via_cdp_click(page, url_box) is None:
@@ -5328,8 +5376,8 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
 
     def _url_matches() -> bool:
         try:
-            box = page.get_by_placeholder("http://www.example.com/page").first
-            if not box.count():
+            box = destination_url_box(page)
+            if box is None:
                 return False
             return box.input_value(timeout=2000).strip() == destination_url.strip()
         except Exception:
@@ -5347,8 +5395,8 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     if not _both_ok():
         for _ in range(2):
             try:
-                retry_box = page.get_by_placeholder("http://www.example.com/page").first
-                if retry_box.count() and _focus_via_cdp_click(page, retry_box) is not None:
+                retry_box = destination_url_box(page)
+                if retry_box is not None and _focus_via_cdp_click(page, retry_box) is not None:
                     page.keyboard.press("Control+A")  # replace, never append
                     page.keyboard.insert_text(destination_url)  # fast: see note above
                 # None AFTER the URL — see the ordering note above.
@@ -5416,8 +5464,8 @@ def _ad_destination_persisted(page: Page, destination_url: str) -> bool:
         except Exception:
             pass
         try:
-            box = page.get_by_placeholder("http://www.example.com/page").first
-            if box.count():
+            box = destination_url_box(page)
+            if box is not None:
                 if (box.input_value(timeout=2000) or "").strip() == destination_url.strip():
                     return _browser_addon_none_checked(page) is not False
                 return False
