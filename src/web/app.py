@@ -832,6 +832,52 @@ def _load_ref_options() -> dict:
     return result
 
 
+def _add_linked_accounts_to_builder(report: dict) -> int:
+    """Аккаунт, привязанный к стране на дешборде, виден и в её билдере.
+
+    Список аккаунтов для билдера строился из книги статистики — то есть из
+    того, что попало в отчёт. Аккаунт, подключённый здесь и в книге
+    отсутствующий, в билдере не появлялся вовсе: в карте страны он есть, со
+    спендом, статусом и кнопкой Read, а собрать на нём кампанию негде. Ровно
+    этот случай — новый тестовый аккаунт, которого в рабочей книге и не должно
+    быть.
+
+    Билдер отвечает на «что запускаем», а не на «что попало в отчёт», поэтому
+    источник тут — связи аккаунтов со странами. Они же давно умеют держать один
+    аккаунт в нескольких странах; до сих пор этим нельзя было пользоваться,
+    потому что в билдере аккаунт был виден только там, где его знает книга.
+
+    Рекомендаций у добавленных нет и быть не может: их считают по числам,
+    которых нет. Пустой список — это и значит «карточек нет, собирайте вручную»,
+    и билдер такую страницу уже умеет показывать.
+    """
+    from src.web import account_links
+
+    by_key: dict[str, list[str]] = {}
+    for stored in account_links.all_values("country"):
+        by_key.setdefault(stored.casefold(), []).extend(
+            account_links.accounts_for("country", stored)
+        )
+
+    added = 0
+    for country in report.get("countries", []):
+        name = (country.get("country") or "").strip()
+        if not name:
+            continue
+        recs = country.setdefault("open_recs", {})
+        seen = {str(k).casefold() for k in recs}
+        # Страна в связях записана так, как её назвали при подключении — то
+        # полным именем, то кодом. Смотрим оба написания, иначе привязка к «SA»
+        # не найдёт «Saudi Arabia», и аккаунт снова пропадёт.
+        for key in {name.casefold(), _country_code(name).casefold()}:
+            for label in by_key.get(key, []):
+                if label and label.casefold() not in seen:
+                    recs[label] = []
+                    seen.add(label.casefold())
+                    added += 1
+    return added
+
+
 def _aggregate_key_to_query(key: Dict[str, Any]) -> str:
     """Render an aggregate_key dict as a URL query string for HTMX hx-get."""
     return urlencode({k: ("" if v is None else str(v)) for k, v in key.items()})
@@ -1166,6 +1212,9 @@ def _render_report(
         )
 
     _enrich_country_overview(report)
+    # До сборки списка аккаунтов ниже: добавленные должны получить и проверку
+    # готовности, и строку в билдере, а не одно из двух.
+    _add_linked_accounts_to_builder(report)
     ref_opts = _load_ref_options()
 
     # Collect all account labels from open_recs across all countries
