@@ -26,15 +26,15 @@ const path=require('node:path');
   }
   await page.locator('#view-archive').click();assert.equal(await page.locator('.task').count(),0);
   await page.locator('#view-all').click();assert.equal(await page.locator('#modules-accounts .st-nav-count').innerText(),'6');
-  await page.locator('#filters-toggle').click();const filterRect=await page.locator('#filters-panel').boundingBox(),triggerRect=await page.locator('#filters-toggle').boundingBox();assert.ok(Math.abs(filterRect.x+filterRect.width-triggerRect.x-triggerRect.width)<2);assert.ok(filterRect.y+filterRect.height<=1000);await page.locator('#filter-flags-design').check();await page.locator('#filter-priorities-high').check();assert.equal(await page.locator('.task').count(),1);
+  await page.locator('#filters-toggle').click();assert.equal(await page.locator('#filters-panel').evaluate(e=>e.tagName),'SECTION');assert.equal(await page.locator('#filters-panel').isVisible(),true);assert.equal(await page.locator('#filters-toggle').getAttribute('aria-expanded'),'true');await page.locator('#filter-flags-design').check();await page.locator('#filter-priorities-high').check();assert.equal(await page.locator('.task').count(),1);
   await page.locator('#filter-statuses-review').check();assert.equal(await page.locator('.task').count(),0);
   await page.locator('#filter-statuses-in_progress').check();assert.equal(await page.locator('.task').count(),1);
   await page.keyboard.press('Escape');await page.locator('#summary-4').click();assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),true);
   await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.id),'summary-4');
-  await page.setViewportSize({width:1920,height:1000});await page.locator('#summary-4').click();await page.locator('#search').fill('Task 4');
+  await page.setViewportSize({width:1920,height:1000});await page.locator('#search').fill('Task 4');await page.locator('#summary-4').click();
   const titleNode=await page.locator('#summary-4').elementHandle();
   data=structuredClone(data);data.tasks[3].body+=' Updated';data.digest='updated';status={...status,digest:'updated'};
-  await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),true);assert.match(await page.locator('.task-body').innerText(),/Updated/);assert.equal(await page.locator('#search').inputValue(),'Task 4');assert.equal(await page.evaluate(()=>document.activeElement.id),'search');
+  await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),true);assert.match(await page.locator('.task-body').innerText(),/Updated/);assert.equal(await page.locator('#search').inputValue(),'Task 4');assert.equal(await page.evaluate(()=>document.activeElement.id),'detail-close');
   // A completed task leaving the filter stays readable in the open detail panel.
   data.tasks[3].status='merged';data.digest='moved';status.digest='moved';await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),0);assert.match(await page.locator('#detail-content').innerText(),/Outside current filters/);
   await page.locator('#detail-close').click();data=structuredClone(fixture.data);status={...fixture.status};await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),1);
@@ -54,7 +54,7 @@ const path=require('node:path');
   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copied=value;}}}));await page.locator('#task-4 [data-copy] .st-id').click();assert.equal(await page.evaluate(()=>window.copied),'example-4');assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),false);assert.equal(await page.locator('#copy-toast').innerText(),'Copied example-4');assert.equal(await page.locator('#task-4 .st-id').innerText(),'example-4');await page.locator('#task-4 [data-copy] svg').click();assert.equal(await page.evaluate(()=>window.copied),'example-4');await page.evaluate(()=>navigator.clipboard.writeText=async()=>{throw Error('denied')});await page.locator('#task-3 [data-copy]').click();assert.equal(await page.locator('#copy-toast').innerText(),'Copy manually: example-3');
   await page.emulateMedia({reducedMotion:'reduce'});await page.getByRole('button',{name:'Light',exact:true}).click();assert.equal(await page.locator('#signal-tracker-v2').evaluate(e=>getComputedStyle(e).transitionDuration),'0s');
   for(const width of [360,736,1024,1440,2560]){await page.setViewportSize({width,height:1000});await page.waitForTimeout(130);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
-  await page.setViewportSize({width:390,height:844});await page.locator('[data-layout=board]').click();assert.equal(await page.locator('.st-lane').count(),1);await page.locator('#column-review').click();assert.equal(await page.locator('#task-5').count(),1);await page.locator('#nav-toggle').click();await page.locator('#mobile-modules-accounts').click();assert.equal(await page.locator('#navigation-panel').evaluate(e=>e.open),false);await page.locator('#filters-toggle').click();assert.equal(await page.locator('#filters-panel').evaluate(e=>e.matches(':modal')),true);await page.keyboard.press('Escape');
+  await page.setViewportSize({width:390,height:844});await page.locator('[data-layout=board]').click();assert.equal(await page.locator('.st-lane').count(),1);await page.locator('#column-review').click();assert.equal(await page.locator('#task-5').count(),1);await page.locator('#nav-toggle').click();await page.locator('#mobile-modules-accounts').click();assert.equal(await page.locator('#navigation-panel').evaluate(e=>e.open),false);await page.locator('#filters-toggle').click();assert.equal(await page.locator('#filters-panel').isVisible(),true);assert.equal(await page.locator('#filters-panel').evaluate(e=>e.matches(':modal')),false);await page.keyboard.press('Escape');
   await page.locator('[data-layout=list]').click();await page.locator('#summary-4').click();assert.equal(await page.locator('#task-detail').evaluate(e=>getComputedStyle(e).animationName),'none');assert.equal(await page.locator('#task-detail').evaluate(e=>e.matches(':modal')),true);assert.equal(await page.locator('#task-detail img').count(),0);await page.keyboard.press('Escape');
   status={...fixture.status,digest:'clear',empty_confirmed:true};data={...fixture.data,digest:'clear',tasks:[]};await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),0);
   // Malformed successful payloads cannot replace the last good snapshot.
@@ -73,6 +73,45 @@ const path=require('node:path');
   assert.equal(await page.locator('#task-detail').evaluate(e=>getComputedStyle(e).animationName),'st-detail-enter');
   await page.keyboard.press('Escape');await page.getByRole('button',{name:'Dark',exact:true}).click();
   assert.ok(await page.locator('#signal-tracker-v2').evaluate(e=>getComputedStyle(e).transitionDuration.split(',').every(v=>parseFloat(v)>=.3)));
+  // The entire row surface opens details; individual controls keep their own behavior.
+  await page.locator('#view-all').click();await page.setViewportSize({width:1920,height:1000});
+  await page.locator('#task-4').click({position:{x:3,y:3}});assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),true);
+  await page.keyboard.press('Escape');let rowBox=await page.locator('#task-4').boundingBox();
+  await page.locator('#task-4').click({position:{x:3,y:rowBox.height-3}});assert.match(await page.locator('#detail-title').innerText(),/Task 4/);
+  await page.locator('#task-5 .st-stage').click();assert.match(await page.locator('#detail-title').innerText(),/Task 5/);
+  await page.keyboard.press('Escape');
+  await page.locator('#task-4').evaluate(e=>{const a=document.createElement('a');a.href='#separate';a.textContent='Separate link';a.id='separate-link';a.onclick=event=>{event.preventDefault();window.linkClicked=true;};e.append(a);});
+  await page.locator('#separate-link').click();assert.equal(await page.evaluate(()=>window.linkClicked),true);assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),false);await page.locator('#separate-link').evaluate(e=>e.remove());
+  await page.locator('#summary-4').focus();await page.keyboard.press('Enter');
+  await page.locator('#task-detail').evaluate(e=>Promise.all(e.getAnimations().map(a=>a.finished)));
+  const handle=page.locator('#detail-resize'),grip=await handle.boundingBox(),initial=await page.locator('#task-detail').boundingBox();
+  await page.mouse.move(grip.x+6,grip.y+180);await page.mouse.down();await page.mouse.move(grip.x-194,grip.y+180,{steps:10});await page.mouse.up();
+  let wide=await page.locator('#task-detail').boundingBox();assert.ok(Math.abs(wide.width-initial.width-200)<2);assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),true);
+  await handle.press('ArrowRight');wide=await page.locator('#task-detail').boundingBox();assert.ok(Math.abs(wide.width-initial.width-168)<2);
+  const savedWidth=wide.width;await page.locator('#search').click();assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),false);assert.equal(await page.evaluate(()=>document.activeElement.id),'search');
+  await page.locator('#summary-4').click();assert.ok(Math.abs((await page.locator('#task-detail').boundingBox()).width-savedWidth)<2);
+  await handle.press('End');assert.ok((await page.locator('#task-detail').boundingBox()).width<=960);await handle.press('Home');assert.equal(Math.round((await page.locator('#task-detail').boundingBox()).width),360);
+  await handle.press('ArrowLeft');await page.reload();assert.equal(Math.round((await page.locator('#task-detail').boundingBox()).width),392);
+  await page.keyboard.press('Escape');await page.setViewportSize({width:1440,height:1000});await page.locator('#summary-4').click();
+  await page.locator('#task-detail').evaluate(e=>Promise.all(e.getAnimations().map(a=>a.finished)));
+  // A drag starting inside does not count as an outside click; an actual backdrop click does.
+  const panel=await page.locator('#task-detail').boundingBox();await page.mouse.move(panel.x+80,160);await page.mouse.down();await page.mouse.move(300,160,{steps:8});await page.mouse.up();assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),true);
+  await page.mouse.click(300,160);assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),false);
+  await page.locator('#search').focus();assert.equal(await page.locator('#search').evaluate(e=>getComputedStyle(e).outlineStyle),'none');assert.ok((await page.locator('.st-search').boundingBox()).width<=280);
+  await page.locator('#filters-toggle').click();await page.locator('#filter-priorities-medium').check();await page.locator('#filters-toggle').click();assert.equal(await page.locator('#filters-panel').isVisible(),false);
+  await page.locator('#filters-toggle').click();assert.equal(await page.locator('#filter-priorities-medium').isChecked(),true);await page.keyboard.press('Escape');await page.locator('#view-all').click();
+  await page.evaluate(async()=>{await document.fonts.ready;window.fontLoads=0;document.fonts.addEventListener('loading',()=>window.fontLoads++);});
+  const typeBefore=await page.locator('#summary-4').evaluate(e=>{const r=document.createRange();r.selectNodeContents(e);return {font:getComputedStyle(e).fontFamily,width:r.getBoundingClientRect().width};});
+  for(const theme of ['light','dark','system']){
+    await page.locator('button[data-theme='+theme+']').click();
+    assert.equal(await page.locator('#summary-4').evaluate(e=>getComputedStyle(e).color),await page.locator('#signal-tracker-v2').evaluate(e=>getComputedStyle(e).color));
+    const typeAfter=await page.locator('#summary-4').evaluate(e=>{const r=document.createRange();r.selectNodeContents(e);return {font:getComputedStyle(e).fontFamily,width:r.getBoundingClientRect().width};});assert.deepEqual(typeAfter,typeBefore);
+  }
+  assert.equal(await page.evaluate(()=>window.fontLoads),0);
+  const logo=page.locator('.st-logo');assert.equal(await logo.evaluate(e=>getComputedStyle(e).animationName),'st-logo-flow');
+  const position=await logo.evaluate(e=>getComputedStyle(e).backgroundPosition);await page.waitForTimeout(180);assert.notEqual(await logo.evaluate(e=>getComputedStyle(e).backgroundPosition),position);
+  await page.emulateMedia({reducedMotion:'reduce'});assert.equal(await logo.evaluate(e=>getComputedStyle(e).animationName),'none');
+  await page.setViewportSize({width:390,height:844});await page.locator('#summary-4').click();assert.equal(await handle.isVisible(),false);assert.equal(Math.round((await page.locator('#task-detail').boundingBox()).width),390);await page.keyboard.press('Escape');
   assert.deepEqual(errors,[]);
   console.log('PASS: exact counts and archived release scope, filters, stable keyed refresh, details outside filter, empty-update protection, stale readiness, List/Board, storage, copy success/denial (mock), themes, responsive navigation/dialogs, injection safety');
  }finally{await browser.close();}

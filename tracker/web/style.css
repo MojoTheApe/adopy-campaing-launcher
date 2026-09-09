@@ -57,11 +57,11 @@ html[data-theme=dark] #signal-tracker-v2{color-scheme:dark}
 #signal-tracker-v2 .st-chips:empty{display:none}
 #signal-tracker-v2 .st-chip{background:var(--st-tint);color:var(--st-accent);border-radius:6px;padding:5px 9px;font-size:12px;margin-bottom:8px;min-height:32px}
 #signal-tracker-v2 .st-clear{font-size:12px;color:var(--st-accent);min-height:32px;margin-bottom:8px}
-#signal-tracker-v2 .st-filter-box{position:absolute;right:0;top:46px;width:min(440px,100%);background:var(--st-panel);border:1px solid var(--st-line);box-shadow:0 12px 40px var(--st-shadow);border-radius:12px;padding:18px;z-index:5}
+
 #signal-tracker-v2 .st-pophead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 #signal-tracker-v2 .st-pophead h2{font-size:14px}
-#signal-tracker-v2 .st-filter-box fieldset{border:0;padding:12px 0;margin:0;border-top:1px solid var(--st-line)}
-#signal-tracker-v2 .st-filter-box legend{font-size:12px;color:var(--st-muted);padding:0 7px 0 0}
+
+
 #signal-tracker-v2 .st-options{display:flex;gap:6px 16px;flex-wrap:wrap}
 #signal-tracker-v2 .st-options label{display:flex;gap:6px;align-items:center;font-size:12px;min-height:32px;cursor:pointer}
 #signal-tracker-v2 input[type=checkbox]{accent-color:var(--st-accent);width:15px;height:15px}
@@ -120,12 +120,12 @@ html[data-theme=dark] #signal-tracker-v2{color-scheme:dark}
 #signal-tracker-v2 .st-toast{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:var(--st-text);color:var(--st-panel);font-size:12px;padding:10px 16px;border-radius:8px;box-shadow:0 5px 20px var(--st-shadow);z-index:10;max-width:90%}
 
 #signal-tracker-v2 .st-mobile-nav{display:none}
-html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tracker-v2 *{transition:background-color .36s ease,color .36s ease,border-color .36s ease,box-shadow .36s ease}
+html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tracker-v2 *{transition:background-color .36s ease,border-color .36s ease,box-shadow .36s ease}
 
 @container signal (min-width:1700px){#signal-tracker-v2 .st-shell{grid-template-columns:224px minmax(0,1fr)}
 #signal-tracker-v2 .st-main{padding:30px 32px}
 #signal-tracker-v2 .st-row,#signal-tracker-v2 .st-list-head{grid-template-columns:minmax(0,1fr) 140px 180px 90px 90px}
-#signal-tracker-v2:has(.st-detail[open]) .st-main{margin-right:440px}
+#signal-tracker-v2:has(.st-detail[open]) .st-main{margin-right:var(--detail-width,440px)}
 #signal-tracker-v2 .st-detail{box-shadow:none}
 }
 
@@ -230,16 +230,16 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
 #signal-tracker-v2 .st-card-bottom{justify-content:start;gap:8px 14px;margin-top:12px}
 #signal-tracker-v2 .st-card-bottom .st-module{flex-basis:100%}
 #signal-tracker-v2 .st-card-bottom .st-priority{font-size:12px}
-#signal-tracker-v2 .st-filter-box{position:fixed;left:auto;bottom:auto;margin:0;width:min(470px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:20px;color:var(--st-text);background:var(--st-panel);z-index:5}
-#signal-tracker-v2 .st-filter-box::backdrop,#signal-tracker-v2 .navigation-panel::backdrop{background:#0f172640}
-#signal-tracker-v2 .st-filter-box:not([open]){display:none}
-#signal-tracker-v2 .st-filter-box .st-options{gap:5px 16px}
-#signal-tracker-v2 .st-filter-box .st-options label{font-size:13px;min-height:34px}
+
+
+
+
+
 #signal-tracker-v2 .filter-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--st-line);padding-top:14px}
 #signal-tracker-v2 .filter-footer .st-clear{margin:0}
 #signal-tracker-v2 .navigation-panel{position:fixed;inset:0 auto 0 0;margin:0;width:min(330px,100vw);height:100dvh;max-height:none;max-width:100%;padding:24px 18px;background:var(--st-panel);color:var(--st-text);border:0;overflow:auto}
 #signal-tracker-v2 .navigation-panel h3{font-size:12px;color:var(--st-muted);margin:20px 10px 10px}
-#signal-tracker-v2 .st-detail{position:fixed;inset:0 0 0 auto;margin:0;height:100dvh;max-height:none;width:min(440px,100vw);max-width:100%;padding:24px;overflow:hidden;flex-direction:column;box-shadow:-8px 0 30px var(--st-shadow)}
+#signal-tracker-v2 .st-detail{position:fixed;inset:0 0 0 auto;margin:0;height:100dvh;max-height:none;width:min(var(--detail-width,440px),calc(100vw - 32px));max-width:100%;padding:24px;overflow:hidden;flex-direction:column;box-shadow:-8px 0 30px var(--st-shadow)}
 #signal-tracker-v2 .st-detail[open]{display:flex}
 #signal-tracker-v2 .st-detail:not([open]){display:none}
 #signal-tracker-v2 .st-detail-close{flex:none;margin:0 0 18px}
@@ -258,11 +258,11 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
 #signal-tracker-v2 .st-toast{position:fixed;bottom:20px;z-index:10}
 #signal-tracker-v2 .st-empty h2{font-size:18px;margin-bottom:12px}
 #signal-tracker-v2 .st-empty .st-control{margin:16px auto 0}
-#signal-tracker-v2.detail-open .st-main{margin-right:440px}
+#signal-tracker-v2.detail-open .st-main{margin-right:var(--detail-width,440px)}
 @media(min-width:1680px){#signal-tracker-v2 .st-detail[data-docked=true]{box-shadow:none}#signal-tracker-v2.detail-open .st-row,#signal-tracker-v2.detail-open .st-list-head{grid-template-columns:minmax(0,1fr) 122px 130px 75px 95px}}
 @media(max-width:1679px){#signal-tracker-v2 .st-main{margin-right:0!important}}
 @media(min-width:900px) and (max-width:1279px){#signal-tracker-v2 .st-shell{grid-template-columns:64px minmax(0,1fr)}#signal-tracker-v2 .st-sidebar{display:none}#signal-tracker-v2 .st-menu{display:block}#signal-tracker-v2 .st-main{grid-column:2}#signal-tracker-v2 .st-shell:before{content:'';background:var(--st-panel);border-right:1px solid var(--st-line);grid-column:1;grid-row:1}#signal-tracker-v2 .st-row,#signal-tracker-v2 .st-list-head{grid-template-columns:minmax(0,1fr) 124px 110px}#signal-tracker-v2 .st-row .st-module,#signal-tracker-v2 .st-row .st-priority,#signal-tracker-v2 .st-module-head,#signal-tracker-v2 .st-priority-head{display:none}}
-@media(max-width:899px){#signal-tracker-v2 .st-shell{display:block}#signal-tracker-v2 .st-sidebar{display:none}#signal-tracker-v2 .st-menu{display:block}#signal-tracker-v2 .st-header-actions{gap:10px;justify-content:space-between;width:100%}#signal-tracker-v2 .st-header{gap:12px}#signal-tracker-v2 .st-board{grid-template-columns:minmax(0,1fr)}#signal-tracker-v2 .st-filter-box.mobile-sheet{inset:auto 0 0;margin:0;width:100%;max-height:85dvh;border-radius:14px 14px 0 0}#signal-tracker-v2 .st-row .st-module,#signal-tracker-v2 .st-row .st-priority{display:none}#signal-tracker-v2 .st-row .mobile-properties{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--st-muted)}#signal-tracker-v2 .st-row{min-height:76px}#signal-tracker-v2 .st-detail{width:100vw;border:0}}
+@media(max-width:899px){#signal-tracker-v2 .st-shell{display:block}#signal-tracker-v2 .st-sidebar{display:none}#signal-tracker-v2 .st-menu{display:block}#signal-tracker-v2 .st-header-actions{gap:10px;justify-content:space-between;width:100%}#signal-tracker-v2 .st-header{gap:12px}#signal-tracker-v2 .st-board{grid-template-columns:minmax(0,1fr)}#signal-tracker-v2 .st-row .st-module,#signal-tracker-v2 .st-row .st-priority{display:none}#signal-tracker-v2 .st-row .mobile-properties{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--st-muted)}#signal-tracker-v2 .st-row{min-height:76px}#signal-tracker-v2 .st-detail{border:0}}
 @media(max-width:510px){#signal-tracker-v2 .st-row{grid-template-columns:minmax(0,1fr) 105px}#signal-tracker-v2 .st-idline{flex-wrap:wrap;white-space:normal;gap:0 4px}#signal-tracker-v2 .st-row .st-idline .task-tag{display:none}#signal-tracker-v2 .st-row .st-idline .blocked,#signal-tracker-v2 .st-row .st-idline .warning{display:inline}#signal-tracker-v2 .mobile-properties>span:first-child{display:none}#signal-tracker-v2 .st-row .st-task-title{font-size:14px}#signal-tracker-v2 .st-stage{font-size:12px}#signal-tracker-v2 .st-search input{font-size:16px}#signal-tracker-v2 .st-theme button{font-size:12px}}
 @media(pointer:coarse){#signal-tracker-v2 button,#signal-tracker-v2 .st-options label{min-height:44px}#signal-tracker-v2 .st-search input{font-size:16px}}
 
@@ -306,3 +306,36 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
 @media(max-width:510px){#signal-tracker-v2 .st-pipeline{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px}#signal-tracker-v2 .st-pipeline button{padding:5px 8px;min-height:34px}#signal-tracker-v2 .st-pipeline b{margin-left:auto}#signal-tracker-v2 .st-release-widget{padding:8px 12px;display:grid;grid-template-columns:auto 1fr;gap:3px 15px;align-items:center}#signal-tracker-v2 .st-release-heading{grid-row:1/3}#signal-tracker-v2 .st-release-widget progress{grid-column:2}#signal-tracker-v2 .st-release-note{grid-column:2}#signal-tracker-v2 .st-toolbar{gap:8px}}
 @media(pointer:coarse){#signal-tracker-v2 .st-copy,#signal-tracker-v2 .st-pipeline button{min-height:44px}#signal-tracker-v2 .st-close{width:44px;height:44px}}
 @media(prefers-reduced-motion:reduce){#signal-tracker-v2 .st-detail[open],#signal-tracker-v2 .st-detail[open]::backdrop{animation:none}#signal-tracker-v2 .st-main{transition:none}}
+
+/* Inline refinements and adjustable task reading space. */
+#signal-tracker-v2 .st-search{flex:0 1 270px;min-width:0;width:270px;max-width:100%}
+#signal-tracker-v2 #search{appearance:none;-webkit-appearance:none;outline:none;box-shadow:none}
+#signal-tracker-v2 #search:focus,#signal-tracker-v2 #search:focus-visible{outline:none;box-shadow:none}
+#signal-tracker-v2 #search::-webkit-search-decoration{-webkit-appearance:none}
+#signal-tracker-v2 .st-toolbar>.st-segment{margin-left:auto}
+#signal-tracker-v2 #filters-toggle:after{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);margin-left:3px}
+#signal-tracker-v2 #filters-toggle[aria-expanded=true]:after{transform:translateY(2px) rotate(225deg)}
+#signal-tracker-v2 .st-inline-filters{background:var(--st-panel);border:1px solid var(--st-line);border-radius:10px;padding:16px;margin:0 0 12px;animation:st-filters-enter .18s ease-out}
+#signal-tracker-v2 #filter-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 20px}
+#signal-tracker-v2 #filter-fields fieldset{margin:0;padding:0;border:0;min-width:0}
+#signal-tracker-v2 #filter-fields legend{font-size:12px;font-weight:600;color:var(--st-muted);padding:0;margin-bottom:6px}
+#signal-tracker-v2 #filter-fields .st-options{gap:2px 12px}
+#signal-tracker-v2 #filter-fields label{font-size:12px;min-height:30px}
+#signal-tracker-v2 .filter-footer{margin-top:12px;padding-top:8px}
+#signal-tracker-v2 .filter-footer button{margin:0}
+#signal-tracker-v2 .navigation-panel::backdrop{background:#0f172640}
+#signal-tracker-v2 .task{cursor:pointer}
+#signal-tracker-v2 .task:hover,#signal-tracker-v2 .task:focus-within{background:var(--st-soft)}
+#signal-tracker-v2 .st-detail-resize{position:absolute;inset:0 auto 0 0;width:12px;cursor:ew-resize;touch-action:none;z-index:2;outline-offset:-3px}
+#signal-tracker-v2 .st-detail-resize:after{content:'';position:absolute;left:3px;top:calc(50% - 24px);width:3px;height:48px;background:var(--st-line);border-radius:3px}
+#signal-tracker-v2 .st-detail-resize:hover:after,#signal-tracker-v2 .st-detail-resize:focus-visible:after{background:var(--st-accent)}
+#signal-tracker-v2 .st-detail-resize:focus-visible{outline:2px solid var(--st-accent)}
+#signal-tracker-v2.is-resizing,#signal-tracker-v2.is-resizing *{cursor:ew-resize!important;user-select:none!important}
+#signal-tracker-v2.is-resizing .st-main{transition:none!important}
+#signal-tracker-v2.is-resizing .st-detail{animation:none}
+#signal-tracker-v2[data-signal=true] .st-logo{background-size:240% 240%;animation:st-logo-flow 12s ease-in-out infinite}
+@keyframes st-logo-flow{0%,100%{background-position:0% 40%}50%{background-position:100% 60%}}
+@keyframes st-filters-enter{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:599px){#signal-tracker-v2 .st-search{flex:1 1 190px;width:auto}#signal-tracker-v2 .st-detail{width:100vw}#signal-tracker-v2 .st-detail-resize{display:none}#signal-tracker-v2 #filter-fields{grid-template-columns:1fr}#signal-tracker-v2 .st-inline-filters{padding:12px}}
+@media(pointer:coarse){#signal-tracker-v2 #filter-fields label{min-height:44px}#signal-tracker-v2 .st-detail-resize{width:18px}}
+@media(prefers-reduced-motion:reduce){#signal-tracker-v2[data-signal=true] .st-logo,#signal-tracker-v2 .st-inline-filters{animation:none}}
