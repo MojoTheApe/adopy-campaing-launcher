@@ -190,3 +190,24 @@ def test_failed_snapshot_replace_preserves_the_previous_backup(tmp_path, monkeyp
     assert board.write_snapshot(tmp_path, "New snapshot") is None
     assert target.read_text() == "Previous snapshot"
     assert list(target.parent.glob("*.tmp")) == []
+
+
+@pytest.mark.parametrize("ready,reason,expected", [
+    (True, "Open recommendations", "ready"),
+    (False, "Verify <identity>", "Verify &lt;identity&gt;"),
+    (False, "", "needs setup"),
+])
+def test_setup_states_render_with_account_actions_and_matching_drill_width(ready, reason, expected):
+    import re
+    row = dict(account="Demo", ready=ready, to_do=reason, has_data=True, spend=12,
+               leads=2, deposits=1, cpl=6, cpa=12, cr=50, status={})
+    html = web.templates.env.get_template("_account_map_country.html").render(
+        mc={"country": "Mexico", "key": "MX", "rows": [row]},
+        amap={"live": {}, "span": "day", "date_from": "2026-09-09", "all_accounts": []},
+        mlx={"A": "Demo A", "B": "Demo B"})
+    setup = re.search(r'<td class="amap-setup">(.*?)</td>', html, re.S).group(1)
+    assert expected in setup
+    assert "Open recommendations" not in setup
+    assert "<identity>" not in setup
+    assert len(re.findall(r"<th[ >]", html)) == len(re.findall(r"<td[ >]", html)) == 11
+    assert "ncols=11" in html and "amapReadSpend(this)" in html and "amapUnlink(" in html
