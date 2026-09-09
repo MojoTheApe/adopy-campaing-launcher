@@ -1,16 +1,34 @@
-# Portable GitHub task wall
+# Portable GitHub task tracker
 
-A read-only English UI for GitHub Issues. Python 3.11+ standard library; authenticated `gh` CLI for sync and agent commands. No frontend build, database, AI API, or hosting vendor is required.
+An English, read-only workspace for GitHub Issues. Python 3.11+ standard library, an authenticated `gh` CLI, and any HTTPS host are sufficient. There is no frontend build, database, AI API or required hosting vendor.
 
-1. Configure `tracker/config.json`: project name, repository, base branch and module catalog. Keep the six workflow IDs stable. The final label can be `In main`, `In master`, or `Merged`.
-2. Read `AGENT_WORKFLOW.md`. Add links to it in the repository's `AGENTS.md` and `CLAUDE.md`.
-3. Run `python -m tracker init` to create labels and the configured empty release milestone. It never assigns existing tasks to a release.
-4. Run `python -m tracker sync --output /path/to/private/public` and serve that directory behind authentication and HTTPS. Both `data.json` and HTML contain private Issue content: protect the entire directory, except a separate content-free health check.
-5. Repeat sync every minute using the host scheduler. Use one sync process per output directory. A failed API request, malformed pagination or unexpected empty response preserves the last successful board and exposes a safe error in `status.json`. Only an explicit `--allow-empty` clears an existing board.
+## Setup
 
-The browser polls status and replaces data only when digests match. It preserves filters, expanded tasks/groups, focus and scroll. UI code changes trigger a reload with the same saved context. Unavailable or stale data cannot show a confirmed green release-ready state.
+1. Configure `tracker/config.json`: project name, repository, base branch, module catalog and release names. Keep the six workflow IDs stable. The final label may be In main, In master or Merged.
+2. Read [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) and link to it from the repository's AGENTS.md and CLAUDE.md.
+3. Run `python -m tracker init` to create labels and the configured empty milestone. This never assigns existing tasks to a release.
+4. Run `python -m tracker sync --output /path/to/private/public`. Serve that directory behind authentication and HTTPS. HTML, data.json and status.json must all use the same protection. Only a content-free health check may be public.
+5. Repeat sync every minute, with one sync process per output directory. Credentials stay in `gh` on the host. `--gh-command-json` accepts a command array for a container or another host-specific adapter; never embed tokens in arguments or config.
 
-Credentials remain in `gh` on the sync host, never in web files. `--gh-command-json` accepts a command array for an existing container or another host-specific adapter. Use a read-capable account for sync and suitable Issue/Contents permissions for agent commands. Do not embed tokens in command arguments or repository config.
+## Workspace
+
+All tasks is the first-use view and shows every nonarchived task, including completed tasks. Clicking All tasks clears search and filters. Other Views also start with their own clean slice: Work (Todo / In progress / Review), Plan (Idea / Backlog), the configured release, and Archive. Modules in the sidebar refine the current slice; All modules removes only that constraint. Narrow screens use the Navigation button.
+
+List and Board show the same results. The flat list opens details in a separate panel, with a dock on wide screens and a dialog on smaller screens. The board groups by stage; its wide version scrolls horizontally within the task area, while narrow screens use an explicit Focus column selector. Cards are read-only; there is no drag-and-drop status change.
+
+Search matches ID, GitHub Issue number, title and description. Filters combines selections within one field with OR and different fields with AND. Applied conditions remain visible and removable. Blocked includes explicit blockers and unfinished dependencies. Use the release selector inside Filters when viewing release scope.
+
+Total tasks excludes Archive and matches All tasks; the Archive link exposes the historical records separately. Backlog means exactly that stage. The release metric counts remaining required leaf tasks, including unresolved archived members of the required scope. Initiative parents do not count twice. High priority does not imply release membership. An empty required scope displays Scope not defined; stale data cannot confirm readiness. Scope ready concerns task completion, not publication of a release.
+
+Copy task ID copies exactly the displayed ID, or `#NUMBER` when no alias exists. Clipboard requires HTTPS and a user action. Success is shown only after the write succeeds; if denied, the ID remains available for manual copying. Descriptions, checklist, dependencies and Git references appear in task details.
+
+Light / Dark / System changes only colors, with a short transition disabled by reduced-motion preferences. Compact changes row density. Preferences are namespaced by repository and UI version; view/layout/theme are remembered locally, while the current search, task selection and scroll are session state. Old tracker v2 preferences are migrated, discarding unknown filters. Task URLs using `#task-NUMBER` and canonical ID fragments open the same task.
+
+## Reliable updates
+
+A failed API request, malformed pagination or unexpected empty response preserves the last successful board and exposes a safe error in status.json. Only explicit `--allow-empty` clears an existing board. The browser accepts a new data snapshot only when its schema, repository and published digest agree; it retains the last good display on errors.
+
+Unchanged rows are reused. Refresh preserves filters, search, layout, selection, focus and scroll anchor. An open task that leaves the filter remains readable with Outside current filters. Unavailable tasks show the last saved details explicitly. UI-code revisions reload with saved context. No poll clears cards to show a loading screen.
 
 ## Reuse in another repository
 
@@ -18,14 +36,16 @@ Credentials remain in `gh` on the sync host, never in web files. `--gh-command-j
 python -m tracker export-template --output /tmp/new-project-tracker --repository OWNER/NEW_REPO --name "New Project" --base main
 ```
 
-The export contains the portable package, generic config, shared instructions and GitHub templates. It contains no task snapshot, old ACL mappings, credentials or deployment paths. Copy these into the new repository, merge instructions with its existing rules, edit the module catalog, initialize labels and configure its hosting/scheduler. Export does not contact GitHub.
+The export contains the portable package (including UI assets and local fonts), generic config, canonical agent instructions and GitHub templates. It excludes real snapshots, historical ACL mappings, credentials and deployment paths. Copy it into the new repository, merge instructions with existing rules, adapt modules, initialize labels and configure hosting. Export does not contact GitHub. The docs entry point links to the one canonical workflow rather than creating a second editable copy.
+
+## Serving and assets
+
+Generated HTML contains its CSS, JavaScript and locally bundled Manrope font, so deployment does not require a frontend asset build or external font service. The font's SIL Open Font License is in `web/fonts/OFL.txt`. Monospace IDs use the platform font.
+
+Mount only generated public files read-only in the web server. Set `Cache-Control: private, no-store`, disable directory listings and protect all content endpoints. The CSP needs inline script/style, `font-src data:` and `connect-src 'self'`; it does not need Google Fonts. Keep credentials/config outside the public mount. ACL's existing systemd integration uses `scripts/acl_tracker.py` as a compatible command entry point.
 
 ## Migration and rollback
 
-`migration-plan --mapping FILE --output PLAN` reads fresh GitHub Issues and produces a reviewable before/after label plan. `migrate --plan PLAN` validates the whole batch and applies individual label additions/removals; `--rollback` reverses it. Save the plan privately. A retry accepts only states within the planned labels and rejects unrelated concurrent changes. Issue numbers, titles, bodies, checklists, states and milestones are retained. Create a new plan if the scope has changed.
+`migration-plan --mapping FILE --output PLAN` reads fresh Issues and produces a before/after label plan. `migrate --plan PLAN` validates the whole batch and applies label changes; `--rollback` reverses it. Keep the plan private. Retries reject unrelated concurrent changes. Issue numbers, titles, descriptions, checklists, states and milestones remain intact.
 
-ACL's one-time mapping is in `docs/tracker-v2-mapping.json` outside this portable package. The old Obsidian board renderer remains a separate historical export tool; its snapshot is not an input to this UI.
-
-## Serving behind an existing reverse proxy
-
-Mount only generated public files read-only in a web server. Set `Cache-Control: private, no-store`; protect `/`, `/data.json` and `/status.json` with the same authentication. The UI's inline JS/CSS and Google Fonts require the corresponding existing CSP allowances; external fonts are optional and system font fallbacks work offline. Do not expose directory listings or the sync host's credentials/config directories. The sync command is also available through `scripts/acl_tracker.py` in ACL for existing systemd units.
+The Design v2 UI requires no label migration. ACL's earlier one-time mapping remains outside the portable package. Historical Obsidian exports are not inputs to this interface. For UI rollback, restore the previous renderer/assets and regenerate a complete matching HTML/data/status snapshot; retain authentication and the last-good-data guards.

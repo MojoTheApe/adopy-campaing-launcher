@@ -1,33 +1,32 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Task Wall</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
-<style>__STYLE__</style></head>
-<body>
-<div class="shell">
-<header><div><p class="eyebrow">PROJECT WORKSPACE</p><h1 id="project-name">Task Wall</h1><p class="intro">One clear queue. From the first idea to finished work.</p></div>
-<div class="header-actions"><a id="github-link" target="_blank" rel="noopener">GitHub ↗</a><button id="theme" aria-label="Switch color theme">Theme</button></div></header>
-<div class="overview" id="overview"></div>
-<nav class="views" aria-label="Views"><button data-view="work">Work</button><button data-view="plan">Plan</button><button data-view="release" id="release-tab">MVP</button><button data-view="all">All</button><button data-view="archive">Archive</button></nav>
-<section class="toolbar" aria-label="Task filters">
-<div class="search-row"><label class="search"><span>Search</span><input id="search" type="search" placeholder="Search tasks, IDs, or details…" autocomplete="off"></label><button id="reset">Clear filters</button></div>
-<div id="statuses" class="statuses" aria-label="Status filters"></div>
-<div class="facets">
-<label>Module<select id="module"><option value="">All modules</option></select></label>
-<label>Priority<select id="priority"><option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="unassigned">Unassigned</option></select></label>
-<label>Type<select id="type"><option value="">All types</option><option value="bug">Bug</option><option value="feature">Feature</option><option value="improvement">Improvement</option><option value="research">Research</option><option value="operations">Operations</option></select></label>
-<label>Release<select id="release"><option value="">All releases</option></select></label>
-<label class="check"><input id="design" type="checkbox">Design</label><label class="check"><input id="required" type="checkbox">Required</label><label class="check"><input id="blocked" type="checkbox">Blocked</label>
-</div>
-<div id="release-options" hidden><label>Show<select id="release-scope"><option value="remaining">Remaining required</option><option value="all">Entire scope</option><option value="blocked">Blockers</option><option value="complete">Completed</option></select></label><p>Scope readiness is based on required tasks and their dependencies. Publishing is a separate action.</p></div>
-</section>
-<section id="release-summary" class="release-summary" aria-live="polite" hidden></section>
-<div class="section-heading"><div><h2 id="view-title"></h2><p id="view-description"></p></div><span id="result-count" aria-live="polite"></span></div>
-<p id="batch-note" class="batch-note" hidden></p>
-<main id="tasks"></main>
-<footer><span id="sync-state" role="status">Checking sync…</span><span>Changes are managed through GitHub · updates every minute</span></footer>
-</div>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Task tracker</title>
 <script id="tracker-data" type="application/json">__DATA__</script>
+<script>
+(() => {try {const d=JSON.parse(document.getElementById('tracker-data').textContent),k='tracker.design.v2.'+d.project.repository,p=JSON.parse(localStorage.getItem(k+'.prefs')||'{}'),old=JSON.parse(sessionStorage.getItem('tracker.v2.'+d.project.repository)||'{}');const t=p.theme||old.theme||'system';document.documentElement.dataset.theme=t==='dark'||t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(_){document.documentElement.dataset.theme=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}})();
+</script>
+<style>__STYLE__</style>
+</head>
+<body>
+<div id="signal-tracker-v2" data-accent="cobalt" data-signal="true" data-density="comfortable">
+<div class="st-shell">
+<aside class="st-sidebar" id="sidebar" aria-label="Project navigation"><div class="st-brand"><span class="st-logo" aria-hidden="true">//</span><span id="project-name">Task tracker</span></div><div><div class="st-nav-label">Workspace</div><nav class="st-nav" aria-label="Views" id="views"></nav></div><div><div class="st-nav-label">Modules</div><nav class="st-nav" aria-label="Modules" id="modules"></nav></div><div class="st-sidebar-bottom"><a id="github-link" target="_blank" rel="noopener">Open GitHub ↗</a></div></aside>
+<main class="st-main" id="workspace">
+<header class="st-header"><div class="st-heading"><button type="button" class="st-control st-menu" id="nav-toggle" aria-haspopup="dialog" aria-label="Open navigation">☰</button><div><div class="st-eyebrow" id="project-context">Project workspace</div><h1 id="view-title">All tasks</h1></div></div><div class="st-header-actions"><span id="sync-state" role="status">Checking sync…</span><div class="st-segment st-theme" aria-label="Appearance"><button type="button" data-theme="light">Light</button><button type="button" data-theme="dark">Dark</button><button type="button" data-theme="system">System</button></div></div></header>
+<section class="st-overview" aria-label="Project totals"><div class="st-metrics"><div class="st-metric"><button type="button" class="st-metric-action" data-metric="all"><span class="st-metric-label">Total tasks</span><strong class="st-metric-number" id="total-count">—</strong></button><button type="button" class="st-metric-note st-text-link" data-view="archive" id="archive-count">Archive</button></div><div class="st-metric"><button type="button" class="st-metric-action" data-metric="backlog"><span class="st-metric-label">Backlog</span><strong class="st-metric-number" id="backlog-count">—</strong><span class="st-metric-note">Accepted, not scheduled</span></button></div><div class="st-metric"><button type="button" class="st-metric-action" data-metric="release" id="mvp-metric"><span class="st-metric-label" id="release-metric-label">MVP remaining</span><strong class="st-metric-number st-mvp-number" id="mvp-count">—</strong><span class="st-metric-note" id="mvp-note">Scope not defined</span></button><progress id="mvp-progress" aria-label="Required release tasks completed" value="0" max="1" hidden></progress></div></div><div class="st-pipeline" id="pipeline"></div></section>
+<div class="st-toolbar"><label class="st-search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search tasks or IDs…" aria-label="Search tasks or IDs" autocomplete="off"></label><button type="button" class="st-control" id="filters-toggle" aria-haspopup="dialog" aria-expanded="false" aria-controls="filters-panel">Filters</button><div class="st-segment" aria-label="Task layout"><button type="button" data-layout="list">List</button><button type="button" data-layout="board">Board</button></div><button type="button" class="st-control density-control" id="density-toggle" aria-pressed="false">Compact</button></div>
+<div class="st-chips" id="chips"></div>
+<section class="release-context" id="release-context" hidden><div class="st-segment" aria-label="Release scope" id="release-scopes"></div><div class="release-summary" id="release-summary" aria-live="polite"></div></section>
+<p class="batch-note" id="batch-note" hidden></p>
+<div class="st-results-meta"><span id="result-count" aria-live="polite"></span><span id="layout-note">Active work first</span></div>
+<div id="board-navigation" class="st-board-nav" aria-label="Focus column" hidden></div>
+<div id="tasks"></div>
+</main></div>
+<dialog id="filters-panel" class="st-filter-box" aria-labelledby="filters-title"><div class="st-pophead"><h2 id="filters-title">Filters</h2><button type="button" data-close="filters-panel" class="st-close" aria-label="Close filters">×</button></div><div id="filter-fields"></div><div class="filter-footer"><button type="button" class="st-clear" id="reset">Clear filters</button><button type="button" class="st-control" data-close="filters-panel">Done</button></div></dialog>
+<dialog id="navigation-panel" class="navigation-panel" aria-labelledby="navigation-title"><div class="st-pophead"><h2 id="navigation-title">Workspace</h2><button type="button" data-close="navigation-panel" class="st-close" aria-label="Close navigation">×</button></div><nav class="st-nav" aria-label="Mobile views" id="mobile-views"></nav><h3>Modules</h3><nav class="st-nav" aria-label="Mobile modules" id="mobile-modules"></nav></dialog>
+<dialog id="task-detail" class="st-detail" aria-labelledby="detail-title"><div class="st-detail-close"><div class="st-idline" id="detail-id"></div><button type="button" id="detail-close" class="st-close" aria-label="Close task details">×</button></div><div class="detail-scroll" id="detail-content"></div><p id="detail-feedback" class="copy-feedback" role="status"></p></dialog>
+<div id="copy-toast" class="st-toast" role="status" hidden></div>
+</div>
 <script>__APP__</script>
 </body></html>

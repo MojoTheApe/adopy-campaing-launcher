@@ -54,7 +54,7 @@ def export(config, args):
     shutil.copytree(source, target / "tracker", ignore=shutil.ignore_patterns("__pycache__","config.json","*.pyc"))
     (target / "tracker/config.json").write_text(json.dumps(config,indent=2)+"\n",encoding="utf-8")
     (target / "docs").mkdir()
-    shutil.copyfile(source / "AGENT_WORKFLOW.md", target / "docs/TRACKER_AGENT_WORKFLOW.md")
+    (target / "docs/TRACKER_AGENT_WORKFLOW.md").write_text("# Tracker agent workflow\n\nRead [the canonical workflow](../tracker/AGENT_WORKFLOW.md) and [project configuration](../tracker/config.json). GitHub Issues are the source of truth; the UI is read-only.\n", encoding="utf-8")
     for filename in ("AGENTS.md","CLAUDE.md"):
         (target / filename).write_text("Before task work, read docs/TRACKER_AGENT_WORKFLOW.md and tracker/config.json. Start the selected task with `python -m tracker start ISSUE` before editing code. Follow the repository's review and release rules.\n",encoding="utf-8")
     shutil.copytree(source / "templates", target / ".github")

@@ -1,4 +1,4 @@
-/* Run with Node + Playwright (Chrome installed); Python fixture uses only stdlib. */
+/* Node + Playwright. Synthetic HTTP routes only; never reaches a live tracker. */
 const {chromium}=require('playwright');
 const {execFileSync}=require('node:child_process');
 const assert=require('node:assert/strict');
@@ -8,35 +8,53 @@ const path=require('node:path');
  let status=fixture.status,data=fixture.data;
  const browser=await chromium.launch({headless:true,channel:'chrome'});
  try{
-  const page=await browser.newPage({viewport:{width:1280,height:1000}}),errors=[];
+  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
   page.on('pageerror',e=>errors.push(String(e)));
   await page.addInitScript(()=>{const original=window.setInterval;window.setInterval=(fn,ms,...args)=>{if(ms>=15000){window.testRefresh=fn;return 1;}return original(fn,ms,...args);};});
   await page.route('http://tracker.test/**',r=>{const url=new URL(r.request().url());r.fulfill({status:200,contentType:url.pathname==='/'?'text/html':'application/json',body:url.pathname==='/'?fixture.page:JSON.stringify(url.pathname==='/status.json'?status:data)});});
   await page.goto('http://tracker.test/');await page.waitForFunction(()=>document.getElementById('sync-state').textContent.startsWith('Synced'));
-  await page.locator('[data-view=all]').click();assert.equal(await page.locator('.task').count(),6);
-  await page.locator('#design').check();await page.locator('#priority').selectOption('high');assert.equal(await page.locator('.task').count(),1);
-  await page.locator('#status-review').click();assert.equal(await page.locator('.task').count(),0);
-  await page.locator('#status-in_progress').click();assert.equal(await page.locator('.task').count(),1);
-  await page.locator('#status-all').click();assert.equal(await page.locator('#priority').inputValue(),'high');
-  await page.locator('#summary-4').click();await page.locator('#search').fill('Task 4');
+  assert.equal(await page.locator('.task').count(),6);assert.equal(await page.locator('#total-count').innerText(),'6');assert.equal(await page.locator('#backlog-count').innerText(),'1');assert.equal(await page.locator('#mvp-count').innerText(),'0');
+  await page.locator('#filters-toggle').click();const filterRect=await page.locator('#filters-panel').boundingBox(),triggerRect=await page.locator('#filters-toggle').boundingBox();assert.ok(Math.abs(filterRect.x+filterRect.width-triggerRect.x-triggerRect.width)<2);assert.ok(filterRect.y+filterRect.height<=1000);await page.locator('#filter-flags-design').check();await page.locator('#filter-priorities-high').check();assert.equal(await page.locator('.task').count(),1);
+  await page.locator('#filter-statuses-review').check();assert.equal(await page.locator('.task').count(),0);
+  await page.locator('#filter-statuses-in_progress').check();assert.equal(await page.locator('.task').count(),1);
+  await page.keyboard.press('Escape');await page.locator('#summary-4').click();assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),true);
+  await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.id),'summary-4');
+  await page.setViewportSize({width:1920,height:1000});await page.locator('#summary-4').click();await page.locator('#search').fill('Task 4');
+  const titleNode=await page.locator('#summary-4').elementHandle();
   data=structuredClone(data);data.tasks[3].body+=' Updated';data.digest='updated';status={...status,digest:'updated'};
-  await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('#task-4').getAttribute('open'),'');assert.equal(await page.locator('#search').inputValue(),'Task 4');
-  assert.equal(await page.evaluate(()=>document.activeElement.id),'search');
-  status={...status,ok:false,error:'empty_response'};await page.evaluate(()=>window.testRefresh());
-  assert.equal(await page.locator('.task').count(),1);assert.match(await page.locator('#sync-state').innerText(),/Empty update ignored/);
-  // Even a seemingly successful empty snapshot cannot erase the current browser.
+  await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),true);assert.match(await page.locator('.task-body').innerText(),/Updated/);assert.equal(await page.locator('#search').inputValue(),'Task 4');assert.equal(await page.evaluate(()=>document.activeElement.id),'search');
+  // A completed task leaving the filter stays readable in the open detail panel.
+  data.tasks[3].status='merged';data.digest='moved';status.digest='moved';await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),0);assert.match(await page.locator('#detail-content').innerText(),/Outside current filters/);
+  await page.locator('#detail-close').click();data=structuredClone(fixture.data);status={...fixture.status};await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),1);
+  status={...status,ok:false,error:'empty_response'};await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),1);assert.match(await page.locator('#sync-state').innerText(),/Empty update ignored/);
   status={...status,ok:true,digest:'empty'};data={...data,digest:'empty',tasks:[]};await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),1);
-  data=fixture.data;status=fixture.status;await page.evaluate(()=>window.testRefresh());
-  await page.locator('[data-view=all]').click();assert.equal(await page.locator('.task').count(),6);
-  await page.locator('[data-view=release]').click();assert.match(await page.locator('#release-summary').innerText(),/Scope ready/);
-  status={...status,ok:false};await page.evaluate(()=>window.testRefresh());assert.match(await page.locator('#release-summary').innerText(),/Readiness unknown/);assert.equal(await page.locator('#release-summary.ready').count(),0);
-  status={...status,ok:true};await page.evaluate(()=>window.testRefresh());await page.locator('#release').selectOption('2');assert.match(await page.locator('#release-summary').innerText(),/No scope defined/);
-  await page.locator('[data-view=all]').click();await page.locator('#module').selectOption('accounts');await page.locator('#summary-4').click();await page.reload();
-  assert.equal(await page.locator('#module').inputValue(),'accounts');
-  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  assert.equal(await page.locator('.task-detail img').count(),0);
+  data=structuredClone(fixture.data);status={...fixture.status};await page.evaluate(()=>window.testRefresh());await page.locator('#view-all').click();assert.equal(await page.locator('.task').count(),6);
+  // Layout is independent from filtering and a card opens the same canonical ID.
+  await page.locator('#modules-accounts').click();await page.locator('#search').fill('Task');await page.locator('[data-layout=board]').click();assert.equal(await page.locator('.task').count(),6);assert.equal(await page.locator('.st-lane').count(),6);assert.equal(await page.locator('#search').inputValue(),'Task');await page.locator('[data-layout=list]').click();assert.equal(await page.locator('.task').count(),6);
+  // No replacement of unchanged rows on a fresh data snapshot.
+  const stable=await page.locator('#summary-3').elementHandle();data=structuredClone(data);data.digest='same-rows';status.digest='same-rows';await page.evaluate(()=>window.testRefresh());assert.equal(await stable.evaluate(e=>e.isConnected),true);
+  await page.locator('#view-release').click();assert.match(await page.locator('#release-summary').innerText(),/Scope ready/);status.ok=false;await page.evaluate(()=>window.testRefresh());assert.match(await page.locator('#release-summary').innerText(),/Readiness unknown/);assert.equal(await page.locator('#release-summary.ready').count(),0);
+  status.ok=true;await page.evaluate(()=>window.testRefresh());await page.locator('#filters-toggle').click();await page.locator('#filter-selectedRelease-2').check();assert.match(await page.locator('#release-summary').innerText(),/Scope not defined/);assert.equal(await page.locator('#mvp-count').innerText(),'—');await page.keyboard.press('Escape');
+  // Required archived leaf tasks stay in the unresolved release scope; parents don't count.
+  data=structuredClone(fixture.data);const archived={...data.tasks[1],number:7,id:'#7',archive:true,required:true,milestone:1,milestone_title:'MVP'};const parent={...data.tasks[1],number:8,id:'#8',required:true,initiative:true,milestone:1,milestone_title:'MVP'};data.tasks.push(archived,parent);data.milestones[0].summary={total:2,complete:1,remaining:1,blocked:0,unresolved:[],ready:false};data.digest='archive-scope';status={...fixture.status,digest:data.digest,issues:8};await page.evaluate(()=>window.testRefresh());await page.locator('#filters-toggle').click();await page.locator('#filter-selectedRelease-1').check();await page.keyboard.press('Escape');await page.locator('#mvp-metric').click();assert.equal(await page.locator('.task').count(),1);assert.equal(await page.locator('#task-7').count(),1);assert.equal(await page.locator('#mvp-count').innerText(),'1');assert.equal(await page.locator('#total-count').innerText(),'7');
+  await page.locator('#view-all').click();assert.equal(await page.locator('.task').count(),7);await page.locator('#archive-count').click();assert.equal(await page.locator('.task').count(),1);
+  await page.locator('#view-all').click();await page.locator('#modules-accounts').click();await page.getByRole('button',{name:'Dark',exact:true}).click();await page.reload();assert.equal(await page.locator('#modules-accounts').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copied=value;}}}));await page.locator('#task-4 [data-copy]').click();assert.equal(await page.evaluate(()=>window.copied),'example-4');assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),false);assert.equal(await page.locator('#copy-toast').innerText(),'Copied example-4');await page.evaluate(()=>navigator.clipboard.writeText=async()=>{throw Error('denied')});await page.locator('#task-3 [data-copy]').click();assert.equal(await page.locator('#copy-toast').innerText(),'Copy manually: example-3');
+  await page.emulateMedia({reducedMotion:'reduce'});await page.getByRole('button',{name:'Light',exact:true}).click();assert.equal(await page.locator('#signal-tracker-v2').evaluate(e=>getComputedStyle(e).transitionDuration),'0s');
+  for(const width of [360,736,1024,1440,2560]){await page.setViewportSize({width,height:1000});await page.waitForTimeout(130);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+  await page.setViewportSize({width:390,height:844});await page.locator('[data-layout=board]').click();assert.equal(await page.locator('.st-lane').count(),1);await page.locator('#column-review').click();assert.equal(await page.locator('#task-5').count(),1);await page.locator('#nav-toggle').click();await page.locator('#mobile-view-work').click();assert.equal(await page.locator('#navigation-panel').evaluate(e=>e.open),false);await page.locator('#filters-toggle').click();assert.equal(await page.locator('#filters-panel').evaluate(e=>e.matches(':modal')),true);await page.keyboard.press('Escape');
+  await page.locator('[data-layout=list]').click();await page.locator('#summary-4').click();assert.equal(await page.locator('#task-detail').evaluate(e=>e.matches(':modal')),true);assert.equal(await page.locator('#task-detail img').count(),0);await page.keyboard.press('Escape');
   status={...fixture.status,digest:'clear',empty_confirmed:true};data={...fixture.data,digest:'clear',tasks:[]};await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),0);
+  // Malformed successful payloads cannot replace the last good snapshot.
+  data=structuredClone(fixture.data);status={...fixture.status};await page.evaluate(()=>window.testRefresh());
+  data={...data,digest:'bad',modules:[null]};status.digest='bad';await page.evaluate(()=>window.testRefresh());assert.ok(await page.locator('.task').count()>0);assert.match(await page.locator('#sync-state').innerText(),/Connection lost/);
+  await page.setViewportSize({width:1440,height:1000});await page.locator('#view-all').click();
+  data=structuredClone(fixture.data);for(let n=20;n<150;n++)data.tasks.push({...structuredClone(data.tasks[1]),number:n,id:'example-'+n,title:'Long list task '+n});data.digest='long';status={...fixture.status,digest:'long',issues:data.tasks.length};await page.evaluate(()=>window.testRefresh());await page.evaluate(()=>scrollTo(0,2400));
+  const anchor=await page.evaluate(()=>{const e=[...document.querySelectorAll('.task')].find(x=>x.getBoundingClientRect().bottom>0);return {id:e.id,top:e.getBoundingClientRect().top}});
+  data.tasks.push({...structuredClone(data.tasks[3]),number:200,id:'example-200',title:'New work above the reading position'});data.digest='inserted';status.digest='inserted';status.issues=data.tasks.length;await page.evaluate(()=>window.testRefresh());assert.ok(Math.abs(await page.locator('#'+anchor.id).evaluate(e=>e.getBoundingClientRect().top)-anchor.top)<2);
+  // An invalid fragment must not stop the UI, and old unsupported filters are cleared.
+  data=structuredClone(fixture.data);status={...fixture.status};await page.evaluate(()=>{sessionStorage.clear();localStorage.clear();sessionStorage.setItem('tracker.v2.owner/example',JSON.stringify({view:'all',priority:'normal',module:'removed',statuses:['next'],theme:'dark'}));});await page.goto('http://tracker.test/#%');await page.reload();assert.equal(await page.locator('#total-count').innerText(),'6');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');assert.equal(await page.locator('#chips .st-chip').count(),0);
   assert.deepEqual(errors,[]);
-  console.log('PASS: combined filters, status OR, All reset, data refresh with focus/details, empty-update protection, stale/empty release readiness, session persistence, mobile, injection safety');
+  console.log('PASS: exact counts and archived release scope, filters, stable keyed refresh, details outside filter, empty-update protection, stale readiness, List/Board, storage, copy success/denial (mock), themes, responsive navigation/dialogs, injection safety');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1);});

@@ -91,3 +91,11 @@ A release is a GitHub milestone; `release:required` identifies essential tasks w
 The UI computes readiness from a nonempty required scope, verified completion, blockers, explicit dependencies and metadata warnings. An empty scope is **No scope defined**. Stale data means readiness is unknown. Reaching In master does not publish a release.
 
 After each operation reread the Issue and verify the intended labels, preserved metadata and current tracker data after sync (normally within two minutes). Report the Issue link, module, status and requested priority/release briefly. A failed status write or sync is unfinished work; preserve the last good UI and report the remaining step accurately.
+
+## Reading Design v2 after a command
+
+All tasks shows every nonarchived task in all six stages; clicking it clears presentation filters. Work shows Todo, In progress and Review. Plan shows Idea and Backlog. Modules refine a view. List and Board use the same results; a card opens its details, and its copy button returns the exact canonical ID (or `#NUMBER`). The UI is read-only: clicking a stage or changing a filter does not change an Issue.
+
+Project totals remain global. The release overview counts remaining required leaf tasks; archived required members stay unresolved until their scope is explicitly changed, and initiative parents do not count twice. Scope not defined means no required release scope exists. Never fill that scope from High priority or all Backlog without the owner's instruction. Scope ready does not mean the release was published.
+
+After a status command, verify the Issue and the next successful UI snapshot. If a task has left the selected view, use All tasks or search its canonical ID; open details may show Outside current filters. A stale sync message means the previous snapshot is still displayed, not that the task was deleted. Follow the same automatic start, queue and merge rules regardless of List/Board, theme or the current chat.
