@@ -61,21 +61,21 @@ def board():
     return acl_board.parse(SAMPLE)
 
 
-def test_review_promotes_to_shipped_without_reopening_checkbox():
+def test_review_promotes_to_merged_without_reopening_checkbox():
     review, _ = acl_board.apply_commit(SAMPLE, "abc1", "closes acl-103", branch="feature/example")
-    shipped, changed = acl_board.apply_commit(review, "abc2", "closes acl-103", branch="master")
+    merged, changed = acl_board.apply_commit(review, "abc2", "closes acl-103", branch="master")
     assert changed == ["acl-103"]
-    assert acl_board.parse(shipped).by_id("acl-103").shown_status == "shipped"
-    assert acl_board.apply_commit(shipped, "abc2", "closes acl-103", branch="master") == (shipped, [])
-    assert acl_board.apply_commit(shipped, "abc3", "closes acl-103", branch="feature/other") == (shipped, [])
+    assert acl_board.parse(merged).by_id("acl-103").shown_status == "merged"
+    assert acl_board.apply_commit(merged, "abc2", "closes acl-103", branch="master") == (merged, [])
+    assert acl_board.apply_commit(merged, "abc3", "closes acl-103", branch="feature/other") == (merged, [])
 
 
-def test_parent_ships_only_when_all_review_children_have_landed():
+def test_parent_merges_only_when_all_review_children_have_landed():
     text = "## 1 · A\n### B\n- [x] `acl-001` Parent #review\n  - [x] `acl-001a` A #review\n  - [x] `acl-001b` B #review\n"
     first, _ = acl_board.apply_commit(text, "abc1", "closes acl-001a", branch="master")
     assert acl_board.parse(first).by_id("acl-001").shown_status == "review"
     second, _ = acl_board.apply_commit(first, "abc2", "closes acl-001b", branch="master")
-    assert acl_board.parse(second).by_id("acl-001").shown_status == "shipped"
+    assert acl_board.parse(second).by_id("acl-001").shown_status == "merged"
 
 
 def test_shipped_headline_does_not_include_completed_review():
@@ -196,7 +196,7 @@ def test_parent_line_is_ticked_when_a_commit_closes_the_last_part():
         l for l in new.splitlines() if "`acl-104`" in l and l.startswith("- [")
     )
     assert parent_line.startswith("- [x]")
-    assert "#shipped" in parent_line
+    assert "#merged" in parent_line
 
 
 def test_subtask_line_gets_no_status_tag():
@@ -240,7 +240,7 @@ def test_apply_commit_ticks_and_logs():
     )
     assert ticked == ["acl-103"]
     task = acl_board.parse(new).by_id("acl-103")
-    assert task.is_done and task.status == "shipped"
+    assert task.is_done and task.status == "merged"
     assert "- [x] `acl-103`" in new
     assert "`abc1234`" in new
     after_log = new.splitlines()[new.splitlines().index("## Log") + 1 :]
@@ -253,7 +253,7 @@ def test_apply_commit_replaces_the_old_status_tag():
     new, _ = acl_board.apply_commit(SAMPLE, "abc1234", "acl-111 закрыто")
     line = next(l for l in new.splitlines() if "`acl-111`" in l)
     assert "#blocked" not in line
-    assert line.count("#shipped") == 1
+    assert line.count("#merged") == 1
 
 
 def test_apply_commit_is_idempotent():
@@ -329,7 +329,7 @@ def test_ambiguous_ids_do_not_block_unique_tasks_in_the_same_commit():
     assert ticked == ["acl-004"]
     before_unique = AMBIGUOUS.split("- [ ] `acl-004`")[0]
     assert new.startswith(before_unique)
-    assert "- [x] `acl-004` Unique #shipped" in new
+    assert "- [x] `acl-004` Unique #merged" in new
 
 
 def test_unique_child_does_not_automatically_tick_an_ambiguous_parent():
@@ -406,10 +406,10 @@ def test_a_commit_on_a_feature_branch_marks_review_not_shipped():
     assert acl_board.parse(new).by_id("acl-103").shown_status == "review"
 
 
-def test_a_commit_on_master_marks_shipped():
+def test_a_commit_on_master_marks_merged():
     new, _ = acl_board.apply_commit(SAMPLE, "abc1234", "closes acl-103", branch="master")
     line = next(l for l in new.splitlines() if "`acl-103`" in l)
-    assert "#shipped" in line
+    assert "#merged" in line
 
 
 def test_the_log_says_which_branch_when_it_is_not_master():
@@ -444,11 +444,11 @@ def test_a_subtask_closed_on_a_branch_says_review():
     assert acl_board.parse(new).by_id("acl-104b").shown_status == "review"
 
 
-def test_a_subtask_closed_on_master_stays_bare():
+def test_a_subtask_closed_on_master_has_an_explicit_merged_tag():
     new, _ = acl_board.apply_commit(SAMPLE, "abc1234", "closes acl-104b", branch="master")
     line = next(l for l in new.splitlines() if "`acl-104b`" in l)
-    assert "#shipped" not in line
-    assert acl_board.parse(new).by_id("acl-104b").shown_status == "shipped"
+    assert "#merged" in line
+    assert acl_board.parse(new).by_id("acl-104b").shown_status == "merged"
 
 
 def test_filter_preserves_expanded_areas(tmp_path):

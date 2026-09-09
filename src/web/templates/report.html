@@ -3663,6 +3663,7 @@ function aclCountryBuilder(country) {
   function parseHash(hash) {
     if (!hash || hash.charAt(0) !== '#') return { view: 'home' };
     if (hash === '#home') return { view: 'home' };
+    if (['targets', 'ad-texts', 'accounts'].indexOf(hash.slice(1)) !== -1) return { view: hash.slice(1) };
     var m = hash.match(/^#country-([a-z0-9-]+)-([a-z0-9-]+)$/);
     if (m) return { view: 'country-' + m[1] + '-' + m[2], country: m[1] };
     return { view: 'home' };
@@ -5546,15 +5547,39 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     }
   });
 
-  // ── Ad Title (ad copy/text) — sourced from the "ad texts" Google Sheet
-  // tab (Ad Title / Headline / Body / Description / Asset / Language),
-  // replacing the old Excel "Ad copy" sheet. Same fetch-once-filter-client-
-  // side pattern as CREATIVES above.
+  // ── Ad Title: the local library is shared with RPA draft enrichment.
   var AD_TITLES = [];  // [{ad_title, headline, body, description, asset, language}]
-  fetch('/api/ad-copy')
-    .then(function(r){ return r.json(); })
-    .then(function(d){ AD_TITLES = d.rows || []; cbpRenderAll(); })
-    .catch(function(){});
+  var AD_TITLES_ERROR = '', adTitlesVersion = 0;
+  function replaceAdTitles(rows) {
+    AD_TITLES = rows.map(function(t) {
+      return {ad_title:t.ad_title || t.name, headline:t.headline, body:t.body,
+        description:t.description, asset:t.asset, language:t.language};
+    });
+    AD_TITLES_ERROR = '';
+    cbpRenderAll();
+  }
+  function reloadAdTitles() {
+    var version = ++adTitlesVersion;
+    return fetch('/api/ad-copy').then(async function(r) {
+      var d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Could not load ad titles');
+      if (version === adTitlesVersion) replaceAdTitles(d.rows || []);
+    }).catch(function(e) {
+      if (version !== adTitlesVersion) return;
+      AD_TITLES = [];
+      AD_TITLES_ERROR = e.message || 'Could not load ad titles';
+      cbpRenderAll();
+    });
+  }
+  document.addEventListener('acl:adtextschange', function(e) {
+    if (e.detail && Array.isArray(e.detail.texts)) {
+      ++adTitlesVersion; // A late initial response cannot replace a newer edit.
+      replaceAdTitles(e.detail.texts);
+    } else {
+      reloadAdTitles();
+    }
+  });
+  reloadAdTitles();
 
   // ── Ad preview mini-cards (grill session 2026-08-02) ─────────────────
   // One FB-like card per ad row, rendered into the slot's [data-preview-col].
@@ -5715,7 +5740,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
           || (t.headline || '').toLowerCase().indexOf(query) >= 0;
     }).slice(0, 60);
 
-    if (!matches.length && !query) {
+    if (!matches.length && !query && !AD_TITLES_ERROR) {
       dropdown.hidden = true;
       return;
     }
@@ -5727,7 +5752,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         (preview ? '<br><span style="font-size:0.66rem;color:var(--muted)">' + aclEscHtml(preview) + '</span>' : '') +
         '</div>';
     }).join('');
-    if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:0.72rem;pointer-events:none">No ad titles found</div>';
+    if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:0.72rem;pointer-events:none">'
+      + aclEscHtml(AD_TITLES_ERROR || 'No ad titles found') + '</div>';
 
     dropdown.innerHTML = html;
     dropdown.hidden = false;
@@ -6335,6 +6361,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       if (d.ok) {
         if (badge) { badge.textContent = '✓ Saved in Upload FB'; badge.className = 'cb-pf-ok cb-link-status-badge'; }
         input.classList.remove('cb-pf-missing');
+        window.ACCOUNT_PREFLIGHT[accountName] = window.ACCOUNT_PREFLIGHT[accountName] || {};
+        window.ACCOUNT_PREFLIGHT[accountName].link = link;
+        window.ACCOUNT_PREFLIGHT[accountName].link_status = d.link_status;
       } else {
         if (badge) { badge.textContent = '✗ ' + (d.error || 'Error'); badge.className = 'cb-pf-err cb-link-status-badge'; }
       }
@@ -7767,7 +7796,7 @@ window.cbTrackingWarning = function(form) {
   if (!typed) return { field: input, text: 'Трекинговой ссылки нет. Кампания соберётся, но клики считать будет нечем.' };
   if (typed !== saved) {
     return { field: input, text: 'Ссылка набрана, но не сохранена — нажмите Save. В сборку уйдёт прежняя: '
-      + (saved ? aclEscHtml(saved) : 'её нет вовсе') + '.' };
+      + (saved || 'её нет вовсе') + '.' };
   }
   if (pf.link_status === 'jira') {
     return { field: input, text: 'В поле адрес задачи Jira, а не трекер. Клики по нему не считаются.' };
@@ -7818,7 +7847,7 @@ window.cbPublish = function(form) {
 
   _safeConfirm('Build this campaign as a draft?', bodyHtml, function() {
     _doCbPublish(form);
-  }, { confirmLabel: warn ? 'Собрать без ссылки' : 'Publish → draft' });
+  }, { confirmLabel: warn ? 'Собрать с предупреждением' : 'Publish → draft' });
 };
 
 function _doCbPublish(form) {
@@ -8770,7 +8799,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
 // Тот же порядок, что у таргетов: список — данные, а не разметка; имя текста
 // живёт в data-атрибуте, а не в селекторе.
 (function () {
-  var texts = [], editing = '', pending = false;
+  var texts = [], editing = '', pending = false, loaded = false;
   var FIELDS = ['name', 'headline', 'body', 'description', 'asset', 'language'];
   function el(id) { return document.getElementById(id); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -8796,7 +8825,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       ? texts.length + ' texts'
       : shown.length + ' of ' + texts.length + ' texts';
 
-    var groups = {};
+    var groups = Object.create(null);
     shown.forEach(function (t) { (groups[langOf(t)] = groups[langOf(t)] || []).push(t); });
     // Языки по алфавиту, безъязыкие — в конец: они не язык, а незаполненное поле.
     var names = Object.keys(groups).sort(function (a, b) {
@@ -8830,7 +8859,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
   }
 
   function fillLanguages() {
-    var seen = {}, options = ['<option value="">All languages</option>'];
+    var seen = Object.create(null), options = ['<option value="">All languages</option>'];
     texts.forEach(function (t) { seen[langOf(t)] = true; });
     Object.keys(seen).sort().forEach(function (lang) {
       options.push('<option value="' + esc(lang) + '">' + esc(lang === '—' ? 'Language not set' : lang) + '</option>');
@@ -8849,7 +8878,6 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     // Пропущенное называется поимённо: молчаливый перенос оставил бы
     // уверенность, что доехало всё. Но повторять этот список при каждом
     // открытии раздела незачем — он относится к переносу, а не к библиотеке.
-    if (!parts.length) return '';
     if ((sheet.skipped || []).length) parts.push('skipped ' + sheet.skipped.length + ': ' + sheet.skipped.slice(0, 3).join('; ')
       + (sheet.skipped.length > 3 ? ' …' : ''));
     if ((sheet.renamed || []).length) parts.push((sheet.renamed || []).length + ' rows had no title and were named by row number');
@@ -8869,6 +8897,8 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       var d = await r.json();
       if (!r.ok || !d.ok) throw new Error(d.error || 'Could not load');
       texts = d.texts || [];
+      loaded = true;
+      document.dispatchEvent(new CustomEvent('acl:adtextschange', {detail:{texts:texts}}));
       fillLanguages();
       render();
       var duplicates = d.duplicates || {};
@@ -8900,6 +8930,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
       var d = await r.json();
       if (!r.ok || !d.ok) throw new Error(d.error || 'Could not save');
       saved = true;
+      document.dispatchEvent(new CustomEvent('acl:adtextschange'));
       if (body.action === 'delete') say('Removed from this machine: ' + body.name);
       else if (body.action === 'update') say('Saved on this machine.');
       else say('Added.');
@@ -8939,13 +8970,16 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     if (name) { startEdit(name); return; }
     name = t.getAttribute('data-at-del');
     if (name) { if (confirm('Remove «' + name + '» from this machine?')) send({action:'delete', name:name}); return; }
-    if (t.getAttribute('data-view') === 'ad-texts' && !texts.length) load(false);
+    if (t.getAttribute('data-view') === 'ad-texts' && !loaded) load(false);
   });
   ['at-search', 'at-lang-filter'].forEach(function (id) {
     document.addEventListener('input', function (ev) { if (ev.target && ev.target.id === id) render(); });
     document.addEventListener('change', function (ev) { if (ev.target && ev.target.id === id) render(); });
   });
   if ((location.hash || '').indexOf('ad-texts') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
+  document.addEventListener('acl:viewchange', function(e) {
+    if (e.detail && e.detail.view === 'ad-texts' && !loaded) load(false);
+  });
 })();
 </script>
 

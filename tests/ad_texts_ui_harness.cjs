@@ -21,14 +21,16 @@ const get = id => elements[id] ||= {
   id, value:'', style:{}, hidden:false, disabled:false, innerHTML:'', textContent:'',
   getAttribute(){ return null; }, scrollIntoView(){},
 };
-let confirmed = true, saveOk = true;
+let confirmed = true, saveOk = true, imported = 2;
 const context = {
   document: {
     getElementById: get,
     querySelectorAll(){ return Object.values(elements); },
     addEventListener(type, fn){ (listeners[type] ||= []).push(fn); },
+    dispatchEvent(event){ (listeners[event.type] || []).forEach(fn => fn(event)); return true; },
   },
   location: {hash:''},
+  CustomEvent: class { constructor(type, options={}) { this.type=type; this.detail=options.detail; } },
   confirm(){ return confirmed; },
   fetch: async (url, opts) => {
     if (opts) {
@@ -39,7 +41,7 @@ const context = {
     }
     return {ok:true, json:async()=>({
       ok:true, texts:rows, duplicates:{names:[], texts:[]},
-      sheet:{added:2, updated:0, skipped:['строка 7: ни заголовка, ни тела'], renamed:['Без названия · строка 9']},
+      sheet:{added:imported, updated:0, skipped:['строка 7: ни заголовка, ни тела'], renamed:['Без названия · строка 9']},
     })};
   },
 };
@@ -51,7 +53,7 @@ const click = (id, attrs = {}) => fire('click', {id, getAttribute(k){ return att
 const type = (id, value) => { get(id).value = value; fire('input', get(id)); };
 
 (async () => {
-  click('', {'data-view':'ad-texts'});
+  context.document.dispatchEvent(new context.CustomEvent('acl:viewchange', {detail:{view:'ad-texts'}}));
   await flush();
   const list = () => get('at-list').innerHTML;
 
@@ -140,4 +142,8 @@ const type = (id, value) => { get(id).value = value; fire('input', get(id)); };
   click('', {'data-at-del':'AR how much'});
   await flush();
   assert.equal(requests[requests.length - 1].action, 'delete');
+  imported = 0;
+  click('at-refresh-btn');
+  await flush();
+  assert(get('at-msg').textContent.includes('skipped 1'), 'A rejected-only import was reported as nothing new');
 })().catch(e => { console.error(e); process.exitCode = 1; });

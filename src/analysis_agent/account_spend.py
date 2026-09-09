@@ -340,7 +340,7 @@ def _dir_spellings(path) -> list[str]:
     единственное: **у папки два написания**. Multilogin запускает Mimic с
     коротким именем 8.3 —
 
-        C:\\Users\\EVGENI~1\\mlx\\profiles\\FDAB97~1\\0F4386~1\\989B59~1
+        C:\\Users\\EXAMPL~1\\mlx\\profiles\\WORKSP~1\\FOLDER~1\\PROFIL~1
 
     — а мы вычисляем длинное, и проверка владения портом сравнивает их как
     строки. `os.path.abspath` и `normcase` короткое имя не разворачивают, и
@@ -423,7 +423,7 @@ def _attach_only(entry, account_label: str):
 
     running = False
     try:
-        running = bool(direct._profile_process_running(str(udd), profile_id))
+        running = any(direct._profile_process_running(p, profile_id) for p in _dir_spellings(udd))
     except Exception:
         pass
     if running:
@@ -588,14 +588,14 @@ def open_for_automation(account: str) -> tuple[bool, str]:
             attached.close(keep_browser_open=True)
             return True, "профиль уже открыт автоматизацией — можно читать"
     try:
-        if direct._profile_process_running(str(udd), profile_id):
+        if any(direct._profile_process_running(p, profile_id) for p in _dir_spellings(udd)):
             return False, (
                 f"{account}: профиль открыт вручную в MLX Desktop. Поднять его "
                 "автоматизацией можно только остановив — а это разлогинивает. "
                 "Закройте окно в MLX Desktop и нажмите ещё раз."
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        return False, f"Не удалось проверить открытые профили: {exc}. Новый запуск не выполнялся."
 
     try:
         conn = rpa_browser.get_browser_provider("multilogin_attach").open(entry, account)

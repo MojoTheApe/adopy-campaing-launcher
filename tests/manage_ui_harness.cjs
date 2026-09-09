@@ -28,6 +28,9 @@ function node(id = '', country = '', classes = []) {
 }
 const panels = [node('view-home', '', ['view-panel'])], builders = [], links = [], countryBlocks = [], countryBtns = [];
 const ids = new Map(), storage = new Map(), events = {}, winEvents = {};
+for (const m of html.matchAll(/<div id="(view-(?:targets|ad-texts|accounts))" class="view-panel"/g)) {
+  panels.push(node(m[1], '', ['view-panel']));
+}
 for (const m of html.matchAll(/<div id="(view-country-[^"]+)" class="view-panel" data-country="([^"]+)"/g)) {
   panels.push(node(m[1], m[2], ['view-panel']));
 }
@@ -108,6 +111,11 @@ if (scenario === 'accounts') {
   assert.equal(context.document.querySelector('.view-panel.active').id, 'view-country-brazil-manage');
   assert.equal(ids.get('manage-builder-brazil').open, true);
   assert.equal(context.aclOpenCountryBuilder('missing'), false);
+  for (const view of ['targets', 'ad-texts', 'accounts']) {
+    context.location.hash = '#' + view;
+    winEvents.hashchange.forEach(f => f());
+    assert.equal(context.document.querySelector('.view-panel.active').id, 'view-' + view);
+  }
 } else if (scenario === 'profiles') {
   run(nav);
   const start = source.indexOf('  function loadActiveCountryProfiles()');

@@ -85,7 +85,7 @@ def test_the_warning_is_read_before_the_details():
 def test_the_confirm_button_says_what_will_happen():
     """«Publish → draft» на кампании без ссылки — не вся правда."""
     js = _js()
-    assert "Собрать без ссылки" in js
+    assert "Собрать с предупреждением" in js
 
 
 def test_the_warning_style_is_not_an_error_style():

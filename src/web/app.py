@@ -477,7 +477,7 @@ def _build_account_map_view(
             if not label:
                 continue
             labels_in_report.add(label)
-            todo[label] = {
+            todo[label.casefold()] = {
                 "to_do": row.get("to_do_display") or "",
                 "ready": bool(row.get("is_ready")),
             }
@@ -600,7 +600,7 @@ def _build_account_map_view(
                 # то же имя, что и у чисел: связка знает аккаунт по имени
                 # Multilogin, отчёт — по книжному
                 **{
-                    k: (todo.get(alias or label) or todo.get(label) or {}).get(k, "" if k == "to_do" else False)
+                    k: (todo.get((alias or label).casefold()) or todo.get(label.casefold()) or {}).get(k, "" if k == "to_do" else False)
                     for k in ("to_do", "ready")
                 },
                 "assets": account_links.values_for(label, "asset"),
@@ -1726,32 +1726,12 @@ async def api_creatives() -> JSONResponse:
 
 
 def _ad_copy_rows() -> list[dict]:
-    """Тексты для поиска Ad Title в билдере — из библиотеки на этой машине.
-
-    Раньше здесь ходили прямо в таблицу, и 9 сентября выяснилось, чем это
-    кончается: без `GSHEET_TARGETS_ID` в окружении загрузчик молча возвращал
-    пустой словарь, и в билдере под полем Ad Title стояло «No ad titles found».
-    Ни ошибки, ни следа в логе — просто пусто, как будто текстов нет вовсе. При
-    этом в разделе Ad titles их лежало 316.
-
-    Теперь источник тот же, что видит человек на экране: реестр. Таблица
-    осталась запасным ходом на одну ситуацию — свежая машина, где библиотеку
-    ещё не наполняли; такой ответ лучше пустого, но реестр всегда главнее.
-    """
+    """Read the same local library used by RPA; only new machines import once."""
     from src.analysis_agent import ad_text_registry as ar
 
-    try:
-        texts = ar.all_texts()
-    except ar.AdTextError:
-        texts = []
-    if texts:
-        return [{"ad_title": t.name, "headline": t.headline, "body": t.body,
-                 "description": t.description, "asset": t.asset,
-                 "language": t.language} for t in texts]
-
-    from src.web.ad_copy_gsheet import load_ad_copy
-
-    return [{"ad_title": title, **entry} for title, entry in load_ad_copy().items()]
+    return [{"ad_title": t.name, "headline": t.headline, "body": t.body,
+             "description": t.description, "asset": t.asset,
+             "language": t.language} for t in ar.builder_texts()]
 
 
 @app.get("/api/ad-copy")
@@ -1762,7 +1742,11 @@ async def api_ad_copy() -> JSONResponse:
     """
     from starlette.concurrency import run_in_threadpool
 
-    return JSONResponse({"rows": await run_in_threadpool(_ad_copy_rows)})
+    from src.analysis_agent.ad_text_registry import AdTextError
+    try:
+        return JSONResponse({"rows": await run_in_threadpool(_ad_copy_rows)})
+    except AdTextError as exc:
+        return JSONResponse({"rows": [], "error": str(exc)}, status_code=503)
 
 
 @app.get("/api/resolve-targeting")
@@ -2143,7 +2127,7 @@ def api_ad_texts(force: bool = False) -> JSONResponse:
     """Библиотека рекламных текстов. Чтение вкладки — в рабочем пуле FastAPI."""
     from src.analysis_agent import ad_text_registry as ar
     try:
-        sheet = ar.refresh(force=force)
+        sheet = ar.refresh(force=True) if force else ar.ensure_loaded()
         texts = ar.all_texts()
         return JSONResponse({"ok": True, "sheet": sheet,
                              "duplicates": ar.duplicates(texts),

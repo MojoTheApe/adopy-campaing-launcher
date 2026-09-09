@@ -34,13 +34,15 @@ def sheet(monkeypatch):
     """Таблица, о которой мы знаем, звали её или нет."""
     calls = {"n": 0, "rows": {}}
 
-    def load_ad_copy():
+    def load_rows(**kwargs):
         calls["n"] += 1
-        return calls["rows"]
+        return [[name, *(entry.get(field, "") for field in ("headline", "body", "description", "asset", "language"))]
+                for name, entry in calls["rows"].items()]
 
-    import src.web.ad_copy_gsheet as gs
+    from src.analysis_agent import gsheet_ad_texts as gs
 
-    monkeypatch.setattr(gs, "load_ad_copy", load_ad_copy)
+    monkeypatch.setattr(gs, "load_ad_text_rows", load_rows)
+    monkeypatch.setattr(gs, "last_error", "")
     return calls
 
 
@@ -72,12 +74,15 @@ def test_a_fresh_machine_still_gets_something_from_the_sheet(sheet):
     assert sheet["n"] == 1
 
 
-def test_an_unreadable_registry_does_not_take_the_builder_down_with_it(sheet, store):
-    """Испорченный файл — повод показать то, что есть, а не уронить форму."""
+def test_an_unreadable_registry_reports_an_error_and_preserves_the_file(sheet, store):
+    """Повреждение не должно молча заменять локальную правку старым текстом."""
     store.joinpath("ad_text_registry.json").write_text("{ не json", encoding="utf-8")
     sheet["rows"] = {"Запасной": {"headline": "H", "body": "B", "description": "",
                                   "asset": "", "language": ""}}
-    assert [r["ad_title"] for r in web._ad_copy_rows()] == ["Запасной"]
+    with pytest.raises(ar.AdTextError):
+        web._ad_copy_rows()
+    assert sheet["n"] == 0
+    assert store.joinpath("ad_text_registry.json").read_text(encoding="utf-8") == "{ не json"
 
 
 def test_every_field_the_builder_reads_is_present(sheet):

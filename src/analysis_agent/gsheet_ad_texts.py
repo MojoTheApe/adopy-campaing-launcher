@@ -18,8 +18,10 @@
 жалобы — проверка «удалось ли создать клиент» здесь ничего не значит.
 
 Переопределения окружением:
+    GSHEET_ADCOPY_ID               — отдельная таблица текстов (приоритет)
     GSHEET_TARGETING_SPREADSHEET_ID — id таблицы (тот же, что у таргетов)
     GSHEET_AD_TEXTS_TAB             — имя вкладки (по умолчанию «ad texts»)
+Старые GSHEET_TARGETS_ID и GSHEET_ADCOPY_SHEET поддерживаются как fallback.
 """
 from __future__ import annotations
 
@@ -41,6 +43,7 @@ last_error: str = ""
 class _Cache:
     loaded_at: float = 0.0
     rows: list = field(default_factory=list)
+    key: tuple[str, str] = ("", "")
 
 
 _cache = _Cache()
@@ -54,7 +57,8 @@ def _log(msg: str) -> None:
 def _spreadsheet_id() -> str:
     from src.analysis_agent.gsheet_targeting import _DEFAULT_SPREADSHEET_ID
 
-    return os.environ.get("GSHEET_TARGETING_SPREADSHEET_ID") or _DEFAULT_SPREADSHEET_ID
+    return (os.environ.get("GSHEET_ADCOPY_ID") or os.environ.get("GSHEET_TARGETING_SPREADSHEET_ID")
+            or os.environ.get("GSHEET_TARGETS_ID") or _DEFAULT_SPREADSHEET_ID)
 
 
 def load_ad_text_rows(*, force: bool = False) -> list:
@@ -66,13 +70,16 @@ def load_ad_text_rows(*, force: bool = False) -> list:
     global last_error
     with _lock:
         now = time.time()
-        if not force and _cache.loaded_at and now - _cache.loaded_at < _CACHE_TTL_S:
+        sheet_id = _spreadsheet_id()
+        tab = os.environ.get("GSHEET_AD_TEXTS_TAB") or os.environ.get("GSHEET_ADCOPY_SHEET") or _DEFAULT_TAB
+        key = (sheet_id, tab)
+        if not force and _cache.key == key and _cache.loaded_at and now - _cache.loaded_at < _CACHE_TTL_S:
             return _cache.rows
+        # A failed forced read must not turn into a cached success on the next call.
+        _cache.loaded_at = 0.0
 
         from src.analysis_agent.gsheet_targeting import _sheets_services
 
-        sheet_id = _spreadsheet_id()
-        tab = os.environ.get("GSHEET_AD_TEXTS_TAB") or _DEFAULT_TAB
         troubles = []
         for label, svc in _sheets_services():
             try:
@@ -92,6 +99,7 @@ def load_ad_text_rows(*, force: bool = False) -> list:
                     raise ValueError("некорректный ответ Google")
                 last_error = ""
                 _cache.rows, _cache.loaded_at = rows, now
+                _cache.key = key
                 _log(f"loaded {len(rows)} ad-text rows from tab {actual!r} via {label}")
                 return rows
             except Exception as exc:

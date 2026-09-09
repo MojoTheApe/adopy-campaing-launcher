@@ -9,7 +9,7 @@
 порт слушался, CDP отвечал. Не сходилось единственное — путь. Multilogin
 запускает браузер с коротким именем 8.3:
 
-    C:\\Users\\EVGENI~1\\mlx\\profiles\\FDAB97~1\\0F4386~1\\989B59~1
+    C:\\Users\\EXAMPL~1\\mlx\\profiles\\WORKSP~1\\FOLDER~1\\PROFIL~1
 
 а мы вычисляем длинное и сравниваем их как строки. `abspath` и `normcase`
 коротких имён не разворачивают, так что два имени одной и той же папки
@@ -34,13 +34,13 @@ sys.path.insert(0, str(ROOT))
 
 from src.analysis_agent import account_spend as sp  # noqa: E402
 
-LONG = r"C:\Users\EvgeniSedin\mlx\profiles\fdab9707-aaaa\0f43865d-bbbb\989b5920-cccc"
-SHORT = r"C:\Users\EVGENI~1\mlx\profiles\FDAB97~1\0F4386~1\989B59~1"
+LONG = r"C:\Users\Example User\mlx\profiles\workspace-example\folder-example\profile-example"
+SHORT = r"C:\Users\EXAMPL~1\mlx\profiles\WORKSP~1\FOLDER~1\PROFIL~1"
 
 
 class _Entry:
-    profile_id = "989b5920-cccc"
-    folder_id = "0f43865d-bbbb"
+    profile_id = "profile-example"
+    folder_id = "folder-example"
 
 
 class _Conn:

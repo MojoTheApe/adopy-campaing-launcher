@@ -53,6 +53,20 @@ def test_the_lock_is_reentrant():
         )
 
 
+def _available_to_another_thread():
+    result = []
+    def probe():
+        got = browser_operation.acquire(blocking=False)
+        result.append(got)
+        if got:
+            browser_operation.release()
+    thread = threading.Thread(target=probe, daemon=True)
+    thread.start()
+    thread.join(timeout=2)
+    assert not thread.is_alive()
+    return result[0]
+
+
 def test_the_decorator_holds_the_lock_while_the_work_runs():
     """Не «взял и отпустил», а держит на всё время работы."""
     seen = {}
@@ -60,12 +74,8 @@ def test_the_decorator_holds_the_lock_while_the_work_runs():
     @serialized_browser
     def work():
         # замок наш: другой поток сюда не войдёт
-        seen["locked"] = not browser_operation.acquire(blocking=False) or _release()
+        seen["locked"] = not _available_to_another_thread()
         return "done"
-
-    def _release():
-        browser_operation.release()
-        return True
 
     assert work() == "done"
     assert seen["locked"] is True
@@ -85,8 +95,7 @@ def test_the_lock_is_released_after_a_failure():
     with pytest.raises(RuntimeError):
         boom()
 
-    assert browser_operation.acquire(blocking=False), "замок остался захваченным"
-    browser_operation.release()
+    assert _available_to_another_thread(), "замок остался захваченным"
 
 
 def test_a_second_thread_waits_for_the_first():

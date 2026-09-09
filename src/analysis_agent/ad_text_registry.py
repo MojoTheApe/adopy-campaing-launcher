@@ -166,6 +166,22 @@ def all_texts() -> list[AdText]:
                       key=lambda t: normalise_one(t.name))
 
 
+def ensure_loaded() -> dict:
+    """Bootstrap a new machine once; an intentionally empty library stays empty."""
+    with _transaction():
+        initialized = _store().exists()
+    if not initialized:
+        return refresh()
+    return {"tried": False, "error": "", "added": 0, "updated": 0, "skipped": [], "renamed": []}
+
+
+def builder_texts() -> list[AdText]:
+    report = ensure_loaded()
+    if report.get("error") and not _store().exists():
+        raise AdTextError("Не удалось загрузить библиотеку текстов: " + report["error"])
+    return all_texts()
+
+
 def duplicates(texts: Iterable[AdText] | None = None) -> dict[str, list]:
     """Осмотр всей библиотеки, а не только правило при заведении.
 
@@ -325,11 +341,22 @@ def import_texts(rows: Iterable) -> dict:
             if old_key and data["texts"][old_key]["source"] != "sheet":
                 continue  # правку руками таблица не перебивает
 
+            try:
+                _check(data, name, headline, body, description, ignore=old_key or "")
+            except AdTextError as exc:
+                report["skipped"].append(f"строка {number}: {exc}")
+                continue
+
             t = _make(name, headline, body, description, asset, language,
                       (data["texts"].get(old_key) or {}).get("added_at") or now, "sheet")
             seen_here.add(key)
             if old_key and data["texts"][old_key] == t.to_dict():
                 continue  # строка не изменилась — это не «обновление»
+            if old_key:
+                old = data["texts"][old_key]
+                old_mark = fingerprint(old["headline"], old["body"], old["description"])
+                if by_text.get(old_mark) == old_key:
+                    del by_text[old_mark]
             if old_key and old_key != t.name:
                 del data["texts"][old_key]
             data["texts"][t.name] = t.to_dict()

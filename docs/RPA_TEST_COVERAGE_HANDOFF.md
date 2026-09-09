@@ -151,8 +151,9 @@ python -m pytest tests/ -q            853 passed
 `scripts/acl_scan_secrets.py` refused an earlier version of
 `tests/test_mlx_profiles.py`: it carried a real `act=…` copied from a live
 account screenshot, which would have reached this repository and every buyer's
-machine. Identifiers in these tests are now assembled from parts so no
-recognisable literal appears in the files. Worth keeping in mind for the
+machine. The current fixtures use synthetic repeated digits and synthetic profile names.
+Splitting a real identifier would not sanitize it and must never be used to bypass
+the scanner. Worth keeping in mind for the
 recorded-page bench in `acl-340`, where the same problem arrives at scale.
 
 ## Next

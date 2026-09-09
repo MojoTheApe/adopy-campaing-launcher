@@ -18,10 +18,12 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from urllib.parse import quote
 from typing import Iterable
 
 BOARD_ENV = "ACL_BOARD_PATH"
@@ -85,7 +87,7 @@ class Task:
     @property
     def is_done(self) -> bool:
         """Работа закончена. Это не то же самое, что «доехало до людей»."""
-        if self.done or self.status == "shipped":
+        if self.done or self.status in {"merged", "shipped"}:
             return True
         # задача, у которой сделаны все части, сделана — это факт, не оценка
         return bool(self.subs) and all(s.is_done for s in self.subs)
@@ -396,9 +398,8 @@ def apply_commit(
 ) -> tuple[str, list[str]]:
     """Отметить задачи, названные в коммите, и записать строку в журнал.
 
-    Коммит в ветку — это «сделано», но не «доехало»: слить в master значит
-    раздать всем машинам, и до этого задача ждёт ревью. Поэтому статус
-    ставится по ветке, а не по факту коммита.
+    Feature-коммит означает review, основной коммит — merged. Только
+    отдельное подтверждение выпуска позволяет пометить задачу shipped.
     """
     board = parse(text)
     ambiguous = set(duplicate_ids(board))
@@ -407,7 +408,8 @@ def apply_commit(
         return text, []
 
     when = when or date.today().isoformat()
-    landed = "shipped" if branch in MAIN_BRANCHES else "review"
+    landed = "merged" if branch in MAIN_BRANCHES else "review"
+    completed_rank = {"review": 0, "merged": 1, "shipped": 2}
     lines = text.splitlines()
     ticked: list[str] = []
 
@@ -426,9 +428,8 @@ def apply_commit(
 
     for task_id in ids:
         task = board.by_id(task_id)
-        if task is None or task.shown_status == "shipped" or (
-            task.is_done and task.shown_status == landed
-        ):
+        if task is None or (task.is_done and
+                completed_rank.get(task.shown_status, -1) >= completed_rank[landed]):
             continue
         # У подзадач статус обычно не пишем: `shipped` читается по галочке, а
         # строка и так узкая. Но `review` галочка не несёт — «сделано» и
@@ -441,7 +442,11 @@ def apply_commit(
         # закрылась последняя часть — родитель закрыт вместе с ней
         if (parent is not None and parent.id not in ambiguous
                 and parent.is_done and parent.shown_status != "shipped"):
-            parent_status = "shipped" if all(s.shown_status == "shipped" for s in parent.subs) else "review"
+            child_states = {s.shown_status for s in parent.subs}
+            parent_status = ("shipped" if child_states == {"shipped"} else
+                             "merged" if child_states <= {"merged", "shipped"} else "review")
+            if completed_rank.get(parent.shown_status, -1) >= completed_rank[parent_status]:
+                continue
             tick(parent, add_tag=True, status=parent_status)
             # и в журнал: задача закончилась этим коммитом, а без записи
             # карточка потом не знает, на какой ветке её искать
@@ -571,19 +576,22 @@ def _where(task: Task, land: dict) -> str:
             for s in task.subs
             if s.id.lower() in land and land[s.id.lower()].get("branch")
         }
-        if len(seen) == 1:
+        if len(seen) == 1 and all(land.get(s.id.lower(), {}).get("branch") for s in task.subs):
             branch_only = seen.pop()
             at = {"branch": branch_only, "sha": ""}
     if not at:
         return '<span class="where none" title="Помечено вручную, а не коммитом — ветка не записана">branch not recorded</span>'
     branch, sha = at.get("branch", ""), at.get("sha", "")
     if not branch:
-        return ""
+        if sha:
+            return (f'<a class="where" href="{_esc(REPO_URL)}/commit/{quote(sha, safe="")}" '
+                    f'target="_blank" rel="noopener"><code>{_esc(sha)}</code></a>')
+        return '<span class="where none">branch not recorded</span>'
     short = branch.split("/", 1)[-1]
     tail = f"<code>{_esc(sha)}</code>" if sha else ""
     where = f" · commit {_esc(sha)}" if sha else ""
     return (
-        f'<a class="where" href="{REPO_URL}/tree/{branch}" target="_blank" rel="noopener"'
+        f'<a class="where" href="{_esc(REPO_URL)}/tree/{quote(branch, safe="/")}" target="_blank" rel="noopener"'
         f' title="{_esc(branch)}{where} — открыть ветку на GitHub">'
         f"{_esc(short)}{tail}</a>"
     )
@@ -1077,16 +1085,29 @@ def write_snapshot(repo: Path, text: str) -> Path | None:
     неизменившийся файл значит показывать его в `git status` на каждом
     коммите, и человек перестанет читать это место.
     """
+    tmp = None
     try:
         out = snapshot_path(repo)
         out.parent.mkdir(parents=True, exist_ok=True)
         if out.is_file() and out.read_text(encoding="utf-8") == text:
             return None
-        out.write_text(text, encoding="utf-8")
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=out.parent,
+                                         prefix=out.name, suffix=".tmp", delete=False) as f:
+            tmp = Path(f.name)
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, out)
         return out
     except Exception as exc:  # pragma: no cover - копия важна, но не важнее сборки
         print(f"копию доски записать не удалось: {exc}", file=sys.stderr)
         return None
+    finally:
+        if tmp is not None:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def default_out(repo: Path) -> Path:
@@ -1198,11 +1219,10 @@ def cmd_sync(args: argparse.Namespace, repo: Path) -> int:
     # журнал берём из обновлённого текста: свежая запись сделана только что,
     # и по старому тексту карточка не узнала бы своей ветки
     out.write_text(render(board, landings(new)), encoding="utf-8")
-    # Хук идёт после коммита, поэтому копия войдёт в следующий: отставание
-    # ровно в один коммит. Это несравнимо лучше, чем один файл на одном диске,
-    # и об отставании сказано вслух, а не спрятано.
+    # Post-commit does not stage files. The owner must explicitly include
+    # this snapshot in a later commit; otherwise the backup stays local.
     if write_snapshot(repo, new) is not None:
-        print(f"копия доски обновлена: {SNAPSHOT.as_posix()} — войдёт в следующий коммит")
+        print(f"копия доски обновлена: {SNAPSHOT.as_posix()} — добавьте её в следующий коммит явно")
     return 0
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from config import paths
 from src.analysis_agent import gsheet_accounts
 from src.analysis_agent import gsheet_targeting
-from src.web import ad_copy_gsheet
+from src.analysis_agent import gsheet_ad_texts
 
 
 def _use_empty_checkout(monkeypatch, tmp_path: Path) -> Path:
@@ -54,7 +54,10 @@ def test_ad_copy_reader_uses_the_same_machine_local_oauth_paths(
 
     monkeypatch.setattr(gsheet_accounts, "_build_sheets_service_oauth", fake_build)
 
-    ad_copy_gsheet._build_service()
+    local.mkdir(parents=True)
+    (local / "oauth_client.json").write_text('{"installed": {}}', encoding="utf-8")
+    # Exercise the actual library reader after retiring the legacy adapter.
+    assert gsheet_ad_texts.load_ad_text_rows(force=True) == []
     assert captured["args"] == (
         str(local / "oauth_client.json"),
         str(local / "token_accounts.json"),
