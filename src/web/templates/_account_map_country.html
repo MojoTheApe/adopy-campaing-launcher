@@ -105,7 +105,12 @@
             <td class="amap-setup">
               {%- if r.ready -%}<span class="amap-st ok" title="Set up and allowed to run">ready</span>
               {%- elif r.to_do -%}<span class="amap-st bad" title="{{ r.to_do }}">{{ r.to_do | truncate(28, True, '…') }}</span>
-              {%- else -%}<span class="amap-st bad" title="Not marked ready in the stats workbook, and no reason given there">needs setup</span>
+              {#- Книга про аккаунт не знает вовсе — это не задача и не беда.
+                  Так выглядит аккаунт, заведённый на дешборде: тестовый в
+                  рабочей книге не появится никогда, и красное «needs setup» на
+                  нём означало бы работу, которой не существует. -#}
+              {%- elif not r.in_workbook -%}<span class="amap-st dim" title="Connected here; the stats workbook has no row for it, so it has no numbers and no to-do">not in the workbook</span>
+              {%- else -%}<span class="amap-st bad" title="The stats workbook has a row for it but does not mark it ready, and gives no reason">needs setup</span>
               {%- endif -%}
             </td>
             <td class="amap-actions">
