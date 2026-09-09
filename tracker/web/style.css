@@ -43,7 +43,8 @@ html[data-theme=dark] #signal-tracker-v2{color-scheme:dark}
 #signal-tracker-v2 .st-demo:before{content:'';height:6px;width:6px;background:var(--st-violet);border-radius:50%}
 #signal-tracker-v2 .st-segment{display:flex;align-items:center;background:var(--st-panel);border:1px solid var(--st-line);border-radius:8px;padding:3px;gap:2px}
 #signal-tracker-v2 .st-segment button{display:flex;align-items:center;justify-content:center;gap:6px;min-height:30px;padding:4px 10px;border-radius:5px;font-size:12px;color:var(--st-muted)}
-#signal-tracker-v2 .st-segment button[aria-pressed=true]{color:var(--st-accent);background:var(--st-tint);font-weight:600}
+#signal-tracker-v2 .st-segment button[aria-pressed=true]{color:var(--st-accent);--st-control-surface:var(--st-tint);font-weight:600}
+#signal-tracker-v2 .st-segment button[aria-pressed=true]:not(.st-signal-border){background:var(--st-tint)}
 
 #signal-tracker-v2 .st-mvp-number{color:var(--st-accent)}
 
@@ -375,14 +376,37 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
   transition:border-color .18s ease,--st-control-surface .18s ease,--st-border-opacity .18s ease;
   animation:st-control-flow 7s ease-in-out infinite;animation-play-state:paused;
 }
-#signal-tracker-v2 .st-search,#signal-tracker-v2 #filters-toggle,#signal-tracker-v2 .st-pipeline button:not(:hover):not([aria-pressed=true]){--st-control-surface:var(--st-panel)}
-#signal-tracker-v2 .st-pipeline .st-signal-border{border-color:var(--st-panel)}
+#signal-tracker-v2 :where(.st-signal-border){--st-control-surface:var(--st-panel)}
+#signal-tracker-v2 .st-pipeline .st-signal-border,#signal-tracker-v2 .st-segment .st-signal-border{border-color:var(--st-panel)}
+#signal-tracker-v2 .st-segment button.st-signal-border{padding:2px 8px}
+#signal-tracker-v2 .st-segment button.st-signal-border:hover{--st-control-surface:var(--st-soft)}
+#signal-tracker-v2 .st-segment button.st-signal-border[aria-pressed=true]{--st-control-surface:var(--st-tint)}
+#signal-tracker-v2 .st-empty .st-control.st-signal-border{padding:5px 11px}
+@container signal (max-width:510px){#signal-tracker-v2 .st-theme button.st-signal-border{padding:2px 4px}}
 #signal-tracker-v2 button.st-signal-border{appearance:none;-webkit-appearance:none;overflow:visible}
 #signal-tracker-v2 .st-signal-border:is([aria-pressed=true],[aria-expanded=true],[data-filtered=true],:focus-visible),
-#signal-tracker-v2 .st-search:focus-within{--st-border-opacity:1;border-color:transparent;animation-play-state:running}
+#signal-tracker-v2 .st-search:focus-within{--st-border-opacity:1;border-color:transparent}
+/* Selection stays visible; motion follows the control receiving interaction.
+   Pausing preserves the current gradient position instead of jumping to frame 0. */
+#signal-tracker-v2 .st-signal-border:focus-visible,#signal-tracker-v2 .st-search:has(input:focus-visible){animation-play-state:running}
 @media(hover:hover){#signal-tracker-v2 .st-signal-border:hover{--st-border-opacity:1;border-color:transparent;animation-play-state:running}}
 html.st-theme-transition #signal-tracker-v2 .st-signal-border{transition:border-color .36s ease,--st-control-surface .36s ease,--st-border-opacity .18s ease}
 @keyframes st-control-flow{0%,100%{background-position:0 0,0% 50%}50%{background-position:0 0,100% 50%}}
+
+/* Module navigation shares the palette through a narrow marker, not a box. */
+#signal-tracker-v2 .st-nav button{position:relative;transition:background-color .18s ease}
+#signal-tracker-v2 .st-nav button:before{
+  content:'';position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;
+  background-image:var(--st-signal-gradient);background-size:100% 300%;
+  opacity:0;pointer-events:none;transition:opacity .18s ease;
+  animation:st-module-flow 7s ease-in-out infinite;animation-play-state:paused;
+}
+#signal-tracker-v2 .st-nav button:is([aria-pressed=true],:focus-visible):before{opacity:1}
+#signal-tracker-v2 .st-nav button:focus-visible:before{animation-play-state:running}
+@media(hover:hover){#signal-tracker-v2 .st-nav button:hover:before{opacity:1;animation-play-state:running}}
+@keyframes st-module-flow{0%,100%{background-position:50% 0%}50%{background-position:50% 100%}}
+#signal-tracker-v2 .st-close{transition:background-color .18s ease,border-color .18s ease,color .18s ease}
+#signal-tracker-v2 .st-close:hover,#signal-tracker-v2 .st-close:focus-visible{background:var(--st-tint);color:var(--st-accent);border-color:var(--st-muted)}
 
 /* Copy is a transparent hit area. Only the ID glyphs carry the moving accent;
    the same hues use text-appropriate contrast in each theme. */
@@ -397,10 +421,12 @@ html.st-theme-transition #signal-tracker-v2 .st-signal-border{transition:border-
   @media(hover:hover){#signal-tracker-v2 .st-copy:hover .st-id{color:transparent;-webkit-text-fill-color:transparent;animation-play-state:running}}
 }
 @media(prefers-reduced-motion:reduce){
-  #signal-tracker-v2 .st-signal-border,#signal-tracker-v2 .st-copy .st-id{animation:none;transition:none}
+  #signal-tracker-v2 .st-signal-border,#signal-tracker-v2 .st-copy .st-id,#signal-tracker-v2 .st-nav button:before{animation:none;transition:none}
+  #signal-tracker-v2 .st-nav button,#signal-tracker-v2 .st-close{transition:none}
   html.st-theme-transition #signal-tracker-v2 .st-signal-border{transition:none}
 }
 @media(forced-colors:active){
+  #signal-tracker-v2 .st-nav button:before{background:Highlight;animation:none}
   #signal-tracker-v2 .st-signal-border{background:Canvas!important;border-color:CanvasText!important;animation:none}
   #signal-tracker-v2 .st-signal-border:is(:hover,:focus-within,[aria-pressed=true],[aria-expanded=true],[data-filtered=true]){border-color:Highlight!important}
   #signal-tracker-v2 .st-copy .st-id{background:none!important;color:ButtonText!important;-webkit-text-fill-color:ButtonText!important;animation:none}

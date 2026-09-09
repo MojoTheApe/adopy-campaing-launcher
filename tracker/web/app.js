@@ -161,7 +161,7 @@
     }));$('pipeline').dataset.signature=sig;}
     $('release-context').hidden=state.view!=='release';
     const scopeRows=[['required','Required tasks'],['remaining','Remaining'],['blocked','Blockers'],['complete','Completed'],['all','Entire milestone']];
-    const scopeSig=JSON.stringify([state.scope,state.view]);if($('release-scopes').dataset.signature!==scopeSig){$('release-scopes').replaceChildren(...scopeRows.map(([v,l])=>button(l,'',{'data-scope':v,'aria-pressed':String(state.scope===v),id:'scope-'+v})));$('release-scopes').dataset.signature=scopeSig;}
+    const scopeSig=JSON.stringify([state.scope,state.view]);if($('release-scopes').dataset.signature!==scopeSig){$('release-scopes').replaceChildren(...scopeRows.map(([v,l])=>button(l,'st-signal-border',{'data-scope':v,'aria-pressed':String(state.scope===v),id:'scope-'+v})));$('release-scopes').dataset.signature=scopeSig;}
     const box=$('release-summary');box.classList.toggle('ready',Boolean(s?.ready&&fresh));
     const summary=!s?.total?'Scope not defined':!fresh?'Readiness unknown · sync delayed':s.ready?'Scope ready':'Scope in progress';
     box.replaceChildren(node('strong',(m?.title||data.release_view_label)+' · '+summary));
@@ -196,7 +196,7 @@
     if(!rows.length) {
       const msg=state.view==='archive'&&!data.tasks.some(inView)?'No archived tasks':!data.tasks.length?'No tasks yet':'No tasks match these filters';
       const signature=state.view+msg;
-      if(holder.dataset.empty!==signature){const box=node('div',undefined,'st-empty');box.append(node('h2',msg));box.append(button('Show all tasks','st-control',{'data-view':'all'}));holder.replaceChildren(box);holder.dataset.empty=signature;}
+      if(holder.dataset.empty!==signature){const box=node('div',undefined,'st-empty');box.append(node('h2',msg));box.append(button('Show all tasks','st-control st-signal-border',{'data-view':'all'}));holder.replaceChildren(box);holder.dataset.empty=signature;}
       listLayout='';$('board-navigation').hidden=true;return;
     }
     delete holder.dataset.empty;
