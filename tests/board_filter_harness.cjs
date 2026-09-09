@@ -11,8 +11,11 @@ const area = {
   querySelector: () => pin,
 };
 const pin = {
+  open: false, listeners: {},
   dataset: {status: 'review'},
   classList: { toggle: () => {} },
+  getAttribute: () => 'acl-101',
+  addEventListener: function(event, callback) { this.listeners[event] = callback; },
 };
 const chip = {
   dataset: {filter: 'review'}, listeners: {},
@@ -20,7 +23,7 @@ const chip = {
   addEventListener: function(event, callback) { this.listeners[event] = callback; },
 };
 const document = {
-  querySelectorAll: (selector) => ({'details.area': [area], 'details.pin': [], '.chip': [chip], '.pin': [pin], '.cap': [], 'nav.areas a': []}[selector]),
+  querySelectorAll: (selector) => ({'details.area': [area], 'details.pin': [pin], '.chip': [chip], '.pin': [pin], '.cap': [], 'nav.areas a': []}[selector]),
 };
 const localStorage = {
   getItem: (key) => { reads.push(String(key)); return storage.get(String(key)) ?? null; },
@@ -30,6 +33,10 @@ vm.runInNewContext(fs.readFileSync(process.argv[2], 'utf8'), {document, localSto
 assert.equal(area.open, true);
 chip.listeners.click();
 assert.equal(area.open, true);
+// Filtering expands areas automatically; a card is still opened by the reader.
+pin.open = true;
+pin.listeners.toggle();
+assert.equal(storage.get('acl.wall.pins'), '["acl-101"]');
 chip.listeners.click();
 // Native details dispatches this toggle event after the script changes open.
 area.listeners.toggle();

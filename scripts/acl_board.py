@@ -1009,9 +1009,9 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
     nodes.forEach(function (n) {{
       if (seen.indexOf(n.getAttribute(attr)) !== -1) n.open = true;
       n.addEventListener('toggle', function () {{
-        // Под фильтром открыто не человеком, а фильтром: запоминать это
-        // значило бы выдать чужой выбор за его собственный.
-        if (active) return;
+        // Фильтр сам раскрывает области; карточки по-прежнему открывает
+        // человек, и их нужно сохранять даже при включённом фильтре.
+        if (active && attr === 'data-area') return;
         try {{
           localStorage.setItem(key, JSON.stringify(
             nodes.filter(function (x) {{ return x.open; }})
