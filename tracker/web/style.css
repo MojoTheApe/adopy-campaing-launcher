@@ -305,9 +305,9 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
 #signal-tracker-v2 #search:focus,#signal-tracker-v2 #search:focus-visible{outline:none;box-shadow:none}
 #signal-tracker-v2 #search::-webkit-search-decoration{-webkit-appearance:none}
 #signal-tracker-v2 .st-toolbar>.st-segment{margin-left:auto}
-#signal-tracker-v2 #filters-toggle{min-width:38px;padding:8px;gap:6px}
+#signal-tracker-v2 #filters-toggle{min-width:38px;width:40px;flex:0 0 40px;padding:8px;gap:6px}
 #signal-tracker-v2 #filters-toggle svg{width:19px;height:19px}
-#signal-tracker-v2 #filters-count{font-size:11px;line-height:16px;min-width:16px;text-align:center;color:var(--st-accent)}
+#signal-tracker-v2 #filters-count{position:absolute;top:-5px;right:-5px;z-index:1;font-size:10px;line-height:16px;min-width:18px;padding:0 3px;text-align:center;color:var(--st-accent);background:var(--st-panel);border:1px solid var(--st-line);border-radius:6px}
 #signal-tracker-v2 #filters-toggle[aria-expanded=true]{color:var(--st-accent);border-color:var(--st-accent)}
 #signal-tracker-v2 .st-inline-filters{padding:0;margin:0 0 12px;animation:st-filters-enter .18s ease-out}
 #signal-tracker-v2 #filter-fields{display:grid;gap:4px}
@@ -339,7 +339,7 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
 
 /* One grid owns all seven columns. Reflow follows the available workspace,
    including a resized dock, rather than hiding metadata at viewport breakpoints. */
-#signal-tracker-v2 .st-main{container:workspace / inline-size}
+#signal-tracker-v2 .st-main{container:workspace / inline-size;overflow-anchor:none}
 #signal-tracker-v2 .st-row,#signal-tracker-v2 .st-list-head{display:grid;grid-template-columns:minmax(240px,1fr) 108px minmax(110px,150px) 68px 86px 102px 118px;align-items:center;gap:12px;padding:0 16px}
 #signal-tracker-v2 .st-row{min-height:64px}
 #signal-tracker-v2 .st-cell{min-width:0;font-size:12px;color:var(--st-muted);overflow-wrap:anywhere}
@@ -369,9 +369,10 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
 /* Shared logo accent: an overlay ring preserves control dimensions and hit areas.
    Mask support is required so an unsupported browser keeps its ordinary border. */
 #signal-tracker-v2 .st-signal-border{position:relative}
+#signal-tracker-v2 button.st-signal-border{appearance:none;-webkit-appearance:none;overflow:visible}
 @supports (mask-composite:exclude) or (-webkit-mask-composite:xor){
   #signal-tracker-v2 .st-signal-border:before{
-    content:'';position:absolute;inset:-1px;border-radius:inherit;padding:1px;
+    content:'';position:absolute;inset:-1px;border-radius:inherit;padding:1.5px;
     background-image:var(--st-signal-gradient);background-size:300% 100%;
     -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
     mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
@@ -379,7 +380,7 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
     pointer-events:none;opacity:0;transition:opacity .18s ease;
     animation:st-logo-flow 7s ease-in-out infinite;animation-play-state:paused;
   }
-  #signal-tracker-v2 .st-pipeline .st-signal-border:before{inset:0}
+  #signal-tracker-v2 .st-pipeline .st-signal-border:before{inset:1px;border-radius:6px}
   #signal-tracker-v2 .st-signal-border:is([aria-pressed=true],[aria-expanded=true],[data-filtered=true],:focus-visible):before,
   #signal-tracker-v2 .st-search:focus-within:before{opacity:1;animation-play-state:running}
   @media(hover:hover){#signal-tracker-v2 .st-signal-border:hover:before{opacity:1;animation-play-state:running}}

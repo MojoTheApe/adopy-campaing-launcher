@@ -8,7 +8,7 @@
   const priorities = ['high', 'medium', 'low', 'unassigned'];
   const types = ['bug', 'feature', 'improvement', 'research', 'operations', 'unassigned'];
   const views = ['all', ...stages, 'release', 'archive'];
-  const defaults = () => ({view:'all', layout:'list', theme:'system', detailWidth:440, filtersOpen:false, module:'', priorities:[], types:[], releases:[], design:false, required:false, blocked:false, search:'', scope:'all', selectedRelease:'', selected:null, column:'in_progress', scroll:0, boardScroll:0, focus:''});
+  const defaults = () => ({view:'all', layout:'list', theme:'system', detailWidth:440, filtersOpen:false, module:'', priorities:[], types:[], design:false, required:false, blocked:false, search:'', scope:'all', selected:null, column:'in_progress', scroll:0, boardScroll:0, focus:''});
   const read = (storage, name) => {try {return JSON.parse(storage.getItem(name) || '{}') || {};} catch (_) {return {};}};
   let state = defaults(), migrated = false;
   try {
@@ -17,7 +17,7 @@
     if (!sessionStorage.getItem(key) && !localStorage.getItem(key+'.prefs')) {
       const old = read(sessionStorage, 'tracker.v2.'+data.project.repository);
       if (Object.keys(old).length) {
-        Object.assign(state, old, {priorities:old.priority?[old.priority]:[], types:old.type?[old.type]:[], releases:old.release?[String(old.release)]:[], selectedRelease:old.release||'', selected:Number(Object.keys(old.open||{}).find(n=>old.open[n]))||null, theme:old.theme||'system', scope:old.scope||'all'});
+        Object.assign(state, old, {priorities:old.priority?[old.priority]:[], types:old.type?[old.type]:[], selected:Number(Object.keys(old.open||{}).find(n=>old.open[n]))||null, theme:old.theme||'system', scope:old.scope||'all'});
         migrated = true;
       }
     }
@@ -25,14 +25,13 @@
   function sanitize() {
     const allowed = {view:views, layout:['list','board'], theme:['light','dark','system'], scope:['all','required','remaining','blocked','complete']};
     for (const [k, values] of Object.entries(allowed)) if (!values.includes(state[k])) state[k]=defaults()[k];
-    // Status is selected only in the top navigation. Discard the retired hidden filter.
-    delete state.statuses;
-    for (const [k, values] of Object.entries({priorities, types, releases:data.milestones.map(m=>String(m.number))})) state[k]=Array.isArray(state[k])?[...new Set(state[k].filter(v=>values.includes(v)))]:[];
+    // Stage and release scope live in navigation; discard retired hidden filters.
+    delete state.statuses;delete state.releases;delete state.selectedRelease;
+    for (const [k, values] of Object.entries({priorities, types})) state[k]=Array.isArray(state[k])?[...new Set(state[k].filter(v=>values.includes(v)))]:[];
     if (!['', 'unclassified', ...data.modules.map(m=>m.id)].includes(state.module)) state.module='';
     state.search=typeof state.search==='string'?state.search:'';
     for (const flag of ['design','required','blocked','filtersOpen']) state[flag]=state[flag]===true;
     state.selected=Number.isSafeInteger(Number(state.selected)) && Number(state.selected)>0?Number(state.selected):null;
-    if (!data.milestones.some(m=>String(m.number)===state.selectedRelease)) state.selectedRelease=String((data.milestones.find(m=>m.title===data.default_release)||data.milestones[0])?.number||'');
     if (!stages.includes(state.column)) state.column='in_progress';
     state.detailWidth=Number.isFinite(state.detailWidth)?Math.min(960,Math.max(360,state.detailWidth)):440;
     state.scroll=Number.isFinite(state.scroll)?Math.max(0,state.scroll):0;
@@ -51,7 +50,7 @@
   const label = s => ({idea:'Idea',backlog:'Backlog',todo:'To do',in_progress:'In progress',review:'Review',merged:data.completion_label})[s];
   const viewLabel = v => ({all:'All tasks',release:data.release_view_label,archive:'Archive'})[v] || label(v);
   const moduleName = m => data.modules.find(x=>x.id===m)?.name || 'Unclassified';
-  const release = () => data.milestones.find(m=>String(m.number)===state.selectedRelease);
+  const release = () => data.milestones.find(m=>m.title===data.default_release)||data.milestones[0];
   const completed = t => t.status==='merged' && !t.archive;
   let lookup = new Map();
   function indexTasks() {lookup=new Map(data.tasks.flatMap(t=>[[t.id.toLowerCase(),t],['#'+t.number,t]]));}
@@ -65,7 +64,7 @@
     if(t.archive && !(state.view==='release' && t.required))return false;
     if(stages.includes(state.view))return t.status===state.view;
     if(state.view==='release') {
-      if(String(t.milestone)!==state.selectedRelease)return false;
+      if(t.milestone!==release()?.number)return false;
       if(state.scope!=='all'&&(!t.required||t.initiative))return false;
       if(state.scope==='remaining')return t.required && !t.initiative && !completed(t);
       if(state.scope==='blocked')return t.required && !t.initiative && blocked(t);
@@ -78,7 +77,6 @@
     if(state.module&&(t.module||'unclassified')!==state.module)return false;
     if(state.priorities.length&&!state.priorities.includes(t.priority||'unassigned'))return false;
     if(state.types.length&&!state.types.includes(t.type||'unassigned'))return false;
-    if(state.releases.length&&!state.releases.includes(String(t.milestone)))return false;
     if(state.design&&!t.design||state.required&&!t.required||state.blocked&&!blocked(t))return false;
     const q=state.search.trim().toLowerCase();
     return !q||[t.id,'#'+t.number,t.title,t.body].join(' ').toLowerCase().includes(q);
@@ -90,7 +88,7 @@
     const p={high:0,medium:1,low:2,'':1};
     return data.tasks.filter(matches).sort((a,b)=>rank[a.status]-rank[b.status] || (a.status==='todo'?(position(a.number)-position(b.number)):0) || p[a.priority]-p[b.priority] || (a.status==='todo'?String(a.todo_at||a.created_at).localeCompare(String(b.todo_at||b.created_at)):0) || a.number-b.number);
   }
-  function clearFilters() {Object.assign(state,{module:'',priorities:[],types:[],releases:[],design:false,required:false,blocked:false,search:'',scope:'all'});$('search').value='';}
+  function clearFilters() {Object.assign(state,{module:'',priorities:[],types:[],design:false,required:false,blocked:false,search:'',scope:'all'});$('search').value='';}
   function chooseView(v) {clearFilters();state.view=v;state.scope=v==='release'?'required':'all';state.boardScroll=0;closeDialog($('navigation-panel'));save();render();}
   function statusBadge(t) {const s=node('span',undefined,'st-stage');s.dataset.status=t.status;s.append(node('span',undefined,'st-stage-dot'),document.createTextNode(t.non_code&&t.status==='merged'?'Complete':label(t.status)));return s;}
   function copyButton(t) {
@@ -173,22 +171,21 @@
   function renderFilters() {
     $('filters-panel').hidden=!state.filtersOpen;$('filters-toggle').setAttribute('aria-expanded',String(state.filtersOpen));
     const hasUnclassified=data.tasks.some(t=>!t.type)||state.types.includes('unassigned');
-    const signature=JSON.stringify([state.view==='release',data.milestones.map(m=>[m.number,m.title]),hasUnclassified]);
+    const signature=JSON.stringify([hasUnclassified]);
     if(signature!==filterSignature) {
-      const group=(name, options, key, radio=false)=>{const field=node('fieldset'),legend=node('legend',name),items=node('div',undefined,'st-options');field.append(legend,items);options.forEach(([v,l])=>{const lab=node('label'),input=node('input');input.type=radio?'radio':'checkbox';input.name=key;input.value=v;input.dataset.facet=key;input.id='filter-'+key+'-'+v;lab.append(input,document.createTextNode(l));items.append(lab);});return field;};
-      $('filter-fields').replaceChildren(group('Priority',priorities.map(v=>[v,cap(v)]),'priorities'),group('Type',types.filter(v=>v!=='unassigned'||hasUnclassified).map(v=>[v,typeLabel(v)]),'types'),group('Release',data.milestones.map(m=>[String(m.number),m.title]),state.view==='release'?'selectedRelease':'releases',state.view==='release'),group('Focus',[['design','Design'],['required','Required'],['blocked','Blocked']],'flags'));
+      const group=(name, options, key)=>{const field=node('fieldset'),legend=node('legend',name),items=node('div',undefined,'st-options');field.append(legend,items);options.forEach(([v,l])=>{const lab=node('label'),input=node('input');input.type='checkbox';input.name=key;input.value=v;input.dataset.facet=key;input.id='filter-'+key+'-'+v;lab.append(input,document.createTextNode(l));items.append(lab);});return field;};
+      $('filter-fields').replaceChildren(group('Priority',priorities.map(v=>[v,cap(v)]),'priorities'),group('Type',types.filter(v=>v!=='unassigned'||hasUnclassified).map(v=>[v,typeLabel(v)]),'types'),group('Focus',[['design','Design'],['required','Required'],['blocked','Blocked']],'flags'));
       filterSignature=signature;
     }
-    for(const input of $('filter-fields').querySelectorAll('input')) {const k=input.dataset.facet;input.checked=k==='flags'?state[input.value]:k==='selectedRelease'?state.selectedRelease===input.value:state[k].includes(input.value);}
+    for(const input of $('filter-fields').querySelectorAll('input')) {const k=input.dataset.facet;input.checked=k==='flags'?state[input.value]:state[k].includes(input.value);}
     const chips=[];
     const chip=(k,v,l)=>{const b=button(l+' ×','st-chip',{'data-remove':k,'data-value':v,'aria-label':'Remove '+l+' filter',id:'chip-'+k+'-'+v});chips.push(b);};
     if(state.module)chip('module',state.module,moduleName(state.module));if(state.search)chip('search','', 'Search: '+state.search);
     for(const v of state.priorities)chip('priorities',v,cap(v));for(const v of state.types)chip('types',v,typeLabel(v));
-    for(const v of state.releases)chip('releases',v,data.milestones.find(m=>String(m.number)===v)?.title||v);
     for(const k of ['design','required','blocked'])if(state[k])chip(k,'',cap(k));
     if(chips.length)chips.push(button('Clear filters','st-clear',{'data-clear':'true',id:'clear-chips'}));
     const chipSignature=JSON.stringify(chips.map(c=>c.outerHTML));if($('chips').dataset.signature!==chipSignature){$('chips').replaceChildren(...chips);$('chips').dataset.signature=chipSignature;}
-    const count=state.priorities.length+state.types.length+state.releases.length+Number(state.design)+Number(state.required)+Number(state.blocked);
+    const count=state.priorities.length+state.types.length+Number(state.design)+Number(state.required)+Number(state.blocked);
     $('filters-count').textContent=String(count);$('filters-count').hidden=!count;
     $('filters-toggle').dataset.filtered=String(count>0);
     const filterLabel='Filters'+(count?' · '+count+' active':'');
@@ -270,10 +267,12 @@
   }
   $('task-detail').addEventListener('cancel',e=>{e.preventDefault();closeDetail();});
   function captureAnchor() {
+    // A task below visible controls is not the user's current reading position.
+    if($('tasks').getBoundingClientRect().top>=0)return null;
     const visible=[...$('tasks').querySelectorAll('.task')].find(e=>e.getBoundingClientRect().bottom>0);return visible?{id:visible.id,top:visible.getBoundingClientRect().top}:null;
   }
-  function render({preserve=false}={}) {
-    const focus=document.activeElement,focusId=focus?.id,y=window.scrollY,anchor=preserve?captureAnchor():null,horizontal=$('tasks').scrollLeft;
+  function render({preserve='viewport'}={}) {
+    const focus=document.activeElement,focusId=focus?.id,y=window.scrollY,anchor=preserve===true?captureAnchor():null,horizontal=$('tasks').scrollLeft;
     renderNavigation();renderOverview();renderFilters();const rows=sortedRows();renderRows(rows);
     $('result-count').textContent=`Showing ${rows.length} of ${data.tasks.filter(inView).length} tasks`;
     const run=data.queue?.run;$('batch-note').hidden=!['todo','in_progress','review'].includes(state.view)||!run;
@@ -324,7 +323,7 @@
     if(b.dataset.clear||b.id==='reset'){clearFilters();save();render();return;}
     if(b.dataset.remove){const k=b.dataset.remove;if(Array.isArray(state[k]))state[k]=state[k].filter(v=>v!==b.dataset.value);else state[k]=typeof state[k]==='boolean'?false:'';$('search').value=state.search;save();render();}
   });
-  $('filter-fields').addEventListener('change',e=>{const input=e.target,k=input.dataset.facet;if(!k)return;if(k==='flags')state[input.value]=input.checked;else if(k==='selectedRelease')state.selectedRelease=input.value;else state[k]=input.checked?[...new Set([...state[k],input.value])]:state[k].filter(v=>v!==input.value);save();render({preserve:true});});
+  $('filter-fields').addEventListener('change',e=>{const input=e.target,k=input.dataset.facet;if(!k)return;if(k==='flags')state[input.value]=input.checked;else state[k]=input.checked?[...new Set([...state[k],input.value])]:state[k].filter(v=>v!==input.value);save();render();});
   $('search').addEventListener('input',e=>{state.search=e.target.value;save();render();});
   // A backdrop/outside click closes details; a drag that began inside never does.
   const outsideDetail=e=>{const d=$('task-detail'),r=d.getBoundingClientRect();return !d.contains(e.target)||e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom;};
