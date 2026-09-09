@@ -90,3 +90,28 @@ def test_a_failed_read_shows_its_reason_after_a_reload():
     assert "state == 'failed'" in cell, "отказ снова показывается прочерком"
     assert "sr.error" in cell, "причина не выводится"
     assert "sr.shot" in cell, "снимок опять негде найти"
+
+
+def test_an_account_the_workbook_never_heard_of_is_not_called_unfinished():
+    """«Нет в книге» и «в книге, но не готов» — разные вещи.
+
+    Аккаунт, заведённый на дешборде для тестов, в рабочей книге статистики не
+    появится никогда. Красное «needs setup» на нём означало бы задачу, которой
+    не существует, — а предупреждение, которое горит всегда, перестаёт что-либо
+    значить, и настоящую нехватку рядом уже никто не заметит.
+    """
+    t = ROW.read_text(encoding="utf-8")
+    setup = t[t.index('class="amap-setup"'): t.index("</td>", t.index('class="amap-setup"'))]
+    assert "not in the workbook" in setup, "аккаунт вне книги снова назван недонастроенным"
+    assert "r.in_workbook" in setup, "неоткуда узнать, знает ли книга этот аккаунт"
+    # Настоящая недонастройка никуда не делась: книга знает и не считает готовым.
+    assert "needs setup" in setup
+
+
+def test_the_row_carries_whether_the_workbook_knows_the_account():
+    """Признак считается на сервере: шаблон не должен гадать по прочерку.
+
+    Пустые числа бывают и у аккаунта из книги — просто за выбранные дни.
+    """
+    source = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
+    assert '"in_workbook"' in source and "_workbook_has_account(df, country_name, label)" in source

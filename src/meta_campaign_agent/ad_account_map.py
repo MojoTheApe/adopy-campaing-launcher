@@ -30,15 +30,20 @@ class AccountMapEntry:
     # therefore unusable until someone also added a row to that workbook by
     # hand — and the only sign of it was a refusal to save the tracking link,
     # long after the account looked fully configured. These columns let the
-    # machine's own map answer instead; the workbook still wins where it has a
-    # row, so nothing changes for accounts that already live there.
+    # machine's own map answer instead; configured local values now win over
+    # legacy workbook values, including a deliberately cleared tracking link.
     tracking_link: str | None = None
     pixel_id: str | None = None
     domain: str | None = None
+    # Distinguishes a deliberately cleared local link from an unconfigured one.
+    tracking_link_set: bool = False
 
 
 def load_ad_account_map(path: str | Path) -> dict[str, AccountMapEntry]:
-    """Load account_name -> AccountMapEntry."""
+    """Load named rows, including profiles waiting for an ad-account number.
+
+    Consumers that read or build campaigns must validate their required fields.
+    """
     p = Path(path)
     if not p.is_file():
         return {}
@@ -50,11 +55,13 @@ def load_ad_account_map(path: str | Path) -> dict[str, AccountMapEntry]:
             name = (row.get("account_name") or row.get("account") or "").strip()
             act = (row.get("ad_account_id") or row.get("act_id") or "").strip()
             page_id = (row.get("page_id") or row.get("facebook_page_id") or "").strip() or None
-            if not name or not act:
+            if not name:
                 continue
-            if not act.startswith("act_"):
+            if act and not act.startswith("act_"):
                 act = f"act_{act.lstrip('act_')}"
             ml_instance = (row.get("multilogin_instance") or row.get("ml_instance") or "A").strip().upper()
+            link_set = (row.get("tracking_link_set") or "").strip().lower() in {"1", "true"}
+            tracking_link = (row.get("tracking_link") if link_set else row.get("tracking_link") or row.get("link")) or ""
             out[name] = AccountMapEntry(
                 ad_account_id=act,
                 page_id=page_id,
@@ -68,9 +75,10 @@ def load_ad_account_map(path: str | Path) -> dict[str, AccountMapEntry]:
                 proxy_pass=(row.get("proxy_pass") or row.get("proxy_password") or "").strip() or None,
                 page_name=(row.get("page_name") or "").strip() or None,
                 country=(row.get("country") or "").strip() or None,
-                tracking_link=(row.get("tracking_link") or row.get("link") or "").strip() or None,
+                tracking_link=tracking_link.strip() or None,
                 pixel_id=(row.get("pixel_id") or row.get("pixel") or "").strip() or None,
                 domain=(row.get("domain") or "").strip() or None,
+                tracking_link_set=link_set,
             )
     return out
 
@@ -85,7 +93,6 @@ def resolve_account_entry(map_data: dict[str, AccountMapEntry], sheet_name: str)
     for key, entry in map_data.items():
         if key.lower() == lower:
             return entry
-    for key, entry in map_data.items():
-        if lower in key.lower() or key.lower() in lower:
-            return entry
-    return None
+    candidates = [entry for key, entry in map_data.items()
+                  if lower in key.lower() or key.lower() in lower]
+    return candidates[0] if len(candidates) == 1 else None

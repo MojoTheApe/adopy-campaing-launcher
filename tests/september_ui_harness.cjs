@@ -68,9 +68,11 @@ async function tracking() {
   assert(!classes.has('cb-preflight-collapsed'));
 
   context.ACCOUNT_PREFLIGHT.Demo={link:'https://example.test/?x=1&y=2',link_status:'tracking'};
-  input.value='https://example.test/new';
+  input.value='https://example.test/new?x=1&y=2';
   context.cbPublish(form);
   assert(confirmation.body.includes('x=1&amp;y=2'));
+  assert(confirmation.body.includes('/new?'));
+  assert(confirmation.body.includes('В этой сборке будет использована'));
   assert(!confirmation.body.includes('&amp;amp;'));
   const badge={};
   const row={querySelector:selector=>selector.includes('tracking_link') ? input : badge};

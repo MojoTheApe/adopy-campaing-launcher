@@ -552,53 +552,80 @@ def _ads_manager_account_name(page) -> str:
     return ""
 
 
+class _Profile:
+    """То немногое, что провайдеру нужно знать о профиле, чтобы его поднять.
+
+    Карта аккаунтов для этого не требуется: `MultiloginAttachOnlyProvider`
+    спрашивает только эти три поля. Отдельный класс нужен ровно затем, чтобы
+    профиль можно было открыть **до** подключения — иначе получалась курица и
+    яйцо: чтобы подключить, дешборд просил номер кабинета; узнать номер можно
+    у открытого профиля; открыть профиль дешборд соглашался только у уже
+    подключённого аккаунта.
+    """
+
+    def __init__(self, profile_id: str, folder_id: str = "", instance: str = "A"):
+        self.profile_id = (profile_id or "").strip()
+        self.folder_id = (folder_id or "").strip()
+        self.multilogin_instance = (instance or "A").strip() or "A"
+
+
 @serialized_browser
-def open_for_automation(account: str) -> tuple[bool, str]:
+def open_profile_for_automation(profile_id: str, folder_id: str = "",
+                                instance: str = "A", label: str = "") -> tuple[bool, str]:
     """Поднять профиль автоматизацией и оставить окно открытым.
 
-    Недостающее звено: прицепиться можно только к профилю, поднятому
-    автоматизацией, а поднимал такой профиль до сих пор только путь публикации.
-    Здесь он поднимается и больше ничего не делается — человек логинится, если
-    надо, и окно остаётся; дальше чтения цепляются к нему.
+    Прицепиться можно только к профилю, поднятому автоматизацией, а поднимал
+    такой профиль до сих пор только путь публикации. Здесь он поднимается и
+    больше ничего не делается — человек логинится, если надо, и окно остаётся;
+    дальше чтения цепляются к нему.
 
-    Закрытый профиль просто запускается — это не перезапуск, и разлогинить
-    он не может. А вот открытый руками пришлось бы остановить и поднять
-    заново: ровно то, что разлогинило x01. Такой мы трогать отказываемся.
+    Закрытый профиль просто запускается — это не перезапуск, и разлогинить он
+    не может. А вот открытый руками пришлось бы остановить и поднять заново:
+    ровно то, что разлогинило x01. Такой мы трогать отказываемся.
+
+    **Отсутствие папки профиля больше не отказ.** Папку создаёт сам Multilogin
+    при первом запуске на этой машине, так что для нового профиля её и не
+    может быть: мы отказывались запускать профиль потому, что его ни разу не
+    запускали. Без папки пробуем API Multilogin; если профиль уже занят,
+    возвращаем отказ и никогда не останавливаем его ради этой кнопки.
     """
-    entry = _entry_for(account)
-    if entry is None:
-        return False, f"{account} нет в карте аккаунтов"
-    profile_id = (getattr(entry, "profile_id", "") or "").strip()
+    profile_id = (profile_id or "").strip()
+    who = label or profile_id[:8] or "профиль"
     if not profile_id:
-        return False, f"у {account} не заполнен profile_id"
+        return False, f"у {who} не заполнен profile_id"
+    instance = (instance or "A").strip().upper()
+    if instance not in {"A", "B"}:
+        return False, "Unknown Multilogin instance; choose A or B"
 
     from src.fb_ads_rpa import browser as rpa_browser
 
     direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
     if direct_cls is None:
         return False, "слой браузера RPA изменился (см. acl-108e)"
-    udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
-    if udd is None:
-        return False, f"папка профиля {profile_id} не найдена"
 
-    direct = direct_cls()
-    for spelling in _dir_spellings(udd):
-        attached = direct._try_attach_existing(profile_id, spelling, strict_profile=True)
-        if attached is not None:
-            attached.close(keep_browser_open=True)
-            return True, "профиль уже открыт автоматизацией — можно читать"
-    try:
-        if any(direct._profile_process_running(p, profile_id) for p in _dir_spellings(udd)):
-            return False, (
-                f"{account}: профиль открыт вручную в MLX Desktop. Поднять его "
-                "автоматизацией можно только остановив — а это разлогинивает. "
-                "Закройте окно в MLX Desktop и нажмите ещё раз."
-            )
-    except Exception as exc:
-        return False, f"Не удалось проверить открытые профили: {exc}. Новый запуск не выполнялся."
+    udd = _mlx_profile_dir(profile_id, folder_id)
+    if udd is not None:
+        direct = direct_cls()
+        for spelling in _dir_spellings(udd):
+            attached = direct._try_attach_existing(profile_id, spelling, strict_profile=True)
+            if attached is not None:
+                attached.close(keep_browser_open=True)
+                return True, "профиль уже открыт автоматизацией — можно читать"
+        try:
+            if any(direct._profile_process_running(p, profile_id) for p in _dir_spellings(udd)):
+                return False, (
+                    f"{who}: профиль открыт вручную в MLX Desktop. Поднять его "
+                    "автоматизацией можно только остановив — а это разлогинивает. "
+                    "Закройте окно в MLX Desktop и нажмите ещё раз."
+                )
+        except Exception as exc:
+            return False, f"Не удалось проверить открытые профили: {exc}. Новый запуск не выполнялся."
 
+
+    entry = _Profile(profile_id, folder_id, instance)
     try:
-        conn = rpa_browser.get_browser_provider("multilogin_attach").open(entry, account)
+        conn = rpa_browser.get_browser_provider("multilogin_attach").open(
+            entry, who, allow_missing_dir=True, allow_restart=False)
     except Exception as exc:  # noqa: BLE001
         return False, f"{type(exc).__name__}: {exc}"
     try:
@@ -607,6 +634,20 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     except Exception:
         pass
     return True, "профиль открыт — залогиньтесь, если нужно, и оставьте окно"
+
+
+@serialized_browser
+def open_for_automation(account: str) -> tuple[bool, str]:
+    """То же самое для аккаунта, который уже есть в карте."""
+    entry = _entry_for(account)
+    if entry is None:
+        return False, f"{account} нет в карте аккаунтов"
+    return open_profile_for_automation(
+        (getattr(entry, "profile_id", "") or ""),
+        (getattr(entry, "folder_id", "") or ""),
+        (getattr(entry, "multilogin_instance", "") or "A"),
+        account,
+    )
 
 
 @serialized_browser

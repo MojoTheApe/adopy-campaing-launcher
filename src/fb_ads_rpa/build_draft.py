@@ -84,12 +84,17 @@ def slots_to_campaign_drafts(
         )
 
         tracking_link = (first.get("tracking_link") or "").strip()
+        # Preserve explicit emptiness; only omitted fields use legacy defaults.
+        language = (first.get("language") or "").strip()
         draft = CampaignDraft(
             name=campaign_name,
             country=country,
             account_label=account_label,
             status=status,
             link=tracking_link,
+            language=language,
+            link_provided=first.get("tracking_link_provided", "tracking_link" in first),
+            language_provided=first.get("language_provided", "language" in first),
             ad_sets=[ad_set],
             warnings=warnings,
         )

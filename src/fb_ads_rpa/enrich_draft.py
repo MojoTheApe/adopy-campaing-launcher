@@ -122,22 +122,24 @@ def enrich_campaign_drafts(
 
     account_map = load_ad_account_map(map_path)
     entry = resolve_account_entry(account_map, account_label)
-    account_info = get_account_info(ref, account_label) if ref else {}
+    account_info = get_account_info(ref, account_label, account_map=account_map)
 
     for draft in drafts:
         draft.ad_account_id = entry.ad_account_id if entry else None
         draft.page_id = (entry.page_id if entry else None)
-        draft.link = str(account_info.get("link") or "")
-        draft.pixel_id = str(account_info.get("pixel") or "")
-        # The GCC/LatAm rule is authoritative for this account's two known
-        # campaign families (confirmed with user 2026-07-27) — checked
-        # first so it can't be silently overridden by unexpected text in
-        # the Upload FB.xlsx "Countries" sheet's language column (that
-        # sheet's format isn't guaranteed to match what fill_audience_
-        # languages() expects to type). Excel is only a fallback for
-        # countries outside those two families.
-        excel_language = str(lookup_country(ref, draft.country).get("language") or "").strip() if ref else ""
-        draft.language = _geo_language_for_country(draft.country) or excel_language
+        # Что набрано в билдере, то и берём. Раньше строка ниже перетирала
+        # ссылку значением из книги безусловно: человек вписывал её в форму,
+        # видел «Link empty» и не мог понять, куда она делась.
+        draft.link = str(draft.link or "").strip()
+        if not draft.link and not getattr(draft, "link_provided", False):
+            draft.link = str(account_info.get("link") or "").strip()
+        # Язык — так же: пришёл из формы, значит его и выбрали. Правило по
+        # стране осталось умолчанием формы, а не заменой ответа человека.
+        # Книга спрашивается последней и только за страны вне GCC и LatAm —
+        # для них правило и так побеждало её всегда.
+        if not str(getattr(draft, "language", "") or "").strip() and not getattr(draft, "language_provided", False):
+            excel_language = str(lookup_country(ref, draft.country).get("language") or "").strip() if ref else ""
+            draft.language = _geo_language_for_country(draft.country) or excel_language
 
         if ref.get("_load_error"):
             draft.warnings.append(f"Upload FB.xlsx not loaded: {ref['_load_error']}")
@@ -147,11 +149,21 @@ def enrich_campaign_drafts(
             continue
         if not entry.ad_account_id:
             draft.errors.append("ad_account_id not mapped in ad_account_map.csv")
+        # Черновик без адреса — это и есть черновик: плеер печатает ссылку как
+        # `d.link or None`, пустую просто не набирает. Требовать её значило
+        # запрещать то, ради чего RPA и существует. Договорённость с
+        # пользователем 8 сентября: подсветить и предупредить, но не запрещать.
+        # Соседний `page_id` двумя строками ниже устроен так с самого начала.
         if not draft.link:
             if draft.status == "DRAFT":
                 draft.warnings.append("Tracking link is empty; add it to the draft before publishing in Meta")
             else:
                 draft.errors.append("Link empty in Upload FB Accounts sheet")
+        # Пусто здесь бывает по двум причинам: язык сняли намеренно или для
+        # этой страны у нас нет правила. Обе разрешены, обе стоит назвать: шаг
+        # выбора языка в Ads Manager просто не выполнится.
+        if not str(getattr(draft, "language", "") or "").strip():
+            draft.warnings.append("audience language not set — the Language step will be skipped")
         # page_id is only required for ACTIVE campaigns; drafts publish without it
         if not draft.page_id:
             draft.warnings.append("page_id not set — required for ACTIVE campaigns only")
@@ -163,11 +175,11 @@ def enrich_campaign_drafts(
 
         for ad_set in draft.ad_sets:
             if getattr(ad_set, "targeting_label", ""):
-                # Primary source (user direction, 2026-07-30): the
-                # "Detailed targeting" tab of the shared Google Sheet —
-                # names come back already comma-separated, no JSON parsing.
-                # The Excel "Interests" sheet remains the fallback so a
-                # Sheets outage or a missing profile can't break publishing.
+                # Источник один — библиотека таргетов на этой машине. Книга
+                # запасным ходом больше не служит: она подставляла интересы,
+                # которых человек не выбирал, и делала это предупреждением, а
+                # не вопросом. Не нашлось — так и сказать; кампания при этом
+                # поднимается, просто без детального таргетинга.
                 resolved = ""
                 try:
                     from src.analysis_agent.gsheet_targeting import lookup_targeting_interests
@@ -178,12 +190,12 @@ def enrich_campaign_drafts(
                     continue
                 if resolved:
                     ad_set.targeting_label = resolved
-                elif ref:
+                else:
                     draft.warnings.append(
-                        f"targeting {ad_set.targeting_label!r} not in Google Sheet "
-                        "'Detailed targeting' — used Excel Interests fallback"
+                        f"targeting {ad_set.targeting_label!r} is not in the library — "
+                        "the campaign will be raised without detailed targeting"
                     )
-                    ad_set.targeting_label = _interest_names_from_targeting(ref, ad_set.targeting_label)
+                    ad_set.targeting_label = ""
 
             for ad in ad_set.ads:
                 # If creative_filename was set directly from folder scan — skip Excel lookup
@@ -208,6 +220,10 @@ def enrich_campaign_drafts(
                     ad.ad_title = (copy.get("headline") or ad.copy_name or "").strip()
                     ad.ad_body = (copy.get("body") or "").strip()
                     ad.ad_link_description = (copy.get("description") or "").strip()
+                    if not ad.ad_body:
+                        draft.warnings.append(
+                            f"ad text {ad.copy_name!r} has no body — check it in Ad titles"
+                        )
 
                 if ad.creative_filename and not preview_mode:
                     try:
