@@ -1,0 +1,266 @@
+{
+  "acl-102": {
+    "module": "accounts",
+    "type": "improvement"
+  },
+  "acl-121": {
+    "module": "accounts",
+    "type": "improvement"
+  },
+  "acl-123": {
+    "module": "accounts",
+    "type": "improvement"
+  },
+  "acl-131": {
+    "module": "accounts",
+    "type": "feature"
+  },
+  "acl-132": {
+    "module": "accounts",
+    "type": "feature"
+  },
+  "acl-133": {
+    "module": "accounts",
+    "type": "feature"
+  },
+  "acl-201": {
+    "module": "accounts",
+    "type": "feature"
+  },
+  "acl-202": {
+    "module": "accounts",
+    "type": "feature"
+  },
+  "acl-601": {
+    "module": "accounts",
+    "type": "feature"
+  },
+  "acl-602": {
+    "module": "accounts",
+    "type": "feature"
+  },
+  "acl-141": {
+    "module": "accounts",
+    "type": "improvement",
+    "design": true
+  },
+  "acl-142": {
+    "module": "accounts",
+    "type": "improvement",
+    "design": true
+  },
+  "acl-144": {
+    "module": "accounts",
+    "type": "improvement"
+  },
+  "acl-145": {
+    "module": "accounts",
+    "type": "bug"
+  },
+  "acl-143": {
+    "module": "accounts",
+    "type": "feature"
+  },
+  "acl-703": {
+    "module": "accounts",
+    "type": "improvement",
+    "design": true
+  },
+  "acl-103": {
+    "module": "data",
+    "type": "improvement"
+  },
+  "acl-105": {
+    "module": "data",
+    "type": "improvement"
+  },
+  "acl-107": {
+    "module": "data",
+    "type": "research"
+  },
+  "acl-108": {
+    "module": "data",
+    "type": "feature"
+  },
+  "acl-109": {
+    "module": "data",
+    "type": "improvement"
+  },
+  "acl-110": {
+    "module": "data",
+    "type": "improvement"
+  },
+  "acl-106": {
+    "module": "data",
+    "type": "bug"
+  },
+  "acl-412": {
+    "module": "data",
+    "type": "improvement"
+  },
+  "acl-111": {
+    "module": "campaigns",
+    "type": "feature"
+  },
+  "acl-112": {
+    "module": "campaigns",
+    "type": "operations"
+  },
+  "acl-113": {
+    "module": "campaigns",
+    "type": "feature"
+  },
+  "acl-116": {
+    "module": "campaigns",
+    "type": "feature"
+  },
+  "acl-117": {
+    "module": "campaigns",
+    "type": "feature"
+  },
+  "acl-114": {
+    "module": "campaigns",
+    "type": "feature"
+  },
+  "acl-115": {
+    "module": "campaigns",
+    "type": "research"
+  },
+  "acl-303": {
+    "module": "campaigns",
+    "type": "operations"
+  },
+  "acl-348": {
+    "module": "campaigns",
+    "type": "improvement"
+  },
+  "acl-347": {
+    "module": "campaigns",
+    "type": "improvement"
+  },
+  "acl-342": {
+    "module": "campaigns",
+    "type": "improvement"
+  },
+  "acl-343": {
+    "module": "campaigns",
+    "type": "improvement"
+  },
+  "acl-344": {
+    "module": "campaigns",
+    "type": "improvement"
+  },
+  "acl-340": {
+    "module": "campaigns",
+    "type": "improvement"
+  },
+  "acl-349": {
+    "module": "campaigns",
+    "type": "bug"
+  },
+  "acl-341": {
+    "module": "campaigns",
+    "type": "improvement"
+  },
+  "acl-333": {
+    "module": "campaigns",
+    "type": "bug"
+  },
+  "acl-331": {
+    "module": "campaigns",
+    "type": "bug"
+  },
+  "acl-336": {
+    "module": "campaigns",
+    "type": "feature"
+  },
+  "acl-211": {
+    "module": "landing",
+    "type": "feature"
+  },
+  "acl-212": {
+    "module": "landing",
+    "type": "operations"
+  },
+  "acl-222": {
+    "module": "landing",
+    "type": "feature"
+  },
+  "acl-223": {
+    "module": "landing",
+    "type": "feature"
+  },
+  "acl-423": {
+    "module": "creatives",
+    "type": "feature"
+  },
+  "acl-424": {
+    "module": "creatives",
+    "type": "feature"
+  },
+  "acl-501": {
+    "module": "creatives",
+    "type": "feature"
+  },
+  "acl-512": {
+    "module": "creatives",
+    "type": "feature"
+  },
+  "acl-521": {
+    "module": "creatives",
+    "type": "feature"
+  },
+  "acl-522": {
+    "module": "creatives",
+    "type": "feature"
+  },
+  "acl-334": {
+    "module": "creatives",
+    "type": "feature"
+  },
+  "acl-335": {
+    "module": "creatives",
+    "type": "bug"
+  },
+  "acl-304": {
+    "module": "platform",
+    "type": "improvement"
+  },
+  "acl-322": {
+    "module": "platform",
+    "type": "improvement"
+  },
+  "acl-312": {
+    "module": "platform",
+    "type": "improvement"
+  },
+  "acl-313": {
+    "module": "platform",
+    "type": "improvement"
+  },
+  "acl-650": {
+    "module": "platform",
+    "type": "improvement"
+  },
+  "acl-653": {
+    "module": "platform",
+    "type": "improvement"
+  },
+  "acl-654": {
+    "module": "platform",
+    "type": "improvement"
+  },
+  "acl-655": {
+    "module": "platform",
+    "type": "improvement"
+  },
+  "acl-402": {
+    "module": "platform",
+    "type": "improvement"
+  },
+  "84": {
+    "module": "platform",
+    "type": "improvement",
+    "design": true
+  }
+}

@@ -63,7 +63,7 @@ merge, финальная карточка такой задачи показы�
 | ID | Существующие номера и ACL ID неизменны | Issue number, существующий ID в заголовке |
 | Модуль | Один основной, по пользовательскому результату | `module:accounts`, `module:campaigns` и т. п. |
 | Статус | Ровно один из шести | `status:idea`, `status:backlog`, `status:todo`, `status:in_progress`, `status:review`, `status:merged` |
-| Приоритет | High / Normal / Low; у неразобранной идеи может отсутствовать | `priority:high`, `priority:normal`, `priority:low` |
+| Приоритет | High / Medium / Low; у неразобранной идеи может отсутствовать | `priority:high`, `priority:medium`, `priority:low` |
 | Тип | Bug / Feature / Improvement / Research / Operations | Одна `type:*`, определяется по содержанию |
 | Design | Дополнительная метка для UI/UX-работы, совместимая с любым типом и модулем | `facet:design` |
 | Релиз | Необязательный целевой выпуск, например MVP | GitHub milestone; не дублировать именем в статусе |
@@ -74,7 +74,7 @@ merge, финальная карточка такой задачи показы�
 Высокий приоритет не равен обязательности для MVP. Задача может быть High, но
 относиться к следующей версии; обязательная для MVP задача может ждать зависимости.
 При отсутствии указания владельца новая Idea не включается в MVP и не получает
-высокий приоритет. При принятии в Backlog приоритет по умолчанию Normal; явное
+высокий приоритет. При принятии в Backlog приоритет по умолчанию Medium; явное
 поручение всегда важнее значения по умолчанию.
 
 В карточке первыми видны ID, короткое название, статус, приоритет и значимые
@@ -343,8 +343,8 @@ Design можно переносить между представлениями
   "project": {"name": "New Project", "repository": "owner/repo", "base_branch": "main"},
   "workflow": ["idea", "backlog", "todo", "in_progress", "review", "merged"],
   "completion": {"status": "merged", "label": "In main"},
-  "priorities": ["high", "normal", "low"],
-  "default_backlog_priority": "normal",
+  "priorities": ["high", "medium", "low"],
+  "default_backlog_priority": "medium",
   "facets": ["design"],
   "modules": [
     {"id": "accounts", "name": "Accounts & Access", "description": "Accounts, profiles and access", "examples": ["Connect an account"]}
@@ -532,3 +532,10 @@ UI при изменении его кода опубликованы. Прош�
 | [#67 · acl-654](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/67) | "In master" is a state of its own |
 | [#68 · acl-655](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/68) | The plan itself has a history |
 | [#53 · acl-402](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/53) | Turn a repeated failure into a rule |
+
+
+## Уточнения владельца при внедрении
+
+- Все элементы UI и новые названия меток — на английском.
+- Приоритеты High / Medium / Low; значение по умолчанию Medium.
+- До первой правки кода AI обязан выполнить `python -m tracker start ISSUE` и убедиться в `status:in_progress`. Переход выполняется самим агентом в рамках поручения, без дополнительного вопроса пользователю.

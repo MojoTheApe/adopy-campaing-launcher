@@ -1,0 +1,24 @@
+name: Task or idea
+description: Capture an idea or a concrete outcome
+labels: ["status:idea", "flag:needs_classification"]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What should become possible? Describe the user result.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Observable checks; an idea can be refined before it enters Todo.
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and context
+      description: Use needs followed by a colon and an issue reference for each dependency. Include useful context and links.
+  - type: markdown
+    attributes:
+      value: "An agent classifies the module and type from tracker/config.json. Priority is High / Medium / Low; accepted work defaults to Medium. MVP membership is explicit."

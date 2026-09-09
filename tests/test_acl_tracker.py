@@ -1,157 +1,92 @@
+"""Tracker v2 integration contract replaces the retired snapshot/area renderer contract."""
 import json
-import subprocess
 from types import SimpleNamespace
-
 import pytest
-
-from scripts import acl_tracker as tracker
-
-
-SNAPSHOT = """## 1 · Accounts
-> Account control
-### Metrics
-- [x] `acl-101` OLD TITLE #shipped
-"""
+from tracker import github, model, sync
 
 
 def issue(number=1, **overrides):
-    return dict(number=number, title="acl-101: Current title", state="open",
-                labels=[{"name": "status:next"}, {"name": "area:1"}],
-                body="Details\n### Subtasks\n- [x] `acl-101a` Done part\n- [ ] Remaining",
-                **overrides)
+    row=dict(number=number,title="project-101: Current title",state="open",labels=[{"name":x} for x in ("status:backlog","module:accounts","priority:medium")],body="Details\n- [x] Done part\n- [ ] Remaining")
+    row.update(overrides);return row
 
 
-def test_github_overrides_snapshot_and_preserves_layout_groups():
-    board = tracker.build_board([issue()], SNAPSHOT, tracker.REPOSITORY, "today")
-    task = board.tasks[0]
-    assert task.title == "Current title" and task.shown_status == "next"
-    assert task.sub_progress == (1, 2)
-    assert board.areas[0].title == "Accounts" and board.areas[0].caps[0].title == "Metrics"
-    assert "OLD TITLE" not in tracker.wall.render(board)
+class FakeAPI:
+    root="repos/owner/repo"
+    def __init__(self, rows=None): self.rows=rows if rows is not None else [issue()]
+    def issues(self): return self.rows
+    def request(self,*a,**k): return []
 
 
-def test_closed_is_not_shipped_or_merged_without_evidence():
-    item = issue()
-    item.update(state="closed", labels=[])
-    task = tracker.build_board([item], SNAPSHOT, tracker.REPOSITORY, "today").tasks[0]
-    assert task.shown_status == "closed"
+def test_github_tasks_need_no_historical_snapshot():
+    tasks=model.tasks_from_issues([issue(),issue(2,title="New idea",labels=[])],model.load_config())
+    assert len(tasks)==2 and tasks[0]['title']=="Current title"
+    assert tasks[0]['status']=='backlog' and tasks[0]['priority']=='medium'
+    assert tasks[0]['checks']==[{'done':True,'title':'Done part'},{'done':False,'title':'Remaining'}]
+    assert tasks[1]['module']=='' and tasks[1]['warnings']
 
 
-def test_all_new_issues_and_duplicate_board_ids_are_visible():
-    items = [issue(1), issue(2), issue(3)]
-    items[2]["title"] = "New unrelated issue"
-    items[2]["labels"] = []
-    board = tracker.build_board(items, SNAPSHOT, tracker.REPOSITORY, "today")
-    assert len(board.tasks) == 3
-    assert len({t.id for t in board.tasks}) == 3
-    assert board.areas[-1].title == "Other tasks"
+def test_closed_is_archived_not_completed():
+    tasks=model.tasks_from_issues([issue(state='closed',labels=[])],model.load_config())
+    assert tasks[0]['archive'] and tasks[0]['status']!='merged'
 
 
 def test_issue_content_cannot_inject_html():
-    item = issue()
-    item["title"] = '<script>alert(1)</script>'
-    item["body"] = '<img src=x onerror="alert(1)">'
-    item["html_url"] = "javascript:alert(1)"
-    page, _ = tracker.render_issues([item], SNAPSHOT, tracker.REPOSITORY, "today")
+    data=model.payload([issue(title='</script><script>alert(1)</script>',body='<img src=x onerror="alert(1)">',html_url='javascript:alert(1)')],model.load_config())
+    page,result=sync.render(data)
     assert '<script>alert(1)</script>' not in page and '<img src=x' not in page
-    assert 'javascript:alert' not in page
-    assert "GitHub #1" in page and "Source of truth:" in page and "GitHub Issues" in page
-    assert "in Obsidian" not in page
+    assert 'javascript:alert' not in page and result['digest'] in page
 
 
-def test_fetches_all_pages_and_excludes_pull_requests(monkeypatch):
-    pr = issue(2)
-    pr["pull_request"] = {}
-    def run(args, **kwargs):
-        assert "--paginate" in args and "--slurp" in args
-        return SimpleNamespace(stdout=json.dumps([[issue(), pr], [issue(3)]]))
-    monkeypatch.setattr(tracker.subprocess, "run", run)
-    assert [i["number"] for i in tracker.fetch_issues(["gh"], tracker.REPOSITORY)] == [1, 3]
+def test_fetch_all_pages_and_reject_malformed_or_duplicate_pages(monkeypatch):
+    pr=issue(2,pull_request={})
+    def run(args,**kwargs):
+        assert '--paginate' in args and '--slurp' in args
+        return SimpleNamespace(stdout=json.dumps([[issue(),pr],[issue(3)]]),returncode=0)
+    monkeypatch.setattr(github.subprocess,'run',run)
+    assert [i['number'] for i in github.GitHub('owner/repo').issues()]==[1,3]
+    for pages in ([],[{}],[[issue()],[issue()]]):
+        monkeypatch.setattr(github.subprocess,'run',lambda *a,**k:SimpleNamespace(stdout=json.dumps(pages),returncode=0))
+        with pytest.raises(ValueError):github.GitHub('owner/repo').issues()
 
 
-def test_partial_failure_keeps_previous_board_and_last_sync_time(tmp_path, monkeypatch):
-    output = tmp_path / "public"
-    output.mkdir()
-    (output / "index.html").write_text("previous successful board")
-    (output / "status.json").write_text(json.dumps({"ok": True, "synced_at": "yesterday", "digest": "old"}))
-    def fail(*args):
-        raise subprocess.CalledProcessError(1, "gh", stderr="SENSITIVE")
-    monkeypatch.setattr(tracker, "fetch_issues", fail)
-    with pytest.raises(RuntimeError, match="previous board preserved"):
-        tracker.sync(["gh"], tracker.REPOSITORY, tmp_path / "snapshot", output)
-    assert (output / "index.html").read_text() == "previous successful board"
-    status = json.loads((output / "status.json").read_text())
-    assert status["ok"] is False and status["synced_at"] == "yesterday"
-    assert "SENSITIVE" not in (output / "status.json").read_text()
+def test_partial_failure_preserves_board_and_safe_status(tmp_path):
+    api=FakeAPI();config=model.load_config();sync.sync(api,config,tmp_path,queue={})
+    old=(tmp_path/'index.html').read_text();status=json.loads((tmp_path/'status.json').read_text())
+    def fail():raise RuntimeError('SENSITIVE')
+    api.issues=fail
+    with pytest.raises(RuntimeError,match='previous board preserved'):sync.sync(api,config,tmp_path,queue={})
+    assert (tmp_path/'index.html').read_text()==old
+    result=json.loads((tmp_path/'status.json').read_text())
+    assert result['synced_at']==status['synced_at'] and not result['ok']
+    assert 'SENSITIVE' not in (tmp_path/'status.json').read_text()
 
 
-def test_successful_sync_updates_html_and_status_together(tmp_path, monkeypatch):
-    snapshot = tmp_path / "snapshot.md"
-    snapshot.write_text(SNAPSHOT)
-    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [issue()])
-    tracker.sync(["gh"], tracker.REPOSITORY, snapshot, tmp_path / "public")
-    status = json.loads((tmp_path / "public/status.json").read_text())
-    html = (tmp_path / "public/index.html").read_text()
-    assert status["ok"] and status["issues"] == 1 and status["digest"] in html
-    assert "Current title" in html
-
-
-def test_empty_response_cannot_replace_existing_board_and_next_sync_recovers(tmp_path, monkeypatch):
-    snapshot = tmp_path / "snapshot.md"
-    snapshot.write_text(SNAPSHOT)
-    output = tmp_path / "public"
-    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [issue()])
-    tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output)
-    html = (output / "index.html").read_text()
-    old = json.loads((output / "status.json").read_text())
-    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [])
+def test_empty_update_keeps_html_data_count_and_recovers(tmp_path):
+    api=FakeAPI();config=model.load_config();sync.sync(api,config,tmp_path,queue={})
+    html=(tmp_path/'index.html').read_text();data=(tmp_path/'data.json').read_text();old=json.loads((tmp_path/'status.json').read_text())
+    api.rows=[]
     for _ in range(2):
-        with pytest.raises(RuntimeError, match="previous board preserved"):
-            tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output)
-        assert (output / "index.html").read_text() == html
-        status = json.loads((output / "status.json").read_text())
-        assert not status["ok"] and status["error"] == "empty_response"
-        assert status["issues"] == 1 and status["digest"] == old["digest"]
-        assert status["synced_at"] == old["synced_at"]
-    updated = issue()
-    updated["title"] = "Recovered task"
-    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [updated])
-    tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output)
-    assert "Recovered task" in (output / "index.html").read_text()
-    assert json.loads((output / "status.json").read_text())["ok"]
+        with pytest.raises(RuntimeError):sync.sync(api,config,tmp_path,queue={})
+        assert (tmp_path/'index.html').read_text()==html and (tmp_path/'data.json').read_text()==data
+        status=json.loads((tmp_path/'status.json').read_text())
+        assert status['error']=='empty_response' and status['issues']==1 and status['digest']==old['digest'] and status['synced_at']==old['synced_at']
+    api.rows=[issue(title='Recovered')];sync.sync(api,config,tmp_path,queue={})
+    assert 'Recovered' in (tmp_path/'index.html').read_text()
+    assert json.loads((tmp_path/'status.json').read_text())['ok']
 
 
-def test_new_empty_project_and_explicit_empty_reset_are_supported(tmp_path, monkeypatch):
-    snapshot = tmp_path / "snapshot.md"
-    snapshot.write_text(SNAPSHOT)
-    output = tmp_path / "public"
-    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [])
-    tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output)
-    assert "No tasks yet" in (output / "index.html").read_text()
-    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [issue()])
-    tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output)
-    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [])
-    tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output, allow_empty=True)
-    assert json.loads((output / "status.json").read_text())["issues"] == 0
+def test_new_empty_project_and_explicit_clear(tmp_path):
+    api=FakeAPI([]);config=model.load_config();sync.sync(api,config,tmp_path,queue={})
+    assert json.loads((tmp_path/'status.json').read_text())['issues']==0
+    api.rows=[issue()];sync.sync(api,config,tmp_path,queue={});api.rows=[]
+    sync.sync(api,config,tmp_path,queue={},allow_empty=True)
+    assert json.loads((tmp_path/'data.json').read_text())['tasks']==[]
 
 
-def test_response_with_no_pages_is_not_a_valid_empty_repository(monkeypatch):
-    monkeypatch.setattr(tracker.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="[]"))
-    with pytest.raises(ValueError, match="complete GitHub issue pages"):
-        tracker.fetch_issues(["gh"], tracker.REPOSITORY)
-
-
-def test_deployment_changes_trigger_refresh_but_timestamps_do_not(monkeypatch):
-    _, original = tracker.render_issues([issue()], SNAPSHOT, tracker.REPOSITORY, "earlier")
-    _, later = tracker.render_issues([issue()], SNAPSHOT, tracker.REPOSITORY, "later")
-    assert later == original
-    monkeypatch.setattr(tracker.wall, "_PAGE", tracker.wall._PAGE.replace("#dfe9dd", "#d0e5d0"))
-    _, changed = tracker.render_issues([issue()], SNAPSHOT, tracker.REPOSITORY, "later")
-    assert changed != original
-
-
-def test_all_button_includes_every_status_in_its_count():
-    a, b = issue(1), issue(2)
-    b["labels"] = [{"name": "status:merged"}]
-    page, _ = tracker.render_issues([a, b], SNAPSHOT, tracker.REPOSITORY, "today")
-    assert 'data-filter="all" aria-pressed="true">All<b>2</b>' in page
+def test_ui_revision_changes_digest_but_sync_clock_does_not(tmp_path,monkeypatch):
+    data=model.payload([issue()],model.load_config());_,first=sync.render(data);_,same=sync.render(data)
+    assert first['digest']==same['digest']
+    import shutil
+    shutil.copytree(sync.WEB,tmp_path/'web');monkeypatch.setattr(sync,'WEB',tmp_path/'web')
+    (sync.WEB/'style.css').write_text((sync.WEB/'style.css').read_text()+'\n/* new UI */')
+    _,updated=sync.render(data);assert first['digest']!=updated['digest']
