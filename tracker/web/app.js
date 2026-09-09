@@ -8,7 +8,7 @@
   const priorities = ['high', 'medium', 'low', 'unassigned'];
   const types = ['bug', 'feature', 'improvement', 'research', 'operations', 'unassigned'];
   const views = ['all', ...stages, 'release', 'archive'];
-  const defaults = () => ({view:'all', layout:'list', theme:'system', detailWidth:440, filtersOpen:false, module:'', statuses:[], priorities:[], types:[], releases:[], design:false, required:false, blocked:false, search:'', scope:'all', selectedRelease:'', selected:null, column:'in_progress', scroll:0, boardScroll:0, focus:''});
+  const defaults = () => ({view:'all', layout:'list', theme:'system', detailWidth:440, filtersOpen:false, module:'', priorities:[], types:[], releases:[], design:false, required:false, blocked:false, search:'', scope:'all', selectedRelease:'', selected:null, column:'in_progress', scroll:0, boardScroll:0, focus:''});
   const read = (storage, name) => {try {return JSON.parse(storage.getItem(name) || '{}') || {};} catch (_) {return {};}};
   let state = defaults(), migrated = false;
   try {
@@ -25,7 +25,9 @@
   function sanitize() {
     const allowed = {view:views, layout:['list','board'], theme:['light','dark','system'], scope:['all','required','remaining','blocked','complete']};
     for (const [k, values] of Object.entries(allowed)) if (!values.includes(state[k])) state[k]=defaults()[k];
-    for (const [k, values] of Object.entries({statuses:stages, priorities, types, releases:data.milestones.map(m=>String(m.number))})) state[k]=Array.isArray(state[k])?[...new Set(state[k].filter(v=>values.includes(v)))]:[];
+    // Status is selected only in the top navigation. Discard the retired hidden filter.
+    delete state.statuses;
+    for (const [k, values] of Object.entries({priorities, types, releases:data.milestones.map(m=>String(m.number))})) state[k]=Array.isArray(state[k])?[...new Set(state[k].filter(v=>values.includes(v)))]:[];
     if (!['', 'unclassified', ...data.modules.map(m=>m.id)].includes(state.module)) state.module='';
     state.search=typeof state.search==='string'?state.search:'';
     for (const flag of ['design','required','blocked','filtersOpen']) state[flag]=state[flag]===true;
@@ -45,6 +47,7 @@
   const node = (tag, text, cls) => {const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   const button = (text, cls, attributes={}) => {const b=node('button',text,cls);b.type='button';for(const [k,v] of Object.entries(attributes))b.setAttribute(k,v);return b;};
   const cap = x => x ? x[0].toUpperCase()+x.slice(1) : 'Unassigned';
+  const typeLabel = x => !x || x==='unassigned' ? 'Not classified' : cap(x);
   const label = s => ({idea:'Idea',backlog:'Backlog',todo:'To do',in_progress:'In progress',review:'Review',merged:data.completion_label})[s];
   const viewLabel = v => ({all:'All tasks',release:data.release_view_label,archive:'Archive'})[v] || label(v);
   const moduleName = m => data.modules.find(x=>x.id===m)?.name || 'Unclassified';
@@ -72,7 +75,6 @@
   }
   function matches(t) {
     if(!inView(t))return false;
-    if(state.statuses.length&&!state.statuses.includes(t.status))return false;
     if(state.module&&(t.module||'unclassified')!==state.module)return false;
     if(state.priorities.length&&!state.priorities.includes(t.priority||'unassigned'))return false;
     if(state.types.length&&!state.types.includes(t.type||'unassigned'))return false;
@@ -88,7 +90,7 @@
     const p={high:0,medium:1,low:2,'':1};
     return data.tasks.filter(matches).sort((a,b)=>rank[a.status]-rank[b.status] || (a.status==='todo'?(position(a.number)-position(b.number)):0) || p[a.priority]-p[b.priority] || (a.status==='todo'?String(a.todo_at||a.created_at).localeCompare(String(b.todo_at||b.created_at)):0) || a.number-b.number);
   }
-  function clearFilters() {Object.assign(state,{module:'',statuses:[],priorities:[],types:[],releases:[],design:false,required:false,blocked:false,search:'',scope:'all'});$('search').value='';}
+  function clearFilters() {Object.assign(state,{module:'',priorities:[],types:[],releases:[],design:false,required:false,blocked:false,search:'',scope:'all'});$('search').value='';}
   function chooseView(v) {clearFilters();state.view=v;state.scope=v==='release'?'required':'all';state.boardScroll=0;closeDialog($('navigation-panel'));save();render();}
   function statusBadge(t) {const s=node('span',undefined,'st-stage');s.dataset.status=t.status;s.append(node('span',undefined,'st-stage-dot'),document.createTextNode(t.non_code&&t.status==='merged'?'Complete':label(t.status)));return s;}
   function copyButton(t) {
@@ -98,20 +100,22 @@
     b.append(node('span',t.id,'st-id'),svg);return b;
   }
   const tag = (text, cls='') => node('span',text,'task-tag '+cls);
+  const focusValues = t => [[t.design,'Design','design'],[t.required,'Required','release-tag'],[blocked(t),'Blocked','blocked']].filter(([active])=>active);
   function taskCard(t, layout) {
     const row=node(layout==='board'?'article':'div',undefined,layout==='board'?'task st-board-card':'task st-row');row.id='task-'+t.number;row.dataset.issue=t.number;
+    if(layout==='list')row.setAttribute('role','row');
     const main=node('div',undefined,'st-task-main'), id=node('div',undefined,'st-idline');id.append(copyButton(t));
-    if(blocked(t))id.append(tag('Blocked','blocked'));
-    if(t.design)id.append(tag('Design','design'));
     if(t.warnings.length)id.append(tag('Check metadata','warning'));
     if(t.archive)id.append(tag('Archived','warning'));
     if(t.initiative)id.append(tag('Initiative'));
     const title=button(t.title,'st-task-title',{'data-task':t.number,id:'summary-'+t.number});
-    main.append(id,title);
-    const mobile=node('div',undefined,'mobile-properties');mobile.append(node('span',moduleName(t.module)));if(t.required)mobile.append(tag((t.milestone_title||'Release')+' required','release-tag'));main.append(mobile);row.append(main);
-    const properties=[statusBadge(t),node('span',moduleName(t.module),'st-module'),node('span',cap(t.priority),'st-priority')];properties[2].dataset.priority=t.priority;
-    const rel=node('span',undefined,'st-release-cell');if(t.milestone_title)rel.append(tag(t.milestone_title+(t.required?' required':''),'release-tag'));else if(t.required)rel.append(tag('Required · no release','warning'));
-    if(layout==='board'){const bottom=node('div',undefined,'st-card-bottom');bottom.append(properties[1],properties[2],rel);row.append(bottom);}else row.append(...properties,rel);
+    main.append(id,title);row.append(main);
+    const property=(name,cls,content)=>{const cell=node('div',undefined,'st-cell '+cls);cell.dataset.label=name;cell.append(content);if(layout==='list')cell.setAttribute('role','cell');return cell;};
+    const priority=node('span',cap(t.priority),'st-priority');priority.dataset.priority=t.priority;
+    const rel=t.milestone_title?tag(t.milestone_title,'release-tag'):t.required?tag('No release','warning'):node('span','—','st-unset');
+    const focus=node('div',undefined,'st-focus-values');focus.append(...focusValues(t).map(([,name,cls])=>tag(name,cls)));if(!focus.childNodes.length)focus.append(node('span','—','st-unset'));
+    const cells=[property('Status','st-status-cell',statusBadge(t)),property('Module','st-module-cell',node('span',moduleName(t.module),'st-module')),property('Priority','st-priority-cell',priority),property('Release','st-release-cell',rel),property('Type','st-type-cell',node('span',typeLabel(t.type),'st-type')),property('Focus','st-focus-cell',focus)];
+    if(layout==='board'){const bottom=node('div',undefined,'st-card-bottom');bottom.append(...cells.slice(1));row.append(bottom);}else{main.setAttribute('role','cell');row.append(...cells);}
     return row;
   }
   let fresh=false,refreshing=false,lastSynced='',filterSignature='',listLayout='',lastDetail=null,detailSignature='',openerId='';
@@ -168,23 +172,26 @@
   }
   function renderFilters() {
     $('filters-panel').hidden=!state.filtersOpen;$('filters-toggle').setAttribute('aria-expanded',String(state.filtersOpen));
-    const signature=JSON.stringify([state.view==='release',data.modules,data.milestones.map(m=>[m.number,m.title]),data.completion_label]);
+    const hasUnclassified=data.tasks.some(t=>!t.type)||state.types.includes('unassigned');
+    const signature=JSON.stringify([state.view==='release',data.milestones.map(m=>[m.number,m.title]),hasUnclassified]);
     if(signature!==filterSignature) {
       const group=(name, options, key, radio=false)=>{const field=node('fieldset'),legend=node('legend',name),items=node('div',undefined,'st-options');field.append(legend,items);options.forEach(([v,l])=>{const lab=node('label'),input=node('input');input.type=radio?'radio':'checkbox';input.name=key;input.value=v;input.dataset.facet=key;input.id='filter-'+key+'-'+v;lab.append(input,document.createTextNode(l));items.append(lab);});return field;};
-      $('filter-fields').replaceChildren(group('Status',stages.map(s=>[s,label(s)]),'statuses'),group('Priority',priorities.map(v=>[v,cap(v)]),'priorities'),group('Type',types.map(v=>[v,cap(v)]),'types'),group(state.view==='release'?'Selected release':'Release',data.milestones.map(m=>[String(m.number),m.title]),state.view==='release'?'selectedRelease':'releases',state.view==='release'),group('Focus',[['design','Design'],['required','Required'],['blocked','Blocked']],'flags'));
+      $('filter-fields').replaceChildren(group('Priority',priorities.map(v=>[v,cap(v)]),'priorities'),group('Type',types.filter(v=>v!=='unassigned'||hasUnclassified).map(v=>[v,typeLabel(v)]),'types'),group('Release',data.milestones.map(m=>[String(m.number),m.title]),state.view==='release'?'selectedRelease':'releases',state.view==='release'),group('Focus',[['design','Design'],['required','Required'],['blocked','Blocked']],'flags'));
       filterSignature=signature;
     }
     for(const input of $('filter-fields').querySelectorAll('input')) {const k=input.dataset.facet;input.checked=k==='flags'?state[input.value]:k==='selectedRelease'?state.selectedRelease===input.value:state[k].includes(input.value);}
     const chips=[];
     const chip=(k,v,l)=>{const b=button(l+' ×','st-chip',{'data-remove':k,'data-value':v,'aria-label':'Remove '+l+' filter',id:'chip-'+k+'-'+v});chips.push(b);};
     if(state.module)chip('module',state.module,moduleName(state.module));if(state.search)chip('search','', 'Search: '+state.search);
-    for(const v of state.statuses)chip('statuses',v,label(v));for(const v of state.priorities)chip('priorities',v,cap(v));for(const v of state.types)chip('types',v,cap(v));
+    for(const v of state.priorities)chip('priorities',v,cap(v));for(const v of state.types)chip('types',v,typeLabel(v));
     for(const v of state.releases)chip('releases',v,data.milestones.find(m=>String(m.number)===v)?.title||v);
     for(const k of ['design','required','blocked'])if(state[k])chip(k,'',cap(k));
     if(chips.length)chips.push(button('Clear filters','st-clear',{'data-clear':'true',id:'clear-chips'}));
     const chipSignature=JSON.stringify(chips.map(c=>c.outerHTML));if($('chips').dataset.signature!==chipSignature){$('chips').replaceChildren(...chips);$('chips').dataset.signature=chipSignature;}
-    const count=state.statuses.length+state.priorities.length+state.types.length+state.releases.length+Number(state.design)+Number(state.required)+Number(state.blocked);
-    $('filters-toggle').textContent=count?'Filters ('+count+')':'Filters';
+    const count=state.priorities.length+state.types.length+state.releases.length+Number(state.design)+Number(state.required)+Number(state.blocked);
+    $('filters-count').textContent=String(count);$('filters-count').hidden=!count;
+    const filterLabel='Filters'+(count?' · '+count+' active':'');
+    $('filters-toggle').setAttribute('aria-label',filterLabel);$('filters-toggle').title=filterLabel;
   }
   function renderRows(rows) {
     const holder=$('tasks');
@@ -200,11 +207,10 @@
     $('board-navigation').hidden=state.layout==='list';
     if(state.layout==='list') {
       let list=holder.querySelector('.st-list');
-      if(!list){list=node('div',undefined,'st-list');const header=node('div',undefined,'st-list-head');['Task','Status','Module','Priority','Release'].forEach((l,i)=>header.append(node('span',l,i===2?'st-module-head':i===3?'st-priority-head':'')));list.append(header);holder.append(list);}
+      if(!list){list=node('div',undefined,'st-list');list.setAttribute('role','table');list.setAttribute('aria-label','Tasks');const header=node('div',undefined,'st-list-head');header.setAttribute('role','row');['Task','Status','Module','Priority','Release','Type','Focus'].forEach(l=>{const cell=node('span',l);cell.setAttribute('role','columnheader');header.append(cell);});list.append(header);holder.append(list);}
       reconcile(list,[list.firstElementChild,...rows.map(getCard)]);
     } else {
       let cols=stages.includes(state.view)?[state.view]:stages;
-      if(state.statuses.length)cols=cols.filter(s=>state.statuses.includes(s));
       const focused=matchMedia('(max-width: 899px)').matches;
       if(!cols.includes(state.column))state.column=cols.find(s=>rows.some(t=>t.status===s))||cols[0];
       $('board-navigation').hidden=!focused;
@@ -219,7 +225,7 @@
   function detailData(t, outside, missing) {
     const contents=document.createDocumentFragment();contents.append(statusBadge(t),node('h2',t.title));contents.lastChild.id='detail-title';
     if(missing||outside)contents.append(node('p',missing?'Task unavailable · showing last saved details':'Outside current filters','detail-notice'));
-    const dl=node('dl');for(const [k,v] of [['Module',moduleName(t.module)],['Priority',cap(t.priority)],['Type',cap(t.type)],['Release',t.milestone_title?(t.milestone_title+(t.required?' · Required':'')):t.required?'Required · no release':'Not assigned']])dl.append(node('dt',k),node('dd',v));contents.append(dl);
+    const dl=node('dl');for(const [k,v] of [['Module',moduleName(t.module)],['Priority',cap(t.priority)],['Type',typeLabel(t.type)],['Release',t.milestone_title||'Not assigned'],['Focus',focusValues(t).map(([,name])=>name).join(' · ')||'—']])dl.append(node('dt',k),node('dd',v));contents.append(dl);
     if(t.warnings.length)contents.append(node('p',t.warnings.join(' · '),'detail-notice warning'));
     if(blocked(t))contents.append(node('p',t.blocked?'Blocked · see the task notes below':'Waiting for unfinished dependencies','detail-notice blocked'));
     if(t.dependencies.length){contents.append(node('h3','Dependencies'));const deps=node('div',undefined,'dependency-list');for(const id of t.dependencies){const other=lookup.get(id.toLowerCase());if(other)deps.append(button(id+(completed(other)?' · complete':' · pending'),'st-control',{'data-task':other.number}));else deps.append(node('span',id+' · unresolved','warning'));}contents.append(deps);}

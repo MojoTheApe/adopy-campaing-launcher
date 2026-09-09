@@ -29,6 +29,22 @@ Use exactly one `status:*` and one configured `module:*`. Priorities are **High 
 
 Classify by the intended user result using module descriptions, boundaries and examples in config. Do not classify solely by file name, “API,” or “design.” Add `facet:design` for UI/UX work within its owning module. Choose one main module; use explicit dependencies for cross-module work. Do not invent new modules or use Platform as a catch-all. If important details are missing, save the idea without `--module`; it will appear under Unclassified with `flag:needs_classification`, then ask one focused question.
 
+The owner can describe a task in ordinary language without listing fields. **Select the module, exactly one Type and any supported Focus properties yourself before creating it.** Always pass `--type` for new tasks; do not ask the owner to fill in a form when the intent is clear. Use these meanings:
+
+| Type | Use when the intended result is |
+|---|---|
+| Bug | Restoring expected behavior that is broken |
+| Feature | Adding a capability the product does not have |
+| Improvement | Improving an existing capability, UX, performance or maintainability |
+| Research | Answering a question or evaluating options before implementation |
+| Operations | Operating infrastructure, deployments, maintenance or project processes |
+
+Type describes the work; Module describes the part of the product. Operations is a valid type in any appropriate module, not another name for Platform or a guarantee that no code is involved. Design is a Focus property, not a Type: an account-card redesign is normally Accounts & Access + Improvement + Design; a broken campaign preview is Campaigns + Bug and may also involve Design.
+
+**Focus can contain several independent properties:** Design follows UI/UX scope; Blocked requires a recorded obstacle or an explicit unfinished dependency; Required follows the owner's approved essential release scope. Do not mark a task Blocked because it is an idea, low priority or waiting in Backlog. Do not infer Required/MVP from importance, Design, or a new feature. If no Focus property applies, leave it empty. The UI derives Blocked from unresolved `needs:` dependencies as well as `flag:blocked`; record and resolve real dependencies rather than inventing a label to match a view.
+
+For “new idea,” create Idea with this classification; for an accepted suggestion use Backlog and default Medium. Todo and execution still follow the owner's selection and the automatic start rule above. If an actual ambiguity prevents classification, ask only about the intended outcome; do not make the owner choose every field. Historical missing Type displays **Not classified** and is not an assignee. Do not bulk classify historical tasks without reading their scope. After creation, briefly report the ID and chosen properties so the owner can correct an interpretation.
+
 Before creating an Issue, read current tasks with `python -m tracker list` and check for semantic duplicates, including completed and archived tasks. The CLI also detects exact-title repeats. After a failed/uncertain create, search for the title before retrying; do not blindly repeat the POST.
 
 ## Conversation to commands
@@ -94,7 +110,7 @@ After each operation reread the Issue and verify the intended labels, preserved 
 
 ## Reading Design v2 after a command
 
-The top strip provides All, each workflow stage and Archive; the sidebar contains only modules. All shows every nonarchived task and clears presentation filters. Master is the compact navigation label for In master, not a new GitHub status. Module counters reflect the selected status/release scope before extra filters. List and Board use the same results. A row/card background opens resizable details; outside click or Escape closes them. Filters expands inline and keeps its conditions when collapsed. Details open separately, and the whole ID including its small icon copies the exact canonical ID (or `#NUMBER`). The UI is read-only: clicking a stage does not change an Issue.
+The top strip provides All, each workflow stage and Archive; the sidebar contains only modules. All shows every nonarchived task and clears presentation filters. Master is the compact navigation label for In master, not a new GitHub status. Module counters reflect the selected status/release scope before extra filters. List and Board use the same results. List has Task, Status, Module, Priority, Release, Type and Focus columns; a narrower workspace shows the same properties with labels below the title. The filter icon expands aligned Priority, Type, Release and Focus rows on the page background. Status is selected only in the top strip; retired stored status filters are discarded. Collapsing filters keeps their conditions. A row/card background opens resizable details; outside click or Escape closes them. The whole ID including its small icon copies the exact canonical ID (or `#NUMBER`). The UI is read-only: clicking a stage does not change an Issue.
 
 Status counts remain project-wide. The compact release widget shows completion percentage and completed / total required leaf tasks; clicking it opens that required scope. Archived required members stay unresolved until their scope is explicitly changed; initiative parents do not count twice. Scope not defined means no required release scope exists. Never fill that scope from High priority or all Backlog without the owner's instruction. A saved-snapshot percentage does not prove current readiness, and Scope ready does not mean a release was published.
 After a status command, verify the Issue and the next successful UI snapshot. If a task has left the selected view, use All, then search its canonical ID; open details may show Outside current filters. A stale sync message means the previous snapshot is still displayed, not that the task was deleted. Follow the same automatic start, queue and merge rules regardless of List/Board, theme or the current chat.

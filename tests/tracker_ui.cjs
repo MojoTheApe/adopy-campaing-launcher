@@ -27,8 +27,15 @@ const path=require('node:path');
   await page.locator('#view-archive').click();assert.equal(await page.locator('.task').count(),0);
   await page.locator('#view-all').click();assert.equal(await page.locator('#modules-accounts .st-nav-count').innerText(),'6');
   await page.locator('#filters-toggle').click();assert.equal(await page.locator('#filters-panel').evaluate(e=>e.tagName),'SECTION');assert.equal(await page.locator('#filters-panel').isVisible(),true);assert.equal(await page.locator('#filters-toggle').getAttribute('aria-expanded'),'true');await page.locator('#filter-flags-design').check();await page.locator('#filter-priorities-high').check();assert.equal(await page.locator('.task').count(),1);
-  await page.locator('#filter-statuses-review').check();assert.equal(await page.locator('.task').count(),0);
-  await page.locator('#filter-statuses-in_progress').check();assert.equal(await page.locator('.task').count(),1);
+  assert.deepEqual(await page.locator('#filter-fields legend').allTextContents(),['Priority','Type','Release','Focus']);
+  assert.equal(await page.locator('[data-facet=statuses]').count(),0);
+  assert.equal(await page.locator('#filters-toggle svg').count(),1);assert.equal(await page.locator('#filters-count').innerText(),'2');
+  assert.match(await page.locator('#filters-toggle').getAttribute('aria-label'),/2 active/);
+  assert.deepEqual(await page.locator('#filters-panel').evaluate(e=>{const s=getComputedStyle(e);return [s.backgroundColor,s.borderTopWidth,s.boxShadow];}),['rgba(0, 0, 0, 0)','0px','none']);
+  const optionStarts=await page.locator('#filter-fields .st-options').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().left));assert.ok(optionStarts.every(x=>x===optionStarts[0]));
+  await page.locator('#filter-types-bug').check();assert.equal(await page.locator('.task').count(),0);
+  await page.locator('#filter-types-feature').check();assert.equal(await page.locator('.task').count(),1);
+  await page.locator('#view-in_progress').click();
   await page.keyboard.press('Escape');await page.locator('#summary-4').click();assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),true);
   await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.id),'summary-4');
   await page.setViewportSize({width:1920,height:1000});await page.locator('#search').fill('Task 4');await page.locator('#summary-4').click();
@@ -41,6 +48,19 @@ const path=require('node:path');
   status={...status,ok:false,error:'empty_response'};await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),1);assert.match(await page.locator('#sync-state').innerText(),/Empty update ignored/);
   status={...status,ok:true,digest:'empty'};data={...data,digest:'empty',tasks:[]};await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),1);
   data=structuredClone(fixture.data);status={...fixture.status};await page.evaluate(()=>window.testRefresh());await page.locator('#view-all').click();assert.equal(await page.locator('.task').count(),6);
+  // Type and Focus are columns; explicit/derived flags stay consistent across list, filters and details.
+  assert.deepEqual(await page.locator('.st-list-head [role=columnheader]').allTextContents(),['Task','Status','Module','Priority','Release','Type','Focus']);
+  assert.equal(await page.locator('#task-4 .st-type-cell').innerText(),'Feature');
+  assert.deepEqual(await page.locator('#task-4 .st-focus-cell .task-tag').allTextContents(),['Design','Blocked']);
+  assert.equal(await page.locator('#task-6 .st-focus-cell').innerText(),'Required');
+  assert.equal(await page.locator('#task-6 .st-release-cell').innerText(),'MVP');
+  await page.locator('#filters-toggle').click();await page.locator('#filter-flags-blocked').check();assert.equal(await page.locator('.task').count(),1);
+  data=structuredClone(data);data.tasks[4].status='merged';data.digest='dependency-complete';status.digest=data.digest;await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),0);
+  await page.locator('#view-all').click();assert.equal(await page.locator('#task-4 .st-focus-cell .blocked').count(),0);
+  data=structuredClone(fixture.data);data.tasks[1].type='';data.digest='unclassified';status={...fixture.status,digest:data.digest};await page.evaluate(()=>window.testRefresh());
+  assert.equal(await page.locator('#task-2 .st-type-cell').innerText(),'Not classified');await page.locator('#filter-types-unassigned').check();assert.equal(await page.locator('.task').count(),1);
+  data=structuredClone(fixture.data);status={...fixture.status};await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),0);assert.equal(await page.locator('#filter-types-unassigned').isChecked(),true);
+  await page.locator('#view-all').click();assert.equal(await page.locator('#filter-types-unassigned').count(),0);await page.keyboard.press('Escape');
   // Layout is independent from filtering and a card opens the same canonical ID.
   await page.locator('#modules-accounts').click();await page.locator('#search').fill('Task');await page.locator('[data-layout=board]').click();assert.equal(await page.locator('.task').count(),6);assert.equal(await page.locator('.st-lane').count(),6);assert.equal(await page.locator('#search').inputValue(),'Task');await page.locator('[data-layout=list]').click();assert.equal(await page.locator('.task').count(),6);
   // No replacement of unchanged rows on a fresh data snapshot.
@@ -53,7 +73,10 @@ const path=require('node:path');
   await page.locator('#view-all').click();await page.locator('#modules-accounts').click();await page.getByRole('button',{name:'Dark',exact:true}).click();await page.reload();assert.equal(await page.locator('#modules-accounts').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copied=value;}}}));await page.locator('#task-4 [data-copy] .st-id').click();assert.equal(await page.evaluate(()=>window.copied),'example-4');assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),false);assert.equal(await page.locator('#copy-toast').innerText(),'Copied example-4');assert.equal(await page.locator('#task-4 .st-id').innerText(),'example-4');await page.locator('#task-4 [data-copy] svg').click();assert.equal(await page.evaluate(()=>window.copied),'example-4');await page.evaluate(()=>navigator.clipboard.writeText=async()=>{throw Error('denied')});await page.locator('#task-3 [data-copy]').click();assert.equal(await page.locator('#copy-toast').innerText(),'Copy manually: example-3');
   await page.emulateMedia({reducedMotion:'reduce'});await page.getByRole('button',{name:'Light',exact:true}).click();assert.equal(await page.locator('#signal-tracker-v2').evaluate(e=>getComputedStyle(e).transitionDuration),'0s');
-  for(const width of [360,736,1024,1440,2560]){await page.setViewportSize({width,height:1000});await page.waitForTimeout(130);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+  for(const width of [360,600,736,1024,1280,1320,1366,1440,2560]){await page.setViewportSize({width,height:1000});await page.waitForTimeout(130);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    const cells=page.locator('#task-4 .st-cell');assert.equal(await cells.count(),6);for(const cell of await cells.all())assert.equal(await cell.isVisible(),true);
+    assert.equal(await page.locator('#task-4').evaluate(row=>{const r=row.getBoundingClientRect();return [...row.children].every(e=>{const b=e.getBoundingClientRect();return b.left>=r.left && b.right<=r.right+1 && b.bottom<=r.bottom+1;});}),true,'All cells fit at '+width);
+  }
   await page.setViewportSize({width:390,height:844});await page.locator('[data-layout=board]').click();assert.equal(await page.locator('.st-lane').count(),1);await page.locator('#column-review').click();assert.equal(await page.locator('#task-5').count(),1);await page.locator('#nav-toggle').click();await page.locator('#mobile-modules-accounts').click();assert.equal(await page.locator('#navigation-panel').evaluate(e=>e.open),false);await page.locator('#filters-toggle').click();assert.equal(await page.locator('#filters-panel').isVisible(),true);assert.equal(await page.locator('#filters-panel').evaluate(e=>e.matches(':modal')),false);await page.keyboard.press('Escape');
   await page.locator('[data-layout=list]').click();await page.locator('#summary-4').click();assert.equal(await page.locator('#task-detail').evaluate(e=>getComputedStyle(e).animationName),'none');assert.equal(await page.locator('#task-detail').evaluate(e=>e.matches(':modal')),true);assert.equal(await page.locator('#task-detail img').count(),0);await page.keyboard.press('Escape');
   status={...fixture.status,digest:'clear',empty_confirmed:true};data={...fixture.data,digest:'clear',tasks:[]};await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),0);
@@ -67,7 +90,7 @@ const path=require('node:path');
   // An invalid fragment must not stop the UI, and old unsupported filters are cleared.
   data=structuredClone(fixture.data);status={...fixture.status};await page.evaluate(()=>{sessionStorage.clear();localStorage.clear();sessionStorage.setItem('tracker.v2.owner/example',JSON.stringify({view:'all',priority:'normal',module:'removed',statuses:['next'],theme:'dark'}));});await page.goto('http://tracker.test/#%');await page.reload();assert.equal(await page.locator('#view-all b').innerText(),'6');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');assert.equal(await page.locator('#chips .st-chip').count(),0);
   // Removed Work/Plan and density preferences cannot reopen hidden views.
-  await page.evaluate(()=>{sessionStorage.clear();localStorage.setItem('tracker.design.v2.owner/example.prefs',JSON.stringify({view:'work',density:'comfortable'}));});await page.reload();
+  await page.evaluate(()=>{sessionStorage.clear();localStorage.setItem('tracker.design.v2.owner/example.prefs',JSON.stringify({view:'work',density:'comfortable',statuses:['review']}));});await page.reload();
   assert.equal(await page.locator('#view-all').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('.task').count(),6);
   await page.emulateMedia({reducedMotion:'no-preference'});await page.locator('#summary-4').click();
   assert.equal(await page.locator('#task-detail').evaluate(e=>getComputedStyle(e).animationName),'st-detail-enter');
@@ -108,10 +131,14 @@ const path=require('node:path');
     const typeAfter=await page.locator('#summary-4').evaluate(e=>{const r=document.createRange();r.selectNodeContents(e);return {font:getComputedStyle(e).fontFamily,width:r.getBoundingClientRect().width};});assert.deepEqual(typeAfter,typeBefore);
   }
   assert.equal(await page.evaluate(()=>window.fontLoads),0);
-  const logo=page.locator('.st-logo');assert.equal(await logo.evaluate(e=>getComputedStyle(e).animationName),'st-logo-flow');
+  const logo=page.locator('.st-logo');assert.equal(await logo.evaluate(e=>getComputedStyle(e).animationDuration),'7s');assert.equal(await logo.evaluate(e=>getComputedStyle(e).animationName),'st-logo-flow');
   const position=await logo.evaluate(e=>getComputedStyle(e).backgroundPosition);await page.waitForTimeout(180);assert.notEqual(await logo.evaluate(e=>getComputedStyle(e).backgroundPosition),position);
   await page.emulateMedia({reducedMotion:'reduce'});assert.equal(await logo.evaluate(e=>getComputedStyle(e).animationName),'none');
   await page.setViewportSize({width:390,height:844});await page.locator('#summary-4').click();assert.equal(await handle.isVisible(),false);assert.equal(Math.round((await page.locator('#task-detail').boundingBox()).width),390);await page.keyboard.press('Escape');
+  await page.locator('#filters-toggle').click();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.setViewportSize({width:1920,height:1000});await page.locator('#summary-4').click();await handle.press('End');
+  await page.locator('#workspace').evaluate(e=>Promise.all(e.getAnimations().map(a=>a.finished)));
+  assert.equal(await page.locator('#task-4 .st-focus-cell').isVisible(),true);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.deepEqual(errors,[]);
   console.log('PASS: exact counts and archived release scope, filters, stable keyed refresh, details outside filter, empty-update protection, stale readiness, List/Board, storage, copy success/denial (mock), themes, responsive navigation/dialogs, injection safety');
  }finally{await browser.close();}
