@@ -134,6 +134,17 @@ def capture(
     повод уронить прогон.
     """
     try:
+        # Номер прогона можно не передавать: место, которое его знает,
+        # называет его один раз в `run_telemetry.set_current_run`. Снимок,
+        # легший в папку «no_run», к прогону потом не привязать.
+        if not run_id or not campaign:
+            try:
+                from src.fb_ads_rpa import run_telemetry as _tel
+
+                run_id = run_id or _tel._current["run_id"]
+                campaign = campaign or _tel._current["campaign"]
+            except Exception:
+                pass
         key = run_id or "no_run"
         if _taken.get(key, 0) >= MAX_PER_RUN:
             return ""

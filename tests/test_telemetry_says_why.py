@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -191,3 +192,36 @@ def test_an_empty_targeting_now_says_so():
     block = block[: block.index("# Placements")]
     assert 'skip_targeting' in block, "пропуск таргетинга снова молчит"
     assert "else:" in block, "у ветки «интересов нет» нет своей записи"
+
+
+# ── номер прогона ─────────────────────────────────────────────────────────
+
+def test_a_direct_writer_inherits_the_current_run(tmp_path):
+    """Сорок три места пишут об отказах, и не все знают номер прогона."""
+    rt.set_current_run("runA", "SA_camp")
+    try:
+        p = tmp_path / "t.jsonl"
+        rt.record("create_additional_ad", False, path=p)
+        row = json.loads(p.read_text(encoding="utf-8").strip())
+        assert row["run_id"] == "runA" and row["campaign"] == "SA_camp"
+    finally:
+        rt._current["run_id"] = ""
+        rt._current["campaign"] = ""
+
+
+def test_a_writer_that_knows_better_is_not_overruled(tmp_path):
+    rt.set_current_run("runA", "SA_camp")
+    try:
+        p = tmp_path / "t.jsonl"
+        rt.record("s", True, run_id="runB", campaign="other", path=p)
+        row = json.loads(p.read_text(encoding="utf-8").strip())
+        assert row["run_id"] == "runB" and row["campaign"] == "other"
+    finally:
+        rt._current["run_id"] = ""
+        rt._current["campaign"] = ""
+
+
+def test_the_flow_names_the_run_once():
+    """Сторож: без этого вызова наследовать нечего."""
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    assert "_telemetry.set_current_run(run_id" in source

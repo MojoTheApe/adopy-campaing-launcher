@@ -2169,6 +2169,9 @@ def run_recorded_campaign_flow(
     # to keep in sync as steps change. Until now the same information had to
     # be reconstructed by hand from screenshot filenames.
     run_id = _telemetry.new_run_id()
+    # Названо один раз здесь — дальше номер прогона получают и те места,
+    # которые пишут в телеметрию напрямую, мимо `_shot`.
+    _telemetry.set_current_run(run_id, campaign_name)
     _shot_clock = {"t": time.time()}
 
     def _shot(label: str, diag: dict | None = None) -> None:
@@ -3613,15 +3616,28 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
         # Added 2026-07-29 after `fail_ad3_create` recurred on both
         # campaigns of a real dashboard run and two rounds of guessing at
         # the geometry heuristics failed to fix it.
+        info = {
+            "adset": adset_name,
+            "point": click_point if isinstance(click_point, dict) else None,
+            **(extra or {}),
+        }
+        # Разметка этого шага на диск, как у всех остальных отказов. 9 сентября
+        # он единственный упал без снимка — писал в телеметрию напрямую, мимо
+        # общей точки, — и `pageWide: 0` пришлось толковать на глаз: имени
+        # ад-сета нет на странице нигде, а почему, сказать нечем.
+        try:
+            from src.fb_ads_rpa import page_capture as _pages
+
+            saved = _pages.capture(page, step="create_additional_ad", diag=info)
+            if saved:
+                info["page"] = saved
+        except Exception:
+            pass
         _telemetry.record(
             "create_additional_ad",
             False,
             note=stage,
-            diag={
-                "adset": adset_name,
-                "point": click_point if isinstance(click_point, dict) else None,
-                **(extra or {}),
-            },
+            diag={**(_telemetry.page_context(page) or {}), **info},
         )
 
     if not surface_clicked:
