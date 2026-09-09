@@ -6,10 +6,20 @@ machine but not in that workbook, and stayed unusable until someone edited the
 spreadsheet by hand. The only symptom was a refusal to save the tracking link —
 long after the account showed ad_account_id, profile_id and page name all set.
 
-The rule now: **the workbook wins wherever it has a row**, because it is the
-shared source of truth several people maintain. The machine's own account map
-answers only where the workbook is silent, so a newly connected account works
-immediately without anyone touching a spreadsheet.
+That was fixed by letting the machine map answer where the workbook was silent,
+and the rule read: **the workbook wins wherever it has a row**, because it is
+the shared source several people maintain.
+
+**Reversed 9 September, by the owner's decision**, and the reason is worth
+keeping. The old order left the workbook in the publish path permanently: a
+link saved on the dashboard was overridden by a row in a hand-edited file that
+on a buyer's machine can be of any age. The person saw one link in the builder
+and another went into the campaign — silently, which is the shape of failure
+this repository keeps logging.
+
+The rule now: **the machine map wins, the workbook answers where the map is
+silent**. Nothing configured only in the workbook is lost, and what a person
+sets on the dashboard is what gets used.
 """
 from __future__ import annotations
 
@@ -45,14 +55,27 @@ def machine_map(tmp_path, monkeypatch):
     return path
 
 
-def test_the_workbook_still_wins_where_it_has_the_account(machine_map):
-    """The shared source stays authoritative; nothing changes for existing rows."""
+def test_what_the_person_set_here_beats_the_workbook(machine_map):
+    """The link typed on the dashboard is the one that goes into the campaign.
+
+    The other way round, the builder showed one link and the campaign carried
+    another, with nothing on screen to say so.
+    """
     ref = {"accounts": {"FacebookMKTOBFLW27 CR Ait": {
         "link": "https://tkr.example.com/workbook", "pixel": "999", "domain": "book.example.com",
     }}}
     info = get_account_info(ref, "FacebookMKTOBFLW27 CR Ait")
+    assert info["link"] == "https://tkr.example.com/machine"
+    assert info["pixel"] == "111"
+
+
+def test_the_workbook_still_answers_where_the_map_is_silent(machine_map):
+    """Nothing set up only in the workbook is lost by the reversal."""
+    ref = {"accounts": {"FacebookOnlyInBook CR Ait": {
+        "link": "https://tkr.example.com/workbook", "pixel": "999", "domain": "book.example.com",
+    }}}
+    info = get_account_info(ref, "FacebookOnlyInBook CR Ait")
     assert info["link"] == "https://tkr.example.com/workbook"
-    assert info["pixel"] == "999"
 
 
 def test_the_machine_map_answers_when_the_workbook_is_silent(machine_map):

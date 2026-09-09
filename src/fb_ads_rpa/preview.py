@@ -37,7 +37,6 @@ def preview_campaign_drafts(drafts: list[CampaignDraft]) -> list[dict[str, Any]]
             "Countries": draft.country,
             "Ad Account ID": draft.ad_account_id or "—",
             "Link Object ID (Page)": draft.page_id or "—",
-            "Pixel": draft.pixel_id or "—",
             "Link": draft.link or "—",
             "Ads in ad set": draft.ad_count,
             "Publish backend": "RPA (Ads Manager UI)",

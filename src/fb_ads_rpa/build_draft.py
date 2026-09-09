@@ -84,12 +84,17 @@ def slots_to_campaign_drafts(
         )
 
         tracking_link = (first.get("tracking_link") or "").strip()
+        # Язык выбирают в билдере: правило по стране стало умолчанием формы, а
+        # не заменой ответа человека. Пусто — значит его сняли намеренно, и
+        # обогащение подставит правило само.
+        language = (first.get("language") or "").strip()
         draft = CampaignDraft(
             name=campaign_name,
             country=country,
             account_label=account_label,
             status=status,
             link=tracking_link,
+            language=language,
             ad_sets=[ad_set],
             warnings=warnings,
         )

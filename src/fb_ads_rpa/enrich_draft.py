@@ -19,6 +19,26 @@ from src.upload_agent.build_upload_excel import (
 from src.web.ad_copy_gsheet import lookup_ad_copy_by_title
 
 
+def _ad_copy(name: str) -> dict:
+    """Текст объявления по названию: сперва библиотека, потом таблица.
+
+    Библиотека — то, что человек видит на экране и правит; таблица участвует
+    только в наполнении и остаётся запасным ходом на машине, где библиотеку
+    ещё не заводили. Ошибка чтения библиотеки не должна стоить сборки: тогда
+    спрашиваем таблицу, как спрашивали раньше.
+    """
+    try:
+        from src.analysis_agent.ad_text_registry import lookup
+
+        text = lookup(name)
+        if text is not None:
+            return {"headline": text.headline, "body": text.body,
+                    "description": text.description}
+    except Exception:
+        pass
+    return lookup_ad_copy_by_title(name)
+
+
 def _interest_names_from_targeting(ref: dict, targeting_name: str) -> str:
     """Resolve a named targeting profile (e.g. "Day") to a comma-separated
     list of real Meta interest/behavior names, for typing one at a time into
@@ -127,17 +147,17 @@ def enrich_campaign_drafts(
     for draft in drafts:
         draft.ad_account_id = entry.ad_account_id if entry else None
         draft.page_id = (entry.page_id if entry else None)
-        draft.link = str(account_info.get("link") or "")
-        draft.pixel_id = str(account_info.get("pixel") or "")
-        # The GCC/LatAm rule is authoritative for this account's two known
-        # campaign families (confirmed with user 2026-07-27) — checked
-        # first so it can't be silently overridden by unexpected text in
-        # the Upload FB.xlsx "Countries" sheet's language column (that
-        # sheet's format isn't guaranteed to match what fill_audience_
-        # languages() expects to type). Excel is only a fallback for
-        # countries outside those two families.
-        excel_language = str(lookup_country(ref, draft.country).get("language") or "").strip() if ref else ""
-        draft.language = _geo_language_for_country(draft.country) or excel_language
+        # Что набрано в билдере, то и берём. Раньше строка ниже перетирала
+        # ссылку значением из книги безусловно: человек вписывал её в форму,
+        # видел «Link empty» и не мог понять, куда она делась.
+        draft.link = str(draft.link or "").strip() or str(account_info.get("link") or "")
+        # Язык — так же: пришёл из формы, значит его и выбрали. Правило по
+        # стране осталось умолчанием формы, а не заменой ответа человека.
+        # Книга спрашивается последней и только за страны вне GCC и LatAm —
+        # для них правило и так побеждало её всегда.
+        if not str(getattr(draft, "language", "") or "").strip():
+            excel_language = str(lookup_country(ref, draft.country).get("language") or "").strip() if ref else ""
+            draft.language = _geo_language_for_country(draft.country) or excel_language
 
         if ref.get("_load_error"):
             draft.warnings.append(f"Upload FB.xlsx not loaded: {ref['_load_error']}")
@@ -147,8 +167,18 @@ def enrich_campaign_drafts(
             continue
         if not entry.ad_account_id:
             draft.errors.append("ad_account_id not mapped in ad_account_map.csv")
+        # Черновик без адреса — это и есть черновик: плеер печатает ссылку как
+        # `d.link or None`, пустую просто не набирает. Требовать её значило
+        # запрещать то, ради чего RPA и существует. Договорённость с
+        # пользователем 8 сентября: подсветить и предупредить, но не запрещать.
+        # Соседний `page_id` двумя строками ниже устроен так с самого начала.
         if not draft.link:
-            draft.errors.append("Link empty in Upload FB Accounts sheet")
+            draft.warnings.append("tracking link not set — required before the campaign goes ACTIVE")
+        # Пусто здесь бывает по двум причинам: язык сняли намеренно или для
+        # этой страны у нас нет правила. Обе разрешены, обе стоит назвать: шаг
+        # выбора языка в Ads Manager просто не выполнится.
+        if not str(getattr(draft, "language", "") or "").strip():
+            draft.warnings.append("audience language not set — the Language step will be skipped")
         # page_id is only required for ACTIVE campaigns; drafts publish without it
         if not draft.page_id:
             draft.warnings.append("page_id not set — required for ACTIVE campaigns only")
@@ -160,11 +190,11 @@ def enrich_campaign_drafts(
 
         for ad_set in draft.ad_sets:
             if getattr(ad_set, "targeting_label", ""):
-                # Primary source (user direction, 2026-07-30): the
-                # "Detailed targeting" tab of the shared Google Sheet —
-                # names come back already comma-separated, no JSON parsing.
-                # The Excel "Interests" sheet remains the fallback so a
-                # Sheets outage or a missing profile can't break publishing.
+                # Источник один — библиотека таргетов на этой машине. Книга
+                # запасным ходом больше не служит: она подставляла интересы,
+                # которых человек не выбирал, и делала это предупреждением, а
+                # не вопросом. Не нашлось — так и сказать; кампания при этом
+                # поднимается, просто без детального таргетинга.
                 resolved = ""
                 try:
                     from src.analysis_agent.gsheet_targeting import lookup_targeting_interests
@@ -175,12 +205,12 @@ def enrich_campaign_drafts(
                     continue
                 if resolved:
                     ad_set.targeting_label = resolved
-                elif ref:
+                else:
                     draft.warnings.append(
-                        f"targeting {ad_set.targeting_label!r} not in Google Sheet "
-                        "'Detailed targeting' — used Excel Interests fallback"
+                        f"targeting {ad_set.targeting_label!r} is not in the library — "
+                        "the campaign will be raised without detailed targeting"
                     )
-                    ad_set.targeting_label = _interest_names_from_targeting(ref, ad_set.targeting_label)
+                    ad_set.targeting_label = ""
 
             for ad in ad_set.ads:
                 # If creative_filename was set directly from folder scan — skip Excel lookup
@@ -193,15 +223,22 @@ def enrich_campaign_drafts(
                             f"(pick a file from the folder or set creative_id in Upload FB)"
                         )
 
-                # "Ad Title" — Google Sheet is the canonical source (was the Excel
-                # "Ad copy" sheet's "Ad copy name"; see fb_agents Obsidian diary,
-                # 2026-07-28). Independent of `ref` (Excel), which only backs the
-                # creative-file/interest/country lookups below.
+                # Текст объявления — из библиотеки на этой машине, той же, что
+                # человек видит и правит в разделе Ad titles. Раньше здесь
+                # ходили прямо в таблицу, и без `GSHEET_TARGETS_ID` в окружении
+                # она молча отдавала пустоту: в превью стояло «Body: —», а
+                # объявление уехало бы в Ads Manager без текста. Таблица
+                # осталась запасным ходом на свежую машину, где библиотеку ещё
+                # не наполняли.
                 if ad.copy_name:
-                    copy = lookup_ad_copy_by_title(ad.copy_name)
+                    copy = _ad_copy(ad.copy_name)
                     ad.ad_title = (copy.get("headline") or ad.copy_name or "").strip()
                     ad.ad_body = (copy.get("body") or "").strip()
                     ad.ad_link_description = (copy.get("description") or "").strip()
+                    if not ad.ad_body:
+                        draft.warnings.append(
+                            f"ad text {ad.copy_name!r} has no body — check it in Ad titles"
+                        )
 
                 if ad.creative_filename and not preview_mode:
                     try:

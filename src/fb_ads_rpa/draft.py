@@ -128,7 +128,6 @@ class CampaignDraft:
             "Status": self.status,
             "Objective": self.objective,
             "Link": self.link or "—",
-            "Pixel": self.pixel_id or "—",
             "Language": self.language or "—",
             "ad_sets": [a.to_preview_dict() for a in self.ad_sets],
             "errors": self.errors,
