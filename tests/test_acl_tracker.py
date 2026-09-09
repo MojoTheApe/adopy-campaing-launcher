@@ -91,3 +91,12 @@ def test_ui_revision_changes_digest_but_sync_clock_does_not(tmp_path,monkeypatch
     shutil.copytree(sync.WEB,tmp_path/'web');monkeypatch.setattr(sync,'WEB',tmp_path/'web')
     (sync.WEB/'style.css').write_text((sync.WEB/'style.css').read_text()+'\n/* new UI */')
     _,updated=sync.render(data);assert first['digest']!=updated['digest']
+
+
+def test_issue_template_markers_remain_literal_data():
+    import re
+    body = "Document __APP__, __STYLE__ and __DATA__ without replacing their values."
+    page, data = sync.render(model.payload([issue(body=body)], model.load_config()))
+    embedded = re.search(r'<script id="tracker-data" type="application/json">(.*?)</script>', page, re.S)[1]
+    assert json.loads(embedded)["tasks"][0]["body"] == body
+    assert json.loads(embedded)["digest"] == data["digest"]

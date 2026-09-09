@@ -12,6 +12,6 @@ for n,status in enumerate(model.STATUSES,1):
     if n in (2,4):labels+=['facet:design']
     if n==4:labels=[x for x in labels if not x.startswith('priority:')]+['priority:high']
     if n==6:labels+=['release:required']
-    rows.append({'number':n,'title':f'example-{n}: Task {n}','body':'Details <img src=x onerror=alert(1)>','state':'open','labels':[{'name':x} for x in labels],'milestone':{'number':1,'title':'MVP'} if n==6 else None})
+    rows.append({'number':n,'title':f'example-{n}: Task {n}','body':'Details <img src=x onerror=alert(1)>' + ('\nneeds: #5' if n==4 else ''),'state':'open','labels':[{'name':x} for x in labels],'milestone':{'number':1,'title':'MVP'} if n==6 else None})
 page,data=sync.render(model.payload(rows,config,[{'number':1,'title':'MVP'},{'number':2,'title':'Later'}]))
 print(json.dumps({'page':page,'data':data,'status':{'ok':True,'synced_at':sync.now(),'digest':data['digest'],'revision':data['revision'],'issues':6}}))

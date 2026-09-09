@@ -139,6 +139,20 @@ def test_export_has_generic_config_no_old_tasks_or_live_deployment(tmp_path):
     assert (args.output/'AGENTS.md').exists() and (args.output/'.github/ISSUE_TEMPLATE/task.yml').exists()
 
 
+def test_export_ui_is_self_contained_and_workflow_has_one_source(tmp_path):
+    from tracker import cli, sync, model
+    from types import SimpleNamespace
+    dest = tmp_path / "portable"
+    cli.export(model.load_config(), SimpleNamespace(output=dest, repository="example/new", name="New", base="main"))
+    assert (dest / "tracker/web/fonts/Manrope.ttf").stat().st_size > 1000
+    assert "../tracker/AGENT_WORKFLOW.md" in (dest / "docs/TRACKER_AGENT_WORKFLOW.md").read_text()
+    config = model.load_config(dest / "tracker/config.json")
+    page, _ = sync.render(model.payload([], config))
+    assert "data:font/ttf;base64," in page
+    assert "fonts.googleapis.com" not in page
+    assert "__FONT__" not in page
+
+
 def test_non_code_completion_requires_review_and_records_evidence(tmp_path):
     row=issue(status='review');row['labels'].append({'name':'type:operations'});row['labels']=[x for x in row['labels'] if x['name']!='type:improvement']
     api=API([row]);evidence=tmp_path/'evidence.md';evidence.write_text('Verified domain resolves to the expected service.')

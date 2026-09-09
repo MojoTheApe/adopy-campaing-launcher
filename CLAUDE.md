@@ -20,3 +20,5 @@ Production — `master` в `MojoTheApe/adopy-campaing-launcher`; явно ука
 ## Task tracker — mandatory
 
 Read [the shared tracker workflow](docs/TRACKER_AGENT_WORKFLOW.md) and `tracker/config.json` before task work. Automatically run `python -m tracker start ISSUE` and verify **In progress before the first code edit**. Use **High / Medium / Low**, default **Medium**. After full review and merge, run the verified `python -m tracker merged` transition and confirm the UI update. GitHub Issues are the source of truth; In master is the final stage.
+
+Tracker Design v2 behavior and template reuse are documented in [tracker/README.md](tracker/README.md). Classify natural-language requests using the shared workflow: choose Module and Type, add Design when applicable, and require evidence for Blocked and approved scope for Required. List/Board and UI filters do not change the shared GitHub start/queue/merge workflow.

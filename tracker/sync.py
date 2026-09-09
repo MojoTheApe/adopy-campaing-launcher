@@ -1,7 +1,9 @@
 """Render one complete snapshot; failed updates preserve last-known-good data."""
 from __future__ import annotations
+import base64
 import hashlib
 import json
+import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +29,8 @@ def atomic_write(path, content):
 def render(data):
     template = (WEB / "index.html").read_text(encoding="utf-8")
     css = (WEB / "style.css").read_text(encoding="utf-8")
+    font = base64.b64encode((WEB / "fonts/Manrope.ttf").read_bytes()).decode("ascii")
+    css = css.replace("__FONT__", font)
     js = (WEB / "app.js").read_text(encoding="utf-8")
     revision = hashlib.sha256((template + css + js).encode()).hexdigest()
     result = dict(data, revision=revision)
@@ -34,7 +38,9 @@ def render(data):
     result["digest"] = digest
     # JSON in a script element must not allow issue text to close that element.
     encoded = json.dumps(result, ensure_ascii=True).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
-    page = template.replace("__STYLE__", css).replace("__DATA__", encoded).replace("__APP__", js)
+    parts = {"__STYLE__": css, "__DATA__": encoded, "__APP__": js}
+    # Replace only placeholders in the template, never marker-like Issue content.
+    page = re.sub(r"__(?:STYLE|DATA|APP)__", lambda match: parts[match[0]], template)
     return page, result
 
 
