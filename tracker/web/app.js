@@ -156,7 +156,7 @@
     const counts={all:active.length,archive:data.tasks.length-active.length,...Object.fromEntries(stages.map(s=>[s,active.filter(t=>t.status===s).length]))};
     const sig=JSON.stringify([counts,data.completion_label,state.view]);
     if($('pipeline').dataset.signature!==sig){$('pipeline').replaceChildren(...['all',...stages,'archive'].map(v=>{
-      const b=button('','',{'data-view':v,'aria-pressed':String(state.view===v),id:'view-'+v});
+      const b=button('','st-signal-border',{'data-view':v,'aria-pressed':String(state.view===v),id:'view-'+v});
       if(stages.includes(v)){const dot=node('span',undefined,'st-stage-dot');dot.dataset.status=v;b.append(dot);}
       const name=v==='all'?'All':v==='merged'?(data.completion_label==='In master'?'Master':data.completion_label):viewLabel(v);
       b.append(node('span',name),node('b',String(counts[v])));return b;
@@ -190,6 +190,7 @@
     const chipSignature=JSON.stringify(chips.map(c=>c.outerHTML));if($('chips').dataset.signature!==chipSignature){$('chips').replaceChildren(...chips);$('chips').dataset.signature=chipSignature;}
     const count=state.priorities.length+state.types.length+state.releases.length+Number(state.design)+Number(state.required)+Number(state.blocked);
     $('filters-count').textContent=String(count);$('filters-count').hidden=!count;
+    $('filters-toggle').dataset.filtered=String(count>0);
     const filterLabel='Filters'+(count?' · '+count+' active':'');
     $('filters-toggle').setAttribute('aria-label',filterLabel);$('filters-toggle').title=filterLabel;
   }
