@@ -1705,22 +1705,44 @@ async def api_creatives() -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+def _ad_copy_rows() -> list[dict]:
+    """Тексты для поиска Ad Title в билдере — из библиотеки на этой машине.
+
+    Раньше здесь ходили прямо в таблицу, и 9 сентября выяснилось, чем это
+    кончается: без `GSHEET_TARGETS_ID` в окружении загрузчик молча возвращал
+    пустой словарь, и в билдере под полем Ad Title стояло «No ad titles found».
+    Ни ошибки, ни следа в логе — просто пусто, как будто текстов нет вовсе. При
+    этом в разделе Ad titles их лежало 316.
+
+    Теперь источник тот же, что видит человек на экране: реестр. Таблица
+    осталась запасным ходом на одну ситуацию — свежая машина, где библиотеку
+    ещё не наполняли; такой ответ лучше пустого, но реестр всегда главнее.
+    """
+    from src.analysis_agent import ad_text_registry as ar
+
+    try:
+        texts = ar.all_texts()
+    except ar.AdTextError:
+        texts = []
+    if texts:
+        return [{"ad_title": t.name, "headline": t.headline, "body": t.body,
+                 "description": t.description, "asset": t.asset,
+                 "language": t.language} for t in texts]
+
+    from src.web.ad_copy_gsheet import load_ad_copy
+
+    return [{"ad_title": title, **entry} for title, entry in load_ad_copy().items()]
+
+
 @app.get("/api/ad-copy")
 async def api_ad_copy() -> JSONResponse:
-    """Return every "ad texts" row from the Google Sheet — canonical source for
-    the Campaign Builder's Ad Title search (see src/web/ad_copy_gsheet.py; the
-    old Excel "Ad copy" sheet is no longer used for this).
+    """Тексты объявлений для билдера.
 
     Returns [{ad_title, headline, body, description, asset, language}].
     """
-    from src.web.ad_copy_gsheet import load_ad_copy
+    from starlette.concurrency import run_in_threadpool
 
-    data = load_ad_copy()
-    rows = [
-        {"ad_title": title, **entry}
-        for title, entry in data.items()
-    ]
-    return JSONResponse({"rows": rows})
+    return JSONResponse({"rows": await run_in_threadpool(_ad_copy_rows)})
 
 
 @app.get("/api/resolve-targeting")
@@ -2094,6 +2116,58 @@ async def api_edit_targeting_profile(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
     return await run_in_threadpool(_edit_targeting_profile, data)
+
+
+@app.get("/api/ad-texts")
+def api_ad_texts(force: bool = False) -> JSONResponse:
+    """Библиотека рекламных текстов. Чтение вкладки — в рабочем пуле FastAPI."""
+    from src.analysis_agent import ad_text_registry as ar
+    try:
+        sheet = ar.refresh(force=force)
+        texts = ar.all_texts()
+        return JSONResponse({"ok": True, "sheet": sheet,
+                             "duplicates": ar.duplicates(texts),
+                             "texts": [t.to_dict() for t in texts]})
+    except ar.AdTextError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
+
+
+_AD_TEXT_FIELDS = ("action", "name", "headline", "body", "description",
+                   "asset", "language", "was")
+
+
+def _edit_ad_text(data: dict) -> JSONResponse:
+    from src.analysis_agent import ad_text_registry as ar
+    if not isinstance(data, dict) or any(not isinstance(data.get(k, ""), str) for k in _AD_TEXT_FIELDS):
+        return JSONResponse({"ok": False, "error": "Expected an object with string fields"}, status_code=400)
+    action = (data.get("action") or "add").strip().lower()
+    name, headline, body, description, asset, language = (
+        data.get(k, "") for k in ("name", "headline", "body", "description", "asset", "language"))
+    try:
+        if action == "delete":
+            ar.remove(name)
+            return JSONResponse({"ok": True, "removed": name})
+        if action == "update":
+            text = ar.update(data.get("was") or name, name, headline, body, description, asset, language)
+        elif action == "add":
+            text = ar.add(name, headline, body, description, asset, language)
+        else:
+            raise ar.AdTextError(f"Неизвестное действие: {action}")
+    except ar.AdTextError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    return JSONResponse({"ok": True, "text": text.to_dict()})
+
+
+@app.post("/api/ad-texts")
+async def api_edit_ad_text(request: Request) -> JSONResponse:
+    from starlette.concurrency import run_in_threadpool
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    return await run_in_threadpool(_edit_ad_text, data)
 
 
 @app.get("/api/parse-adset")
