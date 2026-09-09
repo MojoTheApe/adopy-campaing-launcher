@@ -4593,6 +4593,20 @@ function amapRenderHits(box, hits, profiles, inst) {
     row.className = 'amap-hit';
     row.innerHTML = '<b>' + aclEscHtml(p.name || '(unnamed)') + '</b>'
       + '<span class="amap-hint">checking this machine…</span>';
+    /* Открыть можно до подключения. Так человек и работает: нашёл профиль,
+       открыл, посмотрел в самом кабинете что нужно, подключил. Раньше открыть
+       предлагалось только уже подключённому аккаунту, а для подключения
+       требовался номер кабинета, который знает открытый профиль. */
+    var btnOpen = document.createElement('button');
+    btnOpen.type = 'button'; btnOpen.className = 'amap-btn';
+    btnOpen.textContent = 'Open';
+    btnOpen.title = 'Start this profile in Multilogin and leave the window open';
+    btnOpen.onclick = function () {
+      if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
+      amapOpenFoundProfile(box, p, inst, btnOpen, row);
+    };
+    row.appendChild(btnOpen);
+
     var btnAdd = document.createElement('button');
     btnAdd.type = 'button'; btnAdd.className = 'amap-btn'; btnAdd.textContent = 'Connect';
     btnAdd.onclick = function () {
@@ -4611,6 +4625,39 @@ function amapRenderHits(box, hits, profiles, inst) {
       .then(function (d) { p._details = d; amapHint(row, d); })
       .catch(function () { row.querySelector('.amap-hint').textContent = ''; });
   });
+}
+
+/* Открыть найденный профиль и перечитать, что он о себе говорит.
+
+   Перечитать обязательно: пока профиль не открывали здесь, дешборд не знает
+   его кабинета, а после открытия знает. Без этого человек нажал бы Open,
+   получил «открыт» и увидел рядом ту же надпись «never opened here». */
+async function amapOpenFoundProfile(box, p, inst, btn, row) {
+  var msg = box.querySelector('.amap-msg');
+  btn.disabled = true;
+  msg.className = 'amap-msg';
+  msg.textContent = 'opening ' + (p.name || 'the profile') + '…';
+  var body = new FormData();
+  body.append('profile_id', p.profile_id);
+  body.append('folder_id', p.folder_id || (p._details || {}).folder_id || '');
+  body.append('instance', inst);
+  body.append('name', p.name || '');
+  var d = null;
+  try {
+    var r = await fetch('/mlx-profile-open', { method: 'POST', body: body, credentials: 'same-origin' });
+    d = await r.json();
+  } catch (e) { d = { ok: false, message: String(e && e.message || e) }; }
+  btn.disabled = false;
+  msg.textContent = (d && d.message) || '';
+  msg.className = 'amap-msg' + (d && d.ok ? '' : ' bad');
+  if (!d || !d.ok) return;
+  delete p._details;
+  try {
+    var det = await fetch('/mlx-profile-details?profile_id=' + encodeURIComponent(p.profile_id)
+                          + '&name=' + encodeURIComponent(p.name || '')).then(function (x) { return x.json(); });
+    p._details = det;
+    amapHint(row, det);
+  } catch (e) { /* открыть удалось — это главное; подсказка обновится позже */ }
 }
 
 function amapHint(row, d) {
@@ -4661,13 +4708,23 @@ async function amapConnect(box, profile, instance, btn) {
         + (found.account_name ? '\n' + found.account_name : '');
       seed = found.act;
     } else {
+      /* Пустой ответ больше не отменяет подключение. Номер нужен, чтобы
+         читать спенд и заливать кампании, — но не чтобы держать аккаунт в
+         карте: без него аккаунт подключится, а билдер честно покажет
+         «⚠ missing: ad_account_id» и даст вписать позже.
+
+         Прежнее «пусто = отмена» загоняло в тупик ровно там, где человек
+         впервые видит новый профиль: номер знает открытый профиль, а открыть
+         его дешборд соглашался только у подключённого аккаунта. */
       head = 'Could not read it from the profile:\n' + ((found && found.error) || 'unknown')
-        + '\n\nOpen the profile with automation and try again, or paste the '
-        + 'Ads Manager link or the account number:';
+        + '\n\nPress Open next to the profile and try again, paste the Ads Manager '
+        + 'link or the account number — or leave this empty to connect now and '
+        + 'fill the number in later:';
       seed = '';
     }
-    act = (prompt(head, seed) || '').trim();
-    if (!act) return;
+    var typed = prompt(head, seed);
+    if (typed === null) return;          // Cancel — человек передумал
+    act = (typed || '').trim();          // пусто — подключаем без номера
   }
   btn.disabled = true; msg.textContent = 'connecting…'; msg.className = 'amap-msg';
 
