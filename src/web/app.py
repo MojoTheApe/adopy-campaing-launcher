@@ -603,6 +603,12 @@ def _build_account_map_view(
                     k: (todo.get(alias or label) or todo.get(label) or {}).get(k, "" if k == "to_do" else False)
                     for k in ("to_do", "ready")
                 },
+                # «Книга про него не знает» и «книга знает и не считает
+                # готовым» — разные вещи, а слово на экране было одно. Тестовый
+                # аккаунт, заведённый на дешборде, в рабочей книге не появится
+                # никогда, и вечное «needs setup» на нём означало бы задачу,
+                # которой не существует.
+                "in_workbook": bool(todo.get(alias or label) or todo.get(label)),
                 "assets": account_links.values_for(label, "asset"),
                 "countries": [
                     display_name.get(v.casefold(), v)
