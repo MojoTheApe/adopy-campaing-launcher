@@ -2920,7 +2920,12 @@ async function dashRefresh(ev) {
   <form class="open-account-form" method="post" action="/build-upload"
         data-open-form
         data-country="{{ c.country }}"
-        data-asset="{{ default_asset }}">
+        data-asset="{{ default_asset }}"
+        {#- Умолчание языка нужно и той карточке, которую строит JavaScript по
+            «+ Add Campaign». Считает его всё тот же серверный фильтр: правило
+            должно быть в одном месте, иначе на карточке из шаблона и на
+            карточке из скрипта окажется разный язык. -#}
+        data-language="{{ c.country | geo_language }}">
 
     {# ── Pre-flight panel: link + account map ── #}
     {% set pf_ok = pf.link_status == 'tracking' and not pf.missing_map_fields and pf.page_name %}
@@ -6330,11 +6335,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<input type="hidden" name="camp_' + idx + '_targeting" class="cb-targeting-hidden" value="">' +
       '<div class="cb-targeting-hint" style="font-size:0.67rem;color:var(--muted);margin-top:0.15rem;word-break:break-word"></div>' +
       '</div>' +
-      '<span class="cb-label">OS / Age / Budget</span>' +
+      '<span class="cb-label">OS / Age / Budget / Language</span>' +
       '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS'], 'OS') +
       '<input type="number" name="camp_' + idx + '_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
       '<span style="color:var(--muted);font-size:0.72rem">$/day</span>' +
       '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50">' +
+      /* Язык — и здесь тоже. Карточку строят два места: шаблон на сервере и
+         эта функция по «+ Add Campaign». Поле, добавленное только в одно из
+         них, выглядит добавленным — а на той половине, которой человек
+         пользуется, его нет. Так и вышло 9 сентября. Значение подставляется
+         из `data-language` формы, чтобы правило считалось в одном месте. */
+      '<input type="text" name="camp_' + idx + '_language" class="cb-input cb-input-sm cb-language" value="" placeholder="Language" oninput="cbLanguageChanged(this)" title="Audience language. Leave empty to skip the Language step in Ads Manager.">' +
       '</div>' +
       '<span class="cb-label">Asset / Offer</span>' +
       '<input type="text" name="camp_' + idx + '_asset" class="cb-input" value="" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
@@ -6553,6 +6564,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var asset = form.dataset.asset || '';
       var assetInput = newSlot.querySelector('[name="camp_' + idx + '_asset"]');
       if (assetInput && asset) { assetInput.value = asset; }
+      var langInput = newSlot.querySelector('[name="camp_' + idx + '_language"]');
+      if (langInput) {
+        langInput.value = form.dataset.language || '';
+        cbLanguageChanged(langInput);   // пустой сразу подсвечен, а не после правки
+      }
       cbUpdateName(newSlot);
     }
     cbUpdateCount(form);

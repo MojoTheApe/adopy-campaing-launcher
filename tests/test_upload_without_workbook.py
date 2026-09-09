@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -232,3 +233,48 @@ def test_the_form_field_reaches_the_slot():
     assert '"language": language' in source, "язык не кладётся в слот"
     build = (ROOT / "src" / "fb_ads_rpa" / "build_draft.py").read_text(encoding="utf-8")
     assert 'first.get("language")' in build, "черновик не читает язык из слота"
+
+
+# ── два строителя одной карточки ──────────────────────────────────────────
+
+def test_both_slot_builders_produce_the_same_fields():
+    """Карточку кампании строят два места, и они обязаны совпадать.
+
+    Одно — шаблон на сервере, для карточек из рекомендаций. Второе — функция
+    `buildBlankSlotHTML` в JavaScript, для «+ Add Campaign».
+
+    9 сентября поле языка добавили только в первое. Выглядело добавленным: на
+    странице девятнадцать полей. А человек в тот момент собирал кампанию
+    вручную — рекомендаций за выбранный день не было ни у кого, — и на его
+    половине поля не оказалось. «Я сделал рифреш, а языка всё ещё нет».
+
+    Поэтому сверяются **множества имён полей**, а не наличие одного поля:
+    следующее разойдётся так же тихо.
+    """
+    page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+
+    slot = page[page.index('<div class="cb-slot" data-idx="{{ ns.idx }}">'):]
+    slot = slot[: slot.index("cb-slot-grid")]
+    from_template = set(re.findall(r'name="camp_\{\{ ns\.idx \}\}_([a-z_]+)"', slot))
+
+    js = page[page.index("function buildBlankSlotHTML"):]
+    js = js[: js.index("cb-slot-grid")]
+    from_script = set(re.findall(r"name=\"camp_' \+ idx \+ '_([a-z_]+)\"", js))
+    from_script |= set(re.findall(r"mkSel\(idx, '([a-z_]+)'", js))
+
+    assert from_template, "не нашёл полей в шаблонной карточке — проверка сломана"
+    assert from_script, "не нашёл полей в скриптовой карточке — проверка сломана"
+    assert from_template == from_script, (
+        "строители карточки разошлись: только в шаблоне "
+        f"{sorted(from_template - from_script)}, только в скрипте "
+        f"{sorted(from_script - from_template)}"
+    )
+
+
+def test_the_manual_card_gets_the_country_default_for_the_language():
+    """Иначе «+ Add Campaign» даёт пустой язык там, где правило его знает."""
+    page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    assert 'data-language="{{ c.country | geo_language }}"' in page, (
+        "форма не несёт умолчание языка — скрипту неоткуда его взять"
+    )
+    assert "form.dataset.language" in page, "скрипт не читает умолчание"
