@@ -114,4 +114,4 @@ def test_the_row_carries_whether_the_workbook_knows_the_account():
     Пустые числа бывают и у аккаунта из книги — просто за выбранные дни.
     """
     source = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
-    assert '"in_workbook": bool(todo.get(alias or label) or todo.get(label))' in source
+    assert '"in_workbook"' in source and "_workbook_has_account(df, country_name, label)" in source

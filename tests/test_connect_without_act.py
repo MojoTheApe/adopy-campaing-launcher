@@ -37,7 +37,8 @@ class _Provider:
     def __init__(self):
         self.opened_with = None
 
-    def open(self, entry, label):
+    def open(self, entry, label, **options):
+        assert options == {"allow_missing_dir": True, "allow_restart": False}
         self.opened_with = SimpleNamespace(
             profile_id=entry.profile_id,
             folder_id=entry.folder_id,

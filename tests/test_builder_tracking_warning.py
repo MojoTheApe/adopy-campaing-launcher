@@ -34,7 +34,7 @@ def test_the_three_cases_are_told_apart():
     """Их путать нельзя: делать в каждом надо разное.
 
     Нет ссылки — вписать. Адрес Jira — заменить на трекер. Набрана и не
-    сохранена — нажать Save, иначе уйдёт прежняя.
+    сохранена — текущая сборка использует её, Save сохраняет для следующих.
     """
     js = _js()
     assert "Трекинговой ссылки нет" in js
@@ -43,11 +43,11 @@ def test_the_three_cases_are_told_apart():
 
 
 def test_an_unsaved_link_is_the_most_deceptive_case():
-    """Поле выглядит заполненным, а в сборку уйдёт прежнее значение."""
+    """Форма определяет текущую сборку; Save нужен для следующих."""
     js = _js()
     block = js[js.index("typed !== saved"): js.index("link_status === 'jira'")]
-    assert "прежняя" in block, "не сказано, что уйдёт старая ссылка"
-    assert "saved" in block, "прежняя ссылка не показана — человеку не с чем сравнить"
+    assert "В этой сборке будет использована" in block
+    assert "+ typed" in block
 
 
 def test_a_saved_tracking_link_says_nothing():

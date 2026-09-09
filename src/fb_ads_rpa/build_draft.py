@@ -84,9 +84,7 @@ def slots_to_campaign_drafts(
         )
 
         tracking_link = (first.get("tracking_link") or "").strip()
-        # Язык выбирают в билдере: правило по стране стало умолчанием формы, а
-        # не заменой ответа человека. Пусто — значит его сняли намеренно, и
-        # обогащение подставит правило само.
+        # Preserve explicit emptiness; only omitted fields use legacy defaults.
         language = (first.get("language") or "").strip()
         draft = CampaignDraft(
             name=campaign_name,
@@ -95,6 +93,8 @@ def slots_to_campaign_drafts(
             status=status,
             link=tracking_link,
             language=language,
+            link_provided=first.get("tracking_link_provided", "tracking_link" in first),
+            language_provided=first.get("language_provided", "language" in first),
             ad_sets=[ad_set],
             warnings=warnings,
         )

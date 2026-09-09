@@ -992,6 +992,8 @@ class MultiloginAttachOnlyProvider:
         account_label: str,
         profile_id: str,
         udd: str,
+        *,
+        allow_restart: bool = True,
     ) -> Any:
         from src.meta_campaign_agent.multilogin_config import get_multilogin_instance
         from src.meta_campaign_agent.multilogin_launcher import (
@@ -1041,6 +1043,11 @@ class MultiloginAttachOnlyProvider:
                     or "already running" in msg
                     or "profile_already_running" in msg
                 )
+                if lock_conflict and not allow_restart:
+                    raise RuntimeError(
+                        f"{account_label}: profile is already running; no stop or restart was performed. "
+                        "Close it in Multilogin Desktop before opening it with automation."
+                    ) from exc
                 if attempt < 2 and lock_conflict:
                     # Gracefully stop ONLY this profile via MLX API. This releases MLX
                     # Desktop's lock, preserves the profile's cookies/login, and does
@@ -1071,19 +1078,21 @@ class MultiloginAttachOnlyProvider:
             f"Последняя ошибка: {last_exc}"
         )
 
-    def open(self, entry: AccountMapEntry, account_label: str) -> BrowserConnection:
+    def open(self, entry: AccountMapEntry, account_label: str, *,
+             allow_missing_dir: bool = False, allow_restart: bool = True) -> BrowserConnection:
         profile_id = entry.profile_id
         if not profile_id:
             raise RuntimeError(f"{account_label}: profile_id is required")
 
         user_data_dir = _find_mlx_profile_dir(profile_id)
-        if user_data_dir is None:
+        if user_data_dir is None and not allow_missing_dir:
             raise RuntimeError(
                 f"MLX profile directory not found for profile_id={profile_id}"
             )
-        udd = str(user_data_dir)
+        udd = str(user_data_dir) if user_data_dir is not None else ""
 
-        reused = self._direct._try_attach_existing(profile_id, udd)
+        reused = (self._direct._try_attach_existing(profile_id, udd, strict_profile=not allow_restart)
+                  if udd else None)
         if reused is not None:
             log.info("Attached to already-open Multilogin profile %s", profile_id)
             return reused
@@ -1092,14 +1101,16 @@ class MultiloginAttachOnlyProvider:
         # attach. _start_via_mlx_api gracefully stops ONLY this profile via the MLX
         # API (releasing MLX's lock, keeping cookies) and restarts it with automation
         # enabled. It does NOT kill other open profiles.
-        if self._direct._profile_process_running(udd, profile_id):
+        if self._direct._profile_process_running(udd or profile_id, profile_id):
+            if not allow_restart:
+                raise RuntimeError(f"{account_label}: profile is already running; no restart was performed")
             log.info(
                 "Profile %s is open in MLX manual mode (no CDP). Will restart it via "
                 "MLX automation API (other profiles untouched).",
                 profile_id,
             )
 
-        started = self._start_via_mlx_api(entry, account_label, profile_id, udd)
+        started = self._start_via_mlx_api(entry, account_label, profile_id, udd, allow_restart=allow_restart)
         ws = started.ws_endpoint or ""
         if ws and not ws.startswith("/"):
             ws = f"/{ws}"

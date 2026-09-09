@@ -263,7 +263,7 @@ def load_reference_data(excel_path: str):
     return data
 
 
-def get_account_info(ref: dict, account_name: str) -> dict[str, Any]:
+def get_account_info(ref: dict, account_name: str, *, account_map: dict | None = None) -> dict[str, Any]:
     """Трекинговая ссылка, пиксель и домен аккаунта. Имя может быть частичным.
 
     **Сперва машинная карта, потом книга.** Порядок был обратным, и это
@@ -276,16 +276,30 @@ def get_account_info(ref: dict, account_name: str) -> dict[str, Any]:
     отвечает, и ни один аккаунт, настроенный только в ней, не потеряется.
     """
     name = (account_name or "").strip()
-    from_map = _account_info_from_machine_map(name)
-    if any((from_map.get(k) or "") for k in ("link", "pixel", "domain")):
-        return from_map
+    if not name:
+        return {"pixel": None, "domain": None, "link": None}
+    from_map = _account_info_from_machine_map(name, account_map=account_map)
+    link_set = from_map.pop("_link_set", False)
+    info = dict(_account_info_from_workbook(ref, name))
+    for field in ("link", "pixel", "domain"):
+        value = from_map.get(field)
+        if value or (field == "link" and link_set):
+            info[field] = value
+        else:
+            info.setdefault(field, None)
+    return info
 
+
+def _account_info_from_workbook(ref: dict, name: str) -> dict[str, Any]:
     accounts = ref.get("accounts") or {}
     if name in accounts:
         return accounts[name]
-    for key, val in accounts.items():
-        if name.upper() in key.upper():
-            return val
+    exact = [val for key, val in accounts.items() if name.casefold() == key.casefold()]
+    if len(exact) == 1:
+        return exact[0]
+    partial = [val for key, val in accounts.items() if name.upper() in key.upper()]
+    if partial:
+        return partial[0] if len(partial) == 1 else {}
     # Geo relabels of one profile ("FacebookELf221 EC" vs the sheet's
     # "FacebookElf221 AR Ait") share pixel/domain/tracker — match on the
     # first name token, but ONLY when exactly one row carries it. Sheets
@@ -301,7 +315,7 @@ def get_account_info(ref: dict, account_name: str) -> dict[str, Any]:
     return {"pixel": None, "domain": None, "link": None}
 
 
-def _account_info_from_machine_map(account_name: str) -> dict[str, Any]:
+def _account_info_from_machine_map(account_name: str, *, account_map: dict | None = None) -> dict[str, Any]:
     """Tracking link / pixel / domain from the machine's own account map."""
     empty = {"pixel": None, "domain": None, "link": None}
     try:
@@ -312,7 +326,7 @@ def _account_info_from_machine_map(account_name: str) -> dict[str, Any]:
         )
 
         entry = resolve_account_entry(
-            load_ad_account_map(get_ad_account_map_path()), account_name
+            account_map if account_map is not None else load_ad_account_map(get_ad_account_map_path()), account_name
         )
     except Exception:
         return empty
@@ -322,6 +336,7 @@ def _account_info_from_machine_map(account_name: str) -> dict[str, Any]:
         "pixel": getattr(entry, "pixel_id", None),
         "domain": getattr(entry, "domain", None),
         "link": getattr(entry, "tracking_link", None),
+        **({"_link_set": True} if getattr(entry, "tracking_link_set", False) else {}),
     }
 
 

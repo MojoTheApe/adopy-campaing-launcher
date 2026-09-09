@@ -102,8 +102,9 @@ def test_an_account_is_not_added_twice_under_a_different_spelling():
 def test_a_country_with_no_links_is_left_alone():
     account_links.link("FacebookDQ438", "country", "Peru")
     report = _report(("Saudi Arabia", {"KLD_BFL_X84": []}))
-    assert _add_linked_accounts_to_builder(report) == 0
+    assert _add_linked_accounts_to_builder(report) == 1  # Peru gets its own section.
     assert list(report["countries"][0]["open_recs"]) == ["KLD_BFL_X84"]
+    assert report["countries"][1]["open_recs"] == {"FacebookDQ438": []}
 
 
 def test_a_report_without_countries_does_not_break():

@@ -113,6 +113,9 @@ class CampaignDraft:
     ad_sets: list[AdSetDraft] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    # Empty form fields are explicit choices; older callers may omit them.
+    link_provided: bool = False
+    language_provided: bool = False
 
     @property
     def ad_count(self) -> int:

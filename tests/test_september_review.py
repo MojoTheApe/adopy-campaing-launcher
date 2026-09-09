@@ -199,7 +199,7 @@ def test_failed_snapshot_replace_preserves_the_previous_backup(tmp_path, monkeyp
 ])
 def test_setup_states_render_with_account_actions_and_matching_drill_width(ready, reason, expected):
     import re
-    row = dict(account="Demo", ready=ready, to_do=reason, has_data=True, spend=12,
+    row = dict(account="Demo", ready=ready, to_do=reason, in_workbook=True, has_data=True, spend=12,
                leads=2, deposits=1, cpl=6, cpa=12, cr=50, status={})
     html = web.templates.env.get_template("_account_map_country.html").render(
         mc={"country": "Mexico", "key": "MX", "rows": [row]},

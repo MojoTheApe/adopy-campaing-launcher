@@ -552,7 +552,6 @@ def _ads_manager_account_name(page) -> str:
     return ""
 
 
-@serialized_browser
 class _Profile:
     """То немногое, что провайдеру нужно знать о профиле, чтобы его поднять.
 
@@ -587,13 +586,16 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     **Отсутствие папки профиля больше не отказ.** Папку создаёт сам Multilogin
     при первом запуске на этой машине, так что для нового профиля её и не
     может быть: мы отказывались запускать профиль потому, что его ни разу не
-    запускали. Нет папки — значит локально ничего и не открыто, идём сразу к
-    запуску через API Multilogin, а он выдаёт и прокси, и отладочный порт.
+    запускали. Без папки пробуем API Multilogin; если профиль уже занят,
+    возвращаем отказ и никогда не останавливаем его ради этой кнопки.
     """
-    who = label or profile_id[:8] or "профиль"
     profile_id = (profile_id or "").strip()
+    who = label or profile_id[:8] or "профиль"
     if not profile_id:
         return False, f"у {who} не заполнен profile_id"
+    instance = (instance or "A").strip().upper()
+    if instance not in {"A", "B"}:
+        return False, "Unknown Multilogin instance; choose A or B"
 
     from src.fb_ads_rpa import browser as rpa_browser
 
@@ -622,7 +624,8 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
 
     entry = _Profile(profile_id, folder_id, instance)
     try:
-        conn = rpa_browser.get_browser_provider("multilogin_attach").open(entry, who)
+        conn = rpa_browser.get_browser_provider("multilogin_attach").open(
+            entry, who, allow_missing_dir=True, allow_restart=False)
     except Exception as exc:  # noqa: BLE001
         return False, f"{type(exc).__name__}: {exc}"
     try:
@@ -633,6 +636,7 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     return True, "профиль открыт — залогиньтесь, если нужно, и оставьте окно"
 
 
+@serialized_browser
 def open_for_automation(account: str) -> tuple[bool, str]:
     """То же самое для аккаунта, который уже есть в карте."""
     entry = _entry_for(account)

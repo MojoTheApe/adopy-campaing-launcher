@@ -19,26 +19,6 @@ from src.upload_agent.build_upload_excel import (
 from src.web.ad_copy_gsheet import lookup_ad_copy_by_title
 
 
-def _ad_copy(name: str) -> dict:
-    """Текст объявления по названию: сперва библиотека, потом таблица.
-
-    Библиотека — то, что человек видит на экране и правит; таблица участвует
-    только в наполнении и остаётся запасным ходом на машине, где библиотеку
-    ещё не заводили. Ошибка чтения библиотеки не должна стоить сборки: тогда
-    спрашиваем таблицу, как спрашивали раньше.
-    """
-    try:
-        from src.analysis_agent.ad_text_registry import lookup
-
-        text = lookup(name)
-        if text is not None:
-            return {"headline": text.headline, "body": text.body,
-                    "description": text.description}
-    except Exception:
-        pass
-    return lookup_ad_copy_by_title(name)
-
-
 def _interest_names_from_targeting(ref: dict, targeting_name: str) -> str:
     """Resolve a named targeting profile (e.g. "Day") to a comma-separated
     list of real Meta interest/behavior names, for typing one at a time into
@@ -142,7 +122,7 @@ def enrich_campaign_drafts(
 
     account_map = load_ad_account_map(map_path)
     entry = resolve_account_entry(account_map, account_label)
-    account_info = get_account_info(ref, account_label) if ref else {}
+    account_info = get_account_info(ref, account_label, account_map=account_map)
 
     for draft in drafts:
         draft.ad_account_id = entry.ad_account_id if entry else None
@@ -150,12 +130,14 @@ def enrich_campaign_drafts(
         # Что набрано в билдере, то и берём. Раньше строка ниже перетирала
         # ссылку значением из книги безусловно: человек вписывал её в форму,
         # видел «Link empty» и не мог понять, куда она делась.
-        draft.link = str(draft.link or "").strip() or str(account_info.get("link") or "")
+        draft.link = str(draft.link or "").strip()
+        if not draft.link and not getattr(draft, "link_provided", False):
+            draft.link = str(account_info.get("link") or "").strip()
         # Язык — так же: пришёл из формы, значит его и выбрали. Правило по
         # стране осталось умолчанием формы, а не заменой ответа человека.
         # Книга спрашивается последней и только за страны вне GCC и LatAm —
         # для них правило и так побеждало её всегда.
-        if not str(getattr(draft, "language", "") or "").strip():
+        if not str(getattr(draft, "language", "") or "").strip() and not getattr(draft, "language_provided", False):
             excel_language = str(lookup_country(ref, draft.country).get("language") or "").strip() if ref else ""
             draft.language = _geo_language_for_country(draft.country) or excel_language
 

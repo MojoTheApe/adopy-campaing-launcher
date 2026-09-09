@@ -80,9 +80,7 @@ _ref_full_mtime: float = -1.0
 
 
 def _save_link_to_machine_map(account_name: str, link: str) -> bool:
-    """Store the tracking link on this machine, for an account the workbook
-    does not carry. Returns False when the account is not in the map either —
-    then there is genuinely nothing to attach the link to.
+    """Store the tracking link locally; False means the account is not mapped.
 
     Rewrites the whole CSV rather than patching a line: the file is a dozen
     rows, and a half-written map is worse than a slow one.
@@ -101,23 +99,22 @@ def _save_link_to_machine_map(account_name: str, link: str) -> bool:
     if "tracking_link" not in fieldnames:
         fieldnames.append("tracking_link")
 
-    name_lower = (account_name or "").strip().lower()
-    hit = None
-    for row in rows:
-        key = (row.get("account_name") or "").strip().lower()
-        if key and (key == name_lower or key in name_lower or name_lower in key):
-            hit = row
-            break
-    if hit is None:
+    name_lower = (account_name or "").strip().casefold()
+    exact = [row for row in rows if (row.get("account_name") or row.get("account") or "").strip().casefold() == name_lower]
+    candidates = exact or [row for row in rows if name_lower and
+        (row.get("account_name") or row.get("account") or "").strip() and (
+        name_lower in (row.get("account_name") or row.get("account") or "").casefold()
+        or (row.get("account_name") or row.get("account") or "").strip().casefold() in name_lower)]
+    if not candidates:
         return False
-
+    if len(candidates) != 1:
+        raise ValueError("Account name is ambiguous; use the complete account name")
+    hit = candidates[0]
     hit["tracking_link"] = (link or "").strip()
-    tmp = map_path.with_name(f".{map_path.name}.tmp")
-    with open(tmp, "w", newline="", encoding="utf-8") as f:
-        writer = _csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
-    os.replace(tmp, map_path)
+    hit["tracking_link_set"] = "1"
+    if "tracking_link_set" not in fieldnames:
+        fieldnames.append("tracking_link_set")
+    write_csv_atomic(map_path, fieldnames, rows)
     return True
 
 
@@ -608,7 +605,8 @@ def _build_account_map_view(
                 # аккаунт, заведённый на дешборде, в рабочей книге не появится
                 # никогда, и вечное «needs setup» на нём означало бы задачу,
                 # которой не существует.
-                "in_workbook": bool(todo.get(alias or label) or todo.get(label)),
+                "in_workbook": bool(todo.get((alias or label).casefold()) or todo.get(label.casefold()))
+                    or _workbook_has_account(df, country_name, label),
                 "assets": account_links.values_for(label, "asset"),
                 "countries": [
                     display_name.get(v.casefold(), v)
@@ -714,14 +712,9 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
 
     result: dict[str, dict] = {}
     for label in account_labels:
-        # Link + ad_account_id from Upload FB Accounts sheet
-        if ref:
-            info = get_account_info(ref, label)
-            link = (info.get("link") or "").strip()
-            excel_act_id = (info.get("ad_account_id") or "").strip()
-        else:
-            link = ""
-            excel_act_id = ""
+        info = get_account_info(ref, label, account_map=account_map)
+        link = (info.get("link") or "").strip()
+        excel_act_id = (info.get("ad_account_id") or "").strip()
         link_status = classify_link(link)
 
         # Account map completeness
@@ -859,11 +852,28 @@ def _add_linked_accounts_to_builder(report: dict) -> int:
     """
     from src.web import account_links
 
+    account_links.seed_from_account_map()
     by_key: dict[str, list[str]] = {}
     for stored in account_links.all_values("country"):
         by_key.setdefault(stored.casefold(), []).extend(
             account_links.accounts_for("country", stored)
         )
+
+    # A newly linked country can have no statistics at all, including no report
+    # section. Give it the same empty sections the dashboard already renders.
+    countries = report.setdefault("countries", [])
+    known = {key for c in countries for key in
+             {(c.get("country") or "").casefold(), _country_code(c.get("country") or "").casefold()}}
+    for stored in account_links.all_values("country"):
+        if stored.casefold() in known or _country_code(stored).casefold() in known:
+            continue
+        name = (next((n.title() for n, code in _COUNTRY_CODES.items() if code == stored.upper()), stored)
+                if len(stored) == 2 else stored)
+        countries.append({"country": name, "cm_comparison": [], "account_rows": [],
+                          "asset_summary": [], "asset_variants": [], "variants": [],
+                          "top_combos": [], "targeting": [], "creatives": [],
+                          "trend": {"has_date": False}, "close_recs": {}, "open_recs": {}})
+        known.update({name.casefold(), _country_code(name).casefold()})
 
     added = 0
     for country in report.get("countries", []):
@@ -1217,10 +1227,14 @@ def _render_report(
             status_code=503,
         )
 
-    _enrich_country_overview(report)
+    # Period reports are cached. Local links belong to this render, otherwise
+    # removed accounts remain in the cached builder on subsequent requests.
+    from copy import deepcopy
+    report = deepcopy(report)
     # До сборки списка аккаунтов ниже: добавленные должны получить и проверку
     # готовности, и строку в билдере, а не одно из двух.
     _add_linked_accounts_to_builder(report)
+    _enrich_country_overview(report)
     ref_opts = _load_ref_options()
 
     # Collect all account labels from open_recs across all countries
@@ -1387,6 +1401,14 @@ def workbook_alias_for(df, country: str, label: str) -> str:
         return label
 
 
+def _workbook_has_account(df, country: str, label: str) -> bool:
+    if df is None or "Account Alias" not in df.columns:
+        return False
+    from src.analysis_agent.analyze_fb_stats import alias_matches
+    sub = df[df["Country Final"] == country] if "Country Final" in df.columns else df
+    return bool(alias_matches(sub["Account Alias"], workbook_alias_for(df, country, label)).any())
+
+
 def _country_code(name: str) -> str:
     """Return 2-letter ISO code for a country name, or uppercase 2-char fallback."""
     if not name:
@@ -1482,7 +1504,9 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     "budget": budget,
                     "asset": asset_val,
                     "tracking_link": tracking_link,
+                    "tracking_link_provided": "tracking_link" in form,
                     "language": language,
+                    "language_provided": f"camp_{idx}_language" in form,
                 }
             )
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
@@ -2847,7 +2871,7 @@ async def account_map_remove(request: Request) -> JSONResponse:
 
 @app.post("/account-link-patch")
 async def account_link_patch(request: Request) -> JSONResponse:
-    """Write a tracking link directly to Upload FB.xlsx → Accounts sheet → Link column.
+    """Save a local link, with an Excel fallback for workbook-only accounts.
 
     Body JSON: {account_name: str, link: str}
     """
@@ -2860,6 +2884,15 @@ async def account_link_patch(request: Request) -> JSONResponse:
     link = (data.get("link") or "").strip()
     if not account_name:
         return JSONResponse({"ok": False, "error": "account_name is required"}, status_code=400)
+
+    # Local settings win on reads, so Save must write that same source first.
+    try:
+        saved = _save_link_to_machine_map(account_name, link)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"Could not save the link on this machine: {exc}"}, status_code=409)
+    if saved:
+        return JSONResponse({"ok": True, "account": account_name,
+                             "link_status": classify_link(link), "stored_in": "machine"})
 
     try:
         matched = _write_link_to_excel(account_name, link)

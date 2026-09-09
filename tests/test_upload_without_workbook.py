@@ -79,7 +79,7 @@ def test_an_empty_tracking_link_warns_and_does_not_block(enrich):
     """
     d = enrich(_draft())
     assert not any("link" in e.lower() for e in d.errors), d.errors
-    assert any("tracking link not set" in w for w in d.warnings), d.warnings
+    assert any("tracking link" in w.lower() for w in d.warnings), d.warnings
 
 
 def test_the_link_typed_in_the_builder_survives_enrichment(enrich):
@@ -177,7 +177,7 @@ def test_the_ad_text_comes_from_the_library(enrich, monkeypatch, tmp_path):
     monkeypatch.setattr(ar.paths, "get_local_config_dir", lambda: str(tmp_path))
     ar.add("AR Text 1", "للمزيد", "كم لديك من المال اليوم", "★★★★")
     monkeypatch.setattr(
-        "src.web.ad_copy_gsheet.lookup_ad_copy_by_title",
+        "src.analysis_agent.gsheet_ad_texts.load_ad_text_rows",
         lambda name: pytest.fail("пошли в таблицу при полной библиотеке"),
     )
     d = enrich(_draft(ad_sets=[AdSetDraft("Set", ads=[AdDraft(copy_name="AR Text 1")])]))
@@ -190,7 +190,7 @@ def test_the_ad_text_comes_from_the_library(enrich, monkeypatch, tmp_path):
 def test_an_ad_text_without_a_body_is_named(enrich, monkeypatch, tmp_path):
     """Пустое тело доедет до Ads Manager молча, если о нём не сказать."""
     monkeypatch.setattr(
-        "src.web.ad_copy_gsheet.lookup_ad_copy_by_title",
+        "src.fb_ads_rpa.enrich_draft.lookup_ad_copy_by_title",
         lambda name: {"headline": "H", "body": "", "description": ""},
     )
     d = enrich(_draft(ad_sets=[AdSetDraft("Set", ads=[AdDraft(copy_name="Нет такого")])]))

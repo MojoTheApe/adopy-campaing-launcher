@@ -2899,7 +2899,7 @@ async function dashRefresh(ev) {
   <strong>Free slot</strong> — GSheet has no campaigns for you today. All available accounts are shown. Add campaigns manually with "+ Add Campaign".
 </div>
 {% else %}
-<p class="hint" style="margin:0 0 0.75rem 0;font-size:0.78rem;color:var(--muted)">Pick creative, copy and targeting from your Upload FB.xlsx — then Submit to download a ready Excel.</p>
+<p class="hint" style="margin:0 0 0.75rem 0;font-size:0.78rem;color:var(--muted)">Choose creatives from your folder, ad copy and targeting from the local libraries, then preview and build a draft.</p>
 {% endif %}
 <div class="open-tree">
 {% for acc_label in c.open_recs.keys() | sort %}
@@ -2990,7 +2990,7 @@ async function dashRefresh(ev) {
         <span class="cb-preflight-label">Tracking link</span>
         <div class="cb-preflight-val">
           {% if pf.link_status == 'tracking' %}
-            <span class="cb-pf-ok cb-link-status-badge">✓ Saved in Upload FB</span>
+            <span class="cb-pf-ok cb-link-status-badge">✓ Saved tracking link</span>
           {% elif pf.link_status == 'jira' %}
             <span class="cb-pf-warn cb-link-status-badge">⚠ Jira URL — replace</span>
           {% else %}
@@ -4811,7 +4811,8 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
     d = await r.json();
   } catch (e) { d = { ok: false, message: String(e && e.message || e) }; }
   btn.disabled = false;
-  msg.textContent = (d && d.message) || '';
+  if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
+  msg.textContent = (d && (d.message || d.error)) || '';
   msg.className = 'amap-msg' + (d && d.ok ? '' : ' bad');
   if (!d || !d.ok) return;
   delete p._details;
@@ -6504,7 +6505,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     .then(function(d) {
       btn.disabled = false;
       if (d.ok) {
-        if (badge) { badge.textContent = '✓ Saved in Upload FB'; badge.className = 'cb-pf-ok cb-link-status-badge'; }
+        if (badge) { badge.textContent = '✓ Saved tracking link'; badge.className = 'cb-pf-ok cb-link-status-badge'; }
         input.classList.remove('cb-pf-missing');
         window.ACCOUNT_PREFLIGHT[accountName] = window.ACCOUNT_PREFLIGHT[accountName] || {};
         window.ACCOUNT_PREFLIGHT[accountName].link = link;
@@ -7932,9 +7933,8 @@ window.rpaWebsiteLabStep = function(step, btn) {
    позже руками, и решать это человеку. Задача — чтобы он решал, зная.
 
    Три разных случая, и путать их нельзя: ссылки нет вовсе; ссылка есть, но
-   это адрес задачи Jira, а не трекер; ссылка набрана, но не сохранена — тогда
-   в сборку уйдёт прежняя, а на экране человек видит новую. Последнее особенно
-   обманчиво: поле выглядит заполненным. */
+   это адрес задачи Jira, а не трекер; ссылка набрана, но не сохранена для
+   следующих сборок. Текущая сборка использует значение из формы. */
 window.cbTrackingWarning = function(form) {
   var input = form.querySelector('input[name="tracking_link"]');
   if (!input) return null;
@@ -7945,8 +7945,8 @@ window.cbTrackingWarning = function(form) {
 
   if (!typed) return { field: input, text: 'Трекинговой ссылки нет. Кампания соберётся, но клики считать будет нечем.' };
   if (typed !== saved) {
-    return { field: input, text: 'Ссылка набрана, но не сохранена — нажмите Save. В сборку уйдёт прежняя: '
-      + (saved || 'её нет вовсе') + '.' };
+    return { field: input, text: 'Ссылка не сохранена для следующих сборок — нажмите Save. В этой сборке будет использована: '
+      + typed + '.' };
   }
   if (pf.link_status === 'jira') {
     return { field: input, text: 'В поле адрес задачи Jira, а не трекер. Клики по нему не считаются.' };
