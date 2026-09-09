@@ -148,7 +148,10 @@ def enrich_campaign_drafts(
         if not entry.ad_account_id:
             draft.errors.append("ad_account_id not mapped in ad_account_map.csv")
         if not draft.link:
-            draft.errors.append("Link empty in Upload FB Accounts sheet")
+            if draft.status == "DRAFT":
+                draft.warnings.append("Tracking link is empty; add it to the draft before publishing in Meta")
+            else:
+                draft.errors.append("Link empty in Upload FB Accounts sheet")
         # page_id is only required for ACTIVE campaigns; drafts publish without it
         if not draft.page_id:
             draft.warnings.append("page_id not set — required for ACTIVE campaigns only")
@@ -193,12 +196,15 @@ def enrich_campaign_drafts(
                             f"(pick a file from the folder or set creative_id in Upload FB)"
                         )
 
-                # "Ad Title" — Google Sheet is the canonical source (was the Excel
-                # "Ad copy" sheet's "Ad copy name"; see fb_agents Obsidian diary,
-                # 2026-07-28). Independent of `ref` (Excel), which only backs the
-                # creative-file/interest/country lookups below.
+                # Resolve against the same local library shown by the builder.
+                # Missing/deleted copy must be corrected before opening a browser.
                 if ad.copy_name:
-                    copy = lookup_ad_copy_by_title(ad.copy_name)
+                    from src.analysis_agent.ad_text_registry import AdTextError
+                    try:
+                        copy = lookup_ad_copy_by_title(ad.copy_name)
+                    except AdTextError as exc:
+                        draft.errors.append(f"Ad text {ad.copy_name!r}: {exc}")
+                        continue
                     ad.ad_title = (copy.get("headline") or ad.copy_name or "").strip()
                     ad.ad_body = (copy.get("body") or "").strip()
                     ad.ad_link_description = (copy.get("description") or "").strip()

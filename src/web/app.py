@@ -461,14 +461,26 @@ def _build_account_map_view(
     per_country: dict[str, dict[str, dict]] = {}
     labels_in_report: set[str] = set()
     display_name: dict[str, str] = {}
+    # «Что сделать» и «готов ли» жили в отдельной секции под картой, где тот
+    # же аккаунт описывался второй раз — своими числами и своей формой
+    # подключения. Числа там дублировались, форма была хуже той, что на карте
+    # (просила номер кабинета руками вместо того, чтобы прочитать его у
+    # профиля), а эти два поля не показывались больше нигде. Секция убрана,
+    # поля переехали сюда.
+    todo_by_country: dict[str, dict[str, dict]] = {}
     for country in report.get("countries", []):
         name = (country.get("country") or "").strip()
         bucket: dict[str, dict] = {}
+        todo: dict[str, dict] = {}
         for row in country.get("account_rows") or []:
             label = (row.get("account_label") or "").strip()
             if not label:
                 continue
             labels_in_report.add(label)
+            todo[label.casefold()] = {
+                "to_do": row.get("to_do_display") or "",
+                "ready": bool(row.get("is_ready")),
+            }
             if period is None:
                 bucket[label] = row.get("account_excel") or {}
             else:
@@ -483,6 +495,7 @@ def _build_account_map_view(
         for key in {name.casefold(), _country_code(name).casefold()}:
             if key:
                 per_country[key] = bucket
+                todo_by_country[key] = todo
                 display_name.setdefault(key, name)
 
     map_path = get_ad_account_map_path()
@@ -556,6 +569,7 @@ def _build_account_map_view(
         # a Home screen reading "CR" next to a sidebar reading "Costa Rica"
         # invites the reader to wonder whether they are the same place.
         country_name = display_name.get(key) or wb_country.get(key, stored)
+        todo = todo_by_country.get(key, {})
         rows = []
         for label in account_links.accounts_for("country", stored):
             excel = _numbers(country_name, label) or stats.get(label) or {}
@@ -583,6 +597,12 @@ def _build_account_map_view(
                 # состояние кабинета — без периода: спенд отвечает «сколько за
                 # эти дни», состояние — «что с ним сейчас»
                 "status": _account_status(label),
+                # то же имя, что и у чисел: связка знает аккаунт по имени
+                # Multilogin, отчёт — по книжному
+                **{
+                    k: (todo.get((alias or label).casefold()) or todo.get(label.casefold()) or {}).get(k, "" if k == "to_do" else False)
+                    for k in ("to_do", "ready")
+                },
                 "assets": account_links.values_for(label, "asset"),
                 "countries": [
                     display_name.get(v.casefold(), v)
@@ -1705,22 +1725,28 @@ async def api_creatives() -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+def _ad_copy_rows() -> list[dict]:
+    """Read the same local library used by RPA; only new machines import once."""
+    from src.analysis_agent import ad_text_registry as ar
+
+    return [{"ad_title": t.name, "headline": t.headline, "body": t.body,
+             "description": t.description, "asset": t.asset,
+             "language": t.language} for t in ar.builder_texts()]
+
+
 @app.get("/api/ad-copy")
 async def api_ad_copy() -> JSONResponse:
-    """Return every "ad texts" row from the Google Sheet — canonical source for
-    the Campaign Builder's Ad Title search (see src/web/ad_copy_gsheet.py; the
-    old Excel "Ad copy" sheet is no longer used for this).
+    """Тексты объявлений для билдера.
 
     Returns [{ad_title, headline, body, description, asset, language}].
     """
-    from src.web.ad_copy_gsheet import load_ad_copy
+    from starlette.concurrency import run_in_threadpool
 
-    data = load_ad_copy()
-    rows = [
-        {"ad_title": title, **entry}
-        for title, entry in data.items()
-    ]
-    return JSONResponse({"rows": rows})
+    from src.analysis_agent.ad_text_registry import AdTextError
+    try:
+        return JSONResponse({"rows": await run_in_threadpool(_ad_copy_rows)})
+    except AdTextError as exc:
+        return JSONResponse({"rows": [], "error": str(exc)}, status_code=503)
 
 
 @app.get("/api/resolve-targeting")
@@ -2094,6 +2120,58 @@ async def api_edit_targeting_profile(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
     return await run_in_threadpool(_edit_targeting_profile, data)
+
+
+@app.get("/api/ad-texts")
+def api_ad_texts(force: bool = False) -> JSONResponse:
+    """Библиотека рекламных текстов. Чтение вкладки — в рабочем пуле FastAPI."""
+    from src.analysis_agent import ad_text_registry as ar
+    try:
+        sheet = ar.refresh(force=True) if force else ar.ensure_loaded()
+        texts = ar.all_texts()
+        return JSONResponse({"ok": True, "sheet": sheet,
+                             "duplicates": ar.duplicates(texts),
+                             "texts": [t.to_dict() for t in texts]})
+    except ar.AdTextError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
+
+
+_AD_TEXT_FIELDS = ("action", "name", "headline", "body", "description",
+                   "asset", "language", "was")
+
+
+def _edit_ad_text(data: dict) -> JSONResponse:
+    from src.analysis_agent import ad_text_registry as ar
+    if not isinstance(data, dict) or any(not isinstance(data.get(k, ""), str) for k in _AD_TEXT_FIELDS):
+        return JSONResponse({"ok": False, "error": "Expected an object with string fields"}, status_code=400)
+    action = (data.get("action") or "add").strip().lower()
+    name, headline, body, description, asset, language = (
+        data.get(k, "") for k in ("name", "headline", "body", "description", "asset", "language"))
+    try:
+        if action == "delete":
+            ar.remove(name)
+            return JSONResponse({"ok": True, "removed": name})
+        if action == "update":
+            text = ar.update(data.get("was") or name, name, headline, body, description, asset, language)
+        elif action == "add":
+            text = ar.add(name, headline, body, description, asset, language)
+        else:
+            raise ar.AdTextError(f"Неизвестное действие: {action}")
+    except ar.AdTextError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    return JSONResponse({"ok": True, "text": text.to_dict()})
+
+
+@app.post("/api/ad-texts")
+async def api_edit_ad_text(request: Request) -> JSONResponse:
+    from starlette.concurrency import run_in_threadpool
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    return await run_in_threadpool(_edit_ad_text, data)
 
 
 @app.get("/api/parse-adset")

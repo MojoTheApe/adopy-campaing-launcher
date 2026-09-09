@@ -323,6 +323,42 @@
     }
     .view-panel { display: none; }
     .view-panel.active { display: block; }
+
+    /* ── Ad titles ──────────────────────────────────────────────────────
+       Карточка на текст: имя и язык сверху, заголовок, тело, описание.
+       Тело зажато до трёх строк — иначе один текст занимает пол-экрана, а их
+       три сотни. Разжимается кликом по самому телу, без отдельной кнопки. */
+    .at-group { margin: 1.2rem 0 0.4rem; display: flex; align-items: baseline; gap: 0.5rem; }
+    .at-group h3 { font-size: 0.95rem; margin: 0; }
+    .at-group span { color: var(--muted); font-size: 0.8rem; }
+    .at-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.7rem 0.85rem;
+      margin-bottom: 0.5rem;
+      background: var(--bg-elev);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.35rem 0.8rem;
+    }
+    .at-card > .at-actions { grid-row: 1 / span 4; grid-column: 2; display: flex; flex-direction: column; gap: 0.3rem; }
+    .at-name { font-weight: 600; }
+    .at-badge {
+      font-size: 0.7rem; letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--muted); border: 1px solid var(--border); border-radius: 999px;
+      padding: 0.05rem 0.45rem; margin-left: 0.4rem; vertical-align: 0.08em;
+    }
+    .at-badge.at-local { color: var(--accent); border-color: var(--accent); }
+    .at-headline { color: var(--accent); }
+    /* Тело хранит собственные переносы — pre-wrap, иначе абзацы схлопнутся
+       в сплошняк и текст на экране перестанет совпадать с текстом в Facebook. */
+    .at-body {
+      white-space: pre-wrap; line-height: 1.45; cursor: pointer;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .at-body.at-open { -webkit-line-clamp: unset; display: block; }
+    .at-desc { color: var(--muted); font-size: 0.85rem; }
+    .at-dup { color: var(--danger); }
     h2.view-title {
       font-size: 1.125rem;
       font-weight: 600;
@@ -1282,6 +1318,20 @@
     }
     .cb-slot-name:empty::before { content: 'Campaign name will appear here'; color: var(--muted); font-weight: normal; }
 
+    /* Предупреждение о ссылке. Не красное: это не отказ, а «посмотрите
+       сюда» — собрать всё равно можно. Красным помечается сломанное. */
+    .cb-warn-block {
+      background: var(--warn-soft); border: 1px solid var(--warn);
+      color: var(--text); border-radius: var(--radius-sm);
+      padding: 0.5rem 0.7rem; margin-bottom: 0.7rem;
+      font-size: 0.82rem; line-height: 1.4;
+    }
+    /* Подсветка поля живёт до первой правки — человек видит, куда смотреть,
+       и метка уходит сама, как только он начал вводить. */
+    .cb-field-warn {
+      border-color: var(--warn) !important;
+      box-shadow: 0 0 0 2px var(--warn-soft);
+    }
     .cb-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.6rem; }
     .cb-preview-btn {
       background: var(--bg-elev);
@@ -2332,6 +2382,7 @@ async function dashRefresh(ev) {
   <div class="sidebar-label">Main</div>
   <button type="button" class="sidebar-link sidebar-home active" data-view="home">🏠 Home</button>
   <button type="button" class="sidebar-link" data-view="targets">🎯 Targeting</button>
+  <button type="button" class="sidebar-link" data-view="ad-texts">✍️ Ad titles</button>
   <button type="button" class="sidebar-link" data-view="accounts">🔌 Accounts</button>
 
   <div class="sidebar-label">Countries</div>
@@ -2474,6 +2525,69 @@ async function dashRefresh(ev) {
       Other editors should pause changes during export. Existing local copies on other machines are not deleted.</p>
     <button type="button" id="tg-export-btn" class="btn">Replace shared sheet…</button>
   </details>
+</div>
+
+{# ── Ad titles: библиотека рекламных текстов ─────────────────────────────
+   Триста с лишним текстов на двух языках. Список такой длины читают не
+   сверху вниз, а поиском, поэтому наверху строка поиска и отбор по языку,
+   а сами тексты разложены по языкам с числом в заголовке.
+
+   Тело объявления — многострочное, с абзацами и эмодзи. Показывать его в
+   ячейке таблицы бессмысленно: строки разъедутся, а прочитать всё равно
+   нельзя. Поэтому карточка с зажатым до трёх строк телом и раскрытием по
+   клику. -#}
+<div id="view-ad-texts" class="view-panel">
+  <h2 class="view-title">Ad titles <span class="hint">headline, body and description</span></h2>
+  <p style="color:var(--muted);max-width:70ch">
+    Тексты объявлений живут здесь, на машине. Вкладка «ad texts» общей таблицы
+    осталась источником наполнения: «Load from the sheet» дочитывает её, но
+    ничего туда не пишет. Правка и удаление действуют на этой машине.
+  </p>
+
+  <div id="at-form" style="margin:1rem 0;padding:0.9rem 1rem;border:1px solid var(--border);border-radius:6px;max-width:80ch;background:var(--bg-elev)">
+    <div style="display:flex;flex-wrap:wrap;gap:0.6rem">
+      <label style="flex:2 1 18rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Ad title</div>
+        <input id="at-name" type="text" placeholder="ES how much" style="width:100%">
+      </label>
+      <label style="flex:0 0 6rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Language</div>
+        <input id="at-language" type="text" placeholder="AR" style="width:100%">
+      </label>
+      <label style="flex:1 1 10rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Asset</div>
+        <input id="at-asset" type="text" placeholder="" style="width:100%">
+      </label>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:0.6rem;margin-top:0.6rem">
+      <label style="flex:2 1 22rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Headline</div>
+        <input id="at-headline" type="text" placeholder="Registre-se agora&gt;&gt;&gt;" style="width:100%">
+      </label>
+      <label style="flex:1 1 12rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Description</div>
+        <input id="at-description" type="text" placeholder="★★★★⯪4.6k" style="width:100%">
+      </label>
+    </div>
+    <label style="display:block;margin-top:0.6rem">
+      <div style="font-size:0.75rem;color:var(--muted)">Body — переносы строк сохраняются как есть</div>
+      <textarea id="at-body" rows="5" style="width:100%;font-family:inherit;line-height:1.45"></textarea>
+    </label>
+    <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-top:0.6rem">
+      <button type="button" id="at-add-btn" class="btn">Add</button>
+      <button type="button" id="at-cancel-btn" class="btn" hidden>Cancel edit</button>
+      <button type="button" id="at-refresh-btn" class="btn">Load from the sheet</button>
+      <span id="at-msg" style="font-size:0.85rem"></span>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin:0.8rem 0">
+    <input id="at-search" type="search" placeholder="Search title, headline or body…" style="flex:1 1 22rem;max-width:32rem">
+    <select id="at-lang-filter" style="flex:0 0 auto"><option value="">All languages</option></select>
+    <span id="at-count" style="color:var(--muted);font-size:0.85rem"></span>
+  </div>
+
+  <div id="at-list">Loading…</div>
 </div>
 
 <div id="view-home" class="view-panel active">
@@ -2626,44 +2740,18 @@ async function dashRefresh(ev) {
 </div>
 </div>
 <div class="manage-part">
-<h2 class="view-title">{{ c.country }}: Account Statuses</h2>
+{#- Секция «Account Statuses» убрана 8 сентября.
 
-<div class="ac-country-add" data-country-name="{{ c.country }}"
-     style="margin:0.6rem 0 1rem;padding:0.7rem 0.9rem;border:1px solid var(--border);border-radius:6px">
-  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-end">
-    <label style="flex:1 1 15rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Connect an account to {{ c.country }}</div>
-      <input class="acq-label" type="text" placeholder="account name" style="width:100%" autocomplete="off">
-    </label>
-    <label style="flex:1 1 13rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Ad account</div>
-      <input class="acq-adid" type="text" placeholder="filled in from the profile" style="width:100%"
-             title="Filled in automatically from the profile you pick. Otherwise paste the address from the Ads Manager address bar.">
-    </label>
-    <label style="flex:0 0 13rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Multilogin profile</div>
-      <select class="acq-prof" style="width:100%"></select>
-    </label>
-    <button type="button" class="btn acq-add">Add</button>
-    <span class="acq-msg" style="font-size:0.75rem"></span>
-  </div>
-  <div class="acq-connected" style="margin-top:0.6rem;font-size:0.8rem;color:var(--muted)"></div>
-</div>
+    В ней тот же аккаунт описывался второй раз: свои числа (`Cost` — тот же
+    спенд), своя колонка Ad Asset, которую просили убрать с карты, и своя
+    форма подключения. Форма была хуже той, что на карте: та ищет профиль по
+    последним буквам и **читает номер кабинета из его же истории**, а эта
+    просила номер руками.
 
-<table>
-  <thead><tr><th>Account</th><th>Cost</th><th>Ad Asset</th><th>To Do</th><th>✓</th></tr></thead>
-  <tbody>
-  {% for r in c.account_rows %}
-    <tr>
-      <td>{{ r.account_label }}</td>
-      <td class="num">{{ r.cost | fmt_usd }}</td>
-      <td>{{ r.stock or '—' }}</td>
-      <td>{{ r.to_do_display }}</td>
-      <td>{% if r.is_ready %}✅{% else %}❌{% endif %}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+    Уникальными здесь были только «To Do» и «готов» — они переехали в таблицу
+    аккаунтов выше, к статусу. Одно место подключения вместо двух, одна строка
+    на аккаунт вместо двух. -#}
+
 </div>
 <details class="manage-builder" id="manage-builder-{{ cid }}">
   {#- Билдер — не панель, а страница: свои слоты, аккордеон аккаунтов,
@@ -3575,6 +3663,7 @@ function aclCountryBuilder(country) {
   function parseHash(hash) {
     if (!hash || hash.charAt(0) !== '#') return { view: 'home' };
     if (hash === '#home') return { view: 'home' };
+    if (['targets', 'ad-texts', 'accounts'].indexOf(hash.slice(1)) !== -1) return { view: hash.slice(1) };
     var m = hash.match(/^#country-([a-z0-9-]+)-([a-z0-9-]+)$/);
     if (m) return { view: 'country-' + m[1] + '-' + m[2], country: m[1] };
     return { view: 'home' };
@@ -5458,15 +5547,39 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     }
   });
 
-  // ── Ad Title (ad copy/text) — sourced from the "ad texts" Google Sheet
-  // tab (Ad Title / Headline / Body / Description / Asset / Language),
-  // replacing the old Excel "Ad copy" sheet. Same fetch-once-filter-client-
-  // side pattern as CREATIVES above.
+  // ── Ad Title: the local library is shared with RPA draft enrichment.
   var AD_TITLES = [];  // [{ad_title, headline, body, description, asset, language}]
-  fetch('/api/ad-copy')
-    .then(function(r){ return r.json(); })
-    .then(function(d){ AD_TITLES = d.rows || []; cbpRenderAll(); })
-    .catch(function(){});
+  var AD_TITLES_ERROR = '', adTitlesVersion = 0;
+  function replaceAdTitles(rows) {
+    AD_TITLES = rows.map(function(t) {
+      return {ad_title:t.ad_title || t.name, headline:t.headline, body:t.body,
+        description:t.description, asset:t.asset, language:t.language};
+    });
+    AD_TITLES_ERROR = '';
+    cbpRenderAll();
+  }
+  function reloadAdTitles() {
+    var version = ++adTitlesVersion;
+    return fetch('/api/ad-copy').then(async function(r) {
+      var d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Could not load ad titles');
+      if (version === adTitlesVersion) replaceAdTitles(d.rows || []);
+    }).catch(function(e) {
+      if (version !== adTitlesVersion) return;
+      AD_TITLES = [];
+      AD_TITLES_ERROR = e.message || 'Could not load ad titles';
+      cbpRenderAll();
+    });
+  }
+  document.addEventListener('acl:adtextschange', function(e) {
+    if (e.detail && Array.isArray(e.detail.texts)) {
+      ++adTitlesVersion; // A late initial response cannot replace a newer edit.
+      replaceAdTitles(e.detail.texts);
+    } else {
+      reloadAdTitles();
+    }
+  });
+  reloadAdTitles();
 
   // ── Ad preview mini-cards (grill session 2026-08-02) ─────────────────
   // One FB-like card per ad row, rendered into the slot's [data-preview-col].
@@ -5627,7 +5740,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
           || (t.headline || '').toLowerCase().indexOf(query) >= 0;
     }).slice(0, 60);
 
-    if (!matches.length && !query) {
+    if (!matches.length && !query && !AD_TITLES_ERROR) {
       dropdown.hidden = true;
       return;
     }
@@ -5639,7 +5752,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         (preview ? '<br><span style="font-size:0.66rem;color:var(--muted)">' + aclEscHtml(preview) + '</span>' : '') +
         '</div>';
     }).join('');
-    if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:0.72rem;pointer-events:none">No ad titles found</div>';
+    if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:0.72rem;pointer-events:none">'
+      + aclEscHtml(AD_TITLES_ERROR || 'No ad titles found') + '</div>';
 
     dropdown.innerHTML = html;
     dropdown.hidden = false;
@@ -6247,6 +6361,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       if (d.ok) {
         if (badge) { badge.textContent = '✓ Saved in Upload FB'; badge.className = 'cb-pf-ok cb-link-status-badge'; }
         input.classList.remove('cb-pf-missing');
+        window.ACCOUNT_PREFLIGHT[accountName] = window.ACCOUNT_PREFLIGHT[accountName] || {};
+        window.ACCOUNT_PREFLIGHT[accountName].link = link;
+        window.ACCOUNT_PREFLIGHT[accountName].link_status = d.link_status;
       } else {
         if (badge) { badge.textContent = '✗ ' + (d.error || 'Error'); badge.className = 'cb-pf-err cb-link-status-badge'; }
       }
@@ -7654,6 +7771,56 @@ window.rpaWebsiteLabStep = function(step, btn) {
   .then(function(s) { _rpaLabRender(panel, s); });
 };
 
+/* Трекинговая ссылка: предупредить, но не запрещать.
+
+   Кампания без ссылки собирается и уходит в черновик — Meta её примет, и в
+   Ads Manager всё будет выглядеть готовым. Не будет только учёта: клики
+   некуда считать, и обнаружится это не при сборке, а через день, когда за
+   лиды спросят.
+
+   Поэтому не запрет, а предупреждение: бывают случаи, когда ссылку ставят
+   позже руками, и решать это человеку. Задача — чтобы он решал, зная.
+
+   Три разных случая, и путать их нельзя: ссылки нет вовсе; ссылка есть, но
+   это адрес задачи Jira, а не трекер; ссылка набрана, но не сохранена — тогда
+   в сборку уйдёт прежняя, а на экране человек видит новую. Последнее особенно
+   обманчиво: поле выглядит заполненным. */
+window.cbTrackingWarning = function(form) {
+  var input = form.querySelector('input[name="tracking_link"]');
+  if (!input) return null;
+  var typed = (input.value || '').trim();
+  var acc = ((form.querySelector('[name="account_label"]') || {}).value || '').trim();
+  var pf = (typeof ACCOUNT_PREFLIGHT !== 'undefined' && ACCOUNT_PREFLIGHT[acc]) || {};
+  var saved = (pf.link || '').trim();
+
+  if (!typed) return { field: input, text: 'Трекинговой ссылки нет. Кампания соберётся, но клики считать будет нечем.' };
+  if (typed !== saved) {
+    return { field: input, text: 'Ссылка набрана, но не сохранена — нажмите Save. В сборку уйдёт прежняя: '
+      + (saved || 'её нет вовсе') + '.' };
+  }
+  if (pf.link_status === 'jira') {
+    return { field: input, text: 'В поле адрес задачи Jira, а не трекер. Клики по нему не считаются.' };
+  }
+  if (pf.link_status !== 'tracking') {
+    return { field: input, text: 'Ссылка не похожа на трекинговую. Проверьте её перед сборкой.' };
+  }
+  return null;
+};
+
+/* Подсветить поле так, чтобы его было видно. Раскрываем свёрнутую панель:
+   подсветка внутри закрытого блока — это подсветка, которой не видно. */
+window.cbHighlightField = function(field) {
+  if (!field) return;
+  var panel = field.closest('.cb-preflight');
+  if (panel) panel.classList.remove('cb-preflight-collapsed');
+  field.classList.add('cb-field-warn');
+  try { field.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+  field.addEventListener('input', function once() {
+    field.classList.remove('cb-field-warn');
+    field.removeEventListener('input', once);
+  });
+};
+
 window.cbPublish = function(form) {
   var accLabel  = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
   var country   = ((form.querySelector('[name="country"]') || {}).value || '?').trim();
@@ -7668,9 +7835,19 @@ window.cbPublish = function(form) {
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)</span>';
 
+  // Предупреждение идёт первым блоком: его читают, пока смотрят, что
+  // собирается, — а не после того, как уже нажали.
+  var warn = window.cbTrackingWarning(form);
+  if (warn) {
+    window.cbHighlightField(warn.field);
+    bodyHtml = '<div class="cb-warn-block">⚠ ' + aclEscHtml(warn.text)
+      + '<br><span style="opacity:.75">Собрать всё равно можно — ссылку добавляют и позже.</span></div>'
+      + bodyHtml;
+  }
+
   _safeConfirm('Build this campaign as a draft?', bodyHtml, function() {
     _doCbPublish(form);
-  }, { confirmLabel: 'Publish → draft' });
+  }, { confirmLabel: warn ? 'Собрать с предупреждением' : 'Publish → draft' });
 };
 
 function _doCbPublish(form) {
@@ -8610,6 +8787,199 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     if (t.getAttribute('data-view') === 'targets') load(false);
   });
   if ((location.hash || '').indexOf('targets') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
+})();
+</script>
+
+{# Отдельный <script> намеренно: проверка таргетов (tests/targeting_ui_harness.cjs)
+   вырезает свой код от метки до ближайшего `</script>` и подменяет
+   `addEventListener` заглушкой, которая помнит один обработчик на событие.
+   Второй обработчик в том же блоке молча вытеснял бы первый. #}
+<script>
+// ── Ad titles: библиотека рекламных текстов ──────────────────────────────
+// Тот же порядок, что у таргетов: список — данные, а не разметка; имя текста
+// живёт в data-атрибуте, а не в селекторе.
+(function () {
+  var texts = [], editing = '', pending = false, loaded = false;
+  var FIELDS = ['name', 'headline', 'body', 'description', 'asset', 'language'];
+  function el(id) { return document.getElementById(id); }
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function say(text, error) { el('at-msg').textContent = text || ''; el('at-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
+  function busy(value) {
+    pending = value;
+    document.querySelectorAll('#at-form button, #at-form input, #at-form textarea').forEach(function (b) { b.disabled = value; });
+  }
+  // Язык у 113 строк вкладки не заполнен. Выдумывать его нельзя — ES и PT
+  // пишутся одним письмом, и «угадать» значит подписать текст не тем языком.
+  function langOf(t) { return (t.language || '').trim() || '—'; }
+
+  function matches(t, needle) {
+    if (!needle) return true;
+    return FIELDS.some(function (f) { return String(t[f] || '').toLowerCase().indexOf(needle) !== -1; });
+  }
+
+  function render() {
+    var needle = (el('at-search').value || '').trim().toLowerCase();
+    var only = el('at-lang-filter').value;
+    var shown = texts.filter(function (t) { return matches(t, needle) && (!only || langOf(t) === only); });
+    el('at-count').textContent = shown.length === texts.length
+      ? texts.length + ' texts'
+      : shown.length + ' of ' + texts.length + ' texts';
+
+    var groups = Object.create(null);
+    shown.forEach(function (t) { (groups[langOf(t)] = groups[langOf(t)] || []).push(t); });
+    // Языки по алфавиту, безъязыкие — в конец: они не язык, а незаполненное поле.
+    var names = Object.keys(groups).sort(function (a, b) {
+      if (a === '—') return 1;
+      if (b === '—') return -1;
+      return a.localeCompare(b);
+    });
+    if (!shown.length) { el('at-list').innerHTML = '<p style="color:var(--muted)">Nothing matches.</p>'; return; }
+
+    var html = '';
+    names.forEach(function (lang) {
+      html += '<div class="at-group"><h3>' + esc(lang === '—' ? 'Language not set' : lang) + '</h3>'
+        + '<span>' + groups[lang].length + '</span></div>';
+      groups[lang].forEach(function (t) {
+        html += '<div class="at-card">'
+          + '<div class="at-name">' + esc(t.name)
+          + (t.source === 'sheet' ? '' : '<span class="at-badge at-local">local</span>')
+          + (t.asset ? '<span class="at-badge">' + esc(t.asset) + '</span>' : '')
+          + '</div>'
+          + '<div class="at-actions">'
+          + '<button type="button" class="btn" data-at-edit="' + esc(t.name) + '">Edit</button>'
+          + '<button type="button" class="btn" data-at-del="' + esc(t.name) + '">Remove</button>'
+          + '</div>'
+          + (t.headline ? '<div class="at-headline">' + esc(t.headline) + '</div>' : '')
+          + (t.body ? '<div class="at-body" title="Click to expand">' + esc(t.body) + '</div>' : '')
+          + (t.description ? '<div class="at-desc">' + esc(t.description) + '</div>' : '')
+          + '</div>';
+      });
+    });
+    el('at-list').innerHTML = html;
+  }
+
+  function fillLanguages() {
+    var seen = Object.create(null), options = ['<option value="">All languages</option>'];
+    texts.forEach(function (t) { seen[langOf(t)] = true; });
+    Object.keys(seen).sort().forEach(function (lang) {
+      options.push('<option value="' + esc(lang) + '">' + esc(lang === '—' ? 'Language not set' : lang) + '</option>');
+    });
+    var was = el('at-lang-filter').value;
+    el('at-lang-filter').innerHTML = options.join('');
+    if (seen[was]) el('at-lang-filter').value = was;
+  }
+
+  function report(sheet) {
+    if (!sheet) return '';
+    var parts = [];
+    if (sheet.error) return 'Sheet could not be read: ' + sheet.error + '. Showing the saved library.';
+    if (sheet.added) parts.push('added ' + sheet.added);
+    if (sheet.updated) parts.push('updated ' + sheet.updated);
+    // Пропущенное называется поимённо: молчаливый перенос оставил бы
+    // уверенность, что доехало всё. Но повторять этот список при каждом
+    // открытии раздела незачем — он относится к переносу, а не к библиотеке.
+    if ((sheet.skipped || []).length) parts.push('skipped ' + sheet.skipped.length + ': ' + sheet.skipped.slice(0, 3).join('; ')
+      + (sheet.skipped.length > 3 ? ' …' : ''));
+    if ((sheet.renamed || []).length) parts.push((sheet.renamed || []).length + ' rows had no title and were named by row number');
+    return parts.join(' · ');
+  }
+
+  /* `keepMessage` — перечитывание после сохранения. Без него отчёт о переносе
+     затирает то, что человек только что сделал: он нажал Add, а на экране
+     появляется «updated 316 · skipped 11…», и результат его собственного
+     действия узнать неоткуда. */
+  async function load(force, keepMessage) {
+    if (pending) return;
+    busy(true);
+    if (force) say('Reading the sheet…');
+    try {
+      var r = await fetch('/api/ad-texts' + (force ? '?force=true' : ''));
+      var d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'Could not load');
+      texts = d.texts || [];
+      loaded = true;
+      document.dispatchEvent(new CustomEvent('acl:adtextschange', {detail:{texts:texts}}));
+      fillLanguages();
+      render();
+      var duplicates = d.duplicates || {};
+      var warning = '';
+      if ((duplicates.names || []).length) warning += 'Same title twice: ' + duplicates.names.join(', ') + '. ';
+      (duplicates.texts || []).forEach(function (names) { warning += 'Same text: ' + names.join(' = ') + '. '; });
+      var note = report(d.sheet);
+      if (warning) { say(warning + note, true); }
+      else if (keepMessage) { /* сообщение о сохранении остаётся на месте */ }
+      else if (note) { say(note, !!(d.sheet || {}).error); }
+      else if (force) { say('The sheet added nothing new.'); }
+    } catch (e) { say(e.message || String(e), true); el('at-list').textContent = ''; }
+    finally { busy(false); }
+  }
+
+  function clearForm() {
+    FIELDS.forEach(function (f) { el('at-' + f).value = ''; });
+    editing = '';
+    el('at-add-btn').textContent = 'Add';
+    el('at-cancel-btn').hidden = true;
+  }
+
+  async function send(body) {
+    if (pending) return;
+    busy(true); say('Saving…');
+    var saved = false;
+    try {
+      var r = await fetch('/api/ad-texts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+      var d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'Could not save');
+      saved = true;
+      document.dispatchEvent(new CustomEvent('acl:adtextschange'));
+      if (body.action === 'delete') say('Removed from this machine: ' + body.name);
+      else if (body.action === 'update') say('Saved on this machine.');
+      else say('Added.');
+      if (body.action !== 'delete') clearForm();
+    } catch (e) { say(e.message || String(e), true); }
+    finally { busy(false); }
+    if (saved) await load(false, true);
+  }
+
+  function startEdit(name) {
+    var t = texts.find(function (t) { return t.name === name; });
+    if (!t) return;
+    FIELDS.forEach(function (f) { el('at-' + f).value = t[f] || ''; });
+    editing = name;
+    el('at-add-btn').textContent = 'Save';
+    el('at-cancel-btn').hidden = false;
+    el('at-form').scrollIntoView({ block: 'nearest' });
+    say('Editing: ' + name + '. Cancel edit returns to adding a new text.');
+  }
+
+  function payload(action) {
+    var body = { action: action, was: editing };
+    FIELDS.forEach(function (f) { body[f] = el('at-' + f).value; });
+    return body;
+  }
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t || !t.getAttribute) return;
+    var body = t.closest ? t.closest('.at-body') : null;
+    if (body) { body.classList.toggle('at-open'); return; }
+    if (pending) return;
+    if (t.id === 'at-add-btn') { send(payload(editing ? 'update' : 'add')); return; }
+    if (t.id === 'at-cancel-btn') { clearForm(); say(''); return; }
+    if (t.id === 'at-refresh-btn') { load(true); return; }
+    var name = t.getAttribute('data-at-edit');
+    if (name) { startEdit(name); return; }
+    name = t.getAttribute('data-at-del');
+    if (name) { if (confirm('Remove «' + name + '» from this machine?')) send({action:'delete', name:name}); return; }
+    if (t.getAttribute('data-view') === 'ad-texts' && !loaded) load(false);
+  });
+  ['at-search', 'at-lang-filter'].forEach(function (id) {
+    document.addEventListener('input', function (ev) { if (ev.target && ev.target.id === id) render(); });
+    document.addEventListener('change', function (ev) { if (ev.target && ev.target.id === id) render(); });
+  });
+  if ((location.hash || '').indexOf('ad-texts') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
+  document.addEventListener('acl:viewchange', function(e) {
+    if (e.detail && e.detail.view === 'ad-texts' && !loaded) load(false);
+  });
 })();
 </script>
 
