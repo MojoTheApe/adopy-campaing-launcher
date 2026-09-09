@@ -225,3 +225,32 @@ def test_the_flow_names_the_run_once():
     """Сторож: без этого вызова наследовать нечего."""
     source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
     assert "_telemetry.set_current_run(run_id" in source
+
+
+# ── попытка — это не отказ ────────────────────────────────────────────────
+
+def test_a_retry_is_not_recorded_as_a_failed_step():
+    """Шаг, который не падал ни разу, имел сто процентов отказов.
+
+    Первый клик через CDP регулярно не передаёт фокус, текст не ложится, и
+    вторая попытка кладёт его. Каждая первая попытка писалась отдельной
+    строкой `ok=False` — 9 сентября таких три за прогон при трёх успешных
+    `ad_copy`. По такой статистике чинят то, что работает, и не замечают
+    того, что сломано.
+    """
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    block = source[source.index("def _dump_stage"):]
+    block = block[: block.index("def _locate")]
+    assert "_telemetry.record(" not in block, "попытка снова пишется отдельной записью"
+    assert 'report["attempts"]' in block, "попытка никуда не записывается — хуже прежнего"
+
+
+def test_the_attempts_reach_the_failure_record():
+    """Убрать шум — не значит потерять подробности.
+
+    Если шаг всё-таки упал, стадии всех попыток должны лежать рядом с
+    отказом: без них останется голое «ad_copy ✗», с которого всё начиналось.
+    """
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    assert '_shot("fail_ad_copy", copy_report)' in source
+    assert '_shot(f"fail_{tag}_copy", copy_report)' in source
