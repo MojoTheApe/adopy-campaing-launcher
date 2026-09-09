@@ -323,6 +323,42 @@
     }
     .view-panel { display: none; }
     .view-panel.active { display: block; }
+
+    /* ── Ad titles ──────────────────────────────────────────────────────
+       Карточка на текст: имя и язык сверху, заголовок, тело, описание.
+       Тело зажато до трёх строк — иначе один текст занимает пол-экрана, а их
+       три сотни. Разжимается кликом по самому телу, без отдельной кнопки. */
+    .at-group { margin: 1.2rem 0 0.4rem; display: flex; align-items: baseline; gap: 0.5rem; }
+    .at-group h3 { font-size: 0.95rem; margin: 0; }
+    .at-group span { color: var(--muted); font-size: 0.8rem; }
+    .at-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.7rem 0.85rem;
+      margin-bottom: 0.5rem;
+      background: var(--bg-elev);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.35rem 0.8rem;
+    }
+    .at-card > .at-actions { grid-row: 1 / span 4; grid-column: 2; display: flex; flex-direction: column; gap: 0.3rem; }
+    .at-name { font-weight: 600; }
+    .at-badge {
+      font-size: 0.7rem; letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--muted); border: 1px solid var(--border); border-radius: 999px;
+      padding: 0.05rem 0.45rem; margin-left: 0.4rem; vertical-align: 0.08em;
+    }
+    .at-badge.at-local { color: var(--accent); border-color: var(--accent); }
+    .at-headline { color: var(--accent); }
+    /* Тело хранит собственные переносы — pre-wrap, иначе абзацы схлопнутся
+       в сплошняк и текст на экране перестанет совпадать с текстом в Facebook. */
+    .at-body {
+      white-space: pre-wrap; line-height: 1.45; cursor: pointer;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .at-body.at-open { -webkit-line-clamp: unset; display: block; }
+    .at-desc { color: var(--muted); font-size: 0.85rem; }
+    .at-dup { color: var(--danger); }
     h2.view-title {
       font-size: 1.125rem;
       font-weight: 600;
@@ -2346,6 +2382,7 @@ async function dashRefresh(ev) {
   <div class="sidebar-label">Main</div>
   <button type="button" class="sidebar-link sidebar-home active" data-view="home">🏠 Home</button>
   <button type="button" class="sidebar-link" data-view="targets">🎯 Targeting</button>
+  <button type="button" class="sidebar-link" data-view="ad-texts">✍️ Ad titles</button>
   <button type="button" class="sidebar-link" data-view="accounts">🔌 Accounts</button>
 
   <div class="sidebar-label">Countries</div>
@@ -2488,6 +2525,69 @@ async function dashRefresh(ev) {
       Other editors should pause changes during export. Existing local copies on other machines are not deleted.</p>
     <button type="button" id="tg-export-btn" class="btn">Replace shared sheet…</button>
   </details>
+</div>
+
+{# ── Ad titles: библиотека рекламных текстов ─────────────────────────────
+   Триста с лишним текстов на двух языках. Список такой длины читают не
+   сверху вниз, а поиском, поэтому наверху строка поиска и отбор по языку,
+   а сами тексты разложены по языкам с числом в заголовке.
+
+   Тело объявления — многострочное, с абзацами и эмодзи. Показывать его в
+   ячейке таблицы бессмысленно: строки разъедутся, а прочитать всё равно
+   нельзя. Поэтому карточка с зажатым до трёх строк телом и раскрытием по
+   клику. -#}
+<div id="view-ad-texts" class="view-panel">
+  <h2 class="view-title">Ad titles <span class="hint">headline, body and description</span></h2>
+  <p style="color:var(--muted);max-width:70ch">
+    Тексты объявлений живут здесь, на машине. Вкладка «ad texts» общей таблицы
+    осталась источником наполнения: «Load from the sheet» дочитывает её, но
+    ничего туда не пишет. Правка и удаление действуют на этой машине.
+  </p>
+
+  <div id="at-form" style="margin:1rem 0;padding:0.9rem 1rem;border:1px solid var(--border);border-radius:6px;max-width:80ch;background:var(--bg-elev)">
+    <div style="display:flex;flex-wrap:wrap;gap:0.6rem">
+      <label style="flex:2 1 18rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Ad title</div>
+        <input id="at-name" type="text" placeholder="ES how much" style="width:100%">
+      </label>
+      <label style="flex:0 0 6rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Language</div>
+        <input id="at-language" type="text" placeholder="AR" style="width:100%">
+      </label>
+      <label style="flex:1 1 10rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Asset</div>
+        <input id="at-asset" type="text" placeholder="" style="width:100%">
+      </label>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:0.6rem;margin-top:0.6rem">
+      <label style="flex:2 1 22rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Headline</div>
+        <input id="at-headline" type="text" placeholder="Registre-se agora&gt;&gt;&gt;" style="width:100%">
+      </label>
+      <label style="flex:1 1 12rem">
+        <div style="font-size:0.75rem;color:var(--muted)">Description</div>
+        <input id="at-description" type="text" placeholder="★★★★⯪4.6k" style="width:100%">
+      </label>
+    </div>
+    <label style="display:block;margin-top:0.6rem">
+      <div style="font-size:0.75rem;color:var(--muted)">Body — переносы строк сохраняются как есть</div>
+      <textarea id="at-body" rows="5" style="width:100%;font-family:inherit;line-height:1.45"></textarea>
+    </label>
+    <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-top:0.6rem">
+      <button type="button" id="at-add-btn" class="btn">Add</button>
+      <button type="button" id="at-cancel-btn" class="btn" hidden>Cancel edit</button>
+      <button type="button" id="at-refresh-btn" class="btn">Load from the sheet</button>
+      <span id="at-msg" style="font-size:0.85rem"></span>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin:0.8rem 0">
+    <input id="at-search" type="search" placeholder="Search title, headline or body…" style="flex:1 1 22rem;max-width:32rem">
+    <select id="at-lang-filter" style="flex:0 0 auto"><option value="">All languages</option></select>
+    <span id="at-count" style="color:var(--muted);font-size:0.85rem"></span>
+  </div>
+
+  <div id="at-list">Loading…</div>
 </div>
 
 <div id="view-home" class="view-panel active">
@@ -8658,6 +8758,194 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
     if (t.getAttribute('data-view') === 'targets') load(false);
   });
   if ((location.hash || '').indexOf('targets') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
+})();
+</script>
+
+{# Отдельный <script> намеренно: проверка таргетов (tests/targeting_ui_harness.cjs)
+   вырезает свой код от метки до ближайшего `</script>` и подменяет
+   `addEventListener` заглушкой, которая помнит один обработчик на событие.
+   Второй обработчик в том же блоке молча вытеснял бы первый. #}
+<script>
+// ── Ad titles: библиотека рекламных текстов ──────────────────────────────
+// Тот же порядок, что у таргетов: список — данные, а не разметка; имя текста
+// живёт в data-атрибуте, а не в селекторе.
+(function () {
+  var texts = [], editing = '', pending = false;
+  var FIELDS = ['name', 'headline', 'body', 'description', 'asset', 'language'];
+  function el(id) { return document.getElementById(id); }
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function say(text, error) { el('at-msg').textContent = text || ''; el('at-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
+  function busy(value) {
+    pending = value;
+    document.querySelectorAll('#at-form button, #at-form input, #at-form textarea').forEach(function (b) { b.disabled = value; });
+  }
+  // Язык у 113 строк вкладки не заполнен. Выдумывать его нельзя — ES и PT
+  // пишутся одним письмом, и «угадать» значит подписать текст не тем языком.
+  function langOf(t) { return (t.language || '').trim() || '—'; }
+
+  function matches(t, needle) {
+    if (!needle) return true;
+    return FIELDS.some(function (f) { return String(t[f] || '').toLowerCase().indexOf(needle) !== -1; });
+  }
+
+  function render() {
+    var needle = (el('at-search').value || '').trim().toLowerCase();
+    var only = el('at-lang-filter').value;
+    var shown = texts.filter(function (t) { return matches(t, needle) && (!only || langOf(t) === only); });
+    el('at-count').textContent = shown.length === texts.length
+      ? texts.length + ' texts'
+      : shown.length + ' of ' + texts.length + ' texts';
+
+    var groups = {};
+    shown.forEach(function (t) { (groups[langOf(t)] = groups[langOf(t)] || []).push(t); });
+    // Языки по алфавиту, безъязыкие — в конец: они не язык, а незаполненное поле.
+    var names = Object.keys(groups).sort(function (a, b) {
+      if (a === '—') return 1;
+      if (b === '—') return -1;
+      return a.localeCompare(b);
+    });
+    if (!shown.length) { el('at-list').innerHTML = '<p style="color:var(--muted)">Nothing matches.</p>'; return; }
+
+    var html = '';
+    names.forEach(function (lang) {
+      html += '<div class="at-group"><h3>' + esc(lang === '—' ? 'Language not set' : lang) + '</h3>'
+        + '<span>' + groups[lang].length + '</span></div>';
+      groups[lang].forEach(function (t) {
+        html += '<div class="at-card">'
+          + '<div class="at-name">' + esc(t.name)
+          + (t.source === 'sheet' ? '' : '<span class="at-badge at-local">local</span>')
+          + (t.asset ? '<span class="at-badge">' + esc(t.asset) + '</span>' : '')
+          + '</div>'
+          + '<div class="at-actions">'
+          + '<button type="button" class="btn" data-at-edit="' + esc(t.name) + '">Edit</button>'
+          + '<button type="button" class="btn" data-at-del="' + esc(t.name) + '">Remove</button>'
+          + '</div>'
+          + (t.headline ? '<div class="at-headline">' + esc(t.headline) + '</div>' : '')
+          + (t.body ? '<div class="at-body" title="Click to expand">' + esc(t.body) + '</div>' : '')
+          + (t.description ? '<div class="at-desc">' + esc(t.description) + '</div>' : '')
+          + '</div>';
+      });
+    });
+    el('at-list').innerHTML = html;
+  }
+
+  function fillLanguages() {
+    var seen = {}, options = ['<option value="">All languages</option>'];
+    texts.forEach(function (t) { seen[langOf(t)] = true; });
+    Object.keys(seen).sort().forEach(function (lang) {
+      options.push('<option value="' + esc(lang) + '">' + esc(lang === '—' ? 'Language not set' : lang) + '</option>');
+    });
+    var was = el('at-lang-filter').value;
+    el('at-lang-filter').innerHTML = options.join('');
+    if (seen[was]) el('at-lang-filter').value = was;
+  }
+
+  function report(sheet) {
+    if (!sheet) return '';
+    var parts = [];
+    if (sheet.error) return 'Sheet could not be read: ' + sheet.error + '. Showing the saved library.';
+    if (sheet.added) parts.push('added ' + sheet.added);
+    if (sheet.updated) parts.push('updated ' + sheet.updated);
+    // Пропущенное называется поимённо: молчаливый перенос оставил бы
+    // уверенность, что доехало всё. Но повторять этот список при каждом
+    // открытии раздела незачем — он относится к переносу, а не к библиотеке.
+    if (!parts.length) return '';
+    if ((sheet.skipped || []).length) parts.push('skipped ' + sheet.skipped.length + ': ' + sheet.skipped.slice(0, 3).join('; ')
+      + (sheet.skipped.length > 3 ? ' …' : ''));
+    if ((sheet.renamed || []).length) parts.push((sheet.renamed || []).length + ' rows had no title and were named by row number');
+    return parts.join(' · ');
+  }
+
+  /* `keepMessage` — перечитывание после сохранения. Без него отчёт о переносе
+     затирает то, что человек только что сделал: он нажал Add, а на экране
+     появляется «updated 316 · skipped 11…», и результат его собственного
+     действия узнать неоткуда. */
+  async function load(force, keepMessage) {
+    if (pending) return;
+    busy(true);
+    if (force) say('Reading the sheet…');
+    try {
+      var r = await fetch('/api/ad-texts' + (force ? '?force=true' : ''));
+      var d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'Could not load');
+      texts = d.texts || [];
+      fillLanguages();
+      render();
+      var duplicates = d.duplicates || {};
+      var warning = '';
+      if ((duplicates.names || []).length) warning += 'Same title twice: ' + duplicates.names.join(', ') + '. ';
+      (duplicates.texts || []).forEach(function (names) { warning += 'Same text: ' + names.join(' = ') + '. '; });
+      var note = report(d.sheet);
+      if (warning) { say(warning + note, true); }
+      else if (keepMessage) { /* сообщение о сохранении остаётся на месте */ }
+      else if (note) { say(note, !!(d.sheet || {}).error); }
+      else if (force) { say('The sheet added nothing new.'); }
+    } catch (e) { say(e.message || String(e), true); el('at-list').textContent = ''; }
+    finally { busy(false); }
+  }
+
+  function clearForm() {
+    FIELDS.forEach(function (f) { el('at-' + f).value = ''; });
+    editing = '';
+    el('at-add-btn').textContent = 'Add';
+    el('at-cancel-btn').hidden = true;
+  }
+
+  async function send(body) {
+    if (pending) return;
+    busy(true); say('Saving…');
+    var saved = false;
+    try {
+      var r = await fetch('/api/ad-texts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+      var d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'Could not save');
+      saved = true;
+      if (body.action === 'delete') say('Removed from this machine: ' + body.name);
+      else if (body.action === 'update') say('Saved on this machine.');
+      else say('Added.');
+      if (body.action !== 'delete') clearForm();
+    } catch (e) { say(e.message || String(e), true); }
+    finally { busy(false); }
+    if (saved) await load(false, true);
+  }
+
+  function startEdit(name) {
+    var t = texts.find(function (t) { return t.name === name; });
+    if (!t) return;
+    FIELDS.forEach(function (f) { el('at-' + f).value = t[f] || ''; });
+    editing = name;
+    el('at-add-btn').textContent = 'Save';
+    el('at-cancel-btn').hidden = false;
+    el('at-form').scrollIntoView({ block: 'nearest' });
+    say('Editing: ' + name + '. Cancel edit returns to adding a new text.');
+  }
+
+  function payload(action) {
+    var body = { action: action, was: editing };
+    FIELDS.forEach(function (f) { body[f] = el('at-' + f).value; });
+    return body;
+  }
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t || !t.getAttribute) return;
+    var body = t.closest ? t.closest('.at-body') : null;
+    if (body) { body.classList.toggle('at-open'); return; }
+    if (pending) return;
+    if (t.id === 'at-add-btn') { send(payload(editing ? 'update' : 'add')); return; }
+    if (t.id === 'at-cancel-btn') { clearForm(); say(''); return; }
+    if (t.id === 'at-refresh-btn') { load(true); return; }
+    var name = t.getAttribute('data-at-edit');
+    if (name) { startEdit(name); return; }
+    name = t.getAttribute('data-at-del');
+    if (name) { if (confirm('Remove «' + name + '» from this machine?')) send({action:'delete', name:name}); return; }
+    if (t.getAttribute('data-view') === 'ad-texts' && !texts.length) load(false);
+  });
+  ['at-search', 'at-lang-filter'].forEach(function (id) {
+    document.addEventListener('input', function (ev) { if (ev.target && ev.target.id === id) render(); });
+    document.addEventListener('change', function (ev) { if (ev.target && ev.target.id === id) render(); });
+  });
+  if ((location.hash || '').indexOf('ad-texts') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
 })();
 </script>
 
