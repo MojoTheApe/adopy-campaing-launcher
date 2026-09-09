@@ -248,3 +248,26 @@ def test_a_parent_inherits_the_branch_only_when_its_parts_agree():
     )
     html = b.render(b.parse(text), b.landings(text))
     assert "branch not recorded" in html, "родитель взял одну из двух разных веток"
+
+
+def test_merged_is_not_the_same_as_shipped():
+    """«Влито» и «роздано» — разные вещи, и между ними бывает много дней.
+
+    Автообновление принимает только вершину master с аннотированным
+    `acl-release-*` тегом. 8 сентября три ветки были в master, а последний тег
+    стоял на сборке от 3 сентября: код влит, машины его не видят. Пока
+    состояний было два, слитое приходилось звать `shipped`, и доска
+    утверждала, что работа у людей.
+    """
+    assert "merged" in b.STATUSES, "состояние «в master» исчезло"
+    assert b.STATUS_LABEL["merged"] == "In master"
+    assert b.STATUSES.index("merged") < b.STATUSES.index("review"), (
+        "порядок состояний должен идти от сделанного к незачатому"
+    )
+
+
+def test_a_merged_task_renders_with_its_own_colour():
+    text = _SAMPLE.replace("#shipped @dashboard", "#merged @dashboard")
+    html = b.render(b.parse(text))
+    assert "s-merged" in html, "у слитой задачи нет своего вида"
+    assert "In master" in html
