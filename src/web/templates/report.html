@@ -2695,9 +2695,14 @@ async function dashRefresh(ev) {
 {#- Считается до Manage, а не после: билдер переехал вверх, а этот расчёт
     остался внизу — и `has_open` было ложным, отчего билдер молча рисовал
     пустое место вместо дерева аккаунтов. -#}
-{% set _has_recs = (c.open_recs.values() | map('length') | sum > 0) if c.open_recs else false %}
-{% set _has_fallback_accs = is_fallback_mode and (c.open_recs | length > 0) %}
-{% set has_open = _has_recs or _has_fallback_accs %}
+{#- Билдер есть, пока у страны есть аккаунты. Раньше здесь считалась **сумма
+    рекомендаций**, а они живут внутри выбранного периода: 9 сентября выбрали
+    8-е число, рекомендаций за один день не нашлось ни у кого — и билдер по
+    стране исчез целиком, вместе с подключённым и готовым аккаунтом, который в
+    ту же секунду был виден строкой выше в карте.
+
+    Период отвечает на вопрос «как шли дела», билдер — на «что запускаем». -#}
+{% set has_open = (c.open_recs | length > 0) if c.open_recs else false %}
 <div id="view-country-{{ cid }}-manage" class="view-panel" data-country="{{ cid }}">
 {#- Manage: одна страница вместо четырёх. Читается сверху вниз так, как
     идёт работа: цель месяца по стране, сравнение менеджеров, аккаунты с
@@ -2888,7 +2893,21 @@ async function dashRefresh(ev) {
 <div class="open-tree">
 {% for acc_label in c.open_recs.keys() | sort %}
   {% set recs = c.open_recs[acc_label] %}
-  {% if recs or is_fallback_mode %}
+  {#- Строка билдера — на аккаунт, а не на рекомендацию.
+
+      Раньше она появлялась, только если у аккаунта нашлись открытые
+      рекомендации, а те считаются внутри выбранного периода. 9 сентября это
+      выглядело так: человек выбрал 8 сентября — и билдер по Саудовской Аравии
+      исчез целиком, вместе с подключённым и готовым `KLD_BFL_X84`, который
+      виден строкой выше в карте аккаунтов.
+
+      Собрать кампанию можно для аккаунта, а не для отрезка дней: период
+      отвечает на вопрос «как шли дела», билдер — на «что запускаем». Связывать
+      их одним условием значило прятать рабочий инструмент по причине, к нему
+      не относящейся.
+
+      Рекомендации остаются тем, чем были: если они есть, они заполняют
+      карточки кампаний. Нет — форма пустая, и в ней есть «+ Add Campaign». -#}
   {# Preflight info for this account from backend #}
   {% set pf = account_preflight.get(acc_label, {}) %}
   {% set ds = draft_status.get(acc_label, {}) %}
@@ -3020,8 +3039,11 @@ async function dashRefresh(ev) {
 
       </div>{# /cb-preflight-body #}
     </div>{# /cb-preflight #}
-    {% if not recs and is_fallback_mode %}
-    <p style="font-size:0.78rem;color:var(--muted);margin:0.5rem 0 0.25rem">No performance data yet — click <strong>+ Add Campaign</strong> to build manually.</p>
+    {#- Подсказка нужна всегда, когда карточек нет, а не только в запасном
+        режиме: пустая форма без объяснения читается как «здесь ничего нет»,
+        хотя кнопка «+ Add Campaign» рядом и работает. -#}
+    {% if not recs %}
+    <p style="font-size:0.78rem;color:var(--muted);margin:0.5rem 0 0.25rem">No recommendations for the chosen period — click <strong>+ Add Campaign</strong> to build manually.</p>
     {% endif %}
     <div class="cb-slots">
     {# One campaign card per rec; each creative becomes an ad row inside it #}
@@ -3193,11 +3215,14 @@ async function dashRefresh(ev) {
   </form>
     </div>{# /cb-acc-body #}
   </div>{# /cb-acc-row #}
-  {% endif %}
 {% endfor %}
 </div>
 {% else %}
-<p class="empty-hint">No open recommendations. Account statuses were not loaded from GSheet for this country. Check the GSheet tab and press <strong>Refresh</strong>.</p>
+{#- Сюда попадаем, только когда у страны нет ни одного готового аккаунта —
+    то есть чинить надо привязку аккаунта, а не период и не рекомендации.
+    Прежний текст винил GSheet и предлагал нажать Refresh: за нехваткой
+    рекомендаций это звучало правдоподобно и отправляло искать не там. -#}
+<p class="empty-hint">No accounts connected to {{ c.country }} yet. Connect one in the account map above — the builder appears with it.</p>
 {% endif %}
 
 </details>
