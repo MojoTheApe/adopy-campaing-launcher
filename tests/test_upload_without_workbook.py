@@ -278,3 +278,42 @@ def test_the_manual_card_gets_the_country_default_for_the_language():
         "форма не несёт умолчание языка — скрипту неоткуда его взять"
     )
     assert "form.dataset.language" in page, "скрипт не читает умолчание"
+
+
+# ── строка полей не должна разъезжаться ───────────────────────────────────
+
+def test_the_select_in_the_field_row_has_a_bounded_width():
+    """`.cb-sel-wrap` по умолчанию во всю ширину — это верно для Targeting.
+
+    В строке OS / Age / Budget / Language он растягивался и выталкивал
+    остальное на следующую строку. Пока полей было три, перенос был незаметен;
+    четвёртое его показало.
+    """
+    page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    rule = re.search(r"\.cb-inline \.cb-sel-wrap \{([^}]*)\}", page)
+    assert rule, "ширина списка в строке полей не задана — строка разъедется"
+    assert "width" in rule.group(1)
+
+
+def test_the_width_lives_in_one_place_not_in_a_template_attribute():
+    """Подпись в шаблоне лечила только серверную карточку.
+
+    Карточку из «+ Add Campaign» строит JavaScript, и до неё правило не
+    доходило — ровно то же расхождение, что и с полем языка.
+    """
+    page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    assert 'class="cb-sel-wrap" style="width:6.5rem"' not in page, (
+        "ширина снова задана прямо в шаблоне — до скриптовой карточки она не дойдёт"
+    )
+
+
+def test_page_name_says_it_does_not_affect_publishing():
+    """Оно стояло среди настроек аккаунта и читалось как обязательное.
+
+    Плеер на `page_name` возвращает `None` и берёт первую доступную страницу в
+    кабинете; поле кормит только макет объявления.
+    """
+    page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    row = page[page.index('id="cb-page-name-status-'):]
+    row = row[: row.index("</div>")]
+    assert "preview only" in row, "поле снова выглядит настройкой, влияющей на заливку"
