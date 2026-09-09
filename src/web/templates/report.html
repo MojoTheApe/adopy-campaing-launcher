@@ -1008,6 +1008,17 @@
     }
     .cb-inline { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
     .cb-inline .cb-select, .cb-inline .cb-input { width: auto; }
+    /* Выпадающий список внутри строки полей. `.cb-sel-wrap` по умолчанию
+       занимает всю ширину — это верно для отдельной строки Targeting и
+       неверно здесь: он растягивался и выталкивал возраст, бюджет и язык на
+       следующую строку.
+
+       Раньше это лечила подпись `style="width:6.5rem"` прямо в шаблоне, и
+       только там: карточку, собранную кнопкой «+ Add Campaign», строит
+       JavaScript, и до неё правило не доходило. Пока в строке было три поля,
+       перенос был незаметен; четвёртое его показало. Ширина переехала сюда,
+       чтобы обе карточки брали её из одного места. */
+    .cb-inline .cb-sel-wrap { width: 6.5rem; flex: 0 0 auto; }
     .cb-input-sm { width: 4.5rem !important; }
     /* Язык аудитории. Пустое поле — законный выбор («не трогать язык»), но
        для стран вне GCC и LatAm оно пустое не потому, что так решили, а
@@ -2998,9 +3009,21 @@ async function dashRefresh(ev) {
             {% endif %}
           </div>
 
-          {# page_name — optional, used only by the visual ad preview #}
+          {#- Page name к публикации отношения не имеет и стоял в блоке
+              «Account config» без единого признака этого: рядом с `profile_id`,
+              без которого прогон не пойдёт. Читалось как незаполненная
+              настройка аккаунта — за неё и приняли.
+
+              На деле плеер на `{{ '{{page_name}}' }}` возвращает `None` и берёт
+              **первую доступную страницу** в кабинете; имя из карты он не
+              спрашивает. Единственный потребитель — макет объявления справа,
+              где эта строка стоит над «Sponsored».
+
+              Поэтому не убрано, а подписано — как у соседнего поля CTA строкой
+              ниже. Удалить его значило бы навсегда оставить в макете слова
+              «Page name» вместо имени страницы. -#}
           <div class="cb-map-field-row" id="cb-page-name-status-{{ acc_id }}">
-            <span class="cb-map-field-label">Page name</span>
+            <span class="cb-map-field-label">Page name <span style="color:var(--muted);font-weight:400">(preview only)</span></span>
             {% if not pf.page_name %}
               <input type="text" class="cb-input cb-map-input" data-field="page_name"
                      value="" placeholder="e.g. Global Trading Academy">
@@ -3050,7 +3073,7 @@ async function dashRefresh(ev) {
 
           <span class="cb-label">OS / Age / Budget / Language</span>
           <div class="cb-inline">
-            <div class="cb-sel-wrap" style="width:6.5rem">
+            <div class="cb-sel-wrap">
               <input type="text" class="cb-sel-text" placeholder="OS" autocomplete="off"
                      value="{% if r.device == 'iOS' %}iOS{% else %}All{% endif %}">
               <div class="cb-sel-dropdown" hidden>
