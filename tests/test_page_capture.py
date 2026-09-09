@@ -241,3 +241,44 @@ def test_scrubbing_a_large_page_finishes_in_seconds():
     """
     took = _scrub_elsewhere(pc.MAX_HTML_BYTES + 5000)
     assert took < 20
+
+
+# ── номер прогона ─────────────────────────────────────────────────────────
+
+def test_a_capture_finds_the_run_it_belongs_to_without_being_told():
+    """Иначе снимок ложится в «no_run» и к прогону его потом не привязать.
+
+    Так 9 сентября записался `create_additional_ad`: он пишет в телеметрию
+    напрямую, номера прогона не знал, и при разборе его пришлось искать по
+    времени среди чужих строк.
+    """
+    from src.fb_ads_rpa import run_telemetry as tel
+
+    tel.set_current_run("run77", "SA_test")
+    try:
+        folder = pc.capture(_Page(), step="create_additional_ad")
+        assert Path(folder).parent.name == "run77"
+        assert json.loads(_read(folder, "context.json"))["campaign"] == "SA_test"
+    finally:
+        tel._current["run_id"] = ""
+        tel._current["campaign"] = ""
+
+
+def test_an_explicit_run_id_still_wins():
+    from src.fb_ads_rpa import run_telemetry as tel
+
+    tel.set_current_run("run77", "SA_test")
+    try:
+        folder = pc.capture(_Page(), step="s", run_id="explicit")
+        assert Path(folder).parent.name == "explicit"
+    finally:
+        tel._current["run_id"] = ""
+        tel._current["campaign"] = ""
+
+
+def test_the_create_step_saves_its_markup_too():
+    """Сторож: шаг, писавший мимо общей точки, снова остался бы без снимка."""
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    block = source[source.index('def _diag(stage: str'):]
+    block = block[: block.index('_telemetry.record(')]
+    assert "page_capture" in block, "у create_additional_ad снова нет снимка"

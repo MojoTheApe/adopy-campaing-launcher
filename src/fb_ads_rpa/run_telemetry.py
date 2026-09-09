@@ -146,6 +146,22 @@ def page_context(page, *, timeout_ms: int = 1200) -> dict:
     return info
 
 
+_current: dict[str, str] = {"run_id": "", "campaign": ""}
+
+
+def set_current_run(run_id: str = "", campaign: str = "") -> None:
+    """Запомнить, какой прогон идёт сейчас.
+
+    Об отказах сообщают сорок три места, и не все они знают номер прогона:
+    `create_additional_ad` 9 сентября записался с пустым `run_id` и потому
+    не попал ни в один прогон — при разборе его пришлось искать по времени.
+    Место, которое знает номер, называет его один раз; остальные получают
+    его даром.
+    """
+    _current["run_id"] = run_id or _current["run_id"]
+    _current["campaign"] = campaign or _current["campaign"]
+
+
 def record(
     step: str,
     ok: bool | None = None,
@@ -162,11 +178,12 @@ def record(
         p = path or TELEMETRY_PATH
         p.parent.mkdir(parents=True, exist_ok=True)
         rec: dict[str, Any] = {
-            "run_id": run_id,
+            "run_id": run_id or _current["run_id"],
             "ts": datetime.now(timezone.utc).isoformat(),
             "step": step,
             "ok": ok,
         }
+        campaign = campaign or _current["campaign"]
         if campaign:
             rec["campaign"] = campaign
         if duration_s is not None:

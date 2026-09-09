@@ -360,17 +360,18 @@ def test_the_copy_fields_are_bare_textareas(ad_page):
             assert ta.first.get_attribute(attr) is None, f"{key}: у поля появился {attr}"
 
 
-def test_the_url_field_exists_but_is_hidden(ad_page):
-    """Почему `ad_destination` падает иначе, чем `ad_copy`.
+def test_the_destination_section_is_still_hidden_while_the_copy_is_filled(ad_page):
+    """Порядок разделов, а не поломка: на шаге текстов назначение ещё скрыто.
 
-    У поля ссылки `placeholder` на месте — то есть искали его правильно.
-    Но в момент отказа оно лежало внутри контейнера с прописанным прямо в
-    разметке `display: none !important`: раздел назначения был свёрнут.
-    Значит чинить надо не поиск, а раскрытие раздела — это отдельная работа,
-    и здесь она только зафиксирована.
+    Здесь легко ошибиться, и я ошибся: по этому снимку я решил, что раздел
+    назначения свёрнут и в этом причина отказа `ad_destination`. Снимок
+    самого отказа показал обратное — там поле разложено и пусто (см.
+    `test_the_destination_field_is_there_and_visible_when_its_turn_comes`).
+    Раздел раскрывается позже, и `set_ad_destination_website` сам снимает с
+    него `display: none` перед работой.
 
-    Поля текста при этом разложены и имеют размер — разница настоящая, а не
-    следствие того, что в снимке нет стилей Meta.
+    Проверка остаётся: она держит порядок, на который опирается код, — на
+    шаге текстов в поле ссылки писать нечего.
     """
     got = ad_page.evaluate(
         """() => {
@@ -422,3 +423,110 @@ def test_the_field_is_still_found_when_meta_drops_its_surface_names(ad_page, dom
         assert ad_page.locator('[data-rpa-field="title2"]').first.evaluate("el => el.tagName") == "TEXTAREA"
     finally:
         ad_page.reload()
+
+
+# ══ ссылка объявления ═════════════════════════════════════════════════════
+#
+# Разметка из снимка момента, когда `ad_destination` упал, — не из снимка
+# шага текстов: разделы раскрываются по очереди, и путать их моменты нельзя.
+
+@pytest.fixture(scope="module")
+def dest_page(browser):
+    return _open(browser, "ad_destination_2026_09_09.html")
+
+
+def test_the_old_destination_placeholder_is_gone(dest_page):
+    """Причина отказа `ad_destination`, и она того же рода, что у соседей.
+
+    Код искал `placeholder="http://www.example.com/page"`. На странице таких
+    ноль: Meta заменила подсказку на «Enter the URL people visit after your
+    ad». Третий шаг подряд, упавший из-за переписанной формулировки.
+    """
+    assert dest_page.locator('[placeholder="http://www.example.com/page"]').count() == 0
+    assert dest_page.locator('[placeholder="Enter the URL people visit after your ad"]').count() == 1
+
+
+def test_the_destination_field_is_there_and_visible_when_its_turn_comes(dest_page):
+    """В момент своего отказа поле разложено и пусто — искать было что."""
+    got = dest_page.evaluate(
+        """() => {
+          const el = document.querySelector('[placeholder="Enter the URL people visit after your ad"]');
+          const r = el.getBoundingClientRect();
+          return {w: r.width, h: r.height, value: el.value};
+        }"""
+    )
+    assert got["w"] > 0 and got["h"] > 0, "поле не разложено — тогда причина отказа другая"
+    assert got["value"] == "", "в поле уже что-то есть — снимок не с пустого шага"
+
+
+def test_the_code_finds_the_destination_field(dest_page, dom):
+    """То же, что для текстов: сначала разметочное имя, потом подпись."""
+    assert dom.mark_ad_copy_field(dest_page, "pce_website_url_field", None, "dest")
+    found = dest_page.locator('[data-rpa-field="dest"]')
+    assert found.count() == 1
+    assert found.first.get_attribute("placeholder") == "Enter the URL people visit after your ad"
+
+
+def test_the_destination_code_does_not_use_the_removed_placeholder():
+    """Сторож: старая подсказка не должна вернуться в код."""
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    used = _code_strings(source, "set_ad_destination_website")
+    assert "http://www.example.com/page" not in used
+
+
+def test_the_destination_falls_back_to_the_placeholder(dest_page, dom):
+    """Запасной ход для ссылки — подсказка, а не подпись.
+
+    У поля текста подписи нет вовсе, и там ищем по соседнему div. У ссылки
+    наоборот: `placeholder` на месте, и он ближе к контролу, чем надпись
+    «Website URL», которая в разметке продублирована.
+    """
+    dest_page.evaluate("""() => {
+      for (const e of document.querySelectorAll('[data-surface]')) e.removeAttribute('data-surface');
+    }""")
+    try:
+        assert dom.mark_ad_copy_field(
+            dest_page, "pce_website_url_field", None, "dest2",
+            placeholder="Enter the URL people visit after your ad",
+        )
+        assert dest_page.locator('[data-rpa-field="dest2"]').count() == 1
+    finally:
+        dest_page.reload()
+
+
+def test_the_reveal_check_can_actually_say_yes(ad_page, dom):
+    """Проверка «поле готово» должна проходить на настоящей разметке.
+
+    Прежняя искала `role=combobox` с именем «Tell people what your ad is
+    about». Таких на странице ноль, то есть она не могла ответить «да» ни
+    разу — и `fill_ad_copy` выходил ещё до полей, не записав, почему.
+    """
+    assert ad_page.locator('[role="combobox"]').count() == 0, (
+        "combobox вернулся — тогда прежняя проверка была не так уж неправа"
+    )
+    assert dom.mark_ad_copy_field(ad_page, "message_field", None, "probe"), (
+        "поле основного текста не находится — раскрытие снова скажет «нет»"
+    )
+
+
+def test_the_reveal_check_is_the_one_the_step_uses():
+    """Сторож: проверку легко починить в одном месте и забыть про второе."""
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    block = source[source.index("def _reveal_ad_copy_fields"):]
+    block = block[: block.index("\ndef ", 10)]
+    assert "mark_ad_copy_field" in block, "раскрытие ищет поле своим способом"
+    assert "Tell people what your ad is about'" not in block or "combobox" not in block
+
+
+def test_every_destination_lookup_goes_through_one_helper():
+    """Поле ссылки искали в четырёх местах — и все четыре по мёртвой подсказке.
+
+    Хуже отказа самого шага была проверка «записалось ли»: она искала то же
+    самое, всегда отвечала «нет» и запускала ремонт поверх правильно
+    заполненного поля.
+    """
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    for func in ("set_ad_destination_website", "_ad_destination_persisted"):
+        used = _code_strings(source, func)
+        assert "http://www.example.com/page" not in used, f"{func}: мёртвая подсказка вернулась"
+        assert "placeholder" not in used.lower() or "destination_url_box" in source
