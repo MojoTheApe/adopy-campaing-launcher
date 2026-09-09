@@ -165,11 +165,21 @@ def test_money_is_read_out_of_the_cell(text, value):
 
 def test_url_carries_the_account_and_the_day():
     url = sp._url("act_123", "2026-09-06", "2026-09-06")
-    assert "act=act_123" in url and "date=2026-09-06_2026-09-07" in url
+    assert "act=123" in url and "date=2026-09-06_2026-09-07" in url
 
 
-def test_url_adds_the_act_prefix_when_the_map_lacks_it():
-    assert "act=act_123" in sp._url("123", "2026-09-06", "2026-09-06")
+def test_url_sends_digits_because_meta_ignores_the_prefix():
+    """Раньше здесь утверждалось обратное: что префикс надо **дописывать**.
+
+    Ошибка была записана как намерение, и потому пережила полтора месяца. Meta
+    параметр `act=act_<цифры>` не понимает и молча игнорирует — открывается
+    кабинет профиля по умолчанию. У профиля с одним кабинетом это и есть нужный
+    кабинет, поэтому чтения проходили и выглядели доказательством.
+
+    Разбор — `tests/test_ads_manager_url.py`.
+    """
+    assert "act=123&" in sp._url("123", "2026-09-06", "2026-09-06")
+    assert "act=act_" not in sp._url("act_123", "2026-09-06", "2026-09-06")
 
 
 def test_a_missing_account_fails_before_any_browser_opens(monkeypatch):
