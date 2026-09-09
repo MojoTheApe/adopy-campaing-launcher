@@ -39,12 +39,13 @@ DEFAULT_BOARD = (
 #: `acl-release-*` тегом: без него код в master есть, а на машинах его нет.
 #: Пока состояния было два, слитое приходилось звать `shipped` — и доска
 #: утверждала, что работа у людей, когда она лежала только в репозитории.
-STATUSES = ("shipped", "merged", "review", "next", "blocked", "later", "idea")
+STATUSES = ("shipped", "merged", "closed", "review", "next", "blocked", "later", "idea")
 DEFAULT_STATUS = "idea"
 
 STATUS_LABEL = {
     "shipped": "Shipped",
     "merged": "In master",
+    "closed": "Closed",
     "review": "In review",
     "next": "Next",
     "blocked": "Blocked",
@@ -83,6 +84,8 @@ class Task:
     subs: list["Task"] = field(default_factory=list)
     needs: list[str] = field(default_factory=list)
     explicit: bool = False  # статус написан рукой, а не выведен из галочки
+    source_url: str = ""
+    source_label: str = ""
 
     @property
     def is_done(self) -> bool:
@@ -138,6 +141,9 @@ class Board:
     title: str = "ACL"
     updated: str = ""
     areas: list[Area] = field(default_factory=list)
+    description: str = ""
+    source_url: str = ""
+    source_label: str = ""
 
     @property
     def tasks(self) -> list[Task]:
@@ -609,7 +615,12 @@ def _card(task: Task, tilt: int, land: dict | None = None) -> str:
     meter = f'<span class="count">{done}/{total}</span>' if total else ""
     status = task.shown_status
     subs = _subs(task)
-    body = f"{note}{subs}"
+    source = (
+        f'<p><a href="{_esc(task.source_url)}" target="_blank" rel="noopener noreferrer">'
+        f'{_esc(task.source_label or "Open source")}</a></p>'
+        if task.source_url else ""
+    )
+    body = f"{note}{subs}{source}"
     head = (
         f'<header><code>{_esc(task.id)}</code>{track}</header>'
         f'<h4>{tick}{_rich(task.title)}</h4>'
@@ -708,6 +719,13 @@ def render(board: Board, land: dict | None = None) -> str:
         # не верить остальному тексту на странице.
         area_count=len(board.areas),
         areas="".join(areas_html),
+        description=(_esc(board.description) if board.description else
+            f"{len(board.areas)} areas of the system, the capabilities each is made of, "
+            "and every task hanging off them. Open an area to see its tasks. Edited in "
+            "Obsidian; this wall is built from that file."),
+        source=(f'<a href="{_esc(board.source_url)}" target="_blank" rel="noopener noreferrer">'
+                f'{_esc(board.source_label)}</a>' if board.source_url else
+                '<code>ACL — Task Board.md</code> in Obsidian'),
     )
 
 
@@ -921,6 +939,7 @@ nav.areas a:hover {{ color: var(--ink); text-decoration: underline;
 
 .s-shipped {{ --bg: var(--pin-shipped-bg); --fg: var(--pin-shipped-ink); --edge: var(--pin-shipped-edge); }}
 .s-merged  {{ --bg: var(--pin-merged-bg);  --fg: var(--pin-merged-ink);  --edge: var(--pin-merged-edge); }}
+.s-closed  {{ --bg: var(--pin-merged-bg);  --fg: var(--pin-merged-ink);  --edge: var(--pin-merged-edge); }}
 .s-review  {{ --bg: var(--pin-review-bg);  --fg: var(--pin-review-ink);  --edge: var(--pin-review-edge); }}
 .s-next    {{ --bg: var(--pin-next-bg);    --fg: var(--pin-next-ink);    --edge: var(--pin-next-edge); }}
 .s-blocked {{ --bg: var(--pin-blocked-bg); --fg: var(--pin-blocked-ink); --edge: var(--pin-blocked-edge); }}
@@ -939,9 +958,7 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
   <header class="top">
     <div>
       <h1>ACL Task Wall</h1>
-      <p class="sub">{area_count} areas of the system, the capabilities each is made of,
-      and every task hanging off them. Open an area to see its tasks. Edited in
-      Obsidian; this wall is built from that file.</p>
+      <p class="sub">{description}</p>
     </div>
     <div class="score">
       <div class="cap-label">Shipped</div>
@@ -956,7 +973,7 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
   {areas}
 
   <footer class="foot">
-    <span>Source of truth: <code>ACL — Task Board.md</code> in Obsidian</span>
+    <span>Source of truth: {source}</span>
     <span>Last change: {updated}</span>
     <span>Built by <code>scripts/acl_board.py</code></span>
   </footer>

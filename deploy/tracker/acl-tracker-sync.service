@@ -1,0 +1,20 @@
+[Unit]
+Description=Synchronize GitHub Issues to the Team7 task tracker
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/acl-tracker
+ExecStart=/usr/bin/python3 /opt/acl-tracker/scripts/acl_tracker.py --output /opt/acl-tracker/public --gh-command-json '["docker","exec","-e","GH_CONFIG_DIR=/data/.config/gh","openclaw-cb5e-openclaw-1","/home/linuxbrew/.linuxbrew/bin/gh"]'
+TimeoutStartSec=120
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/acl-tracker/public
+ProtectHome=true
+PrivateTmp=true
+UMask=0022
+
+[Install]
+WantedBy=multi-user.target
