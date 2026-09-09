@@ -34,7 +34,9 @@ const path=require('node:path');
   await page.locator('[data-view=all]').click();await page.locator('#module').selectOption('accounts');await page.locator('#summary-4').click();await page.reload();
   assert.equal(await page.locator('#module').inputValue(),'accounts');
   await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  assert.equal(await page.locator('.task-detail img').count(),0);assert.deepEqual(errors,[]);
+  assert.equal(await page.locator('.task-detail img').count(),0);
+  status={...fixture.status,digest:'clear',empty_confirmed:true};data={...fixture.data,digest:'clear',tasks:[]};await page.evaluate(()=>window.testRefresh());assert.equal(await page.locator('.task').count(),0);
+  assert.deepEqual(errors,[]);
   console.log('PASS: combined filters, status OR, All reset, data refresh with focus/details, empty-update protection, stale/empty release readiness, session persistence, mobile, injection safety');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1);});

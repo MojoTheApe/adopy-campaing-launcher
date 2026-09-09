@@ -262,5 +262,10 @@
     "module": "platform",
     "type": "improvement",
     "design": true
+  },
+  "acl-704": {
+    "module": "campaigns",
+    "type": "improvement",
+    "design": true
   }
 }

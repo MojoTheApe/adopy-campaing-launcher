@@ -81,6 +81,7 @@ def test_new_empty_project_and_explicit_clear(tmp_path):
     api.rows=[issue()];sync.sync(api,config,tmp_path,queue={});api.rows=[]
     sync.sync(api,config,tmp_path,queue={},allow_empty=True)
     assert json.loads((tmp_path/'data.json').read_text())['tasks']==[]
+    assert json.loads((tmp_path/'status.json').read_text())['empty_confirmed']
 
 
 def test_ui_revision_changes_digest_but_sync_clock_does_not(tmp_path,monkeypatch):

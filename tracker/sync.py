@@ -66,7 +66,7 @@ def sync(api, config, output, *, allow_empty=False, queue=None):
         atomic_write(output / "data.json", json.dumps(data))
         atomic_write(output / "index.html", page)
         status = {"ok": True, "synced_at": timestamp, "digest": data["digest"],
-                  "revision": data["revision"], "issues": len(data["tasks"])}
+                  "revision": data["revision"], "issues": len(data["tasks"]), "empty_confirmed": not bool(data["tasks"])}
         atomic_write(output / "status.json", json.dumps(status))
         print(f"Synced {status['issues']} issues at {timestamp}")
         return status

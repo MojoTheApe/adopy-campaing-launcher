@@ -135,16 +135,20 @@
     if(!rows.length){const box=node('div',undefined,'empty');box.append(node('h3','No tasks in this view'),node('p',state.view==='work'?'Choose tasks from Backlog and move them to Todo to form your next batch. You can see the full project in All.':'Try clearing filters or choose All to see tasks across every status.'));const b=node('button','Show all tasks');b.onclick=()=>view('all');box.append(b);$('tasks').append(box);}
     if(focused&&$(focused))$(focused).focus({preventScroll:true});window.scrollTo(0,scroll);
   }
+  async function fetchUpdate(url) {
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);
+    try{const response=await fetch(url,{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error();return await response.json();}
+    finally{clearTimeout(timeout);}
+  }
   async function refresh() {
     if(refreshing)return;refreshing=true;
     try{
-      const response=await fetch('/status.json',{cache:'no-store'});if(!response.ok)throw Error();
-      const s=await response.json(),age=Date.now()-Date.parse(s.synced_at);
+      const s=await fetchUpdate('/status.json'),age=Date.now()-Date.parse(s.synced_at);
       fresh=Boolean(s.ok&&Number.isFinite(age)&&age>=-60000&&age<=Math.max(180000,data.refresh_seconds*3000));
       if(!fresh){$('sync-state').textContent=s.error==='empty_response'?'Empty update ignored · showing the last successful update':'Sync delayed · showing the last successful update';releaseSummary();return;}
       if(s.digest!==data.digest){
-        const r=await fetch('/data.json',{cache:'no-store'});if(!r.ok)throw Error();const next=await r.json();
-        if(next.schema_version!==2||next.digest!==s.digest||!Array.isArray(next.tasks)||next.project.repository!==data.project.repository||(!next.tasks.length&&data.tasks.length))throw Error();
+        const next=await fetchUpdate('/data.json');
+        if(next.schema_version!==2||next.digest!==s.digest||!Array.isArray(next.tasks)||next.project.repository!==data.project.repository||(!next.tasks.length&&data.tasks.length&&!s.empty_confirmed))throw Error();
         if(next.revision!==data.revision){state.scroll=window.scrollY;state.focus=document.activeElement?.id;save();location.reload();return;}
         data=next;filters();render();
       }
