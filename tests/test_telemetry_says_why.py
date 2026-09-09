@@ -155,10 +155,33 @@ def test_the_context_is_attached_at_the_single_choke_point():
 
 def test_an_explicit_diag_is_not_overwritten_by_the_collected_one():
     """Где причина известна точно, она важнее общего снимка обстановки."""
+    merged = rt.merge_diag({"url": "u", "why": "общее"}, {"why": "точное"})
+    assert merged["why"] == "точное"
+
+
+def test_a_step_that_explains_itself_still_keeps_the_page_address():
+    """Иначе за собственную причину шаг платит адресом страницы.
+
+    По адресу и заголовку отказ сопоставляют со снимком разметки. Прежнее
+    условие `if diag is None` их отбрасывало ровно у тех шагов, которые
+    рассказали о себе больше всех.
+    """
+    merged = rt.merge_diag({"url": "u", "title": "t"}, {"why": "видно 3 категории из 5"})
+    assert merged == {"url": "u", "title": "t", "why": "видно 3 категории из 5"}
+
+
+def test_nothing_to_say_stays_nothing():
+    """Пустой словарь в записи читался бы как «причину искали и не нашли»."""
+    assert rt.merge_diag(None, None) is None
+    assert rt.merge_diag({}, {}) is None
+
+
+def test_the_merge_is_the_one_the_step_recorder_uses():
+    """Сторож: правило проверяется здесь только если код зовёт именно его."""
     source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
     block = source[source.index("def _shot(label: str"):]
     block = block[: block.index("_shot_clock[\"t\"] = now")]
-    assert "diag is None" in block
+    assert "merge_diag" in block, "запись отказа соединяет причины сама по себе"
 
 
 def test_an_empty_targeting_now_says_so():
