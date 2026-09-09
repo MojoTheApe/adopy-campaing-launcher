@@ -2179,8 +2179,8 @@ def run_recorded_campaign_flow(
         # 9 сентября `diag` был пуст, и сказать про них было нечего — ни
         # человеку, ни будущему агенту. Собранное в одном месте не разойдётся
         # с вызовами, и новый шаг получит контекст, ничего для этого не делая.
-        if ok is False and diag is None:
-            diag = _telemetry.page_context(page) or None
+        if ok is False:
+            diag = _telemetry.merge_diag(_telemetry.page_context(page), diag)
         # Разметка упавшего шага — на диск, рядом со скриншотом. По картинке
         # селектор не напишешь: на вопрос «почему не нашлась кнопка» отвечает
         # то, что было в DOM. Тот же снимок нужен стенду `acl-340`, без
@@ -2594,13 +2594,17 @@ def run_recorded_campaign_flow(
     # than the Audience fields above, but still soft-fail per the same
     # "don't stop the test" contract.
     try:
-        if not fill_placements(page):
-            _shot("fail_placements")
+        placements_report: dict = {}
+        if not fill_placements(page, placements_report):
+            # Отчёт кладётся рядом с отказом: пустое «placements ✗» стоило
+            # пяти прогонов вслепую — шаг падал, а что именно не нашлось,
+            # приходилось выяснять заново каждый раз.
+            _shot("fail_placements", placements_report)
             soft_fails.append("placements")
         else:
             _shot("after_placements")
     except Exception as exc:
-        _shot("fail_placements")
+        _shot("fail_placements", {"error": str(exc)[:200]})
         soft_fails.append(f"placements:{str(exc)[:60]}")
 
     # Devices and operating systems: lives inside the same Placements /
@@ -2828,41 +2832,80 @@ def run_recorded_campaign_flow(
     return ""
 
 
-def fill_placements(page: Page) -> bool:
-    """Set manual Placement controls to the account's real target
-    configuration instead of leaving Advantage+ automatic placements on.
+_PLACEMENT_CATEGORIES = {
+    # Пять категорий раздела Placement controls и то, чем они должны стать.
+    # Порядок важен только для отчёта: снимаем и ставим по одной.
+    "Feeds": True,
+    "Stories, Status, Reels": True,
+    "In-stream ads for reels": True,
+    "Search results": False,
+    "Apps and sites": False,
+}
 
-    Confirmed live 2026-07-27 by walking the real flow end-to-end with the
-    user watching, across many iterations: the "Advantage+ on" pill next to
-    the Placements heading is a pure status badge (no role/onclick/tabindex
-    anywhere in its ancestor chain) — it is NOT the control that reveals
-    manual placements, clicking it is a no-op. The actual sequence is:
-      1. Click "Show more settings" under Placements.
-      2. Click "Placement controls" — reveals a 5-category checkbox tree:
-         Feeds / Stories, Status, Reels / In-stream ads for reels /
-         Search results / Apps and sites.
-      3. Uncheck the Search results and Apps and sites category checkboxes.
-      4. Expand Feeds / Stories, Status, Reels / In-stream ads for reels
-         (id=ads_placement_expandable_list_item_{feed,story,stream}) and
-         set each sub-item checkbox to the target configuration.
-      5. Uncheck "Allow limited spending to excluded placements".
+_SUBITEMS_ON = (
+    "Facebook Feed",
+    "Instagram feed",
+    "Instagram Stories",
+    "Facebook Stories",
+    "Instagram Reels",
+    "Facebook Reels",
+    "Facebook in-stream reels",
+)
 
-    Every earlier attempt at this used a find-coordinates-then-separately-
-    click-by-mouse-position pattern (page.evaluate to get x/y, then a raw
-    CDP mouse click). That has a real gap between measuring a position and
-    clicking it — confirmed live 2026-07-27 that this page's right-hand
-    "Audience definition"/"Campaign score" panels recalculate and reflow
-    asynchronously often enough that a coordinate captured even a few
-    hundred ms earlier can land on the wrong element by the time the click
-    fires (this is what broke several previous fix attempts here, each
-    confirmed via debug log + screenshot mismatches). Fixed by finding AND
-    clicking inside a single page.evaluate() call — a real DOM element
-    handle stays valid regardless of layout shifts, unlike a screen
-    coordinate. Native element.click() is reliable here (unlike the Ad
-    copy text fields elsewhere in this file, which specifically needed a
-    raw CDP mouse click to get real focus for text entry — these are plain
-    checkbox/link toggles, not text input).
+_SUBITEMS_OFF = (
+    "Facebook profile feed",
+    "Instagram profile feed",
+    "Facebook Marketplace",
+    "Facebook right column",
+    "Instagram Explore home",
+    "Facebook Business Explore",
+    "Threads feed",
+    "Facebook Notifications",
+    "Messenger Stories",
+    "WhatsApp Status",
+    "Ads on Facebook Reels",
+)
+
+
+def fill_placements(page: Page, report: dict | None = None) -> bool:
+    """Выставить ручные площадки вместо автоматических Advantage+.
+
+    Переписано 2026-09-09 по настоящей разметке — снимку прогона, в котором
+    этот шаг упал пятый раз подряд. Разметка сохранена стендом:
+    `tests/fixtures/ads_manager/placements_2026_09_09.html`.
+
+    **Чего на странице больше нет** (проверено по полному снимку в 4 МБ, не
+    по догадке): формулировок «Advantage+ placements» и «Manual placements»
+    — ноль совпадений; идентификаторов
+    `ads_placement_expandable_list_item_{feed,story,stream}` — их Meta
+    заменила на порождаемые (`js_14p`, `_r_d2_`), меняющиеся от отрисовки к
+    отрисовке, так что цепляться за них нельзя больше никогда; кнопок с
+    подписью «Expand» — ни одной; галочки «Allow limited spending» — ни
+    одной. Наш прежний код искал все четыре и падал на первом же.
+
+    **Что на странице есть.** Раздел приходит уже раскрытым («Hide
+    settings»), внутри — пять категорий, каждая строкой `role="button"` с
+    `aria-expanded`, и в каждой строке `<label>` со своей галочкой. Опора
+    осталась одна — слова рядом с контролом, то есть то же, по чему ищет
+    человек.
+
+    Порядок: убедиться, что пять категорий видны (а не жать «показать» на
+    уже открытом — этот клик его закрывал); выставить пять категорийных
+    галочек; раскрыть три оставленные категории и проставить в них
+    подпункты.
+
+    Имена подпунктов взяты из прогона в июле, и по свёрнутой разметке их не
+    проверить. Поэтому код переписывает в `report` то, что увидел на месте:
+    одного упавшего прогона хватит, чтобы узнать настоящий список вместо
+    гадания. Пустое `False` в телеметрии стоило пяти прогонов вслепую.
+
+    Найти и кликнуть — в одном вызове `page.evaluate`. Правая колонка
+    («Audience definition», «Campaign score») пересчитывается сама и двигает
+    строки, поэтому координата, снятая даже на доли секунды раньше, к
+    моменту клика указывает на соседнюю строку. Ссылка на узел этим не
+    страдает.
     """
+    report = report if report is not None else {}
     _dbg: list[str] = []
 
     def _dump_dbg() -> None:
@@ -3032,168 +3075,264 @@ def fill_placements(page: Page) -> bool:
         except Exception:
             return False
 
-    expanded = False
-    for i in range(10):
-        if _present_in_placements("Hide settings", exact=False):
-            expanded = True
-            break
-        clicked = _click_in_placements("show more settings", exact=False, max_children=2)
-        _dbg.append(f"tick {i}: show_more_clicked={clicked}")
-        if clicked:
-            _sleep_h(0.6)
-            continue
-        _sleep_h(0.4)
-    _dbg.append(f"expanded={expanded}")
-    if not expanded:
-        _dump_dbg()
-        return False
+    def _categories_visible() -> int:
+        """Сколько из пяти категорий видно прямо сейчас."""
+        try:
+            return int(
+                page.evaluate(
+                    """
+                    (names) => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      const root = document.querySelector('[data-rpa-placements-marker]') || document;
+                      return [...root.querySelectorAll('label')].filter(l =>
+                        l.offsetParent !== null && names.includes(norm(l.textContent))).length;
+                    }
+                    """,
+                    list(_PLACEMENT_CATEGORIES),
+                )
+                or 0
+            )
+        except Exception:
+            return 0
 
-    pc_clicked = _click_in_placements("Placement controls")
-    _dbg.append(f"placement_controls_clicked={pc_clicked}")
-    if not pc_clicked:
+    def _expand_button(text: str) -> dict:
+        """Раскрыть свёрнутый узел по началу его текста.
+
+        Жмём только при `aria-expanded="false"`: тот же клик по уже
+        раскрытому закрывает его.
+        """
+        try:
+            return page.evaluate(
+                """
+                ([text]) => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const root = document.querySelector('[data-rpa-placements-marker]') || document;
+                  const btn = [...root.querySelectorAll('[role="button"][aria-expanded]')].find(e =>
+                    e.offsetParent !== null && norm(e.textContent).startsWith(text));
+                  if (!btn) return { found: false };
+                  const was = btn.getAttribute('aria-expanded');
+                  if (was === 'false') btn.click();
+                  return { found: true, was: was };
+                }
+                """,
+                [text],
+            ) or {"found": False}
+        except Exception as exc:
+            return {"found": False, "error": str(exc)[:80]}
+
+    def _set_category(name: str, want_checked: bool) -> dict:
+        """Галочка категории лежит внутри `<label>` с её же названием."""
+        try:
+            return page.evaluate(
+                """
+                ([name, want]) => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const root = document.querySelector('[data-rpa-placements-marker]') || document;
+                  const lab = [...root.querySelectorAll('label')].find(l =>
+                    l.offsetParent !== null && norm(l.textContent) === name);
+                  if (!lab) return { found: false };
+                  const cb = lab.querySelector('input[type=checkbox]');
+                  if (!cb) return { found: true, checkbox: false };
+                  if (cb.checked !== want) cb.click();
+                  return { found: true, checkbox: true, checked: cb.checked };
+                }
+                """,
+                [name, want_checked],
+            ) or {"found": False}
+        except Exception as exc:
+            return {"found": False, "error": str(exc)[:80]}
+
+    def _expand_category(name: str) -> dict:
+        """Раскрыватель категории — её собственная строка, а не кнопка рядом.
+
+        До неё от подписи семь уровней вверх, и это число менять нельзя на
+        глазок: остановка идёт по `role="list"` — общему списку всех пяти
+        категорий. Уйти выше значило бы схватить чужую кнопку и свернуть
+        весь раздел.
+        """
+        try:
+            return page.evaluate(
+                """
+                ([name]) => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const root = document.querySelector('[data-rpa-placements-marker]') || document;
+                  const lab = [...root.querySelectorAll('label')].find(l =>
+                    l.offsetParent !== null && norm(l.textContent) === name);
+                  if (!lab) return { found: false };
+                  let node = lab.parentElement;
+                  for (let i = 0; i < 12 && node; i++) {
+                    if (node.getAttribute('role') === 'list') break;
+                    if (node.getAttribute('role') === 'button' && node.hasAttribute('aria-expanded')) {
+                      const was = node.getAttribute('aria-expanded');
+                      if (was === 'false') node.click();
+                      return { found: true, was: was, depth: i };
+                    }
+                    node = node.parentElement;
+                  }
+                  return { found: true, was: null };
+                }
+                """,
+                [name],
+            ) or {"found": False}
+        except Exception as exc:
+            return {"found": False, "error": str(exc)[:80]}
+
+    def _subitem_labels() -> list:
+        """Какие подпункты страница показала после раскрытия категорий.
+
+        Это ответ страницы на вопрос, на который наш июльский список
+        ответить не может: как эти строки называются сегодня.
+        """
+        try:
+            return (
+                page.evaluate(
+                    """
+                    (skip) => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      const root = document.querySelector('[data-rpa-placements-marker]') || document;
+                      const out = [];
+                      for (const l of root.querySelectorAll('label')) {
+                        if (l.offsetParent === null) continue;
+                        const t = norm(l.textContent);
+                        if (!t || t.length > 60 || skip.includes(t) || out.includes(t)) continue;
+                        out.push(t);
+                      }
+                      return out;
+                    }
+                    """,
+                    list(_PLACEMENT_CATEGORIES),
+                )
+                or []
+            )
+        except Exception:
+            return []
+
+    # ── раскрытие ────────────────────────────────────────────────────────
+    #
+    # Смотрим не на надпись, а на то, что нужно на самом деле: видны ли пять
+    # категорий. Прежний код начинал с клика по «Show more settings» — а
+    # раздел приходит раскрытым, и этот клик его закрывал.
+    seen = _categories_visible()
+    if seen < len(_PLACEMENT_CATEGORIES):
+        for i in range(6):
+            if _present_in_placements("Hide settings", exact=False):
+                break
+            clicked = _click_in_placements("show more settings", exact=False, max_children=2)
+            _dbg.append(f"tick {i}: show_more_clicked={clicked}")
+            _sleep_h(0.6 if clicked else 0.4)
+        seen = _categories_visible()
+
+    if seen < len(_PLACEMENT_CATEGORIES):
+        pc = _expand_button("Placement controls")
+        _dbg.append(f"placement_controls={pc}")
+        report["placement_controls"] = pc
+        _sleep_h(0.8)
+        seen = _categories_visible()
+
+    report["categories_visible"] = seen
+    _dbg.append(f"categories_visible={seen}")
+    if seen < len(_PLACEMENT_CATEGORIES):
+        report["why"] = f"видно {seen} категорий из {len(_PLACEMENT_CATEGORIES)}"
         _dump_dbg()
         return False
-    _sleep_h(0.8)
-    _dump_dbg()
 
     ok = True
 
-    def _set_category(container_id: str, want_checked: bool) -> None:
-        nonlocal ok
-        try:
-            result = page.evaluate(
-                """
-                ([id, wantChecked]) => {
-                  const el = document.getElementById(id);
-                  const cb = el ? el.querySelector('input[type=checkbox]') : null;
-                  if (!cb) return null;
-                  if (cb.checked !== wantChecked) cb.click();
-                  return true;
-                }
-                """,
-                [container_id, want_checked],
-            )
-        except Exception:
-            result = None
-        if result is None:
-            ok = False
-
-    # Search results / Apps and sites: whole category off — click the
-    # single category-level checkbox directly, no need to expand.
-    _set_category("ads_placement_expandable_list_item_search", False)
-    _sleep_h(0.3)
-    _set_category("ads_placement_expandable_list_item_external", False)
-    _sleep_h(0.3)
-
-    for expand_id in (
-        "ads_placement_expandable_list_item_feed",
-        "ads_placement_expandable_list_item_story",
-        "ads_placement_expandable_list_item_stream",
-    ):
-        try:
-            page.evaluate(
-                """
-                (id) => {
-                  const el = document.getElementById(id);
-                  const btn = el ? [...el.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || '') === 'Expand') : null;
-                  if (btn) btn.click();
-                }
-                """,
-                expand_id,
-            )
-        except Exception:
-            pass
-        _sleep_h(0.4)
-
-    def _set(label: str, want_checked: bool) -> None:
-        nonlocal ok
-        # Found AND clicked in a single evaluate call — confirmed live
-        # 2026-07-27 that unchecking one sub-item reflows rows below it,
-        # so any approach that measures a coordinate first and clicks it
-        # in a separate step can land on the wrong row by the time the
-        # click fires.
-        try:
-            result = page.evaluate(
-                """
-                ([label, wantChecked]) => {
-                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                  const rows = [...document.querySelectorAll('*')].filter(e =>
-                    e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
-                  for (const row of rows) {
-                    let container = row.parentElement;
-                    for (let i = 0; i < 4 && container; i++) {
-                      const cb = container.querySelector('input[type=checkbox]');
-                      if (cb) {
-                        if (cb.checked !== wantChecked) cb.click();
-                        return true;
-                      }
-                      container = container.parentElement;
-                    }
-                  }
-                  return false;
-                }
-                """,
-                [label, want_checked],
-            )
-        except Exception:
-            result = False
-        if not result:
+    # ── категории ────────────────────────────────────────────────────────
+    report["categories"] = {}
+    for name, want in _PLACEMENT_CATEGORIES.items():
+        res = _set_category(name, want)
+        report["categories"][name] = res
+        if not res.get("checkbox"):
             ok = False
         _sleep_h(0.3)
 
-    for label in (
-        "Facebook Feed",
-        "Instagram feed",
-        "Instagram Stories",
-        "Facebook Stories",
-        "Instagram Reels",
-        "Facebook Reels",
-        "Facebook in-stream reels",
-    ):
-        _set(label, True)
+    # ── подпункты ────────────────────────────────────────────────────────
+    report["expanded"] = {}
+    for name, want in _PLACEMENT_CATEGORIES.items():
+        if not want:
+            continue
+        report["expanded"][name] = _expand_category(name)
+        _sleep_h(0.4)
 
-    for label in (
-        "Facebook profile feed",
-        "Instagram profile feed",
-        "Facebook Marketplace",
-        "Facebook right column",
-        "Instagram Explore home",
-        "Facebook Business Explore",
-        "Threads feed",
-        "Facebook Notifications",
-        "Messenger Stories",
-        "WhatsApp Status",
-        "Ads on Facebook Reels",
-    ):
-        _set(label, False)
+    report["subitems_seen"] = _subitem_labels()
+    _dbg.append(f"subitems_seen={report['subitems_seen']}")
 
-    # "Allow limited spending to excluded placements" appears once any
-    # placement above is excluded — confirmed live 2026-07-27 it defaults
-    # to checked; the account's real config wants it off.
+    def _set(label: str, want_checked: bool) -> bool:
+        # Найдено И нажато одним вызовом: снятие галочки перекладывает
+        # строки под ней, и координата, снятая отдельным шагом, к моменту
+        # клика указывает уже на соседнюю.
+        try:
+            return bool(
+                page.evaluate(
+                    """
+                    ([label, wantChecked]) => {
+                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                      const rows = [...document.querySelectorAll('*')].filter(e =>
+                        e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
+                      for (const row of rows) {
+                        let container = row.parentElement;
+                        for (let i = 0; i < 4 && container; i++) {
+                          const cb = container.querySelector('input[type=checkbox]');
+                          if (cb) {
+                            if (cb.checked !== wantChecked) cb.click();
+                            return true;
+                          }
+                          container = container.parentElement;
+                        }
+                      }
+                      return false;
+                    }
+                    """,
+                    [label, want_checked],
+                )
+            )
+        except Exception:
+            return False
+
+    missing = []
+    for label in _SUBITEMS_ON:
+        if not _set(label, True):
+            missing.append(label)
+        _sleep_h(0.3)
+    for label in _SUBITEMS_OFF:
+        if not _set(label, False):
+            missing.append(label)
+        _sleep_h(0.3)
+    report["subitems_missing"] = missing
+    if missing:
+        ok = False
+
+    # «Allow limited spending to excluded placements»: в снимке 2026-09-09
+    # её нет ни разу. Раньше она появлялась после исключения площадок, так
+    # что шаг оставлен — но её отсутствие больше не беда, отчёт скажет,
+    # нашлась она или нет.
     try:
-        page.evaluate(
+        report["limited_spending"] = page.evaluate(
             """
             () => {
               const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
               const row = [...document.querySelectorAll('*')].find(e =>
                 norm(e.textContent).startsWith('Allow limited spending to excluded placements')
                 && e.offsetParent !== null);
-              if (!row) return;
+              if (!row) return { found: false };
               let container = row;
               for (let i = 0; i < 6 && container; i++) {
                 const cb = container.querySelector('input[type=checkbox]');
                 if (cb) {
                   if (cb.checked) cb.click();
-                  return;
+                  return { found: true, checked: cb.checked };
                 }
                 container = container.parentElement;
               }
+              return { found: true, checkbox: false };
             }
             """
         )
     except Exception:
-        pass
+        report["limited_spending"] = {"found": False}
 
+    _dump_dbg()
     return ok
 
 
@@ -4734,6 +4873,85 @@ def _focus_via_cdp_click(page: Page, locator):
         return None
 
 
+_AD_COPY_FIELDS = {
+    # Разметочное имя Meta -> подпись над полем, на случай если имя уедет.
+    "message_field": "Tell people what your ad is about",
+    "headline_field": "Write a short headline",
+    "link_description_field": "Include additional details",
+}
+
+
+def mark_ad_copy_field(page: Page, key: str, label: str | None, mark: str) -> bool:
+    """Пометить поле объявления атрибутом, за который его возьмёт локатор.
+
+    Написано 2026-09-09 по настоящей разметке (снимок прогона, фикстура
+    `tests/fixtures/ads_manager/ad_copy_2026_09_09.html`). Прежний код искал
+    заголовок по `placeholder="Write a short headline"`, а основной текст —
+    по роли `combobox` с именем: на странице нет ни одного и ни другого,
+    отсюда три отказа из шести 9 сентября.
+
+    Что там на самом деле:
+
+        <div class="_9vo4">Write a short headline</div>
+        <textarea dir="auto"></textarea>
+        <div aria-hidden="true">Write a short headline</div>
+
+    Подпись — соседний div, поле — голая `<textarea>` без единого атрибута.
+    Зато весь блок обёрнут в `data-surface=".../headline_field"`: это
+    собственная разметка Meta для её логов — осмысленная и, в отличие от
+    классов и идентификаторов, не порождаемая заново при каждой отрисовке.
+
+    Ищем сначала по ней, потом по подписи. Атрибут служебный, обещаний нам
+    не давал, и один способ поиска на такое поле — это тот же самый отказ,
+    отложенный на несколько месяцев.
+
+    Видно ли поле, считаем по размеру его прямоугольника. В этом же снимке
+    рядом лежит поле ссылки внутри контейнера с `display: none !important` —
+    свёрнутый раздел назначения; по размеру такое отсеивается, и в поле,
+    которого человек не видит, мы не напечатаем.
+
+    Помечаем атрибутом, а не возвращаем координату: правая колонка
+    пересчитывается сама и двигает строки, а ссылка на узел этого не
+    замечает.
+    """
+    try:
+        return bool(
+            page.evaluate(
+                """
+                ([key, label, mark]) => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const seen = (el) => {
+                    const r = el.getBoundingClientRect();
+                    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+                  };
+                  for (const old of document.querySelectorAll('[data-rpa-field="' + mark + '"]')) {
+                    old.removeAttribute('data-rpa-field');
+                  }
+                  let host = key ? document.querySelector('[data-surface$="/' + key + '"]') : null;
+                  if (!host && label) {
+                    const tag = [...document.querySelectorAll('div,span,label')].find(e =>
+                      e.children.length === 0 && norm(e.textContent) === label);
+                    host = tag ? tag.parentElement : null;
+                    for (let i = 0; i < 3 && host; i++) {
+                      if (host.querySelector('textarea,input[type=text],[contenteditable="true"]')) break;
+                      host = host.parentElement;
+                    }
+                  }
+                  if (!host) return false;
+                  const el = [...host.querySelectorAll('textarea,input[type=text],[contenteditable="true"]')]
+                    .find(seen);
+                  if (!el) return false;
+                  el.setAttribute('data-rpa-field', mark);
+                  return true;
+                }
+                """,
+                [key, label, mark],
+            )
+        )
+    except Exception:
+        return False
+
+
 def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
     """Fill Primary text (Body) and Headline (Title) with real ad copy.
 
@@ -4787,12 +5005,16 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
         except Exception:
             pass
 
+    def _locate(key: str, mark: str):
+        """Локатор поля — по разметочному имени Meta, иначе по подписи."""
+        if mark_ad_copy_field(page, key, _AD_COPY_FIELDS.get(key), mark):
+            return page.locator(f'[data-rpa-field="{mark}"]').first
+        return None
+
     def _fill_body() -> bool:
         try:
-            primary_box = page.get_by_role(
-                "combobox", name="Tell people what your ad is about"
-            ).first
-            count = primary_box.count()
+            primary_box = _locate("message_field", "body")
+            count = primary_box.count() if primary_box is not None else 0
             if count:
                 handle = _click_via_cdp_handle(primary_box)
                 if handle is not None:
@@ -4811,8 +5033,8 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
 
     def _fill_title() -> bool:
         try:
-            headline_box = page.get_by_placeholder("Write a short headline").first
-            count = headline_box.count()
+            headline_box = _locate("headline_field", "title")
+            count = headline_box.count() if headline_box is not None else 0
             if count:
                 handle = _click_via_cdp_handle(headline_box)
                 if handle is not None:
