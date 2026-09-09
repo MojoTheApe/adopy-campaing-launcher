@@ -11,16 +11,25 @@ const area = {
   querySelector: () => pin,
 };
 const pin = {
+  open: false, listeners: {},
   dataset: {status: 'review'},
   classList: { toggle: () => {} },
+  getAttribute: () => 'acl-101',
+  addEventListener: function(event, callback) { this.listeners[event] = callback; },
 };
 const chip = {
   dataset: {filter: 'review'}, listeners: {},
   setAttribute: () => {},
   addEventListener: function(event, callback) { this.listeners[event] = callback; },
 };
+const allAttributes = {};
+const allChip = {
+  dataset: {filter: 'all'}, listeners: {},
+  setAttribute: (key, value) => { allAttributes[key] = value; },
+  addEventListener: function(event, callback) { this.listeners[event] = callback; },
+};
 const document = {
-  querySelectorAll: (selector) => ({'details.area': [area], 'details.pin': [], '.chip': [chip], '.pin': [pin], '.cap': [], 'nav.areas a': []}[selector]),
+  querySelectorAll: (selector) => ({'details.area': [area], 'details.pin': [pin], '.chip': [allChip, chip], '.pin': [pin], '.cap': [], 'nav.areas a': []}[selector]),
 };
 const localStorage = {
   getItem: (key) => { reads.push(String(key)); return storage.get(String(key)) ?? null; },
@@ -30,9 +39,27 @@ vm.runInNewContext(fs.readFileSync(process.argv[2], 'utf8'), {document, localSto
 assert.equal(area.open, true);
 chip.listeners.click();
 assert.equal(area.open, true);
+// Filtering expands areas automatically; a card is still opened by the reader.
+pin.open = true;
+pin.listeners.toggle();
+assert.equal(storage.get('acl.wall.pins'), '["acl-101"]');
 chip.listeners.click();
 // Native details dispatches this toggle event after the script changes open.
 area.listeners.toggle();
 assert.equal(area.open, true);
 assert.equal(storage.get('acl.wall.open'), '["1"]');
 assert.ok(!reads.includes('undefined'));
+// All must reveal cards even when the reader previously collapsed every area.
+area.open = false;
+area.listeners.toggle();
+assert.equal(storage.get('acl.wall.open'), '[]');
+chip.listeners.click();
+allChip.listeners.click();
+assert.equal(area.open, true);
+assert.equal(allAttributes['aria-pressed'], 'true');
+area.listeners.toggle();
+assert.equal(storage.get('acl.wall.open'), '["1"]');
+// Repeated All is idempotent; it must never become a nonexistent status filter.
+allChip.listeners.click();
+assert.equal(area.open, true);
+assert.equal(allAttributes['aria-pressed'], 'true');
