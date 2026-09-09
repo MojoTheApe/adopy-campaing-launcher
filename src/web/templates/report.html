@@ -1318,6 +1318,20 @@
     }
     .cb-slot-name:empty::before { content: 'Campaign name will appear here'; color: var(--muted); font-weight: normal; }
 
+    /* Предупреждение о ссылке. Не красное: это не отказ, а «посмотрите
+       сюда» — собрать всё равно можно. Красным помечается сломанное. */
+    .cb-warn-block {
+      background: var(--warn-soft); border: 1px solid var(--warn);
+      color: var(--text); border-radius: var(--radius-sm);
+      padding: 0.5rem 0.7rem; margin-bottom: 0.7rem;
+      font-size: 0.82rem; line-height: 1.4;
+    }
+    /* Подсветка поля живёт до первой правки — человек видит, куда смотреть,
+       и метка уходит сама, как только он начал вводить. */
+    .cb-field-warn {
+      border-color: var(--warn) !important;
+      box-shadow: 0 0 0 2px var(--warn-soft);
+    }
     .cb-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.6rem; }
     .cb-preview-btn {
       background: var(--bg-elev);
@@ -2726,44 +2740,18 @@ async function dashRefresh(ev) {
 </div>
 </div>
 <div class="manage-part">
-<h2 class="view-title">{{ c.country }}: Account Statuses</h2>
+{#- Секция «Account Statuses» убрана 8 сентября.
 
-<div class="ac-country-add" data-country-name="{{ c.country }}"
-     style="margin:0.6rem 0 1rem;padding:0.7rem 0.9rem;border:1px solid var(--border);border-radius:6px">
-  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-end">
-    <label style="flex:1 1 15rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Connect an account to {{ c.country }}</div>
-      <input class="acq-label" type="text" placeholder="account name" style="width:100%" autocomplete="off">
-    </label>
-    <label style="flex:1 1 13rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Ad account</div>
-      <input class="acq-adid" type="text" placeholder="filled in from the profile" style="width:100%"
-             title="Filled in automatically from the profile you pick. Otherwise paste the address from the Ads Manager address bar.">
-    </label>
-    <label style="flex:0 0 13rem">
-      <div style="font-size:0.72rem;color:var(--muted)">Multilogin profile</div>
-      <select class="acq-prof" style="width:100%"></select>
-    </label>
-    <button type="button" class="btn acq-add">Add</button>
-    <span class="acq-msg" style="font-size:0.75rem"></span>
-  </div>
-  <div class="acq-connected" style="margin-top:0.6rem;font-size:0.8rem;color:var(--muted)"></div>
-</div>
+    В ней тот же аккаунт описывался второй раз: свои числа (`Cost` — тот же
+    спенд), своя колонка Ad Asset, которую просили убрать с карты, и своя
+    форма подключения. Форма была хуже той, что на карте: та ищет профиль по
+    последним буквам и **читает номер кабинета из его же истории**, а эта
+    просила номер руками.
 
-<table>
-  <thead><tr><th>Account</th><th>Cost</th><th>Ad Asset</th><th>To Do</th><th>✓</th></tr></thead>
-  <tbody>
-  {% for r in c.account_rows %}
-    <tr>
-      <td>{{ r.account_label }}</td>
-      <td class="num">{{ r.cost | fmt_usd }}</td>
-      <td>{{ r.stock or '—' }}</td>
-      <td>{{ r.to_do_display }}</td>
-      <td>{% if r.is_ready %}✅{% else %}❌{% endif %}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+    Уникальными здесь были только «To Do» и «готов» — они переехали в таблицу
+    аккаунтов выше, к статусу. Одно место подключения вместо двух, одна строка
+    на аккаунт вместо двух. -#}
+
 </div>
 <details class="manage-builder" id="manage-builder-{{ cid }}">
   {#- Билдер — не панель, а страница: свои слоты, аккордеон аккаунтов,
@@ -7754,6 +7742,56 @@ window.rpaWebsiteLabStep = function(step, btn) {
   .then(function(s) { _rpaLabRender(panel, s); });
 };
 
+/* Трекинговая ссылка: предупредить, но не запрещать.
+
+   Кампания без ссылки собирается и уходит в черновик — Meta её примет, и в
+   Ads Manager всё будет выглядеть готовым. Не будет только учёта: клики
+   некуда считать, и обнаружится это не при сборке, а через день, когда за
+   лиды спросят.
+
+   Поэтому не запрет, а предупреждение: бывают случаи, когда ссылку ставят
+   позже руками, и решать это человеку. Задача — чтобы он решал, зная.
+
+   Три разных случая, и путать их нельзя: ссылки нет вовсе; ссылка есть, но
+   это адрес задачи Jira, а не трекер; ссылка набрана, но не сохранена — тогда
+   в сборку уйдёт прежняя, а на экране человек видит новую. Последнее особенно
+   обманчиво: поле выглядит заполненным. */
+window.cbTrackingWarning = function(form) {
+  var input = form.querySelector('input[name="tracking_link"]');
+  if (!input) return null;
+  var typed = (input.value || '').trim();
+  var acc = ((form.querySelector('[name="account_label"]') || {}).value || '').trim();
+  var pf = (typeof ACCOUNT_PREFLIGHT !== 'undefined' && ACCOUNT_PREFLIGHT[acc]) || {};
+  var saved = (pf.link || '').trim();
+
+  if (!typed) return { field: input, text: 'Трекинговой ссылки нет. Кампания соберётся, но клики считать будет нечем.' };
+  if (typed !== saved) {
+    return { field: input, text: 'Ссылка набрана, но не сохранена — нажмите Save. В сборку уйдёт прежняя: '
+      + (saved ? aclEscHtml(saved) : 'её нет вовсе') + '.' };
+  }
+  if (pf.link_status === 'jira') {
+    return { field: input, text: 'В поле адрес задачи Jira, а не трекер. Клики по нему не считаются.' };
+  }
+  if (pf.link_status !== 'tracking') {
+    return { field: input, text: 'Ссылка не похожа на трекинговую. Проверьте её перед сборкой.' };
+  }
+  return null;
+};
+
+/* Подсветить поле так, чтобы его было видно. Раскрываем свёрнутую панель:
+   подсветка внутри закрытого блока — это подсветка, которой не видно. */
+window.cbHighlightField = function(field) {
+  if (!field) return;
+  var panel = field.closest('.cb-preflight');
+  if (panel) panel.classList.remove('cb-preflight-collapsed');
+  field.classList.add('cb-field-warn');
+  try { field.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+  field.addEventListener('input', function once() {
+    field.classList.remove('cb-field-warn');
+    field.removeEventListener('input', once);
+  });
+};
+
 window.cbPublish = function(form) {
   var accLabel  = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
   var country   = ((form.querySelector('[name="country"]') || {}).value || '?').trim();
@@ -7768,9 +7806,19 @@ window.cbPublish = function(form) {
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)</span>';
 
+  // Предупреждение идёт первым блоком: его читают, пока смотрят, что
+  // собирается, — а не после того, как уже нажали.
+  var warn = window.cbTrackingWarning(form);
+  if (warn) {
+    window.cbHighlightField(warn.field);
+    bodyHtml = '<div class="cb-warn-block">⚠ ' + aclEscHtml(warn.text)
+      + '<br><span style="opacity:.75">Собрать всё равно можно — ссылку добавляют и позже.</span></div>'
+      + bodyHtml;
+  }
+
   _safeConfirm('Build this campaign as a draft?', bodyHtml, function() {
     _doCbPublish(form);
-  }, { confirmLabel: 'Publish → draft' });
+  }, { confirmLabel: warn ? 'Собрать без ссылки' : 'Publish → draft' });
 };
 
 function _doCbPublish(form) {

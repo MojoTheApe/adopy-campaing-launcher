@@ -461,14 +461,26 @@ def _build_account_map_view(
     per_country: dict[str, dict[str, dict]] = {}
     labels_in_report: set[str] = set()
     display_name: dict[str, str] = {}
+    # «Что сделать» и «готов ли» жили в отдельной секции под картой, где тот
+    # же аккаунт описывался второй раз — своими числами и своей формой
+    # подключения. Числа там дублировались, форма была хуже той, что на карте
+    # (просила номер кабинета руками вместо того, чтобы прочитать его у
+    # профиля), а эти два поля не показывались больше нигде. Секция убрана,
+    # поля переехали сюда.
+    todo_by_country: dict[str, dict[str, dict]] = {}
     for country in report.get("countries", []):
         name = (country.get("country") or "").strip()
         bucket: dict[str, dict] = {}
+        todo: dict[str, dict] = {}
         for row in country.get("account_rows") or []:
             label = (row.get("account_label") or "").strip()
             if not label:
                 continue
             labels_in_report.add(label)
+            todo[label] = {
+                "to_do": row.get("to_do_display") or "",
+                "ready": bool(row.get("is_ready")),
+            }
             if period is None:
                 bucket[label] = row.get("account_excel") or {}
             else:
@@ -483,6 +495,7 @@ def _build_account_map_view(
         for key in {name.casefold(), _country_code(name).casefold()}:
             if key:
                 per_country[key] = bucket
+                todo_by_country[key] = todo
                 display_name.setdefault(key, name)
 
     map_path = get_ad_account_map_path()
@@ -556,6 +569,7 @@ def _build_account_map_view(
         # a Home screen reading "CR" next to a sidebar reading "Costa Rica"
         # invites the reader to wonder whether they are the same place.
         country_name = display_name.get(key) or wb_country.get(key, stored)
+        todo = todo_by_country.get(key, {})
         rows = []
         for label in account_links.accounts_for("country", stored):
             excel = _numbers(country_name, label) or stats.get(label) or {}
@@ -583,6 +597,12 @@ def _build_account_map_view(
                 # состояние кабинета — без периода: спенд отвечает «сколько за
                 # эти дни», состояние — «что с ним сейчас»
                 "status": _account_status(label),
+                # то же имя, что и у чисел: связка знает аккаунт по имени
+                # Multilogin, отчёт — по книжному
+                **{
+                    k: (todo.get(alias or label) or todo.get(label) or {}).get(k, "" if k == "to_do" else False)
+                    for k in ("to_do", "ready")
+                },
                 "assets": account_links.values_for(label, "asset"),
                 "countries": [
                     display_name.get(v.casefold(), v)
