@@ -49,7 +49,7 @@ def fetch_issues(command: list[str], repository: str) -> list[dict]:
         capture_output=True, text=True, timeout=90, check=True,
     )
     pages = json.loads(result.stdout)
-    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+    if not isinstance(pages, list) or not pages or any(not isinstance(page, list) for page in pages):
         raise ValueError("Expected complete GitHub issue pages")
     issues = [item for page in pages for item in page]
     if any(not isinstance(item, dict) or not isinstance(item.get("number"), int)
@@ -130,13 +130,17 @@ def build_board(issues: list[dict], snapshot: str, repository: str, synced_at: s
 
 
 def render_issues(issues: list[dict], snapshot: str, repository: str, synced_at: str) -> tuple[str, str]:
-    digest = hashlib.sha256(json.dumps(issues, sort_keys=True).encode()).hexdigest()
-    page = wall.render(build_board(issues, snapshot, repository, synced_at))
+    # Track rendered content and UI code, excluding the per-minute timestamp.
+    # Otherwise a style/filter deployment never reaches an already-open tab.
+    page = wall.render(build_board(issues, snapshot, repository, "__TRACKER_SYNC_TIME__"))
     page = '<!doctype html>\n<html lang="en">\n' + page
     page = page.replace('<meta charset="utf-8">',
                         '<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">')
     page = page.replace('<span>Built by <code>scripts/acl_board.py</code></span>',
                         '<span id="sync-state" role="status">Updates every minute</span>')
+    digest = hashlib.sha256((page + CLIENT).encode()).hexdigest()
+    page = page.replace('<span>Last change: __TRACKER_SYNC_TIME__</span>',
+                        f'<span>Last change: {wall._esc(synced_at)}</span>')
     page += '\n<script>\n' + CLIENT.replace("__DIGEST__", json.dumps(digest)) + '\n</script>\n</html>\n'
     return page, digest
 
@@ -149,7 +153,7 @@ CLIENT = """
   try {
     const wanted = sessionStorage.getItem(key);
     document.querySelectorAll('.chip').forEach(c => {
-      if (c.dataset.filter === wanted) c.click();
+      if (wanted && wanted !== 'all' && c.dataset.filter === wanted) c.click();
       c.addEventListener('click', () => {
         try { sessionStorage.setItem(key, c.getAttribute('aria-pressed') === 'true' ? c.dataset.filter : ''); }
         catch (_) {}
@@ -163,7 +167,9 @@ CLIENT = """
       const state = await response.json();
       const age = Date.now() - Date.parse(state.synced_at);
       if (!state.ok || !Number.isFinite(age) || age > 180000) {
-        message.textContent = 'Sync delayed · showing the last successful update';
+        message.textContent = state.error === 'empty_response'
+          ? 'Empty update ignored · showing the last successful update'
+          : 'Sync delayed · showing the last successful update';
         return;
       }
       message.textContent = 'Synced ' + new Date(state.synced_at).toLocaleTimeString() + ' · updates every minute';
@@ -176,26 +182,36 @@ CLIENT = """
 """
 
 
-def sync(command: list[str], repository: str, snapshot: Path, output: Path) -> None:
+def sync(command: list[str], repository: str, snapshot: Path, output: Path,
+         *, allow_empty: bool = False) -> None:
     output.mkdir(parents=True, exist_ok=True)
     status_path = output / "status.json"
     try:
+        previous = json.loads(status_path.read_text())
+        if not isinstance(previous, dict):
+            previous = {}
+    except (OSError, ValueError):
+        previous = {}
+    error = "fetch_failed"
+    try:
         issues = fetch_issues(command, repository)
+        if (not issues and not allow_empty and (output / "index.html").exists()
+                and previous.get("issues") != 0):
+            error = "empty_response"
+            raise ValueError("Empty response would erase the existing board")
         timestamp = now()
+        error = "render_failed"
         page, digest = render_issues(issues, snapshot.read_text(encoding="utf-8"), repository, timestamp)
+        error = "write_failed"
         atomic_write(output / "index.html", page)
         atomic_write(status_path, json.dumps({"ok": True, "synced_at": timestamp,
                                               "digest": digest, "issues": len(issues)}))
         print(f"Synced {len(issues)} issues at {timestamp}")
     except Exception:
-        try:
-            previous = json.loads(status_path.read_text())
-        except (OSError, ValueError):
-            previous = {}
-        previous.update(ok=False, attempted_at=now())
+        previous.update(ok=False, attempted_at=now(), error=error)
         atomic_write(status_path, json.dumps(previous))
         # Never log subprocess stderr: authentication errors may contain secrets.
-        raise RuntimeError("GitHub sync failed; previous board preserved") from None
+        raise RuntimeError(f"GitHub sync failed ({error}); previous board preserved") from None
 
 
 def main() -> int:
@@ -204,12 +220,14 @@ def main() -> int:
     parser.add_argument("--gh-command-json", default='["gh"]')
     parser.add_argument("--snapshot", type=Path, default=Path(__file__).resolve().parent.parent / "docs/task-board-snapshot.md")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--allow-empty", action="store_true",
+                        help="Explicitly allow clearing a previously populated board")
     args = parser.parse_args()
     command = json.loads(args.gh_command_json)
     if not isinstance(command, list) or not command or any(not isinstance(x, str) for x in command):
         parser.error("--gh-command-json must be a nonempty array of strings")
     try:
-        sync(command, args.repository, args.snapshot, args.output)
+        sync(command, args.repository, args.snapshot, args.output, allow_empty=args.allow_empty)
     except RuntimeError as error:
         print(str(error), file=sys.stderr)
         return 1

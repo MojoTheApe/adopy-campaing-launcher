@@ -94,3 +94,64 @@ def test_successful_sync_updates_html_and_status_together(tmp_path, monkeypatch)
     html = (tmp_path / "public/index.html").read_text()
     assert status["ok"] and status["issues"] == 1 and status["digest"] in html
     assert "Current title" in html
+
+
+def test_empty_response_cannot_replace_existing_board_and_next_sync_recovers(tmp_path, monkeypatch):
+    snapshot = tmp_path / "snapshot.md"
+    snapshot.write_text(SNAPSHOT)
+    output = tmp_path / "public"
+    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [issue()])
+    tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output)
+    html = (output / "index.html").read_text()
+    old = json.loads((output / "status.json").read_text())
+    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [])
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="previous board preserved"):
+            tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output)
+        assert (output / "index.html").read_text() == html
+        status = json.loads((output / "status.json").read_text())
+        assert not status["ok"] and status["error"] == "empty_response"
+        assert status["issues"] == 1 and status["digest"] == old["digest"]
+        assert status["synced_at"] == old["synced_at"]
+    updated = issue()
+    updated["title"] = "Recovered task"
+    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [updated])
+    tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output)
+    assert "Recovered task" in (output / "index.html").read_text()
+    assert json.loads((output / "status.json").read_text())["ok"]
+
+
+def test_new_empty_project_and_explicit_empty_reset_are_supported(tmp_path, monkeypatch):
+    snapshot = tmp_path / "snapshot.md"
+    snapshot.write_text(SNAPSHOT)
+    output = tmp_path / "public"
+    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [])
+    tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output)
+    assert "No tasks yet" in (output / "index.html").read_text()
+    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [issue()])
+    tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output)
+    monkeypatch.setattr(tracker, "fetch_issues", lambda *args: [])
+    tracker.sync(["gh"], tracker.REPOSITORY, snapshot, output, allow_empty=True)
+    assert json.loads((output / "status.json").read_text())["issues"] == 0
+
+
+def test_response_with_no_pages_is_not_a_valid_empty_repository(monkeypatch):
+    monkeypatch.setattr(tracker.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="[]"))
+    with pytest.raises(ValueError, match="complete GitHub issue pages"):
+        tracker.fetch_issues(["gh"], tracker.REPOSITORY)
+
+
+def test_deployment_changes_trigger_refresh_but_timestamps_do_not(monkeypatch):
+    _, original = tracker.render_issues([issue()], SNAPSHOT, tracker.REPOSITORY, "earlier")
+    _, later = tracker.render_issues([issue()], SNAPSHOT, tracker.REPOSITORY, "later")
+    assert later == original
+    monkeypatch.setattr(tracker.wall, "_PAGE", tracker.wall._PAGE.replace("#dfe9dd", "#d0e5d0"))
+    _, changed = tracker.render_issues([issue()], SNAPSHOT, tracker.REPOSITORY, "later")
+    assert changed != original
+
+
+def test_all_button_includes_every_status_in_its_count():
+    a, b = issue(1), issue(2)
+    b["labels"] = [{"name": "status:merged"}]
+    page, _ = tracker.render_issues([a, b], SNAPSHOT, tracker.REPOSITORY, "today")
+    assert 'data-filter="all" aria-pressed="true">All<b>2</b>' in page

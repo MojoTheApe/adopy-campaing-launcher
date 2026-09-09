@@ -663,7 +663,8 @@ def render(board: Board, land: dict | None = None) -> str:
     total = len(board.tasks)
     shipped = sum(1 for t in board.tasks if t.shown_status == "shipped")
 
-    legend = "".join(
+    legend = f'<button class="chip" data-filter="all" aria-pressed="true">All<b>{total}</b></button>'
+    legend += "".join(
         f'<button class="chip s-{s}" data-filter="{s}">{STATUS_LABEL[s]}'
         f'<b>{counts.get(s, 0)}</b></button>'
         for s in STATUSES
@@ -718,7 +719,7 @@ def render(board: Board, land: dict | None = None) -> str:
         # стояло «Five areas», когда их было уже шесть. Мелочь, которая учит
         # не верить остальному тексту на странице.
         area_count=len(board.areas),
-        areas="".join(areas_html),
+        areas="".join(areas_html) or '<p class="empty-board" role="status">No tasks yet.</p>',
         description=(_esc(board.description) if board.description else
             f"{len(board.areas)} areas of the system, the capabilities each is made of, "
             "and every task hanging off them. Open an area to see its tasks. Edited in "
@@ -1050,13 +1051,16 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
   }}
 
   chips.forEach(function (chip) {{
-    chip.setAttribute('aria-pressed', 'false');
+    chip.setAttribute('aria-pressed', String(chip.dataset.filter === 'all'));
     chip.addEventListener('click', function () {{
       var want = chip.dataset.filter;
-      active = (active === want) ? null : want;
-      if (!active) known = stored(AREA_KEY);
+      active = (want === 'all' || active === want) ? null : want;
+      // All is an explicit recovery action: reveal every area and every card.
+      // Toggling an individual status off retains the reader's previous layout.
+      if (want === 'all') known = areas.map(function (a) {{ return a.getAttribute('data-area'); }});
+      else if (!active) known = stored(AREA_KEY);
       chips.forEach(function (c) {{
-        c.setAttribute('aria-pressed', String(c.dataset.filter === active));
+        c.setAttribute('aria-pressed', String(c.dataset.filter === (active || 'all')));
       }});
       apply();
     }});

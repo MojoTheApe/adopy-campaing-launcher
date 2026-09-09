@@ -93,3 +93,31 @@ Implementation and self-review: Codex. No independent review claimed.
 - Docker health check passes; recurring systemd sync succeeds.
 
 This deployment does not merge code into master or promote a desktop ACL release.
+
+## Empty updates and UI refresh
+
+On 9 September 2026, the server logged nine successful zero-issue syncs among
+otherwise populated updates. The previous code accepted that response and
+published an empty board. It now rejects a zero-issue result when a populated
+board already exists, retaining both the HTML and the last successful count,
+timestamp and digest. The status endpoint reports `ok: false` and the safe
+error code `empty_response`; a later valid sync recovers automatically. Invalid
+page envelopes are rejected too. The upstream reason for the intermittent
+empty responses has not been established; the safeguard does not claim to
+detect every possible partially incomplete, nonempty response.
+
+New, empty repositories can still initialize. Deliberately clearing an existing
+board requires a one-off sync with `--allow-empty`; do not add that flag to the
+recurring timer. Other safe error codes distinguish fetch, render and write
+failures without publishing command stderr or secrets.
+
+`All` clears the status filter and opens all areas. It does not change GitHub
+labels. Manual expansion and selected status survive reloads. The refresh digest
+covers the rendered board and browser code, excluding the sync timestamp, so
+UI deployments also reach existing tabs without causing a reload every minute.
+
+Validation for the reliability change: 81 board/tracker tests passed. A separate
+Chrome test with 64 current issues verified All, status filters, repeated
+reloads, card/area persistence, rejected empty updates and the existing green
+palette. Backend regression tests reproduced the old empty-board overwrite
+before the fix and verify preservation followed by automatic recovery.

@@ -22,8 +22,14 @@ const chip = {
   setAttribute: () => {},
   addEventListener: function(event, callback) { this.listeners[event] = callback; },
 };
+const allAttributes = {};
+const allChip = {
+  dataset: {filter: 'all'}, listeners: {},
+  setAttribute: (key, value) => { allAttributes[key] = value; },
+  addEventListener: function(event, callback) { this.listeners[event] = callback; },
+};
 const document = {
-  querySelectorAll: (selector) => ({'details.area': [area], 'details.pin': [pin], '.chip': [chip], '.pin': [pin], '.cap': [], 'nav.areas a': []}[selector]),
+  querySelectorAll: (selector) => ({'details.area': [area], 'details.pin': [pin], '.chip': [allChip, chip], '.pin': [pin], '.cap': [], 'nav.areas a': []}[selector]),
 };
 const localStorage = {
   getItem: (key) => { reads.push(String(key)); return storage.get(String(key)) ?? null; },
@@ -43,3 +49,17 @@ area.listeners.toggle();
 assert.equal(area.open, true);
 assert.equal(storage.get('acl.wall.open'), '["1"]');
 assert.ok(!reads.includes('undefined'));
+// All must reveal cards even when the reader previously collapsed every area.
+area.open = false;
+area.listeners.toggle();
+assert.equal(storage.get('acl.wall.open'), '[]');
+chip.listeners.click();
+allChip.listeners.click();
+assert.equal(area.open, true);
+assert.equal(allAttributes['aria-pressed'], 'true');
+area.listeners.toggle();
+assert.equal(storage.get('acl.wall.open'), '["1"]');
+// Repeated All is idempotent; it must never become a nonexistent status filter.
+allChip.listeners.click();
+assert.equal(area.open, true);
+assert.equal(allAttributes['aria-pressed'], 'true');
