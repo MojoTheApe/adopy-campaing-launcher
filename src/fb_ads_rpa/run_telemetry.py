@@ -23,6 +23,7 @@ Each record:
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,7 +52,80 @@ def normalise_step(label: str) -> tuple[str, bool | None]:
         return label[len("fail_"):], False
     if label.startswith("success_"):
         return label[len("success_"):], True
+    # «Пропущено» — третий исход, и он не то же самое, что удача или отказ.
+    # Шаг детального таргетинга не выполнялся вовсе, когда в черновике не было
+    # интересов, и не писал об этом ни строки: в потоке его просто не
+    # существовало. 9 сентября это выглядело так, что интересы «не
+    # проставились», а по телеметрии нельзя было отличить пропуск от отказа.
+    # `ok=None` не попадает в долю неудач — пропуск не провал.
+    if label.startswith("skip_"):
+        return label[len("skip_"):], None
     return label, None
+
+
+#: Что похоже на номер кабинета, id профиля или иной опознавательный знак.
+#: Контекст отказа уезжает в общую таблицу телеметрии, которую читает вся
+#: компания, — идентификаторы туда не едут.
+_SCRUB = (
+    (re.compile(r"(act=)(?:act_)?\d{6,}"), r"\1<hidden>"),
+    (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), "<uuid>"),
+    (re.compile(r"\b\d{10,}\b"), "<digits>"),
+)
+
+
+def scrub(text: str) -> str:
+    """Убрать из строки всё, по чему опознаётся аккаунт или профиль."""
+    out = str(text or "")
+    for pattern, replacement in _SCRUB:
+        out = pattern.sub(replacement, out)
+    return out
+
+
+def page_context(page, *, timeout_ms: int = 1200) -> dict:
+    """Что было на странице в момент отказа — коротко и безопасно.
+
+    До сих пор у отказов записывался только факт: «ad_copy: false». Причины не
+    было ни у человека, ни у будущего агента. 9 сентября прогон дал шесть
+    отказов, и по телеметрии нельзя было сказать про них ничего.
+
+    Собирается в **одной** точке — там же, где пишется сама запись, — а не в
+    сорока трёх местах вызова. Разойтись с ними нечему, и новый шаг получит
+    контекст, ничего для этого не делая.
+
+    Три правила, которые здесь важнее полноты:
+
+    * **Никогда не бросает.** Строка лога не должна стоить кампании — то же
+      правило, что у `record`.
+    * **Ограничено по времени.** Ожидание на упавшем шаге платит человек,
+      сидящий перед экраном.
+    * **Вычищено.** Адрес Ads Manager содержит номер кабинета, и он не поедет
+      в общую таблицу.
+    """
+    info: dict[str, Any] = {}
+    try:
+        info["url"] = scrub(str(getattr(page, "url", "") or ""))[:200]
+    except Exception:
+        pass
+    for name, call in (
+        ("title", lambda: page.title()),
+        ("dialogs", lambda: page.get_by_role("dialog").count()),
+    ):
+        try:
+            value = call()
+            if isinstance(value, str):
+                value = scrub(value)[:120]
+            info[name] = value
+        except Exception:
+            continue
+    # Верхний баннер Meta закрывает и сдвигает контролы — это самая частая
+    # причина, по которой шаг «не нашёл» существующую кнопку.
+    try:
+        banner = page.get_by_role("banner").first
+        if banner.is_visible(timeout=timeout_ms):
+            info["banner"] = scrub(banner.inner_text(timeout=timeout_ms))[:120]
+    except Exception:
+        pass
+    return info
 
 
 def record(
