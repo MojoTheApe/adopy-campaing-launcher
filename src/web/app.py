@@ -2410,6 +2410,32 @@ async def account_spend_open_profile(request: Request) -> JSONResponse:
     return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
 
 
+@app.post("/mlx-profile-open")
+async def mlx_profile_open(request: Request) -> JSONResponse:
+    """Поднять найденный в Multilogin профиль — ещё до подключения аккаунта.
+
+    Порядок работы человека: нашёл профиль в поиске, открыл, посмотрел в самом
+    кабинете что нужно, подключил. Прежде дешборд соглашался открыть профиль
+    только у аккаунта, который уже в карте, — а чтобы попасть в карту, он же
+    требовал номер кабинета, который знает открытый профиль. Круг замкнутый, и
+    выйти из него можно было только вписав номер руками.
+    """
+    from src.analysis_agent import account_spend
+
+    form = await request.form()
+    profile_id = (form.get("profile_id") or "").strip()
+    if not profile_id:
+        return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
+    ok, message = await asyncio.to_thread(
+        account_spend.open_profile_for_automation,
+        profile_id,
+        (form.get("folder_id") or "").strip(),
+        (form.get("instance") or "A").strip(),
+        (form.get("name") or "").strip(),
+    )
+    return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
+
+
 @app.post("/account-probe/ad-account")
 async def account_probe_ad_account(request: Request) -> JSONResponse:
     """Спросить у открытого профиля, какой у него рекламный кабинет.
