@@ -933,6 +933,43 @@ _FIND_TOTALS_JS = r"""
 """
 
 
+#: Прокрутить список кампаний к низу. Строка итогов стоит **под** ними, и в
+#: невысоком окне Ads Manager её не отрисовывает вовсе — искать в DOM нечего.
+#:
+#: 8 сентября прогон на 1–8 сентября сорвался именно так: на снимке окно
+#: обрывается сразу под первой строкой кампании, даты стоят верные, а строки
+#: итогов на странице нет. Двадцать секунд ожидания ничего не меняли: ждать
+#: можно сколько угодно того, что не рисуется.
+#:
+#: Прокручивается самый большой прокручиваемый блок — сам список. Ищем его по
+#: `overflowY`, а не по классу: имена классов у Meta меняются от сборки к
+#: сборке, а поведение блока — нет.
+_SCROLL_TO_TOTALS_JS = r"""
+() => {
+  let best = null, bestArea = 0;
+  for (const n of document.querySelectorAll('div')) {
+    const st = getComputedStyle(n);
+    if (!/(auto|scroll)/.test(st.overflowY)) continue;
+    if (n.scrollHeight <= n.clientHeight + 40) continue;
+    const r = n.getBoundingClientRect();
+    const area = r.width * r.height;
+    if (area > bestArea) { bestArea = area; best = n; }
+  }
+  if (best) { best.scrollTop = best.scrollHeight; return true; }
+  window.scrollTo(0, document.body.scrollHeight);
+  return false;
+}
+"""
+
+
+def _scroll_to_totals(page) -> None:
+    """Показать низ списка, где живёт строка итогов. Молча, если не вышло."""
+    try:
+        page.evaluate(_SCROLL_TO_TOTALS_JS)
+    except Exception:
+        pass
+
+
 def _scan_totals(page) -> tuple[float | None, bool]:
     """Сумма из строки итогов и есть ли надпись, за которую берётся курсор."""
     try:
@@ -967,6 +1004,9 @@ def _read_total(page) -> tuple[float | None, str]:
     # самого начала (`_shown_period`), у итогов её не было.
     label = None
     for _ in range(TOTALS_TRIES):
+        # Прокрутка перед каждым осмотром, а не однажды: список догружается по
+        # мере прокрутки, и низ у него появляется не сразу.
+        _scroll_to_totals(page)
         value, has_label = _scan_totals(page)
         if value is not None:
             return value, "строка итогов, «Total spent»"
@@ -976,7 +1016,10 @@ def _read_total(page) -> tuple[float | None, str]:
                 break
         _sleep(1)
     if label is None:
-        return None, f"строка «Results from …» не появилась за {TOTALS_TRIES} с"
+        return None, (
+            f"строка «Results from …» не появилась за {TOTALS_TRIES} с "
+            "даже после прокрутки к низу списка"
+        )
 
     try:
         label.scroll_into_view_if_needed(timeout=5_000)
