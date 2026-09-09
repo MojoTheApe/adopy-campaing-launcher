@@ -672,6 +672,11 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
     if not act:
         out.error = f"у {account} не заполнен ad_account_id"
         return out
+    try:
+        url = _url(act, date_from, date_to)
+    except ValueError as exc:
+        out.error = str(exc)
+        return out
 
     conn = None
     try:
@@ -681,7 +686,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
             out.error = str(exc)
             return out
         page = conn.page
-        page.goto(_url(act, date_from, date_to), timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
 
         # Ads Manager рисуется скриптом, и `domcontentloaded` на нём не значит
         # почти ничего: первый прогон 2026-09-07 проверил период через четыре
@@ -689,8 +694,14 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         # Ждём саму таблицу, и только потом спрашиваем, какой период показан.
         grid_ready = _wait_for_grid(page)
         expected_act = act if act.startswith("act_") else "act_" + act
-        if _act_from_url(page, tries=1) != expected_act:
-            out.error = "Ads Manager opened a different account; reading refused."
+        opened = _act_from_url(page, tries=1)
+        if opened != expected_act:
+            # Оба номера помогают сверить карту и доступ профиля без нового чтения.
+            out.error = (
+                f"Ads Manager открыл кабинет {opened or '(в адресе нет act)'}, "
+                f"а у {account} записан {expected_act} — чтение отменено. "
+                "Либо в карте не тот номер, либо у профиля нет доступа к этому кабинету."
+            )
             return out
         if not grid_ready:
             # Статус спрашиваем и здесь: у отключённого кабинета таблицы может
@@ -798,18 +809,17 @@ def _read_status(page) -> tuple[str, str]:
 def _url(act: str, date_from: str, date_to: str = "") -> str:
     """Адрес Ads Manager на нужный период.
 
-    **Конец в этом параметре исключающий.** Проверено на живом аккаунте
-    2026-09-07: `date=2026-09-01_2026-09-06` показывает «Sep 1 – Sep 5», а
-    `..._2026-09-07` — «Sep 1 – Sep 6». Поэтому к концу прибавляется день, и
-    тогда один день укладывается в то же правило: `06_07` — это шестое.
-
-    Без этого шесть дней превращались в пять, а сумма выходила за другой
-    отрезок и выглядела правильной: 67.87 вместо числа, включающего 259.48 за
-    шестое. Сверка периода на экране это ловит, но лучше не создавать повода.
+    Конец диапазона исключающий: к последнему запрошенному дню прибавляем один.
+    В URL передаём только цифры, без префикса `act_` из карты: иначе Ads Manager
+    может открыть кабинет профиля по умолчанию. Разборщик входящего URL допускает
+    оба формата, поэтому его успешный round trip сам по себе не проверяет запрос.
     """
     from datetime import date as _date, timedelta as _td
+    import re
 
-    act_id = act if act.startswith("act_") else f"act_{act}"
+    act_id = act.strip().removeprefix("act_")
+    if not re.fullmatch(r"[0-9]+", act_id):
+        raise ValueError("ad_account_id должен содержать только цифры, с необязательным префиксом act_")
     end = date_to or date_from
     try:
         y, m, d = (int(x) for x in end.split("-"))
