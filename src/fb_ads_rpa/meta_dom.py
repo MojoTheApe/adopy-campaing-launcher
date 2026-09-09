@@ -2174,6 +2174,13 @@ def run_recorded_campaign_flow(
     def _shot(label: str, diag: dict | None = None) -> None:
         now = time.time()
         step, ok = _telemetry.normalise_step(label)
+        # Причина отказа собирается здесь, в единственной точке, а не в сорока
+        # трёх местах вызова. Ни один из них её не передавал: у всех отказов
+        # 9 сентября `diag` был пуст, и сказать про них было нечего — ни
+        # человеку, ни будущему агенту. Собранное в одном месте не разойдётся
+        # с вызовами, и новый шаг получит контекст, ничего для этого не делая.
+        if ok is False and diag is None:
+            diag = _telemetry.page_context(page) or None
         _telemetry.record(
             step,
             ok,
@@ -2558,6 +2565,13 @@ def run_recorded_campaign_flow(
         except Exception as exc:
             _shot("fail_targeting")
             soft_fails.append(f"targeting:{str(exc)[:60]}")
+    else:
+        # Пропуск тоже событие. Раньше пустой список интересов не оставлял в
+        # телеметрии ни строки: шага в потоке просто не существовало. 9 сентября
+        # на экране это выглядело как «интересы не проставились», а отличить
+        # «нечего было вводить» от «не нашёл поле» было нечем — оба исхода
+        # выглядели одинаково, то есть никак.
+        _shot("skip_targeting", {"why": "в черновике нет интересов"})
 
     # Placements: switch off Advantage+ automatic placements and set the
     # account's real manual configuration (confirmed live 2026-07-26 via
