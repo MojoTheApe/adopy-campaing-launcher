@@ -9,10 +9,11 @@ The workflow is **Idea → Backlog → Todo → In progress → Review → In ma
 - [Workspace, hosting and reusable template](../tracker/README.md).
 - [Workflow specification](TRACKER_REORGANIZATION.md) and [approved Design v2](TRACKER_DESIGN_V2.md).
 
-All tasks shows every nonarchived task and clears all filters. Work contains Todo, In progress and Review; Plan contains Idea and Backlog. Modules refine the current view. List and Board share search and filters; clicking a task opens its details separately. Use the small copy icon beside the ID to send its exact identifier to an agent. On narrow screens, Navigation opens Views and Modules; Board shows one explicitly selected stage.
+The top navigation is All · Idea · Backlog · To do · In progress · Review · Master · Archive, with project-wide counts. All clears filters and shows every nonarchived task. Master means the same final In master stage. The sidebar contains modules only; its counts match the selected status/release scope before extra filters. On narrow screens Navigation opens those modules.
 
-The overview shows Total tasks, Backlog and the selected release's remaining required leaf tasks, plus workflow counts. The totals are project-wide, independent from local filters. Archive is counted separately. Required archived leaf tasks remain unresolved release scope until explicitly removed from it; initiative parents do not inflate readiness.
+List and Board share search and filters, with compact rows and separate task details. Clicking anywhere on the ID, including its small icon, copies its exact identifier. Light / Dark / System changes smoothly; reduced motion disables animations.
 
+The compact MVP widget shows percentage and completed / total required leaf tasks. Clicking it opens that required scope. Required archived leaf tasks remain unresolved until explicitly removed from scope; initiative parents do not inflate readiness.
 MVP uses an explicit milestone and Required flags. Empty scope displays Scope not defined. Stale sync means readiness is unknown, and the last saved tasks remain visible. Scope readiness is not the publication of a release. All UI changes remain presentation preferences: task mutations happen through GitHub and the canonical agent commands.
 
 The previous [Obsidian export](archive/TASK-BOARD-LEGACY.md) and task-board-snapshot.md are historical and are not read by the live tracker. Local commits and checked boxes do not independently prove merge or release.

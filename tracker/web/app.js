@@ -7,8 +7,8 @@
   const stages = ['idea', 'backlog', 'todo', 'in_progress', 'review', 'merged'];
   const priorities = ['high', 'medium', 'low', 'unassigned'];
   const types = ['bug', 'feature', 'improvement', 'research', 'operations', 'unassigned'];
-  const views = ['all', 'work', 'plan', 'release', 'archive'];
-  const defaults = () => ({view:'all', layout:'list', density:'comfortable', theme:'system', module:'', statuses:[], priorities:[], types:[], releases:[], design:false, required:false, blocked:false, search:'', scope:'all', selectedRelease:'', selected:null, column:'in_progress', scroll:0, boardScroll:0, focus:''});
+  const views = ['all', ...stages, 'release', 'archive'];
+  const defaults = () => ({view:'all', layout:'list', theme:'system', module:'', statuses:[], priorities:[], types:[], releases:[], design:false, required:false, blocked:false, search:'', scope:'all', selectedRelease:'', selected:null, column:'in_progress', scroll:0, boardScroll:0, focus:''});
   const read = (storage, name) => {try {return JSON.parse(storage.getItem(name) || '{}') || {};} catch (_) {return {};}};
   let state = defaults(), migrated = false;
   try {
@@ -23,7 +23,7 @@
     }
   } catch (_) {}
   function sanitize() {
-    const allowed = {view:views, layout:['list','board'], density:['comfortable','compact'], theme:['light','dark','system'], scope:['all','remaining','blocked','complete']};
+    const allowed = {view:views, layout:['list','board'], theme:['light','dark','system'], scope:['all','required','remaining','blocked','complete']};
     for (const [k, values] of Object.entries(allowed)) if (!values.includes(state[k])) state[k]=defaults()[k];
     for (const [k, values] of Object.entries({statuses:stages, priorities, types, releases:data.milestones.map(m=>String(m.number))})) state[k]=Array.isArray(state[k])?[...new Set(state[k].filter(v=>values.includes(v)))]:[];
     if (!['', 'unclassified', ...data.modules.map(m=>m.id)].includes(state.module)) state.module='';
@@ -44,8 +44,8 @@
   const node = (tag, text, cls) => {const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   const button = (text, cls, attributes={}) => {const b=node('button',text,cls);b.type='button';for(const [k,v] of Object.entries(attributes))b.setAttribute(k,v);return b;};
   const cap = x => x ? x[0].toUpperCase()+x.slice(1) : 'Unassigned';
-  const label = s => ({idea:'Idea',backlog:'Backlog',todo:'Todo',in_progress:'In progress',review:'Review',merged:data.completion_label})[s];
-  const viewLabel = v => ({all:'All tasks',work:'Work',plan:'Plan',release:data.release_view_label,archive:'Archive'})[v];
+  const label = s => ({idea:'Idea',backlog:'Backlog',todo:'To do',in_progress:'In progress',review:'Review',merged:data.completion_label})[s];
+  const viewLabel = v => ({all:'All tasks',release:data.release_view_label,archive:'Archive'})[v] || label(v);
   const moduleName = m => data.modules.find(x=>x.id===m)?.name || 'Unclassified';
   const release = () => data.milestones.find(m=>String(m.number)===state.selectedRelease);
   const completed = t => t.status==='merged' && !t.archive;
@@ -59,10 +59,10 @@
   function inView(t) {
     if(state.view==='archive')return t.archive;
     if(t.archive && !(state.view==='release' && t.required))return false;
-    if(state.view==='work')return ['todo','in_progress','review'].includes(t.status);
-    if(state.view==='plan')return ['idea','backlog'].includes(t.status);
+    if(stages.includes(state.view))return t.status===state.view;
     if(state.view==='release') {
       if(String(t.milestone)!==state.selectedRelease)return false;
+      if(state.scope!=='all'&&(!t.required||t.initiative))return false;
       if(state.scope==='remaining')return t.required && !t.initiative && !completed(t);
       if(state.scope==='blocked')return t.required && !t.initiative && blocked(t);
       if(state.scope==='complete')return completed(t);
@@ -88,18 +88,18 @@
     return data.tasks.filter(matches).sort((a,b)=>rank[a.status]-rank[b.status] || (a.status==='todo'?(position(a.number)-position(b.number)):0) || p[a.priority]-p[b.priority] || (a.status==='todo'?String(a.todo_at||a.created_at).localeCompare(String(b.todo_at||b.created_at)):0) || a.number-b.number);
   }
   function clearFilters() {Object.assign(state,{module:'',statuses:[],priorities:[],types:[],releases:[],design:false,required:false,blocked:false,search:'',scope:'all'});$('search').value='';}
-  function chooseView(v) {clearFilters();state.view=v;state.boardScroll=0;closeDialog($('navigation-panel'));save();render();}
+  function chooseView(v) {clearFilters();state.view=v;state.scope=v==='release'?'required':'all';state.boardScroll=0;closeDialog($('navigation-panel'));save();render();}
   function statusBadge(t) {const s=node('span',undefined,'st-stage');s.dataset.status=t.status;s.append(node('span',undefined,'st-stage-dot'),document.createTextNode(t.non_code&&t.status==='merged'?'Complete':label(t.status)));return s;}
   function copyButton(t) {
     const b=button('', 'st-copy', {id:'copy-'+t.number,'data-copy':t.id,'aria-label':'Copy task ID '+t.id,'title':'Copy task ID'});
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');
     for(const attrs of [{x:8,y:8,width:12,height:12,rx:2},{x:3,y:3,width:12,height:12,rx:2}]){const r=document.createElementNS(svg.namespaceURI,'rect');for(const [k,v] of Object.entries(attrs))r.setAttribute(k,v);svg.prepend(r);}
-    b.append(svg);return b;
+    b.append(node('span',t.id,'st-id'),svg);return b;
   }
   const tag = (text, cls='') => node('span',text,'task-tag '+cls);
   function taskCard(t, layout) {
     const row=node(layout==='board'?'article':'div',undefined,layout==='board'?'task st-board-card':'task st-row');row.id='task-'+t.number;row.dataset.issue=t.number;
-    const main=node('div',undefined,'st-task-main'), id=node('div',undefined,'st-idline');id.append(node('span',t.id,'st-id'),copyButton(t));
+    const main=node('div',undefined,'st-task-main'), id=node('div',undefined,'st-idline');id.append(copyButton(t));
     if(blocked(t))id.append(tag('Blocked','blocked'));
     if(t.design)id.append(tag('Design','design'));
     if(t.warnings.length)id.append(tag('Check metadata','warning'));
@@ -127,35 +127,37 @@
     for(const child of [...container.children])if(!keep.has(child))child.remove();
     children.forEach((child,i)=>{if(container.children[i]!==child)container.insertBefore(child,container.children[i]||null);});
   }
-  function navButtons(container, mobile=false) {
-    const list=views.map(v=>{const b=button(viewLabel(v),'',{'data-view':v,'aria-pressed':String(state.view===v),id:(mobile?'mobile-':'')+'view-'+v});if(v==='all'){const count=node('span',String(data.tasks.filter(t=>!t.archive).length),'st-nav-count');b.append(count);}return b;});
-    // Navigation isn't recreated during a data poll unless its labels/counts change.
-    const sig=JSON.stringify(list.map(b=>b.outerHTML));if(container.dataset.signature!==sig){container.replaceChildren(...list);container.dataset.signature=sig;}
-  }
   function renderNavigation() {
-    navButtons($('views'));navButtons($('mobile-views'),true);
     const modules=[{id:'',name:'All modules'},...data.modules];if(data.tasks.some(t=>!t.module))modules.push({id:'unclassified',name:'Unclassified'});
+    const section=data.tasks.filter(inView),counts=modules.map(m=>section.filter(t=>!m.id||(t.module||'unclassified')===m.id).length);
     for(const id of ['modules','mobile-modules']) {
-      const sig=JSON.stringify([modules,state.module]);if($(id).dataset.signature===sig)continue;
-      $(id).replaceChildren(...modules.map(m=>{const b=button('','',{'data-module':m.id,'aria-pressed':String(state.module===m.id),id:id+'-'+(m.id||'all')});b.append(node('span',undefined,'st-module-dot'),document.createTextNode(m.name));return b;}));$(id).dataset.signature=sig;
+      const sig=JSON.stringify([modules,state.module,counts]);if($(id).dataset.signature===sig)continue;
+      $(id).replaceChildren(...modules.map((m,i)=>{const b=button('','',{'data-module':m.id,'aria-pressed':String(state.module===m.id),id:id+'-'+(m.id||'all')});b.append(node('span',undefined,'st-module-dot'),node('span',m.name,'st-module-name'),node('span',String(counts[i]),'st-nav-count'));return b;}));$(id).dataset.signature=sig;
     }
-    $('view-title').textContent=viewLabel(state.view);$('project-name').textContent=data.project.name;$('project-context').textContent=data.project.name;
-    $('github-link').href='https://github.com/'+data.project.repository+'/issues';document.title=data.project.name+' · '+viewLabel(state.view);
-    root.dataset.density=state.density;
+    const title=state.module?moduleName(state.module):viewLabel(state.view);
+    $('view-title').textContent=title;$('project-name').textContent=data.project.name;$('project-context').textContent=data.project.name;
+    $('github-link').href='https://github.com/'+data.project.repository+'/issues';document.title=data.project.name+' · '+title;
     document.querySelectorAll('[data-layout]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.layout===state.layout)));
-    $('density-toggle').setAttribute('aria-pressed',String(state.density==='compact'));
   }
   function renderOverview() {
     const active=data.tasks.filter(t=>!t.archive),m=release(),s=m?.summary;
-    $('total-count').textContent=active.length;$('archive-count').textContent=(data.tasks.length-active.length)+' archived';$('backlog-count').textContent=active.filter(t=>t.status==='backlog').length;
-    $('release-metric-label').textContent=(m?.title||data.release_view_label)+' remaining';
-    $('mvp-count').textContent=s?.total?String(s.remaining):'—';
-    $('mvp-note').textContent=!s?.total?'Scope not defined':`${s.complete} of ${s.total} complete${s.blocked?' · '+s.blocked+' blocked':''}${!fresh?' · last saved data':''}`;
-    $('mvp-progress').hidden=!s?.total;$('mvp-progress').max=s?.total||1;$('mvp-progress').value=s?.complete||0;
-    const sig=JSON.stringify([active.map(t=>t.status),data.completion_label]);
-    if($('pipeline').dataset.signature!==sig){$('pipeline').replaceChildren(...['todo','in_progress','review','merged'].map(status=>{const b=button('','',{'data-metric':status,id:'metric-'+status});const mark=node('span',undefined,'st-stage-dot');mark.dataset.status=status;b.append(mark,document.createTextNode(label(status)),node('b',String(active.filter(t=>t.status===status).length)));return b;}));$('pipeline').dataset.signature=sig;}
+    $('release-metric-label').textContent=m?.title||data.release_view_label;
+    const percent=s?.total?(s.complete===s.total?100:Math.floor(s.complete/s.total*100)):null;
+    $('mvp-count').textContent=percent===null?'—':percent+'%';
+    $('mvp-note').textContent=percent===null?'Scope not defined':`${s.complete} / ${s.total} required tasks${!fresh?' · saved snapshot':''}`;
+    $('mvp-metric').setAttribute('aria-pressed',String(state.view==='release'));
+    $('mvp-metric').classList.toggle('is-stale',!fresh);
+    $('mvp-progress').hidden=percent===null;$('mvp-progress').max=s?.total||1;$('mvp-progress').value=s?.complete||0;
+    const counts={all:active.length,archive:data.tasks.length-active.length,...Object.fromEntries(stages.map(s=>[s,active.filter(t=>t.status===s).length]))};
+    const sig=JSON.stringify([counts,data.completion_label,state.view]);
+    if($('pipeline').dataset.signature!==sig){$('pipeline').replaceChildren(...['all',...stages,'archive'].map(v=>{
+      const b=button('','',{'data-view':v,'aria-pressed':String(state.view===v),id:'view-'+v});
+      if(stages.includes(v)){const dot=node('span',undefined,'st-stage-dot');dot.dataset.status=v;b.append(dot);}
+      const name=v==='all'?'All':v==='merged'?(data.completion_label==='In master'?'Master':data.completion_label):viewLabel(v);
+      b.append(node('span',name),node('b',String(counts[v])));return b;
+    }));$('pipeline').dataset.signature=sig;}
     $('release-context').hidden=state.view!=='release';
-    const scopeRows=[['all','Entire scope'],['remaining','Remaining required'],['blocked','Blockers'],['complete','Completed']];
+    const scopeRows=[['required','Required tasks'],['remaining','Remaining'],['blocked','Blockers'],['complete','Completed'],['all','Entire milestone']];
     const scopeSig=JSON.stringify([state.scope,state.view]);if($('release-scopes').dataset.signature!==scopeSig){$('release-scopes').replaceChildren(...scopeRows.map(([v,l])=>button(l,'',{'data-scope':v,'aria-pressed':String(state.scope===v),id:'scope-'+v})));$('release-scopes').dataset.signature=scopeSig;}
     const box=$('release-summary');box.classList.toggle('ready',Boolean(s?.ready&&fresh));
     const summary=!s?.total?'Scope not defined':!fresh?'Readiness unknown · sync delayed':s.ready?'Scope ready':'Scope in progress';
@@ -185,9 +187,9 @@
   function renderRows(rows) {
     const holder=$('tasks');
     if(!rows.length) {
-      const msg=state.view==='work'&&!data.tasks.some(inView)?'No tasks selected for execution':state.view==='archive'&&!data.tasks.some(inView)?'No archived tasks':!data.tasks.length?'No tasks yet':'No tasks match these filters';
+      const msg=state.view==='archive'&&!data.tasks.some(inView)?'No archived tasks':!data.tasks.length?'No tasks yet':'No tasks match these filters';
       const signature=state.view+msg;
-      if(holder.dataset.empty!==signature){const box=node('div',undefined,'st-empty');box.append(node('h2',msg));if(state.view==='work')box.append(node('p','Select tasks from Backlog and move them to Todo.'));box.append(button('Show all tasks','st-control',{'data-view':'all'}));holder.replaceChildren(box);holder.dataset.empty=signature;}
+      if(holder.dataset.empty!==signature){const box=node('div',undefined,'st-empty');box.append(node('h2',msg));box.append(button('Show all tasks','st-control',{'data-view':'all'}));holder.replaceChildren(box);holder.dataset.empty=signature;}
       listLayout='';$('board-navigation').hidden=true;return;
     }
     delete holder.dataset.empty;
@@ -199,7 +201,7 @@
       if(!list){list=node('div',undefined,'st-list');const header=node('div',undefined,'st-list-head');['Task','Status','Module','Priority','Release'].forEach((l,i)=>header.append(node('span',l,i===2?'st-module-head':i===3?'st-priority-head':'')));list.append(header);holder.append(list);}
       reconcile(list,[list.firstElementChild,...rows.map(getCard)]);
     } else {
-      let cols=state.view==='work'?['todo','in_progress','review']:state.view==='plan'?['idea','backlog']:stages;
+      let cols=stages.includes(state.view)?[state.view]:stages;
       if(state.statuses.length)cols=cols.filter(s=>state.statuses.includes(s));
       const focused=matchMedia('(max-width: 899px)').matches;
       if(!cols.includes(state.column))state.column=cols.find(s=>rows.some(t=>t.status===s))||cols[0];
@@ -231,7 +233,7 @@
     if(!t){state.selected=null;return;}
     lastDetail=t;
     const sig=JSON.stringify([t,!matches(t),!current,data.modules,pendingDeps(t)]);
-    if(sig!==detailSignature){const y=$('detail-content').scrollTop;const copy=copyButton(t);copy.id='detail-copy-'+t.number;$('detail-id').replaceChildren(node('span',t.id,'st-id'),copy);$('detail-content').replaceChildren(detailData(t,!matches(t),!current));$('detail-content').scrollTop=y;detailSignature=sig;}
+    if(sig!==detailSignature){const y=$('detail-content').scrollTop;const copy=copyButton(t);copy.id='detail-copy-'+t.number;$('detail-id').replaceChildren(copy);$('detail-content').replaceChildren(detailData(t,!matches(t),!current));$('detail-content').scrollTop=y;detailSignature=sig;}
     positionDetail();
   }
 
@@ -245,7 +247,9 @@
   }
   function openTask(number, source) {
     const t=taskByNumber(Number(number));if(!t)return;
+    const switching=$('task-detail').open&&state.selected!==t.number;
     openerId=source?.id||'summary-'+number;state.selected=t.number;lastDetail=t;detailSignature='';updateDetail();$('detail-feedback').textContent='';$('detail-close').focus({preventScroll:true});
+    if(switching&&!matchMedia('(prefers-reduced-motion: reduce)').matches)$('detail-content').animate([{opacity:0,transform:'translateY(6px)'},{opacity:1,transform:'translateY(0)'}],{duration:220,easing:'ease-out'});
     history.replaceState(null,'','#task-'+t.number);save();
   }
   function closeDetail() {
@@ -261,7 +265,7 @@
     const focus=document.activeElement,focusId=focus?.id,y=window.scrollY,anchor=preserve?captureAnchor():null,horizontal=$('tasks').scrollLeft;
     renderNavigation();renderOverview();renderFilters();const rows=sortedRows();renderRows(rows);
     $('result-count').textContent=`Showing ${rows.length} of ${data.tasks.filter(inView).length} tasks`;
-    const run=data.queue?.run;$('batch-note').hidden=state.view!=='work'||!run;
+    const run=data.queue?.run;$('batch-note').hidden=!['todo','in_progress','review'].includes(state.view)||!run;
     if(run)$('batch-note').textContent=`${run.issues.length} tasks in the selected batch${data.queue.active?' · working on #'+data.queue.active.issue:''}`;
     if(state.selected)updateDetail();
     if(focus?.isConnected)focus.focus({preventScroll:true});else if(focusId&&$(focusId))$(focusId).focus({preventScroll:true});
@@ -269,11 +273,12 @@
     $('tasks').scrollLeft=horizontal;
   }
   const themeMedia=matchMedia('(prefers-color-scheme: dark)');
+  let themeTimer;
   function theme(animate=false) {
     if(animate)document.documentElement.classList.add('st-theme-transition');
     document.documentElement.dataset.theme=state.theme==='system'?(themeMedia.matches?'dark':'light'):state.theme;
     document.querySelectorAll('button[data-theme]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.theme===state.theme)));
-    if(animate)setTimeout(()=>document.documentElement.classList.remove('st-theme-transition'),180);
+    if(animate){clearTimeout(themeTimer);themeTimer=setTimeout(()=>document.documentElement.classList.remove('st-theme-transition'),420);}
   }
   themeMedia.addEventListener('change',()=>{if(state.theme==='system')theme(true);});
   function closeDialog(d) {if(!d.open)return;d.close();if(d.id==='filters-panel')$('filters-toggle').setAttribute('aria-expanded','false');}
@@ -284,11 +289,11 @@
     b.setAttribute('aria-expanded','true');d.querySelector('button').focus();
   }
   $('filters-panel').addEventListener('close',()=>{$('filters-toggle').setAttribute('aria-expanded','false');});
-  let toastTimer;
+  let toastTimer;const copyTimers=new WeakMap();
   function copyFeedback(id, ok, source) {
     const message=ok?'Copied '+id:'Copy manually: '+id;
     $('detail-feedback').textContent=message;$('copy-toast').textContent=message;$('copy-toast').hidden=false;
-    if(ok&&source.isConnected){const original=source.innerHTML;source.textContent='✓';source.setAttribute('aria-label','Copied '+id);setTimeout(()=>{if(source.isConnected){source.innerHTML=original;source.setAttribute('aria-label','Copy task ID '+id);}},1500);}
+    if(ok&&source.isConnected){source.dataset.copied='true';clearTimeout(copyTimers.get(source));copyTimers.set(source,setTimeout(()=>delete source.dataset.copied,1500));}
     clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$('copy-toast').hidden=true;},3000);
   }
   root.addEventListener('click',event=>{
@@ -304,8 +309,6 @@
     if(b.dataset.layout){state.layout=b.dataset.layout;save();render({preserve:true});return;}
     if(b.dataset.column){state.column=b.dataset.column;save();render({preserve:true});return;}
     if(b.dataset.theme){state.theme=b.dataset.theme;theme(true);save();return;}
-    if(b.id==='density-toggle'){state.density=state.density==='compact'?'comfortable':'compact';save();render({preserve:true});return;}
-    if(b.dataset.metric){clearFilters();state.view=b.dataset.metric==='release'?'release':'all';if(b.dataset.metric==='release')state.scope='remaining';else if(b.dataset.metric!=='all')state.statuses=[b.dataset.metric];save();render();return;}
     if(b.dataset.scope){state.scope=b.dataset.scope;save();render();return;}
     if(b.dataset.clear||b.id==='reset'){clearFilters();save();render();return;}
     if(b.dataset.remove){const k=b.dataset.remove;if(Array.isArray(state[k]))state[k]=state[k].filter(v=>v!==b.dataset.value);else state[k]=typeof state[k]==='boolean'?false:'';$('search').value=state.search;save();render();}
