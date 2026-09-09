@@ -761,7 +761,7 @@ _PAGE = """<meta charset="utf-8">
   --accent: #23456b;
   --shadow: 0 1px 2px rgba(20,26,32,.16), 0 6px 14px rgba(20,26,32,.09);
   --pin-shipped-bg: #dfe9dd; --pin-shipped-ink: #2f5233; --pin-shipped-edge: #b8ccb6;
-  --pin-merged-bg:  #d9f99d; --pin-merged-ink:  #365314; --pin-merged-edge: #a3cf62;
+  --pin-merged-bg:  #dfe9dd; --pin-merged-ink:  #2f5233; --pin-merged-edge: #b8ccb6;
   --pin-closed-bg:  #d9e6f2; --pin-closed-ink:  #1f4a72; --pin-closed-edge: #b0cbe4;
   --pin-review-bg:  #f6e7c8; --pin-review-ink:  #74521a; --pin-review-edge: #e0c795;
   --pin-next-bg:    #dbe4f0; --pin-next-ink:    #23456b; --pin-next-edge:  #b3c5dd;
@@ -775,7 +775,7 @@ _PAGE = """<meta charset="utf-8">
     --ink-3: #7d868e; --rule: #2e343a; --accent: #9db8db;
     --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 18px rgba(0,0,0,.38);
     --pin-shipped-bg:#25352a; --pin-shipped-ink:#b3d3b5; --pin-shipped-edge:#37503d;
-    --pin-merged-bg:#b7e46d; --pin-merged-ink:#20340c; --pin-merged-edge:#8ebc45;
+    --pin-merged-bg:#25352a; --pin-merged-ink:#b3d3b5; --pin-merged-edge:#37503d;
     --pin-closed-bg:#1d2b3a; --pin-closed-ink:#a9c8e8; --pin-closed-edge:#2c4560;
     --pin-review-bg: #3a301b; --pin-review-ink: #e2c286; --pin-review-edge: #574526;
     --pin-next-bg:   #1f2c3d; --pin-next-ink:   #a8c4e6; --pin-next-edge:  #2f4460;
@@ -785,7 +785,7 @@ _PAGE = """<meta charset="utf-8">
   }}
 }}
 :root[data-theme="dark"] {{
-  --pin-merged-bg:#b7e46d; --pin-merged-ink:#20340c; --pin-merged-edge:#8ebc45;
+  --pin-merged-bg:#25352a; --pin-merged-ink:#b3d3b5; --pin-merged-edge:#37503d;
   --ground: #14171a; --panel: #1c2024; --ink: #eef1f3; --ink-2: #b4bcc3;
   --ink-3: #7d868e; --rule: #2e343a; --accent: #9db8db;
   --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 18px rgba(0,0,0,.38);
