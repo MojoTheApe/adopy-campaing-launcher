@@ -101,10 +101,12 @@ const path=require('node:path');
   await page.keyboard.press('Escape');await page.setViewportSize({width:1440,height:1000});await page.waitForTimeout(150);await page.evaluate(()=>scrollTo(0,2400));
   const anchor=await page.evaluate(()=>{const e=[...document.querySelectorAll('.task')].find(x=>x.getBoundingClientRect().bottom>0);return {id:e.id,top:e.getBoundingClientRect().top}});
   data.tasks.push({...structuredClone(data.tasks[3]),number:200,id:'example-200',title:'New work above the reading position'});data.digest='inserted';status.digest='inserted';status.issues=data.tasks.length;await page.evaluate(()=>window.testRefresh());assert.ok(Math.abs(await page.locator('#'+anchor.id).evaluate(e=>e.getBoundingClientRect().top)-anchor.top)<2);
+  // Seed preferences on a same-origin JSON document so pending app scroll saves
+  // cannot overwrite the migration fixture before navigation.
   // An invalid fragment must not stop the UI, and old unsupported filters are cleared.
-  data=structuredClone(fixture.data);status={...fixture.status};await page.evaluate(()=>{sessionStorage.clear();localStorage.clear();sessionStorage.setItem('tracker.v2.owner/example',JSON.stringify({view:'all',priority:'normal',module:'removed',statuses:['next'],theme:'dark'}));});await page.goto('http://tracker.test/#%');await page.reload();assert.equal(await page.locator('#view-all b').innerText(),'6');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');assert.equal(await page.locator('#chips .st-chip').count(),0);
+  data=structuredClone(fixture.data);status={...fixture.status};await page.goto('http://tracker.test/data.json');await page.evaluate(()=>{sessionStorage.clear();localStorage.clear();sessionStorage.setItem('tracker.v2.owner/example',JSON.stringify({view:'all',priority:'normal',module:'removed',statuses:['next'],theme:'dark'}));});await page.goto('http://tracker.test/#%');await page.reload();assert.equal(await page.locator('#view-all b').innerText(),'6');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');assert.equal(await page.locator('#chips .st-chip').count(),0);
   // Removed Work/Plan and density preferences cannot reopen hidden views.
-  await page.evaluate(()=>{sessionStorage.clear();localStorage.setItem('tracker.design.v2.owner/example.prefs',JSON.stringify({view:'work',density:'comfortable',statuses:['review'],releases:['2'],selectedRelease:'2'}));});await page.reload();
+  await page.goto('http://tracker.test/data.json');await page.evaluate(()=>{sessionStorage.clear();localStorage.setItem('tracker.design.v2.owner/example.prefs',JSON.stringify({view:'work',density:'comfortable',statuses:['review'],releases:['2'],selectedRelease:'2'}));});await page.goto('http://tracker.test/');
   assert.equal(await page.locator('#view-all').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('.task').count(),6);assert.equal(await page.locator('#chips .st-chip').count(),0);await page.locator('#mvp-metric').click();assert.equal(await page.locator('#release-metric-label').innerText(),'MVP');assert.equal(await page.locator('#task-6').count(),1);await page.locator('#view-all').click();
   await page.emulateMedia({reducedMotion:'no-preference'});await page.locator('#summary-4').click();
   assert.equal(await page.locator('#task-detail').evaluate(e=>getComputedStyle(e).animationName),'st-detail-enter');
@@ -126,14 +128,32 @@ const path=require('node:path');
   let wide=await page.locator('#task-detail').boundingBox();assert.ok(Math.abs(wide.width-initial.width-200)<2);assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),true);
   await handle.press('ArrowRight');wide=await page.locator('#task-detail').boundingBox();assert.ok(Math.abs(wide.width-initial.width-168)<2);
   const savedWidth=wide.width;await page.locator('#search').click();assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),false);assert.equal(await page.evaluate(()=>document.activeElement.id),'search');
-  await page.locator('#summary-4').click();assert.ok(Math.abs((await page.locator('#task-detail').boundingBox()).width-savedWidth)<2);
-  await handle.press('End');assert.ok((await page.locator('#task-detail').boundingBox()).width<=960);await handle.press('Home');assert.equal(Math.round((await page.locator('#task-detail').boundingBox()).width),360);
+  await page.locator('#summary-4').click();await page.locator('#task-detail').evaluate(e=>Promise.all(e.getAnimations().map(a=>a.finished)));assert.ok(Math.abs((await page.locator('#task-detail').boundingBox()).width-savedWidth)<2);
+  await handle.press('End');const endBounds=await page.locator('#task-detail').boundingBox();assert.ok(endBounds.width<=960,JSON.stringify({endBounds,css:await page.locator('#task-detail').evaluate(e=>getComputedStyle(e).width)}));await handle.press('Home');assert.equal(Math.round((await page.locator('#task-detail').boundingBox()).width),360);
   await handle.press('ArrowLeft');await page.reload();assert.equal(Math.round((await page.locator('#task-detail').boundingBox()).width),392);
   await page.keyboard.press('Escape');await page.setViewportSize({width:1440,height:1000});await page.locator('#summary-4').click();
   await page.locator('#task-detail').evaluate(e=>Promise.all(e.getAnimations().map(a=>a.finished)));
   // A drag starting inside does not count as an outside click; an actual backdrop click does.
   const panel=await page.locator('#task-detail').boundingBox();await page.mouse.move(panel.x+80,160);await page.mouse.down();await page.mouse.move(300,160,{steps:8});await page.mouse.up();assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),true);
   await page.mouse.click(300,160);assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),false);
+  // Pointer dismissal must not select the opener; keyboard dismissal restores it.
+  for(const width of [1440,1920]){
+    await page.setViewportSize({width,height:1000});await page.locator('#summary-4').click();
+    await page.locator('#task-detail').evaluate(e=>Promise.all(e.getAnimations().map(a=>a.finished)));
+    await page.locator('#view-title').click({force:true});
+    assert.equal(await page.locator('#task-detail').evaluate(e=>e.open),false);
+    assert.equal(await page.locator('#summary-4').evaluate(e=>e===document.activeElement),false);
+    assert.equal(await page.evaluate(()=>String(window.getSelection())), '');
+    await page.locator('#summary-4').click();await page.locator('#detail-close').click();
+    assert.equal(await page.locator('#summary-4').evaluate(e=>e===document.activeElement),false);
+    await page.locator('#summary-4').focus();await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#detail-close').evaluate(e=>getComputedStyle(e).outlineStyle),'none');
+    await handle.focus();assert.equal(await handle.evaluate(e=>getComputedStyle(e).outlineStyle),'none');
+    assert.equal(await handle.evaluate(e=>getComputedStyle(e,'::after').height),'48px');
+    await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.id),'summary-4');
+    await page.keyboard.press('Enter');await page.locator('#detail-close').press('Enter');
+    assert.equal(await page.evaluate(()=>document.activeElement.id),'summary-4');
+  }
   await page.locator('#search').focus();assert.equal(await page.locator('#search').evaluate(e=>getComputedStyle(e).outlineStyle),'none');assert.ok((await page.locator('.st-search').boundingBox()).width<=280);
   await page.locator('#filters-toggle').click();await page.locator('#filter-priorities-medium').check();await page.locator('#filters-toggle').click();assert.equal(await page.locator('#filters-panel').isVisible(),false);
   await page.locator('#filters-toggle').click();assert.equal(await page.locator('#filter-priorities-medium').isChecked(),true);await page.keyboard.press('Escape');await page.locator('#view-all').click();

@@ -263,7 +263,11 @@
     finishResize(true);
     state.selected=null;root.classList.remove('detail-open');$('task-detail').close();detailSignature='';lastDetail=null;
     if(/^#task-\d+$/.test(location.hash))history.replaceState(null,'',location.pathname+location.search);
-    if(restoreFocus){const target=$(openerId)||$('search');target.focus({preventScroll:true});}save();
+    if(restoreFocus){const target=$(openerId)||$('search');target.focus({preventScroll:true});}
+    // Native dialog.close() may restore the opener even after an outside click.
+    // Pointer dismissal leaves focus where the pointer goes, not on the task title.
+    else document.activeElement?.blur();
+    save();
   }
   $('task-detail').addEventListener('cancel',e=>{e.preventDefault();closeDetail();});
   function captureAnchor() {
@@ -309,7 +313,7 @@
     }
     if(b.dataset.copy){const id=b.dataset.copy;try{navigator.clipboard.writeText(id).then(()=>copyFeedback(id,true,b),()=>copyFeedback(id,false,b));}catch(_){copyFeedback(id,false,b);}return;}
     if(b.dataset.task){event.stopPropagation();openTask(b.dataset.task,b);return;}
-    if(b.id==='detail-close'){closeDetail();return;}
+    if(b.id==='detail-close'){closeDetail(event.detail===0);return;}
     if(b.dataset.close==='filters-panel'){showFilters(false);$('filters-toggle').focus();return;}
     if(b.dataset.close){closeDialog($(b.dataset.close));(b.dataset.close==='navigation-panel'?$('nav-toggle'):$('filters-toggle')).focus();return;}
     if(b.id==='nav-toggle'){$('navigation-panel').showModal();return;}
@@ -332,7 +336,7 @@
   document.addEventListener('click',e=>{
     if(!outsidePress?.outside||!$('task-detail').open||!outsideDetail(e)||Math.hypot(e.clientX-outsidePress.x,e.clientY-outsidePress.y)>5)return;
     const focus=e.target.closest('button,input,select,textarea,a[href],[tabindex]');
-    closeDetail(!focus);if(focus?.isConnected)focus.focus({preventScroll:true});outsidePress=null;
+    closeDetail(false);if(focus?.isConnected)focus.focus({preventScroll:true});outsidePress=null;
   });
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('task-detail').open){e.preventDefault();closeDetail();}else if(state.filtersOpen){e.preventDefault();showFilters(false);$('filters-toggle').focus();}}});
 

@@ -321,10 +321,11 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
 #signal-tracker-v2 .navigation-panel::backdrop{background:#0f172640}
 #signal-tracker-v2 .task{cursor:pointer}
 #signal-tracker-v2 .task:hover,#signal-tracker-v2 .task:focus-within{background:var(--st-soft)}
-#signal-tracker-v2 .st-detail-resize{position:absolute;inset:0 auto 0 0;width:12px;cursor:ew-resize;touch-action:none;z-index:2;outline-offset:-3px}
+#signal-tracker-v2 .st-detail-resize{position:absolute;inset:0 auto 0 0;width:12px;cursor:ew-resize;touch-action:none;z-index:2;outline:none}
 #signal-tracker-v2 .st-detail-resize:after{content:'';position:absolute;left:3px;top:calc(50% - 24px);width:3px;height:48px;background:var(--st-line);border-radius:3px}
 #signal-tracker-v2 .st-detail-resize:hover:after,#signal-tracker-v2 .st-detail-resize:focus-visible:after{background:var(--st-accent)}
-#signal-tracker-v2 .st-detail-resize:focus-visible{outline:2px solid var(--st-accent)}
+#signal-tracker-v2 .st-detail-resize:focus-visible{outline:none}
+#signal-tracker-v2 .st-detail-resize:focus-visible:after{box-shadow:0 0 0 3px var(--st-tint)}
 #signal-tracker-v2.is-resizing,#signal-tracker-v2.is-resizing *{cursor:ew-resize!important;user-select:none!important}
 #signal-tracker-v2.is-resizing .st-main{transition:none!important}
 #signal-tracker-v2.is-resizing .st-detail{animation:none}
@@ -406,6 +407,8 @@ html.st-theme-transition #signal-tracker-v2 .st-signal-border{transition:border-
 @media(hover:hover){#signal-tracker-v2 .st-nav button:hover:before{opacity:1;animation-play-state:running}}
 @keyframes st-module-flow{0%,100%{background-position:50% 0%}50%{background-position:50% 100%}}
 #signal-tracker-v2 .st-close{transition:background-color .18s ease,border-color .18s ease,color .18s ease}
+#signal-tracker-v2 .st-close:focus{outline:none}
+#signal-tracker-v2 .st-close:focus-visible{box-shadow:inset 0 0 0 1px var(--st-accent)}
 #signal-tracker-v2 .st-close:hover,#signal-tracker-v2 .st-close:focus-visible{background:var(--st-tint);color:var(--st-accent);border-color:var(--st-muted)}
 
 /* Copy is a transparent hit area. Only the ID glyphs carry the moving accent;
@@ -426,6 +429,8 @@ html.st-theme-transition #signal-tracker-v2 .st-signal-border{transition:border-
   html.st-theme-transition #signal-tracker-v2 .st-signal-border{transition:none}
 }
 @media(forced-colors:active){
+  #signal-tracker-v2 .st-detail-resize:focus-visible:after{outline:2px solid Highlight}
+  #signal-tracker-v2 .st-close:focus-visible{border-color:Highlight}
   #signal-tracker-v2 .st-nav button:before{background:Highlight;animation:none}
   #signal-tracker-v2 .st-signal-border{background:Canvas!important;border-color:CanvasText!important;animation:none}
   #signal-tracker-v2 .st-signal-border:is(:hover,:focus-within,[aria-pressed=true],[aria-expanded=true],[data-filtered=true]){border-color:Highlight!important}
