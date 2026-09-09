@@ -332,6 +332,55 @@ def _mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
     return None
 
 
+def _dir_spellings(path) -> list[str]:
+    """Написания одной и той же папки, которые Windows считает равными.
+
+    9 сентября чтение спенда X84 отказывало словами «профиль открыт вручную»
+    сразу после того, как дешборд сам его и открыл. Прицепиться мешало
+    единственное: **у папки два написания**. Multilogin запускает Mimic с
+    коротким именем 8.3 —
+
+        C:\\Users\\EVGENI~1\\mlx\\profiles\\FDAB97~1\\0F4386~1\\989B59~1
+
+    — а мы вычисляем длинное, и проверка владения портом сравнивает их как
+    строки. `os.path.abspath` и `normcase` короткое имя не разворачивают, и
+    два имени одной папки расходятся.
+
+    Проверять владение по папке — правильно: без этого можно прицепиться к
+    браузеру **другого** аккаунта, а это хуже любого непрочитанного числа.
+    Поэтому сравнение остаётся, а сюда добавляется второе написание.
+
+    Разворачивать короткое в длинное было бы половиной решения: неизвестно,
+    какое из двух придёт следующим, и на машине с выключенным 8.3 короткого
+    имени нет вовсе. Поэтому возвращаются оба, без повторов и в понятном
+    порядке — длинное первым.
+    """
+    out: list[str] = []
+    text = str(path)
+    for value in (text, _short_path(text)):
+        if value and value not in out:
+            out.append(value)
+    return out
+
+
+def _short_path(path: str) -> str:
+    """Имя 8.3 для существующей папки — или пусто, если его нет.
+
+    Пусто — обычный ответ, а не сбой: на томах с выключенным 8.3 короткого
+    имени не существует, и тогда написание всего одно.
+    """
+    if os.name != "nt":
+        return ""
+    try:
+        import ctypes
+
+        buf = ctypes.create_unicode_buffer(4096)
+        length = ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, 4096)
+        return buf.value if 0 < length < 4096 and buf.value != str(path) else ""
+    except Exception:
+        return ""
+
+
 def _attach_only(entry, account_label: str):
     """Подключиться к уже открытому профилю. Никогда его не перезапускать.
 
@@ -367,9 +416,10 @@ def _attach_only(entry, account_label: str):
         )
 
     direct = direct_cls()
-    conn = direct._try_attach_existing(profile_id, str(udd), strict_profile=True, new_page=True)
-    if conn is not None:
-        return conn
+    for spelling in _dir_spellings(udd):
+        conn = direct._try_attach_existing(profile_id, spelling, strict_profile=True, new_page=True)
+        if conn is not None:
+            return conn
 
     running = False
     try:
@@ -532,10 +582,11 @@ def open_for_automation(account: str) -> tuple[bool, str]:
         return False, f"папка профиля {profile_id} не найдена"
 
     direct = direct_cls()
-    attached = direct._try_attach_existing(profile_id, str(udd), strict_profile=True)
-    if attached is not None:
-        attached.close(keep_browser_open=True)
-        return True, "профиль уже открыт автоматизацией — можно читать"
+    for spelling in _dir_spellings(udd):
+        attached = direct._try_attach_existing(profile_id, spelling, strict_profile=True)
+        if attached is not None:
+            attached.close(keep_browser_open=True)
+            return True, "профиль уже открыт автоматизацией — можно читать"
     try:
         if direct._profile_process_running(str(udd), profile_id):
             return False, (
