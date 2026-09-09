@@ -48,8 +48,8 @@ html[data-theme=dark] #signal-tracker-v2{color-scheme:dark}
 #signal-tracker-v2 .st-mvp-number{color:var(--st-accent)}
 
 #signal-tracker-v2 .st-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;position:relative;margin-bottom:10px}
-#signal-tracker-v2 .st-search{display:flex;align-items:center;gap:8px;border:1px solid var(--st-line);background:var(--st-panel);border-radius:8px;min-height:38px;padding:0 12px;flex:1;min-width:170px;color:var(--st-muted)}
-#signal-tracker-v2 .st-search input{min-width:0;width:100%;background:none;border:none;padding:8px 0;font-size:13px}
+#signal-tracker-v2 .st-search{display:flex;align-items:center;gap:8px;border:1px solid var(--st-line);background:var(--st-panel);border-radius:8px;min-height:38px;padding:0 11px;flex:1;min-width:170px;color:var(--st-muted)}
+#signal-tracker-v2 .st-search input{min-width:0;width:100%;background:none;border:none;padding:7px 0;font-size:13px}
 #signal-tracker-v2 .st-search input::placeholder{color:var(--st-muted)}
 #signal-tracker-v2 .st-control{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--st-panel);border:1px solid var(--st-line);border-radius:8px;min-height:38px;padding:6px 12px;font-size:12px}
 #signal-tracker-v2 .st-control[aria-expanded=true]{color:var(--st-accent);border-color:var(--st-accent)}
@@ -261,13 +261,12 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
 /* A single compact status strip; the sidebar contains only modules. */
 #signal-tracker-v2 .st-overview{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap;margin-bottom:18px}
 #signal-tracker-v2 .st-pipeline{display:flex;align-items:center;flex-wrap:wrap;gap:4px;flex:1 1 600px;min-width:0;padding:6px;background:var(--st-panel);border:1px solid var(--st-line);border-radius:10px}
-#signal-tracker-v2 .st-pipeline button{display:flex;align-items:center;gap:6px;min-height:38px;padding:7px 10px;border-radius:7px;color:var(--st-muted);font-size:12px;font-weight:550;white-space:nowrap}
-#signal-tracker-v2 .st-pipeline button:hover{background:var(--st-soft);color:var(--st-text)}
-#signal-tracker-v2 .st-pipeline button[aria-pressed=true]{background:var(--st-tint);color:var(--st-accent)}
+#signal-tracker-v2 .st-pipeline button{display:flex;align-items:center;gap:6px;min-height:38px;padding:5px 8px;border-radius:7px;color:var(--st-muted);font-size:12px;font-weight:550;white-space:nowrap}
+#signal-tracker-v2 .st-pipeline button:hover{--st-control-surface:var(--st-soft);color:var(--st-text)}
+#signal-tracker-v2 .st-pipeline button[aria-pressed=true]{--st-control-surface:var(--st-tint);color:var(--st-accent)}
 #signal-tracker-v2 .st-pipeline b{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;min-width:17px;text-align:center;padding:1px 4px;background:var(--st-soft);border-radius:4px}
 #signal-tracker-v2 .st-pipeline .st-stage-dot{width:6px;height:6px}
-#signal-tracker-v2 .st-release-widget{flex:0 1 220px;min-width:195px;text-align:left;padding:9px 13px;background:var(--st-tint);border:1px solid var(--st-line);border-radius:10px;display:flex;flex-direction:column;justify-content:center;gap:4px}
-#signal-tracker-v2 .st-release-widget:hover,#signal-tracker-v2 .st-release-widget[aria-pressed=true]{border-color:var(--st-accent)}
+#signal-tracker-v2 .st-release-widget{flex:0 1 220px;min-width:195px;text-align:left;padding:8px 12px;--st-control-surface:var(--st-tint);border:1px solid var(--st-line);border-radius:10px;display:flex;flex-direction:column;justify-content:center;gap:4px}
 #signal-tracker-v2 .st-release-heading{display:flex;align-items:baseline;justify-content:space-between;gap:14px;font-size:12px;color:var(--st-accent);font-weight:650}
 #signal-tracker-v2 .st-release-heading strong{font-size:17px;font-variant-numeric:tabular-nums;line-height:1.2}
 #signal-tracker-v2 .st-release-note{font-size:11px;color:var(--st-muted)}
@@ -277,12 +276,11 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
 #signal-tracker-v2 .st-nav .st-nav-count{flex:none;min-width:22px;text-align:center;border-radius:5px;background:var(--st-soft);padding:1px 4px;font-size:11px}
 #signal-tracker-v2 .st-nav button{gap:7px;padding:8px 9px}
 #signal-tracker-v2 .st-search svg{width:20px;height:20px;color:var(--st-muted)}
-#signal-tracker-v2 .st-search:focus-within{border-color:var(--st-accent);box-shadow:none}
+#signal-tracker-v2 .st-search:focus-within{box-shadow:none}
 #signal-tracker-v2 .st-search:focus-within svg{color:var(--st-accent)}
 #signal-tracker-v2 .st-copy{position:relative;display:inline-flex;align-items:center;gap:5px;min-height:26px;padding:3px 5px;margin-left:-5px;width:auto;flex:none;color:var(--st-muted);border-radius:5px;white-space:nowrap}
 #signal-tracker-v2 .st-copy svg{width:13px;height:13px;opacity:.75}
-#signal-tracker-v2 .st-copy:hover{color:var(--st-accent);background:var(--st-tint)}
-#signal-tracker-v2 .st-copy:hover .st-id{color:var(--st-accent)}
+#signal-tracker-v2 .st-copy:hover,#signal-tracker-v2 .st-copy:focus-visible{color:var(--st-accent);background:none}
 #signal-tracker-v2 .st-copy[data-copied=true] svg{visibility:hidden}
 #signal-tracker-v2 .st-copy[data-copied=true]:after{content:'✓';position:absolute;right:5px;color:var(--st-green);font-size:13px}
 #signal-tracker-v2 .st-row .st-task-title{-webkit-line-clamp:1}
@@ -295,7 +293,7 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
 @keyframes st-backdrop-enter{from{background:#0f172600}to{background:#0f172640}}
 @media(min-width:1680px){#signal-tracker-v2 .st-main{transition:margin-right .28s cubic-bezier(.22,1,.36,1)}}
 @media(max-width:899px){#signal-tracker-v2 .st-pipeline{flex-basis:100%}#signal-tracker-v2 .st-release-widget{flex:1;min-width:0}#signal-tracker-v2 .st-release-heading{justify-content:start}#signal-tracker-v2 .st-release-widget progress{max-width:none}#signal-tracker-v2 .st-overview{gap:8px}#signal-tracker-v2 .st-row .st-task-title{-webkit-line-clamp:2}}
-@media(max-width:510px){#signal-tracker-v2 .st-pipeline{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px}#signal-tracker-v2 .st-pipeline button{padding:5px 8px;min-height:34px}#signal-tracker-v2 .st-pipeline b{margin-left:auto}#signal-tracker-v2 .st-release-widget{padding:8px 12px;display:grid;grid-template-columns:auto 1fr;gap:3px 15px;align-items:center}#signal-tracker-v2 .st-release-heading{grid-row:1/3}#signal-tracker-v2 .st-release-widget progress{grid-column:2}#signal-tracker-v2 .st-release-note{grid-column:2}#signal-tracker-v2 .st-toolbar{gap:8px}}
+@media(max-width:510px){#signal-tracker-v2 .st-pipeline{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px}#signal-tracker-v2 .st-pipeline button{padding:3px 6px;min-height:34px}#signal-tracker-v2 .st-pipeline b{margin-left:auto}#signal-tracker-v2 .st-release-widget{padding:7px 11px;display:grid;grid-template-columns:auto 1fr;gap:3px 15px;align-items:center}#signal-tracker-v2 .st-release-heading{grid-row:1/3}#signal-tracker-v2 .st-release-widget progress{grid-column:2}#signal-tracker-v2 .st-release-note{grid-column:2}#signal-tracker-v2 .st-toolbar{gap:8px}}
 @media(pointer:coarse){#signal-tracker-v2 .st-copy,#signal-tracker-v2 .st-pipeline button{min-height:44px}#signal-tracker-v2 .st-close{width:44px;height:44px}}
 @media(prefers-reduced-motion:reduce){#signal-tracker-v2 .st-detail[open],#signal-tracker-v2 .st-detail[open]::backdrop{animation:none}#signal-tracker-v2 .st-main{transition:none}}
 
@@ -305,10 +303,10 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
 #signal-tracker-v2 #search:focus,#signal-tracker-v2 #search:focus-visible{outline:none;box-shadow:none}
 #signal-tracker-v2 #search::-webkit-search-decoration{-webkit-appearance:none}
 #signal-tracker-v2 .st-toolbar>.st-segment{margin-left:auto}
-#signal-tracker-v2 #filters-toggle{min-width:38px;width:40px;flex:0 0 40px;padding:8px;gap:6px}
+#signal-tracker-v2 #filters-toggle{min-width:38px;width:40px;flex:0 0 40px;padding:7px;gap:6px}
 #signal-tracker-v2 #filters-toggle svg{width:19px;height:19px}
 #signal-tracker-v2 #filters-count{position:absolute;top:-5px;right:-5px;z-index:1;font-size:10px;line-height:16px;min-width:18px;padding:0 3px;text-align:center;color:var(--st-accent);background:var(--st-panel);border:1px solid var(--st-line);border-radius:6px}
-#signal-tracker-v2 #filters-toggle[aria-expanded=true]{color:var(--st-accent);border-color:var(--st-accent)}
+#signal-tracker-v2 #filters-toggle[aria-expanded=true]{color:var(--st-accent)}
 #signal-tracker-v2 .st-inline-filters{padding:0;margin:0 0 12px;animation:st-filters-enter .18s ease-out}
 #signal-tracker-v2 #filter-fields{display:grid;gap:4px}
 #signal-tracker-v2 #filter-fields fieldset{margin:0;padding:0;border:0;min-width:0}
@@ -366,24 +364,44 @@ html.st-theme-transition #signal-tracker-v2,html.st-theme-transition #signal-tra
   #signal-tracker-v2 .st-row .st-task-title{-webkit-line-clamp:2}
 }
 
-/* Shared logo accent: an overlay ring preserves control dimensions and hit areas.
-   Mask support is required so an unsupported browser keeps its ordinary border. */
-#signal-tracker-v2 .st-signal-border{position:relative}
+/* One native border owns all four edges. The opaque padding-box layer leaves
+   exactly 2px of gradient visible, without masks or overlapping outlines. */
+@property --st-control-surface{syntax:"<color>";inherits:false;initial-value:#fff}
+@property --st-border-opacity{syntax:"<number>";inherits:false;initial-value:0}
+#signal-tracker-v2 .st-signal-border{
+  position:relative;border:2px solid var(--st-line);
+  background:linear-gradient(var(--st-control-surface,var(--st-panel)),var(--st-control-surface,var(--st-panel))) padding-box,linear-gradient(115deg,rgb(49 89 217 / var(--st-border-opacity,0)) 0%,rgb(25 126 175 / var(--st-border-opacity,0)) 28%,rgb(133 86 188 / var(--st-border-opacity,0)) 52%,rgb(49 89 217 / var(--st-border-opacity,0)) 76%,rgb(25 126 175 / var(--st-border-opacity,0)) 100%) border-box;
+  background-size:100% 100%,300% 100%;
+  transition:border-color .18s ease,--st-control-surface .18s ease,--st-border-opacity .18s ease;
+  animation:st-control-flow 7s ease-in-out infinite;animation-play-state:paused;
+}
+#signal-tracker-v2 .st-search,#signal-tracker-v2 #filters-toggle,#signal-tracker-v2 .st-pipeline button:not(:hover):not([aria-pressed=true]){--st-control-surface:var(--st-panel)}
+#signal-tracker-v2 .st-pipeline .st-signal-border{border-color:var(--st-panel)}
 #signal-tracker-v2 button.st-signal-border{appearance:none;-webkit-appearance:none;overflow:visible}
-@supports (mask-composite:exclude) or (-webkit-mask-composite:xor){
-  #signal-tracker-v2 .st-signal-border:before{
-    content:'';position:absolute;inset:-1px;border-radius:inherit;padding:1.5px;
-    background-image:var(--st-signal-gradient);background-size:300% 100%;
-    -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
-    mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
-    -webkit-mask-composite:xor;mask-composite:exclude;
-    pointer-events:none;opacity:0;transition:opacity .18s ease;
+#signal-tracker-v2 .st-signal-border:is([aria-pressed=true],[aria-expanded=true],[data-filtered=true],:focus-visible),
+#signal-tracker-v2 .st-search:focus-within{--st-border-opacity:1;border-color:transparent;animation-play-state:running}
+@media(hover:hover){#signal-tracker-v2 .st-signal-border:hover{--st-border-opacity:1;border-color:transparent;animation-play-state:running}}
+html.st-theme-transition #signal-tracker-v2 .st-signal-border{transition:border-color .36s ease,--st-control-surface .36s ease,--st-border-opacity .18s ease}
+@keyframes st-control-flow{0%,100%{background-position:0 0,0% 50%}50%{background-position:0 0,100% 50%}}
+
+/* Copy is a transparent hit area. Only the ID glyphs carry the moving accent;
+   the same hues use text-appropriate contrast in each theme. */
+#signal-tracker-v2{--st-id-gradient:linear-gradient(115deg,light-dark(#3159d9,#a4b9ff) 0%,light-dark(#166f9b,#80d1e8) 28%,light-dark(#7250a0,#c5a5e9) 52%,light-dark(#3159d9,#a4b9ff) 76%,light-dark(#166f9b,#80d1e8) 100%)}
+@supports (background-clip:text) or (-webkit-background-clip:text){
+  #signal-tracker-v2 .st-copy .st-id{
+    background-image:var(--st-id-gradient);background-size:300% 100%;
+    -webkit-background-clip:text;background-clip:text;
     animation:st-logo-flow 7s ease-in-out infinite;animation-play-state:paused;
   }
-  #signal-tracker-v2 .st-pipeline .st-signal-border:before{inset:1px;border-radius:6px}
-  #signal-tracker-v2 .st-signal-border:is([aria-pressed=true],[aria-expanded=true],[data-filtered=true],:focus-visible):before,
-  #signal-tracker-v2 .st-search:focus-within:before{opacity:1;animation-play-state:running}
-  @media(hover:hover){#signal-tracker-v2 .st-signal-border:hover:before{opacity:1;animation-play-state:running}}
-  @media(prefers-reduced-motion:reduce){#signal-tracker-v2 .st-signal-border:before{animation:none;transition:none}}
-  @media(forced-colors:active){#signal-tracker-v2 .st-signal-border:before{display:none}}
+  #signal-tracker-v2 .st-copy:focus-visible .st-id{color:transparent;-webkit-text-fill-color:transparent;animation-play-state:running}
+  @media(hover:hover){#signal-tracker-v2 .st-copy:hover .st-id{color:transparent;-webkit-text-fill-color:transparent;animation-play-state:running}}
+}
+@media(prefers-reduced-motion:reduce){
+  #signal-tracker-v2 .st-signal-border,#signal-tracker-v2 .st-copy .st-id{animation:none;transition:none}
+  html.st-theme-transition #signal-tracker-v2 .st-signal-border{transition:none}
+}
+@media(forced-colors:active){
+  #signal-tracker-v2 .st-signal-border{background:Canvas!important;border-color:CanvasText!important;animation:none}
+  #signal-tracker-v2 .st-signal-border:is(:hover,:focus-within,[aria-pressed=true],[aria-expanded=true],[data-filtered=true]){border-color:Highlight!important}
+  #signal-tracker-v2 .st-copy .st-id{background:none!important;color:ButtonText!important;-webkit-text-fill-color:ButtonText!important;animation:none}
 }
