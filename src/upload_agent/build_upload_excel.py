@@ -264,9 +264,23 @@ def load_reference_data(excel_path: str):
 
 
 def get_account_info(ref: dict, account_name: str) -> dict[str, Any]:
-    """Get pixel, domain, link for account. account_name can be partial match."""
-    accounts = ref.get("accounts") or {}
+    """Трекинговая ссылка, пиксель и домен аккаунта. Имя может быть частичным.
+
+    **Сперва машинная карта, потом книга.** Порядок был обратным, и это
+    оставляло книгу в пути заливки навсегда: ссылку, сохранённую на дешборде
+    кнопкой Save, перебивала строка из чужого файла, который правят руками и
+    который на машине байера может быть какой угодно давности. Человек видел
+    в билдере одну ссылку, а в кампанию уходила другая — молча.
+
+    Книга осталась запасным ходом: там, где карта пуста, она по-прежнему
+    отвечает, и ни один аккаунт, настроенный только в ней, не потеряется.
+    """
     name = (account_name or "").strip()
+    from_map = _account_info_from_machine_map(name)
+    if any((from_map.get(k) or "") for k in ("link", "pixel", "domain")):
+        return from_map
+
+    accounts = ref.get("accounts") or {}
     if name in accounts:
         return accounts[name]
     for key, val in accounts.items():
@@ -284,14 +298,7 @@ def get_account_info(ref: dict, account_name: str) -> dict[str, Any]:
                 if (key or "").upper().split()[:1] == [token]]
         if len(hits) == 1:
             return hits[0]
-    # Nothing in the workbook: ask this machine's account map before giving up.
-    #
-    # The workbook stays the shared source of truth and wins wherever it has a
-    # row. But an account connected on the dashboard exists only in the map
-    # until someone edits the workbook by hand, and until then it was unusable:
-    # no tracking link, no pixel, and the only symptom was a refusal to save
-    # the link — long after the account looked fully configured.
-    return _account_info_from_machine_map(name)
+    return {"pixel": None, "domain": None, "link": None}
 
 
 def _account_info_from_machine_map(account_name: str) -> dict[str, Any]:

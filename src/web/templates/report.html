@@ -1009,6 +1009,15 @@
     .cb-inline { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
     .cb-inline .cb-select, .cb-inline .cb-input { width: auto; }
     .cb-input-sm { width: 4.5rem !important; }
+    /* Язык аудитории. Пустое поле — законный выбор («не трогать язык»), но
+       для стран вне GCC и LatAm оно пустое не потому, что так решили, а
+       потому, что правила для них нет. Подсветка спрашивает, а не запрещает:
+       поднять кампанию без языка можно, как и без трекинговой ссылки. */
+    .cb-language { width: 6rem !important; }
+    .cb-language-empty {
+      border-color: var(--warn);
+      background: var(--warn-soft);
+    }
     .cb-radio-group { display: flex; gap: 0.75rem; }
     .cb-radio-group label { display: flex; align-items: center; gap: 0.3rem; cursor: pointer; color: var(--text); }
     .cb-name-input { font-size: 0.72rem; color: var(--muted); width: 100%; }
@@ -3034,7 +3043,7 @@ async function dashRefresh(ev) {
             <div class="cb-targeting-hint" style="font-size:0.67rem;color:var(--muted);margin-top:0.15rem;word-break:break-word">{{ sel_targeting_label }}</div>
           </div>
 
-          <span class="cb-label">OS / Age / Budget</span>
+          <span class="cb-label">OS / Age / Budget / Language</span>
           <div class="cb-inline">
             <div class="cb-sel-wrap" style="width:6.5rem">
               <input type="text" class="cb-sel-text" placeholder="OS" autocomplete="off"
@@ -3052,6 +3061,18 @@ async function dashRefresh(ev) {
             <span style="color:var(--muted);font-size:0.72rem">$/day</span>
             <input type="number" name="camp_{{ ns.idx }}_budget" class="cb-input cb-input-sm"
                    value="" min="1" step="1" placeholder="50">
+            {#- Язык аудитории. Умолчание считает сервер тем же кодом, что
+                применяет правило при заливке: GCC — арабский, LatAm —
+                испанский. Для прочих стран поле пустое и подсвечено — угадывать
+                за человека язык мы не станем, но и промолчать об этом нельзя.
+                Снять язык можно у любой страны: пустое поле значит «не трогать
+                язык аудитории». -#}
+            {%- set geo_lang = c.country | geo_language %}
+            <input type="text" name="camp_{{ ns.idx }}_language"
+                   class="cb-input cb-input-sm cb-language{% if not geo_lang %} cb-language-empty{% endif %}"
+                   value="{{ geo_lang }}" placeholder="Language"
+                   oninput="cbLanguageChanged(this)"
+                   title="Audience language. Leave empty to skip the Language step in Ads Manager.">
           </div>
 
           <span class="cb-label">Asset / Offer</span>
@@ -5841,6 +5862,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   // ── Campaign name ─────────────────────────────────────────────────────
+  /* Подсветка пустого языка живёт вместе с полем, а не только в разметке:
+     человек снимает язык уже после загрузки страницы, и без этого поле
+     осталось бы обычным — то есть промолчало бы ровно в том случае, ради
+     которого подсветка и заведена. */
+  window.cbLanguageChanged = function(input) {
+    input.classList.toggle('cb-language-empty', !(input.value || '').trim());
+  };
+
   window.cbUpdateName = function(slot) {
     if (!slot) return;
     var idx    = slot.dataset.idx;
