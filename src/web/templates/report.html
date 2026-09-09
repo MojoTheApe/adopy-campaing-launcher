@@ -1008,7 +1008,27 @@
     }
     .cb-inline { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
     .cb-inline .cb-select, .cb-inline .cb-input { width: auto; }
+    /* Выпадающий список внутри строки полей. `.cb-sel-wrap` по умолчанию
+       занимает всю ширину — это верно для отдельной строки Targeting и
+       неверно здесь: он растягивался и выталкивал возраст, бюджет и язык на
+       следующую строку.
+
+       Раньше это лечила подпись `style="width:6.5rem"` прямо в шаблоне, и
+       только там: карточку, собранную кнопкой «+ Add Campaign», строит
+       JavaScript, и до неё правило не доходило. Пока в строке было три поля,
+       перенос был незаметен; четвёртое его показало. Ширина переехала сюда,
+       чтобы обе карточки брали её из одного места. */
+    .cb-inline .cb-sel-wrap { width: 6.5rem; flex: 0 0 auto; }
     .cb-input-sm { width: 4.5rem !important; }
+    /* Язык аудитории. Пустое поле — законный выбор («не трогать язык»), но
+       для стран вне GCC и LatAm оно пустое не потому, что так решили, а
+       потому, что правила для них нет. Подсветка спрашивает, а не запрещает:
+       поднять кампанию без языка можно, как и без трекинговой ссылки. */
+    .cb-language { width: 6rem !important; }
+    .cb-language-empty {
+      border-color: var(--warn);
+      background: var(--warn-soft);
+    }
     .cb-radio-group { display: flex; gap: 0.75rem; }
     .cb-radio-group label { display: flex; align-items: center; gap: 0.3rem; cursor: pointer; color: var(--text); }
     .cb-name-input { font-size: 0.72rem; color: var(--muted); width: 100%; }
@@ -2919,17 +2939,27 @@ async function dashRefresh(ev) {
   <form class="open-account-form" method="post" action="/build-upload"
         data-open-form
         data-country="{{ c.country }}"
-        data-asset="{{ default_asset }}">
+        data-asset="{{ default_asset }}"
+        {#- Умолчание языка нужно и той карточке, которую строит JavaScript по
+            «+ Add Campaign». Считает его всё тот же серверный фильтр: правило
+            должно быть в одном месте, иначе на карточке из шаблона и на
+            карточке из скрипта окажется разный язык. -#}
+        data-language="{{ c.country | geo_language }}">
 
     {# ── Pre-flight panel: link + account map ── #}
-    {% set pf_ok = pf.link_status == 'tracking' and not pf.missing_map_fields and pf.page_name %}
+    {#- «Настроен» больше не требует имени страницы. Оно к публикации отношения
+        не имеет — плеер берёт первую доступную страницу в кабинете, — а
+        держало аккаунт в состоянии «needs setup» навсегда: заполнить его было
+        негде, кроме как здесь, и оно ничего не решало. Красная надпись при
+        полностью рабочем аккаунте — это не предупреждение, а шум. -#}
+    {% set pf_ok = pf.link_status == 'tracking' and not pf.missing_map_fields %}
     <div class="cb-preflight {% if pf_ok %}cb-preflight-collapsed{% endif %}">
       <button type="button" class="cb-preflight-toggle"
               onclick="this.closest('.cb-preflight').classList.toggle('cb-preflight-collapsed')">
         <span class="cb-preflight-caret">▸</span> ⚙ Account
         {% if pf_ok %}
           <span class="cb-pf-ok">configured ✓</span>
-          <span style="color:var(--muted);font-weight:400">· tracking, ids, page — all set</span>
+          <span style="color:var(--muted);font-weight:400">· tracking and ids — all set</span>
         {% else %}
           <span class="cb-pf-err">needs setup</span>
         {% endif %}
@@ -2992,19 +3022,6 @@ async function dashRefresh(ev) {
             {% endif %}
           </div>
 
-          {# page_name — optional, used only by the visual ad preview #}
-          <div class="cb-map-field-row" id="cb-page-name-status-{{ acc_id }}">
-            <span class="cb-map-field-label">Page name</span>
-            {% if not pf.page_name %}
-              <input type="text" class="cb-input cb-map-input" data-field="page_name"
-                     value="" placeholder="e.g. Global Trading Academy">
-              <button type="button" class="cb-field-save-btn"
-                      onclick="cbSaveOneMapField(this, {{ acc_label | tojson | forceescape }}, 'page_name')">Save</button>
-              <span class="cb-field-status"></span>
-            {% else %}
-              <span class="cb-pf-ok" style="font-size:0.72rem">✓ {{ pf.page_name }}</span>
-            {% endif %}
-          </div>
 
         </div>
       </div>
@@ -3042,9 +3059,9 @@ async function dashRefresh(ev) {
             <div class="cb-targeting-hint" style="font-size:0.67rem;color:var(--muted);margin-top:0.15rem;word-break:break-word">{{ sel_targeting_label }}</div>
           </div>
 
-          <span class="cb-label">OS / Age / Budget</span>
+          <span class="cb-label">OS / Age / Budget / Language</span>
           <div class="cb-inline">
-            <div class="cb-sel-wrap" style="width:6.5rem">
+            <div class="cb-sel-wrap">
               <input type="text" class="cb-sel-text" placeholder="OS" autocomplete="off"
                      value="{% if r.device == 'iOS' %}iOS{% else %}All{% endif %}">
               <div class="cb-sel-dropdown" hidden>
@@ -3060,6 +3077,18 @@ async function dashRefresh(ev) {
             <span style="color:var(--muted);font-size:0.72rem">$/day</span>
             <input type="number" name="camp_{{ ns.idx }}_budget" class="cb-input cb-input-sm"
                    value="" min="1" step="1" placeholder="50">
+            {#- Язык аудитории. Умолчание считает сервер тем же кодом, что
+                применяет правило при заливке: GCC — арабский, LatAm —
+                испанский. Для прочих стран поле пустое и подсвечено — угадывать
+                за человека язык мы не станем, но и промолчать об этом нельзя.
+                Снять язык можно у любой страны: пустое поле значит «не трогать
+                язык аудитории». -#}
+            {%- set geo_lang = c.country | geo_language %}
+            <input type="text" name="camp_{{ ns.idx }}_language"
+                   class="cb-input cb-input-sm cb-language{% if not geo_lang %} cb-language-empty{% endif %}"
+                   value="{{ geo_lang }}" placeholder="Language"
+                   oninput="cbLanguageChanged(this)"
+                   title="Audience language. Leave empty to skip the Language step in Ads Manager.">
           </div>
 
           <span class="cb-label">Asset / Offer</span>
@@ -5875,6 +5904,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   // ── Campaign name ─────────────────────────────────────────────────────
+  /* Подсветка пустого языка живёт вместе с полем, а не только в разметке:
+     человек снимает язык уже после загрузки страницы, и без этого поле
+     осталось бы обычным — то есть промолчало бы ровно в том случае, ради
+     которого подсветка и заведена. */
+  window.cbLanguageChanged = function(input) {
+    input.classList.toggle('cb-language-empty', !(input.value || '').trim());
+  };
+
   window.cbUpdateName = function(slot) {
     if (!slot) return;
     var idx    = slot.dataset.idx;
@@ -6335,11 +6372,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<input type="hidden" name="camp_' + idx + '_targeting" class="cb-targeting-hidden" value="">' +
       '<div class="cb-targeting-hint" style="font-size:0.67rem;color:var(--muted);margin-top:0.15rem;word-break:break-word"></div>' +
       '</div>' +
-      '<span class="cb-label">OS / Age / Budget</span>' +
+      '<span class="cb-label">OS / Age / Budget / Language</span>' +
       '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS'], 'OS') +
       '<input type="number" name="camp_' + idx + '_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
       '<span style="color:var(--muted);font-size:0.72rem">$/day</span>' +
       '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50">' +
+      /* Язык — и здесь тоже. Карточку строят два места: шаблон на сервере и
+         эта функция по «+ Add Campaign». Поле, добавленное только в одно из
+         них, выглядит добавленным — а на той половине, которой человек
+         пользуется, его нет. Так и вышло 9 сентября. Значение подставляется
+         из `data-language` формы, чтобы правило считалось в одном месте. */
+      '<input type="text" name="camp_' + idx + '_language" class="cb-input cb-input-sm cb-language" value="" placeholder="Language" oninput="cbLanguageChanged(this)" title="Audience language. Leave empty to skip the Language step in Ads Manager.">' +
       '</div>' +
       '<span class="cb-label">Asset / Offer</span>' +
       '<input type="text" name="camp_' + idx + '_asset" class="cb-input" value="" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
@@ -6561,6 +6604,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var asset = form.dataset.asset || '';
       var assetInput = newSlot.querySelector('[name="camp_' + idx + '_asset"]');
       if (assetInput && asset) { assetInput.value = asset; }
+      var langInput = newSlot.querySelector('[name="camp_' + idx + '_language"]');
+      if (langInput) {
+        langInput.value = form.dataset.language || '';
+        cbLanguageChanged(langInput);   // пустой сразу подсвечен, а не после правки
+      }
       cbUpdateName(newSlot);
     }
     cbUpdateCount(form);

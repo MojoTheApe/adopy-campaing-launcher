@@ -811,14 +811,12 @@ def _load_ref_options() -> dict:
     except Exception:
         return {**empty, "targetings": fallback_targets}
     ad_copies = sorted(ref.get("ad_copy") or {})
-    image_files = [
-        {"id": k, "filename": v}
-        for k, v in sorted((ref.get("image_files") or {}).items(), key=lambda x: x[0])
-    ]
-    video_files = [
-        {"id": k, "filename": v}
-        for k, v in sorted((ref.get("video_files") or {}).items(), key=lambda x: x[0])
-    ]
+    # Списки файлов из книги здесь больше не собираются: билдер ищет креативы
+    # в `/api/creatives`, который рекурсивно обходит папку, и экселевские
+    # `image_files`/`video_files` не читал никто. Ключи остаются пустыми
+    # списками — их формат входит в ответ, и убирать его отдельным решением.
+    image_files: list = []
+    video_files: list = []
     targetings = fallback_targets
     if not targetings and not has_registry:
         targetings = [{"code": t, "label": t, "fb_interest": t}
@@ -855,6 +853,27 @@ templates.env.filters["fmt_currency"] = fmt_currency
 templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")
 templates.env.filters["creative_type"] = lambda name: parse_creative_from_ad_title(name)[0]
 templates.env.filters["creative_id"] = lambda name: parse_creative_from_ad_title(name)[1]
+
+
+def _geo_language(country_name: str) -> str:
+    """Язык аудитории по стране — умолчание поля в билдере.
+
+    Правило берётся у того же кода, что применяет его при заливке, а не
+    переписывается в шаблоне: два списка стран разошлись бы, и разошлись бы
+    молча — на экране стояло бы одно, в Ads Manager набралось другое.
+
+    Пусто — законный ответ для стран вне GCC и LatAm: угадывать за человека
+    язык мы не будем, поле останется пустым и подсвеченным.
+    """
+    try:
+        from src.fb_ads_rpa.enrich_draft import _geo_language_for_country
+
+        return _geo_language_for_country(_country_code(country_name))
+    except Exception:
+        return ""
+
+
+templates.env.filters["geo_language"] = _geo_language
 
 # Drill fragment column counts per section — keep in sync with report.html
 # table headers. The detail <td colspan> must match the parent table's
@@ -1364,6 +1383,9 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         targeting = (form.get(f"camp_{idx}_targeting") or "").strip()
         os_val    = (form.get(f"camp_{idx}_os") or "All").strip()
         age_val   = (form.get(f"camp_{idx}_age") or "35").strip()
+        # Пусто — это ответ, а не пропуск: язык сняли намеренно, и правило по
+        # стране подставится при обогащении только если поле не трогали.
+        language  = (form.get(f"camp_{idx}_language") or "").strip()
         asset_val = _abbrev_asset((form.get(f"camp_{idx}_asset") or "").strip())
         budget    = (form.get(f"camp_{idx}_budget") or "").strip()
         name      = (form.get(f"camp_{idx}_name") or "").strip()
@@ -1405,6 +1427,7 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     "budget": budget,
                     "asset": asset_val,
                     "tracking_link": tracking_link,
+                    "language": language,
                 }
             )
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
