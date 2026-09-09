@@ -1702,7 +1702,22 @@
     }
     .amap-cal-inputs { margin: 0.6rem 0 0; }
     /* Приглушённый, но живой: книга этого периода не знает, а аккаунт знает. */
-    .amap-cal-presets button.thin { color: var(--muted); }
+    /* ── «Книга про этот день не знает» ≠ «этот день нельзя выбрать» ──────
+       Дни и пресеты без строк в книге статистики выбираются наравне со всеми:
+       книга говорит, что знает дешборд, а не что можно спросить у аккаунта, и
+       отстаёт она почти всегда. Кнопка Read ходит в Ads Manager, где вчера и
+       сегодня есть.
+
+       Красились они, однако, приглушённым цветом — тем же языком, каким рядом
+       говорит `:disabled`. 9 сентября это прочли ровно так, как написано:
+       «почему-то в дате нельзя проставить вчерашний день». Проверено на живом
+       дешборде: выбирается и применяется, `?date_from=2026-09-08`. Мешал
+       только вид.
+
+       Цвет вернули. Отсутствие данных помечено пунктиром у пресета и точкой
+       под числом дня — знаком «нет данных», а не «нельзя». Точка берёт
+       currentColor, чтобы оставаться видимой и на выбранном дне, где фон
+       акцентный. */
     .amap-cal-presets button.thin i { border-style: dashed; }
     .amap-cal-presets button:disabled {
       color: var(--border-strong); cursor: default; text-decoration: line-through;
@@ -1749,7 +1764,12 @@
     /* Дни, которых нет в книге, зачёркнуты, а не просто бледные: серое читается
        как «неяркое», зачёркнутое — как «этого нет». Разница видна до клика. */
     /* Не «нельзя», а «дешборд не знает»: выбор остаётся возможным. */
-    .amap-cal-grid button.thin { color: var(--muted); opacity: .55; }
+    .amap-cal-grid button.thin { position: relative; }
+    .amap-cal-grid button.thin::after {
+      content: ""; position: absolute; left: 50%; bottom: 2px;
+      width: 3px; height: 3px; margin-left: -1.5px; border-radius: 50%;
+      background: currentColor; opacity: .45;
+    }
     .amap-cal-grid button:disabled {
       color: var(--border-strong); cursor: default; text-decoration: line-through;
     }
