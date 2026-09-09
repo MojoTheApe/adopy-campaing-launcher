@@ -1725,22 +1725,44 @@ async def api_creatives() -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+def _ad_copy_rows() -> list[dict]:
+    """Тексты для поиска Ad Title в билдере — из библиотеки на этой машине.
+
+    Раньше здесь ходили прямо в таблицу, и 9 сентября выяснилось, чем это
+    кончается: без `GSHEET_TARGETS_ID` в окружении загрузчик молча возвращал
+    пустой словарь, и в билдере под полем Ad Title стояло «No ad titles found».
+    Ни ошибки, ни следа в логе — просто пусто, как будто текстов нет вовсе. При
+    этом в разделе Ad titles их лежало 316.
+
+    Теперь источник тот же, что видит человек на экране: реестр. Таблица
+    осталась запасным ходом на одну ситуацию — свежая машина, где библиотеку
+    ещё не наполняли; такой ответ лучше пустого, но реестр всегда главнее.
+    """
+    from src.analysis_agent import ad_text_registry as ar
+
+    try:
+        texts = ar.all_texts()
+    except ar.AdTextError:
+        texts = []
+    if texts:
+        return [{"ad_title": t.name, "headline": t.headline, "body": t.body,
+                 "description": t.description, "asset": t.asset,
+                 "language": t.language} for t in texts]
+
+    from src.web.ad_copy_gsheet import load_ad_copy
+
+    return [{"ad_title": title, **entry} for title, entry in load_ad_copy().items()]
+
+
 @app.get("/api/ad-copy")
 async def api_ad_copy() -> JSONResponse:
-    """Return every "ad texts" row from the Google Sheet — canonical source for
-    the Campaign Builder's Ad Title search (see src/web/ad_copy_gsheet.py; the
-    old Excel "Ad copy" sheet is no longer used for this).
+    """Тексты объявлений для билдера.
 
     Returns [{ad_title, headline, body, description, asset, language}].
     """
-    from src.web.ad_copy_gsheet import load_ad_copy
+    from starlette.concurrency import run_in_threadpool
 
-    data = load_ad_copy()
-    rows = [
-        {"ad_title": title, **entry}
-        for title, entry in data.items()
-    ]
-    return JSONResponse({"rows": rows})
+    return JSONResponse({"rows": await run_in_threadpool(_ad_copy_rows)})
 
 
 @app.get("/api/resolve-targeting")
