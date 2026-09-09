@@ -9,10 +9,10 @@
             одну меньше: ширины сложились без последней, и колонка с кнопками
             уехала за правый край. Теперь счёт держит тест, а не память. -#}
         <colgroup>
-          <col style="width:20%"><col style="width:8%"><col style="width:8%">
+          <col style="width:23%"><col style="width:8%"><col style="width:9%">
           <col style="width:5%"><col style="width:5%"><col style="width:5%">
-          <col style="width:5%"><col style="width:5%"><col style="width:8%">
-          <col style="width:16%"><col style="width:3%"><col style="width:12%">
+          <col style="width:5%"><col style="width:5%"><col style="width:10%">
+          <col style="width:12%"><col style="width:13%">
         </colgroup>
         {#- Два спенда стоят рядом и подписаны источником: один из книги
             статистики, другой прочитан с самого кабинета. Порознь их легко
@@ -31,10 +31,16 @@
           <th class="num">CPA</th>
           <th class="num">CR</th>
           <th title="What the account itself said when it was last read. Blank means nobody has looked.">Status</th>
-          {#- «Что сделать» и «готов ли» переехали из секции под картой, где
-              тот же аккаунт описывался второй раз. Больше их показать негде. -#}
-          <th title="What still has to happen before this account can run">To do</th>
-          <th title="Ready to run">✓</th>
+          {#- Колонка «To do» убрана по решению пользователя 9 сентября. Она
+              несла список открытых рекомендаций («Air/GMBL/Vid Blue - 3⚠») —
+              для готового аккаунта это шум, а не задача, и он занимал шестую
+              часть ширины таблицы.
+
+              Галочка ✅/❌ заменена словом. Галочка отвечала на вопрос, которого
+              никто не задавал вслух: «готов ли». Слово отвечает на тот, что
+              задают: **что с аккаунтом**. И когда он не готов, слово называет
+              причину — то единственное, ради чего строка «To do» была нужна. -#}
+          <th title="Whether this account is set up and allowed to run. When it is not, the reason is written here.">Setup</th>
           <th></th>
         </tr></thead>
         <tbody>
@@ -43,7 +49,7 @@
             <td class="amap-acc">
               {% if r.has_data %}
               <button type="button" class="amap-caret" aria-label="Campaigns of {{ r.account }}"
-                      hx-get="/details?section=account&country={{ mc.country | urlencode }}&account={{ (r.workbook_alias or r.account) | urlencode }}&ncols=12"
+                      hx-get="/details?section=account&country={{ mc.country | urlencode }}&account={{ (r.workbook_alias or r.account) | urlencode }}&ncols=11"
                       hx-target="closest tr" hx-swap="afterend" hx-trigger="click">▸</button>
               {% else %}<span class="amap-caret-off">·</span>{% endif %}
               {{ r.account }}
@@ -93,8 +99,15 @@
               {%- else -%}<span class="amap-st bad" title="{{ st.status_text or st.status }} — read {{ st.at }}">{{ st.status }}</span>
               {%- endif -%}
             </td>
-            <td class="amap-todo" title="{{ r.to_do }}">{{ r.to_do or '—' }}</td>
-            <td class="num">{% if r.ready %}✅{% else %}❌{% endif %}</td>
+            {#- Не готов — пишем чем именно. `to_do` для неготового аккаунта и
+                есть причина («Video selfie»), а для готового это список
+                рекомендаций, который здесь не нужен. -#}
+            <td class="amap-setup">
+              {%- if r.ready -%}<span class="amap-st ok" title="Set up and allowed to run">ready</span>
+              {%- elif r.to_do -%}<span class="amap-st bad" title="{{ r.to_do }}">{{ r.to_do | truncate(28, True, '…') }}</span>
+              {%- else -%}<span class="amap-st bad" title="Not marked ready in the stats workbook, and no reason given there">needs setup</span>
+              {%- endif -%}
+            </td>
             <td class="amap-actions">
               {%- if amap.span == 'all' or not amap.date_from -%}
                 <button type="button" class="amap-btn amap-read" disabled title="Select dates to read account spend; Maximum is not supported">Select dates</button>

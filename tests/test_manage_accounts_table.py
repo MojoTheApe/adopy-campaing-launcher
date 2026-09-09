@@ -30,10 +30,40 @@ def test_only_one_place_connects_an_account():
     assert "Connect an account to" not in t, "второе место подключения вернулось"
 
 
-def test_what_is_left_to_do_moved_into_the_row():
+def test_the_state_of_the_account_is_written_not_ticked():
+    """Галочка отвечала на вопрос, которого никто не задаёт вслух.
+
+    ✅/❌ говорило «готов ли», а спрашивают другое: что с аккаунтом. Слово
+    отвечает на второй вопрос и, когда аккаунт не готов, называет причину —
+    ради неё и держали отдельную колонку «To do».
+    """
     t = ROW.read_text(encoding="utf-8")
-    assert "r.to_do" in t, "«что сделать» негде посмотреть"
-    assert "r.ready" in t, "готовность аккаунта негде посмотреть"
+    assert "r.ready" in t, "состояние аккаунта негде посмотреть"
+    assert ">ready<" in t, "состояние не написано словом"
+    assert "needs setup" in t, "неготовый аккаунт ничего о себе не говорит"
+    # Смотрим только в строки таблицы: в комментарии рядом галочка названа
+    # нарочно — там объясняется, почему её убрали.
+    body = t[t.index("<tbody>"): t.index("</tbody>")]
+    assert "✅" not in body and "❌" not in body, "галочка вернулась"
+
+
+def test_the_reason_is_written_when_the_account_is_not_ready():
+    """Иначе «needs setup» — это тупик: непонятно, что именно сделать."""
+    t = ROW.read_text(encoding="utf-8")
+    setup = t[t.index('class="amap-setup"'): t.index("</td>", t.index('class="amap-setup"'))]
+    assert "r.to_do" in setup, "причина неготовности потерялась вместе с колонкой"
+
+
+def test_the_open_recommendations_column_is_gone():
+    """Список рекомендаций у готового аккаунта — шум, а не задача.
+
+    Он занимал шестую часть ширины таблицы и повторял то, что уже сказано в
+    разделе оптимизации.
+    """
+    t = ROW.read_text(encoding="utf-8")
+    head = t[t.index("<thead>"): t.index("</thead>")]
+    assert ">To do<" not in head, "колонка To do вернулась"
+    assert "amap-todo" not in t, "ячейка To do осталась в разметке"
 
 
 def test_the_column_count_still_matches_itself():
@@ -56,7 +86,7 @@ def test_a_failed_read_shows_its_reason_after_a_reload():
     когда причина успела смениться.
     """
     t = ROW.read_text(encoding="utf-8")
-    cell = t[t.index("amap-live"): t.index("amap-todo")]
+    cell = t[t.index("amap-live"): t.index("amap-status")]
     assert "state == 'failed'" in cell, "отказ снова показывается прочерком"
     assert "sr.error" in cell, "причина не выводится"
     assert "sr.shot" in cell, "снимок опять негде найти"
