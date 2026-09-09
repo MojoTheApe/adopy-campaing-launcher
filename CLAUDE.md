@@ -16,3 +16,7 @@ Production — `master` в `MojoTheApe/adopy-campaing-launcher`; явно ука
 
 Готовый промпт для начала задачи и переноса правил в другие проекты:
 [CLAUDE_START_PROMPT.md](docs/CLAUDE_START_PROMPT.md).
+
+## Task tracker — mandatory
+
+Read [the shared tracker workflow](docs/TRACKER_AGENT_WORKFLOW.md) and `tracker/config.json` before task work. Automatically run `python -m tracker start ISSUE` and verify **In progress before the first code edit**. Use **High / Medium / Low**, default **Medium**. After full review and merge, run the verified `python -m tracker merged` transition and confirm the UI update. GitHub Issues are the source of truth; In master is the final stage.

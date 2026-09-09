@@ -1,0 +1,19 @@
+{
+  "schema_version": 2,
+  "project": {"name": "ACL Task Wall", "repository": "MojoTheApe/adopy-campaing-launcher", "base_branch": "master"},
+  "completion_label": "In master",
+  "workflow": ["idea", "backlog", "todo", "in_progress", "review", "merged"],
+  "priorities": ["high", "medium", "low"],
+  "default_backlog_priority": "medium",
+  "release_view_label": "MVP",
+  "default_release": "MVP",
+  "refresh_seconds": 60,
+  "modules": [
+    {"id": "accounts", "name": "Accounts & Access", "description": "Accounts, countries, profiles, roles and onboarding. Excludes ad operations and reporting metrics.", "examples": ["Simplify the account card", "Read account details from Jira"]},
+    {"id": "data", "name": "Data & Reporting", "description": "BI/API/RPA metrics, timeframes, reconciliation, reports and recommendations.", "examples": ["Compare spend between periods", "Read spend from the BI"]},
+    {"id": "campaigns", "name": "Campaigns", "description": "Builder, targeting, publishing, ad controls and publishing reliability.", "examples": ["Publish a campaign", "Test Ads Manager selectors"]},
+    {"id": "landing", "name": "Landing Pages & Tracking", "description": "Landing pages, hosting, QA, domains, Keitaro and tracking links.", "examples": ["Manage tracking domains", "Copy a landing page"]},
+    {"id": "creatives", "name": "Creatives & Content", "description": "Text libraries, creative analysis, briefs, headlines and material generation.", "examples": ["Generate headlines from winning ads", "Share the ad text library"]},
+    {"id": "platform", "name": "Platform & Operations", "description": "Installation, updates, shared telemetry, infrastructure and project tooling including this tracker. Not a catch-all for ambiguous tasks.", "examples": ["Update the installer", "Improve the task tracker"]}
+  ]
+}

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task Wall</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>__STYLE__</style></head>
+<body>
+<div class="shell">
+<header><div><p class="eyebrow">PROJECT WORKSPACE</p><h1 id="project-name">Task Wall</h1><p class="intro">One clear queue. From the first idea to finished work.</p></div>
+<div class="header-actions"><a id="github-link" target="_blank" rel="noopener">GitHub ↗</a><button id="theme" aria-label="Switch color theme">Theme</button></div></header>
+<div class="overview" id="overview"></div>
+<nav class="views" aria-label="Views"><button data-view="work">Work</button><button data-view="plan">Plan</button><button data-view="release" id="release-tab">MVP</button><button data-view="all">All</button><button data-view="archive">Archive</button></nav>
+<section class="toolbar" aria-label="Task filters">
+<div class="search-row"><label class="search"><span>Search</span><input id="search" type="search" placeholder="Search tasks, IDs, or details…" autocomplete="off"></label><button id="reset">Clear filters</button></div>
+<div id="statuses" class="statuses" aria-label="Status filters"></div>
+<div class="facets">
+<label>Module<select id="module"><option value="">All modules</option></select></label>
+<label>Priority<select id="priority"><option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="unassigned">Unassigned</option></select></label>
+<label>Type<select id="type"><option value="">All types</option><option value="bug">Bug</option><option value="feature">Feature</option><option value="improvement">Improvement</option><option value="research">Research</option><option value="operations">Operations</option></select></label>
+<label>Release<select id="release"><option value="">All releases</option></select></label>
+<label class="check"><input id="design" type="checkbox">Design</label><label class="check"><input id="required" type="checkbox">Required</label><label class="check"><input id="blocked" type="checkbox">Blocked</label>
+</div>
+<div id="release-options" hidden><label>Show<select id="release-scope"><option value="remaining">Remaining required</option><option value="all">Entire scope</option><option value="blocked">Blockers</option><option value="complete">Completed</option></select></label><p>Scope readiness is based on required tasks and their dependencies. Publishing is a separate action.</p></div>
+</section>
+<section id="release-summary" class="release-summary" aria-live="polite" hidden></section>
+<div class="section-heading"><div><h2 id="view-title"></h2><p id="view-description"></p></div><span id="result-count" aria-live="polite"></span></div>
+<p id="batch-note" class="batch-note" hidden></p>
+<main id="tasks"></main>
+<footer><span id="sync-state" role="status">Checking sync…</span><span>Changes are managed through GitHub · updates every minute</span></footer>
+</div>
+<script id="tracker-data" type="application/json">__DATA__</script>
+<script>__APP__</script>
+</body></html>
