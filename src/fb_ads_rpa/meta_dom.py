@@ -2686,8 +2686,9 @@ def run_recorded_campaign_flow(
 
         if reached_ad_level and creative_uploaded and (ad_title or ad_body):
             try:
-                if not fill_ad_copy(page, ad_title, ad_body):
-                    _shot("fail_ad_copy")
+                copy_report: dict = {}
+                if not fill_ad_copy(page, ad_title, ad_body, copy_report):
+                    _shot("fail_ad_copy", copy_report)
                     ad_level_fails.append("ad_copy")
                 else:
                     _shot("after_ad_copy")
@@ -2768,8 +2769,9 @@ def run_recorded_campaign_flow(
                 extra_body = extra.get("ad_body") or ""
                 if extra_title or extra_body:
                     try:
-                        if not fill_ad_copy(page, extra_title, extra_body):
-                            _shot(f"fail_{tag}_copy")
+                        copy_report = {}
+                        if not fill_ad_copy(page, extra_title, extra_body, copy_report):
+                            _shot(f"fail_{tag}_copy", copy_report)
                             ad_level_fails.append(f"{tag}_copy")
                         else:
                             _shot(f"after_{tag}_copy")
@@ -4977,14 +4979,28 @@ def mark_ad_copy_field(
         return False
 
 
-def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
-    """Fill Primary text (Body) and Headline (Title) with real ad copy.
+def fill_ad_copy(
+    page: Page, ad_title: str, ad_body: str, report: dict | None = None
+) -> bool:
+    """Заполнить основной текст и заголовок объявления.
 
-    Confirmed live (2026-07-26): `page.keyboard.type()` drops accented
-    characters ("Regístrese" -> "Registrese") on this field — use
-    `page.keyboard.insertText()` instead, which pastes the string in one
-    shot and preserves accents/emoji/bullets correctly.
+    `page.keyboard.type()` теряет диакритику на этом поле («Regístrese» →
+    «Registrese») — проверено живьём 2026-07-26. Поэтому `insert_text()`:
+    вставляет строку целиком и сохраняет ударения, эмодзи и маркеры.
+
+    Первый клик через CDP регулярно рапортует успех, не передав фокус
+    странице: текст уходит в никуда, поле остаётся пустым, исключения нет.
+    Ловится это только чтением поля после ввода, поэтому и вторая попытка.
+    Проверено живьём 2026-09-09: заголовок ложился со второй попытки во
+    всех трёх объявлениях подряд.
+
+    Неудачная попытка — не отказ шага, и в `report` она кладётся именно
+    попыткой. До 9 сентября каждая писалась отдельной строкой `ok=False`, и
+    шаг, который на деле не падал ни разу, имел в статистике надёжности
+    сто процентов отказов.
     """
+    report = report if report is not None else {}
+    report.setdefault("attempts", [])
     if not _reveal_ad_copy_fields(page):
         return False
 
@@ -5021,11 +5037,8 @@ def fill_ad_copy(page: Page, ad_title: str, ad_body: str) -> bool:
                 " comboboxCount: document.querySelectorAll('[role=combobox]').length,"
                 " placeholderFieldCount: document.querySelectorAll('[placeholder]').length }; }"
             )
-            _telemetry.record(
-                f"ad_copy_{what}",
-                False,
-                note=stage,
-                diag={**info, **(extra or {})},
+            report["attempts"].append(
+                {"field": what, "stage": stage, **info, **(extra or {})}
             )
         except Exception:
             pass
