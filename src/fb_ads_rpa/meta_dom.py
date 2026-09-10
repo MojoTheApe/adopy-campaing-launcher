@@ -1407,6 +1407,53 @@ def _sleep_h(base: float, spread: float = 0.3) -> None:
     time.sleep(_human_jitter(base, spread))
 
 
+_LOADING_TEXT = re.compile(r"^\s*Loading\b", re.I)
+"""Надпись загрузочной накладки Meta — и только она.
+
+Было `re.compile(r"Loading", re.I)`: без привязки к началу и без границы
+слова. На странице редактора объявления это находило постоянную видимую
+фразу «Send people to a fast-loading, mobile-optimized experience» —
+описание Instant Experience в разделе назначения. Скрыться она не может, и
+ожидание «пока исчезнет» выбирало все тридцать секунд таймаута.
+
+Проверка идёт перед каждой попыткой каждого клика и каждого заполнения,
+поэтому платили эти тридцать секунд по нескольку раз за шаг: у `ad3_name`
+плоский пол 31.7с при восьми прогонах, у `ad_name` разброс 0.7…32.6 — в
+зависимости от того, есть ли на странице эта фраза.
+
+Формулировки накладки видели разные («Loading...», «Loading creation» на
+списке кампаний с тремя десятками черновиков), но все начинаются со слова
+целиком — привязка к началу их сохраняет и отсекает «fast-loading».
+"""
+
+
+def _first_visible(page: Page, locators, *, budget_s: float = 4.0, poll_s: float = 0.25):
+    """Первый из локаторов, который стал видимым за отведённое время.
+
+    Отвечает на вопрос «есть ли оно вообще», и отвечает быстро. Попытка
+    кликнуть по отсутствующему элементу стоит полного таймаута ожидания
+    видимости — умноженного на число попыток. У `onboarding_modal` это
+    складывалось в 43 секунды на каждую кампанию: пять заходов по восемь
+    секунд ради модалки, которой на обжитом аккаунте не бывает.
+
+    Опрос частый, потому что здесь ничего не происходит — мы ждём, а не
+    действуем. Человеческие паузы между действиями (`_sleep_h`) это не
+    затрагивает: они нужны, чтобы наши действия выглядели человеческими, а
+    ожидание никаких событий не порождает.
+    """
+    deadline = time.time() + budget_s
+    while True:
+        for loc in locators:
+            try:
+                if loc.count() and loc.first.is_visible(timeout=200):
+                    return loc
+            except Exception:
+                continue
+        if time.time() >= deadline:
+            return None
+        time.sleep(poll_s)
+
+
 def _type_human(page: Page, text: str) -> None:
     """Type text as keystrokes, not as one instant insertion.
 
@@ -2127,10 +2174,20 @@ def run_recorded_campaign_flow(
         # wait-then-click was still sometimes racing a fresh overlay. Checked
         # before every action below, with a retry loop around the action itself.
         # Wording varies ("Loading...", "Loading creation" seen live on a
-        # campaign list with 30+ prior test drafts) — match any "Loading"
-        # text rather than the literal ellipsis.
+        # campaign list with 30+ prior test drafts) — hence `_LOADING_TEXT`
+        # matches the word at the start rather than the literal ellipsis.
+        #
+        # Спрашиваем сначала, висит ли накладка сейчас. Если её нет, ждать
+        # нечего и возвращаться надо немедленно: прежний вариант в этом
+        # случае звал `wait_for(hidden)` на элементе, который скрываться не
+        # собирался, и выбирал весь таймаут. Тридцать секунд урезаны до
+        # восьми — накладка, не ушедшая за восемь секунд, уже не переходная,
+        # и следующая попытка действия всё равно проверит заново.
         try:
-            page.get_by_text(re.compile(r"Loading", re.I)).first.wait_for(state="hidden", timeout=30000)
+            overlay = page.get_by_text(_LOADING_TEXT).first
+            if not overlay.count() or not overlay.is_visible(timeout=200):
+                return
+            overlay.wait_for(state="hidden", timeout=8000)
         except Exception:
             pass
 
@@ -2267,8 +2324,28 @@ def run_recorded_campaign_flow(
     # bug documented everywhere else in this function) and silently missed,
     # while the screenshot happened to catch the overlay and looked like
     # progress. Use the same retrying _click() helper as everything else.
-    if not _click(page.get_by_role("button", name="Don't show again"), attempts=3):
-        _click(page.get_by_role("button", name="OK", exact=True), attempts=2)
+    # Сначала спрашиваем, есть ли она вообще. Пять попыток кликнуть по
+    # отсутствующей кнопке стоили ровно 43 секунды: три захода по 8 секунд
+    # ожидания видимости плюс два по 8, плюс паузы между ними. Измерено по
+    # телеметрии — у шага плоский пол 43.2с при медиане 44.0с и четырнадцати
+    # прогонах, то есть модалки не было ни разу. За 9 сентября — 11 минут
+    # ожидания того, чего нет.
+    #
+    # Ждать её всё же надо: она всплывает поверх «Campaign details» и
+    # закрывает поле имени кампании, а появляется не мгновенно. Но четырёх
+    # секунд на «появись, если ты есть» достаточно — дальше идёт заполнение
+    # имени со своими попытками, и если модалка всё же успела встать, оно
+    # упадёт заметно, а не молча.
+    modal_btn = _first_visible(
+        page,
+        (
+            page.get_by_role("button", name="Don't show again"),
+            page.get_by_role("button", name="OK", exact=True),
+        ),
+        budget_s=4.0,
+    )
+    if modal_btn is not None:
+        _click(modal_btn, attempts=3)
     _shot("after_onboarding_modal")
 
     if not _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name):
