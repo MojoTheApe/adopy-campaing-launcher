@@ -181,32 +181,32 @@ Merge в `master` выполняется в пределах разрешённ�
 
 ## Таск-трекер: начало, очередь и завершение
 
-Обязательные общие правила находятся в [TRACKER_AGENT_WORKFLOW.md](TRACKER_AGENT_WORKFLOW.md)
-и едином [инструкцию общего движка](TRACKER_AGENT_WORKFLOW.md).
-GitHub Issues — источник задач; UI на `https://tracker.team7.cloud` только отображает их.
+Читайте [TRACKER_AGENT_WORKFLOW.md](TRACKER_AGENT_WORKFLOW.md), `tracker/config.json`
+и актуальную общую инструкцию через `python scripts/task_tracker.py guide`.
+Каждое поручение на разработку, включая «исправь сейчас», требует реального Issue:
+`work ID` либо `work --title ... --module ... --type ...` создаёт/находит задачу
+и проверяет In Progress до первой правки кода. Агент выбирает модуль и тип сам;
+планирование создаёт Idea/Backlog, а To Do содержит явно выбранную порцию работ.
 
-До первой правки кода агент автоматически выполняет `python scripts/task_tracker.py start ISSUE`
-и проверяет **In progress**. Это часть поручения, без дополнительного запроса владельцу.
-Все чаты используют общую очередь; следующий Issue начинается только после завершения
-или явной передачи/блокировки текущего. Порция Todo не пополняется из Backlog автоматически.
+ID имеют префикс ACL: исторические номера сохранены, новые равны 1000 + номер Issue.
+Приоритеты High / Medium / Low, по умолчанию Medium. Единая метка `release:included`
+отображается как Release в Focus и включает задачу в виджет. Дополнительные
+Required/MVP не нужны. Архив не означает завершение; merge не публикует релиз
+и не очищает его состав. История выпуска сохраняется только после его явного подтверждения.
 
-Статусы: Idea → Backlog → Todo → In progress → Review → In master. In master — финальный;
-отдельного Done/shipped нет. Факт выпуска ведётся в записях релиза. Приоритеты —
-High / Medium / Low, по умолчанию Medium. MVP — milestone с явно выбранным обязательным
-составом; готовность вычисляется и не является дополнительным статусом.
-
-Перед merge указать реальные связанные Issues в PR (`Tracker issues: #НОМЕР`). После
-полной проверки всех изменений задачи и подтверждённого merge в master выполнить:
+Перед merge укажите одну строку `Tracker issues: ACL-ID` с реальными ID и выполните
+`python scripts/task_tracker.py check-pr PR_NUMBER`. После полного ревью и merge:
 
 ```sh
-python scripts/task_tracker.py merged ISSUE --pr PR
-python scripts/task_tracker.py merged ISSUE --pr PR --apply --reviewed-complete
+python scripts/task_tracker.py merged ID --pr PR_NUMBER
+python scripts/task_tracker.py merged ID --pr PR_NUMBER --apply --reviewed-complete
 ```
 
-Перечитать метки и проверить успешную синхронизацию UI. Это обязательное завершение
-того же поручения, отдельное разрешение не требуется. Не закрывать Issues и не отмечать
-незавершённые чекбоксы ради прохождения проверки. Для частичного результата статус
-In master не ставится. Прежний `scripts/acl_mark_merged.py` сохранён как совместимый вход.
+Перечитайте метки и проверьте UI. Частичная задача остаётся в Review; нельзя
+отмечать непроверенные чекбоксы ради прохождения проверки. Общая очередь разрешает
+одну активную реализацию; перед следующим этапом оформляется передача через
+`queue release ID`. Прежний `scripts/acl_mark_merged.py` сохранён для совместимости.
+Проверки Windows и правила исключений выше действуют для каждого нового кандидата.
 
 ## Передача работы
 
