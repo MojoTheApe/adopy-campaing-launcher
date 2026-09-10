@@ -158,6 +158,7 @@ with tempfile.TemporaryDirectory(dir=OUT) as config:
         assert form.locator('.cbp-diag-chip-bad').count()==1
         assert form.locator('.cb-publish-btn').is_disabled()
         chip=form.locator('.cbp-diag-chip').first
+        assert chip.evaluate("e=>!!e.closest('.cb-ads-section')")
         top=form.locator('.cb-actions').evaluate('e=>e.getBoundingClientRect().top+scrollY')
         chip.click()
         drawer=page.locator('#cbp-diag-drawer')
@@ -223,7 +224,6 @@ with tempfile.TemporaryDirectory(dir=OUT) as config:
             return {ok:true,json:async()=>({ok:true,reading:{state:'ok',spend:12.34,currency:'EUR',date_from:'2026-09-01',date_to:'2026-09-09'}})};
           };
         }""")
-        all_button=page.locator('#view-home > .amap .amap-read-all').first
         # Select directly by the live map: no navigation or external reads occur.
         page.evaluate("()=>{window.queuePromise=amapReadAll(document.querySelector('#view-home .amap-read-all'));}")
         page.wait_for_function("typeof releaseFirst==='function'")
