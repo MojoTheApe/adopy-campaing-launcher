@@ -254,3 +254,70 @@ def test_the_attempts_reach_the_failure_record():
     source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
     assert '_shot("fail_ad_copy", copy_report)' in source
     assert '_shot(f"fail_{tag}_copy", copy_report)' in source
+
+
+# ── страница-ошибка браузера ──────────────────────────────────────────────
+#
+# 10 сентября прогон встал на ERR_SSL_PROTOCOL_ERROR: Ads Manager не
+# открывался вовсе. Шаг честно не нашёл бы кнопку, которой нет, и сообщил бы
+# «не нашёл поле имени кампании» — то есть соврал бы о причине.
+
+class _ErrorPage:
+    """Страница, отдающая заданный узел #main-frame-error."""
+
+    def __init__(self, html_text=None, raises=False):
+        self._text = html_text
+        self._raises = raises
+        self.url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns"
+
+    def evaluate(self, js, *a):
+        if self._raises:
+            raise RuntimeError("target closed")
+        return self._text or ""
+
+    def title(self):
+        return "adsmanager.facebook.com"
+
+    def get_by_role(self, role):
+        raise RuntimeError("нет")
+
+
+def test_the_browser_error_code_is_named():
+    assert rt.browser_error(_ErrorPage("ERR_SSL_PROTOCOL_ERROR")) == "ERR_SSL_PROTOCOL_ERROR"
+
+
+def test_a_proxy_failure_is_named_too():
+    """Самый ожидаемый сосед: прокси не отвечает."""
+    assert rt.browser_error(_ErrorPage("ERR_PROXY_CONNECTION_FAILED")) == "ERR_PROXY_CONNECTION_FAILED"
+
+
+def test_a_healthy_page_reports_nothing():
+    """Узла нет — значит и экрана ошибки нет."""
+    assert rt.browser_error(_ErrorPage("")) == ""
+
+
+def test_a_page_that_throws_reports_nothing():
+    assert rt.browser_error(_ErrorPage(raises=True)) == ""
+
+
+def test_the_code_reaches_the_failure_context():
+    """Иначе находка останется внутри функции и до записи об отказе не дойдёт."""
+    ctx = rt.page_context(_ErrorPage("ERR_SSL_PROTOCOL_ERROR"))
+    assert ctx["browser_error"] == "ERR_SSL_PROTOCOL_ERROR"
+
+
+def test_a_working_page_carries_no_such_key():
+    """Пустой ключ читался бы как «проверяли и не нашли», а проверять нечего."""
+    assert "browser_error" not in rt.page_context(_ErrorPage(""))
+
+
+def test_the_word_err_inside_a_live_page_is_not_an_error_screen():
+    """`ERR_…` встречается и в скриптах живой страницы.
+
+    Поэтому ищется узел `#main-frame-error`, а не слово по всему тексту:
+    иначе каждый второй отказ сообщал бы о несуществующей потере связи.
+    """
+    source = (ROOT / "src" / "fb_ads_rpa" / "run_telemetry.py").read_text(encoding="utf-8")
+    block = source[source.index("def browser_error"):]
+    block = block[: block.index("\ndef ", 10)] if "\ndef " in block[10:] else block
+    assert "#main-frame-error" in block, "экран ошибки ищется по тексту, а не по своему узлу"
