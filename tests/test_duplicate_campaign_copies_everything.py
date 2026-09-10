@@ -79,3 +79,18 @@ def test_the_targeting_is_still_copied_with_its_visible_text():
     body = _duplicate_body()
     assert "newTgtHidden.value = srcTgtHidden.value" in body
     assert "newTgtSearch.value = srcTgtSearch.value" in body
+
+
+# ── предупреждение про блокировку экрана ──────────────────────────────────
+
+def test_the_publish_dialog_warns_about_locking_the_screen():
+    """Сказать надо до запуска, а не в разборе через сорок минут.
+
+    10 сентября заблокированный экран стоил 42 минут на файле, который
+    соседнее объявление приняло за 74 секунды. Снять блокировку нельзя — это
+    настройка машины байера; предупредить вовремя можно.
+    """
+    tpl = TPL.read_text(encoding="utf-8")
+    block = tpl[tpl.index("window.cbPublish = function"):]
+    block = block[: block.index("function _doCbPublish")]
+    assert "Не блокируйте экран" in block, "о блокировке экрана не предупреждают"

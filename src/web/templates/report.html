@@ -8066,7 +8066,14 @@ window.cbPublish = function(form) {
     + 'Country: <strong>' + aclEscHtml(country) + '</strong><br>'
     + 'Campaigns: <strong>' + campCount + '</strong><br><br>'
     + '<span style="color:var(--muted);font-size:0.85rem">The RPA attaches to the Multilogin profile through MLX automation '
-    + '(no need to open the profile first; if it is open by hand the window may restart).</span><br><br>'
+    + '(no need to open the profile first; if it is open by hand the window may restart).</span><br>'
+    // Заблокированный экран останавливает страницу так же, как свёрнутое
+    // окно, только сильнее: система уходит на защищённый рабочий стол, и
+    // загрузка встаёт. 10 сентября так вышло 42 минуты на файл, который
+    // соседнее объявление приняло за 74 секунды. Снять блокировку мы не
+    // можем — это настройка машины; сказать о ней вовремя можем.
+    + '<span style="color:var(--warn);font-size:0.85rem">Не блокируйте экран, пока идёт сборка — '
+    + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)</span>';
 
