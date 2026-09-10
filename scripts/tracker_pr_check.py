@@ -49,7 +49,8 @@ def check(request, config, pr_number, *, allow_transition=False):
                           and {stages.get(s) for s in status}=={'review','merged'})
         if not resuming_merge and (len(status)!=1 or stages.get(status[0]) not in allowed):
             raise ValueError(f'#{n}: start and implement the task, then move it to Review before a ready PR')
-        if 'flag:archived' in labels or issue.get('state_reason')=='not_planned' or issue.get('state')=='closed' and stages.get(status[0])!='merged':
+        closed_by_merge = allow_transition and pr.get('merged') and issue.get('state_reason')=='completed'
+        if 'flag:archived' in labels or issue.get('state_reason')=='not_planned' or issue.get('state')=='closed' and stages.get(status[0])!='merged' and not closed_by_merge:
             raise ValueError(f'#{n} is archived or cancelled')
         if 'flag:blocked' in labels: raise ValueError(f'#{n} has an unresolved blocker')
         module=[s[7:] for s in labels if s.startswith('module:')]
