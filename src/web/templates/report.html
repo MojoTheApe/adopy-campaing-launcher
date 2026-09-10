@@ -792,21 +792,22 @@
       display: inline-block;
     }
     .cb-add-btn-sm:hover { color: var(--accent); border-color: var(--accent); }
-    /* Duplicate campaign — the workhorse button of the builder (user
-       request 2026-08-02: make it stand out). Filled accent vs the ghost
-       add-buttons beside it. Per-ad duplication lives on the ad card's
-       header instead (acl-705). */
-    .cb-dup-btn {
-      background: var(--accent);
-      border: 1px solid var(--accent);
-      color: #fff;
-      font-weight: 600;
+    /* Duplication lives on the cards themselves: ⧉ on each ad row
+       (acl-705) and on each campaign slot's header (acl-706) — a bottom
+       button could not say which item it would take. */
+    .cb-dup-slot-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      width: 1.4rem; height: 1.4rem;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      line-height: 1;
+      padding: 0;
+      font-family: inherit;
     }
-    .cb-dup-btn:hover {
-      background: color-mix(in srgb, var(--accent) 85%, #000);
-      border-color: color-mix(in srgb, var(--accent) 85%, #000);
-      color: #fff;
-    }
+    .cb-dup-slot-btn:hover { color: var(--accent); border-color: var(--accent); }
 
     /* "Send to Builder" trigger + popup */
     /* Landing-page chips: second line under the adset name in the CM drill —
@@ -1389,7 +1390,7 @@
        Единое ощущение контролов: один радиус, слоистая тень, видимое
        фокус-кольцо, мягкий ховер, тактильное нажатие. ── */
     .cb-preview-btn, .cb-publish-btn, .ml-connect-btn, .cb-field-save-btn,
-    .cb-add-btn, .cb-add-btn-sm, .cb-dup-btn, .cb-cart-btn, .cb-send-btn,
+    .cb-add-btn, .cb-add-btn-sm, .cb-dup-slot-btn, .cb-cart-btn, .cb-send-btn,
     .ml-profile-use-btn, .cb-cart-bar button, .lp-chip-more,
     #rpa-takeover-btn {
       border-radius: 6px;
@@ -1401,23 +1402,23 @@
     }
     .cb-preview-btn:active, .cb-publish-btn:active, .ml-connect-btn:active,
     .cb-field-save-btn:active, .cb-add-btn:active, .cb-add-btn-sm:active,
-    .cb-dup-btn:active, .cb-cart-btn:active, .cb-cart-bar button:active,
+    .cb-dup-slot-btn:active, .cb-cart-btn:active, .cb-cart-bar button:active,
     #rpa-takeover-btn:active {
       transform: translateY(0.5px) scale(0.98);
     }
     .cb-preview-btn:focus-visible, .cb-publish-btn:focus-visible,
     .ml-connect-btn:focus-visible, .cb-field-save-btn:focus-visible,
     .cb-add-btn:focus-visible, .cb-add-btn-sm:focus-visible,
-    .cb-dup-btn:focus-visible, .cb-cart-btn:focus-visible,
+    .cb-dup-slot-btn:focus-visible, .cb-cart-btn:focus-visible,
     .cb-cart-bar button:focus-visible, .cb-select:focus-visible {
       outline: none;
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
     }
     /* Primary actions get the layered shadow treatment */
-    .cb-dup-btn, .cb-publish-btn:not([disabled]), .ml-connect-btn, .cb-cart-bar button {
+    .cb-publish-btn:not([disabled]), .ml-connect-btn, .cb-cart-bar button {
       box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.12);
     }
-    .cb-dup-btn:hover, .cb-publish-btn:not([disabled]):hover, .ml-connect-btn:hover {
+    .cb-publish-btn:not([disabled]):hover, .ml-connect-btn:hover {
       box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.12);
     }
     /* Cart bar: pill card with the md shadow, consistent inner rhythm */
@@ -1436,7 +1437,7 @@
     .cbp-card:hover { box-shadow: var(--shadow-md); }
     @media (prefers-reduced-motion: reduce) {
       .cb-preview-btn, .cb-publish-btn, .ml-connect-btn, .cb-field-save-btn,
-      .cb-add-btn, .cb-add-btn-sm, .cb-dup-btn, .cb-cart-btn, .cb-send-btn,
+      .cb-add-btn, .cb-add-btn-sm, .cb-dup-slot-btn, .cb-cart-btn, .cb-send-btn,
       .cb-cart-bar button, .cbp-card, #cb-cart-toast {
         transition: none;
       }
@@ -2550,6 +2551,7 @@ async function dashRefresh(ev) {
           <span class="cb-slot-label">Campaign {{ ns.idx + 1 }}
             {% if r.strategy_label %}<span style="color:var(--muted);font-weight:normal"> · {{ r.strategy_label }}</span>{% endif %}
           </span>
+          <button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateSlot(this)" title="Duplicate this campaign (including its ads)">⧉</button>
           <button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>
         </div>
         <div class="cb-slot-name" data-name-display></div>
@@ -2660,8 +2662,6 @@ async function dashRefresh(ev) {
 
     <button type="button" class="cb-add-btn"
             onclick="cbAddSlot(this.closest('form'))">+ Add Campaign</button>
-    <button type="button" class="cb-add-btn cb-dup-btn"
-            onclick="cbDuplicateSlot(this.closest('form'))" title="Duplicate the last campaign (including its ads) — tweak one field instead of refilling everything">⧉ Duplicate campaign</button>
 
     <div class="cb-actions">
       <button type="button" class="cb-preview-btn"
@@ -4502,19 +4502,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     cbUpdateAdLabels(slot);
   };
 
-  // "⧉ Duplicate campaign" sits next to "+ Add Campaign" — duplicates the
-  // LAST campaign slot (targeting/OS/age/budget/asset + every one of its
-  // ads) into a new slot at the end, so building a variant campaign only
-  // requires changing the one field that differs.
-  window.cbDuplicateSlot = function(form) {
-    var container = form.querySelector('.cb-slots');
-    if (!container) return;
-    var slots = container.querySelectorAll('.cb-slot');
-    var srcSlot = slots[slots.length - 1];
-    if (!srcSlot) return;
-    var idx = slots.length;
-    container.insertAdjacentHTML('beforeend', buildBlankSlotHTML(idx));
-    var newSlot = container.querySelector('.cb-slot[data-idx="' + idx + '"]');
+  // "⧉" on each campaign slot's header duplicates THAT slot (targeting/
+  // OS/age/budget/asset/language + every one of its ads); the copy lands
+  // right under its source and the slots renumber. It used to be one
+  // form-bottom button that silently took the last slot — with several
+  // campaigns on screen nothing said which one it meant (acl-706).
+  window.cbDuplicateSlot = function(btn) {
+    var srcSlot = btn.closest('.cb-slot');
+    var form = btn.closest('form');
+    if (!srcSlot || !form) return;
+    var idx = form.querySelectorAll('.cb-slot').length;
+    srcSlot.insertAdjacentHTML('afterend', buildBlankSlotHTML(idx));
+    var newSlot = srcSlot.nextElementSibling;
     if (!newSlot) return;
     initAllSelects(newSlot);
 
@@ -4540,10 +4539,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       if (srcOsText && newOsText) newOsText.value = srcOsText.value;
     }
 
-    ['age', 'budget', 'asset'].forEach(function(field) {
+    // language included: the copy that lost it went on to build a campaign
+    // without the language the original had (acl-706). On builds that have
+    // no language field yet the selector simply finds nothing.
+    ['age', 'budget', 'asset', 'language'].forEach(function(field) {
       var srcInput = srcSlot.querySelector('[name="camp_' + srcIdx + '_' + field + '"]');
       var newInput = newSlot.querySelector('[name="camp_' + idx + '_' + field + '"]');
-      if (srcInput && newInput) newInput.value = srcInput.value;
+      if (srcInput && newInput) {
+        newInput.value = srcInput.value;
+        if (field === 'language' && typeof cbLanguageChanged === 'function') cbLanguageChanged(newInput);
+      }
     });
 
     var newAdRows = newSlot.querySelector('.cb-ad-rows');
@@ -4556,7 +4561,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     cbUpdateAdCount(newSlot);
     cbUpdateAdLabels(newSlot);
 
-    cbUpdateName(newSlot);
+    // The copy sits mid-list, so every slot after it shifts by one:
+    // renumber names and labels for the whole form, not just the new slot.
+    cbRenumber(form);
     cbUpdateCount(form);
   };
 
@@ -4646,6 +4653,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return '<div class="cb-slot" data-idx="' + idx + '">' +
       '<div class="cb-slot-header">' +
       '<span class="cb-slot-label">Campaign ' + (idx + 1) + '</span>' +
+      '<button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateSlot(this)" title="Duplicate this campaign (including its ads)">⧉</button>' +
       '<button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>' +
       '</div>' +
       '<div class="cb-slot-name" data-name-display></div>' +
