@@ -107,7 +107,10 @@ def test_country_blocks_are_collapsed_by_default():
     вопрос «что здесь» без раскрытия.
     """
     t = (TPL.parent / "_account_map.html").read_text(encoding="utf-8")
-    block = t[t.index("<details class=\"amap-country\""):]
+    # Ищем без закрывающей кавычки: в классе появилось условие
+    # (`amap-country{% if not mc.rows %} amap-nocov{% endif %}`), и точная
+    # строка перестала находиться. Смысл проверки от этого не изменился.
+    block = t[t.index("<details class=\"amap-country"):]
     block = block[: block.index("</summary>")]
     assert "open" not in block.replace("amap-openprof", ""), (
         "блок страны снова раскрыт разметкой: " + block[:200]
