@@ -1409,6 +1409,7 @@ def _sleep_h(base: float, spread: float = 0.3) -> None:
 
 _UPLOADING_TEXT = re.compile(r"^Uploading (video|image)\b", re.I)
 _UPLOAD_MAX_S = 20 * 60
+_UPLOAD_FROZEN_S = 60   # столько неподвижной полосы считаем застоем
 
 
 def _upload_in_progress(page: Page) -> bool:
@@ -4687,15 +4688,32 @@ def upload_ad_creative(
     # — тогда семидесяти секунд по-прежнему достаточно, и застрявший шаг не
     # висит вечно. Общий потолок нужен на случай, если надпись останется
     # висеть навсегда: прогон должен кончиться отказом, а не сутками ожидания.
+    #
+    # Застой распознаётся ЗДЕСЬ, а не после выхода из цикла. Сначала эта
+    # проверка стояла между попытками — то есть включалась только после того,
+    # как ожидание выберет свой потолок. 10 сентября это стоило сорока двух
+    # минут: два потолка по двадцать подряд, и лишь потом перезагрузка.
+    # Неподвижная полоса видна за минуту, и решать надо в этих единицах.
     idle = 0
+    frozen = 0
+    last_progress = _upload_progress(page)
     deadline = time.time() + _UPLOAD_MAX_S
-    while idle < 60 and time.time() < deadline:
+    while idle < 60 and frozen < _UPLOAD_FROZEN_S and time.time() < deadline:
         try:
             if page.evaluate(sel_js) or page.evaluate(tile_js, fname):
                 break
         except Exception:
             pass
-        idle = 0 if _upload_in_progress(page) else idle + 1
+        uploading = _upload_in_progress(page)
+        idle = 0 if uploading else idle + 1
+        now = _upload_progress(page)
+        # Счётчик неподвижности идёт только пока страница говорит, что грузит:
+        # вне загрузки «прогресс не менялся» ничего не значит.
+        if uploading and now is not None and now == last_progress:
+            frozen += 1
+        else:
+            frozen = 0
+        last_progress = now
         _sleep_h(1.0)
 
     # Uploading does NOT always select the tile: measured live 2026-08-04
@@ -4835,8 +4853,10 @@ def _verify_ad_media_present(page: Page) -> bool:
     # по часам, который есть на случай навсегда зависшей надписи.
     grace = 0
     idle = 0
+    frozen = 0
+    last_progress = _upload_progress(page)
     deadline = time.time() + _UPLOAD_MAX_S
-    while idle < 150 and time.time() < deadline:
+    while idle < 150 and frozen < _UPLOAD_FROZEN_S and time.time() < deadline:
         try:
             state = page.evaluate(
                 """
@@ -4860,6 +4880,12 @@ def _verify_ad_media_present(page: Page) -> bool:
             return True
         if state.get("uploading"):
             grace = 0
+            # Неподвижная полоса — застой, и ждать до потолка незачем: тот же
+            # счёт, что и в самом ожидании загрузки. Сорок две минуты
+            # 10 сентября сложились именно здесь, во втором потолке подряд.
+            now = _upload_progress(page)
+            frozen = frozen + 1 if now is not None and now == last_progress else 0
+            last_progress = now
             _sleep_h(1.0)
             continue
         if state.get("empty"):
