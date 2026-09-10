@@ -4056,7 +4056,7 @@ def upload_ad_creative_with_retry(
     report False forever — once media is attached, the "Set up creative"
     button this function waits for no longer exists).
     """
-    for _ in range(attempts):
+    for attempt in range(attempts):
         try:
             if upload_ad_creative(page, creative_type, creative_path, edit_url=edit_url):
                 return True
@@ -4066,7 +4066,76 @@ def upload_ad_creative_with_retry(
         _sleep_h(0.8)
         if _verify_ad_media_present(page):
             return True
+        # Застрявшая загрузка — отдельная беда, и повтор на той же странице
+        # её не лечит: состояние висит в этой же вкладке. Перезагружаем
+        # редактор и пробуем заново. Объявление при этом не теряется — Meta
+        # хранит черновик у себя (в снимке отказа 10 сентября видно «All
+        # edits saved», имя объявления в поле и в дереве, статус «In draft»).
+        if attempt + 1 < attempts and _upload_stalled(page):
+            _telemetry.record("creative_upload_stalled", None, note="reload_and_retry")
+            _reload_editor(page, edit_url)
     return False
+
+
+def _upload_progress(page: Page) -> int | None:
+    """Сколько процентов загрузки показывает страница, или `None`.
+
+    Meta рисует настоящий индикатор:
+    `<div role="progressbar" aria-valuenow="0" aria-valuemax="100">` — рядом с
+    надписью «Uploading video …» и кнопкой Cancel.
+    """
+    try:
+        val = page.evaluate(
+            """
+            () => {
+              const el = document.querySelector('[role="progressbar"][aria-valuenow]');
+              return el ? el.getAttribute('aria-valuenow') : null;
+            }
+            """
+        )
+        return int(val) if val is not None else None
+    except Exception:
+        return None
+
+
+def _upload_stalled(page: Page, *, watch_s: float = 4.0) -> bool:
+    """Висит ли загрузка на месте — измеряем, а не предполагаем.
+
+    10 сентября два объявления подряд простояли 537 и 327 секунд с надписью
+    «Uploading video 2_ar_2221_story.mp4» на экране, и в обоих снимках отказа
+    `aria-valuenow="0"`. Файл 25.8 МБ. То есть загрузка не шла медленно — она
+    не начиналась вовсе, а надпись создавала видимость работы.
+    Это же объясняет разброс, который вес объяснить не мог: те же 25 МБ в
+    других попытках уходили за 62 и 90 секунд.
+
+    Одного нуля мало: ноль бывает и в первую секунду настоящей загрузки.
+    Поэтому смотрим дважды и считаем застоем только неподвижность.
+    """
+    if not _upload_in_progress(page):
+        return False
+    before = _upload_progress(page)
+    if before is None:
+        return False
+    time.sleep(watch_s)
+    if not _upload_in_progress(page):
+        return False
+    return _upload_progress(page) == before
+
+
+def _reload_editor(page: Page, edit_url: str = "") -> None:
+    """Перезагрузить редактор объявления, сбросив зависшее состояние вкладки.
+
+    Это перезагрузка страницы внутри того же профиля, а не перезапуск
+    браузера: сессия, профиль и прокси остаются на месте.
+    """
+    try:
+        if edit_url:
+            page.goto(edit_url, wait_until="domcontentloaded", timeout=60000)
+        else:
+            page.reload(wait_until="domcontentloaded", timeout=60000)
+    except Exception:
+        return
+    _sleep_h(1.5)
 
 
 def _click_xpath(page: Page, xpath: str, *, scroll: bool = True) -> bool:
@@ -4711,8 +4780,19 @@ def _verify_ad_media_present(page: Page) -> bool:
     # 58c3cb9b53c6 (24.08): ad3 failed with that toast still mid-progress on
     # screen, while the three ads whose uploads happened to finish sooner all
     # passed — a stopwatch race, not a broken step.
+    # Потолок здесь был `for _ in range(150)` с припиской «тратится только
+    # пока идёт работа». Приписка неверна: счёт шёл всегда, и на тяжёлом
+    # видео эти две с половиной минуты кончались задолго до загрузки.
+    # 10 сентября объявление объявили без креатива на 537-й секунде, а на
+    # экране в этот момент было «Uploading video 2_ar_2221_story.mp4».
+    #
+    # Теперь так, как обещала приписка: проходы считаются только когда
+    # страница молчит. Пока она говорит, что грузит, ждём — до общего потолка
+    # по часам, который есть на случай навсегда зависшей надписи.
     grace = 0
-    for _ in range(150):  # up to ~2.5 min, only spent while work is in flight
+    idle = 0
+    deadline = time.time() + _UPLOAD_MAX_S
+    while idle < 150 and time.time() < deadline:
         try:
             state = page.evaluate(
                 """
@@ -4744,6 +4824,7 @@ def _verify_ad_media_present(page: Page) -> bool:
             grace += 1
             if grace >= 6:  # ~3s of settled, upload-free empty state
                 return False
+        idle += 1
         _sleep_h(0.5)
     return False
 

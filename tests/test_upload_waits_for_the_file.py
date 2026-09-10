@@ -96,3 +96,152 @@ def test_a_quiet_page_still_gives_up_at_about_a_minute():
     """Раньше семидесяти секунд хватало, когда грузить нечего. Так и осталось."""
     block = _wait_block()
     assert "idle < 60" in block, "порог простоя изменился — проверить, что шаг не висит зря"
+
+
+# ── проверка «лёг ли креатив» ─────────────────────────────────────────────
+#
+# Здесь и был настоящий отказ 10 сентября. Первый цикл ожидания тоже считал
+# проходы, но объявление признали пустым именно тут — на 537-й секунде, при
+# видимой на экране надписи «Uploading video 2_ar_2221_story.mp4».
+
+def _verify_block() -> str:
+    """Тело функции без строк-комментариев.
+
+    Комментарий, описывающий убранную конструкцию, — не её возвращение.
+    Сторож, читающий текст целиком, ловит собственное объяснение: за эту
+    сессию так вышло трижды.
+    """
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    start = source.index("def _verify_ad_media_present")
+    body = source[start : source.index("\ndef ", start + 10)]
+    return "\n".join(ln for ln in body.splitlines() if not ln.lstrip().startswith("#"))
+
+
+def test_the_media_check_counts_only_quiet_passes():
+    """Раньше стояло `for _ in range(150)` с припиской «только пока идёт работа».
+
+    Приписка была неверной: счёт шёл всегда, и две с половиной минуты
+    кончались задолго до конца тяжёлой загрузки.
+    """
+    block = _verify_block()
+    assert "for _ in range(150)" not in block, "вернулся счёт проходов независимо от состояния"
+    assert "while idle < 150" in block, "порог тишины пропал"
+    assert "idle += 1" in block, "проходы не считаются вовсе — шаг будет висеть до потолка"
+
+
+def test_the_media_check_does_not_count_while_uploading():
+    """Ветка загрузки уходит на следующий круг, не трогая счётчик тишины."""
+    block = _verify_block()
+    upload_branch = block[block.index('if state.get("uploading")'):]
+    upload_branch = upload_branch[: upload_branch.index("continue")]
+    assert "idle" not in upload_branch, "счётчик тишины растёт во время загрузки"
+
+
+def test_the_media_check_still_ends_on_a_stuck_page():
+    assert "_UPLOAD_MAX_S" in _verify_block(), "у проверки нет потолка по часам"
+
+
+# ══ застрявшая загрузка ═══════════════════════════════════════════════════
+#
+# 10 сентября два объявления подряд простояли 537 и 327 секунд с надписью
+# «Uploading video 2_ar_2221_story.mp4», и в обоих снимках отказа
+# aria-valuenow="0" при файле в 25.8 МБ. Загрузка не шла медленно — она не
+# начиналась. Те же 25 МБ в других попытках ушли за 62 и 90 секунд.
+
+class _ProgressPage:
+    """Страница с индикатором, отдающая заданную череду процентов."""
+
+    def __init__(self, values, uploading=True):
+        self._values = list(values)
+        self._uploading = uploading
+        self.reads = 0
+
+    def evaluate(self, js, *a):
+        if "Uploading" in js:
+            return self._uploading
+        self.reads += 1
+        return str(self._values[min(self.reads - 1, len(self._values) - 1)])
+
+
+def test_the_progress_is_read_from_metas_own_indicator():
+    assert meta_dom._upload_progress(_ProgressPage([37])) == 37
+
+
+def test_no_indicator_means_no_answer():
+    """`None` — это «не знаю», и застоем его считать нельзя."""
+
+    class _NoBar:
+        def evaluate(self, js, *a):
+            return None
+
+    assert meta_dom._upload_progress(_NoBar()) is None
+
+
+def test_a_frozen_bar_is_called_stalled(monkeypatch):
+    monkeypatch.setattr(meta_dom.time, "sleep", lambda s: None)
+    assert meta_dom._upload_stalled(_ProgressPage([0, 0])) is True
+
+
+def test_a_moving_bar_is_not(monkeypatch):
+    """Ноль бывает и в первую секунду настоящей загрузки."""
+    monkeypatch.setattr(meta_dom.time, "sleep", lambda s: None)
+    assert meta_dom._upload_stalled(_ProgressPage([0, 4])) is False
+
+
+def test_a_finished_upload_is_not_stalled(monkeypatch):
+    """Надпись пропала между замерами — значит всё получилось."""
+    monkeypatch.setattr(meta_dom.time, "sleep", lambda s: None)
+
+    class _Finishing(_ProgressPage):
+        def evaluate(self, js, *a):
+            if "Uploading" in js:
+                self._uploading = not self._uploading
+                return not self._uploading
+            return super().evaluate(js, *a)
+
+    assert meta_dom._upload_stalled(_Finishing([0, 0])) is False
+
+
+def test_a_page_with_nothing_uploading_is_not_stalled(monkeypatch):
+    monkeypatch.setattr(meta_dom.time, "sleep", lambda s: None)
+    assert meta_dom._upload_stalled(_ProgressPage([0, 0], uploading=False)) is False
+
+
+# ── что делает повтор ─────────────────────────────────────────────────────
+
+def _retry_block() -> str:
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    start = source.index("def upload_ad_creative_with_retry")
+    body = source[start : source.index("\ndef _upload_progress", start)]
+    return "\n".join(ln for ln in body.splitlines() if not ln.lstrip().startswith("#"))
+
+
+def test_a_stall_reloads_before_trying_again():
+    """Повтор на той же странице застоя не лечит: состояние висит во вкладке."""
+    block = _retry_block()
+    assert "_upload_stalled(page)" in block, "застой не распознаётся"
+    assert "_reload_editor(page, edit_url)" in block, "страница не перезагружается"
+
+
+def test_the_stall_is_written_down():
+    """Молчаливая перезагрузка — потерянный след.
+
+    Отмена и повтор могут оставить в библиотеке аккаунта недогруженный файл;
+    об этом должно остаться, что искать.
+    """
+    assert 'record("creative_upload_stalled"' in _retry_block()
+
+
+def test_the_reload_stays_inside_the_profile():
+    """Красная линия: перезапуск браузера снимает прокси. Здесь его нет."""
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    start = source.index("def _reload_editor")
+    block = source[start : source.index("\ndef ", start + 10)]
+    for forbidden in ("launch(", "new_context", "close(", "connect_over_cdp"):
+        assert forbidden not in block, f"перезагрузка трогает браузер: {forbidden}"
+    assert "page.goto" in block and "page.reload" in block
+
+
+def test_the_reload_does_not_happen_after_the_last_attempt():
+    """Перезагружать редактор, чтобы тут же сдаться, — потерянная минута."""
+    assert "attempt + 1 < attempts" in _retry_block()
