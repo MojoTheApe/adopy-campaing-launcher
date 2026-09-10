@@ -1818,11 +1818,19 @@ async def api_creatives() -> JSONResponse:
         except ValueError:
             rel = Path(p.name)
         folder = str(rel.parent) if rel.parent != Path(".") else ""
+        try:
+            size = p.stat().st_size
+        except OSError:
+            size = 0
         files.append({
             "filename": p.name,
             "rel_path": str(rel).replace("\\", "/"),
             "folder": folder.replace("\\", "/"),
             "type": ftype,
+            # Вес виден при выборе, а не через десять минут загрузки. В той же
+            # папке 10 сентября лежали файлы от 30 КБ до 1.5 ГБ, и по имени
+            # они не отличались никак.
+            "size_bytes": size,
         })
     return JSONResponse({"files": files})
 
