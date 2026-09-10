@@ -398,3 +398,71 @@ def test_the_recovery_runs_where_nothing_is_entered_yet():
     assert 'name="Create"' in after, "проверка стоит не в начале потока"
     calls = source.count("_recover_from_browser_error(page)")
     assert calls <= 2, f"проверка расставлена в {calls} местах — правило стало сплошным"
+
+
+# ── заблокированный экран ─────────────────────────────────────────────────
+#
+# Блокировка останавливает страницу как свёрнутое окно, только сильнее.
+# 29 июля с окном в фоне шаги шли в 10-50 раз медленнее, загрузка креатива
+# заняла 12 минут и «упала». 10 сентября то же с локскрином: 42 минуты на
+# файл, который соседнее объявление приняло за 74 секунды — сразу после того,
+# как человек вернулся к машине.
+
+def _fake_procs(names):
+    class _P:
+        def __init__(self, n): self.info = {"name": n}
+    return lambda attrs=None: [_P(n) for n in names]
+
+
+def test_the_lock_screen_process_is_the_signal(monkeypatch):
+    import psutil
+
+    monkeypatch.setattr(psutil, "process_iter", _fake_procs(["chrome.exe", "LogonUI.exe"]))
+    monkeypatch.setattr(rt.sys, "platform", "win32")
+    assert rt.screen_locked() is True
+
+
+def test_an_unlocked_machine_says_so(monkeypatch):
+    import psutil
+
+    monkeypatch.setattr(psutil, "process_iter", _fake_procs(["chrome.exe", "explorer.exe"]))
+    monkeypatch.setattr(rt.sys, "platform", "win32")
+    assert rt.screen_locked() is False
+
+
+def test_the_name_is_matched_regardless_of_case(monkeypatch):
+    import psutil
+
+    monkeypatch.setattr(psutil, "process_iter", _fake_procs(["logonui.exe"]))
+    monkeypatch.setattr(rt.sys, "platform", "win32")
+    assert rt.screen_locked() is True
+
+
+def test_elsewhere_the_answer_is_i_do_not_know(monkeypatch):
+    """`None` честнее, чем False: на другой системе признака просто нет."""
+    monkeypatch.setattr(rt.sys, "platform", "linux")
+    assert rt.screen_locked() is None
+
+
+def test_a_process_list_that_throws_does_not_break_the_record(monkeypatch):
+    import psutil
+
+    def _boom(attrs=None):
+        raise RuntimeError("access denied")
+
+    monkeypatch.setattr(psutil, "process_iter", _boom)
+    monkeypatch.setattr(rt.sys, "platform", "win32")
+    assert rt.screen_locked() is None
+
+
+def test_the_lock_reaches_the_failure_context(monkeypatch):
+    """Иначе находка останется внутри функции и до записи об отказе не дойдёт."""
+    monkeypatch.setattr(rt, "screen_locked", lambda: True)
+    ctx = rt.page_context(_ErrorPage(""))
+    assert ctx["screen_locked"] is True
+
+
+def test_an_unlocked_run_carries_no_such_key(monkeypatch):
+    """Ключ со значением False читался бы как повод о нём думать."""
+    monkeypatch.setattr(rt, "screen_locked", lambda: False)
+    assert "screen_locked" not in rt.page_context(_ErrorPage(""))

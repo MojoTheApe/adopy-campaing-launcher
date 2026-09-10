@@ -76,7 +76,9 @@ def test_the_wait_asks_the_page_instead_of_counting():
 
 def test_the_idle_counter_resets_only_while_uploading():
     """Смысл в этой строке: идёт загрузка — простой не копится."""
-    assert "idle = 0 if _upload_in_progress(page) else idle + 1" in _wait_block()
+    block = _wait_block()
+    assert "uploading = _upload_in_progress(page)" in block
+    assert "idle = 0 if uploading else idle + 1" in block
 
 
 def test_a_stuck_upload_still_ends():
@@ -245,3 +247,42 @@ def test_the_reload_stays_inside_the_profile():
 def test_the_reload_does_not_happen_after_the_last_attempt():
     """Перезагружать редактор, чтобы тут же сдаться, — потерянная минута."""
     assert "attempt + 1 < attempts" in _retry_block()
+
+
+# ══ застой ловится ВНУТРИ ожидания, а не после него ═══════════════════════
+#
+# Сначала распознавание стояло между попытками — то есть включалось только
+# после того, как ожидание выберет свой потолок в двадцать минут. 10 сентября
+# это стоило сорока двух минут: два потолка подряд, и лишь потом перезагрузка.
+# Неподвижная полоса видна за минуту, и решать надо в этих единицах.
+
+def test_the_wait_gives_up_on_a_frozen_bar():
+    block = _wait_block()
+    assert "_UPLOAD_FROZEN_S" in block, "ожидание не смотрит на неподвижность полосы"
+    assert "frozen < _UPLOAD_FROZEN_S" in block, "неподвижность не выводит из цикла"
+
+
+def test_the_media_check_gives_up_on_a_frozen_bar_too():
+    """Второй потолок сгорал именно здесь."""
+    block = _verify_block()
+    assert "frozen < _UPLOAD_FROZEN_S" in block
+    assert "_upload_progress(page)" in block
+
+
+def test_frozen_counts_only_while_the_page_says_it_uploads():
+    """Вне загрузки «прогресс не менялся» ничего не значит."""
+    block = _wait_block()
+    assert "if uploading and now is not None and now == last_progress:" in block
+
+
+def test_a_minute_of_stillness_is_the_threshold():
+    """Минута — заметно меньше потолка и заметно больше сетевой заминки."""
+    assert 20 <= meta_dom._UPLOAD_FROZEN_S <= 180, (
+        f"{meta_dom._UPLOAD_FROZEN_S}с — либо ловит обычную заминку, либо снова ждёт лишнее"
+    )
+
+
+def test_the_ceiling_is_still_there():
+    """Полоса может и вовсе исчезнуть — тогда работает общий потолок."""
+    assert "_UPLOAD_MAX_S" in _wait_block()
+    assert "_UPLOAD_MAX_S" in _verify_block()
