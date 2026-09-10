@@ -904,24 +904,47 @@
       align-content: start;
     }
     .cbp-item { display: flex; flex-direction: column; min-width: 0; }
-    /* Диагностика превью (acl-704): свёрнутые карточки в пустоте под
-       превью объявлений — страница не растёт вдвое. Кампания с ошибкой
-       приходит открытой: провал валидации не прячется за кликом. */
-    .cbp-diag-slot { margin-top: 0.6rem; }
-    .cbp-diag {
+    /* Диагностика превью (acl-704): плашка в одну строку у правого края
+       колонки; полная таблица выезжает панелью справа ПОВЕРХ страницы —
+       раскрытие ничего не расталкивает. Кампания с ошибкой — красная
+       плашка с ❌: провал валидации виден со свёрнутого состояния. */
+    .cbp-diag-slot { margin-top: 0.6rem; display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; }
+    .cbp-diag-chip {
+      display: inline-flex; align-items: center; gap: 0.45rem; max-width: 100%;
+      font: inherit; font-size: 0.72rem; cursor: pointer;
       border: 1px solid var(--border); border-radius: 4px;
-      background: var(--bg); overflow: hidden; margin-top: 0.4rem;
+      background: var(--bg-hover); color: var(--accent);
+      padding: 0.28rem 0.6rem;
     }
-    .cbp-diag:first-child { margin-top: 0; }
-    .cbp-diag-bad { border-color: var(--bad); }
-    .cbp-diag > summary {
-      cursor: pointer; user-select: none; list-style: none;
-      display: flex; align-items: center; gap: 0.5rem; min-width: 0;
-      padding: 0.3rem 0.6rem; background: var(--bg-hover);
+    .cbp-diag-chip:hover { border-color: var(--accent); }
+    .cbp-diag-chip-bad { color: var(--bad); border-color: var(--bad); }
+    .cbp-diag-chip-bad:hover { border-color: var(--bad); }
+    .cbp-diag-chip-name {
+      color: var(--muted); min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .cbp-diag > summary::-webkit-details-marker { display: none; }
-    .cbp-diag > summary::after { content: '▸'; color: var(--muted); font-size: 0.7rem; margin-left: auto; }
-    .cbp-diag[open] > summary::after { content: '▾'; }
+    .cbp-diag-back { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); z-index: 900; }
+    .cbp-diag-pop {
+      position: fixed; top: 0; right: 0; height: 100vh; z-index: 901;
+      width: min(560px, 92vw); background: var(--bg-elev);
+      border-left: 1px solid var(--border);
+      box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
+      display: flex; flex-direction: column;
+    }
+    .cbp-diag-pop-head {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border);
+    }
+    .cbp-diag-pop-title {
+      font-size: 0.8rem; font-weight: 600; flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cbp-diag-pop-close {
+      background: none; border: 1px solid transparent; color: var(--muted);
+      font-size: 1rem; line-height: 1; cursor: pointer; border-radius: 3px; padding: 0.1rem 0.35rem;
+    }
+    .cbp-diag-pop-close:hover { color: var(--bad); border-color: var(--bad); }
+    .cbp-diag-pop-body { overflow-y: auto; padding: 0.6rem 0.9rem; }
     @media (max-width: 1150px) {
       .cb-slot-grid { grid-template-columns: 1fr; }
       .cb-preview-col { max-width: 460px; margin-top: 0.6rem; }
@@ -7897,13 +7920,21 @@ window.cbPreview = function(form) {
           });
           body += '</div>';
         }
-        var camp = '<details class="cbp-diag' + (hasErr ? ' cbp-diag-bad' : '') + '"' + (hasErr ? ' open' : '') + '>'
-          + '<summary>'
-          + '<span style="font-weight:bold;flex:none;color:' + (hasErr ? 'var(--bad)' : 'var(--accent)') + '">'
-          + (hasErr ? '❌' : '✓') + ' Campaign ' + (i + 1) + '</span>'
-          + '<span style="font-size:0.72rem;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + aclEscHtml(p['Campaign Name'] || '') + '</span>'
-          + (hasWarn ? '<span style="flex:none;color:var(--warn);font-size:0.7rem">⚡' + p.warnings.length + '</span>' : '')
-          + '</summary>' + body + '</details>';
+        /* Плашка справа + панель поверх дешборда (правка по скриншоту
+           10.09): раскрытие внутри колонки расталкивало секцию вниз —
+           полная таблица теперь выезжает панелью справа, ничего не двигая.
+           Тело таблицы лежит рядом с плашкой в скрытом контейнере, панель
+           берёт его оттуда при открытии. */
+        var chipTitle = (hasErr ? '❌' : '✓') + ' Campaign ' + (i + 1);
+        var camp = '<button type="button" class="cbp-diag-chip' + (hasErr ? ' cbp-diag-chip-bad' : '') + '"'
+          + ' onclick="cbpDiagOpen(this)" title="Open the full diagnostic">'
+          + '<span style="font-weight:bold;flex:none">' + chipTitle + '</span>'
+          + '<span class="cbp-diag-chip-name">' + aclEscHtml(p['Campaign Name'] || '') + '</span>'
+          + (hasWarn ? '<span style="flex:none;color:var(--warn)">⚡' + p.warnings.length + '</span>' : '')
+          + '<span style="flex:none;color:var(--muted)">▸</span>'
+          + '</button>'
+          + '<div class="cbp-diag-full" hidden data-title="' + aclEscHtml(chipTitle + ' · ' + (p['Campaign Name'] || '')) + '"'
+          + (hasErr ? ' data-bad="1"' : '') + '>' + body + '</div>';
         var slotEl = slotEls[i];
         var col = slotEl && slotEl.querySelector('[data-preview-col]');
         if (col) {
@@ -7954,6 +7985,42 @@ window.cbPreview = function(form) {
     .catch(function(e) {
       panel.innerHTML = '<span class="cb-preview-errors">Request failed: ' + aclEscHtml(e.message) + '</span>';
     });
+};
+
+// ── Диагностика превью: панель поверх дешборда (acl-704) ─────────────
+// Плашка у слота — одна строка; полная таблица выезжает справа ПОВЕРХ
+// страницы, ничего не расталкивая, и закрывается крестиком, Esc или
+// кликом по фону. Тело берётся из скрытого контейнера рядом с плашкой.
+window.cbpDiagOpen = function(chip) {
+  var full = chip.parentNode.querySelector('.cbp-diag-full');
+  if (!full) return;
+  var wrap = document.getElementById('cbp-diag-drawer');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.id = 'cbp-diag-drawer';
+    wrap.style.display = 'none';
+    wrap.innerHTML = '<div class="cbp-diag-back"></div>'
+      + '<div class="cbp-diag-pop" role="dialog" aria-label="Campaign diagnostic">'
+      + '<div class="cbp-diag-pop-head"><span class="cbp-diag-pop-title"></span>'
+      + '<button type="button" class="cbp-diag-pop-close" title="Close">×</button></div>'
+      + '<div class="cbp-diag-pop-body"></div></div>';
+    document.body.appendChild(wrap);
+    wrap.querySelector('.cbp-diag-back').addEventListener('click', cbpDiagClose);
+    wrap.querySelector('.cbp-diag-pop-close').addEventListener('click', cbpDiagClose);
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') cbpDiagClose();
+    });
+  }
+  var title = wrap.querySelector('.cbp-diag-pop-title');
+  title.textContent = full.dataset.title || 'Campaign diagnostic';
+  title.style.color = full.dataset.bad ? 'var(--bad)' : 'var(--accent)';
+  wrap.querySelector('.cbp-diag-pop-body').innerHTML = full.innerHTML;
+  wrap.style.display = 'block';
+};
+
+window.cbpDiagClose = function() {
+  var wrap = document.getElementById('cbp-diag-drawer');
+  if (wrap) wrap.style.display = 'none';
 };
 
 // ── RPA Human Takeover ────────────────────────────────────────────────
