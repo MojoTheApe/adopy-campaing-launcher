@@ -6575,16 +6575,54 @@ def _select_leads_dataset(page: Page) -> bool:
     return not _empty()
 
 
+def conversion_event_field_present(page: Page) -> bool:
+    """Есть ли на странице поле «Conversion event» вообще.
+
+    От этого зависит, что считать успехом шага. В августе поле пропадало, и
+    его заменял «Dataset»; 9-10 сентября в снимках ад-сета видны **оба** — и
+    метка «Conversion event», и её пустое состояние «Select an event or
+    search by name».
+    """
+    try:
+        return bool(
+            page.evaluate(
+                """
+                () => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ')
+                    .replace(/^[*✱•\\s]+/, '').trim().toLowerCase();
+                  return [...document.querySelectorAll('label, span, div, h2, h3, [role=heading]')]
+                    .some(e => e.children.length <= 2 &&
+                      norm(e.textContent).startsWith('conversion event'));
+                }
+                """
+            )
+        )
+    except Exception:
+        return False
+
+
 def select_conversion_event_lead(page: Page) -> bool:
-    """Open Conversion event dropdown and choose Lead."""
+    """Выбрать событие конверсии «Lead».
+
+    Успех засчитывается по самому полю события, а не по соседнему.
+    `_select_leads_dataset` отвечает True, как только заполнен «Dataset», —
+    а пиксель у этих аккаунтов один, Meta подставляет его сама, и поле
+    непусто **всегда**. Шаг рапортовал успех, ни разу не тронув Conversion
+    event: 10 сентября обе кампании ушли в черновик без события, при
+    зелёном `conversion_event` в телеметрии.
+
+    Посылка «с 24.08 поля события нет, его заменил Dataset» была верна
+    когда-то, но проверка осталась на ней. Датасет засчитывается в одиночку
+    только там, где поля события действительно нет.
+    """
     scroll_to_section(page, "Conversion event", "Evento de conversión")
     if is_lead_conversion_event_selected(page):
         return True
-    # The 24.08 layout has no Conversion event dropdown at all; its successor
-    # is the Dataset field. Try it before the legacy path so the run doesn't
-    # spend 130s failing to find a section that was removed.
-    if _select_leads_dataset(page):
-        return True
+    # Датасет всё равно нужен: он обязателен и в новой раскладке. Но сам по
+    # себе он событие конверсии не заменяет — см. докстринг.
+    dataset_ok = _select_leads_dataset(page)
+    if not conversion_event_field_present(page):
+        return dataset_ok
     for _ in range(2):
         if not click_conversion_event_dropdown(page):
             break
