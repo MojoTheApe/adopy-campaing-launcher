@@ -4,6 +4,13 @@
    Две копии разметки разошлись бы, и заметил бы это тот, кто поверил не
    той. Ожидает `mc` — страну из карты — и `amap`. #}
       {% if mc.rows %}
+      {#- ACL-353: прочитать все аккаунты этой страны одной кнопкой. Та же
+          очередь, что у общей Read all в шапке карты, только область — блок
+          страны: amapReadAll сама понимает, откуда её нажали. -#}
+      <div class="amap-toolbar">
+        <button type="button" class="amap-btn amap-read-all" onclick="amapReadAll(this)"
+                title="Read every connected account in {{ mc.country }} for the period on screen — one at a time">Read all in {{ mc.country }}</button>
+      </div>
       <table class="amap-grid">
         {#- Колонок и долей поровну, в сумме ровно 100%. Когда-то доль было на
             одну меньше: ширины сложились без последней, и колонка с кнопками
