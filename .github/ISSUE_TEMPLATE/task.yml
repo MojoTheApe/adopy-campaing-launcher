@@ -21,4 +21,4 @@ body:
       description: Use needs followed by a colon and an issue reference for each dependency. Include useful context and links.
   - type: markdown
     attributes:
-      value: "An agent classifies the module and type from tracker/config.json. Priority is High / Medium / Low; accepted work defaults to Medium. MVP membership is explicit."
+      value: "An agent classifies the module and type from tracker/config.json. Priority is High / Medium / Low; accepted work defaults to Medium. Release membership is explicit. New functional modules may be added with documented boundaries and examples."
