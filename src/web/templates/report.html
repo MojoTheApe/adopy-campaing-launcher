@@ -6401,11 +6401,33 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       if (srcOsText && newOsText) newOsText.value = srcOsText.value;
     }
 
-    ['age', 'budget', 'asset'].forEach(function(field) {
-      var srcInput = srcSlot.querySelector('[name="camp_' + srcIdx + '_' + field + '"]');
+    // Копируются ВСЕ поля слота, а не перечисленные руками. Прежний список
+    // ['age','budget','asset'] отстал от формы: язык добавили позже, и
+    // дублирование молча оставляло его пустым. На экране это выглядело как
+    // забывчивость человека, а кампания уходила без языка.
+    //
+    // Пропускаются только те, у которых своя логика: имя собирается само,
+    // счётчик объявлений ставится при их копировании, а таргетинг и ОС уже
+    // скопированы выше вместе со своим видимым текстом.
+    var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1 };
+    var prefix = 'camp_' + srcIdx + '_';
+    srcSlot.querySelectorAll('[name^="' + prefix + '"]').forEach(function(srcInput) {
+      var field = srcInput.name.slice(prefix.length);
+      if (field.indexOf('ad_') === 0 || SKIP_FIELDS[field]) return;
       var newInput = newSlot.querySelector('[name="camp_' + idx + '_' + field + '"]');
-      if (srcInput && newInput) newInput.value = srcInput.value;
+      if (!newInput) return;
+      newInput.value = srcInput.value;
+      var srcWrap = srcInput.closest('.cb-sel-wrap');
+      var newWrap = newInput.closest('.cb-sel-wrap');
+      if (srcWrap && newWrap) {
+        var a = srcWrap.querySelector('.cb-sel-text');
+        var b = newWrap.querySelector('.cb-sel-text');
+        if (a && b) b.value = a.value;
+      }
     });
+    // Пустой язык подсвечивается сразу, а не после первой правки.
+    var dupLang = newSlot.querySelector('[name="camp_' + idx + '_language"]');
+    if (dupLang && typeof cbLanguageChanged === 'function') cbLanguageChanged(dupLang);
 
     var newAdRows = newSlot.querySelector('.cb-ad-rows');
     newAdRows.innerHTML = '';
