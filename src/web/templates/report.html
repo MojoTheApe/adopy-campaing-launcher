@@ -1059,9 +1059,10 @@
       display: inline-block;
     }
     .cb-add-btn-sm:hover { color: var(--accent); border-color: var(--accent); }
-    /* Duplicate ad / Duplicate campaign — the two workhorse buttons of the
-       builder (user request 2026-08-02: make them stand out). Filled accent
-       vs the ghost add-buttons beside them. */
+    /* Duplicate campaign — the workhorse button of the builder (user
+       request 2026-08-02: make it stand out). Filled accent vs the ghost
+       add-buttons beside it. Per-ad duplication lives on the ad card's
+       header instead (acl-705). */
     .cb-dup-btn {
       background: var(--accent);
       border: 1px solid var(--accent);
@@ -1261,6 +1262,21 @@
     }
     .cb-ad-row:hover .cb-remove-ad-btn { opacity: 1; }
     .cb-remove-ad-btn:hover { color: var(--bad); border-color: var(--bad); opacity: 1; }
+    .cb-dup-ad-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      width: 1.2rem; height: 1.2rem;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      line-height: 1;
+      padding: 0;
+      font-family: inherit;
+      opacity: 0.5;
+    }
+    .cb-ad-row:hover .cb-dup-ad-btn { opacity: 1; }
+    .cb-dup-ad-btn:hover { color: var(--accent); border-color: var(--accent); opacity: 1; }
     .cb-ad-fields {
       display: grid;
       grid-template-columns: 7rem 1fr;
@@ -3132,6 +3148,7 @@ async function dashRefresh(ev) {
             <div class="cb-ad-row" data-ad-idx="{{ loop.index0 }}">
               <div class="cb-ad-row-header">
                 <span class="cb-ad-row-label">Ad {{ loop.index }}</span>
+                <button type="button" class="cb-dup-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate this ad">⧉</button>
                 <button type="button" class="cb-remove-ad-btn" onclick="cbRemoveAd(this)" title="Remove ad">×</button>
               </div>
               <div class="cb-ad-fields">
@@ -3170,7 +3187,6 @@ async function dashRefresh(ev) {
           </div>
           <input type="hidden" name="camp_{{ ns.idx }}_ad_count" class="cb-ad-count" value="{{ creatives|length }}">
           <button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>
-          <button type="button" class="cb-add-btn-sm cb-dup-btn" onclick="cbDuplicateAd(this)" title="Duplicate the last ad — tweak one field instead of refilling everything">⧉ Duplicate ad</button>
         </div>
         </div>{# /cb-slot-main #}
         <div class="cb-preview-col" data-preview-col></div>
@@ -6186,6 +6202,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return '<div class="cb-ad-row" data-ad-idx="' + aIdx + '">' +
       '<div class="cb-ad-row-header">' +
       '<span class="cb-ad-row-label">Ad ' + (aIdx + 1) + '</span>' +
+      '<button type="button" class="cb-dup-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate this ad">⧉</button>' +
       '<button type="button" class="cb-remove-ad-btn" onclick="cbRemoveAd(this)" title="Remove ad">×</button>' +
       '</div>' +
       '<div class="cb-ad-fields">' +
@@ -6279,21 +6296,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     initAllSelects(newRow);
   }
 
-  // "⧉ Duplicate ad" sits next to "+ Add ad" (not on a specific row) —
-  // duplicates the LAST ad in this campaign, same append point "+ Add ad"
-  // itself uses.
+  // "⧉" sits on each ad card's header and duplicates THAT ad; the copy
+  // lands right under its source. It used to be one list-bottom button
+  // that silently took the last row — with three ads on screen nothing
+  // said which one it meant (acl-705).
   window.cbDuplicateAd = function(btn) {
+    var srcRow = btn.closest('.cb-ad-row');
     var slot = btn.closest('.cb-slot');
-    var section = btn.closest('.cb-ads-section');
-    if (!slot || !section) return;
-    var container = section.querySelector('.cb-ad-rows');
-    var rows = container.querySelectorAll('.cb-ad-row');
-    var srcRow = rows[rows.length - 1];
-    if (!srcRow) return;
+    if (!srcRow || !slot) return;
     var cIdx = slot.dataset.idx;
-    var aIdx = rows.length;
-    container.insertAdjacentHTML('beforeend', buildAdRowHTML(cIdx, aIdx));
-    var newRow = container.lastElementChild;
+    var aIdx = slot.querySelectorAll('.cb-ad-row').length;
+    srcRow.insertAdjacentHTML('afterend', buildAdRowHTML(cIdx, aIdx));
+    var newRow = srcRow.nextElementSibling;
     _copyAdRowValues(srcRow, newRow);
     cbRenumberAds(slot);
     cbUpdateAdCount(slot);
@@ -6360,10 +6374,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   function cbRenumberAds(slot) {
     var cIdx = slot.dataset.idx;
+    var named = Array.from(slot.querySelectorAll('.cb-ad-row [name]'));
+    named.forEach(function(el) { el.dataset.renumberName = el.name; el.removeAttribute('name'); });
     slot.querySelectorAll('.cb-ad-row').forEach(function(row, aIdx) {
       row.dataset.adIdx = aIdx;
-      row.querySelectorAll('[name]').forEach(function(el) {
-        el.name = el.name.replace(/^camp_\d+_ad_\d+_/, 'camp_' + cIdx + '_ad_' + aIdx + '_');
+      row.querySelectorAll('[data-renumber-name]').forEach(function(el) {
+        el.name = el.dataset.renumberName.replace(/^camp_\d+_ad_\d+_/, 'camp_' + cIdx + '_ad_' + aIdx + '_');
+        delete el.dataset.renumberName;
       });
     });
   }
@@ -6478,7 +6495,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-ad-rows">' + buildAdRowHTML(idx, 0) + '</div>' +
       '<input type="hidden" name="camp_' + idx + '_ad_count" class="cb-ad-count" value="1">' +
       '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>' +
-      '<button type="button" class="cb-add-btn-sm cb-dup-btn" onclick="cbDuplicateAd(this)" title="Duplicate the last ad — tweak one field instead of refilling everything">⧉ Duplicate ad</button>' +
       '</div>' +
       '</div>' +
       '<div class="cb-preview-col" data-preview-col></div>' +
