@@ -6524,17 +6524,35 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       if (srcOsText && newOsText) newOsText.value = srcOsText.value;
     }
 
-    // language included: the copy that lost it went on to build a campaign
-    // without the language the original had (acl-706). On builds that have
-    // no language field yet the selector simply finds nothing.
-    ['age', 'budget', 'asset', 'language'].forEach(function(field) {
-      var srcInput = srcSlot.querySelector('[name="camp_' + srcIdx + '_' + field + '"]');
+    // Копируются ВСЕ поля слота, а не перечисленные руками.
+    //
+    // Список ['age','budget','asset'] уже отстал однажды: язык добавили в
+    // форму позже, и дублирование молча оставляло его пустым — человек
+    // запускал кампанию без языка оригинала. Дописать в список одно поле
+    // значит оставить ту же ловушку следующему.
+    //
+    // Пропускаются только те, у которых своя логика: имя собирается само,
+    // счётчик объявлений ставится при копировании объявлений, а таргетинг и
+    // ОС скопированы выше вместе со своим видимым текстом.
+    var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1 };
+    var prefix = 'camp_' + srcIdx + '_';
+    srcSlot.querySelectorAll('[name^="' + prefix + '"]').forEach(function(srcInput) {
+      var field = srcInput.name.slice(prefix.length);
+      if (field.indexOf('ad_') === 0 || SKIP_FIELDS[field]) return;
       var newInput = newSlot.querySelector('[name="camp_' + idx + '_' + field + '"]');
-      if (srcInput && newInput) {
-        newInput.value = srcInput.value;
-        if (field === 'language' && typeof cbLanguageChanged === 'function') cbLanguageChanged(newInput);
+      if (!newInput) return;
+      newInput.value = srcInput.value;
+      var srcWrap = srcInput.closest('.cb-sel-wrap');
+      var newWrap = newInput.closest('.cb-sel-wrap');
+      if (srcWrap && newWrap) {
+        var a = srcWrap.querySelector('.cb-sel-text');
+        var b = newWrap.querySelector('.cb-sel-text');
+        if (a && b) b.value = a.value;
       }
     });
+    // Пустой язык подсвечивается сразу, а не после первой правки.
+    var dupLang = newSlot.querySelector('[name="camp_' + idx + '_language"]');
+    if (dupLang && typeof cbLanguageChanged === 'function') cbLanguageChanged(dupLang);
 
     var newAdRows = newSlot.querySelector('.cb-ad-rows');
     newAdRows.innerHTML = '';
@@ -8175,7 +8193,14 @@ window.cbPublish = function(form) {
     + 'Country: <strong>' + aclEscHtml(country) + '</strong><br>'
     + 'Campaigns: <strong>' + campCount + '</strong><br><br>'
     + '<span style="color:var(--muted);font-size:0.85rem">The RPA attaches to the Multilogin profile through MLX automation '
-    + '(no need to open the profile first; if it is open by hand the window may restart).</span><br><br>'
+    + '(no need to open the profile first; if it is open by hand the window may restart).</span><br>'
+    // Заблокированный экран останавливает страницу так же, как свёрнутое
+    // окно, только сильнее: система уходит на защищённый рабочий стол, и
+    // загрузка встаёт. 10 сентября так вышло 42 минуты на файл, который
+    // соседнее объявление приняло за 74 секунды. Снять блокировку мы не
+    // можем — это настройка машины; сказать о ней вовремя можем.
+    + '<span style="color:var(--warn);font-size:0.85rem">Не блокируйте экран, пока идёт сборка — '
+    + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)</span>';
 
