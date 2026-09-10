@@ -14,6 +14,10 @@
       "title": "Reduce duplicate CI and scope ACL Windows checks to relevant changes",
       "state": "created",
       "issue": 102
+    },
+    "796c10cf693e9acb6b9f92e90f97f061eccab448174f01b68c52093664997d22": {
+      "title": "Adopt readable task descriptions in the project workflow",
+      "state": "creating"
     }
   }
 }
