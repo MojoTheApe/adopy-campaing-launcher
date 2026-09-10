@@ -5606,6 +5606,26 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     .then(function(d){ CREATIVES = d.files || []; cbpRenderAll(); })
     .catch(function(){});
 
+  // Вес файла рядом с его именем — видно при выборе, а не через десять минут
+  // загрузки. 10 сентября в одной папке лежали креативы от 30 КБ до 1.5 ГБ, и
+  // по имени они не отличались ничем.
+  //
+  // Времени здесь намеренно нет. Замеры того же дня: три файла кампании были
+  // 24-26 МБ, а грузились 537, 326, 62 и 90 секунд — восьмикратный разброс при
+  // одинаковом весе. Оценка «столько-то минут» была бы выдуманным числом;
+  // человеку нужнее знать, что он выбрал гигабайт вместо двадцати мегабайт.
+  var CB_HEAVY_MB = 100;  // не закон, а граница: выше неё файлы в папке
+                          // единичны, и выбор такого стоит заметить
+  window.cbSizeTag = function(bytes) {
+    if (!bytes) return '';
+    var mb = bytes / 1e6;
+    var text = mb >= 1000 ? (mb / 1000).toFixed(1) + ' GB' : Math.round(mb) + ' MB';
+    var heavy = mb >= CB_HEAVY_MB;
+    return ' <span style="font-size:0.68rem;color:var(--'
+         + (heavy ? 'warn' : 'muted') + ')'
+         + (heavy ? ';font-weight:600' : '') + '">' + text + '</span>';
+  };
+
   window.cbCreativeSearch = function(input) {
     var wrap = input.closest('.cb-creative-sel-wrap');
     if (!wrap) return;
@@ -5641,7 +5661,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var label = isDup
         ? aclEscHtml(f.filename) + ' <span style="color:var(--accent);font-size:0.68rem">(' + aclEscHtml(f.folder) + ')</span>'
         : (f.folder ? aclEscHtml(f.filename) + ' <span style="color:var(--muted);font-size:0.7rem">(' + aclEscHtml(f.folder) + ')</span>' : aclEscHtml(f.filename));
-      return '<div class="cb-sel-opt" data-val="' + aclEscHtml(val) + '" style="font-size:0.72rem">' + label + '</div>';
+      return '<div class="cb-sel-opt" data-val="' + aclEscHtml(val) + '" style="font-size:0.72rem">'
+           + label + cbSizeTag(f.size_bytes) + '</div>';
     }).join('');
     if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:0.72rem;pointer-events:none">No files found</div>';
 
