@@ -1407,6 +1407,32 @@ def _sleep_h(base: float, spread: float = 0.3) -> None:
     time.sleep(_human_jitter(base, spread))
 
 
+_UPLOADING_TEXT = re.compile(r"^Uploading (video|image)\b", re.I)
+_UPLOAD_MAX_S = 20 * 60
+
+
+def _upload_in_progress(page: Page) -> bool:
+    """Говорит ли страница прямо сейчас, что грузит файл.
+
+    Единственный честный ответ на вопрос «ждать ли дальше». Размер креатива
+    коду неизвестен: картинка в полмегабайта и видео на сотню — один и тот же
+    шаг, и никакое фиксированное число проходов не годится для обоих.
+    """
+    try:
+        return bool(
+            page.evaluate(
+                """
+                () => [...document.querySelectorAll('*')]
+                  .filter(e => e.offsetParent !== null && e.children.length === 0)
+                  .some(e => /^Uploading (video|image)\\b/i.test(
+                    (e.textContent || '').replace(/\\s+/g, ' ').trim()))
+                """
+            )
+        )
+    except Exception:
+        return False
+
+
 _LOADING_TEXT = re.compile(r"^\s*Loading\b", re.I)
 """Надпись загрузочной накладки Meta — и только она.
 
@@ -4536,12 +4562,27 @@ def upload_ad_creative(
     # Wait for the uploaded tile to appear in the grid (observable result of
     # the upload — measured 2026-08-04 that no "upload is complete" toast is
     # ever visible to us, so the old 45s+40s toast waits burned the budget).
-    for _ in range(60):
+    # Ждём по состоянию, а не по счёту итераций. Шестьдесят проходов — это
+    # около семидесяти секунд, и на тяжёлом видео их не хватает: 10 сентября
+    # файл грузился девять минут, код досчитал своё и ушёл, а на экране в этот
+    # момент было «Uploading video 2_ar_2221_story.mp4» и кнопка Cancel. Объём
+    # креатива нам заранее неизвестен, и никакое фиксированное число проходов
+    # не будет верным для всех.
+    #
+    # Поэтому спрашиваем страницу: пока она говорит, что грузит, ждём. Счётчик
+    # простоя идёт только тогда, когда ни результата, ни признака загрузки нет
+    # — тогда семидесяти секунд по-прежнему достаточно, и застрявший шаг не
+    # висит вечно. Общий потолок нужен на случай, если надпись останется
+    # висеть навсегда: прогон должен кончиться отказом, а не сутками ожидания.
+    idle = 0
+    deadline = time.time() + _UPLOAD_MAX_S
+    while idle < 60 and time.time() < deadline:
         try:
             if page.evaluate(sel_js) or page.evaluate(tile_js, fname):
                 break
         except Exception:
             pass
+        idle = 0 if _upload_in_progress(page) else idle + 1
         _sleep_h(1.0)
 
     # Uploading does NOT always select the tile: measured live 2026-08-04
