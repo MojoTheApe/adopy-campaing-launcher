@@ -530,3 +530,49 @@ def test_every_destination_lookup_goes_through_one_helper():
         used = _code_strings(source, func)
         assert "http://www.example.com/page" not in used, f"{func}: мёртвая подсказка вернулась"
         assert "placeholder" not in used.lower() or "destination_url_box" in source
+
+
+# ══ сторож загрузки против настоящей страницы ═════════════════════════════
+
+def test_the_loading_matcher_does_not_catch_fast_loading(ad_page, dom):
+    """Одно отсутствующее ограничение слова стоило тридцати секунд на действие.
+
+    `re.compile(r"Loading", re.I)` находил на странице редактора постоянную
+    видимую фразу «Send people to a fast-loading, mobile-optimized
+    experience» — описание Instant Experience. Скрыться она не может, а
+    ожидание «пока исчезнет» звалось перед каждой попыткой каждого клика.
+    Отсюда плоский пол `ad3_name` в 31.7с при восьми прогонах.
+    """
+    import re as _re
+
+    loose = ad_page.get_by_text(_re.compile(r"Loading", _re.I))
+    assert loose.count() >= 1, "фраза-ловушка исчезла со страницы — проверка больше ничего не значит"
+    assert "fast-loading" in loose.first.inner_text().lower()
+
+    tight = ad_page.get_by_text(dom._LOADING_TEXT)
+    assert tight.count() == 0, "новый образец всё ещё ловит постоянный текст страницы"
+
+
+def test_the_loading_matcher_still_catches_the_real_overlay():
+    """Сузили так, что перестало ловить настоящее, — это было бы хуже."""
+    for real in ("Loading...", "loading creation", "  Loading"):
+        assert dom_module()._LOADING_TEXT.match(real), f"{real!r} перестал считаться накладкой"
+    for not_overlay in ("Send people to a fast-loading, mobile-optimized experience.",
+                        "Downloading report", "Reloading"):
+        assert not dom_module()._LOADING_TEXT.match(not_overlay), f"{not_overlay!r} принят за накладку"
+
+
+def dom_module():
+    from src.fb_ads_rpa import meta_dom
+
+    return meta_dom
+
+
+def test_the_wait_returns_at_once_when_nothing_is_loading():
+    """Сторож: без этой проверки ожидание снова выберет весь таймаут."""
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    block = source[source.index("def _wait_loading"):]
+    block = block[: block.index("def _click(")]
+    assert "is_visible" in block, "ожидание не спрашивает, висит ли накладка сейчас"
+    assert "timeout=30000" not in block, "вернулся тридцатисекундный таймаут"
+    assert "_LOADING_TEXT" in block, "образец снова задан на месте"
