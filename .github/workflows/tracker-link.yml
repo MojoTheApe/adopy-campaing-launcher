@@ -1,0 +1,22 @@
+name: Tracker linkage
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+concurrency:
+  group: acl-tracker-link-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  tracker-link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Verify the tracked task
+        run: python3 scripts/tracker_pr_check.py --pr "$PR_NUMBER"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}

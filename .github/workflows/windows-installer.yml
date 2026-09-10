@@ -4,17 +4,33 @@ on:
   push:
     branches:
       - master
-      - codex/windows-installer-integration
-      - codex/acl-windows-installer-v1
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: acl-installer-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  scope:
+    name: Classify installer changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      windows: ${{ steps.scope.outputs.windows }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        run: python3 scripts/acl_ci_scope.py
   phase-1-isolation:
     name: Verify build inputs
+    needs: scope
+    if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.windows != 'false') }}
     runs-on: windows-latest
     timeout-minutes: 10
 
@@ -28,6 +44,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Verify installer branch isolation
         run: python packaging/windows/verify_core_isolation.py --tracked-only --require-clean

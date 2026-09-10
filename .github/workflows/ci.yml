@@ -15,12 +15,42 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: acl-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  scope:
+    name: Classify and check project tooling
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      windows: ${{ steps.scope.outputs.windows }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        run: python3 scripts/acl_ci_scope.py
+      - name: Scan all tracked inputs
+        run: python3 scripts/acl_scan_secrets.py
+      - name: Install lightweight test dependencies
+        run: python3 -m pip install 'pytest>=8,<10'
+      - name: Verify project tooling and tracker metadata
+        run: |
+          python3 -m json.tool tracker/config.json > /dev/null
+          python3 -m json.tool tracker/engine.json > /dev/null
+          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_tracker.py tests/test_tracker_v2.py -q
   test:
+    needs: scope
+    if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.windows != 'false') }}
     runs-on: windows-latest
     timeout-minutes: 20
 

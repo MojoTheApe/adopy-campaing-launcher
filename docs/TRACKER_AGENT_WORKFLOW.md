@@ -1,13 +1,15 @@
-# Shared tracker instructions
+# Project task tracker · v3
 
-Read [the canonical tracker agent workflow](../tracker/AGENT_WORKFLOW.md) and
-[the project configuration](../tracker/config.json) before creating or working on tasks.
-The same instructions apply to Codex, Claude and other agents. The portable package
-contains the single maintained copy so future projects receive identical rules.
+Development Issues remain in `MojoTheApe/adopy-campaing-launcher`. UI: https://tracker.team7.cloud/projects/acl/. Integration branch: `master`. Public IDs use **ACL-NUMBER**; copy the full ID from the UI. Historical ACL IDs are frozen; new IDs use the GitHub Issue number plus 1000. Never assign or renumber IDs manually.
 
-ACL production is `master`; the UI is [tracker.team7.cloud](https://tracker.team7.cloud).
-Follow [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md) for review, CI and releases.
+Read `tracker/config.json` for current module boundaries and stages, then run `python scripts/task_tracker.py guide` for the canonical workflow from the exact shared engine SHA in `tracker/engine.json`. Read it again in resumed chats. The small client uses an ignored `.tracker-runtime/` cache; Python 3.11+, Git and an authenticated GitHub CLI are required. `TASK_TRACKER_HOME` can select a clean checkout of that exact revision. Never copy the application into this project.
 
-**Before the first implementation edit, automatically run `python -m tracker start ISSUE`
-and verify In progress.** After complete review and merge, use `python -m tracker merged`.
-Priorities are **High / Medium / Low**; default **Medium**. In master is the final task stage.
+Every implementation request, including immediate fixes, needs a real Issue and verified In Progress before the first code edit. Use `work ID` for existing work, or `work --title ... --module ... --type ...` to find/create/start a new task. Inspect semantic duplicates first. A new idea enters Idea; accepted work enters Backlog with Medium priority; To Do is the explicitly selected batch. Planning alone does not start development. Select Module and Type from the intended result without asking the owner to fill metadata; a clear new functional module can be added with boundaries, examples and reason. Never use Operations as a catch-all. Use one execution slot; do not steal another task or resume concurrently.
+
+Focus flags are Design, Blocked and Release. `set ID --release` alone adds the task to the Release widget and filter; `--no-release` removes it. No Required or MVP assignment is needed. Priority never implies membership. The UI is read-only. Historical milestones remain metadata. Archive preserves task history and never implies completion; an archived Release task remains unresolved until explicitly removed from the scope. After an explicitly confirmed publication, `release close --name VERSION` previews an immutable snapshot; `--apply --published` records it and clears that completed scope for the next cycle. A merge alone never resets it.
+
+Ready PRs must contain exactly one `Tracker issues: ID` line listing real local tasks, and pass `python scripts/task_tracker.py check-pr PR_NUMBER`. The standalone CI check in `scripts/tracker_pr_check.py` only needs this repository's token. Move implemented work to Review. Tick acceptance criteria only after actual verification; then run the `merged ID --pr PR_NUMBER` dry run and apply with `--reviewed-complete` after complete review and merge. Re-read Issue labels and verify the next successful UI snapshot. Keep partial work and parent tasks in Review. Implementation and self-review must not be described as independent review.
+
+Existing repository checks, branch protection, release gates and operational rules remain in force. Any CI exception is specific to its approved PR/candidate. n8n projects retain LIVE_FIRST: Git representation, publication, execution and a successful business result are separate facts. Tracker work does not authorize live workflow edits/executions, Telegram messages or operational Jira writes. All new task/UI text is English.
+
+The retained local `tracker/` implementation and `scripts/acl_mark_merged.py` remain compatibility entry points. The canonical new task operations use the pinned `scripts/task_tracker.py` client. Do not extend or deploy the old package.
