@@ -3,10 +3,11 @@ description: Capture an idea or a concrete outcome
 labels: ["status:idea", "flag:needs_classification"]
 body:
   - type: textarea
-    id: outcome
+    id: description
     attributes:
-      label: Outcome
-      description: What should become possible? Describe the user result.
+      label: Description
+      description: Explain what changes, why it matters and the expected result in plain English. A reader should understand the task without the original chat.
+      placeholder: "Write a short explanation in your own words. Keep implementation details in Technical notes below."
     validations:
       required: true
   - type: textarea
@@ -17,8 +18,8 @@ body:
   - type: textarea
     id: dependencies
     attributes:
-      label: Dependencies and context
+      label: Technical notes
       description: Use needs followed by a colon and an issue reference for each dependency. Include useful context and links.
   - type: markdown
     attributes:
-      value: "An agent classifies the module and type from tracker/config.json. Priority is High / Medium / Low; accepted work defaults to Medium. Release is one explicit flag; ask the agent to add the task to Release. IDs are assigned automatically. New functional modules may be added with documented boundaries and examples."
+      value: "The agent writes Description from the request and verified context even if the owner did not dictate it. Do not invent missing requirements. An agent classifies the module and type from tracker/config.json. Priority is High / Medium / Low; accepted work defaults to Medium. Release is one explicit flag; ask the agent to add the task to Release. IDs are assigned automatically. New functional modules may be added with documented boundaries and examples."
