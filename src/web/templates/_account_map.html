@@ -23,43 +23,59 @@
       </span>
     </div>
 
+    {#- ACL-356, вторая итерация (решение владельца 10.09): одна таблица
+        вместо двух. Countries overview слился сюда — каждая строка несёт
+        книжные тоталы страны (те же my_totals, что показывал overview),
+        колонки выровнены общей сеткой, у строк с нулём аккаунтов красная
+        подсветка: деньги в книге идут, а картой они не покрыты. -#}
+    <div class="amap-grid-head" aria-hidden="true">
+      <span></span>
+      <span>Country</span>
+      <span title="Spend read from the ad accounts themselves for the period on screen">Account read</span>
+      <span class="num">Spend</span>
+      <span class="num">Dep</span>
+      <span class="num">Leads</span>
+      <span class="num">CPA</span>
+      <span class="num">CR</span>
+      <span class="num">Accounts</span>
+      <span></span>
+    </div>
     {% for mc in amap.countries %}
-    {# Свёрнуто по умолчанию. Раньше открывались первые три страны — правило,
-       которого на экране не видно: часть блоков открыта, часть нет, и порядок
-       стран этим управляет. Сводка в заголовке (аккаунты, спенд, лиды, FTD)
-       отвечает на вопрос «что здесь» без раскрытия.
-
-       Раскрытое человеком запоминается: дешборд перезагружает себя сам, и
-       закрывать при этом страну, внутри которой человек работает, значило бы
-       менять одну помеху на другую. #}
-    <details class="amap-country" data-country="{{ mc.key | e }}">
-      <summary>
-        {{ mc.country }}
-        {#- ACL-356: свёрнутая строка несёт числа страны, а не пустоту.
-            Сначала — спенд, снятый с самих кабинетов (Read), по валютам;
-            прочерк значит «никто не читал», это не ноль. Дальше — тоталы
-            источника статистики (сегодня книга, после acl-103 — BI):
-            Dep · Leads · CPA · CR. -#}
-        <span class="amap-sum amap-sum-mid">
-          <span title="Spend read from the ad accounts themselves for the period on screen">account
-            {%- if mc.live_sums %}
-            {%- for s in mc.live_sums %} <b>{{ s.currency }} {{ '%.2f' | format(s.spend) }}</b>{% if not loop.last %} +{% endif %}{% endfor %}
-            <i>{{ mc.live_read }}/{{ mc.rows | length }} read</i>
-            {%- else %} <b>—</b>{% endif %}</span>
-          <span>Dep <b>{{ mc.deposits }}</b></span>
-          <span>Leads <b>{{ mc.leads }}</b></span>
-          <span title="Workbook spend / deposits">CPA <b>{% if mc.deposits %}{{ (mc.spend / mc.deposits) | fmt_usd }}{% else %}—{% endif %}</b></span>
-          <span title="Deposits / leads">CR <b>{% if mc.leads %}{{ '%.0f%%' | format(100 * mc.deposits / mc.leads) }}{% else %}—{% endif %}</b></span>
-        </span>
-        <span class="amap-sum">
-          <span>accounts <b>{{ mc.rows | length }}</b></span>
-          <span>spend <b>{{ mc.spend | fmt_usd }}</b></span>
+    {# Свёрнуто по умолчанию: раскрытое человеком запоминается в браузере.
+       Виртуальная строка (страна из книги без аккаунтов) раскрывает не
+       таблицу, а объяснение, куда идти её заводить. #}
+    {% set bk = mc.book or {} %}
+    <details class="amap-country{% if not mc.rows %} amap-nocov{% endif %}" data-country="{{ (mc.key or mc.country) | e }}">
+      <summary class="amap-row">
+        <span class="amap-cell-name">{{ mc.country }}</span>
+        <span class="amap-cell-read">
+          {%- if mc.live_sums %}
+          {%- for s in mc.live_sums %}<b>{{ s.currency }} {{ '%.2f' | format(s.spend) }}</b>{% if not loop.last %} + {% endif %}{% endfor %}
+          <i>{{ mc.live_read }}/{{ mc.rows | length }}</i>
+          {%- else %}<b>—</b>{% endif %}</span>
+        <span class="num"><b>{{ bk.spend | fmt_usd if bk.spend else '—' }}</b></span>
+        <span class="num"><b>{{ bk.deposits if bk.deposits is defined and bk.deposits is not none else '—' }}</b></span>
+        <span class="num"><b>{{ bk.leads if bk.leads is defined and bk.leads is not none else '—' }}</b></span>
+        <span class="num"><b>{% if bk.deposits %}{{ (bk.spend / bk.deposits) | fmt_usd }}{% else %}—{% endif %}</b></span>
+        <span class="num"><b>{% if bk.leads %}{{ '%.1f%%' | format(100 * (bk.deposits or 0) / bk.leads) }}{% else %}—{% endif %}</b></span>
+        <span class="num{% if not mc.rows %} amap-nocov-count{% endif %}"><b>{{ mc.rows | length }}</b></span>
+        <span class="amap-cell-act">
+          {%- if not mc.virtual %}
           <button type="button" class="amap-btn danger"
                   onclick="event.preventDefault();event.stopPropagation();amapClose('country',{{ mc.key | tojson | forceescape }},{{ mc.country | tojson | forceescape }})"
                   title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>
-        </span>
+          {%- endif %}</span>
       </summary>
+      {% if not mc.virtual %}
       {% include "_account_map_country.html" %}
+      {% else %}
+      <div class="amap-empty">
+        {{ mc.country }} has workbook money for this period but no accounts
+        placed here — the spend is not covered by the map. Connect the
+        account from the country's Accounts section, or add the country
+        above and place it.
+      </div>
+      {% endif %}
     </details>
     {% endfor %}
 
