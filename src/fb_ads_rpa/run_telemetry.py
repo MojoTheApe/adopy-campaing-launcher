@@ -23,6 +23,8 @@ Each record:
 from __future__ import annotations
 
 import json
+import re
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,7 +53,191 @@ def normalise_step(label: str) -> tuple[str, bool | None]:
         return label[len("fail_"):], False
     if label.startswith("success_"):
         return label[len("success_"):], True
+    # «Пропущено» — третий исход, и он не то же самое, что удача или отказ.
+    # Шаг детального таргетинга не выполнялся вовсе, когда в черновике не было
+    # интересов, и не писал об этом ни строки: в потоке его просто не
+    # существовало. 9 сентября это выглядело так, что интересы «не
+    # проставились», а по телеметрии нельзя было отличить пропуск от отказа.
+    # `ok=None` не попадает в долю неудач — пропуск не провал.
+    if label.startswith("skip_"):
+        return label[len("skip_"):], None
     return label, None
+
+
+#: Что похоже на номер кабинета, id профиля или иной опознавательный знак.
+#: Контекст отказа уезжает в общую таблицу телеметрии, которую читает вся
+#: компания, — идентификаторы туда не едут.
+_SCRUB = (
+    (re.compile(r"(act=)(?:act_)?\d{6,}"), r"\1<hidden>"),
+    (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), "<uuid>"),
+    (re.compile(r"\b\d{10,}\b"), "<digits>"),
+)
+
+
+def scrub(text: str) -> str:
+    """Убрать из строки всё, по чему опознаётся аккаунт или профиль."""
+    out = str(text or "")
+    for pattern, replacement in _SCRUB:
+        out = pattern.sub(replacement, out)
+    return out
+
+
+def merge_diag(collected: dict | None, explicit: dict | None) -> dict | None:
+    """Соединить общий снимок обстановки с тем, что шаг рассказал о себе сам.
+
+    Два правила, и оба нужны:
+
+    * **Точное важнее общего.** Если шаг назвал причину своим ключом, снимок
+      обстановки его не затирает.
+    * **Общее не теряется.** Шаг, рассказавший о себе, не должен из-за этого
+      лишиться адреса страницы и заголовка — по ним отказ находят в снимках.
+
+    Раньше это было условием `if diag is None` в теле `_shot`: шаг с
+    собственной причиной оставался без адреса страницы. Правило вынесено
+    сюда, чтобы его можно было проверить, а не угадывать по виду кода.
+    """
+    merged = {**(collected or {}), **(explicit or {})}
+    return merged or None
+
+
+def screen_locked() -> bool | None:
+    """Заблокирован ли сейчас экран Windows. `None`, если спросить не удалось.
+
+    Блокировка останавливает страницу так же, как свёрнутое окно, только
+    сильнее: система уходит на защищённый рабочий стол, композитор перестаёт
+    отдавать кадры, и эмуляция фокуса через CDP уже не помогает.
+
+    Это не догадка. 29 июля с окном в фоне шаги шли в 10-50 раз медленнее, а
+    загрузка креатива второго объявления заняла двенадцать минут и «упала».
+    10 сентября то же самое повторилось с заблокированным экраном: сорок две
+    минуты на файл, который соседнее объявление приняло за семьдесят четыре
+    секунды — сразу после того, как человек вернулся к машине.
+
+    Признак — процесс `LogonUI.exe`: он живёт ровно пока показан экран
+    блокировки. Способ грубый, но дешёвый и не требует ни прав, ни библиотек;
+    ошибиться он может только в сторону «не знаю», а это честный ответ.
+
+    Снять блокировку мы не можем и не должны — это настройка безопасности
+    машины байера. Но назвать её причиной вместо разметки Meta обязаны: за
+    один день она дважды увела разбор не туда.
+    """
+    if not sys.platform.startswith("win"):
+        return None
+    try:
+        import psutil
+    except Exception:
+        return None
+    try:
+        for proc in psutil.process_iter(["name"]):
+            if (proc.info.get("name") or "").lower() == "logonui.exe":
+                return True
+        return False
+    except Exception:
+        return None
+
+
+def page_context(page, *, timeout_ms: int = 1200) -> dict:
+    """Что было на странице в момент отказа — коротко и безопасно.
+
+    До сих пор у отказов записывался только факт: «ad_copy: false». Причины не
+    было ни у человека, ни у будущего агента. 9 сентября прогон дал шесть
+    отказов, и по телеметрии нельзя было сказать про них ничего.
+
+    Собирается в **одной** точке — там же, где пишется сама запись, — а не в
+    сорока трёх местах вызова. Разойтись с ними нечему, и новый шаг получит
+    контекст, ничего для этого не делая.
+
+    Три правила, которые здесь важнее полноты:
+
+    * **Никогда не бросает.** Строка лога не должна стоить кампании — то же
+      правило, что у `record`.
+    * **Ограничено по времени.** Ожидание на упавшем шаге платит человек,
+      сидящий перед экраном.
+    * **Вычищено.** Адрес Ads Manager содержит номер кабинета, и он не поедет
+      в общую таблицу.
+    """
+    info: dict[str, Any] = {}
+    try:
+        info["url"] = scrub(str(getattr(page, "url", "") or ""))[:200]
+    except Exception:
+        pass
+    for name, call in (
+        ("title", lambda: page.title()),
+        ("dialogs", lambda: page.get_by_role("dialog").count()),
+    ):
+        try:
+            value = call()
+            if isinstance(value, str):
+                value = scrub(value)[:120]
+            info[name] = value
+        except Exception:
+            continue
+    # Верхний баннер Meta закрывает и сдвигает контролы — это самая частая
+    # причина, по которой шаг «не нашёл» существующую кнопку.
+    try:
+        banner = page.get_by_role("banner").first
+        if banner.is_visible(timeout=timeout_ms):
+            info["banner"] = scrub(banner.inner_text(timeout=timeout_ms))[:120]
+    except Exception:
+        pass
+    # Страница-ошибка самого браузера. Когда она открыта, все прочие выводы —
+    # шум: шаг честно не найдёт кнопку, которой нет, и сообщит «не нашёл поле
+    # имени кампании» вместо «нет связи». 10 сентября прогон встал на
+    # ERR_SSL_PROTOCOL_ERROR — на проксированном профиле это почти всегда сам
+    # прокси, и искать надо там, а не в разметке Meta.
+    err = browser_error(page)
+    if err:
+        info["browser_error"] = err
+    # Заблокированный экран останавливает страницу так же, как свёрнутое окно,
+    # только сильнее. Без этой строки отказ читается как поломка разметки, а
+    # человек уходит искать её в Ads Manager.
+    if screen_locked():
+        info["screen_locked"] = True
+    return info
+
+
+_ERROR_CODE = re.compile(r"\bERR_[A-Z0-9_]{3,40}\b")
+
+
+def browser_error(page) -> str:
+    """Код ошибки браузера, если открыта его собственная страница-ошибка.
+
+    Chrome рисует её со своим узлом `#main-frame-error` и кодом внутри —
+    `ERR_SSL_PROTOCOL_ERROR`, `ERR_PROXY_CONNECTION_FAILED` и подобными.
+    Ищем узел, а не текст по всей странице: слово `ERR_…` может встретиться и
+    в скриптах живой страницы, а нам нужен именно этот экран.
+    """
+    try:
+        text = page.evaluate(
+            """
+            () => {
+              const el = document.querySelector('#main-frame-error');
+              if (!el) return '';
+              const code = el.querySelector('.error-code');
+              return (code ? code.textContent : el.textContent) || '';
+            }
+            """
+        )
+    except Exception:
+        return ""
+    match = _ERROR_CODE.search(text or "")
+    return match.group(0) if match else ""
+
+
+_current: dict[str, str] = {"run_id": "", "campaign": ""}
+
+
+def set_current_run(run_id: str = "", campaign: str = "") -> None:
+    """Запомнить, какой прогон идёт сейчас.
+
+    Об отказах сообщают сорок три места, и не все они знают номер прогона:
+    `create_additional_ad` 9 сентября записался с пустым `run_id` и потому
+    не попал ни в один прогон — при разборе его пришлось искать по времени.
+    Место, которое знает номер, называет его один раз; остальные получают
+    его даром.
+    """
+    _current["run_id"] = run_id or _current["run_id"]
+    _current["campaign"] = campaign or _current["campaign"]
 
 
 def record(
@@ -70,11 +256,12 @@ def record(
         p = path or TELEMETRY_PATH
         p.parent.mkdir(parents=True, exist_ok=True)
         rec: dict[str, Any] = {
-            "run_id": run_id,
+            "run_id": run_id or _current["run_id"],
             "ts": datetime.now(timezone.utc).isoformat(),
             "step": step,
             "ok": ok,
         }
+        campaign = campaign or _current["campaign"]
         if campaign:
             rec["campaign"] = campaign
         if duration_s is not None:
