@@ -40,11 +40,25 @@
     <details class="amap-country" data-country="{{ mc.key | e }}">
       <summary>
         {{ mc.country }}
+        {#- ACL-356: свёрнутая строка несёт числа страны, а не пустоту.
+            Сначала — спенд, снятый с самих кабинетов (Read), по валютам;
+            прочерк значит «никто не читал», это не ноль. Дальше — тоталы
+            источника статистики (сегодня книга, после acl-103 — BI):
+            Dep · Leads · CPA · CR. -#}
+        <span class="amap-sum amap-sum-mid">
+          <span title="Spend read from the ad accounts themselves for the period on screen">account
+            {%- if mc.live_sums %}
+            {%- for s in mc.live_sums %} <b>{{ s.currency }} {{ '%.2f' | format(s.spend) }}</b>{% if not loop.last %} +{% endif %}{% endfor %}
+            <i>{{ mc.live_read }}/{{ mc.rows | length }} read</i>
+            {%- else %} <b>—</b>{% endif %}</span>
+          <span>Dep <b>{{ mc.deposits }}</b></span>
+          <span>Leads <b>{{ mc.leads }}</b></span>
+          <span title="Workbook spend / deposits">CPA <b>{% if mc.deposits %}{{ (mc.spend / mc.deposits) | fmt_usd }}{% else %}—{% endif %}</b></span>
+          <span title="Deposits / leads">CR <b>{% if mc.leads %}{{ '%.0f%%' | format(100 * mc.deposits / mc.leads) }}{% else %}—{% endif %}</b></span>
+        </span>
         <span class="amap-sum">
           <span>accounts <b>{{ mc.rows | length }}</b></span>
           <span>spend <b>{{ mc.spend | fmt_usd }}</b></span>
-          <span>leads <b>{{ mc.leads }}</b></span>
-          <span>FTD <b>{{ mc.deposits }}</b></span>
           <button type="button" class="amap-btn danger"
                   onclick="event.preventDefault();event.stopPropagation();amapClose('country',{{ mc.key | tojson | forceescape }},{{ mc.country | tojson | forceescape }})"
                   title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>
