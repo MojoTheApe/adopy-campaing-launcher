@@ -158,13 +158,14 @@ with tempfile.TemporaryDirectory(dir=OUT) as config:
         assert form.locator('.cbp-diag-chip-bad').count()==1
         assert form.locator('.cb-publish-btn').is_disabled()
         chip=form.locator('.cbp-diag-chip').first
-        top=form.locator('.cb-actions').bounding_box()['y']
+        top=form.locator('.cb-actions').evaluate('e=>e.getBoundingClientRect().top+scrollY')
         chip.click()
         drawer=page.locator('#cbp-diag-drawer')
         assert drawer.locator(".cbp-diag-pop").is_visible()
         assert 'First <campaign>' in drawer.inner_text()
         assert 'Check audience' in drawer.inner_text()
-        assert form.locator('.cb-actions').bounding_box()['y']==top
+        assert abs(form.locator('.cb-actions').evaluate('e=>e.getBoundingClientRect().top+scrollY')-top)<1
+        page.screenshot(path=str(OUT/'diagnostic.png'))
         page.keyboard.press('Tab')
         assert drawer.locator('.cbp-diag-pop-close').evaluate('e=>e===document.activeElement')
         page.keyboard.press('Escape')
@@ -194,6 +195,69 @@ with tempfile.TemporaryDirectory(dir=OUT) as config:
         assert form.locator('.cbp-diag-chip').count()==0
         assert form.locator('.cb-publish-btn').is_disabled()
         print('PASS: preview refresh, errors, drawer layout/focus, toggles, edits, stale responses and failure clearing')
+        # Render the shared account map fragment and run its actual Read all buttons.
+        def map_row(name):
+            return dict(account=name, has_data=False, status={}, workbook_alias='', elsewhere={},
+                        assets=[], countries=[], ready=True, in_workbook=False)
+        amap=dict(dates=[], countries=[
+            dict(country='Alpha',key='Alpha',rows=[map_row('First'),map_row('Broken')],spend=0,leads=0,deposits=0),
+            dict(country='Beta',key='Beta',rows=[map_row('First'),map_row('toString')],spend=0,leads=0,deposits=0)],
+            available=[],all_accounts=['First','Broken','toString'],live={},date_from='2026-09-01',date_to='2026-09-09',span='')
+        fragment=web.templates.env.get_template('_account_map.html').render(amap=amap,mlx={'A':'A','B':'B'})
+        page.evaluate("html=>{location.hash='#home';document.querySelector('#view-home .amap').outerHTML=html;}",fragment)
+        page.evaluate("""() => {
+          window._amapPick={from:'2026-09-01',to:'2026-09-09',span:''};
+          window.readRequests=[]; window.finished=[]; window.holdFirst=true;
+          window.nativeTimeout=window.setTimeout;
+          window.setTimeout=(fn,ms)=>nativeTimeout(fn,ms===3000?1:ms);
+          window.fetch=async (url,opts={})=>{
+            if (!url.startsWith('/account-spend/')) return realFetch(url,opts);
+            const account=opts.body?.get('account') || new URL(url,location.origin).searchParams.get('account');
+            if (url==='/account-spend/read') {
+              readRequests.push([account,opts.body.get('date_from'),opts.body.get('date_to')]);
+              if (account==='Broken') throw new Error('Synthetic offline account');
+            } else {
+              if (account==='First' && holdFirst) await new Promise(resolve=>window.releaseFirst=resolve);
+              finished.push(account);
+            }
+            return {ok:true,json:async()=>({ok:true,reading:{state:'ok',spend:12.34,currency:'EUR',date_from:'2026-09-01',date_to:'2026-09-09'}})};
+          };
+        }""")
+        all_button=page.locator('#view-home > .amap .amap-read-all').first
+        # Select directly by the live map: no navigation or external reads occur.
+        page.evaluate("()=>{window.queuePromise=amapReadAll(document.querySelector('#view-home .amap-read-all'));}")
+        page.wait_for_function("typeof releaseFirst==='function'")
+        assert page.evaluate('readRequests')==[['First','2026-09-01','2026-09-09']]
+        assert page.locator('#view-home .amap-read-all').first.is_disabled()
+        page.evaluate("amapReadAll(document.querySelector('#view-home .amap-read-all'));amapReadSpend(document.querySelector('#view-home .amap-read'))")
+        assert len(page.evaluate('readRequests'))==1
+        page.evaluate("holdFirst=false;releaseFirst()")
+        page.wait_for_function('amapReadAllBusy===false')
+        assert page.evaluate('readRequests')==[[a,'2026-09-01','2026-09-09'] for a in ['First','Broken','toString']]
+        assert page.locator('#view-home .amap-read-all').first.get_attribute('title')=='2 read, 1 failed'
+        assert page.locator('#view-home .amap-live[data-account="First"]').count()==2
+        for cell in page.locator('#view-home .amap-live[data-account="First"]').all():
+            assert 'EUR 12.34' in cell.text_content(), cell.text_content()
+        assert 'Synthetic offline account' in page.locator('#view-home .amap-live[data-account="Broken"]').text_content()
+        page.evaluate("()=>{readRequests=[];window.queuePromise=amapReadAll(document.querySelector('#view-home details[data-country=Beta] .amap-read-all'));}")
+        page.wait_for_function('amapReadAllBusy===false')
+        assert [r[0] for r in page.evaluate('readRequests')]==['First','toString']
+        # A never-answering POST aborts; the following account still runs.
+        page.evaluate("""() => {
+          readRequests=[]; const previous=window.fetch;
+          window.setTimeout=(fn,ms)=>nativeTimeout(fn,ms===3000?1:ms===20000?50:ms);
+          window.fetch=(url,opts={})=>url==='/account-spend/read' && opts.body.get('account')==='First'
+            ? new Promise((resolve,reject)=>opts.signal.addEventListener('abort',()=>reject(new DOMException('Timed out','AbortError'))))
+            : previous(url,opts);
+          window.queuePromise=amapReadAll(document.querySelector('#view-home details[data-country=Beta] .amap-read-all'));
+        }""")
+        page.wait_for_function('amapReadAllBusy===false')
+        assert [r[0] for r in page.evaluate('readRequests')]==['toString']
+        assert page.locator('#view-home details[data-country="Beta"] .amap-read-all').get_attribute('title')=='1 read, 1 failed'
+        assert not page.locator('#view-home .amap-read-all').first.is_disabled()
+        page.evaluate("readRequests=[];_amapPick={from:'',to:'',span:'all'};amapReadAll(document.querySelector('#view-home .amap-read-all'))")
+        assert page.evaluate('readRequests')==[]
+        print('PASS: Read all sequential order, duplicates, selected period, country scope, failure continuation, timeout and re-entry guards')
         assert not errors, errors
         print('PASS: real rendered ad card duplicates selected video, preserves later radio groups and order')
         browser.close()

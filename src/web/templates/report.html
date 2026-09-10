@@ -4437,6 +4437,7 @@ function amapSpendCell(btn) {
 }
 
 function amapReadSpend(btn) {
+  if (amapReadAllBusy) return;
   var cell = amapSpendCell(btn);
   var account = cell && cell.dataset.account;
   if (!account) return;
@@ -4491,7 +4492,7 @@ function amapApplyReading(account, s) {
     cell.innerHTML = '<span class="amap-live-ok"></span>';
     cell.firstChild.textContent = amapMoney(s.spend, s.currency);
     cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how;
-    btn.disabled = false; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read'; btn.title = 'Read again';
+    btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read'; btn.title = 'Read again';
   });
 }
 
@@ -4538,96 +4539,101 @@ else amapResumeReadings();
    её чтение пришло. Упавший аккаунт остаётся с ошибкой в своей строке, а
    очередь идёт дальше. Никогда по таймеру: кнопка — это человек спросил. */
 var amapReadAllBusy = false;
-function amapReadAll(btn) {
+function amapReadAllControls(busy) {
+  document.querySelectorAll('.amap-read-all').forEach(function(b) { b.disabled = busy; });
+  document.querySelectorAll('.amap-read').forEach(function(b) {
+    var cell = amapSpendCell(b);
+    b.disabled = busy || !b.getAttribute('onclick') || !!(cell && cell.dataset.running === '1');
+  });
+}
+
+async function amapReadAll(btn) {
   if (amapReadAllBusy) return;
-  var per = amapPeriod();
+  var per = Object.assign({}, amapPeriod());
   if (!per.from || per.span === 'all') {
     btn.title = 'Select dates to read account spend; Maximum is not supported';
     return;
   }
-  var scope = btn.closest('details.amap-country') || btn.closest('.amap') || document;
-  var seen = {};
+  var scope = btn.closest('details.amap-country') || btn.closest('.amap');
+  if (!scope) return;
+  var seen = new Set();
   var jobs = [];
-  scope.querySelectorAll('.amap-read').forEach(function (b) {
-    if (b.disabled || !b.getAttribute('onclick')) return;
+  scope.querySelectorAll('.amap-read').forEach(function(b) {
+    if (!b.getAttribute('onclick')) return;
     var cell = amapSpendCell(b);
     var account = cell && cell.dataset.account;
-    if (!account || seen[account]) return;
-    seen[account] = true;
+    if (!account || seen.has(account)) return;
+    seen.add(account);
     jobs.push({account: account, btn: b, cell: cell});
   });
   if (!jobs.length) { btn.title = 'No connected accounts to read here'; return; }
   amapReadAllBusy = true;
+  amapReadAllControls(true);
   var label = btn.textContent;
-  btn.disabled = true;
   var okCount = 0, failCount = 0;
-  (function next(i) {
-    if (i >= jobs.length) {
-      amapReadAllBusy = false;
-      btn.disabled = false;
-      btn.textContent = label;
-      btn.title = okCount + ' read, ' + failCount + ' failed';
-      return;
-    }
-    btn.textContent = 'Reading ' + (i + 1) + ' of ' + jobs.length + '…';
-    amapQueueRead(jobs[i], per).then(function (state) {
+  try {
+    for (var i = 0; i < jobs.length; i++) {
+      btn.textContent = 'Reading ' + (i + 1) + ' of ' + jobs.length + '…';
+      var state = await amapQueueRead(jobs[i], per);
       if (state === 'ok') okCount++; else failCount++;
-      next(i + 1);
-    });
-  })(0);
-}
-
-/* Один шаг очереди: то же, что делает amapReadSpend, но с ответом о
-   завершении — очереди нужно знать, когда переходить к следующему. */
-function amapQueueRead(job, per) {
-  var extra = job.btn.parentNode.querySelector('.amap-openprof');
-  if (extra) extra.remove();
-  job.btn.disabled = true;
-  job.btn.className = 'amap-btn amap-read';
-  job.btn.textContent = 'reading…';
-  var body = new FormData();
-  body.append('account', job.account);
-  body.append('date_from', per.from);
-  body.append('date_to', per.to);
-  body.append('span', per.span);
-  return fetch('/account-spend/read', { method: 'POST', body: body, credentials: 'same-origin' })
-    .then(function (r) { return r.json(); })
-    .then(function (j) {
-      if (!j.ok) throw new Error(j.error || 'refused');
-      return amapAwaitReading(job.account, per, 0);
-    })
-    .catch(function (e) {
-      amapSpendFailed(job.btn, job.cell, String(e && e.message || e));
-      return 'failed';
-    });
-}
-
-function amapAwaitReading(account, per, tries) {
-  if (tries > 120) {
-    amapApplyReading(account, {state: 'failed', error: 'no answer after six minutes — check the launcher window'});
-    return Promise.resolve('failed');
+    }
+    btn.title = okCount + ' read, ' + failCount + ' failed';
+  } finally {
+    amapReadAllBusy = false;
+    amapReadAllControls(false);
+    btn.textContent = label;
   }
-  return new Promise(function (resolve) { setTimeout(resolve, 3000); }).then(function () {
-    return fetch('/account-spend/status?account=' + encodeURIComponent(account)
-        + '&date_from=' + encodeURIComponent(per.from)
-        + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        if (!j.ok) throw new Error(j.error || 'Could not read status');
-        var s = j.reading || {};
-        amapApplyReading(account, s);
-        if (s.state === 'running') return amapAwaitReading(account, per, tries + 1);
-        return s.state === 'ok' ? 'ok' : 'failed';
-      })
-      .catch(function (e) {
-        amapApplyReading(account, {state: 'failed', error: String(e && e.message || e)});
-        return 'failed';
-      });
-  });
+}
+
+// A stalled HTTP request must not leave the manual queue locked forever.
+async function amapReadJson(url, options) {
+  var controller = new AbortController();
+  var timeout = setTimeout(function() { controller.abort(); }, 20000);
+  try {
+    var r = await fetch(url, Object.assign({}, options, {signal: controller.signal}));
+    var j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Could not read account spend');
+    return j;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function amapQueueRead(job, per) {
+  try {
+    var extra = job.btn.parentNode && job.btn.parentNode.querySelector('.amap-openprof');
+    if (extra) extra.remove();
+    amapApplyReading(job.account, {state: 'running'});
+    var body = new FormData();
+    body.append('account', job.account);
+    body.append('date_from', per.from);
+    body.append('date_to', per.to);
+    body.append('span', per.span || '');
+    // The server joins an existing read for this account and exact period.
+    await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
+    return await amapAwaitReading(job.account, per, 0);
+  } catch (e) {
+    var message = e && e.name === 'AbortError' ? 'Read request timed out — check the launcher window' : String(e && e.message || e);
+    amapApplyReading(job.account, {state: 'failed', error: message});
+    return 'failed';
+  }
+}
+
+async function amapAwaitReading(account, per, tries) {
+  while (tries++ <= 120) {
+    await new Promise(function(resolve) { setTimeout(resolve, 3000); });
+    var j = await amapReadJson('/account-spend/status?account=' + encodeURIComponent(account)
+      + '&date_from=' + encodeURIComponent(per.from)
+      + '&date_to=' + encodeURIComponent(per.to), {credentials: 'same-origin'});
+    var s = j.reading || {};
+    amapApplyReading(account, s);
+    if (s.state !== 'running') return s.state === 'ok' ? 'ok' : 'failed';
+  }
+  throw new Error('no answer after six minutes — check the launcher window');
 }
 
 function amapSpendFailed(btn, cell, why, shot, how) {
-  btn.disabled = false;
+  btn.disabled = !!amapReadAllBusy;
   btn.className = 'amap-btn amap-read amap-live-bad';
   btn.textContent = 'failed · retry';
   btn.title = why;
