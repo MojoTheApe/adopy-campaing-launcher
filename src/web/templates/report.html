@@ -892,7 +892,9 @@
     .cb-preview-col {
       max-width: 430px;
       width: 100%;
-      margin-top: 1.35rem; /* clears the "Ads" divider so row 1 meets ad 1 */
+      /* Вровень с началом секции ADS — по разметке владельца 10.09;
+         прежний отступ 1.35rem опускал карточки ниже линии секции. */
+      margin-top: 0;
     }
     /* Сетка карточек уехала на под-контейнер: колонку они теперь делят с
        диагностикой превью (acl-704), и та не должна вставать в ячейку
@@ -7903,13 +7905,16 @@ window.cbPreview = function(form) {
           + '</button>'
           + '<div class="cbp-diag-full" hidden data-title="' + aclEscHtml(chipTitle + ' · ' + (p['Campaign Name'] || '')) + '"'
           + (hasErr ? ' data-bad="1"' : '') + '>' + body + '</div>';
+        /* Плашка живёт под объявлениями, в левой колонке (после «+ Add
+           ad») — по разметке владельца 10.09: в колонке превью она висела
+           посреди пустоты. */
         var slotEl = slotEls[i];
-        var col = slotEl && slotEl.querySelector('[data-preview-col]');
-        if (col) {
+        var ads = slotEl && slotEl.querySelector('.cb-ads-section');
+        if (ads) {
           var box = document.createElement('div');
           box.className = 'cbp-diag-slot';
           box.innerHTML = camp;
-          col.appendChild(box);
+          ads.appendChild(box);
         } else {
           // Кампаний в плане больше, чем слотов на экране, — не терять.
           html += camp;
