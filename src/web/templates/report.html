@@ -890,15 +890,38 @@
        next one down and the column filled with gaps. Uniform card height +
        one constant gap reads as deliberate rhythm instead. */
     .cb-preview-col {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.6rem;
-      align-content: start;
       max-width: 430px;
       width: 100%;
       margin-top: 1.35rem; /* clears the "Ads" divider so row 1 meets ad 1 */
     }
+    /* Сетка карточек уехала на под-контейнер: колонку они теперь делят с
+       диагностикой превью (acl-704), и та не должна вставать в ячейку
+       сетки как четвёртая «карточка». */
+    .cbp-cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.6rem;
+      align-content: start;
+    }
     .cbp-item { display: flex; flex-direction: column; min-width: 0; }
+    /* Диагностика превью (acl-704): свёрнутые карточки в пустоте под
+       превью объявлений — страница не растёт вдвое. Кампания с ошибкой
+       приходит открытой: провал валидации не прячется за кликом. */
+    .cbp-diag-slot { margin-top: 0.6rem; }
+    .cbp-diag {
+      border: 1px solid var(--border); border-radius: 4px;
+      background: var(--bg); overflow: hidden; margin-top: 0.4rem;
+    }
+    .cbp-diag:first-child { margin-top: 0; }
+    .cbp-diag-bad { border-color: var(--bad); }
+    .cbp-diag > summary {
+      cursor: pointer; user-select: none; list-style: none;
+      display: flex; align-items: center; gap: 0.5rem; min-width: 0;
+      padding: 0.3rem 0.6rem; background: var(--bg-hover);
+    }
+    .cbp-diag > summary::-webkit-details-marker { display: none; }
+    .cbp-diag > summary::after { content: '▸'; color: var(--muted); font-size: 0.7rem; margin-left: auto; }
+    .cbp-diag[open] > summary::after { content: '▾'; }
     @media (max-width: 1150px) {
       .cb-slot-grid { grid-template-columns: 1fr; }
       .cb-preview-col { max-width: 460px; margin-top: 0.6rem; }
@@ -5923,7 +5946,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         '</div>' +
         '</div>');
     });
-    col.innerHTML = cards.join('');
+    /* Карточки — в своём под-контейнере: колонку они теперь делят с
+       диагностикой превью (acl-704), и перерисовка карточек при правке
+       формы не должна её стирать. */
+    var cardsBox = col.querySelector('.cbp-cards');
+    if (!cardsBox) {
+      cardsBox = document.createElement('div');
+      cardsBox.className = 'cbp-cards';
+      col.insertBefore(cardsBox, col.firstChild);
+    }
+    cardsBox.innerHTML = cards.join('');
     cbpAlign(slot);
   }
 
@@ -7820,19 +7852,21 @@ window.cbPreview = function(form) {
 
       var html = '<strong style="font-size:0.8rem">Preview — ' + plan.length + ' campaign(s)</strong>';
 
+      /* Диагностика каждой кампании живёт СВЁРНУТОЙ карточкой в правой
+         колонке её слота, под превью объявлений (acl-704): раньше таблица
+         на все поля растягивала страницу вдвое, а справа от объявлений
+         стояла пустота. Кампания с ошибкой открыта сразу — провал
+         валидации не должен прятаться за кликом. Свежий прогон превью
+         стирает диагностику прошлого: слоты могли добавиться или уйти. */
+      var slotEls = form.querySelectorAll('.cb-slot');
+      form.querySelectorAll('.cbp-diag-slot').forEach(function(b) { b.remove(); });
+
       plan.forEach(function(p, i) {
         var hasErr = p.errors && p.errors.length;
         var hasWarn = p.warnings && p.warnings.length;
-        var borderColor = hasErr ? 'var(--bad)' : 'var(--border)';
-        html += '<div style="margin-top:0.55rem;border:1px solid ' + borderColor + ';border-radius:4px;overflow:hidden">';
-        // Header
-        html += '<div style="background:var(--bg-hover);padding:0.3rem 0.6rem;display:flex;align-items:center;gap:0.5rem">';
-        html += '<span style="font-weight:bold;color:' + (hasErr ? 'var(--bad)' : 'var(--accent)') + '">';
-        html += (hasErr ? '❌' : '✓') + ' Campaign ' + (i + 1) + '</span>';
-        html += '<span style="font-size:0.72rem;color:var(--muted)">' + aclEscHtml(p['Campaign Name'] || '') + '</span>';
-        html += '</div>';
+        var body = '';
         // Two-column key/value grid
-        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0">';
+        body += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0">';
         var keys = Object.keys(p).filter(function(k) { return SKIP.indexOf(k) < 0; });
         keys.forEach(function(k, ki) {
           var v = p[k];
@@ -7841,36 +7875,53 @@ window.cbPreview = function(form) {
           var isError   = isPath && v && v.indexOf('NOT FOUND') >= 0;
           var bg = ki % 4 < 2 ? 'var(--bg-elev)' : 'var(--bg)';
           var valColor = isError ? 'var(--bad)' : (isMissing ? 'var(--muted)' : 'var(--text)');
-          html += '<div style="display:contents">';
-          html += '<div style="background:' + bg + ';padding:0.18rem 0.55rem;color:var(--muted);font-size:0.7rem;border-bottom:1px solid var(--border)">' + aclEscHtml(k) + '</div>';
-          html += '<div style="background:' + bg + ';padding:0.18rem 0.55rem;color:' + valColor + ';font-size:0.72rem;border-bottom:1px solid var(--border);word-break:break-all">' + aclEscHtml(v || '—') + '</div>';
-          html += '</div>';
+          body += '<div style="display:contents">';
+          body += '<div style="background:' + bg + ';padding:0.18rem 0.55rem;color:var(--muted);font-size:0.7rem;border-bottom:1px solid var(--border)">' + aclEscHtml(k) + '</div>';
+          body += '<div style="background:' + bg + ';padding:0.18rem 0.55rem;color:' + valColor + ';font-size:0.72rem;border-bottom:1px solid var(--border);word-break:break-all">' + aclEscHtml(v || '—') + '</div>';
+          body += '</div>';
         });
-        html += '</div>';
+        body += '</div>';
         // Errors
         if (hasErr) {
-          html += '<div style="padding:0.3rem 0.6rem;background:#1a0606">';
+          body += '<div style="padding:0.3rem 0.6rem;background:#1a0606">';
           p.errors.forEach(function(e) {
-            html += '<div class="cb-preview-errors">⚠ ' + aclEscHtml(e) + '</div>';
+            body += '<div class="cb-preview-errors">⚠ ' + aclEscHtml(e) + '</div>';
           });
-          html += '</div>';
+          body += '</div>';
         }
         // Warnings
         if (hasWarn) {
-          html += '<div style="padding:0.3rem 0.6rem;background:#1a1200">';
+          body += '<div style="padding:0.3rem 0.6rem;background:#1a1200">';
           p.warnings.forEach(function(w) {
-            html += '<div style="color:var(--warn);font-size:0.72rem">⚡ ' + aclEscHtml(w) + '</div>';
+            body += '<div style="color:var(--warn);font-size:0.72rem">⚡ ' + aclEscHtml(w) + '</div>';
           });
-          html += '</div>';
+          body += '</div>';
         }
-        html += '</div>';
+        var camp = '<details class="cbp-diag' + (hasErr ? ' cbp-diag-bad' : '') + '"' + (hasErr ? ' open' : '') + '>'
+          + '<summary>'
+          + '<span style="font-weight:bold;flex:none;color:' + (hasErr ? 'var(--bad)' : 'var(--accent)') + '">'
+          + (hasErr ? '❌' : '✓') + ' Campaign ' + (i + 1) + '</span>'
+          + '<span style="font-size:0.72rem;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + aclEscHtml(p['Campaign Name'] || '') + '</span>'
+          + (hasWarn ? '<span style="flex:none;color:var(--warn);font-size:0.7rem">⚡' + p.warnings.length + '</span>' : '')
+          + '</summary>' + body + '</details>';
+        var slotEl = slotEls[i];
+        var col = slotEl && slotEl.querySelector('[data-preview-col]');
+        if (col) {
+          var box = document.createElement('div');
+          box.className = 'cbp-diag-slot';
+          box.innerHTML = camp;
+          col.appendChild(box);
+        } else {
+          // Кампаний в плане больше, чем слотов на экране, — не терять.
+          html += camp;
+        }
       });
 
       if (!hasErrors && plan.length > 0) {
         if (publishBtn) publishBtn.disabled = false;
         html += '<p style="color:var(--good);margin-top:0.5rem;font-size:0.75rem">✓ All campaigns valid — ready to publish</p>';
       } else if (hasErrors) {
-        html += '<p style="color:var(--bad);margin-top:0.5rem;font-size:0.75rem">Fix errors above before publishing</p>';
+        html += '<p style="color:var(--bad);margin-top:0.5rem;font-size:0.75rem">Fix the errors in the campaign cards before publishing</p>';
       }
 
       var visualHtml = buildVisualPreviewHtml(plan, pageName, ctaMap);
@@ -7892,6 +7943,11 @@ window.cbPreview = function(form) {
           var showVisual = btn.dataset.view === 'visual';
           diagEl.style.display = showVisual ? 'none' : 'block';
           visEl.style.display = showVisual ? 'block' : 'none';
+          // Карточки диагностики живут в колонках слотов, не в панели —
+          // переключатель прячет и их тоже.
+          form.querySelectorAll('.cbp-diag-slot').forEach(function(b) {
+            b.style.display = showVisual ? 'none' : 'block';
+          });
         });
       });
     })
