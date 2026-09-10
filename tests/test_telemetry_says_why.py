@@ -254,3 +254,147 @@ def test_the_attempts_reach_the_failure_record():
     source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
     assert '_shot("fail_ad_copy", copy_report)' in source
     assert '_shot(f"fail_{tag}_copy", copy_report)' in source
+
+
+# ── страница-ошибка браузера ──────────────────────────────────────────────
+#
+# 10 сентября прогон встал на ERR_SSL_PROTOCOL_ERROR: Ads Manager не
+# открывался вовсе. Шаг честно не нашёл бы кнопку, которой нет, и сообщил бы
+# «не нашёл поле имени кампании» — то есть соврал бы о причине.
+
+class _ErrorPage:
+    """Страница, отдающая заданный узел #main-frame-error."""
+
+    def __init__(self, html_text=None, raises=False):
+        self._text = html_text
+        self._raises = raises
+        self.url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns"
+
+    def evaluate(self, js, *a):
+        if self._raises:
+            raise RuntimeError("target closed")
+        return self._text or ""
+
+    def title(self):
+        return "adsmanager.facebook.com"
+
+    def get_by_role(self, role):
+        raise RuntimeError("нет")
+
+
+def test_the_browser_error_code_is_named():
+    assert rt.browser_error(_ErrorPage("ERR_SSL_PROTOCOL_ERROR")) == "ERR_SSL_PROTOCOL_ERROR"
+
+
+def test_a_proxy_failure_is_named_too():
+    """Самый ожидаемый сосед: прокси не отвечает."""
+    assert rt.browser_error(_ErrorPage("ERR_PROXY_CONNECTION_FAILED")) == "ERR_PROXY_CONNECTION_FAILED"
+
+
+def test_a_healthy_page_reports_nothing():
+    """Узла нет — значит и экрана ошибки нет."""
+    assert rt.browser_error(_ErrorPage("")) == ""
+
+
+def test_a_page_that_throws_reports_nothing():
+    assert rt.browser_error(_ErrorPage(raises=True)) == ""
+
+
+def test_the_code_reaches_the_failure_context():
+    """Иначе находка останется внутри функции и до записи об отказе не дойдёт."""
+    ctx = rt.page_context(_ErrorPage("ERR_SSL_PROTOCOL_ERROR"))
+    assert ctx["browser_error"] == "ERR_SSL_PROTOCOL_ERROR"
+
+
+def test_a_working_page_carries_no_such_key():
+    """Пустой ключ читался бы как «проверяли и не нашли», а проверять нечего."""
+    assert "browser_error" not in rt.page_context(_ErrorPage(""))
+
+
+def test_the_word_err_inside_a_live_page_is_not_an_error_screen():
+    """`ERR_…` встречается и в скриптах живой страницы.
+
+    Поэтому ищется узел `#main-frame-error`, а не слово по всему тексту:
+    иначе каждый второй отказ сообщал бы о несуществующей потере связи.
+    """
+    source = (ROOT / "src" / "fb_ads_rpa" / "run_telemetry.py").read_text(encoding="utf-8")
+    block = source[source.index("def browser_error"):]
+    block = block[: block.index("\ndef ", 10)] if "\ndef " in block[10:] else block
+    assert "#main-frame-error" in block, "экран ошибки ищется по тексту, а не по своему узлу"
+
+
+# ── «застряло — обнови», но не везде ──────────────────────────────────────
+
+class _RecoverPage:
+    """Страница, у которой ошибка уходит после заданного числа перезагрузок."""
+
+    def __init__(self, errors_until_ok):
+        self._left = errors_until_ok
+        self.reloads = 0
+        self.url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns"
+
+    def evaluate(self, js, *a):
+        return "ERR_SSL_PROTOCOL_ERROR" if self._left > 0 else ""
+
+    def reload(self, **kw):
+        self.reloads += 1
+        self._left -= 1
+
+    def goto(self, url, **kw):
+        self.reload()
+
+
+def test_a_working_page_is_left_alone():
+    """Перезагружать исправную страницу — терять время на ровном месте."""
+    from src.fb_ads_rpa import meta_dom
+
+    page = _RecoverPage(0)
+    assert meta_dom._recover_from_browser_error(page) is False
+    assert page.reloads == 0
+
+
+def test_a_broken_page_is_reloaded_and_recovers(monkeypatch):
+    from src.fb_ads_rpa import meta_dom
+
+    monkeypatch.setattr(meta_dom, "_sleep_h", lambda *a, **k: None)
+    page = _RecoverPage(1)
+    assert meta_dom._recover_from_browser_error(page) is True
+    assert page.reloads == 1
+
+
+def test_a_page_that_stays_broken_gives_up(monkeypatch):
+    """Прокси лежит — перезагружать вечно нельзя, отказ должен прийти."""
+    from src.fb_ads_rpa import meta_dom
+
+    monkeypatch.setattr(meta_dom, "_sleep_h", lambda *a, **k: None)
+    page = _RecoverPage(99)
+    assert meta_dom._recover_from_browser_error(page) is True
+    assert page.reloads == 2, "число попыток не ограничено"
+
+
+def test_the_break_is_written_down_even_if_it_healed(monkeypatch):
+    """Связь рвалась — это важнее, чем то, что следующий шаг потом прошёл."""
+    from src.fb_ads_rpa import meta_dom
+
+    monkeypatch.setattr(meta_dom, "_sleep_h", lambda *a, **k: None)
+    calls = []
+    monkeypatch.setattr(meta_dom._telemetry, "record",
+                        lambda *a, **k: calls.append((a, k)))
+    meta_dom._recover_from_browser_error(_RecoverPage(1))
+    assert calls and calls[0][0][0] == "browser_error"
+    assert calls[0][1]["note"] == "ERR_SSL_PROTOCOL_ERROR"
+
+
+def test_the_recovery_runs_where_nothing_is_entered_yet():
+    """Правило намеренно не сплошное.
+
+    На странице-ошибке терять нечего. Посреди мастера создания кампании та же
+    перезагрузка стёрла бы несохранённые поля и превратила бы один отказ в
+    потерянную кампанию.
+    """
+    source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
+    at = source.index("_recover_from_browser_error(page)", source.index("run_id = _telemetry.new_run_id()"))
+    after = source[at : at + 1200]
+    assert 'name="Create"' in after, "проверка стоит не в начале потока"
+    calls = source.count("_recover_from_browser_error(page)")
+    assert calls <= 2, f"проверка расставлена в {calls} местах — правило стало сплошным"

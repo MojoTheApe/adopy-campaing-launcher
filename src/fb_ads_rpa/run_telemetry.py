@@ -143,7 +143,43 @@ def page_context(page, *, timeout_ms: int = 1200) -> dict:
             info["banner"] = scrub(banner.inner_text(timeout=timeout_ms))[:120]
     except Exception:
         pass
+    # Страница-ошибка самого браузера. Когда она открыта, все прочие выводы —
+    # шум: шаг честно не найдёт кнопку, которой нет, и сообщит «не нашёл поле
+    # имени кампании» вместо «нет связи». 10 сентября прогон встал на
+    # ERR_SSL_PROTOCOL_ERROR — на проксированном профиле это почти всегда сам
+    # прокси, и искать надо там, а не в разметке Meta.
+    err = browser_error(page)
+    if err:
+        info["browser_error"] = err
     return info
+
+
+_ERROR_CODE = re.compile(r"\bERR_[A-Z0-9_]{3,40}\b")
+
+
+def browser_error(page) -> str:
+    """Код ошибки браузера, если открыта его собственная страница-ошибка.
+
+    Chrome рисует её со своим узлом `#main-frame-error` и кодом внутри —
+    `ERR_SSL_PROTOCOL_ERROR`, `ERR_PROXY_CONNECTION_FAILED` и подобными.
+    Ищем узел, а не текст по всей странице: слово `ERR_…` может встретиться и
+    в скриптах живой страницы, а нам нужен именно этот экран.
+    """
+    try:
+        text = page.evaluate(
+            """
+            () => {
+              const el = document.querySelector('#main-frame-error');
+              if (!el) return '';
+              const code = el.querySelector('.error-code');
+              return (code ? code.textContent : el.textContent) || '';
+            }
+            """
+        )
+    except Exception:
+        return ""
+    match = _ERROR_CODE.search(text or "")
+    return match.group(0) if match else ""
 
 
 _current: dict[str, str] = {"run_id": "", "campaign": ""}

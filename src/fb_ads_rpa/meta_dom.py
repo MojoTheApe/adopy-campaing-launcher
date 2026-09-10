@@ -2308,6 +2308,20 @@ def run_recorded_campaign_flow(
     # 2026-07-24 that a single dismiss attempt can run before the banner has
     # actually rendered (intermittent: worked on one run, didn't on the next
     # against the same account), leaving it in place to block/shift Create.
+    # Начинаем с вопроса, открыт ли вообще Ads Manager. 10 сентября прогон
+    # встал между кампаниями на ERR_SSL_PROTOCOL_ERROR: на экране была
+    # страница-ошибка самого браузера, и следующая кампания не началась
+    # никогда. Шаг честно не нашёл бы на ней кнопку Create и сообщил бы «не
+    # нашёл Create» — то есть назвал бы причиной разметку Meta.
+    #
+    # Перезагрузка здесь безопасна ровно потому, что мы **в начале**: на
+    # странице-ошибке ничего не введено и терять нечего. Именно поэтому
+    # правило «застряло — обнови» применяется тут, а не ко всякому отказу
+    # подряд: посреди мастера создания кампании перезагрузка стёрла бы
+    # несохранённые поля.
+    if _recover_from_browser_error(page):
+        _shot("skip_browser_error_recovered")
+
     for _ in range(3):
         _dismiss_floating_banners(page)
         _sleep_h(0.4)
@@ -4120,6 +4134,36 @@ def _upload_stalled(page: Page, *, watch_s: float = 4.0) -> bool:
     if not _upload_in_progress(page):
         return False
     return _upload_progress(page) == before
+
+
+def _recover_from_browser_error(page: Page, *, attempts: int = 2) -> bool:
+    """Открыта страница-ошибка браузера — обновить и посмотреть, ушла ли она.
+
+    Правило «застряло — попробуй обновить» применяется здесь, а не ко всякому
+    отказу подряд, и разница существенная. На странице-ошибке ничего не
+    введено: это не страница Meta, а экран Chrome, и терять при перезагрузке
+    нечего. Посреди мастера создания кампании та же перезагрузка стёрла бы
+    несохранённые поля и превратила бы один отказ в потерянную кампанию.
+
+    Возвращает True, если ошибка была (и, возможно, ушла) — чтобы это попало
+    в телеметрию: связь рвалась, и знать об этом важнее, чем о том, что
+    следующий шаг потом прошёл.
+
+    10 сентября прогон встал между кампаниями на ERR_SSL_PROTOCOL_ERROR и
+    вторая кампания не началась вовсе. На проксированном профиле такая ошибка
+    почти всегда означает сам прокси; перезагрузка лечит разовый разрыв, а
+    если прокси лежит — отказ придёт честно и с названной причиной.
+    """
+    seen = ""
+    for _ in range(attempts):
+        code = _telemetry.browser_error(page)
+        if not code:
+            return bool(seen)
+        seen = code
+        _telemetry.record("browser_error", None, note=code)
+        _reload_editor(page)
+        _sleep_h(1.0)
+    return bool(seen)
 
 
 def _reload_editor(page: Page, edit_url: str = "") -> None:
