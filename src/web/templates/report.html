@@ -1111,20 +1111,6 @@
       display: inline-block;
     }
     .cb-add-btn-sm:hover { color: var(--accent); border-color: var(--accent); }
-    /* Duplicate ad / Duplicate campaign — the two workhorse buttons of the
-       builder (user request 2026-08-02: make them stand out). Filled accent
-       vs the ghost add-buttons beside them. */
-    .cb-dup-btn {
-      background: var(--accent);
-      border: 1px solid var(--accent);
-      color: var(--on-accent);
-      font-weight: 600;
-    }
-    .cb-dup-btn:hover {
-      background: color-mix(in srgb, var(--accent) 85%, #000);
-      border-color: color-mix(in srgb, var(--accent) 85%, #000);
-      color: var(--on-accent);
-    }
     /* Duplication lives on the cards themselves: ⧉ on each ad row
        (acl-705) and on each campaign slot's header (acl-706) — a bottom
        button could not say which item it would take. */
@@ -6604,14 +6590,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       if (srcOsText && newOsText) newOsText.value = srcOsText.value;
     }
 
-    // Копируются ВСЕ поля слота, а не перечисленные руками. Прежний список
-    // ['age','budget','asset'] отстал от формы: язык добавили позже, и
-    // дублирование молча оставляло его пустым. На экране это выглядело как
-    // забывчивость человека, а кампания уходила без языка.
+    // Копируются ВСЕ поля слота, а не перечисленные руками.
+    //
+    // Список ['age','budget','asset'] уже отстал однажды: язык добавили в
+    // форму позже, и дублирование молча оставляло его пустым — человек
+    // запускал кампанию без языка оригинала. Дописать в список одно поле
+    // значит оставить ту же ловушку следующему.
     //
     // Пропускаются только те, у которых своя логика: имя собирается само,
-    // счётчик объявлений ставится при их копировании, а таргетинг и ОС уже
-    // скопированы выше вместе со своим видимым текстом.
+    // счётчик объявлений ставится при копировании объявлений, а таргетинг и
+    // ОС скопированы выше вместе со своим видимым текстом.
     var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1 };
     var prefix = 'camp_' + srcIdx + '_';
     srcSlot.querySelectorAll('[name^="' + prefix + '"]').forEach(function(srcInput) {
