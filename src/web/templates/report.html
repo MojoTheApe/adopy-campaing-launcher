@@ -5907,12 +5907,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   var _cbpTimer = null;
+  var _cbpDirtySlots = new Set();
+  var _cbpAllPending = false;
   function cbpSchedule(el) {
     var slot = el && el.closest ? el.closest('.cb-slot') : null;
+    if (slot) _cbpDirtySlots.add(slot);
+    else _cbpAllPending = true;
     clearTimeout(_cbpTimer);
     _cbpTimer = setTimeout(function() {
-      if (slot && document.contains(slot)) cbRenderPreviews(slot);
-      else cbpRenderAll();
+      if (_cbpAllPending) cbpRenderAll();
+      else _cbpDirtySlots.forEach(function(s) { if (document.contains(s)) cbRenderPreviews(s); });
+      _cbpDirtySlots.clear();
+      _cbpAllPending = false;
     }, 180);
   }
   document.addEventListener('input', function(e) {
@@ -5923,7 +5929,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   });
   document.addEventListener('click', function(e) {
     if (!e.target.closest) return;
-    if (e.target.closest('.cb-sel-opt') || e.target.closest('.cb-add-btn-sm')
+    if (e.target.closest('.cb-dup-slot-btn')) { cbpSchedule(null); return; }
+    if (e.target.closest('.cb-dup-ad-btn') || e.target.closest('.cb-sel-opt') || e.target.closest('.cb-add-btn-sm')
         || e.target.closest('.cb-remove-ad-btn') || e.target.closest('.cb-add-btn')) {
       cbpSchedule(e.target);
     }
@@ -7659,7 +7666,35 @@ function cbCollectFormData(form) {
   return new FormData(form);
 }
 
+// A diagnostic belongs to one exact form snapshot, including slot order.
+function cbInvalidatePreview(form) {
+  if (!form) return;
+  form._previewRequest = (form._previewRequest || 0) + 1;
+  form.querySelectorAll('.cbp-diag-slot').forEach(function(b) { b.remove(); });
+  var drawer = document.getElementById('cbp-diag-drawer');
+  if (drawer && drawer._form === form) cbpDiagClose();
+  var publish = form.querySelector('.cb-publish-btn');
+  if (publish) publish.disabled = true;
+  var panel = form.querySelector('.cb-preview-panel');
+  if (panel && panel.style.display === 'block') {
+    panel.textContent = 'Campaign changed — preview again to check the current setup.';
+  }
+}
+['input', 'change', 'click', 'mousedown'].forEach(function(type) {
+  document.addEventListener(type, function(e) {
+    if (!e.target.closest) return;
+    var form = e.target.closest('form[data-open-form]');
+    if (!form) return;
+    if (type === 'input' || type === 'change'
+        || e.target.closest('.cb-dup-ad-btn, .cb-dup-slot-btn, .cb-remove-ad-btn, .cb-remove-btn, .cb-add-btn, .cb-add-btn-sm, .cb-sel-opt')) {
+      cbInvalidatePreview(form);
+    }
+  }, true);
+});
+
 window.cbPreview = function(form) {
+  cbInvalidatePreview(form);
+  var requestId = form._previewRequest;
   var panel = form.querySelector('.cb-preview-panel');
   var publishBtn = form.querySelector('.cb-publish-btn');
   if (!panel) return;
@@ -7678,6 +7713,11 @@ window.cbPreview = function(form) {
   });
 
   var fd = cbCollectFormData(form);
+  var snapshot = JSON.stringify(Array.from(fd.entries()));
+  function current() {
+    return form._previewRequest === requestId && document.contains(form)
+      && JSON.stringify(Array.from(new FormData(form).entries())) === snapshot;
+  }
   fetch('/preview-publish', { method: 'POST', body: fd })
     .then(function(r) {
       if (!r.ok) {
@@ -7686,6 +7726,7 @@ window.cbPreview = function(form) {
       return r.json();
     })
     .then(function(data) {
+      if (!current()) return;
       if (!data) { panel.innerHTML = '<span class="cb-preview-errors">Empty response from server</span>'; return; }
       if (data.error) {
         panel.innerHTML = '<span class="cb-preview-errors">⚠ ' + aclEscHtml(data.error) + '</span>';
@@ -7794,6 +7835,7 @@ window.cbPreview = function(form) {
           toggleBtns.forEach(function(b) { b.classList.remove('cb-preview-toggle-active'); });
           btn.classList.add('cb-preview-toggle-active');
           var showVisual = btn.dataset.view === 'visual';
+          if (showVisual) cbpDiagClose();
           diagEl.style.display = showVisual ? 'none' : 'block';
           visEl.style.display = showVisual ? 'block' : 'none';
           // Карточки диагностики живут в колонках слотов, не в панели —
@@ -7805,6 +7847,7 @@ window.cbPreview = function(form) {
       });
     })
     .catch(function(e) {
+      if (!current()) return;
       panel.innerHTML = '<span class="cb-preview-errors">Request failed: ' + aclEscHtml(e.message) + '</span>';
     });
 };
@@ -7814,7 +7857,7 @@ window.cbPreview = function(form) {
 // страницы, ничего не расталкивая, и закрывается крестиком, Esc или
 // кликом по фону. Тело берётся из скрытого контейнера рядом с плашкой.
 window.cbpDiagOpen = function(chip) {
-  var full = chip.parentNode.querySelector('.cbp-diag-full');
+  var full = chip.nextElementSibling;
   if (!full) return;
   var wrap = document.getElementById('cbp-diag-drawer');
   if (!wrap) {
@@ -7822,7 +7865,7 @@ window.cbpDiagOpen = function(chip) {
     wrap.id = 'cbp-diag-drawer';
     wrap.style.display = 'none';
     wrap.innerHTML = '<div class="cbp-diag-back"></div>'
-      + '<div class="cbp-diag-pop" role="dialog" aria-label="Campaign diagnostic">'
+      + '<div class="cbp-diag-pop" role="dialog" aria-modal="true" aria-label="Campaign diagnostic">'
       + '<div class="cbp-diag-pop-head"><span class="cbp-diag-pop-title"></span>'
       + '<button type="button" class="cbp-diag-pop-close" title="Close">×</button></div>'
       + '<div class="cbp-diag-pop-body"></div></div>';
@@ -7830,19 +7873,27 @@ window.cbpDiagOpen = function(chip) {
     wrap.querySelector('.cbp-diag-back').addEventListener('click', cbpDiagClose);
     wrap.querySelector('.cbp-diag-pop-close').addEventListener('click', cbpDiagClose);
     document.addEventListener('keydown', function(e) {
+      if (wrap.style.display === 'none') return;
       if (e.key === 'Escape') cbpDiagClose();
+      if (e.key === 'Tab') { e.preventDefault(); wrap.querySelector('.cbp-diag-pop-close').focus(); }
     });
   }
   var title = wrap.querySelector('.cbp-diag-pop-title');
   title.textContent = full.dataset.title || 'Campaign diagnostic';
   title.style.color = full.dataset.bad ? 'var(--bad)' : 'var(--accent)';
   wrap.querySelector('.cbp-diag-pop-body').innerHTML = full.innerHTML;
+  wrap._trigger = chip;
+  wrap._form = chip.closest('form');
   wrap.style.display = 'block';
+  wrap.querySelector('.cbp-diag-pop-close').focus();
 };
 
 window.cbpDiagClose = function() {
   var wrap = document.getElementById('cbp-diag-drawer');
-  if (wrap) wrap.style.display = 'none';
+  if (wrap && wrap.style.display !== 'none') {
+    wrap.style.display = 'none';
+    if (wrap._trigger && wrap._trigger.isConnected) wrap._trigger.focus();
+  }
 };
 
 // ── RPA Human Takeover ────────────────────────────────────────────────
