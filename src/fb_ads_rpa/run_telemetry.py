@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -99,6 +100,42 @@ def merge_diag(collected: dict | None, explicit: dict | None) -> dict | None:
     return merged or None
 
 
+def screen_locked() -> bool | None:
+    """Заблокирован ли сейчас экран Windows. `None`, если спросить не удалось.
+
+    Блокировка останавливает страницу так же, как свёрнутое окно, только
+    сильнее: система уходит на защищённый рабочий стол, композитор перестаёт
+    отдавать кадры, и эмуляция фокуса через CDP уже не помогает.
+
+    Это не догадка. 29 июля с окном в фоне шаги шли в 10-50 раз медленнее, а
+    загрузка креатива второго объявления заняла двенадцать минут и «упала».
+    10 сентября то же самое повторилось с заблокированным экраном: сорок две
+    минуты на файл, который соседнее объявление приняло за семьдесят четыре
+    секунды — сразу после того, как человек вернулся к машине.
+
+    Признак — процесс `LogonUI.exe`: он живёт ровно пока показан экран
+    блокировки. Способ грубый, но дешёвый и не требует ни прав, ни библиотек;
+    ошибиться он может только в сторону «не знаю», а это честный ответ.
+
+    Снять блокировку мы не можем и не должны — это настройка безопасности
+    машины байера. Но назвать её причиной вместо разметки Meta обязаны: за
+    один день она дважды увела разбор не туда.
+    """
+    if not sys.platform.startswith("win"):
+        return None
+    try:
+        import psutil
+    except Exception:
+        return None
+    try:
+        for proc in psutil.process_iter(["name"]):
+            if (proc.info.get("name") or "").lower() == "logonui.exe":
+                return True
+        return False
+    except Exception:
+        return None
+
+
 def page_context(page, *, timeout_ms: int = 1200) -> dict:
     """Что было на странице в момент отказа — коротко и безопасно.
 
@@ -151,6 +188,11 @@ def page_context(page, *, timeout_ms: int = 1200) -> dict:
     err = browser_error(page)
     if err:
         info["browser_error"] = err
+    # Заблокированный экран останавливает страницу так же, как свёрнутое окно,
+    # только сильнее. Без этой строки отказ читается как поломка разметки, а
+    # человек уходит искать её в Ads Manager.
+    if screen_locked():
+        info["screen_locked"] = True
     return info
 
 
