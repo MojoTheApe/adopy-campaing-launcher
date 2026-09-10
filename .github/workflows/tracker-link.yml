@@ -2,9 +2,13 @@ name: Tracker linkage
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited, ready_for_review]
+concurrency:
+  group: acl-tracker-link-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   tracker-link:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
       issues: read
