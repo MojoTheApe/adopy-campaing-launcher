@@ -908,19 +908,21 @@
        колонки; полная таблица выезжает панелью справа ПОВЕРХ страницы —
        раскрытие ничего не расталкивает. Кампания с ошибкой — красная
        плашка с ❌: провал валидации виден со свёрнутого состояния. */
-    .cbp-diag-slot { margin-top: 0.6rem; display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; }
+    /* Плашка — полоса на всю ширину колонки, вровень с карточками превью:
+       прижатая вправо «висела» посреди пустоты и читалась как случайная. */
+    .cbp-diag-slot { margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.3rem; }
     .cbp-diag-chip {
-      display: inline-flex; align-items: center; gap: 0.45rem; max-width: 100%;
-      font: inherit; font-size: 0.72rem; cursor: pointer;
+      display: flex; align-items: center; gap: 0.45rem; width: 100%;
+      font: inherit; font-size: 0.72rem; cursor: pointer; text-align: left;
       border: 1px solid var(--border); border-radius: 4px;
       background: var(--bg-hover); color: var(--accent);
-      padding: 0.28rem 0.6rem;
+      padding: 0.3rem 0.6rem;
     }
     .cbp-diag-chip:hover { border-color: var(--accent); }
     .cbp-diag-chip-bad { color: var(--bad); border-color: var(--bad); }
     .cbp-diag-chip-bad:hover { border-color: var(--bad); }
     .cbp-diag-chip-name {
-      color: var(--muted); min-width: 0;
+      color: var(--muted); flex: 1; min-width: 0;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .cbp-diag-back { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); z-index: 900; }
@@ -1035,7 +1037,9 @@
       align-items: center;
       font-size: 0.8rem;
     }
-    .cb-label { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+    /* Меткам можно переноситься: nowrap загонял длинную «OS / Age / Budget /
+       Language» под соседнее поле — обрезанная метка хуже двухстрочной. */
+    .cb-label { color: var(--muted); font-size: 0.75rem; line-height: 1.25; }
     .cb-select, .cb-input {
       background: var(--bg-elev);
       border: 1px solid var(--border);
