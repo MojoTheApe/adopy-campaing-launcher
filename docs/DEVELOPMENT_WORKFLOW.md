@@ -182,10 +182,10 @@ Merge в `master` выполняется в пределах разрешённ�
 ## Таск-трекер: начало, очередь и завершение
 
 Обязательные общие правила находятся в [TRACKER_AGENT_WORKFLOW.md](TRACKER_AGENT_WORKFLOW.md)
-и едином [workflow переносимого пакета](../tracker/AGENT_WORKFLOW.md).
+и едином [инструкцию общего движка](TRACKER_AGENT_WORKFLOW.md).
 GitHub Issues — источник задач; UI на `https://tracker.team7.cloud` только отображает их.
 
-До первой правки кода агент автоматически выполняет `python -m tracker start ISSUE`
+До первой правки кода агент автоматически выполняет `python scripts/task_tracker.py start ISSUE`
 и проверяет **In progress**. Это часть поручения, без дополнительного запроса владельцу.
 Все чаты используют общую очередь; следующий Issue начинается только после завершения
 или явной передачи/блокировки текущего. Порция Todo не пополняется из Backlog автоматически.
@@ -199,8 +199,8 @@ High / Medium / Low, по умолчанию Medium. MVP — milestone с явн
 полной проверки всех изменений задачи и подтверждённого merge в master выполнить:
 
 ```sh
-python -m tracker merged ISSUE --pr PR
-python -m tracker merged ISSUE --pr PR --apply --reviewed-complete
+python scripts/task_tracker.py merged ISSUE --pr PR
+python scripts/task_tracker.py merged ISSUE --pr PR --apply --reviewed-complete
 ```
 
 Перечитать метки и проверить успешную синхронизацию UI. Это обязательное завершение

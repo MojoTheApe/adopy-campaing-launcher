@@ -1,3 +1,5 @@
+> Compatibility reference only. Current task operations and production use the shared engine. Read [the current workflow](../docs/TRACKER_AGENT_WORKFLOW.md). Do not deploy or extend this older package.
+
 # Portable GitHub task tracker
 
 An English, read-only workspace for GitHub Issues. Python 3.11+ standard library, an authenticated `gh` CLI, and any HTTPS host are sufficient. There is no frontend build, database, AI API or required hosting vendor.
