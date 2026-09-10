@@ -255,6 +255,23 @@ with tempfile.TemporaryDirectory(dir=OUT) as config:
         assert [r[0] for r in page.evaluate('readRequests')]==['toString']
         assert page.locator('#view-home details[data-country="Beta"] .amap-read-all').get_attribute('title')=='1 read, 1 failed'
         assert not page.locator('#view-home .amap-read-all').first.is_disabled()
+        beta=page.locator('#view-home details[data-country="Beta"] .amap-live-summary')
+        assert 'EUR 12.34' in beta.text_content() and '1/2 read' in beta.text_content()
+        page.evaluate("amapApplyReading('First',{state:'ok',spend:7,currency:'KWD'})")
+        assert 'KWD 7.00' in beta.text_content() and 'EUR 12.34' in beta.text_content()
+        assert '2/2 read' in beta.text_content()
+        page.evaluate("amapApplyReading('First',{state:'running'})")
+        assert 'KWD 7.00' not in beta.text_content() and '1/2 read' in beta.text_content()
+        page.evaluate("amapApplyReading('First',{state:'ok',spend:0,currency:'EUR'})")
+        assert beta.locator('b').count()==1 and 'EUR 12.34' in beta.text_content()
+        page.evaluate("amapApplyReading('First',{state:'ok',spend:2,currency:''});amapApplyReading('toString',{state:'ok',spend:3,currency:''})")
+        assert 'currency unknown 2.00 (First)' in beta.text_content()
+        assert 'currency unknown 3.00 (toString)' in beta.text_content()
+        page.set_viewport_size({'width':1100,'height':900})
+        for summary in page.locator('#view-home details[data-country] > summary').all():
+            assert summary.evaluate('e=>e.scrollWidth<=e.clientWidth+1'), summary.text_content()
+        page.screenshot(path=str(OUT/'country-totals.png'))
+        print('PASS: live country summaries refresh, retain zero and separate known/unknown currencies without overflow')
         page.evaluate("readRequests=[];_amapPick={from:'',to:'',span:'all'};amapReadAll(document.querySelector('#view-home .amap-read-all'))")
         assert page.evaluate('readRequests')==[]
         print('PASS: Read all sequential order, duplicates, selected period, country scope, failure continuation, timeout and re-entry guards')

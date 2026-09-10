@@ -40,11 +40,27 @@
     <details class="amap-country" data-country="{{ mc.key | e }}">
       <summary>
         {{ mc.country }}
+        {#- ACL-356: свёрнутая строка несёт числа страны, а не пустоту.
+            Сначала — спенд, снятый с самих кабинетов (Read), по валютам;
+            прочерк значит «никто не читал», это не ноль. Дальше — тоталы
+            источника статистики (сегодня книга, после acl-103 — BI):
+            Dep · Leads · CPA · CR. -#}
+        <span class="amap-sum amap-sum-mid">
+          <span class="amap-live-summary" title="Full spend of the linked accounts across all countries for the selected dates; not country-attributed spend. Currencies are kept separate.">Linked accounts
+            <span class="amap-live-summary-values">
+            {%- if mc.live_sums %}
+            {%- for s in mc.live_sums %} <b>{{ s.spend | fmt_currency(s.currency) }}{% if s.account %} ({{ s.account }}){% endif %}</b>{% if not loop.last %} ·{% endif %}{% endfor %}
+            {%- else %} <b>—</b>{% endif %}</span>
+            <i class="amap-live-summary-count">{{ mc.live_read or 0 }}/{{ mc.rows | length }} read</i>
+          </span>
+          <span>Dep <b>{{ mc.deposits }}</b></span>
+          <span>Leads <b>{{ mc.leads }}</b></span>
+          <span title="Workbook spend / deposits">CPA <b>{% if mc.deposits %}{{ (mc.spend / mc.deposits) | fmt_usd }}{% else %}—{% endif %}</b></span>
+          <span title="Deposits / leads">CR <b>{% if mc.leads %}{{ '%.0f%%' | format(100 * mc.deposits / mc.leads) }}{% else %}—{% endif %}</b></span>
+        </span>
         <span class="amap-sum">
           <span>accounts <b>{{ mc.rows | length }}</b></span>
           <span>spend <b>{{ mc.spend | fmt_usd }}</b></span>
-          <span>leads <b>{{ mc.leads }}</b></span>
-          <span>FTD <b>{{ mc.deposits }}</b></span>
           <button type="button" class="amap-btn danger"
                   onclick="event.preventDefault();event.stopPropagation();amapClose('country',{{ mc.key | tojson | forceescape }},{{ mc.country | tojson | forceescape }})"
                   title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>

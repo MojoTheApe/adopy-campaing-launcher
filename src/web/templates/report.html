@@ -1671,7 +1671,7 @@
       overflow: hidden;
     }
     .amap-country > summary {
-      display: flex; align-items: center; gap: var(--space-md);
+      display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md);
       padding: 0.55rem 0.85rem; cursor: pointer; user-select: none;
       background: var(--bg-subtle); font-weight: 600; font-size: 0.9rem;
     }
@@ -1679,10 +1679,16 @@
     .amap-country > summary::before { content: '▸'; color: var(--muted); font-size: 0.75rem; }
     .amap-country[open] > summary::before { content: '▾'; }
     .amap-sum {
-      margin-left: auto; display: flex; gap: 1.1rem;
+      margin-left: auto; display: flex; flex-wrap: wrap; gap: 1.1rem;
       font-weight: 400; font-size: 0.78rem; color: var(--muted);
     }
     .amap-sum b { color: var(--text); font-weight: 600; }
+    /* ACL-356: числа страны в свёрнутой строке. Средняя группа занимает
+       бывшую пустоту между именем и правыми чипами; у account-спенда
+       счётчик «i» — сколько кабинетов из скольких прочитано. */
+    .amap-sum-mid { flex: 1 1 28rem; min-width: 0; margin-left: 1rem; margin-right: auto; }
+    .amap-live-summary { min-width: 0; overflow-wrap: anywhere; }
+    .amap-sum-mid i { font-style: normal; font-size: 0.7rem; color: var(--muted); }
     .amap table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
     .amap th {
       text-align: left; font-weight: 500; font-size: 0.7rem;
@@ -4473,12 +4479,45 @@ function amapMoney(spend, currency) {
     + Number(spend).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
+function amapUpdateCountrySummaries() {
+  document.querySelectorAll('details.amap-country[data-country]').forEach(function(block) {
+    var summary = block.querySelector('.amap-live-summary');
+    if (!summary) return;
+    var seen = new Set(), sums = new Map(), unknown = [], read = 0;
+    block.querySelectorAll('.amap-live').forEach(function(cell) {
+      var account = cell.dataset.account;
+      if (seen.has(account)) return;
+      seen.add(account);
+      if (cell.dataset.readState !== 'ok' || !cell.dataset.readSpend) return;
+      var amount = Number(cell.dataset.readSpend);
+      if (!Number.isFinite(amount)) return;
+      read++;
+      var currency = (cell.dataset.readCurrency || '').toUpperCase();
+      if (/^[A-Z]{3}$/.test(currency)) sums.set(currency, (sums.get(currency) || 0) + amount);
+      else unknown.push(amapMoney(amount, '') + ' (' + account + ')');
+    });
+    var values = Array.from(sums.keys()).sort().map(function(cur) { return amapMoney(sums.get(cur), cur); }).concat(unknown);
+    var target = summary.querySelector('.amap-live-summary-values');
+    target.replaceChildren();
+    (values.length ? values : ['—']).forEach(function(value, i) {
+      if (i) target.appendChild(document.createTextNode(' · '));
+      var bold = document.createElement('b');
+      bold.textContent = value;
+      target.appendChild(bold);
+    });
+    summary.querySelector('.amap-live-summary-count').textContent = read + '/' + seen.size + ' read';
+  });
+}
+
 function amapApplyReading(account, s) {
   document.querySelectorAll('.amap-live').forEach(function (cell) {
     if (cell.dataset.account !== account) return;
     var row = cell.closest('tr');
     var btn = row.querySelector('.amap-read');
     cell.dataset.running = s.state === 'running' ? '1' : '0';
+    cell.dataset.readState = s.state || '';
+    cell.dataset.readSpend = s.spend == null ? '' : String(s.spend);
+    cell.dataset.readCurrency = s.currency || '';
     if (s.status) {
       var status = row.querySelector('.amap-status');
       status.innerHTML = '<span></span>';
@@ -4496,6 +4535,7 @@ function amapApplyReading(account, s) {
     cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how;
     btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read'; btn.title = 'Read again';
   });
+  amapUpdateCountrySummaries();
 }
 
 function amapPollSpend(account, cell, btn, tries, per) {
