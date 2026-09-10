@@ -6184,6 +6184,45 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
   };
 
+  // Уходя с поля, доводим выбор до конца.
+  //
+  // Скрытое поле с интересами заполнялось ТОЛЬКО кликом мышью по строке
+  // списка. Напечатал код, ушёл с поля — имя кампании собиралось из
+  // напечатанного текста и выглядело правильным, а интересы оставались
+  // пустыми. 10 сентября обе кампании ушли в черновик без детального
+  // таргетинга: в телеметрии `targeting` записан пропуском со словами «в
+  // черновике нет интересов», хотя в имени стояло `Trading` и `FX`.
+  //
+  // Совпадение ищется точное — по коду или по подписи. Угадывать, что имел
+  // в виду человек, здесь нельзя: соседние коды отличаются одной буквой, и
+  // подстановка «похожего» означала бы чужой таргетинг в живой кампании.
+  window.cbTargetingCommit = function(input) {
+    var wrap = input.closest('.cb-targeting-wrap');
+    if (!wrap) return false;
+    var hidden = wrap.querySelector('.cb-targeting-hidden');
+    var hint   = wrap.querySelector('.cb-targeting-hint');
+    var typed  = (input.value || '').trim();
+    if (!typed) { if (hidden) hidden.value = ''; return false; }
+    if (hidden && hidden.value) return true;   // уже выбрано мышью
+
+    var targets = (REF && REF.targetings) ? REF.targetings : [];
+    var q = typed.toLowerCase();
+    var hit = targets.filter(function(t) {
+      return (t.code || '').toLowerCase() === q || (t.label || '').toLowerCase() === q;
+    });
+    if (hit.length === 1) {
+      input.value = hit[0].code;
+      if (hidden) hidden.value = hit[0].fb_interest || '';
+      if (hint)   hint.textContent = hit[0].fb_interest || '';
+      var slot = wrap.closest('.cb-slot');
+      if (slot) cbUpdateName(slot);
+      return true;
+    }
+    // Не совпало — поле остаётся помеченным, и публикация об этом скажет.
+    if (hidden) hidden.value = '';
+    return false;
+  };
+
   // Close targeting dropdown on blur
   document.addEventListener('focusout', function(e) {
     var input = e.target;
@@ -6191,6 +6230,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     setTimeout(function() {
       var wrap = input.closest('.cb-targeting-wrap');
       if (wrap) { var dd = wrap.querySelector('.cb-sel-dropdown'); if (dd) dd.hidden = true; }
+      cbTargetingCommit(input);
+      var slot = input.closest('.cb-slot');
+      if (slot && typeof refreshReviewMarkers === 'function') refreshReviewMarkers(slot);
     }, 150);
   });
 
@@ -8006,6 +8048,21 @@ window.cbPublish = function(form) {
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)</span>';
 
+  // Таргетинг, набранный руками и не доведённый до выбора, — это кампания
+  // без детального таргетинга. Имя при этом выглядит правильным: оно
+  // строится из напечатанного текста, а интересы живут в скрытом поле.
+  // 10 сентября так ушли в черновик обе кампании: в имени `Trading` и `FX`,
+  // в телеметрии `targeting` пропущен со словами «в черновике нет
+  // интересов». Молчать об этом нельзя — на экране всё выглядело собранным.
+  var lostTargeting = [];
+  form.querySelectorAll('.cb-targeting-wrap').forEach(function(wrap) {
+    var input  = wrap.querySelector('.cb-targeting-search');
+    var hidden = wrap.querySelector('.cb-targeting-hidden');
+    if (input && typeof cbTargetingCommit === 'function') cbTargetingCommit(input);
+    var typed = input ? (input.value || '').trim() : '';
+    if (typed && !(hidden && hidden.value)) lostTargeting.push(typed);
+  });
+
   // Предупреждение идёт первым блоком: его читают, пока смотрят, что
   // собирается, — а не после того, как уже нажали.
   var warn = window.cbTrackingWarning(form);
@@ -8016,9 +8073,17 @@ window.cbPublish = function(form) {
       + bodyHtml;
   }
 
+  if (lostTargeting.length) {
+    var names = lostTargeting.map(aclEscHtml).join(', ');
+    bodyHtml = '<div class="cb-warn-block">⚠ Таргетинг не выбран: <b>' + names + '</b>'
+      + '<br><span style="opacity:.75">Набранное не совпало ни с одним кодом. Кампания уйдёт '
+      + 'без детального таргетинга, а имя всё равно будет с этим словом — выберите строку из списка.</span></div>'
+      + bodyHtml;
+  }
+
   _safeConfirm('Build this campaign as a draft?', bodyHtml, function() {
     _doCbPublish(form);
-  }, { confirmLabel: warn ? 'Собрать с предупреждением' : 'Publish → draft' });
+  }, { confirmLabel: (warn || lostTargeting.length) ? 'Собрать с предупреждением' : 'Publish → draft' });
 };
 
 function _doCbPublish(form) {
