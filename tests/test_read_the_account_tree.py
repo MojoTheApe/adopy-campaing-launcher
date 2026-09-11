@@ -5,16 +5,16 @@
 на что: в книге нет id объектов Meta, она отстаёт на сутки, и столбца on/off
 в ней нет вовсе. Всё три есть на экране, который чтение уже открывает.
 
-Разбор таблицы проверяется на **настоящем браузере**: JS-блок — это код, и
-подделка возвращаемого значения проверяла бы подделку. Разметка здесь
-синтетическая и повторяет устройство грида Ads Manager (role=table / row /
-columnheader / cell), а не его точные классы — классы Meta меняет, устройство
-держится.
+Разметка здесь **снята с живого аккаунта** 11.09 (KLD_BFL_X84), а не
+придумана. Первая версия этих проверок была придумана — искала `role="row"` и
+`role="cell"`, — и живой прогон показал, что у грида Ads Manager размечен
+ролями только заголовок: пятнадцать `columnheader` и ноль `role="cell"`, а
+тело лежит под `role="presentation"`. Проверки при этом были зелёными: они
+подтверждали ту же выдумку, из которой вырос разбор.
 
-Чего эти проверки **не** доказывают: что у настоящей строки Ads Manager id
-лежит именно в атрибуте. Приём — догадка до первого живого прогона, и поэтому
-разбор возвращает `id_from`: первое же чтение скажет, откуда число взялось,
-вместо того чтобы молча вернуть пустые id.
+Поэтому разбор идёт по `data-surface` — собственной разметке Meta для её же
+логов, — и гоняется на **настоящем браузере**: JS-блок это код, и подделка
+возвращаемого значения проверяла бы подделку.
 """
 from __future__ import annotations
 
@@ -68,22 +68,44 @@ def browser():
         b.close()
 
 
-def _grid(headers: list[str], rows: list[list[str]], *, row_attrs: list[str] | None = None,
-          switches: list[str | None] | None = None) -> str:
-    """Синтетический грид Ads Manager: роли настоящие, классы неважны."""
-    head = "".join(f'<div role="columnheader">{h}</div>' for h in headers)
-    out = [f'<div role="table"><div role="row">{head}</div>']
-    for i, cells in enumerate(rows):
-        attr = (row_attrs or [""] * len(rows))[i]
-        sw = (switches or ["true"] * len(rows))[i]
-        body = "".join(f'<div role="cell">{c}</div>' for c in cells)
-        toggle = (
-            f'<div role="switch" aria-checked="{sw}" aria-label="Off/On"></div>'
-            if sw is not None else ""
-        )
-        out.append(f'<div role="row" {attr}>{toggle}{body}</div>')
-    out.append("</div>")
-    return "".join(out)
+def _row(rid: str, kind: str, name: str, delivery: str, toggle: str | None) -> str:
+    """Строка в разметке Meta: `data-surface` несёт id строки и назначение ячейки.
+
+    Снято с живого аккаунта 11.09 (KLD_BFL_X84). Одна и та же разметка висит
+    на нескольких вложенных узлах, и внутренние копии часто пустые — здесь это
+    воспроизведено, потому что именно на этом разбор и мог бы споткнуться.
+    """
+    base = f"/am/table/table_row:{rid}unit/table_cell:"
+    sw = (
+        f'<div data-surface="{base}forObjectType(toggle,{kind})">'
+        f'<input type="checkbox" role="switch" aria-checked="{toggle}" aria-label="On/off"></div>'
+        if toggle is not None else ""
+    )
+    return (
+        f'<div data-surface="/am/table/table_row:{rid}unit">'
+        f'<div data-surface="{base}row_selector"><input type="checkbox" aria-checked="false"></div>'
+        f'{sw}'
+        f'<span data-surface="{base}forObjectType(name,{kind})">{name}'
+        f'<span data-surface="{base}forObjectType(name,{kind})"></span></span>'
+        f'<span data-surface="{base}forObjectType(delivery,{kind})">{delivery}</span>'
+        f'<span data-surface="{base}spend">$412.02</span>'
+        f"</div>"
+    )
+
+
+def _grid(rows: list[str]) -> str:
+    """Грид Ads Manager: заголовки в `role=table`, тело — под `presentation`.
+
+    Ровно то, что сломало первую версию: пятнадцать `columnheader` и **ноль**
+    `role="cell"`. Разбор по ролям находил заголовки и ноль строк, то есть
+    возвращал пустоту с видом работающего.
+    """
+    head = "".join(
+        f'<div role="columnheader">{h}</div>'
+        for h in ("Off / On", "Ad set", "Delivery", "Amount spent")
+    )
+    body = "".join(f'<div role="presentation">{r}</div>' for r in rows)
+    return f'<div role="table"><div role="row">{head}</div>{body}</div>'
 
 
 @pytest.fixture
@@ -93,81 +115,83 @@ def page(browser):
     p.close()
 
 
-def test_a_row_gives_up_its_name_state_and_delivery(page):
-    page.set_content(_grid(
-        ["Ad set name", "Delivery", "Amount spent"],
-        [["KW_lookalike_25-45", "Active", "$120.40"]],
-        row_attrs=['data-testid="row_120210000000123456"'],
-    ))
+def test_a_row_gives_up_its_id_name_state_and_delivery(page):
+    page.set_content(_grid([
+        _row("120250178859040703", "CAMPAIGN", "SA_ARM_iOS_IMG_Reading_30_6.9", "Active", "true"),
+    ]))
     rows, how, err = sp.read_level(page, "adset")
     assert not err, err
-    assert how == "header-mapped"
+    assert how == "data-surface"
     (r,) = rows
-    assert r.name == "KW_lookalike_25-45"
-    assert r.delivery == "Active", "колонка Delivery должна приходить дословно"
-    assert r.switch == "on"
-    assert r.id == "120210000000123456"
-    assert r.id_from == "data-testid", "непонятно, откуда взят id — чинить будет нечего"
-
-
-def test_the_columns_are_found_by_their_headers_not_by_their_order(page):
-    """Человек переставляет столбцы сам. Жёсткий индекс читал бы спенд как имя."""
-    page.set_content(_grid(
-        ["Amount spent", "Delivery", "Ad set name"],
-        [["$120.40", "Active", "KW_lookalike_25-45"]],
-        row_attrs=['data-testid="120210000000123456"'],
-    ))
-    (r,), _, err = sp.read_level(page, "adset")
-    assert not err, err
-    assert r.name == "KW_lookalike_25-45"
+    assert r.id == "120250178859040703"
+    assert r.name == "SA_ARM_iOS_IMG_Reading_30_6.9"
     assert r.delivery == "Active"
+    assert r.switch == "on"
+    assert r.switch_label == "On/off"
+    assert r.id_from == "data-surface"
 
 
-def test_an_ad_is_not_given_its_parents_name(page):
-    """Колонка «Ad set name» бывает показана и на странице объявлений.
+def test_the_totals_row_is_not_an_object(page):
+    """`table_row:-1` размечена как все, но переключать там нечего."""
+    page.set_content(_grid([
+        _row("120250178859040703", "CAMPAIGN", "SA_ARM", "Active", "true"),
+        _row("-1", "CAMPAIGN", "Results from 6 ad sets", "", None),
+    ]))
+    rows, _, err = sp.read_level(page, "adset")
+    assert not err, err
+    assert [r.id for r in rows] == ["120250178859040703"]
 
-    Общий список заголовков находил её раньше «Ad name», и в имени объявления
-    оказывалось имя его родителя — то есть все объявления одного ad set'а
-    выглядели бы одинаково, а переключать пришлось бы наугад.
+
+def test_the_level_is_checked_by_what_meta_says_about_the_rows(page):
+    """Словарь Meta здесь легаси: на странице ad set'ов строки помечены
+    `CAMPAIGN`, на странице объявлений — `ADGROUP`. Так назывались эти уровни
+    в старом Ads API.
+
+    Прочитать `forObjectType(toggle,CAMPAIGN)` буквально значит ошибиться на
+    целый уровень — а это разница между «остановить один ad set» и «погасить
+    всё под кампанией».
     """
-    page.set_content(_grid(
-        ["Ad set name", "Ad name", "Delivery"],
-        [["KW_lookalike_25-45", "ad_2_ar_story", "Active"]],
-        row_attrs=['data-testid="120210000000777666"'],
-    ))
+    assert sp._LEVEL_KIND == {"adset": "CAMPAIGN", "ad": "ADGROUP"}
+    page.set_content(_grid([_row("1202501788590407", "ADGROUP", "ad_2_ar", "Active", "true")]))
+    rows, _, err = sp.read_level(page, "adset")
+    assert rows == [], "объявления приняты за ad set'ы"
+    assert "ADGROUP" in err and "CAMPAIGN" in err
+
+
+def test_the_ad_level_wants_adgroup(page):
+    page.set_content(_grid([_row("1202501788509507", "ADGROUP", "1962_12- Officialy", "Active", "true")]))
     (r,), _, err = sp.read_level(page, "ad")
     assert not err, err
-    assert r.name == "ad_2_ar_story", "объявлению досталось имя его ad set'а"
-    assert r.parent_name == "KW_lookalike_25-45", "чей это объект — не записано"
+    assert r.level == "ad" and r.name == "1962_12- Officialy"
 
 
-def test_an_ad_set_row_has_no_parent_to_report(page):
-    """У ad set'а родитель — кампания, и её этот список не показывает."""
-    page.set_content(_grid(
-        ["Ad set name", "Delivery"], [["KW_broad", "Active"]],
-        row_attrs=['data-testid="120210000000555444"'],
-    ))
+def test_rows_without_a_stated_kind_are_refused(page):
+    """«Не сказано, что это» — не то же самое, что «это то, что мы просили»."""
+    page.set_content(
+        '<div role="table"><div role="presentation">'
+        '<div data-surface="/am/table/table_row:120250178859040703unit/table_cell:mystery">x</div>'
+        "</div></div>"
+    )
+    rows, _, err = sp.read_level(page, "adset")
+    assert rows == [] and "что это за объекты" in err
+
+
+def test_svg_paths_are_not_mistaken_for_ids(page):
+    """Первая версия искала любое число в 15-18 цифр в атрибутах, и первыми
+    находились `<path d="M 25.19238815542512 ...">`."""
+    page.set_content(
+        '<div role="table">'
+        '<svg><path d="M 25.19238815542512 25.192388155425117"></path></svg>'
+        '<div role="presentation">'
+        + _row("120250178859040703", "CAMPAIGN", "SA_ARM", "Active", "true")
+        + "</div></div>"
+    )
     (r,), _, _ = sp.read_level(page, "adset")
-    assert r.name == "KW_broad"
-    assert r.parent_name == ""
-
-
-def test_a_missing_parent_column_is_emptiness_not_a_claim(page):
-    """Колонку могли просто не показать. «Родителя нет» — другое утверждение."""
-    page.set_content(_grid(
-        ["Ad name", "Delivery"], [["ad_2_ar_story", "Active"]],
-        row_attrs=['data-testid="120210000000333222"'],
-    ))
-    (r,), _, _ = sp.read_level(page, "ad")
-    assert r.name == "ad_2_ar_story"
-    assert r.parent_name == ""
+    assert r.id == "120250178859040703"
 
 
 def test_a_switched_off_row_says_off(page):
-    page.set_content(_grid(
-        ["Ad name", "Delivery"], [["ad_2_ar", "Off"]],
-        row_attrs=['id="ad_120210000000999888"'], switches=["false"],
-    ))
+    page.set_content(_grid([_row("120250178850950703", "ADGROUP", "ad_2_ar", "Off", "false")]))
     (r,), _, _ = sp.read_level(page, "ad")
     assert r.switch == "off"
     assert r.level == "ad"
@@ -178,10 +202,9 @@ def test_a_row_without_a_switch_says_unknown_not_off(page):
 
     Спутать их значит показать человеку выключенным то, что тратит деньги.
     """
-    page.set_content(_grid(
-        ["Ad set name", "Delivery"], [["KW_broad", "In review"]],
-        row_attrs=['data-x="120210000000111222"'], switches=[None],
-    ))
+    page.set_content(_grid([
+        _row("120250178859040703", "CAMPAIGN", "KW_broad", "In review", None),
+    ]))
     (r,), _, _ = sp.read_level(page, "adset")
     assert r.switch == "unknown"
     assert r.delivery == "In review", "состояние Meta словами, а не сплющенное в булев"
@@ -193,15 +216,20 @@ def test_a_page_without_a_grid_is_an_error_not_an_empty_answer(page):
     rows, how, err = sp.read_level(page, "adset")
     assert rows == []
     assert err, "страница без таблицы прошла как успешно прочитанная"
-    assert how == "no-grid"
+    assert how == "no-table"
 
 
-def test_a_grid_with_only_a_header_names_what_it_saw(page):
-    """Чтобы по отказу было видно, на что вообще смотрели."""
-    page.set_content(_grid(["Ad set name", "Delivery"], []))
-    rows, _, err = sp.read_level(page, "adset")
+def test_a_grid_with_a_header_and_no_rows_is_an_error_too(page):
+    """Именно так выглядела поломка первой версии: заголовки нашлись, строк нет.
+
+    Разбор по ролям возвращал пустоту с видом работающего, и понять это можно
+    было только по тому, что объектов ноль.
+    """
+    page.set_content(_grid([]))
+    rows, how, err = sp.read_level(page, "adset")
     assert rows == []
-    assert "ad set name" in err.lower(), f"в отказе не названы колонки: {err}"
+    assert how == "no-row-surfaces"
+    assert err
 
 
 def test_an_unknown_level_is_refused_before_the_page_is_touched():
