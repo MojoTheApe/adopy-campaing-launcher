@@ -432,11 +432,43 @@ python scripts/acl_board.py --render
         other.
   - [x] `acl-108c` Pull yesterday's spend off a live test account #merged
         The whole point. Until this happens `acl-108` is code, not a route.
-  - [ ] `acl-108e` A public "attach, never relaunch" in the RPA track #next @rpa
+  - [ ] `acl-108e` A public "attach, never relaunch" in the RPA track #later @rpa needs:acl-108d
         Reading calls `_try_attach_existing` and `_profile_process_running`
         directly — private methods of another track — because there is no
         public way to say "use the window that is open, and if there is none,
         stop". Publishing wants the opposite and gets it; reading needs this.
+        **The dangerous half is closed** (11 September, `e6be77e`): a relaunch
+        would log the account out and can lose its proxy, and until then that
+        rule lived in a comment and two `strict_profile=True` arguments. A test
+        now records every call reading makes to the provider and names any new
+        one; a second test keeps every reading path going through the single
+        door. What remains is the track boundary itself, and moving reading
+        (`acl-108d`) dissolves it — no public wrapper needed.
+  - [x] `acl-108j` Gather the reading's Meta selectors in one place #review @dashboard
+        Groundwork for `acl-108d`, and useful on its own. Meta moves controls
+        for everyone at once: on 10 September it rewrote wording and eight
+        publishing steps fell over — reading looks at the same screens and
+        breaks the same way. Selectors scattered through the file mean fixing
+        them one at a time, found by search.
+        Seven names now sit above the first function, with the two JavaScript
+        blocks beside them. A test refuses any selector literal inside a
+        function, so the block cannot quietly spread back — it caught one the
+        eye had missed (`_wait_for_grid`).
+        `country_split.py` is deliberately untouched: the other session is
+        mid-work there (`acl-357`, `c069838`). Consolidating a file someone is
+        rewriting is how two people produce one bug twice.
+        Branch `feature/reading-selectors-in-one-place`.
+  - [ ] `acl-108k` The same for `country_split.py` #blocked @dashboard needs:acl-357
+        Waits on the other session's Ads Reporting work reaching master
+        (`acl-357`, `c069838`). Gathering a file while someone rewrites it is
+        how two people produce one bug twice — that already happened once on
+        11 September with the language field.
+        Most of it is already tidy: three named JavaScript constants
+        (`_GRAB_CELLS_JS`, `_CLICK_LABEL_JS`, `_CHECKED_JS`). What is left is
+        one query written inline at `_shown_period_text` — a whole page scan
+        and a date pattern spelled into a Python string, escapes and all.
+        Move those beside the rest and the file matches `account_spend.py`;
+        the guard from `acl-108j` can then cover it too.
   - [ ] `acl-108d` Move the Ads Manager reading into the RPA track
         The selectors for Meta's own screens belong beside the other ones, in
         `src/fb_ads_rpa`, owned by the session that fixes them when Meta moves
@@ -497,6 +529,23 @@ python scripts/acl_board.py --render
       still a person asking (`никогда не поллить аккаунты` rule).
       To settle first: one global button, per-country buttons, or both — a
       country tab already shows its own accounts (`acl-102d`).
+- [x] `acl-710` Connect an account where the country has none #review @dashboard
+      A country shows up on the map because the workbook has money for it,
+      while nothing is linked to it yet — Guatemala, $1,894 spent, zero
+      accounts. Opening it gave a sentence, not a control: "connect the
+      account from the country's Accounts section, or add the country above
+      and place it." The person is already looking at the country and gets
+      sent to look for another place.
+      Nothing stood in the way: linking an account **creates** the country —
+      `account_links.link` writes a row and the country starts existing. So
+      the same form works, addressed by the country's name instead of a key
+      it does not have yet.
+      The form is now one piece (`_account_map_add.html`) used by both — a
+      country from the map and a country that is only a number in the
+      workbook. Two copies would have drifted: they get edited at different
+      times for different reasons.
+      Branch `feature/connect-empty-country`, based on `acl-356` iteration 2
+      (`20375c8`) because that is what the dashboard serves today.
 
 ### Open/close ads/ad sets
 
@@ -836,8 +885,13 @@ python scripts/acl_board.py --render
       step's outcome. Nothing is lost: if the step does fail, every attempt's
       stage lands beside the failure. Confirmed live 20:19-20:26 — not one such
       row. Merged as `38c84aa`.
-- [ ] `acl-706` Two more clean runs before we trust the flow #next @rpa needs:acl-704
-      One clean run is not repeatability. Counter: **1 of 3**.
+- [ ] `acl-706` Two more clean runs before we trust the flow #blocked @rpa needs:acl-704
+      One clean run is not repeatability. Counter: **1 of 3**, and stuck there
+      for a reason outside the code: the proxy keeps dropping. Two attempts on
+      10 September lost forty minutes each to an upload whose progress bar
+      never moved, and a page reload during one of them landed on
+      `ERR_SSL_PROTOCOL_ERROR` — the connection, not Meta, not the file size.
+      Running again before the proxy is replaced buys nothing.
       First one landed 10 September, 12:04-12:26 — both campaigns, 76 steps, no
       failures, both `ad_level_summary` = ok, and on **video** creatives, which
       had produced ads with no media all morning. Nothing before it that day
