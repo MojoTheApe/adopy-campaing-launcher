@@ -1953,6 +1953,11 @@
     }
     .amap-tree-num.spend { color: inherit; }
     .amap-tree-err { color: var(--danger); font-size: 0.75rem; padding-top: 0.3rem; }
+    /* Оговорка, а не отказ: строки настоящие, просто их меньше, чем денег. */
+    .amap-tree-note {
+      color: var(--warn, var(--muted)); font-size: 0.73rem;
+      padding-top: 0.4rem; line-height: 1.4;
+    }
     .amap-btn {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -4645,6 +4650,52 @@ function amapTreeLine(o) {
   return line;
 }
 
+/* ── Покрывают ли строки спенд аккаунта ────────────────────────────────
+   На живом аккаунте 12.09 пять ad set'ов сложились в итог копейка в копейку
+   ($2 117.46), а шесть объявлений дали $661.57 из тех же денег. Прокрутка
+   новых строк не добавила — это весь список, который отдаёт страница.
+
+   Почему так, неизвестно: на странице объявлений есть переключатель вида
+   (All ads / Actions / Had delivery / Active ads), и какой из них выбран, в
+   разметке не выражено вовсе — ни `aria-selected`, ни `aria-current`. Либо
+   действует вид, скрывающий часть строк, либо спенд пришёлся на удалённые
+   объявления, которых нет ни в одном виде.
+
+   Пока это не выяснено, молчать нельзя: человек решает по этим строкам, что
+   остановить, и «шесть объявлений» выглядят как весь аккаунт. Поэтому суммы
+   разбираются — только чтобы сравнить, не для показа, — и когда строки
+   заметно не покрывают итог, это сказано словами.
+
+   Не разобралось — молчим. Неверная оговорка хуже отсутствующей. */
+function amapMoneyIn(text) {
+  if (!text) return null;
+  var m = String(text).match(/-?\d[\d,\s]*(?:\.\d+)?/);
+  if (!m) return null;
+  var n = parseFloat(m[0].replace(/[,\s]/g, ''));
+  return isFinite(n) ? n : null;
+}
+
+/* Порог в двадцатую долю: расхождение в копейки бывает от округления самой
+   Meta, и жаловаться на него значит приучить не читать оговорку. */
+var AMAP_COVER_GAP = 0.05;
+
+function amapCoverage(objects, level, total) {
+  if (typeof total !== 'number' || !(total > 0)) return null;
+  var rows = objects.filter(function (o) { return (o.level === 'ad') === (level === 'ad'); });
+  if (!rows.length) return null;
+  var sum = 0, seen = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var raw = rows[i].spend;
+    if (!raw) continue;                       // у черновика спенда нет — это не пробел
+    var v = amapMoneyIn(raw);
+    if (v === null) return null;              // не разобрали — ничего не утверждаем
+    sum += v; seen++;
+  }
+  if (!seen) return null;
+  if (total - sum < total * AMAP_COVER_GAP) return null;
+  return {sum: sum, total: total, count: rows.length};
+}
+
 /* Дерево живёт под той же стрелкой, что и остальное про аккаунт, и свёрнуто.
    Раскрытым по умолчанию оно давало полтора экрана строк под каждым читанным
    аккаунтом, и карта переставала читаться — владелец назвал это «странно
@@ -4710,6 +4761,24 @@ function amapPaintTree(row, s) {
   box.appendChild(head);
 
   objects.forEach(function (o) { box.appendChild(amapTreeLine(o)); });
+
+  /* Оговорка идёт по каждому уровню отдельно: ad set'ы могут сойтись копейка
+     в копейку, а объявления нет — так и было на живом аккаунте. Общая фраза
+     про «строки» заставила бы усомниться и в тех, что сходятся. */
+  [['adset', 'ad sets'], ['ad', 'ads']].forEach(function (pair) {
+    var gap = amapCoverage(objects, pair[0], s.spend);
+    if (!gap) return;
+    var note = document.createElement('div');
+    note.className = 'amap-tree-note';
+    note.textContent = gap.count + ' ' + pair[1] + ' here add up to '
+      + amapMoney(gap.sum, s.currency) + ' of the account’s '
+      + amapMoney(gap.total, s.currency)
+      + ' — the rest was spent by something this list does not show.';
+    note.title = 'Deleted items keep their spend in the account total, and the '
+      + 'list has a view switcher whose state Meta does not put in the markup. '
+      + 'Decide by the rows that add up.';
+    box.appendChild(note);
+  });
 
   if (s.objects_error) {
     var err = document.createElement('div');

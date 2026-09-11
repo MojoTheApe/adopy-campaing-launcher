@@ -33,9 +33,16 @@ def _script() -> str:
     tail = "row.classList.toggle('amap-open', !block.hidden);\n  });\n}"
     end = src.index(tail, start) + len(tail)
     block = src[start:end]
-    for needed in ("amapPaintTree", "amapEnsureCaret"):
+    for needed in ("amapPaintTree", "amapEnsureCaret", "amapTreeLine", "amapCoverage"):
         assert needed in block, f"срез не захватил {needed}"
     return block
+
+
+def _money() -> str:
+    """`amapMoney` определён выше по файлу и нужен оговорке — берём и его."""
+    src = REPORT.read_text(encoding="utf-8")
+    start = src.index("function amapMoney(spend, currency) {")
+    return src[start: src.index("\nfunction ", start + 10)]
 
 
 @pytest.fixture(scope="module")
@@ -61,15 +68,23 @@ def page(browser):
         '<tr id="after"><td>next account</td></tr>'
         "</tbody></table>"
     )
-    p.add_script_tag(content=_script())
+    p.add_script_tag(content=_money() + "\n" + _script())
     yield p
     p.close()
 
 
-def _paint(page, objects, *, error="", finished="2026-09-11 23:07:51"):
+def _paint(page, objects, *, error="", finished="2026-09-11 23:07:51",
+           spend=None, currency="USD"):
     page.evaluate(
         "(s) => amapPaintTree(document.getElementById('acc'), s)",
-        {"objects": objects, "objects_error": error, "finished_at": finished},
+        {"objects": objects, "objects_error": error, "finished_at": finished,
+         "spend": spend, "currency": currency},
+    )
+
+
+def _note(page):
+    return page.evaluate(
+        "() => Array.from(document.querySelectorAll('.amap-tree-note')).map(n => n.textContent)"
     )
 
 
@@ -326,3 +341,71 @@ def test_the_only_listener_is_the_one_that_opens_it():
     block = _script()
     assert block.count("addEventListener") == 1
     assert "caret.addEventListener('click'" in block
+
+
+# ── покрывают ли строки спенд аккаунта ────────────────────────────────────
+#
+# На живом аккаунте 12.09 пять ad set'ов сложились в итог копейка в копейку
+# ($2 117.46), а шесть объявлений дали $661.57 из тех же денег. Прокрутка
+# новых строк не добавила — это весь список, который отдаёт страница.
+#
+# Молчать об этом нельзя: человек решает по этим строкам, что остановить, а
+# «шесть объявлений» выглядят как весь аккаунт.
+
+LIVE_SETS = [
+    dict(ADSET, name="a", spend="$678.45"), dict(ADSET, name="b", spend="$676.99"),
+    dict(ADSET, name="c", spend="$685.79"), dict(ADSET, name="d", spend="$34.26"),
+    dict(ADSET, name="e", spend="$41.97"),
+]
+LIVE_ADS = [dict(AD, name="ad%d" % i, spend=v) for i, v in enumerate(
+    ["$422.22", "$149.00", "$18.17", "$9.35", "$34.40", "$28.43"])]
+
+
+def test_the_gap_is_said_out_loud(page):
+    _paint(page, LIVE_SETS + LIVE_ADS, spend=2117.46)
+    notes = _note(page)
+    assert len(notes) == 1, f"оговорка не одна: {notes}"
+    assert "6 ads here add up to USD 661.57" in notes[0]
+    assert "USD 2,117.46" in notes[0], "не с чем сравнить"
+
+
+def test_the_level_that_adds_up_is_not_doubted(page):
+    """Общая фраза про «строки» заставила бы усомниться и в тех, что сходятся."""
+    _paint(page, LIVE_SETS + LIVE_ADS, spend=2117.46)
+    assert "ad sets" not in _note(page)[0]
+
+
+def test_rows_that_cover_the_total_say_nothing(page):
+    _paint(page, LIVE_SETS, spend=2117.46)
+    assert _note(page) == []
+
+
+def test_rounding_does_not_trigger_it(page):
+    """Расхождение в копейки бывает от округления самой Meta. Жаловаться на
+    него значит приучить не читать оговорку."""
+    _paint(page, LIVE_SETS, spend=2117.50)
+    assert _note(page) == []
+
+
+def test_unparseable_money_stays_silent(page):
+    """Неверная оговорка хуже отсутствующей."""
+    _paint(page, [dict(ADSET, spend="about a lot")], spend=2117.46)
+    assert _note(page) == []
+
+
+def test_no_account_total_means_no_claim(page):
+    _paint(page, LIVE_ADS, spend=None)
+    assert _note(page) == []
+
+
+def test_drafts_without_spend_are_not_a_shortfall(page):
+    """У черновика спенда ещё нет — это не пробел в покрытии."""
+    _paint(page, [dict(ADSET, spend="$100.00"), dict(ADSET, spend="", delivery="In draft")],
+           spend=100.00)
+    assert _note(page) == []
+
+
+def test_the_note_explains_itself(page):
+    _paint(page, LIVE_SETS + LIVE_ADS, spend=2117.46)
+    title = page.evaluate("() => document.querySelector('.amap-tree-note').title")
+    assert "Deleted items" in title and "view switcher" in title
