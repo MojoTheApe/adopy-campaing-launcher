@@ -89,6 +89,8 @@ def _row(rid: str, kind: str, name: str, delivery: str, toggle: str | None) -> s
         f'<span data-surface="{base}forObjectType(name,{kind})"></span></span>'
         f'<span data-surface="{base}forObjectType(delivery,{kind})">{delivery}</span>'
         f'<span data-surface="{base}spend">$412.02</span>'
+        f'<span data-surface="{base}forAttributionWindow(results,default)">18 Leads (Form)</span>'
+        f'<span data-surface="{base}forAttributionWindow(cost_per_result,default)">$22.89 Per Lead (Form)</span>'
         f"</div>"
     )
 
@@ -129,6 +131,33 @@ def test_a_row_gives_up_its_id_name_state_and_delivery(page):
     assert r.switch == "on"
     assert r.switch_label == "On/off"
     assert r.id_from == "data-surface"
+
+
+def test_the_numbers_of_a_row_come_back_as_meta_wrote_them(page):
+    """Не разбираем в числа намеренно: «$22.89 Per Lead (Form)» несёт и сумму,
+    и за что она, а `22.89` — только половину. Считать по ним мы ничего не
+    собираемся; они нужны, чтобы человек видел, что именно останавливает.
+    """
+    page.set_content(_grid([_row("120250178859040703", "CAMPAIGN", "SA_ARM", "Active", "true")]))
+    (r,), _, err = sp.read_level(page, "adset")
+    assert not err, err
+    assert r.spend == "$412.02"
+    assert r.results == "18 Leads (Form)"
+    assert r.cost_per_result == "$22.89 Per Lead (Form)"
+
+
+def test_a_row_without_numbers_says_nothing_rather_than_zero(page):
+    """Черновик ещё ничего не потратил. «$0» — утверждение, которого нет."""
+    base = "/am/table/table_row:120250178859040703unit/table_cell:"
+    page.set_content(
+        '<div role="table"><div role="presentation">'
+        f'<div data-surface="/am/table/table_row:120250178859040703unit">'
+        f'<span data-surface="{base}forObjectType(name,CAMPAIGN)">SA_draft</span>'
+        f'<span data-surface="{base}forObjectType(delivery,CAMPAIGN)">In draft</span>'
+        "</div></div></div>"
+    )
+    (r,), _, _ = sp.read_level(page, "adset")
+    assert r.spend == "" and r.results == "" and r.cost_per_result == ""
 
 
 def test_the_totals_row_is_not_an_object(page):

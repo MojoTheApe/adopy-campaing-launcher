@@ -1242,6 +1242,15 @@ class AdObject:
     switch: str = "unknown"   # on | off | unknown — положение тумблера
     switch_label: str = ""    # подпись тумблера словами Meta
     delivery: str = ""        # колонка Delivery, дословно
+
+    #: Числа строки — теми же словами, какими их написала Meta. Не разбираем в
+    #: числа намеренно: «$22.89 Per Lead (Form)» несёт и сумму, и за что она,
+    #: а `22.89` — только половину. Считать по ним мы ничего не собираемся;
+    #: они нужны, чтобы человек видел, что именно останавливает.
+    spend: str = ""
+    results: str = ""
+    cost_per_result: str = ""
+
     id_from: str = ""         # откуда взят id — чтобы знать, что сломалось
 
     def to_dict(self) -> dict[str, Any]:
@@ -1312,7 +1321,7 @@ _READ_TREE_JS = r"""
     let r = rows.get(id);
     if (!r) {
       r = {id: id, name: '', delivery: '', switch: 'unknown', switch_label: '',
-           id_from: 'data-surface'};
+           id_from: 'data-surface', spend: '', results: '', cost_per_result: ''};
       rows.set(id, r);
     }
     const k = cell.match(KIND);
@@ -1334,6 +1343,15 @@ _READ_TREE_JS = r"""
         if (c === 'true') r.switch = 'on';
         else if (c === 'false') r.switch = 'off';
       }
+    } else if (cell === 'spend') {
+      const txt = norm(el.innerText);
+      if (txt && !r.spend) r.spend = txt;
+    } else if (cell.startsWith('forAttributionWindow(results')) {
+      const txt = norm(el.innerText);
+      if (txt && !r.results) r.results = txt;
+    } else if (cell.startsWith('forAttributionWindow(cost_per_result')) {
+      const txt = norm(el.innerText);
+      if (txt && !r.cost_per_result) r.cost_per_result = txt;
     }
   }
 
@@ -1372,6 +1390,9 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
             switch=str(r.get("switch") or "unknown"),
             switch_label=str(r.get("switch_label") or ""),
             delivery=str(r.get("delivery") or ""),
+            spend=str(r.get("spend") or ""),
+            results=str(r.get("results") or ""),
+            cost_per_result=str(r.get("cost_per_result") or ""),
             id_from=str(r.get("id_from") or ""),
         )
         for r in rows
