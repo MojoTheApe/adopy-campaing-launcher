@@ -417,13 +417,13 @@ def _attach_only(entry, account_label: str):
 
     direct = direct_cls()
     for spelling in _dir_spellings(udd):
-        conn = direct._try_attach_existing(profile_id, spelling, strict_profile=True, new_page=True)
+        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
         if conn is not None:
             return conn
 
     running = False
     try:
-        running = any(direct._profile_process_running(p, profile_id) for p in _dir_spellings(udd))
+        running = any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd))
     except Exception:
         pass
     if running:
@@ -607,12 +607,12 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     if udd is not None:
         direct = direct_cls()
         for spelling in _dir_spellings(udd):
-            attached = direct._try_attach_existing(profile_id, spelling, strict_profile=True)
+            attached = direct.attach_existing_only(profile_id, spelling)
             if attached is not None:
                 attached.close(keep_browser_open=True)
                 return True, "профиль уже открыт автоматизацией — можно читать"
         try:
-            if any(direct._profile_process_running(p, profile_id) for p in _dir_spellings(udd)):
+            if any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd)):
                 return False, (
                     f"{who}: профиль открыт вручную в MLX Desktop. Поднять его "
                     "автоматизацией можно только остановив — а это разлогинивает. "

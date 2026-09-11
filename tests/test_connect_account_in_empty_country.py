@@ -79,10 +79,14 @@ def test_the_dead_end_text_is_gone():
 
 def _render(virtual: bool):
     """Отрисовать карту с одной страной — настоящей или только из книги."""
-    from jinja2 import Environment, FileSystemLoader
+    from jinja2 import FileSystemLoader
 
-    env = Environment(loader=FileSystemLoader(str(TPL)), autoescape=True)
-    env.filters["fmt_usd"] = lambda v: f"${v:,.0f}" if v else "—"
+    # Фильтры берутся у настоящего приложения, а не перечисляются здесь.
+    # Перечисленные отстают: шаблон обзавёлся `fmt_currency`, и проверка
+    # упала с "No filter named" — на своём же двойнике, а не на поломке.
+    from src.web.app import templates
+
+    env = templates.env.overlay(loader=FileSystemLoader(str(TPL)), autoescape=True)
     country = {
         "country": "Guatemala", "key": "" if virtual else "GT", "virtual": virtual,
         "rows": [], "spend": 1894, "deposits": 4, "leads": 82,

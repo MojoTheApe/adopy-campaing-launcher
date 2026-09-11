@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import math
 import os
 import re as _re
 import re
@@ -628,13 +629,25 @@ def _build_account_map_view(
         # НА валюту: KWD и USD в одну цифру не складываются, а «не читали»
         # не равно нулю (acl-356). Пустой live_sums — «никто не смотрел».
         live_sums: dict[str, float] = {}
+        unknown_sums: list[dict] = []
         live_read = 0
         for r in rows:
             lr = live.get(r["account"]) or {}
-            if lr.get("state") == "ok" and lr.get("spend") is not None:
-                live_read += 1
-                cur = str(lr.get("currency") or "?").upper()
-                live_sums[cur] = live_sums.get(cur, 0.0) + float(lr.get("spend") or 0)
+            if lr.get("state") != "ok" or lr.get("spend") is None:
+                continue
+            try:
+                amount = float(lr["spend"])
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(amount):
+                continue
+            live_read += 1
+            cur = str(lr.get("currency") or "").upper()
+            if re.fullmatch(r"[A-Z]{3}", cur):
+                live_sums[cur] = live_sums.get(cur, 0.0) + amount
+            else:
+                # Unknown units cannot be added to one another.
+                unknown_sums.append({"currency": "", "spend": amount, "account": r["account"]})
 
         countries.append({
             # `country` is what the reader sees, `key` is what the store knows.
@@ -650,7 +663,7 @@ def _build_account_map_view(
             "live_read": live_read,
             "live_sums": [
                 {"currency": c, "spend": s} for c, s in sorted(live_sums.items())
-            ],
+            ] + unknown_sums,
         })
 
     # ── Одна таблица вместо двух (решение владельца 10.09, acl-356) ────

@@ -1666,7 +1666,7 @@
       overflow: hidden;
     }
     .amap-country > summary {
-      display: flex; align-items: center; gap: var(--space-md);
+      display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md);
       padding: 0.55rem 0.85rem; cursor: pointer; user-select: none;
       background: var(--bg-subtle); font-weight: 600; font-size: 0.9rem;
     }
@@ -1674,7 +1674,7 @@
     .amap-country > summary::before { content: '▸'; color: var(--muted); font-size: 0.75rem; }
     .amap-country[open] > summary::before { content: '▾'; }
     .amap-sum {
-      margin-left: auto; display: flex; gap: 1.1rem;
+      margin-left: auto; display: flex; flex-wrap: wrap; gap: 1.1rem;
       font-weight: 400; font-size: 0.78rem; color: var(--muted);
     }
     .amap-sum b { color: var(--text); font-weight: 600; }
@@ -4441,6 +4441,7 @@ function amapSpendCell(btn) {
 }
 
 function amapReadSpend(btn) {
+  if (amapReadAllBusy) return;
   var cell = amapSpendCell(btn);
   var account = cell && cell.dataset.account;
   if (!account) return;
@@ -4474,12 +4475,45 @@ function amapMoney(spend, currency) {
     + Number(spend).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
+function amapUpdateCountrySummaries() {
+  document.querySelectorAll('details.amap-country[data-country]').forEach(function(block) {
+    var summary = block.querySelector('.amap-live-summary');
+    if (!summary) return;
+    var seen = new Set(), sums = new Map(), unknown = [], read = 0;
+    block.querySelectorAll('.amap-live').forEach(function(cell) {
+      var account = cell.dataset.account;
+      if (seen.has(account)) return;
+      seen.add(account);
+      if (cell.dataset.readState !== 'ok' || !cell.dataset.readSpend) return;
+      var amount = Number(cell.dataset.readSpend);
+      if (!Number.isFinite(amount)) return;
+      read++;
+      var currency = (cell.dataset.readCurrency || '').toUpperCase();
+      if (/^[A-Z]{3}$/.test(currency)) sums.set(currency, (sums.get(currency) || 0) + amount);
+      else unknown.push(amapMoney(amount, '') + ' (' + account + ')');
+    });
+    var values = Array.from(sums.keys()).sort().map(function(cur) { return amapMoney(sums.get(cur), cur); }).concat(unknown);
+    var target = summary.querySelector('.amap-live-summary-values');
+    target.replaceChildren();
+    (values.length ? values : ['—']).forEach(function(value, i) {
+      if (i) target.appendChild(document.createTextNode(' · '));
+      var bold = document.createElement('b');
+      bold.textContent = value;
+      target.appendChild(bold);
+    });
+    summary.querySelector('.amap-live-summary-count').textContent = read + '/' + seen.size + ' read';
+  });
+}
+
 function amapApplyReading(account, s) {
   document.querySelectorAll('.amap-live').forEach(function (cell) {
     if (cell.dataset.account !== account) return;
     var row = cell.closest('tr');
     var btn = row.querySelector('.amap-read');
     cell.dataset.running = s.state === 'running' ? '1' : '0';
+    cell.dataset.readState = s.state || '';
+    cell.dataset.readSpend = s.spend == null ? '' : String(s.spend);
+    cell.dataset.readCurrency = s.currency || '';
     if (s.status) {
       var status = row.querySelector('.amap-status');
       status.innerHTML = '<span></span>';
@@ -4495,8 +4529,9 @@ function amapApplyReading(account, s) {
     cell.innerHTML = '<span class="amap-live-ok"></span>';
     cell.firstChild.textContent = amapMoney(s.spend, s.currency);
     cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how;
-    btn.disabled = false; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read'; btn.title = 'Read again';
+    btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read'; btn.title = 'Read again';
   });
+  amapUpdateCountrySummaries();
 }
 
 function amapPollSpend(account, cell, btn, tries, per) {
@@ -4542,96 +4577,101 @@ else amapResumeReadings();
    её чтение пришло. Упавший аккаунт остаётся с ошибкой в своей строке, а
    очередь идёт дальше. Никогда по таймеру: кнопка — это человек спросил. */
 var amapReadAllBusy = false;
-function amapReadAll(btn) {
+function amapReadAllControls(busy) {
+  document.querySelectorAll('.amap-read-all').forEach(function(b) { b.disabled = busy; });
+  document.querySelectorAll('.amap-read').forEach(function(b) {
+    var cell = amapSpendCell(b);
+    b.disabled = busy || !b.getAttribute('onclick') || !!(cell && cell.dataset.running === '1');
+  });
+}
+
+async function amapReadAll(btn) {
   if (amapReadAllBusy) return;
-  var per = amapPeriod();
+  var per = Object.assign({}, amapPeriod());
   if (!per.from || per.span === 'all') {
     btn.title = 'Select dates to read account spend; Maximum is not supported';
     return;
   }
-  var scope = btn.closest('details.amap-country') || btn.closest('.amap') || document;
-  var seen = {};
+  var scope = btn.closest('details.amap-country') || btn.closest('.amap');
+  if (!scope) return;
+  var seen = new Set();
   var jobs = [];
-  scope.querySelectorAll('.amap-read').forEach(function (b) {
-    if (b.disabled || !b.getAttribute('onclick')) return;
+  scope.querySelectorAll('.amap-read').forEach(function(b) {
+    if (!b.getAttribute('onclick')) return;
     var cell = amapSpendCell(b);
     var account = cell && cell.dataset.account;
-    if (!account || seen[account]) return;
-    seen[account] = true;
+    if (!account || seen.has(account)) return;
+    seen.add(account);
     jobs.push({account: account, btn: b, cell: cell});
   });
   if (!jobs.length) { btn.title = 'No connected accounts to read here'; return; }
   amapReadAllBusy = true;
+  amapReadAllControls(true);
   var label = btn.textContent;
-  btn.disabled = true;
   var okCount = 0, failCount = 0;
-  (function next(i) {
-    if (i >= jobs.length) {
-      amapReadAllBusy = false;
-      btn.disabled = false;
-      btn.textContent = label;
-      btn.title = okCount + ' read, ' + failCount + ' failed';
-      return;
-    }
-    btn.textContent = 'Reading ' + (i + 1) + ' of ' + jobs.length + '…';
-    amapQueueRead(jobs[i], per).then(function (state) {
+  try {
+    for (var i = 0; i < jobs.length; i++) {
+      btn.textContent = 'Reading ' + (i + 1) + ' of ' + jobs.length + '…';
+      var state = await amapQueueRead(jobs[i], per);
       if (state === 'ok') okCount++; else failCount++;
-      next(i + 1);
-    });
-  })(0);
-}
-
-/* Один шаг очереди: то же, что делает amapReadSpend, но с ответом о
-   завершении — очереди нужно знать, когда переходить к следующему. */
-function amapQueueRead(job, per) {
-  var extra = job.btn.parentNode.querySelector('.amap-openprof');
-  if (extra) extra.remove();
-  job.btn.disabled = true;
-  job.btn.className = 'amap-btn amap-read';
-  job.btn.textContent = 'reading…';
-  var body = new FormData();
-  body.append('account', job.account);
-  body.append('date_from', per.from);
-  body.append('date_to', per.to);
-  body.append('span', per.span);
-  return fetch('/account-spend/read', { method: 'POST', body: body, credentials: 'same-origin' })
-    .then(function (r) { return r.json(); })
-    .then(function (j) {
-      if (!j.ok) throw new Error(j.error || 'refused');
-      return amapAwaitReading(job.account, per, 0);
-    })
-    .catch(function (e) {
-      amapSpendFailed(job.btn, job.cell, String(e && e.message || e));
-      return 'failed';
-    });
-}
-
-function amapAwaitReading(account, per, tries) {
-  if (tries > 120) {
-    amapApplyReading(account, {state: 'failed', error: 'no answer after six minutes — check the launcher window'});
-    return Promise.resolve('failed');
+    }
+    btn.title = okCount + ' read, ' + failCount + ' failed';
+  } finally {
+    amapReadAllBusy = false;
+    amapReadAllControls(false);
+    btn.textContent = label;
   }
-  return new Promise(function (resolve) { setTimeout(resolve, 3000); }).then(function () {
-    return fetch('/account-spend/status?account=' + encodeURIComponent(account)
-        + '&date_from=' + encodeURIComponent(per.from)
-        + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        if (!j.ok) throw new Error(j.error || 'Could not read status');
-        var s = j.reading || {};
-        amapApplyReading(account, s);
-        if (s.state === 'running') return amapAwaitReading(account, per, tries + 1);
-        return s.state === 'ok' ? 'ok' : 'failed';
-      })
-      .catch(function (e) {
-        amapApplyReading(account, {state: 'failed', error: String(e && e.message || e)});
-        return 'failed';
-      });
-  });
+}
+
+// A stalled HTTP request must not leave the manual queue locked forever.
+async function amapReadJson(url, options) {
+  var controller = new AbortController();
+  var timeout = setTimeout(function() { controller.abort(); }, 20000);
+  try {
+    var r = await fetch(url, Object.assign({}, options, {signal: controller.signal}));
+    var j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Could not read account spend');
+    return j;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function amapQueueRead(job, per) {
+  try {
+    var extra = job.btn.parentNode && job.btn.parentNode.querySelector('.amap-openprof');
+    if (extra) extra.remove();
+    amapApplyReading(job.account, {state: 'running'});
+    var body = new FormData();
+    body.append('account', job.account);
+    body.append('date_from', per.from);
+    body.append('date_to', per.to);
+    body.append('span', per.span || '');
+    // The server joins an existing read for this account and exact period.
+    await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
+    return await amapAwaitReading(job.account, per, 0);
+  } catch (e) {
+    var message = e && e.name === 'AbortError' ? 'Read request timed out — check the launcher window' : String(e && e.message || e);
+    amapApplyReading(job.account, {state: 'failed', error: message});
+    return 'failed';
+  }
+}
+
+async function amapAwaitReading(account, per, tries) {
+  while (tries++ <= 120) {
+    await new Promise(function(resolve) { setTimeout(resolve, 3000); });
+    var j = await amapReadJson('/account-spend/status?account=' + encodeURIComponent(account)
+      + '&date_from=' + encodeURIComponent(per.from)
+      + '&date_to=' + encodeURIComponent(per.to), {credentials: 'same-origin'});
+    var s = j.reading || {};
+    amapApplyReading(account, s);
+    if (s.state !== 'running') return s.state === 'ok' ? 'ok' : 'failed';
+  }
+  throw new Error('no answer after six minutes — check the launcher window');
 }
 
 function amapSpendFailed(btn, cell, why, shot, how) {
-  btn.disabled = false;
+  btn.disabled = !!amapReadAllBusy;
   btn.className = 'amap-btn amap-read amap-live-bad';
   btn.textContent = 'failed · retry';
   btn.title = why;
@@ -6031,12 +6071,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   var _cbpTimer = null;
+  var _cbpDirtySlots = new Set();
+  var _cbpAllPending = false;
   function cbpSchedule(el) {
     var slot = el && el.closest ? el.closest('.cb-slot') : null;
+    if (slot) _cbpDirtySlots.add(slot);
+    else _cbpAllPending = true;
     clearTimeout(_cbpTimer);
     _cbpTimer = setTimeout(function() {
-      if (slot && document.contains(slot)) cbRenderPreviews(slot);
-      else cbpRenderAll();
+      if (_cbpAllPending) cbpRenderAll();
+      else _cbpDirtySlots.forEach(function(s) { if (document.contains(s)) cbRenderPreviews(s); });
+      _cbpDirtySlots.clear();
+      _cbpAllPending = false;
     }, 180);
   }
   document.addEventListener('input', function(e) {
@@ -6047,7 +6093,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   });
   document.addEventListener('click', function(e) {
     if (!e.target.closest) return;
-    if (e.target.closest('.cb-sel-opt') || e.target.closest('.cb-add-btn-sm')
+    if (e.target.closest('.cb-dup-slot-btn')) { cbpSchedule(null); return; }
+    if (e.target.closest('.cb-dup-ad-btn') || e.target.closest('.cb-sel-opt') || e.target.closest('.cb-add-btn-sm')
         || e.target.closest('.cb-remove-ad-btn') || e.target.closest('.cb-add-btn')) {
       cbpSchedule(e.target);
     }
@@ -6624,10 +6671,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   function cbRenumberAds(slot) {
     var cIdx = slot.dataset.idx;
+    var named = Array.from(slot.querySelectorAll('.cb-ad-row [name]'));
+    named.forEach(function(el) { el.dataset.renumberName = el.name; el.removeAttribute('name'); });
     slot.querySelectorAll('.cb-ad-row').forEach(function(row, aIdx) {
       row.dataset.adIdx = aIdx;
-      row.querySelectorAll('[name]').forEach(function(el) {
-        el.name = el.name.replace(/^camp_\d+_ad_\d+_/, 'camp_' + cIdx + '_ad_' + aIdx + '_');
+      row.querySelectorAll('[data-renumber-name]').forEach(function(el) {
+        el.name = el.dataset.renumberName.replace(/^camp_\d+_ad_\d+_/, 'camp_' + cIdx + '_ad_' + aIdx + '_');
+        delete el.dataset.renumberName;
       });
     });
   }
@@ -6671,14 +6721,20 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   };
 
   function cbRenumber(form) {
+    // Free every old radio group before inserting new indices mid-list.
+    form.querySelectorAll('.cb-slot [name]').forEach(function(el) {
+      el.dataset.renumberName = el.name;
+      el.removeAttribute('name');
+    });
     form.querySelectorAll('.cb-slot').forEach(function(slot, i) {
       var oldIdx = slot.dataset.idx;
       slot.dataset.idx = i;
       var label = slot.querySelector('.cb-slot-label');
       if (label) label.innerHTML = label.innerHTML.replace(/^Campaign \d+/, 'Campaign ' + (i + 1));
       // Rename camp_OLD_* → camp_NEW_* (covers both campaign and ad-row fields)
-      slot.querySelectorAll('[name]').forEach(function(el) {
-        el.name = el.name.replace(new RegExp('^camp_' + oldIdx + '_'), 'camp_' + i + '_');
+      slot.querySelectorAll('[data-renumber-name]').forEach(function(el) {
+        el.name = el.dataset.renumberName.replace(new RegExp('^camp_' + oldIdx + '_'), 'camp_' + i + '_');
+        delete el.dataset.renumberName;
       });
       cbUpdateName(slot);
     });
@@ -7834,7 +7890,35 @@ function cbCollectFormData(form) {
   return new FormData(form);
 }
 
+// A diagnostic belongs to one exact form snapshot, including slot order.
+function cbInvalidatePreview(form) {
+  if (!form) return;
+  form._previewRequest = (form._previewRequest || 0) + 1;
+  form.querySelectorAll('.cbp-diag-slot').forEach(function(b) { b.remove(); });
+  var drawer = document.getElementById('cbp-diag-drawer');
+  if (drawer && drawer._form === form) cbpDiagClose();
+  var publish = form.querySelector('.cb-publish-btn');
+  if (publish) publish.disabled = true;
+  var panel = form.querySelector('.cb-preview-panel');
+  if (panel && panel.style.display === 'block') {
+    panel.textContent = 'Campaign changed — preview again to check the current setup.';
+  }
+}
+['input', 'change', 'click', 'mousedown'].forEach(function(type) {
+  document.addEventListener(type, function(e) {
+    if (!e.target.closest) return;
+    var form = e.target.closest('form[data-open-form]');
+    if (!form) return;
+    if (type === 'input' || type === 'change'
+        || e.target.closest('.cb-dup-ad-btn, .cb-dup-slot-btn, .cb-remove-ad-btn, .cb-remove-btn, .cb-add-btn, .cb-add-btn-sm, .cb-sel-opt')) {
+      cbInvalidatePreview(form);
+    }
+  }, true);
+});
+
 window.cbPreview = function(form) {
+  cbInvalidatePreview(form);
+  var requestId = form._previewRequest;
   var panel = form.querySelector('.cb-preview-panel');
   var publishBtn = form.querySelector('.cb-publish-btn');
   if (!panel) return;
@@ -7853,6 +7937,11 @@ window.cbPreview = function(form) {
   });
 
   var fd = cbCollectFormData(form);
+  var snapshot = JSON.stringify(Array.from(fd.entries()));
+  function current() {
+    return form._previewRequest === requestId && document.contains(form)
+      && JSON.stringify(Array.from(new FormData(form).entries())) === snapshot;
+  }
   fetch('/preview-publish', { method: 'POST', body: fd })
     .then(function(r) {
       if (!r.ok) {
@@ -7861,6 +7950,7 @@ window.cbPreview = function(form) {
       return r.json();
     })
     .then(function(data) {
+      if (!current()) return;
       if (!data) { panel.innerHTML = '<span class="cb-preview-errors">Empty response from server</span>'; return; }
       if (data.error) {
         panel.innerHTML = '<span class="cb-preview-errors">⚠ ' + aclEscHtml(data.error) + '</span>';
@@ -7972,6 +8062,7 @@ window.cbPreview = function(form) {
           toggleBtns.forEach(function(b) { b.classList.remove('cb-preview-toggle-active'); });
           btn.classList.add('cb-preview-toggle-active');
           var showVisual = btn.dataset.view === 'visual';
+          if (showVisual) cbpDiagClose();
           diagEl.style.display = showVisual ? 'none' : 'block';
           visEl.style.display = showVisual ? 'block' : 'none';
           // Карточки диагностики живут в колонках слотов, не в панели —
@@ -7983,6 +8074,7 @@ window.cbPreview = function(form) {
       });
     })
     .catch(function(e) {
+      if (!current()) return;
       panel.innerHTML = '<span class="cb-preview-errors">Request failed: ' + aclEscHtml(e.message) + '</span>';
     });
 };
@@ -7992,7 +8084,7 @@ window.cbPreview = function(form) {
 // страницы, ничего не расталкивая, и закрывается крестиком, Esc или
 // кликом по фону. Тело берётся из скрытого контейнера рядом с плашкой.
 window.cbpDiagOpen = function(chip) {
-  var full = chip.parentNode.querySelector('.cbp-diag-full');
+  var full = chip.nextElementSibling;
   if (!full) return;
   var wrap = document.getElementById('cbp-diag-drawer');
   if (!wrap) {
@@ -8000,7 +8092,7 @@ window.cbpDiagOpen = function(chip) {
     wrap.id = 'cbp-diag-drawer';
     wrap.style.display = 'none';
     wrap.innerHTML = '<div class="cbp-diag-back"></div>'
-      + '<div class="cbp-diag-pop" role="dialog" aria-label="Campaign diagnostic">'
+      + '<div class="cbp-diag-pop" role="dialog" aria-modal="true" aria-label="Campaign diagnostic">'
       + '<div class="cbp-diag-pop-head"><span class="cbp-diag-pop-title"></span>'
       + '<button type="button" class="cbp-diag-pop-close" title="Close">×</button></div>'
       + '<div class="cbp-diag-pop-body"></div></div>';
@@ -8008,19 +8100,27 @@ window.cbpDiagOpen = function(chip) {
     wrap.querySelector('.cbp-diag-back').addEventListener('click', cbpDiagClose);
     wrap.querySelector('.cbp-diag-pop-close').addEventListener('click', cbpDiagClose);
     document.addEventListener('keydown', function(e) {
+      if (wrap.style.display === 'none') return;
       if (e.key === 'Escape') cbpDiagClose();
+      if (e.key === 'Tab') { e.preventDefault(); wrap.querySelector('.cbp-diag-pop-close').focus(); }
     });
   }
   var title = wrap.querySelector('.cbp-diag-pop-title');
   title.textContent = full.dataset.title || 'Campaign diagnostic';
   title.style.color = full.dataset.bad ? 'var(--bad)' : 'var(--accent)';
   wrap.querySelector('.cbp-diag-pop-body').innerHTML = full.innerHTML;
+  wrap._trigger = chip;
+  wrap._form = chip.closest('form');
   wrap.style.display = 'block';
+  wrap.querySelector('.cbp-diag-pop-close').focus();
 };
 
 window.cbpDiagClose = function() {
   var wrap = document.getElementById('cbp-diag-drawer');
-  if (wrap) wrap.style.display = 'none';
+  if (wrap && wrap.style.display !== 'none') {
+    wrap.style.display = 'none';
+    if (wrap._trigger && wrap._trigger.isConnected) wrap._trigger.focus();
+  }
 };
 
 // ── RPA Human Takeover ────────────────────────────────────────────────
