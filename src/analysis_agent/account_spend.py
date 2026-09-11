@@ -1243,6 +1243,10 @@ class AdObject:
     switch_label: str = ""    # подпись тумблера словами Meta
     delivery: str = ""        # колонка Delivery, дословно
     id_from: str = ""         # из какого атрибута взят id — чтобы знать, что сломалось
+    #: Чей это объект. У объявления список даёт **имя** ad set'а, если колонка
+    #: показана, — не его id. Пустое значит «в таблице этого не было», и
+    #: выдавать это за «родителя нет» нельзя.
+    parent_name: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -1269,7 +1273,7 @@ def _tree_url(act: str, level: str, date_from: str, date_to: str = "") -> str:
 #: `id_from` — имя атрибута, из которого число взято. Первое же чтение скажет,
 #: что там на самом деле, вместо того чтобы молча вернуть пустые id.
 _READ_TREE_JS = r"""
-() => {
+(level) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
   const grid = document.querySelector('div[role="table"], [role="grid"]');
   if (!grid) return {rows: [], how: 'no-grid', columns: []};
@@ -1288,7 +1292,13 @@ _READ_TREE_JS = r"""
     for (const n of names) for (const k in cols) if (k.startsWith(n)) return cols[k];
     return -1;
   };
-  const iName = pick(['ad set name', 'ad name', 'campaign name', 'name']);
+  // Имя ищется по своему уровню, а не по первому подходящему заголовку. На
+  // странице объявлений колонка «Ad set name» тоже бывает показана, и общий
+  // список перехватил бы её раньше «Ad name» — в имени объявления оказалось бы
+  // имя его родителя.
+  const iName = level === 'ad' ? pick(['ad name', 'name'])
+                               : pick(['ad set name', 'name']);
+  const iParent = level === 'ad' ? pick(['ad set name']) : -1;
   const iDelivery = pick(['delivery', 'status']);
 
   const LONG = /\d{15,18}/;
@@ -1327,6 +1337,7 @@ _READ_TREE_JS = r"""
       switch: onoff,
       switch_label: label,
       delivery: (iDelivery >= 0 && cells[iDelivery]) ? norm(cells[iDelivery].innerText) : '',
+      parent_name: (iParent >= 0 && cells[iParent]) ? norm(cells[iParent].innerText) : '',
     });
   }
   return {rows: out, how: head ? 'header-mapped' : 'no-header', columns: Object.keys(cols)};
@@ -1347,7 +1358,7 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
     if level not in ADS_MANAGER_LEVELS:
         return [], "", f"неизвестный уровень {level!r}"
     try:
-        got = page.evaluate(_READ_TREE_JS)
+        got = page.evaluate(_READ_TREE_JS, level)
     except Exception as exc:
         return [], "", f"таблица {level} не разобрана: {exc}"
     if not isinstance(got, dict):
@@ -1364,6 +1375,7 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
             switch_label=str(r.get("switch_label") or ""),
             delivery=str(r.get("delivery") or ""),
             id_from=str(r.get("id_from") or ""),
+            parent_name=str(r.get("parent_name") or ""),
         )
         for r in rows
         if isinstance(r, dict)

@@ -123,6 +123,46 @@ def test_the_columns_are_found_by_their_headers_not_by_their_order(page):
     assert r.delivery == "Active"
 
 
+def test_an_ad_is_not_given_its_parents_name(page):
+    """Колонка «Ad set name» бывает показана и на странице объявлений.
+
+    Общий список заголовков находил её раньше «Ad name», и в имени объявления
+    оказывалось имя его родителя — то есть все объявления одного ad set'а
+    выглядели бы одинаково, а переключать пришлось бы наугад.
+    """
+    page.set_content(_grid(
+        ["Ad set name", "Ad name", "Delivery"],
+        [["KW_lookalike_25-45", "ad_2_ar_story", "Active"]],
+        row_attrs=['data-testid="120210000000777666"'],
+    ))
+    (r,), _, err = sp.read_level(page, "ad")
+    assert not err, err
+    assert r.name == "ad_2_ar_story", "объявлению досталось имя его ad set'а"
+    assert r.parent_name == "KW_lookalike_25-45", "чей это объект — не записано"
+
+
+def test_an_ad_set_row_has_no_parent_to_report(page):
+    """У ad set'а родитель — кампания, и её этот список не показывает."""
+    page.set_content(_grid(
+        ["Ad set name", "Delivery"], [["KW_broad", "Active"]],
+        row_attrs=['data-testid="120210000000555444"'],
+    ))
+    (r,), _, _ = sp.read_level(page, "adset")
+    assert r.name == "KW_broad"
+    assert r.parent_name == ""
+
+
+def test_a_missing_parent_column_is_emptiness_not_a_claim(page):
+    """Колонку могли просто не показать. «Родителя нет» — другое утверждение."""
+    page.set_content(_grid(
+        ["Ad name", "Delivery"], [["ad_2_ar_story", "Active"]],
+        row_attrs=['data-testid="120210000000333222"'],
+    ))
+    (r,), _, _ = sp.read_level(page, "ad")
+    assert r.name == "ad_2_ar_story"
+    assert r.parent_name == ""
+
+
 def test_a_switched_off_row_says_off(page):
     page.set_content(_grid(
         ["Ad name", "Delivery"], [["ad_2_ar", "Off"]],
