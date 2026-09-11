@@ -480,6 +480,8 @@ python scripts/acl_board.py --render
         Move those beside the rest and the file matches `account_spend.py`;
         the guard from `acl-108j` can then cover it too.
   - [ ] `acl-108d` Move the Ads Manager reading into the RPA track #next @rpa
+        Tracked in GitHub Issues as **ACL-1121** (#121), module Data & Reporting,
+        type Improvement, Backlog.
         The selectors for Meta's own screens belong beside the other ones, in
         `src/fb_ads_rpa`, owned by the session that fixes them when Meta moves
         a control. It sits in the dashboard track today only because that is
