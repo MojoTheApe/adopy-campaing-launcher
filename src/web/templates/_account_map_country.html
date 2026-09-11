@@ -155,25 +155,5 @@
       {% else %}
       <div class="amap-empty">No accounts placed in this country yet.</div>
       {% endif %}
-      <div class="amap-add" data-amap-country="{{ mc.key | e }}">
-        <select class="amap-known">
-          <option value="">already connected…</option>
-          {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
-        </select>
-        <button type="button" class="amap-btn"
-                onclick="amapLink(this.previousElementSibling,'country',{{ mc.key | tojson | forceescape }})">Add</button>
-        <span style="color:var(--border-strong)">|</span>
-        <select class="amap-inst" onchange="amapFilter(this.closest('.amap-add').querySelector('.amap-find'))" title="Which Multilogin account to search">
-          <option value="A">{{ mlx['A'] }}</option>
-          <option value="B">{{ mlx['B'] }}</option>
-        </select>
-        {#- Отбор идёт по мере ввода. Список профилей тянется один раз на
-            инстанс и фильтруется на месте: так отклик мгновенный, а Multilogin
-            не дёргается на каждую букву. Кнопка осталась для перезагрузки
-            списка, когда профиль только что завели. -#}
-        <input type="text" class="amap-find" placeholder="last letters: X84" size="10"
-               oninput="amapFilter(this)" onfocus="amapFilter(this)" autocomplete="off">
-        <button type="button" class="amap-btn" onclick="amapFind(this)" title="Reload the profile list from Multilogin">Reload</button>
-        <span class="amap-msg"></span>
-        <div class="amap-hits" hidden></div>
+      {% with amap_value = mc.key %}{% include "_account_map_add.html" %}{% endwith %}
       </div>

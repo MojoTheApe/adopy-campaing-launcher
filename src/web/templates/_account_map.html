@@ -74,12 +74,15 @@
       {% if not mc.virtual %}
       {% include "_account_map_country.html" %}
       {% else %}
+      {#- Раньше здесь был только текст «подключите из раздела Accounts» —
+          человека отправляли искать другое место вместо того, чтобы дать
+          сделать здесь. Форма та же, что у стран из карты; привязка заводит
+          страну сама, отдельного «создать» не нужно. -#}
       <div class="amap-empty">
         {{ mc.country }} has workbook money for this period but no accounts
-        placed here — the spend is not covered by the map. Connect the
-        account from the country's Accounts section, or add the country
-        above and place it.
+        placed here — the spend is not covered by the map. Connect one below.
       </div>
+      {% with amap_value = mc.country %}{% include "_account_map_add.html" %}{% endwith %}
       {% endif %}
     </details>
     {% endfor %}
