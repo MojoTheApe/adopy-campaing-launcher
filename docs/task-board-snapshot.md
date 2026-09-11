@@ -591,15 +591,47 @@ python scripts/acl_board.py --render
   - [ ] `acl-111b` Pause a single ad
   - [ ] `acl-111c` Refuse to touch anything outside the account being worked on
 - [ ] `acl-112` Request `ads_management` on the app #next @ops
-      Read access is not enough to pause anything. Nothing in this capability
-      moves until this is granted.
-- [ ] `acl-113` Open and close through the RPA #next @rpa
+      Read access is not enough to pause anything **through the token**. That
+      sentence used to read "nothing in this capability moves until this is
+      granted", and on 11 September that stopped being true: the review picked
+      the RPA route as the only one, and the browser carries the account's own
+      proxy and needs no permission from Meta. `acl-113` does not wait on this.
+      It still gates `acl-111`, if the token route is ever revived.
+- [ ] `acl-113` Open and close through the RPA #blocked @rpa needs:acl-118
       Not a fallback — the second route, meant to work on its own. The browser
       already carries the account's proxy, so it needs no permission from Meta
       at all; only the code, which is not written.
+      **Owner's decisions, 11 September.** The control is a toggle on the rows
+      the dashboard already draws under an account — no separate confirmation
+      dialog, the toggle is the interface. Two levels: the row the dashboard
+      calls a campaign (in the data it is `Adset Name`, so Meta's ad set) and
+      the ad under it. Meta's own campaign level stays out: pausing a campaign
+      silences every ad set beneath it, and nobody asked for that.
+      Blocked on `acl-118`: the rows come from the statistics workbook, which
+      carries names but no Meta ids, lags a day, and has no on/off column — so
+      nothing there can drive a toggle or show its state.
+      Never open an ad's editor (DQ204, 2 August): Meta pre-selects "Instant
+      form (suggested)" on every opening and autosaves it, so a clean Leads ad
+      picks up error #100 from a look-and-leave visit. The row's own toggle is
+      the only acceptable mechanism.
+      GitHub: #23.
   - [ ] `acl-113a` Pause an ad set in Ads Manager, and start it again
   - [ ] `acl-113b` Pause a single ad
   - [ ] `acl-113c` Never near Publish
+- [ ] `acl-118` Read an account's ad sets and ads with ids and on/off state #next @rpa
+      What the toggle stands on. The Read button already goes to that screen for
+      spend: attach to the open profile, never start one, verify the ad account,
+      wait for the grid. Owner's decision — this rides the same button rather
+      than a new control. Expanding an account shows workbook rows at once;
+      Read fills in ids and lights the toggles, so a live account is still read
+      when a person asks and never on a timer.
+      Per row: the name as the account spells it, the Meta id, the state in
+      Meta's own words (in review, rejected, archived — not flattened into a
+      boolean), the level, and which ad set an ad belongs to.
+      Costs tens of seconds per account, one account at a time. The interface
+      has to show it working rather than pretend the tree is already live.
+      GitHub: **ACL-1124** (#124), Data & Reporting, Feature, To Do, High,
+      Release.
         Pausing stops money; publishing spends it. The rule that the RPA does
         not press Publish does not loosen because it learned a new verb.
 - [ ] `acl-116` One switch chooses the route #next @dashboard
