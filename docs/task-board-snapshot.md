@@ -432,8 +432,9 @@ python scripts/acl_board.py --render
         other.
   - [x] `acl-108c` Pull yesterday's spend off a live test account #merged
         The whole point. Until this happens `acl-108` is code, not a route.
-  - [x] `acl-108e` A public "attach, never relaunch" in the RPA track #review @rpa
-        PR #122, `check-pr` verified. Waits on the merge, nothing else.
+  - [x] `acl-108e` A public "attach, never relaunch" in the RPA track #merged @rpa
+        PR #122, merged 11 September. Master carries the public pair and the
+        gathered selectors (`acl-108j`) — the reader calls them there now.
         Reading calls `_try_attach_existing` and `_profile_process_running`
         directly — private methods of another track — because there is no
         public way to say "use the window that is open, and if there is none,
@@ -618,7 +619,7 @@ python scripts/acl_board.py --render
   - [ ] `acl-113a` Pause an ad set in Ads Manager, and start it again
   - [ ] `acl-113b` Pause a single ad
   - [ ] `acl-113c` Never near Publish
-- [ ] `acl-118` Read an account's ad sets and ads with ids and on/off state #next @rpa
+- [x] `acl-118` Read an account's ad sets and ads with ids and on/off state #review @rpa
       What the toggle stands on. The Read button already goes to that screen for
       spend: attach to the open profile, never start one, verify the ad account,
       wait for the grid. Owner's decision — this rides the same button rather
@@ -630,7 +631,22 @@ python scripts/acl_board.py --render
       boolean), the level, and which ad set an ad belongs to.
       Costs tens of seconds per account, one account at a time. The interface
       has to show it working rather than pretend the tree is already live.
-      GitHub: **ACL-1124** (#124), Data & Reporting, Feature, To Do, High,
+      **Done 11 September**, PR #125, `check-pr` verified, 23 tests. The parse
+      runs in a real browser against synthetic markup shaped like the grid —
+      a JS block is code, and faking its return value would test the fake.
+      State is two facts, not one: the switch (`on`/`off`/`unknown`) and the
+      Delivery column verbatim. "No switch visible" and "switched off" are
+      different answers, and "In review" is not flattened into a boolean.
+      Columns are found by their headers — people reorder them, and a fixed
+      index would read spend as a name. Caught on the way: the ads page also
+      shows an "Ad set name" column, and a shared header list found it before
+      "Ad name", so every ad of one ad set would have looked identical.
+      **Not yet proved:** that a real row carries its id in an attribute. That
+      is a hypothesis until the first live read — same footing as the acl-357
+      selector steps. It is built to say so: the parse returns `id_from` and
+      `objects_how`, so one live read reports what is actually there instead
+      of silently returning empty ids.
+      GitHub: **ACL-1124** (#124), Data & Reporting, Feature, Review, High,
       Release.
         Pausing stops money; publishing spends it. The rule that the RPA does
         not press Publish does not loosen because it learned a new verb.
