@@ -119,3 +119,55 @@ def test_this_check_would_notice_the_old_behaviour():
         '{% with amap_value = mc.country %}{% include "_account_map_add.html" %}{% endwith %}', ""
     )
     assert 'amap_value = mc.country' not in without
+
+
+# ── вложенность ───────────────────────────────────────────────────────────
+#
+# Форму вынесли в отдельный кусок, а её закрывающий `</div>` остался в
+# _account_map_country.html: вырезали только открывающий тег и содержимое,
+# последняя строка хунка не попала в правку. Проверки выше остались зелёными —
+# они спрашивали, есть ли в выводе нужные поля, а не цел ли он.
+#
+# В браузере лишний `</div>` не игнорируется: парсер выкидывает элементы,
+# пока не выкинет какой-нибудь div, и вместе с ним уносит `<main>`. Карта
+# вывалилась из своей секции, все страновые разделы стали детьми `<body>` —
+# страница показывала одну строку Колумбии и пустоту под ней.
+
+def _div_depth_low_and_final(html: str):
+    """Наименьшая глубина и конечная — по настоящему разбору, не по счёту строк."""
+    from html.parser import HTMLParser
+
+    class _Depth(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.depth = 0
+            self.low = 0
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "div":
+                self.depth += 1
+
+        def handle_endtag(self, tag):
+            if tag == "div":
+                self.depth -= 1
+                self.low = min(self.low, self.depth)
+
+    p = _Depth()
+    p.feed(html)
+    return p.low, p.depth
+
+
+def test_the_rendered_map_closes_exactly_what_it_opens():
+    for virtual in (False, True):
+        low, final = _div_depth_low_and_final(_render(virtual=virtual))
+        assert low == 0, (
+            f"virtual={virtual}: лишний </div> — браузер вынесет карту из её секции"
+        )
+        assert final == 0, f"virtual={virtual}: незакрытый <div> — секция съест следующую"
+
+
+def test_the_form_stays_inside_the_country_it_belongs_to():
+    """Тот самый признак поломки: форма оказывалась снаружи своей строки."""
+    out = _render(virtual=False)
+    block = out[out.index("<details"): out.index("</details>")]
+    assert 'data-amap-country="GT"' in block, "форма вывалилась из своей страны"
