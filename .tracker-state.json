@@ -24,6 +24,10 @@
       "title": "Adopt Description and Specifications for project tasks",
       "state": "created",
       "issue": 117
+    },
+    "1fcf841394fb7bf9eca2daf40892151a49db8f46cf37845b3ea7f650904f5d79": {
+      "title": "Reject unsafe or incomplete country spend readings",
+      "state": "creating"
     }
   }
 }
