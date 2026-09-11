@@ -840,7 +840,7 @@ class MultiloginDirectCDPProvider:
         port = self._discover_owned_debug_port(user_data_dir) if strict_profile else self._discover_debug_port(user_data_dir, profile_id)
         if port is None:
             log.info(
-                "Profile %s is running but no CDP debug port found — will relaunch with debugging",
+                "Profile %s is running but no CDP debug port found — attachment unavailable",
                 profile_id,
             )
             return None
@@ -856,7 +856,7 @@ class MultiloginDirectCDPProvider:
             log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
             return conn
         except Exception as exc:
-            log.warning("Could not attach to running Mimic (%s) — will relaunch", exc)
+            log.warning("Could not attach to running Mimic (%s)", exc)
             return None
 
     def open(self, entry: AccountMapEntry, account_label: str) -> "BrowserConnection":

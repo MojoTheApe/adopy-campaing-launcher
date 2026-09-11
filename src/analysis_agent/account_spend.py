@@ -50,6 +50,111 @@ TABLE_TIMEOUT_MS = 90_000
 TOTALS_TRIES = 20
 
 
+# ── Чем чтение цепляется за экраны Meta ──────────────────────────────────
+#
+# Всё в одном месте, как в `meta_dom.py` у RPA. Причина не в порядке ради
+# порядка: Meta двигает контролы сразу для всех, и правка, ломающая публикацию,
+# ломает и чтение — экраны те же. Разбросанные по файлу литералы означают, что
+# чинить придётся по одному, находя их поиском.
+#
+# Здесь же они переживут переезд в RPA-трек (`acl-108d`): перенести один блок —
+# работа механическая, собрать его заново по всему файлу — нет.
+#
+# Каждый список — по убыванию надёжности: сначала то, что Meta пометила сама,
+# потом то, что видно человеку. Первое переживает перевод интерфейса, второе
+# нет; но первое Meta и убирает чаще.
+
+#: Название кабинета в шапке Ads Manager.
+SEL_ACCOUNT_NAME = (
+    '[aria-label*="Ad account" i]',
+    '[data-testid*="account_selector" i]',
+    'div[role="button"]:has-text("act_")',
+)
+
+#: Кнопка периода. Запасной путь ниже на деле основной: у кнопки часто нет
+#: aria-label, и опознаётся она по дате внутри — снимок первого живого прогона
+#: показал справа вверху «Sep 6, 2026».
+SEL_PERIOD = (
+    '[aria-label*="Date"], [aria-label*="date range" i]',
+    'div[role="button"][aria-label*="Date"]',
+    'span:has-text("Yesterday")',
+)
+SEL_PERIOD_FALLBACK = 'div[role="button"], [role="combobox"]'
+RE_PERIOD_DATE = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},\s*\d{4}"
+
+#: Надпись строки итогов, помеченная нашим же атрибутом из `_FIND_TOTALS_JS`:
+#: к ней надо подвести курсор, а через evaluate ручку не получить.
+SEL_TOTALS_LABEL = '[data-acl-totals="1"]'
+
+#: Любая кнопка — среди них ищется «View results» по тексту.
+SEL_BUTTON = '[role="button"]'
+
+#: Таблица кампаний — признак, что страница ожила. Три написания: Meta успела
+#: подержать список и таблицей, и гридом, а подпись колонки переживает оба.
+SEL_GRID = 'div[role="table"], [role="grid"], [aria-label*="Amount spent" i]'
+
+#: Поиск строки итогов целиком внутри страницы — один вызов вместо обхода по
+#: узлу за раз. Обход `query_selector_all("div, span")` с `inner_text()` на
+#: каждом узле — это тысячи обращений к браузеру: пока он делался однократно,
+#: он стоил секунды, но повторные попытки (TOTALS_TRIES) умножили цену, и
+#: чтение за три дня заняло 175 секунд против 40 за один. Ждать надо страницу,
+#: а не собственный обход.
+#:
+#: Надпись помечается атрибутом, чтобы потом взять её обычным селектором: к ней
+#: ещё нужно подвести курсор, а через evaluate ручку не получить.
+_FIND_TOTALS_JS = r"""
+() => {
+  const out = {spend: null, label: false};
+  const money = /([$€£₪]\s*[\d,]+(?:\.\d{1,2})?)\s*Total spent/;
+  document.querySelectorAll('[data-acl-totals]').forEach(
+    e => e.removeAttribute('data-acl-totals'));
+  for (const n of document.querySelectorAll('div, span')) {
+    const t = (n.innerText || '').replace(/\s+/g, ' ').trim();
+    if (!t) continue;
+    if (out.spend === null && t.length <= 600 && t.indexOf('Total spent') !== -1) {
+      const m = t.match(money);
+      if (m) out.spend = m[1];
+    }
+    if (t.indexOf('Results from') === 0 && t.indexOf('campaign') !== -1) {
+      const r = n.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        // как и в прежнем обходе, побеждает последняя видимая копия
+        document.querySelectorAll('[data-acl-totals]').forEach(
+          e => e.removeAttribute('data-acl-totals'));
+        n.setAttribute('data-acl-totals', '1');
+        out.label = true;
+      }
+    }
+  }
+  return out;
+}
+"""
+
+
+
+#: Прокручивается самый большой прокручиваемый блок — сам список. Ищем его по
+#: `overflowY`, а не по классу: имена классов у Meta меняются от сборки к
+#: сборке, а поведение блока — нет.
+_SCROLL_TO_TOTALS_JS = r"""
+() => {
+  let best = null, bestArea = 0;
+  for (const n of document.querySelectorAll('div')) {
+    const st = getComputedStyle(n);
+    if (!/(auto|scroll)/.test(st.overflowY)) continue;
+    if (n.scrollHeight <= n.clientHeight + 40) continue;
+    const r = n.getBoundingClientRect();
+    const area = r.width * r.height;
+    if (area > bestArea) { bestArea = area; best = n; }
+  }
+  if (best) { best.scrollTop = best.scrollHeight; return true; }
+  window.scrollTo(0, document.body.scrollHeight);
+  return false;
+}
+"""
+
+
+
+
 def yesterday(today: date | None = None) -> str:
     return ((today or date.today()) - timedelta(days=1)).isoformat()
 
@@ -73,6 +178,15 @@ class SpendReading:
     shot: str = ""                # скриншот при неудаче
     status: str = ""              # см. _read_status: clear | disabled | restricted | review | unknown
     status_text: str = ""         # словами страницы — человеку с этим идти и разбираться
+
+    #: Дерево аккаунта: ad set'ы и объявления с их id и положением тумблера.
+    #: Читается тем же нажатием, что и спенд (решение владельца 11.09) — см.
+    #: `_read_tree`. Неудача дерева не отменяет спенд: это разные ответы, и
+    #: терять прочитанное число из-за второго — хуже, чем вернуть его без
+    #: дерева.
+    objects: list[dict] = field(default_factory=list)
+    objects_error: str = ""
+    objects_how: str = ""         # чем разобрана таблица — чтобы знать, что сломалось
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -394,8 +508,8 @@ def _attach_only(entry, account_label: str):
     открытого руками в MLX Desktop, нет отладочного порта, и это свойство
     Multilogin, а не наше решение.
 
-    Зовём внутренности чужого трека сознательно и в одном месте: публичного
-    «прицепись, но не поднимай» там пока нет — заведено как `acl-108e`.
+    Используем публичный attach_existing_only: проверка принадлежности
+    профилю закреплена в провайдере, для чтения создаётся отдельная вкладка.
     """
     from src.fb_ads_rpa import browser as rpa_browser
 
@@ -536,11 +650,7 @@ def _ads_manager_account_name(page) -> str:
     молча значит время от времени выбирать не тот кабинет так, что на экране
     об этом ничего не сказано.
     """
-    for sel in (
-        '[aria-label*="Ad account" i]',
-        '[data-testid*="account_selector" i]',
-        'div[role="button"]:has-text("act_")',
-    ):
+    for sel in SEL_ACCOUNT_NAME:
         try:
             el = page.query_selector(sel)
             if el:
@@ -743,6 +853,22 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         out.currency = _currency(page)
         out.how = how
         out.state = "ok"
+
+        # Дерево — тем же нажатием (решение владельца 11.09): Read и так уже
+        # здесь, а каждое отдельное касание живого аккаунта чего-то стоит.
+        #
+        # Строго после того, как спенд принят. Неудача дерева не отменяет
+        # число: это разные ответы на разные вопросы, и терять прочитанный
+        # спенд из-за второго — хуже, чем вернуть его без дерева. Поэтому же
+        # здесь `except Exception`: сюда мы приходим с готовым результатом, и
+        # уронить его необработанным исключением — самое плохое, что может
+        # случиться.
+        try:
+            out.objects, out.objects_how, out.objects_error = _read_tree(
+                page, act, expected_act, date_from, date_to
+            )
+        except Exception as exc:            # noqa: BLE001 — см. выше
+            out.objects_error = f"дерево не прочитано: {exc}"
         return out
     finally:
         if conn is not None:
@@ -832,10 +958,7 @@ def _url(act: str, date_from: str, date_to: str = "") -> str:
 def _wait_for_grid(page) -> bool:
     """Дождаться таблицы кампаний — признак, что страница ожила."""
     try:
-        page.wait_for_selector(
-            'div[role="table"], [role="grid"], [aria-label*="Amount spent" i]',
-            timeout=TABLE_TIMEOUT_MS,
-        )
+        page.wait_for_selector(SEL_GRID, timeout=TABLE_TIMEOUT_MS)
         return True
     except Exception:
         return False
@@ -858,11 +981,7 @@ def _shown_period(page, tries: int = 12) -> str:
 
 
 def _period_once(page) -> str:
-    for sel in (
-        '[aria-label*="Date"], [aria-label*="date range" i]',
-        'div[role="button"][aria-label*="Date"]',
-        'span:has-text("Yesterday")',
-    ):
+    for sel in SEL_PERIOD:
         try:
             el = page.query_selector(sel)
             if el:
@@ -878,11 +997,8 @@ def _period_once(page) -> str:
     try:
         import re as _r
 
-        pat = _r.compile(
-            r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},\s*\d{4}",
-            _r.I,
-        )
-        for el in page.query_selector_all('div[role="button"], [role="combobox"]'):
+        pat = _r.compile(RE_PERIOD_DATE, _r.I)
+        for el in page.query_selector_all(SEL_PERIOD_FALLBACK):
             text = " ".join((el.inner_text() or "").split())
             if 0 < len(text) < 80 and pat.search(text):
                 return text
@@ -946,44 +1062,6 @@ def _period_matches(shown: str, date_from: str, date_to: str = "") -> bool:
     return sorted(found) == sorted(want)
 
 
-#: Поиск строки итогов целиком внутри страницы — один вызов вместо обхода по
-#: узлу за раз. Обход `query_selector_all("div, span")` с `inner_text()` на
-#: каждом узле — это тысячи обращений к браузеру: пока он делался однократно,
-#: он стоил секунды, но повторные попытки (TOTALS_TRIES) умножили цену, и
-#: чтение за три дня заняло 175 секунд против 40 за один. Ждать надо страницу,
-#: а не собственный обход.
-#:
-#: Надпись помечается атрибутом, чтобы потом взять её обычным селектором: к ней
-#: ещё нужно подвести курсор, а через evaluate ручку не получить.
-_FIND_TOTALS_JS = r"""
-() => {
-  const out = {spend: null, label: false};
-  const money = /([$€£₪]\s*[\d,]+(?:\.\d{1,2})?)\s*Total spent/;
-  document.querySelectorAll('[data-acl-totals]').forEach(
-    e => e.removeAttribute('data-acl-totals'));
-  for (const n of document.querySelectorAll('div, span')) {
-    const t = (n.innerText || '').replace(/\s+/g, ' ').trim();
-    if (!t) continue;
-    if (out.spend === null && t.length <= 600 && t.indexOf('Total spent') !== -1) {
-      const m = t.match(money);
-      if (m) out.spend = m[1];
-    }
-    if (t.indexOf('Results from') === 0 && t.indexOf('campaign') !== -1) {
-      const r = n.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) {
-        // как и в прежнем обходе, побеждает последняя видимая копия
-        document.querySelectorAll('[data-acl-totals]').forEach(
-          e => e.removeAttribute('data-acl-totals'));
-        n.setAttribute('data-acl-totals', '1');
-        out.label = true;
-      }
-    }
-  }
-  return out;
-}
-"""
-
-
 #: Прокрутить список кампаний к низу. Строка итогов стоит **под** ними, и в
 #: невысоком окне Ads Manager её не отрисовывает вовсе — искать в DOM нечего.
 #:
@@ -992,27 +1070,6 @@ _FIND_TOTALS_JS = r"""
 #: итогов на странице нет. Двадцать секунд ожидания ничего не меняли: ждать
 #: можно сколько угодно того, что не рисуется.
 #:
-#: Прокручивается самый большой прокручиваемый блок — сам список. Ищем его по
-#: `overflowY`, а не по классу: имена классов у Meta меняются от сборки к
-#: сборке, а поведение блока — нет.
-_SCROLL_TO_TOTALS_JS = r"""
-() => {
-  let best = null, bestArea = 0;
-  for (const n of document.querySelectorAll('div')) {
-    const st = getComputedStyle(n);
-    if (!/(auto|scroll)/.test(st.overflowY)) continue;
-    if (n.scrollHeight <= n.clientHeight + 40) continue;
-    const r = n.getBoundingClientRect();
-    const area = r.width * r.height;
-    if (area > bestArea) { bestArea = area; best = n; }
-  }
-  if (best) { best.scrollTop = best.scrollHeight; return true; }
-  window.scrollTo(0, document.body.scrollHeight);
-  return false;
-}
-"""
-
-
 def _scroll_to_totals(page) -> None:
     """Показать низ списка, где живёт строка итогов. Молча, если не вышло."""
     try:
@@ -1062,7 +1119,7 @@ def _read_total(page) -> tuple[float | None, str]:
         if value is not None:
             return value, "строка итогов, «Total spent»"
         if has_label:
-            label = page.query_selector('[data-acl-totals="1"]')
+            label = page.query_selector(SEL_TOTALS_LABEL)
             if label is not None:
                 break
         _sleep(1)
@@ -1081,7 +1138,7 @@ def _read_total(page) -> tuple[float | None, str]:
     _sleep(1.5)
     clicked = False
     try:
-        for b in page.query_selector_all('[role="button"]'):
+        for b in page.query_selector_all(SEL_BUTTON):
             try:
                 if " ".join((b.inner_text() or "").split()) == "View results" and b.is_visible():
                     b.click(timeout=5_000)
@@ -1148,3 +1205,232 @@ def _shoot(page, account: str, day: str) -> str:
         return str(target)
     except Exception:
         return ""
+
+
+# ══ Дерево аккаунта: ad set'ы и объявления ════════════════════════════════
+#
+# То, на что встанет переключатель (`acl-113`). Строки, которые дешборд рисует
+# под аккаунтом сегодня, приходят из книги статистики: у них есть имя и нет
+# ничего больше. Тремя способами это не годится для тумблера — в книге нет id
+# объектов Meta, она отстаёт на сутки, и столбца on/off в ней нет вовсе.
+#
+# Всё три есть на экране, который чтение уже открывает.
+#
+# Переезжает в RPA-трек вместе с остальным чтением (`acl-1121`). Отдельным
+# модулем это не заведено намеренно: селекторы, ожидание таблицы и путь
+# прицепки лежат здесь, и новый модуль в `fb_ads_rpa` импортировал бы их
+# обратно — то есть RPA зависел бы от дешборда. Переносить надо одним куском.
+
+ADS_MANAGER_LEVELS: dict[str, str] = {
+    "adset": "https://adsmanager.facebook.com/adsmanager/manage/adsets",
+    "ad": "https://adsmanager.facebook.com/adsmanager/manage/ads",
+}
+
+#: Уровни, которые читаем и на которые встанет тумблер. Уровень кампании Meta
+#: сюда не входит: остановка кампании гасит все её ad set'ы разом, и такого
+#: никто не просил (решение владельца 11.09).
+TREE_LEVELS: tuple[str, ...] = ("adset", "ad")
+
+
+@dataclass
+class AdObject:
+    """Одна строка списка: то, что нужно, чтобы её показать и переключить."""
+
+    level: str                # adset | ad
+    id: str = ""              # id объекта в Meta
+    name: str = ""            # как аккаунт его называет
+    switch: str = "unknown"   # on | off | unknown — положение тумблера
+    switch_label: str = ""    # подпись тумблера словами Meta
+    delivery: str = ""        # колонка Delivery, дословно
+    id_from: str = ""         # из какого атрибута взят id — чтобы знать, что сломалось
+    #: Чей это объект. У объявления список даёт **имя** ad set'а, если колонка
+    #: показана, — не его id. Пустое значит «в таблице этого не было», и
+    #: выдавать это за «родителя нет» нельзя.
+    parent_name: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _tree_url(act: str, level: str, date_from: str, date_to: str = "") -> str:
+    """Адрес уровня. Разбор периода и номера кабинета — общий с `_url`."""
+    if level not in ADS_MANAGER_LEVELS:
+        raise ValueError(f"неизвестный уровень {level!r}")
+    base = _url(act, date_from, date_to)
+    return ADS_MANAGER_LEVELS[level] + base[len(ADS_MANAGER):]
+
+
+#: Разбор таблицы одним заходом в страницу.
+#:
+#: Колонки ищутся **по заголовку**, а не по номеру: их порядок человек меняет
+#: сам, и жёсткий индекс читал бы спенд вместо имени у того, кто переставил
+#: столбцы.
+#:
+#: id берётся из атрибутов строки, а не из текста: id объекта Meta — число в
+#: 15-18 цифр, в тексте строки таких не бывает (спенд, показы и лиды короче),
+#: а в атрибутах оно лежит у чекбокса, ссылки или узла разметки. Приём это
+#: догадка ровно до первого живого прогона, поэтому возвращается ещё и
+#: `id_from` — имя атрибута, из которого число взято. Первое же чтение скажет,
+#: что там на самом деле, вместо того чтобы молча вернуть пустые id.
+_READ_TREE_JS = r"""
+(level) => {
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const grid = document.querySelector('div[role="table"], [role="grid"]');
+  if (!grid) return {rows: [], how: 'no-grid', columns: []};
+  const rows = Array.from(grid.querySelectorAll('[role="row"]'));
+  if (!rows.length) return {rows: [], how: 'no-rows', columns: []};
+
+  const head = rows.find(r => r.querySelector('[role="columnheader"]'));
+  const cols = {};
+  if (head) {
+    Array.from(head.querySelectorAll('[role="columnheader"]')).forEach((c, i) => {
+      const k = norm(c.innerText).toLowerCase();
+      if (k && !(k in cols)) cols[k] = i;
+    });
+  }
+  const pick = (names) => {
+    for (const n of names) for (const k in cols) if (k.startsWith(n)) return cols[k];
+    return -1;
+  };
+  // Имя ищется по своему уровню, а не по первому подходящему заголовку. На
+  // странице объявлений колонка «Ad set name» тоже бывает показана, и общий
+  // список перехватил бы её раньше «Ad name» — в имени объявления оказалось бы
+  // имя его родителя.
+  const iName = level === 'ad' ? pick(['ad name', 'name'])
+                               : pick(['ad set name', 'name']);
+  const iParent = level === 'ad' ? pick(['ad set name']) : -1;
+  const iDelivery = pick(['delivery', 'status']);
+
+  const LONG = /\d{15,18}/;
+  const out = [];
+  for (const r of rows) {
+    if (r === head || r.querySelector('[role="columnheader"]')) continue;
+    const cells = Array.from(r.querySelectorAll('[role="cell"], [role="gridcell"]'));
+    if (!cells.length) continue;
+
+    let id = '', idFrom = '';
+    const nodes = [r].concat(Array.from(r.querySelectorAll('*')));
+    scan:
+    for (const el of nodes) {
+      for (const a of (el.attributes || [])) {
+        const m = String(a.value).match(LONG);
+        if (m) { id = m[0]; idFrom = a.name; break scan; }
+      }
+    }
+
+    const sw = r.querySelector('[role="switch"], input[type="checkbox"][aria-checked]');
+    let onoff = 'unknown', label = '';
+    if (sw) {
+      label = norm(sw.getAttribute('aria-label') || '');
+      const c = sw.getAttribute('aria-checked');
+      if (c === 'true') onoff = 'on';
+      else if (c === 'false') onoff = 'off';
+      else if (sw.checked === true) onoff = 'on';
+      else if (sw.checked === false) onoff = 'off';
+    }
+
+    out.push({
+      id: id,
+      id_from: idFrom,
+      name: (iName >= 0 && cells[iName]) ? norm(cells[iName].innerText)
+                                         : norm(cells[0] ? cells[0].innerText : ''),
+      switch: onoff,
+      switch_label: label,
+      delivery: (iDelivery >= 0 && cells[iDelivery]) ? norm(cells[iDelivery].innerText) : '',
+      parent_name: (iParent >= 0 && cells[iParent]) ? norm(cells[iParent].innerText) : '',
+    });
+  }
+  return {rows: out, how: head ? 'header-mapped' : 'no-header', columns: Object.keys(cols)};
+}
+"""
+
+
+def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
+    """Разобрать открытую таблицу одного уровня.
+
+    Возвращает `(объекты, чем разобрано, ошибка)`. Страница должна быть уже
+    на нужном уровне: переходами заведует `_read_tree`, которому есть что
+    сверять (кабинет, период), а этой функции — нет.
+
+    Ничего не нажимает. Это чтение, и единственное, что здесь происходит со
+    страницей, — вопрос к ней.
+    """
+    if level not in ADS_MANAGER_LEVELS:
+        return [], "", f"неизвестный уровень {level!r}"
+    try:
+        got = page.evaluate(_READ_TREE_JS, level)
+    except Exception as exc:
+        return [], "", f"таблица {level} не разобрана: {exc}"
+    if not isinstance(got, dict):
+        return [], "", f"таблица {level}: страница ответила не тем"
+
+    how = str(got.get("how") or "")
+    rows = got.get("rows") or []
+    objects = [
+        AdObject(
+            level=level,
+            id=str(r.get("id") or ""),
+            name=str(r.get("name") or ""),
+            switch=str(r.get("switch") or "unknown"),
+            switch_label=str(r.get("switch_label") or ""),
+            delivery=str(r.get("delivery") or ""),
+            id_from=str(r.get("id_from") or ""),
+            parent_name=str(r.get("parent_name") or ""),
+        )
+        for r in rows
+        if isinstance(r, dict)
+    ]
+    if not objects:
+        columns = ", ".join(str(c) for c in (got.get("columns") or [])) or "колонок не видно"
+        return [], how, f"в таблице {level} не нашлось ни одной строки ({how}; {columns})"
+    return objects, how, ""
+
+
+def _read_tree(
+    page, act: str, expected_act: str, date_from: str, date_to: str = "",
+) -> tuple[list[dict], str, str]:
+    """Пройти уровни и собрать дерево. Возвращает `(объекты, чем, ошибка)`.
+
+    Кабинет и период сверяются **на каждом уровне заново**. Переход — это новый
+    адрес, а Ads Manager умеет открыть кабинет профиля по умолчанию вместо
+    запрошенного; без сверки чужое дерево пришло бы с видом правильного ответа.
+    Ровно та же осторожность, что и со спендом, и по той же причине.
+
+    Редактор объявления не открывается ни на каком шаге. Meta при каждом его
+    открытии предвыбирает «Instant form (suggested)» в Browser add-ons и
+    автосохраняет — чистое Leads-объявление получает ошибку #100 от одного
+    визита (DQ204, 02.08). Всё читается со списка.
+    """
+    objects: list[dict] = []
+    hows: list[str] = []
+    errors: list[str] = []
+
+    for level in TREE_LEVELS:
+        try:
+            page.goto(
+                _tree_url(act, level, date_from, date_to),
+                timeout=TABLE_TIMEOUT_MS,
+                wait_until="domcontentloaded",
+            )
+        except Exception as exc:
+            errors.append(f"{level}: переход не удался ({exc})")
+            continue
+
+        if not _wait_for_grid(page):
+            errors.append(f"{level}: таблица не отрисовалась за отведённое время")
+            continue
+        if _act_from_url(page, tries=1) != expected_act:
+            errors.append(f"{level}: открылся не тот кабинет — уровень пропущен")
+            continue
+        if not _period_matches(_shown_period(page), date_from, date_to):
+            errors.append(f"{level}: на экране другой период — уровень пропущен")
+            continue
+
+        got, how, err = read_level(page, level)
+        if how:
+            hows.append(f"{level}:{how}")
+        if err:
+            errors.append(err)
+        objects.extend(o.to_dict() for o in got)
+
+    return objects, " ".join(hows), "; ".join(errors)
