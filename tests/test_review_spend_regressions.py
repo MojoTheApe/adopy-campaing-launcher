@@ -139,6 +139,16 @@ def test_strict_attach_refuses_other_profiles_global_port(tmp_path, monkeypatch)
 def test_attach_requests_owned_profile_and_new_tab(monkeypatch, tmp_path):
     calls = []
     class Direct:
+        # Публичная пара, как у настоящего провайдера: она делегирует
+        # приватным, а strict_profile зафиксирован внутри неё.
+        def attach_existing_only(self, profile_id, user_data_dir, *, new_page=False):
+            return self._try_attach_existing(
+                profile_id, user_data_dir, strict_profile=True, new_page=new_page
+            )
+
+        def profile_is_running(self, user_data_dir, profile_id=""):
+            return self._profile_process_running(user_data_dir, profile_id)
+
         def _try_attach_existing(self, *args, **kwargs):
             calls.append(kwargs)
             return NS()
@@ -185,3 +195,36 @@ def test_account_identity_is_checked_and_only_owned_tab_is_closed(monkeypatch, r
     if redirect_at:
         assert out.spend is None and not out.status
     assert calls == ["tab closed", {"keep_browser_open": True}]
+
+
+@pytest.mark.parametrize("running,owned_port", [(False, None), (True, None), (True, 19222)])
+def test_public_attach_uses_only_owned_port_without_profile_lifecycle(monkeypatch, running, owned_port):
+    """Exercise the public provider with the real attach implementation.
+
+    Discovery and the CDP connection are synthetic; lifecycle/fallback paths
+    must never be used, including after a failed CDP connection.
+    """
+    from unittest.mock import Mock
+    provider = br.MultiloginDirectCDPProvider()
+    monkeypatch.setattr(provider, "_profile_process_running", Mock(return_value=running))
+    owned = Mock(return_value=owned_port)
+    monkeypatch.setattr(provider, "_discover_owned_debug_port", owned)
+    forbidden = Mock(side_effect=AssertionError("unsafe fallback or profile lifecycle"))
+    for name in ("_discover_debug_port", "_kill_profile_browser", "open"):
+        monkeypatch.setattr(provider, name, forbidden)
+    connection = object()
+    connect = Mock(return_value=connection)
+    monkeypatch.setattr(br, "_connect_playwright", connect)
+    got = provider.attach_existing_only("synthetic-profile", "/synthetic/profile", new_page=True)
+    if running and owned_port:
+        assert got is connection
+        connect.assert_called_once_with(cdp_url="http://127.0.0.1:19222", provider="multilogin_direct",
+                                        debug_port="19222", ws_endpoint=None, new_page=True)
+        connect.side_effect = RuntimeError("CDP unavailable")
+        assert provider.attach_existing_only("synthetic-profile", "/synthetic/profile", new_page=True) is None
+    else:
+        assert got is None
+        connect.assert_not_called()
+    forbidden.assert_not_called()
+    if not running:
+        owned.assert_not_called()

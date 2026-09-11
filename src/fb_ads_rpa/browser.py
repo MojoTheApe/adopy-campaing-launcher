@@ -789,6 +789,45 @@ class MultiloginDirectCDPProvider:
                 continue
         return None
 
+    # ── Публичный путь «прицепись, но не поднимай» ───────────────────────
+    #
+    # Публикация и чтение хотят от браузера противоположного. Публикации нужен
+    # браузер любой ценой: не вышло прицепиться — останови профиль и подними
+    # заново с автоматизацией. Чтению наоборот: прицепись к тому, что открыто,
+    # а если открытого нет — **остановись**. Перезапуск разлогинивает аккаунт
+    # (так вышло на x01) и умеет терять прокси; ради одного числа за вчера это
+    # неприемлемо.
+    #
+    # Публичного способа сказать второе не было, и чтение звало приватные
+    # методы этого класса напрямую из чужого модуля (`acl-108e`). Теперь
+    # говорит — а приватные методы остаются приватными.
+
+    def attach_existing_only(
+        self, profile_id: str, user_data_dir: str, *, new_page: bool = False
+    ) -> "BrowserConnection | None":
+        """Прицепиться к уже открытому профилю. Никогда его не поднимать.
+
+        `None` значит «открытого окна с отладочным портом нет», и это всё, что
+        здесь происходит: ни остановки профиля, ни запуска.
+
+        `strict_profile` зафиксирован намеренно: он требует, чтобы порт
+        принадлежал именно этому профилю. Свободный поиск годится публикации,
+        которая профиль только что подняла сама; чтению он позволил бы
+        прицепиться к чужому окну и прочитать чужой кабинет.
+        """
+        return self._try_attach_existing(
+            profile_id, user_data_dir, strict_profile=True, new_page=new_page
+        )
+
+    def profile_is_running(self, user_data_dir: str, profile_id: str = "") -> bool:
+        """Есть ли живой процесс Mimic на этой папке профиля.
+
+        Нужно, чтобы отличить «профиль закрыт» от «профиль открыт руками в MLX
+        Desktop»: у второго нет отладочного порта, прицепиться не к чему, и
+        человеку надо сказать именно это, а не «профиль не найден».
+        """
+        return self._profile_process_running(user_data_dir, profile_id)
+
     def _try_attach_existing(
         self, profile_id: str, user_data_dir: str, *, strict_profile: bool = False, new_page: bool = False
     ) -> "BrowserConnection | None":
@@ -801,7 +840,7 @@ class MultiloginDirectCDPProvider:
         port = self._discover_owned_debug_port(user_data_dir) if strict_profile else self._discover_debug_port(user_data_dir, profile_id)
         if port is None:
             log.info(
-                "Profile %s is running but no CDP debug port found — will relaunch with debugging",
+                "Profile %s is running but no CDP debug port found — attachment unavailable",
                 profile_id,
             )
             return None
@@ -817,7 +856,7 @@ class MultiloginDirectCDPProvider:
             log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
             return conn
         except Exception as exc:
-            log.warning("Could not attach to running Mimic (%s) — will relaunch", exc)
+            log.warning("Could not attach to running Mimic (%s)", exc)
             return None
 
     def open(self, entry: AccountMapEntry, account_label: str) -> "BrowserConnection":

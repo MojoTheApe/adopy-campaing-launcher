@@ -50,6 +50,111 @@ TABLE_TIMEOUT_MS = 90_000
 TOTALS_TRIES = 20
 
 
+# ── Чем чтение цепляется за экраны Meta ──────────────────────────────────
+#
+# Всё в одном месте, как в `meta_dom.py` у RPA. Причина не в порядке ради
+# порядка: Meta двигает контролы сразу для всех, и правка, ломающая публикацию,
+# ломает и чтение — экраны те же. Разбросанные по файлу литералы означают, что
+# чинить придётся по одному, находя их поиском.
+#
+# Здесь же они переживут переезд в RPA-трек (`acl-108d`): перенести один блок —
+# работа механическая, собрать его заново по всему файлу — нет.
+#
+# Каждый список — по убыванию надёжности: сначала то, что Meta пометила сама,
+# потом то, что видно человеку. Первое переживает перевод интерфейса, второе
+# нет; но первое Meta и убирает чаще.
+
+#: Название кабинета в шапке Ads Manager.
+SEL_ACCOUNT_NAME = (
+    '[aria-label*="Ad account" i]',
+    '[data-testid*="account_selector" i]',
+    'div[role="button"]:has-text("act_")',
+)
+
+#: Кнопка периода. Запасной путь ниже на деле основной: у кнопки часто нет
+#: aria-label, и опознаётся она по дате внутри — снимок первого живого прогона
+#: показал справа вверху «Sep 6, 2026».
+SEL_PERIOD = (
+    '[aria-label*="Date"], [aria-label*="date range" i]',
+    'div[role="button"][aria-label*="Date"]',
+    'span:has-text("Yesterday")',
+)
+SEL_PERIOD_FALLBACK = 'div[role="button"], [role="combobox"]'
+RE_PERIOD_DATE = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},\s*\d{4}"
+
+#: Надпись строки итогов, помеченная нашим же атрибутом из `_FIND_TOTALS_JS`:
+#: к ней надо подвести курсор, а через evaluate ручку не получить.
+SEL_TOTALS_LABEL = '[data-acl-totals="1"]'
+
+#: Любая кнопка — среди них ищется «View results» по тексту.
+SEL_BUTTON = '[role="button"]'
+
+#: Таблица кампаний — признак, что страница ожила. Три написания: Meta успела
+#: подержать список и таблицей, и гридом, а подпись колонки переживает оба.
+SEL_GRID = 'div[role="table"], [role="grid"], [aria-label*="Amount spent" i]'
+
+#: Поиск строки итогов целиком внутри страницы — один вызов вместо обхода по
+#: узлу за раз. Обход `query_selector_all("div, span")` с `inner_text()` на
+#: каждом узле — это тысячи обращений к браузеру: пока он делался однократно,
+#: он стоил секунды, но повторные попытки (TOTALS_TRIES) умножили цену, и
+#: чтение за три дня заняло 175 секунд против 40 за один. Ждать надо страницу,
+#: а не собственный обход.
+#:
+#: Надпись помечается атрибутом, чтобы потом взять её обычным селектором: к ней
+#: ещё нужно подвести курсор, а через evaluate ручку не получить.
+_FIND_TOTALS_JS = r"""
+() => {
+  const out = {spend: null, label: false};
+  const money = /([$€£₪]\s*[\d,]+(?:\.\d{1,2})?)\s*Total spent/;
+  document.querySelectorAll('[data-acl-totals]').forEach(
+    e => e.removeAttribute('data-acl-totals'));
+  for (const n of document.querySelectorAll('div, span')) {
+    const t = (n.innerText || '').replace(/\s+/g, ' ').trim();
+    if (!t) continue;
+    if (out.spend === null && t.length <= 600 && t.indexOf('Total spent') !== -1) {
+      const m = t.match(money);
+      if (m) out.spend = m[1];
+    }
+    if (t.indexOf('Results from') === 0 && t.indexOf('campaign') !== -1) {
+      const r = n.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        // как и в прежнем обходе, побеждает последняя видимая копия
+        document.querySelectorAll('[data-acl-totals]').forEach(
+          e => e.removeAttribute('data-acl-totals'));
+        n.setAttribute('data-acl-totals', '1');
+        out.label = true;
+      }
+    }
+  }
+  return out;
+}
+"""
+
+
+
+#: Прокручивается самый большой прокручиваемый блок — сам список. Ищем его по
+#: `overflowY`, а не по классу: имена классов у Meta меняются от сборки к
+#: сборке, а поведение блока — нет.
+_SCROLL_TO_TOTALS_JS = r"""
+() => {
+  let best = null, bestArea = 0;
+  for (const n of document.querySelectorAll('div')) {
+    const st = getComputedStyle(n);
+    if (!/(auto|scroll)/.test(st.overflowY)) continue;
+    if (n.scrollHeight <= n.clientHeight + 40) continue;
+    const r = n.getBoundingClientRect();
+    const area = r.width * r.height;
+    if (area > bestArea) { bestArea = area; best = n; }
+  }
+  if (best) { best.scrollTop = best.scrollHeight; return true; }
+  window.scrollTo(0, document.body.scrollHeight);
+  return false;
+}
+"""
+
+
+
+
 def yesterday(today: date | None = None) -> str:
     return ((today or date.today()) - timedelta(days=1)).isoformat()
 
@@ -394,8 +499,8 @@ def _attach_only(entry, account_label: str):
     открытого руками в MLX Desktop, нет отладочного порта, и это свойство
     Multilogin, а не наше решение.
 
-    Зовём внутренности чужого трека сознательно и в одном месте: публичного
-    «прицепись, но не поднимай» там пока нет — заведено как `acl-108e`.
+    Используем публичный attach_existing_only: проверка принадлежности
+    профилю закреплена в провайдере, для чтения создаётся отдельная вкладка.
     """
     from src.fb_ads_rpa import browser as rpa_browser
 
@@ -417,13 +522,13 @@ def _attach_only(entry, account_label: str):
 
     direct = direct_cls()
     for spelling in _dir_spellings(udd):
-        conn = direct._try_attach_existing(profile_id, spelling, strict_profile=True, new_page=True)
+        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
         if conn is not None:
             return conn
 
     running = False
     try:
-        running = any(direct._profile_process_running(p, profile_id) for p in _dir_spellings(udd))
+        running = any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd))
     except Exception:
         pass
     if running:
@@ -536,11 +641,7 @@ def _ads_manager_account_name(page) -> str:
     молча значит время от времени выбирать не тот кабинет так, что на экране
     об этом ничего не сказано.
     """
-    for sel in (
-        '[aria-label*="Ad account" i]',
-        '[data-testid*="account_selector" i]',
-        'div[role="button"]:has-text("act_")',
-    ):
+    for sel in SEL_ACCOUNT_NAME:
         try:
             el = page.query_selector(sel)
             if el:
@@ -607,12 +708,12 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     if udd is not None:
         direct = direct_cls()
         for spelling in _dir_spellings(udd):
-            attached = direct._try_attach_existing(profile_id, spelling, strict_profile=True)
+            attached = direct.attach_existing_only(profile_id, spelling)
             if attached is not None:
                 attached.close(keep_browser_open=True)
                 return True, "профиль уже открыт автоматизацией — можно читать"
         try:
-            if any(direct._profile_process_running(p, profile_id) for p in _dir_spellings(udd)):
+            if any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd)):
                 return False, (
                     f"{who}: профиль открыт вручную в MLX Desktop. Поднять его "
                     "автоматизацией можно только остановив — а это разлогинивает. "
@@ -832,10 +933,7 @@ def _url(act: str, date_from: str, date_to: str = "") -> str:
 def _wait_for_grid(page) -> bool:
     """Дождаться таблицы кампаний — признак, что страница ожила."""
     try:
-        page.wait_for_selector(
-            'div[role="table"], [role="grid"], [aria-label*="Amount spent" i]',
-            timeout=TABLE_TIMEOUT_MS,
-        )
+        page.wait_for_selector(SEL_GRID, timeout=TABLE_TIMEOUT_MS)
         return True
     except Exception:
         return False
@@ -858,11 +956,7 @@ def _shown_period(page, tries: int = 12) -> str:
 
 
 def _period_once(page) -> str:
-    for sel in (
-        '[aria-label*="Date"], [aria-label*="date range" i]',
-        'div[role="button"][aria-label*="Date"]',
-        'span:has-text("Yesterday")',
-    ):
+    for sel in SEL_PERIOD:
         try:
             el = page.query_selector(sel)
             if el:
@@ -878,11 +972,8 @@ def _period_once(page) -> str:
     try:
         import re as _r
 
-        pat = _r.compile(
-            r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},\s*\d{4}",
-            _r.I,
-        )
-        for el in page.query_selector_all('div[role="button"], [role="combobox"]'):
+        pat = _r.compile(RE_PERIOD_DATE, _r.I)
+        for el in page.query_selector_all(SEL_PERIOD_FALLBACK):
             text = " ".join((el.inner_text() or "").split())
             if 0 < len(text) < 80 and pat.search(text):
                 return text
@@ -946,44 +1037,6 @@ def _period_matches(shown: str, date_from: str, date_to: str = "") -> bool:
     return sorted(found) == sorted(want)
 
 
-#: Поиск строки итогов целиком внутри страницы — один вызов вместо обхода по
-#: узлу за раз. Обход `query_selector_all("div, span")` с `inner_text()` на
-#: каждом узле — это тысячи обращений к браузеру: пока он делался однократно,
-#: он стоил секунды, но повторные попытки (TOTALS_TRIES) умножили цену, и
-#: чтение за три дня заняло 175 секунд против 40 за один. Ждать надо страницу,
-#: а не собственный обход.
-#:
-#: Надпись помечается атрибутом, чтобы потом взять её обычным селектором: к ней
-#: ещё нужно подвести курсор, а через evaluate ручку не получить.
-_FIND_TOTALS_JS = r"""
-() => {
-  const out = {spend: null, label: false};
-  const money = /([$€£₪]\s*[\d,]+(?:\.\d{1,2})?)\s*Total spent/;
-  document.querySelectorAll('[data-acl-totals]').forEach(
-    e => e.removeAttribute('data-acl-totals'));
-  for (const n of document.querySelectorAll('div, span')) {
-    const t = (n.innerText || '').replace(/\s+/g, ' ').trim();
-    if (!t) continue;
-    if (out.spend === null && t.length <= 600 && t.indexOf('Total spent') !== -1) {
-      const m = t.match(money);
-      if (m) out.spend = m[1];
-    }
-    if (t.indexOf('Results from') === 0 && t.indexOf('campaign') !== -1) {
-      const r = n.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) {
-        // как и в прежнем обходе, побеждает последняя видимая копия
-        document.querySelectorAll('[data-acl-totals]').forEach(
-          e => e.removeAttribute('data-acl-totals'));
-        n.setAttribute('data-acl-totals', '1');
-        out.label = true;
-      }
-    }
-  }
-  return out;
-}
-"""
-
-
 #: Прокрутить список кампаний к низу. Строка итогов стоит **под** ними, и в
 #: невысоком окне Ads Manager её не отрисовывает вовсе — искать в DOM нечего.
 #:
@@ -992,27 +1045,6 @@ _FIND_TOTALS_JS = r"""
 #: итогов на странице нет. Двадцать секунд ожидания ничего не меняли: ждать
 #: можно сколько угодно того, что не рисуется.
 #:
-#: Прокручивается самый большой прокручиваемый блок — сам список. Ищем его по
-#: `overflowY`, а не по классу: имена классов у Meta меняются от сборки к
-#: сборке, а поведение блока — нет.
-_SCROLL_TO_TOTALS_JS = r"""
-() => {
-  let best = null, bestArea = 0;
-  for (const n of document.querySelectorAll('div')) {
-    const st = getComputedStyle(n);
-    if (!/(auto|scroll)/.test(st.overflowY)) continue;
-    if (n.scrollHeight <= n.clientHeight + 40) continue;
-    const r = n.getBoundingClientRect();
-    const area = r.width * r.height;
-    if (area > bestArea) { bestArea = area; best = n; }
-  }
-  if (best) { best.scrollTop = best.scrollHeight; return true; }
-  window.scrollTo(0, document.body.scrollHeight);
-  return false;
-}
-"""
-
-
 def _scroll_to_totals(page) -> None:
     """Показать низ списка, где живёт строка итогов. Молча, если не вышло."""
     try:
@@ -1062,7 +1094,7 @@ def _read_total(page) -> tuple[float | None, str]:
         if value is not None:
             return value, "строка итогов, «Total spent»"
         if has_label:
-            label = page.query_selector('[data-acl-totals="1"]')
+            label = page.query_selector(SEL_TOTALS_LABEL)
             if label is not None:
                 break
         _sleep(1)
@@ -1081,7 +1113,7 @@ def _read_total(page) -> tuple[float | None, str]:
     _sleep(1.5)
     clicked = False
     try:
-        for b in page.query_selector_all('[role="button"]'):
+        for b in page.query_selector_all(SEL_BUTTON):
             try:
                 if " ".join((b.inner_text() or "").split()) == "View results" and b.is_visible():
                     b.click(timeout=5_000)
