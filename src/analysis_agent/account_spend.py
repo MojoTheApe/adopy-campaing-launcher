@@ -1242,11 +1242,7 @@ class AdObject:
     switch: str = "unknown"   # on | off | unknown — положение тумблера
     switch_label: str = ""    # подпись тумблера словами Meta
     delivery: str = ""        # колонка Delivery, дословно
-    id_from: str = ""         # из какого атрибута взят id — чтобы знать, что сломалось
-    #: Чей это объект. У объявления список даёт **имя** ad set'а, если колонка
-    #: показана, — не его id. Пустое значит «в таблице этого не было», и
-    #: выдавать это за «родителя нет» нельзя.
-    parent_name: str = ""
+    id_from: str = ""         # откуда взят id — чтобы знать, что сломалось
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -1260,87 +1256,89 @@ def _tree_url(act: str, level: str, date_from: str, date_to: str = "") -> str:
     return ADS_MANAGER_LEVELS[level] + base[len(ADS_MANAGER):]
 
 
+#: Какой тип объекта Meta пишет в разметке на каждом уровне.
+#:
+#: **Словарь здесь легаси, и читать его буквально нельзя.** На странице ad
+#: set'ов строки помечены `CAMPAIGN`, на странице объявлений — `ADGROUP`: так
+#: назывались эти уровни в старом Ads API, где «campaign» значил нынешний ad
+#: set, а «adgroup» — объявление. Кто прочтёт `forObjectType(toggle,CAMPAIGN)`
+#: как «тумблер кампании», ошибётся на целый уровень — а это разница между
+#: «остановить один ad set» и «погасить всё под кампанией».
+#:
+#: Зато токен даёт проверку, которой иначе нет: адрес уровня можно открыть и
+#: получить не тот список, и заметить это по одному URL нельзя.
+_LEVEL_KIND: dict[str, str] = {"adset": "CAMPAIGN", "ad": "ADGROUP"}
+
+#: Строка итогов. Не объект: переключать там нечего, а в список она попадает
+#: такой же разметкой, как настоящие строки.
+_TOTALS_ROW_ID = "-1"
+
 #: Разбор таблицы одним заходом в страницу.
 #:
-#: Колонки ищутся **по заголовку**, а не по номеру: их порядок человек меняет
-#: сам, и жёсткий индекс читал бы спенд вместо имени у того, кто переставил
-#: столбцы.
+#: Идём по `data-surface` — собственной разметке Meta для её же логов. Она
+#: несёт и id строки, и назначение ячейки:
 #:
-#: id берётся из атрибутов строки, а не из текста: id объекта Meta — число в
-#: 15-18 цифр, в тексте строки таких не бывает (спенд, показы и лиды короче),
-#: а в атрибутах оно лежит у чекбокса, ссылки или узла разметки. Приём это
-#: догадка ровно до первого живого прогона, поэтому возвращается ещё и
-#: `id_from` — имя атрибута, из которого число взято. Первое же чтение скажет,
-#: что там на самом деле, вместо того чтобы молча вернуть пустые id.
+#:     /am/table/table_row:120250178859040703unit/table_cell:forObjectType(name,CAMPAIGN)
+#:
+#: Первая версия искала `role="row"` и `role="cell"` и не нашла ни одной
+#: строки: у грида Ads Manager размечен заголовком только он сам —
+#: пятнадцать `columnheader` и **ноль** `role="cell"`, а тело таблицы лежит под
+#: `role="presentation"`. Заголовки при этом прочитались, то есть разбор
+#: возвращал «ноль строк» с видом работающего.
+#:
+#: id тоже брался не оттуда: искалось любое число в 15-18 цифр в атрибутах, и
+#: первыми находились `<path d="M 25.19238815542512 ...">` — в путях SVG таких
+#: цепочек сколько угодно. Здесь id берётся из одного определённого места.
 _READ_TREE_JS = r"""
 (level) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-  const grid = document.querySelector('div[role="table"], [role="grid"]');
-  if (!grid) return {rows: [], how: 'no-grid', columns: []};
-  const rows = Array.from(grid.querySelectorAll('[role="row"]'));
-  if (!rows.length) return {rows: [], how: 'no-rows', columns: []};
+  const t = document.querySelector('[role="table"], [role="grid"]');
+  if (!t) return {rows: [], how: 'no-table', kinds: []};
 
-  const head = rows.find(r => r.querySelector('[role="columnheader"]'));
-  const cols = {};
-  if (head) {
-    Array.from(head.querySelectorAll('[role="columnheader"]')).forEach((c, i) => {
-      const k = norm(c.innerText).toLowerCase();
-      if (k && !(k in cols)) cols[k] = i;
-    });
-  }
-  const pick = (names) => {
-    for (const n of names) for (const k in cols) if (k.startsWith(n)) return cols[k];
-    return -1;
-  };
-  // Имя ищется по своему уровню, а не по первому подходящему заголовку. На
-  // странице объявлений колонка «Ad set name» тоже бывает показана, и общий
-  // список перехватил бы её раньше «Ad name» — в имени объявления оказалось бы
-  // имя его родителя.
-  const iName = level === 'ad' ? pick(['ad name', 'name'])
-                               : pick(['ad set name', 'name']);
-  const iParent = level === 'ad' ? pick(['ad set name']) : -1;
-  const iDelivery = pick(['delivery', 'status']);
+  const marked = t.querySelectorAll('[data-surface*="table_row:"]');
+  if (!marked.length) return {rows: [], how: 'no-row-surfaces', kinds: []};
 
-  const LONG = /\d{15,18}/;
-  const out = [];
-  for (const r of rows) {
-    if (r === head || r.querySelector('[role="columnheader"]')) continue;
-    const cells = Array.from(r.querySelectorAll('[role="cell"], [role="gridcell"]'));
-    if (!cells.length) continue;
+  const rows = new Map();
+  const kinds = new Set();
+  const CELL = /table_row:(-?\d+)[a-z]*\/table_cell:([^\/]+)/;
+  const KIND = /forObjectType\((?:name|toggle|delivery),([A-Z_]+)\)/;
 
-    let id = '', idFrom = '';
-    const nodes = [r].concat(Array.from(r.querySelectorAll('*')));
-    scan:
-    for (const el of nodes) {
-      for (const a of (el.attributes || [])) {
-        const m = String(a.value).match(LONG);
-        if (m) { id = m[0]; idFrom = a.name; break scan; }
+  for (const el of marked) {
+    const m = (el.getAttribute('data-surface') || '').match(CELL);
+    if (!m) continue;
+    const id = m[1], cell = m[2];
+    if (id === '-1') continue;   // строка итогов — не объект
+
+    let r = rows.get(id);
+    if (!r) {
+      r = {id: id, name: '', delivery: '', switch: 'unknown', switch_label: '',
+           id_from: 'data-surface'};
+      rows.set(id, r);
+    }
+    const k = cell.match(KIND);
+    if (k) kinds.add(k[1]);
+
+    // Одна и та же разметка висит на нескольких вложенных узлах: берём первое
+    // непустое, а не последнее — внутренние копии часто пустые.
+    if (cell.startsWith('forObjectType(name')) {
+      const txt = norm(el.innerText);
+      if (txt && !r.name) r.name = txt;
+    } else if (cell.startsWith('forObjectType(delivery')) {
+      const txt = norm(el.innerText);
+      if (txt && !r.delivery) r.delivery = txt;
+    } else if (cell.startsWith('forObjectType(toggle')) {
+      const sw = el.querySelector('[role="switch"], input[type="checkbox"]');
+      if (sw && r.switch === 'unknown') {
+        r.switch_label = norm(sw.getAttribute('aria-label') || '');
+        const c = sw.getAttribute('aria-checked');
+        if (c === 'true') r.switch = 'on';
+        else if (c === 'false') r.switch = 'off';
       }
     }
-
-    const sw = r.querySelector('[role="switch"], input[type="checkbox"][aria-checked]');
-    let onoff = 'unknown', label = '';
-    if (sw) {
-      label = norm(sw.getAttribute('aria-label') || '');
-      const c = sw.getAttribute('aria-checked');
-      if (c === 'true') onoff = 'on';
-      else if (c === 'false') onoff = 'off';
-      else if (sw.checked === true) onoff = 'on';
-      else if (sw.checked === false) onoff = 'off';
-    }
-
-    out.push({
-      id: id,
-      id_from: idFrom,
-      name: (iName >= 0 && cells[iName]) ? norm(cells[iName].innerText)
-                                         : norm(cells[0] ? cells[0].innerText : ''),
-      switch: onoff,
-      switch_label: label,
-      delivery: (iDelivery >= 0 && cells[iDelivery]) ? norm(cells[iDelivery].innerText) : '',
-      parent_name: (iParent >= 0 && cells[iParent]) ? norm(cells[iParent].innerText) : '',
-    });
   }
-  return {rows: out, how: head ? 'header-mapped' : 'no-header', columns: Object.keys(cols)};
+
+  return {rows: Array.from(rows.values()), how: 'data-surface',
+          kinds: Array.from(kinds)};
 }
 """
 
@@ -1375,14 +1373,27 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
             switch_label=str(r.get("switch_label") or ""),
             delivery=str(r.get("delivery") or ""),
             id_from=str(r.get("id_from") or ""),
-            parent_name=str(r.get("parent_name") or ""),
         )
         for r in rows
         if isinstance(r, dict)
     ]
     if not objects:
-        columns = ", ".join(str(c) for c in (got.get("columns") or [])) or "колонок не видно"
-        return [], how, f"в таблице {level} не нашлось ни одной строки ({how}; {columns})"
+        return [], how, f"в таблице {level} не нашлось ни одной строки ({how})"
+
+    # Уровень сверяется по тому, что Meta написала о самих строках, а не по
+    # адресу: открыть `/manage/adsets` и получить другой список — можно, и по
+    # одному URL этого не увидеть. Спутать уровни здесь дороже всего: на это
+    # встанет тумблер, и разница между ad set'ом и кампанией — разница между
+    # «остановить одно» и «погасить всё под ней».
+    kinds = {str(k) for k in (got.get("kinds") or [])}
+    want = _LEVEL_KIND[level]
+    if kinds and kinds != {want}:
+        return [], how, (
+            f"на уровне {level} ждали объекты {want}, а страница разметила "
+            f"{', '.join(sorted(kinds))} — список не тот, ничего не берём"
+        )
+    if not kinds:
+        return [], how, f"на уровне {level} страница не сказала, что это за объекты"
     return objects, how, ""
 
 
