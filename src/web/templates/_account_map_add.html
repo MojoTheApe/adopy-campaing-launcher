@@ -1,0 +1,33 @@
+{#- Форма подключения аккаунта к стране.
+
+    Один кусок на два места: страна, которая уже есть в карте, и страна,
+    которая пока существует только расходом в книге. Раньше форма жила
+    только в первой, и у второй было лишь объяснение «подключите из раздела
+    Accounts» — то есть человека отправляли искать другое место вместо того,
+    чтобы дать сделать здесь.
+
+    `amap_value` — то, к чему привязываем. У страны из карты это её ключ, у
+    страны из книги — её имя: привязка сама заводит страну, отдельного шага
+    «создать» не нужно. -#}
+<div class="amap-add" data-amap-country="{{ amap_value | e }}">
+  <select class="amap-known">
+    <option value="">already connected…</option>
+    {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
+  </select>
+  <button type="button" class="amap-btn"
+          onclick="amapLink(this.previousElementSibling,'country',{{ amap_value | tojson | forceescape }})">Add</button>
+  <span style="color:var(--border-strong)">|</span>
+  <select class="amap-inst" onchange="amapFilter(this.closest('.amap-add').querySelector('.amap-find'))" title="Which Multilogin account to search">
+    <option value="A">{{ mlx['A'] }}</option>
+    <option value="B">{{ mlx['B'] }}</option>
+  </select>
+  {#- Отбор идёт по мере ввода. Список профилей тянется один раз на инстанс и
+      фильтруется на месте: так отклик мгновенный, а Multilogin не дёргается
+      на каждую букву. Кнопка осталась для перезагрузки списка, когда профиль
+      только что завели. -#}
+  <input type="text" class="amap-find" placeholder="last letters: X84" size="10"
+         oninput="amapFilter(this)" onfocus="amapFilter(this)" autocomplete="off">
+  <button type="button" class="amap-btn" onclick="amapFind(this)" title="Reload the profile list from Multilogin">Reload</button>
+  <span class="amap-msg"></span>
+  <div class="amap-hits" hidden></div>
+</div>
