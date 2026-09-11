@@ -641,11 +641,21 @@ python scripts/acl_board.py --render
       index would read spend as a name. Caught on the way: the ads page also
       shows an "Ad set name" column, and a shared header list found it before
       "Ad name", so every ad of one ad set would have looked identical.
-      **Not yet proved:** that a real row carries its id in an attribute. That
-      is a hypothesis until the first live read — same footing as the acl-357
-      selector steps. It is built to say so: the parse returns `id_from` and
-      `objects_how`, so one live read reports what is actually there instead
-      of silently returning empty ids.
+      **Verified live 11 September** (`fb97ab1`): 5 ad sets and 6 ads with real
+      ids off KLD_BFL_X84. The first read returned zero rows with the headers
+      parsed, and the self-diagnosis named three mistakes at once — the grid
+      marks up only its header with roles (fifteen `columnheader`, zero
+      `role="cell"`; the body is `role="presentation"`), the id heuristic was
+      picking digits out of SVG path data, and the level was never checked.
+      All three are answered by `data-surface`, Meta's own logging labels,
+      which carry row id, cell purpose and object kind together.
+      **A trap worth remembering:** that vocabulary is legacy. Ad-set rows are
+      marked `CAMPAIGN`, ad rows `ADGROUP` — the names these levels had in the
+      old Ads API. Reading it literally is being wrong by a whole level.
+      Two facts, not one, proved right the same day: two ad sets came back with
+      the switch `on` and delivery `Campaign off` — switched on, delivering
+      nothing. A boolean would have shown them running.
+      Open for `acl-113`: the live ad row carries no link to its ad set.
       GitHub: **ACL-1124** (#124), Data & Reporting, Feature, Review, High,
       Release.
         Pausing stops money; publishing spends it. The rule that the RPA does
