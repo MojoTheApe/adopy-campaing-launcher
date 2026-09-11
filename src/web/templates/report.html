@@ -1906,6 +1906,46 @@
     .amap-live-ok { font-variant-numeric: tabular-nums; font-weight: 600; }
     .amap-live-run { color: var(--muted); font-size: 0.78rem; }
     .amap-live-bad { color: var(--danger); border-color: var(--danger); }
+
+    /* ── Что в аккаунте на самом деле (acl-113) ───────────────────────────
+       Строки приходят из кабинета, не из книги: у книжных нет ни id, ни
+       состояния, и отстают они на сутки. Появляется этот блок только после
+       Read — до него показывать нечего, и притворяться, что есть, нельзя.
+
+       Состояние нарисовано СЛОВОМ, а не тумблером. Переключать пока нечем, а
+       контрол, похожий на переключатель, обещает то, чего не делает. */
+    .amap-tree > td { padding: 0 !important; background: var(--bg-subtle); }
+    .amap-tree-inner { padding: 0.5rem 0.75rem 0.6rem 2.2rem; }
+    .amap-tree-head {
+      font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 0.35rem;
+    }
+    .amap-tree-line {
+      display: flex; align-items: baseline; gap: 0.5rem;
+      padding: 0.15rem 0; font-size: 0.8rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .amap-tree-line:last-child { border-bottom: none; }
+    .amap-tree-line.ad { padding-left: 1.4rem; }
+    .amap-tree-kind {
+      flex: 0 0 3.6rem; color: var(--muted); font-size: 0.7rem;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .amap-tree-sw {
+      flex: 0 0 2.6rem; text-align: center; border-radius: 3px;
+      padding: 0.05rem 0.3rem; font-size: 0.7rem; font-weight: 600;
+      border: 1px solid var(--border);
+    }
+    .amap-tree-sw.on { color: var(--good); border-color: var(--good); }
+    .amap-tree-sw.off { color: var(--muted); }
+    .amap-tree-sw.dim { color: var(--muted); border-style: dashed; }
+    .amap-tree-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Доставка отдельно от тумблера намеренно: «on» и «Campaign off» стоят
+       вместе на живом аккаунте — включено, а не крутится, потому что выключена
+       кампания сверху. Одним значком это не показать. */
+    .amap-tree-del { flex: 0 0 auto; color: var(--muted); font-size: 0.72rem; }
+    .amap-tree-del.stopped { color: var(--warn, var(--danger)); }
+    .amap-tree-err { color: var(--danger); font-size: 0.75rem; padding-top: 0.3rem; }
     .amap-btn {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -4530,8 +4570,91 @@ function amapApplyReading(account, s) {
     cell.firstChild.textContent = amapMoney(s.spend, s.currency);
     cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how;
     btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read'; btn.title = 'Read again';
+    amapPaintTree(row, s);
   });
   amapUpdateCountrySummaries();
+}
+
+/* ── Что в аккаунте на самом деле (acl-113) ─────────────────────────────
+   Read приносит не только число, но и ad set'ы с объявлениями: их id,
+   положение тумблера и доставку словами Meta (ACL-1124). До этой правки всё
+   это приходило и пропадало — рисовать было нечем.
+
+   Строки из книги статистики этого заменить не могут: в книге нет ни id, ни
+   состояния, и отстаёт она на сутки. Поэтому блок появляется только после
+   чтения и только под тем аккаунтом, который читали.
+
+   Состояние показано двумя значениями, а не одним. На живом аккаунте
+   встретилось «тумблер on, доставка Campaign off» — включено, а не крутится,
+   потому что выключена кампания сверху. Сведи это в один значок, и человек
+   увидит работающим то, что не тратит ничего. */
+function amapTreeLine(o) {
+  var line = document.createElement('div');
+  line.className = 'amap-tree-line' + (o.level === 'ad' ? ' ad' : '');
+
+  var kind = document.createElement('span');
+  kind.className = 'amap-tree-kind';
+  kind.textContent = o.level === 'ad' ? 'ad' : 'ad set';
+
+  var sw = document.createElement('span');
+  var state = o.switch === 'on' ? 'on' : o.switch === 'off' ? 'off' : 'dim';
+  sw.className = 'amap-tree-sw ' + state;
+  sw.textContent = o.switch === 'on' ? 'On' : o.switch === 'off' ? 'Off' : '—';
+  /* «Тумблера не видно» — не «выключено». Спутать их значит показать
+     остановленным то, что тратит деньги. */
+  sw.title = o.switch === 'unknown'
+    ? 'No switch found in this row — not the same as switched off'
+    : (o.switch_label || 'On/off');
+
+  var name = document.createElement('span');
+  name.className = 'amap-tree-name';
+  name.textContent = o.name || '(no name)';
+  name.title = (o.name || '') + (o.id ? '  ·  ' + o.id : '');
+
+  var del = document.createElement('span');
+  var stopped = /off|review|reject|not deliver|error/i.test(o.delivery || '');
+  del.className = 'amap-tree-del' + (stopped ? ' stopped' : '');
+  del.textContent = o.delivery || '';
+
+  line.appendChild(kind); line.appendChild(sw);
+  line.appendChild(name); line.appendChild(del);
+  return line;
+}
+
+function amapPaintTree(row, s) {
+  /* Прежний блок снимается всегда: устаревшее состояние живого аккаунта —
+     худшее, что здесь можно оставить на экране. */
+  var next = row.nextElementSibling;
+  if (next && next.classList.contains('amap-tree')) next.remove();
+
+  var objects = (s && s.objects) || [];
+  if (!objects.length && !(s && s.objects_error)) return;
+
+  var tr = document.createElement('tr');
+  tr.className = 'amap-tree';
+  var td = document.createElement('td');
+  td.colSpan = row.children.length;
+  var box = document.createElement('div');
+  box.className = 'amap-tree-inner';
+
+  var head = document.createElement('div');
+  head.className = 'amap-tree-head';
+  var sets = objects.filter(function (o) { return o.level !== 'ad'; }).length;
+  var ads = objects.length - sets;
+  head.textContent = 'in the account · ' + sets + ' ad sets · ' + ads + ' ads · read ' + (s.finished_at || '');
+  box.appendChild(head);
+
+  objects.forEach(function (o) { box.appendChild(amapTreeLine(o)); });
+
+  if (s.objects_error) {
+    var err = document.createElement('div');
+    err.className = 'amap-tree-err';
+    err.textContent = s.objects_error;
+    box.appendChild(err);
+  }
+
+  td.appendChild(box); tr.appendChild(td);
+  row.parentNode.insertBefore(tr, row.nextSibling);
 }
 
 function amapPollSpend(account, cell, btn, tries, per) {
@@ -4564,6 +4687,36 @@ function amapResumeReadings() {
     seen[account] = true;
     var btn = cell.closest('tr').querySelector('.amap-read');
     amapPollSpend(account, cell, btn, 0, amapPeriod());
+  });
+
+  /* Дерево рисует только JS — второй копии этой разметки в шаблоне нет
+     намеренно: две копии расходятся, и замечает это тот, кто поверил не той.
+     Значит после перезагрузки страницы его надо восстановить из сохранённого
+     чтения, иначе оно исчезало бы, пока человек не нажмёт Read ещё раз —
+     то есть ради уже известного ответа пришлось бы снова трогать живой
+     аккаунт.
+
+     Запрос уходит только за теми, кого уже читали: он местный и в браузер не
+     ходит. */
+  var done = {};
+  var per = amapPeriod();
+  if (!per.from || per.span === 'all') return;
+  document.querySelectorAll('.amap-live[data-read-state="ok"]').forEach(function (cell) {
+    var account = cell.dataset.account;
+    if (done[account] || seen[account]) return;
+    done[account] = true;
+    fetch('/account-spend/status?account=' + encodeURIComponent(account)
+          + '&date_from=' + encodeURIComponent(per.from)
+          + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var s = (j && j.ok && j.reading) || null;
+        if (!s || s.state !== 'ok') return;
+        document.querySelectorAll('.amap-live').forEach(function (c) {
+          if (c.dataset.account === account) amapPaintTree(c.closest('tr'), s);
+        });
+      })
+      .catch(function () { /* дерево — не то, ради чего стоит рушить страницу */ });
   });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapResumeReadings);
