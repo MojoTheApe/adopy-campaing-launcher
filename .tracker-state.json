@@ -22,7 +22,8 @@
     },
     "f7809be11c4b601db7f19ace696b5a0d309638500cd8763a724ba1caf02ac3fc": {
       "title": "Adopt Description and Specifications for project tasks",
-      "state": "creating"
+      "state": "created",
+      "issue": 117
     }
   }
 }
