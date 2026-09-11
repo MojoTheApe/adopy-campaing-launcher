@@ -433,6 +433,7 @@ python scripts/acl_board.py --render
   - [x] `acl-108c` Pull yesterday's spend off a live test account #merged
         The whole point. Until this happens `acl-108` is code, not a route.
   - [x] `acl-108e` A public "attach, never relaunch" in the RPA track #review @rpa
+        PR #122, `check-pr` verified. Waits on the merge, nothing else.
         Reading calls `_try_attach_existing` and `_profile_process_running`
         directly — private methods of another track — because there is no
         public way to say "use the window that is open, and if there is none,
@@ -481,7 +482,9 @@ python scripts/acl_board.py --render
         the guard from `acl-108j` can then cover it too.
   - [ ] `acl-108d` Move the Ads Manager reading into the RPA track #next @rpa
         Tracked in GitHub Issues as **ACL-1121** (#121), module Data & Reporting,
-        type Improvement, Backlog.
+        type Improvement, Backlog. Taken out of the ACL-108 checklist on 11
+        September: an unfinished item there would keep ACL-108 from ever
+        reaching Merged for work that is no longer part of it.
         The selectors for Meta's own screens belong beside the other ones, in
         `src/fb_ads_rpa`, owned by the session that fixes them when Meta moves
         a control. It sits in the dashboard track today only because that is
