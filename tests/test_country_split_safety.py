@@ -34,6 +34,8 @@ def test_whole_money_cells(raw, expected):
     [HEADER, ["Peru", "$5.00"], ["Chile", "loading"]],
     [HEADER, ["Peru", "$1.00"], ["Peru", "$2.00"]],
     [["Country", "Day", "Amount spent"], ["Peru", DAY, "$5.00"]],
+    [["Country", "Age", "Amount spent"], ["Peru", "18-24", "$5.00"],
+     ["Total results 1/1 rows displayed", "", "$5.00"]],
     [["Country", "Amount spent", "Amount spent"], ["Peru", "1", "2"]],
     [HEADER, ["Peru", "$5.00"], ["Total results 1/2 rows displayed", "$5.00"]],
     [HEADER, ["Peru", "$5.00"], ["Total results 1/1 rows displayed", "$7.00"]],

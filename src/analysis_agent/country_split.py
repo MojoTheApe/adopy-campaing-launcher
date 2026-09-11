@@ -146,6 +146,7 @@ def money_and_currency(text: str) -> tuple[float | None, str]:
 
 _EMPTY_MARKERS = {"no data", "no results", "no data available", "no results found"}
 _TOTAL_LABEL = re.compile(r"(?:total(?: results)?|all)(?:\s+([0-9]+)/([0-9]+) rows displayed)?", re.I)
+_METRIC_COLUMNS = {"amount spent", "reach", "impressions", "cost per result", "results", "frequency"}
 
 
 def _parse_cells(matrix: list[list[str]]) -> tuple[list[dict], dict | None, str]:
@@ -160,8 +161,10 @@ def _parse_cells(matrix: list[list[str]]) -> tuple[list[dict], dict | None, str]
     header_i, names = headers[0]
     if names.count("country") != 1 or names.count("amount spent") != 1:
         return [], None, "refused: ambiguous report columns"
-    if any(n in names for n in ("campaign name", "ad set name", "ad name", "day", "month")):
-        return [], None, "refused: report contains an additional breakdown"
+    # An unrecognized dimension can still yield unique country names (e.g. only
+    # one age bucket happened to deliver). Duplicate detection alone is unsafe.
+    if any(n != "country" and n not in _METRIC_COLUMNS for n in names):
+        return [], None, "refused: additional breakdown or unsupported report column"
     country_col, amount_col = names.index("country"), names.index("amount spent")
     rows, seen, total, empty = [], set(), None, False
     for cells in matrix[header_i + 1:]:
