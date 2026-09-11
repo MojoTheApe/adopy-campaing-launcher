@@ -1924,8 +1924,15 @@
     /* Доставка отдельно от тумблера намеренно: «on» и «Campaign off» стоят
        вместе на живом аккаунте — включено, а не крутится, потому что выключена
        кампания сверху. Одним значком это не показать. */
-    .amap-tree-del { flex: 0 0 auto; color: var(--muted); font-size: 0.72rem; }
+    .amap-tree-del { flex: 0 0 8rem; text-align: right; color: var(--muted); font-size: 0.72rem; }
     .amap-tree-del.stopped { color: var(--warn, var(--danger)); }
+    /* Числа держат свою ширину и выравниваются по разряду: столбик из пяти
+       строк читается взглядом, разъезжающийся — нет. */
+    .amap-tree-num {
+      flex: 0 0 6rem; text-align: right; font-size: 0.75rem;
+      font-variant-numeric: tabular-nums; color: var(--muted);
+    }
+    .amap-tree-num.spend { color: inherit; }
     .amap-tree-err { color: var(--danger); font-size: 0.75rem; padding-top: 0.3rem; }
     .amap-btn {
       background: none; border: 1px solid var(--border-strong);
@@ -4620,22 +4627,80 @@ function amapTreeLine(o) {
   del.className = 'amap-tree-del' + (stopped ? ' stopped' : '');
   del.textContent = o.delivery || '';
 
+  /* Числа — теми же словами, какими их написала Meta. Имя и состояние говорят,
+     ЧТО это; спенд и результаты — зачем это трогать. Пять одинаково включённых
+     ad set'ов без чисел выглядят одинаково, а остановить надо тот, что тратит
+     без лидов.
+
+     Пусто остаётся пустым: у черновика спенда ещё не бывает, и «$0» было бы
+     утверждением, которого страница не делала. */
+  var spend = document.createElement('span');
+  spend.className = 'amap-tree-num spend';
+  spend.textContent = o.spend || '';
+
+  var res = document.createElement('span');
+  res.className = 'amap-tree-num';
+  res.textContent = o.results || '';
+  res.title = o.cost_per_result || '';
+
   line.appendChild(kind); line.appendChild(sw);
   line.appendChild(name); line.appendChild(del);
+  line.appendChild(spend); line.appendChild(res);
   return line;
+}
+
+/* Дерево живёт под той же стрелкой, что и остальное про аккаунт, и свёрнуто.
+   Раскрытым по умолчанию оно давало полтора экрана строк под каждым читанным
+   аккаунтом, и карта переставала читаться — владелец назвал это «странно
+   организовано», и был прав.
+
+   У аккаунта без книжных строк стрелки не было вовсе (шаблон рисует «·»):
+   раскрывать было нечего. Теперь есть, и она появляется. */
+function amapEnsureCaret(row, onToggle) {
+  var caret = row.querySelector('.amap-caret');
+  if (!caret) {
+    var off = row.querySelector('.amap-caret-off');
+    if (!off) return null;
+    caret = document.createElement('button');
+    caret.type = 'button';
+    caret.className = 'amap-caret';
+    caret.textContent = '▸';
+    caret.setAttribute('aria-label', 'What is in this account');
+    off.replaceWith(caret);
+  }
+  if (caret.dataset.treeBound === '1') return caret;
+  caret.dataset.treeBound = '1';
+  caret.addEventListener('click', onToggle);
+  return caret;
 }
 
 function amapPaintTree(row, s) {
   /* Прежний блок снимается всегда: устаревшее состояние живого аккаунта —
-     худшее, что здесь можно оставить на экране. */
+     худшее, что здесь можно оставить на экране. Раскрытость при этом
+     запоминается: перечитал человек аккаунт с открытым деревом — оно и
+     останется открытым, только уже с новыми числами. */
+  /* Строка вне таблицы — рисовать некуда. Причина та же, по которой неудача
+     дерева не отменяет спенд: `amapApplyReading` обходит все копии строки, и
+     исключение здесь оставило бы без числа те, до которых обход не дошёл. */
+  if (!row || !row.parentNode || !row.classList) return;
+
+  var wasOpen = row.classList.contains('amap-tree-open');
   var next = row.nextElementSibling;
-  if (next && next.classList.contains('amap-tree')) next.remove();
+  while (next && next.classList.contains('amap-tree')) {
+    var after = next.nextElementSibling;
+    next.remove();
+    next = after;
+  }
 
   var objects = (s && s.objects) || [];
-  if (!objects.length && !(s && s.objects_error)) return;
+  if (!objects.length && !(s && s.objects_error)) {
+    row.classList.remove('amap-tree-open');
+    return;
+  }
 
   var tr = document.createElement('tr');
   tr.className = 'amap-tree';
+  tr.hidden = !wasOpen;
   var td = document.createElement('td');
   td.colSpan = row.children.length;
   var box = document.createElement('div');
@@ -4659,6 +4724,19 @@ function amapPaintTree(row, s) {
 
   td.appendChild(box); tr.appendChild(td);
   row.parentNode.insertBefore(tr, row.nextSibling);
+
+  amapEnsureCaret(row, function () {
+    /* Стрелка у аккаунта с книжными строками вдобавок дёргает htmx за
+       подробностями из книги — это его прежняя работа, и отнимать её не за
+       что: книга отвечает на «как шло», дерево на «что там сейчас». Здесь
+       только своё. */
+    var block = row.nextElementSibling;
+    while (block && !block.classList.contains('amap-tree')) block = block.nextElementSibling;
+    if (!block) return;
+    block.hidden = !block.hidden;
+    row.classList.toggle('amap-tree-open', !block.hidden);
+    row.classList.toggle('amap-open', !block.hidden);
+  });
 }
 
 function amapPollSpend(account, cell, btn, tries, per) {

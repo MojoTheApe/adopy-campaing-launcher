@@ -30,10 +30,11 @@ def _script() -> str:
     """Обе функции показа — из шаблона, а не по памяти."""
     src = REPORT.read_text(encoding="utf-8")
     start = src.index("function amapTreeLine(o) {")
-    tail = "row.parentNode.insertBefore(tr, row.nextSibling);\n}"
+    tail = "row.classList.toggle('amap-open', !block.hidden);\n  });\n}"
     end = src.index(tail, start) + len(tail)
     block = src[start:end]
-    assert "amapPaintTree" in block, "срез не захватил вторую функцию"
+    for needed in ("amapPaintTree", "amapEnsureCaret"):
+        assert needed in block, f"срез не захватил {needed}"
     return block
 
 
@@ -55,7 +56,8 @@ def page(browser):
     p = browser.new_page()
     p.set_content(
         "<table><tbody>"
-        '<tr id="acc">' + ('<td>x</td>' * COLUMNS) + "</tr>"
+        '<tr id="acc"><td><span class="amap-caret-off">·</span>KLD_BFL_X84</td>'
+        + ("<td>x</td>" * (COLUMNS - 1)) + "</tr>"
         '<tr id="after"><td>next account</td></tr>'
         "</tbody></table>"
     )
@@ -72,12 +74,52 @@ def _paint(page, objects, *, error="", finished="2026-09-11 23:07:51"):
 
 
 ADSET = {"level": "adset", "id": "120250178859040703", "name": "SA_ARM_iOS_IMG_Reading_30_6.9",
-         "switch": "on", "switch_label": "On/off", "delivery": "Active"}
+         "switch": "on", "switch_label": "On/off", "delivery": "Active",
+         "spend": "$412.02", "results": "18 Leads (Form)",
+         "cost_per_result": "$22.89 Per Lead (Form)"}
 AD = {"level": "ad", "id": "120250178850950703", "name": "1962_12- Officialy",
-      "switch": "on", "switch_label": "On/off", "delivery": "Active"}
+      "switch": "on", "switch_label": "On/off", "delivery": "Active",
+      "spend": "$120.40", "results": "5 Leads (Form)", "cost_per_result": ""}
+
+
+def _open(page):
+    """Раскрыть дерево так же, как это делает человек, — стрелкой."""
+    page.evaluate("() => document.querySelector('#acc .amap-caret').click()")
 
 
 # ── что появляется ────────────────────────────────────────────────────────
+
+def test_the_tree_starts_collapsed(page):
+    """Раскрытым по умолчанию оно давало полтора экрана строк под каждым
+    читанным аккаунтом, и карта переставала читаться."""
+    _paint(page, [ADSET, AD])
+    assert page.evaluate("() => document.querySelector('.amap-tree').hidden") is True
+
+
+def test_the_arrow_opens_and_closes_it(page):
+    _paint(page, [ADSET, AD])
+    _open(page)
+    assert page.evaluate("() => document.querySelector('.amap-tree').hidden") is False
+    assert page.evaluate("() => document.getElementById('acc').classList.contains('amap-open')") is True
+    _open(page)
+    assert page.evaluate("() => document.querySelector('.amap-tree').hidden") is True
+
+
+def test_an_account_without_workbook_rows_gets_an_arrow(page):
+    """У такого аккаунта шаблон рисует «·»: раскрывать было нечего. Теперь есть."""
+    _paint(page, [ADSET])
+    assert page.evaluate("() => !!document.querySelector('#acc .amap-caret')")
+    assert page.evaluate("() => !document.querySelector('#acc .amap-caret-off')")
+
+
+def test_reading_again_keeps_it_open(page):
+    """Перечитал с открытым деревом — оно и осталось открытым, с новыми числами."""
+    _paint(page, [ADSET])
+    _open(page)
+    _paint(page, [dict(ADSET, spend="$500.00")])
+    assert page.evaluate("() => document.querySelector('.amap-tree').hidden") is False
+    assert page.evaluate("() => document.querySelector('.amap-tree-num.spend').textContent") == "$500.00"
+
 
 def test_the_tree_lands_under_its_own_account(page):
     _paint(page, [ADSET, AD])
@@ -104,6 +146,30 @@ def test_each_line_says_what_it_is(page):
     assert got[0]["name"] == "SA_ARM_iOS_IMG_Reading_30_6.9"
     assert "120250178859040703" in got[0]["title"], "id негде посмотреть"
     assert got[1]["ad"] is True, "объявление не отступлено под своим уровнем"
+
+
+def test_the_numbers_say_why_to_touch_it(page):
+    """Имя и состояние говорят, ЧТО это. Пять одинаково включённых ad set'ов
+    без чисел выглядят одинаково, а остановить надо тот, что тратит без лидов.
+    """
+    _paint(page, [ADSET])
+    got = page.evaluate("""() => {
+      const l = document.querySelector('.amap-tree-line');
+      const n = l.querySelectorAll('.amap-tree-num');
+      return {spend: n[0].textContent, results: n[1].textContent, cpr: n[1].title};
+    }""")
+    assert got["spend"] == "$412.02"
+    assert got["results"] == "18 Leads (Form)"
+    assert got["cpr"] == "$22.89 Per Lead (Form)", "цена результата негде посмотреть"
+
+
+def test_a_row_without_numbers_stays_blank(page):
+    """У черновика спенда ещё не бывает. «$0» — утверждение, которого нет."""
+    _paint(page, [dict(ADSET, spend="", results="", cost_per_result="", delivery="In draft")])
+    got = page.evaluate(
+        "() => Array.from(document.querySelectorAll('.amap-tree-num')).map(n => n.textContent)"
+    )
+    assert got == ["", ""]
 
 
 def test_the_header_counts_both_levels(page):
@@ -239,8 +305,24 @@ def test_a_reload_brings_the_tree_back_without_touching_the_account():
 
 
 def test_the_display_cannot_switch_anything_yet():
-    """Показ — это показ. Переключение придёт второй половиной acl-113, и до
-    тех пор контрола, похожего на переключатель, быть не должно."""
+    """Показ — это показ. Переключение придёт второй половиной acl-113.
+
+    Раскрытие стрелкой тут не в счёт: оно меняет экран, а не аккаунт. Запрещено
+    именно то, чем можно тронуть аккаунт, — запросы наружу, — и контрол,
+    похожий на переключатель: такой обещает то, чего не делает.
+    """
     block = _script()
-    for forbidden in ("onclick", "addEventListener", "fetch(", "role=\"switch\"", "'switch'"):
+    for forbidden in ("fetch(", "XMLHttpRequest", "hx-post", "/account-spend/",
+                      'role="switch"', "'switch'"):
         assert forbidden not in block, f"в показе есть {forbidden} — он обещает то, чего не делает"
+
+
+def test_the_only_listener_is_the_one_that_opens_it():
+    """Сторож на сторожа: обработчик тут ровно один, и он про стрелку.
+
+    Проверка выше разрешает `addEventListener` — значит кто-то может повесить
+    рядом второй, уже переключающий. Пусть это будет видно.
+    """
+    block = _script()
+    assert block.count("addEventListener") == 1
+    assert "caret.addEventListener('click'" in block
