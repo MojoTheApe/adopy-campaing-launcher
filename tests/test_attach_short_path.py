@@ -186,3 +186,112 @@ def test_open_profile_recognises_a_window_it_already_opened(wired, monkeypatch):
     assert ok is True
     assert "уже открыт автоматизацией" in message
     assert provider.conn.closed_keeping_window, "окно закрыли за человеком"
+
+
+# ══ чтение не может поднять профиль ═══════════════════════════════════════
+#
+# Перезапуск профиля разлогинивает аккаунт (так вышло на x01), а ветка
+# перезапуска вдобавок умеет терять прокси. Для публикации риск оправдан —
+# туда ради этого и приходят. Ради одного числа за вчера — нет.
+#
+# До сих пор это правило держалось на честном слове: `test_nothing_is_
+# relaunched_on_the_way` проверяет **один** флаг у двойника, у которого
+# методов запуска нет вовсе. Вызови код завтра `start_profile`, и двойник
+# упадёт с AttributeError — это заметят, но как поломку теста. А позови он
+# метод, которого двойник случайно не знает, проверка промолчит.
+
+ALLOWED = {"_try_attach_existing", "_profile_process_running"}
+
+
+class _Watchful:
+    """Провайдер, который помнит, что у него спрашивали.
+
+    Любое обращение к неизвестному атрибуту записывается и возвращает
+    заглушку — так вызов метода запуска не падает, а попадает в список.
+    """
+
+    def __init__(self, attaches: bool = True, running: bool = True):
+        self.touched: list[str] = []
+        self.conn = _Conn()
+        self._attaches = attaches
+        self._running = running
+
+    def _try_attach_existing(self, profile_id, user_data_dir, *, strict_profile=False, new_page=False):
+        self.touched.append("_try_attach_existing")
+        assert strict_profile is True, "чтение прицепилось без strict_profile"
+        return self.conn if self._attaches else None
+
+    def _profile_process_running(self, user_data_dir, profile_id=""):
+        self.touched.append("_profile_process_running")
+        return self._running
+
+    def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        self.touched.append(name)
+        return lambda *a, **k: None
+
+
+def test_reading_touches_only_the_two_methods_it_is_allowed(wired):
+    """Любой новый вызов к провайдеру попадёт сюда и будет виден по имени."""
+    provider = wired(_Watchful())
+    sp._attach_only(_Entry(), "KLD_BFL_X84")
+    unexpected = [n for n in provider.touched if n not in ALLOWED]
+    assert not unexpected, f"чтение позвало у провайдера: {unexpected}"
+
+
+def test_a_profile_that_will_not_attach_is_refused_not_started(wired):
+    """Прицепиться не вышло, окно открыто руками — останавливаемся.
+
+    Это и есть правило целиком: отказ вместо запуска.
+    """
+    provider = wired(_Watchful(attaches=False, running=True))
+    with pytest.raises(sp.ProfileNotAttachable):
+        sp._attach_only(_Entry(), "KLD_BFL_X84")
+    unexpected = [n for n in provider.touched if n not in ALLOWED]
+    assert not unexpected, f"вместо отказа чтение позвало: {unexpected}"
+
+
+def test_this_check_would_catch_a_relaunch(wired):
+    """Обратная проверка: сторож, который ничего не ловит, — хуже отсутствующего.
+
+    Подсовываем провайдера, у которого попытка прицепиться сама зовёт запуск.
+    """
+    class _Sneaky(_Watchful):
+        def _try_attach_existing(self, *a, **k):
+            self.touched.append("_try_attach_existing")
+            self.start_profile()          # то, чего быть не должно
+            return self.conn
+
+    provider = wired(_Sneaky())
+    sp._attach_only(_Entry(), "KLD_BFL_X84")
+    assert "start_profile" in provider.touched
+    unexpected = [n for n in provider.touched if n not in ALLOWED]
+    assert unexpected, "подложенный запуск не замечен — проверка ничего не стоит"
+
+
+def test_the_reading_paths_go_through_the_one_door():
+    """Каждый путь чтения зовёт `_attach_only`, а не провайдера напрямую.
+
+    Иначе проверка выше сторожит дверь, мимо которой можно пройти.
+    """
+    import ast
+
+    root = Path(sp.__file__).resolve().parent.parent.parent
+    for rel in ("src/analysis_agent/account_spend.py", "src/analysis_agent/country_split.py"):
+        src = (root / rel).read_text(encoding="utf-8")
+        tree = ast.parse(src)
+        for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
+            # Две функции имеют право: `_attach_only` — сама дверь, а
+            # `open_profile_for_automation` — кнопка «Open profile», то есть
+            # осознанное действие человека, у которого свой отказ на профиль,
+            # открытый руками. Всё остальное обязано ходить через дверь.
+            if fn.name in ("_attach_only", "open_profile_for_automation"):
+                continue
+            called = {
+                node.func.attr
+                for node in ast.walk(fn)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            }
+            leaked = called & ALLOWED
+            assert not leaked, f"{rel}:{fn.name} ходит к провайдеру мимо _attach_only: {leaked}"
