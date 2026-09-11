@@ -432,7 +432,7 @@ python scripts/acl_board.py --render
         other.
   - [x] `acl-108c` Pull yesterday's spend off a live test account #merged
         The whole point. Until this happens `acl-108` is code, not a route.
-  - [ ] `acl-108e` A public "attach, never relaunch" in the RPA track #later @rpa needs:acl-108d
+  - [x] `acl-108e` A public "attach, never relaunch" in the RPA track #review @rpa
         Reading calls `_try_attach_existing` and `_profile_process_running`
         directly — private methods of another track — because there is no
         public way to say "use the window that is open, and if there is none,
@@ -443,7 +443,17 @@ python scripts/acl_board.py --render
         now records every call reading makes to the provider and names any new
         one; a second test keeps every reading path going through the single
         door. What remains is the track boundary itself, and moving reading
-        (`acl-108d`) dissolves it — no public wrapper needed.
+        **Done 11 September** (`ec2edbb`, `feature/acl-108e-public-attach`):
+        `attach_existing_only` and `profile_is_running` on the provider. They
+        delegate to the same private methods, but from outside only the promise
+        is visible — the kitchen can change while the promise holds.
+        `strict_profile` is pinned inside the public path. A free port search
+        suits publishing, which just started the profile itself; reading it
+        would let attach to someone else's window and read someone else's
+        account. Three guards: reading calls nothing private, the public path
+        does nothing but delegate, and the strict flag stays.
+        The move itself (`acl-108d`) is still worth doing, but this no longer
+        waits on it.
   - [x] `acl-108j` Gather the reading's Meta selectors in one place #review @dashboard
         Groundwork for `acl-108d`, and useful on its own. Meta moves controls
         for everyone at once: on 10 September it rewrote wording and eight
@@ -469,11 +479,31 @@ python scripts/acl_board.py --render
         and a date pattern spelled into a Python string, escapes and all.
         Move those beside the rest and the file matches `account_spend.py`;
         the guard from `acl-108j` can then cover it too.
-  - [ ] `acl-108d` Move the Ads Manager reading into the RPA track
+  - [ ] `acl-108d` Move the Ads Manager reading into the RPA track #next @rpa
         The selectors for Meta's own screens belong beside the other ones, in
         `src/fb_ads_rpa`, owned by the session that fixes them when Meta moves
         a control. It sits in the dashboard track today only because that is
         whose hands were free.
+        **Half done, parked 11 September** (`29f3e14`,
+        `feature/acl-108d-reading-into-rpa`, pushed, merged nowhere). The code
+        has moved: `src/fb_ads_rpa/ads_manager_read.py` holds Meta's screens,
+        Multilogin profiles and the period sums; `account_spend` keeps the
+        readings store, the statuses and the read queue — dashboard questions
+        that never touch a Meta screen. The dependency runs one way.
+        What is left is not the move but the tests: 115 failures and 13 errors,
+        all from one mechanical cause. Around fifty
+        `monkeypatch.setattr(account_spend, "_period_matches", …)` targets
+        across thirteen files name things that have moved. Each has to be
+        re-pointed and checked that it patches the name the code actually
+        resolves.
+        Re-exporting the moved names back into `account_spend` would turn the
+        suite green and meaningless — the patch would stop reaching the real
+        call. Not an option.
+        Also on that branch: a copy of the `browser.py` change that shipped
+        separately as `acl-108e` (`ec2edbb`). The branch forked earlier; drop
+        it on rebase.
+        No longer urgent — `acl-108e` closed the dangerous half. What remains
+        is track ownership, and it costs a session of careful mechanical work.
   - [x] `acl-108i` Reading three days took three minutes #merged
         The retry added the day before was right and expensive: each look
         walked every div and span on the page one node at a time, thousands of
