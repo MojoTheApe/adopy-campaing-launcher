@@ -179,6 +179,15 @@ class SpendReading:
     status: str = ""              # см. _read_status: clear | disabled | restricted | review | unknown
     status_text: str = ""         # словами страницы — человеку с этим идти и разбираться
 
+    #: Дерево аккаунта: ad set'ы и объявления с их id и положением тумблера.
+    #: Читается тем же нажатием, что и спенд (решение владельца 11.09) — см.
+    #: `_read_tree`. Неудача дерева не отменяет спенд: это разные ответы, и
+    #: терять прочитанное число из-за второго — хуже, чем вернуть его без
+    #: дерева.
+    objects: list[dict] = field(default_factory=list)
+    objects_error: str = ""
+    objects_how: str = ""         # чем разобрана таблица — чтобы знать, что сломалось
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -844,6 +853,22 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         out.currency = _currency(page)
         out.how = how
         out.state = "ok"
+
+        # Дерево — тем же нажатием (решение владельца 11.09): Read и так уже
+        # здесь, а каждое отдельное касание живого аккаунта чего-то стоит.
+        #
+        # Строго после того, как спенд принят. Неудача дерева не отменяет
+        # число: это разные ответы на разные вопросы, и терять прочитанный
+        # спенд из-за второго — хуже, чем вернуть его без дерева. Поэтому же
+        # здесь `except Exception`: сюда мы приходим с готовым результатом, и
+        # уронить его необработанным исключением — самое плохое, что может
+        # случиться.
+        try:
+            out.objects, out.objects_how, out.objects_error = _read_tree(
+                page, act, expected_act, date_from, date_to
+            )
+        except Exception as exc:            # noqa: BLE001 — см. выше
+            out.objects_error = f"дерево не прочитано: {exc}"
         return out
     finally:
         if conn is not None:
@@ -1180,3 +1205,220 @@ def _shoot(page, account: str, day: str) -> str:
         return str(target)
     except Exception:
         return ""
+
+
+# ══ Дерево аккаунта: ad set'ы и объявления ════════════════════════════════
+#
+# То, на что встанет переключатель (`acl-113`). Строки, которые дешборд рисует
+# под аккаунтом сегодня, приходят из книги статистики: у них есть имя и нет
+# ничего больше. Тремя способами это не годится для тумблера — в книге нет id
+# объектов Meta, она отстаёт на сутки, и столбца on/off в ней нет вовсе.
+#
+# Всё три есть на экране, который чтение уже открывает.
+#
+# Переезжает в RPA-трек вместе с остальным чтением (`acl-1121`). Отдельным
+# модулем это не заведено намеренно: селекторы, ожидание таблицы и путь
+# прицепки лежат здесь, и новый модуль в `fb_ads_rpa` импортировал бы их
+# обратно — то есть RPA зависел бы от дешборда. Переносить надо одним куском.
+
+ADS_MANAGER_LEVELS: dict[str, str] = {
+    "adset": "https://adsmanager.facebook.com/adsmanager/manage/adsets",
+    "ad": "https://adsmanager.facebook.com/adsmanager/manage/ads",
+}
+
+#: Уровни, которые читаем и на которые встанет тумблер. Уровень кампании Meta
+#: сюда не входит: остановка кампании гасит все её ad set'ы разом, и такого
+#: никто не просил (решение владельца 11.09).
+TREE_LEVELS: tuple[str, ...] = ("adset", "ad")
+
+
+@dataclass
+class AdObject:
+    """Одна строка списка: то, что нужно, чтобы её показать и переключить."""
+
+    level: str                # adset | ad
+    id: str = ""              # id объекта в Meta
+    name: str = ""            # как аккаунт его называет
+    switch: str = "unknown"   # on | off | unknown — положение тумблера
+    switch_label: str = ""    # подпись тумблера словами Meta
+    delivery: str = ""        # колонка Delivery, дословно
+    id_from: str = ""         # из какого атрибута взят id — чтобы знать, что сломалось
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _tree_url(act: str, level: str, date_from: str, date_to: str = "") -> str:
+    """Адрес уровня. Разбор периода и номера кабинета — общий с `_url`."""
+    if level not in ADS_MANAGER_LEVELS:
+        raise ValueError(f"неизвестный уровень {level!r}")
+    base = _url(act, date_from, date_to)
+    return ADS_MANAGER_LEVELS[level] + base[len(ADS_MANAGER):]
+
+
+#: Разбор таблицы одним заходом в страницу.
+#:
+#: Колонки ищутся **по заголовку**, а не по номеру: их порядок человек меняет
+#: сам, и жёсткий индекс читал бы спенд вместо имени у того, кто переставил
+#: столбцы.
+#:
+#: id берётся из атрибутов строки, а не из текста: id объекта Meta — число в
+#: 15-18 цифр, в тексте строки таких не бывает (спенд, показы и лиды короче),
+#: а в атрибутах оно лежит у чекбокса, ссылки или узла разметки. Приём это
+#: догадка ровно до первого живого прогона, поэтому возвращается ещё и
+#: `id_from` — имя атрибута, из которого число взято. Первое же чтение скажет,
+#: что там на самом деле, вместо того чтобы молча вернуть пустые id.
+_READ_TREE_JS = r"""
+() => {
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const grid = document.querySelector('div[role="table"], [role="grid"]');
+  if (!grid) return {rows: [], how: 'no-grid', columns: []};
+  const rows = Array.from(grid.querySelectorAll('[role="row"]'));
+  if (!rows.length) return {rows: [], how: 'no-rows', columns: []};
+
+  const head = rows.find(r => r.querySelector('[role="columnheader"]'));
+  const cols = {};
+  if (head) {
+    Array.from(head.querySelectorAll('[role="columnheader"]')).forEach((c, i) => {
+      const k = norm(c.innerText).toLowerCase();
+      if (k && !(k in cols)) cols[k] = i;
+    });
+  }
+  const pick = (names) => {
+    for (const n of names) for (const k in cols) if (k.startsWith(n)) return cols[k];
+    return -1;
+  };
+  const iName = pick(['ad set name', 'ad name', 'campaign name', 'name']);
+  const iDelivery = pick(['delivery', 'status']);
+
+  const LONG = /\d{15,18}/;
+  const out = [];
+  for (const r of rows) {
+    if (r === head || r.querySelector('[role="columnheader"]')) continue;
+    const cells = Array.from(r.querySelectorAll('[role="cell"], [role="gridcell"]'));
+    if (!cells.length) continue;
+
+    let id = '', idFrom = '';
+    const nodes = [r].concat(Array.from(r.querySelectorAll('*')));
+    scan:
+    for (const el of nodes) {
+      for (const a of (el.attributes || [])) {
+        const m = String(a.value).match(LONG);
+        if (m) { id = m[0]; idFrom = a.name; break scan; }
+      }
+    }
+
+    const sw = r.querySelector('[role="switch"], input[type="checkbox"][aria-checked]');
+    let onoff = 'unknown', label = '';
+    if (sw) {
+      label = norm(sw.getAttribute('aria-label') || '');
+      const c = sw.getAttribute('aria-checked');
+      if (c === 'true') onoff = 'on';
+      else if (c === 'false') onoff = 'off';
+      else if (sw.checked === true) onoff = 'on';
+      else if (sw.checked === false) onoff = 'off';
+    }
+
+    out.push({
+      id: id,
+      id_from: idFrom,
+      name: (iName >= 0 && cells[iName]) ? norm(cells[iName].innerText)
+                                         : norm(cells[0] ? cells[0].innerText : ''),
+      switch: onoff,
+      switch_label: label,
+      delivery: (iDelivery >= 0 && cells[iDelivery]) ? norm(cells[iDelivery].innerText) : '',
+    });
+  }
+  return {rows: out, how: head ? 'header-mapped' : 'no-header', columns: Object.keys(cols)};
+}
+"""
+
+
+def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
+    """Разобрать открытую таблицу одного уровня.
+
+    Возвращает `(объекты, чем разобрано, ошибка)`. Страница должна быть уже
+    на нужном уровне: переходами заведует `_read_tree`, которому есть что
+    сверять (кабинет, период), а этой функции — нет.
+
+    Ничего не нажимает. Это чтение, и единственное, что здесь происходит со
+    страницей, — вопрос к ней.
+    """
+    if level not in ADS_MANAGER_LEVELS:
+        return [], "", f"неизвестный уровень {level!r}"
+    try:
+        got = page.evaluate(_READ_TREE_JS)
+    except Exception as exc:
+        return [], "", f"таблица {level} не разобрана: {exc}"
+    if not isinstance(got, dict):
+        return [], "", f"таблица {level}: страница ответила не тем"
+
+    how = str(got.get("how") or "")
+    rows = got.get("rows") or []
+    objects = [
+        AdObject(
+            level=level,
+            id=str(r.get("id") or ""),
+            name=str(r.get("name") or ""),
+            switch=str(r.get("switch") or "unknown"),
+            switch_label=str(r.get("switch_label") or ""),
+            delivery=str(r.get("delivery") or ""),
+            id_from=str(r.get("id_from") or ""),
+        )
+        for r in rows
+        if isinstance(r, dict)
+    ]
+    if not objects:
+        columns = ", ".join(str(c) for c in (got.get("columns") or [])) or "колонок не видно"
+        return [], how, f"в таблице {level} не нашлось ни одной строки ({how}; {columns})"
+    return objects, how, ""
+
+
+def _read_tree(
+    page, act: str, expected_act: str, date_from: str, date_to: str = "",
+) -> tuple[list[dict], str, str]:
+    """Пройти уровни и собрать дерево. Возвращает `(объекты, чем, ошибка)`.
+
+    Кабинет и период сверяются **на каждом уровне заново**. Переход — это новый
+    адрес, а Ads Manager умеет открыть кабинет профиля по умолчанию вместо
+    запрошенного; без сверки чужое дерево пришло бы с видом правильного ответа.
+    Ровно та же осторожность, что и со спендом, и по той же причине.
+
+    Редактор объявления не открывается ни на каком шаге. Meta при каждом его
+    открытии предвыбирает «Instant form (suggested)» в Browser add-ons и
+    автосохраняет — чистое Leads-объявление получает ошибку #100 от одного
+    визита (DQ204, 02.08). Всё читается со списка.
+    """
+    objects: list[dict] = []
+    hows: list[str] = []
+    errors: list[str] = []
+
+    for level in TREE_LEVELS:
+        try:
+            page.goto(
+                _tree_url(act, level, date_from, date_to),
+                timeout=TABLE_TIMEOUT_MS,
+                wait_until="domcontentloaded",
+            )
+        except Exception as exc:
+            errors.append(f"{level}: переход не удался ({exc})")
+            continue
+
+        if not _wait_for_grid(page):
+            errors.append(f"{level}: таблица не отрисовалась за отведённое время")
+            continue
+        if _act_from_url(page, tries=1) != expected_act:
+            errors.append(f"{level}: открылся не тот кабинет — уровень пропущен")
+            continue
+        if not _period_matches(_shown_period(page), date_from, date_to):
+            errors.append(f"{level}: на экране другой период — уровень пропущен")
+            continue
+
+        got, how, err = read_level(page, level)
+        if how:
+            hows.append(f"{level}:{how}")
+        if err:
+            errors.append(err)
+        objects.extend(o.to_dict() for o in got)
+
+    return objects, " ".join(hows), "; ".join(errors)
