@@ -62,15 +62,15 @@ def test_rows_extracted_by_header_words():
     assert "header row 1" in how
 
 
-def test_total_and_service_rows_are_skipped():
+def test_multiple_totals_are_ambiguous():
     matrix = [
         HEADER,
         ["Total results", "1", "2", "$9.99", ""],
         ["All", "1", "2", "$9.99", ""],
         ["Peru", "1", "2", "$9.99", ""],
     ]
-    rows, _ = rows_from_cells(matrix)
-    assert [r["country"] for r in rows] == ["Peru"]
+    rows, how = rows_from_cells(matrix)
+    assert rows == [] and "multiple totals" in how
 
 
 def test_country_without_amount_is_skipped_not_zeroed():
