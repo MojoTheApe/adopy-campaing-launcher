@@ -164,53 +164,5 @@
       {% else %}
       <div class="amap-empty">No accounts placed in this country yet.</div>
       {% endif %}
-      {#- Подключение аккаунта — одно дело, одна панель.
-
-          Раньше оно было разорвано надвое: здесь строка привязки, а вход в
-          Multilogin — отдельной панелью внизу, в билдере кампаний, и та
-          рисовалась **по копии на каждую страну**: двадцать полей пароля,
-          двадцать textarea для токена, двадцать копий инструкции — ради
-          настройки, которая одна на машину (токен пишется в `.env`).
-
-          Вторая панель была предусловием первой: без живого токена кнопке
-          Reload неоткуда взять список профилей. Ничто на экране об этом не
-          говорило, и владелец прочитал их как одно, разорванное пополам.
-
-          Теперь: строка состояния всегда, поля входа — только когда токена
-          нет. Подключился — и они исчезли везде, потому что состояние общее. -#}
-      <div class="amap-add" data-amap-country="{{ mc.key | e }}">
-        <select class="amap-known">
-          <option value="">already connected…</option>
-          {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
-        </select>
-        <button type="button" class="amap-btn"
-                onclick="amapLink(this.previousElementSibling,'country',{{ mc.key | tojson | forceescape }})">Add</button>
-        <span style="color:var(--border-strong)">|</span>
-        {#- Запасные имена здесь свои: шаблоны перечитываются на каждый
-            запрос, а Python — только при перезапуске. Между обновлением файлов
-            и рестартом `mlx` в контексте может не оказаться, и селектор
-            остался бы с пустыми подписями — «Instance A» на экране не лучше
-            пустоты, но пустота хуже. -#}
-        {%- set mlxn = mlx or {'A': 'Inhouse', 'B': 'KLD'} %}
-        <select class="amap-inst" onchange="amapInstanceChanged(this)" title="Which Multilogin account to search">
-          <option value="A">{{ mlxn['A'] }}</option>
-          <option value="B">{{ mlxn['B'] }}</option>
-        </select>
-        {#- Отбор идёт по мере ввода. Список профилей тянется один раз на
-            инстанс и фильтруется на месте: так отклик мгновенный, а Multilogin
-            не дёргается на каждую букву. Кнопка осталась для перезагрузки
-            списка, когда профиль только что завели. -#}
-        <input type="text" class="amap-find" placeholder="last letters: X84" size="10"
-               oninput="amapFilter(this)" onfocus="amapFilter(this)" autocomplete="off">
-        <button type="button" class="amap-btn" onclick="amapFind(this)" title="Reload the profile list from Multilogin">Reload</button>
-        <span class="amap-msg"></span>
-        <div class="amap-hits" hidden></div>
-
-        {#- Состояние Multilogin и, если надо, вход. Заполняется из
-            `/multilogin-token-status` при первом взгляде на блок. -#}
-        <div class="amap-ml" data-ml-state="unknown">
-          <span class="amap-ml-line">Multilogin: <i>checking…</i></span>
-          <button type="button" class="amap-btn amap-ml-open" hidden onclick="amapMlOpen(this)">Connect Multilogin</button>
-          <button type="button" class="amap-btn" onclick="document.getElementById('amap-rpa-help').showModal()">RPA help</button>
-        </div>
+      {% with amap_value = mc.key %}{% include "_account_map_add.html" %}{% endwith %}
       </div>
