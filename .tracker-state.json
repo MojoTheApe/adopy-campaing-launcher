@@ -53,7 +53,8 @@
     },
     "906976540c89dc506122552176f6aa48743675c1ae63557daf6b3e6e5a436688": {
       "title": "Four things the builder let a person do wrong",
-      "state": "creating"
+      "state": "created",
+      "issue": 134
     }
   }
 }
