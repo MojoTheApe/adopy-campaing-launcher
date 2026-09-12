@@ -42,9 +42,20 @@ def test_currency_comes_from_the_total_not_other_page_amounts():
 
 
 def test_concurrent_readings_and_statuses_survive():
+    """Двенадцать записей одновременно: ни одна не теряется, `.tmp` не остаётся.
+
+    Барьер держал таймаут в три секунды, и это был не факт о коде, а ставка на
+    скорость машины. В полном прогоне процессор занят браузерами Playwright,
+    двенадцать потоков до барьера за три секунды не доходят, `wait` бросает
+    `BrokenBarrierError`, `pool.map` его пробрасывает — часть показаний не
+    сохраняется, и проверка падает на исправном коде (12.09).
+
+    Смысл проверки — «пишут вместе», и он от щедрого предела не страдает.
+    Предел остаётся: без него зависший поток остановил бы прогон навсегда.
+    """
     gate = threading.Barrier(12)
     def save(i):
-        gate.wait(3)
+        gate.wait(60)
         sp._put(sp.SpendReading(account=f"Acc{i}", date_from=DAY, date_to=DAY, spend=i, state="ok", status="clear"))
     with ThreadPoolExecutor(max_workers=12) as pool:
         list(pool.map(save, range(12)))
