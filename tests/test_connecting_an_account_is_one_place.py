@@ -1,152 +1,148 @@
-"""Подключение аккаунта — одно дело, одна панель.
-
-Раньше оно было разорвано надвое: в карте аккаунтов строка привязки, а вход в
-Multilogin — отдельной панелью внизу, в билдере кампаний. Вторая была
-предусловием первой (без живого токена кнопке Reload неоткуда взять список
-профилей), но ничто на экране об этом не говорило, и владелец прочитал их как
-одно, разорванное пополам.
-
-Хуже: панель входа рисовалась **по копии на каждую страну**. На отрисованной
-странице было двадцать полей пароля, двадцать textarea для токена и двадцать
-копий инструкции «How to run the RPA» — ради настройки, которая одна на
-машину: токен пишется в `.env`.
-"""
+"""Run the shipped connect markup, styles and handlers in an offline browser."""
 from __future__ import annotations
 
-import re
-import sys
+import json
+import os
 from pathlib import Path
+import re
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+import pytest
+from jinja2 import Environment, FileSystemLoader
+from playwright.sync_api import sync_playwright
 
-TPL = ROOT / "src" / "web" / "templates"
-REPORT = TPL / "report.html"
-COUNTRY = TPL / "_account_map_country.html"
-
-
-def _no_comments(text: str) -> str:
-    """Без комментариев Jinja и JS-блоков: объяснение убранного — не его
-    возвращение. За эту сессию такой сторож трижды ловил собственный текст."""
-    text = re.sub(r"\{#.*?#\}", "", text, flags=re.S)
-    return re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+TPL = Path(__file__).resolve().parents[1] / 'src/web/templates'
 
 
-# ── панели больше не две ──────────────────────────────────────────────────
-
-def test_the_builder_no_longer_carries_its_own_multilogin_panel():
-    body = _no_comments(REPORT.read_text(encoding="utf-8"))
-    assert "ml-connect-panel" not in body or 'class="ml-connect-panel"' not in body, (
-        "панель входа снова живёт в билдере"
-    )
-    assert "Multilogin — connect to auto-link profile_id" not in body
+@pytest.fixture(scope='module')
+def browser():
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=os.environ.get('ACL_BROWSER_EXECUTABLE') or None)
+        yield b
+        b.close()
 
 
-def test_the_help_that_was_repeated_per_country_is_gone():
-    """Справка — не контрол, и двадцать её копий не нужны никому."""
-    body = _no_comments(REPORT.read_text(encoding="utf-8"))
-    assert "How to run the RPA" not in body
-
-
-def _connect_form() -> str:
-    """Форма подключения — там, где она лежит.
-
-    Она бывает встроена в блок страны и бывает вынесена отдельным файлом:
-    вынос сделан ради страны, которой нет в карте, и ждёт своего мерджа. Обе
-    раскладки живые, и проверять надо содержимое, а не место — иначе сторож
-    падает на переезде, а не на поломке.
-    """
-    extracted = TPL / "_account_map_add.html"
-    if extracted.exists():
-        return extracted.read_text(encoding="utf-8")
-    body = COUNTRY.read_text(encoding="utf-8")
-    return body[body.index('<div class="amap-add"'):]
-
-
-def test_signing_in_lives_where_the_account_is_connected():
-    block = _connect_form()
-    for needed in ("amap-ml-line", "amap-ml-signin", "amapMlSignin", "amapMlSaveToken"):
-        assert needed in block, f"в форме подключения нет {needed}"
-
-
-def test_pasting_a_token_is_still_possible():
-    """Пароля может не быть вовсе: токен выдаёт владелец воркспейса."""
-    assert "amap-ml-token" in _connect_form()
-
-
-# ── как это ведёт себя ────────────────────────────────────────────────────
-
-def _js() -> str:
-    """Только этот блок, с точным концом.
-
-    Срез «до следующего def/function» за эту сессию подводил четыре раза: то
-    функция оказывалась последней в файле, то соседняя переезжала. Конец здесь
-    задан строкой, которой блок кончается, и проверен на непустоту.
-    """
-    src = REPORT.read_text(encoding="utf-8")
-    start = src.index("var AMAP_ML_STATE")
-    tail = "else amapMlBoot();"
-    block = src[start: src.index(tail, start) + len(tail)]
-    assert "amapMlSignin" in block and len(block) < 8000, "срез захватил лишнее"
-    return block
-
-
-def test_the_sign_in_hides_itself_once_connected():
-    """Подключился — поля исчезают во всех копиях блока: состояние общее."""
-    js = _js()
-    assert "signin.hidden = alive" in js, "поля входа не прячутся по живому токену"
-    assert "amapMlPaintAll" in js, "перекрашивается только один блок из тридцати"
-
-
-def test_a_stale_token_is_not_called_connected():
-    """«Токен есть» и «токен живой» — разное: по протухшему профили не придут."""
-    js = _js()
-    assert "state.has_token ? 'token expired' : 'not connected'" in js
-
-
-def test_the_password_does_not_linger_on_screen():
-    js = _js()
-    assert ".amap-ml-pass').value = ''" in js, "пароль остаётся в поле после входа"
-
-
-def test_the_state_is_asked_once_per_instance_not_once_per_block():
-    """Блоков на странице под тридцать, а ответ один и тот же."""
-    js = _js()
-    assert "var wanted = {}" in js and "Object.keys(wanted).forEach" in js
-
-
-def test_switching_instance_moves_both_the_search_and_the_state():
-    """Прежний обработчик умел только первое."""
-    js = _js()
-    start = js.index("function amapInstanceChanged")
-    body = js[start: js.index("\nfunction ", start + 10)]
-    assert "amapFilter" in body and "amapMlRefresh" in body
-
-
-def test_the_block_is_found_by_class_not_by_id():
-    """Блок рисуется дважды на страну — карта на Home и вкладка страны.
-    Одинаковые id сломали бы обе копии."""
-    js = _js()
-    assert "getElementById" not in js, "вернулась адресация по id"
-    assert "closest('.amap-add')" in js
-
-
-# ── сколько их на странице ────────────────────────────────────────────────
-
-def test_the_rendered_page_has_no_password_field_per_country():
-    """То самое число, ради которого всё затевалось."""
-    from jinja2 import Environment, FileSystemLoader
-
+def _page(browser, *, alive=False, token_saved=True):
+    report = (TPL / 'report.html').read_text(encoding='utf-8')
+    styles = '\n'.join(re.findall(r'<style[^>]*>(.*?)</style>', report, re.S))
+    script = report[report.index('var _mlxCache ='):report.index('\nfunction amapHint')]
+    shared = report[report.index('<template id="amap-ml-signin-template">'):report.index('</body>')]
     env = Environment(loader=FileSystemLoader(str(TPL)), autoescape=True)
-    env.filters["fmt_usd"] = lambda v: f"${v:,.0f}" if v else "—"
-    country = {"country": "Saudi Arabia", "key": "SA", "rows": [], "virtual": False}
-    out = env.get_template("_account_map_country.html").render(
-        mc=country,
-        amap={"countries": [country], "available": [], "all_accounts": ["FacebookDQ438"],
-              "live": {}, "dates": [], "date_from": "", "date_to": "", "span": ""},
-        mlx={"A": "Inhouse", "B": "Agency"},
-    )
-    # Одна страна — один блок подключения и ни одного поля пароля в разметке:
-    # оно появляется только когда токена нет, и рисует его JS.
-    assert out.count('class="amap-add"') == 1
-    assert out.count("amap-ml-pass") == 1, "поле пароля не одно на блок"
+    env.filters['fmt_usd'] = str
+    countries = [{'country': c, 'key': k, 'rows': [], 'virtual': False} for c,k in [('Mexico','MX'),('Spain','ES')]]
+    blocks = ''.join(env.get_template('_account_map_country.html').render(
+        mc=c, amap={'countries':countries, 'available':[], 'all_accounts':[], 'live':{}, 'dates':[], 'date_from':'','date_to':'','span':''},
+        mlx={'A':'Inhouse','B':'Agency'}) for c in countries)
+    html = f'<style>{styles}</style>{blocks}{shared}<script>var ACL_MLX_LABELS = {{A:"Inhouse",B:"Agency"}};{script}</script>'
+    ctx = browser.new_context()
+    page = ctx.new_page()
+    state = {'alive': {'A':alive,'B':False}, 'calls':[], 'token_saved':token_saved}
+    errors = []
+    page.on('pageerror', lambda e: errors.append(str(e)))
+    def route(r):
+        from urllib.parse import urlsplit, parse_qs
+        url = urlsplit(r.request.url)
+        if url.path == '/':
+            r.fulfill(body=html, content_type='text/html'); return
+        data = r.request.post_data_json if r.request.method == 'POST' else {}
+        state['calls'].append((url.path, data))
+        if url.path == '/multilogin-token-status':
+            inst = parse_qs(url.query)['instance'][0]
+            body = {'ok':True,'alive':state['alive'][inst],'has_token':state['alive'][inst]}
+        elif url.path in ('/multilogin-signin','/multilogin-save-token'):
+            saved = state['token_saved'] or url.path.endswith('save-token')
+            state['alive'][data['instance']] = saved
+            body = {'ok':True,'token_saved':saved,'token_error':'Workspace owner must issue the automation token'}
+        elif url.path == '/multilogin-search':
+            body = {'ok':True, 'profiles':[]}
+        else:
+            r.abort(); return
+        r.fulfill(body=json.dumps(body), content_type='application/json')
+    ctx.route('**/*', route)
+    page.goto('http://acl.test/')
+    page.wait_for_function("Object.keys(AMAP_ML_STATE).length === 1")
+    return ctx, page, state, errors
+
+
+def test_live_token_has_no_credentials_in_the_dom(browser):
+    ctx,p,s,errors = _page(browser, alive=True)
+    try:
+        assert p.locator('input[type=password]').count() == 0
+        assert p.locator('.amap-ml-open:visible').count() == 0
+        assert p.locator('.amap-ml-line').first.inner_text() == 'Multilogin Inhouse: connected'
+        assert [x[0] for x in s['calls']].count('/multilogin-token-status') == 1
+        assert not errors
+    finally: ctx.close()
+
+
+def test_one_form_moves_to_the_account_being_connected(browser):
+    ctx,p,s,errors = _page(browser)
+    try:
+        p.locator('.amap-ml-open').nth(0).click()
+        p.locator('.amap-ml-pass').fill('discard-me')
+        p.locator('.amap-ml-open').nth(1).click()
+        assert p.locator('.amap-ml-signin').count() == 1
+        assert p.locator('.amap-add').nth(1).locator('.amap-ml-pass').is_visible()
+        assert p.locator('.amap-ml-pass').input_value() == ''
+        p.get_by_role('button', name='RPA help').first.click()
+        assert p.get_by_role('heading', name='How to run the RPA').count() == 1
+        assert p.locator('#amap-rpa-help').is_visible()
+        assert not errors
+    finally: ctx.close()
+
+
+def test_signin_removes_form_everywhere_without_reload(browser):
+    ctx,p,s,errors = _page(browser)
+    try:
+        p.locator('.amap-ml-open').first.click()
+        p.locator('.amap-ml-email').fill('tester@example.test')
+        p.locator('.amap-ml-pass').fill('synthetic-password')
+        p.locator('.amap-ml-signin').get_by_role('button', name='Connect', exact=True).click()
+        p.wait_for_function("document.querySelectorAll('.amap-ml-open:not([hidden])').length === 0")
+        assert p.locator('.amap-ml-signin').count() == 0
+        assert p.locator('input[type=password]').count() == 0
+        assert 'Connected' in p.locator('.amap-msg').first.inner_text()
+        assert not errors
+    finally: ctx.close()
+
+
+def test_signin_without_saved_token_shows_reason_not_success(browser):
+    ctx,p,s,errors = _page(browser, token_saved=False)
+    try:
+        p.locator('.amap-ml-open').first.click()
+        p.locator('.amap-ml-email').fill('tester@example.test')
+        p.locator('.amap-ml-pass').fill('synthetic-password')
+        p.locator('.amap-ml-signin').get_by_role('button', name='Connect', exact=True).click()
+        p.wait_for_function("document.querySelector('.amap-msg').textContent.includes('Workspace owner')")
+        assert p.locator('.amap-ml-pass').is_visible()
+        assert p.locator('.amap-ml-pass').input_value() == ''
+        assert not errors
+    finally: ctx.close()
+
+
+def test_token_paste_uses_selected_instance_and_invalidates_profile_cache(browser):
+    ctx,p,s,errors = _page(browser, alive=True)
+    try:
+        p.locator('.amap-inst').first.select_option('B')
+        p.locator('.amap-ml-open').first.click()
+        p.evaluate("_mlxCache.B = [{name:'old workspace'}]; _mlxCache.A = [{name:'keep'}]")
+        p.locator('.amap-ml-token').fill('synthetic-token')
+        p.get_by_role('button', name='Save token', exact=True).click()
+        p.wait_for_function("AMAP_ML_STATE.B.alive === true")
+        assert p.evaluate('_mlxCache.B === undefined && _mlxCache.A[0].name === "keep"')
+        assert next(d for path,d in s['calls'] if path == '/multilogin-save-token') == {'token':'synthetic-token','instance':'B'}
+        p.locator('.amap-find').first.fill('X84')
+        p.wait_for_function("document.querySelector('.amap-msg').textContent.includes('nothing')")
+        assert any(path == '/multilogin-search' and d['instance']=='B' for path,d in s['calls'])
+        assert not errors
+    finally: ctx.close()
+
+
+def test_instance_switch_discards_other_workspace_credentials(browser):
+    ctx,p,s,errors = _page(browser)
+    try:
+        p.locator('.amap-ml-open').first.click()
+        p.locator('.amap-ml-pass').fill('synthetic-password')
+        p.locator('.amap-inst').first.select_option('B')
+        assert p.locator('.amap-ml-signin').count() == 0
+        assert not errors
+    finally: ctx.close()

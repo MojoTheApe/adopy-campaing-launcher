@@ -201,16 +201,7 @@
             `/multilogin-token-status` при первом взгляде на блок. -#}
         <div class="amap-ml" data-ml-state="unknown">
           <span class="amap-ml-line">Multilogin: <i>checking…</i></span>
-          <div class="amap-ml-signin" hidden>
-            <input type="email" class="amap-ml-email" placeholder="Multilogin email" autocomplete="username" size="18">
-            <input type="password" class="amap-ml-pass" placeholder="password" autocomplete="current-password" size="14">
-            <button type="button" class="amap-btn" onclick="amapMlSignin(this)">Connect</button>
-            <span style="color:var(--border-strong)">|</span>
-            {#- Пароля может не быть вовсе: токен выдаёт владелец воркспейса
-                (Settings → Automation → Generate Token). Это не запасной путь,
-                а обычный для тех, у кого нет учётки. -#}
-            <input type="text" class="amap-ml-token" placeholder="or paste automation token" size="22" autocomplete="off">
-            <button type="button" class="amap-btn" onclick="amapMlSaveToken(this)">Save token</button>
-          </div>
+          <button type="button" class="amap-btn amap-ml-open" hidden onclick="amapMlOpen(this)">Connect Multilogin</button>
+          <button type="button" class="amap-btn" onclick="document.getElementById('amap-rpa-help').showModal()">RPA help</button>
         </div>
       </div>
