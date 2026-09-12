@@ -1110,6 +1110,45 @@ python scripts/acl_board.py --render
       committing in the same worktree. Git replaces a file wholesale. Written
       into the module docstring with the rule that follows.
       Ten consecutive clean runs. GitHub: **ACL-1126** (#126), Platform, Bug.
+- [x] `acl-1130` Connecting an account is one job, not two panels #review @dashboard
+      The owner circled two forms and said they felt like one thing torn in
+      half. He was right, and the measurement was worse than the screen: the
+      page carried **twenty copies** of the Multilogin sign-in — twenty
+      password fields, twenty token boxes, twenty copies of a help block — one
+      per country, for a setting that is global.
+      Now one panel: the link controls, a line of Multilogin state, and the
+      sign-in fields only when there is no live token.
+      Found by a test rather than planned: `{% set mlx = mlx_labels %}` is a
+      template-local, and included files never see it. Between updating the
+      templates and restarting the server — the supported order — the instance
+      picker would have rendered blank. The fallback now lives where the picker
+      lives.
+      The markup moved; the machinery did not. Thirteen `ml*` functions across
+      eighty-nine places stay as they are, some now without callers, and that
+      is written down. Removing code you have not traced is how something
+      breaks at night.
+      GitHub: **ACL-1130** (#130), PR #131.
+- [x] `acl-1134` Four things the builder let a person do wrong #review @dashboard
+      A creative's weight, invisible until it costs nine minutes. A locked
+      screen, which looks exactly like a hung run. Targeting typed and then
+      lost between the form and Publish. And the language dropped when a
+      campaign was duplicated.
+      **The same bug, fixed twice.** The language fix exists in master too — the
+      same hand-written field list with `'language'` added. This branch keeps
+      the general walk over every field, because the stale list *was* the
+      cause: the next field added to the form repeats it. That is an override
+      of someone else's merged work and is said so in the PR, not slipped in.
+      GitHub: **ACL-1134** (#134), PR #133.
+- [ ] `acl-1136` Eight branches were pushed with no PR #next @rpa
+      The red test everyone stepped over for two days was fixed on my own
+      branch, pushed that morning, never submitted. Looking for others found
+      eight — four of them finished work simply sitting there.
+      Four are now submitted as two PRs (#132, #133 — three of them turned out
+      to be nested, one line of work with checkpoints). One waits on a
+      colleague's branch reaching master. Three are deliberate: parked WIP, a
+      stack waiting on its parent, and the board copy.
+      The habit is the task, not the backlog: pushing a branch is not
+      submitting it. Work ends at a PR, not at a commit.
 - [x] `acl-1128` The red test on master was reading the machine #review @dashboard
       `test_a_report_without_countries_does_not_break` had been red for two
       days, and I wrote "red on master, not mine" in every PR — while the fix
