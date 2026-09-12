@@ -53,12 +53,20 @@ def test_widths_add_up_to_a_hundred():
     assert total == 100, f"ширины дают {total}%, а не 100"
 
 
-def test_the_drill_spans_every_column():
-    """`ncols` — это colspan строки раскрытия: разойдётся, и она поедет."""
+def test_the_drill_no_longer_needs_a_hand_written_width():
+    """`ncols` был colspan'ом книжной строки раскрытия: разойдётся с числом
+    колонок — и строка поедет. Стеречь его было правильно.
+
+    12.09 книжная детализация ушла со стрелки (решение владельца): одна
+    стрелка открывала два списка сразу, и читались они как одна поломанная
+    таблица. Осталось живое дерево, а его colspan берётся из самой строки
+    (`td.colSpan = row.children.length`) — разойтись ему не с чем.
+
+    Сторож на это стоит в test_the_account_tree_on_screen.py:
+    `test_the_tree_lands_under_its_own_account`.
+    """
     t = TPL.read_text(encoding="utf-8")
-    m = re.search(r"ncols=(\d+)", t)
-    assert m, "исчез ncols — строка раскрытия не будет знать своей ширины"
-    assert int(m.group(1)) == len(_head())
+    assert "ncols=" not in t, "вернулась ширина, написанная руками"
 
 
 def test_the_two_spends_say_where_they_came_from():

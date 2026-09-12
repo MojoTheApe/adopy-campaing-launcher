@@ -680,3 +680,29 @@ def test_an_ad_without_its_campaign_is_not_a_button(page):
 def test_a_proper_campaign_row_still_is(page):
     _paint(page, [ADSET])
     assert _sw(page)["tag"] == "BUTTON"
+
+
+# ── стрелка раскрывает только дерево ──────────────────────────────────────
+
+def test_the_account_arrow_no_longer_pulls_the_workbook_drill():
+    """Одна стрелка открывала два списка: книжный первым и длинный, живой под
+    ним. Две таблицы с похожими словами одна над другой читаются как одна
+    поломанная (решение владельца 12.09).
+    """
+    import re
+
+    # Комментарии Jinja вырезаются: объяснение убранной конструкции — не её
+    # возвращение. Сторож, читающий файл целиком, ловит собственный текст;
+    # за эту сессию так вышло уже трижды.
+    body = re.sub(r"\{#.*?#\}", "", (TPL / "_account_map_country.html").read_text(encoding="utf-8"),
+                  flags=re.S)
+    assert "section=account" not in body, "книжная детализация снова висит на стрелке"
+    assert 'class="amap-caret"' not in body, "стрелку рисует JS, и только когда есть что раскрыть"
+    assert 'class="amap-caret-off"' in body, "без заглушки строки разъедутся"
+
+
+def test_the_arrow_appears_only_when_there_is_a_tree(page):
+    """До чтения раскрывать нечего, и обещать обратное незачем."""
+    assert page.evaluate("() => !!document.querySelector('#acc .amap-caret')") is False
+    _paint(page, [ADSET])
+    assert page.evaluate("() => !!document.querySelector('#acc .amap-caret')") is True
