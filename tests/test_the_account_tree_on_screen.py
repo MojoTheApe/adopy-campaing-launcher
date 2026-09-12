@@ -792,3 +792,70 @@ def test_the_confirmation_waits_for_meta_to_settle():
         "подтверждение снова решает с первого взгляда"
     )
     assert "Meta не приняла" in after, "отказ перестал быть возможным — тогда это не проверка"
+
+
+# ══ дерево не остаётся старше действия ════════════════════════════════════
+#
+# 12.09 чтение легло в 15:52:14, выключение случилось в 15:52:38. После
+# перезагрузки страницы объявление снова показывалось включённым — да ещё с
+# кнопкой на том, что уже выключено.
+
+def _store(monkeypatch, tmp_path, objects):
+    from src.analysis_agent import account_spend as sp
+    import json
+
+    path = tmp_path / "readings.json"
+    monkeypatch.setattr(sp, "_store_path", lambda: path)
+    path.write_text(json.dumps({
+        "acc|2026-09-08|2026-09-11": {"account": "acc", "date_from": "2026-09-08",
+                                      "date_to": "2026-09-11", "objects": objects},
+        "acc|2026-09-11|2026-09-11": {"account": "acc", "date_from": "2026-09-11",
+                                      "date_to": "2026-09-11", "objects": objects},
+        "other|2026-09-11|2026-09-11": {"account": "other", "objects": objects},
+    }), encoding="utf-8")
+    return sp, path
+
+
+def test_a_confirmed_turn_off_updates_the_saved_tree(monkeypatch, tmp_path):
+    sp, path = _store(monkeypatch, tmp_path, [
+        {"id": "777", "level": "ad", "switch": "on", "delivery": "Active"},
+        {"id": "888", "level": "ad", "switch": "on", "delivery": "Active"},
+    ])
+    touched = sp._mark_object_off("acc", "777", "Processing")
+    assert touched == 2, "поправлено не во всех чтениях аккаунта"
+    import json
+    data = json.loads(path.read_text(encoding="utf-8"))
+    for key in ("acc|2026-09-08|2026-09-11", "acc|2026-09-11|2026-09-11"):
+        rows = {o["id"]: o for o in data[key]["objects"]}
+        assert rows["777"]["switch"] == "off"
+        assert rows["777"]["delivery"] == "Processing", "доставка не та, что прочитали"
+        assert rows["888"]["switch"] == "on", "тронули соседа"
+
+
+def test_another_account_is_left_alone(monkeypatch, tmp_path):
+    sp, path = _store(monkeypatch, tmp_path, [
+        {"id": "777", "level": "ad", "switch": "on", "delivery": "Active"}])
+    sp._mark_object_off("acc", "777", "Off")
+    import json
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["other|2026-09-11|2026-09-11"]["objects"][0]["switch"] == "on"
+
+
+def test_an_unread_delivery_is_not_invented(monkeypatch, tmp_path):
+    """Не прочитали — пусть остаётся прежняя, чем ложная."""
+    sp, path = _store(monkeypatch, tmp_path, [
+        {"id": "777", "level": "ad", "switch": "on", "delivery": "Active"}])
+    sp._mark_object_off("acc", "777", "")
+    import json
+    data = json.loads(path.read_text(encoding="utf-8"))
+    row = data["acc|2026-09-11|2026-09-11"]["objects"][0]
+    assert row["switch"] == "off" and row["delivery"] == "Active"
+
+
+def test_only_a_confirmed_outcome_touches_the_tree():
+    """Отказ ничего не подтвердил, и дерево трогать не за что."""
+    src = (ROOT / "src" / "analysis_agent" / "account_spend.py").read_text(encoding="utf-8")
+    start = src.index("def turn_off(account: str")
+    body = src[start: src.index("def _turn_off(account: str", start)]
+    assert 'if out.state in ("off", "already_off"):' in body
+    assert "_mark_object_off" in body

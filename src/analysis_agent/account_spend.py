@@ -1705,6 +1705,50 @@ def _record_turn_off(out: "TurnOffResult") -> None:
         pass
 
 
+def _mark_object_off(account: str, object_id: str, delivery: str = "") -> int:
+    """Поправить сохранённые чтения: этот объект теперь выключен.
+
+    Иначе дерево остаётся старше действия. 12.09 чтение легло в 15:52:14, а
+    выключение случилось в 15:52:38 — после перезагрузки страницы объявление
+    снова показывалось включённым, да ещё с кнопкой на том, что уже выключено.
+
+    Правим во **всех** чтениях этого аккаунта: выключенность к периоду не
+    относится, объект выключен вообще, а не «за восьмое сентября».
+
+    Доставку ставим ту, что реально прочитали при подтверждении, — Meta сразу
+    после выключения пишет «Processing», а не «Off». Не прочитали — не
+    выдумываем: пусть остаётся прежняя, чем ложная.
+    """
+    touched = 0
+    with _STORE_LOCK:
+        data = _load_all()
+        prefix = account + "|"
+        for key, raw in data.items():
+            if not key.startswith(prefix) or not isinstance(raw, dict):
+                continue
+            for obj in (raw.get("objects") or []):
+                if str(obj.get("id") or "") != str(object_id):
+                    continue
+                obj["switch"] = "off"
+                if delivery:
+                    obj["delivery"] = delivery
+                touched += 1
+        if touched:
+            _save_all(data)
+        # Живая копия в памяти — тот же ответ, что отдаёт `get_reading`.
+        for key, reading in list(_UNSAVED.items()):
+            if not key.startswith(prefix):
+                continue
+            for obj in (reading.objects or []):
+                if str(obj.get("id") or "") != str(object_id):
+                    continue
+                obj["switch"] = "off"
+                if delivery:
+                    obj["delivery"] = delivery
+                touched += 1
+    return touched
+
+
 def turn_off_history(limit: int = 50) -> list[dict]:
     """Последние выключения — новыми вперёд. Для дешборда и для разбора."""
     try:
@@ -1734,6 +1778,10 @@ class TurnOffResult:
     object_id: str
     name: str = ""
     state: str = "failed"     # off | already_off | failed
+    #: Что страница написала о доставке в момент подтверждения. Словами Meta:
+    #: сразу после выключения она пишет «Processing», а не «Off», и выдавать
+    #: одно за другое нельзя.
+    delivery: str = ""
     error: str = ""
     how: str = ""             # чем подтверждено — чтобы знать, чему верить
     at: str = ""
@@ -1755,7 +1803,7 @@ _FIND_SWITCH_JS = r"""
   document.querySelectorAll('[data-acl-switch]').forEach(
     e => e.removeAttribute('data-acl-switch'));
   const CELL = /table_row:(-?\d+)[a-z]*\/table_cell:([^\/]+)/;
-  let name = '', toggle = null, seen = 0;
+  let name = '', delivery = '', toggle = null, seen = 0;
   for (const el of t.querySelectorAll('[data-surface*="table_row:"]')) {
     const m = (el.getAttribute('data-surface') || '').match(CELL);
     if (!m || m[1] !== wanted) continue;
@@ -1771,7 +1819,7 @@ _FIND_SWITCH_JS = r"""
   const checked = toggle.getAttribute('aria-checked');
   toggle.setAttribute('data-acl-switch', '1');
   return {
-    found: true, name: name,
+    found: true, name: name, delivery: delivery,
     on: checked === 'true' || toggle.checked === true,
     off: checked === 'false' || toggle.checked === false,
     label: norm(toggle.getAttribute('aria-label') || ''),
@@ -1809,6 +1857,14 @@ def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
     """
     out = _turn_off(account, level, object_id, parent_id=parent_id,
                     expected_name=expected_name, date_from=date_from, date_to=date_to)
+    if out.state in ("off", "already_off"):
+        # Не «наверное выключилось»: сюда приходят только подтверждённые
+        # исходы, и сохранённое дерево обязано их отражать — иначе оно врёт
+        # ровно про то, что человек только что сделал.
+        try:
+            _mark_object_off(out.account, out.object_id, out.delivery)
+        except Exception:
+            pass
     _record_turn_off(out)
     return out
 
@@ -1904,6 +1960,7 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
             return out
 
         if found.get("off"):
+            out.delivery = str(found.get("delivery") or "")
             out.state = "already_off"
             out.how = "тумблер уже выключен — ничего не нажимали"
             return out
@@ -1938,6 +1995,7 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
                 _sleep(TURN_OFF_PAUSE_S)
             again = page.evaluate(_FIND_SWITCH_JS, out.object_id)
             if again and again.get("off"):
+                out.delivery = str(again.get("delivery") or "")
                 out.state = "off"
                 out.how = f"подтверждено перезагрузкой списка ({attempt + 1}-й взгляд)"
                 return out
