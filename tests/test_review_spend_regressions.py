@@ -291,3 +291,55 @@ def test_a_page_that_cannot_answer_is_not_fronted(monkeypatch):
 
 def _boom(_js):
     raise RuntimeError("target closed")
+
+
+def test_the_new_tab_is_created_in_the_background(monkeypatch):
+    """`context.new_page()` не просто делает вкладку активной — Chrome
+    поднимает само окно профиля. Человек сидит в другом приложении, а ему на
+    минуты выбрасывает Ads Manager (проверено вживую 12.09; возврата фокуса
+    соседней вкладке не хватило — окно уже всплыло).
+
+    У CDP флаг `background` есть, и он ровно про это.
+    """
+    sent = []
+    made = NS(evaluate=lambda _js: "hidden")
+    base = NS(evaluate=lambda _js: "hidden")
+    pages = [base]
+
+    def _send(method, params=None):
+        sent.append((method, params))
+        pages.append(made)
+
+    context = NS(pages=pages,
+                 new_cdp_session=lambda _p: NS(send=_send),
+                 new_page=lambda: (_ for _ in ()).throw(AssertionError("вкладку открыли не фоном")))
+    browser = NS(contexts=[context])
+    pw = NS(chromium=NS(connect_over_cdp=lambda _: browser), stop=lambda: None)
+    monkeypatch.setattr(br, "sync_playwright", lambda: NS(start=lambda: pw))
+    for name in ["ensure_playwright_browsers_path", "_stop_thread_playwright",
+                 "_reset_asyncio_running_loop", "_disable_background_throttling",
+                 "_ensure_wide_window", "_keep_renderer_active"]:
+        monkeypatch.setattr(br, name, lambda *a: None)
+    conn = br._connect_playwright(cdp_url="test", provider="multilogin_direct",
+                                  debug_port="123", ws_endpoint=None, new_page=True)
+    assert conn.page is made
+    assert sent and sent[0][0] == "Target.createTarget"
+    assert sent[0][1].get("background") is True, "флаг фона не передан"
+
+
+def test_a_tab_we_could_not_open_in_the_background_is_still_opened(monkeypatch):
+    """Своя вкладка нужнее тишины: без неё чтение уводило бы страницу человека."""
+    fallback = NS()
+    context = NS(pages=[NS(evaluate=lambda _js: "hidden")],
+                 new_cdp_session=lambda _p: (_ for _ in ()).throw(RuntimeError("no cdp")),
+                 new_page=lambda: fallback)
+    browser = NS(contexts=[context])
+    pw = NS(chromium=NS(connect_over_cdp=lambda _: browser), stop=lambda: None)
+    monkeypatch.setattr(br, "sync_playwright", lambda: NS(start=lambda: pw))
+    for name in ["ensure_playwright_browsers_path", "_stop_thread_playwright",
+                 "_reset_asyncio_running_loop", "_disable_background_throttling",
+                 "_ensure_wide_window", "_keep_renderer_active"]:
+        monkeypatch.setattr(br, name, lambda *a: None)
+    conn = br._connect_playwright(cdp_url="test", provider="multilogin_direct",
+                                  debug_port="123", ws_endpoint=None, new_page=True)
+    assert conn.page is fallback

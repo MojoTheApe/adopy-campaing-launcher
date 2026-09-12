@@ -314,6 +314,42 @@ def _stop_thread_playwright() -> None:
     _reset_asyncio_running_loop()
 
 
+def _new_background_page(context):
+    """Новая вкладка, не забирающая экран.
+
+    `context.new_page()` создаёт вкладку через `Target.createTarget` без флага
+    `background`, и Chrome не просто делает её активной — он **поднимает само
+    окно профиля**. Человек сидит в другом приложении, а ему на минуты
+    выбрасывает Ads Manager. Вернуть фокус соседней вкладке этого не отменяет:
+    окно уже всплыло (проверено вживую 12.09).
+
+    У CDP флаг есть, и он ровно про это. Не вышло — возвращаем `None`, и
+    вызывающий откроет вкладку обычным путём: своя вкладка нужнее тишины.
+    """
+    try:
+        # По тождественности, а не через множество: страницу нельзя считать
+        # хешируемой — у объекта может быть свой `__eq__` без `__hash__`, и
+        # тогда `set()` тихо уронит весь приём в запасной путь.
+        before = [id(x) for x in context.pages]
+        base = next(iter(context.pages), None)
+        if base is None:
+            return None
+        session = context.new_cdp_session(base)
+        session.send("Target.createTarget", {"url": "about:blank", "background": True})
+    except Exception:
+        return None
+    # Страница появляется в контексте не мгновенно: ждём её, а не угадываем.
+    for _ in range(60):
+        try:
+            for candidate in context.pages:
+                if id(candidate) not in before:
+                    return candidate
+        except Exception:
+            return None
+        time.sleep(0.05)
+    return None
+
+
 def _front_page(context):
     """Какая вкладка сейчас на экране — чтобы вернуть её человеку.
 
@@ -523,7 +559,10 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
             context = browser.contexts[0]
             # Чья вкладка была на экране до нас — чтобы вернуть её обратно.
             prior = _front_page(context) if new_page else None
-            page = context.new_page() if new_page or not context.pages else context.pages[0]
+            if new_page:
+                page = _new_background_page(context) or context.new_page()
+            else:
+                page = context.pages[0] if context.pages else context.new_page()
         else:
             context = browser.new_context()
             prior = None
