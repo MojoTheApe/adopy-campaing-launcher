@@ -6404,6 +6404,26 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     .then(function(d){ CREATIVES = d.files || []; cbpRenderAll(); })
     .catch(function(){});
 
+  // Вес файла рядом с его именем — видно при выборе, а не через десять минут
+  // загрузки. 10 сентября в одной папке лежали креативы от 30 КБ до 1.5 ГБ, и
+  // по имени они не отличались ничем.
+  //
+  // Времени здесь намеренно нет. Замеры того же дня: три файла кампании были
+  // 24-26 МБ, а грузились 537, 326, 62 и 90 секунд — восьмикратный разброс при
+  // одинаковом весе. Оценка «столько-то минут» была бы выдуманным числом;
+  // человеку нужнее знать, что он выбрал гигабайт вместо двадцати мегабайт.
+  var CB_HEAVY_MB = 100;  // не закон, а граница: выше неё файлы в папке
+                          // единичны, и выбор такого стоит заметить
+  window.cbSizeTag = function(bytes) {
+    if (!bytes) return '';
+    var mb = bytes / 1e6;
+    var text = mb >= 1000 ? (mb / 1000).toFixed(1) + ' GB' : Math.round(mb) + ' MB';
+    var heavy = mb >= CB_HEAVY_MB;
+    return ' <span style="font-size:0.68rem;color:var(--'
+         + (heavy ? 'warn' : 'muted') + ')'
+         + (heavy ? ';font-weight:600' : '') + '">' + text + '</span>';
+  };
+
   window.cbCreativeSearch = function(input) {
     var wrap = input.closest('.cb-creative-sel-wrap');
     if (!wrap) return;
@@ -6439,7 +6459,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var label = isDup
         ? aclEscHtml(f.filename) + ' <span style="color:var(--accent);font-size:0.68rem">(' + aclEscHtml(f.folder) + ')</span>'
         : (f.folder ? aclEscHtml(f.filename) + ' <span style="color:var(--muted);font-size:0.7rem">(' + aclEscHtml(f.folder) + ')</span>' : aclEscHtml(f.filename));
-      return '<div class="cb-sel-opt" data-val="' + aclEscHtml(val) + '" style="font-size:0.72rem">' + label + '</div>';
+      return '<div class="cb-sel-opt" data-val="' + aclEscHtml(val) + '" style="font-size:0.72rem">'
+           + label + cbSizeTag(f.size_bytes) + '</div>';
     }).join('');
     if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:0.72rem;pointer-events:none">No files found</div>';
 
@@ -6913,6 +6934,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var hint     = wrap.querySelector('.cb-targeting-hint');
     var query    = input.value.trim().toLowerCase();
 
+    // Typing replaces the previous selection, even before the blur callback.
+    if (hidden) hidden.value = '';
+    if (hint) hint.textContent = '';
+    cbUpdateName(wrap.closest('.cb-slot'));
+
     var targets = (REF && REF.targetings) ? REF.targetings : [];
     // Rank, don't just filter (user request 2026-07-30): typing letter by
     // letter must cut the irrelevant and float the most relevant. Substring
@@ -6977,6 +7003,45 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
   };
 
+  // Уходя с поля, доводим выбор до конца.
+  //
+  // Скрытое поле с интересами заполнялось ТОЛЬКО кликом мышью по строке
+  // списка. Напечатал код, ушёл с поля — имя кампании собиралось из
+  // напечатанного текста и выглядело правильным, а интересы оставались
+  // пустыми. 10 сентября обе кампании ушли в черновик без детального
+  // таргетинга: в телеметрии `targeting` записан пропуском со словами «в
+  // черновике нет интересов», хотя в имени стояло `Trading` и `FX`.
+  //
+  // Совпадение ищется точное — по коду или по подписи. Угадывать, что имел
+  // в виду человек, здесь нельзя: соседние коды отличаются одной буквой, и
+  // подстановка «похожего» означала бы чужой таргетинг в живой кампании.
+  window.cbTargetingCommit = function(input) {
+    var wrap = input.closest('.cb-targeting-wrap');
+    if (!wrap) return false;
+    var hidden = wrap.querySelector('.cb-targeting-hidden');
+    var hint   = wrap.querySelector('.cb-targeting-hint');
+    var typed  = (input.value || '').trim();
+    if (!typed) { if (hidden) hidden.value = ''; return false; }
+    if (hidden && hidden.value) return true;   // уже выбрано мышью
+
+    var targets = (REF && REF.targetings) ? REF.targetings : [];
+    var q = typed.toLowerCase();
+    var hit = targets.filter(function(t) {
+      return (t.code || '').toLowerCase() === q || (t.label || '').toLowerCase() === q;
+    });
+    if (hit.length === 1) {
+      input.value = hit[0].code;
+      if (hidden) hidden.value = hit[0].fb_interest || '';
+      if (hint)   hint.textContent = hit[0].fb_interest || '';
+      var slot = wrap.closest('.cb-slot');
+      if (slot) cbUpdateName(slot);
+      return true;
+    }
+    // Не совпало — поле остаётся помеченным, и публикация об этом скажет.
+    if (hidden) hidden.value = '';
+    return false;
+  };
+
   // Close targeting dropdown on blur
   document.addEventListener('focusout', function(e) {
     var input = e.target;
@@ -6984,6 +7049,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     setTimeout(function() {
       var wrap = input.closest('.cb-targeting-wrap');
       if (wrap) { var dd = wrap.querySelector('.cb-sel-dropdown'); if (dd) dd.hidden = true; }
+      cbTargetingCommit(input);
+      var slot = input.closest('.cb-slot');
+      if (slot && typeof refreshReviewMarkers === 'function') refreshReviewMarkers(slot);
     }, 150);
   });
 
@@ -7149,17 +7217,41 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       if (srcOsText && newOsText) newOsText.value = srcOsText.value;
     }
 
-    // language included: the copy that lost it went on to build a campaign
-    // without the language the original had (acl-706). On builds that have
-    // no language field yet the selector simply finds nothing.
-    ['age', 'budget', 'asset', 'language'].forEach(function(field) {
-      var srcInput = srcSlot.querySelector('[name="camp_' + srcIdx + '_' + field + '"]');
+    // Один и тот же баг чинили дважды: в master лежит список полей руками —
+    // ['age','budget','asset','language'] (acl-706). Здесь оставлен общий
+    // обход, потому что отставший список и был причиной: язык добавили в
+    // форму позже, а список не тронули, и дублирование молча оставляло его
+    // пустым. Следующее поле повторит это ровно так же.
+    //
+    // Из той версии ничего не теряется: язык копируется общим обходом, а
+    // `cbLanguageChanged` вызывается строкой ниже.
+    // Копируются ВСЕ поля слота, а не перечисленные руками. Прежний список
+    // ['age','budget','asset'] отстал от формы: язык добавили позже, и
+    // дублирование молча оставляло его пустым. На экране это выглядело как
+    // забывчивость человека, а кампания уходила без языка.
+    //
+    // Пропускаются только те, у которых своя логика: имя собирается само,
+    // счётчик объявлений ставится при их копировании, а таргетинг и ОС уже
+    // скопированы выше вместе со своим видимым текстом.
+    var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1 };
+    var prefix = 'camp_' + srcIdx + '_';
+    srcSlot.querySelectorAll('[name^="' + prefix + '"]').forEach(function(srcInput) {
+      var field = srcInput.name.slice(prefix.length);
+      if (field.indexOf('ad_') === 0 || SKIP_FIELDS[field]) return;
       var newInput = newSlot.querySelector('[name="camp_' + idx + '_' + field + '"]');
-      if (srcInput && newInput) {
-        newInput.value = srcInput.value;
-        if (field === 'language' && typeof cbLanguageChanged === 'function') cbLanguageChanged(newInput);
+      if (!newInput) return;
+      newInput.value = srcInput.value;
+      var srcWrap = srcInput.closest('.cb-sel-wrap');
+      var newWrap = newInput.closest('.cb-sel-wrap');
+      if (srcWrap && newWrap) {
+        var a = srcWrap.querySelector('.cb-sel-text');
+        var b = newWrap.querySelector('.cb-sel-text');
+        if (a && b) b.value = a.value;
       }
     });
+    // Пустой язык подсвечивается сразу, а не после первой правки.
+    var dupLang = newSlot.querySelector('[name="camp_' + idx + '_language"]');
+    if (dupLang && typeof cbLanguageChanged === 'function') cbLanguageChanged(dupLang);
 
     var newAdRows = newSlot.querySelector('.cb-ad-rows');
     newAdRows.innerHTML = '';
@@ -8392,6 +8484,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
 // ── Preview & Publish ─────────────────────────────────────────────────
 function cbCollectFormData(form) {
+  // Preview and draft submission must see a typed selection before the delayed blur.
+  form.querySelectorAll('.cb-targeting-search').forEach(function(input) { cbTargetingCommit(input); });
   // Ensure every slot has a fresh name before we snapshot the FormData
   form.querySelectorAll('.cb-slot').forEach(function(slot) { cbUpdateName(slot); });
   cbUpdateCount(form);
@@ -8924,9 +9018,31 @@ window.cbPublish = function(form) {
     + 'Country: <strong>' + aclEscHtml(country) + '</strong><br>'
     + 'Campaigns: <strong>' + campCount + '</strong><br><br>'
     + '<span style="color:var(--muted);font-size:0.85rem">The RPA attaches to the Multilogin profile through MLX automation '
-    + '(no need to open the profile first; if it is open by hand the window may restart).</span><br><br>'
+    + '(no need to open the profile first; if it is open by hand the window may restart).</span><br>'
+    // Заблокированный экран останавливает страницу так же, как свёрнутое
+    // окно, только сильнее: система уходит на защищённый рабочий стол, и
+    // загрузка встаёт. 10 сентября так вышло 42 минуты на файл, который
+    // соседнее объявление приняло за 74 секунды. Снять блокировку мы не
+    // можем — это настройка машины; сказать о ней вовремя можем.
+    + '<span style="color:var(--warn);font-size:0.85rem">Не блокируйте экран, пока идёт сборка — '
+    + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)</span>';
+
+  // Таргетинг, набранный руками и не доведённый до выбора, — это кампания
+  // без детального таргетинга. Имя при этом выглядит правильным: оно
+  // строится из напечатанного текста, а интересы живут в скрытом поле.
+  // 10 сентября так ушли в черновик обе кампании: в имени `Trading` и `FX`,
+  // в телеметрии `targeting` пропущен со словами «в черновике нет
+  // интересов». Молчать об этом нельзя — на экране всё выглядело собранным.
+  var lostTargeting = [];
+  form.querySelectorAll('.cb-targeting-wrap').forEach(function(wrap) {
+    var input  = wrap.querySelector('.cb-targeting-search');
+    var hidden = wrap.querySelector('.cb-targeting-hidden');
+    if (input && typeof cbTargetingCommit === 'function') cbTargetingCommit(input);
+    var typed = input ? (input.value || '').trim() : '';
+    if (typed && !(hidden && hidden.value)) lostTargeting.push(typed);
+  });
 
   // Предупреждение идёт первым блоком: его читают, пока смотрят, что
   // собирается, — а не после того, как уже нажали.
@@ -8938,9 +9054,17 @@ window.cbPublish = function(form) {
       + bodyHtml;
   }
 
+  if (lostTargeting.length) {
+    var names = lostTargeting.map(aclEscHtml).join(', ');
+    bodyHtml = '<div class="cb-warn-block">⚠ Таргетинг не выбран: <b>' + names + '</b>'
+      + '<br><span style="opacity:.75">Набранное не совпало ни с одним кодом. Кампания уйдёт '
+      + 'без детального таргетинга, а имя всё равно будет с этим словом — выберите строку из списка.</span></div>'
+      + bodyHtml;
+  }
+
   _safeConfirm('Build this campaign as a draft?', bodyHtml, function() {
     _doCbPublish(form);
-  }, { confirmLabel: warn ? 'Собрать с предупреждением' : 'Publish → draft' });
+  }, { confirmLabel: (warn || lostTargeting.length) ? 'Собрать с предупреждением' : 'Publish → draft' });
 };
 
 function _doCbPublish(form) {
