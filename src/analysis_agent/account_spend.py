@@ -1052,31 +1052,58 @@ def _shown_period(page, tries: int = 12) -> str:
     return ""
 
 
+#: Поиск показанного периода целиком внутри страницы — один вызов вместо
+#: обхода по узлу за раз.
+#:
+#: Запасной путь ходил по всем `div[role="button"]` и спрашивал `inner_text()`
+#: у каждого **из Python**: на странице Ads Manager их сотни, и каждый вопрос —
+#: обращение в браузер. Замер 12.09: сверка периода стоила 22 секунды из 54 на
+#: чтение аккаунта с пятью кампаниями — сорок процентов всего времени, при
+#: шести переходах по 3.7 с.
+#:
+#: Ровно так же однажды тормозило чтение итогов: обход `query_selector_all` с
+#: `inner_text()` стоил 175 секунд против 40. Лечение то же — спросить страницу
+#: один раз.
+_FIND_PERIOD_JS = r"""
+([marked, fallback, pattern]) => {
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+
+  const visible = el => el.getClientRects().length && !el.closest('[hidden],[aria-hidden="true"],[inert]') && getComputedStyle(el).visibility !== 'hidden';
+  const markedText = new Set();
+  for (const sel of marked) {
+    let candidates = [];
+    try { candidates = document.querySelectorAll(sel); } catch (_) { continue; }
+    for (const el of candidates) {
+      if (!visible(el)) continue;
+      const text = norm(el.getAttribute('aria-label') || el.innerText || '');
+      if (text) markedText.add(text);
+    }
+  }
+  if (markedText.size) return markedText.size === 1 ? [...markedText][0] : '';
+
+  let re;
+  try { re = new RegExp(pattern, 'i'); } catch (e) { return ''; }
+  let nodes = [];
+  try { nodes = document.querySelectorAll(fallback); } catch (e) { return ''; }
+  const texts = new Set();
+  for (const el of nodes) {
+    if (!visible(el)) continue;
+    const text = norm(el.innerText || '');
+    if (text.length > 0 && text.length < 80 && re.test(text)) texts.add(text);
+  }
+  return texts.size === 1 ? [...texts][0] : '';
+}
+"""
+
+
 def _period_once(page) -> str:
-    for sel in SEL_PERIOD:
-        try:
-            el = page.query_selector(sel)
-            if el:
-                text = (el.get_attribute("aria-label") or el.inner_text() or "").strip()
-                if text:
-                    return text
-        except Exception:
-            continue
-
-    # Запасной путь, и на деле основной: кнопка периода — просто кнопка с
-    # датой внутри, без aria-label, за который цеплялись выше. Снимок первого
-    # живого прогона показал ровно это: справа вверху «Sep 6, 2026».
+    """Один взгляд на страницу, одним обращением в браузер."""
     try:
-        import re as _r
-
-        pat = _r.compile(RE_PERIOD_DATE, _r.I)
-        for el in page.query_selector_all(SEL_PERIOD_FALLBACK):
-            text = " ".join((el.inner_text() or "").split())
-            if 0 < len(text) < 80 and pat.search(text):
-                return text
+        found = page.evaluate(_FIND_PERIOD_JS,
+                              [list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE])
     except Exception:
-        pass
-    return ""
+        return ""
+    return str(found or "").strip()
 
 
 _MONTHS = {
@@ -1714,3 +1741,401 @@ def _read_tree(
         objects = [o for o in objects if not (o["level"] == "ad" and o["id"] in ambiguous)]
         errors.append("одни объявления вернулись у разных кампаний — неоднозначные связи пропущены")
     return objects, " ".join(hows), "; ".join(errors)
+
+
+# ══ Выключить кампанию или объявление ═════════════════════════════════════
+#
+# Первое действие ACL, меняющее живой аккаунт. До сих пор он только строил
+# черновики, которые публиковал человек, и читал.
+#
+# **Только выключение** (решение владельца 12.09). Включать отсюда нельзя, и
+# это не недоделка: выключение денег не тратит, включение тратит. Обратно —
+# руками в Ads Manager, там же, где человек видит последствия.
+#
+# Ничего, кроме тумблера, здесь не нажимается. Редактор объявления не
+# открывается: Meta портит Leads-объявление одним его открытием (DQ204,
+# 02.08), а тумблер лежит в строке списка.
+
+#: Сколько ждать, пока Meta подтвердит переключение. Тумблер рисуется сразу, а
+#: сохраняется запросом — и отката ждать дольше, чем рисования.
+TURN_OFF_TRIES = 12
+TURN_OFF_PAUSE_S = 0.75
+
+
+def _turn_off_log() -> Path:
+    """Журнал выключений — рядом с показаниями, тем же путём."""
+    return Path(_store_path()).with_name("turn_off_log.jsonl")
+
+
+def _record_turn_off(out: "TurnOffResult") -> None:
+    """Записать, что случилось. Строкой в журнал и строкой в лог лаунчера.
+
+    Первое живое нажатие 12.09 вернуло отказ, и прочитать его причину было
+    негде: результат уходил в ответ HTTP и исчезал. Действие, меняющее чужой
+    аккаунт, обязано оставлять след — «что-то изменилось вчера» не ответ.
+
+    Ни запись, ни лог не смеют уронить сам результат, поэтому оба под
+    `except`: потерять журнал плохо, потерять ответ — хуже.
+    """
+    try:
+        log.info(
+            "turn_off %s %s %s → %s%s",
+            out.account, out.level, out.object_id, out.state,
+            f" ({out.error or out.how})" if (out.error or out.how) else "",
+        )
+    except Exception:
+        pass
+    try:
+        path = _turn_off_log()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(out.to_dict(), ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _mark_object_off(account: str, object_id: str, delivery: str = "") -> int:
+    """Поправить сохранённые чтения: этот объект теперь выключен.
+
+    Иначе дерево остаётся старше действия. 12.09 чтение легло в 15:52:14, а
+    выключение случилось в 15:52:38 — после перезагрузки страницы объявление
+    снова показывалось включённым, да ещё с кнопкой на том, что уже выключено.
+
+    Правим во **всех** чтениях этого аккаунта: выключенность к периоду не
+    относится, объект выключен вообще, а не «за восьмое сентября».
+
+    Доставку ставим ту, что реально прочитали при подтверждении, — Meta сразу
+    после выключения пишет «Processing», а не «Off». Не прочитали — не
+    выдумываем: пусть остаётся прежняя, чем ложная.
+    """
+    touched = 0
+    with _STORE_LOCK:
+        data = _load_all()
+        prefix = account + "|"
+        for key, raw in data.items():
+            if not key.startswith(prefix) or not isinstance(raw, dict):
+                continue
+            for obj in (raw.get("objects") or []):
+                if str(obj.get("id") or "") != str(object_id):
+                    continue
+                obj["switch"] = "off"
+                if delivery:
+                    obj["delivery"] = delivery
+                touched += 1
+        if touched:
+            _save_all(data)
+        # Живая копия в памяти — тот же ответ, что отдаёт `get_reading`.
+        for key, reading in list(_UNSAVED.items()):
+            if not key.startswith(prefix):
+                continue
+            for obj in (reading.objects or []):
+                if str(obj.get("id") or "") != str(object_id):
+                    continue
+                obj["switch"] = "off"
+                if delivery:
+                    obj["delivery"] = delivery
+                touched += 1
+    return touched
+
+
+def turn_off_history(limit: int = 50) -> list[dict]:
+    """Последние выключения — новыми вперёд. Для дешборда и для разбора."""
+    try:
+        lines = _turn_off_log().read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    out: list[dict] = []
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except Exception:
+            continue
+        if len(out) >= limit:
+            break
+    return out
+
+
+@dataclass
+class TurnOffResult:
+    """Что случилось с одним объектом. Никаких «наверное»."""
+
+    account: str
+    level: str
+    object_id: str
+    name: str = ""
+    state: str = "failed"     # off | already_off | failed
+    #: Что страница написала о доставке в момент подтверждения. Словами Meta:
+    #: сразу после выключения она пишет «Processing», а не «Off», и выдавать
+    #: одно за другое нельзя.
+    delivery: str = ""
+    error: str = ""
+    how: str = ""             # чем подтверждено — чтобы знать, чему верить
+    at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+#: Метка, которую поиск вешает на найденный тумблер: через `evaluate` ручку
+#: наружу не получить, а нажимать надо именно его.
+SEL_MARKED_SWITCH = '[data-acl-switch="1"]'
+
+#: Найти строку по её id и рассказать про её тумблер. Ничего не нажимает.
+_FIND_SWITCH_JS = r"""
+(args) => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  const visible = e => e.getClientRects().length && !e.closest('[hidden],[aria-hidden="true"],[inert]') && getComputedStyle(e).visibility !== 'hidden';
+  const fail = why => ({found: false, why});
+  document.querySelectorAll('[data-acl-switch]').forEach(e => e.removeAttribute('data-acl-switch'));
+  const tables = [...document.querySelectorAll('[role="table"],[role="grid"]')].filter(visible);
+  if (tables.length !== 1) return fail('expected one visible table');
+  const t = tables[0];
+  if (t.closest('[aria-busy="true"]') || [...t.querySelectorAll('[role="progressbar"],[aria-busy="true"]')].some(visible)) return fail('table is still loading');
+  const CELL = /table_row:(-?\d+)[a-z]*\/table_cell:([^\/]+)/;
+  const names = new Set(), deliveries = new Set(), switches = new Set(), kinds = new Set();
+  for (const el of t.querySelectorAll('[data-surface*="table_row:"]')) {
+    if (!visible(el)) continue;
+    const m = (el.getAttribute('data-surface') || '').match(CELL);
+    if (!m || m[1] !== args.id) continue;
+    const kind = m[2].match(/forObjectType\([^,]+,([^,)]+)/);
+    if (kind) kinds.add(kind[1]);
+    if (m[2].startsWith('forObjectType(name') && norm(el.innerText)) names.add(norm(el.innerText));
+    if (m[2].startsWith('forObjectType(delivery') && norm(el.innerText)) deliveries.add(norm(el.innerText));
+    if (m[2].startsWith('forObjectType(toggle')) {
+      el.querySelectorAll('[role="switch"],input[type="checkbox"]').forEach(sw => {
+        if (visible(sw)) switches.add(sw);
+      });
+    }
+  }
+  if (kinds.size !== 1 || !kinds.has(args.kind) || names.size !== 1 || switches.size !== 1) return fail('row identity or switch is ambiguous');
+  const name = [...names][0], sw = [...switches][0];
+  if (!args.name || name !== norm(args.name)) return fail('row name changed');
+  if (sw.disabled || sw.closest('[aria-disabled="true"]')) return fail('switch is disabled');
+  const aria = sw.getAttribute('aria-checked');
+  const state = aria === 'true' ? 'on' : aria === 'false' ? 'off' :
+    aria === null && sw.matches('input[type="checkbox"]') && !sw.indeterminate ? (sw.checked ? 'on' : 'off') : 'unknown';
+  const label = norm(sw.getAttribute('aria-label'));
+  const result = {found:true, name, delivery:deliveries.size === 1 ? [...deliveries][0] : '', on:state === 'on', off:state === 'off', label};
+  if (args.click) {
+    // Identity, context and state are read and acted upon in one JS task.
+    // If Meta switched it off meanwhile, clicking again would turn it ON.
+    if (location.href !== args.url || label !== args.label || state === 'unknown') return fail('context or switch changed before action');
+    if (state === 'on') {
+      const r = sw.getBoundingClientRect(), hit = document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+      if (!hit || (hit !== sw && !sw.contains(hit))) return fail('switch is covered');
+      sw.click();
+      result.clicked = true;
+    }
+  }
+  sw.setAttribute('data-acl-switch', '1');
+  return result;
+}
+"""
+
+# Re-read the same visible period in the exact browser task that may click.
+_SWITCH_ACTION_JS = """args => {
+  const period = (""" + _FIND_PERIOD_JS + """)(args.period_args);
+  if (!period || period !== args.period) return {found:false, why:'period changed before action'};
+  return (""" + _FIND_SWITCH_JS + """)(args);
+}"""
+
+
+@serialized_browser
+def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
+             expected_name: str = "", date_from: str = "", date_to: str = "") -> "TurnOffResult":
+    """Выключить и записать, что вышло.
+
+    Запись стоит здесь, а не внутри: у `_turn_off` двадцать путей выхода, и
+    расставленные по ним вызовы рано или поздно разойдутся — один забудут.
+    """
+    out = _turn_off(account, level, object_id, parent_id=parent_id,
+                    expected_name=expected_name, date_from=date_from, date_to=date_to)
+    if out.state in ("off", "already_off"):
+        # Не «наверное выключилось»: сюда приходят только подтверждённые
+        # исходы, и сохранённое дерево обязано их отражать — иначе оно врёт
+        # ровно про то, что человек только что сделал.
+        try:
+            _mark_object_off(out.account, out.object_id, out.delivery)
+        except Exception:
+            pass
+    _record_turn_off(out)
+    return out
+
+
+def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
+              expected_name: str = "", date_from: str = "", date_to: str = "") -> "TurnOffResult":
+    """Выключить одну кампанию или одно объявление. Включить отсюда нельзя.
+
+    Период нужен не ради чисел, а ради сверки: на экране должен стоять тот же
+    отрезок, что и на дешборде, иначе мы смотрим не на то, что показывали
+    человеку, — то же правило, что и у чтения.
+    """
+    from src.fb_ads_rpa import wizard_guard as wg
+
+    out = TurnOffResult(account=account, level=level, object_id=str(object_id),
+                        name=expected_name, at=_now())
+    if level not in ("campaign", "ad"):
+        out.error = f"выключать умеем кампанию и объявление, а не {level!r}"
+        return out
+    if not expected_name.strip():
+        out.error = "row name is required — read the account again"
+        return out
+    if not str(object_id).isdigit():
+        out.error = "id объекта должен состоять из цифр"
+        return out
+    if level == "ad" and not str(parent_id).isdigit():
+        # Список объявлений сужается по кампании: другого проверенного способа
+        # добраться до одной строки у нас нет.
+        out.error = "чтобы выключить объявление, нужна его кампания"
+        return out
+
+    entry = _entry_for(account)
+    if entry is None:
+        out.error = f"{account} нет в карте аккаунтов"
+        return out
+    act = (entry.ad_account_id or "").strip()
+    if not act:
+        out.error = f"у {account} не заполнен ad_account_id"
+        return out
+    date_from = date_from or yesterday()
+    date_to = date_to or date_from
+
+    if level == "campaign":
+        url = _tree_url(act, "campaign", date_from, date_to)
+    else:
+        url = _tree_url(act, "ad", date_from, date_to,
+                        parent_level="campaign", parent_id=str(parent_id))
+
+    conn = None
+    try:
+        try:
+            conn = _attach_only(entry, account)
+        except ProfileNotAttachable as exc:
+            out.error = str(exc)
+            return out
+        page = conn.page
+        page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        if not _wait_for_grid(page):
+            out.error = "Ads Manager не отрисовался за отведённое время"
+            return out
+
+        from urllib.parse import parse_qs, urlsplit
+        expected_act = act if act.startswith("act_") else "act_" + act
+        approved_url = page.url
+        def context_matches():
+            parts = urlsplit(page.url)
+            params = parse_qs(parts.query)
+            return (page.url == approved_url and wg.is_ads_manager_url(page.url)
+                    and parts.path == urlsplit(ADS_MANAGER_LEVELS[level]).path
+                    and _act_from_url(page, tries=1) == expected_act
+                    and _period_matches(_shown_period(page), date_from, date_to)
+                    and (level != "ad" or params.get("selected_campaign_ids") == [str(parent_id)]))
+
+        if not context_matches():
+            out.error = "account, period, level or parent changed — nothing touched"
+            return out
+        args = {"id":out.object_id, "kind":_LEVEL_KIND[level], "name":expected_name}
+        found = page.evaluate(_FIND_SWITCH_JS, args)
+        if not found or not found.get("found"):
+            out.error = (found or {}).get("why") or "строку не нашли"
+            return out
+        if not context_matches():
+            out.error = "context changed during lookup"
+            return out
+        out.name = str(found.get("name") or expected_name)
+
+        # Имя сверяется, если дешборд его прислал: id мог устареть, а строка
+        # под ним — оказаться чужой. Выключить не то хуже, чем не выключить.
+        if expected_name and out.name and out.name != expected_name:
+            out.error = (
+                f"под этим id на странице «{out.name}», а дешборд показывал "
+                f"«{expected_name}» — ничего не трогаем"
+            )
+            return out
+
+        # Запрет на опасные нажатия — тот же, что у мастера создания
+        # (`acl-113c`). Тумблер подписан «On/off» и под него не попадает; смысл
+        # в том, чтобы поймать случай, когда мы схватили не тот элемент.
+        why = wg.forbidden_click_reason(found.get("label"))
+        if why:
+            out.error = f"нажимать это нельзя: {why}"
+            return out
+
+        if found.get("off"):
+            out.delivery = str(found.get("delivery") or "")
+            out.state = "already_off"
+            out.how = "тумблер уже выключен — ничего не нажимали"
+            return out
+        if not found.get("on"):
+            out.error = "положение тумблера непонятно — ничего не трогаем"
+            return out
+
+        page.locator(SEL_MARKED_SWITCH).scroll_into_view_if_needed(timeout=15_000)
+        if not context_matches():
+            out.error = "context changed before action — nothing touched"
+            return out
+        period = _period_once(page)
+        if not _period_matches(period, date_from, date_to):
+            out.error = "period could not be confirmed before action"
+            return out
+        acted = page.evaluate(_SWITCH_ACTION_JS, dict(args, click=True, url=approved_url,
+            label=found.get("label"), period=period,
+            period_args=[list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE]))
+        if not acted or not acted.get("found"):
+            out.error = (acted or {}).get("why") or "action refused"
+            return out
+        if not acted.get("clicked"):
+            out.state = "already_off"
+            out.delivery = str(acted.get("delivery") or "")
+            out.how = "already off at the final check; no click"
+            return out
+
+        # Wait for the optimistic update, then independently verify persistence.
+        for _ in range(TURN_OFF_TRIES):
+            now = page.evaluate(_FIND_SWITCH_JS, args)
+            if now and now.get("off"):
+                break
+            page.wait_for_timeout(int(TURN_OFF_PAUSE_S * 1000))
+        else:
+            out.error = "clicked but off was not confirmed; read the account again"
+            return out
+
+        page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        if not _wait_for_grid(page):
+            out.error = "confirmation table did not load; state unknown"
+            return out
+        again = None
+        for attempt in range(TURN_OFF_TRIES):
+            if attempt:
+                page.wait_for_timeout(int(TURN_OFF_PAUSE_S * 1000))
+            if not context_matches():
+                out.error = "confirmation context changed; state unknown"
+                return out
+            again = page.evaluate(_FIND_SWITCH_JS, args)
+            if again and again.get("off") and context_matches():
+                out.delivery = str(again.get("delivery") or "")
+                out.state = "off"
+                out.how = f"confirmed after reload (observation {attempt + 1})"
+                return out
+
+        if not again or not again.get("found"):
+            out.error = "после перезагрузки строку не нашли — состояние неизвестно"
+            return out
+        out.error = "после перезагрузки тумблер снова включён — Meta не приняла"
+        return out
+    except Exception as exc:                      # noqa: BLE001
+        out.error = f"не получилось: {exc}"
+        return out
+    finally:
+        if conn is not None:
+            try:
+                conn.page.close()
+            except Exception:
+                pass
+            try:
+                conn.close(keep_browser_open=True)
+            except Exception:
+                pass

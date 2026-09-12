@@ -314,6 +314,89 @@ def _stop_thread_playwright() -> None:
     _reset_asyncio_running_loop()
 
 
+def _new_background_page(context):
+    """Новая вкладка, не забирающая экран.
+
+    `context.new_page()` создаёт вкладку через `Target.createTarget` без флага
+    `background`, и Chrome не просто делает её активной — он **поднимает само
+    окно профиля**. Человек сидит в другом приложении, а ему на минуты
+    выбрасывает Ads Manager. Вернуть фокус соседней вкладке этого не отменяет:
+    окно уже всплыло (проверено вживую 12.09).
+
+    У CDP флаг есть, и он ровно про это. Не вышло — возвращаем `None`, и
+    вызывающий откроет вкладку обычным путём: своя вкладка нужнее тишины.
+    """
+    session = None
+    target_id = None
+    owned = None
+    try:
+        base = next(iter(context.pages), None)
+        if base is None:
+            return None
+        session = context.new_cdp_session(base)
+        params = {"url": "about:blank", "background": True}
+        info = session.send("Target.getTargetInfo").get("targetInfo", {})
+        if info.get("browserContextId"):
+            params["browserContextId"] = info["browserContextId"]
+        target_id = session.send("Target.createTarget", params).get("targetId")
+        if not target_id:
+            return None
+        for _ in range(60):
+            for candidate in list(context.pages):
+                probe = None
+                try:
+                    probe = context.new_cdp_session(candidate)
+                    info = probe.send("Target.getTargetInfo").get("targetInfo", {})
+                    if info.get("targetId") == target_id:
+                        owned = candidate
+                        return owned
+                finally:
+                    if probe is not None:
+                        try:
+                            probe.detach()
+                        except Exception:
+                            pass
+            # Dispatch Playwright's page events while waiting for our target.
+            base.wait_for_timeout(50)
+    except Exception:
+        return None
+    finally:
+        if session is not None:
+            if target_id and owned is None:
+                try:
+                    session.send("Target.closeTarget", {"targetId": target_id})
+                except Exception:
+                    pass
+            try:
+                session.detach()
+            except Exception:
+                pass
+    return None
+
+
+def _front_page(context):
+    """Какая вкладка сейчас на экране — чтобы вернуть её человеку.
+
+    У Playwright нет понятия «активная вкладка», зато сама страница знает:
+    видимая отвечает `visible`, остальные `hidden`. Спрашиваем до того, как
+    создадим свою: после — ответят обе, потому что на нашей включена подделка
+    фокуса.
+
+    Ничего не нашли — значит и возвращать нечего; молчим, а не гадаем.
+    """
+    try:
+        pages = list(context.pages or [])
+    except Exception:
+        return None
+    for candidate in pages:
+        try:
+            if candidate.evaluate("() => document.visibilityState") == "visible":
+                return candidate
+        except Exception:
+            continue
+    return None
+
+
 def _disable_background_throttling(context, page) -> None:
     """Stop Chrome throttling the page when its window is minimised or behind
     another one.
@@ -498,13 +581,29 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
         browser = pw.chromium.connect_over_cdp(cdp_url)
         if browser.contexts:
             context = browser.contexts[0]
-            page = context.new_page() if new_page or not context.pages else context.pages[0]
+            # Чья вкладка была на экране до нас — чтобы вернуть её обратно.
+            prior = _front_page(context) if new_page else None
+            if new_page:
+                page = _new_background_page(context) or context.new_page()
+            else:
+                page = context.pages[0] if context.pages else context.new_page()
         else:
             context = browser.new_context()
+            prior = None
             page = context.new_page()
         _disable_background_throttling(context, page)
         _ensure_wide_window(context, page)
         _keep_renderer_active(context, page)
+        # Новая вкладка в Chrome сразу становится активной, и окно человека на
+        # минуты уезжает на нашу страницу. Возвращаем то, на что он смотрел:
+        # наша вкладка уходит в фон, но продолжает работать — торможение
+        # фоновых вкладок здесь уже снято двумя вызовами выше, ради этого они
+        # и делались.
+        if prior is not None and prior is not page:
+            try:
+                prior.bring_to_front()
+            except Exception:
+                pass
         # Install human-activity tracker on the page
         try:
             from src.fb_ads_rpa.pacing import _install_mouse_tracker

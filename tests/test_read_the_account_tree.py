@@ -554,6 +554,79 @@ def test_no_tabs_at_all_is_not_a_view(page):
     assert how == "data-surface"
 
 
+# ══ сверка периода: сорок процентов времени чтения ════════════════════════
+#
+# Замер 12.09 на живом аккаунте: сверка периода стоила 22 секунды из 54 — при
+# шести переходах по 3.7 с. Запасной путь ходил по всем `div[role="button"]`
+# и спрашивал `inner_text()` у каждого **из Python**: на странице Ads Manager
+# их сотни, и каждый вопрос — обращение в браузер.
+#
+# Ровно так же однажды тормозило чтение итогов (175 с против 40). Лечение то
+# же: спросить страницу один раз.
+
+def test_the_period_comes_from_what_meta_marked(page):
+    page.set_content('<div role="button" aria-label="Date range: Sep 11, 2026">calendar</div>')
+    assert "Sep 11, 2026" in sp._period_once(page)
+
+
+def test_a_plain_button_with_a_date_is_the_fallback(page):
+    """У кнопки периода часто нет aria-label, и опознаётся она по дате внутри."""
+    page.set_content(
+        '<div role="button">Campaigns</div>'
+        '<div role="button">Sep 11, 2026</div>'
+    )
+    assert sp._period_once(page) == "Sep 11, 2026"
+
+
+def test_a_wall_of_text_with_a_date_in_it_is_not_the_period(page):
+    """Иначе периодом окажется первый же длинный блок, куда попала дата."""
+    page.set_content(
+        '<div role="button">' + ("Some long explanation about billing. " * 4)
+        + 'Sep 11, 2026</div>'
+    )
+    assert sp._period_once(page) == ""
+
+
+def test_a_page_without_a_date_says_nothing(page):
+    page.set_content('<div role="button">Campaigns</div>')
+    assert sp._period_once(page) == ""
+
+
+def test_a_broken_page_is_silence_not_a_crash():
+    class _Broken:
+        def evaluate(self, *a, **k):
+            raise RuntimeError("target closed")
+
+    assert sp._period_once(_Broken()) == ""
+
+
+def test_the_search_happens_inside_the_page(page):
+    """Сторож на возврат медленного приёма: обход по узлу за раз стоил сорок
+    процентов времени чтения."""
+    src = (ROOT / "src" / "analysis_agent" / "account_spend.py").read_text(encoding="utf-8")
+    start = src.index("def _period_once(page)")
+    nxt = src.find("\ndef ", start + 10)
+    body = src[start: nxt if nxt != -1 else len(src)]
+    assert "page.evaluate" in body
+    for forbidden in ("query_selector_all", "inner_text()", "get_attribute"):
+        assert forbidden not in body, f"вернулся обход по узлу за раз: {forbidden}"
+
+
+def test_one_look_is_one_round_trip(page):
+    """Один взгляд — один вопрос браузеру, а не сотни."""
+    calls = []
+    real = page.evaluate
+
+    class _Counting:
+        def evaluate(self, js, arg=None):
+            calls.append(1)
+            return real(js, arg)
+
+    page.set_content('<div role="button">Sep 11, 2026</div>')
+    sp._period_once(_Counting())
+    assert calls == [1]
+
+
 @pytest.mark.parametrize("mode", ["hidden", "ambiguous", "loading", "untyped", "hidden-row"])
 def test_only_visible_identified_ready_rows_are_accepted(page, mode):
     good = _grid([_row("111", "CAMPAIGN_GROUP", "current", "Active", "true")])

@@ -1901,6 +1901,76 @@
     .amap-live-ok { font-variant-numeric: tabular-nums; font-weight: 600; }
     .amap-live-run { color: var(--muted); font-size: 0.78rem; }
     .amap-live-bad { color: var(--danger); border-color: var(--danger); }
+
+    /* ── Что в аккаунте на самом деле (acl-113) ───────────────────────────
+       Строки приходят из кабинета, не из книги: у книжных нет ни id, ни
+       состояния, и отстают они на сутки. Появляется этот блок только после
+       Read — до него показывать нечего, и притворяться, что есть, нельзя.
+
+       Состояние нарисовано СЛОВОМ, а не тумблером. Переключать пока нечем, а
+       контрол, похожий на переключатель, обещает то, чего не делает. */
+    .amap-tree > td { padding: 0 !important; background: var(--bg-subtle); }
+    .amap-tree-inner { padding: 0.5rem 0.75rem 0.6rem 2.2rem; }
+    .amap-tree-head {
+      font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 0.35rem;
+    }
+    .amap-tree-line {
+      display: flex; align-items: baseline; gap: 0.5rem;
+      padding: 0.15rem 0; font-size: 0.8rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .amap-tree-line:last-child { border-bottom: none; }
+    .amap-tree-line.ad { padding-left: 1.4rem; }
+    .amap-tree-kind {
+      flex: 0 0 4.6rem; color: var(--muted); font-size: 0.7rem;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    /* Стрелка кампании. Пустое место вместо неё держит ту же ширину, иначе
+       строки без объявлений разъезжаются относительно остальных. */
+    .amap-tree-caret, .amap-tree-caret-off {
+      flex: 0 0 1rem; font-size: 0.7rem; line-height: 1; text-align: left;
+    }
+    .amap-tree-caret {
+      background: none; border: 0; padding: 0; cursor: pointer;
+      color: var(--muted); transition: transform 120ms var(--ease-out);
+    }
+    .amap-tree-caret:hover { color: var(--accent); }
+    .amap-tree-caret.open { transform: rotate(90deg); }
+    .amap-tree-sw {
+      flex: 0 0 2.6rem; text-align: center; border-radius: 3px;
+      padding: 0.05rem 0.3rem; font-size: 0.7rem; font-weight: 600;
+      border: 1px solid var(--border);
+    }
+    .amap-tree-sw.on { color: var(--good); border-color: var(--good); }
+    .amap-tree-sw.off { color: var(--muted); }
+    .amap-tree-sw.dim { color: var(--muted); border-style: dashed; }
+    .amap-tree-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Доставка отдельно от тумблера намеренно: «on» и «Campaign off» стоят
+       вместе на живом аккаунте — включено, а не крутится, потому что выключена
+       кампания сверху. Одним значком это не показать. */
+    .amap-tree-del { flex: 0 0 8rem; text-align: right; color: var(--muted); font-size: 0.72rem; }
+    .amap-tree-del.stopped { color: var(--warn, var(--danger)); }
+    /* Числа держат свою ширину и выравниваются по разряду: столбик из пяти
+       строк читается взглядом, разъезжающийся — нет. */
+    .amap-tree-num {
+      flex: 0 0 6rem; text-align: right; font-size: 0.75rem;
+      font-variant-numeric: tabular-nums; color: var(--muted);
+    }
+    .amap-tree-num.spend { color: inherit; }
+    .amap-tree-err { color: var(--danger); font-size: 0.75rem; padding-top: 0.3rem; }
+    /* Включённая строка — кнопка: её можно выключить. Выключенная и
+       «непонятно» остаются надписями, нажимать там нечего. */
+    button.amap-tree-sw { cursor: pointer; font-family: inherit; }
+    button.amap-tree-sw:hover { border-color: var(--danger); color: var(--danger); }
+    .amap-tree-sw.arming { flex-basis: 5rem; border-color: var(--danger); color: var(--danger); }
+    .amap-tree-sw.failed { border-style: dashed; }
+    button.amap-tree-sw:disabled { opacity: 0.6; cursor: default; }
+    /* Оговорка, а не отказ: строки настоящие, просто их меньше, чем денег. */
+    .amap-tree-note {
+      color: var(--warn, var(--muted)); font-size: 0.73rem;
+      padding-top: 0.4rem; line-height: 1.4;
+    }
     .amap-btn {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -4487,9 +4557,415 @@ function amapApplyReading(account, s) {
     cell.firstChild.textContent = amapMoney(s.spend, s.currency);
     cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how;
     btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read'; btn.title = 'Read again';
+    amapPaintTree(row, s);
   });
   amapUpdateCountrySummaries();
 }
+
+/* ── Что в аккаунте на самом деле (acl-113) ─────────────────────────────
+   Read приносит не только число, но и кампании с объявлениями: их id,
+   положение тумблера и доставку словами Meta (ACL-1124). До этой правки всё
+   это приходило и пропадало — рисовать было нечем.
+
+   Строки из книги статистики этого заменить не могут: в книге нет ни id, ни
+   состояния, и отстаёт она на сутки. Поэтому блок появляется только после
+   чтения и только под тем аккаунтом, который читали.
+
+   Состояние показано двумя значениями, а не одним. На живом аккаунте
+   встретилось «тумблер on, доставка Campaign off» — включено, а не крутится,
+   потому что выключена кампания сверху. Сведи это в один значок, и человек
+   увидит работающим то, что не тратит ничего. */
+function amapTreeLine(o, adCount) {
+  var line = document.createElement('div');
+  line.className = 'amap-tree-line' + (o.level === 'ad' ? ' ad' : '');
+
+  /* У кампании с объявлениями — своя стрелка. Кнопкой, а не значком: её
+     нажимают, и с клавиатуры тоже. Пустое место вместо неё держит ширину,
+     чтобы строки не разъезжались. */
+  if (o.level !== 'ad' && adCount) {
+    var caret = document.createElement('button');
+    caret.type = 'button';
+    caret.className = 'amap-tree-caret';
+    caret.textContent = '▸';
+    caret.setAttribute('aria-label', adCount + ' ads in ' + (o.name || 'this campaign'));
+    line.appendChild(caret);
+  } else {
+    var gap = document.createElement('span');
+    gap.className = 'amap-tree-caret-off';
+    line.appendChild(gap);
+  }
+
+  var kind = document.createElement('span');
+  kind.className = 'amap-tree-kind';
+  kind.textContent = o.level === 'ad' ? 'ad' : 'campaign';
+  if (o.level !== 'ad' && adCount) kind.textContent += ' · ' + adCount;
+
+  /* Включённое можно выключить, и только это. Включить отсюда нельзя
+     (решение владельца 12.09): выключение денег не тратит, включение тратит,
+     и обратный ход человек делает руками в Ads Manager, где видит
+     последствия. Поэтому кнопкой становится только `on`; `off` и «непонятно»
+     остаются надписями — нажимать там нечего. */
+  /* Кнопкой строка становится, только если по ней есть чем действовать.
+     Сохранённые чтения переживают смену формы ответа: после перехода с ad
+     set'ов на кампании (12.09) в хранилище остались деревья, где уровень
+     `adset`, а у объявлений в родителях — id ad set'а. Выключение такую
+     строку не примет, и кнопка на ней обещала бы работу, которой не будет.
+     Перечитать аккаунт — и всё встанет на место. */
+  var canAct = o.switch === 'on'
+    && (o.level === 'campaign' || (o.level === 'ad' && o.parent_id));
+  var live = canAct;
+  var sw = document.createElement(live ? 'button' : 'span');
+  var state = o.switch === 'on' ? 'on' : o.switch === 'off' ? 'off' : 'dim';
+  sw.className = 'amap-tree-sw ' + state;
+  sw.textContent = o.switch === 'on' ? 'On' : o.switch === 'off' ? 'Off' : '—';
+  /* «Тумблера не видно» — не «выключено». Спутать их значит показать
+     остановленным то, что тратит деньги. */
+  sw.title = o.switch === 'unknown'
+    ? 'No switch found in this row — not the same as switched off'
+    : live
+      ? 'Turn off. It cannot be turned back on from here — that is done in Ads Manager.'
+      : (o.switch_label || 'On/off');
+  if (live) {
+    sw.type = 'button';
+    sw.dataset.level = o.level;
+    sw.dataset.objectId = o.id || '';
+    sw.dataset.parentId = o.parent_id || '';
+    sw.dataset.name = o.name || '';
+  }
+
+  var name = document.createElement('span');
+  name.className = 'amap-tree-name';
+  name.textContent = o.name || '(no name)';
+  name.title = (o.name || '') + (o.id ? '  ·  ' + o.id : '');
+
+  var del = document.createElement('span');
+  var stopped = /off|review|reject|not deliver|error/i.test(o.delivery || '');
+  del.className = 'amap-tree-del' + (stopped ? ' stopped' : '');
+  del.textContent = o.delivery || '';
+
+  /* Числа — теми же словами, какими их написала Meta. Имя и состояние говорят,
+     ЧТО это; спенд и результаты — зачем это трогать. Пять одинаково включённых
+     кампаний без чисел выглядят одинаково, а остановить надо тот, что тратит
+     без лидов.
+
+     Пусто остаётся пустым: у черновика спенда ещё не бывает, и «$0» было бы
+     утверждением, которого страница не делала. */
+  var spend = document.createElement('span');
+  spend.className = 'amap-tree-num spend';
+  spend.textContent = o.spend || '';
+
+  var res = document.createElement('span');
+  res.className = 'amap-tree-num';
+  res.textContent = o.results || '';
+  res.title = o.cost_per_result || '';
+
+  line.appendChild(kind); line.appendChild(sw);
+  line.appendChild(name); line.appendChild(del);
+  line.appendChild(spend); line.appendChild(res);
+  return line;
+}
+
+/* ── Покрывают ли строки спенд аккаунта ────────────────────────────────
+   На живом аккаунте 12.09 пять кампаний сложились в итог копейка в копейку
+   ($2 117.46), а шесть объявлений дали $661.57 из тех же денег. Прокрутка
+   новых строк не добавила — это весь список, который отдаёт страница.
+
+   Почему так, неизвестно: на странице объявлений есть переключатель вида
+   (All ads / Actions / Had delivery / Active ads), и какой из них выбран, в
+   разметке не выражено вовсе — ни `aria-selected`, ни `aria-current`. Либо
+   действует вид, скрывающий часть строк, либо спенд пришёлся на удалённые
+   объявления, которых нет ни в одном виде.
+
+   Пока это не выяснено, молчать нельзя: человек решает по этим строкам, что
+   остановить, и «шесть объявлений» выглядят как весь аккаунт. Поэтому суммы
+   разбираются — только чтобы сравнить, не для показа, — и когда строки
+   заметно не покрывают итог, это сказано словами.
+
+   Не разобралось — молчим. Неверная оговорка хуже отсутствующей. */
+function amapMoneyIn(text) {
+  if (!text) return null;
+  var m = String(text).match(/-?\d[\d,\s]*(?:\.\d+)?/);
+  if (!m) return null;
+  var n = parseFloat(m[0].replace(/[,\s]/g, ''));
+  return isFinite(n) ? n : null;
+}
+
+/* Порог в двадцатую долю: расхождение в копейки бывает от округления самой
+   Meta, и жаловаться на него значит приучить не читать оговорку. */
+var AMAP_COVER_GAP = 0.05;
+
+function amapCoverage(objects, level, total) {
+  if (typeof total !== 'number' || !(total > 0)) return null;
+  var rows = objects.filter(function (o) { return (o.level === 'ad') === (level === 'ad'); });
+  if (!rows.length) return null;
+  var sum = 0, seen = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var raw = rows[i].spend;
+    if (!raw) continue;                       // у черновика спенда нет — это не пробел
+    var v = amapMoneyIn(raw);
+    if (v === null) return null;              // не разобрали — ничего не утверждаем
+    sum += v; seen++;
+  }
+  if (!seen) return null;
+  if (total - sum < total * AMAP_COVER_GAP) return null;
+  return {sum: sum, total: total, count: rows.length};
+}
+
+/* Дерево живёт под той же стрелкой, что и остальное про аккаунт, и свёрнуто.
+   Раскрытым по умолчанию оно давало полтора экрана строк под каждым читанным
+   аккаунтом, и карта переставала читаться — владелец назвал это «странно
+   организовано», и был прав.
+
+   У аккаунта без книжных строк стрелки не было вовсе (шаблон рисует «·»):
+   раскрывать было нечего. Теперь есть, и она появляется. */
+function amapEnsureCaret(row, onToggle) {
+  var caret = row.querySelector('.amap-caret');
+  if (!caret) {
+    var off = row.querySelector('.amap-caret-off');
+    if (!off) return null;
+    caret = document.createElement('button');
+    caret.type = 'button';
+    caret.className = 'amap-caret';
+    caret.textContent = '▸';
+    caret.setAttribute('aria-label', 'What is in this account');
+    off.replaceWith(caret);
+  }
+  if (caret.dataset.treeBound === '1') return caret;
+  caret.dataset.treeBound = '1';
+  caret.addEventListener('click', onToggle);
+  return caret;
+}
+
+function amapPaintTree(row, s) {
+  /* Прежний блок снимается всегда: устаревшее состояние живого аккаунта —
+     худшее, что здесь можно оставить на экране. Раскрытость при этом
+     запоминается: перечитал человек аккаунт с открытым деревом — оно и
+     останется открытым, только уже с новыми числами. */
+  /* Строка вне таблицы — рисовать некуда. Причина та же, по которой неудача
+     дерева не отменяет спенд: `amapApplyReading` обходит все копии строки, и
+     исключение здесь оставило бы без числа те, до которых обход не дошёл. */
+  if (!row || !row.parentNode || !row.classList) return;
+
+  var wasOpen = row.classList.contains('amap-tree-open');
+  var next = row.nextElementSibling;
+  while (next && next.classList.contains('amap-tree')) {
+    var after = next.nextElementSibling;
+    next.remove();
+    next = after;
+  }
+
+  var objects = (s && s.objects) || [];
+  if (!objects.length && !(s && s.objects_error)) {
+    row.classList.remove('amap-tree-open');
+    return;
+  }
+
+  var tr = document.createElement('tr');
+  tr.className = 'amap-tree';
+  tr.hidden = !wasOpen;
+  var td = document.createElement('td');
+  td.colSpan = row.children.length;
+  var box = document.createElement('div');
+  box.className = 'amap-tree-inner';
+
+  var head = document.createElement('div');
+  head.className = 'amap-tree-head';
+  var sets = objects.filter(function (o) { return o.level !== 'ad'; }).length;
+  var ads = objects.length - sets;
+  head.textContent = 'in the account · ' + sets + ' campaigns · ' + ads + ' ads · read ' + (s.finished_at || '');
+  box.appendChild(head);
+
+  /* Объявления встают под свою кампанию, а не общим списком следом. Порядок
+     задаёт `parent_id`, который чтение знает по построению: список
+     объявлений спрашивается по одной кампании за раз.
+
+     Осиротевшие — те, чья кампания в ответе не пришла, — идут в конец под своим
+     заголовком. Приписать их к последнему попавшемуся было бы хуже всего: по
+     этим строкам решают, что останавливать. */
+  var sets = objects.filter(function (o) { return o.level !== 'ad'; });  // кампании
+  var ads = objects.filter(function (o) { return o.level === 'ad'; });
+  var placed = {};
+
+  /* Объявления свёрнуты под своей кампанией. У DQ438 их 99 на десять
+     кампаний: раскрытые разом, они уезжали на километр и прятали всё, что ниже
+     по карте. Раскрытое человеком запоминается и переживает перечитывание —
+     иначе после каждого Read пришлось бы открывать заново. */
+  var openSets = (row.dataset.openSets || '').split(',').filter(Boolean);
+
+  sets.forEach(function (s) {
+    var mine = ads.filter(function (a) { return a.parent_id && a.parent_id === s.id; });
+    var line = amapTreeLine(s, mine.length);
+    box.appendChild(line);
+    if (!mine.length) return;
+
+    var kids = document.createElement('div');
+    kids.className = 'amap-tree-kids';
+    kids.hidden = openSets.indexOf(s.id) === -1;
+    mine.forEach(function (a) { placed[a.id] = 1; kids.appendChild(amapTreeLine(a)); });
+    box.appendChild(kids);
+
+    var caret = line.querySelector('.amap-tree-caret');
+    caret.classList.toggle('open', !kids.hidden);
+    caret.addEventListener('click', function () {
+      kids.hidden = !kids.hidden;
+      caret.classList.toggle('open', !kids.hidden);
+      var now = (row.dataset.openSets || '').split(',').filter(Boolean)
+        .filter(function (id) { return id !== s.id; });
+      if (!kids.hidden) now.push(s.id);
+      row.dataset.openSets = now.join(',');
+    });
+  });
+  var orphans = ads.filter(function (a) { return !placed[a.id]; });
+  if (orphans.length) {
+    var lost = document.createElement('div');
+    lost.className = 'amap-tree-head';
+    lost.textContent = orphans.length + ' ads whose campaign is not in this answer';
+    box.appendChild(lost);
+    orphans.forEach(function (a) { box.appendChild(amapTreeLine(a)); });
+  }
+
+  /* Оговорка идёт по каждому уровню отдельно: кампании могут сойтись копейка
+     в копейку, а объявления нет — так и было на живом аккаунте. Общая фраза
+     про «строки» заставила бы усомниться и в тех, что сходятся. */
+  [['campaign', 'campaigns'], ['ad', 'ads']].forEach(function (pair) {
+    var gap = amapCoverage(objects, pair[0], s.spend);
+    if (!gap) return;
+    var note = document.createElement('div');
+    note.className = 'amap-tree-note';
+    note.textContent = gap.count + ' ' + pair[1] + ' here add up to '
+      + amapMoney(gap.sum, s.currency) + ' of the account’s '
+      + amapMoney(gap.total, s.currency)
+      + ' — the rest was spent by something this list does not show.';
+    note.title = 'Deleted items keep their spend in the account total, and the '
+      + 'list has a view switcher whose state Meta does not put in the markup. '
+      + 'Decide by the rows that add up.';
+    box.appendChild(note);
+  });
+
+  if (s.objects_error) {
+    var err = document.createElement('div');
+    err.className = 'amap-tree-err';
+    err.textContent = s.objects_error;
+    box.appendChild(err);
+  }
+
+  td.appendChild(box); tr.appendChild(td);
+  row.parentNode.insertBefore(tr, row.nextSibling);
+
+  amapEnsureCaret(row, function () {
+    /* Стрелка у аккаунта с книжными строками вдобавок дёргает htmx за
+       подробностями из книги — это его прежняя работа, и отнимать её не за
+       что: книга отвечает на «как шло», дерево на «что там сейчас». Здесь
+       только своё. */
+    var block = row.nextElementSibling;
+    while (block && !block.classList.contains('amap-tree')) block = block.nextElementSibling;
+    if (!block) return;
+    block.hidden = !block.hidden;
+    row.classList.toggle('amap-tree-open', !block.hidden);
+    row.classList.toggle('amap-open', !block.hidden);
+  });
+}
+
+/* ── Выключить строку ────────────────────────────────────────────────────
+   Первое, чем дешборд меняет живой аккаунт, а не читает его. Отсюда три
+   решения, каждое стоит объяснения.
+
+   **Только выключение.** Кнопкой становится лишь включённая строка. Включить
+   отсюда нельзя: выключение денег не тратит, включение тратит, и обратный ход
+   человек делает руками в Ads Manager, где видит последствия.
+
+   **Нажатие в два шага.** Отдельного диалога владелец не хотел, и его нет:
+   первое нажатие превращает «On» в «Turn off?», второе выключает, а через
+   несколько секунд или по нажатию мимо всё возвращается. Промах мышью не
+   должен останавливать кампанию, которая крутит деньги.
+
+   **Ответ дословный.** Что вышло, пишем её же словами и не подкрашиваем
+   успехом: «нажали, но тумблер не стал выключенным» — это не успех. */
+var AMAP_CONFIRM_MS = 4000;
+
+function amapTurnOffAsk(btn) {
+  if (btn.dataset.armed === '1') { amapTurnOffDo(btn); return; }
+  amapTurnOffDisarm();
+  btn.dataset.armed = '1';
+  btn.dataset.was = btn.textContent;
+  btn.textContent = 'Turn off?';
+  btn.classList.add('arming');
+  btn.dataset.timer = String(setTimeout(function () { amapTurnOffDisarm(); }, AMAP_CONFIRM_MS));
+}
+
+function amapTurnOffDisarm() {
+  document.querySelectorAll('.amap-tree-sw[data-armed="1"]').forEach(function (b) {
+    clearTimeout(Number(b.dataset.timer || 0));
+    b.textContent = b.dataset.was || 'On';
+    b.classList.remove('arming');
+    delete b.dataset.armed;
+  });
+}
+
+function amapTurnOffDo(btn) {
+  clearTimeout(Number(btn.dataset.timer || 0));
+  delete btn.dataset.armed;
+  btn.classList.remove('arming');
+
+  /* Аккаунт берём из строки над деревом — той самой, под которой оно стоит.
+     Держать его копию в кнопке значило бы завести второй источник правды. */
+  var row = btn.closest('.amap-tree');
+  var account = row && row.previousElementSibling
+    ? (row.previousElementSibling.querySelector('.amap-live') || {}).dataset : null;
+  account = account ? account.account : '';
+  var per = amapPeriod();
+  if (!account || !per.from || per.span === 'all') {
+    amapTurnOffSaid(btn, 'failed', 'Pick the dates first — we act on what is on screen.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '…';
+  var body = new URLSearchParams({
+    account: account, level: btn.dataset.level || '', object_id: btn.dataset.objectId || '',
+    parent_id: btn.dataset.parentId || '', name: btn.dataset.name || '',
+    date_from: per.from, date_to: per.to, span: per.span || '',
+  });
+  fetch('/account-spend/turn-off', {
+    method: 'POST', credentials: 'same-origin', body: body,
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j || !j.ok) throw new Error((j && j.error) || 'no answer');
+      var res = j.result || {};
+      if (res.state === 'off' || res.state === 'already_off') {
+        amapTurnOffSaid(btn, res.state, res.how || '');
+      } else {
+        amapTurnOffSaid(btn, 'failed', res.error || 'did not turn off');
+      }
+    })
+    .catch(function (e) { amapTurnOffSaid(btn, 'failed', String((e && e.message) || e)); });
+}
+
+function amapTurnOffSaid(btn, state, words) {
+  btn.disabled = false;
+  if (state === 'off' || state === 'already_off') {
+    /* Кнопка становится надписью: включить отсюда нельзя, и оставлять
+       нажимаемым то, что больше ничего не делает, — обман. */
+    var done = document.createElement('span');
+    done.className = 'amap-tree-sw off';
+    done.textContent = 'Off';
+    done.title = (state === 'already_off' ? 'It was already off. ' : 'Turned off. ')
+      + (words || '') + ' Turning it back on is done in Ads Manager.';
+    btn.replaceWith(done);
+    return;
+  }
+  btn.disabled = true;
+  btn.className = 'amap-tree-sw unknown failed';
+  btn.textContent = 'Check';
+  btn.title = 'State unconfirmed. Read the account again. ' + words;
+}
+
+document.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('.amap-tree-sw[data-object-id]') : null;
+  if (btn) { amapTurnOffAsk(btn); return; }
+  amapTurnOffDisarm();
+});
 
 function amapPollSpend(account, cell, btn, tries, per) {
   per = per || amapPeriod();
@@ -4513,6 +4989,8 @@ function amapPollSpend(account, cell, btn, tries, per) {
   }, 3000);
 }
 
+
+
 function amapResumeReadings() {
   var seen = {};
   document.querySelectorAll('.amap-live[data-running="1"]').forEach(function (cell) {
@@ -4521,6 +4999,36 @@ function amapResumeReadings() {
     seen[account] = true;
     var btn = cell.closest('tr').querySelector('.amap-read');
     amapPollSpend(account, cell, btn, 0, amapPeriod());
+  });
+
+  /* Дерево рисует только JS — второй копии этой разметки в шаблоне нет
+     намеренно: две копии расходятся, и замечает это тот, кто поверил не той.
+     Значит после перезагрузки страницы его надо восстановить из сохранённого
+     чтения, иначе оно исчезало бы, пока человек не нажмёт Read ещё раз —
+     то есть ради уже известного ответа пришлось бы снова трогать живой
+     аккаунт.
+
+     Запрос уходит только за теми, кого уже читали: он местный и в браузер не
+     ходит. */
+  var done = {};
+  var per = amapPeriod();
+  if (!per.from || per.span === 'all') return;
+  document.querySelectorAll('.amap-live[data-read-state="ok"]').forEach(function (cell) {
+    var account = cell.dataset.account;
+    if (done[account] || seen[account]) return;
+    done[account] = true;
+    fetch('/account-spend/status?account=' + encodeURIComponent(account)
+          + '&date_from=' + encodeURIComponent(per.from)
+          + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var s = (j && j.ok && j.reading) || null;
+        if (!s || s.state !== 'ok') return;
+        document.querySelectorAll('.amap-live').forEach(function (c) {
+          if (c.dataset.account === account) amapPaintTree(c.closest('tr'), s);
+        });
+      })
+      .catch(function () { /* дерево — не то, ради чего стоит рушить страницу */ });
   });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapResumeReadings);

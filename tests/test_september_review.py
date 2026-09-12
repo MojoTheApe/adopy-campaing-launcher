@@ -211,4 +211,7 @@ def test_setup_states_render_with_account_actions_and_matching_drill_width(ready
     assert "Open recommendations" not in setup
     assert "<identity>" not in setup
     assert len(re.findall(r"<th[ >]", html)) == len(re.findall(r"<td[ >]", html)) == 11
-    assert "ncols=11" in html and "amapReadSpend(this)" in html and "amapUnlink(" in html
+    # `ncols=11` проверялось здесь же: это была ширина книжной строки
+    # раскрытия. 12.09 книжная детализация ушла со стрелки — у живого дерева
+    # colspan берётся из самой строки.
+    assert "amapReadSpend(this)" in html and "amapUnlink(" in html

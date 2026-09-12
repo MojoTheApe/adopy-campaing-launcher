@@ -76,7 +76,9 @@ def test_the_column_count_still_matches_itself():
     assert len(re.findall(r"<td[ >]", body)) == cols, "ячеек не столько же, сколько колонок"
     assert cg.count("<col ") == cols, "долей не столько же, сколько колонок"
     assert sum(int(x) for x in re.findall(r"width:(\d+)%", cg)) == 100
-    assert int(re.search(r"ncols=(\d+)", t).group(1)) == cols, "строка раскрытия поедет"
+    # Проверка `ncols == cols` убрана вместе с книжной строкой раскрытия
+    # (12.09): у живого дерева colspan берётся из самой строки и разойтись
+    # ему не с чем.
 
 
 def test_a_failed_read_shows_its_reason_after_a_reload():
