@@ -48,17 +48,30 @@ def test_the_help_that_was_repeated_per_country_is_gone():
     assert "How to run the RPA" not in body
 
 
-def test_signing_in_lives_where_the_account_is_connected():
+def _connect_form() -> str:
+    """Форма подключения — там, где она лежит.
+
+    Она бывает встроена в блок страны и бывает вынесена отдельным файлом:
+    вынос сделан ради страны, которой нет в карте, и ждёт своего мерджа. Обе
+    раскладки живые, и проверять надо содержимое, а не место — иначе сторож
+    падает на переезде, а не на поломке.
+    """
+    extracted = TPL / "_account_map_add.html"
+    if extracted.exists():
+        return extracted.read_text(encoding="utf-8")
     body = COUNTRY.read_text(encoding="utf-8")
-    block = body[body.index('<div class="amap-add"'):]
+    return body[body.index('<div class="amap-add"'):]
+
+
+def test_signing_in_lives_where_the_account_is_connected():
+    block = _connect_form()
     for needed in ("amap-ml-line", "amap-ml-signin", "amapMlSignin", "amapMlSaveToken"):
         assert needed in block, f"в форме подключения нет {needed}"
 
 
 def test_pasting_a_token_is_still_possible():
     """Пароля может не быть вовсе: токен выдаёт владелец воркспейса."""
-    block = COUNTRY.read_text(encoding="utf-8")
-    assert "amap-ml-token" in block
+    assert "amap-ml-token" in _connect_form()
 
 
 # ── как это ведёт себя ────────────────────────────────────────────────────
