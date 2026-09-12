@@ -348,7 +348,7 @@ def test_nothing_here_can_turn_anything_on():
 def test_only_a_switched_on_row_is_a_button():
     """Нажимаемое «Off» обещало бы включение, которого нет."""
     block = _script()
-    assert "var live = o.switch === 'on';" in block
+    assert "o.switch === 'on'" in block
     assert "document.createElement(live ? 'button' : 'span')" in block
 
 
@@ -658,3 +658,25 @@ def test_clicking_elsewhere_takes_the_question_back(page):
     page.evaluate("() => document.body.click()")
     assert _sw(page)["text"] == "On"
     assert page.evaluate("() => window.__sent.length") == 0
+
+
+def test_a_row_from_an_older_reading_is_not_a_button(page):
+    """Сохранённые чтения переживают смену формы ответа.
+
+    После перехода с ad set'ов на кампании (12.09) в хранилище остались
+    деревья с уровнем `adset`. Выключение такую строку не примет, и кнопка на
+    ней обещала бы работу, которой не будет.
+    """
+    _paint(page, [dict(ADSET, level="adset")])
+    assert _sw(page)["tag"] == "SPAN"
+
+
+def test_an_ad_without_its_campaign_is_not_a_button(page):
+    """Список объявлений сужается по кампании: без неё до строки не добраться."""
+    _paint(page, [dict(AD, parent_id="")])
+    assert _sw(page)["tag"] == "SPAN"
+
+
+def test_a_proper_campaign_row_still_is(page):
+    _paint(page, [ADSET])
+    assert _sw(page)["tag"] == "BUTTON"
