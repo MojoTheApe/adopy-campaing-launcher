@@ -1355,8 +1355,36 @@ _READ_TREE_JS = r"""
     }
   }
 
+  // Какой вид списка выбран. У Meta это ничем не помечено, кроме цвета
+  // подчёркивания: у выбранной вкладки оно синее, у остальных серое, и ни
+  // aria-selected, ни aria-current, ни tabindex здесь нет.
+  //
+  // Поэтому ищем «не такую, как все», а не конкретный цвет: тема у Meta
+  // меняется, а то, что выбранная вкладка одна и подчёркнута иначе, — нет.
+  // Две «не такие» значит, что правило перестало работать; тогда честнее
+  // промолчать, чем назвать вид наугад.
+  let view = '';
+  const tabs = Array.from(document.querySelectorAll('[data-surface$="quickviewTab"]'));
+  if (tabs.length > 1) {
+    const marks = tabs.map(e => {
+      let colour = '';
+      for (const k of e.querySelectorAll('*')) {
+        const st = getComputedStyle(k);
+        if (parseFloat(st.borderBottomWidth) > 0) { colour = st.borderBottomColor; break; }
+      }
+      return {text: norm(e.innerText), colour: colour};
+    });
+    const seen = {};
+    marks.forEach(m => { if (m.colour) seen[m.colour] = (seen[m.colour] || 0) + 1; });
+    for (const m of marks) {
+      if (!m.colour || seen[m.colour] !== 1) continue;
+      if (view) { view = ''; break; }
+      view = m.text;
+    }
+  }
+
   return {rows: Array.from(rows.values()), how: 'data-surface',
-          kinds: Array.from(kinds)};
+          kinds: Array.from(kinds), view: view};
 }
 """
 
@@ -1381,6 +1409,12 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         return [], "", f"таблица {level}: страница ответила не тем"
 
     how = str(got.get("how") or "")
+    view = str(got.get("view") or "")
+    if view:
+        # Вид — часть ответа на «что мы прочитали». Список «Active ads» и
+        # список «All ads» — разные списки, и одинаково выглядящее число
+        # строк в них значит разное.
+        how = f"{how}({view})"
     rows = got.get("rows") or []
     objects = [
         AdObject(
