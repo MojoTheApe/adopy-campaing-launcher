@@ -720,3 +720,75 @@ def test_turning_off_never_runs_in_the_web_loop():
     body = src[start: src.index("\n@app.", start)]
     assert "run_in_threadpool" in body, "выключение снова вызывается в цикле веб-сервера"
     assert "await run_in_threadpool(\n            account_spend.turn_off," in body
+
+
+# ══ след выключения ═══════════════════════════════════════════════════════
+#
+# Первое живое нажатие 12.09 вернуло отказ, и прочитать его причину было
+# негде: результат уходил в ответ HTTP и исчезал. Действие, меняющее чужой
+# аккаунт, обязано оставлять след — «что-то изменилось вчера» не ответ.
+
+def test_every_turn_off_leaves_a_record(monkeypatch, tmp_path):
+    from src.analysis_agent import account_spend as sp
+
+    monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "readings.json")
+    seen = []
+    monkeypatch.setattr(sp, "_turn_off", lambda *a, **k: sp.TurnOffResult(
+        account="acc", level="campaign", object_id="1", state="failed",
+        error="на экране другой период — ничего не трогаем"))
+    monkeypatch.setattr(sp, "_record_turn_off", lambda out: seen.append(out))
+    sp.turn_off("acc", "campaign", "1")
+    assert len(seen) == 1, "у действия нет следа"
+
+
+def test_the_record_survives_a_refusal(monkeypatch, tmp_path):
+    """Отказ нужнее удачи: именно его причину приходится искать."""
+    from src.analysis_agent import account_spend as sp
+
+    monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "readings.json")
+    sp._record_turn_off(sp.TurnOffResult(
+        account="KLD_BFL_X84", level="ad", object_id="777", name="ad one",
+        state="failed", error="под этим id на странице «чужое имя»"))
+    rows = sp.turn_off_history()
+    assert len(rows) == 1
+    assert rows[0]["state"] == "failed"
+    assert "чужое имя" in rows[0]["error"], "причина не записана"
+
+
+def test_the_record_never_breaks_the_answer(monkeypatch, tmp_path):
+    """Потерять журнал плохо, потерять ответ — хуже."""
+    from src.analysis_agent import account_spend as sp
+
+    monkeypatch.setattr(sp, "_turn_off_log", lambda: tmp_path / "no" / "such" / "dir" / "x.jsonl")
+    monkeypatch.setattr(Path, "mkdir", lambda *a, **k: (_ for _ in ()).throw(OSError("disk full")))
+    sp._record_turn_off(sp.TurnOffResult(account="a", level="ad", object_id="1"))
+
+
+def test_the_newest_record_comes_first(monkeypatch, tmp_path):
+    from src.analysis_agent import account_spend as sp
+
+    monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "readings.json")
+    for i in range(3):
+        sp._record_turn_off(sp.TurnOffResult(account="a", level="ad", object_id=str(i)))
+    assert [r["object_id"] for r in sp.turn_off_history()] == ["2", "1", "0"]
+
+
+def test_the_confirmation_waits_for_meta_to_settle():
+    """12.09 объявление выключилось — в Ads Manager тумблер снят, доставка
+    «Processing», — а дешборд показал отказ: проверка после перезагрузки
+    смотрела строку один раз и успела заглянуть раньше ответа.
+
+    Та же ошибка, что была со статусом кабинета: шаг поверил первому взгляду.
+    """
+    src = (ROOT / "src" / "analysis_agent" / "account_spend.py").read_text(encoding="utf-8")
+    start = src.index("def _turn_off(account: str")
+    # Функция может быть последней в файле: `index` на отсутствующий следующий
+    # `def` бросает ValueError, и сторож падает тем же красным, каким падал бы
+    # на настоящей поломке. За эту сессию такой срез подводил дважды.
+    nxt = src.find("\ndef ", start + 10)
+    body = src[start: nxt if nxt != -1 else len(src)]
+    after = body[body.index("page.goto(url", body.index("page.click(")):]
+    assert "for attempt in range(TURN_OFF_TRIES)" in after, (
+        "подтверждение снова решает с первого взгляда"
+    )
+    assert "Meta не приняла" in after, "отказ перестал быть возможным — тогда это не проверка"

@@ -1673,6 +1673,58 @@ TURN_OFF_TRIES = 12
 TURN_OFF_PAUSE_S = 0.75
 
 
+def _turn_off_log() -> Path:
+    """Журнал выключений — рядом с показаниями, тем же путём."""
+    return Path(_store_path()).with_name("turn_off_log.jsonl")
+
+
+def _record_turn_off(out: "TurnOffResult") -> None:
+    """Записать, что случилось. Строкой в журнал и строкой в лог лаунчера.
+
+    Первое живое нажатие 12.09 вернуло отказ, и прочитать его причину было
+    негде: результат уходил в ответ HTTP и исчезал. Действие, меняющее чужой
+    аккаунт, обязано оставлять след — «что-то изменилось вчера» не ответ.
+
+    Ни запись, ни лог не смеют уронить сам результат, поэтому оба под
+    `except`: потерять журнал плохо, потерять ответ — хуже.
+    """
+    try:
+        log.info(
+            "turn_off %s %s %s → %s%s",
+            out.account, out.level, out.object_id, out.state,
+            f" ({out.error or out.how})" if (out.error or out.how) else "",
+        )
+    except Exception:
+        pass
+    try:
+        path = _turn_off_log()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(out.to_dict(), ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def turn_off_history(limit: int = 50) -> list[dict]:
+    """Последние выключения — новыми вперёд. Для дешборда и для разбора."""
+    try:
+        lines = _turn_off_log().read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    out: list[dict] = []
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except Exception:
+            continue
+        if len(out) >= limit:
+            break
+    return out
+
+
 @dataclass
 class TurnOffResult:
     """Что случилось с одним объектом. Никаких «наверное»."""
@@ -1750,6 +1802,19 @@ def _switch_state(page):
 @serialized_browser
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
              expected_name: str = "", date_from: str = "", date_to: str = "") -> "TurnOffResult":
+    """Выключить и записать, что вышло.
+
+    Запись стоит здесь, а не внутри: у `_turn_off` двадцать путей выхода, и
+    расставленные по ним вызовы рано или поздно разойдутся — один забудут.
+    """
+    out = _turn_off(account, level, object_id, parent_id=parent_id,
+                    expected_name=expected_name, date_from=date_from, date_to=date_to)
+    _record_turn_off(out)
+    return out
+
+
+def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
+              expected_name: str = "", date_from: str = "", date_to: str = "") -> "TurnOffResult":
     """Выключить одну кампанию или одно объявление. Включить отсюда нельзя.
 
     Период нужен не ради чисел, а ради сверки: на экране должен стоять тот же
@@ -1861,16 +1926,29 @@ def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
 
         page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
         _wait_for_grid(page)
-        again = page.evaluate(_FIND_SWITCH_JS, out.object_id)
+
+        # Смотреть один раз — значит спросить раньше, чем Meta ответит. 12.09
+        # объявление выключилось (в Ads Manager тумблер снят, доставка
+        # «Processing»), а дешборд показал отказ: проверка успела заглянуть до
+        # того, как состояние устоялось. Ровно та же ошибка, что была со
+        # статусом кабинета, — шаг поверил первому взгляду.
+        again = None
+        for attempt in range(TURN_OFF_TRIES):
+            if attempt:
+                _sleep(TURN_OFF_PAUSE_S)
+            again = page.evaluate(_FIND_SWITCH_JS, out.object_id)
+            if again and again.get("off"):
+                out.state = "off"
+                out.how = f"подтверждено перезагрузкой списка ({attempt + 1}-й взгляд)"
+                return out
+            if again and again.get("on"):
+                continue
+            # Строку ещё не отрисовало — ждём, а не объявляем неизвестность.
+
         if not again or not again.get("found"):
             out.error = "после перезагрузки строку не нашли — состояние неизвестно"
             return out
-        if not again.get("off"):
-            out.error = "после перезагрузки тумблер снова включён — Meta не приняла"
-            return out
-
-        out.state = "off"
-        out.how = "подтверждено перезагрузкой списка"
+        out.error = "после перезагрузки тумблер снова включён — Meta не приняла"
         return out
     except Exception as exc:                      # noqa: BLE001
         out.error = f"не получилось: {exc}"
