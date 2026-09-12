@@ -48,7 +48,8 @@
     },
     "73464cc797ca54407527da49d3443d1950901079747444508b917bd6d3b5c7e7": {
       "title": "Connecting an account is one job, not two panels",
-      "state": "creating"
+      "state": "created",
+      "issue": 130
     }
   }
 }
