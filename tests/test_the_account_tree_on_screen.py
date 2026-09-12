@@ -706,3 +706,17 @@ def test_the_arrow_appears_only_when_there_is_a_tree(page):
     assert page.evaluate("() => !!document.querySelector('#acc .amap-caret')") is False
     _paint(page, [ADSET])
     assert page.evaluate("() => !!document.querySelector('#acc .amap-caret')") is True
+
+
+def test_turning_off_never_runs_in_the_web_loop():
+    """Playwright здесь синхронный, и вызов его из работающего цикла asyncio
+    кончается `RuntimeError: Cannot enter into task …` — выключение падает, ни
+    разу не тронув страницу. Так и вышло на первом живом нажатии 12.09.
+
+    Чтение по той же причине живёт в своём потоке (`start_read`).
+    """
+    src = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
+    start = src.index("async def account_spend_turn_off(")
+    body = src[start: src.index("\n@app.", start)]
+    assert "run_in_threadpool" in body, "выключение снова вызывается в цикле веб-сервера"
+    assert "await run_in_threadpool(\n            account_spend.turn_off," in body
