@@ -1099,6 +1099,31 @@ python scripts/acl_board.py --render
       This is worth fixing rather than re-running: a suite that is red for no
       reason trains everyone to ignore red, and the one failure that matters
       arrives looking exactly like the noise.
+- [x] `acl-1126` Two more tests blinked in a full run #review @rpa
+      Same lesson, 12 September. One held a twelve-thread barrier on a
+      three-second timeout — a bet on machine speed, not a fact about the code;
+      under a full run the CPU is also driving Playwright browsers and the
+      threads do not arrive in time. The bound is 60 s now, and breaking the
+      store on purpose still fails it, so it did not become a stub.
+      The other was not a test problem at all: it reads the real
+      `tracker/config.json`, and it failed only in runs during which I was
+      committing in the same worktree. Git replaces a file wholesale. Written
+      into the module docstring with the rule that follows.
+      Ten consecutive clean runs. GitHub: **ACL-1126** (#126), Platform, Bug.
+- [x] `acl-1128` The red test on master was reading the machine #review @dashboard
+      `test_a_report_without_countries_does_not_break` had been red for two
+      days, and I wrote "red on master, not mine" in every PR — while the fix
+      sat on my own branch `fix/sidebar-without-workbook`, pushed that morning
+      with no PR.
+      The fixture patched where account links are stored but not where they
+      come from: `seed_from_account_map()` reads the machine's real
+      `ad_account_map.csv` and makes a link per country — eleven here. It
+      failed on the machine's data, not the code, and on an empty map it would
+      have passed while testing nothing.
+      Carries the other half of that branch too: a period the workbook does not
+      cover says so instead of drawing a page of zeros.
+      **1213 passed, nothing red** — the first fully clean run in two days.
+      GitHub: **ACL-1128** (#128), PR #129.
 - [ ] `acl-341` `recipe_player` is 1,064 statements at zero #later @rpa
       Waits on the same bench: it replays a recorded flow through `meta_dom`,
       so it cannot be tested without one. Listed separately so the size is not
