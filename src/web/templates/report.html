@@ -4764,7 +4764,30 @@ function amapPaintTree(row, s) {
   head.textContent = 'in the account · ' + sets + ' ad sets · ' + ads + ' ads · read ' + (s.finished_at || '');
   box.appendChild(head);
 
-  objects.forEach(function (o) { box.appendChild(amapTreeLine(o)); });
+  /* Объявления встают под свой ad set, а не общим списком следом. Порядок
+     задаёт `parent_id`, который чтение знает по построению: список
+     объявлений спрашивается по одному ad set'у за раз.
+
+     Осиротевшие — те, чей ad set в ответе не пришёл, — идут в конец под своим
+     заголовком. Приписать их к последнему попавшемуся было бы хуже всего: по
+     этим строкам решают, что останавливать. */
+  var sets = objects.filter(function (o) { return o.level !== 'ad'; });
+  var ads = objects.filter(function (o) { return o.level === 'ad'; });
+  var placed = {};
+  sets.forEach(function (s) {
+    box.appendChild(amapTreeLine(s));
+    ads.forEach(function (a) {
+      if (a.parent_id && a.parent_id === s.id) { placed[a.id] = 1; box.appendChild(amapTreeLine(a)); }
+    });
+  });
+  var orphans = ads.filter(function (a) { return !placed[a.id]; });
+  if (orphans.length) {
+    var lost = document.createElement('div');
+    lost.className = 'amap-tree-head';
+    lost.textContent = orphans.length + ' ads whose ad set is not in this answer';
+    box.appendChild(lost);
+    orphans.forEach(function (a) { box.appendChild(amapTreeLine(a)); });
+  }
 
   /* Оговорка идёт по каждому уровню отдельно: ad set'ы могут сойтись копейка
      в копейку, а объявления нет — так и было на живом аккаунте. Общая фраза
