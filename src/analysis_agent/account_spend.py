@@ -893,8 +893,22 @@ _STATUS_SIGNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "ad account was disabled",
         "account has been disabled",
         "this ad account is disabled",
+        # По образцу увиденного ниже: Meta пишет о себе действительным залогом.
+        "we disabled your ad account",
+        "we disabled your account",
+        "we've disabled your ad account",
+        "we have disabled your ad account",
     )),
     ("restricted", (
+        # Снято с DQ438 12.09. Все формулировки выше этой строки были
+        # придуманы и ни одна не сработала: аккаунт был ограничен, а дешборд
+        # показывал «no warning». Meta пишет не «account is restricted», а
+        # **«We restricted your ad account»** — от себя и действительным
+        # залогом. Догадка о чужих словах и здесь стоила молчания об отказе.
+        "we restricted your ad account",
+        "we restricted your account",
+        "we've restricted your ad account",
+        "we have restricted your ad account",
         "account is restricted",
         "restricted from advertising",
         "advertising access is restricted",
@@ -903,6 +917,18 @@ _STATUS_SIGNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "account is under review",
         "is being reviewed",
     )),
+)
+
+#: Признаки беды, из которых не видно, какой именно. Нужны затем, что список
+#: выше — перечень **известных** формулировок, а Meta их меняет. Пока банер не
+#: опознан, честный ответ — «что-то не так, вот её слова», и уж точно не «no
+#: warning»: под этой надписью аккаунт стоял ограниченным.
+_TROUBLE_SIGNS: tuple[str, ...] = (
+    "you can't run ads",
+    "you can’t run ads",
+    "you cannot run ads",
+    "you can no longer run ads",
+    "request review",
 )
 
 
@@ -929,6 +955,22 @@ def _read_status(page) -> tuple[str, str]:
             if at != -1:
                 start = max(0, at - 60)
                 return state, flat[start : at + len(phrase) + 140].strip()
+
+    # Банер есть, а какой — не опознали. Говорим это вслух её же словами.
+    #
+    # Не `unknown`: он означает «страница ничего не дала прочитать», и так его
+    # и подписывает дешборд. Здесь прочиталось прекрасно — просто формулировка
+    # новая. Отдельное слово попадает в колонку состояния красным, а фраза
+    # Meta — в подсказку, с ней человеку и идти разбираться.
+    #
+    # Ложное «blocked» на здоровом аккаунте — досада; ложное «no warning» на
+    # ограниченном — то, что уже случилось: аккаунт не мог крутить рекламу, а
+    # дешборд молчал. Размен осознанный.
+    for phrase in _TROUBLE_SIGNS:
+        at = low.find(phrase)
+        if at != -1:
+            start = max(0, at - 120)
+            return "blocked", flat[start : at + len(phrase) + 200].strip()
     return "clear", ""
 
 
