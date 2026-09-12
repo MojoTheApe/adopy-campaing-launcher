@@ -18,10 +18,12 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from urllib.parse import quote
 from typing import Iterable
 
 BOARD_ENV = "ACL_BOARD_PATH"
@@ -32,11 +34,18 @@ DEFAULT_BOARD = (
 )
 
 #: статусы в порядке от сделанного к незачатому — порядок задаёт вид доски
-STATUSES = ("shipped", "review", "next", "blocked", "later", "idea")
+#: «Влито» и «роздано» — разные вещи, и между ними бывает много дней.
+#: Автообновление принимает только вершину master с аннотированным
+#: `acl-release-*` тегом: без него код в master есть, а на машинах его нет.
+#: Пока состояния было два, слитое приходилось звать `shipped` — и доска
+#: утверждала, что работа у людей, когда она лежала только в репозитории.
+STATUSES = ("shipped", "merged", "closed", "review", "next", "blocked", "later", "idea")
 DEFAULT_STATUS = "idea"
 
 STATUS_LABEL = {
     "shipped": "Shipped",
+    "merged": "In master",
+    "closed": "Closed",
     "review": "In review",
     "next": "Next",
     "blocked": "Blocked",
@@ -75,11 +84,13 @@ class Task:
     subs: list["Task"] = field(default_factory=list)
     needs: list[str] = field(default_factory=list)
     explicit: bool = False  # статус написан рукой, а не выведен из галочки
+    source_url: str = ""
+    source_label: str = ""
 
     @property
     def is_done(self) -> bool:
         """Работа закончена. Это не то же самое, что «доехало до людей»."""
-        if self.done or self.status == "shipped":
+        if self.done or self.status in {"merged", "shipped"}:
             return True
         # задача, у которой сделаны все части, сделана — это факт, не оценка
         return bool(self.subs) and all(s.is_done for s in self.subs)
@@ -130,6 +141,9 @@ class Board:
     title: str = "ACL"
     updated: str = ""
     areas: list[Area] = field(default_factory=list)
+    description: str = ""
+    source_url: str = ""
+    source_label: str = ""
 
     @property
     def tasks(self) -> list[Task]:
@@ -390,9 +404,8 @@ def apply_commit(
 ) -> tuple[str, list[str]]:
     """Отметить задачи, названные в коммите, и записать строку в журнал.
 
-    Коммит в ветку — это «сделано», но не «доехало»: слить в master значит
-    раздать всем машинам, и до этого задача ждёт ревью. Поэтому статус
-    ставится по ветке, а не по факту коммита.
+    Feature-коммит означает review, основной коммит — merged. Только
+    отдельное подтверждение выпуска позволяет пометить задачу shipped.
     """
     board = parse(text)
     ambiguous = set(duplicate_ids(board))
@@ -401,7 +414,8 @@ def apply_commit(
         return text, []
 
     when = when or date.today().isoformat()
-    landed = "shipped" if branch in MAIN_BRANCHES else "review"
+    landed = "merged" if branch in MAIN_BRANCHES else "review"
+    completed_rank = {"review": 0, "merged": 1, "shipped": 2}
     lines = text.splitlines()
     ticked: list[str] = []
 
@@ -420,9 +434,8 @@ def apply_commit(
 
     for task_id in ids:
         task = board.by_id(task_id)
-        if task is None or task.shown_status == "shipped" or (
-            task.is_done and task.shown_status == landed
-        ):
+        if task is None or (task.is_done and
+                completed_rank.get(task.shown_status, -1) >= completed_rank[landed]):
             continue
         # У подзадач статус обычно не пишем: `shipped` читается по галочке, а
         # строка и так узкая. Но `review` галочка не несёт — «сделано» и
@@ -435,8 +448,16 @@ def apply_commit(
         # закрылась последняя часть — родитель закрыт вместе с ней
         if (parent is not None and parent.id not in ambiguous
                 and parent.is_done and parent.shown_status != "shipped"):
-            parent_status = "shipped" if all(s.shown_status == "shipped" for s in parent.subs) else "review"
+            child_states = {s.shown_status for s in parent.subs}
+            parent_status = ("shipped" if child_states == {"shipped"} else
+                             "merged" if child_states <= {"merged", "shipped"} else "review")
+            if completed_rank.get(parent.shown_status, -1) >= completed_rank[parent_status]:
+                continue
             tick(parent, add_tag=True, status=parent_status)
+            # и в журнал: задача закончилась этим коммитом, а без записи
+            # карточка потом не знает, на какой ветке её искать
+            if parent.id not in ticked:
+                ticked.append(parent.id)
 
     if not ticked:
         return text, []
@@ -470,6 +491,36 @@ def apply_commit(
 
 def _bump_updated(text: str, when: str) -> str:
     return re.sub(r"^updated:.*$", f"updated: {when}", text, count=1, flags=re.MULTILINE)
+
+
+#: Где искать ветку на GitHub. Рабочий репозиторий, тот, куда получают доступ
+#: разработчики; переопределяется переменной окружения.
+REPO_URL = os.environ.get(
+    "ACL_REPO_URL", "https://github.com/MojoTheApe/adopy-campaing-launcher"
+).rstrip("/")
+
+#: строка журнала: «- 2026-09-08 · `e85e4ee` · `feature/…` · `acl-703b` — …»
+_LOG_LINE = re.compile(
+    r"^-\s*(\d{4}-\d{2}-\d{2})\s*·\s*`([0-9a-f]{6,40})`"
+    r"(?:\s*·\s*`([^`]+)`)?\s*·\s*(.+?)\s+—",
+    re.MULTILINE,
+)
+
+
+def landings(text: str) -> dict[str, dict[str, str]]:
+    """Где лежит работа по каждой задаче: коммит, ветка, день.
+
+    Берётся из журнала, который хук и так ведёт, а не из нового поля рядом с
+    задачей. Второе хранилище того же факта однажды разойдётся с первым, и
+    заметит это тот, кто поверит не тому.
+
+    Побеждает верхняя запись: журнал ведётся сверху вниз, новыми вперёд.
+    """
+    out: dict[str, dict[str, str]] = {}
+    for when, sha, branch, ids in _LOG_LINE.findall(text):
+        for task_id in re.findall(r"`(acl-\d+[a-z]?)`", ids):
+            out.setdefault(task_id.lower(), {"sha": sha, "branch": branch or "", "when": when})
+    return out
 
 
 # ─────────────────────────── витрина ───────────────────────────
@@ -508,7 +559,51 @@ def _needs(task: Task) -> str:
     return f'<span class="needs">waits on {deps}</span>'
 
 
-def _card(task: Task, tilt: int) -> str:
+def _where(task: Task, land: dict) -> str:
+    """Где искать работу задачи, ждущей ревью.
+
+    Ставится рядом со статусом, потому что читают их вместе: «в ревью» без
+    ответа на вопрос «где» — это состояние, с которым нечего делать.
+
+    Если записи нет, так и написано. Задача, помеченная в ревью рукой, а не
+    коммитом, ветки за собой не оставляет — и молчание здесь выглядело бы как
+    «ветки нет», а не как «мы её не записали».
+    """
+    if task.shown_status != "review":
+        return ""
+    at = land.get(task.id.lower())
+    if not at and task.subs:
+        # Родителя хук раньше закрывал молча, не называя в журнале. Ветку
+        # берём у частей — но только если они согласны между собой: разные
+        # ветки у частей это не «примерно там», а вопрос, на который у нас
+        # нет ответа.
+        seen = {
+            land[s.id.lower()]["branch"]
+            for s in task.subs
+            if s.id.lower() in land and land[s.id.lower()].get("branch")
+        }
+        if len(seen) == 1 and all(land.get(s.id.lower(), {}).get("branch") for s in task.subs):
+            branch_only = seen.pop()
+            at = {"branch": branch_only, "sha": ""}
+    if not at:
+        return '<span class="where none" title="Помечено вручную, а не коммитом — ветка не записана">branch not recorded</span>'
+    branch, sha = at.get("branch", ""), at.get("sha", "")
+    if not branch:
+        if sha:
+            return (f'<a class="where" href="{_esc(REPO_URL)}/commit/{quote(sha, safe="")}" '
+                    f'target="_blank" rel="noopener"><code>{_esc(sha)}</code></a>')
+        return '<span class="where none">branch not recorded</span>'
+    short = branch.split("/", 1)[-1]
+    tail = f"<code>{_esc(sha)}</code>" if sha else ""
+    where = f" · commit {_esc(sha)}" if sha else ""
+    return (
+        f'<a class="where" href="{_esc(REPO_URL)}/tree/{quote(branch, safe="/")}" target="_blank" rel="noopener"'
+        f' title="{_esc(branch)}{where} — открыть ветку на GitHub">'
+        f"{_esc(short)}{tail}</a>"
+    )
+
+
+def _card(task: Task, tilt: int, land: dict | None = None) -> str:
     note = f'<p class="note">{_rich(task.note)}</p>' if task.note else ""
     track = (
         f'<span class="track">{_esc(TRACK_LABEL.get(task.track, task.track))}</span>'
@@ -520,12 +615,17 @@ def _card(task: Task, tilt: int) -> str:
     meter = f'<span class="count">{done}/{total}</span>' if total else ""
     status = task.shown_status
     subs = _subs(task)
-    body = f"{note}{subs}"
+    source = (
+        f'<p><a href="{_esc(task.source_url)}" target="_blank" rel="noopener noreferrer">'
+        f'{_esc(task.source_label or "Open source")}</a></p>'
+        if task.source_url else ""
+    )
+    body = f"{note}{subs}{source}"
     head = (
         f'<header><code>{_esc(task.id)}</code>{track}</header>'
         f'<h4>{tick}{_rich(task.title)}</h4>'
         f'<footer>{_esc(STATUS_LABEL.get(status, status))}'
-        f"{_needs(task)}{meter}</footer>"
+        f"{_where(task, land or {})}{_needs(task)}{meter}</footer>"
     )
     attrs = (
         f'class="pin s-{status}" style="--tilt:{tilt / 10:.1f}deg" '
@@ -556,13 +656,15 @@ def _tilts() -> Iterable[int]:
         i += 1
 
 
-def render(board: Board) -> str:
+def render(board: Board, land: dict | None = None) -> str:
+    land = land or {}
     tilt = _tilts()
     counts = board.counts()
     total = len(board.tasks)
     shipped = sum(1 for t in board.tasks if t.shown_status == "shipped")
 
-    legend = "".join(
+    legend = f'<button class="chip" data-filter="all" aria-pressed="true">All<b>{total}</b></button>'
+    legend += "".join(
         f'<button class="chip s-{s}" data-filter="{s}">{STATUS_LABEL[s]}'
         f'<b>{counts.get(s, 0)}</b></button>'
         for s in STATUSES
@@ -577,7 +679,7 @@ def render(board: Board) -> str:
         for cap in area.caps:
             if not cap.tasks:
                 continue
-            cards = "".join(_card(t, next(tilt)) for t in cap.tasks)
+            cards = "".join(_card(t, next(tilt), land) for t in cap.tasks)
             caps.append(
                 f'<section class="cap"><h3>{_esc(cap.title)}</h3>'
                 f'<div class="pins">{cards}</div></section>'
@@ -617,7 +719,14 @@ def render(board: Board) -> str:
         # стояло «Five areas», когда их было уже шесть. Мелочь, которая учит
         # не верить остальному тексту на странице.
         area_count=len(board.areas),
-        areas="".join(areas_html),
+        areas="".join(areas_html) or '<p class="empty-board" role="status">No tasks yet.</p>',
+        description=(_esc(board.description) if board.description else
+            f"{len(board.areas)} areas of the system, the capabilities each is made of, "
+            "and every task hanging off them. Open an area to see its tasks. Edited in "
+            "Obsidian; this wall is built from that file."),
+        source=(f'<a href="{_esc(board.source_url)}" target="_blank" rel="noopener noreferrer">'
+                f'{_esc(board.source_label)}</a>' if board.source_url else
+                '<code>ACL — Task Board.md</code> in Obsidian'),
     )
 
 
@@ -653,6 +762,8 @@ _PAGE = """<meta charset="utf-8">
   --accent: #23456b;
   --shadow: 0 1px 2px rgba(20,26,32,.16), 0 6px 14px rgba(20,26,32,.09);
   --pin-shipped-bg: #dfe9dd; --pin-shipped-ink: #2f5233; --pin-shipped-edge: #b8ccb6;
+  --pin-merged-bg:  #dfe9dd; --pin-merged-ink:  #2f5233; --pin-merged-edge: #b8ccb6;
+  --pin-closed-bg:  #d9e6f2; --pin-closed-ink:  #1f4a72; --pin-closed-edge: #b0cbe4;
   --pin-review-bg:  #f6e7c8; --pin-review-ink:  #74521a; --pin-review-edge: #e0c795;
   --pin-next-bg:    #dbe4f0; --pin-next-ink:    #23456b; --pin-next-edge:  #b3c5dd;
   --pin-blocked-bg: #f3d9d5; --pin-blocked-ink: #8b332a; --pin-blocked-edge:#e0b6af;
@@ -665,6 +776,8 @@ _PAGE = """<meta charset="utf-8">
     --ink-3: #7d868e; --rule: #2e343a; --accent: #9db8db;
     --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 18px rgba(0,0,0,.38);
     --pin-shipped-bg:#25352a; --pin-shipped-ink:#b3d3b5; --pin-shipped-edge:#37503d;
+    --pin-merged-bg:#25352a; --pin-merged-ink:#b3d3b5; --pin-merged-edge:#37503d;
+    --pin-closed-bg:#1d2b3a; --pin-closed-ink:#a9c8e8; --pin-closed-edge:#2c4560;
     --pin-review-bg: #3a301b; --pin-review-ink: #e2c286; --pin-review-edge: #574526;
     --pin-next-bg:   #1f2c3d; --pin-next-ink:   #a8c4e6; --pin-next-edge:  #2f4460;
     --pin-blocked-bg:#3b2422; --pin-blocked-ink:#e0a89f; --pin-blocked-edge:#59332e;
@@ -673,6 +786,7 @@ _PAGE = """<meta charset="utf-8">
   }}
 }}
 :root[data-theme="dark"] {{
+  --pin-merged-bg:#25352a; --pin-merged-ink:#b3d3b5; --pin-merged-edge:#37503d;
   --ground: #14171a; --panel: #1c2024; --ink: #eef1f3; --ink-2: #b4bcc3;
   --ink-3: #7d868e; --rule: #2e343a; --accent: #9db8db;
   --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 18px rgba(0,0,0,.38);
@@ -799,6 +913,15 @@ nav.areas a:hover {{ color: var(--ink); text-decoration: underline;
   font-size: 9.5px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .09em; opacity: .68; display: flex; gap: 10px;
   align-items: baseline; flex-wrap: wrap; }}
+/* Где искать работу: ветка и коммит рядом со статусом. Читают их вместе —
+   «в ревью» без ответа на «где» это состояние, с которым нечего делать. */
+.where {{ margin-left: 8px; font-size: 9.5px; letter-spacing: .02em;
+  color: inherit; opacity: .75; text-decoration: none; white-space: nowrap; }}
+.where:hover {{ opacity: 1; text-decoration: underline; text-underline-offset: 2px; }}
+.where code {{ margin-left: 5px; opacity: .8;
+  font-family: "JetBrains Mono", ui-monospace, monospace; }}
+/* Не записано — не то же самое, что «ветки нет». */
+.where.none {{ opacity: .5; font-style: italic; }}
 .pin footer .count {{ margin-left: auto; font-variant-numeric: tabular-nums;
   opacity: .85; }}
 .pin.hide {{ display: none; }}
@@ -819,6 +942,8 @@ nav.areas a:hover {{ color: var(--ink); text-decoration: underline;
 @media (prefers-reduced-motion: reduce) {{ .pin-caret {{ transition: none; }} }}
 
 .s-shipped {{ --bg: var(--pin-shipped-bg); --fg: var(--pin-shipped-ink); --edge: var(--pin-shipped-edge); }}
+.s-merged  {{ --bg: var(--pin-merged-bg);  --fg: var(--pin-merged-ink);  --edge: var(--pin-merged-edge); }}
+.s-closed  {{ --bg: var(--pin-closed-bg);  --fg: var(--pin-closed-ink);  --edge: var(--pin-closed-edge); }}
 .s-review  {{ --bg: var(--pin-review-bg);  --fg: var(--pin-review-ink);  --edge: var(--pin-review-edge); }}
 .s-next    {{ --bg: var(--pin-next-bg);    --fg: var(--pin-next-ink);    --edge: var(--pin-next-edge); }}
 .s-blocked {{ --bg: var(--pin-blocked-bg); --fg: var(--pin-blocked-ink); --edge: var(--pin-blocked-edge); }}
@@ -837,9 +962,7 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
   <header class="top">
     <div>
       <h1>ACL Task Wall</h1>
-      <p class="sub">{area_count} areas of the system, the capabilities each is made of,
-      and every task hanging off them. Open an area to see its tasks. Edited in
-      Obsidian; this wall is built from that file.</p>
+      <p class="sub">{description}</p>
     </div>
     <div class="score">
       <div class="cap-label">Shipped</div>
@@ -854,7 +977,7 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
   {areas}
 
   <footer class="foot">
-    <span>Source of truth: <code>ACL — Task Board.md</code> in Obsidian</span>
+    <span>Source of truth: {source}</span>
     <span>Last change: {updated}</span>
     <span>Built by <code>scripts/acl_board.py</code></span>
   </footer>
@@ -890,9 +1013,9 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
     nodes.forEach(function (n) {{
       if (seen.indexOf(n.getAttribute(attr)) !== -1) n.open = true;
       n.addEventListener('toggle', function () {{
-        // Под фильтром открыто не человеком, а фильтром: запоминать это
-        // значило бы выдать чужой выбор за его собственный.
-        if (active) return;
+        // Фильтр сам раскрывает области; карточки по-прежнему открывает
+        // человек, и их нужно сохранять даже при включённом фильтре.
+        if (active && attr === 'data-area') return;
         try {{
           localStorage.setItem(key, JSON.stringify(
             nodes.filter(function (x) {{ return x.open; }})
@@ -928,13 +1051,16 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
   }}
 
   chips.forEach(function (chip) {{
-    chip.setAttribute('aria-pressed', 'false');
+    chip.setAttribute('aria-pressed', String(chip.dataset.filter === 'all'));
     chip.addEventListener('click', function () {{
       var want = chip.dataset.filter;
-      active = (active === want) ? null : want;
-      if (!active) known = stored(AREA_KEY);
+      active = (want === 'all' || active === want) ? null : want;
+      // All is an explicit recovery action: reveal every area and every card.
+      // Toggling an individual status off retains the reader's previous layout.
+      if (want === 'all') known = areas.map(function (a) {{ return a.getAttribute('data-area'); }});
+      else if (!active) known = stored(AREA_KEY);
       chips.forEach(function (c) {{
-        c.setAttribute('aria-pressed', String(c.dataset.filter === active));
+        c.setAttribute('aria-pressed', String(c.dataset.filter === (active || 'all')));
       }});
       apply();
     }});
@@ -960,6 +1086,54 @@ footer.foot code {{ font-family: "JetBrains Mono", monospace; font-size: 11.5px;
 # ─────────────────────────── команды ───────────────────────────
 
 
+#: Копия доски внутри репозитория. Источник живёт в Obsidian, у которого нет
+#: ни гита, ни корзины: 8 сентября одна неудачная правка вырезала из доски
+#: целую область, и восстановилось это только потому, что незадолго до того
+#: была опубликована витрина, а в её HTML осталось содержимое. Удача, а не
+#: запасной план.
+#:
+#: Копия не источник и им не станет: её пишет сборка, читать её как истину
+#: нельзя. Она нужна ровно для одного — чтобы у плана работ была история и те
+#: же три адреса, что у кода.
+SNAPSHOT = Path("docs") / "task-board-snapshot.md"
+
+
+def snapshot_path(repo: Path) -> Path:
+    return repo / SNAPSHOT
+
+
+def write_snapshot(repo: Path, text: str) -> Path | None:
+    """Положить копию доски рядом с кодом. Ошибка не должна ломать сборку.
+
+    Возвращает путь, если файл изменился, иначе `None`: переписывать
+    неизменившийся файл значит показывать его в `git status` на каждом
+    коммите, и человек перестанет читать это место.
+    """
+    tmp = None
+    try:
+        out = snapshot_path(repo)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if out.is_file() and out.read_text(encoding="utf-8") == text:
+            return None
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=out.parent,
+                                         prefix=out.name, suffix=".tmp", delete=False) as f:
+            tmp = Path(f.name)
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, out)
+        return out
+    except Exception as exc:  # pragma: no cover - копия важна, но не важнее сборки
+        print(f"копию доски записать не удалось: {exc}", file=sys.stderr)
+        return None
+    finally:
+        if tmp is not None:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 def default_out(repo: Path) -> Path:
     raw = os.environ.get(OUT_ENV)
     return Path(raw) if raw else repo / "output" / "acl_task_wall.html"
@@ -970,10 +1144,13 @@ def cmd_render(args: argparse.Namespace, repo: Path) -> int:
     if not src.exists():
         print(f"нет файла доски: {src}", file=sys.stderr)
         return 2
-    board = parse(src.read_text(encoding="utf-8"))
+    raw = src.read_text(encoding="utf-8")
+    board = parse(raw)
     out = Path(args.out) if args.out else default_out(repo)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(board), encoding="utf-8")
+    out.write_text(render(board, landings(raw)), encoding="utf-8")
+    if write_snapshot(repo, raw) is not None:
+        print(f"копия доски обновлена: {SNAPSHOT.as_posix()} — её надо закоммитить")
     done = sum(1 for t in board.tasks if t.is_done)
     print(f"доска собрана: {out}")
     print(f"  {len(board.areas)} областей, {len(board.tasks)} задач, {done} сделано")
@@ -1063,7 +1240,13 @@ def cmd_sync(args: argparse.Namespace, repo: Path) -> int:
     board = parse(new)
     out = default_out(repo)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(board), encoding="utf-8")
+    # журнал берём из обновлённого текста: свежая запись сделана только что,
+    # и по старому тексту карточка не узнала бы своей ветки
+    out.write_text(render(board, landings(new)), encoding="utf-8")
+    # Post-commit does not stage files. The owner must explicitly include
+    # this snapshot in a later commit; otherwise the backup stays local.
+    if write_snapshot(repo, new) is not None:
+        print(f"копия доски обновлена: {SNAPSHOT.as_posix()} — добавьте её в следующий коммит явно")
     return 0
 
 

@@ -38,8 +38,14 @@ def is_takeover_active() -> bool:
 # ── Teach-mode helpers ─────────────────────────────────────────────────────────
 
 def begin_teach_wait(step: str) -> None:
-    """Called by RPA when it needs the human to act (e.g. Website click)."""
-    global _TEACH_WAITING, _TEACH_STEP, _TEACH_RESULT
+    """Called by RPA when it needs the human to act (e.g. Website click).
+
+    `_HUMAN_TAKEOVER` belongs in the `global` list below. Without it the
+    assignment made a local variable and the module flag never changed: the
+    comment promised that pacing checks would pause, and they did not. RPA
+    asked the human to click and kept acting in the same browser.
+    """
+    global _TEACH_WAITING, _TEACH_STEP, _TEACH_RESULT, _HUMAN_TAKEOVER
     _TEACH_WAITING = True
     _TEACH_STEP = step
     _TEACH_RESULT = {}

@@ -298,3 +298,8 @@ python run_content_machine.py plan -w config/content_plan_week.example.json
 - **Комбо по странам** — лучшие связки (страна, устройство, интерес, возраст, креатив, текст) с метриками.
 - **CM по странам** — таблица по каждому кампайн-менеджеру: Deposits, Leads, Spend, Net, CPL, CPA, CR%, ROI.
 - **По офферам по странам** — сравнение офферов (из Ad Asset) и рекомендация топ-N кампаний на каждый оффер (по умолчанию все страны).
+
+
+## Task tracker
+
+[English task UI](https://tracker.team7.cloud) · [Workflow and commands](docs/TASK-BOARD.md) · [Portable tracker package](tracker/README.md). Agents must set In progress before implementation; priorities are High / Medium / Low.

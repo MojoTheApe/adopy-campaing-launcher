@@ -1,0 +1,23 @@
+name: Task or idea
+description: Capture an idea or a concrete outcome
+labels: ["status:idea", "flag:needs_classification"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Explain what changes, why it matters and the expected result in plain English. A reader should understand the task without the original chat.
+      placeholder: "Write a short explanation in your own words. Keep implementation details in Specifications below."
+    validations:
+      required: true
+  - type: textarea
+    id: specifications
+    attributes:
+      label: Specifications
+      description: Working context for an agent without the original chat. Include expected behavior, scope, constraints, acceptance criteria, verification and current handoff. An idea may state known context and open questions.
+      placeholder: "Describe the verified context and requirements. Keep the plain-language explanation in Description above. Do not invent missing decisions."
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: "The agent writes Description from the request and verified context even if the owner did not dictate it. Specifications contains the complete working context; the tracker UI collapses it by default, but agents must read the full Issue body. Do not invent missing requirements. An agent classifies the module and type from tracker/config.json. Priority is High / Medium / Low; accepted work defaults to Medium. Release is one explicit flag; ask the agent to add the task to Release. IDs are assigned automatically. New functional modules may be added with documented boundaries and examples."

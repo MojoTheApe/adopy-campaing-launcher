@@ -12,6 +12,11 @@
       {#- Выбор периода переехал в шапку: он меняет всю страницу, а не эту
           секцию. Здесь остаётся только то, за какие дни показаны числа. -#}
       <span class="amap-note">{% if amap.span == 'all' %}all dates{% elif amap.date_from and amap.date_from == amap.date_to %}{{ amap.date_from }}{% elif amap.date_from or amap.date_to %}{{ amap.date_from or '…' }} → {{ amap.date_to or '…' }}{% else %}all dates{% endif %}</span>
+      {#- ACL-353: одна кнопка читает все подключённые аккаунты карты, по
+          одному за раз — правило «один профиль одновременно» никуда не
+          девается, поэтому это очередь, а не параллельный прогон. -#}
+      <button type="button" class="amap-btn amap-read-all" onclick="amapReadAll(this)"
+              title="Read every connected account for the period on screen — one at a time, top to bottom">Read all</button>
       <span class="amap-add" style="padding:0;margin-left:auto">
         <input type="text" id="amap-new-country" placeholder="new country…" size="14">
         <select id="amap-new-country-acc">
@@ -35,11 +40,27 @@
     <details class="amap-country" data-country="{{ mc.key | e }}">
       <summary>
         {{ mc.country }}
+        {#- ACL-356: свёрнутая строка несёт числа страны, а не пустоту.
+            Сначала — спенд, снятый с самих кабинетов (Read), по валютам;
+            прочерк значит «никто не читал», это не ноль. Дальше — тоталы
+            источника статистики (сегодня книга, после acl-103 — BI):
+            Dep · Leads · CPA · CR. -#}
+        <span class="amap-sum amap-sum-mid">
+          <span class="amap-live-summary" title="Full spend of the linked accounts across all countries for the selected dates; not country-attributed spend. Currencies are kept separate.">Linked accounts
+            <span class="amap-live-summary-values">
+            {%- if mc.live_sums %}
+            {%- for s in mc.live_sums %} <b>{{ s.spend | fmt_currency(s.currency) }}{% if s.account %} ({{ s.account }}){% endif %}</b>{% if not loop.last %} ·{% endif %}{% endfor %}
+            {%- else %} <b>—</b>{% endif %}</span>
+            <i class="amap-live-summary-count">{{ mc.live_read or 0 }}/{{ mc.rows | length }} read</i>
+          </span>
+          <span>Dep <b>{{ mc.deposits }}</b></span>
+          <span>Leads <b>{{ mc.leads }}</b></span>
+          <span title="Workbook spend / deposits">CPA <b>{% if mc.deposits %}{{ (mc.spend / mc.deposits) | fmt_usd }}{% else %}—{% endif %}</b></span>
+          <span title="Deposits / leads">CR <b>{% if mc.leads %}{{ '%.0f%%' | format(100 * mc.deposits / mc.leads) }}{% else %}—{% endif %}</b></span>
+        </span>
         <span class="amap-sum">
           <span>accounts <b>{{ mc.rows | length }}</b></span>
           <span>spend <b>{{ mc.spend | fmt_usd }}</b></span>
-          <span>leads <b>{{ mc.leads }}</b></span>
-          <span>FTD <b>{{ mc.deposits }}</b></span>
           <button type="button" class="amap-btn danger"
                   onclick="event.preventDefault();event.stopPropagation();amapClose('country',{{ mc.key | tojson | forceescape }},{{ mc.country | tojson | forceescape }})"
                   title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>

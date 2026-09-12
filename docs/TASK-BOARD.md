@@ -1,149 +1,19 @@
-# Доска задач
+# Task tracker
 
-Пять областей системы, из чего каждая состоит и что по ней сделано.
+GitHub Issues are the source of truth. The private English UI is [tracker.team7.cloud](https://tracker.team7.cloud).
 
-**Источник один — файл в Obsidian:**
+The workflow is **Idea → Backlog → Todo → In progress → Review → In master**. There is no separate Done. Priorities are **High / Medium / Low**, default Medium for accepted work. Agents automatically claim the task and mark In progress before coding; full reviewed merges are verified before In master.
 
-```
-Kuwait Forms\дешборд\ACL — Task Board.md
-```
+- [Agent instructions](TRACKER_AGENT_WORKFLOW.md): ideas, classification, Todo batches and verified completion.
+- [Project configuration](../tracker/config.json): module boundaries and examples.
+- [Workspace, hosting and reusable template](../tracker/README.md).
+- [Workflow specification](TRACKER_REORGANIZATION.md) and [approved Design v2](TRACKER_DESIGN_V2.md).
 
-Всё остальное — виды на него. Витрина собирается из файла и никогда наоборот:
-если разметка и HTML разошлись, прав файл.
+The top navigation is All · Idea · Backlog · To do · In progress · Review · Master · Archive, with project-wide counts. All clears filters and shows every nonarchived task. Master means the same final In master stage. The sidebar contains modules only; its counts match the selected status/release scope before extra filters. On narrow screens Navigation opens those modules.
 
-## Почему в Obsidian, а не в репозитории
+List and Board share a short search field and inline expandable filters. The whole row/card opens task details except for its separate controls. Drag the panel’s left edge to resize; click outside or press Escape to close. Width and filter expansion are remembered. Clicking anywhere on the ID, including its small icon, copies its exact identifier. Light / Dark / System keeps typography stable while surfaces change smoothly. The logo gradient slowly shifts inside its fixed mark; reduced motion disables animations.
 
-Задачи должен править человек, а не только тот, у кого открыт редактор кода.
-Файл лежит в хранилище, которое и так синхронизировано между машинами, и его
-читает любая сессия агента: спросить «что дальше по области 1» можно из любого
-чата, не восстанавливая контекст заново.
+The compact MVP widget shows percentage and completed / total required leaf tasks. Clicking it opens that required scope. Required archived leaf tasks remain unresolved until explicitly removed from scope; initiative parents do not inflate readiness.
+MVP uses an explicit milestone and Required flags. Empty scope displays Scope not defined. Stale sync means readiness is unknown, and the last saved tasks remain visible. Scope readiness is not the publication of a release. All UI changes remain presentation preferences: task mutations happen through GitHub and the canonical agent commands.
 
-Обратная сторона — на машине без хранилища доски нет. Это не ошибка:
-`--sync` в таком случае молча пропускает работу и коммит не ломает.
-
-## Разметка
-
-```markdown
-## 1 · Complete account control
-> Одна строка о том, что означает «готово» для всей области.
-
-### Check Spend & Metrics
-
-- [ ] `acl-103` Read spend live from the ad account #next @analysis
-      Примечание с отступом. Свободный текст.
-```
-
-| Что | Значит |
-|---|---|
-| `- [x]` / `- [ ]` | сделано или нет |
-| `` `acl-103` `` | id; не переиспользовать — по нему коммит отмечает задачу |
-| `#status` | `#shipped` `#review` `#next` `#blocked` `#later` `#idea`; без тега — `#idea` |
-| `@track` | `@dashboard` `@rpa` `@analysis` `@content` `@ops` |
-| строка с отступом | примечание к задаче |
-
-Заголовки `##` — области, `###` — способности внутри области. Задачи без id
-пропускаются, примеры внутри ``` не разбираются.
-
-## Подзадачи
-
-Отступ и ещё одна галочка. У id появляется буква:
-
-```markdown
-- [ ] `acl-103` Read spend from the company BI #next @analysis
-  - [ ] `acl-103a` Find out how the BI gets spend
-        Примечание подзадачи — тоже с отступом.
-  - [ ] `acl-103b` Connect ACL to the BI
-```
-
-- **Задача, у которой сделаны все части, считается сделанной.** Это факт, а не
-  оценка: галочку на родителе ставить не нужно, доска выведет её сама. Когда
-  последнюю часть закрывает коммит, галочка проставляется и в файле — чтобы в
-  Obsidian было видно то же, что на витрине.
-- Подзадача без id — законна, её просто нельзя отметить коммитом.
-- Прогресс области считается по задачам верхнего уровня. Иначе одна подробно
-  расписанная задача перевесила бы всю область.
-
-## Зависимости
-
-`needs:acl-105` в любой строке — задачи или подзадачи.
-
-```markdown
-- [ ] `acl-103c` Spend follows the chosen period needs:acl-105
-```
-
-Правило, ради которого это заведено: **если мешает чужая задача — это
-`needs:`, а не подзадача.** Иначе задача молча берёт на себя работу, которую
-её исполнитель сделать не может. Если же порядок ваш собственный и работа
-ваша — это подзадача.
-
-Третье правило, к которому приходишь сам: когда частей ещё не знаешь, первая
-подзадача — узнать. Обычно это разговор, а не код.
-
-## Команды
-
-```
-python scripts/acl_board.py --check          разобрать и напечатать сводку
-python scripts/acl_board.py --render         собрать output/acl_task_wall.html
-python scripts/acl_board.py --sync           отметить задачи из свежего коммита
-python scripts/acl_board.py --install-hook   поставить post-commit
-```
-
-Пути переопределяются: `ACL_BOARD_PATH` — где лежит разметка,
-`ACL_BOARD_HTML` — куда класть витрину.
-
-## Коммит отмечает задачу
-
-Хук `post-commit` читает сообщение коммита и ставит галочку — но **одного
-упоминания id недостаточно, рядом должно стоять закрывающее слово**:
-
-```
-git commit -m "feat: живой спенд с аккаунта, closes acl-103"
-git commit -m "acl-103 закрыто"
-git commit -m "Board: acl-103, acl-104b"
-```
-
-Годятся `closes` / `closed` / `fix` / `fixes` / `fixed` / `done` / `board` и
-русские «закрыто», «сделано», «готово» — с любой стороны от id.
-
-→ `acl-103` становится `[x] #shipped`, в раздел `## Log` попадает строка с
-датой, хэшем и темой коммита, витрина пересобирается.
-
-Почему так строго: первая же версия отмечала задачу от любого упоминания —
-и первый настоящий коммит с этим хуком закрыл `acl-105` тем, что в тексте
-объяснения стояло `needs:acl-105`. Задача, которую никто не делал, оказалась
-сделанной, и никто бы этого не заметил.
-
-**Статус ставится по ветке.** Коммит в `master` — `#shipped`: слить в master
-значит раздать всем машинам. Коммит в любую другую ветку — `#review`: работа
-сделана, но никому не доехала, и в журнале рядом с хэшем встаёт имя ветки.
-
-Отсюда же правило разметки: **галочка и статус — про разное.** `- [x]` значит
-«работа доделана», `#review` — «лежит в ветке». Строка
-
-```markdown
-- [x] `acl-105` Timeframe that survives real use #review @dashboard
-```
-
-читается как «готово, ждёт ревью, в master не влито». Раньше галочка молча
-переписывала статус в `shipped`, и задача выглядела доехавшей до людей, ничего
-им не доехав.
-
-Три вещи, которые стоит знать:
-
-- **Хук не решает, что сделано** — он записывает то, что вы назвали. Никакой
-  догадки по изменённым файлам.
-- **Повторный коммит с тем же id ничего не портит** — задача уже отмечена,
-  вторая запись в журнал не добавляется.
-- **Хук никогда не валит коммит.** Нет хранилища, сломался python, нет прав на
-  запись — печатает строку и выходит с нулём.
-
-Хук ставится в общий каталог `.git/hooks`, поэтому один раз на чекаут — и он
-работает во всех worktree сразу. Скрипт при этом лежит не в каждой ветке:
-хук ищет `scripts/acl_board.py` по всем worktree и разбирает коммит любой
-найденной копией — объекты git у них общие. Не нашёл — молча выходит.
-
-## Показать
-
-`--render` кладёт самодостаточный HTML в `output/`: открывается двойным
-щелчком, печатается на бумагу, живёт без сервера. Для показа не на своей
-машине этот же файл публикуется отдельно — ссылку выдаёт агент.
+The previous [Obsidian export](archive/TASK-BOARD-LEGACY.md) and task-board-snapshot.md are historical and are not read by the live tracker. Local commits and checked boxes do not independently prove merge or release.

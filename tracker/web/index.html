@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Task tracker</title>
+<script id="tracker-data" type="application/json">__DATA__</script>
+<script>
+(() => {try {const d=JSON.parse(document.getElementById('tracker-data').textContent),k='tracker.design.v2.'+d.project.repository,p=JSON.parse(localStorage.getItem(k+'.prefs')||'{}'),old=JSON.parse(sessionStorage.getItem('tracker.v2.'+d.project.repository)||'{}');const t=p.theme||old.theme||'system';document.documentElement.dataset.theme=t==='dark'||t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(_){document.documentElement.dataset.theme=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}})();
+</script>
+<style>__STYLE__</style>
+</head>
+<body>
+<div id="signal-tracker-v2" data-accent="cobalt" data-signal="true">
+<div class="st-shell">
+<aside class="st-sidebar" id="sidebar" aria-label="Project navigation"><div class="st-brand"><span class="st-logo" aria-hidden="true">//</span><span id="project-name">Task tracker</span></div><div><div class="st-nav-label">Modules</div><nav class="st-nav" aria-label="Modules" id="modules"></nav></div><div class="st-sidebar-bottom"><a id="github-link" target="_blank" rel="noopener">Open GitHub ↗</a></div></aside>
+<main class="st-main" id="workspace">
+<header class="st-header"><div class="st-heading"><button type="button" class="st-control st-menu" id="nav-toggle" aria-haspopup="dialog" aria-label="Open navigation">☰</button><div><div class="st-eyebrow" id="project-context">Project workspace</div><h1 id="view-title">All tasks</h1></div></div><div class="st-header-actions"><span id="sync-state" role="status">Checking sync…</span><div class="st-segment st-theme" aria-label="Appearance"><button type="button" class="st-signal-border" data-theme="light">Light</button><button type="button" class="st-signal-border" data-theme="dark">Dark</button><button type="button" class="st-signal-border" data-theme="system">System</button></div></div></header>
+<section class="st-overview" aria-label="Task navigation"><nav class="st-pipeline" id="pipeline" aria-label="Task status"></nav><button type="button" class="st-release-widget st-signal-border" data-view="release" id="mvp-metric"><span class="st-release-heading"><span id="release-metric-label">MVP</span><strong id="mvp-count">—</strong></span><progress id="mvp-progress" aria-label="Required release tasks completed" value="0" max="1" hidden></progress><span class="st-release-note" id="mvp-note">Scope not defined</span></button></section>
+<div class="st-toolbar"><label class="st-search st-signal-border"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input id="search" type="search" placeholder="Search tasks or IDs…" aria-label="Search tasks or IDs" autocomplete="off"></label><button type="button" class="st-control st-signal-border" id="filters-toggle" aria-expanded="false" aria-controls="filters-panel" aria-label="Filters" title="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8Z"/></svg><span id="filters-count" aria-hidden="true" hidden></span></button><div class="st-segment" aria-label="Task layout"><button type="button" class="st-signal-border" data-layout="list">List</button><button type="button" class="st-signal-border" data-layout="board">Board</button></div></div>
+<section id="filters-panel" class="st-inline-filters" aria-label="Task filters" hidden><div id="filter-fields"></div><div class="filter-footer"><button type="button" class="st-clear" id="reset">Clear filters</button><button type="button" class="st-clear" data-close="filters-panel">Hide filters</button></div></section>
+<div class="st-chips" id="chips"></div>
+<section class="release-context" id="release-context" hidden><div class="st-segment" aria-label="Release scope" id="release-scopes"></div><div class="release-summary" id="release-summary" aria-live="polite"></div></section>
+<p class="batch-note" id="batch-note" hidden></p>
+<div class="st-results-meta"><span id="result-count" aria-live="polite"></span><span id="layout-note">Active work first</span></div>
+<div id="board-navigation" class="st-board-nav" aria-label="Focus column" hidden></div>
+<div id="tasks"></div>
+</main></div>
+
+<dialog id="navigation-panel" class="navigation-panel" aria-labelledby="navigation-title"><div class="st-pophead"><h2 id="navigation-title">Modules</h2><button type="button" data-close="navigation-panel" class="st-close" aria-label="Close navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><nav class="st-nav" aria-label="Mobile modules" id="mobile-modules"></nav></dialog>
+<dialog id="task-detail" class="st-detail" aria-labelledby="detail-title"><div id="detail-resize" class="st-detail-resize" role="separator" aria-label="Resize task details" aria-orientation="vertical" aria-controls="detail-content" tabindex="0" title="Drag to resize · arrow keys adjust width"></div><div class="st-detail-close"><div class="st-idline" id="detail-id"></div><button type="button" id="detail-close" class="st-close" aria-label="Close task details"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="detail-scroll" id="detail-content"></div><p id="detail-feedback" class="copy-feedback" role="status"></p></dialog>
+<div id="copy-toast" class="st-toast" role="status" hidden></div>
+</div>
+<script>__APP__</script>
+</body></html>

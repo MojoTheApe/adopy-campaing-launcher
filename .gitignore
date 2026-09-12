@@ -103,3 +103,7 @@ token_telemetry.json
 # upload_plan.xlsx), а тест контекст-пака создаёт свой файл во временной папке.
 output/*
 !output/.gitkeep
+
+# Pinned shared tracker runtime cache
+.tracker-runtime/
+__pycache__/

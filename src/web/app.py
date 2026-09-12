@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import math
 import os
 import re as _re
 import re
@@ -80,9 +81,7 @@ _ref_full_mtime: float = -1.0
 
 
 def _save_link_to_machine_map(account_name: str, link: str) -> bool:
-    """Store the tracking link on this machine, for an account the workbook
-    does not carry. Returns False when the account is not in the map either —
-    then there is genuinely nothing to attach the link to.
+    """Store the tracking link locally; False means the account is not mapped.
 
     Rewrites the whole CSV rather than patching a line: the file is a dozen
     rows, and a half-written map is worse than a slow one.
@@ -101,23 +100,22 @@ def _save_link_to_machine_map(account_name: str, link: str) -> bool:
     if "tracking_link" not in fieldnames:
         fieldnames.append("tracking_link")
 
-    name_lower = (account_name or "").strip().lower()
-    hit = None
-    for row in rows:
-        key = (row.get("account_name") or "").strip().lower()
-        if key and (key == name_lower or key in name_lower or name_lower in key):
-            hit = row
-            break
-    if hit is None:
+    name_lower = (account_name or "").strip().casefold()
+    exact = [row for row in rows if (row.get("account_name") or row.get("account") or "").strip().casefold() == name_lower]
+    candidates = exact or [row for row in rows if name_lower and
+        (row.get("account_name") or row.get("account") or "").strip() and (
+        name_lower in (row.get("account_name") or row.get("account") or "").casefold()
+        or (row.get("account_name") or row.get("account") or "").strip().casefold() in name_lower)]
+    if not candidates:
         return False
-
+    if len(candidates) != 1:
+        raise ValueError("Account name is ambiguous; use the complete account name")
+    hit = candidates[0]
     hit["tracking_link"] = (link or "").strip()
-    tmp = map_path.with_name(f".{map_path.name}.tmp")
-    with open(tmp, "w", newline="", encoding="utf-8") as f:
-        writer = _csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
-    os.replace(tmp, map_path)
+    hit["tracking_link_set"] = "1"
+    if "tracking_link_set" not in fieldnames:
+        fieldnames.append("tracking_link_set")
+    write_csv_atomic(map_path, fieldnames, rows)
     return True
 
 
@@ -461,14 +459,26 @@ def _build_account_map_view(
     per_country: dict[str, dict[str, dict]] = {}
     labels_in_report: set[str] = set()
     display_name: dict[str, str] = {}
+    # «Что сделать» и «готов ли» жили в отдельной секции под картой, где тот
+    # же аккаунт описывался второй раз — своими числами и своей формой
+    # подключения. Числа там дублировались, форма была хуже той, что на карте
+    # (просила номер кабинета руками вместо того, чтобы прочитать его у
+    # профиля), а эти два поля не показывались больше нигде. Секция убрана,
+    # поля переехали сюда.
+    todo_by_country: dict[str, dict[str, dict]] = {}
     for country in report.get("countries", []):
         name = (country.get("country") or "").strip()
         bucket: dict[str, dict] = {}
+        todo: dict[str, dict] = {}
         for row in country.get("account_rows") or []:
             label = (row.get("account_label") or "").strip()
             if not label:
                 continue
             labels_in_report.add(label)
+            todo[label.casefold()] = {
+                "to_do": row.get("to_do_display") or "",
+                "ready": bool(row.get("is_ready")),
+            }
             if period is None:
                 bucket[label] = row.get("account_excel") or {}
             else:
@@ -483,6 +493,7 @@ def _build_account_map_view(
         for key in {name.casefold(), _country_code(name).casefold()}:
             if key:
                 per_country[key] = bucket
+                todo_by_country[key] = todo
                 display_name.setdefault(key, name)
 
     map_path = get_ad_account_map_path()
@@ -547,6 +558,10 @@ def _build_account_map_view(
         except Exception:  # pragma: no cover
             return {}
 
+    # Показания Read нужны и построчно (в таблице), и суммой в свёрнутой
+    # строке страны — снимаются один раз до цикла.
+    live = {} if span == "all" else _live_spend(date_from, date_to)
+
     countries: list[dict] = []
     for stored in account_links.all_values("country"):
         key = stored.casefold()
@@ -556,6 +571,7 @@ def _build_account_map_view(
         # a Home screen reading "CR" next to a sidebar reading "Costa Rica"
         # invites the reader to wonder whether they are the same place.
         country_name = display_name.get(key) or wb_country.get(key, stored)
+        todo = todo_by_country.get(key, {})
         rows = []
         for label in account_links.accounts_for("country", stored):
             excel = _numbers(country_name, label) or stats.get(label) or {}
@@ -583,6 +599,19 @@ def _build_account_map_view(
                 # состояние кабинета — без периода: спенд отвечает «сколько за
                 # эти дни», состояние — «что с ним сейчас»
                 "status": _account_status(label),
+                # то же имя, что и у чисел: связка знает аккаунт по имени
+                # Multilogin, отчёт — по книжному
+                **{
+                    k: (todo.get((alias or label).casefold()) or todo.get(label.casefold()) or {}).get(k, "" if k == "to_do" else False)
+                    for k in ("to_do", "ready")
+                },
+                # «Книга про него не знает» и «книга знает и не считает
+                # готовым» — разные вещи, а слово на экране было одно. Тестовый
+                # аккаунт, заведённый на дешборде, в рабочей книге не появится
+                # никогда, и вечное «needs setup» на нём означало бы задачу,
+                # которой не существует.
+                "in_workbook": bool(todo.get((alias or label).casefold()) or todo.get(label.casefold()))
+                    or _workbook_has_account(df, country_name, label),
                 "assets": account_links.values_for(label, "asset"),
                 "countries": [
                     display_name.get(v.casefold(), v)
@@ -596,6 +625,30 @@ def _build_account_map_view(
                 "cr": excel.get("cr"),
                 "has_data": bool(excel.get("has_data")),
             })
+        # Спенд, снятый с самих кабинетов (Read), суммируется по стране
+        # НА валюту: KWD и USD в одну цифру не складываются, а «не читали»
+        # не равно нулю (acl-356). Пустой live_sums — «никто не смотрел».
+        live_sums: dict[str, float] = {}
+        unknown_sums: list[dict] = []
+        live_read = 0
+        for r in rows:
+            lr = live.get(r["account"]) or {}
+            if lr.get("state") != "ok" or lr.get("spend") is None:
+                continue
+            try:
+                amount = float(lr["spend"])
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(amount):
+                continue
+            live_read += 1
+            cur = str(lr.get("currency") or "").upper()
+            if re.fullmatch(r"[A-Z]{3}", cur):
+                live_sums[cur] = live_sums.get(cur, 0.0) + amount
+            else:
+                # Unknown units cannot be added to one another.
+                unknown_sums.append({"currency": "", "spend": amount, "account": r["account"]})
+
         countries.append({
             # `country` is what the reader sees, `key` is what the store knows.
             # They differ whenever the account map holds a code ("KW") and the
@@ -607,6 +660,10 @@ def _build_account_map_view(
             "spend": sum(r["spend"] or 0 for r in rows),
             "leads": sum(r["leads"] or 0 for r in rows),
             "deposits": sum(r["deposits"] or 0 for r in rows),
+            "live_read": live_read,
+            "live_sums": [
+                {"currency": c, "spend": s} for c, s in sorted(live_sums.items())
+            ] + unknown_sums,
         })
 
     available = [
@@ -618,7 +675,7 @@ def _build_account_map_view(
         "available": available,
         "all_accounts": all_known,
         "dates": dates,
-        "live": {} if span == "all" else _live_spend(date_from, date_to),
+        "live": live,
         "date_from": date_from,
         "date_to": date_to,
         "span": span,
@@ -688,14 +745,9 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
 
     result: dict[str, dict] = {}
     for label in account_labels:
-        # Link + ad_account_id from Upload FB Accounts sheet
-        if ref:
-            info = get_account_info(ref, label)
-            link = (info.get("link") or "").strip()
-            excel_act_id = (info.get("ad_account_id") or "").strip()
-        else:
-            link = ""
-            excel_act_id = ""
+        info = get_account_info(ref, label, account_map=account_map)
+        link = (info.get("link") or "").strip()
+        excel_act_id = (info.get("ad_account_id") or "").strip()
         link_status = classify_link(link)
 
         # Account map completeness
@@ -791,14 +843,12 @@ def _load_ref_options() -> dict:
     except Exception:
         return {**empty, "targetings": fallback_targets}
     ad_copies = sorted(ref.get("ad_copy") or {})
-    image_files = [
-        {"id": k, "filename": v}
-        for k, v in sorted((ref.get("image_files") or {}).items(), key=lambda x: x[0])
-    ]
-    video_files = [
-        {"id": k, "filename": v}
-        for k, v in sorted((ref.get("video_files") or {}).items(), key=lambda x: x[0])
-    ]
+    # Списки файлов из книги здесь больше не собираются: билдер ищет креативы
+    # в `/api/creatives`, который рекурсивно обходит папку, и экселевские
+    # `image_files`/`video_files` не читал никто. Ключи остаются пустыми
+    # списками — их формат входит в ответ, и убирать его отдельным решением.
+    image_files: list = []
+    video_files: list = []
     targetings = fallback_targets
     if not targetings and not has_registry:
         targetings = [{"code": t, "label": t, "fb_interest": t}
@@ -812,6 +862,69 @@ def _load_ref_options() -> dict:
     _ref_opts_cache = result
     _ref_opts_mtime = mtime
     return result
+
+
+def _add_linked_accounts_to_builder(report: dict) -> int:
+    """Аккаунт, привязанный к стране на дешборде, виден и в её билдере.
+
+    Список аккаунтов для билдера строился из книги статистики — то есть из
+    того, что попало в отчёт. Аккаунт, подключённый здесь и в книге
+    отсутствующий, в билдере не появлялся вовсе: в карте страны он есть, со
+    спендом, статусом и кнопкой Read, а собрать на нём кампанию негде. Ровно
+    этот случай — новый тестовый аккаунт, которого в рабочей книге и не должно
+    быть.
+
+    Билдер отвечает на «что запускаем», а не на «что попало в отчёт», поэтому
+    источник тут — связи аккаунтов со странами. Они же давно умеют держать один
+    аккаунт в нескольких странах; до сих пор этим нельзя было пользоваться,
+    потому что в билдере аккаунт был виден только там, где его знает книга.
+
+    Рекомендаций у добавленных нет и быть не может: их считают по числам,
+    которых нет. Пустой список — это и значит «карточек нет, собирайте вручную»,
+    и билдер такую страницу уже умеет показывать.
+    """
+    from src.web import account_links
+
+    account_links.seed_from_account_map()
+    by_key: dict[str, list[str]] = {}
+    for stored in account_links.all_values("country"):
+        by_key.setdefault(stored.casefold(), []).extend(
+            account_links.accounts_for("country", stored)
+        )
+
+    # A newly linked country can have no statistics at all, including no report
+    # section. Give it the same empty sections the dashboard already renders.
+    countries = report.setdefault("countries", [])
+    known = {key for c in countries for key in
+             {(c.get("country") or "").casefold(), _country_code(c.get("country") or "").casefold()}}
+    for stored in account_links.all_values("country"):
+        if stored.casefold() in known or _country_code(stored).casefold() in known:
+            continue
+        name = (next((n.title() for n, code in _COUNTRY_CODES.items() if code == stored.upper()), stored)
+                if len(stored) == 2 else stored)
+        countries.append({"country": name, "cm_comparison": [], "account_rows": [],
+                          "asset_summary": [], "asset_variants": [], "variants": [],
+                          "top_combos": [], "targeting": [], "creatives": [],
+                          "trend": {"has_date": False}, "close_recs": {}, "open_recs": {}})
+        known.update({name.casefold(), _country_code(name).casefold()})
+
+    added = 0
+    for country in report.get("countries", []):
+        name = (country.get("country") or "").strip()
+        if not name:
+            continue
+        recs = country.setdefault("open_recs", {})
+        seen = {str(k).casefold() for k in recs}
+        # Страна в связях записана так, как её назвали при подключении — то
+        # полным именем, то кодом. Смотрим оба написания, иначе привязка к «SA»
+        # не найдёт «Saudi Arabia», и аккаунт снова пропадёт.
+        for key in {name.casefold(), _country_code(name).casefold()}:
+            for label in by_key.get(key, []):
+                if label and label.casefold() not in seen:
+                    recs[label] = []
+                    seen.add(label.casefold())
+                    added += 1
+    return added
 
 
 def _aggregate_key_to_query(key: Dict[str, Any]) -> str:
@@ -835,6 +948,27 @@ templates.env.filters["fmt_currency"] = fmt_currency
 templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")
 templates.env.filters["creative_type"] = lambda name: parse_creative_from_ad_title(name)[0]
 templates.env.filters["creative_id"] = lambda name: parse_creative_from_ad_title(name)[1]
+
+
+def _geo_language(country_name: str) -> str:
+    """Язык аудитории по стране — умолчание поля в билдере.
+
+    Правило берётся у того же кода, что применяет его при заливке, а не
+    переписывается в шаблоне: два списка стран разошлись бы, и разошлись бы
+    молча — на экране стояло бы одно, в Ads Manager набралось другое.
+
+    Пусто — законный ответ для стран вне GCC и LatAm: угадывать за человека
+    язык мы не будем, поле останется пустым и подсвеченным.
+    """
+    try:
+        from src.fb_ads_rpa.enrich_draft import _geo_language_for_country
+
+        return _geo_language_for_country(_country_code(country_name))
+    except Exception:
+        return ""
+
+
+templates.env.filters["geo_language"] = _geo_language
 
 # Drill fragment column counts per section — keep in sync with report.html
 # table headers. The detail <td colspan> must match the parent table's
@@ -1126,6 +1260,13 @@ def _render_report(
             status_code=503,
         )
 
+    # Period reports are cached. Local links belong to this render, otherwise
+    # removed accounts remain in the cached builder on subsequent requests.
+    from copy import deepcopy
+    report = deepcopy(report)
+    # До сборки списка аккаунтов ниже: добавленные должны получить и проверку
+    # готовности, и строку в билдере, а не одно из двух.
+    _add_linked_accounts_to_builder(report)
     _enrich_country_overview(report)
     ref_opts = _load_ref_options()
 
@@ -1293,6 +1434,14 @@ def workbook_alias_for(df, country: str, label: str) -> str:
         return label
 
 
+def _workbook_has_account(df, country: str, label: str) -> bool:
+    if df is None or "Account Alias" not in df.columns:
+        return False
+    from src.analysis_agent.analyze_fb_stats import alias_matches
+    sub = df[df["Country Final"] == country] if "Country Final" in df.columns else df
+    return bool(alias_matches(sub["Account Alias"], workbook_alias_for(df, country, label)).any())
+
+
 def _country_code(name: str) -> str:
     """Return 2-letter ISO code for a country name, or uppercase 2-char fallback."""
     if not name:
@@ -1344,6 +1493,9 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         targeting = (form.get(f"camp_{idx}_targeting") or "").strip()
         os_val    = (form.get(f"camp_{idx}_os") or "All").strip()
         age_val   = (form.get(f"camp_{idx}_age") or "35").strip()
+        # Пусто — это ответ, а не пропуск: язык сняли намеренно, и правило по
+        # стране подставится при обогащении только если поле не трогали.
+        language  = (form.get(f"camp_{idx}_language") or "").strip()
         asset_val = _abbrev_asset((form.get(f"camp_{idx}_asset") or "").strip())
         budget    = (form.get(f"camp_{idx}_budget") or "").strip()
         name      = (form.get(f"camp_{idx}_name") or "").strip()
@@ -1385,6 +1537,9 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     "budget": budget,
                     "asset": asset_val,
                     "tracking_link": tracking_link,
+                    "tracking_link_provided": "tracking_link" in form,
+                    "language": language,
+                    "language_provided": f"camp_{idx}_language" in form,
                 }
             )
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
@@ -1705,22 +1860,28 @@ async def api_creatives() -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+def _ad_copy_rows() -> list[dict]:
+    """Read the same local library used by RPA; only new machines import once."""
+    from src.analysis_agent import ad_text_registry as ar
+
+    return [{"ad_title": t.name, "headline": t.headline, "body": t.body,
+             "description": t.description, "asset": t.asset,
+             "language": t.language} for t in ar.builder_texts()]
+
+
 @app.get("/api/ad-copy")
 async def api_ad_copy() -> JSONResponse:
-    """Return every "ad texts" row from the Google Sheet — canonical source for
-    the Campaign Builder's Ad Title search (see src/web/ad_copy_gsheet.py; the
-    old Excel "Ad copy" sheet is no longer used for this).
+    """Тексты объявлений для билдера.
 
     Returns [{ad_title, headline, body, description, asset, language}].
     """
-    from src.web.ad_copy_gsheet import load_ad_copy
+    from starlette.concurrency import run_in_threadpool
 
-    data = load_ad_copy()
-    rows = [
-        {"ad_title": title, **entry}
-        for title, entry in data.items()
-    ]
-    return JSONResponse({"rows": rows})
+    from src.analysis_agent.ad_text_registry import AdTextError
+    try:
+        return JSONResponse({"rows": await run_in_threadpool(_ad_copy_rows)})
+    except AdTextError as exc:
+        return JSONResponse({"rows": [], "error": str(exc)}, status_code=503)
 
 
 @app.get("/api/resolve-targeting")
@@ -2096,6 +2257,58 @@ async def api_edit_targeting_profile(request: Request) -> JSONResponse:
     return await run_in_threadpool(_edit_targeting_profile, data)
 
 
+@app.get("/api/ad-texts")
+def api_ad_texts(force: bool = False) -> JSONResponse:
+    """Библиотека рекламных текстов. Чтение вкладки — в рабочем пуле FastAPI."""
+    from src.analysis_agent import ad_text_registry as ar
+    try:
+        sheet = ar.refresh(force=True) if force else ar.ensure_loaded()
+        texts = ar.all_texts()
+        return JSONResponse({"ok": True, "sheet": sheet,
+                             "duplicates": ar.duplicates(texts),
+                             "texts": [t.to_dict() for t in texts]})
+    except ar.AdTextError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
+
+
+_AD_TEXT_FIELDS = ("action", "name", "headline", "body", "description",
+                   "asset", "language", "was")
+
+
+def _edit_ad_text(data: dict) -> JSONResponse:
+    from src.analysis_agent import ad_text_registry as ar
+    if not isinstance(data, dict) or any(not isinstance(data.get(k, ""), str) for k in _AD_TEXT_FIELDS):
+        return JSONResponse({"ok": False, "error": "Expected an object with string fields"}, status_code=400)
+    action = (data.get("action") or "add").strip().lower()
+    name, headline, body, description, asset, language = (
+        data.get(k, "") for k in ("name", "headline", "body", "description", "asset", "language"))
+    try:
+        if action == "delete":
+            ar.remove(name)
+            return JSONResponse({"ok": True, "removed": name})
+        if action == "update":
+            text = ar.update(data.get("was") or name, name, headline, body, description, asset, language)
+        elif action == "add":
+            text = ar.add(name, headline, body, description, asset, language)
+        else:
+            raise ar.AdTextError(f"Неизвестное действие: {action}")
+    except ar.AdTextError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    return JSONResponse({"ok": True, "text": text.to_dict()})
+
+
+@app.post("/api/ad-texts")
+async def api_edit_ad_text(request: Request) -> JSONResponse:
+    from starlette.concurrency import run_in_threadpool
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    return await run_in_threadpool(_edit_ad_text, data)
+
+
 @app.get("/api/parse-adset")
 async def api_parse_adset(name: str = "") -> JSONResponse:
     """Parse a raw Meta ad set name into (country_code, device, age, targeting)
@@ -2306,6 +2519,32 @@ async def account_spend_open_profile(request: Request) -> JSONResponse:
     # to_thread, а не starlette: свежая установка не должна зависеть от
     # пакета, которого нет в requirements.txt
     ok, message = await asyncio.to_thread(account_spend.open_for_automation, account)
+    return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
+
+
+@app.post("/mlx-profile-open")
+async def mlx_profile_open(request: Request) -> JSONResponse:
+    """Поднять найденный в Multilogin профиль — ещё до подключения аккаунта.
+
+    Порядок работы человека: нашёл профиль в поиске, открыл, посмотрел в самом
+    кабинете что нужно, подключил. Прежде дешборд соглашался открыть профиль
+    только у аккаунта, который уже в карте, — а чтобы попасть в карту, он же
+    требовал номер кабинета, который знает открытый профиль. Круг замкнутый, и
+    выйти из него можно было только вписав номер руками.
+    """
+    from src.analysis_agent import account_spend
+
+    form = await request.form()
+    profile_id = (form.get("profile_id") or "").strip()
+    if not profile_id:
+        return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
+    ok, message = await asyncio.to_thread(
+        account_spend.open_profile_for_automation,
+        profile_id,
+        (form.get("folder_id") or "").strip(),
+        (form.get("instance") or "A").strip(),
+        (form.get("name") or "").strip(),
+    )
     return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
 
 
@@ -2665,7 +2904,7 @@ async def account_map_remove(request: Request) -> JSONResponse:
 
 @app.post("/account-link-patch")
 async def account_link_patch(request: Request) -> JSONResponse:
-    """Write a tracking link directly to Upload FB.xlsx → Accounts sheet → Link column.
+    """Save a local link, with an Excel fallback for workbook-only accounts.
 
     Body JSON: {account_name: str, link: str}
     """
@@ -2678,6 +2917,15 @@ async def account_link_patch(request: Request) -> JSONResponse:
     link = (data.get("link") or "").strip()
     if not account_name:
         return JSONResponse({"ok": False, "error": "account_name is required"}, status_code=400)
+
+    # Local settings win on reads, so Save must write that same source first.
+    try:
+        saved = _save_link_to_machine_map(account_name, link)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"Could not save the link on this machine: {exc}"}, status_code=409)
+    if saved:
+        return JSONResponse({"ok": True, "account": account_name,
+                             "link_status": classify_link(link), "stored_in": "machine"})
 
     try:
         matched = _write_link_to_excel(account_name, link)

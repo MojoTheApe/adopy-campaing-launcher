@@ -165,11 +165,13 @@ def test_money_is_read_out_of_the_cell(text, value):
 
 def test_url_carries_the_account_and_the_day():
     url = sp._url("act_123", "2026-09-06", "2026-09-06")
-    assert "act=act_123" in url and "date=2026-09-06_2026-09-07" in url
+    assert "act=123" in url and "date=2026-09-06_2026-09-07" in url
 
 
-def test_url_adds_the_act_prefix_when_the_map_lacks_it():
-    assert "act=act_123" in sp._url("123", "2026-09-06", "2026-09-06")
+def test_url_sends_digits_because_meta_ignores_the_prefix():
+    """Префикс нужен формату карты, но мешает выбору кабинета в Ads Manager."""
+    assert "act=123&" in sp._url("123", "2026-09-06", "2026-09-06")
+    assert "act=act_" not in sp._url("act_123", "2026-09-06", "2026-09-06")
 
 
 def test_a_missing_account_fails_before_any_browser_opens(monkeypatch):
@@ -203,6 +205,16 @@ def _fake_browser(monkeypatch, *, attach, running, has_dir=True):
     from src.fb_ads_rpa import browser as rpa_browser
 
     class Direct:
+        # Публичная пара, как у настоящего провайдера: она делегирует
+        # приватным, а strict_profile зафиксирован внутри неё.
+        def attach_existing_only(self, profile_id, user_data_dir, *, new_page=False):
+            return self._try_attach_existing(
+                profile_id, user_data_dir, strict_profile=True, new_page=new_page
+            )
+
+        def profile_is_running(self, user_data_dir, profile_id=""):
+            return self._profile_process_running(user_data_dir, profile_id)
+
         def _try_attach_existing(self, profile_id, udd, **kwargs):
             return attach
 

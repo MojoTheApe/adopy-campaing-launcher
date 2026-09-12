@@ -789,6 +789,45 @@ class MultiloginDirectCDPProvider:
                 continue
         return None
 
+    # ── Публичный путь «прицепись, но не поднимай» ───────────────────────
+    #
+    # Публикация и чтение хотят от браузера противоположного. Публикации нужен
+    # браузер любой ценой: не вышло прицепиться — останови профиль и подними
+    # заново с автоматизацией. Чтению наоборот: прицепись к тому, что открыто,
+    # а если открытого нет — **остановись**. Перезапуск разлогинивает аккаунт
+    # (так вышло на x01) и умеет терять прокси; ради одного числа за вчера это
+    # неприемлемо.
+    #
+    # Публичного способа сказать второе не было, и чтение звало приватные
+    # методы этого класса напрямую из чужого модуля (`acl-108e`). Теперь
+    # говорит — а приватные методы остаются приватными.
+
+    def attach_existing_only(
+        self, profile_id: str, user_data_dir: str, *, new_page: bool = False
+    ) -> "BrowserConnection | None":
+        """Прицепиться к уже открытому профилю. Никогда его не поднимать.
+
+        `None` значит «открытого окна с отладочным портом нет», и это всё, что
+        здесь происходит: ни остановки профиля, ни запуска.
+
+        `strict_profile` зафиксирован намеренно: он требует, чтобы порт
+        принадлежал именно этому профилю. Свободный поиск годится публикации,
+        которая профиль только что подняла сама; чтению он позволил бы
+        прицепиться к чужому окну и прочитать чужой кабинет.
+        """
+        return self._try_attach_existing(
+            profile_id, user_data_dir, strict_profile=True, new_page=new_page
+        )
+
+    def profile_is_running(self, user_data_dir: str, profile_id: str = "") -> bool:
+        """Есть ли живой процесс Mimic на этой папке профиля.
+
+        Нужно, чтобы отличить «профиль закрыт» от «профиль открыт руками в MLX
+        Desktop»: у второго нет отладочного порта, прицепиться не к чему, и
+        человеку надо сказать именно это, а не «профиль не найден».
+        """
+        return self._profile_process_running(user_data_dir, profile_id)
+
     def _try_attach_existing(
         self, profile_id: str, user_data_dir: str, *, strict_profile: bool = False, new_page: bool = False
     ) -> "BrowserConnection | None":
@@ -801,7 +840,7 @@ class MultiloginDirectCDPProvider:
         port = self._discover_owned_debug_port(user_data_dir) if strict_profile else self._discover_debug_port(user_data_dir, profile_id)
         if port is None:
             log.info(
-                "Profile %s is running but no CDP debug port found — will relaunch with debugging",
+                "Profile %s is running but no CDP debug port found — attachment unavailable",
                 profile_id,
             )
             return None
@@ -817,7 +856,7 @@ class MultiloginDirectCDPProvider:
             log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
             return conn
         except Exception as exc:
-            log.warning("Could not attach to running Mimic (%s) — will relaunch", exc)
+            log.warning("Could not attach to running Mimic (%s)", exc)
             return None
 
     def open(self, entry: AccountMapEntry, account_label: str) -> "BrowserConnection":
@@ -992,6 +1031,8 @@ class MultiloginAttachOnlyProvider:
         account_label: str,
         profile_id: str,
         udd: str,
+        *,
+        allow_restart: bool = True,
     ) -> Any:
         from src.meta_campaign_agent.multilogin_config import get_multilogin_instance
         from src.meta_campaign_agent.multilogin_launcher import (
@@ -1041,6 +1082,11 @@ class MultiloginAttachOnlyProvider:
                     or "already running" in msg
                     or "profile_already_running" in msg
                 )
+                if lock_conflict and not allow_restart:
+                    raise RuntimeError(
+                        f"{account_label}: profile is already running; no stop or restart was performed. "
+                        "Close it in Multilogin Desktop before opening it with automation."
+                    ) from exc
                 if attempt < 2 and lock_conflict:
                     # Gracefully stop ONLY this profile via MLX API. This releases MLX
                     # Desktop's lock, preserves the profile's cookies/login, and does
@@ -1071,19 +1117,21 @@ class MultiloginAttachOnlyProvider:
             f"Последняя ошибка: {last_exc}"
         )
 
-    def open(self, entry: AccountMapEntry, account_label: str) -> BrowserConnection:
+    def open(self, entry: AccountMapEntry, account_label: str, *,
+             allow_missing_dir: bool = False, allow_restart: bool = True) -> BrowserConnection:
         profile_id = entry.profile_id
         if not profile_id:
             raise RuntimeError(f"{account_label}: profile_id is required")
 
         user_data_dir = _find_mlx_profile_dir(profile_id)
-        if user_data_dir is None:
+        if user_data_dir is None and not allow_missing_dir:
             raise RuntimeError(
                 f"MLX profile directory not found for profile_id={profile_id}"
             )
-        udd = str(user_data_dir)
+        udd = str(user_data_dir) if user_data_dir is not None else ""
 
-        reused = self._direct._try_attach_existing(profile_id, udd)
+        reused = (self._direct._try_attach_existing(profile_id, udd, strict_profile=not allow_restart)
+                  if udd else None)
         if reused is not None:
             log.info("Attached to already-open Multilogin profile %s", profile_id)
             return reused
@@ -1092,14 +1140,16 @@ class MultiloginAttachOnlyProvider:
         # attach. _start_via_mlx_api gracefully stops ONLY this profile via the MLX
         # API (releasing MLX's lock, keeping cookies) and restarts it with automation
         # enabled. It does NOT kill other open profiles.
-        if self._direct._profile_process_running(udd, profile_id):
+        if self._direct._profile_process_running(udd or profile_id, profile_id):
+            if not allow_restart:
+                raise RuntimeError(f"{account_label}: profile is already running; no restart was performed")
             log.info(
                 "Profile %s is open in MLX manual mode (no CDP). Will restart it via "
                 "MLX automation API (other profiles untouched).",
                 profile_id,
             )
 
-        started = self._start_via_mlx_api(entry, account_label, profile_id, udd)
+        started = self._start_via_mlx_api(entry, account_label, profile_id, udd, allow_restart=allow_restart)
         ws = started.ws_endpoint or ""
         if ws and not ws.startswith("/"):
             ws = f"/{ws}"
