@@ -1909,9 +1909,20 @@
     .amap-tree-line:last-child { border-bottom: none; }
     .amap-tree-line.ad { padding-left: 1.4rem; }
     .amap-tree-kind {
-      flex: 0 0 3.6rem; color: var(--muted); font-size: 0.7rem;
+      flex: 0 0 4.6rem; color: var(--muted); font-size: 0.7rem;
       text-transform: uppercase; letter-spacing: 0.04em;
     }
+    /* Стрелка ad set'а. Пустое место вместо неё держит ту же ширину, иначе
+       строки без объявлений разъезжаются относительно остальных. */
+    .amap-tree-caret, .amap-tree-caret-off {
+      flex: 0 0 1rem; font-size: 0.7rem; line-height: 1; text-align: left;
+    }
+    .amap-tree-caret {
+      background: none; border: 0; padding: 0; cursor: pointer;
+      color: var(--muted); transition: transform 120ms var(--ease-out);
+    }
+    .amap-tree-caret:hover { color: var(--accent); }
+    .amap-tree-caret.open { transform: rotate(90deg); }
     .amap-tree-sw {
       flex: 0 0 2.6rem; text-align: center; border-radius: 3px;
       padding: 0.05rem 0.3rem; font-size: 0.7rem; font-weight: 600;
@@ -4604,13 +4615,30 @@ function amapApplyReading(account, s) {
    встретилось «тумблер on, доставка Campaign off» — включено, а не крутится,
    потому что выключена кампания сверху. Сведи это в один значок, и человек
    увидит работающим то, что не тратит ничего. */
-function amapTreeLine(o) {
+function amapTreeLine(o, adCount) {
   var line = document.createElement('div');
   line.className = 'amap-tree-line' + (o.level === 'ad' ? ' ad' : '');
+
+  /* У ad set'а с объявлениями — своя стрелка. Кнопкой, а не значком: её
+     нажимают, и с клавиатуры тоже. Пустое место вместо неё держит ширину,
+     чтобы строки не разъезжались. */
+  if (o.level !== 'ad' && adCount) {
+    var caret = document.createElement('button');
+    caret.type = 'button';
+    caret.className = 'amap-tree-caret';
+    caret.textContent = '▸';
+    caret.setAttribute('aria-label', adCount + ' ads in ' + (o.name || 'this ad set'));
+    line.appendChild(caret);
+  } else {
+    var gap = document.createElement('span');
+    gap.className = 'amap-tree-caret-off';
+    line.appendChild(gap);
+  }
 
   var kind = document.createElement('span');
   kind.className = 'amap-tree-kind';
   kind.textContent = o.level === 'ad' ? 'ad' : 'ad set';
+  if (o.level !== 'ad' && adCount) kind.textContent += ' · ' + adCount;
 
   var sw = document.createElement('span');
   var state = o.switch === 'on' ? 'on' : o.switch === 'off' ? 'off' : 'dim';
@@ -4774,10 +4802,34 @@ function amapPaintTree(row, s) {
   var sets = objects.filter(function (o) { return o.level !== 'ad'; });
   var ads = objects.filter(function (o) { return o.level === 'ad'; });
   var placed = {};
+
+  /* Объявления свёрнуты под своим ad set'ом. У DQ438 их 99 на десять ad
+     set'ов: раскрытые разом, они уезжали на километр и прятали всё, что ниже
+     по карте. Раскрытое человеком запоминается и переживает перечитывание —
+     иначе после каждого Read пришлось бы открывать заново. */
+  var openSets = (row.dataset.openSets || '').split(',').filter(Boolean);
+
   sets.forEach(function (s) {
-    box.appendChild(amapTreeLine(s));
-    ads.forEach(function (a) {
-      if (a.parent_id && a.parent_id === s.id) { placed[a.id] = 1; box.appendChild(amapTreeLine(a)); }
+    var mine = ads.filter(function (a) { return a.parent_id && a.parent_id === s.id; });
+    var line = amapTreeLine(s, mine.length);
+    box.appendChild(line);
+    if (!mine.length) return;
+
+    var kids = document.createElement('div');
+    kids.className = 'amap-tree-kids';
+    kids.hidden = openSets.indexOf(s.id) === -1;
+    mine.forEach(function (a) { placed[a.id] = 1; kids.appendChild(amapTreeLine(a)); });
+    box.appendChild(kids);
+
+    var caret = line.querySelector('.amap-tree-caret');
+    caret.classList.toggle('open', !kids.hidden);
+    caret.addEventListener('click', function () {
+      kids.hidden = !kids.hidden;
+      caret.classList.toggle('open', !kids.hidden);
+      var now = (row.dataset.openSets || '').split(',').filter(Boolean)
+        .filter(function (id) { return id !== s.id; });
+      if (!kids.hidden) now.push(s.id);
+      row.dataset.openSets = now.join(',');
     });
   });
   var orphans = ads.filter(function (a) { return !placed[a.id]; });
