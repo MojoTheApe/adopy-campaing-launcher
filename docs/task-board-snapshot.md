@@ -598,27 +598,62 @@ python scripts/acl_board.py --render
       the RPA route as the only one, and the browser carries the account's own
       proxy and needs no permission from Meta. `acl-113` does not wait on this.
       It still gates `acl-111`, if the token route is ever revived.
-- [ ] `acl-113` Open and close through the RPA #blocked @rpa needs:acl-118
+- [x] `acl-113` Close campaigns and ads through the RPA #review @rpa
       Not a fallback — the second route, meant to work on its own. The browser
-      already carries the account's proxy, so it needs no permission from Meta
-      at all; only the code, which is not written.
-      **Owner's decisions, 11 September.** The control is a toggle on the rows
-      the dashboard already draws under an account — no separate confirmation
-      dialog, the toggle is the interface. Two levels: the row the dashboard
-      calls a campaign (in the data it is `Adset Name`, so Meta's ad set) and
-      the ad under it. Meta's own campaign level stays out: pausing a campaign
-      silences every ad set beneath it, and nobody asked for that.
-      Blocked on `acl-118`: the rows come from the statistics workbook, which
-      carries names but no Meta ids, lags a day, and has no on/off column — so
-      nothing there can drive a toggle or show its state.
+      already carries the account's proxy, so it needs no permission from Meta.
+      **Works live since 12 September.**
+      **Owner's decisions.** The control is a toggle on the rows under an
+      account — no separate dialog. The levels are **campaign and ad**: the
+      11 September note here said ad set and ad, and that was wrong for how
+      this team works. Campaigns and ad sets run one-to-one, and the campaign
+      is what stops the money. The live account settled it — the same two rows
+      read at both levels: `on / Campaign off` at the ad-set level, `off / Off`
+      at the campaign level. A toggle on the ad set would have controlled the
+      wrong thing.
+      **Only turning off.** Turning off spends no money, turning on does; the
+      way back is by hand in Ads Manager, where the person sees the
+      consequences. Only a switched-on row is a button; a click takes two steps
+      so a mis-click cannot stop a live campaign.
+      Four checks before acting: the ad account, the period on screen, that the
+      page is Ads Manager, and that the row under that id still carries the
+      name the person saw. An id can go stale; turning off the wrong campaign
+      is worse than turning off none.
+      **Drawn off and staying off are different.** After the click it waits for
+      `aria-checked=false`, then reloads and reads the row again — up to twelve
+      looks. The first live turn-off confirmed on the **second** look, so the
+      patience was needed and not a precaution. A one-glance check had already
+      reported a failure for an ad that did turn off.
       Never open an ad's editor (DQ204, 2 August): Meta pre-selects "Instant
       form (suggested)" on every opening and autosaves it, so a clean Leads ad
-      picks up error #100 from a look-and-leave visit. The row's own toggle is
-      the only acceptable mechanism.
+      picks up error #100 from a look-and-leave visit.
+      Every outcome is written down — `turn_off_log.jsonl` plus a launcher log
+      line. That is the part of `acl-117` without which the action could not
+      ship: "something changed yesterday" is not an answer.
+      Branch `feature/acl-113-toggle-in-the-tree`, stacked on `acl-118`.
       GitHub: #23.
-  - [ ] `acl-113a` Pause an ad set in Ads Manager, and start it again
-  - [ ] `acl-113b` Pause a single ad
-  - [ ] `acl-113c` Never near Publish
+  - [x] `acl-113a` Close a campaign #review
+        Starting it again is deliberately out of scope — see "only turning
+        off" above.
+  - [x] `acl-113b` Close a single ad #review
+        First live confirmation 12 September, 15:52:38: `2025_23- Officialy`.
+  - [x] `acl-113c` Never near Publish #review
+        The switch's own label goes through `wizard_guard.forbidden_click_reason`
+        before the click. It reads "On/off" and never matches, which is the
+        point: the guard is there for the day we grab a different element.
+        Until now the `^Publish$` rule sat in `rpa_forbidden_zones.yaml`
+        connected only to the creation wizard.
+  - [ ] `acl-113d` Reading an account takes one and a half to three minutes #next @rpa
+        One visit for the campaigns, then one per campaign for its ads. At
+        twenty-five campaigns it hits the ceiling and the person waits five
+        minutes. Two honest ways out: read a campaign's ads when that campaign
+        is expanded rather than up front, or skip campaigns that are off and
+        have no spend. Neither is free — the first makes expanding slow, the
+        second hides rows.
+  - [ ] `acl-113e` The screen is not stolen, but the profile still is #next @rpa
+        The read no longer raises the profile window (the tab is created with
+        CDP's `background: true`; `context.new_page()` does not pass it). But
+        the profile is busy for minutes and one profile runs at a time, so a
+        second account waits. Worth knowing before ten buyers use this.
 - [x] `acl-118` Read an account's ad sets and ads with ids and on/off state #review @rpa
       What the toggle stands on. The Read button already goes to that screen for
       spend: attach to the open profile, never start one, verify the ad account,
@@ -656,6 +691,22 @@ python scripts/acl_board.py --render
       the switch `on` and delivery `Campaign off` — switched on, delivering
       nothing. A boolean would have shown them running.
       Open for `acl-113`: the live ad row carries no link to its ad set.
+      **12 September, two corrections.** The tree walks **campaigns**, not ad
+      sets (see `acl-113`), and the flat ad list turned out to be lying: it
+      returned six rows worth $661 against the account's $2,117, while walking
+      the parents gave twenty-one worth $1,957 — one campaign alone has six.
+      The view tab honestly said "All ads"; what narrowed the list, the page
+      does not say. It is no longer read.
+      Ads come from `selected_campaign_ids`, so a parent is known by
+      construction rather than read off the page — the "Ad set name" column
+      exists in the header but has no cell in the row.
+      Also fixed here: the account's own status. The search was for a phrase I
+      invented ("account is restricted"); Meta writes "**We** restricted your
+      ad account". With that fixed it still passed as "no warning", because the
+      status was asked a moment after the grid drew and the banner arrives
+      later — the wait is now bounded and only a quiet page pays for it. And a
+      second layer: an unrecognised banner with "You can't run ads" reports
+      `blocked` in Meta's own words rather than silence.
       GitHub: **ACL-1124** (#124), Data & Reporting, Feature, Review, High,
       Release.
         Pausing stops money; publishing spends it. The rule that the RPA does
