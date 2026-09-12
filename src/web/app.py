@@ -2569,8 +2569,17 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
         date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""), str(form.get("span") or ""))
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    # В отдельный поток, а не здесь. Playwright тут синхронный, и вызов его из
+    # работающего цикла asyncio кончается `RuntimeError: Cannot enter into
+    # task ... while another task is being executed` — то есть выключение
+    # падает, ни разу не тронув страницу. Чтение по той же причине живёт в
+    # своём потоке (`start_read`); я про это забыл, и первое же живое нажатие
+    # 12.09 упёрлось ровно в это.
+    from starlette.concurrency import run_in_threadpool
+
     try:
-        result = account_spend.turn_off(
+        result = await run_in_threadpool(
+            account_spend.turn_off,
             account, level, object_id,
             parent_id=(form.get("parent_id") or "").strip(),
             expected_name=(form.get("name") or "").strip(),
