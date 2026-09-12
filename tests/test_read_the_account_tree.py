@@ -412,3 +412,78 @@ def test_a_broken_tree_does_not_lose_the_spend():
     assert spend_set < tree_call, "дерево читается до того, как спенд принят"
     tail = body[tree_call:]
     assert "except Exception" in tail, "исключение в дереве уронит готовый результат"
+
+
+# ── какой вид списка выбран ───────────────────────────────────────────────
+#
+# 12.09 выяснилось, что «All ads» и «Active ads» — разные списки, а какой из
+# них открыт, Meta не пишет нигде: ни aria-selected, ни aria-current, ни
+# tabindex. Единственное отличие выбранной вкладки — цвет подчёркивания:
+# синий против серого у остальных.
+#
+# Значение этого не косметическое. Шесть строк в «Active ads» и шесть в «All
+# ads» выглядят одинаково и значат разное, а человек по ним решает, что
+# останавливать.
+
+def _tabs(names, underline):
+    """Вкладки видов: подчёркивание рисуется дочерним блоком, как у Meta."""
+    cells = "".join(
+        f'<div data-surface="/am/search_and_filter/quickviewTabGroup/quickviewTab">'
+        f'<div style="border-bottom: 1px solid {c}">{n}</div></div>'
+        for n, c in zip(names, underline)
+    )
+    return f'<div data-surface="/am/search_and_filter/quickviewTabGroup">{cells}</div>'
+
+
+BLUE, GREY = "rgb(10, 120, 190)", "rgb(203, 210, 217)"
+VIEWS = ("All ads", "Actions", "Had delivery", "Active ads")
+
+
+def _with_tabs(rows_html, underline):
+    return _tabs(VIEWS, underline) + rows_html
+
+
+def test_the_open_view_is_named(page):
+    page.set_content(_with_tabs(
+        _grid([_row("120250178859040703", "CAMPAIGN", "SA_ARM", "Active", "true")]),
+        (BLUE, GREY, GREY, GREY),
+    ))
+    _, how, err = sp.read_level(page, "adset")
+    assert not err, err
+    assert how == "data-surface(All ads)", f"вид не назван: {how}"
+
+
+def test_another_view_is_named_too(page):
+    """Тот случай, ради которого это и сделано: список неполон, и видно почему."""
+    page.set_content(_with_tabs(
+        _grid([_row("120250178859040703", "CAMPAIGN", "SA_ARM", "Active", "true")]),
+        (GREY, GREY, GREY, BLUE),
+    ))
+    _, how, _ = sp.read_level(page, "adset")
+    assert how == "data-surface(Active ads)"
+
+
+def test_the_odd_one_out_is_found_by_difference_not_by_colour(page):
+    """Тема у Meta меняется, а «выбранная одна и подчёркнута иначе» — нет."""
+    page.set_content(_with_tabs(
+        _grid([_row("120250178859040703", "CAMPAIGN", "SA_ARM", "Active", "true")]),
+        ("rgb(255, 0, 0)", "rgb(1, 2, 3)", "rgb(1, 2, 3)", "rgb(1, 2, 3)"),
+    ))
+    _, how, _ = sp.read_level(page, "adset")
+    assert how == "data-surface(All ads)"
+
+
+def test_two_odd_ones_mean_the_rule_broke_and_it_says_nothing(page):
+    """Назвать вид наугад хуже, чем не назвать: по нему будут решать."""
+    page.set_content(_with_tabs(
+        _grid([_row("120250178859040703", "CAMPAIGN", "SA_ARM", "Active", "true")]),
+        (BLUE, "rgb(9, 9, 9)", GREY, GREY),
+    ))
+    _, how, _ = sp.read_level(page, "adset")
+    assert how == "data-surface", f"вид назван, хотя правило не сработало: {how}"
+
+
+def test_no_tabs_at_all_is_not_a_view(page):
+    page.set_content(_grid([_row("120250178859040703", "CAMPAIGN", "SA_ARM", "Active", "true")]))
+    _, how, _ = sp.read_level(page, "adset")
+    assert how == "data-surface"
