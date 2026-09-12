@@ -35,6 +35,10 @@
       "title": "Reject unsafe or incomplete country spend readings",
       "state": "created",
       "issue": 119
+    },
+    "a0307efac7200ae4e79f3f9ae58bbe37125922d15dbaa98024dc20ab030ffa5d": {
+      "title": "Two tests blink in a full run",
+      "state": "creating"
     }
   }
 }
