@@ -131,3 +131,49 @@ def test_an_ordinary_page_is_still_clear():
         "Campaigns Ad sets Ads Results from 5 campaigns Amount spent Reach Impressions"
     ))
     assert state == "clear"
+
+
+# ══ спрашивать рано — всё равно что не спрашивать ═════════════════════════
+#
+# 12.09: ограниченный кабинет прошёл как `clear` **уже с исправленными
+# формулировками**. Статус спрашивали через мгновение после отрисовки грида, а
+# баннер Meta приходит отдельным запросом и позже. Ручная проверка ждала шесть
+# секунд и видела его.
+
+class _Later:
+    """Страница, на которой баннер появляется не сразу."""
+
+    def __init__(self, text: str, after: int):
+        self.text, self.after, self.looks = text, after, 0
+
+    def inner_text(self, _sel):
+        self.looks += 1
+        return self.text if self.looks > self.after else "Campaigns Ad sets Ads"
+
+
+def test_a_banner_that_arrives_late_is_still_found(monkeypatch):
+    monkeypatch.setattr(sp, "_sleep", lambda s: None)
+    page = _Later(RESTRICTED, after=4)
+    state, _ = sp._read_status(page)
+    assert state == "restricted", "спросили один раз и решили, что чисто"
+
+
+def test_a_quiet_page_is_not_waited_on_forever(monkeypatch):
+    monkeypatch.setattr(sp, "_sleep", lambda s: None)
+    page = _Later("Campaigns Ad sets Ads", after=999)
+    state, _ = sp._read_status(page)
+    assert state == "clear"
+    assert page.looks == sp.STATUS_TRIES, "число попыток не то, что объявлено"
+
+
+def test_a_named_answer_is_returned_at_once(monkeypatch):
+    """Платит за ожидание только чистая страница."""
+    monkeypatch.setattr(sp, "_sleep", lambda s: None)
+    page = _Later(RESTRICTED, after=0)
+    sp._read_status(page)
+    assert page.looks == 1, "нашли банер и всё равно ждали"
+
+
+def test_the_wait_is_seconds_not_minutes():
+    """Столько живой аккаунт ждать не жалко, а дольше — уже заметно человеку."""
+    assert 3 <= sp.STATUS_TRIES * sp.STATUS_PAUSE_S <= 15
