@@ -630,7 +630,11 @@ python scripts/acl_board.py --render
       line. That is the part of `acl-117` without which the action could not
       ship: "something changed yesterday" is not an answer.
       Branch `feature/acl-113-toggle-in-the-tree`, stacked on `acl-118`.
-      GitHub: #23.
+      GitHub: **#23, still To Do there** — the tracker will not move it to
+      Review while its dependency (ACL-1124 / PR #125) is unmerged, and that
+      rule is the team's. The work is done and confirmed live; the state in
+      GitHub follows the merge, not the keyboard. Do not read the two as
+      disagreeing.
   - [x] `acl-113a` Close a campaign #review
         Starting it again is deliberately out of scope — see "only turning
         off" above.
