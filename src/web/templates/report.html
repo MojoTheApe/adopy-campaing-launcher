@@ -1912,7 +1912,7 @@
       flex: 0 0 4.6rem; color: var(--muted); font-size: 0.7rem;
       text-transform: uppercase; letter-spacing: 0.04em;
     }
-    /* Стрелка ad set'а. Пустое место вместо неё держит ту же ширину, иначе
+    /* Стрелка кампании. Пустое место вместо неё держит ту же ширину, иначе
        строки без объявлений разъезжаются относительно остальных. */
     .amap-tree-caret, .amap-tree-caret-off {
       flex: 0 0 1rem; font-size: 0.7rem; line-height: 1; text-align: left;
@@ -4603,7 +4603,7 @@ function amapApplyReading(account, s) {
 }
 
 /* ── Что в аккаунте на самом деле (acl-113) ─────────────────────────────
-   Read приносит не только число, но и ad set'ы с объявлениями: их id,
+   Read приносит не только число, но и кампании с объявлениями: их id,
    положение тумблера и доставку словами Meta (ACL-1124). До этой правки всё
    это приходило и пропадало — рисовать было нечем.
 
@@ -4619,7 +4619,7 @@ function amapTreeLine(o, adCount) {
   var line = document.createElement('div');
   line.className = 'amap-tree-line' + (o.level === 'ad' ? ' ad' : '');
 
-  /* У ad set'а с объявлениями — своя стрелка. Кнопкой, а не значком: её
+  /* У кампании с объявлениями — своя стрелка. Кнопкой, а не значком: её
      нажимают, и с клавиатуры тоже. Пустое место вместо неё держит ширину,
      чтобы строки не разъезжались. */
   if (o.level !== 'ad' && adCount) {
@@ -4627,7 +4627,7 @@ function amapTreeLine(o, adCount) {
     caret.type = 'button';
     caret.className = 'amap-tree-caret';
     caret.textContent = '▸';
-    caret.setAttribute('aria-label', adCount + ' ads in ' + (o.name || 'this ad set'));
+    caret.setAttribute('aria-label', adCount + ' ads in ' + (o.name || 'this campaign'));
     line.appendChild(caret);
   } else {
     var gap = document.createElement('span');
@@ -4637,7 +4637,7 @@ function amapTreeLine(o, adCount) {
 
   var kind = document.createElement('span');
   kind.className = 'amap-tree-kind';
-  kind.textContent = o.level === 'ad' ? 'ad' : 'ad set';
+  kind.textContent = o.level === 'ad' ? 'ad' : 'campaign';
   if (o.level !== 'ad' && adCount) kind.textContent += ' · ' + adCount;
 
   var sw = document.createElement('span');
@@ -4662,7 +4662,7 @@ function amapTreeLine(o, adCount) {
 
   /* Числа — теми же словами, какими их написала Meta. Имя и состояние говорят,
      ЧТО это; спенд и результаты — зачем это трогать. Пять одинаково включённых
-     ad set'ов без чисел выглядят одинаково, а остановить надо тот, что тратит
+     кампаний без чисел выглядят одинаково, а остановить надо тот, что тратит
      без лидов.
 
      Пусто остаётся пустым: у черновика спенда ещё не бывает, и «$0» было бы
@@ -4683,7 +4683,7 @@ function amapTreeLine(o, adCount) {
 }
 
 /* ── Покрывают ли строки спенд аккаунта ────────────────────────────────
-   На живом аккаунте 12.09 пять ad set'ов сложились в итог копейка в копейку
+   На живом аккаунте 12.09 пять кампаний сложились в итог копейка в копейку
    ($2 117.46), а шесть объявлений дали $661.57 из тех же денег. Прокрутка
    новых строк не добавила — это весь список, который отдаёт страница.
 
@@ -4789,22 +4789,22 @@ function amapPaintTree(row, s) {
   head.className = 'amap-tree-head';
   var sets = objects.filter(function (o) { return o.level !== 'ad'; }).length;
   var ads = objects.length - sets;
-  head.textContent = 'in the account · ' + sets + ' ad sets · ' + ads + ' ads · read ' + (s.finished_at || '');
+  head.textContent = 'in the account · ' + sets + ' campaigns · ' + ads + ' ads · read ' + (s.finished_at || '');
   box.appendChild(head);
 
-  /* Объявления встают под свой ad set, а не общим списком следом. Порядок
+  /* Объявления встают под свою кампанию, а не общим списком следом. Порядок
      задаёт `parent_id`, который чтение знает по построению: список
-     объявлений спрашивается по одному ad set'у за раз.
+     объявлений спрашивается по одной кампании за раз.
 
-     Осиротевшие — те, чей ad set в ответе не пришёл, — идут в конец под своим
+     Осиротевшие — те, чья кампания в ответе не пришла, — идут в конец под своим
      заголовком. Приписать их к последнему попавшемуся было бы хуже всего: по
      этим строкам решают, что останавливать. */
-  var sets = objects.filter(function (o) { return o.level !== 'ad'; });
+  var sets = objects.filter(function (o) { return o.level !== 'ad'; });  // кампании
   var ads = objects.filter(function (o) { return o.level === 'ad'; });
   var placed = {};
 
-  /* Объявления свёрнуты под своим ad set'ом. У DQ438 их 99 на десять ad
-     set'ов: раскрытые разом, они уезжали на километр и прятали всё, что ниже
+  /* Объявления свёрнуты под своей кампанией. У DQ438 их 99 на десять
+     кампаний: раскрытые разом, они уезжали на километр и прятали всё, что ниже
      по карте. Раскрытое человеком запоминается и переживает перечитывание —
      иначе после каждого Read пришлось бы открывать заново. */
   var openSets = (row.dataset.openSets || '').split(',').filter(Boolean);
@@ -4836,15 +4836,15 @@ function amapPaintTree(row, s) {
   if (orphans.length) {
     var lost = document.createElement('div');
     lost.className = 'amap-tree-head';
-    lost.textContent = orphans.length + ' ads whose ad set is not in this answer';
+    lost.textContent = orphans.length + ' ads whose campaign is not in this answer';
     box.appendChild(lost);
     orphans.forEach(function (a) { box.appendChild(amapTreeLine(a)); });
   }
 
-  /* Оговорка идёт по каждому уровню отдельно: ad set'ы могут сойтись копейка
+  /* Оговорка идёт по каждому уровню отдельно: кампании могут сойтись копейка
      в копейку, а объявления нет — так и было на живом аккаунте. Общая фраза
      про «строки» заставила бы усомниться и в тех, что сходятся. */
-  [['adset', 'ad sets'], ['ad', 'ads']].forEach(function (pair) {
+  [['campaign', 'campaigns'], ['ad', 'ads']].forEach(function (pair) {
     var gap = amapCoverage(objects, pair[0], s.spend);
     if (!gap) return;
     var note = document.createElement('div');

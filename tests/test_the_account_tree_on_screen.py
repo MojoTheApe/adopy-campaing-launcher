@@ -88,7 +88,7 @@ def _note(page):
     )
 
 
-ADSET = {"level": "adset", "id": "120250178859040703", "name": "SA_ARM_iOS_IMG_Reading_30_6.9",
+ADSET = {"level": "campaign", "id": "120250178859040703", "name": "SA_ARM_iOS_IMG_Reading_30_6.9",
          "switch": "on", "switch_label": "On/off", "delivery": "Active",
          "spend": "$412.02", "results": "18 Leads (Form)",
          "cost_per_result": "$22.89 Per Lead (Form)"}
@@ -157,14 +157,14 @@ def test_each_line_says_what_it_is(page):
       title: l.querySelector('.amap-tree-name').title,
       ad: l.classList.contains('ad'),
     }))""")
-    assert [g["kind"] for g in got] == ["ad set", "ad"]
+    assert [g["kind"] for g in got] == ["campaign", "ad"]
     assert got[0]["name"] == "SA_ARM_iOS_IMG_Reading_30_6.9"
     assert "120250178859040703" in got[0]["title"], "id негде посмотреть"
     assert got[1]["ad"] is True, "объявление не отступлено под своим уровнем"
 
 
 def test_the_numbers_say_why_to_touch_it(page):
-    """Имя и состояние говорят, ЧТО это. Пять одинаково включённых ad set'ов
+    """Имя и состояние говорят, ЧТО это. Пять одинаково включённых кампаний
     без чисел выглядят одинаково, а остановить надо тот, что тратит без лидов.
     """
     _paint(page, [ADSET])
@@ -190,7 +190,7 @@ def test_a_row_without_numbers_stays_blank(page):
 def test_the_header_counts_both_levels(page):
     _paint(page, [ADSET, ADSET, AD])
     head = page.evaluate("() => document.querySelector('.amap-tree-head').textContent")
-    assert "2 ad sets" in head and "1 ads" in head
+    assert "2 campaigns" in head and "1 ads" in head
     assert "23:07:51" in head, "не сказано, когда читали — состояние живого аккаунта стареет"
 
 
@@ -347,7 +347,7 @@ def test_the_only_listener_is_the_one_that_opens_it():
 
 # ── покрывают ли строки спенд аккаунта ────────────────────────────────────
 #
-# На живом аккаунте 12.09 пять ad set'ов сложились в итог копейка в копейку
+# На живом аккаунте 12.09 пять кампаний сложились в итог копейка в копейку
 # ($2 117.46), а шесть объявлений дали $661.57 из тех же денег. Прокрутка
 # новых строк не добавила — это весь список, который отдаёт страница.
 #
@@ -374,7 +374,7 @@ def test_the_gap_is_said_out_loud(page):
 def test_the_level_that_adds_up_is_not_doubted(page):
     """Общая фраза про «строки» заставила бы усомниться и в тех, что сходятся."""
     _paint(page, LIVE_SETS + LIVE_ADS, spend=2117.46)
-    assert "ad sets" not in _note(page)[0]
+    assert "campaigns" not in _note(page)[0]
 
 
 def test_rows_that_cover_the_total_say_nothing(page):
@@ -413,9 +413,9 @@ def test_the_note_explains_itself(page):
     assert "Deleted items" in title and "view switcher" in title
 
 
-# ── объявления под своим ad set'ом ────────────────────────────────────────
+# ── объявления под своим кампанией ────────────────────────────────────────
 #
-# Пока связи не было, объявления шли общим списком следом за ad set'ами, и
+# Пока связи не было, объявления шли общим списком следом за кампаниими, и
 # понять, чьё какое, было нельзя. Чтение теперь спрашивает их по одному ad
 # set'у за раз (ACL-1124), и `parent_id` известен по построению.
 
@@ -432,13 +432,13 @@ def _names(page):
         .map(l => l.querySelector('.amap-tree-name').textContent)""")
 
 
-def test_ads_stand_under_their_own_ad_set(page):
+def test_ads_stand_under_their_own_campaign(page):
     _paint(page, [SET_A, SET_B,
                   _ad("a1", "11111111"), _ad("b1", "22222222"), _ad("a2", "11111111")])
     assert _names(page) == ["set A", "a1", "a2", "set B", "b1"]
 
 
-def test_an_ad_set_without_ads_is_still_shown(page):
+def test_a_campaign_without_ads_is_still_shown(page):
     """Пустой ad set — это ответ: он есть и в нём ничего не крутится."""
     _paint(page, [SET_A, SET_B, _ad("b1", "22222222")])
     assert _names(page) == ["set A", "set B", "b1"]
@@ -453,7 +453,7 @@ def test_an_ad_is_never_guessed_into_a_neighbour(page):
     heads = page.evaluate(
         "() => Array.from(document.querySelectorAll('.amap-tree-head')).map(h => h.textContent)"
     )
-    assert any("whose ad set is not in this answer" in h for h in heads), heads
+    assert any("whose campaign is not in this answer" in h for h in heads), heads
 
 
 def test_an_ad_without_a_parent_is_an_orphan_too(page):
@@ -461,15 +461,15 @@ def test_an_ad_without_a_parent_is_an_orphan_too(page):
     heads = page.evaluate(
         "() => Array.from(document.querySelectorAll('.amap-tree-head')).map(h => h.textContent)"
     )
-    assert any("1 ads whose ad set" in h for h in heads), heads
+    assert any("1 ads whose campaign" in h for h in heads), heads
 
 
 # ── ad set тоже раскрывается ──────────────────────────────────────────────
 #
-# У DQ438 десять ad set'ов и 99 объявлений: раскрытые разом, они уезжали на
+# У DQ438 десять кампаний и 99 объявлений: раскрытые разом, они уезжали на
 # километр и прятали всё, что ниже по карте.
 
-def test_ads_start_hidden_under_their_ad_set(page):
+def test_ads_start_hidden_under_their_campaign(page):
     _paint(page, [SET_A, _ad("a1", "11111111"), _ad("a2", "11111111")])
     _open(page)  # дерево свёрнуто само по себе — считаем видимое внутри раскрытого
     got = page.evaluate("""() => ({
@@ -482,7 +482,7 @@ def test_ads_start_hidden_under_their_ad_set(page):
     assert got["visible"] == 1, "объявления видны, хотя ad set свёрнут"
 
 
-def test_the_ad_set_arrow_opens_its_ads(page):
+def test_the_campaign_arrow_opens_its_ads(page):
     _paint(page, [SET_A, _ad("a1", "11111111"), _ad("a2", "11111111")])
     _open(page)  # само дерево
     page.evaluate("() => document.querySelector('.amap-tree-caret').click()")
@@ -491,14 +491,14 @@ def test_the_ad_set_arrow_opens_its_ads(page):
     assert page.evaluate("() => document.querySelector('.amap-tree-kids').hidden") is True
 
 
-def test_a_collapsed_ad_set_still_says_how_many(page):
+def test_a_collapsed_campaign_still_says_how_many(page):
     """Иначе свёрнутая строка молчит о том, есть ли под ней что-нибудь."""
     _paint(page, [SET_A, _ad("a1", "11111111"), _ad("a2", "11111111")])
     kind = page.evaluate("() => document.querySelector('.amap-tree-kind').textContent")
-    assert kind == "ad set · 2"
+    assert kind == "campaign · 2"
 
 
-def test_an_ad_set_without_ads_has_no_arrow(page):
+def test_a_campaign_without_ads_has_no_arrow(page):
     """Раскрывать нечего, а стрелка обещала бы, что есть."""
     _paint(page, [SET_A])
     got = page.evaluate("""() => ({
@@ -509,7 +509,7 @@ def test_an_ad_set_without_ads_has_no_arrow(page):
     assert got["gaps"] == 1, "без заглушки строки разъедутся"
 
 
-def test_an_opened_ad_set_stays_open_after_a_re_read(page):
+def test_an_opened_campaign_stays_open_after_a_re_read(page):
     """Иначе после каждого Read пришлось бы открывать заново."""
     _paint(page, [SET_A, _ad("a1", "11111111")])
     page.evaluate("() => document.querySelector('.amap-tree-caret').click()")
@@ -518,7 +518,7 @@ def test_an_opened_ad_set_stays_open_after_a_re_read(page):
     assert page.evaluate("() => document.querySelector('.amap-tree-caret').classList.contains('open')")
 
 
-def test_each_ad_set_opens_on_its_own(page):
+def test_each_campaign_opens_on_its_own(page):
     _paint(page, [SET_A, SET_B, _ad("a1", "11111111"), _ad("b1", "22222222")])
     page.evaluate("() => document.querySelectorAll('.amap-tree-caret')[1].click()")
     got = page.evaluate(
