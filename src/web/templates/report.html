@@ -1945,6 +1945,13 @@
     }
     .amap-tree-num.spend { color: inherit; }
     .amap-tree-err { color: var(--danger); font-size: 0.75rem; padding-top: 0.3rem; }
+    /* Включённая строка — кнопка: её можно выключить. Выключенная и
+       «непонятно» остаются надписями, нажимать там нечего. */
+    button.amap-tree-sw { cursor: pointer; font-family: inherit; }
+    button.amap-tree-sw:hover { border-color: var(--danger); color: var(--danger); }
+    .amap-tree-sw.arming { flex-basis: 5rem; border-color: var(--danger); color: var(--danger); }
+    .amap-tree-sw.failed { border-style: dashed; }
+    button.amap-tree-sw:disabled { opacity: 0.6; cursor: default; }
     /* Оговорка, а не отказ: строки настоящие, просто их меньше, чем денег. */
     .amap-tree-note {
       color: var(--warn, var(--muted)); font-size: 0.73rem;
@@ -4640,7 +4647,13 @@ function amapTreeLine(o, adCount) {
   kind.textContent = o.level === 'ad' ? 'ad' : 'campaign';
   if (o.level !== 'ad' && adCount) kind.textContent += ' · ' + adCount;
 
-  var sw = document.createElement('span');
+  /* Включённое можно выключить, и только это. Включить отсюда нельзя
+     (решение владельца 12.09): выключение денег не тратит, включение тратит,
+     и обратный ход человек делает руками в Ads Manager, где видит
+     последствия. Поэтому кнопкой становится только `on`; `off` и «непонятно»
+     остаются надписями — нажимать там нечего. */
+  var live = o.switch === 'on';
+  var sw = document.createElement(live ? 'button' : 'span');
   var state = o.switch === 'on' ? 'on' : o.switch === 'off' ? 'off' : 'dim';
   sw.className = 'amap-tree-sw ' + state;
   sw.textContent = o.switch === 'on' ? 'On' : o.switch === 'off' ? 'Off' : '—';
@@ -4648,7 +4661,16 @@ function amapTreeLine(o, adCount) {
      остановленным то, что тратит деньги. */
   sw.title = o.switch === 'unknown'
     ? 'No switch found in this row — not the same as switched off'
-    : (o.switch_label || 'On/off');
+    : live
+      ? 'Turn off. It cannot be turned back on from here — that is done in Ads Manager.'
+      : (o.switch_label || 'On/off');
+  if (live) {
+    sw.type = 'button';
+    sw.dataset.level = o.level;
+    sw.dataset.objectId = o.id || '';
+    sw.dataset.parentId = o.parent_id || '';
+    sw.dataset.name = o.name || '';
+  }
 
   var name = document.createElement('span');
   name.className = 'amap-tree-name';
@@ -4883,6 +4905,106 @@ function amapPaintTree(row, s) {
   });
 }
 
+/* ── Выключить строку ────────────────────────────────────────────────────
+   Первое, чем дешборд меняет живой аккаунт, а не читает его. Отсюда три
+   решения, каждое стоит объяснения.
+
+   **Только выключение.** Кнопкой становится лишь включённая строка. Включить
+   отсюда нельзя: выключение денег не тратит, включение тратит, и обратный ход
+   человек делает руками в Ads Manager, где видит последствия.
+
+   **Нажатие в два шага.** Отдельного диалога владелец не хотел, и его нет:
+   первое нажатие превращает «On» в «Turn off?», второе выключает, а через
+   несколько секунд или по нажатию мимо всё возвращается. Промах мышью не
+   должен останавливать кампанию, которая крутит деньги.
+
+   **Ответ дословный.** Что вышло, пишем её же словами и не подкрашиваем
+   успехом: «нажали, но тумблер не стал выключенным» — это не успех. */
+var AMAP_CONFIRM_MS = 4000;
+
+function amapTurnOffAsk(btn) {
+  if (btn.dataset.armed === '1') { amapTurnOffDo(btn); return; }
+  amapTurnOffDisarm();
+  btn.dataset.armed = '1';
+  btn.dataset.was = btn.textContent;
+  btn.textContent = 'Turn off?';
+  btn.classList.add('arming');
+  btn.dataset.timer = String(setTimeout(function () { amapTurnOffDisarm(); }, AMAP_CONFIRM_MS));
+}
+
+function amapTurnOffDisarm() {
+  document.querySelectorAll('.amap-tree-sw[data-armed="1"]').forEach(function (b) {
+    clearTimeout(Number(b.dataset.timer || 0));
+    b.textContent = b.dataset.was || 'On';
+    b.classList.remove('arming');
+    delete b.dataset.armed;
+  });
+}
+
+function amapTurnOffDo(btn) {
+  clearTimeout(Number(btn.dataset.timer || 0));
+  delete btn.dataset.armed;
+  btn.classList.remove('arming');
+
+  /* Аккаунт берём из строки над деревом — той самой, под которой оно стоит.
+     Держать его копию в кнопке значило бы завести второй источник правды. */
+  var row = btn.closest('.amap-tree');
+  var account = row && row.previousElementSibling
+    ? (row.previousElementSibling.querySelector('.amap-live') || {}).dataset : null;
+  account = account ? account.account : '';
+  var per = amapPeriod();
+  if (!account || !per.from || per.span === 'all') {
+    amapTurnOffSaid(btn, 'failed', 'Pick the dates first — we act on what is on screen.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '…';
+  var body = new URLSearchParams({
+    account: account, level: btn.dataset.level || '', object_id: btn.dataset.objectId || '',
+    parent_id: btn.dataset.parentId || '', name: btn.dataset.name || '',
+    date_from: per.from, date_to: per.to, span: per.span || '',
+  });
+  fetch('/account-spend/turn-off', {
+    method: 'POST', credentials: 'same-origin', body: body,
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j || !j.ok) throw new Error((j && j.error) || 'no answer');
+      var res = j.result || {};
+      if (res.state === 'off' || res.state === 'already_off') {
+        amapTurnOffSaid(btn, res.state, res.how || '');
+      } else {
+        amapTurnOffSaid(btn, 'failed', res.error || 'did not turn off');
+      }
+    })
+    .catch(function (e) { amapTurnOffSaid(btn, 'failed', String((e && e.message) || e)); });
+}
+
+function amapTurnOffSaid(btn, state, words) {
+  btn.disabled = false;
+  if (state === 'off' || state === 'already_off') {
+    /* Кнопка становится надписью: включить отсюда нельзя, и оставлять
+       нажимаемым то, что больше ничего не делает, — обман. */
+    var done = document.createElement('span');
+    done.className = 'amap-tree-sw off';
+    done.textContent = 'Off';
+    done.title = (state === 'already_off' ? 'It was already off. ' : 'Turned off. ')
+      + (words || '') + ' Turning it back on is done in Ads Manager.';
+    btn.replaceWith(done);
+    return;
+  }
+  btn.className = 'amap-tree-sw on failed';
+  btn.textContent = 'On';
+  btn.title = 'Did not turn off: ' + words;
+}
+
+document.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('.amap-tree-sw[data-object-id]') : null;
+  if (btn) { amapTurnOffAsk(btn); return; }
+  amapTurnOffDisarm();
+});
+
 function amapPollSpend(account, cell, btn, tries, per) {
   per = per || amapPeriod();
   if (!per.from || per.span === 'all') return;
@@ -4904,6 +5026,8 @@ function amapPollSpend(account, cell, btn, tries, per) {
       .catch(function (e) { amapApplyReading(account, {state: 'failed', error: String(e && e.message || e)}); });
   }, 3000);
 }
+
+
 
 function amapResumeReadings() {
   var seen = {};
