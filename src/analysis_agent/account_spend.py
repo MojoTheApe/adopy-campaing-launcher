@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import tempfile
 import os
 import threading
@@ -179,7 +180,7 @@ class SpendReading:
     status: str = ""              # см. _read_status: clear | disabled | restricted | review | unknown
     status_text: str = ""         # словами страницы — человеку с этим идти и разбираться
 
-    #: Дерево аккаунта: ad set'ы и объявления с их id и положением тумблера.
+    #: Дерево аккаунта: кампании и объявления с их id и положением тумблера.
     #: Читается тем же нажатием, что и спенд (решение владельца 11.09) — см.
     #: `_read_tree`. Неудача дерева не отменяет спенд: это разные ответы, и
     #: терять прочитанное число из-за второго — хуже, чем вернуть его без
@@ -1278,7 +1279,7 @@ def _shoot(page, account: str, day: str) -> str:
         return ""
 
 
-# ══ Дерево аккаунта: ad set'ы и объявления ════════════════════════════════
+# ══ Дерево аккаунта: кампании и объявления ════════════════════════════════
 #
 # То, на что встанет переключатель (`acl-113`). Строки, которые дешборд рисует
 # под аккаунтом сегодня, приходят из книги статистики: у них есть имя и нет
@@ -1328,7 +1329,7 @@ TREE_MAX_PARENTS = 25
 class AdObject:
     """Одна строка списка: то, что нужно, чтобы её показать и переключить."""
 
-    level: str                # adset | ad
+    level: str                # campaign | adset | ad
     id: str = ""              # id объекта в Meta
     name: str = ""            # как аккаунт его называет
     switch: str = "unknown"   # on | off | unknown — положение тумблера
@@ -1412,7 +1413,7 @@ _TOTALS_ROW_ID = "-1"
 #: Идём по `data-surface` — собственной разметке Meta для её же логов. Она
 #: несёт и id строки, и назначение ячейки:
 #:
-#:     /am/table/table_row:120250178859040703unit/table_cell:forObjectType(name,CAMPAIGN)
+#:     /am/table/table_row:123456789000000001unit/table_cell:forObjectType(name,CAMPAIGN)
 #:
 #: Первая версия искала `role="row"` и `role="cell"` и не нашла ни одной
 #: строки: у грида Ads Manager размечен заголовком только он сам —
@@ -1426,8 +1427,18 @@ _TOTALS_ROW_ID = "-1"
 _READ_TREE_JS = r"""
 (level) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-  const t = document.querySelector('[role="table"], [role="grid"]');
-  if (!t) return {rows: [], how: 'no-table', kinds: []};
+  const visible = (el) => el.getClientRects().length > 0 &&
+    !el.closest('[hidden], [aria-hidden="true"]') &&
+    getComputedStyle(el).visibility !== 'hidden';
+  const tables = Array.from(document.querySelectorAll('[role="table"], [role="grid"]'))
+    .filter(visible).filter(el => !el.parentElement.closest('[role="table"], [role="grid"]'));
+  const refuse = (how) => ({rows: [], how, kinds: [], error: how});
+  if (!tables.length) return refuse('no-table');
+  if (tables.length !== 1) return refuse('ambiguous-tables');
+  const t = tables[0];
+  if (t.closest('[aria-busy="true"]') ||
+      Array.from(t.querySelectorAll('[aria-busy="true"], [role="progressbar"]')).some(visible))
+    return refuse('table-loading');
 
   const marked = t.querySelectorAll('[data-surface*="table_row:"]');
   if (!marked.length) return {rows: [], how: 'no-row-surfaces', kinds: []};
@@ -1438,6 +1449,7 @@ _READ_TREE_JS = r"""
   const KIND = /forObjectType\((?:name|toggle|delivery),([A-Z_]+)\)/;
 
   for (const el of marked) {
+    if (!visible(el)) continue;
     const m = (el.getAttribute('data-surface') || '').match(CELL);
     if (!m) continue;
     const id = m[1], cell = m[2];
@@ -1446,11 +1458,14 @@ _READ_TREE_JS = r"""
     let r = rows.get(id);
     if (!r) {
       r = {id: id, name: '', delivery: '', switch: 'unknown', switch_label: '',
-           id_from: 'data-surface', spend: '', results: '', cost_per_result: ''};
+           id_from: 'data-surface', spend: '', results: '', cost_per_result: '', kinds: []};
       rows.set(id, r);
     }
     const k = cell.match(KIND);
-    if (k) kinds.add(k[1]);
+    if (k) {
+      kinds.add(k[1]);
+      if (!r.kinds.includes(k[1])) r.kinds.push(k[1]);
+    }
 
     // Одна и та же разметка висит на нескольких вложенных узлах: берём первое
     // непустое, а не последнее — внутренние копии часто пустые.
@@ -1508,8 +1523,15 @@ _READ_TREE_JS = r"""
     }
   }
 
+  // Ads Manager can virtualize rows outside a scrollable list. This snapshot
+  // cannot certify that it contains the entire account; expose that limit.
+  const containers = [t, ...t.querySelectorAll('*')];
+  for (let el = t.parentElement; el; el = el.parentElement) containers.push(el);
+  const scrollable = containers.some(el => visible(el) &&
+    /auto|scroll/.test(getComputedStyle(el).overflowY) &&
+    el.scrollHeight > el.clientHeight + 2);
   return {rows: Array.from(rows.values()), how: 'data-surface',
-          kinds: Array.from(kinds), view: view};
+          kinds: Array.from(kinds), view: view, partial: scrollable};
 }
 """
 
@@ -1540,7 +1562,19 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         # список «All ads» — разные списки, и одинаково выглядящее число
         # строк в них значит разное.
         how = f"{how}({view})"
+    if got.get("error"):
+        return [], how, f"таблица {level}: {got['error']}"
     rows = got.get("rows") or []
+    want = _LEVEL_KIND[level]
+    # Every accepted object must identify itself, not borrow another row's kind.
+    if not isinstance(rows, list) or any(
+        not isinstance(r, dict)
+        or not re.fullmatch(r"[0-9]+", str(r.get("id") or ""))
+        or not str(r.get("name") or "").strip()
+        or set(r.get("kinds") or []) != {want}
+        for r in rows
+    ):
+        return [], how, f"таблица {level}: строка не подтвердила id, имя или что это за объекты ({want})"
     objects = [
         AdObject(
             level=level,
@@ -1574,7 +1608,11 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         )
     if not kinds:
         return [], how, f"на уровне {level} страница не сказала, что это за объекты"
-    return objects, how, ""
+    warning = (
+        "прочитаны отрисованные строки; список прокручивается, полнота не подтверждена"
+        if got.get("partial") else ""
+    )
+    return objects, how, warning
 
 
 def _read_tree(
@@ -1596,7 +1634,23 @@ def _read_tree(
     hows: list[str] = []
     errors: list[str] = []
 
-    def _open(url: str, what: str) -> bool:
+    def _context_matches(what: str, parent_id: str = "") -> bool:
+        from urllib.parse import parse_qs, urlsplit
+
+        if _act_from_url(page, tries=1) != expected_act:
+            errors.append(f"{what}: открылся не тот кабинет — пропущено")
+            return False
+        if not _period_matches(_shown_period(page), date_from, date_to):
+            errors.append(f"{what}: на экране другой период — пропущено")
+            return False
+        if parent_id:
+            params = parse_qs(urlsplit(page.url).query)
+            if params.get(TREE_PARENT_PARAM[top]) != [parent_id]:
+                errors.append(f"{what}: фильтр родительской кампании изменился — пропущено")
+                return False
+        return True
+
+    def _open(url: str, what: str, parent_id: str = "") -> bool:
         """Перейти и сверить, что открылось именно то, что просили."""
         try:
             page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
@@ -1606,18 +1660,14 @@ def _read_tree(
         if not _wait_for_grid(page):
             errors.append(f"{what}: таблица не отрисовалась за отведённое время")
             return False
-        if _act_from_url(page, tries=1) != expected_act:
-            errors.append(f"{what}: открылся не тот кабинет — пропущено")
-            return False
-        if not _period_matches(_shown_period(page), date_from, date_to):
-            errors.append(f"{what}: на экране другой период — пропущено")
-            return False
-        return True
+        return _context_matches(what, parent_id)
 
     # Сначала верхний уровень: его id нужны, чтобы спросить объявления каждого.
     top = TREE_LEVELS[0]
     if _open(_tree_url(act, top, date_from, date_to), top):
         parents, how, err = read_level(page, top)
+        if not _context_matches(top):
+            return [], how, "; ".join(errors)
         if how:
             hows.append(f"{top}:{how}")
         if err:
@@ -1638,9 +1688,11 @@ def _read_tree(
             what = f"{top} {parent.id}"
             url = _tree_url(act, "ad", date_from, date_to,
                             parent_level=top, parent_id=parent.id)
-            if not _open(url, what):
+            if not _open(url, what, parent.id):
                 continue
             got, how, err = read_level(page, "ad")
+            if not _context_matches(what, parent.id):
+                continue
             if how:
                 ads_how.add(how)
             if err:
@@ -1651,4 +1703,14 @@ def _read_tree(
         if ads_how:
             hows.append("ad:" + "/".join(sorted(ads_how)))
 
+    # A stale/ignored filter may return the same ad under different parents.
+    # Its ownership is then ambiguous: keep neither association.
+    owners: dict[str, set[str]] = {}
+    for obj in objects:
+        if obj["level"] == "ad":
+            owners.setdefault(obj["id"], set()).add(obj["parent_id"])
+    ambiguous = {oid for oid, parents in owners.items() if len(parents) > 1}
+    if ambiguous:
+        objects = [o for o in objects if not (o["level"] == "ad" and o["id"] in ambiguous)]
+        errors.append("одни объявления вернулись у разных кампаний — неоднозначные связи пропущены")
     return objects, " ".join(hows), "; ".join(errors)

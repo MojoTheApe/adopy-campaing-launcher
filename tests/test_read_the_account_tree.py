@@ -5,7 +5,7 @@
 на что: в книге нет id объектов Meta, она отстаёт на сутки, и столбца on/off
 в ней нет вовсе. Всё три есть на экране, который чтение уже открывает.
 
-Разметка здесь **снята с живого аккаунта** 11.09 (KLD_BFL_X84), а не
+Разметка здесь **снята с живого аккаунта** 11.09 (identifiers and names sanitized), а не
 придумана. Первая версия этих проверок была придумана — искала `role="row"` и
 `role="cell"`, — и живой прогон показал, что у грида Ads Manager размечен
 ролями только заголовок: пятнадцать `columnheader` и ноль `role="cell"`, а
@@ -71,10 +71,11 @@ def browser():
     Вложенные `sync_playwright()` в одном потоке уже ломали прогон: контекст
     нельзя открыть дважды. Поэтому фикстура модульная, а не пофункциональная.
     """
+    import os
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as pw:
-        b = pw.chromium.launch()
+        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
         yield b
         b.close()
 
@@ -82,7 +83,7 @@ def browser():
 def _row(rid: str, kind: str, name: str, delivery: str, toggle: str | None) -> str:
     """Строка в разметке Meta: `data-surface` несёт id строки и назначение ячейки.
 
-    Снято с живого аккаунта 11.09 (KLD_BFL_X84). Одна и та же разметка висит
+    Снято с живого аккаунта 11.09 (identifiers and names sanitized). Одна и та же разметка висит
     на нескольких вложенных узлах, и внутренние копии часто пустые — здесь это
     воспроизведено, потому что именно на этом разбор и мог бы споткнуться.
     """
@@ -124,20 +125,21 @@ def _grid(rows: list[str]) -> str:
 @pytest.fixture
 def page(browser):
     p = browser.new_page()
+    p.route("**/*", lambda route: route.abort())
     yield p
     p.close()
 
 
 def test_a_row_gives_up_its_id_name_state_and_delivery(page):
     page.set_content(_grid([
-        _row("120250178859040703", "CAMPAIGN_GROUP", "SA_ARM_iOS_IMG_Reading_30_6.9", "Active", "true"),
+        _row("12345678900000000303", "CAMPAIGN_GROUP", "Example campaign", "Active", "true"),
     ]))
     rows, how, err = sp.read_level(page, "campaign")
     assert not err, err
     assert how == "data-surface"
     (r,) = rows
-    assert r.id == "120250178859040703"
-    assert r.name == "SA_ARM_iOS_IMG_Reading_30_6.9"
+    assert r.id == "12345678900000000303"
+    assert r.name == "Example campaign"
     assert r.delivery == "Active"
     assert r.switch == "on"
     assert r.switch_label == "On/off"
@@ -149,7 +151,7 @@ def test_the_numbers_of_a_row_come_back_as_meta_wrote_them(page):
     и за что она, а `22.89` — только половину. Считать по ним мы ничего не
     собираемся; они нужны, чтобы человек видел, что именно останавливает.
     """
-    page.set_content(_grid([_row("120250178859040703", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]))
+    page.set_content(_grid([_row("12345678900000000303", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]))
     (r,), _, err = sp.read_level(page, "campaign")
     assert not err, err
     assert r.spend == "$412.02"
@@ -159,10 +161,10 @@ def test_the_numbers_of_a_row_come_back_as_meta_wrote_them(page):
 
 def test_a_row_without_numbers_says_nothing_rather_than_zero(page):
     """Черновик ещё ничего не потратил. «$0» — утверждение, которого нет."""
-    base = "/am/table/table_row:120250178859040703unit/table_cell:"
+    base = "/am/table/table_row:12345678900000000303unit/table_cell:"
     page.set_content(
         '<div role="table"><div role="presentation">'
-        f'<div data-surface="/am/table/table_row:120250178859040703unit">'
+        f'<div data-surface="/am/table/table_row:12345678900000000303unit">'
         f'<span data-surface="{base}forObjectType(name,CAMPAIGN_GROUP)">SA_draft</span>'
         f'<span data-surface="{base}forObjectType(delivery,CAMPAIGN_GROUP)">In draft</span>'
         "</div></div></div>"
@@ -174,12 +176,12 @@ def test_a_row_without_numbers_says_nothing_rather_than_zero(page):
 def test_the_totals_row_is_not_an_object(page):
     """`table_row:-1` размечена как все, но переключать там нечего."""
     page.set_content(_grid([
-        _row("120250178859040703", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true"),
+        _row("12345678900000000303", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true"),
         _row("-1", "CAMPAIGN_GROUP", "Results from 6 ad sets", "", None),
     ]))
     rows, _, err = sp.read_level(page, "campaign")
     assert not err, err
-    assert [r.id for r in rows] == ["120250178859040703"]
+    assert [r.id for r in rows] == ["12345678900000000303"]
 
 
 def test_the_level_is_checked_by_what_meta_says_about_the_rows(page):
@@ -192,14 +194,14 @@ def test_the_level_is_checked_by_what_meta_says_about_the_rows(page):
     всё под кампанией».
     """
     assert sp._LEVEL_KIND == {"campaign": "CAMPAIGN_GROUP", "adset": "CAMPAIGN", "ad": "ADGROUP"}
-    page.set_content(_grid([_row("1202501788590407", "ADGROUP", "ad_2_ar", "Active", "true")]))
+    page.set_content(_grid([_row("123456789000000003", "ADGROUP", "ad_2_ar", "Active", "true")]))
     rows, _, err = sp.read_level(page, "campaign")
     assert rows == [], "объявления приняты за кампании"
-    assert "ADGROUP" in err and "CAMPAIGN_GROUP" in err
+    assert "CAMPAIGN_GROUP" in err
 
 
 def test_the_ad_level_wants_adgroup(page):
-    page.set_content(_grid([_row("1202501788509507", "ADGROUP", "1962_12- Officialy", "Active", "true")]))
+    page.set_content(_grid([_row("123456789000000001", "ADGROUP", "1962_12- Officialy", "Active", "true")]))
     (r,), _, err = sp.read_level(page, "ad")
     assert not err, err
     assert r.level == "ad" and r.name == "1962_12- Officialy"
@@ -209,7 +211,7 @@ def test_rows_without_a_stated_kind_are_refused(page):
     """«Не сказано, что это» — не то же самое, что «это то, что мы просили»."""
     page.set_content(
         '<div role="table"><div role="presentation">'
-        '<div data-surface="/am/table/table_row:120250178859040703unit/table_cell:mystery">x</div>'
+        '<div data-surface="/am/table/table_row:12345678900000000303unit/table_cell:mystery">x</div>'
         "</div></div>"
     )
     rows, _, err = sp.read_level(page, "campaign")
@@ -223,15 +225,15 @@ def test_svg_paths_are_not_mistaken_for_ids(page):
         '<div role="table">'
         '<svg><path d="M 25.19238815542512 25.192388155425117"></path></svg>'
         '<div role="presentation">'
-        + _row("120250178859040703", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")
+        + _row("12345678900000000303", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")
         + "</div></div>"
     )
     (r,), _, _ = sp.read_level(page, "campaign")
-    assert r.id == "120250178859040703"
+    assert r.id == "12345678900000000303"
 
 
 def test_a_switched_off_row_says_off(page):
-    page.set_content(_grid([_row("120250178850950703", "ADGROUP", "ad_2_ar", "Off", "false")]))
+    page.set_content(_grid([_row("12345678900000000103", "ADGROUP", "ad_2_ar", "Off", "false")]))
     (r,), _, _ = sp.read_level(page, "ad")
     assert r.switch == "off"
     assert r.level == "ad"
@@ -243,7 +245,7 @@ def test_a_row_without_a_switch_says_unknown_not_off(page):
     Спутать их значит показать человеку выключенным то, что тратит деньги.
     """
     page.set_content(_grid([
-        _row("120250178859040703", "CAMPAIGN_GROUP", "KW_broad", "In review", None),
+        _row("12345678900000000303", "CAMPAIGN_GROUP", "KW_broad", "In review", None),
     ]))
     (r,), _, _ = sp.read_level(page, "campaign")
     assert r.switch == "unknown"
@@ -300,6 +302,7 @@ class _Page:
 
     def goto(self, url, **kw):
         self.visited.append(url)
+        self.url = url
 
 
 @pytest.fixture
@@ -314,7 +317,7 @@ def flow(monkeypatch):
         if level == "campaign":
             return ([sp.AdObject(level="campaign", id="11" * 8, name="camp A"),
                      sp.AdObject(level="campaign", id="22" * 8, name="camp B")], "data-surface", "")
-        return ([sp.AdObject(level="ad", id="99" * 8, name="an ad")], "data-surface", "")
+        return ([sp.AdObject(level="ad", id=str(9900 + len(page.visited)), name="an ad")], "data-surface", "")
 
     monkeypatch.setattr(sp, "read_level", _level)
     return monkeypatch
@@ -366,7 +369,7 @@ def test_the_account_is_rechecked_after_every_navigation(flow):
     seen: list[int] = []
     flow.setattr(sp, "_act_from_url", lambda page, tries=1: (seen.append(1), "act_123")[1])
     sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
-    assert len(seen) == 3
+    assert len(seen) == 6
 
 
 def test_one_campaign_failing_does_not_cost_the_others(flow):
@@ -507,7 +510,7 @@ def _with_tabs(rows_html, underline):
 
 def test_the_open_view_is_named(page):
     page.set_content(_with_tabs(
-        _grid([_row("120250178859040703", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]),
+        _grid([_row("12345678900000000303", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]),
         (BLUE, GREY, GREY, GREY),
     ))
     _, how, err = sp.read_level(page, "campaign")
@@ -518,7 +521,7 @@ def test_the_open_view_is_named(page):
 def test_another_view_is_named_too(page):
     """Тот случай, ради которого это и сделано: список неполон, и видно почему."""
     page.set_content(_with_tabs(
-        _grid([_row("120250178859040703", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]),
+        _grid([_row("12345678900000000303", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]),
         (GREY, GREY, GREY, BLUE),
     ))
     _, how, _ = sp.read_level(page, "campaign")
@@ -528,7 +531,7 @@ def test_another_view_is_named_too(page):
 def test_the_odd_one_out_is_found_by_difference_not_by_colour(page):
     """Тема у Meta меняется, а «выбранная одна и подчёркнута иначе» — нет."""
     page.set_content(_with_tabs(
-        _grid([_row("120250178859040703", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]),
+        _grid([_row("12345678900000000303", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]),
         ("rgb(255, 0, 0)", "rgb(1, 2, 3)", "rgb(1, 2, 3)", "rgb(1, 2, 3)"),
     ))
     _, how, _ = sp.read_level(page, "campaign")
@@ -538,7 +541,7 @@ def test_the_odd_one_out_is_found_by_difference_not_by_colour(page):
 def test_two_odd_ones_mean_the_rule_broke_and_it_says_nothing(page):
     """Назвать вид наугад хуже, чем не назвать: по нему будут решать."""
     page.set_content(_with_tabs(
-        _grid([_row("120250178859040703", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]),
+        _grid([_row("12345678900000000303", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]),
         (BLUE, "rgb(9, 9, 9)", GREY, GREY),
     ))
     _, how, _ = sp.read_level(page, "campaign")
@@ -546,6 +549,77 @@ def test_two_odd_ones_mean_the_rule_broke_and_it_says_nothing(page):
 
 
 def test_no_tabs_at_all_is_not_a_view(page):
-    page.set_content(_grid([_row("120250178859040703", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]))
+    page.set_content(_grid([_row("12345678900000000303", "CAMPAIGN_GROUP", "SA_ARM", "Active", "true")]))
     _, how, _ = sp.read_level(page, "campaign")
     assert how == "data-surface"
+
+
+@pytest.mark.parametrize("mode", ["hidden", "ambiguous", "loading", "untyped", "hidden-row"])
+def test_only_visible_identified_ready_rows_are_accepted(page, mode):
+    good = _grid([_row("111", "CAMPAIGN_GROUP", "current", "Active", "true")])
+    old = _grid([_row("222", "CAMPAIGN_GROUP", "old", "Off", "false")])
+    markup = {
+        "hidden": '<div hidden>' + old + '</div>' + good,
+        "ambiguous": old + good,
+        "loading": good.replace('role="table"', 'role="table" aria-busy="true"'),
+        "untyped": _grid([_row("111", "CAMPAIGN_GROUP", "current", "Active", "true"),
+                           '<div data-surface="/am/table/table_row:222unit/table_cell:spend">$10</div>']),
+        "hidden-row": _grid([_row("111", "CAMPAIGN_GROUP", "current", "Active", "true"),
+                              '<div hidden>' + _row("222", "CAMPAIGN_GROUP", "old", "Off", "false") + '</div>']),
+    }[mode]
+    page.set_content(markup)
+    rows, _, err = sp.read_level(page, "campaign")
+    if mode in ("hidden", "hidden-row"):
+        assert not err and [(r.id, r.name) for r in rows] == [("111", "current")]
+    else:
+        assert rows == [] and err
+
+
+def test_a_parent_filter_lost_on_navigation_refuses_the_ads(flow):
+    class Redirected(_Page):
+        def goto(self, url, **kwargs):
+            super().goto(url, **kwargs)
+            self.url = url.split('&selected_campaign_ids=')[0]
+    objects, _, err = sp._read_tree(Redirected(), "act_123", "act_123", "2026-09-01")
+    assert objects and all(o["level"] == "campaign" for o in objects)
+    assert "фильтр" in err
+
+
+@pytest.mark.parametrize("change", ["account", "period", "parent"])
+def test_context_changed_during_parse_is_refused(flow, change):
+    original = sp.read_level
+    def changing(page, level):
+        result = original(page, level)
+        if level == "ad":
+            if change == "account":
+                flow.setattr(sp, "_act_from_url", lambda *a, **kw: "act_999")
+            elif change == "period":
+                flow.setattr(sp, "_period_matches", lambda *a, **kw: False)
+            else:
+                page.url = page.url.split('&selected_campaign_ids=')[0]
+        return result
+    flow.setattr(sp, "read_level", changing)
+    objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert objects and all(o["level"] == "campaign" for o in objects)
+    assert err
+
+
+def test_the_same_ad_under_different_campaigns_has_no_guessed_parent(flow):
+    original = sp.read_level
+    def duplicated(page, level):
+        if level == "ad":
+            return [sp.AdObject(level="ad", id="999", name="stale ad")], "data-surface", ""
+        return original(page, level)
+    flow.setattr(sp, "read_level", duplicated)
+    objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert objects and all(o["level"] == "campaign" for o in objects)
+    assert "разных кампаний" in err
+
+
+def test_a_scrollable_snapshot_does_not_claim_a_complete_tree(page):
+    page.set_content('<div style="height: 30px; overflow-y: auto">' + _grid([
+        _row("111", "CAMPAIGN_GROUP", "first", "Active", "true"),
+        _row("222", "CAMPAIGN_GROUP", "second", "Active", "true"),
+    ]) + '</div>')
+    objects, _, err = sp.read_level(page, "campaign")
+    assert objects and "полнота не подтверждена" in err
