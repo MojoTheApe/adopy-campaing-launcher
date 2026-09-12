@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import math
 import os
 import re as _re
 import re
@@ -557,6 +558,10 @@ def _build_account_map_view(
         except Exception:  # pragma: no cover
             return {}
 
+    # Показания Read нужны и построчно (в таблице), и суммой в свёрнутой
+    # строке страны — снимаются один раз до цикла.
+    live = {} if span == "all" else _live_spend(date_from, date_to)
+
     countries: list[dict] = []
     for stored in account_links.all_values("country"):
         key = stored.casefold()
@@ -620,6 +625,30 @@ def _build_account_map_view(
                 "cr": excel.get("cr"),
                 "has_data": bool(excel.get("has_data")),
             })
+        # Спенд, снятый с самих кабинетов (Read), суммируется по стране
+        # НА валюту: KWD и USD в одну цифру не складываются, а «не читали»
+        # не равно нулю (acl-356). Пустой live_sums — «никто не смотрел».
+        live_sums: dict[str, float] = {}
+        unknown_sums: list[dict] = []
+        live_read = 0
+        for r in rows:
+            lr = live.get(r["account"]) or {}
+            if lr.get("state") != "ok" or lr.get("spend") is None:
+                continue
+            try:
+                amount = float(lr["spend"])
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(amount):
+                continue
+            live_read += 1
+            cur = str(lr.get("currency") or "").upper()
+            if re.fullmatch(r"[A-Z]{3}", cur):
+                live_sums[cur] = live_sums.get(cur, 0.0) + amount
+            else:
+                # Unknown units cannot be added to one another.
+                unknown_sums.append({"currency": "", "spend": amount, "account": r["account"]})
+
         countries.append({
             # `country` is what the reader sees, `key` is what the store knows.
             # They differ whenever the account map holds a code ("KW") and the
@@ -631,6 +660,10 @@ def _build_account_map_view(
             "spend": sum(r["spend"] or 0 for r in rows),
             "leads": sum(r["leads"] or 0 for r in rows),
             "deposits": sum(r["deposits"] or 0 for r in rows),
+            "live_read": live_read,
+            "live_sums": [
+                {"currency": c, "spend": s} for c, s in sorted(live_sums.items())
+            ] + unknown_sums,
         })
 
     available = [
@@ -642,7 +675,7 @@ def _build_account_map_view(
         "available": available,
         "all_accounts": all_known,
         "dates": dates,
-        "live": {} if span == "all" else _live_spend(date_from, date_to),
+        "live": live,
         "date_from": date_from,
         "date_to": date_to,
         "span": span,

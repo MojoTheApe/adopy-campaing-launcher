@@ -113,4 +113,4 @@ DEVELOPMENT_WORKFLOW.md. Назначенные роли, основную ве�
 в персональной настройке одной модели не синхронизирует команду.
 
 
-Для таск-трекера прочитай `docs/TRACKER_AGENT_WORKFLOW.md` и `tracker/config.json`. До первой правки кода автоматически выполни `python -m tracker start ISSUE` и проверь In progress. После полной проверки и merge обнови Issue через `python -m tracker merged`. Приоритеты High / Medium / Low; default Medium.
+Для каждого поручения на разработку, включая немедленное исправление, прочитай `docs/TRACKER_AGENT_WORKFLOW.md`, `tracker/config.json` и `python scripts/task_tracker.py guide`. Создай/найди Issue и проверь In Progress командой `python scripts/task_tracker.py work ID` либо `work --title ... --module ... --type ...` до правок кода. Выбирай Module и Type самостоятельно, Medium по умолчанию; единый флаг `--release` включает задачу в Release. Перед merge выполни `check-pr`, после полной проверки, merge и приёмки — защищённый `merged` через тот же клиент и проверь UI.

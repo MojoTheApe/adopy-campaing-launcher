@@ -1,19 +1,158 @@
 {
   "schema_version": 2,
-  "project": {"name": "ACL Task Wall", "repository": "MojoTheApe/adopy-campaing-launcher", "base_branch": "master"},
-  "completion_label": "In master",
-  "workflow": ["idea", "backlog", "todo", "in_progress", "review", "merged"],
-  "priorities": ["high", "medium", "low"],
+  "project": {
+    "name": "ACL",
+    "repository": "MojoTheApe/adopy-campaing-launcher",
+    "base_branch": "master",
+    "id_prefix": "ACL",
+    "id_offset": 1000,
+    "legacy_task_ids": {
+      "12": "ACL-102",
+      "13": "ACL-103",
+      "14": "ACL-105",
+      "15": "ACL-107",
+      "16": "ACL-108",
+      "17": "ACL-109",
+      "18": "ACL-110",
+      "19": "ACL-106",
+      "21": "ACL-111",
+      "22": "ACL-112",
+      "23": "ACL-113",
+      "24": "ACL-116",
+      "25": "ACL-117",
+      "26": "ACL-114",
+      "27": "ACL-115",
+      "28": "ACL-121",
+      "29": "ACL-123",
+      "30": "ACL-131",
+      "31": "ACL-132",
+      "32": "ACL-133",
+      "33": "ACL-201",
+      "34": "ACL-202",
+      "35": "ACL-211",
+      "36": "ACL-212",
+      "37": "ACL-222",
+      "38": "ACL-223",
+      "39": "ACL-303",
+      "40": "ACL-348",
+      "41": "ACL-347",
+      "42": "ACL-342",
+      "43": "ACL-343",
+      "44": "ACL-344",
+      "45": "ACL-340",
+      "46": "ACL-349",
+      "47": "ACL-341",
+      "48": "ACL-333",
+      "49": "ACL-331",
+      "50": "ACL-334",
+      "51": "ACL-335",
+      "52": "ACL-336",
+      "53": "ACL-402",
+      "54": "ACL-412",
+      "55": "ACL-423",
+      "56": "ACL-424",
+      "57": "ACL-501",
+      "58": "ACL-512",
+      "59": "ACL-521",
+      "60": "ACL-522",
+      "61": "ACL-304",
+      "62": "ACL-322",
+      "63": "ACL-312",
+      "64": "ACL-313",
+      "65": "ACL-650",
+      "66": "ACL-653",
+      "67": "ACL-654",
+      "68": "ACL-655",
+      "69": "ACL-601",
+      "70": "ACL-602",
+      "71": "ACL-141",
+      "72": "ACL-142",
+      "73": "ACL-144",
+      "74": "ACL-145",
+      "75": "ACL-143",
+      "76": "ACL-703",
+      "86": "ACL-704",
+      "87": "ACL-350",
+      "88": "ACL-351",
+      "93": "ACL-353",
+      "94": "ACL-354",
+      "96": "ACL-355",
+      "98": "ACL-705"
+    }
+  },
+  "completion_label": "Merged",
+  "workflow": [
+    "idea",
+    "backlog",
+    "todo",
+    "in_progress",
+    "review",
+    "merged"
+  ],
+  "priorities": [
+    "high",
+    "medium",
+    "low"
+  ],
   "default_backlog_priority": "medium",
-  "release_view_label": "MVP",
-  "default_release": "MVP",
+  "release_view_label": "Release",
+  "default_release": "",
   "refresh_seconds": 60,
   "modules": [
-    {"id": "accounts", "name": "Accounts & Access", "description": "Accounts, countries, profiles, roles and onboarding. Excludes ad operations and reporting metrics.", "examples": ["Simplify the account card", "Read account details from Jira"]},
-    {"id": "data", "name": "Data & Reporting", "description": "BI/API/RPA metrics, timeframes, reconciliation, reports and recommendations.", "examples": ["Compare spend between periods", "Read spend from the BI"]},
-    {"id": "campaigns", "name": "Campaigns", "description": "Builder, targeting, publishing, ad controls and publishing reliability.", "examples": ["Publish a campaign", "Test Ads Manager selectors"]},
-    {"id": "landing", "name": "Landing Pages & Tracking", "description": "Landing pages, hosting, QA, domains, Keitaro and tracking links.", "examples": ["Manage tracking domains", "Copy a landing page"]},
-    {"id": "creatives", "name": "Creatives & Content", "description": "Text libraries, creative analysis, briefs, headlines and material generation.", "examples": ["Generate headlines from winning ads", "Share the ad text library"]},
-    {"id": "platform", "name": "Platform & Operations", "description": "Installation, updates, shared telemetry, infrastructure and project tooling including this tracker. Not a catch-all for ambiguous tasks.", "examples": ["Update the installer", "Improve the task tracker"]}
-  ]
+    {
+      "id": "accounts",
+      "name": "Accounts & Access",
+      "description": "Accounts, countries, profiles, roles and onboarding. Excludes ad operations and reporting metrics.",
+      "examples": [
+        "Simplify the account card",
+        "Read account details from Jira"
+      ]
+    },
+    {
+      "id": "data",
+      "name": "Data & Reporting",
+      "description": "BI/API/RPA metrics, timeframes, reconciliation, reports and recommendations.",
+      "examples": [
+        "Compare spend between periods",
+        "Read spend from the BI"
+      ]
+    },
+    {
+      "id": "campaigns",
+      "name": "Campaigns",
+      "description": "Builder, targeting, publishing, ad controls and publishing reliability.",
+      "examples": [
+        "Publish a campaign",
+        "Test Ads Manager selectors"
+      ]
+    },
+    {
+      "id": "landing",
+      "name": "Landing Pages & Tracking",
+      "description": "Landing pages, hosting, QA, domains, Keitaro and tracking links.",
+      "examples": [
+        "Manage tracking domains",
+        "Copy a landing page"
+      ]
+    },
+    {
+      "id": "creatives",
+      "name": "Creatives & Content",
+      "description": "Text libraries, creative analysis, briefs, headlines and material generation.",
+      "examples": [
+        "Generate headlines from winning ads",
+        "Share the ad text library"
+      ]
+    },
+    {
+      "id": "platform",
+      "name": "Platform & Operations",
+      "description": "Installation, updates, shared telemetry, infrastructure and project tooling including this tracker. Not a catch-all for ambiguous tasks.",
+      "examples": [
+        "Update the installer",
+        "Improve the task tracker"
+      ]
+    }
+  ],
+  "release_mode": "single"
 }

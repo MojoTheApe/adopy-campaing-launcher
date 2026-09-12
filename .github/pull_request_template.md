@@ -2,6 +2,6 @@ Describe the concrete problem and resulting behavior.
 
 Tracker issues: #ISSUE
 
-Validation: commands, results, environment, and any checks still outstanding.
+Validation: commands, results, environment, and outstanding checks.
 
-Before coding, run `python -m tracker start ISSUE`. Before review, set the Issue to Review. After all task work is reviewed and merged, run the verified `python -m tracker merged` transition and confirm the tracker updated. Do not treat a partial merge as task completion.
+Every implementation needs a task, including immediate fixes. Before code, use `python scripts/task_tracker.py work ID` or `work --title ... --module ... --type ...` and verify In Progress. Set Review when implementation is ready. Run `python scripts/task_tracker.py check-pr PR_NUMBER` before merge. After all work is reviewed, merged and verified, use the merged dry run and apply with `--reviewed-complete`; verify the UI. Partial work never completes a parent task.

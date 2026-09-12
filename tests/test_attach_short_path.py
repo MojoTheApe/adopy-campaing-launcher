@@ -59,6 +59,16 @@ class _Provider:
         self.tried: list[str] = []
         self.conn = _Conn()
 
+    # Публичная пара, как у настоящего провайдера: она делегирует
+    # приватным, а strict_profile зафиксирован внутри неё.
+    def attach_existing_only(self, profile_id, user_data_dir, *, new_page=False):
+        return self._try_attach_existing(
+            profile_id, user_data_dir, strict_profile=True, new_page=new_page
+        )
+
+    def profile_is_running(self, user_data_dir, profile_id=""):
+        return self._profile_process_running(user_data_dir, profile_id)
+
     def _try_attach_existing(self, profile_id, user_data_dir, *, strict_profile=False, new_page=False):
         self.tried.append(user_data_dir)
         return self.conn if user_data_dir == self.knows else None
@@ -186,3 +196,61 @@ def test_open_profile_recognises_a_window_it_already_opened(wired, monkeypatch):
     assert ok is True
     assert "уже открыт автоматизацией" in message
     assert provider.conn.closed_keeping_window, "окно закрыли за человеком"
+
+
+# ══ публичный путь «прицепись, но не поднимай» ════════════════════════════
+#
+# Публикация и чтение хотят от браузера противоположного: одной нужен браузер
+# любой ценой, второй — только уже открытый. Публичного способа сказать второе
+# не было, и чтение звало приватные методы браузерного слоя из чужого модуля.
+# Работало, но держалось на честном слове: тот, кто правит слой, не обязан
+# помнить, что за его кухней подглядывают.
+
+def test_reading_asks_through_the_public_pair():
+    """Сторож: возврат к приватным именам — возврат к негласной связи."""
+    import ast
+
+    root = Path(sp.__file__).resolve().parents[2]
+    src = (root / "src" / "analysis_agent" / "account_spend.py").read_text(encoding="utf-8")
+    called = {
+        n.func.attr
+        for n in ast.walk(ast.parse(src))
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+    }
+    leaked = called & {"_try_attach_existing", "_profile_process_running"}
+    assert not leaked, f"чтение снова зовёт приватное: {sorted(leaked)}"
+    assert "attach_existing_only" in called, "чтение не пользуется публичным путём"
+
+
+def test_the_public_pair_exists_and_promises_what_it_says():
+    """Обещание должно быть выполнимым: метод есть и не поднимает профиль."""
+    from src.fb_ads_rpa.browser import MultiloginDirectCDPProvider as P
+
+    assert callable(getattr(P, "attach_existing_only", None))
+    assert callable(getattr(P, "profile_is_running", None))
+
+    import ast
+    import inspect
+
+    body = ast.parse(inspect.getsource(P.attach_existing_only).lstrip())
+    called = {
+        n.func.attr
+        for n in ast.walk(body)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+    }
+    assert called == {"_try_attach_existing"}, (
+        f"публичный путь делает что-то ещё: {sorted(called)}"
+    )
+
+
+def test_the_public_path_pins_the_strict_check():
+    """Свободный поиск порта дал бы чтению прицепиться к чужому окну.
+
+    Публикации он подходит — она профиль только что подняла сама. Чтению
+    нельзя: прочитает чужой кабинет и запишет как свой.
+    """
+    import inspect
+
+    from src.fb_ads_rpa.browser import MultiloginDirectCDPProvider as P
+
+    assert "strict_profile=True" in inspect.getsource(P.attach_existing_only)
