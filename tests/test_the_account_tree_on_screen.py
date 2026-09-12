@@ -29,7 +29,7 @@ REPORT = TPL / "report.html"
 def _script() -> str:
     """Обе функции показа — из шаблона, а не по памяти."""
     src = REPORT.read_text(encoding="utf-8")
-    start = src.index("function amapTreeLine(o) {")
+    start = src.index("function amapTreeLine(o, adCount) {")
     tail = "row.classList.toggle('amap-open', !block.hidden);\n  });\n}"
     end = src.index(tail, start) + len(tail)
     block = src[start:end]
@@ -339,8 +339,10 @@ def test_the_only_listener_is_the_one_that_opens_it():
     рядом второй, уже переключающий. Пусть это будет видно.
     """
     block = _script()
-    assert block.count("addEventListener") == 1
-    assert "caret.addEventListener('click'" in block
+    assert block.count("addEventListener") == 2, "появился третий обработчик — что он делает?"
+    assert block.count("caret.addEventListener('click'") == 2, (
+        "обработчики не про стрелки: раскрытие меняет экран, всё остальное — нет"
+    )
 
 
 # ── покрывают ли строки спенд аккаунта ────────────────────────────────────
@@ -460,3 +462,66 @@ def test_an_ad_without_a_parent_is_an_orphan_too(page):
         "() => Array.from(document.querySelectorAll('.amap-tree-head')).map(h => h.textContent)"
     )
     assert any("1 ads whose ad set" in h for h in heads), heads
+
+
+# ── ad set тоже раскрывается ──────────────────────────────────────────────
+#
+# У DQ438 десять ad set'ов и 99 объявлений: раскрытые разом, они уезжали на
+# километр и прятали всё, что ниже по карте.
+
+def test_ads_start_hidden_under_their_ad_set(page):
+    _paint(page, [SET_A, _ad("a1", "11111111"), _ad("a2", "11111111")])
+    _open(page)  # дерево свёрнуто само по себе — считаем видимое внутри раскрытого
+    got = page.evaluate("""() => ({
+      kids: document.querySelectorAll('.amap-tree-kids').length,
+      hidden: document.querySelector('.amap-tree-kids').hidden,
+      visible: Array.from(document.querySelectorAll('.amap-tree-line'))
+        .filter(l => l.offsetParent !== null).length,
+    })""")
+    assert got["kids"] == 1 and got["hidden"] is True
+    assert got["visible"] == 1, "объявления видны, хотя ad set свёрнут"
+
+
+def test_the_ad_set_arrow_opens_its_ads(page):
+    _paint(page, [SET_A, _ad("a1", "11111111"), _ad("a2", "11111111")])
+    _open(page)  # само дерево
+    page.evaluate("() => document.querySelector('.amap-tree-caret').click()")
+    assert page.evaluate("() => document.querySelector('.amap-tree-kids').hidden") is False
+    page.evaluate("() => document.querySelector('.amap-tree-caret').click()")
+    assert page.evaluate("() => document.querySelector('.amap-tree-kids').hidden") is True
+
+
+def test_a_collapsed_ad_set_still_says_how_many(page):
+    """Иначе свёрнутая строка молчит о том, есть ли под ней что-нибудь."""
+    _paint(page, [SET_A, _ad("a1", "11111111"), _ad("a2", "11111111")])
+    kind = page.evaluate("() => document.querySelector('.amap-tree-kind').textContent")
+    assert kind == "ad set · 2"
+
+
+def test_an_ad_set_without_ads_has_no_arrow(page):
+    """Раскрывать нечего, а стрелка обещала бы, что есть."""
+    _paint(page, [SET_A])
+    got = page.evaluate("""() => ({
+      carets: document.querySelectorAll('.amap-tree-caret').length,
+      gaps: document.querySelectorAll('.amap-tree-caret-off').length,
+    })""")
+    assert got["carets"] == 0
+    assert got["gaps"] == 1, "без заглушки строки разъедутся"
+
+
+def test_an_opened_ad_set_stays_open_after_a_re_read(page):
+    """Иначе после каждого Read пришлось бы открывать заново."""
+    _paint(page, [SET_A, _ad("a1", "11111111")])
+    page.evaluate("() => document.querySelector('.amap-tree-caret').click()")
+    _paint(page, [SET_A, _ad("a1", "11111111", spend="$99.00")])
+    assert page.evaluate("() => document.querySelector('.amap-tree-kids').hidden") is False
+    assert page.evaluate("() => document.querySelector('.amap-tree-caret').classList.contains('open')")
+
+
+def test_each_ad_set_opens_on_its_own(page):
+    _paint(page, [SET_A, SET_B, _ad("a1", "11111111"), _ad("b1", "22222222")])
+    page.evaluate("() => document.querySelectorAll('.amap-tree-caret')[1].click()")
+    got = page.evaluate(
+        "() => Array.from(document.querySelectorAll('.amap-tree-kids')).map(k => k.hidden)"
+    )
+    assert got == [True, False]
