@@ -31,7 +31,12 @@ class _Page:
         self.url = url
         self._raises = raises
 
-    def content(self):
+    def locator(self, selector):
+        assert selector == "html"
+        return self
+
+    def inner_html(self, *, timeout):
+        assert timeout > 0
         if self._raises:
             raise RuntimeError("target closed")
         return self._html

@@ -68,6 +68,8 @@ def normalise_step(label: str) -> tuple[str, bool | None]:
 #: Контекст отказа уезжает в общую таблицу телеметрии, которую читает вся
 #: компания, — идентификаторы туда не едут.
 _SCRUB = (
+    (re.compile(r"((?:access_token|token|password|authorization|fb_dtsg|lsd)=)[^&\s\"'<>]{1,16384}", re.I), r"\1<hidden>"),
+    (re.compile(r"\bBearer [A-Za-z0-9._~+/-]{1,16384}", re.I), "Bearer <hidden>"),
     (re.compile(r"(act=)(?:act_)?\d{6,}"), r"\1<hidden>"),
     (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), "<uuid>"),
     (re.compile(r"\b\d{10,}\b"), "<digits>"),
@@ -80,6 +82,16 @@ def scrub(text: str) -> str:
     for pattern, replacement in _SCRUB:
         out = pattern.sub(replacement, out)
     return out
+
+
+def scrub_diag(value):
+    """Explicit step diagnostics share the same export boundary as page context."""
+    if isinstance(value, dict):
+        return {key: ("<hidden>" if str(key).lower() in {"token", "access_token", "password", "authorization", "fb_dtsg", "lsd"} else scrub_diag(item))
+                for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [scrub_diag(item) for item in value]
+    return scrub(value) if isinstance(value, str) else value
 
 
 def merge_diag(collected: dict | None, explicit: dict | None) -> dict | None:
@@ -267,7 +279,7 @@ def record(
         if duration_s is not None:
             rec["duration_s"] = round(duration_s, 1)
         if diag:
-            rec["diag"] = diag
+            rec["diag"] = scrub_diag(diag)
         if note:
             rec["note"] = note
         with open(p, "a", encoding="utf-8") as f:

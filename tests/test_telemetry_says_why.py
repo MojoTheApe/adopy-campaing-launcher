@@ -368,7 +368,7 @@ def test_a_page_that_stays_broken_gives_up(monkeypatch):
 
     monkeypatch.setattr(meta_dom, "_sleep_h", lambda *a, **k: None)
     page = _RecoverPage(99)
-    assert meta_dom._recover_from_browser_error(page) is True
+    assert meta_dom._recover_from_browser_error(page) is False
     assert page.reloads == 2, "число попыток не ограничено"
 
 
@@ -466,3 +466,17 @@ def test_an_unlocked_run_carries_no_such_key(monkeypatch):
     """Ключ со значением False читался бы как повод о нём думать."""
     monkeypatch.setattr(rt, "screen_locked", lambda: False)
     assert "screen_locked" not in rt.page_context(_ErrorPage(""))
+
+
+def test_diagnostic_tokens_are_removed_before_the_exportable_log(tmp_path):
+    path = tmp_path / 'log.jsonl'
+    account_id = '9' * 12  # generated synthetic identifier, never a live account
+    rt.record('failed_step', False, path=path, diag={
+        'url':f'https://example.test/?access_token=synthetic-secret&act={account_id}',
+        'nested': [{'Authorization':'Bearer synthetic-secret','error':'Bearer synthetic-secret'}],
+        'count':2,
+    })
+    text = path.read_text()
+    assert 'synthetic-secret' not in text
+    assert account_id not in text
+    assert json.loads(text)['diag']['count'] == 2

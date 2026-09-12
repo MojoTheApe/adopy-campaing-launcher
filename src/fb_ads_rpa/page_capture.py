@@ -151,7 +151,7 @@ def capture(
 
         started = time.time()
         try:
-            html = page.content()
+            html = "<html>" + page.locator("html").inner_html(timeout=timeout_ms) + "</html>"
         except Exception:
             return ""
 

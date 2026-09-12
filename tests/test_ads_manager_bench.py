@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 
 import pytest
@@ -57,7 +58,7 @@ def browser():
     от неё раздаются.
     """
     with _chromium() as pw:
-        b = pw.chromium.launch(headless=True)
+        b = pw.chromium.launch(headless=True, executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
         try:
             yield b
         finally:
@@ -66,6 +67,8 @@ def browser():
 
 def _open(browser, name="placements_2026_09_09.html"):
     pg = browser.new_page()
+    # No fixture can load remote images, styles or scripts from a real account.
+    pg.route("**/*", lambda route: route.continue_() if route.request.url.startswith("file:") else route.abort())
     pg.goto((FIXTURES / name).as_uri())
     return pg
 
@@ -576,3 +579,63 @@ def test_the_wait_returns_at_once_when_nothing_is_loading():
     assert "is_visible" in block, "ожидание не спрашивает, висит ли накладка сейчас"
     assert "timeout=30000" not in block, "вернулся тридцатисекундный таймаут"
     assert "_LOADING_TEXT" in block, "образец снова задан на месте"
+
+
+@pytest.mark.parametrize('extra', [
+    '<div data-surface="x/headline_field"><textarea></textarea></div>',
+    '<div aria-hidden="true" data-surface="x/headline_field"><textarea></textarea></div>',
+])
+def test_field_lookup_refuses_ambiguous_visible_fields_but_ignores_hidden_decoys(browser, dom, extra):
+    pg = browser.new_page()
+    try:
+        pg.set_content('<div data-surface="x/headline_field"><textarea></textarea></div>' + extra)
+        got = dom.mark_ad_copy_field(pg, 'headline_field', None, 'title')
+        assert got is ('aria-hidden' in extra)
+        assert pg.locator('[data-rpa-field="title"]').count() == int(got)
+    finally: pg.close()
+
+
+def test_field_lookup_does_not_reuse_a_stale_marker(browser, dom):
+    pg = browser.new_page()
+    try:
+        pg.set_content('<div data-surface="x/headline_field"><textarea></textarea></div>')
+        assert dom.mark_ad_copy_field(pg, 'headline_field', None, 'title')
+        pg.locator('textarea').evaluate('el => el.disabled = true')
+        assert not dom.mark_ad_copy_field(pg, 'headline_field', None, 'title')
+        assert pg.locator('[data-rpa-field="title"]').count() == 0
+    finally: pg.close()
+
+
+def test_copy_field_lookup_keeps_the_previous_accessible_layout(browser, dom):
+    pg = browser.new_page()
+    try:
+        pg.set_content('<div contenteditable="true" role="combobox" aria-label="Tell people what your ad is about">Text</div>')
+        assert dom.mark_ad_copy_field(pg, 'message_field', 'Tell people what your ad is about', 'body')
+    finally: pg.close()
+
+
+def test_category_checkbox_rejected_by_page_is_not_success(fresh_page, dom):
+    fresh_page.locator('label').filter(has_text='Search results').locator('input').first.evaluate(
+        "el => { el.checked = true; el.addEventListener('click', e => e.preventDefault()); }")
+    report = {}
+    assert not dom.fill_placements(fresh_page, report)
+    assert report['categories']['Search results']['checked'] is True
+
+
+def test_broken_recorded_selector_is_detected_by_real_lookup(browser, dom):
+    pg = _open(browser, 'ad_copy_2026_09_09.html')
+    try:
+        assert dom.mark_ad_copy_field(pg, 'headline_field', None, 'title')
+        pg.locator('[data-surface$="/headline_field"]').evaluate('el => el.removeAttribute("data-surface")')
+        assert not dom.mark_ad_copy_field(pg, 'headline_field', None, 'title')
+    finally: pg.close()
+
+
+def test_upload_progress_ignores_hidden_bars_and_refuses_ambiguity(browser, dom):
+    pg = browser.new_page()
+    try:
+        pg.set_content('<div role="progressbar" aria-valuenow="0" hidden></div><div role="progressbar" aria-valuenow="45" style="width:20px;height:20px"></div>')
+        assert dom._upload_progress(pg) == 45
+        pg.evaluate("document.body.insertAdjacentHTML('beforeend', '<div role=progressbar aria-valuenow=10 style=height:20px></div>')")
+        assert dom._upload_progress(pg) is None
+    finally: pg.close()
