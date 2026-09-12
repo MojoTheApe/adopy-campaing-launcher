@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import tempfile
 import os
 import threading
@@ -178,6 +179,15 @@ class SpendReading:
     shot: str = ""                # скриншот при неудаче
     status: str = ""              # см. _read_status: clear | disabled | restricted | review | unknown
     status_text: str = ""         # словами страницы — человеку с этим идти и разбираться
+
+    #: Дерево аккаунта: кампании и объявления с их id и положением тумблера.
+    #: Читается тем же нажатием, что и спенд (решение владельца 11.09) — см.
+    #: `_read_tree`. Неудача дерева не отменяет спенд: это разные ответы, и
+    #: терять прочитанное число из-за второго — хуже, чем вернуть его без
+    #: дерева.
+    objects: list[dict] = field(default_factory=list)
+    objects_error: str = ""
+    objects_how: str = ""         # чем разобрана таблица — чтобы знать, что сломалось
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -844,6 +854,22 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         out.currency = _currency(page)
         out.how = how
         out.state = "ok"
+
+        # Дерево — тем же нажатием (решение владельца 11.09): Read и так уже
+        # здесь, а каждое отдельное касание живого аккаунта чего-то стоит.
+        #
+        # Строго после того, как спенд принят. Неудача дерева не отменяет
+        # число: это разные ответы на разные вопросы, и терять прочитанный
+        # спенд из-за второго — хуже, чем вернуть его без дерева. Поэтому же
+        # здесь `except Exception`: сюда мы приходим с готовым результатом, и
+        # уронить его необработанным исключением — самое плохое, что может
+        # случиться.
+        try:
+            out.objects, out.objects_how, out.objects_error = _read_tree(
+                page, act, expected_act, date_from, date_to
+            )
+        except Exception as exc:            # noqa: BLE001 — см. выше
+            out.objects_error = f"дерево не прочитано: {exc}"
         return out
     finally:
         if conn is not None:
@@ -868,8 +894,22 @@ _STATUS_SIGNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "ad account was disabled",
         "account has been disabled",
         "this ad account is disabled",
+        # По образцу увиденного ниже: Meta пишет о себе действительным залогом.
+        "we disabled your ad account",
+        "we disabled your account",
+        "we've disabled your ad account",
+        "we have disabled your ad account",
     )),
     ("restricted", (
+        # Снято с DQ438 12.09. Все формулировки выше этой строки были
+        # придуманы и ни одна не сработала: аккаунт был ограничен, а дешборд
+        # показывал «no warning». Meta пишет не «account is restricted», а
+        # **«We restricted your ad account»** — от себя и действительным
+        # залогом. Догадка о чужих словах и здесь стоила молчания об отказе.
+        "we restricted your ad account",
+        "we restricted your account",
+        "we've restricted your ad account",
+        "we have restricted your ad account",
         "account is restricted",
         "restricted from advertising",
         "advertising access is restricted",
@@ -880,8 +920,35 @@ _STATUS_SIGNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     )),
 )
 
+#: Признаки беды, из которых не видно, какой именно. Нужны затем, что список
+#: выше — перечень **известных** формулировок, а Meta их меняет. Пока банер не
+#: опознан, честный ответ — «что-то не так, вот её слова», и уж точно не «no
+#: warning»: под этой надписью аккаунт стоял ограниченным.
+_TROUBLE_SIGNS: tuple[str, ...] = (
+    "you can't run ads",
+    "you can’t run ads",
+    "you cannot run ads",
+    "you can no longer run ads",
+    "request review",
+)
 
-def _read_status(page) -> tuple[str, str]:
+
+#: Сколько ждать баннер о состоянии кабинета, прежде чем сказать «чисто».
+#:
+#: Он приходит отдельным запросом и позже таблицы. 12.09 из-за этого
+#: ограниченный кабинет прошёл как `clear` **уже с исправленными
+#: формулировками**: спрашивали через мгновение после отрисовки грида, когда
+#: баннера на странице ещё не было. Ручная проверка ждала шесть секунд и
+#: видела его.
+#:
+#: Платит за ожидание только чистая страница: найденный баннер возвращается
+#: сразу. То есть цена — секунды на здоровом аккаунте и правильный ответ на
+#: больном.
+STATUS_TRIES = 8
+STATUS_PAUSE_S = 0.75
+
+
+def _read_status(page, tries: int = STATUS_TRIES) -> tuple[str, str]:
     """Состояние кабинета — словами самой страницы.
 
     Отсутствие предупреждения **не значит «активен»**: баннер мог не успеть
@@ -890,6 +957,20 @@ def _read_status(page) -> tuple[str, str]:
     больше. Написать здесь `active` значило бы выдать незнание за проверку —
     именно тот вид ошибки, которая выглядит нормальным результатом.
     """
+    answer = ("unknown", "")
+    for attempt in range(max(1, tries)):
+        if attempt:
+            _sleep(STATUS_PAUSE_S)
+        answer = _status_once(page)
+        # Ждём только «нечего сказать»: и «чисто», и «страница ничего не дала»
+        # бывают потому, что рано спросили. Всё, что названо, — ответ.
+        if answer[0] not in ("clear", "unknown"):
+            return answer
+    return answer
+
+
+def _status_once(page) -> tuple[str, str]:
+    """Один взгляд на страницу. Ожиданием заведует `_read_status`."""
     try:
         raw = page.inner_text("body") or ""
     except Exception:
@@ -904,6 +985,22 @@ def _read_status(page) -> tuple[str, str]:
             if at != -1:
                 start = max(0, at - 60)
                 return state, flat[start : at + len(phrase) + 140].strip()
+
+    # Банер есть, а какой — не опознали. Говорим это вслух её же словами.
+    #
+    # Не `unknown`: он означает «страница ничего не дала прочитать», и так его
+    # и подписывает дешборд. Здесь прочиталось прекрасно — просто формулировка
+    # новая. Отдельное слово попадает в колонку состояния красным, а фраза
+    # Meta — в подсказку, с ней человеку и идти разбираться.
+    #
+    # Ложное «blocked» на здоровом аккаунте — досада; ложное «no warning» на
+    # ограниченном — то, что уже случилось: аккаунт не мог крутить рекламу, а
+    # дешборд молчал. Размен осознанный.
+    for phrase in _TROUBLE_SIGNS:
+        at = low.find(phrase)
+        if at != -1:
+            start = max(0, at - 120)
+            return "blocked", flat[start : at + len(phrase) + 200].strip()
     return "clear", ""
 
 
@@ -1180,3 +1277,440 @@ def _shoot(page, account: str, day: str) -> str:
         return str(target)
     except Exception:
         return ""
+
+
+# ══ Дерево аккаунта: кампании и объявления ════════════════════════════════
+#
+# То, на что встанет переключатель (`acl-113`). Строки, которые дешборд рисует
+# под аккаунтом сегодня, приходят из книги статистики: у них есть имя и нет
+# ничего больше. Тремя способами это не годится для тумблера — в книге нет id
+# объектов Meta, она отстаёт на сутки, и столбца on/off в ней нет вовсе.
+#
+# Всё три есть на экране, который чтение уже открывает.
+#
+# Переезжает в RPA-трек вместе с остальным чтением (`acl-1121`). Отдельным
+# модулем это не заведено намеренно: селекторы, ожидание таблицы и путь
+# прицепки лежат здесь, и новый модуль в `fb_ads_rpa` импортировал бы их
+# обратно — то есть RPA зависел бы от дешборда. Переносить надо одним куском.
+
+ADS_MANAGER_LEVELS: dict[str, str] = {
+    "campaign": ADS_MANAGER,
+    "adset": "https://adsmanager.facebook.com/adsmanager/manage/adsets",
+    "ad": "https://adsmanager.facebook.com/adsmanager/manage/ads",
+}
+
+#: Уровни, которые читаем и на которые встанет тумблер.
+#:
+#: **Кампания и объявление** — решение владельца 12.09, поправляющее прежнее.
+#: Сначала было записано «ad set и объявление, кампания вне объёма», и это
+#: оказалось неверно для того, как здесь работают: кампания и ad set идут один
+#: к одному, а деньги останавливает именно кампания. Живой аккаунт показал
+#: почему — строки с тумблером `on` и доставкой `Campaign off`: ad set включён,
+#: а не крутится ничего, потому что выключена кампания над ним.
+#:
+#: Ad set остаётся известным уровнем (его умеет читать `read_level`), но в
+#: обход не входит: лишний заход на живой аккаунт ради строки, которую никто
+#: не трогает.
+TREE_LEVELS: tuple[str, ...] = ("campaign", "ad")
+
+#: Каким параметром сузить список объявлений до одной кампании.
+TREE_PARENT_PARAM: dict[str, str] = {
+    "campaign": "selected_campaign_ids",
+    "adset": "selected_adset_ids",
+}
+
+#: Сколько кампаний обойти за объявлениями. Каждая — отдельный заход на живой
+#: аккаунт, и на большом кабинете чтение иначе растянется на десятки минут.
+#: Превышение не замалчивается: сколько осталось непрочитанным, сказано вслух.
+TREE_MAX_PARENTS = 25
+
+
+@dataclass
+class AdObject:
+    """Одна строка списка: то, что нужно, чтобы её показать и переключить."""
+
+    level: str                # campaign | adset | ad
+    id: str = ""              # id объекта в Meta
+    name: str = ""            # как аккаунт его называет
+    switch: str = "unknown"   # on | off | unknown — положение тумблера
+    switch_label: str = ""    # подпись тумблера словами Meta
+    delivery: str = ""        # колонка Delivery, дословно
+
+    #: Числа строки — теми же словами, какими их написала Meta. Не разбираем в
+    #: числа намеренно: «$22.89 Per Lead (Form)» несёт и сумму, и за что она,
+    #: а `22.89` — только половину. Считать по ним мы ничего не собираемся;
+    #: они нужны, чтобы человек видел, что именно останавливает.
+    spend: str = ""
+    results: str = ""
+    cost_per_result: str = ""
+
+    id_from: str = ""         # откуда взят id — чтобы знать, что сломалось
+
+    #: Чей это объект. У объявления — id его кампании, и известен он **по
+    #: построению**: список объявлений спрашивается по одной кампании за раз.
+    #: Вычитать родителя со страницы нечем — колонка «Ad set name» есть в
+    #: заголовках, а ячейки у неё в разметке не нашлось.
+    parent_id: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _tree_url(act: str, level: str, date_from: str, date_to: str = "",
+              parent_level: str = "", parent_id: str = "") -> str:
+    """Адрес уровня. Разбор периода и номера кабинета — общий с `_url`.
+
+    `parent_id` сужает список объявлений до одного родителя — кампании или ad
+    set'а. Это единственный способ узнать, чьё объявление: в самой строке
+    родителя нет — колонка «Ad set name» в заголовках есть, а ячейки у неё в
+    разметке не оказалось.
+
+    Он же оказался единственным способом увидеть объявления вообще. Общий
+    список 12.09 отдал шесть строк на $661 при спенде аккаунта $2 117; проход
+    по родителям дал двадцать на $1 957. Чем именно был сужен «общий» список,
+    страница не говорит — а раз так, доверять ему нельзя.
+    """
+    if level not in ADS_MANAGER_LEVELS:
+        raise ValueError(f"неизвестный уровень {level!r}")
+    base = _url(act, date_from, date_to)
+    url = ADS_MANAGER_LEVELS[level] + base[len(ADS_MANAGER):]
+    if parent_id:
+        if level != "ad":
+            raise ValueError("сузить до родителя можно только список объявлений")
+        param = TREE_PARENT_PARAM.get(parent_level)
+        if not param:
+            raise ValueError(f"неизвестный родительский уровень {parent_level!r}")
+        if not parent_id.isdigit():
+            raise ValueError("id родителя должен состоять из цифр")
+        url += "&" + param + "=" + parent_id
+    return url
+
+
+#: Какой тип объекта Meta пишет в разметке на каждом уровне.
+#:
+#: **Словарь здесь легаси, и читать его буквально нельзя.** На странице ad
+#: set'ов строки помечены `CAMPAIGN`, на странице объявлений — `ADGROUP`: так
+#: назывались эти уровни в старом Ads API, где «campaign» значил нынешний ad
+#: set, а «adgroup» — объявление. Кто прочтёт `forObjectType(toggle,CAMPAIGN)`
+#: как «тумблер кампании», ошибётся на целый уровень — а это разница между
+#: «остановить один ad set» и «погасить всё под кампанией».
+#:
+#: Зато токен даёт проверку, которой иначе нет: адрес уровня можно открыть и
+#: получить не тот список, и заметить это по одному URL нельзя.
+#: Кампания — `CAMPAIGN_GROUP`, ad set — `CAMPAIGN`, объявление — `ADGROUP`.
+#: Все три сняты с живого аккаунта; словарь легаси целиком, и `CAMPAIGN` здесь
+#: значит ad set.
+_LEVEL_KIND: dict[str, str] = {
+    "campaign": "CAMPAIGN_GROUP", "adset": "CAMPAIGN", "ad": "ADGROUP",
+}
+
+#: Строка итогов. Не объект: переключать там нечего, а в список она попадает
+#: такой же разметкой, как настоящие строки.
+_TOTALS_ROW_ID = "-1"
+
+#: Разбор таблицы одним заходом в страницу.
+#:
+#: Идём по `data-surface` — собственной разметке Meta для её же логов. Она
+#: несёт и id строки, и назначение ячейки:
+#:
+#:     /am/table/table_row:123456789000000001unit/table_cell:forObjectType(name,CAMPAIGN)
+#:
+#: Первая версия искала `role="row"` и `role="cell"` и не нашла ни одной
+#: строки: у грида Ads Manager размечен заголовком только он сам —
+#: пятнадцать `columnheader` и **ноль** `role="cell"`, а тело таблицы лежит под
+#: `role="presentation"`. Заголовки при этом прочитались, то есть разбор
+#: возвращал «ноль строк» с видом работающего.
+#:
+#: id тоже брался не оттуда: искалось любое число в 15-18 цифр в атрибутах, и
+#: первыми находились `<path d="M 25.19238815542512 ...">` — в путях SVG таких
+#: цепочек сколько угодно. Здесь id берётся из одного определённого места.
+_READ_TREE_JS = r"""
+(level) => {
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => el.getClientRects().length > 0 &&
+    !el.closest('[hidden], [aria-hidden="true"]') &&
+    getComputedStyle(el).visibility !== 'hidden';
+  const tables = Array.from(document.querySelectorAll('[role="table"], [role="grid"]'))
+    .filter(visible).filter(el => !el.parentElement.closest('[role="table"], [role="grid"]'));
+  const refuse = (how) => ({rows: [], how, kinds: [], error: how});
+  if (!tables.length) return refuse('no-table');
+  if (tables.length !== 1) return refuse('ambiguous-tables');
+  const t = tables[0];
+  if (t.closest('[aria-busy="true"]') ||
+      Array.from(t.querySelectorAll('[aria-busy="true"], [role="progressbar"]')).some(visible))
+    return refuse('table-loading');
+
+  const marked = t.querySelectorAll('[data-surface*="table_row:"]');
+  if (!marked.length) return {rows: [], how: 'no-row-surfaces', kinds: []};
+
+  const rows = new Map();
+  const kinds = new Set();
+  const CELL = /table_row:(-?\d+)[a-z]*\/table_cell:([^\/]+)/;
+  const KIND = /forObjectType\((?:name|toggle|delivery),([A-Z_]+)\)/;
+
+  for (const el of marked) {
+    if (!visible(el)) continue;
+    const m = (el.getAttribute('data-surface') || '').match(CELL);
+    if (!m) continue;
+    const id = m[1], cell = m[2];
+    if (id === '-1') continue;   // строка итогов — не объект
+
+    let r = rows.get(id);
+    if (!r) {
+      r = {id: id, name: '', delivery: '', switch: 'unknown', switch_label: '',
+           id_from: 'data-surface', spend: '', results: '', cost_per_result: '', kinds: []};
+      rows.set(id, r);
+    }
+    const k = cell.match(KIND);
+    if (k) {
+      kinds.add(k[1]);
+      if (!r.kinds.includes(k[1])) r.kinds.push(k[1]);
+    }
+
+    // Одна и та же разметка висит на нескольких вложенных узлах: берём первое
+    // непустое, а не последнее — внутренние копии часто пустые.
+    if (cell.startsWith('forObjectType(name')) {
+      const txt = norm(el.innerText);
+      if (txt && !r.name) r.name = txt;
+    } else if (cell.startsWith('forObjectType(delivery')) {
+      const txt = norm(el.innerText);
+      if (txt && !r.delivery) r.delivery = txt;
+    } else if (cell.startsWith('forObjectType(toggle')) {
+      const sw = el.querySelector('[role="switch"], input[type="checkbox"]');
+      if (sw && r.switch === 'unknown') {
+        r.switch_label = norm(sw.getAttribute('aria-label') || '');
+        const c = sw.getAttribute('aria-checked');
+        if (c === 'true') r.switch = 'on';
+        else if (c === 'false') r.switch = 'off';
+      }
+    } else if (cell === 'spend') {
+      const txt = norm(el.innerText);
+      if (txt && !r.spend) r.spend = txt;
+    } else if (cell.startsWith('forAttributionWindow(results')) {
+      const txt = norm(el.innerText);
+      if (txt && !r.results) r.results = txt;
+    } else if (cell.startsWith('forAttributionWindow(cost_per_result')) {
+      const txt = norm(el.innerText);
+      if (txt && !r.cost_per_result) r.cost_per_result = txt;
+    }
+  }
+
+  // Какой вид списка выбран. У Meta это ничем не помечено, кроме цвета
+  // подчёркивания: у выбранной вкладки оно синее, у остальных серое, и ни
+  // aria-selected, ни aria-current, ни tabindex здесь нет.
+  //
+  // Поэтому ищем «не такую, как все», а не конкретный цвет: тема у Meta
+  // меняется, а то, что выбранная вкладка одна и подчёркнута иначе, — нет.
+  // Две «не такие» значит, что правило перестало работать; тогда честнее
+  // промолчать, чем назвать вид наугад.
+  let view = '';
+  const tabs = Array.from(document.querySelectorAll('[data-surface$="quickviewTab"]'));
+  if (tabs.length > 1) {
+    const marks = tabs.map(e => {
+      let colour = '';
+      for (const k of e.querySelectorAll('*')) {
+        const st = getComputedStyle(k);
+        if (parseFloat(st.borderBottomWidth) > 0) { colour = st.borderBottomColor; break; }
+      }
+      return {text: norm(e.innerText), colour: colour};
+    });
+    const seen = {};
+    marks.forEach(m => { if (m.colour) seen[m.colour] = (seen[m.colour] || 0) + 1; });
+    for (const m of marks) {
+      if (!m.colour || seen[m.colour] !== 1) continue;
+      if (view) { view = ''; break; }
+      view = m.text;
+    }
+  }
+
+  // Ads Manager can virtualize rows outside a scrollable list. This snapshot
+  // cannot certify that it contains the entire account; expose that limit.
+  const containers = [t, ...t.querySelectorAll('*')];
+  for (let el = t.parentElement; el; el = el.parentElement) containers.push(el);
+  const scrollable = containers.some(el => visible(el) &&
+    /auto|scroll/.test(getComputedStyle(el).overflowY) &&
+    el.scrollHeight > el.clientHeight + 2);
+  return {rows: Array.from(rows.values()), how: 'data-surface',
+          kinds: Array.from(kinds), view: view, partial: scrollable};
+}
+"""
+
+
+def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
+    """Разобрать открытую таблицу одного уровня.
+
+    Возвращает `(объекты, чем разобрано, ошибка)`. Страница должна быть уже
+    на нужном уровне: переходами заведует `_read_tree`, которому есть что
+    сверять (кабинет, период), а этой функции — нет.
+
+    Ничего не нажимает. Это чтение, и единственное, что здесь происходит со
+    страницей, — вопрос к ней.
+    """
+    if level not in ADS_MANAGER_LEVELS:
+        return [], "", f"неизвестный уровень {level!r}"
+    try:
+        got = page.evaluate(_READ_TREE_JS, level)
+    except Exception as exc:
+        return [], "", f"таблица {level} не разобрана: {exc}"
+    if not isinstance(got, dict):
+        return [], "", f"таблица {level}: страница ответила не тем"
+
+    how = str(got.get("how") or "")
+    view = str(got.get("view") or "")
+    if view:
+        # Вид — часть ответа на «что мы прочитали». Список «Active ads» и
+        # список «All ads» — разные списки, и одинаково выглядящее число
+        # строк в них значит разное.
+        how = f"{how}({view})"
+    if got.get("error"):
+        return [], how, f"таблица {level}: {got['error']}"
+    rows = got.get("rows") or []
+    want = _LEVEL_KIND[level]
+    # Every accepted object must identify itself, not borrow another row's kind.
+    if not isinstance(rows, list) or any(
+        not isinstance(r, dict)
+        or not re.fullmatch(r"[0-9]+", str(r.get("id") or ""))
+        or not str(r.get("name") or "").strip()
+        or set(r.get("kinds") or []) != {want}
+        for r in rows
+    ):
+        return [], how, f"таблица {level}: строка не подтвердила id, имя или что это за объекты ({want})"
+    objects = [
+        AdObject(
+            level=level,
+            id=str(r.get("id") or ""),
+            name=str(r.get("name") or ""),
+            switch=str(r.get("switch") or "unknown"),
+            switch_label=str(r.get("switch_label") or ""),
+            delivery=str(r.get("delivery") or ""),
+            spend=str(r.get("spend") or ""),
+            results=str(r.get("results") or ""),
+            cost_per_result=str(r.get("cost_per_result") or ""),
+            id_from=str(r.get("id_from") or ""),
+        )
+        for r in rows
+        if isinstance(r, dict)
+    ]
+    if not objects:
+        return [], how, f"в таблице {level} не нашлось ни одной строки ({how})"
+
+    # Уровень сверяется по тому, что Meta написала о самих строках, а не по
+    # адресу: открыть `/manage/adsets` и получить другой список — можно, и по
+    # одному URL этого не увидеть. Спутать уровни здесь дороже всего: на это
+    # встанет тумблер, и разница между ad set'ом и кампанией — разница между
+    # «остановить одно» и «погасить всё под ней».
+    kinds = {str(k) for k in (got.get("kinds") or [])}
+    want = _LEVEL_KIND[level]
+    if kinds and kinds != {want}:
+        return [], how, (
+            f"на уровне {level} ждали объекты {want}, а страница разметила "
+            f"{', '.join(sorted(kinds))} — список не тот, ничего не берём"
+        )
+    if not kinds:
+        return [], how, f"на уровне {level} страница не сказала, что это за объекты"
+    warning = (
+        "прочитаны отрисованные строки; список прокручивается, полнота не подтверждена"
+        if got.get("partial") else ""
+    )
+    return objects, how, warning
+
+
+def _read_tree(
+    page, act: str, expected_act: str, date_from: str, date_to: str = "",
+) -> tuple[list[dict], str, str]:
+    """Пройти уровни и собрать дерево. Возвращает `(объекты, чем, ошибка)`.
+
+    Кабинет и период сверяются **на каждом уровне заново**. Переход — это новый
+    адрес, а Ads Manager умеет открыть кабинет профиля по умолчанию вместо
+    запрошенного; без сверки чужое дерево пришло бы с видом правильного ответа.
+    Ровно та же осторожность, что и со спендом, и по той же причине.
+
+    Редактор объявления не открывается ни на каком шаге. Meta при каждом его
+    открытии предвыбирает «Instant form (suggested)» в Browser add-ons и
+    автосохраняет — чистое Leads-объявление получает ошибку #100 от одного
+    визита (DQ204, 02.08). Всё читается со списка.
+    """
+    objects: list[dict] = []
+    hows: list[str] = []
+    errors: list[str] = []
+
+    def _context_matches(what: str, parent_id: str = "") -> bool:
+        from urllib.parse import parse_qs, urlsplit
+
+        if _act_from_url(page, tries=1) != expected_act:
+            errors.append(f"{what}: открылся не тот кабинет — пропущено")
+            return False
+        if not _period_matches(_shown_period(page), date_from, date_to):
+            errors.append(f"{what}: на экране другой период — пропущено")
+            return False
+        if parent_id:
+            params = parse_qs(urlsplit(page.url).query)
+            if params.get(TREE_PARENT_PARAM[top]) != [parent_id]:
+                errors.append(f"{what}: фильтр родительской кампании изменился — пропущено")
+                return False
+        return True
+
+    def _open(url: str, what: str, parent_id: str = "") -> bool:
+        """Перейти и сверить, что открылось именно то, что просили."""
+        try:
+            page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        except Exception as exc:
+            errors.append(f"{what}: переход не удался ({exc})")
+            return False
+        if not _wait_for_grid(page):
+            errors.append(f"{what}: таблица не отрисовалась за отведённое время")
+            return False
+        return _context_matches(what, parent_id)
+
+    # Сначала верхний уровень: его id нужны, чтобы спросить объявления каждого.
+    top = TREE_LEVELS[0]
+    if _open(_tree_url(act, top, date_from, date_to), top):
+        parents, how, err = read_level(page, top)
+        if not _context_matches(top):
+            return [], how, "; ".join(errors)
+        if how:
+            hows.append(f"{top}:{how}")
+        if err:
+            errors.append(err)
+        objects.extend(o.to_dict() for o in parents)
+
+        wanted = [p for p in parents if p.id]
+        if len(wanted) > TREE_MAX_PARENTS:
+            # Молчаливое усечение читается как «это всё». Говорим вслух.
+            errors.append(
+                f"объявления прочитаны у первых {TREE_MAX_PARENTS} из "
+                f"{len(wanted)}: каждая — отдельный заход на аккаунт"
+            )
+            wanted = wanted[:TREE_MAX_PARENTS]
+
+        ads_how: set[str] = set()
+        for parent in wanted:
+            what = f"{top} {parent.id}"
+            url = _tree_url(act, "ad", date_from, date_to,
+                            parent_level=top, parent_id=parent.id)
+            if not _open(url, what, parent.id):
+                continue
+            got, how, err = read_level(page, "ad")
+            if not _context_matches(what, parent.id):
+                continue
+            if how:
+                ads_how.add(how)
+            if err:
+                errors.append(f"{what}: {err}")
+            for o in got:
+                o.parent_id = parent.id
+                objects.append(o.to_dict())
+        if ads_how:
+            hows.append("ad:" + "/".join(sorted(ads_how)))
+
+    # A stale/ignored filter may return the same ad under different parents.
+    # Its ownership is then ambiguous: keep neither association.
+    owners: dict[str, set[str]] = {}
+    for obj in objects:
+        if obj["level"] == "ad":
+            owners.setdefault(obj["id"], set()).add(obj["parent_id"])
+    ambiguous = {oid for oid, parents in owners.items() if len(parents) > 1}
+    if ambiguous:
+        objects = [o for o in objects if not (o["level"] == "ad" and o["id"] in ambiguous)]
+        errors.append("одни объявления вернулись у разных кампаний — неоднозначные связи пропущены")
+    return objects, " ".join(hows), "; ".join(errors)
