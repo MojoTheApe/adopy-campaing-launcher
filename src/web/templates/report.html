@@ -1884,6 +1884,20 @@
       background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent);
     }
 
+    /* Состояние Multilogin внутри формы подключения: строка всегда, поля
+       входа — только когда токена нет (ACL-1130). */
+    .amap-ml { flex-basis: 100%; margin-top: 0.35rem; font-size: 0.74rem; color: var(--muted); }
+    .amap-ml-line b { font-weight: 600; }
+    .amap-ml-ok { color: var(--good); }
+    .amap-ml-off { color: var(--warn, var(--danger)); }
+    .amap-ml-signin {
+      display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.35rem;
+    }
+    .amap-ml [hidden] { display: none; }
+    .amap-ml-signin input {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+      color: var(--text); padding: 0.2rem 0.4rem; font-size: 0.75rem; font-family: inherit;
+    }
     .amap-live-ok { font-variant-numeric: tabular-nums; font-weight: 600; }
     .amap-live-run { color: var(--muted); font-size: 0.78rem; }
     .amap-live-bad { color: var(--danger); border-color: var(--danger); }
@@ -2917,88 +2931,21 @@ async function dashRefresh(ev) {
 
 <h2 class="view-title">{{ c.country }}: Campaign Builder</h2>
 
-{# ── Multilogin connect panel ── #}
-<div class="ml-connect-panel" id="ml-connect-{{ cid }}">
-  <div class="ml-connect-header" onclick="mlTogglePanel('{{ cid }}')">
-    <span class="ml-connect-icon">🔑</span>
-    <span class="ml-connect-title">Multilogin — connect to auto-link profile_id</span>
-    <span class="ml-connect-chevron" id="ml-chevron-{{ cid }}">▸</span>
-  </div>
-  <div class="ml-connect-body" id="ml-body-{{ cid }}" style="display:none">
-    <p style="margin:0 0 0.6rem;font-size:0.75rem;color:var(--muted)">
-      Credentials are used for one sign-in request only and never saved to disk.
-      Token (1 month) is saved to <code>.env</code> so you don't need to re-enter next time.
-    </p>
-    <div class="ml-connect-fields">
-      <div class="ml-instance-toggle" id="ml-instance-{{ cid }}">
-        <button type="button" class="ml-inst-btn ml-inst-active" data-inst="A" onclick="mlSetInstance('{{ cid }}','A')" title="Multilogin account A">{{ mlx['A'] }}</button>
-        <button type="button" class="ml-inst-btn" data-inst="B" onclick="mlSetInstance('{{ cid }}','B')" title="Multilogin account B">{{ mlx['B'] }}</button>
-      </div>
-      {# Token-first (grill 2026-08-02, Q1=a): the credential form is shown
-         only when the saved monthly token is dead — mlTokenFirst() decides. #}
-      <div id="ml-token-banner-{{ cid }}" style="display:none;font-size:0.74rem"></div>
-      <div id="ml-cred-fields-{{ cid }}">
-        <input type="email" id="ml-email-{{ cid }}" class="cb-input" placeholder="Multilogin email" autocomplete="username">
-        <input type="password" id="ml-pass-{{ cid }}" class="cb-input" placeholder="Multilogin password" autocomplete="current-password">
-        <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem">
-          <input type="checkbox" id="ml-save-{{ cid }}" checked> Save token to .env (1 month)
-        </label>
-        <button type="button" class="ml-connect-btn" onclick="mlSignin('{{ cid }}')">Connect</button>
-      </div>
-    </div>
-    <div id="ml-status-{{ cid }}" style="margin-top:0.5rem;font-size:0.74rem"></div>
-    <div id="ml-profiles-{{ cid }}" style="margin-top:0.6rem"></div>
+{#- Панель входа в Multilogin отсюда убрана (ACL-1130).
 
-    {# ── Attach-only workflow ── #}
-    <details style="margin-top:0.6rem" id="ml-direct-section-{{ cid }}" open>
-      <summary style="font-size:0.72rem;color:var(--ok);cursor:pointer;user-select:none;font-weight:600">
-        ✓ How to run the RPA (Multilogin)
-      </summary>
-      <div style="margin-top:0.5rem;padding:0.5rem;background:#0a2a14;border-radius:6px;border:1px solid #1a5a2a">
-        <p style="font-size:0.72rem;color:#8fd4a0;margin:0 0 0.4rem">
-          <strong>1.</strong> Before Publish it is better <strong>not to open the profile by hand</strong> in MLX Desktop (the RPA starts it itself with CDP).<br>
-          <strong>2.</strong> Campaign Builder → <strong>Preview</strong> → <strong>Publish</strong> (confirm in the dialog).<br>
-          <strong>3.</strong> The RPA opens the profile through the <strong>MLX automation API</strong>, builds the campaign and
-          <strong>leaves the window open</strong> — check that Facebook is signed in to the right account.
-        </p>
-        <p style="font-size:0.72rem;color:#8fd4a0;margin:0">
-          ⚠️ A manual "Quick launch" from MLX Desktop <strong>gives no CDP</strong> — the RPA cannot attach to it.
-          If the profile is already open by hand, the RPA may restart <strong>only that one</strong> to get CDP (cookies are kept).
-          Either way the Multilogin window <strong>stays open</strong> — do not close it.
-        </p>
-      </div>
-    </details>
+    Она была предусловием формы привязки аккаунта в карте — без живого токена
+    кнопке Reload неоткуда взять список профилей, — но стояла отдельно, внизу,
+    в билдере, и рисовалась **по копии на каждую страну**: двадцать полей
+    пароля на странице ради настройки, которая одна на машину.
 
-    {# ── Paste token directly (no password needed) ── #}
-    <details style="margin-top:0.6rem">
-      <summary style="font-size:0.72rem;color:var(--muted);cursor:pointer;user-select:none">
-        🔑 Paste the automation token directly (if you have no password)
-      </summary>
-      <div style="margin-top:0.5rem">
-        <p style="font-size:0.71rem;color:var(--muted);margin:0 0 0.4rem">
-          Ask the owner of the Multilogin X workspace for a token
-          (<strong>Settings → Automation → Generate Token</strong>) and paste it here.
-          The token is saved to <code>.env</code> and used to start profiles.
-        </p>
-        <textarea id="ml-token-paste-{{ cid }}" rows="3"
-          placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9…"
-          style="width:100%;box-sizing:border-box;font-family:monospace;font-size:0.68rem;
-                 background:var(--bg);border:1px solid var(--border);border-radius:4px;
-                 color:var(--text);padding:0.3rem 0.45rem;resize:vertical"></textarea>
-        <div style="display:flex;gap:0.5rem;margin-top:0.35rem;align-items:center">
-          <button type="button" class="ml-connect-btn"
-                  style="padding:0.28rem 0.8rem;font-size:0.75rem"
-                  onclick="mlSaveToken('{{ cid }}')">💾 Save token</button>
-          <button type="button" class="ml-connect-btn"
-                  style="padding:0.28rem 0.8rem;font-size:0.75rem;background:var(--bg-hover)"
-                  onclick="mlTestToken('{{ cid }}')">🔍 Check + load profiles</button>
-          <span id="ml-token-status-{{ cid }}" style="font-size:0.72rem"></span>
-        </div>
-      </div>
-    </details>
+    Теперь вход живёт внутри самой формы привязки и показывается, только когда
+    токена нет. Справка «How to run the RPA» была справкой, а не контролом, и
+    двадцать её копий не нужны никому.
 
-  </div>
-</div>
+    Функции `ml*` в этом файле частью остались без вызывающих. Убирать их
+    отдельным заходом: их тринадцать и восемьдесят девять мест, и удалять код,
+    который не проследил, — способ сломать что-нибудь ночью. -#}
+
 
 {% if has_open %}
 {% if is_fallback_mode %}
@@ -5042,6 +4989,130 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
     amapHint(row, det);
   } catch (e) { /* открыть удалось — это главное; подсказка обновится позже */ }
 }
+
+/* One credential form is mounted beside the account being connected. No
+   password inputs live in hidden country tabs or remain after connection. */
+var AMAP_ML_STATE = {};
+var AMAP_ML_PENDING = {};
+
+function amapMlBlock(el) { return el.closest('.amap-add'); }
+function amapMlInstance(block) {
+  var sel = block.querySelector('.amap-inst');
+  return (sel && sel.value) || 'A';
+}
+function amapMlPaint(block) {
+  var ml = block.querySelector('.amap-ml');
+  if (!ml) return;
+  var inst = amapMlInstance(block), state = AMAP_ML_STATE[inst];
+  var line = ml.querySelector('.amap-ml-line');
+  var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[inst]) || inst;
+  var alive = !!(state && state.alive);
+  line.textContent = 'Multilogin ' + label + ': ';
+  line.title = (state && (state.error || state.reason)) || '';
+  var mark = document.createElement('b');
+  mark.className = alive ? 'amap-ml-ok' : 'amap-ml-off';
+  mark.textContent = !state ? 'checking…' : alive ? 'connected' :
+    state.reason === 'expired' ? 'token expired' : state.has_token ? 'token could not be verified' : 'not connected';
+  line.appendChild(mark);
+  if (alive && state.email) line.appendChild(document.createTextNode(' · ' + state.email));
+  if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
+  ml.querySelector('.amap-ml-open').hidden = !state || alive;
+  var signin = ml.querySelector('.amap-ml-signin');
+  if (alive && signin) signin.remove();
+}
+function amapMlPaintAll() { document.querySelectorAll('.amap-add').forEach(amapMlPaint); }
+function amapMlRefresh(inst, force) {
+  if (!force && AMAP_ML_PENDING[inst]) return AMAP_ML_PENDING[inst];
+  if (!force && AMAP_ML_STATE[inst]) { amapMlPaintAll(); return Promise.resolve(AMAP_ML_STATE[inst]); }
+  var pending = fetch('/multilogin-token-status?instance=' + encodeURIComponent(inst), {credentials: 'same-origin'})
+    .then(function (r) { if (!r.ok) throw new Error('Connection status unavailable'); return r.json(); })
+    .catch(function (e) { return {ok: false, alive: false, error: String(e.message || e)}; })
+    .then(function (j) {
+      if (AMAP_ML_PENDING[inst] === pending) {
+        AMAP_ML_STATE[inst] = j || {};
+        delete AMAP_ML_PENDING[inst];
+        amapMlPaintAll();
+      }
+      return j;
+    });
+  AMAP_ML_PENDING[inst] = pending;
+  return pending;
+}
+function amapMlOpen(btn) {
+  var block = amapMlBlock(btn), inst = amapMlInstance(block);
+  if (AMAP_ML_STATE[inst] && AMAP_ML_STATE[inst].alive) return;
+  // A pending sign-in owns its form until its response; never detach its inputs.
+  if (document.querySelector('.amap-ml-signin[data-busy]')) return;
+  document.querySelectorAll('.amap-ml-signin').forEach(function (el) { el.remove(); });
+  block.querySelector('.amap-ml').appendChild(document.getElementById('amap-ml-signin-template').content.cloneNode(true));
+  block.querySelector('.amap-ml-email').focus();
+}
+function amapInstanceChanged(sel) {
+  var block = amapMlBlock(sel), form = block.querySelector('.amap-ml-signin');
+  if (form) form.remove();
+  amapFilter(block.querySelector('.amap-find'));
+  amapMlRefresh(sel.value || 'A', false);
+  amapMlPaint(block);
+}
+function amapMlSay(block, text, bad) {
+  var msg = block.querySelector('.amap-msg');
+  if (!msg) return;
+  msg.textContent = text;
+  msg.style.color = bad ? 'var(--danger)' : 'var(--muted)';
+}
+async function amapMlSubmit(btn, paste) {
+  var block = amapMlBlock(btn), inst = amapMlInstance(block);
+  var form = btn.closest('.amap-ml-signin');
+  if (form.dataset.busy) return;
+  var pass = form.querySelector('.amap-ml-pass'), token = form.querySelector('.amap-ml-token');
+  var data = paste ? {token: token.value.trim(), instance: inst} : {
+    email: form.querySelector('.amap-ml-email').value.trim(), password: pass.value, save_token: true, instance: inst
+  };
+  if (paste ? !data.token : !data.email || !data.password) {
+    amapMlSay(block, paste ? 'Paste the token first' : 'Email and password, please', true); return;
+  }
+  form.dataset.busy = '1';
+  var selector = block.querySelector('.amap-inst');
+  selector.disabled = true;
+  form.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+  amapMlSay(block, paste ? 'Saving…' : 'Signing in…');
+  try {
+    var response = await fetch(paste ? '/multilogin-save-token' : '/multilogin-signin', {
+      method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+    });
+    var j = await response.json();
+    if (!response.ok || !j || !j.ok) throw new Error((j && j.error) || 'Connection failed');
+    if (!paste && !j.token_saved) throw new Error(j.token_error || 'Signed in, but no automation token was saved. Ask the workspace owner for a token.');
+    // A new workspace token invalidates both cached profiles and in-flight results.
+    delete _mlxCache[inst]; delete _mlxLoading[inst];
+    document.querySelectorAll('.amap-add').forEach(function (b) {
+      if (amapMlInstance(b) !== inst) return;
+      b._amapGeneration = (b._amapGeneration || 0) + 1;
+      var hits = b.querySelector('.amap-hits');
+      if (hits) { hits.replaceChildren(); hits.hidden = true; }
+    });
+    token.value = '';
+    amapMlSay(block, 'Token saved; checking connection…');
+    var state = await amapMlRefresh(inst, true);
+    amapMlSay(block, state && state.alive ? 'Connected. Reload to search profiles.' :
+      'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
+  } catch (e) { amapMlSay(block, String(e.message || e), true); }
+  finally {
+    pass.value = '';
+    delete form.dataset.busy;
+    selector.disabled = false;
+    form.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+  }
+}
+function amapMlSignin(btn) { return amapMlSubmit(btn, false); }
+function amapMlSaveToken(btn) { return amapMlSubmit(btn, true); }
+function amapMlBoot() {
+  var wanted = {};
+  document.querySelectorAll('.amap-ml').forEach(function (ml) { wanted[amapMlInstance(amapMlBlock(ml))] = 1; });
+  Object.keys(wanted).forEach(function (inst) { amapMlRefresh(inst, false); });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapMlBoot);
+else amapMlBoot();
 
 function amapHint(row, d) {
   var hint = row.querySelector('.amap-hint');
@@ -9497,5 +9568,20 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
 })();
 </script>
 
+<template id="amap-ml-signin-template">
+  <div class="amap-ml-signin">
+    <input type="email" class="amap-ml-email" placeholder="Multilogin email" autocomplete="username" size="18">
+    <input type="password" class="amap-ml-pass" placeholder="password" autocomplete="current-password" size="14">
+    <button type="button" class="amap-btn" onclick="amapMlSignin(this)">Connect</button>
+    <input type="password" class="amap-ml-token" placeholder="or paste automation token" size="22" autocomplete="off">
+    <button type="button" class="amap-btn" onclick="amapMlSaveToken(this)">Save token</button>
+  </div>
+</template>
+<dialog id="amap-rpa-help">
+  <h3>How to run the RPA</h3>
+  <p>Connect Multilogin and link the account to its profile here. Then open Campaign Builder, preview the campaign and confirm the draft run.</p>
+  <p>The RPA needs a profile with CDP access. It leaves the Multilogin window open so you can check the draft and the selected Facebook account. Keep it open during the run.</p>
+  <button type="button" onclick="this.closest('dialog').close()">Close</button>
+</dialog>
 </body>
 </html>
