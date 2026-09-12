@@ -54,6 +54,16 @@ def browser(monkeypatch):
     provider = _Provider()
 
     class _Direct:
+        # Публичная пара, как у настоящего провайдера: она делегирует
+        # приватным, а strict_profile зафиксирован внутри неё.
+        def attach_existing_only(self, profile_id, user_data_dir, *, new_page=False):
+            return self._try_attach_existing(
+                profile_id, user_data_dir, strict_profile=True, new_page=new_page
+            )
+
+        def profile_is_running(self, user_data_dir, profile_id=""):
+            return self._profile_process_running(user_data_dir, profile_id)
+
         def _try_attach_existing(self, *a, **kw):
             return None
 
@@ -108,6 +118,16 @@ def test_a_profile_opened_by_hand_is_still_refused(browser, monkeypatch, tmp_pat
     monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a, **kw: tmp_path)
 
     class _Running:
+        # Публичная пара, как у настоящего провайдера: она делегирует
+        # приватным, а strict_profile зафиксирован внутри неё.
+        def attach_existing_only(self, profile_id, user_data_dir, *, new_page=False):
+            return self._try_attach_existing(
+                profile_id, user_data_dir, strict_profile=True, new_page=new_page
+            )
+
+        def profile_is_running(self, user_data_dir, profile_id=""):
+            return self._profile_process_running(user_data_dir, profile_id)
+
         def _try_attach_existing(self, *a, **kw):
             return None
 
@@ -126,6 +146,16 @@ def test_an_already_automated_profile_is_not_restarted(browser, monkeypatch, tmp
     closed = []
 
     class _Attached:
+        # Публичная пара, как у настоящего провайдера: она делегирует
+        # приватным, а strict_profile зафиксирован внутри неё.
+        def attach_existing_only(self, profile_id, user_data_dir, *, new_page=False):
+            return self._try_attach_existing(
+                profile_id, user_data_dir, strict_profile=True, new_page=new_page
+            )
+
+        def profile_is_running(self, user_data_dir, profile_id=""):
+            return self._profile_process_running(user_data_dir, profile_id)
+
         def _try_attach_existing(self, *a, **kw):
             return SimpleNamespace(close=lambda keep_browser_open=False: closed.append(keep_browser_open))
 
