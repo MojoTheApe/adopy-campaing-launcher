@@ -30,19 +30,29 @@ def _script() -> str:
     """Обе функции показа — из шаблона, а не по памяти."""
     src = REPORT.read_text(encoding="utf-8")
     start = src.index("function amapTreeLine(o, adCount) {")
-    tail = "row.classList.toggle('amap-open', !block.hidden);\n  });\n}"
+    tail = "  amapTurnOffDisarm();\n});"
     end = src.index(tail, start) + len(tail)
     block = src[start:end]
-    for needed in ("amapPaintTree", "amapEnsureCaret", "amapTreeLine", "amapCoverage"):
+    for needed in ("amapPaintTree", "amapEnsureCaret", "amapTreeLine", "amapCoverage",
+                   "amapTurnOffAsk", "amapTurnOffDo"):
         assert needed in block, f"срез не захватил {needed}"
     return block
 
 
+def _one(head: str) -> str:
+    src = REPORT.read_text(encoding="utf-8")
+    start = src.index(head)
+    return src[start: src.index("\nfunction ", start + 10)]
+
+
 def _money() -> str:
     """`amapMoney` определён выше по файлу и нужен оговорке — берём и его."""
-    src = REPORT.read_text(encoding="utf-8")
-    start = src.index("function amapMoney(spend, currency) {")
-    return src[start: src.index("\nfunction ", start + 10)]
+    return _one("function amapMoney(spend, currency) {")
+
+
+def _period() -> str:
+    """`amapPeriod` — источник периода для выключения. Тоже выше по файлу."""
+    return _one("function amapPeriod() {")
 
 
 @pytest.fixture(scope="module")
@@ -64,11 +74,14 @@ def page(browser):
     p.set_content(
         "<table><tbody>"
         '<tr id="acc"><td><span class="amap-caret-off">·</span>KLD_BFL_X84</td>'
-        + ("<td>x</td>" * (COLUMNS - 1)) + "</tr>"
+        # Аккаунт выключение берёт отсюда — из строки, под которой стоит дерево.
+        '<td class="amap-live" data-account="KLD_BFL_X84">USD 1.00</td>'
+        + ("<td>x</td>" * (COLUMNS - 2)) + "</tr>"
         '<tr id="after"><td>next account</td></tr>'
         "</tbody></table>"
     )
-    p.add_script_tag(content=_money() + "\n" + _script())
+    p.add_script_tag(content=_money() + "\n" + _period() + "\n" + _script())
+    p.evaluate("() => { window._amapPick = {from: '2026-09-01', to: '2026-09-12', span: ''}; }")
     yield p
     p.close()
 
@@ -319,30 +332,38 @@ def test_a_reload_brings_the_tree_back_without_touching_the_account():
     assert "/account-spend/read" not in block, "восстановление запускает новое чтение аккаунта"
 
 
-def test_the_display_cannot_switch_anything_yet():
-    """Показ — это показ. Переключение придёт второй половиной acl-113.
+def test_nothing_here_can_turn_anything_on():
+    """Включение отсюда невозможно, и это не недоделка.
 
-    Раскрытие стрелкой тут не в счёт: оно меняет экран, а не аккаунт. Запрещено
-    именно то, чем можно тронуть аккаунт, — запросы наружу, — и контрол,
-    похожий на переключатель: такой обещает то, чего не делает.
+    Выключение денег не тратит, включение тратит. Обратный ход — руками в Ads
+    Manager, где человек видит последствия.
     """
     block = _script()
-    for forbidden in ("fetch(", "XMLHttpRequest", "hx-post", "/account-spend/",
-                      'role="switch"', "'switch'"):
-        assert forbidden not in block, f"в показе есть {forbidden} — он обещает то, чего не делает"
+    assert "/account-spend/turn-off" in block, "выключать нечем"
+    for forbidden in ("turn-on", "turn_on", "/account-spend/read"):
+        assert forbidden not in block, f"в показе есть {forbidden}"
+    assert block.count("fetch(") == 1, "второй запрос наружу — какой?"
 
 
-def test_the_only_listener_is_the_one_that_opens_it():
+def test_only_a_switched_on_row_is_a_button():
+    """Нажимаемое «Off» обещало бы включение, которого нет."""
+    block = _script()
+    assert "var live = o.switch === 'on';" in block
+    assert "document.createElement(live ? 'button' : 'span')" in block
+
+
+def test_the_listeners_are_the_arrows_and_the_off_button():
     """Сторож на сторожа: обработчик тут ровно один, и он про стрелку.
 
     Проверка выше разрешает `addEventListener` — значит кто-то может повесить
     рядом второй, уже переключающий. Пусть это будет видно.
     """
     block = _script()
-    assert block.count("addEventListener") == 2, "появился третий обработчик — что он делает?"
-    assert block.count("caret.addEventListener('click'") == 2, (
-        "обработчики не про стрелки: раскрытие меняет экран, всё остальное — нет"
+    assert block.count("caret.addEventListener('click'") == 2, "обработчики стрелок не два"
+    assert block.count("document.addEventListener('click'") == 1, (
+        "второй общий обработчик нажатий — что он делает?"
     )
+    assert block.count("addEventListener") == 3, "появился четвёртый обработчик"
 
 
 # ── покрывают ли строки спенд аккаунта ────────────────────────────────────
@@ -525,3 +546,115 @@ def test_each_campaign_opens_on_its_own(page):
         "() => Array.from(document.querySelectorAll('.amap-tree-kids')).map(k => k.hidden)"
     )
     assert got == [True, False]
+
+
+# ══ выключение ════════════════════════════════════════════════════════════
+#
+# Первое, чем дешборд меняет живой аккаунт, а не читает его. Отсюда два шага
+# на нажатие и дословный ответ: «нажали, но тумблер не стал выключенным» — это
+# не успех, и подкрашивать его успехом нельзя.
+
+def _armed(page, index=0):
+    page.evaluate(
+        "(i) => document.querySelectorAll('.amap-tree-sw[data-object-id]')[i].click()", index
+    )
+
+
+def _stub_server(page, answer):
+    """Сервер-заглушка: настоящий ходит в живой аккаунт."""
+    page.evaluate(
+        """(ans) => {
+             window.__sent = [];
+             window.fetch = async (url, opt) => {
+               window.__sent.push({url: url, body: String(opt && opt.body || '')});
+               return {json: async () => ans};
+             };
+           }""",
+        answer,
+    )
+
+
+def _sw(page, index=0):
+    return page.evaluate(
+        """(i) => {
+             const e = document.querySelectorAll('.amap-tree-sw')[i];
+             return {tag: e.tagName, text: e.textContent, cls: e.className, title: e.title};
+           }""",
+        index,
+    )
+
+
+def test_only_a_switched_on_row_offers_the_button(page):
+    _paint(page, [ADSET, dict(ADSET, id="2", switch="off", delivery="Off"),
+                  dict(ADSET, id="3", switch="unknown")])
+    got = page.evaluate(
+        "() => Array.from(document.querySelectorAll('.amap-tree-sw')).map(e => e.tagName)"
+    )
+    assert got == ["BUTTON", "SPAN", "SPAN"], "нажимаемым стало то, что включить нельзя"
+
+
+def test_the_first_click_only_asks(page):
+    _paint(page, [ADSET])
+    _stub_server(page, {"ok": True, "result": {"state": "off"}})
+    _armed(page)
+    assert _sw(page)["text"] == "Turn off?"
+    assert page.evaluate("() => window.__sent.length") == 0, "выключили с одного промаха"
+
+
+def test_the_second_click_turns_it_off(page):
+    _paint(page, [ADSET])
+    _stub_server(page, {"ok": True, "result": {"state": "off", "how": "подтверждено перезагрузкой"}})
+    _armed(page); _armed(page)
+    page.wait_for_function("() => document.querySelector('.amap-tree-sw').tagName === 'SPAN'")
+    got = _sw(page)
+    assert got["text"] == "Off" and got["tag"] == "SPAN", "осталось нажимаемым, хотя включить нельзя"
+    assert "Ads Manager" in got["title"], "не сказано, где включать обратно"
+
+
+def test_what_is_sent_is_what_was_shown(page):
+    _paint(page, [dict(ADSET, id="120250178859040703", name="SA_ARM")])
+    _stub_server(page, {"ok": True, "result": {"state": "off"}})
+    _armed(page); _armed(page)
+    page.wait_for_function("() => window.__sent.length === 1")
+    sent = page.evaluate("() => window.__sent[0]")
+    assert sent["url"] == "/account-spend/turn-off"
+    assert "object_id=120250178859040703" in sent["body"]
+    assert "level=campaign" in sent["body"]
+    assert "name=SA_ARM" in sent["body"], "имя не послано — сверить на странице будет нечем"
+
+
+def test_an_ad_carries_its_campaign(page):
+    """Список объявлений сужается по кампании: без неё до строки не добраться."""
+    _paint(page, [SET_A, _ad("a1", "11111111")])
+    _stub_server(page, {"ok": True, "result": {"state": "off"}})
+    _armed(page, 1); _armed(page, 1)
+    page.wait_for_function("() => window.__sent.length === 1")
+    assert "parent_id=11111111" in page.evaluate("() => window.__sent[0].body")
+
+
+def test_a_refusal_is_not_dressed_up_as_success(page):
+    _paint(page, [ADSET])
+    _stub_server(page, {"ok": True, "result": {
+        "state": "failed", "error": "после перезагрузки тумблер снова включён — Meta не приняла"}})
+    _armed(page); _armed(page)
+    page.wait_for_function("() => document.querySelector('.amap-tree-sw').classList.contains('failed')")
+    got = _sw(page)
+    assert got["text"] == "On", "показали выключенным то, что крутится"
+    assert "Meta не приняла" in got["title"], "причина не видна"
+
+
+def test_already_off_is_said_plainly(page):
+    _paint(page, [ADSET])
+    _stub_server(page, {"ok": True, "result": {"state": "already_off", "how": "ничего не нажимали"}})
+    _armed(page); _armed(page)
+    page.wait_for_function("() => document.querySelector('.amap-tree-sw').tagName === 'SPAN'")
+    assert "already off" in _sw(page)["title"]
+
+
+def test_clicking_elsewhere_takes_the_question_back(page):
+    _paint(page, [ADSET])
+    _stub_server(page, {"ok": True, "result": {"state": "off"}})
+    _armed(page)
+    page.evaluate("() => document.body.click()")
+    assert _sw(page)["text"] == "On"
+    assert page.evaluate("() => window.__sent.length") == 0

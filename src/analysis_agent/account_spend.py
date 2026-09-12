@@ -1652,3 +1652,236 @@ def _read_tree(
             hows.append("ad:" + "/".join(sorted(ads_how)))
 
     return objects, " ".join(hows), "; ".join(errors)
+
+
+# ══ Выключить кампанию или объявление ═════════════════════════════════════
+#
+# Первое действие ACL, меняющее живой аккаунт. До сих пор он только строил
+# черновики, которые публиковал человек, и читал.
+#
+# **Только выключение** (решение владельца 12.09). Включать отсюда нельзя, и
+# это не недоделка: выключение денег не тратит, включение тратит. Обратно —
+# руками в Ads Manager, там же, где человек видит последствия.
+#
+# Ничего, кроме тумблера, здесь не нажимается. Редактор объявления не
+# открывается: Meta портит Leads-объявление одним его открытием (DQ204,
+# 02.08), а тумблер лежит в строке списка.
+
+#: Сколько ждать, пока Meta подтвердит переключение. Тумблер рисуется сразу, а
+#: сохраняется запросом — и отката ждать дольше, чем рисования.
+TURN_OFF_TRIES = 12
+TURN_OFF_PAUSE_S = 0.75
+
+
+@dataclass
+class TurnOffResult:
+    """Что случилось с одним объектом. Никаких «наверное»."""
+
+    account: str
+    level: str
+    object_id: str
+    name: str = ""
+    state: str = "failed"     # off | already_off | failed
+    error: str = ""
+    how: str = ""             # чем подтверждено — чтобы знать, чему верить
+    at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+#: Метка, которую поиск вешает на найденный тумблер: через `evaluate` ручку
+#: наружу не получить, а нажимать надо именно его.
+SEL_MARKED_SWITCH = '[data-acl-switch="1"]'
+
+#: Найти строку по её id и рассказать про её тумблер. Ничего не нажимает.
+_FIND_SWITCH_JS = r"""
+(wanted) => {
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const t = document.querySelector('[role="table"], [role="grid"]');
+  if (!t) return {found: false, why: 'таблицы нет'};
+  document.querySelectorAll('[data-acl-switch]').forEach(
+    e => e.removeAttribute('data-acl-switch'));
+  const CELL = /table_row:(-?\d+)[a-z]*\/table_cell:([^\/]+)/;
+  let name = '', toggle = null, seen = 0;
+  for (const el of t.querySelectorAll('[data-surface*="table_row:"]')) {
+    const m = (el.getAttribute('data-surface') || '').match(CELL);
+    if (!m || m[1] !== wanted) continue;
+    seen++;
+    if (m[2].startsWith('forObjectType(name') && !name) name = norm(el.innerText);
+    if (m[2].startsWith('forObjectType(toggle')) {
+      const sw = el.querySelector('[role="switch"], input[type="checkbox"]');
+      if (sw) toggle = sw;
+    }
+  }
+  if (!seen) return {found: false, why: 'строки с таким id на странице нет'};
+  if (!toggle) return {found: false, why: 'у строки не нашлось тумблера', name: name};
+  const checked = toggle.getAttribute('aria-checked');
+  toggle.setAttribute('data-acl-switch', '1');
+  return {
+    found: true, name: name,
+    on: checked === 'true' || toggle.checked === true,
+    off: checked === 'false' || toggle.checked === false,
+    label: norm(toggle.getAttribute('aria-label') || ''),
+  };
+}
+"""
+
+#: Тот же взгляд после нажатия — по метке, которую поставил поиск.
+_SWITCH_STATE_JS = r"""
+() => {
+  const sw = document.querySelector('[data-acl-switch="1"]');
+  if (!sw) return null;
+  const c = sw.getAttribute('aria-checked');
+  if (c === 'true') return 'on';
+  if (c === 'false') return 'off';
+  return null;
+}
+"""
+
+
+def _switch_state(page):
+    try:
+        return page.evaluate(_SWITCH_STATE_JS)
+    except Exception:
+        return None
+
+
+@serialized_browser
+def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
+             expected_name: str = "", date_from: str = "", date_to: str = "") -> "TurnOffResult":
+    """Выключить одну кампанию или одно объявление. Включить отсюда нельзя.
+
+    Период нужен не ради чисел, а ради сверки: на экране должен стоять тот же
+    отрезок, что и на дешборде, иначе мы смотрим не на то, что показывали
+    человеку, — то же правило, что и у чтения.
+    """
+    from src.fb_ads_rpa import wizard_guard as wg
+
+    out = TurnOffResult(account=account, level=level, object_id=str(object_id),
+                        name=expected_name, at=_now())
+    if level not in ("campaign", "ad"):
+        out.error = f"выключать умеем кампанию и объявление, а не {level!r}"
+        return out
+    if not str(object_id).isdigit():
+        out.error = "id объекта должен состоять из цифр"
+        return out
+    if level == "ad" and not str(parent_id).isdigit():
+        # Список объявлений сужается по кампании: другого проверенного способа
+        # добраться до одной строки у нас нет.
+        out.error = "чтобы выключить объявление, нужна его кампания"
+        return out
+
+    entry = _entry_for(account)
+    if entry is None:
+        out.error = f"{account} нет в карте аккаунтов"
+        return out
+    act = (entry.ad_account_id or "").strip()
+    if not act:
+        out.error = f"у {account} не заполнен ad_account_id"
+        return out
+    date_from = date_from or yesterday()
+    date_to = date_to or date_from
+
+    if level == "campaign":
+        url = _tree_url(act, "campaign", date_from, date_to)
+    else:
+        url = _tree_url(act, "ad", date_from, date_to,
+                        parent_level="campaign", parent_id=str(parent_id))
+
+    conn = None
+    try:
+        try:
+            conn = _attach_only(entry, account)
+        except ProfileNotAttachable as exc:
+            out.error = str(exc)
+            return out
+        page = conn.page
+        page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        if not _wait_for_grid(page):
+            out.error = "Ads Manager не отрисовался за отведённое время"
+            return out
+
+        # Те же три сверки, что и у чтения, и по той же причине: адрес можно
+        # открыть и получить не тот кабинет, не тот период, не тот список.
+        expected_act = act if act.startswith("act_") else "act_" + act
+        if _act_from_url(page, tries=1) != expected_act:
+            out.error = "открылся не тот кабинет — ничего не трогаем"
+            return out
+        if not _period_matches(_shown_period(page), date_from, date_to):
+            out.error = "на экране другой период — ничего не трогаем"
+            return out
+        if not wg.is_ads_manager_url(page.url):
+            out.error = "это не Ads Manager — ничего не трогаем"
+            return out
+
+        found = page.evaluate(_FIND_SWITCH_JS, out.object_id)
+        if not found or not found.get("found"):
+            out.error = (found or {}).get("why") or "строку не нашли"
+            return out
+        out.name = str(found.get("name") or expected_name)
+
+        # Имя сверяется, если дешборд его прислал: id мог устареть, а строка
+        # под ним — оказаться чужой. Выключить не то хуже, чем не выключить.
+        if expected_name and out.name and out.name != expected_name:
+            out.error = (
+                f"под этим id на странице «{out.name}», а дешборд показывал "
+                f"«{expected_name}» — ничего не трогаем"
+            )
+            return out
+
+        # Запрет на опасные нажатия — тот же, что у мастера создания
+        # (`acl-113c`). Тумблер подписан «On/off» и под него не попадает; смысл
+        # в том, чтобы поймать случай, когда мы схватили не тот элемент.
+        why = wg.forbidden_click_reason(found.get("label"))
+        if why:
+            out.error = f"нажимать это нельзя: {why}"
+            return out
+
+        if found.get("off"):
+            out.state = "already_off"
+            out.how = "тумблер уже выключен — ничего не нажимали"
+            return out
+        if not found.get("on"):
+            out.error = "положение тумблера непонятно — ничего не трогаем"
+            return out
+
+        page.click(SEL_MARKED_SWITCH, timeout=15_000)
+
+        # Нарисоваться выключенным и остаться им — разное. Ждём подтверждения,
+        # а потом перезагружаем список и смотрим ещё раз: Meta умеет показать
+        # тумблер выключенным и молча вернуть его обратно.
+        for _ in range(TURN_OFF_TRIES):
+            if _switch_state(page) == "off":
+                break
+            _sleep(TURN_OFF_PAUSE_S)
+        else:
+            out.error = "нажали, но тумблер не стал выключенным"
+            return out
+
+        page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        _wait_for_grid(page)
+        again = page.evaluate(_FIND_SWITCH_JS, out.object_id)
+        if not again or not again.get("found"):
+            out.error = "после перезагрузки строку не нашли — состояние неизвестно"
+            return out
+        if not again.get("off"):
+            out.error = "после перезагрузки тумблер снова включён — Meta не приняла"
+            return out
+
+        out.state = "off"
+        out.how = "подтверждено перезагрузкой списка"
+        return out
+    except Exception as exc:                      # noqa: BLE001
+        out.error = f"не получилось: {exc}"
+        return out
+    finally:
+        if conn is not None:
+            try:
+                conn.page.close()
+            except Exception:
+                pass
+            try:
+                conn.close(keep_browser_open=True)
+            except Exception:
+                pass

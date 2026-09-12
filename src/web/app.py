@@ -2543,6 +2543,44 @@ async def account_spend_read(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
 
 
+@app.post("/account-spend/turn-off")
+async def account_spend_turn_off(request: Request) -> JSONResponse:
+    """Выключить одну кампанию или одно объявление на живом аккаунте.
+
+    Первый маршрут ACL, который меняет чужой кабинет, а не читает его.
+    Поэтому здесь **только выключение**: включить отсюда нельзя (решение
+    владельца 12.09). Выключение денег не тратит, включение тратит, и обратный
+    ход человек делает руками в Ads Manager, где видит последствия.
+
+    Как и чтение, это только по нажатию человека: никакого расписания и
+    никаких списков «выключить всё подряд».
+    """
+    from src.analysis_agent import account_spend
+
+    form = await request.form()
+    account = (form.get("account") or "").strip()
+    level = (form.get("level") or "").strip()
+    object_id = (form.get("object_id") or "").strip()
+    if not account or not object_id:
+        return JSONResponse({"ok": False, "error": "account and object_id are required"}, status_code=400)
+    if level not in ("campaign", "ad"):
+        return JSONResponse({"ok": False, "error": "level must be campaign or ad"}, status_code=400)
+    try:
+        date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""), str(form.get("span") or ""))
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    try:
+        result = account_spend.turn_off(
+            account, level, object_id,
+            parent_id=(form.get("parent_id") or "").strip(),
+            expected_name=(form.get("name") or "").strip(),
+            date_from=date_from, date_to=date_to,
+        )
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Could not reach the account. Check the launcher window."}, status_code=503)
+    return JSONResponse({"ok": True, "result": result.to_dict()})
+
+
 @app.post("/account-spend/open-profile")
 async def account_spend_open_profile(request: Request) -> JSONResponse:
     """Поднять профиль аккаунта автоматизацией и оставить окно открытым.
