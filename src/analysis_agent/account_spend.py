@@ -1051,31 +1051,55 @@ def _shown_period(page, tries: int = 12) -> str:
     return ""
 
 
+#: Поиск показанного периода целиком внутри страницы — один вызов вместо
+#: обхода по узлу за раз.
+#:
+#: Запасной путь ходил по всем `div[role="button"]` и спрашивал `inner_text()`
+#: у каждого **из Python**: на странице Ads Manager их сотни, и каждый вопрос —
+#: обращение в браузер. Замер 12.09: сверка периода стоила 22 секунды из 54 на
+#: чтение аккаунта с пятью кампаниями — сорок процентов всего времени, при
+#: шести переходах по 3.7 с.
+#:
+#: Ровно так же однажды тормозило чтение итогов: обход `query_selector_all` с
+#: `inner_text()` стоил 175 секунд против 40. Лечение то же — спросить страницу
+#: один раз.
+_FIND_PERIOD_JS = r"""
+([marked, fallback, pattern]) => {
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+
+  // Сначала то, что Meta пометила сама: такое переживает перевод интерфейса.
+  for (const sel of marked) {
+    let el = null;
+    try { el = document.querySelector(sel); } catch (e) { continue; }
+    if (!el) continue;
+    const text = norm(el.getAttribute('aria-label') || el.innerText || '');
+    if (text) return text;
+  }
+
+  // Запасной путь, и на деле основной: кнопка периода — просто кнопка с датой
+  // внутри, без aria-label. Снимок первого живого прогона показал справа
+  // вверху «Sep 6, 2026».
+  let re;
+  try { re = new RegExp(pattern, 'i'); } catch (e) { return ''; }
+  let nodes = [];
+  try { nodes = document.querySelectorAll(fallback); } catch (e) { return ''; }
+  for (const el of nodes) {
+    const text = norm(el.innerText || '');
+    if (text.length > 0 && text.length < 80 && re.test(text)) return text;
+  }
+  return '';
+}
+"""
+
+
 def _period_once(page) -> str:
-    for sel in SEL_PERIOD:
-        try:
-            el = page.query_selector(sel)
-            if el:
-                text = (el.get_attribute("aria-label") or el.inner_text() or "").strip()
-                if text:
-                    return text
-        except Exception:
-            continue
-
-    # Запасной путь, и на деле основной: кнопка периода — просто кнопка с
-    # датой внутри, без aria-label, за который цеплялись выше. Снимок первого
-    # живого прогона показал ровно это: справа вверху «Sep 6, 2026».
+    """Один взгляд на страницу, одним обращением в браузер."""
     try:
-        import re as _r
-
-        pat = _r.compile(RE_PERIOD_DATE, _r.I)
-        for el in page.query_selector_all(SEL_PERIOD_FALLBACK):
-            text = " ".join((el.inner_text() or "").split())
-            if 0 < len(text) < 80 and pat.search(text):
-                return text
+        found = page.evaluate(_FIND_PERIOD_JS,
+                              [list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE])
     except Exception:
-        pass
-    return ""
+        return ""
+    return str(found or "").strip()
 
 
 _MONTHS = {
