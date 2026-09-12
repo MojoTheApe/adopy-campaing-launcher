@@ -293,26 +293,44 @@ class _Page:
 
 @pytest.fixture
 def flow(monkeypatch):
-    """Проходимые уровни с подменёнными сверками — проверяется порядок, не DOM."""
+    """Проходимый обход с подменёнными сверками — проверяется порядок, не DOM."""
     monkeypatch.setattr(sp, "_wait_for_grid", lambda page: True)
     monkeypatch.setattr(sp, "_act_from_url", lambda page, tries=1: "act_123")
     monkeypatch.setattr(sp, "_shown_period", lambda page, tries=12: "Sep 1, 2026 - Sep 10, 2026")
     monkeypatch.setattr(sp, "_period_matches", lambda shown, a, b="": True)
-    monkeypatch.setattr(
-        sp, "read_level",
-        lambda page, level: ([sp.AdObject(level=level, id="1" * 16, name=level)], "header-mapped", ""),
-    )
+
+    def _level(page, level):
+        if level == "adset":
+            return ([sp.AdObject(level="adset", id="11" * 8, name="set A"),
+                     sp.AdObject(level="adset", id="22" * 8, name="set B")], "data-surface", "")
+        return ([sp.AdObject(level="ad", id="99" * 8, name="an ad")], "data-surface", "")
+
+    monkeypatch.setattr(sp, "read_level", _level)
     return monkeypatch
 
 
-def test_both_levels_are_collected(flow):
-    objects, how, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01", "2026-09-10")
+def test_ads_are_asked_for_one_ad_set_at_a_time(flow):
+    """Общий список объявлений 12.09 отдал шесть строк при двадцати настоящих,
+    и чем он был сужен, страница не сказала. По ad set'ам — по построению."""
+    page = _Page()
+    objects, how, err = sp._read_tree(page, "act_123", "act_123", "2026-09-01", "2026-09-10")
     assert not err, err
-    assert [o["level"] for o in objects] == ["adset", "ad"]
-    assert "adset:header-mapped" in how and "ad:header-mapped" in how
+    assert len(page.visited) == 3, f"заходов {len(page.visited)}, а надо 1 + 2"
+    assert "selected_adset_ids=" + "11" * 8 in page.visited[1]
+    assert "selected_adset_ids=" + "22" * 8 in page.visited[2]
+    assert how.startswith("adset:data-surface") and "ad:data-surface" in how
 
 
-def test_a_level_that_opened_another_account_is_dropped(flow):
+def test_every_ad_knows_whose_it_is(flow):
+    objects, _, _ = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    ads = [o for o in objects if o["level"] == "ad"]
+    assert len(ads) == 2
+    assert {a["parent_id"] for a in ads} == {"11" * 8, "22" * 8}
+    sets = [o for o in objects if o["level"] == "adset"]
+    assert all(s["parent_id"] == "" for s in sets), "у ad set'а родителя тут нет"
+
+
+def test_a_wrong_account_stops_everything(flow):
     """Ads Manager умеет открыть кабинет профиля по умолчанию вместо запрошенного.
 
     Без сверки чужое дерево пришло бы с видом правильного ответа — ровно то,
@@ -324,34 +342,67 @@ def test_a_level_that_opened_another_account_is_dropped(flow):
     assert "не тот кабинет" in err
 
 
-def test_a_level_showing_another_period_is_dropped(flow):
+def test_a_wrong_period_stops_everything(flow):
     flow.setattr(sp, "_period_matches", lambda shown, a, b="": False)
     objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
     assert objects == []
     assert "другой период" in err
 
 
-def test_the_account_is_rechecked_on_every_level_not_once(flow):
-    """Переход — это новый адрес, и проверка до него ничего не говорит о том, что после."""
+def test_the_account_is_rechecked_after_every_navigation(flow):
+    """Переход — это новый адрес, и проверка до него ничего не говорит о том,
+    что после. Заходов теперь три, и сверок должно быть три."""
     seen: list[int] = []
     flow.setattr(sp, "_act_from_url", lambda page, tries=1: (seen.append(1), "act_123")[1])
     sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
-    assert len(seen) == len(sp.TREE_LEVELS), "кабинет сверен не на каждом уровне"
+    assert len(seen) == 3
 
 
-def test_one_bad_level_does_not_take_the_other_with_it(flow):
-    calls = {"n": 0}
-
-    def _one_fails(page, level):
-        calls["n"] += 1
+def test_one_ad_set_failing_does_not_cost_the_others(flow):
+    def _level(page, level):
         if level == "adset":
-            return [], "", "adset: сломалось"
-        return [sp.AdObject(level=level, id="2" * 16, name="ad")], "header-mapped", ""
+            return ([sp.AdObject(level="adset", id="11" * 8, name="A"),
+                     sp.AdObject(level="adset", id="22" * 8, name="B")], "data-surface", "")
+        # первый ad set отдаёт отказ, второй — объявление
+        return ([], "", "сломалось") if len(page.visited) == 2 else (
+            [sp.AdObject(level="ad", id="99" * 8, name="ad")], "data-surface", "")
 
-    flow.setattr(sp, "read_level", _one_fails)
+    flow.setattr(sp, "read_level", _level)
     objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
-    assert [o["level"] for o in objects] == ["ad"]
-    assert "adset: сломалось" in err
+    assert [o["level"] for o in objects] == ["adset", "adset", "ad"]
+    assert "сломалось" in err
+
+
+def test_no_ad_sets_means_no_ads_and_no_pretending(flow):
+    flow.setattr(sp, "read_level", lambda page, level: ([], "no-row-surfaces", "пусто"))
+    page = _Page()
+    objects, _, err = sp._read_tree(page, "act_123", "act_123", "2026-09-01")
+    assert objects == []
+    assert len(page.visited) == 1, "пошли за объявлениями, не зная ни одного ad set'а"
+    assert "пусто" in err
+
+
+def test_a_long_account_says_what_it_did_not_read(flow):
+    """Молчаливое усечение читается как «это всё»."""
+    many = [sp.AdObject(level="adset", id=str(10 ** 17 + i), name=str(i))
+            for i in range(sp.TREE_MAX_ADSETS + 3)]
+    flow.setattr(sp, "read_level", lambda page, level:
+                 (many, "data-surface", "") if level == "adset" else ([], "data-surface", ""))
+    page = _Page()
+    _, _, err = sp._read_tree(page, "act_123", "act_123", "2026-09-01")
+    assert len(page.visited) == 1 + sp.TREE_MAX_ADSETS
+    assert str(len(many)) in err and str(sp.TREE_MAX_ADSETS) in err
+
+
+def test_the_ad_url_is_refused_for_the_wrong_level():
+    with pytest.raises(ValueError):
+        sp._tree_url("act_1", "adset", "2026-09-01", adset_id="123")
+
+
+def test_a_made_up_ad_set_id_is_refused():
+    """В адрес идёт то, что пришло со страницы. Проверяем, что это цифры."""
+    with pytest.raises(ValueError):
+        sp._tree_url("act_1", "ad", "2026-09-01", adset_id="123&act=999")
 
 
 # ── красные линии ─────────────────────────────────────────────────────────
