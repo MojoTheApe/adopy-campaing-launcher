@@ -70,7 +70,19 @@ def test_rebuild_error_never_returns_unfiltered_numbers(monkeypatch):
                               "2026-04-18", "2026-04-18")
 
 
-def test_account_drill_uses_resolved_workbook_identity(monkeypatch, enriched_df):
+def test_the_account_row_names_the_identity_its_numbers_came_from(monkeypatch, enriched_df):
+    """Аккаунт подключён как `KLD_BFL_X82`, а в книге он `FacebookMKTOBFLX82`.
+
+    Совпадение по хвосту имени — догадка, и человеку надо видеть, по какой
+    именно: молчаливое совпадение выглядит так же, как собственные данные
+    аккаунта, и проверить его было бы нечем.
+
+    Прежде это проверялось через адрес книжной строки раскрытия: она уехала со
+    стрелки 12.09 (решение владельца — стрелка раскрывает только живое дерево
+    из кабинета). Проверяемое здесь от этого не изменилось, изменился способ
+    спросить: имя названо в самой строке, и по нему находятся те же девять
+    записей.
+    """
     from src.web import account_links
     from src.analysis_agent.section_filters import filter_account_rows
     frame = enriched_df.copy()
@@ -78,17 +90,14 @@ def test_account_drill_uses_resolved_workbook_identity(monkeypatch, enriched_df)
     account_links.link("KLD_BFL_X82", "country", "Mexico")
     view = app._build_account_map_view({"countries": []}, frame, "2026-04-01", "2026-04-30")
     country = view["countries"][0]
-    assert country["rows"][0]["has_data"]
+    row = country["rows"][0]
+    assert row["has_data"]
+    alias = row["workbook_alias"]
+    assert alias == "FacebookMKTOBFLX82", "числа взяты не из той строки книги"
+
     html = app.templates.env.get_template("_account_map_country.html").render(
         mc=country, amap=view, mlx={"A": "Inhouse", "B": "KLD"})
-    class Links(HTMLParser):
-        def __init__(self):
-            super().__init__()
-            self.urls = []
-        def handle_starttag(self, tag, attrs):
-            self.urls += [v for k, v in attrs if k == "hx-get"]
-    links = Links()
-    links.feed(html)
-    query = parse_qs(urlsplit(links.urls[0]).query)
-    rows = filter_account_rows(frame, query["country"][0], query["account"][0])
+    assert alias in html, "по какому имени совпало — на экране не сказано"
+
+    rows = filter_account_rows(frame, country["country"], alias)
     assert len(rows) == 9

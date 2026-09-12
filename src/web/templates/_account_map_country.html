@@ -54,11 +54,20 @@
         {% for r in mc.rows %}
           <tr>
             <td class="amap-acc">
-              {% if r.has_data %}
-              <button type="button" class="amap-caret" aria-label="Campaigns of {{ r.account }}"
-                      hx-get="/details?section=account&country={{ mc.country | urlencode }}&account={{ (r.workbook_alias or r.account) | urlencode }}&ncols=11"
-                      hx-target="closest tr" hx-swap="afterend" hx-trigger="click">▸</button>
-              {% else %}<span class="amap-caret-off">·</span>{% endif %}
+              {#- Стрелка раскрывает только то, что в аккаунте сейчас: кампании
+                  и объявления, прочитанные с самого кабинета (acl-113).
+
+                  Раньше на ней висела ещё и книжная детализация из
+                  `/details?section=account`, и с появлением дерева одна
+                  стрелка стала открывать два списка сразу — книжный первым и
+                  длинный, живой под ним. Две таблицы с похожими словами одна
+                  над другой читаются как одна поломанная (решение владельца
+                  12.09). Вопрос «как шло по дням» остался в разделе
+                  Optimization, где он и жил.
+
+                  Саму стрелку рисует JS и только когда есть что раскрыть:
+                  до чтения раскрывать нечего, и обещать обратное незачем. -#}
+              <span class="amap-caret-off">·</span>
               {{ r.account }}
               {# Числа подставлены по совпадению хвоста имён — говорим, по
                  какому именно. Молчаливое совпадение выглядит так же, как
