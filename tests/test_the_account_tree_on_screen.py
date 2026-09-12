@@ -409,3 +409,54 @@ def test_the_note_explains_itself(page):
     _paint(page, LIVE_SETS + LIVE_ADS, spend=2117.46)
     title = page.evaluate("() => document.querySelector('.amap-tree-note').title")
     assert "Deleted items" in title and "view switcher" in title
+
+
+# ── объявления под своим ad set'ом ────────────────────────────────────────
+#
+# Пока связи не было, объявления шли общим списком следом за ad set'ами, и
+# понять, чьё какое, было нельзя. Чтение теперь спрашивает их по одному ad
+# set'у за раз (ACL-1124), и `parent_id` известен по построению.
+
+SET_A = dict(ADSET, id="11111111", name="set A", spend="$700.00")
+SET_B = dict(ADSET, id="22222222", name="set B", spend="$300.00")
+
+
+def _ad(name, parent, spend="$10.00"):
+    return dict(AD, id="ad-" + name, name=name, parent_id=parent, spend=spend)
+
+
+def _names(page):
+    return page.evaluate("""() => Array.from(document.querySelectorAll('.amap-tree-line'))
+        .map(l => l.querySelector('.amap-tree-name').textContent)""")
+
+
+def test_ads_stand_under_their_own_ad_set(page):
+    _paint(page, [SET_A, SET_B,
+                  _ad("a1", "11111111"), _ad("b1", "22222222"), _ad("a2", "11111111")])
+    assert _names(page) == ["set A", "a1", "a2", "set B", "b1"]
+
+
+def test_an_ad_set_without_ads_is_still_shown(page):
+    """Пустой ad set — это ответ: он есть и в нём ничего не крутится."""
+    _paint(page, [SET_A, SET_B, _ad("b1", "22222222")])
+    assert _names(page) == ["set A", "set B", "b1"]
+
+
+def test_an_ad_is_never_guessed_into_a_neighbour(page):
+    """Приписать к последнему попавшемуся — худшее, что можно сделать: по этим
+    строкам решают, что останавливать."""
+    _paint(page, [SET_A, _ad("lost", "99999999")])
+    names = _names(page)
+    assert names == ["set A", "lost"]
+    heads = page.evaluate(
+        "() => Array.from(document.querySelectorAll('.amap-tree-head')).map(h => h.textContent)"
+    )
+    assert any("whose ad set is not in this answer" in h for h in heads), heads
+
+
+def test_an_ad_without_a_parent_is_an_orphan_too(page):
+    _paint(page, [SET_A, dict(AD, id="x", name="nobody", parent_id="")])
+    heads = page.evaluate(
+        "() => Array.from(document.querySelectorAll('.amap-tree-head')).map(h => h.textContent)"
+    )
+    assert any("1 ads whose ad set" in h for h in heads), heads

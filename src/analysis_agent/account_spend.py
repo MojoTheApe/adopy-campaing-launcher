@@ -1231,6 +1231,11 @@ ADS_MANAGER_LEVELS: dict[str, str] = {
 #: никто не просил (решение владельца 11.09).
 TREE_LEVELS: tuple[str, ...] = ("adset", "ad")
 
+#: Сколько ad set'ов обойти за объявлениями. Каждый — отдельный заход на живой
+#: аккаунт, и на большом кабинете чтение иначе растянется на десятки минут.
+#: Превышение не замалчивается: сколько осталось непрочитанным, сказано вслух.
+TREE_MAX_ADSETS = 25
+
 
 @dataclass
 class AdObject:
@@ -1253,16 +1258,40 @@ class AdObject:
 
     id_from: str = ""         # откуда взят id — чтобы знать, что сломалось
 
+    #: Чей это объект. У объявления — id его ad set'а, и известен он **по
+    #: построению**: список объявлений спрашивается по одному ad set'у за раз.
+    #: Вычитать родителя со страницы нечем — колонка «Ad set name» есть в
+    #: заголовках, а ячейки у неё в разметке не нашлось.
+    parent_id: str = ""
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
-def _tree_url(act: str, level: str, date_from: str, date_to: str = "") -> str:
-    """Адрес уровня. Разбор периода и номера кабинета — общий с `_url`."""
+def _tree_url(act: str, level: str, date_from: str, date_to: str = "",
+              adset_id: str = "") -> str:
+    """Адрес уровня. Разбор периода и номера кабинета — общий с `_url`.
+
+    `adset_id` сужает список объявлений до одного ad set'а. Это единственный
+    способ узнать, чьё объявление: в самой строке родителя нет — колонка «Ad
+    set name» в заголовках есть, а ячейки у неё в разметке не оказалось.
+
+    Он же оказался единственным способом увидеть объявления вообще. Общий
+    список 12.09 отдал шесть строк на $661 при спенде аккаунта $2 117; проход
+    по ad set'ам дал двадцать на $1 957. Чем именно был сужен «общий» список,
+    страница не говорит — а раз так, доверять ему нельзя.
+    """
     if level not in ADS_MANAGER_LEVELS:
         raise ValueError(f"неизвестный уровень {level!r}")
     base = _url(act, date_from, date_to)
-    return ADS_MANAGER_LEVELS[level] + base[len(ADS_MANAGER):]
+    url = ADS_MANAGER_LEVELS[level] + base[len(ADS_MANAGER):]
+    if adset_id:
+        if level != "ad":
+            raise ValueError("сузить до ad set'а можно только список объявлений")
+        if not adset_id.isdigit():
+            raise ValueError("id ad set'а должен состоять из цифр")
+        url += "&selected_adset_ids=" + adset_id
+    return url
 
 
 #: Какой тип объекта Meta пишет в разметке на каждом уровне.
@@ -1471,32 +1500,56 @@ def _read_tree(
     hows: list[str] = []
     errors: list[str] = []
 
-    for level in TREE_LEVELS:
+    def _open(url: str, what: str) -> bool:
+        """Перейти и сверить, что открылось именно то, что просили."""
         try:
-            page.goto(
-                _tree_url(act, level, date_from, date_to),
-                timeout=TABLE_TIMEOUT_MS,
-                wait_until="domcontentloaded",
-            )
+            page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
         except Exception as exc:
-            errors.append(f"{level}: переход не удался ({exc})")
-            continue
-
+            errors.append(f"{what}: переход не удался ({exc})")
+            return False
         if not _wait_for_grid(page):
-            errors.append(f"{level}: таблица не отрисовалась за отведённое время")
-            continue
+            errors.append(f"{what}: таблица не отрисовалась за отведённое время")
+            return False
         if _act_from_url(page, tries=1) != expected_act:
-            errors.append(f"{level}: открылся не тот кабинет — уровень пропущен")
-            continue
+            errors.append(f"{what}: открылся не тот кабинет — пропущено")
+            return False
         if not _period_matches(_shown_period(page), date_from, date_to):
-            errors.append(f"{level}: на экране другой период — уровень пропущен")
-            continue
+            errors.append(f"{what}: на экране другой период — пропущено")
+            return False
+        return True
 
-        got, how, err = read_level(page, level)
+    # Сначала ad set'ы: их id нужны, чтобы спросить объявления каждого.
+    if _open(_tree_url(act, "adset", date_from, date_to), "adset"):
+        sets, how, err = read_level(page, "adset")
         if how:
-            hows.append(f"{level}:{how}")
+            hows.append(f"adset:{how}")
         if err:
             errors.append(err)
-        objects.extend(o.to_dict() for o in got)
+        objects.extend(o.to_dict() for o in sets)
+
+        wanted = [s for s in sets if s.id]
+        if len(wanted) > TREE_MAX_ADSETS:
+            # Молчаливое усечение читается как «это всё». Говорим вслух.
+            errors.append(
+                f"объявления прочитаны у первых {TREE_MAX_ADSETS} ad set'ов из "
+                f"{len(wanted)}: каждый — отдельный заход на аккаунт"
+            )
+            wanted = wanted[:TREE_MAX_ADSETS]
+
+        ads_how: set[str] = set()
+        for s in wanted:
+            what = f"ad set {s.id}"
+            if not _open(_tree_url(act, "ad", date_from, date_to, s.id), what):
+                continue
+            got, how, err = read_level(page, "ad")
+            if how:
+                ads_how.add(how)
+            if err:
+                errors.append(f"{what}: {err}")
+            for o in got:
+                o.parent_id = s.id
+                objects.append(o.to_dict())
+        if ads_how:
+            hows.append("ad:" + "/".join(sorted(ads_how)))
 
     return objects, " ".join(hows), "; ".join(errors)
