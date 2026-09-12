@@ -326,27 +326,51 @@ def _new_background_page(context):
     У CDP флаг есть, и он ровно про это. Не вышло — возвращаем `None`, и
     вызывающий откроет вкладку обычным путём: своя вкладка нужнее тишины.
     """
+    session = None
+    target_id = None
+    owned = None
     try:
-        # По тождественности, а не через множество: страницу нельзя считать
-        # хешируемой — у объекта может быть свой `__eq__` без `__hash__`, и
-        # тогда `set()` тихо уронит весь приём в запасной путь.
-        before = [id(x) for x in context.pages]
         base = next(iter(context.pages), None)
         if base is None:
             return None
         session = context.new_cdp_session(base)
-        session.send("Target.createTarget", {"url": "about:blank", "background": True})
+        params = {"url": "about:blank", "background": True}
+        info = session.send("Target.getTargetInfo").get("targetInfo", {})
+        if info.get("browserContextId"):
+            params["browserContextId"] = info["browserContextId"]
+        target_id = session.send("Target.createTarget", params).get("targetId")
+        if not target_id:
+            return None
+        for _ in range(60):
+            for candidate in list(context.pages):
+                probe = None
+                try:
+                    probe = context.new_cdp_session(candidate)
+                    info = probe.send("Target.getTargetInfo").get("targetInfo", {})
+                    if info.get("targetId") == target_id:
+                        owned = candidate
+                        return owned
+                finally:
+                    if probe is not None:
+                        try:
+                            probe.detach()
+                        except Exception:
+                            pass
+            # Dispatch Playwright's page events while waiting for our target.
+            base.wait_for_timeout(50)
     except Exception:
         return None
-    # Страница появляется в контексте не мгновенно: ждём её, а не угадываем.
-    for _ in range(60):
-        try:
-            for candidate in context.pages:
-                if id(candidate) not in before:
-                    return candidate
-        except Exception:
-            return None
-        time.sleep(0.05)
+    finally:
+        if session is not None:
+            if target_id and owned is None:
+                try:
+                    session.send("Target.closeTarget", {"targetId": target_id})
+                except Exception:
+                    pass
+            try:
+                session.detach()
+            except Exception:
+                pass
     return None
 
 

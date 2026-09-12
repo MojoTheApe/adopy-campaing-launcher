@@ -112,25 +112,51 @@ def test_the_two_multilogin_accounts_are_named_not_lettered():
 
     report = {**_MOCK_REPORT, "countries": [dict(c) for c in _MOCK_REPORT["countries"]]}
     _enrich_country_overview(report)
+    # Фикстура приведена к тому, что передаёт приложение: карта аккаунтов и
+    # `mlx` в контексте.
+    #
+    # Выбор между двумя учётками Multilogin живёт теперь в форме подключения
+    # (ACL-1130); раньше он был ещё и в панели билдера, и её убрали. Заодно
+    # вскрылось, что фикстура давала `mlx_labels`, а `{% set mlx = mlx_labels %}`
+    # — локальная переменная шаблона, и включаемые файлы её не видят. Панель
+    # билдера жила в самом report.html и потому видела, а карта — нет. То есть
+    # проверка смотрела не туда, куда смотрит человек.
+    one = {"country": "Mexico", "key": "MX", "rows": [], "virtual": False,
+           "live_read": 0, "live_sums": [], "book": {}}
     context = dict(
         request=MagicMock(), report=report, warnings=[], built_at="x", upload_errors={},
         account_preflight={}, account_preflight_json={}, ref_options={},
         ref_options_json={}, account_alias_map_json={}, draft_status={},
+        amap={"countries": [one], "available": [], "all_accounts": [], "live": {},
+              "dates": [], "date_from": "", "date_to": "", "span": ""},
+        mlx=mlx_instance_labels(),
     )
     template = templates.env.get_template("report.html")
 
     rendered = template.render(**context, mlx_labels=mlx_instance_labels())
-    assert ">Inhouse<" in rendered and ">KLD<" in rendered
     assert "Instance A" not in rendered
+
+    # Сам выбор — там, где человек его делает: в форме подключения аккаунта.
+    # Раньше он был ещё и в панели билдера внутри report.html, и проверка
+    # смотрела на страницу целиком. Панель убрана (ACL-1130), а карта на этой
+    # фикстуре не разворачивается — поэтому спрашиваем тот кусок напрямую, а
+    # не подгоняем фикстуру под целую страницу.
+    picker = templates.env.get_template("_account_map_country.html").render(
+        mc=one, amap=context["amap"], mlx=mlx_instance_labels())
+    assert ">Inhouse<" in picker and ">KLD<" in picker
+    assert "Instance A" not in picker
     # The slot ids stay A and B: they are written in every machine's
     # ad_account_map.csv and in the environment keys. Renaming those would mean
     # a migration on every install, for a label.
-    assert 'data-inst="A"' in rendered and 'data-inst="B"' in rendered
+    assert 'value="A"' in picker and 'value="B"' in picker
 
     # Templates reload per request, Python only on restart. Between updating the
     # files and restarting the server the report must still render.
-    stale_server = template.render(**context)
-    assert ">Inhouse<" in stale_server and ">KLD<" in stale_server
+    stale = templates.env.get_template("_account_map_country.html").render(
+        mc=one, amap=context["amap"])
+    assert ">Inhouse<" in stale and ">KLD<" in stale, (
+        "без `mlx` в контексте селектор остаётся без подписей"
+    )
 
 
 def test_the_panel_does_not_show_success_when_no_token_was_saved():

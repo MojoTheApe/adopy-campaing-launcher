@@ -60,7 +60,7 @@ def browser():
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as pw:
-        b = pw.chromium.launch()
+        b = pw.chromium.launch(executable_path=__import__("os").environ.get("ACL_BROWSER_EXECUTABLE") or None)
         yield b
         b.close()
 
@@ -639,7 +639,7 @@ def test_a_refusal_is_not_dressed_up_as_success(page):
     _armed(page); _armed(page)
     page.wait_for_function("() => document.querySelector('.amap-tree-sw').classList.contains('failed')")
     got = _sw(page)
-    assert got["text"] == "On", "показали выключенным то, что крутится"
+    assert got["text"] == "Check", "unconfirmed action must not claim the old on state"
     assert "Meta не приняла" in got["title"], "причина не видна"
 
 
@@ -773,25 +773,7 @@ def test_the_newest_record_comes_first(monkeypatch, tmp_path):
     assert [r["object_id"] for r in sp.turn_off_history()] == ["2", "1", "0"]
 
 
-def test_the_confirmation_waits_for_meta_to_settle():
-    """12.09 объявление выключилось — в Ads Manager тумблер снят, доставка
-    «Processing», — а дешборд показал отказ: проверка после перезагрузки
-    смотрела строку один раз и успела заглянуть раньше ответа.
-
-    Та же ошибка, что была со статусом кабинета: шаг поверил первому взгляду.
-    """
-    src = (ROOT / "src" / "analysis_agent" / "account_spend.py").read_text(encoding="utf-8")
-    start = src.index("def _turn_off(account: str")
-    # Функция может быть последней в файле: `index` на отсутствующий следующий
-    # `def` бросает ValueError, и сторож падает тем же красным, каким падал бы
-    # на настоящей поломке. За эту сессию такой срез подводил дважды.
-    nxt = src.find("\ndef ", start + 10)
-    body = src[start: nxt if nxt != -1 else len(src)]
-    after = body[body.index("page.goto(url", body.index("page.click(")):]
-    assert "for attempt in range(TURN_OFF_TRIES)" in after, (
-        "подтверждение снова решает с первого взгляда"
-    )
-    assert "Meta не приняла" in after, "отказ перестал быть возможным — тогда это не проверка"
+# Persistent confirmation is exercised by test_turn_off_safety_browser.py.
 
 
 # ══ дерево не остаётся старше действия ════════════════════════════════════
