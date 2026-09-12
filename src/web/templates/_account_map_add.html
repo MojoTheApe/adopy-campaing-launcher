@@ -17,17 +17,40 @@
   <button type="button" class="amap-btn"
           onclick="amapLink(this.previousElementSibling,'country',{{ amap_value | tojson | forceescape }})">Add</button>
   <span style="color:var(--border-strong)">|</span>
-  <select class="amap-inst" onchange="amapFilter(this.closest('.amap-add').querySelector('.amap-find'))" title="Which Multilogin account to search">
-    <option value="A">{{ mlx['A'] }}</option>
-    <option value="B">{{ mlx['B'] }}</option>
+  {#- Запасные имена здесь свои: шаблоны перечитываются на каждый
+      запрос, а Python — только при перезапуске. Между обновлением файлов
+      и рестартом `mlx` в контексте может не оказаться, и селектор
+      остался бы с пустыми подписями — «Instance A» на экране не лучше
+      пустоты, но пустота хуже. -#}
+  {%- set mlxn = mlx or {'A': 'Inhouse', 'B': 'KLD'} %}
+  <select class="amap-inst" onchange="amapInstanceChanged(this)" title="Which Multilogin account to search">
+    <option value="A">{{ mlxn['A'] }}</option>
+    <option value="B">{{ mlxn['B'] }}</option>
   </select>
-  {#- Отбор идёт по мере ввода. Список профилей тянется один раз на инстанс и
-      фильтруется на месте: так отклик мгновенный, а Multilogin не дёргается
-      на каждую букву. Кнопка осталась для перезагрузки списка, когда профиль
-      только что завели. -#}
+  {#- Отбор идёт по мере ввода. Список профилей тянется один раз на
+      инстанс и фильтруется на месте: так отклик мгновенный, а Multilogin
+      не дёргается на каждую букву. Кнопка осталась для перезагрузки
+      списка, когда профиль только что завели. -#}
   <input type="text" class="amap-find" placeholder="last letters: X84" size="10"
          oninput="amapFilter(this)" onfocus="amapFilter(this)" autocomplete="off">
   <button type="button" class="amap-btn" onclick="amapFind(this)" title="Reload the profile list from Multilogin">Reload</button>
   <span class="amap-msg"></span>
   <div class="amap-hits" hidden></div>
+
+  {#- Состояние Multilogin и, если надо, вход. Заполняется из
+      `/multilogin-token-status` при первом взгляде на блок. -#}
+  <div class="amap-ml" data-ml-state="unknown">
+    <span class="amap-ml-line">Multilogin: <i>checking…</i></span>
+    <div class="amap-ml-signin" hidden>
+      <input type="email" class="amap-ml-email" placeholder="Multilogin email" autocomplete="username" size="18">
+      <input type="password" class="amap-ml-pass" placeholder="password" autocomplete="current-password" size="14">
+      <button type="button" class="amap-btn" onclick="amapMlSignin(this)">Connect</button>
+      <span style="color:var(--border-strong)">|</span>
+      {#- Пароля может не быть вовсе: токен выдаёт владелец воркспейса
+          (Settings → Automation → Generate Token). Это не запасной путь,
+          а обычный для тех, у кого нет учётки. -#}
+      <input type="text" class="amap-ml-token" placeholder="or paste automation token" size="22" autocomplete="off">
+      <button type="button" class="amap-btn" onclick="amapMlSaveToken(this)">Save token</button>
+    </div>
+  </div>
 </div>

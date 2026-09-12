@@ -48,10 +48,10 @@ def _piece() -> str:
     return piece.replace('{% include "_account_map.html" %}', "MAP")
 
 
-def _render(countries, *, date_from="2026-09-09", dates=("2026-09-07", "2026-09-08")):
+def _render(countries, *, date_from="2026-09-09", date_to=None, dates=("2026-09-07", "2026-09-08")):
     return templates.env.from_string(_piece()).render(
         report={"countries": list(countries)},
-        account_map={"date_from": date_from, "date_to": date_from, "dates": list(dates)},
+        account_map={"date_from": date_from, "date_to": date_from if date_to is None else date_to, "dates": list(dates)},
     )
 
 
@@ -106,7 +106,7 @@ def test_this_check_would_notice_the_old_behaviour():
     шаблона — и остался зелёным, когда блок перестал отрисовываться вовсе.
     """
     old = _piece().replace(
-        "{% if not report.countries or not book_covers_period %}",
+        "{% if not report.countries or not book_covers_period.value %}",
         "{% if not report.countries %}",
     )
     out = templates.env.from_string(old).render(
@@ -116,3 +116,55 @@ def test_this_check_would_notice_the_old_behaviour():
     assert "The workbook has no rows" not in out, (
         "прежнее условие сообщение показывает — значит проверка ничего не ловит"
     )
+
+
+def test_a_range_with_rows_after_its_first_day_is_not_empty():
+    out = _render(ONE_COUNTRY, date_from="2026-09-06", date_to="2026-09-08")
+    assert "The workbook has no rows" not in out
+
+
+def test_a_gap_inside_the_workbook_is_empty():
+    out = _render(ONE_COUNTRY, date_from="2026-09-08", dates=("2026-09-07", "2026-09-09"))
+    assert "The workbook has no rows" in out
+
+
+def test_open_ended_periods_match_the_report_filter():
+    assert "The workbook has no rows" not in _render(ONE_COUNTRY, date_from="2026-09-06", date_to="")
+    assert "The workbook has no rows" not in _render(ONE_COUNTRY, date_from="", date_to="2026-09-08")
+    out = _render(ONE_COUNTRY, date_from="", date_to="2026-09-06")
+    assert "The workbook has no rows" in out and "dates through 2026-09-06" in out
+
+
+def test_a_partial_overlap_is_not_described_as_no_rows():
+    assert "The workbook has no rows" not in _render(ONE_COUNTRY, date_from="2026-09-08", date_to="2026-09-12")
+
+
+def _full_page(countries=True):
+    from unittest.mock import MagicMock
+    from tests.test_web_build_upload import _minimal_report
+    from src.web.app import _enrich_country_overview, mlx_instance_labels
+    report = _minimal_report()
+    if not countries:
+        report['countries'] = []
+    _enrich_country_overview(report)
+    amap = dict(countries=[], available=[], all_accounts=[], live={}, span='',
+                date_from='2026-09-09', date_to='2026-09-09', dates=['2026-09-08'])
+    return templates.env.get_template('report.html').render(
+        request=MagicMock(), report=report, mlx_labels=mlx_instance_labels(),
+        warnings=[], built_at='2026-09-12', upload_errors={}, account_map=amap,
+        account_preflight={}, account_preflight_json={}, ref_options={},
+        ref_options_json={}, account_alias_map_json={}, draft_status={},
+    )
+
+
+def test_full_page_places_notice_before_dashboard_and_keeps_one_map():
+    html = _full_page()
+    assert html.index('id="workbook-period-notice"') < html.index('<div class="dashboard-shell">')
+    assert html.count('id="amap-slot"') == 1
+    assert 'Read all' in html and 'manage-builder-' in html
+
+
+def test_full_empty_page_still_has_the_account_map():
+    html = _full_page(countries=False)
+    assert 'The workbook has no rows' in html
+    assert html.count('id="amap-slot"') == 1 and 'Read all' in html
