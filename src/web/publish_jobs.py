@@ -180,19 +180,10 @@ def _clear_inherited_asyncio_loop() -> None:
 
 @contextlib.contextmanager
 def _watch_screen_lock(job_id: str):
-    """Запоминает, был ли экран заблокирован хоть раз за время работы.
+    """Remember a local session lock observed while this job is working.
 
-    Спрашивать в конце поздно: человек к тому моменту уже вернулся к
-    машине, разблокировал её и увидел пустой сбой. Причина была, её просто
-    некому было записать.
-
-    Поэтому смотрим по ходу. Проверка местная и дешёвая — жив ли процесс
-    `LogonUI.exe`, — прав не требует и наружу ничего не шлёт; раз в
-    пятнадцать секунд её не заметит никто.
-
-    Не знать — законный ответ: `screen_locked()` возвращает `None`, если
-    спросить не удалось, и такой ответ ничего не утверждает. Ошибка самой
-    проверки не должна касаться сборки, поэтому всё обёрнуто.
+    Sample every fifteen seconds; unknown/unavailable probes are not evidence
+    of a lock. No network or live browser operations are used here.
     """
     stop = threading.Event()
 
@@ -206,19 +197,28 @@ def _watch_screen_lock(job_id: str):
                 if screen_locked() is True:
                     with _jobs_lock:
                         job = _jobs.get(job_id)
-                        if job is not None:
+                        if (not stop.is_set() and job is not None
+                                and job.get("status") in {"running", "cancelling"}):
                             job["screen_was_locked"] = True
                     return          # узнали — больше смотреть незачем
             except Exception:
                 return
             stop.wait(15.0)
 
-    watcher = threading.Thread(target=look, daemon=True, name=f"screenlock-{job_id[:8]}")
-    watcher.start()
+    try:
+        watcher = threading.Thread(target=look, daemon=True, name=f"screenlock-{job_id[:8]}")
+        watcher.start()
+    except Exception:
+        # Monitoring is optional; inability to create its thread must not
+        # strand a running job before RPA starts.
+        stop.set()
     try:
         yield
     finally:
-        stop.set()
+        # Serialize exit with the write above. A delayed OS probe must never
+        # add a warning after the job or this monitoring scope has finished.
+        with _jobs_lock:
+            stop.set()
 
 
 def _run_job(
