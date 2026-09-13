@@ -11,6 +11,7 @@ form fields and violated the product's manual-final-publish boundary.
 """
 from __future__ import annotations
 
+import contextlib
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.draft import RpaPublishResult
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.fb_ads_rpa.operations import browser_operation
+from src.web.keep_awake import keep_display_awake
 
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
@@ -176,6 +178,49 @@ def _clear_inherited_asyncio_loop() -> None:
             pass
 
 
+@contextlib.contextmanager
+def _watch_screen_lock(job_id: str):
+    """Remember a local session lock observed while this job is working.
+
+    Sample every fifteen seconds; unknown/unavailable probes are not evidence
+    of a lock. No network or live browser operations are used here.
+    """
+    stop = threading.Event()
+
+    def look() -> None:
+        try:
+            from src.fb_ads_rpa.run_telemetry import screen_locked
+        except Exception:
+            return
+        while not stop.is_set():
+            try:
+                if screen_locked() is True:
+                    with _jobs_lock:
+                        job = _jobs.get(job_id)
+                        if (not stop.is_set() and job is not None
+                                and job.get("status") in {"running", "cancelling"}):
+                            job["screen_was_locked"] = True
+                    return          # узнали — больше смотреть незачем
+            except Exception:
+                return
+            stop.wait(15.0)
+
+    try:
+        watcher = threading.Thread(target=look, daemon=True, name=f"screenlock-{job_id[:8]}")
+        watcher.start()
+    except Exception:
+        # Monitoring is optional; inability to create its thread must not
+        # strand a running job before RPA starts.
+        stop.set()
+    try:
+        yield
+    finally:
+        # Serialize exit with the write above. A delayed OS probe must never
+        # add a warning after the job or this monitoring scope has finished.
+        with _jobs_lock:
+            stop.set()
+
+
 def _run_job(
     job_id: str,
     slots: list[dict[str, Any]],
@@ -211,15 +256,23 @@ def _run_job(
         if activate or not use_rpa_publish():
             _fatal(job_id, "ACL safety gate: only draft-only RPA jobs are allowed")
             return
-        _run_rpa(
-            job_id,
-            slots,
-            account_label=account_label,
-            country=country,
-            activate=False,
-            dry_run=dry_run,
-            hand_off=True,
-        )
+        # Заблокированный экран останавливает сборку: система уходит на
+        # защищённый рабочий стол, браузер перестаёт получать время, и
+        # креатив, который грузится 74 секунды, грузился 42 минуты. Пока
+        # работа идёт, просим не гасить экран; просьба снимается сама,
+        # чем бы работа ни кончилась. Держится она вокруг ВСЕЙ работы, а
+        # не вокруг шага: прерывать нельзя всю. Очередь в это время ждёт
+        # снаружи — держать экран ради ожидания незачем.
+        with keep_display_awake(account_label), _watch_screen_lock(job_id):
+            _run_rpa(
+                job_id,
+                slots,
+                account_label=account_label,
+                country=country,
+                activate=False,
+                dry_run=dry_run,
+                hand_off=True,
+            )
         return
 
 

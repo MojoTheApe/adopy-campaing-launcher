@@ -23,6 +23,7 @@ Each record:
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import uuid
@@ -112,38 +113,47 @@ def merge_diag(collected: dict | None, explicit: dict | None) -> dict | None:
     return merged or None
 
 
+def _process_session_id(pid: int) -> int | None:
+    """Return a Windows session ID; inability to query is not session zero."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        query = ctypes.windll.kernel32.ProcessIdToSessionId
+        query.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+        query.restype = wintypes.BOOL
+        session = wintypes.DWORD()
+        if query(pid, ctypes.byref(session)):
+            return session.value
+    except Exception:
+        pass
+    return None
+
+
 def screen_locked() -> bool | None:
-    """Заблокирован ли сейчас экран Windows. `None`, если спросить не удалось.
+    """Observe LogonUI in ACL's Windows session; unknown probes return None.
 
-    Блокировка останавливает страницу так же, как свёрнутое окно, только
-    сильнее: система уходит на защищённый рабочий стол, композитор перестаёт
-    отдавать кадры, и эмуляция фокуса через CDP уже не помогает.
-
-    Это не догадка. 29 июля с окном в фоне шаги шли в 10-50 раз медленнее, а
-    загрузка креатива второго объявления заняла двенадцать минут и «упала».
-    10 сентября то же самое повторилось с заблокированным экраном: сорок две
-    минуты на файл, который соседнее объявление приняло за семьдесят четыре
-    секунды — сразу после того, как человек вернулся к машине.
-
-    Признак — процесс `LogonUI.exe`: он живёт ровно пока показан экран
-    блокировки. Способ грубый, но дешёвый и не требует ни прав, ни библиотек;
-    ошибиться он может только в сторону «не знаю», а это честный ответ.
-
-    Снять блокировку мы не можем и не должны — это настройка безопасности
-    машины байера. Но назвать её причиной вместо разметки Meta обязаны: за
-    один день она дважды увела разбор не туда.
+    A process in another signed-in/RDP session says nothing about the browser
+    driven by this desktop app. The observation is a possible explanation for
+    a stalled upload, not proof of the cause of a particular campaign error.
     """
     if not sys.platform.startswith("win"):
         return None
     try:
         import psutil
-    except Exception:
-        return None
-    try:
+
+        own_session = _process_session_id(os.getpid())
+        if own_session is None:
+            return None
+        unknown = False
         for proc in psutil.process_iter(["name"]):
             if (proc.info.get("name") or "").lower() == "logonui.exe":
-                return True
-        return False
+                session = _process_session_id(proc.pid)
+                if session is None:
+                    unknown = True
+                elif session == own_session:
+                    return True
+        return None if unknown else False
     except Exception:
         return None
 
