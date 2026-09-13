@@ -317,13 +317,17 @@ def test_the_new_tab_is_created_in_the_background(monkeypatch):
     base = NS(evaluate=lambda _js: "hidden")
     pages = [base]
 
-    def _send(method, params=None):
-        sent.append((method, params))
-        pages.append(made)
-
-    context = NS(pages=pages,
-                 new_cdp_session=lambda _p: NS(send=_send),
-                 new_page=lambda: (_ for _ in ()).throw(AssertionError("вкладку открыли не фоном")))
+    unrelated = NS(evaluate=lambda _js: "hidden")
+    def _session(target):
+        def send(method, params=None):
+            sent.append((method, params))
+            if method == "Target.createTarget":
+                pages.extend([unrelated, made])  # a user's concurrent tab is first
+                return {"targetId":"owned"}
+            return {"targetInfo":{"targetId":"owned" if target is made else "user"}}
+        return NS(send=send, detach=lambda:None)
+    context = NS(pages=pages, new_cdp_session=_session,
+                 new_page=lambda: (_ for _ in ()).throw(AssertionError("expected background tab")))
     browser = NS(contexts=[context])
     pw = NS(chromium=NS(connect_over_cdp=lambda _: browser), stop=lambda: None)
     monkeypatch.setattr(br, "sync_playwright", lambda: NS(start=lambda: pw))
@@ -334,8 +338,8 @@ def test_the_new_tab_is_created_in_the_background(monkeypatch):
     conn = br._connect_playwright(cdp_url="test", provider="multilogin_direct",
                                   debug_port="123", ws_endpoint=None, new_page=True)
     assert conn.page is made
-    assert sent and sent[0][0] == "Target.createTarget"
-    assert sent[0][1].get("background") is True, "флаг фона не передан"
+    created = [params for method, params in sent if method == "Target.createTarget"]
+    assert len(created) == 1 and created[0]["background"] is True
 
 
 def test_a_tab_we_could_not_open_in_the_background_is_still_opened(monkeypatch):

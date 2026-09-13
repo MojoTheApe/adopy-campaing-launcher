@@ -27,8 +27,15 @@ from src.web.app import _add_linked_accounts_to_builder  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def store(tmp_path, monkeypatch):
-    """Своё хранилище связей, а не машины разработчика."""
+    """Своё хранилище связей, а не машины разработчика.
+
+    Подменить путь хранения мало: `seed_from_account_map` читает карту
+    аккаунтов машины и заносит из неё страны. На машине разработчика их
+    одиннадцать, и проверка «в пустом отчёте стран нет» падала на них, а не на
+    коде. Хуже была бы обратная сторона — зелёная проверка на чужих данных.
+    """
     monkeypatch.setattr(account_links, "get_local_config_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(account_links, "seed_from_account_map", lambda: 0)
     return tmp_path
 
 
@@ -107,10 +114,27 @@ def test_a_country_with_no_links_is_left_alone():
     assert report["countries"][1]["open_recs"] == {"FacebookDQ438": []}
 
 
-def test_a_report_without_countries_does_not_break():
-    """Книга отстала — стран в отчёте нет вовсе. Это не повод падать."""
-    assert _add_linked_accounts_to_builder({"countries": []}) == 0
-    assert _add_linked_accounts_to_builder({}) == 0
+def test_a_report_without_countries_gets_them_from_the_links():
+    """Книга отстала — стран в отчёте нет вовсе.
+
+    Раньше здесь ожидался ноль: функция только раскладывала аккаунты по уже
+    существующим странам, а пустой отчёт оставался пустым. С тех пор она сама
+    заводит стране пустую секцию, и ожидание нуля стало неверным — тест был
+    красным и до этой ветки.
+
+    Проверять надо то, ради чего правка делалась: страна с подключённым
+    аккаунтом на странице есть, а отчёт без единой связи по-прежнему не падает.
+    """
+    account_links.link("FacebookDQ438", "country", "Saudi Arabia")
+    report: dict = {"countries": []}
+    assert _add_linked_accounts_to_builder(report) == 1
+    assert [c["country"] for c in report["countries"]] == ["Saudi Arabia"]
+
+
+def test_a_report_without_countries_and_without_links_does_not_break():
+    empty: dict = {}
+    assert _add_linked_accounts_to_builder(empty) == 0
+    assert empty.get("countries") == []
 
 
 def test_a_country_without_open_recs_at_all_gets_the_key():

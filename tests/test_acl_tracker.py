@@ -1,18 +1,11 @@
-"""Трекер: разбор задач GitHub и сборка витрины.
+"""Tracker parsing and rendering against the repository's real config.
 
-`model.load_config()` читает **настоящий** `tracker/config.json`, и это
-намеренно: проверяется в том числе, что живой конфиг имеет схему 2 и шесть
-стадий. Из этого следует одно неприятное свойство.
-
-**Если этот файл падает только в полном прогоне, а по одному проходит — ищите
-не в тесте.** 12.09 так и было: тест читал `tracker/config.json` в тот момент,
-когда git его переписывал мерджем. Git на Windows заменяет файл целиком, и
-читателю может достаться отсутствующий или недописанный. Три прогона без
-одновременных коммитов прошли чисто.
-
-Правило простое: не коммитить и не мерджить в том же рабочем дереве, где идёт
-прогон. Доказательства косвенные — воспроизвести гонку намеренно не удалось, —
-но других объяснений не нашлось, а это объясняет и когда падало, и когда нет.
+A September 12 full-suite failure was reported while commits and merges were
+changing this checkout. Concurrent worktree writes are a possible explanation,
+not a reproduced root cause: isolated runs were clean. Preserve that distinction
+until the original exception or a reproduction establishes the cause. Never
+commit or merge in the same checkout while its tests are running; do not hide
+this test behind retries or skips.
 """
 import json
 from types import SimpleNamespace

@@ -1836,9 +1836,10 @@ async def api_creatives() -> JSONResponse:
         return JSONResponse({"error": f"Creatives folder not found: {root}", "files": []})
 
     files = []
-    for p in sorted(root.rglob("*")):
-        if not p.is_file():
-            continue
+    # Directory enumeration identifies file entries without a separate Path.stat
+    # per entry. An unreadable size must not abort the whole picker on Windows.
+    paths = (Path(folder) / name for folder, _dirs, names in os.walk(root) for name in names)
+    for p in sorted(paths):
         ext = p.suffix.lower()
         if ext in _IMAGE_EXTS:
             ftype = "Image"
@@ -1851,11 +1852,19 @@ async def api_creatives() -> JSONResponse:
         except ValueError:
             rel = Path(p.name)
         folder = str(rel.parent) if rel.parent != Path(".") else ""
+        try:
+            size = p.stat().st_size
+        except OSError:
+            size = 0
         files.append({
             "filename": p.name,
             "rel_path": str(rel).replace("\\", "/"),
             "folder": folder.replace("\\", "/"),
             "type": ftype,
+            # Вес виден при выборе, а не через десять минут загрузки. В той же
+            # папке 10 сентября лежали файлы от 30 КБ до 1.5 ГБ, и по имени
+            # они не отличались никак.
+            "size_bytes": size,
         })
     return JSONResponse({"files": files})
 
