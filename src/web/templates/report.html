@@ -2361,7 +2361,50 @@
     .cbd-country:first-child { margin-top: 0; }
     .cbd-country::after {
       content: ""; flex: 1; height: 1px; background: var(--border);
+      order: 1;
     }
+    .cbd-country-add {
+      order: 2; flex-shrink: 0;
+      background: none; border: 1px dashed var(--border-strong);
+      border-radius: 3px; padding: 0.05rem 0.3rem;
+      color: var(--muted); font: inherit; font-size: 0.6rem; font-weight: 600;
+      letter-spacing: 0.04em; cursor: pointer;
+    }
+    .cbd-country-add:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* Форма подключения гостит здесь. Она рассчитана на строку во всю
+       ширину страницы, поэтому в ящике складывается. */
+    .cbd-connect-slot { margin-bottom: var(--space-sm); }
+    .cbd-connect-host .amap-add {
+      display: flex; flex-wrap: wrap; gap: 0.25rem;
+      padding: var(--space-sm); margin: 0;
+      border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      background: var(--bg);
+    }
+    .cbd-connect-host .amap-add > * { flex: 1 1 45%; min-width: 6rem; max-width: 100%; }
+    .cbd-connect-host .amap-hits, .cbd-connect-host .amap-ml,
+    .cbd-connect-host .amap-msg { flex: 1 1 100%; }
+    .cbd-connect-host select, .cbd-connect-host input { width: 100%; box-sizing: border-box; }
+
+    /* Строка «завести страну» лежит в колонке `.cbd-pick` и должна стоять
+       поперёк неё. Класса рядом мало: у `.cbd-pick` тот же вес, и оно
+       побеждало порядком в файле — строка оставалась колонкой. А в колонке
+       `flex-basis` задаёт не ширину, а ВЫСОТУ: поле вырастало на восемь
+       строк вниз. Отсюда два правила: вес выше и никакого basis в тех
+       единицах, которые можно принять за высоту. */
+    .cbd-pick.cbd-newc {
+      flex-direction: row; flex-wrap: wrap;
+      gap: var(--space-xs); align-items: center;
+    }
+    .cbd-pick.cbd-newc .cbd-new-country {
+      flex: 1 1 auto; width: auto; min-width: 6rem; box-sizing: border-box;
+      padding: 0.25rem 0.4rem; font: inherit; font-size: 0.74rem;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+    }
+    .cbd-pick.cbd-newc .cbd-add { display: inline-block; width: auto; flex: 0 0 auto; margin-top: 0; }
+    .cbd-pick.cbd-newc .cbd-new-msg { flex: 1 1 100%; color: var(--muted); font-size: 0.68rem; }
+    .cbd-new-msg.bad { color: var(--bad); }
     .cbd-account {
       margin: var(--space-sm) 0 var(--space-xs);
       font-size: 0.72rem; font-weight: 600; color: var(--text);
@@ -4352,11 +4395,33 @@ window.cbTree = (function () {
       };
     }).filter(function (g) { return g.accounts.length; });
 
+    if (connectHost.parentNode) connectHost.parentNode.removeChild(connectHost);
+
+    /* Страна, в которой открыли подключение, остаётся в дереве, даже если
+       в ней пока ничего не собирается: иначе строка исчезала бы прямо
+       под руками. */
+    if (openConnect && !busy.some(function (g) { return g.country === openConnect; })) {
+      var extra = null;
+      tree.forEach(function (g) { if (g.country === openConnect) extra = g; });
+      if (extra) busy.push({ country: extra.country, countryName: extra.countryName, accounts: [] });
+      else openConnect = '';
+    }
+
     if (!busy.length) {
       body.innerHTML = '<p class="cbd-empty">Nothing is being assembled yet.</p>';
     } else {
       body.innerHTML = busy.map(function (g) {
-        return '<div class="cbd-country">' + aclEscHtml(g.countryName || g.country) + '</div>'
+        return '<div class="cbd-country">' + aclEscHtml(g.countryName || g.country)
+          + '<button type="button" class="cbd-country-add" data-act="connect"'
+          + ' data-country="' + aclEscHtml(g.country) + '"'
+          + ' data-country-name="' + aclEscHtml(g.countryName || g.country) + '"'
+          /* Подпись здесь короткая нарочно: словами подлиннее называлась
+             вторая форма подключения, которую убрали, и сторож стережёт её
+             возвращение именно по ним. Цитировать их даже в комментарии не
+             стоит — он тоже часть файла. Здесь не вторая форма, а та же
+             самая, показанная в другом месте. */
+          + ' title="Link an account here">+ Account</button></div>'
+          + (g.country === openConnect ? '<div class="cbd-connect-slot"></div>' : '')
           + g.accounts.map(function (a) {
               return '<div class="cbd-account">' + aclEscHtml(a.account) + '</div>'
                 + a.campaigns.map(campaignHtml).join('')
@@ -4371,6 +4436,10 @@ window.cbTree = (function () {
     var card = openId ? body.querySelector('.cbd-camp[data-camp="' + openId + '"]') : null;
     if (card) card.appendChild(host);
     else if (openId) release();
+
+    var slotEl = openConnect ? body.querySelector('.cbd-connect-slot') : null;
+    if (slotEl) slotEl.appendChild(connectHost);
+    else if (openConnect) { openConnect = ''; releaseConnect(); }
 
     if (window.cbDrawer) window.cbDrawer.setCount(countTotal(tree));
     paintFoot();
@@ -4402,6 +4471,11 @@ window.cbTree = (function () {
       + '</select>'
       + '<select class="cbd-pick-account" aria-label="Account"></select>'
       + '<button type="button" class="cbd-add" data-act="add-picked">+ Campaign</button>'
+      + '</div>'
+      + '<div class="cbd-pick cbd-newc">'
+      + '<input type="text" class="cbd-new-country" placeholder="new country…" autocomplete="off">'
+      + '<button type="button" class="cbd-add" data-act="add-country">+ Country</button>'
+      + '<span class="cbd-new-msg"></span>'
       + '</div>';
     paintAccounts();
   }
@@ -4426,6 +4500,54 @@ window.cbTree = (function () {
   var host = document.createElement('div');
   host.className = 'cbd-camp-body cbd-host';
   var BORROWED = null;
+
+  /* ── подключить аккаунт, не уходя из ящика ─────────────────────────────
+     Третьей копии формы подключения здесь нет и не будет: их было две,
+     они разошлись, и сведение их в одну было отдельной задачей. Ящик
+     берёт ту самую форму из карты аккаунтов — со своим поиском профилей,
+     кнопкой Reload и строкой состояния Multilogin, — показывает её у себя
+     и возвращает на место. Понадобился вход — он там же, внутри неё. */
+  var connectHost = document.createElement('div');
+  connectHost.className = 'cbd-connect-host';
+  var CONNECT = null;
+  var openConnect = '';
+
+  /* Блок подключения страны ищется по её имени: в карте аккаунтов у
+     страны свой ключ (код или имя), и с адресом вкладки он не совпадает. */
+  function connectBlockFor(countryName) {
+    var found = null;
+    document.querySelectorAll('details.amap-country').forEach(function (d) {
+      if (found) return;
+      var cell = d.querySelector('.amap-cell-name') || d.querySelector('summary');
+      var name = cell ? (cell.textContent || '').trim() : '';
+      if (name === countryName) found = d.querySelector('.amap-add');
+    });
+    return found;
+  }
+
+  function borrowConnect(countryName) {
+    releaseConnect();
+    var block = connectBlockFor(countryName);
+    if (!block) return false;
+    var mark = document.createComment('cbd-connect');
+    block.parentNode.insertBefore(mark, block);
+    CONNECT = { block: block, mark: mark };
+    connectHost.appendChild(block);
+    /* Состояние Multilogin рисуется при первом взгляде на блок; перенос
+       взглядом не считается, поэтому просим перечитать. */
+    if (window.amapMlRefresh && window.amapMlInstance) {
+      try { window.amapMlRefresh(window.amapMlInstance(block), false); } catch (e) { /* не страшно */ }
+    }
+    return true;
+  }
+
+  function releaseConnect() {
+    if (!CONNECT) return;
+    var c = CONNECT;
+    CONNECT = null;
+    c.mark.parentNode.insertBefore(c.block, c.mark);
+    c.mark.remove();
+  }
 
   function borrow(row, form, only) {
     if (BORROWED && BORROWED.form === form) { showOnly(form, only); return; }
@@ -4545,6 +4667,28 @@ window.cbTree = (function () {
       paint();
     } else if (act === 'add-here') {
       addCampaign(hit.dataset.country, hit.dataset.account);
+    } else if (act === 'connect') {
+      var country = hit.dataset.country;
+      if (openConnect === country) { openConnect = ''; releaseConnect(); paint(); return; }
+      openConnect = country;
+      paint();
+      if (!borrowConnect(hit.dataset.countryName)) {
+        openConnect = '';
+        paint();
+        window.alert('This country is not on the account map yet — add it first with «+ Country».');
+        return;
+      }
+      paint();
+    } else if (act === 'add-country') {
+      var input = foot.querySelector('.cbd-new-country');
+      var msg = foot.querySelector('.cbd-new-msg');
+      var name = input ? (input.value || '').trim() : '';
+      if (!name) { if (msg) { msg.textContent = 'name the country'; msg.className = 'cbd-new-msg bad'; } return; }
+      /* Отправляет та же функция, что и кнопка в карте аккаунтов: свой
+         запрос завёл бы второе место, где решается, что значит «завести
+         страну». Она же перезагрузит страницу — набранное в билдере это
+         переживёт. */
+      window.amapSend({ action: 'add', kind: 'country', value: name }, msg);
     } else if (act === 'publish-all') {
       hit.disabled = true;
       window.cbPublishAll(showQueue);
