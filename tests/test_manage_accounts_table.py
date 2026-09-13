@@ -25,9 +25,25 @@ def test_the_duplicate_section_is_gone():
 
 
 def test_only_one_place_connects_an_account():
-    """Форма на карте читает номер кабинета сама; вторая просила его руками."""
+    """Форма на карте читает номер кабинета сама; вторая просила его руками.
+
+    Стережётся возвращение той формы, а не всякое упоминание подключения.
+    Ящик билдера показывает у себя кнопку «+ Account» — но за ней стоит эта
+    же форма, физически перенесённая из карты и возвращаемая на место; своих
+    полей у ящика нет, и проверяется это здесь же, ниже.
+    """
+    # Без комментариев: объяснение убранного — не его возвращение. Сторож,
+    # читающий комментарий вместо кода, ловит собственный текст.
+    import re as _re
     t = PAGE.read_text(encoding="utf-8")
+    t = _re.sub(r"\{#.*?#\}", "", t, flags=_re.S)
+    t = _re.sub(r"/\*.*?\*/", "", t, flags=_re.S)
     assert "Connect an account to" not in t, "второе место подключения вернулось"
+    # Поля той формы — по одному экземпляру на страницу: она одна.
+    for field in ("amap-ml-email", "amap-known", "amap-find"):
+        assert t.count('class="' + field) + t.count(" " + field + '"') <= 2, (
+            f"поле {field} встречается больше одного раза — форм подключения снова несколько"
+        )
 
 
 def test_the_state_of_the_account_is_written_not_ticked():
@@ -76,7 +92,9 @@ def test_the_column_count_still_matches_itself():
     assert len(re.findall(r"<td[ >]", body)) == cols, "ячеек не столько же, сколько колонок"
     assert cg.count("<col ") == cols, "долей не столько же, сколько колонок"
     assert sum(int(x) for x in re.findall(r"width:(\d+)%", cg)) == 100
-    assert int(re.search(r"ncols=(\d+)", t).group(1)) == cols, "строка раскрытия поедет"
+    # Проверка `ncols == cols` убрана вместе с книжной строкой раскрытия
+    # (12.09): у живого дерева colspan берётся из самой строки и разойтись
+    # ему не с чем.
 
 
 def test_a_failed_read_shows_its_reason_after_a_reload():

@@ -44,11 +44,15 @@ async function tracking() {
   const input = {value:'', classList:{add:name=>classes.add(name),remove:name=>classes.delete(name)},
     closest:()=>panel, scrollIntoView(){}, addEventListener(){}, removeEventListener(){}};
   const account = {value:'Demo'};
-  const form = {querySelector(selector) {
+  // У настоящей формы есть и querySelectorAll — двойник без него ронял
+  // cbPublish, как только тот начал обходить поля таргетинга. Пустой список
+  // означает «слотов нет», и предупреждению о таргетинге здесь не о чем
+  // говорить: этот стенд про трекинговую ссылку.
+  const form = {classList:{contains:()=>false}, querySelector(selector) {
     if (selector.includes('tracking_link')) return input;
     if (selector.includes('account_label')) return account;
     return {value: selector.includes('camp_count') ? '1' : 'Mexico'};
-  }};
+  }, querySelectorAll(){ return []; }};
   const context = {ACCOUNT_PREFLIGHT:{Demo:{link:'',link_status:'empty'}}, aclEscHtml:esc,
     _safeConfirm:(title,body,run,options)=>{confirmation={body,run,options};},
     _doCbPublish:()=>builds++,

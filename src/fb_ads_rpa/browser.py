@@ -314,6 +314,89 @@ def _stop_thread_playwright() -> None:
     _reset_asyncio_running_loop()
 
 
+def _new_background_page(context):
+    """Новая вкладка, не забирающая экран.
+
+    `context.new_page()` создаёт вкладку через `Target.createTarget` без флага
+    `background`, и Chrome не просто делает её активной — он **поднимает само
+    окно профиля**. Человек сидит в другом приложении, а ему на минуты
+    выбрасывает Ads Manager. Вернуть фокус соседней вкладке этого не отменяет:
+    окно уже всплыло (проверено вживую 12.09).
+
+    У CDP флаг есть, и он ровно про это. Не вышло — возвращаем `None`, и
+    вызывающий откроет вкладку обычным путём: своя вкладка нужнее тишины.
+    """
+    session = None
+    target_id = None
+    owned = None
+    try:
+        base = next(iter(context.pages), None)
+        if base is None:
+            return None
+        session = context.new_cdp_session(base)
+        params = {"url": "about:blank", "background": True}
+        info = session.send("Target.getTargetInfo").get("targetInfo", {})
+        if info.get("browserContextId"):
+            params["browserContextId"] = info["browserContextId"]
+        target_id = session.send("Target.createTarget", params).get("targetId")
+        if not target_id:
+            return None
+        for _ in range(60):
+            for candidate in list(context.pages):
+                probe = None
+                try:
+                    probe = context.new_cdp_session(candidate)
+                    info = probe.send("Target.getTargetInfo").get("targetInfo", {})
+                    if info.get("targetId") == target_id:
+                        owned = candidate
+                        return owned
+                finally:
+                    if probe is not None:
+                        try:
+                            probe.detach()
+                        except Exception:
+                            pass
+            # Dispatch Playwright's page events while waiting for our target.
+            base.wait_for_timeout(50)
+    except Exception:
+        return None
+    finally:
+        if session is not None:
+            if target_id and owned is None:
+                try:
+                    session.send("Target.closeTarget", {"targetId": target_id})
+                except Exception:
+                    pass
+            try:
+                session.detach()
+            except Exception:
+                pass
+    return None
+
+
+def _front_page(context):
+    """Какая вкладка сейчас на экране — чтобы вернуть её человеку.
+
+    У Playwright нет понятия «активная вкладка», зато сама страница знает:
+    видимая отвечает `visible`, остальные `hidden`. Спрашиваем до того, как
+    создадим свою: после — ответят обе, потому что на нашей включена подделка
+    фокуса.
+
+    Ничего не нашли — значит и возвращать нечего; молчим, а не гадаем.
+    """
+    try:
+        pages = list(context.pages or [])
+    except Exception:
+        return None
+    for candidate in pages:
+        try:
+            if candidate.evaluate("() => document.visibilityState") == "visible":
+                return candidate
+        except Exception:
+            continue
+    return None
+
+
 def _disable_background_throttling(context, page) -> None:
     """Stop Chrome throttling the page when its window is minimised or behind
     another one.
@@ -498,13 +581,29 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
         browser = pw.chromium.connect_over_cdp(cdp_url)
         if browser.contexts:
             context = browser.contexts[0]
-            page = context.new_page() if new_page or not context.pages else context.pages[0]
+            # Чья вкладка была на экране до нас — чтобы вернуть её обратно.
+            prior = _front_page(context) if new_page else None
+            if new_page:
+                page = _new_background_page(context) or context.new_page()
+            else:
+                page = context.pages[0] if context.pages else context.new_page()
         else:
             context = browser.new_context()
+            prior = None
             page = context.new_page()
         _disable_background_throttling(context, page)
         _ensure_wide_window(context, page)
         _keep_renderer_active(context, page)
+        # Новая вкладка в Chrome сразу становится активной, и окно человека на
+        # минуты уезжает на нашу страницу. Возвращаем то, на что он смотрел:
+        # наша вкладка уходит в фон, но продолжает работать — торможение
+        # фоновых вкладок здесь уже снято двумя вызовами выше, ради этого они
+        # и делались.
+        if prior is not None and prior is not page:
+            try:
+                prior.bring_to_front()
+            except Exception:
+                pass
         # Install human-activity tracker on the page
         try:
             from src.fb_ads_rpa.pacing import _install_mouse_tracker
@@ -789,6 +888,45 @@ class MultiloginDirectCDPProvider:
                 continue
         return None
 
+    # ── Публичный путь «прицепись, но не поднимай» ───────────────────────
+    #
+    # Публикация и чтение хотят от браузера противоположного. Публикации нужен
+    # браузер любой ценой: не вышло прицепиться — останови профиль и подними
+    # заново с автоматизацией. Чтению наоборот: прицепись к тому, что открыто,
+    # а если открытого нет — **остановись**. Перезапуск разлогинивает аккаунт
+    # (так вышло на x01) и умеет терять прокси; ради одного числа за вчера это
+    # неприемлемо.
+    #
+    # Публичного способа сказать второе не было, и чтение звало приватные
+    # методы этого класса напрямую из чужого модуля (`acl-108e`). Теперь
+    # говорит — а приватные методы остаются приватными.
+
+    def attach_existing_only(
+        self, profile_id: str, user_data_dir: str, *, new_page: bool = False
+    ) -> "BrowserConnection | None":
+        """Прицепиться к уже открытому профилю. Никогда его не поднимать.
+
+        `None` значит «открытого окна с отладочным портом нет», и это всё, что
+        здесь происходит: ни остановки профиля, ни запуска.
+
+        `strict_profile` зафиксирован намеренно: он требует, чтобы порт
+        принадлежал именно этому профилю. Свободный поиск годится публикации,
+        которая профиль только что подняла сама; чтению он позволил бы
+        прицепиться к чужому окну и прочитать чужой кабинет.
+        """
+        return self._try_attach_existing(
+            profile_id, user_data_dir, strict_profile=True, new_page=new_page
+        )
+
+    def profile_is_running(self, user_data_dir: str, profile_id: str = "") -> bool:
+        """Есть ли живой процесс Mimic на этой папке профиля.
+
+        Нужно, чтобы отличить «профиль закрыт» от «профиль открыт руками в MLX
+        Desktop»: у второго нет отладочного порта, прицепиться не к чему, и
+        человеку надо сказать именно это, а не «профиль не найден».
+        """
+        return self._profile_process_running(user_data_dir, profile_id)
+
     def _try_attach_existing(
         self, profile_id: str, user_data_dir: str, *, strict_profile: bool = False, new_page: bool = False
     ) -> "BrowserConnection | None":
@@ -801,7 +939,7 @@ class MultiloginDirectCDPProvider:
         port = self._discover_owned_debug_port(user_data_dir) if strict_profile else self._discover_debug_port(user_data_dir, profile_id)
         if port is None:
             log.info(
-                "Profile %s is running but no CDP debug port found — will relaunch with debugging",
+                "Profile %s is running but no CDP debug port found — attachment unavailable",
                 profile_id,
             )
             return None
@@ -817,7 +955,7 @@ class MultiloginDirectCDPProvider:
             log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
             return conn
         except Exception as exc:
-            log.warning("Could not attach to running Mimic (%s) — will relaunch", exc)
+            log.warning("Could not attach to running Mimic (%s)", exc)
             return None
 
     def open(self, entry: AccountMapEntry, account_label: str) -> "BrowserConnection":

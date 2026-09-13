@@ -205,6 +205,16 @@ def _fake_browser(monkeypatch, *, attach, running, has_dir=True):
     from src.fb_ads_rpa import browser as rpa_browser
 
     class Direct:
+        # Публичная пара, как у настоящего провайдера: она делегирует
+        # приватным, а strict_profile зафиксирован внутри неё.
+        def attach_existing_only(self, profile_id, user_data_dir, *, new_page=False):
+            return self._try_attach_existing(
+                profile_id, user_data_dir, strict_profile=True, new_page=new_page
+            )
+
+        def profile_is_running(self, user_data_dir, profile_id=""):
+            return self._profile_process_running(user_data_dir, profile_id)
+
         def _try_attach_existing(self, profile_id, udd, **kwargs):
             return attach
 

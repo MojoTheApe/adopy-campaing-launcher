@@ -42,9 +42,20 @@ def test_currency_comes_from_the_total_not_other_page_amounts():
 
 
 def test_concurrent_readings_and_statuses_survive():
+    """Двенадцать записей одновременно: ни одна не теряется, `.tmp` не остаётся.
+
+    Барьер держал таймаут в три секунды, и это был не факт о коде, а ставка на
+    скорость машины. В полном прогоне процессор занят браузерами Playwright,
+    двенадцать потоков до барьера за три секунды не доходят, `wait` бросает
+    `BrokenBarrierError`, `pool.map` его пробрасывает — часть показаний не
+    сохраняется, и проверка падает на исправном коде (12.09).
+
+    Смысл проверки — «пишут вместе», и он от щедрого предела не страдает.
+    Предел остаётся: без него зависший поток остановил бы прогон навсегда.
+    """
     gate = threading.Barrier(12)
     def save(i):
-        gate.wait(3)
+        gate.wait(60)
         sp._put(sp.SpendReading(account=f"Acc{i}", date_from=DAY, date_to=DAY, spend=i, state="ok", status="clear"))
     with ThreadPoolExecutor(max_workers=12) as pool:
         list(pool.map(save, range(12)))
@@ -139,6 +150,16 @@ def test_strict_attach_refuses_other_profiles_global_port(tmp_path, monkeypatch)
 def test_attach_requests_owned_profile_and_new_tab(monkeypatch, tmp_path):
     calls = []
     class Direct:
+        # Публичная пара, как у настоящего провайдера: она делегирует
+        # приватным, а strict_profile зафиксирован внутри неё.
+        def attach_existing_only(self, profile_id, user_data_dir, *, new_page=False):
+            return self._try_attach_existing(
+                profile_id, user_data_dir, strict_profile=True, new_page=new_page
+            )
+
+        def profile_is_running(self, user_data_dir, profile_id=""):
+            return self._profile_process_running(user_data_dir, profile_id)
+
         def _try_attach_existing(self, *args, **kwargs):
             calls.append(kwargs)
             return NS()
@@ -185,3 +206,155 @@ def test_account_identity_is_checked_and_only_owned_tab_is_closed(monkeypatch, r
     if redirect_at:
         assert out.spend is None and not out.status
     assert calls == ["tab closed", {"keep_browser_open": True}]
+
+
+@pytest.mark.parametrize("running,owned_port", [(False, None), (True, None), (True, 19222)])
+def test_public_attach_uses_only_owned_port_without_profile_lifecycle(monkeypatch, running, owned_port):
+    """Exercise the public provider with the real attach implementation.
+
+    Discovery and the CDP connection are synthetic; lifecycle/fallback paths
+    must never be used, including after a failed CDP connection.
+    """
+    from unittest.mock import Mock
+    provider = br.MultiloginDirectCDPProvider()
+    monkeypatch.setattr(provider, "_profile_process_running", Mock(return_value=running))
+    owned = Mock(return_value=owned_port)
+    monkeypatch.setattr(provider, "_discover_owned_debug_port", owned)
+    forbidden = Mock(side_effect=AssertionError("unsafe fallback or profile lifecycle"))
+    for name in ("_discover_debug_port", "_kill_profile_browser", "open"):
+        monkeypatch.setattr(provider, name, forbidden)
+    connection = object()
+    connect = Mock(return_value=connection)
+    monkeypatch.setattr(br, "_connect_playwright", connect)
+    got = provider.attach_existing_only("synthetic-profile", "/synthetic/profile", new_page=True)
+    if running and owned_port:
+        assert got is connection
+        connect.assert_called_once_with(cdp_url="http://127.0.0.1:19222", provider="multilogin_direct",
+                                        debug_port="19222", ws_endpoint=None, new_page=True)
+        connect.side_effect = RuntimeError("CDP unavailable")
+        assert provider.attach_existing_only("synthetic-profile", "/synthetic/profile", new_page=True) is None
+    else:
+        assert got is None
+        connect.assert_not_called()
+    forbidden.assert_not_called()
+    if not running:
+        owned.assert_not_called()
+
+
+def test_the_new_tab_gives_the_screen_back(monkeypatch):
+    """Новая вкладка в Chrome сразу становится активной, и окно человека на
+    минуты уезжает на нашу страницу. Возвращаем то, на что он смотрел.
+
+    Наша вкладка уходит в фон и продолжает работать: торможение фоновых
+    вкладок здесь снято подделкой фокуса и удержанием рендерера — ради этого
+    те вызовы и делались (Test139, 29.07).
+    """
+    fronted = []
+    old_page = NS(evaluate=lambda _js: "visible", bring_to_front=lambda: fronted.append("old"))
+    hidden = NS(evaluate=lambda _js: "hidden", bring_to_front=lambda: fronted.append("hidden"))
+    new_page = NS(bring_to_front=lambda: fronted.append("new"))
+    context = NS(pages=[hidden, old_page], new_page=lambda: new_page)
+    browser = NS(contexts=[context])
+    pw = NS(chromium=NS(connect_over_cdp=lambda _: browser), stop=lambda: None)
+    monkeypatch.setattr(br, "sync_playwright", lambda: NS(start=lambda: pw))
+    for name in ["ensure_playwright_browsers_path", "_stop_thread_playwright",
+                 "_reset_asyncio_running_loop", "_disable_background_throttling",
+                 "_ensure_wide_window", "_keep_renderer_active"]:
+        monkeypatch.setattr(br, name, lambda *a: None)
+    conn = br._connect_playwright(cdp_url="test", provider="multilogin_direct",
+                                  debug_port="123", ws_endpoint=None, new_page=True)
+    assert conn.page is new_page, "работаем не в своей вкладке"
+    assert fronted == ["old"], f"экран отдали не той вкладке: {fronted}"
+
+
+def test_the_screen_is_left_alone_when_we_take_no_new_tab(monkeypatch):
+    """Публикация работает в той же вкладке — там возвращать нечего."""
+    fronted = []
+    old_page = NS(evaluate=lambda _js: "visible", bring_to_front=lambda: fronted.append("old"))
+    context = NS(pages=[old_page], new_page=lambda: NS())
+    browser = NS(contexts=[context])
+    pw = NS(chromium=NS(connect_over_cdp=lambda _: browser), stop=lambda: None)
+    monkeypatch.setattr(br, "sync_playwright", lambda: NS(start=lambda: pw))
+    for name in ["ensure_playwright_browsers_path", "_stop_thread_playwright",
+                 "_reset_asyncio_running_loop", "_disable_background_throttling",
+                 "_ensure_wide_window", "_keep_renderer_active"]:
+        monkeypatch.setattr(br, name, lambda *a: None)
+    conn = br._connect_playwright(cdp_url="test", provider="multilogin_direct",
+                                  debug_port="123", ws_endpoint=None, new_page=False)
+    assert conn.page is old_page
+    assert fronted == [], "дёрнули вкладку без нужды"
+
+
+def test_a_page_that_cannot_answer_is_not_fronted(monkeypatch):
+    """Ничего не нашли — значит и возвращать нечего; молчим, а не гадаем."""
+    broken = NS(evaluate=_boom, bring_to_front=lambda: (_ for _ in ()).throw(AssertionError("не та")))
+    context = NS(pages=[broken], new_page=lambda: NS())
+    browser = NS(contexts=[context])
+    pw = NS(chromium=NS(connect_over_cdp=lambda _: browser), stop=lambda: None)
+    monkeypatch.setattr(br, "sync_playwright", lambda: NS(start=lambda: pw))
+    for name in ["ensure_playwright_browsers_path", "_stop_thread_playwright",
+                 "_reset_asyncio_running_loop", "_disable_background_throttling",
+                 "_ensure_wide_window", "_keep_renderer_active"]:
+        monkeypatch.setattr(br, name, lambda *a: None)
+    br._connect_playwright(cdp_url="test", provider="multilogin_direct",
+                           debug_port="123", ws_endpoint=None, new_page=True)
+
+
+def _boom(_js):
+    raise RuntimeError("target closed")
+
+
+def test_the_new_tab_is_created_in_the_background(monkeypatch):
+    """`context.new_page()` не просто делает вкладку активной — Chrome
+    поднимает само окно профиля. Человек сидит в другом приложении, а ему на
+    минуты выбрасывает Ads Manager (проверено вживую 12.09; возврата фокуса
+    соседней вкладке не хватило — окно уже всплыло).
+
+    У CDP флаг `background` есть, и он ровно про это.
+    """
+    sent = []
+    made = NS(evaluate=lambda _js: "hidden")
+    base = NS(evaluate=lambda _js: "hidden")
+    pages = [base]
+
+    unrelated = NS(evaluate=lambda _js: "hidden")
+    def _session(target):
+        def send(method, params=None):
+            sent.append((method, params))
+            if method == "Target.createTarget":
+                pages.extend([unrelated, made])  # a user's concurrent tab is first
+                return {"targetId":"owned"}
+            return {"targetInfo":{"targetId":"owned" if target is made else "user"}}
+        return NS(send=send, detach=lambda:None)
+    context = NS(pages=pages, new_cdp_session=_session,
+                 new_page=lambda: (_ for _ in ()).throw(AssertionError("expected background tab")))
+    browser = NS(contexts=[context])
+    pw = NS(chromium=NS(connect_over_cdp=lambda _: browser), stop=lambda: None)
+    monkeypatch.setattr(br, "sync_playwright", lambda: NS(start=lambda: pw))
+    for name in ["ensure_playwright_browsers_path", "_stop_thread_playwright",
+                 "_reset_asyncio_running_loop", "_disable_background_throttling",
+                 "_ensure_wide_window", "_keep_renderer_active"]:
+        monkeypatch.setattr(br, name, lambda *a: None)
+    conn = br._connect_playwright(cdp_url="test", provider="multilogin_direct",
+                                  debug_port="123", ws_endpoint=None, new_page=True)
+    assert conn.page is made
+    created = [params for method, params in sent if method == "Target.createTarget"]
+    assert len(created) == 1 and created[0]["background"] is True
+
+
+def test_a_tab_we_could_not_open_in_the_background_is_still_opened(monkeypatch):
+    """Своя вкладка нужнее тишины: без неё чтение уводило бы страницу человека."""
+    fallback = NS()
+    context = NS(pages=[NS(evaluate=lambda _js: "hidden")],
+                 new_cdp_session=lambda _p: (_ for _ in ()).throw(RuntimeError("no cdp")),
+                 new_page=lambda: fallback)
+    browser = NS(contexts=[context])
+    pw = NS(chromium=NS(connect_over_cdp=lambda _: browser), stop=lambda: None)
+    monkeypatch.setattr(br, "sync_playwright", lambda: NS(start=lambda: pw))
+    for name in ["ensure_playwright_browsers_path", "_stop_thread_playwright",
+                 "_reset_asyncio_running_loop", "_disable_background_throttling",
+                 "_ensure_wide_window", "_keep_renderer_active"]:
+        monkeypatch.setattr(br, name, lambda *a: None)
+    conn = br._connect_playwright(cdp_url="test", provider="multilogin_direct",
+                                  debug_port="123", ws_endpoint=None, new_page=True)
+    assert conn.page is fallback

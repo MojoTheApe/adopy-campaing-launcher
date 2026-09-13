@@ -115,8 +115,9 @@ def test_short_named_manual_profile_is_not_started_again(monkeypatch):
     from src.fb_ads_rpa import browser
     from pathlib import Path
     calls = []
-    provider = NS(_try_attach_existing=lambda *a, **kw: None,
-                  _profile_process_running=lambda path, profile: path == "SHORT")
+    # Публичная пара, как у настоящего провайдера: чтение ходит через неё.
+    provider = NS(attach_existing_only=lambda *a, **kw: None,
+                  profile_is_running=lambda path, profile="": path == "SHORT")
     monkeypatch.setattr(spend, "_entry_for", lambda a: NS(profile_id="demo", folder_id="folder"))
     monkeypatch.setattr(spend, "_mlx_profile_dir", lambda *a: Path("LONG"))
     monkeypatch.setattr(spend, "_dir_spellings", lambda p: ["LONG", "SHORT"])
@@ -173,7 +174,7 @@ def test_process_detection_failure_does_not_start_a_profile(monkeypatch):
     from pathlib import Path
     def fail(*args):
         raise RuntimeError("process inventory unavailable")
-    provider = NS(_try_attach_existing=lambda *a, **kw: None, _profile_process_running=fail)
+    provider = NS(attach_existing_only=lambda *a, **kw: None, profile_is_running=fail)
     monkeypatch.setattr(spend, "_entry_for", lambda a: NS(profile_id="demo", folder_id="folder"))
     monkeypatch.setattr(spend, "_mlx_profile_dir", lambda *a: Path("LONG"))
     monkeypatch.setattr(browser, "MultiloginDirectCDPProvider", lambda: provider)
@@ -210,4 +211,7 @@ def test_setup_states_render_with_account_actions_and_matching_drill_width(ready
     assert "Open recommendations" not in setup
     assert "<identity>" not in setup
     assert len(re.findall(r"<th[ >]", html)) == len(re.findall(r"<td[ >]", html)) == 11
-    assert "ncols=11" in html and "amapReadSpend(this)" in html and "amapUnlink(" in html
+    # `ncols=11` проверялось здесь же: это была ширина книжной строки
+    # раскрытия. 12.09 книжная детализация ушла со стрелки — у живого дерева
+    # colspan берётся из самой строки.
+    assert "amapReadSpend(this)" in html and "amapUnlink(" in html
