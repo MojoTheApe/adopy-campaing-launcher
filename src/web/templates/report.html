@@ -2453,6 +2453,117 @@
       color: var(--muted); font-size: 0.78rem; line-height: 1.6;
       text-align: center; padding: var(--space-xl) var(--space-sm);
     }
+
+    /* ── Дерево: страна → аккаунт → кампания → объявление ───────────────
+       Подписями, а не лесенкой. Два уровня отступов в панели шириной в
+       360 пикселей не оставляют имени кампании места, где жить, — а имя
+       здесь длинное и в нём вся суть. */
+    .cbd-country {
+      display: flex; align-items: baseline; gap: var(--space-sm);
+      margin: var(--space-lg) 0 var(--space-xs);
+      font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .cbd-country:first-child { margin-top: 0; }
+    .cbd-country::after {
+      content: ""; flex: 1; height: 1px; background: var(--border);
+    }
+    .cbd-account {
+      margin: var(--space-sm) 0 var(--space-xs);
+      font-size: 0.72rem; font-weight: 600; color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    .cbd-camp {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg); margin-bottom: var(--space-xs);
+    }
+    .cbd-camp[data-open="1"] { border-color: var(--border-strong); background: var(--bg-elev); }
+    .cbd-camp-head { display: flex; align-items: center; padding-right: 0.3rem; }
+    .cbd-camp-row {
+      display: flex; align-items: center; gap: var(--space-sm);
+      flex: 1; min-width: 0; box-sizing: border-box;
+      padding: 0.4rem 0.5rem;
+      background: none; border: none; color: inherit; font: inherit;
+      text-align: left; cursor: pointer;
+    }
+    .cbd-camp-row:hover { background: var(--bg-hover); }
+    .cbd-camp-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .cbd-caret {
+      flex-shrink: 0; color: var(--muted); font-size: 0.7rem; line-height: 1;
+      transition: transform 160ms var(--ease-out);
+    }
+    .cbd-camp[data-open="1"] .cbd-caret { transform: rotate(90deg); }
+    .cbd-camp-name {
+      flex: 1; min-width: 0; font-size: 0.76rem;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cbd-camp-name-empty { color: var(--muted); font-style: italic; }
+    .cbd-camp-ads {
+      flex-shrink: 0; color: var(--muted); font-size: 0.66rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .cbd-camp-drop {
+      flex-shrink: 0; padding: 0 0.2rem;
+      background: none; border: 1px solid transparent; border-radius: 3px;
+      color: var(--muted); font-size: 0.85rem; line-height: 1; cursor: pointer;
+    }
+    .cbd-camp-drop:hover { color: var(--bad); border-color: var(--bad); }
+    .cbd-camp-body {
+      padding: var(--space-sm); border-top: 1px solid var(--border);
+      font-size: 0.74rem;
+    }
+    .cbd-camp-ad {
+      display: flex; align-items: center; gap: var(--space-xs);
+      padding: 0.22rem 0.3rem; border-bottom: 1px solid var(--border);
+      font-size: 0.73rem;
+    }
+    .cbd-camp-ad-name {
+      flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cbd-camp-ad:last-of-type { border-bottom: none; }
+
+    /* Готовность: цвет, форма и значок вместе. Красный и зелёный —
+       самая частая пара, которую не различают, и одного цвета мало. */
+    .cbd-ind {
+      flex-shrink: 0;
+      width: 1rem; height: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.6rem; font-weight: 700; line-height: 1;
+      border: 1px solid currentColor;
+    }
+    .cbd-ind-ok { color: var(--good); border-radius: 50%; }
+    .cbd-ind-warn { color: var(--warn); transform: rotate(45deg); }
+    .cbd-ind-warn > span { transform: rotate(-45deg); }
+    .cbd-ind-bad { color: var(--bad); border-radius: 2px; }
+    /* Четвёртое состояние, без которого зелёный был бы обещанием, ещё не
+       сдержанным: пока проверка идёт, сказать нечего. */
+    .cbd-ind-wait { color: var(--muted); border-radius: 50%; border-style: dashed; }
+
+    .cbd-add {
+      display: block; width: 100%; box-sizing: border-box;
+      margin-top: var(--space-xs);
+      padding: 0.3rem 0.5rem;
+      background: none; border: 1px dashed var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--muted); font: inherit; font-size: 0.72rem;
+      cursor: pointer; text-align: left;
+    }
+    .cbd-add:hover { color: var(--accent); border-color: var(--accent); }
+    .cbd-add[disabled] { cursor: not-allowed; opacity: 0.55; }
+    .cbd-add[disabled]:hover { color: var(--muted); border-color: var(--border-strong); }
+
+    .cbd-pick {
+      display: flex; flex-direction: column; gap: var(--space-xs);
+    }
+    .cbd-pick select {
+      width: 100%; box-sizing: border-box;
+      padding: 0.25rem 0.4rem; font: inherit; font-size: 0.74rem;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+    }
+    .cbd-note { color: var(--muted); font-size: 0.7rem; line-height: 1.5; }
     .cbd-foot {
       padding: var(--space-sm) var(--space-md);
       border-top: 1px solid var(--border);
@@ -4192,6 +4303,266 @@ window.cbDraft = (function () {
   };
 })();
 if (window.cbDrawer) window.cbDrawer.setCount(window.cbDraft.count());
+</script>
+
+<script>
+/* Дерево в ящике: страна → аккаунт → кампания → объявление.
+ *
+ * Подписями, а не лесенкой: два уровня отступов в панели шириной в 360
+ * пикселей не оставляют имени кампании места, где жить, — а имя тут
+ * длинное, и в нём вся суть.
+ *
+ * Страны и аккаунты берутся с самой страницы, а не отдельным списком с
+ * сервера. Список, живущий рядом с настоящим, рано или поздно начинает
+ * ему врать: здесь уже было двадцать копий одной панели и две формы
+ * подключения. Страница знает, какие аккаунты к какой стране привязаны,
+ * — её и спрашиваем.
+ */
+window.cbTree = (function () {
+  var OPEN_KEY = 'acl.builder.open-campaign';
+
+  var body = document.getElementById('cbd-body');
+  var foot = document.getElementById('cbd-foot');
+  if (!body || !foot || !window.cbDraft) return null;
+
+  var openId = '';
+  try { openId = localStorage.getItem(OPEN_KEY) || ''; } catch (e) { openId = ''; }
+
+  /* ── что страница знает о странах и аккаунтах ─────────────────────── */
+
+  function places() {
+    var byCountry = {};
+    var order = [];
+    document.querySelectorAll('.view-panel[data-country]').forEach(function (panel) {
+      var id = panel.dataset.country;
+      if (!id) return;
+      panel.querySelectorAll('.cb-acc-row[data-acc-label]').forEach(function (row) {
+        var label = row.dataset.accLabel;
+        if (!label) return;
+        if (!byCountry[id]) {
+          byCountry[id] = { country: id, name: countryName(id), accounts: [] };
+          order.push(byCountry[id]);
+        }
+        if (byCountry[id].accounts.indexOf(label) === -1) byCountry[id].accounts.push(label);
+      });
+    });
+    return order;
+  }
+
+  function countryName(id) {
+    var btn = document.querySelector('.sidebar-country-btn[data-country="' + id + '"]');
+    return btn ? (btn.textContent || '').trim() : id;
+  }
+
+  function currentCountry() {
+    var panel = document.querySelector('.view-panel.active[data-country]');
+    return panel ? (panel.dataset.country || '') : '';
+  }
+
+  /* ── готовность ───────────────────────────────────────────────────────
+     Пока это заглушка, и она нарочно не зелёная: зелёный, поставленный
+     до проверки, — обещание, которое ещё не сдержано. Настоящие проверки
+     приедут вместе с формой, и заменить надо будет только эту функцию. */
+
+  function readiness(c) {
+    if (!c.name) return { state: 'bad', sign: '✕', why: 'Not named yet' };
+    if (!c.ads || !c.ads.length) return { state: 'bad', sign: '✕', why: 'No ads yet' };
+    return { state: 'wait', sign: '·', why: 'Not checked yet — checks arrive with the form' };
+  }
+
+  /* ── отрисовка ────────────────────────────────────────────────────── */
+
+  function campaignHtml(c) {
+    var r = readiness(c);
+    var open = c.id === openId;
+    var ads = (c.ads || []).length;
+    return '<div class="cbd-camp" data-camp="' + aclEscHtml(c.id) + '" data-open="' + (open ? '1' : '0') + '">'
+      + '<div class="cbd-camp-head">'
+      + '<button type="button" class="cbd-camp-row" data-act="toggle"'
+      + ' aria-expanded="' + (open ? 'true' : 'false') + '">'
+      + '<span class="cbd-caret" aria-hidden="true">▸</span>'
+      + '<span class="cbd-ind cbd-ind-' + r.state + '" title="' + aclEscHtml(r.why) + '">'
+      + '<span>' + r.sign + '</span></span>'
+      + (c.name
+          ? '<span class="cbd-camp-name">' + aclEscHtml(c.name) + '</span>'
+          : '<span class="cbd-camp-name cbd-camp-name-empty">Untitled campaign</span>')
+      + '<span class="cbd-camp-ads">' + ads + (ads === 1 ? ' ad' : ' ads') + '</span>'
+      + '</button>'
+      + '<button type="button" class="cbd-camp-drop" data-act="drop"'
+      + ' title="Remove this campaign" aria-label="Remove this campaign">×</button>'
+      + '</div>'
+      + (open ? '<div class="cbd-camp-body">' + campaignBodyHtml(c) + '</div>' : '')
+      + '</div>';
+  }
+
+  function campaignBodyHtml(c) {
+    var ads = c.ads || [];
+    var rows = ads.length
+      ? ads.map(function (ad, i) {
+          var name = (ad && ad.name) || '';
+          /* Добавить объявление и не мочь его убрать — ловушка: лишнее
+             уедет в черновик вместе с нужным. */
+          return '<div class="cbd-camp-ad">'
+            + '<span class="cbd-camp-ad-name">' + (i + 1) + '. '
+            + (name ? aclEscHtml(name) : '<span class="cbd-camp-name-empty">Untitled ad</span>')
+            + '</span>'
+            + '<button type="button" class="cbd-camp-drop" data-act="drop-ad" data-ad="' + i + '"'
+            + ' title="Remove this ad" aria-label="Remove this ad">×</button>'
+            + '</div>';
+        }).join('')
+      : '<p class="cbd-note">No ads yet.</p>';
+    return rows
+      + '<button type="button" class="cbd-add" data-act="add-ad">+ Ad</button>'
+      + '<p class="cbd-note" style="margin-top:0.5rem">The campaign fields arrive with the next piece.</p>';
+  }
+
+  function paint() {
+    var tree = window.cbDraft.grouped();
+    if (!tree.length) {
+      body.innerHTML = '<p class="cbd-empty">Nothing is being assembled yet.</p>';
+    } else {
+      body.innerHTML = tree.map(function (g) {
+        return '<div class="cbd-country">' + aclEscHtml(g.countryName || g.country) + '</div>'
+          + g.accounts.map(function (a) {
+              return '<div class="cbd-account">' + aclEscHtml(a.account || 'No account') + '</div>'
+                + a.campaigns.map(campaignHtml).join('')
+                + '<button type="button" class="cbd-add" data-act="add-here"'
+                + ' data-country="' + aclEscHtml(g.country) + '"'
+                + ' data-country-name="' + aclEscHtml(g.countryName || g.country) + '"'
+                + ' data-account="' + aclEscHtml(a.account) + '">+ Campaign</button>';
+            }).join('');
+      }).join('');
+    }
+    paintFoot();
+  }
+
+  function paintFoot() {
+    var list = places();
+    foot.hidden = false;
+    if (!list.length) {
+      foot.innerHTML = '<p class="cbd-note">No connected accounts on this page yet.'
+        + ' Connect one in the account map, and it can be built for here.</p>';
+      return;
+    }
+    var chosen = foot.querySelector('.cbd-pick-country');
+    /* Умолчание — страна, которую человек сейчас читает: он пришёл в ящик
+       из неё, и заводить кампанию почти наверняка собирается там же.
+       Уже выбранное руками важнее. */
+    var keep = (chosen && chosen.value) || currentCountry();
+    foot.innerHTML = '<div class="cbd-pick">'
+      + '<select class="cbd-pick-country" aria-label="Country">'
+      + list.map(function (p) {
+          return '<option value="' + aclEscHtml(p.country) + '"'
+            + (p.country === keep ? ' selected' : '') + '>'
+            + aclEscHtml(p.name) + '</option>';
+        }).join('')
+      + '</select>'
+      + '<select class="cbd-pick-account" aria-label="Account"></select>'
+      + '<button type="button" class="cbd-add" data-act="add-picked">+ Campaign</button>'
+      + '</div>';
+    paintAccounts();
+  }
+
+  function paintAccounts() {
+    var countrySel = foot.querySelector('.cbd-pick-country');
+    var accountSel = foot.querySelector('.cbd-pick-account');
+    if (!countrySel || !accountSel) return;
+    var list = places();
+    var found = null;
+    list.forEach(function (p) { if (p.country === countrySel.value) found = p; });
+    accountSel.innerHTML = (found ? found.accounts : []).map(function (a) {
+      return '<option value="' + aclEscHtml(a) + '">' + aclEscHtml(a) + '</option>';
+    }).join('');
+  }
+
+  /* ── что делают руками ────────────────────────────────────────────── */
+
+  function rememberOpen(id) {
+    openId = id || '';
+    try { localStorage.setItem(OPEN_KEY, openId); } catch (e) { /* не помним */ }
+  }
+
+  function addCampaign(country, countryName, account) {
+    var made = window.cbDraft.add({ country: country, countryName: countryName, account: account });
+    if (!made) {
+      /* Потолок должен быть виден как потолок, а не как молча переставшая
+         работать кнопка. */
+      window.alert('The builder is holding ' + window.cbDraft.limit
+        + ' campaigns already. Publish or remove some before adding more.');
+      return null;
+    }
+    rememberOpen(made.id);   // заведённое сразу раскрыто: его пришли заполнять
+    paint();
+    return made;
+  }
+
+  document.getElementById('cbd-panel').addEventListener('click', function (e) {
+    var hit = e.target.closest('[data-act]');
+    if (!hit) return;
+    var act = hit.dataset.act;
+    var card = hit.closest('.cbd-camp');
+    var id = card ? card.dataset.camp : '';
+
+    if (act === 'toggle') {
+      rememberOpen(id === openId ? '' : id);   // одна раскрытая за раз
+      paint();
+    } else if (act === 'drop') {
+      var c = window.cbDraft.get(id);
+      var what = (c && c.name) ? '"' + c.name + '"' : 'this unnamed campaign';
+      if (!window.confirm('Remove ' + what + ' from the builder?')) return;
+      if (id === openId) rememberOpen('');
+      window.cbDraft.remove(id);
+      paint();
+    } else if (act === 'add-here') {
+      addCampaign(hit.dataset.country, hit.dataset.countryName, hit.dataset.account);
+    } else if (act === 'add-picked') {
+      var countrySel = foot.querySelector('.cbd-pick-country');
+      var accountSel = foot.querySelector('.cbd-pick-account');
+      if (!countrySel || !accountSel || !accountSel.value) return;
+      addCampaign(countrySel.value,
+                  countrySel.options[countrySel.selectedIndex].textContent,
+                  accountSel.value);
+    } else if (act === 'add-ad') {
+      var camp = window.cbDraft.get(id);
+      if (!camp) return;
+      window.cbDraft.update(id, { ads: (camp.ads || []).concat([{ name: '' }]) });
+      paint();
+    } else if (act === 'drop-ad') {
+      var owner = window.cbDraft.get(id);
+      if (!owner) return;
+      var rest = (owner.ads || []).slice();
+      rest.splice(parseInt(hit.dataset.ad, 10), 1);
+      window.cbDraft.update(id, { ads: rest });
+      paint();
+    }
+  });
+
+  foot.addEventListener('change', function (e) {
+    if (e.target.classList.contains('cbd-pick-country')) paintAccounts();
+  });
+
+  /* Перешёл на другую страну — «+ Campaign» едет за ним. Без этого можно
+     читать Кувейт и завести кампанию в Чили, ничего не заметив. */
+  document.addEventListener('acl:viewchange', function (e) {
+    var id = (e.detail && e.detail.country) || '';
+    var sel = foot.querySelector('.cbd-pick-country');
+    if (!id || !sel) return;
+    for (var i = 0; i < sel.options.length; i += 1) {
+      if (sel.options[i].value === id) { sel.value = id; paintAccounts(); return; }
+    }
+  });
+
+  /* Перерисовка идёт от хранилища, а не от кнопки: изменение может
+     прийти и не от клика по дереву, и тогда экран обязан за ним пойти. */
+  window.cbDraft.onChange(function () {
+    if (window.cbDrawer) window.cbDrawer.setCount(window.cbDraft.count());
+    paint();
+  });
+
+  paint();
+
+  return { paint: paint, places: places, readiness: readiness };
+})();
 </script>
 
 <script>
