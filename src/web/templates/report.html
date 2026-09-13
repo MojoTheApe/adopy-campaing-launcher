@@ -10348,8 +10348,12 @@ window.aclConnect = (function () {
         : '<span class="acc-pill todo">missing: ' + esc(a.missing.join(', ')) + '</span>';
       var local = a.local_only ? ' <span class="acc-pill local">only here</span>' : '';
       html += '<tr data-label="' + esc(a.label) + '">'
-        + '<td class="col-pick">' + (removable
-            ? '<input type="checkbox" class="ac-check" aria-label="select ' + esc(a.label) + '">' : '') + '</td>'
+        /* Галочка у каждой строки: выбирают и убирают одинаково, а
+           насколько аккаунт настроен — не дело того, кто наводит порядок
+           в списке. Что произойдёт под кнопкой, решается по строке. */
+        + '<td class="col-pick">'
+        + '<input type="checkbox" class="ac-check" data-removable="' + (removable ? '1' : '0')
+        + '" aria-label="select ' + esc(a.label) + '">' + '</td>'
         + '<td><div class="acc-name">' + esc(a.label) + '</div>'
         + '<div class="acc-meta">' + pill + local + '</div></td>'
         + '<td>' + countryCell(a) + '</td>'
@@ -10365,11 +10369,20 @@ window.aclConnect = (function () {
            вернётся на следующем обновлении. Поэтому не «Remove», а «Hide», и
            подсказка объясняет разницу — прежде на этом месте была пустота, и
            она читалась как сломанная кнопка. */
-        + (removable
-            ? ' <button type="button" class="acc-btn danger ac-drop">Remove</button>'
-            : ' <button type="button" class="acc-btn ac-hide" title="Comes from the shared sheet — '
-              + 'nothing to remove here. Hiding only puts it out of sight on this machine.">'
-              + (a.hidden ? 'Unhide' : 'Hide') + '</button>')
+        /* Кнопка одна и называется одинаково. Под ней разное, и это
+           честно: у настроенного аккаунта есть локальная запись, её и
+           убираем; у пришедшего из общей таблицы её нет — убирать нечего,
+           поэтому строка уходит с глаз. Результат для человека один: её
+           больше нет в списке. Подсказка говорит, что именно случится. */
+        + (a.hidden
+            ? ' <button type="button" class="acc-btn ac-hide" data-back="1"'
+              + ' title="Bring it back into the list">Unhide</button>'
+            : ' <button type="button" class="acc-btn danger ac-drop" data-removable="'
+              + (removable ? '1' : '0') + '" title="'
+              + (removable
+                  ? 'Drops this machine&#39;s row for the account. The shared sheet keeps it.'
+                  : 'Comes from the shared sheet — there is no local row to drop, so it is put out of sight here.')
+              + '">Remove</button>')
         + ' <span class="ac-row-msg acc-meta"></span></td>'
         + '</tr>';
     });
@@ -10442,10 +10455,17 @@ window.aclConnect = (function () {
       });
   }
 
+  /* Возвращается не только подпись, но и есть ли у строки запись на этой
+     машине: от этого зависит, что с ней делать, и решать это должен код, а
+     не человек, выбирающий строки вперемешку. */
   function selected() {
     return [].slice.call(document.querySelectorAll('#ac-list .ac-check:checked'))
-      .map(function (c) { return c.closest('tr').getAttribute('data-label'); })
-      .filter(Boolean);
+      .map(function (c) {
+        var row = c.closest('tr');
+        return { label: row && row.getAttribute('data-label'),
+                 removable: c.dataset.removable === '1' };
+      })
+      .filter(function (x) { return x.label; });
   }
 
   function refreshBulk() {
@@ -10456,27 +10476,50 @@ window.aclConnect = (function () {
     label.textContent = 'Selected: ' + n;
   }
 
-  function removeMany(labels) {
-    if (!labels.length) return;
+  /* Группой — то же, что по одной: у кого есть запись на машине, у того
+     она убирается; остальные уходят с глаз. Выбирают их вперемешку, и
+     разбираться, какой строке что положено, человек не должен. */
+  function removeMany(picked) {
+    if (!picked.length) return;
+    var labels = picked.map(function (x) { return x.label; });
     var list = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ' and ' + (labels.length - 8) + ' more' : '');
-    if (!window.confirm('Remove ' + labels.length + ' account(s) from the map of THIS machine?'
+    var mapped = picked.filter(function (x) { return x.removable; }).map(function (x) { return x.label; });
+    var sheet = picked.filter(function (x) { return !x.removable; }).map(function (x) { return x.label; });
+    if (!window.confirm('Take ' + labels.length + ' account(s) out of this list?'
         + String.fromCharCode(10, 10) + list + String.fromCharCode(10, 10)
-        + 'Nothing in the shared sheet changes.')) return;
+        + (mapped.length ? mapped.length + ' had a row on this machine — it is dropped.' + String.fromCharCode(10) : '')
+        + (sheet.length ? sheet.length + ' came from the shared sheet with nothing stored here — '
+            + 'they are put out of sight and can be brought back.' + String.fromCharCode(10) : '')
+        + String.fromCharCode(10) + 'Nothing in the shared sheet changes.')) return;
+
     var btn = el('ac-bulk-drop');
     if (btn) btn.disabled = true;
-    say('Removing ' + labels.length + '…');
-    fetch('/account-map-remove', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account_names: labels })
-    }).then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (btn) btn.disabled = false;
-        if (!d.ok) { say(d.error || 'failed', 'err'); return; }
-        var m = 'Removed: ' + (d.removed || []).length;
-        if ((d.missing || []).length) m += ' · not found: ' + d.missing.join(', ');
-        say(m, 'ok'); load(true);
-      })
-      .catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); });
+    say('Working through ' + labels.length + '…');
+
+    var jobs = [];
+    if (mapped.length) {
+      jobs.push(fetch('/account-map-remove', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_names: mapped })
+      }).then(function (r) { return r.json(); }));
+    }
+    sheet.forEach(function (label) {
+      jobs.push(fetch('/api/accounts-hidden', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: label, hidden: true })
+      }).then(function (r) { return r.json(); }));
+    });
+
+    Promise.all(jobs).then(function (all) {
+      if (btn) btn.disabled = false;
+      var bad = all.filter(function (d) { return !d || !d.ok; });
+      if (bad.length) { say((bad[0] && bad[0].error) || 'failed', 'err'); load(true); return; }
+      var parts = [];
+      if (mapped.length) parts.push('removed: ' + mapped.length);
+      if (sheet.length) parts.push('out of sight: ' + sheet.length);
+      say(parts.join(' · '), 'ok');
+      load(true);
+    }).catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); load(true); });
   }
 
   /* Спрятать — не удалить. Удалять тут нечего: строка пришла из общей
@@ -10501,24 +10544,47 @@ window.aclConnect = (function () {
       .catch(function (e) { btn.disabled = false; say(String(e), 'err'); });
   }
 
+  /* Одна кнопка, два исхода — и выбирает их строка, а не человек.
+     У настроенного аккаунта есть запись на этой машине: её и убираем. У
+     пришедшего из общей таблицы её нет, убирать нечего — строка уходит с
+     глаз. Для человека результат один: аккаунта больше нет в списке, и
+     общая таблица не тронута ни в том, ни в другом случае. */
   function drop(btn) {
     var row = btn.closest('tr'); if (!row) return;
     var label = row.getAttribute('data-label');
-    if (!window.confirm('Remove "' + label + '" from the map of THIS machine?'
-        + String.fromCharCode(10, 10)
-        + 'The account stays in the shared sheet with all its history — this '
-        + 'computer simply stops knowing how to reach it.')) return;
+    var hasRow = btn.dataset.removable === '1';
+    if (!window.confirm(hasRow
+        ? 'Remove "' + label + '" from the map of THIS machine?'
+          + String.fromCharCode(10, 10)
+          + 'The account stays in the shared sheet with all its history — this '
+          + 'computer simply stops knowing how to reach it.'
+        : 'Take "' + label + '" out of this list?'
+          + String.fromCharCode(10, 10)
+          + 'It comes from the shared sheet and nothing is stored for it here, '
+          + 'so there is nothing to delete — it is put out of sight on this '
+          + 'machine and can be brought back.')) return;
     btn.disabled = true;
+    var done = function (ok, err) {
+      btn.disabled = false;
+      if (!ok) { say(err || 'failed', 'err'); return; }
+      say((hasRow ? 'Removed: ' : 'Out of sight here: ') + label, 'ok');
+      load(true);
+    };
+    if (!hasRow) {
+      fetch('/api/accounts-hidden', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: label, hidden: true })
+      }).then(function (r) { return r.json(); })
+        .then(function (d) { done(d && d.ok, d && d.error); })
+        .catch(function (e) { done(false, String(e)); });
+      return;
+    }
     fetch('/account-map-remove', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ account_name: label })
     }).then(function (r) { return r.json(); })
-      .then(function (d) {
-        btn.disabled = false;
-        if (!d.ok) { say(d.error || 'failed', 'err'); return; }
-        say('Removed: ' + label, 'ok'); load(true);
-      })
-      .catch(function (e) { btn.disabled = false; say(String(e), 'err'); });
+      .then(function (d) { done(d && d.ok, d && d.error); })
+      .catch(function (e) { done(false, String(e)); });
   }
 
   // Клик по строке дрилла: открыть или закрыть, а не открывать ещё раз.
