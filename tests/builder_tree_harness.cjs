@@ -102,7 +102,7 @@ function page(spec) {
   // Карта аккаунтов: у каждой страны своя форма подключения. Ящик берёт
   // её оттуда, а не заводит третью копию.
   const maps = spec.map((c) => el('details', {
-    classes: ['amap-country'],
+    classes: ['amap-country'], dataset: {countryName:c.name},
     children: [
       el('span', { classes: ['amap-cell-name'], textContent: c.name }),
       el('div', { classes: ['amap-add'], dataset: { amapCountry: c.name } }),
@@ -125,6 +125,7 @@ function boot(spec, opts = {}) {
   const alerts = [];
   const sent = [];
   const document = {
+    body: root,
     getElementById: (id) => ids[id] || null,
     querySelectorAll: (sel) => root.querySelectorAll(sel),
     querySelector: (sel) => root.querySelector(sel),

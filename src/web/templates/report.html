@@ -4299,7 +4299,7 @@ window.cbTree = (function () {
   }
 
   function realTree() {
-    var out = [], byCountry = {};
+    var out = [], byCountry = Object.create(null);
     document.querySelectorAll('.view-panel[data-country]').forEach(function (panel) {
       var id = panel.dataset.country;
       if (!id) return;
@@ -4391,8 +4391,8 @@ window.cbTree = (function () {
 
   function readiness(c) {
     var r = c.slot && c.slot._drawerResult;
-    if (!r) return {state:'wait', sign:'·', why:'Checking campaign'};
-    if (r.state === 'ok' && c.twin) return {state:'warn', sign:'△', why:'Same name: Publish all combines these cards into one campaign.'};
+    if (!r) return {state: 'wait', sign: '·', why: 'Checking campaign'};
+    if (r.state === 'ok' && c.twin) return {state: 'warn', sign: '△', why: 'Same name: Publish all combines these cards into one campaign.'};
     return r;
   }
 
@@ -9103,7 +9103,7 @@ function cbDrawerApplyPlan(form, plan, error) {
     var name = String(p['Campaign Name'] || '');
     if (!byName[name]) byName[name] = {errors:[],warnings:[]};
     byName[name].errors = byName[name].errors.concat(cbBlockingErrors(p));
-    byName[name].warnings = byName[name].warnings.concat(p.warnings || []);
+    byName[name].warnings = byName[name].warnings.concat(p.warnings || [], (p.errors || []).filter(function(e) { return window.CB_LINK_NOT_BLOCKING.test(String(e)); }));
   });
   form.querySelectorAll('.cb-slot').forEach(function(slot) {
     var name = (slot.querySelector('.cb-name-hidden') || {}).value || '';

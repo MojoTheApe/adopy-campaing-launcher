@@ -88,7 +88,8 @@ def test_recommendations_no_longer_fill_the_campaign_cards():
     slots = html[html.index('<div class="cb-slots">'):]
     slots = slots[: slots.index("</div>")]
     assert 'class="cb-slot"' not in slots, "рекомендация снова построила карточку"
-    assert "Aramco Form" in html
+    assert 'data-asset="Aramco Form"' not in html
+    assert 'data-asset=""' in html
 
 
 def test_several_accounts_each_get_their_own_builder():
