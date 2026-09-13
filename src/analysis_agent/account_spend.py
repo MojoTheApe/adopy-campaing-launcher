@@ -1068,27 +1068,30 @@ _FIND_PERIOD_JS = r"""
 ([marked, fallback, pattern]) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
 
-  // Сначала то, что Meta пометила сама: такое переживает перевод интерфейса.
+  const visible = el => el.getClientRects().length && !el.closest('[hidden],[aria-hidden="true"],[inert]') && getComputedStyle(el).visibility !== 'hidden';
+  const markedText = new Set();
   for (const sel of marked) {
-    let el = null;
-    try { el = document.querySelector(sel); } catch (e) { continue; }
-    if (!el) continue;
-    const text = norm(el.getAttribute('aria-label') || el.innerText || '');
-    if (text) return text;
+    let candidates = [];
+    try { candidates = document.querySelectorAll(sel); } catch (_) { continue; }
+    for (const el of candidates) {
+      if (!visible(el)) continue;
+      const text = norm(el.getAttribute('aria-label') || el.innerText || '');
+      if (text) markedText.add(text);
+    }
   }
+  if (markedText.size) return markedText.size === 1 ? [...markedText][0] : '';
 
-  // Запасной путь, и на деле основной: кнопка периода — просто кнопка с датой
-  // внутри, без aria-label. Снимок первого живого прогона показал справа
-  // вверху «Sep 6, 2026».
   let re;
   try { re = new RegExp(pattern, 'i'); } catch (e) { return ''; }
   let nodes = [];
   try { nodes = document.querySelectorAll(fallback); } catch (e) { return ''; }
+  const texts = new Set();
   for (const el of nodes) {
+    if (!visible(el)) continue;
     const text = norm(el.innerText || '');
-    if (text.length > 0 && text.length < 80 && re.test(text)) return text;
+    if (text.length > 0 && text.length < 80 && re.test(text)) texts.add(text);
   }
-  return '';
+  return texts.size === 1 ? [...texts][0] : '';
 }
 """
 
@@ -1882,55 +1885,62 @@ SEL_MARKED_SWITCH = '[data-acl-switch="1"]'
 
 #: Найти строку по её id и рассказать про её тумблер. Ничего не нажимает.
 _FIND_SWITCH_JS = r"""
-(wanted) => {
-  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-  const t = document.querySelector('[role="table"], [role="grid"]');
-  if (!t) return {found: false, why: 'таблицы нет'};
-  document.querySelectorAll('[data-acl-switch]').forEach(
-    e => e.removeAttribute('data-acl-switch'));
+(args) => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  const visible = e => e.getClientRects().length && !e.closest('[hidden],[aria-hidden="true"],[inert]') && getComputedStyle(e).visibility !== 'hidden';
+  const fail = why => ({found: false, why});
+  document.querySelectorAll('[data-acl-switch]').forEach(e => e.removeAttribute('data-acl-switch'));
+  const tables = [...document.querySelectorAll('[role="table"],[role="grid"]')].filter(visible);
+  if (tables.length !== 1) return fail('expected one visible table');
+  const t = tables[0];
+  if (t.closest('[aria-busy="true"]') || [...t.querySelectorAll('[role="progressbar"],[aria-busy="true"]')].some(visible)) return fail('table is still loading');
   const CELL = /table_row:(-?\d+)[a-z]*\/table_cell:([^\/]+)/;
-  let name = '', delivery = '', toggle = null, seen = 0;
+  const names = new Set(), deliveries = new Set(), switches = new Set(), kinds = new Set();
   for (const el of t.querySelectorAll('[data-surface*="table_row:"]')) {
+    if (!visible(el)) continue;
     const m = (el.getAttribute('data-surface') || '').match(CELL);
-    if (!m || m[1] !== wanted) continue;
-    seen++;
-    if (m[2].startsWith('forObjectType(name') && !name) name = norm(el.innerText);
+    if (!m || m[1] !== args.id) continue;
+    const kind = m[2].match(/forObjectType\([^,]+,([^,)]+)/);
+    if (kind) kinds.add(kind[1]);
+    if (m[2].startsWith('forObjectType(name') && norm(el.innerText)) names.add(norm(el.innerText));
+    if (m[2].startsWith('forObjectType(delivery') && norm(el.innerText)) deliveries.add(norm(el.innerText));
     if (m[2].startsWith('forObjectType(toggle')) {
-      const sw = el.querySelector('[role="switch"], input[type="checkbox"]');
-      if (sw) toggle = sw;
+      el.querySelectorAll('[role="switch"],input[type="checkbox"]').forEach(sw => {
+        if (visible(sw)) switches.add(sw);
+      });
     }
   }
-  if (!seen) return {found: false, why: 'строки с таким id на странице нет'};
-  if (!toggle) return {found: false, why: 'у строки не нашлось тумблера', name: name};
-  const checked = toggle.getAttribute('aria-checked');
-  toggle.setAttribute('data-acl-switch', '1');
-  return {
-    found: true, name: name, delivery: delivery,
-    on: checked === 'true' || toggle.checked === true,
-    off: checked === 'false' || toggle.checked === false,
-    label: norm(toggle.getAttribute('aria-label') || ''),
-  };
+  if (kinds.size !== 1 || !kinds.has(args.kind) || names.size !== 1 || switches.size !== 1) return fail('row identity or switch is ambiguous');
+  const name = [...names][0], sw = [...switches][0];
+  if (!args.name || name !== norm(args.name)) return fail('row name changed');
+  if (sw.disabled || sw.closest('[aria-disabled="true"]')) return fail('switch is disabled');
+  const aria = sw.getAttribute('aria-checked');
+  const state = aria === 'true' ? 'on' : aria === 'false' ? 'off' :
+    aria === null && sw.matches('input[type="checkbox"]') && !sw.indeterminate ? (sw.checked ? 'on' : 'off') : 'unknown';
+  const label = norm(sw.getAttribute('aria-label'));
+  const result = {found:true, name, delivery:deliveries.size === 1 ? [...deliveries][0] : '', on:state === 'on', off:state === 'off', label};
+  if (args.click) {
+    // Identity, context and state are read and acted upon in one JS task.
+    // If Meta switched it off meanwhile, clicking again would turn it ON.
+    if (location.href !== args.url || label !== args.label || state === 'unknown') return fail('context or switch changed before action');
+    if (state === 'on') {
+      const r = sw.getBoundingClientRect(), hit = document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+      if (!hit || (hit !== sw && !sw.contains(hit))) return fail('switch is covered');
+      sw.click();
+      result.clicked = true;
+    }
+  }
+  sw.setAttribute('data-acl-switch', '1');
+  return result;
 }
 """
 
-#: Тот же взгляд после нажатия — по метке, которую поставил поиск.
-_SWITCH_STATE_JS = r"""
-() => {
-  const sw = document.querySelector('[data-acl-switch="1"]');
-  if (!sw) return null;
-  const c = sw.getAttribute('aria-checked');
-  if (c === 'true') return 'on';
-  if (c === 'false') return 'off';
-  return null;
-}
-"""
-
-
-def _switch_state(page):
-    try:
-        return page.evaluate(_SWITCH_STATE_JS)
-    except Exception:
-        return None
+# Re-read the same visible period in the exact browser task that may click.
+_SWITCH_ACTION_JS = """args => {
+  const period = (""" + _FIND_PERIOD_JS + """)(args.period_args);
+  if (!period || period !== args.period) return {found:false, why:'period changed before action'};
+  return (""" + _FIND_SWITCH_JS + """)(args);
+}"""
 
 
 @serialized_browser
@@ -1969,6 +1979,9 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
                         name=expected_name, at=_now())
     if level not in ("campaign", "ad"):
         out.error = f"выключать умеем кампанию и объявление, а не {level!r}"
+        return out
+    if not expected_name.strip():
+        out.error = "row name is required — read the account again"
         return out
     if not str(object_id).isdigit():
         out.error = "id объекта должен состоять из цифр"
@@ -2009,22 +2022,28 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
             out.error = "Ads Manager не отрисовался за отведённое время"
             return out
 
-        # Те же три сверки, что и у чтения, и по той же причине: адрес можно
-        # открыть и получить не тот кабинет, не тот период, не тот список.
+        from urllib.parse import parse_qs, urlsplit
         expected_act = act if act.startswith("act_") else "act_" + act
-        if _act_from_url(page, tries=1) != expected_act:
-            out.error = "открылся не тот кабинет — ничего не трогаем"
-            return out
-        if not _period_matches(_shown_period(page), date_from, date_to):
-            out.error = "на экране другой период — ничего не трогаем"
-            return out
-        if not wg.is_ads_manager_url(page.url):
-            out.error = "это не Ads Manager — ничего не трогаем"
-            return out
+        approved_url = page.url
+        def context_matches():
+            parts = urlsplit(page.url)
+            params = parse_qs(parts.query)
+            return (page.url == approved_url and wg.is_ads_manager_url(page.url)
+                    and parts.path == urlsplit(ADS_MANAGER_LEVELS[level]).path
+                    and _act_from_url(page, tries=1) == expected_act
+                    and _period_matches(_shown_period(page), date_from, date_to)
+                    and (level != "ad" or params.get("selected_campaign_ids") == [str(parent_id)]))
 
-        found = page.evaluate(_FIND_SWITCH_JS, out.object_id)
+        if not context_matches():
+            out.error = "account, period, level or parent changed — nothing touched"
+            return out
+        args = {"id":out.object_id, "kind":_LEVEL_KIND[level], "name":expected_name}
+        found = page.evaluate(_FIND_SWITCH_JS, args)
         if not found or not found.get("found"):
             out.error = (found or {}).get("why") or "строку не нашли"
+            return out
+        if not context_matches():
+            out.error = "context changed during lookup"
             return out
         out.name = str(found.get("name") or expected_name)
 
@@ -2054,40 +2073,53 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
             out.error = "положение тумблера непонятно — ничего не трогаем"
             return out
 
-        page.click(SEL_MARKED_SWITCH, timeout=15_000)
+        page.locator(SEL_MARKED_SWITCH).scroll_into_view_if_needed(timeout=15_000)
+        if not context_matches():
+            out.error = "context changed before action — nothing touched"
+            return out
+        period = _period_once(page)
+        if not _period_matches(period, date_from, date_to):
+            out.error = "period could not be confirmed before action"
+            return out
+        acted = page.evaluate(_SWITCH_ACTION_JS, dict(args, click=True, url=approved_url,
+            label=found.get("label"), period=period,
+            period_args=[list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE]))
+        if not acted or not acted.get("found"):
+            out.error = (acted or {}).get("why") or "action refused"
+            return out
+        if not acted.get("clicked"):
+            out.state = "already_off"
+            out.delivery = str(acted.get("delivery") or "")
+            out.how = "already off at the final check; no click"
+            return out
 
-        # Нарисоваться выключенным и остаться им — разное. Ждём подтверждения,
-        # а потом перезагружаем список и смотрим ещё раз: Meta умеет показать
-        # тумблер выключенным и молча вернуть его обратно.
+        # Wait for the optimistic update, then independently verify persistence.
         for _ in range(TURN_OFF_TRIES):
-            if _switch_state(page) == "off":
+            now = page.evaluate(_FIND_SWITCH_JS, args)
+            if now and now.get("off"):
                 break
-            _sleep(TURN_OFF_PAUSE_S)
+            page.wait_for_timeout(int(TURN_OFF_PAUSE_S * 1000))
         else:
-            out.error = "нажали, но тумблер не стал выключенным"
+            out.error = "clicked but off was not confirmed; read the account again"
             return out
 
         page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
-        _wait_for_grid(page)
-
-        # Смотреть один раз — значит спросить раньше, чем Meta ответит. 12.09
-        # объявление выключилось (в Ads Manager тумблер снят, доставка
-        # «Processing»), а дешборд показал отказ: проверка успела заглянуть до
-        # того, как состояние устоялось. Ровно та же ошибка, что была со
-        # статусом кабинета, — шаг поверил первому взгляду.
+        if not _wait_for_grid(page):
+            out.error = "confirmation table did not load; state unknown"
+            return out
         again = None
         for attempt in range(TURN_OFF_TRIES):
             if attempt:
-                _sleep(TURN_OFF_PAUSE_S)
-            again = page.evaluate(_FIND_SWITCH_JS, out.object_id)
-            if again and again.get("off"):
+                page.wait_for_timeout(int(TURN_OFF_PAUSE_S * 1000))
+            if not context_matches():
+                out.error = "confirmation context changed; state unknown"
+                return out
+            again = page.evaluate(_FIND_SWITCH_JS, args)
+            if again and again.get("off") and context_matches():
                 out.delivery = str(again.get("delivery") or "")
                 out.state = "off"
-                out.how = f"подтверждено перезагрузкой списка ({attempt + 1}-й взгляд)"
+                out.how = f"confirmed after reload (observation {attempt + 1})"
                 return out
-            if again and again.get("on"):
-                continue
-            # Строку ещё не отрисовало — ждём, а не объявляем неизвестность.
 
         if not again or not again.get("found"):
             out.error = "после перезагрузки строку не нашли — состояние неизвестно"

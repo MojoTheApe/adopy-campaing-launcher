@@ -3366,7 +3366,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     for name, want in _PLACEMENT_CATEGORIES.items():
         res = _set_category(name, want)
         report["categories"][name] = res
-        if not res.get("checkbox"):
+        if not res.get("checkbox") or res.get("checked") is not want:
             ok = False
         _sleep_h(0.3)
 
@@ -3384,15 +3384,17 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                     """
                     ([label, wantChecked]) => {
                       const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                      const rows = [...document.querySelectorAll('*')].filter(e =>
+                      const root = document.querySelector('[data-rpa-placements-marker]');
+                      if (!root) return false;
+                      const rows = [...root.querySelectorAll('*')].filter(e =>
                         e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
                       for (const row of rows) {
                         let container = row.parentElement;
                         for (let i = 0; i < 4 && container; i++) {
                           const cb = container.querySelector('input[type=checkbox]');
-                          if (cb) {
+                          if (cb && !cb.disabled) {
                             if (cb.checked !== wantChecked) cb.click();
-                            return true;
+                            return cb.checked === wantChecked;
                           }
                           container = container.parentElement;
                         }
@@ -4087,9 +4089,43 @@ def upload_ad_creative_with_retry(
         # хранит черновик у себя (в снимке отказа 10 сентября видно «All
         # edits saved», имя объявления в поле и в дереве, статус «In draft»).
         if attempt + 1 < attempts and _upload_stalled(page):
+            if not _upload_retry_can_reload(page, edit_url):
+                _telemetry.record("creative_upload_stalled", False, note="reload_refused_unconfirmed_saved_draft")
+                return False
             _telemetry.record("creative_upload_stalled", None, note="reload_and_retry")
             _reload_editor(page, edit_url)
     return False
+
+
+def _upload_retry_can_reload(page: Page, edit_url: str = "") -> bool:
+    """Reload only the same confirmed, saved draft. An old screenshot saying
+    'All edits saved' does not establish that the current upload can be retried.
+    """
+    from urllib.parse import parse_qs, urlsplit
+    from src.fb_ads_rpa.wizard_guard import is_ads_manager_url
+
+    try:
+        current = str(page.url)
+        target = edit_url or current
+        if not is_ads_manager_url(current) or not is_ads_manager_url(target):
+            return False
+        current_url, target_url = urlsplit(current), urlsplit(target)
+        # Never navigate to an earlier ad/campaign while retrying this upload.
+        if current_url.path != target_url.path or parse_qs(current_url.query) != parse_qs(target_url.query):
+            return False
+        if not parse_qs(current_url.query).get('act'):
+            return False
+        for attempt in range(2):
+            if attempt:
+                _sleep_h(1.5, spread=0)
+            if str(page.url) != current or _editor_is_busy_saving(page):
+                return False
+            saved = page.get_by_text(re.compile(r"^All edits saved$", re.I))
+            if saved.count() != 1 or not saved.first.is_visible():
+                return False
+        return True
+    except Exception:
+        return False
 
 
 def _upload_progress(page: Page) -> int | None:
@@ -4103,8 +4139,12 @@ def _upload_progress(page: Page) -> int | None:
         val = page.evaluate(
             """
             () => {
-              const el = document.querySelector('[role="progressbar"][aria-valuenow]');
-              return el ? el.getAttribute('aria-valuenow') : null;
+              const bars = [...document.querySelectorAll('[role="progressbar"][aria-valuenow]')].filter(el => {
+                const r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0 && !el.closest('[aria-hidden="true"]')
+                  && getComputedStyle(el).visibility !== 'hidden';
+              });
+              return bars.length === 1 ? bars[0].getAttribute('aria-valuenow') : null;
             }
             """
         )
@@ -4164,7 +4204,7 @@ def _recover_from_browser_error(page: Page, *, attempts: int = 2) -> bool:
         _telemetry.record("browser_error", None, note=code)
         _reload_editor(page)
         _sleep_h(1.0)
-    return bool(seen)
+    return bool(seen) and not _telemetry.browser_error(page)
 
 
 def _reload_editor(page: Page, edit_url: str = "") -> None:
@@ -5213,30 +5253,42 @@ def mark_ad_copy_field(
                   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
                   const seen = (el) => {
                     const r = el.getBoundingClientRect();
-                    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+                    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'
+                      && !el.closest('[aria-hidden="true"], [inert]') && !el.disabled && !el.readOnly;
                   };
+                  const controls = 'textarea,input[type=text],input:not([type]),[contenteditable="true"]';
                   for (const old of document.querySelectorAll('[data-rpa-field="' + mark + '"]')) {
                     old.removeAttribute('data-rpa-field');
                   }
-                  let host = key ? document.querySelector('[data-surface$="/' + key + '"]') : null;
-                  if (!host && placeholder) {
-                    const direct = [...document.querySelectorAll('[placeholder]')]
-                      .find(e => e.getAttribute('placeholder') === placeholder && seen(e));
-                    if (direct) { direct.setAttribute('data-rpa-field', mark); return true; }
-                  }
-                  if (!host && label) {
-                    const tag = [...document.querySelectorAll('div,span,label')].find(e =>
-                      e.children.length === 0 && norm(e.textContent) === label);
-                    host = tag ? tag.parentElement : null;
-                    for (let i = 0; i < 3 && host; i++) {
-                      if (host.querySelector('textarea,input[type=text],[contenteditable="true"]')) break;
-                      host = host.parentElement;
+                  let candidates = [];
+                  if (key) {
+                    for (const host of document.querySelectorAll('[data-surface$="/' + key + '"]')) {
+                      candidates.push(...[...host.querySelectorAll(controls)].filter(seen));
                     }
                   }
-                  if (!host) return false;
-                  const el = [...host.querySelectorAll('textarea,input[type=text],[contenteditable="true"]')]
-                    .find(seen);
-                  if (!el) return false;
+                  if (!candidates.length && placeholder) {
+                    candidates = [...document.querySelectorAll(controls)]
+                      .filter(e => e.getAttribute('placeholder') === placeholder && seen(e));
+                  }
+                  if (!candidates.length && label) {
+                    // Keep the old accessible/placeholder layouts as well as the
+                    // recorded adjacent-label layout. Refuse ambiguous matches.
+                    candidates = [...document.querySelectorAll(controls)].filter(e =>
+                      seen(e) && (e.getAttribute('aria-label') === label || e.getAttribute('placeholder') === label));
+                    if (!candidates.length) {
+                      for (const tag of document.querySelectorAll('div,span,label')) {
+                        if (tag.children.length || norm(tag.textContent) !== label || !seen(tag)) continue;
+                        let host = tag.parentElement;
+                        for (let i = 0; i < 3 && host; i++, host = host.parentElement) {
+                          const found = [...host.querySelectorAll(controls)].filter(seen);
+                          if (found.length) { candidates.push(...found); break; }
+                        }
+                      }
+                    }
+                  }
+                  candidates = [...new Set(candidates)];
+                  if (candidates.length !== 1) return false;
+                  const el = candidates[0];
                   el.setAttribute('data-rpa-field', mark);
                   return true;
                 }

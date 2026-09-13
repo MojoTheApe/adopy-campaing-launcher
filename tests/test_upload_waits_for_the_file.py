@@ -286,3 +286,37 @@ def test_the_ceiling_is_still_there():
     """Полоса может и вовсе исчезнуть — тогда работает общий потолок."""
     assert "_UPLOAD_MAX_S" in _wait_block()
     assert "_UPLOAD_MAX_S" in _verify_block()
+
+
+def test_retry_never_reloads_an_unconfirmed_draft(monkeypatch):
+    calls = []
+    monkeypatch.setattr(meta_dom, 'upload_ad_creative', lambda *a, **k: False)
+    monkeypatch.setattr(meta_dom, '_close_creative_setup_modal', lambda *a: None)
+    monkeypatch.setattr(meta_dom, '_sleep_h', lambda *a, **k: None)
+    monkeypatch.setattr(meta_dom, '_verify_ad_media_present', lambda *a: False)
+    monkeypatch.setattr(meta_dom, '_upload_stalled', lambda *a: True)
+    monkeypatch.setattr(meta_dom, '_upload_retry_can_reload', lambda *a: False)
+    monkeypatch.setattr(meta_dom, '_reload_editor', lambda *a: calls.append('reload'))
+    assert not meta_dom.upload_ad_creative_with_retry(object(), 'video', 'synthetic.mp4')
+    assert calls == []
+
+
+def test_reload_requires_same_account_ad_and_stable_saved_indicator(monkeypatch):
+    monkeypatch.setattr(meta_dom, '_sleep_h', lambda *a, **k: None)
+    monkeypatch.setattr(meta_dom, '_editor_is_busy_saving', lambda p: p.busy)
+    class Page:
+        url = 'https://adsmanager.facebook.com/adsmanager/manage/ads/edit?act=123&selected_ad_ids=456'
+        busy = False
+        saved = True
+        def get_by_text(self, pattern): return self
+        def count(self): return 1
+        @property
+        def first(self): return self
+        def is_visible(self): return self.saved
+    p = Page()
+    assert meta_dom._upload_retry_can_reload(p, p.url)
+    assert not meta_dom._upload_retry_can_reload(p, p.url.replace('456','789'))
+    p.saved = False
+    assert not meta_dom._upload_retry_can_reload(p)
+    p.saved = True; p.busy = True
+    assert not meta_dom._upload_retry_can_reload(p)

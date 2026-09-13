@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -70,9 +71,10 @@ def _chromium():
 @pytest.fixture(scope="module")
 def page():
     with _chromium() as pw:
-        browser = pw.chromium.launch(headless=True)
+        browser = pw.chromium.launch(headless=True, executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
         try:
             pg = browser.new_page()
+            pg.route("**/*", lambda route: route.continue_() if route.request.url.startswith("file:") else route.abort())
             pg.goto((FIXTURES / "conversion_event_2026_09_09.html").as_uri())
             yield pg
         finally:

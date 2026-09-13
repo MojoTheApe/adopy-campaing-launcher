@@ -1869,9 +1869,10 @@ async def api_creatives() -> JSONResponse:
         return JSONResponse({"error": f"Creatives folder not found: {root}", "files": []})
 
     files = []
-    for p in sorted(root.rglob("*")):
-        if not p.is_file():
-            continue
+    # Directory enumeration identifies file entries without a separate Path.stat
+    # per entry. An unreadable size must not abort the whole picker on Windows.
+    paths = (Path(folder) / name for folder, _dirs, names in os.walk(root) for name in names)
+    for p in sorted(paths):
         ext = p.suffix.lower()
         if ext in _IMAGE_EXTS:
             ftype = "Image"
