@@ -141,3 +141,96 @@ assert.equal(out.kept, 0);
 assert.equal(out.body.get('camp_count'), '0');
 
 console.log('ok');
+
+// ── очередь: один аккаунт за раз ──────────────────────────────────────
+// Сервер и так пускает по одному: `_run_job` держит общий замок
+// (`browser_operation`) весь прогон — решение проекта от 2026-07-31,
+// «никогда два браузера Multilogin одновременно; параллельные профили —
+// отдельный осознанный шаг, не умолчание». Тот же замок берёт и чтение
+// аккаунта.
+//
+// Очередь здесь нужна не вместо него, а чтобы экран не врал. Отправив все
+// работы разом, мы получили бы пять «running», из которых четыре стоят в
+// ожидании замка, и остановить не ту было бы нечем.
+const queueCode = cut('window.cbPublishAll = function', '// ── Диагностика превью');
+
+function runQueue(accounts, opts = {}) {
+  const events = [];
+  const pending = [];
+  const forms = accounts.map((label) => ({
+    _label: label,
+    querySelectorAll: () => [{}],                        // одна карточка
+    querySelector: (sel) => (sel === '[name="account_label"]' ? { value: label } : null),
+  }));
+  const sandbox = {
+    window: {},
+    FormData, RegExp, String, parseInt, Object, JSON, Promise,
+    aclEscHtml: (v) => String(v == null ? '' : v),
+    document: { querySelectorAll: () => forms, querySelector: () => null },
+    _safeConfirm: (title, body, onYes) => { events.push('asked'); if (opts.confirm !== false) onYes(); },
+    cbPreview: (form, done) => {
+      events.push('preview:' + form._label);
+      done(opts.plan ? opts.plan(form._label) : [{ 'Campaign Name': form._label, errors: [] }], null);
+    },
+    cbSkipByName: opts.skip || (() => ({ skip: {}, unchecked: 0, broken: 0 })),
+    cbFormDataSkipping: opts.pack || (() => ({ body: new FormData(), kept: 1 })),
+    cbPollJob: (jobId, panel, btn, done) => { events.push('poll'); pending.push(done); },
+    fetch: (url) => {
+      events.push('POST');
+      return Promise.resolve({ json: () => Promise.resolve({ job_id: 'j' + pending.length }) });
+    },
+    alert: (m) => events.push('alert'),
+  };
+  sandbox.window.window = sandbox.window;
+  sandbox.window.cbPreview = sandbox.cbPreview;
+  sandbox.window.alert = sandbox.alert;
+  vm.runInNewContext(
+    'window.cbSkipByName = cbSkipByName; window.cbFormDataSkipping = cbFormDataSkipping;\n' + queueCode,
+    sandbox);
+  sandbox.window.cbPublishAll(() => {});
+  return { events, pending };
+}
+
+// Запрос уходит через микрозадачи — без этого проверка смотрит на «ещё
+// ничего не случилось» и радуется.
+const flush = () => new Promise((r) => setImmediate(r));
+const posts = (q) => q.events.filter((e) => e === 'POST').length;
+
+(async () => {
+  // Спрашивают один раз на всю пачку, а не на каждый аккаунт.
+  let q = runQueue(['A', 'B', 'C']);
+  assert.equal(q.events.filter((e) => e === 'asked').length, 1, 'спрашивают на каждый аккаунт');
+
+  await flush();
+  assert.equal(posts(q), 1, 'запущено больше одной работы разом — они подерутся за окно Multilogin');
+  assert.equal(q.pending.length, 1, 'вторая работа не ждёт первую');
+
+  // Закончилась первая — пошла вторая, и снова одна.
+  q.pending[0]({ results: [{ publishable: true }] });
+  await flush();
+  assert.equal(posts(q), 2, 'следующий аккаунт не начался после завершения прошлого');
+  assert.equal(q.pending.length, 2);
+
+  q.pending[1]({ results: [{ publishable: true }] });
+  await flush();
+  assert.equal(posts(q), 3);
+  q.pending[2]({ results: [{ publishable: true }] });
+  await flush();
+  assert.equal(posts(q), 3, 'после последнего аккаунта запущено что-то ещё');
+
+  // Отказ на вопросе — ни одной работы.
+  q = runQueue(['A'], { confirm: false });
+  await flush();
+  assert.equal(posts(q), 0, 'запустили, несмотря на отказ');
+
+  // Аккаунт, у которого все кампании сломаны, не отправляется вовсе — но и
+  // очередь на себе не останавливает.
+  q = runQueue(['A', 'B'], { skip: () => ({ skip: { 0: true }, unchecked: 0, broken: 1 }),
+                             pack: () => ({ body: new FormData(), kept: 0 }) });
+  await flush();
+  assert.equal(posts(q), 0, 'отправлена кампания, у которой нет ни одной годной');
+  assert.deepEqual(q.events.filter((e) => e.startsWith('preview')), ['preview:A', 'preview:B'],
+    'очередь встала на сломанном аккаунте');
+
+  console.log('ok (queue)');
+})();
