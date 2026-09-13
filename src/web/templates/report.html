@@ -77,6 +77,12 @@
       --space-lg: 16px;
       --space-xl: 24px;
       --sidebar-w: 248px;
+      /* Ширина ящика билдера и его язычка. Одни числа на всё: и сам ящик,
+         и отступ страницы, который освобождает место под него. Язычку
+         ширина задана, а не оставлена на содержимое, — иначе отступ
+         пришлось бы угадывать. */
+      --cbd-w: 360px;
+      --cbd-handle-w: 40px;
       --radius-sm: 6px;
       --radius-md: 8px;
       --radius-lg: 10px;
@@ -2367,6 +2373,102 @@
       .acc-form { grid-template-columns: 1fr; }
       .acc-manual.open { grid-template-columns: 1fr; }
     }
+
+    /* ── Ящик билдера ──────────────────────────────────────────────────
+       Панель сборки кампаний: живёт справа, открыта на любой вкладке.
+       Немодальная нарочно — подложки нет, и за её пределами страница
+       работает как обычно. Ради этого всё и затевалось: выделить текст
+       слева и вставить его в поле справа, не потеряв набранное.
+       Ширина фиксированная; открытое состояние помнится между
+       перезагрузками. */
+    .cbd-root {
+      position: fixed; top: 0; right: calc(-1 * var(--cbd-w)); height: 100vh;
+      z-index: 880; display: flex; align-items: stretch;
+      pointer-events: none;
+      transition: right 220ms var(--ease-out);
+    }
+    .cbd-root[data-open="1"] { right: 0; }
+    .cbd-root > * { pointer-events: auto; }
+
+    /* Язычок: единственное, что видно, пока ящик закрыт. */
+    .cbd-handle {
+      align-self: center;
+      width: var(--cbd-handle-w); box-sizing: border-box;
+      writing-mode: vertical-rl;
+      display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+      padding: 0.75rem 0.3rem;
+      background: var(--bg-elev); color: var(--muted);
+      border: 1px solid var(--border); border-right: none;
+      border-radius: var(--radius-md) 0 0 var(--radius-md);
+      box-shadow: var(--shadow-md);
+      font: inherit; font-size: 0.74rem; font-weight: 600;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      transition: color 160ms var(--ease-out), border-color 160ms var(--ease-out);
+    }
+    .cbd-handle:hover { color: var(--accent); border-color: var(--accent); }
+    .cbd-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .cbd-handle-arrow {
+      writing-mode: horizontal-tb;
+      font-size: 0.9rem; line-height: 1;
+      transition: transform 220ms var(--ease-out);
+    }
+    .cbd-root[data-open="1"] .cbd-handle-arrow { transform: rotate(180deg); }
+    /* Счётчик черновиков — чтобы закрытый язычок что-то говорил. */
+    .cbd-handle-count {
+      writing-mode: horizontal-tb;
+      min-width: 1.15rem; padding: 0.05rem 0.25rem;
+      border-radius: 999px;
+      background: var(--accent); color: var(--on-accent);
+      font-size: 0.66rem; font-weight: 700; text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .cbd-panel {
+      width: var(--cbd-w); flex-shrink: 0;
+      display: flex; flex-direction: column;
+      background: var(--bg-elev);
+      border-left: 1px solid var(--border);
+      box-shadow: var(--shadow-md);
+    }
+    .cbd-head {
+      display: flex; align-items: baseline; gap: var(--space-sm);
+      padding: var(--space-sm) var(--space-md);
+      border-bottom: 1px solid var(--border);
+    }
+    .cbd-title { font-size: 0.82rem; font-weight: 700; }
+    .cbd-sub {
+      flex: 1; min-width: 0; color: var(--muted); font-size: 0.7rem;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cbd-close {
+      align-self: center;
+      background: none; border: 1px solid transparent; color: var(--muted);
+      font-size: 1rem; line-height: 1; cursor: pointer;
+      border-radius: var(--radius-sm); padding: 0.1rem 0.35rem;
+    }
+    .cbd-close:hover { color: var(--bad); border-color: var(--bad); }
+    .cbd-body { flex: 1; overflow-y: auto; padding: var(--space-md); }
+    .cbd-empty {
+      color: var(--muted); font-size: 0.78rem; line-height: 1.6;
+      text-align: center; padding: var(--space-xl) var(--space-sm);
+    }
+    .cbd-foot {
+      padding: var(--space-sm) var(--space-md);
+      border-top: 1px solid var(--border);
+    }
+
+    /* Открытый ящик раздвигает страницу, а не накрывает её: читать нужно
+       ровно то, что сейчас закрыто панелью. Язычок входит в отступ — он
+       торчит слева от панели и иначе ложится поверх таблицы. На узком
+       экране двигать некуда: там ящик всё-таки накрывает. */
+    body.cbd-open { padding-right: calc(var(--cbd-w) + var(--cbd-handle-w)); }
+    @media (max-width: 1100px) {
+      body.cbd-open { padding-right: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cbd-root, .cbd-handle-arrow { transition: none; }
+    }
   </style>
 </head>
 <body>
@@ -3818,6 +3920,114 @@ async function dashRefresh(ev) {
 </div>
 {% endif %}
 
+{# ── Ящик билдера ────────────────────────────────────────────────────────
+   Снаружи `{% if report.countries %}`: собирать кампании можно и когда
+   книги нет, а вкладка «Accounts» живёт и без стран.
+   Снаружи `.view-panel`: вкладки переключаются без перезагрузки, так что
+   ящик, стоящий рядом с ними, переживает переход сам собой — и открытым.
+   Один на страницу: панелей «по копии на страну» здесь уже хватило. #}
+<div id="cbd-root" class="cbd-root" data-open="0">
+  <button type="button" class="cbd-handle" id="cbd-handle"
+          aria-controls="cbd-panel" aria-expanded="false"
+          title="Campaign builder">
+    <span class="cbd-handle-arrow" aria-hidden="true">‹</span>
+    <span class="cbd-handle-text">Builder</span>
+    <span class="cbd-handle-count" id="cbd-count" hidden>0</span>
+  </button>
+  <aside class="cbd-panel" id="cbd-panel" role="complementary"
+         aria-label="Campaign builder">
+    <div class="cbd-head">
+      <span class="cbd-title">Builder</span>
+      <span class="cbd-sub" id="cbd-sub"></span>
+      <button type="button" class="cbd-close" id="cbd-close"
+              title="Close the builder" aria-label="Close the builder">×</button>
+    </div>
+    <div class="cbd-body" id="cbd-body">
+      <p class="cbd-empty">Nothing is being assembled yet.</p>
+    </div>
+    <div class="cbd-foot" id="cbd-foot" hidden></div>
+  </aside>
+</div>
+
+<script>
+/* Ящик билдера: открыть, закрыть, помнить.
+ *
+ * Ни одного обработчика на документе тут нет и не должно быть. Прежняя
+ * правая панель закрывалась по клику мимо себя, и из-за этого ею нельзя
+ * было пользоваться по назначению: выделяешь текст в таблице слева —
+ * панель захлопывается вместе с набранным. Escape тоже не вешаем: он
+ * прилетает из полей ввода, и закрыть ящик на полуслове — то же самое.
+ * Закрывают ящик ровно две вещи: язычок и крестик.
+ */
+window.cbDrawer = (function () {
+  var KEY = 'acl.builder.open';
+
+  var root = document.getElementById('cbd-root');
+  if (!root) return null;
+  var panel = document.getElementById('cbd-panel');
+  var handle = document.getElementById('cbd-handle');
+  var countEl = document.getElementById('cbd-count');
+  var subEl = document.getElementById('cbd-sub');
+  var count = 0;
+
+  /* Хранилище бывает закрыто: приватное окно, запрет на данные сайта.
+     Тогда ящик просто не помнит состояние — но работает. */
+  function remember(open) {
+    try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (e) { /* не помним */ }
+  }
+  function remembered() {
+    try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function isOpen() { return root.getAttribute('data-open') === '1'; }
+
+  function apply(open) {
+    root.setAttribute('data-open', open ? '1' : '0');
+    handle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    handle.title = open ? 'Close the builder' : 'Campaign builder';
+    /* Закрытый ящик стоит за краем экрана: убрать его из обхода клавишей
+       Tab и от чтения с экрана, иначе фокус уезжает в невидимое. */
+    panel.inert = !open;
+    document.body.classList.toggle('cbd-open', open);
+  }
+
+  function set(open, save) {
+    open = !!open;
+    if (open === isOpen()) return open;
+    apply(open);
+    if (save !== false) remember(open);
+    document.dispatchEvent(new CustomEvent('acl:builder-drawer', { detail: { open: open } }));
+    return open;
+  }
+
+  /* Сколько кампаний собирается прямо сейчас. Ноль — значка нет вовсе:
+     пустой кружок говорит меньше, чем его отсутствие. */
+  function setCount(n) {
+    count = Math.max(0, n | 0);
+    countEl.textContent = String(count);
+    countEl.hidden = count === 0;
+    subEl.textContent = count === 0 ? '' : count + (count === 1 ? ' campaign' : ' campaigns');
+    return count;
+  }
+
+  handle.addEventListener('click', function () { set(!isOpen()); });
+  document.getElementById('cbd-close').addEventListener('click', function () { set(false); });
+
+  apply(remembered());
+  setCount(0);
+
+  return {
+    open: function () { return set(true); },
+    close: function () { return set(false); },
+    toggle: function () { return set(!isOpen()); },
+    isOpen: isOpen,
+    setCount: setCount,
+    count: function () { return count; },
+    body: function () { return document.getElementById('cbd-body'); },
+    foot: function () { return document.getElementById('cbd-foot'); }
+  };
+})();
+</script>
 
 <script>
 function aclCountryBuilder(country) {
