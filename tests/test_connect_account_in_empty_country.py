@@ -81,8 +81,14 @@ def _render(virtual: bool):
     """Отрисовать карту с одной страной — настоящей или только из книги."""
     from jinja2 import Environment, FileSystemLoader
 
+    # Фильтры берём настоящие, а не свои похожие: карта форматирует суммы
+    # по валютам, и окружение, знающее меньше фильтров, чем приложение,
+    # падает на шаблоне, который на экране работает.
+    from src.analysis_agent.money_format import fmt_usd, fmt_currency
+
     env = Environment(loader=FileSystemLoader(str(TPL)), autoescape=True)
-    env.filters["fmt_usd"] = lambda v: f"${v:,.0f}" if v else "—"
+    env.filters["fmt_usd"] = fmt_usd
+    env.filters["fmt_currency"] = fmt_currency
     country = {
         "country": "Guatemala", "key": "" if virtual else "GT", "virtual": virtual,
         "rows": [], "spend": 1894, "deposits": 4, "leads": 82,
