@@ -56,18 +56,38 @@ def test_an_account_without_recommendations_still_has_a_builder():
 
 
 def test_the_empty_builder_says_what_to_do_next():
-    """Пустая форма без объяснения читается как «здесь ничего нет»."""
+    """Пустая форма без объяснения читается как «здесь ничего нет».
+
+    Прежде эту роль играла строка «нет рекомендаций за выбранный период». Она
+    исчезла вместе с автозаполнением, а объяснять пустоту по-прежнему надо —
+    и теперь объяснение не зависит от того, нашла ли книга рекомендации.
+    """
     html = _render({"KLD_BFL_X84": []})
     assert "Add Campaign" in html
-    assert "No recommendations for the chosen period" in html
+    assert "No campaigns here yet" in html
 
 
-def test_recommendations_still_fill_the_campaign_cards():
-    """Ради чего рекомендации и нужны — заполнить карточки, а не решать судьбу формы."""
+def test_recommendations_no_longer_fill_the_campaign_cards():
+    """Кампания заводится пустой — руками.
+
+    Раньше на каждую открытую рекомендацию рисовалась готовая карточка.
+    Заполнялось это плохо: таргетинг и креатив угадывались по тексту строки и
+    чаще не угадывались, карточка приезжала с красными полями и значком
+    «review before publish» — то есть всё равно требовала ручной работы,
+    только теперь ещё и с чужими значениями, которые надо было сначала
+    заметить. Решение владельца 13 сентября: убрать.
+
+    Считаются карточки в отрисованном **теле формы**, а не по всей странице:
+    строка `class="cb-slot"` живёт ещё и в javascript, который их строит, и
+    проверка «есть ли карточка» по всему html проходит всегда — чем прежний
+    сторож и занимался после удаления.
+    """
     rec = {"strategy_type": "scale", "offer": "Aramco Form", "targeting": "FX", "creatives": []}
     html = _render({"KLD_BFL_X84": [rec]})
-    assert _builder_rows(html) == ["KLD_BFL_X84"]
-    assert html.count('class="cb-slot"') >= 1, "карточка кампании не построена"
+    assert _builder_rows(html) == ["KLD_BFL_X84"], "билдер аккаунта исчез"
+    slots = html[html.index('<div class="cb-slots">'):]
+    slots = slots[: slots.index("</div>")]
+    assert 'class="cb-slot"' not in slots, "рекомендация снова построила карточку"
     assert "Aramco Form" in html
 
 

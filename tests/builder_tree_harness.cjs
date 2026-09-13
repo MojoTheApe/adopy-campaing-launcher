@@ -1,254 +1,322 @@
-// Дерево в ящике: страна → аккаунт → кампания → объявление.
+// Дерево в ящике — отражение страницы, а не собственный список.
 //
-// Проверяется тем же способом, что и остальной код страницы: настоящий
-// блок вырезается из шаблона и исполняется. Разметка тут собирается
-// строками, поэтому её и проверяем строками — а обработчик клика зовём
-// настоящий, подсунув ему событие.
+// Кампания, заведённая кнопкой «+ Add Campaign» на странице страны, и
+// кампания, заведённая в ящике, — одна и та же карточка в одной и той же
+// форме. Пока ящик вёл свою бухгалтерию, половина работы была ему не видна.
+//
+// Раскрытая кампания получает НАСТОЯЩУЮ форму аккаунта, перенесённую в
+// ящик целиком. Целиком — потому что браузер собирает данные формы только
+// из того, что лежит внутри её тега: карточка, вынутая наружу, ушла бы в
+// публикацию без единого своего поля, молча.
+//
+// Код берётся живьём из шаблона. DOM здесь поддельный, но настоящий по
+// поведению: узлы, селекторы, перенос между родителями — ровно то, на что
+// дерево опирается.
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
 const html = fs.readFileSync(process.argv[2], 'utf8');
 
 const start = html.indexOf('window.cbTree = (function () {');
 assert(start > 0, 'window.cbTree не найден в шаблоне');
 const tail = '\n})();';
-const end = html.indexOf(tail, start) + tail.length;
-const code = html.slice(start, end);
-assert(code.includes('cbd-country'), 'срез захватил не то');
+const code = html.slice(start, html.indexOf(tail, start) + tail.length);
+assert(code.includes('cbd-country') && code.includes('realTree'), 'срез захватил не то');
 
-// ── поддельная страница ───────────────────────────────────────────────
-// Ровно столько, сколько трогает дерево, и ни строчкой больше: стоит
-// стубу начать додумывать, он начинает врать вместо страницы.
+// ── поддельный DOM ────────────────────────────────────────────────────
+// Селекторы поддерживаются ровно те, что дерево использует; встретив
+// незнакомый, стуб ругается, а не возвращает молча null.
 
-function panel(country, accounts, active) {
+const SEL = /^([a-z]*)((?:\.[-\w]+)*)(?:\[([-\w]+)(?:="([^"]*)")?\])?$/;
+
+function parseSel(sel) {
+  const m = SEL.exec(sel.trim());
+  assert.ok(m, 'стуб не знает такого селектора: ' + sel);
   return {
-    dataset: { country },
-    classList: { contains: (c) => c === 'active' && !!active },
-    querySelectorAll: () => accounts.map((label) => ({ dataset: { accLabel: label } })),
+    tag: m[1] || '',
+    classes: (m[2] || '').split('.').filter(Boolean),
+    attr: m[3] || '',
+    value: m[4],
   };
 }
 
-function makePage(opts) {
-  opts = opts || {};
-  const panels = opts.panels || [];
-  const names = opts.names || {};
-  const store = opts.store;
-
-  const nodes = {};
-  ['cbd-body', 'cbd-foot', 'cbd-panel'].forEach((id) => {
-    nodes[id] = {
-      id,
-      innerHTML: '',
-      hidden: true,
-      handlers: {},
-      addEventListener(name, fn) { (this.handlers[name] = this.handlers[name] || []).push(fn); },
-      // Разметка строкой не разбирается: тесты смотрят на неё как на строку,
-      // а по элементам ходят через подставленное событие.
-      querySelector: () => null,
-    };
-  });
-
-  const listened = [];
-  const document = {
-    getElementById: (id) => nodes[id] || null,
-    querySelectorAll(sel) {
-      if (sel === '.view-panel[data-country]') return panels;
-      return [];
+function el(tag, opts = {}) {
+  const node = {
+    tag,
+    dataset: opts.dataset || {},
+    hidden: false,
+    value: opts.value !== undefined ? opts.value : '',
+    textContent: opts.textContent || '',
+    children: [],
+    parentNode: null,
+    _classes: new Set(opts.classes || []),
+    classList: {
+      add: (c) => node._classes.add(c),
+      remove: (c) => node._classes.delete(c),
+      contains: (c) => node._classes.has(c),
+      toggle: (c, on) => (on === undefined ? (node._classes.has(c) ? node._classes.delete(c) : node._classes.add(c))
+                                           : (on ? node._classes.add(c) : node._classes.delete(c))),
     },
-    querySelector(sel) {
-      const m = /^\.view-panel\.active\[data-country\]$/.test(sel);
-      if (m) return panels.find((p) => p.classList.contains('active')) || null;
-      const c = sel.match(/^\.sidebar-country-btn\[data-country="(.+)"\]$/);
-      if (c) return names[c[1]] ? { textContent: names[c[1]] } : null;
+    matches(sel) {
+      const s = parseSel(sel);
+      if (s.tag && s.tag !== node.tag) return false;
+      if (!s.classes.every((c) => node._classes.has(c))) return false;
+      if (s.attr) {
+        const key = s.attr.replace(/^data-/, '').replace(/-(\w)/g, (_, c) => c.toUpperCase());
+        const has = s.attr.startsWith('data-') ? node.dataset[key] !== undefined : node[s.attr] !== undefined;
+        if (!has) return false;
+        if (s.value !== undefined) {
+          const got = s.attr.startsWith('data-') ? node.dataset[key] : node[s.attr];
+          if (String(got) !== s.value) return false;
+        }
+      }
+      return true;
+    },
+    querySelectorAll(sel) {
+      const out = [];
+      (function walk(n) {
+        n.children.forEach((c) => { if (c.matches(sel)) out.push(c); walk(c); });
+      })(node);
+      return out;
+    },
+    querySelector(sel) { return node.querySelectorAll(sel)[0] || null; },
+    appendChild(child) {
+      if (child.parentNode) child.parentNode.removeChild(child);
+      child.parentNode = node;
+      node.children.push(child);
+      return child;
+    },
+    removeChild(child) {
+      node.children = node.children.filter((c) => c !== child);
+      child.parentNode = null;
+      return child;
+    },
+    insertBefore(child, ref) {
+      if (child.parentNode) child.parentNode.removeChild(child);
+      const i = node.children.indexOf(ref);
+      node.children.splice(i === -1 ? node.children.length : i, 0, child);
+      child.parentNode = node;
+      return child;
+    },
+    remove() { if (node.parentNode) node.parentNode.removeChild(node); },
+    addEventListener(name, fn) { (node._on = node._on || {})[name] = (node._on[name] || []).concat(fn); },
+    fire(name, e) { ((node._on || {})[name] || []).forEach((fn) => fn(e)); },
+    closest(sel) {
+      let n = node;
+      while (n) { if (n.matches && n.matches(sel)) return n; n = n.parentNode; }
       return null;
     },
-    addEventListener(name) { listened.push(name); },
+  };
+  // `className = '...'` — обычный способ задать класс на созданном узле;
+  // без него classList остаётся пустым, и узел не находится ни одним
+  // селектором.
+  Object.defineProperty(node, 'className', {
+    get: () => [...node._classes].join(' '),
+    set: (v) => { node._classes = new Set(String(v).split(/\s+/).filter(Boolean)); },
+  });
+  (opts.children || []).forEach((c) => node.appendChild(c));
+  return node;
+}
+
+// Узел, куда дерево пишет разметку строкой. Разбирать её незачем — карточки
+// адресуются по id, а он в строке есть.
+function sink(id) {
+  const node = el('div', { classes: [id] });
+  node.id = id;
+  node._cards = new Map();
+  Object.defineProperty(node, 'innerHTML', {
+    get() { return node._html || ''; },
+    set(v) {
+      node._html = v;
+      node.children.slice().forEach((c) => node.removeChild(c));
+      node._cards = new Map();
+      for (const m of v.matchAll(/data-camp="([^"]+)"/g)) {
+        node._cards.set(m[1], el('div', { classes: ['cbd-camp'], dataset: { camp: m[1] } }));
+      }
+      // Выбор внизу — два настоящих узла: второй заполняется отдельно, и
+      // без него проверка «какие аккаунты предлагаются» ничего не видит.
+      node._picks = /cbd-pick-country/.test(v)
+        ? { '.cbd-pick-country': el('select', { classes: ['cbd-pick-country'] }),
+            '.cbd-pick-account': el('select', { classes: ['cbd-pick-account'] }) }
+        : null;
+      if (node._picks) {
+        const opt = /<option value="([^"]*)"(?: selected)?>/.exec(v);
+        node._picks['.cbd-pick-country'].value = opt ? opt[1] : '';
+      }
+    },
+  });
+  const rawQS = node.querySelector;
+  node.querySelector = (sel) => {
+    const m = /^\.cbd-camp\[data-camp="([^"]+)"\]$/.exec(sel);
+    if (m) return node._cards.get(m[1]) || null;
+    if (sel === '.cbd-pick-country' || sel === '.cbd-pick-account') return node._picks?.[sel] || null;
+    return rawQS(sel);
+  };
+  return node;
+}
+
+function slot(name, ads) {
+  const kids = [
+    el('input', { classes: ['cb-name-hidden'], value: name }),
+    el('span', { dataset: { nameDisplay: '' }, textContent: name }),
+  ];
+  for (let i = 0; i < ads; i += 1) kids.push(el('div', { classes: ['cb-ad-row'] }));
+  return el('div', { classes: ['cb-slot'], children: kids });
+}
+
+function page(spec) {
+  // spec: [{country, name, accounts: [{label, slots: [[name, ads], ...]}]}]
+  const panels = [], sideBtns = [], forms = [];
+  spec.forEach((c, ci) => {
+    const rows = c.accounts.map((a) => {
+      const form = el('form', {
+        classes: ['open-account-form'],
+        children: a.slots.map((s) => slot(s[0], s[1])),
+      });
+      forms.push(form);
+      return el('div', { classes: ['cb-acc-row'], dataset: { accLabel: a.label }, children: [form] });
+    });
+    const panel = el('div', {
+      classes: ['view-panel'].concat(ci === 0 ? ['active'] : []),
+      dataset: { country: c.country },
+      children: rows,
+    });
+    panels.push(panel);
+    sideBtns.push(el('button', { classes: ['sidebar-country-btn'], dataset: { country: c.country }, textContent: c.name }));
+  });
+  return { panels, sideBtns, forms };
+}
+
+function boot(spec, opts = {}) {
+  const p = page(spec);
+  const bodyNode = sink('cbd-body');
+  const footNode = sink('cbd-foot');
+  const panelNode = el('div', { classes: ['cbd-panel'] });
+  const root = el('div', { children: p.panels.concat(p.sideBtns) });
+  const ids = { 'cbd-body': bodyNode, 'cbd-foot': footNode, 'cbd-panel': panelNode };
+
+  const timers = [];
+  const counts = [];
+  const confirms = [];
+  const document = {
+    getElementById: (id) => ids[id] || null,
+    querySelectorAll: (sel) => root.querySelectorAll(sel),
+    querySelector: (sel) => root.querySelector(sel),
+    addEventListener: (name, fn) => ((document._on = document._on || {})[name] = (document._on[name] || []).concat(fn)),
+    fire: (name, e) => ((document._on || {})[name] || []).forEach((fn) => fn(e)),
+    createElement: (tag) => el(tag),
   };
 
-  const alerts = [], confirms = [];
   const sandbox = {
     document,
-    localStorage: store || {
-      getItem: () => null,
-      setItem() {},
-    },
-    aclEscHtml(v) {
-      return String(v == null ? '' : v).replace(/[&<>"']/g, (c) =>
-        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    },
+    localStorage: { getItem: () => opts.open || null, setItem() {} },
+    aclEscHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+    setTimeout: (fn) => { timers.push(fn); return timers.length; },
+    clearTimeout() {},
+    MutationObserver: function (fn) { this.observe = () => { sandbox._observed = (sandbox._observed || 0) + 1; }; this._fn = fn; sandbox._mo = this; },
     window: {
-      cbDraft: opts.draft,
-      alert(m) { alerts.push(m); },
-      confirm(m) { confirms.push(m); return opts.confirm !== false; },
+      cbDrawer: { setCount: (n) => counts.push(n) },
+      confirm: (m) => { confirms.push(m); return opts.confirm !== false; },
+      aclFindAccountRow: (country, label) => {
+        const panel = p.panels.find((x) => x.dataset.country === country);
+        return panel ? panel.querySelector('.cb-acc-row[data-acc-label="' + label + '"]') : null;
+      },
+      cbAddSlot: (form) => form.appendChild(slot('', 1)),
+      cbRemoveSlot: (node) => node.closest('.cb-slot').remove(),
     },
-    Object, Array, JSON,
+    Array, Object, String, JSON, Math, clearTimeout() {},
   };
   sandbox.window.window = sandbox.window;
   vm.runInNewContext(code, sandbox);
-  return { api: sandbox.window.cbTree, nodes, alerts, confirms, listened, sandbox };
+  return { api: sandbox.window.cbTree, body: bodyNode, foot: footNode, panel: panelNode,
+           p, counts, confirms, timers, sandbox, document };
 }
 
-// Поддельное хранилище: то же лицо, что у настоящего cbDraft.
-function fakeDraft(campaigns) {
-  const list = campaigns.slice();
-  const api = {
-    limit: 200,
-    all: () => list,
-    count: () => list.length,
-    get: (id) => list.find((c) => c.id === id) || null,
-    add(where) {
-      if (list.length >= api.limit) return null;
-      const c = { id: 'id' + (list.length + 1), name: '', ads: [], ...where };
-      list.push(c);
-      return c;
-    },
-    update(id, patch) {
-      const c = api.get(id);
-      if (c) Object.assign(c, patch);
-      return c;
-    },
-    remove(id) {
-      const i = list.findIndex((c) => c.id === id);
-      if (i === -1) return false;
-      list.splice(i, 1);
-      return true;
-    },
-    grouped() {
-      const out = [], byC = {};
-      list.forEach((c) => {
-        if (!byC[c.country]) {
-          byC[c.country] = { country: c.country, countryName: c.countryName, accounts: [], _a: {} };
-          out.push(byC[c.country]);
-        }
-        const g = byC[c.country];
-        if (!g._a[c.account]) { g._a[c.account] = { account: c.account, campaigns: [] }; g.accounts.push(g._a[c.account]); }
-        g._a[c.account].campaigns.push(c);
-      });
-      out.forEach((g) => delete g._a);
-      return out;
-    },
-    onChange(fn) { api._changed = fn; },
-  };
-  return api;
-}
+const SPEC = [
+  { country: 'sa', name: 'Saudi Arabia', accounts: [
+      { label: 'DQ438', slots: [['SA_one', 2], ['', 1]] },
+      { label: 'KLD_X84', slots: [] },
+  ] },
+  { country: 'kw', name: 'Kuwait', accounts: [
+      { label: 'KW_W72', slots: [['KW_one', 1]] },
+  ] },
+];
 
-// ── готовность: зелёного до проверки не бывает ────────────────────────
-let page = makePage({ draft: fakeDraft([]) });
-const r = page.api.readiness;
-assert.equal(r({ name: '', ads: [] }).state, 'bad', 'безымянная кампания сошла за готовую');
-assert.equal(r({ name: 'X', ads: [] }).state, 'bad', 'кампания без объявлений сошла за готовую');
-assert.equal(r({ name: 'X', ads: [{}] }).state, 'wait', 'проверок ещё нет, а состояние уже не серое');
-// Ни одно состояние не опознаётся одним цветом: у каждого свой значок.
-const signs = [r({ name: '', ads: [] }), r({ name: 'X', ads: [] }), r({ name: 'X', ads: [{}] })]
-  .map((x) => x.sign);
-assert.ok(signs.every((s) => s && s.length), 'у состояния нет значка — остался один цвет');
-assert.ok(r({ name: '', ads: [] }).why, 'состояние без объяснения — загадка, а не индикатор');
-// Зелёного здесь не выдают вовсе: обещать нечего, пока никто не проверял.
-assert.ok(![r({ name: '', ads: [] }), r({ name: 'X', ads: [] }), r({ name: 'X', ads: [{}] })]
-  .some((x) => x.state === 'ok'), 'выдан зелёный без единой проверки');
-
-// ── страны и аккаунты берутся со страницы ─────────────────────────────
-page = makePage({
-  draft: fakeDraft([]),
-  panels: [
-    panel('saudi-arabia', ['DQ438', 'KLD_X84']),
-    panel('saudi-arabia', ['DQ438']),          // та же страна второй панелью
-    panel('kuwait', ['KW_W72']),
-    panel('peru', []),                          // без аккаунтов — не предлагается
-  ],
-  names: { 'saudi-arabia': 'Saudi Arabia', kuwait: 'Kuwait' },
-});
-let list = page.api.places();
-assert.deepEqual(list.map((p) => p.country), ['saudi-arabia', 'kuwait'], 'страна без аккаунтов попала в выбор');
-assert.deepEqual(list[0].accounts, ['DQ438', 'KLD_X84'], 'аккаунт задвоился между панелями');
-assert.equal(list[0].name, 'Saudi Arabia', 'имя страны не взято с боковой панели');
-
-// ── пусто ─────────────────────────────────────────────────────────────
-page = makePage({ draft: fakeDraft([]), panels: [panel('kuwait', ['KW_W72'])], names: { kuwait: 'Kuwait' } });
-assert.ok(/Nothing is being assembled yet/.test(page.nodes['cbd-body'].innerHTML));
-assert.ok(/cbd-pick-country/.test(page.nodes['cbd-foot'].innerHTML), 'завести первую кампанию нечем');
-
-// ── дерево рисуется подписями ─────────────────────────────────────────
-const draft = fakeDraft([
-  { id: 'a', country: 'sa', countryName: 'Saudi Arabia', account: 'DQ438', name: '', ads: [] },
-  { id: 'b', country: 'sa', countryName: 'Saudi Arabia', account: 'DQ438', name: 'SA · Trading', ads: [{}, {}] },
-  { id: 'c', country: 'kw', countryName: 'Kuwait', account: 'KW_W72', name: 'KW · Amazon', ads: [{}] },
-]);
-page = makePage({ draft, panels: [panel('kw', ['KW_W72'])], names: { kw: 'Kuwait' } });
-let body = page.nodes['cbd-body'].innerHTML;
-assert.equal((body.match(/cbd-country/g) || []).length, 2, 'стран не две');
-assert.equal((body.match(/class="cbd-account"/g) || []).length, 2);
-assert.equal((body.match(/class="cbd-camp"/g) || []).length, 3);
-assert.ok(body.indexOf('Saudi Arabia') < body.indexOf('DQ438'), 'аккаунт выше своей страны');
-assert.ok(/1 ad<\/span>/.test(body) && /2 ads<\/span>/.test(body), 'число объявлений не единственное/множественное');
+// ── дерево показывает то, что есть на странице ────────────────────────
+let t = boot(SPEC);
+let body = t.body.innerHTML;
+assert.ok(/Saudi Arabia/.test(body) && /Kuwait/.test(body), 'страны не показаны');
+assert.equal((body.match(/class="cbd-camp"/g) || []).length, 3, 'карточек не три');
+assert.ok(/SA_one/.test(body) && /KW_one/.test(body), 'имена кампаний не со страницы');
 assert.ok(/Untitled campaign/.test(body), 'безымянная кампания названа пустотой');
-// Отступов на уровень нет: иерархию несут подписи, а не лесенка.
-assert.ok(!/margin-left|padding-left:\s*\d/.test(body), 'в дереве появилась лесенка');
+assert.ok(/2 ads/.test(body) && /1 ad</.test(body), 'объявления считаются не по странице');
 
-// ── имя кампании экранируется ─────────────────────────────────────────
-page = makePage({
-  draft: fakeDraft([{ id: 'x', country: 'sa', countryName: 'S<b>A', account: 'A"C', name: '<img src=x onerror=1>', ads: [] }]),
-  panels: [],
-});
-body = page.nodes['cbd-body'].innerHTML;
-assert.ok(!/<img/.test(body), 'имя кампании попало в разметку как разметка');
-assert.ok(!/<b>/.test(body), 'имя страны попало в разметку как разметка');
+// Аккаунт, в котором ничего не собирается, в дереве не нужен: их два
+// десятка, и стена пустых строк прячет две кампании, ради которых открыли.
+assert.ok(!/KLD_X84/.test(body), 'пустой аккаунт занял место в дереве');
+// Но завести в нём кампанию можно — через выбор внизу, где перечислены все.
+const sa = t.api.places().find((p) => p.country === 'sa');
+assert.deepEqual(sa.accounts, ['DQ438', 'KLD_X84'], 'пустой аккаунт нельзя выбрать внизу');
+assert.equal(sa.name, 'Saudi Arabia', 'имя страны не взято с боковой панели');
 
-// ── клики идут через настоящий обработчик ─────────────────────────────
-function clickOn(page, act, attrs, campId) {
-  const hit = { dataset: Object.assign({ act }, attrs || {}), closest: (sel) => (sel === '.cbd-camp' ? (campId ? { dataset: { camp: campId } } : null) : hit) };
-  const event = { target: { closest: (sel) => (sel === '[data-act]' ? hit : null) } };
-  page.nodes['cbd-panel'].handlers.click.forEach((fn) => fn(event));
-}
+// ── счётчик на язычке считает настоящие карточки ──────────────────────
+assert.equal(t.counts[t.counts.length - 1], 3);
 
-// раскрывается одна за раз
-const two = fakeDraft([
-  { id: 'a', country: 'sa', countryName: 'SA', account: 'A', name: 'one', ads: [{}] },
-  { id: 'b', country: 'sa', countryName: 'SA', account: 'A', name: 'two', ads: [{}] },
-]);
-page = makePage({ draft: two, panels: [] });
-clickOn(page, 'toggle', {}, 'a');
-body = page.nodes['cbd-body'].innerHTML;
-assert.ok(/data-camp="a" data-open="1"/.test(body), 'кампания не раскрылась');
-clickOn(page, 'toggle', {}, 'b');
-body = page.nodes['cbd-body'].innerHTML;
-assert.equal((body.match(/data-open="1"/g) || []).length, 1, 'раскрыты две сразу — в узкой панели это каша');
-assert.ok(/data-camp="b" data-open="1"/.test(body));
-clickOn(page, 'toggle', {}, 'b');
-assert.ok(!/data-open="1"/.test(page.nodes['cbd-body'].innerHTML), 'повторный клик не свернул');
+// ── ничего не собирается ──────────────────────────────────────────────
+let empty = boot([{ country: 'sa', name: 'Saudi Arabia', accounts: [{ label: 'DQ438', slots: [] }] }]);
+assert.ok(/Nothing is being assembled yet/.test(empty.body.innerHTML));
+assert.ok(/cbd-pick-country/.test(empty.foot.innerHTML), 'начать первую кампанию нечем');
 
-// объявление добавляется в свою кампанию
-clickOn(page, 'toggle', {}, 'a');
-clickOn(page, 'add-ad', {}, 'a');
-assert.equal(two.get('a').ads.length, 2, 'объявление не добавилось');
-assert.equal(two.get('b').ads.length, 1, 'объявление уехало в чужую кампанию');
+// ── заведённое на странице видно в ящике без единого клика в ящике ────
+t = boot(SPEC);
+const form = t.p.forms[0];
+t.sandbox.window.cbAddSlot(form);          // как «+ Add Campaign» на странице
+assert.ok(t.sandbox._mo, 'за формами никто не следит');
+t.sandbox._mo._fn();                        // наблюдатель сообщает об изменении
+t.timers.forEach((fn) => fn());             // перерисовка отложена — выполняем
+assert.equal((t.body.innerHTML.match(/class="cbd-camp"/g) || []).length, 4,
+  'кампания, заведённая на странице, в ящике не появилась');
 
-// и убирается: добавить, не имея как убрать, — ловушка
-two.update('a', { ads: [{ name: 'первое' }, { name: 'второе' }, { name: 'третье' }] });
-clickOn(page, 'drop-ad', { ad: '1' }, 'a');
-assert.deepEqual(two.get('a').ads.map((x) => x.name), ['первое', 'третье'], 'убрали не то объявление');
+// ── раскрытая кампания получает настоящую форму ───────────────────────
+t = boot(SPEC);
+let id = /data-camp="([^"]+)"/.exec(t.body.innerHTML)[1];
+t.api.open(id);
+const card = t.body.querySelector('.cbd-camp[data-camp="' + id + '"]');
+const host = card.children[0];
+assert.ok(host, 'в раскрытой карточке нет места под форму');
+assert.equal(host.querySelector('form.open-account-form'), t.p.forms[0], 'в ящик приехала не та форма');
+assert.equal(t.p.forms[0].parentNode, host, 'форма осталась на странице');
 
-// удаление спрашивает
-page = makePage({ draft: two, panels: [], confirm: false });
-clickOn(page, 'drop', {}, 'a');
-assert.equal(two.count(), 2, 'кампанию удалили, несмотря на отказ');
-assert.ok(/one/.test(page.confirms[0]), 'в вопросе не названо, что именно удаляют');
-page = makePage({ draft: two, panels: [], confirm: true });
-clickOn(page, 'drop', {}, 'a');
-assert.equal(two.count(), 1, 'кампания не удалилась');
+// на её месте — заметка, куда она делась
+const row = t.p.panels[0].querySelector('.cb-acc-row[data-acc-label="DQ438"]');
+assert.ok(row.querySelector('.cb-parked-note'), 'на странице не сказано, куда делась форма');
 
-// кампания заводится под своим аккаунтом и сразу раскрыта
-const empty = fakeDraft([]);
-page = makePage({ draft: empty, panels: [panel('kw', ['KW_W72'])], names: { kw: 'Kuwait' } });
-clickOn(page, 'add-here', { country: 'kw', countryName: 'Kuwait', account: 'KW_W72' });
-assert.equal(empty.count(), 1);
-assert.equal(empty.all()[0].account, 'KW_W72');
-assert.ok(/data-open="1"/.test(page.nodes['cbd-body'].innerHTML), 'заведённую кампанию не раскрыли');
+// показана одна кампания, остальные скрыты — но не выброшены: они
+// по-прежнему кампании этого аккаунта и по-прежнему уйдут в публикацию
+const slots = t.p.forms[0].querySelectorAll('.cb-slot');
+assert.equal(slots.length, 2, 'скрытая кампания потерялась');
+assert.equal(slots.filter((s) => !s.hidden).length, 1, 'показана не одна кампания');
 
-// потолок виден как потолок, а не как переставшая работать кнопка
-const full = fakeDraft([]);
-for (let i = 0; i < full.limit; i += 1) full.add({ country: 'kw', countryName: 'Kuwait', account: 'A' });
-page = makePage({ draft: full, panels: [] });
-clickOn(page, 'add-here', { country: 'kw', countryName: 'Kuwait', account: 'A' });
-assert.equal(page.alerts.length, 1, 'о потолке не сказали');
-assert.ok(/200/.test(page.alerts[0]), 'в сообщении не названо, сколько именно');
+// ── закрыли — форма вернулась на место ────────────────────────────────
+t.api.close();
+assert.equal(t.p.forms[0].parentNode, row, 'форма не вернулась в свой блок');
+assert.equal(row.querySelector('.cb-parked-note'), null, 'заметка осталась после возврата');
+assert.equal(t.p.forms[0].querySelectorAll('.cb-slot').filter((s) => s.hidden).length, 0,
+  'кампании остались скрытыми на странице');
+
+// ── раскрыта одна за раз ──────────────────────────────────────────────
+t = boot(SPEC);
+const ids = [...t.body.innerHTML.matchAll(/data-camp="([^"]+)"/g)].map((m) => m[1]);
+t.api.open(ids[0]);
+t.api.open(ids[2]);                        // кампания другого аккаунта
+assert.equal(t.p.forms[0].parentNode, t.p.panels[0].querySelector('.cb-acc-row[data-acc-label="DQ438"]'),
+  'первая форма не вернулась, когда раскрыли вторую');
+assert.equal(t.p.panels[0].querySelectorAll('.cb-parked-note').length
+  + t.p.panels[1].querySelectorAll('.cb-parked-note').length, 1, 'заметок больше одной');
+
+// ── удаление спрашивает и называет ────────────────────────────────────
+t = boot(SPEC, { confirm: false });
+t.panel.fire('click', { target: { closest: (s) => (s === '[data-act]' ? { dataset: { act: 'drop' }, closest: () => ({ dataset: { camp: ids[0] } }) } : null) } });
+assert.ok(/SA_one/.test(t.confirms[0] || ''), 'в вопросе не названо, что удаляют');
+assert.equal(t.p.forms[0].querySelectorAll('.cb-slot').length, 2, 'удалили, несмотря на отказ');
 
 console.log('ok');
