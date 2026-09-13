@@ -214,6 +214,8 @@ function boot(spec, opts = {}) {
     clearTimeout() {},
     MutationObserver: function (fn) { this.observe = () => { sandbox._observed = (sandbox._observed || 0) + 1; }; this._fn = fn; sandbox._mo = this; },
     window: {
+      innerHeight: 900,
+      addEventListener() {},
       cbDrawer: { setCount: (n) => counts.push(n) },
       confirm: (m) => { confirms.push(m); return opts.confirm !== false; },
       aclFindAccountRow: (country, label) => {

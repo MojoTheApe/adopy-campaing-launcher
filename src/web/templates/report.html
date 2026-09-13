@@ -2459,6 +2459,26 @@
     }
     .cbd-note { color: var(--muted); font-size: 0.7rem; line-height: 1.5; }
 
+    .cbd-publish-all {
+      display: block; width: 100%; box-sizing: border-box;
+      margin-bottom: var(--space-xs); padding: 0.4rem 0.5rem;
+      background: var(--good-fill); color: var(--on-good);
+      border: 1px solid var(--good); border-radius: var(--radius-sm);
+      font: inherit; font-size: 0.76rem; font-weight: 700; cursor: pointer;
+    }
+    .cbd-publish-all:hover:not([disabled]) { background: var(--good); }
+    .cbd-publish-all[disabled] { opacity: 0.55; cursor: progress; }
+    .cbd-queue {
+      margin-bottom: var(--space-xs); max-height: 9rem; overflow-y: auto;
+      font-size: 0.7rem; line-height: 1.5;
+    }
+    .cbd-q-head { color: var(--muted); font-weight: 700; padding-bottom: 0.15rem; }
+    .cbd-q-line { display: flex; align-items: baseline; gap: 0.3rem; }
+    .cbd-q-why { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cbd-q-ok { color: var(--good); }
+    .cbd-q-bad { color: var(--bad); }
+    .cbd-q-run { color: var(--accent); }
+
     /* ── Форма аккаунта, гостящая в ящике ──────────────────────────────
        Переносится настоящая форма, а не копия: браузер собирает данные
        только из того, что лежит внутри её тега. Раскладка её при этом
@@ -2474,8 +2494,20 @@
     .cbd-host .cb-preview-col { display: none; }
     .cbd-host .cb-fields { grid-template-columns: 1fr; gap: 0.15rem; max-width: none; }
     .cbd-host .cb-fields .cb-label { margin-top: 0.35rem; }
-    .cbd-host .cb-inline { gap: 0.3rem; }
-    .cbd-host .cb-inline .cb-input, .cbd-host .cb-inline .cb-select { flex: 1 1 4rem; width: auto; }
+    /* Четыре поля в ряд в 360 пикселях дают по семьдесят на каждое — в
+       такое не целятся. Переносим по два. */
+    .cbd-host .cb-inline { gap: 0.3rem; flex-wrap: wrap; }
+    .cbd-host .cb-inline > * { flex: 1 1 40%; min-width: 6rem; }
+    .cbd-host .cb-inline .cb-input, .cbd-host .cb-inline .cb-select { width: 100%; }
+
+    /* Выпадающий список внутри ящика рисуется поверх всего, а не внутри
+       прокручиваемой области: `position: absolute` режется первым же
+       предком с `overflow`, а это и есть тело ящика. Список длиной в
+       двести пикселей у поля из нижней половины панели оказывался
+       обрезан по её краю — на экране это выглядело как «поле не
+       работает»: печатаешь, а выбрать не из чего. Координаты ставит
+       `cbdPlaceDropdowns`. */
+    .cbd-host .cb-sel-dropdown { position: fixed; z-index: 1000; }
     .cbd-host .cb-preflight { margin-bottom: var(--space-sm); }
     .cbd-host .cb-empty-hint { display: none; }
     /* Кнопки формы — в столбик во всю ширину: в ряд они не помещаются. */
@@ -4318,7 +4350,13 @@ window.cbTree = (function () {
     }
     var chosen = foot.querySelector('.cbd-pick-country');
     var keep = (chosen && chosen.value) || currentCountry();
-    foot.innerHTML = '<div class="cbd-pick">'
+    var busy = countTotal(realTree());
+    foot.innerHTML = (busy
+        ? '<button type="button" class="cbd-publish-all" data-act="publish-all">'
+          + 'Publish all → drafts (' + busy + ')</button>'
+          + '<div class="cbd-queue" hidden></div>'
+        : '')
+      + '<div class="cbd-pick">'
       + '<select class="cbd-pick-country" aria-label="Country">'
       + list.map(function (p) {
           return '<option value="' + aclEscHtml(p.country) + '"'
@@ -4384,6 +4422,36 @@ window.cbTree = (function () {
     form.classList.toggle('cb-in-drawer', !!id);
   }
 
+  /* ── очередь публикации ────────────────────────────────────────────────
+     Аккаунтов может быть пять, каждый — минуты. Очередь видна: иначе
+     «нажал и жду» отличается от «нажал, и ничего не произошло» только
+     терпением. */
+  function showQueue(p) {
+    var box = foot.querySelector('.cbd-queue');
+    var btn = foot.querySelector('.cbd-publish-all');
+    if (!box) return;
+    box.hidden = false;
+
+    var lines = (p.report || []).map(function (r) {
+      var mark = r.state === 'ok' ? '<span class="cbd-q-ok">✓</span>' : '<span class="cbd-q-bad">✕</span>';
+      var tail = r.skipped ? ' · ' + r.skipped + ' skipped' : '';
+      return '<div class="cbd-q-line">' + mark + ' ' + aclEscHtml(r.account) + tail
+        + (r.why ? '<span class="cbd-q-why">' + aclEscHtml(r.why) + '</span>' : '') + '</div>';
+    });
+
+    if (p.done) {
+      var ok = (p.report || []).filter(function (r) { return r.state === 'ok'; }).length;
+      lines.unshift('<div class="cbd-q-head">Done — ' + ok + ' of ' + p.of + ' accounts</div>');
+      if (btn) { btn.disabled = false; }
+    } else {
+      lines.push('<div class="cbd-q-line"><span class="cbd-q-run">⏳</span> '
+        + aclEscHtml(p.account) + ' — '
+        + (p.stage === 'checking' ? 'checking' : 'building the draft')
+        + ' <span class="cbd-q-why">' + p.at + ' of ' + p.of + '</span></div>');
+    }
+    box.innerHTML = lines.join('');
+  }
+
   /* ── что делают руками ────────────────────────────────────────────── */
 
   function rememberOpen(id) {
@@ -4441,6 +4509,9 @@ window.cbTree = (function () {
       paint();
     } else if (act === 'add-here') {
       addCampaign(hit.dataset.country, hit.dataset.account);
+    } else if (act === 'publish-all') {
+      hit.disabled = true;
+      window.cbPublishAll(showQueue);
     } else if (act === 'add-picked') {
       var countrySel = foot.querySelector('.cbd-pick-country');
       var accountSel = foot.querySelector('.cbd-pick-account');
@@ -4478,6 +4549,41 @@ window.cbTree = (function () {
       timer = setTimeout(function () { timer = null; paint(); }, 120);
     };
   })();
+
+  /* ── выпадающие списки внутри ящика ───────────────────────────────────
+     Список у поля — `position: absolute`, и его режет первый же предок с
+     прокруткой, то есть само тело ящика. У поля из нижней половины панели
+     от списка оставалась полоска, и поле выглядело сломанным: печатаешь, а
+     выбрать не из чего. В ящике список рисуется поверх всего (`fixed`), и
+     координаты ему надо проставить руками — вот здесь.
+
+     Открывают список пять разных функций; ловим не их, а факт появления:
+     наблюдатель следит за атрибутом `hidden`. Так не забудется шестая. */
+  function cbdPlaceDropdowns() {
+    host.querySelectorAll('.cb-sel-dropdown').forEach(function (dd) {
+      if (dd.hidden) return;
+      var wrap = dd.closest('.cb-sel-wrap');
+      if (!wrap) return;
+      var r = wrap.getBoundingClientRect();
+      var below = window.innerHeight - r.bottom - 8;
+      var above = r.top - 8;
+      /* Внизу места может не остаться — тогда список открывается вверх. */
+      var down = below >= Math.min(220, above);
+      dd.style.left = r.left + 'px';
+      dd.style.width = r.width + 'px';
+      dd.style.maxHeight = Math.max(120, down ? below : above) + 'px';
+      if (down) { dd.style.top = r.bottom + 'px'; dd.style.bottom = 'auto'; }
+      else { dd.style.bottom = (window.innerHeight - r.top) + 'px'; dd.style.top = 'auto'; }
+    });
+  }
+
+  var dropWatcher = new MutationObserver(cbdPlaceDropdowns);
+  dropWatcher.observe(host, { attributes: true, attributeFilter: ['hidden'], subtree: true });
+  /* Панель прокрутили или окно изменили — список должен уехать за полем,
+     а не остаться висеть там, где поля уже нет. */
+  body.addEventListener('scroll', cbdPlaceDropdowns);
+  window.addEventListener('resize', cbdPlaceDropdowns);
+  host.addEventListener('input', cbdPlaceDropdowns);
 
   var watcher = new MutationObserver(repaintSoon);
   function watch() {
@@ -8478,7 +8584,11 @@ function cbInvalidatePreview(form) {
   }, true);
 });
 
-window.cbPreview = function(form) {
+// `done(plan, error)` — необязательный: зовётся после того, как диагностика
+// отрисована. Нужен «Publish all», чтобы узнать, у какой кампании ошибки,
+// не делая второго запроса к серверу: превью — не дешёвый вызов, он
+// разрешает креативы и тексты.
+window.cbPreview = function(form, done) {
   cbInvalidatePreview(form);
   var requestId = form._previewRequest;
   var panel = form.querySelector('.cb-preview-panel');
@@ -8634,12 +8744,187 @@ window.cbPreview = function(form) {
           });
         });
       });
+
+      if (done) done(plan, null);
     })
     .catch(function(e) {
       if (!current()) return;
       panel.innerHTML = '<span class="cb-preview-errors">Request failed: ' + aclEscHtml(e.message) + '</span>';
+      if (done) done(null, e.message);
     });
 };
+
+/* ── «Publish all»: поднять черновиками всё, что собрано ────────────────
+ *
+ * Каждый аккаунт — отдельная работа RPA, и профиль в Multilogin один:
+ * два аккаунта одновременно дрались бы за окно. Поэтому очередь идёт по
+ * одному, и следующий начинается, только когда закончился прошлый.
+ *
+ * Перед каждой работой гоняется превью — тот же вызов, что и по кнопке
+ * Preview, с той же отрисовкой: кампания с ошибкой получает свою
+ * свёрнутую плашку диагностики там же, где получала бы всегда.
+ *
+ * Кампания с ошибкой не уходит. Уходят остальные кампании того же
+ * аккаунта: незаполненная кампания — не повод задержать соседнюю,
+ * собранную. Единственная ошибка, которая не держит, — пустая ссылка:
+ * её добавляют и после сборки, так решил владелец.
+ */
+window.CB_LINK_NOT_BLOCKING = /link empty/i;
+
+function cbBlockingErrors(entry) {
+  return (entry.errors || []).filter(function (e) {
+    return !window.CB_LINK_NOT_BLOCKING.test(String(e));
+  });
+}
+
+/* Какие карточки не поедут — по ИМЕНИ, а не по номеру.
+ *
+ * План с сервера не стоит в одном ряду с карточками на экране. Сервер
+ * группирует кампании по имени: две карточки с одинаковым именем
+ * становятся одной кампанией, а карточка, у которой имя не собралось,
+ * выпадает вовсе. Три карточки на экране легко дают одну строку плана —
+ * это видно на живом дешборде, а не в теории.
+ *
+ * Отбирать по номеру значило бы при первом же совпадении имён пропустить
+ * не ту кампанию: сломанная ушла бы в публикацию, а собранная осталась
+ * бы дома. Поэтому карточка ищет свою строку плана по имени.
+ *
+ * Имени в плане не нашлось — карточка считается непроверенной и не едет.
+ * Отказ в сторону «не публиковать» здесь единственный допустимый: молча
+ * поднять черновик, который никто не проверял, хуже, чем не поднять. */
+function cbSkipByName(form, plan) {
+  var verdict = {};
+  (plan || []).forEach(function (entry) {
+    var name = String(entry['Campaign Name'] || '');
+    if (name) verdict[name] = cbBlockingErrors(entry).length > 0;
+  });
+
+  var total = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '0'), 10) || 0;
+  var skip = {}, unchecked = 0, broken = 0;
+  for (var i = 0; i < total; i += 1) {
+    var field = form.querySelector('[name="camp_' + i + '_name"]');
+    var name = field ? String(field.value || '') : '';
+    if (!(name in verdict)) { skip[i] = true; unchecked += 1; }
+    else if (verdict[name]) { skip[i] = true; broken += 1; }
+  }
+  return { skip: skip, unchecked: unchecked, broken: broken };
+}
+
+/* Payload без пропущенных кампаний.
+ *
+ * Поля называются по номеру — `camp_0_asset`, `camp_1_ad_0_copy`, — и
+ * сервер читает их подряд от нуля. Выбросив кампанию из середины, номера
+ * надо сдвинуть, иначе на сервере останется дыра и он прочитает меньше,
+ * чем отправлено. `camp_count` пересчитывается по оставшимся. */
+function cbFormDataSkipping(form, skip) {
+  var total = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '0'), 10) || 0;
+  var renumber = {};
+  var kept = 0;
+  for (var i = 0; i < total; i += 1) if (!skip[i]) renumber[i] = kept++;
+
+  var out = new FormData();
+  new FormData(form).forEach(function (value, key) {
+    if (key === 'camp_count') return;
+    var m = /^camp_(\d+)_(.+)$/.exec(key);
+    if (!m) { out.append(key, value); return; }
+    var old = parseInt(m[1], 10);
+    if (!(old in renumber)) return;      // пропущенная кампания не едет
+    out.append('camp_' + renumber[old] + '_' + m[2], value);
+  });
+  out.set('camp_count', String(kept));
+  return { body: out, kept: kept };
+}
+
+window.cbPublishAll = function (onProgress) {
+  var forms = [];
+  document.querySelectorAll('form.open-account-form').forEach(function (form) {
+    if (form.querySelectorAll('.cb-slot').length) forms.push(form);
+  });
+  if (!forms.length) { window.alert('Nothing is being assembled yet.'); return; }
+
+  var names = forms.map(function (f) {
+    return ((f.querySelector('[name="account_label"]') || {}).value || '?').trim();
+  });
+
+  _safeConfirm('Build every campaign as a draft?',
+    'Accounts: <strong>' + forms.length + '</strong><br>'
+    + '<span style="color:var(--muted);font-size:0.85rem">' + aclEscHtml(names.join(', ')) + '</span><br><br>'
+    + '<span style="color:var(--muted);font-size:0.85rem">One account at a time — the Multilogin profile is single. '
+    + 'A campaign whose preview shows an error is skipped; the rest of its account still go.</span><br>'
+    + '<span style="color:var(--warn);font-size:0.85rem">Не блокируйте экран, пока идёт сборка — '
+    + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
+    + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
+    + 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook</span>',
+    function () { _runPublishQueue(forms, onProgress || function () {}); },
+    { confirmLabel: 'Publish all → drafts' });
+};
+
+function _runPublishQueue(forms, onProgress) {
+  var i = 0;
+  var report = [];
+
+  function finish(entry) {
+    report.push(entry);
+    i += 1;
+    step();
+  }
+
+  function step() {
+    if (i >= forms.length) {
+      onProgress({ done: true, at: forms.length, of: forms.length, report: report });
+      return;
+    }
+    var form = forms[i];
+    var label = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
+    onProgress({ at: i + 1, of: forms.length, account: label, stage: 'checking', report: report });
+
+    window.cbPreview(form, function (plan, error) {
+      if (error) { finish({ account: label, state: 'bad', why: error }); return; }
+
+      var verdict = cbSkipByName(form, plan);
+      var skipped = verdict.broken + verdict.unchecked;
+
+      var payload = cbFormDataSkipping(form, verdict.skip);
+      if (!payload.kept) {
+        finish({ account: label, state: 'bad', skipped: skipped,
+                 why: verdict.unchecked && !verdict.broken
+                   ? 'the check covered no campaign here'
+                   : 'every campaign has errors — see the diagnostics' });
+        return;
+      }
+
+      onProgress({ at: i + 1, of: forms.length, account: label, stage: 'publishing',
+                   skipped: skipped, report: report });
+
+      var statusPanel = form.querySelector('.cb-status-panel');
+      if (statusPanel) {
+        statusPanel.style.display = 'block';
+        statusPanel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
+      }
+      var fd = payload.body;
+      fd.set('via_multilogin', '1');
+      fd.set('activate', '0');
+      fd.set('dry_run', '0');
+      fd.set('hand_off', '1');
+      fd.set('user_confirmed', '1');
+
+      fetch('/publish-jobs', { method: 'POST', body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.error) { finish({ account: label, state: 'bad', why: data.error, skipped: skipped }); return; }
+          cbPollJob(data.job_id, statusPanel, form.querySelector('.cb-publish-btn'), function (job) {
+            var ok = (job.results || []).length
+              && (job.results || []).every(function (r) { return r.publishable === true; });
+            finish({ account: label, state: ok ? 'ok' : 'bad', skipped: skipped,
+                     why: ok ? '' : 'draft blocked — see the account panel' });
+          });
+        })
+        .catch(function (e) { finish({ account: label, state: 'bad', why: e.message, skipped: skipped }); });
+    });
+  }
+
+  step();
+}
 
 // ── Диагностика превью: панель поверх дешборда (acl-704) ─────────────
 // Плашка у слота — одна строка; полная таблица выезжает справа ПОВЕРХ
@@ -9060,7 +9345,10 @@ function _doCbPublish(form) {
     });
 }
 
-function cbPollJob(jobId, statusPanel, publishBtn) {
+// `done` — необязательный: зовётся один раз, когда работа кончилась любым
+// образом. Нужен очереди «Publish all»: профиль в Multilogin один, и
+// следующий аккаунт начинается только после того, как закончился прошлый.
+function cbPollJob(jobId, statusPanel, publishBtn, done) {
   var stopBtnId = 'cb-stop-' + jobId.replace(/-/g, '').slice(0, 12);
 
   function renderStatus(job) {
@@ -9256,6 +9544,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
           if ((job.errors || []).length > 0 || (job.results || []).some(function(r){return !r.success;})) {
             statusPanel.scrollIntoView({behavior: 'smooth', block: 'center'});
           }
+          if (done) { var f = done; done = null; f(job); }
         }
       })
       .catch(function(e) {
