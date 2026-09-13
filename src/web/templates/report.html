@@ -1434,6 +1434,14 @@
     .cb-status-err { color: var(--bad); font-size: 0.72rem; margin-left: 1.7rem; }
     .cb-status-id { color: var(--muted); font-size: 0.7rem; font-family: monospace; }
     .cb-status-fatal { color: var(--bad); margin-top: 0.35rem; }
+    /* Названная причина — не ошибка: она объясняет её. Поэтому не красным,
+       а жёлтым, и отдельной плашкой, чтобы читалась раньше списка сбоев. */
+    .cb-status-cause {
+      margin-top: 0.4rem; padding: 0.4rem 0.6rem;
+      background: var(--warn-soft); border: 1px solid var(--warn);
+      border-radius: var(--radius-sm);
+      color: var(--text); font-size: 0.78rem; line-height: 1.45;
+    }
 
     /* ── §6 Creative Brief ── */
     .brief-details { margin-top: 1.5rem; }
@@ -9642,6 +9650,20 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
             : 'draft blocked — do not publish'))
         : 'running… (can take 1–3 min)'));
     var html = '<div class="cb-status-title">' + statusIcon + ' ' + done + '/' + total + ' — ' + doneLabel + '</div>';
+    /* Заблокированный экран останавливает сборку: система уходит на
+       защищённый рабочий стол, браузер перестаёт получать время, и
+       креатив, который грузится 74 секунды, грузился 42 минуты. Машина
+       это знала — признак пишется по ходу работы, — и молчала, а человек
+       шёл искать поломку в кампании, разметке Meta и аккаунте. За один
+       день так дважды увели разбор не туда.
+
+       Говорим только когда не получилось: при удачном черновике это
+       ничего не объясняет, а место занимает. */
+    if (job.screen_was_locked && !jobPublishable && job.status === 'done') {
+      html += '<div class="cb-status-cause">🔒 Во время сборки экран был заблокирован — '
+        + 'на нём загрузка встаёт. С кампанией, скорее всего, всё в порядке: '
+        + 'повторите, не блокируя экран.</div>';
+    }
     if (isRunning && !isCancelling) {
       html += '<div style="margin:0.5rem 0">'
         + '<button type="button" id="' + stopBtnId + '" '
