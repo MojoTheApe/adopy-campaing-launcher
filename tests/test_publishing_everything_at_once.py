@@ -37,7 +37,7 @@ TPL = ROOT / "src" / "web" / "templates" / "report.html"
 
 def _block() -> str:
     src = TPL.read_text(encoding="utf-8")
-    start = src.index("window.CB_LINK_NOT_BLOCKING")
+    start = src.index("window.CB_LINK_NOT_BLOCKING =")
     return src[start: src.index("// ── Диагностика превью", start)]
 
 

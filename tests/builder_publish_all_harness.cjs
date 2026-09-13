@@ -14,7 +14,7 @@ function cut(from, to) {
   return html.slice(s, e);
 }
 
-const code = cut('window.CB_LINK_NOT_BLOCKING', 'window.cbPublishAll = function');
+const code = cut('window.CB_LINK_NOT_BLOCKING =', 'window.cbPublishAll = function');
 
 const sandbox = { window: {}, FormData, RegExp, String, parseInt, Object };
 sandbox.window.window = sandbox.window;
