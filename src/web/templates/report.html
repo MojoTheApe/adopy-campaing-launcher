@@ -3961,168 +3961,204 @@ window.cbDrawer = (function () {
 </script>
 
 <script>
-/* Что собирается прямо сейчас.
+/* Набранное переживает перезагрузку.
  *
- * Живёт в браузере и переживает F5: собранная наполовину кампания —
- * работа, и терять её на перезагрузке нельзя. Дальше этого браузера она
- * не едет: ни на другую машину, ни к соседу.
+ * Форму рисует сервер, и рисует пустой: карточек кампаний в разметке
+ * больше нет. Значит, после F5 в билдере чисто — а собранная наполовину
+ * кампания есть работа: имя, бюджет, таргетинг, тексты, выбранные
+ * креативы. Перезагрузка здесь случается часто, дешборд сам просит
+ * обновиться, и терять на ней час чужого вечера нельзя.
+ *
+ * Поэтому значения полей складываются в браузер при вводе и
+ * раскладываются обратно при загрузке. Дальше этого браузера они не
+ * едут: у десяти байеров десять разных наборов, общего места для них
+ * нет.
  *
  * Хранилище само ничего не забывает, поэтому забывать приходится нам:
- * без срока годности через месяц здесь лежат позапрошлые черновики, и
- * список, который должен отвечать «что я собираю», отвечает «что я
- * когда-либо начинал».
+ * без срока годности через месяц здесь лежат позапрошлые черновики.
  */
-window.cbDraft = (function () {
-  var KEY = 'acl.builder.v1';
-  var VERSION = 1;
+window.cbKeep = (function () {
+  var KEY = 'acl.builder.v2';
+  var VERSION = 2;
   /* Две недели без прикосновения — это уже не «собираю». Срок щедрый
      нарочно: выбросить чужую работу хуже, чем подержать лишнее. */
   var STALE_MS = 14 * 24 * 60 * 60 * 1000;
-  /* Потолок на случай, если что-то начнёт плодить записи само: он тут не
-     ради места, а чтобы поломка была видна как потолок, а не как
-     заполненное хранилище и молча переставший работать дешборд. */
-  var MAX = 200;
 
-  var listeners = [];
-  var state = null;
-
-  function now() { return Date.now(); }
-
-  function blank() { return { v: VERSION, campaigns: [] }; }
+  var state = { v: VERSION, forms: {} };
+  var restoring = false;
 
   function read() {
     var raw;
-    try { raw = localStorage.getItem(KEY); } catch (e) { return blank(); }
-    if (!raw) return blank();
+    try { raw = localStorage.getItem(KEY); } catch (e) { return null; }
+    if (!raw) return null;
     var parsed;
-    try { parsed = JSON.parse(raw); } catch (e) { return blank(); }
-    /* Чужая или будущая версия: молча начинаем с чистого, но не роняем
-       страницу. Мигрировать пока не с чего — версия первая. */
-    if (!parsed || parsed.v !== VERSION || !Array.isArray(parsed.campaigns)) return blank();
-    return parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { return null; }
+    if (!parsed || parsed.v !== VERSION || !parsed.forms) return null;
+    var fresh = {}, now = Date.now();
+    Object.keys(parsed.forms).forEach(function (k) {
+      var entry = parsed.forms[k];
+      if (entry && (now - (entry.touched || 0)) < STALE_MS) fresh[k] = entry;
+    });
+    return { v: VERSION, forms: fresh };
   }
 
   function write() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ }
   }
 
-  function fresh(c) { return c && (now() - (c.touched || 0)) < STALE_MS; }
-
-  function load() {
-    state = read();
-    var kept = state.campaigns.filter(fresh);
-    var dropped = state.campaigns.length - kept.length;
-    state.campaigns = kept;
-    if (dropped) write();
-    return state;
+  /* Ключ ставится, пока форма ещё стоит в своём блоке: гостя в ящике, она
+     из блока вынута, и спросить у неё страну будет не у кого. */
+  function stamp(form) {
+    if (form.dataset.cbdKey) return form.dataset.cbdKey;
+    var row = form.closest('.cb-acc-row');
+    var panel = form.closest('.view-panel[data-country]');
+    var account = row ? (row.dataset.accLabel || '') : '';
+    var country = panel ? (panel.dataset.country || '') : '';
+    if (!account) return '';
+    form.dataset.cbdKey = country + '|' + account;
+    return form.dataset.cbdKey;
   }
 
-  function announce() {
-    if (window.cbDrawer) window.cbDrawer.setCount(state.campaigns.length);
-    listeners.forEach(function (fn) {
-      try { fn(state.campaigns); } catch (e) { /* один слушатель не роняет остальных */ }
+  function field(el) {
+    var m = /^camp_\d+_(.+)$/.exec(el.name || '');
+    return m ? m[1] : '';
+  }
+
+  function readSlot(slot) {
+    var fields = {};
+    slot.querySelectorAll('[name]').forEach(function (el) {
+      var f = field(el);
+      if (!f) return;
+      if (el.type === 'radio') { if (el.checked) fields[f] = el.value; }
+      else fields[f] = el.value;
     });
-  }
-
-  function save() { write(); announce(); }
-
-  function nextId() {
-    /* Время плюс счётчик: две кампании, заведённые в одну миллисекунду,
-       должны остаться двумя. */
-    var n = 0;
-    var taken = {};
-    state.campaigns.forEach(function (c) { taken[c.id] = true; });
-    var id;
-    do { id = 'cbd' + now().toString(36) + (n ? '-' + n : ''); n += 1; } while (taken[id]);
-    return id;
-  }
-
-  function find(id) {
-    for (var i = 0; i < state.campaigns.length; i += 1) {
-      if (state.campaigns[i].id === id) return state.campaigns[i];
-    }
-    return null;
-  }
-
-  function add(where) {
-    where = where || {};
-    if (state.campaigns.length >= MAX) return null;
-    var c = {
-      id: nextId(),
-      country: where.country || '',
-      countryName: where.countryName || '',
-      account: where.account || '',
-      name: '',
-      fields: {},
-      ads: [],
-      created: now(),
-      touched: now()
+    /* Видимый текст поиска хранится отдельно от выбранного значения:
+       в скрытом поле лежит список интересов, а в видимом — код, который
+       человек набрал. Без него после перезагрузки поле выглядит пустым
+       при заполненном значении. */
+    var shown = {};
+    slot.querySelectorAll('.cb-sel-wrap').forEach(function (wrap) {
+      var hidden = wrap.querySelector('[name]');
+      var text = wrap.querySelector('.cb-sel-text');
+      if (!hidden || !text) return;
+      var f = field(hidden);
+      if (f) shown[f] = text.value;
+    });
+    var hint = slot.querySelector('.cb-targeting-hint');
+    return {
+      fields: fields,
+      shown: shown,
+      hint: hint ? hint.textContent : '',
+      ads: slot.querySelectorAll('.cb-ad-row').length
     };
-    state.campaigns.push(c);
-    save();
-    return c;
   }
 
-  function update(id, patch) {
-    var c = find(id);
-    if (!c) return null;
-    Object.keys(patch || {}).forEach(function (k) {
-      if (k === 'id' || k === 'created') return;      // не переписываются
-      c[k] = patch[k];
+  function writeSlot(slot, data) {
+    var have = slot.querySelectorAll('.cb-ad-row').length;
+    var addAd = slot.querySelector('.cb-add-btn-sm');
+    for (var i = have; i < (data.ads || 1) && addAd; i += 1) window.cbAddAd(addAd);
+
+    slot.querySelectorAll('[name]').forEach(function (el) {
+      var f = field(el);
+      if (!f || !(f in data.fields)) return;
+      if (el.type === 'radio') el.checked = (el.value === data.fields[f]);
+      else el.value = data.fields[f];
     });
-    c.touched = now();
-    save();
-    return c;
-  }
-
-  function remove(id) {
-    var before = state.campaigns.length;
-    state.campaigns = state.campaigns.filter(function (c) { return c.id !== id; });
-    if (state.campaigns.length === before) return false;
-    save();
-    return true;
-  }
-
-  /* Для показа: страна → аккаунт → кампании. Порядок — как заводили;
-     он же порядок публикации, и переставлять его молча нельзя. */
-  function grouped() {
-    var countries = [];
-    var byCountry = {};
-    state.campaigns.forEach(function (c) {
-      var ck = c.country || '';
-      if (!byCountry[ck]) {
-        byCountry[ck] = { country: ck, countryName: c.countryName || ck, accounts: [], _byAccount: {} };
-        countries.push(byCountry[ck]);
-      }
-      var group = byCountry[ck];
-      var ak = c.account || '';
-      if (!group._byAccount[ak]) {
-        group._byAccount[ak] = { account: ak, campaigns: [] };
-        group.accounts.push(group._byAccount[ak]);
-      }
-      group._byAccount[ak].campaigns.push(c);
+    slot.querySelectorAll('.cb-sel-wrap').forEach(function (wrap) {
+      var hidden = wrap.querySelector('[name]');
+      var text = wrap.querySelector('.cb-sel-text');
+      if (!hidden || !text) return;
+      var f = field(hidden);
+      if (f && f in data.shown) text.value = data.shown[f];
     });
-    countries.forEach(function (g) { delete g._byAccount; });
-    return countries;
+    var hint = slot.querySelector('.cb-targeting-hint');
+    if (hint) hint.textContent = data.hint || '';
+    if (window.cbUpdateName) window.cbUpdateName(slot);
   }
 
-  load();
+  function forms() {
+    return Array.prototype.slice.call(document.querySelectorAll('form.open-account-form'));
+  }
+
+  function save() {
+    if (restoring) return;          // раскладываем своё же — записывать нечего
+    var now = Date.now();
+    var next = {};
+    forms().forEach(function (form) {
+      var key = stamp(form);
+      if (!key) return;
+      var slots = form.querySelectorAll('.cb-slot');
+      if (!slots.length) return;    // пустой аккаунт не занимает места
+      next[key] = {
+        touched: now,
+        campaigns: Array.prototype.map.call(slots, readSlot)
+      };
+    });
+    state = { v: VERSION, forms: next };
+    write();
+  }
+
+  function restore() {
+    var stored = read();
+    if (!stored) { state = { v: VERSION, forms: {} }; return 0; }
+    state = stored;
+    restoring = true;
+    var made = 0;
+    forms().forEach(function (form) {
+      var key = stamp(form);
+      var entry = key && state.forms[key];
+      if (!entry || !entry.campaigns || !entry.campaigns.length) return;
+      /* Сервер отдал форму пустой; если в ней почему-то уже есть карточки,
+         не задваиваем — раскладываем только недостающие. */
+      var already = form.querySelectorAll('.cb-slot').length;
+      entry.campaigns.forEach(function (data, i) {
+        if (i < already) return;
+        window.cbAddSlot(form);
+        var slots = form.querySelectorAll('.cb-slot');
+        writeSlot(slots[slots.length - 1], data);
+        made += 1;
+      });
+    });
+    restoring = false;
+    return made;
+  }
+
+  var timer = null;
+  function saveSoon() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(function () { timer = null; save(); }, 400);
+  }
+
+  /* Слушаем ввод на документе, а не на каждой форме: формы приезжают и
+     уезжают — одна из них прямо сейчас гостит в ящике. */
+  document.addEventListener('input', function (e) {
+    if (e.target.closest && e.target.closest('form.open-account-form')) saveSoon();
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target.closest && e.target.closest('form.open-account-form')) saveSoon();
+  });
+
+  function boot() {
+    forms().forEach(stamp);          // пока все формы ещё в своих блоках
+    var made = restore();
+    if (made && window.cbTree) window.cbTree.paint();
+    return made;
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 
   return {
-    all: function () { return state.campaigns; },
-    count: function () { return state.campaigns.length; },
-    get: find,
-    add: add,
-    update: update,
-    remove: remove,
-    grouped: grouped,
-    reload: function () { load(); announce(); return state.campaigns; },
-    onChange: function (fn) { listeners.push(fn); return fn; },
-    limit: MAX,
-    staleMs: STALE_MS
+    save: save,
+    saveSoon: saveSoon,
+    restore: restore,
+    readSlot: readSlot,
+    writeSlot: writeSlot,
+    all: function () { return state.forms; },
+    staleMs: STALE_MS,
+    forget: function () { state = { v: VERSION, forms: {} }; write(); }
   };
 })();
-if (window.cbDrawer) window.cbDrawer.setCount(window.cbDraft.count());
 </script>
 
 <script>
@@ -4576,7 +4612,54 @@ window.cbTree = (function () {
   window.addEventListener('resize', cbdPlaceDropdowns);
   host.addEventListener('input', cbdPlaceDropdowns);
 
-  var watcher = new MutationObserver(repaintSoon);
+  /* Строка кампании обновляется на месте — без перерисовки дерева.
+     Перерисовка вынимает форму из документа и возвращает обратно, а это
+     снимает фокус с поля: вводишь букву, и тебя выбрасывает. Пока форма
+     гостит в ящике, её собственные изменения — это набор текста, и
+     трогать надо только подпись строки. */
+  function refreshOpenRow() {
+    if (!openId) return;
+    var card = body.querySelector('.cbd-camp[data-camp="' + openId + '"]');
+    var found = findCampaign(openId);
+    if (!card || !found) return;
+    var c = found.camp;
+    var nameEl = card.querySelector('.cbd-camp-name');
+    if (nameEl) {
+      nameEl.textContent = c.name || 'Untitled campaign';
+      nameEl.classList.toggle('cbd-camp-name-empty', !c.name);
+    }
+    var adsEl = card.querySelector('.cbd-camp-ads');
+    if (adsEl) adsEl.textContent = c.ads + (c.ads === 1 ? ' ad' : ' ads');
+    var ind = card.querySelector('.cbd-ind');
+    if (ind) {
+      var r = readiness(c);
+      ind.className = 'cbd-ind cbd-ind-' + r.state;
+      ind.title = r.why;
+      var sign = ind.querySelector('span');
+      if (sign) sign.textContent = r.sign;
+    }
+  }
+
+  /* Появилась или исчезла карточка — это уже не набор текста, дерево
+     обязано перестроиться. Различаем по тому, что именно изменилось. */
+  function touchesSlots(record) {
+    if (record.type !== 'childList') return false;
+    function has(list) {
+      for (var i = 0; i < list.length; i += 1) {
+        var n = list[i];
+        if (n.classList && n.classList.contains('cb-slot')) return true;
+      }
+      return false;
+    }
+    return has(record.addedNodes) || has(record.removedNodes);
+  }
+
+  var watcher = new MutationObserver(function (records) {
+    var full = records.some(function (r) {
+      return !host.contains(r.target) || touchesSlots(r);
+    });
+    if (full) repaintSoon(); else refreshOpenRow();
+  });
   function watch() {
     document.querySelectorAll('form.open-account-form').forEach(function (form) {
       if (form._cbdWatched) return;
