@@ -272,3 +272,16 @@ def test_connection_borrows_the_existing_country_form(ui):
     expect(p.locator('.amap-add[data-amap-country]')).to_have_count(1)
     p.locator('[data-act="connect-picked"]').click()
     assert p.evaluate("document.querySelector('#offline-map details.amap-country .amap-add') === originalConnect")
+
+
+def test_delayed_tree_repaint_keeps_typing_focus_and_selection(ui):
+    p, _ = ui
+    p.evaluate("""() => {
+      document.querySelector('[data-act=\"add-picked\"]').click();
+      const x=document.querySelector('.cb-in-drawer .cb-targeting-search');
+      x.focus();x.value='typed targeting';x.setSelectionRange(2,7);
+      x.dispatchEvent(new Event('input',{bubbles:true}));
+    }""")
+    p.wait_for_timeout(250)
+    expect(p.locator('.cb-in-drawer .cb-targeting-search')).to_be_focused()
+    assert p.evaluate('[document.activeElement.selectionStart,document.activeElement.selectionEnd]') == [2,7]

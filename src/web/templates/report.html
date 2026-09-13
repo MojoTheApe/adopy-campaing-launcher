@@ -4420,6 +4420,10 @@ window.cbTree = (function () {
   }
 
   function paint() {
+    // Structural changes can repaint after the user has already started typing.
+    var focused = document.activeElement;
+    var keepFocus = focused && (host.contains(focused) || connectHost.contains(focused));
+    var selection = keepFocus ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection] : null;
     var tree = realTree();
     /* Узел с гостящей формой держим в переменной и вынимаем ДО перерисовки:
        иначе innerHTML снёс бы вместе с разметкой и саму форму. */
@@ -4485,6 +4489,13 @@ window.cbTree = (function () {
 
     if (window.cbDrawer) window.cbDrawer.setCount(countTotal(tree));
     paintFoot();
+    if (keepFocus && focused.isConnected) {
+      focused.focus({preventScroll:true});
+      if (selection[0] !== null && focused.setSelectionRange) {
+        try { focused.setSelectionRange(selection[0], selection[1], selection[2]); } catch (e) { /* non-text input */ }
+      }
+      cbdPlaceDropdowns();
+    }
   }
 
   function paintFoot() {
