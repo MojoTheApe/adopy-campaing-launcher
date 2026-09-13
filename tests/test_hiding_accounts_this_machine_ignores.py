@@ -100,11 +100,43 @@ def _accounts_js() -> str:
     return page[start: page.index("// ── Таргеты: общая библиотека", start)]
 
 
-def test_a_row_that_cannot_be_removed_can_be_hidden():
+def test_every_row_is_selected_and_removed_the_same_way():
+    """Решение владельца: строки выбираются и убираются одинаково,
+    независимо от того, насколько аккаунт настроен.
+
+    Сначала неудаляемая строка получила отдельную кнопку «Hide» — это было
+    честно, но заставляло человека разбираться, какой строке что положено.
+    Теперь кнопка одна и называется одинаково, а что случится под ней,
+    решает строка.
+    """
     js = _accounts_js()
-    assert "ac-hide" in js, "у неудаляемой строки снова нечего нажать"
-    assert "Comes from the shared sheet" in js, (
-        "не сказано, почему удалить нельзя — пустое место читается как поломка"
+    assert 'class="ac-check"' in js and "removable ? '1' : '0'" in js, (
+        "галочка снова не у всех строк"
+    )
+    drop = js[js.index('class="acc-btn danger ac-drop"'):][:700]
+    assert ">Remove</button>" in drop, "кнопка удаления снова называется по-разному"
+    # «Unhide» — единственная другая надпись, и она только у уже спрятанной
+    # строки: вернуть её обратно иначе было бы нечем.
+    head = js[: js.index('class="acc-btn danger ac-drop"')]
+    assert head.rstrip().endswith("? ' <button type=\"button\" class=\"acc-btn ac-hide\" data-back=\"1\"'"
+                                  "\n              + ' title=\"Bring it back into the list\">Unhide</button>'"
+                                  "\n            : '") or "a.hidden" in head[-400:], (
+        "вторая надпись появилась не только у спрятанной строки"
+    )
+
+
+def test_what_happens_under_the_button_is_chosen_by_the_row():
+    """У настроенного аккаунта есть запись на машине — её и убираем. У
+    пришедшего из таблицы её нет, убирать нечего — строка уходит с глаз.
+    Перепутать эти два вызова значит либо потерять настройку, либо молча
+    ничего не сделать."""
+    js = _accounts_js()
+    body = js[js.index("function drop(btn)"):]
+    body = body[: body.index("\n  function ")]
+    assert "btn.dataset.removable === '1'" in body, "исход выбирается не по строке"
+    assert "/api/accounts-hidden" in body and "/account-map-remove" in body
+    assert "Take \"' + label + '\" out of this list?" in body, (
+        "человеку не сказано, что со строкой из таблицы будет другое"
     )
 
 
