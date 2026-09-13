@@ -89,6 +89,44 @@ def test_a_removed_campaign_is_asked_about_first():
     именно убирают, иначе соглашаешься вслепую."""
     block = _tree_block()
     assert "window.confirm(" in block
-    assert "c.name" in block[block.index("act === 'drop'"):][:400], (
+    assert "camp.name" in block[block.index("act === 'drop'"):][:400], (
         "в вопросе не названо, что удаляют"
     )
+
+
+def test_the_whole_form_travels_and_never_a_single_card():
+    """В ящик переносится форма аккаунта целиком.
+
+    Браузер собирает данные формы только из того, что лежит **внутри** её
+    тега: `new FormData(form)` не видит ничего снаружи. Карточка, вынутая в
+    ящик по отдельности, ушла бы в публикацию без единого своего поля —
+    молча, без ошибки. В коде, поднимающем черновики в кабинете, такой отказ
+    недопустим, поэтому переносится форма, а лишние карточки в ней просто
+    скрыты.
+    """
+    block = _tree_block()
+    assert "host.appendChild(form)" in block, "в ящик переносится не форма"
+    assert "host.appendChild(slot" not in block and "appendChild(found.camp.slot" not in block, (
+        "карточку вынимают из формы — её поля не уйдут в публикацию"
+    )
+    only = block[block.index("function showOnly("):]
+    only = only[: only.index("\n  }") + 4]
+    assert "slot.hidden" in only and ".remove()" not in only, (
+        "лишние карточки не скрыты, а выброшены — это кампании того же аккаунта"
+    )
+
+
+def test_the_drawer_follows_the_page_without_being_told():
+    """Кампанию заводят и на странице страны. Ящик должен показать это сам —
+    иначе половина работы ему не видна, и добавлять приходится только через
+    него."""
+    block = _tree_block()
+    assert "MutationObserver" in block, "за формами никто не следит"
+    assert "form.open-account-form" in block
+
+
+def test_the_tree_shows_what_is_being_assembled_not_every_account():
+    """Аккаунтов два десятка. Показанные все, они делают стену пустых строк,
+    в которой не видно двух кампаний, ради которых ящик и открыли."""
+    block = _tree_block()
+    assert "a.campaigns.length" in block, "пустые аккаунты не отсеиваются"
