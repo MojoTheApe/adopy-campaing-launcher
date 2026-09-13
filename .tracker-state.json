@@ -58,7 +58,8 @@
     },
     "96d82742a1820041faae8753d5fa06ae1cf36c8f6128414c7b5add0d17c015bf": {
       "title": "Assemble campaigns from a drawer open on every tab",
-      "state": "creating"
+      "state": "created",
+      "issue": 135
     }
   }
 }
