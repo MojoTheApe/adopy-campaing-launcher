@@ -27,15 +27,33 @@
     <option value="A">{{ mlxn['A'] }}</option>
     <option value="B">{{ mlxn['B'] }}</option>
   </select>
-  {#- Отбор идёт по мере ввода. Список профилей тянется один раз на
-      инстанс и фильтруется на месте: так отклик мгновенный, а Multilogin
-      не дёргается на каждую букву. Кнопка осталась для перезагрузки
-      списка, когда профиль только что завели. -#}
-  <input type="text" class="amap-find" placeholder="last letters: X84" size="10"
-         oninput="amapFilter(this)" onfocus="amapFilter(this)" autocomplete="off">
-  <button type="button" class="amap-btn" onclick="amapFind(this)" title="Reload the profile list from Multilogin">Reload</button>
+  {#- Одно решение — какой профиль открыт. Имя аккаунта берётся из
+      заголовка профиля, рекламный кабинет — из его же истории браузера;
+      спрашивать их было лишней работой, в которой к тому же ошибаются.
+      Вывод и отправка — общие с вкладкой Accounts (`aclConnect`): формы
+      подключения в этом файле уже разъезжались, и двух хватило.
+
+      Список — только ОТКРЫТЫЕ профили. Это не ограничение, а проверка:
+      RPA умеет работать лишь с открытым, и подключить закрытый значило бы
+      записать строку, которой нельзя пользоваться. -#}
+  <select class="amap-prof" onchange="amapProfChanged(this)" title="An open Multilogin profile">
+    <option value="">— pick an open profile —</option>
+  </select>
+  <button type="button" class="amap-btn amap-prof-connect" onclick="amapProfConnect(this)" hidden>Connect</button>
+  <button type="button" class="amap-btn" onclick="amapProfReload(this)" title="Re-read the list of open profiles">Reload</button>
   <span class="amap-msg"></span>
-  <div class="amap-hits" hidden></div>
+  <div class="amap-derived" hidden></div>
+
+  {#- Запасной путь: профиль не открыт или ничего о себе не сказал. Тогда
+      прежний поиск по последним буквам — он ходит в Multilogin за всеми
+      профилями, а не только за открытыми. -#}
+  <details class="amap-manual">
+    <summary>profile not open?</summary>
+    <input type="text" class="amap-find" placeholder="last letters: X84" size="10"
+           oninput="amapFilter(this)" onfocus="amapFilter(this)" autocomplete="off">
+    <button type="button" class="amap-btn" onclick="amapFind(this)" title="Search all profiles in Multilogin">Search</button>
+    <div class="amap-hits" hidden></div>
+  </details>
 
   {#- Состояние Multilogin и, если надо, вход. Заполняется из
       `/multilogin-token-status` при первом взгляде на блок.

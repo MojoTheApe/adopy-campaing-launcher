@@ -130,6 +130,12 @@ def test_token_paste_uses_selected_instance_and_invalidates_profile_cache(browse
         p.wait_for_function("AMAP_ML_STATE.B.alive === true")
         assert p.evaluate('_mlxCache.B === undefined && _mlxCache.A[0].name === "keep"')
         assert next(d for path,d in s['calls'] if path == '/multilogin-save-token') == {'token':'synthetic-token','instance':'B'}
+        # Поиск по буквам стал запасным путём и лежит свёрнутым: карта
+        # подключает выбором открытого профиля, а буквы нужны, когда профиль
+        # не открыт. Проверяется то же самое — что после смены токена поиск
+        # идёт в выбранный воркспейс, — просто добраться до него теперь надо
+        # так же, как добирается человек.
+        p.locator('.amap-manual > summary').first.click()
         p.locator('.amap-find').first.fill('X84')
         p.wait_for_function("document.querySelector('.amap-msg').textContent.includes('nothing')")
         assert any(path == '/multilogin-search' and d['instance']=='B' for path,d in s['calls'])
