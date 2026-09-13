@@ -25,96 +25,7 @@ assert(code.includes('cbd-country') && code.includes('realTree'), 'срез за
 // Селекторы поддерживаются ровно те, что дерево использует; встретив
 // незнакомый, стуб ругается, а не возвращает молча null.
 
-const SEL = /^([a-z]*)((?:\.[-\w]+)*)(?:\[([-\w]+)(?:="([^"]*)")?\])?$/;
-
-function parseSel(sel) {
-  const m = SEL.exec(sel.trim());
-  assert.ok(m, 'стуб не знает такого селектора: ' + sel);
-  return {
-    tag: m[1] || '',
-    classes: (m[2] || '').split('.').filter(Boolean),
-    attr: m[3] || '',
-    value: m[4],
-  };
-}
-
-function el(tag, opts = {}) {
-  const node = {
-    tag,
-    dataset: opts.dataset || {},
-    hidden: false,
-    value: opts.value !== undefined ? opts.value : '',
-    textContent: opts.textContent || '',
-    children: [],
-    parentNode: null,
-    _classes: new Set(opts.classes || []),
-    classList: {
-      add: (c) => node._classes.add(c),
-      remove: (c) => node._classes.delete(c),
-      contains: (c) => node._classes.has(c),
-      toggle: (c, on) => (on === undefined ? (node._classes.has(c) ? node._classes.delete(c) : node._classes.add(c))
-                                           : (on ? node._classes.add(c) : node._classes.delete(c))),
-    },
-    matches(sel) {
-      const s = parseSel(sel);
-      if (s.tag && s.tag !== node.tag) return false;
-      if (!s.classes.every((c) => node._classes.has(c))) return false;
-      if (s.attr) {
-        const key = s.attr.replace(/^data-/, '').replace(/-(\w)/g, (_, c) => c.toUpperCase());
-        const has = s.attr.startsWith('data-') ? node.dataset[key] !== undefined : node[s.attr] !== undefined;
-        if (!has) return false;
-        if (s.value !== undefined) {
-          const got = s.attr.startsWith('data-') ? node.dataset[key] : node[s.attr];
-          if (String(got) !== s.value) return false;
-        }
-      }
-      return true;
-    },
-    querySelectorAll(sel) {
-      const out = [];
-      (function walk(n) {
-        n.children.forEach((c) => { if (c.matches(sel)) out.push(c); walk(c); });
-      })(node);
-      return out;
-    },
-    querySelector(sel) { return node.querySelectorAll(sel)[0] || null; },
-    appendChild(child) {
-      if (child.parentNode) child.parentNode.removeChild(child);
-      child.parentNode = node;
-      node.children.push(child);
-      return child;
-    },
-    removeChild(child) {
-      node.children = node.children.filter((c) => c !== child);
-      child.parentNode = null;
-      return child;
-    },
-    insertBefore(child, ref) {
-      if (child.parentNode) child.parentNode.removeChild(child);
-      const i = node.children.indexOf(ref);
-      node.children.splice(i === -1 ? node.children.length : i, 0, child);
-      child.parentNode = node;
-      return child;
-    },
-    remove() { if (node.parentNode) node.parentNode.removeChild(node); },
-    addEventListener(name, fn) { (node._on = node._on || {})[name] = (node._on[name] || []).concat(fn); },
-    fire(name, e) { ((node._on || {})[name] || []).forEach((fn) => fn(e)); },
-    closest(sel) {
-      let n = node;
-      while (n) { if (n.matches && n.matches(sel)) return n; n = n.parentNode; }
-      return null;
-    },
-  };
-  // `className = '...'` — обычный способ задать класс на созданном узле;
-  // без него classList остаётся пустым, и узел не находится ни одним
-  // селектором.
-  Object.defineProperty(node, 'className', {
-    get: () => [...node._classes].join(' '),
-    set: (v) => { node._classes = new Set(String(v).split(/\s+/).filter(Boolean)); },
-  });
-  (opts.children || []).forEach((c) => node.appendChild(c));
-  return node;
-}
+const { el, parseSel } = require('./fake_dom.cjs');
 
 // Узел, куда дерево пишет разметку строкой. Разбирать её незачем — карточки
 // адресуются по id, а он в строке есть.
@@ -271,12 +182,33 @@ assert.ok(/cbd-pick-country/.test(empty.foot.innerHTML), 'начать перв�
 // ── заведённое на странице видно в ящике без единого клика в ящике ────
 t = boot(SPEC);
 const form = t.p.forms[0];
-t.sandbox.window.cbAddSlot(form);          // как «+ Add Campaign» на странице
+const added = t.sandbox.window.cbAddSlot(form);   // как «+ Add Campaign» на странице
 assert.ok(t.sandbox._mo, 'за формами никто не следит');
-t.sandbox._mo._fn();                        // наблюдатель сообщает об изменении
+t.sandbox._mo._fn([{ type: 'childList', target: form, addedNodes: [added], removedNodes: [] }]);
 t.timers.forEach((fn) => fn());             // перерисовка отложена — выполняем
 assert.equal((t.body.innerHTML.match(/class="cbd-camp"/g) || []).length, 4,
   'кампания, заведённая на странице, в ящике не появилась');
+
+// ── набор текста НЕ перерисовывает дерево ─────────────────────────────
+// Перерисовка вынимает форму из документа и возвращает обратно, а это
+// снимает фокус: вводишь букву — и тебя выбрасывает из поля.
+t = boot(SPEC);
+let openId = /data-camp="([^"]+)"/.exec(t.body.innerHTML)[1];
+t.api.open(openId);
+const hosted = t.p.forms[0];
+const nameNode = hosted.querySelector('[data-name-display]');
+const timersBefore = t.timers.length;
+nameNode.textContent = 'SA_new_name';       // ровно то, что делает cbUpdateName
+t.sandbox._mo._fn([{ type: 'characterData', target: nameNode, addedNodes: [], removedNodes: [] }]);
+assert.equal(t.timers.length, timersBefore, 'набор текста поставил дерево на перерисовку');
+assert.equal(hosted.parentNode.matches('.cbd-host'), true, 'форму вынули из ящика на вводе буквы');
+// Но подпись строки всё равно обновилась — на месте, без перерисовки.
+assert.equal(t.body.querySelector('.cbd-camp[data-camp="' + openId + '"]')._html, undefined);
+
+// А вот появление карточки внутри ящика дерево перестроить обязано.
+const inDrawerSlot = t.sandbox.window.cbAddSlot(hosted);
+t.sandbox._mo._fn([{ type: 'childList', target: hosted, addedNodes: [inDrawerSlot], removedNodes: [] }]);
+assert.ok(t.timers.length > timersBefore, 'новая карточка в ящике не перестроила дерево');
 
 // ── раскрытая кампания получает настоящую форму ───────────────────────
 t = boot(SPEC);
