@@ -1905,6 +1905,20 @@
     }
     .amap-msg { font-size: 0.75rem; color: var(--muted); margin-left: 0.3rem; }
     .amap-msg.bad { color: var(--bad); }
+    /* Выведенное показывается ДО подключения: человек должен увидеть, что
+       мы поняли, а не узнать это по строке, появившейся в карте. */
+    .amap-derived {
+      flex: 1 1 100%; font-size: 0.74rem; color: var(--muted); padding-top: 0.15rem;
+    }
+    .amap-derived b { color: var(--text); }
+    .amap-derived code { color: var(--text); font-size: 0.72rem; }
+    .amap-derived-gap { color: var(--warn); }
+    /* Запасной путь свёрнут: он нужен, когда профиль не открыт, а это
+       не обычный случай. */
+    .amap-manual { flex: 1 1 100%; font-size: 0.74rem; }
+    .amap-manual > summary { color: var(--muted); cursor: pointer; padding: 0.15rem 0; }
+    .amap-manual > summary:hover { color: var(--accent); }
+    .amap-prof { max-width: 18rem; }
     .amap-hits {
       flex-basis: 100%; margin-top: 0.4rem; display: flex;
       flex-direction: column; gap: 0.2rem;
@@ -2262,6 +2276,14 @@
       font-size: 0.84rem;
     }
     .acc-bulk.on { display: flex; }
+
+    /* Спрятанное видно счётчиком: список, молча глотающий строки, хуже
+       длинного списка. */
+    .acc-hidden-bar {
+      display: flex; align-items: center; gap: var(--space-sm);
+      margin: 0 0 var(--space-sm);
+      color: var(--muted); font-size: 0.8rem;
+    }
 
     @media (max-width: 860px) {
       .acc-form { grid-template-columns: 1fr; }
@@ -6487,6 +6509,95 @@ function amapRank(profiles, q) {
   return ends.concat(has);
 }
 
+/* ── Карта аккаунтов: выбери профиль, остальное само ────────────────────
+ *
+ * Прежде здесь спрашивали последние буквы профиля, потом Reload, потом имя
+ * и кабинет. Вкладка Accounts давно делает это одним выбором, выводя имя
+ * из заголовка профиля, а кабинет — из его истории браузера. Решение
+ * владельца: карта перенимает подход.
+ *
+ * Вывод и отправка не переписаны, а взяты у `aclConnect` — того же, что
+ * зовёт вкладка. Две формы подключения в этом файле уже расходились, и
+ * сводили их отдельной задачей; третьей копии здесь не будет.
+ */
+function amapProfBlock(el) { return el.closest('.amap-add'); }
+
+function amapProfFill(block, keep, state) {
+  var sel = block.querySelector('.amap-prof');
+  if (!sel) return;
+  sel.innerHTML = window.aclConnect.options(keep || sel.value || '', state);
+  if (state !== 'loading') amapProfChanged(sel);
+}
+
+function amapProfLoad(block, force) {
+  return window.aclConnect.load(force).then(function () { amapProfFill(block); });
+}
+
+function amapProfChanged(sel) {
+  var block = amapProfBlock(sel);
+  var box = block.querySelector('.amap-derived');
+  var btn = block.querySelector('.amap-prof-connect');
+  var pid = sel.value;
+  if (!pid) {
+    box.hidden = true; box.textContent = '';
+    if (btn) btn.hidden = true;
+    return;
+  }
+  var name = window.aclConnect.nameFor(pid);
+  var ad = window.aclConnect.adFor(pid);
+  /* Показываем выведенное ДО подключения. Человек должен увидеть, что мы
+     поняли, а не узнать это по строке, появившейся в карте. */
+  box.hidden = false;
+  box.innerHTML = (name ? 'Account: <b>' + aclEscHtml(name) + '</b>'
+                        : '<span class="amap-derived-gap">name could not be worked out</span>')
+    + ' · '
+    + (ad ? 'Ad account: <code>' + aclEscHtml(ad) + '</code>'
+          : '<span class="amap-derived-gap">ad account could not be worked out</span>');
+  if (btn) btn.hidden = !(name && ad);
+  if (!(name && ad)) {
+    var manual = block.querySelector('.amap-manual');
+    if (manual) manual.open = true;    // запасной путь сам, а не поиском по экрану
+  }
+}
+
+function amapProfConnect(btn) {
+  var block = amapProfBlock(btn);
+  var sel = block.querySelector('.amap-prof');
+  var msg = block.querySelector('.amap-msg');
+  var pid = sel.value;
+  if (!pid) return;
+  btn.disabled = true;
+  if (msg) { msg.textContent = 'connecting…'; msg.className = 'amap-msg'; }
+  window.aclConnect.connect({
+    profile_id: pid,
+    account_name: window.aclConnect.nameFor(pid),
+    ad_account_id: window.aclConnect.adFor(pid),
+    country: block.dataset.amapCountry || ''
+  }).then(function (d) {
+    btn.disabled = false;
+    if (!d || !d.ok) {
+      if (msg) { msg.textContent = (d && d.error) || 'failed'; msg.className = 'amap-msg bad'; }
+      return;
+    }
+    /* Страница перечитывается: аккаунт появляется в карте, в билдере и в
+       ящике сразу, а не после того, как человек догадается обновить. */
+    location.reload();
+  });
+}
+
+function amapProfReload(btn) {
+  var block = amapProfBlock(btn);
+  var msg = block.querySelector('.amap-msg');
+  if (msg) { msg.textContent = 'reading…'; msg.className = 'amap-msg'; }
+  window.amapProfEnsure(true);
+  window.aclConnect.load(false).then(function () {
+    if (!msg) return;
+    var n = window.aclConnect.profiles().length;
+    msg.textContent = n ? '' : 'no profile is open — open it in Multilogin';
+    msg.className = n ? 'amap-msg' : 'amap-msg bad';
+  });
+}
+
 function amapFilter(input, reload) {
   var box = input.closest('.amap-add');
   var inst = box.querySelector('.amap-inst').value || 'A';
@@ -6721,6 +6832,7 @@ function amapMlBoot() {
   var wanted = {};
   document.querySelectorAll('.amap-ml').forEach(function (ml) { wanted[amapMlInstance(amapMlBlock(ml))] = 1; });
   Object.keys(wanted).forEach(function (inst) { amapMlRefresh(inst, false); });
+
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapMlBoot);
 else amapMlBoot();
@@ -10037,13 +10149,168 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
   });
 })();
 
+/* ── Подключение аккаунта: одна механика на два экрана ──────────────────
+ *
+ * Подключиться можно из двух мест: со вкладки Accounts и из карты
+ * аккаунтов. Спрашивать они должны одно и то же — какой профиль открыт, —
+ * и выводить остальное сами: имя берётся из заголовка профиля, рекламный
+ * кабинет — из его же истории браузера.
+ *
+ * Формы подключения в этом файле уже разъезжались: две свели в одну неделю
+ * назад ровно потому, что копии расходятся молча. Поэтому вывод и запрос
+ * живут здесь по одному разу, а экраны отличаются только разметкой.
+ *
+ * Профили — те, что ОТКРЫТЫ в Multilogin. Это не ограничение, а проверка:
+ * RPA всё равно умеет работать только с открытым профилем, и подключать
+ * закрытый значило бы записать строку, которой нельзя пользоваться.
+ */
+window.aclConnect = (function () {
+  var profiles = [], labels = [], loadedAt = 0;
+
+  /* Ключ аккаунта — хвост из буквы и цифр. Multilogin зовёт профиль
+     «KLD_BFL_W27», а таблица тот же аккаунт — «FacebookMKTOBFLW27 SV Ait»:
+     приставки разные и такими останутся, совпадает хвост.
+
+     Это та же формула, что применяет сервер (`profile_name_key`), буква в
+     букву. Своя, похожая, дала бы другие совпадения — и вывод имени в
+     карте разошёлся бы со вкладкой, то есть ровно то, ради чего этот
+     модуль и заведён. */
+  function tail(label) {
+    var m = String(label || '').split(' ')[0].match(/([A-Za-z])(\d{1,4})$/);
+    return m ? (m[1] + m[2]).toUpperCase() : '';
+  }
+
+  function load(force) {
+    if (!force && loadedAt && Date.now() - loadedAt < 20000) return Promise.resolve(profiles);
+    return fetch('/api/accounts-overview').then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.ok) return profiles;
+        profiles = d.open_profiles || [];
+        labels = (d.suggestions || []).concat((d.accounts || []).map(function (a) { return a.label; }));
+        loadedAt = Date.now();
+        return profiles;
+      })
+      .catch(function () { return profiles; });
+  }
+
+  function byId(pid) {
+    return profiles.filter(function (p) { return p.profile_id === pid; })[0] || null;
+  }
+
+  /* Имя аккаунта по профилю. Пусто, когда совпадений не одно: два аккаунта
+     делят ключ («FacebookElf191 SA» и «FacebookElf191 PE»), и угадывание
+     привязало бы кампанию к чужому браузеру. Лучше спросить. */
+  function nameFor(pid) {
+    var p = byId(pid);
+    if (!p || !p.key) return '';
+    var hits = labels.filter(function (l) { return tail(l) === p.key; });
+    var byBase = {};
+    hits.forEach(function (l) {
+      var base = String(l).split(' ')[0].toLowerCase();
+      if (!byBase[base] || l.length > byBase[base].length) byBase[base] = l;
+    });
+    var uniq = Object.keys(byBase).map(function (k) { return byBase[k]; });
+    return uniq.length === 1 ? uniq[0] : '';
+  }
+
+  function adFor(pid) {
+    var p = byId(pid);
+    return (p && p.ad_account_id) || '';
+  }
+
+  /* Пустой селектор, пока список едет, читается как сломанный: список
+     открытых профилей приходит вместе с общей таблицей, а та — из
+     Google Sheets, и это несколько секунд. Поэтому у заглушки три
+     состояния, и «жду» среди них. */
+  function options(current, state) {
+    if (state === 'loading') return '<option value="">— reading open profiles… —</option>';
+    if (!profiles.length) return '<option value="">— no profile is open in Multilogin —</option>';
+    var out = '<option value="">— pick an open profile —</option>';
+    profiles.forEach(function (p) {
+      var shown = p.name || (p.profile_id.slice(0, 8) + '…');
+      if (p.taken_by) shown += ' · taken by: ' + p.taken_by;
+      out += '<option value="' + aclEscHtml(p.profile_id) + '"'
+        + (p.profile_id === current ? ' selected' : '') + '>' + aclEscHtml(shown) + '</option>';
+    });
+    return out;
+  }
+
+  /* Запрос тоже один. Кабинет обязателен: строка без него запишется, но в
+     карте не появится — карта пропускает записи без `ad_account_id`, и
+     молча исчезнувший аккаунт хуже отказа. */
+  function connect(fields) {
+    var name = (fields.account_name || '').trim();
+    var ad = (fields.ad_account_id || '').trim();
+    if (!name) return Promise.resolve({ ok: false, error: 'Name could not be worked out — enter it manually' });
+    if (!ad) return Promise.resolve({ ok: false, error: 'Ad account could not be worked out — enter it manually' });
+    var payload = { account_name: name, ad_account_id: ad };
+    if (fields.profile_id) payload.profile_id = fields.profile_id;
+    var p = byId(fields.profile_id);
+    if (p && p.folder_id) payload.folder_id = p.folder_id;
+    if (fields.country) payload.country = fields.country;
+    return fetch('/account-map-patch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); })
+      .catch(function (e) { return { ok: false, error: String(e) }; });
+  }
+
+  return {
+    load: load, options: options, nameFor: nameFor, adFor: adFor, key: tail,
+    connect: connect, profiles: function () { return profiles; },
+    remember: function (list, known) { profiles = list || []; labels = known || labels; loadedAt = Date.now(); }
+  };
+})();
+
+/* Список открытых профилей спрашивается ОДИН раз на страницу — и только
+   когда за ним потянулись.
+
+   Он приходит вместе с общей таблицей, а та из Google Sheets: три секунды
+   сама по себе, а при загрузке страницы запрос встаёт в очередь за
+   остальными и приходит через десять с лишним. Блоков подключения на
+   странице под тридцать, а трогают из них один, поэтому платить этим
+   ожиданием при каждом открытии дешборда незачем.
+
+   Ждать теперь приходится тому, кто подключает, и он видит, чего ждёт:
+   у заглушки есть состояние «читаю».
+
+   Живёт это здесь, а не рядом с остальной загрузкой карты, по скучной
+   причине: та лежит выше по файлу, чем `aclConnect`, и звала бы его
+   раньше, чем он объявлен. */
+(function () {
+  var asked = false;
+
+  function fillAll(state) {
+    document.querySelectorAll('.amap-add').forEach(function (block) {
+      if (block.querySelector('.amap-prof')) amapProfFill(block, '', state);
+    });
+  }
+
+  window.amapProfEnsure = function (force) {
+    if (asked && !force) return;
+    asked = true;
+    fillAll('loading');
+    window.aclConnect.load(!!force).then(function () { fillAll(); });
+  };
+
+  /* Тянутся мышью и клавишей одинаково часто, а `focus` у списка приходит
+     позже, чем его раскрывают. */
+  ['mousedown', 'focusin'].forEach(function (name) {
+    document.addEventListener(name, function (e) {
+      if (e.target && e.target.classList && e.target.classList.contains('amap-prof')) {
+        window.amapProfEnsure(false);
+      }
+    });
+  });
+})();
+
 // ── Аккаунты: подключение к этой машине ──────────────────────────────────
 // Одно решение оператора — какой профиль. Имя аккаунта и рекламный кабинет
 // выводятся из него: имя из названия профиля, кабинет из истории того же
 // профиля. Ручной ввод остаётся, но убран с глаз: он нужен, только когда
 // вывести не удалось.
 (function () {
-  var loaded = false, openProfiles = [], knownLabels = [];
+  var loaded = false, openProfiles = [], knownLabels = [], showHidden = false;
 
   function esc(v) {
     return String(v == null ? '' : v)
@@ -10057,30 +10324,13 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     m.textContent = t || '';
   }
 
-  function tailKey(label) {
-    var m = String(label || '').split(' ')[0].match(/([A-Za-z])(\d{1,4})$/);
-    return m ? (m[1] + m[2]).toUpperCase() : '';
-  }
+  // Ключ считает `aclConnect` — одной формулой на оба экрана.
+  function tailKey(label) { return window.aclConnect.key(label); }
 
-  function detectedFor(profileId) {
-    var p = openProfiles.filter(function (x) { return x.profile_id === profileId; })[0];
-    return (p && p.ad_account_id) || '';
-  }
+  // Вывод живёт в `aclConnect` и здесь только зовётся: копии расходятся.
+  function detectedFor(profileId) { return window.aclConnect.adFor(profileId); }
 
-  function accountForProfile(profileId) {
-    var p = openProfiles.filter(function (x) { return x.profile_id === profileId; })[0];
-    if (!p || !p.key) return '';
-    var hits = knownLabels.filter(function (l) { return tailKey(l) === p.key; });
-    // Один аккаунт встречается дважды: полным именем из таблицы и коротким из
-    // статистики. Схлопываем, иначе ясное совпадение читается как спорное.
-    var byBase = {};
-    hits.forEach(function (l) {
-      var base = String(l).split(' ')[0].toLowerCase();
-      if (!byBase[base] || l.length > byBase[base].length) byBase[base] = l;
-    });
-    var uniq = Object.keys(byBase).map(function (k) { return byBase[k]; });
-    return uniq.length === 1 ? uniq[0] : '';
-  }
+  function accountForProfile(profileId) { return window.aclConnect.nameFor(profileId); }
 
   function profileOptions(current, suggested) {
     var out = '<option value="">— pick a profile —</option>';
@@ -10157,10 +10407,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     var btn = el('ac-add-btn');
     if (btn) btn.disabled = true;
     say('Connecting…');
-    fetch('/account-map-patch', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json(); })
+    window.aclConnect.connect(payload)
       .then(function (d) {
         if (btn) btn.disabled = false;
         if (!d.ok) { say(d.error || 'failed', 'err'); return; }
@@ -10185,6 +10432,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     openProfiles = d.open_profiles || [];
     var accs = d.accounts || [];
     knownLabels = (d.suggestions || []).concat(accs.map(function (a) { return a.label; }));
+    // Тот же список — общему модулю: карта аккаунтов выводит имя и кабинет
+    // тем же кодом, и второй раз спрашивать сервер незачем.
+    if (window.aclConnect) window.aclConnect.remember(openProfiles, knownLabels);
     var connected = accs.filter(function (a) { return a.connected; }).length;
 
     var html = '<div class="acc-stats">'
@@ -10198,12 +10448,24 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
             + 'open the profile for that account and it will appear in the list.</p>';
     }
 
+    /* Спрятанные не показываем, но и не теряем: счётчик и «показать» рядом.
+       Список, молча глотающий строки, хуже длинного списка. */
+    var hiddenCount = accs.filter(function (a) { return a.hidden; }).length;
+    if (hiddenCount) {
+      html += '<p class="acc-hidden-bar">'
+        + '<span>' + hiddenCount + (hiddenCount === 1 ? ' account hidden' : ' accounts hidden')
+        + ' on this machine</span> '
+        + '<button type="button" class="acc-btn" id="ac-show-hidden">'
+        + (showHidden ? 'hide them again' : 'show them') + '</button></p>';
+    }
+    var shown = showHidden ? accs : accs.filter(function (a) { return !a.hidden; });
+
     html += '<table class="acc-table"><thead><tr>'
       + '<th class="col-pick"><input type="checkbox" id="ac-check-all" title="Select everything that can be removed"></th>'
       + '<th>Account</th><th>Country</th><th>Ad account</th><th>Profile</th><th class="col-act"></th>'
       + '</tr></thead><tbody>';
 
-    accs.forEach(function (a) {
+    shown.forEach(function (a) {
       var removable = a.connected || a.local_only;
       var pill = a.connected
         ? '<span class="acc-pill ok">connected</span>'
@@ -10221,7 +10483,17 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
         + '<td><select class="ac-prof" style="max-width:15rem">'
         + profileOptions(a.profile_id, a.suggested_profile) + '</select></td>'
         + '<td class="col-act"><button type="button" class="acc-btn ac-save">Save</button>'
-        + (removable ? ' <button type="button" class="acc-btn danger ac-drop">Remove</button>' : '')
+        /* Удалить можно только то, что здесь записано. Строка из общей
+           таблицы, про которую на машине ничего нет, удалению не поддаётся —
+           удалять нечего, а вычеркнуть её из таблицы дешборд не вправе: она
+           вернётся на следующем обновлении. Поэтому не «Remove», а «Hide», и
+           подсказка объясняет разницу — прежде на этом месте была пустота, и
+           она читалась как сломанная кнопка. */
+        + (removable
+            ? ' <button type="button" class="acc-btn danger ac-drop">Remove</button>'
+            : ' <button type="button" class="acc-btn ac-hide" title="Comes from the shared sheet — '
+              + 'nothing to remove here. Hiding only puts it out of sight on this machine.">'
+              + (a.hidden ? 'Unhide' : 'Hide') + '</button>')
         + ' <span class="ac-row-msg acc-meta"></span></td>'
         + '</tr>';
     });
@@ -10329,6 +10601,28 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
         say(m, 'ok'); load(true);
       })
       .catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); });
+  }
+
+  /* Спрятать — не удалить. Удалять тут нечего: строка пришла из общей
+     таблицы, и на этой машине про неё не записано ничего. Прячем только
+     вид, и только на этой машине; в таблице аккаунт остаётся со всеми
+     своими цифрами и работает везде, где работал. */
+  function hide(btn) {
+    var row = btn.closest('tr'); if (!row) return;
+    var label = row.getAttribute('data-label');
+    var back = btn.textContent.trim() === 'Unhide';
+    btn.disabled = true;
+    fetch('/api/accounts-hidden', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: label, hidden: !back })
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        btn.disabled = false;
+        if (!d.ok) { say(d.error || 'failed', 'err'); return; }
+        say(back ? ('Back in the list: ' + label) : ('Hidden here: ' + label), 'ok');
+        load(true);
+      })
+      .catch(function (e) { btn.disabled = false; say(String(e), 'err'); });
   }
 
   function drop(btn) {
@@ -10585,6 +10879,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     if (t.classList && t.classList.contains('acq-add')) { addFromCountry(t); return; }
     if (t.classList && t.classList.contains('ac-save')) { save(t); return; }
     if (t.classList && t.classList.contains('ac-drop')) { drop(t); return; }
+    if (t.classList && t.classList.contains('ac-hide')) { hide(t); return; }
+    if (t.id === 'ac-show-hidden') { showHidden = !showHidden; load(true); return; }
     var view = t.getAttribute && t.getAttribute('data-view');
     if (view === 'accounts') { load(false); return; }
 
