@@ -48,7 +48,7 @@ async function tracking() {
   // cbPublish, как только тот начал обходить поля таргетинга. Пустой список
   // означает «слотов нет», и предупреждению о таргетинге здесь не о чем
   // говорить: этот стенд про трекинговую ссылку.
-  const form = {querySelector(selector) {
+  const form = {classList:{contains:()=>false}, querySelector(selector) {
     if (selector.includes('tracking_link')) return input;
     if (selector.includes('account_label')) return account;
     return {value: selector.includes('camp_count') ? '1' : 'Mexico'};

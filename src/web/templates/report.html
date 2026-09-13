@@ -77,6 +77,12 @@
       --space-lg: 16px;
       --space-xl: 24px;
       --sidebar-w: 248px;
+      /* Ширина ящика билдера и его язычка. Одни числа на всё: и сам ящик,
+         и отступ страницы, который освобождает место под него. Язычку
+         ширина задана, а не оставлена на содержимое, — иначе отступ
+         пришлось бы угадывать. */
+      --cbd-w: 360px;
+      --cbd-handle-w: 40px;
       --radius-sm: 6px;
       --radius-md: 8px;
       --radius-lg: 10px;
@@ -1162,104 +1168,8 @@
     .asset-variant-table th { font-size: 0.7rem; }
     .asset-variant-table td { font-size: 0.78rem; padding: 0.25rem 0.6rem; }
     .asset-variant-total td { border-top: 1px solid var(--border-strong); font-weight: 600; }
-    /* Prebuild cart: row buttons + toast */
-    .cb-cart-btn {
-      background: transparent;
-      border: 1px solid var(--border-strong);
-      color: var(--accent);
-      border-radius: 3px;
-      padding: 0.12rem 0.45rem;
-      font-size: 0.7rem;
-      font-family: inherit;
-      font-weight: 500;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .cb-cart-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
-    .cb-cart-btn.cb-send-selected { background: var(--good-fill); border-color: var(--good); color: var(--on-good); }
-    #cb-cart-toast {
-      position: fixed;
-      bottom: 4.2rem;
-      left: 50%;
-      transform: translateX(-50%) translateY(8px);
-      background: var(--text);
-      color: var(--bg-elev);
-      padding: 0.4rem 0.9rem;
-      border-radius: 6px;
-      font-size: 0.78rem;
-      font-weight: 600;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out);
-      z-index: 9999;
-    }
-    #cb-cart-toast.cb-cart-toast-show { opacity: 1; transform: translateX(-50%) translateY(0); }
-    .cb-send-btn {
-      background: transparent;
-      border: 1px solid var(--border-strong);
-      color: var(--accent);
-      border-radius: 3px;
-      padding: 0.15rem 0.55rem;
-      font-size: 0.7rem;
-      font-family: inherit;
-      font-weight: 500;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .cb-send-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
-    .cb-send-btn.cb-send-selected {
-      background: var(--good-fill); border-color: var(--good); color: var(--on-good);
-    }
-    /* Whole-card accent for a pre-built (Send-to-Builder) slot that still
-       needs review — not just the small badge line, the entire slot border/
-       background shifts so it's obvious at a glance in a long slot list. */
-    .cb-slot[data-auto-built="1"] {
-      border: 1.5px solid var(--warn);
-      background: color-mix(in srgb, var(--warn) 6%, var(--bg-elev));
-      box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 35%, transparent), var(--shadow-sm);
-    }
-    .cb-autobuilt-badge {
-      display: inline-flex; align-items: center; gap: 0.3rem;
-      background: color-mix(in srgb, var(--warn) 15%, transparent);
-      border: 1px solid var(--warn);
-      color: var(--warn);
-      font-size: 0.68rem; font-weight: 700;
-      padding: 0.2rem 0.55rem; border-radius: 4px;
-      margin: 0.3rem 0 0.4rem;
-    }
-    .cb-field-needs-review { outline: 1.5px solid var(--bad); outline-offset: 1px; border-radius: 3px; }
-    .cb-cart-bar {
-      position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 9998;
-      background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 8px;
-      padding: 0.6rem 0.8rem; box-shadow: 0 6px 24px rgba(0,0,0,0.3);
-      display: flex; align-items: center; gap: 0.65rem; font-size: 0.8rem;
-    }
-    .cb-cart-count { color: var(--text); font-weight: 600; white-space: nowrap; }
-    .cb-cart-bar button {
-      font-family: inherit; font-size: 0.76rem; font-weight: 600; border-radius: 5px; cursor: pointer; padding: 0.35rem 0.75rem;
-      background: var(--accent); border: none; color: var(--on-accent);
-    }
-    .cb-cart-bar button:hover { background: var(--accent-strong); }
-    .cb-send-modal-overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.72);
-      z-index: 9999; display: flex; align-items: center; justify-content: center;
-    }
-    .cb-send-modal-box {
-      background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
-      padding: 1.2rem 1.4rem; max-width: 440px; width: 92%; max-height: 85vh; overflow-y: auto;
-      box-shadow: 0 8px 32px rgba(0,0,0,.65); font-size: 0.8rem;
-    }
-    .cb-send-modal-title { font-size: 0.9rem; font-weight: 700; color: var(--accent); margin-bottom: 0.75rem; }
-    .cb-send-field-row {
-      display: flex; justify-content: space-between; gap: 0.75rem;
-      padding: 0.3rem 0; border-bottom: 1px solid var(--border); font-size: 0.78rem;
-    }
-    .cb-send-field-label { color: var(--muted); }
-    .cb-send-field-val { color: var(--text); font-weight: 500; text-align: right; word-break: break-word; }
-    .cb-send-field-val.cb-send-unresolved { color: var(--warn); }
-    .cb-send-modal-actions { display: flex; gap: 0.55rem; justify-content: flex-end; margin-top: 1rem; }
-    .cb-send-modal-msg { font-size: 0.78rem; color: var(--muted); margin: 0.5rem 0; line-height: 1.5; }
-    .cb-send-modal-msg.cb-send-warn { color: var(--warn); }
+    /* Стили корзинки, модалки «Send to Builder» и метки автосборки убраны
+       вместе с самим механизмом: кампания заводится пустой и руками. */
     .cb-targeting-hint {
       font-size: 0.65rem;
       color: var(--muted);
@@ -2146,8 +2056,8 @@
        Единое ощущение контролов: один радиус, слоистая тень, видимое
        фокус-кольцо, мягкий ховер, тактильное нажатие. ── */
     .cb-preview-btn, .cb-publish-btn, .ml-connect-btn, .cb-field-save-btn,
-    .cb-add-btn, .cb-add-btn-sm, .cb-dup-slot-btn, .cb-cart-btn, .cb-send-btn,
-    .ml-profile-use-btn, .cb-cart-bar button, .lp-chip-more,
+    .cb-add-btn, .cb-add-btn-sm, .cb-dup-slot-btn,
+    .ml-profile-use-btn, .lp-chip-more,
     #rpa-takeover-btn {
       border-radius: 6px;
       transition: background-color 150ms var(--ease-out),
@@ -2158,32 +2068,23 @@
     }
     .cb-preview-btn:active, .cb-publish-btn:active, .ml-connect-btn:active,
     .cb-field-save-btn:active, .cb-add-btn:active, .cb-add-btn-sm:active,
-    .cb-dup-slot-btn:active, .cb-cart-btn:active, .cb-cart-bar button:active,
+    .cb-dup-slot-btn:active,
     #rpa-takeover-btn:active {
       transform: translateY(0.5px) scale(0.98);
     }
     .cb-preview-btn:focus-visible, .cb-publish-btn:focus-visible,
     .ml-connect-btn:focus-visible, .cb-field-save-btn:focus-visible,
     .cb-add-btn:focus-visible, .cb-add-btn-sm:focus-visible,
-    .cb-dup-slot-btn:focus-visible, .cb-cart-btn:focus-visible,
-    .cb-cart-bar button:focus-visible, .cb-select:focus-visible {
+    .cb-dup-slot-btn:focus-visible, .cb-select:focus-visible {
       outline: none;
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
     }
     /* Primary actions get the layered shadow treatment */
-    .cb-publish-btn:not([disabled]), .ml-connect-btn, .cb-cart-bar button {
+    .cb-publish-btn:not([disabled]), .ml-connect-btn {
       box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.12);
     }
     .cb-publish-btn:not([disabled]):hover, .ml-connect-btn:hover {
       box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-    }
-    /* Cart bar: pill card with the md shadow, consistent inner rhythm */
-    .cb-cart-bar {
-      border-radius: 10px;
-      box-shadow: var(--shadow-md);
-      gap: 0.6rem;
-      align-items: center;
-      padding: 0.5rem 0.8rem;
     }
     /* Tables: row hover feedback everywhere (uitripled list pattern) */
     tbody tr:hover td { background: color-mix(in srgb, var(--accent) 4%, transparent); }
@@ -2193,8 +2094,7 @@
     .cbp-card:hover { box-shadow: var(--shadow-md); }
     @media (prefers-reduced-motion: reduce) {
       .cb-preview-btn, .cb-publish-btn, .ml-connect-btn, .cb-field-save-btn,
-      .cb-add-btn, .cb-add-btn-sm, .cb-dup-slot-btn, .cb-cart-btn, .cb-send-btn,
-      .cb-cart-bar button, .cbp-card, #cb-cart-toast {
+      .cb-add-btn, .cb-add-btn-sm, .cb-dup-slot-btn, .cbp-card {
         transition: none;
       }
     }
@@ -2366,6 +2266,325 @@
     @media (max-width: 860px) {
       .acc-form { grid-template-columns: 1fr; }
       .acc-manual.open { grid-template-columns: 1fr; }
+    }
+
+    /* ── Ящик билдера ──────────────────────────────────────────────────
+       Панель сборки кампаний: живёт справа, открыта на любой вкладке.
+       Немодальная нарочно — подложки нет, и за её пределами страница
+       работает как обычно. Ради этого всё и затевалось: выделить текст
+       слева и вставить его в поле справа, не потеряв набранное.
+       Ширина фиксированная; открытое состояние помнится между
+       перезагрузками. */
+    .cbd-root {
+      position: fixed; top: 0; right: calc(-1 * var(--cbd-w)); height: 100vh;
+      z-index: 880; display: flex; align-items: stretch;
+      pointer-events: none;
+      transition: right 220ms var(--ease-out);
+    }
+    .cbd-root[data-open="1"] { right: 0; }
+    .cbd-root > * { pointer-events: auto; }
+
+    /* Язычок: единственное, что видно, пока ящик закрыт. */
+    .cbd-handle {
+      align-self: center;
+      width: var(--cbd-handle-w); box-sizing: border-box;
+      writing-mode: vertical-rl;
+      display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+      padding: 0.75rem 0.3rem;
+      background: var(--bg-elev); color: var(--muted);
+      border: 1px solid var(--border); border-right: none;
+      border-radius: var(--radius-md) 0 0 var(--radius-md);
+      box-shadow: var(--shadow-md);
+      font: inherit; font-size: 0.74rem; font-weight: 600;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      transition: color 160ms var(--ease-out), border-color 160ms var(--ease-out);
+    }
+    .cbd-handle:hover { color: var(--accent); border-color: var(--accent); }
+    .cbd-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .cbd-handle-arrow {
+      writing-mode: horizontal-tb;
+      font-size: 0.9rem; line-height: 1;
+      transition: transform 220ms var(--ease-out);
+    }
+    .cbd-root[data-open="1"] .cbd-handle-arrow { transform: rotate(180deg); }
+    /* Счётчик черновиков — чтобы закрытый язычок что-то говорил. */
+    .cbd-handle-count {
+      writing-mode: horizontal-tb;
+      min-width: 1.15rem; padding: 0.05rem 0.25rem;
+      border-radius: 999px;
+      background: var(--accent); color: var(--on-accent);
+      font-size: 0.66rem; font-weight: 700; text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .cbd-panel {
+      width: var(--cbd-w); flex-shrink: 0;
+      display: flex; flex-direction: column;
+      background: var(--bg-elev);
+      border-left: 1px solid var(--border);
+      box-shadow: var(--shadow-md);
+    }
+    .cbd-head {
+      display: flex; align-items: baseline; gap: var(--space-sm);
+      padding: var(--space-sm) var(--space-md);
+      border-bottom: 1px solid var(--border);
+    }
+    .cbd-title { font-size: 0.82rem; font-weight: 700; }
+    .cbd-sub {
+      flex: 1; min-width: 0; color: var(--muted); font-size: 0.7rem;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cbd-close {
+      align-self: center;
+      background: none; border: 1px solid transparent; color: var(--muted);
+      font-size: 1rem; line-height: 1; cursor: pointer;
+      border-radius: var(--radius-sm); padding: 0.1rem 0.35rem;
+    }
+    .cbd-close:hover { color: var(--bad); border-color: var(--bad); }
+    .cbd-body { flex: 1; overflow-y: auto; padding: var(--space-md); }
+    .cbd-empty {
+      color: var(--muted); font-size: 0.78rem; line-height: 1.6;
+      text-align: center; padding: var(--space-xl) var(--space-sm);
+    }
+
+    /* ── Дерево: страна → аккаунт → кампания → объявление ───────────────
+       Подписями, а не лесенкой. Два уровня отступов в панели шириной в
+       360 пикселей не оставляют имени кампании места, где жить, — а имя
+       здесь длинное и в нём вся суть. */
+    .cbd-country {
+      display: flex; align-items: baseline; gap: var(--space-sm);
+      margin: var(--space-lg) 0 var(--space-xs);
+      font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .cbd-country:first-child { margin-top: 0; }
+    .cbd-country::after {
+      content: ""; flex: 1; height: 1px; background: var(--border);
+      order: 1;
+    }
+    .cbd-country-add {
+      order: 2; flex-shrink: 0;
+      background: none; border: 1px dashed var(--border-strong);
+      border-radius: 3px; padding: 0.05rem 0.3rem;
+      color: var(--muted); font: inherit; font-size: 0.6rem; font-weight: 600;
+      letter-spacing: 0.04em; cursor: pointer;
+    }
+    .cbd-country-add:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* Форма подключения гостит здесь. Она рассчитана на строку во всю
+       ширину страницы, поэтому в ящике складывается. */
+    .cbd-connect-slot { margin-bottom: var(--space-sm); }
+    .cbd-connect-host .amap-add {
+      display: flex; flex-wrap: wrap; gap: 0.25rem;
+      padding: var(--space-sm); margin: 0;
+      border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      background: var(--bg);
+    }
+    .cbd-connect-host .amap-add > * { flex: 1 1 45%; min-width: 6rem; max-width: 100%; }
+    .cbd-connect-host .amap-hits, .cbd-connect-host .amap-ml,
+    .cbd-connect-host .amap-msg { flex: 1 1 100%; }
+    .cbd-connect-host select, .cbd-connect-host input { width: 100%; box-sizing: border-box; }
+
+    /* Строка «завести страну» лежит в колонке `.cbd-pick` и должна стоять
+       поперёк неё. Класса рядом мало: у `.cbd-pick` тот же вес, и оно
+       побеждало порядком в файле — строка оставалась колонкой. А в колонке
+       `flex-basis` задаёт не ширину, а ВЫСОТУ: поле вырастало на восемь
+       строк вниз. Отсюда два правила: вес выше и никакого basis в тех
+       единицах, которые можно принять за высоту. */
+    .cbd-pick.cbd-newc {
+      flex-direction: row; flex-wrap: wrap;
+      gap: var(--space-xs); align-items: center;
+    }
+    .cbd-pick.cbd-newc .cbd-new-country {
+      flex: 1 1 auto; width: auto; min-width: 6rem; box-sizing: border-box;
+      padding: 0.25rem 0.4rem; font: inherit; font-size: 0.74rem;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+    }
+    .cbd-pick.cbd-newc .cbd-add { display: inline-block; width: auto; flex: 0 0 auto; margin-top: 0; }
+    .cbd-pick.cbd-newc .cbd-new-msg { flex: 1 1 100%; color: var(--muted); font-size: 0.68rem; }
+    .cbd-new-msg.bad { color: var(--bad); }
+    .cbd-account {
+      margin: var(--space-sm) 0 var(--space-xs);
+      font-size: 0.72rem; font-weight: 600; color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    .cbd-camp {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg); margin-bottom: var(--space-xs);
+    }
+    .cbd-camp[data-open="1"] { border-color: var(--border-strong); background: var(--bg-elev); }
+    .cbd-camp-head { display: flex; align-items: center; padding-right: 0.3rem; }
+    .cbd-camp-row {
+      display: flex; align-items: center; gap: var(--space-sm);
+      flex: 1; min-width: 0; box-sizing: border-box;
+      padding: 0.4rem 0.5rem;
+      background: none; border: none; color: inherit; font: inherit;
+      text-align: left; cursor: pointer;
+    }
+    .cbd-camp-row:hover { background: var(--bg-hover); }
+    .cbd-camp-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .cbd-caret {
+      flex-shrink: 0; color: var(--muted); font-size: 0.7rem; line-height: 1;
+      transition: transform 160ms var(--ease-out);
+    }
+    .cbd-camp[data-open="1"] .cbd-caret { transform: rotate(90deg); }
+    .cbd-camp-name {
+      flex: 1; min-width: 0; font-size: 0.76rem;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cbd-camp-name-empty { color: var(--muted); font-style: italic; }
+    .cbd-camp-ads {
+      flex-shrink: 0; color: var(--muted); font-size: 0.66rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .cbd-camp-drop {
+      flex-shrink: 0; padding: 0 0.2rem;
+      background: none; border: 1px solid transparent; border-radius: 3px;
+      color: var(--muted); font-size: 0.85rem; line-height: 1; cursor: pointer;
+    }
+    .cbd-camp-drop:hover { color: var(--bad); border-color: var(--bad); }
+    .cbd-camp-body {
+      padding: var(--space-sm); border-top: 1px solid var(--border);
+      font-size: 0.74rem;
+    }
+    .cbd-camp-ad {
+      display: flex; align-items: center; gap: var(--space-xs);
+      padding: 0.22rem 0.3rem; border-bottom: 1px solid var(--border);
+      font-size: 0.73rem;
+    }
+    .cbd-camp-ad-name {
+      flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cbd-camp-ad:last-of-type { border-bottom: none; }
+
+    /* Готовность: цвет, форма и значок вместе. Красный и зелёный —
+       самая частая пара, которую не различают, и одного цвета мало. */
+    .cbd-ind {
+      flex-shrink: 0;
+      width: 1rem; height: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.6rem; font-weight: 700; line-height: 1;
+      border: 1px solid currentColor;
+    }
+    .cbd-ind-ok { color: var(--good); border-radius: 50%; }
+    .cbd-ind-warn { color: var(--warn); transform: rotate(45deg); }
+    .cbd-ind-warn > span { transform: rotate(-45deg); }
+    .cbd-ind-bad { color: var(--bad); border-radius: 2px; }
+    /* Четвёртое состояние, без которого зелёный был бы обещанием, ещё не
+       сдержанным: пока проверка идёт, сказать нечего. */
+    .cbd-ind-wait { color: var(--muted); border-radius: 50%; border-style: dashed; }
+
+    .cbd-add {
+      display: block; width: 100%; box-sizing: border-box;
+      margin-top: var(--space-xs);
+      padding: 0.3rem 0.5rem;
+      background: none; border: 1px dashed var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--muted); font: inherit; font-size: 0.72rem;
+      cursor: pointer; text-align: left;
+    }
+    .cbd-add:hover { color: var(--accent); border-color: var(--accent); }
+    .cbd-add[disabled] { cursor: not-allowed; opacity: 0.55; }
+    .cbd-add[disabled]:hover { color: var(--muted); border-color: var(--border-strong); }
+
+    .cbd-pick {
+      display: flex; flex-direction: column; gap: var(--space-xs);
+    }
+    .cbd-pick select {
+      width: 100%; box-sizing: border-box;
+      padding: 0.25rem 0.4rem; font: inherit; font-size: 0.74rem;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+    }
+    .cbd-note { color: var(--muted); font-size: 0.7rem; line-height: 1.5; }
+
+    .cbd-publish-all {
+      display: block; width: 100%; box-sizing: border-box;
+      margin-bottom: var(--space-xs); padding: 0.4rem 0.5rem;
+      background: var(--good-fill); color: var(--on-good);
+      border: 1px solid var(--good); border-radius: var(--radius-sm);
+      font: inherit; font-size: 0.76rem; font-weight: 700; cursor: pointer;
+    }
+    .cbd-publish-all:hover:not([disabled]) { background: var(--good); }
+    .cbd-publish-all[disabled] { opacity: 0.55; cursor: progress; }
+    .cbd-queue {
+      margin-bottom: var(--space-xs); max-height: 9rem; overflow-y: auto;
+      font-size: 0.7rem; line-height: 1.5;
+    }
+    .cbd-q-head { color: var(--muted); font-weight: 700; padding-bottom: 0.15rem; }
+    .cbd-q-line { display: flex; align-items: baseline; gap: 0.3rem; }
+    .cbd-q-why { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cbd-q-ok { color: var(--good); }
+    .cbd-q-bad { color: var(--bad); }
+    .cbd-q-run { color: var(--accent); }
+
+    /* ── Форма аккаунта, гостящая в ящике ──────────────────────────────
+       Переносится настоящая форма, а не копия: браузер собирает данные
+       только из того, что лежит внутри её тега. Раскладка её при этом
+       чужая — она рассчитана на широкую страницу, — поэтому здесь она
+       складывается в одну колонку. Превью убрано: его не просили, и в
+       360 пикселей оно всё равно не живёт. */
+    .cbd-host { padding: 0; border-top: 1px solid var(--border); }
+    /* Шапка блока и заголовок карточки в ящике не нужны: имя аккаунта и
+       имя кампании стоят строкой выше, в самом дереве. */
+    .cbd-host .cb-acc-header, .cbd-host .cb-slot-header, .cbd-host .cb-slot-name { display: none; }
+    .cbd-host .cb-slot { border: none; padding: var(--space-sm); margin: 0; }
+    .cbd-host .cb-slot-grid { grid-template-columns: 1fr; column-gap: 0; }
+    .cbd-host .cb-preview-col, .cbd-host .cb-preview-btn,
+    .cbd-host .cb-preview-panel, .cbd-host .cbp-diag-slot { display: none !important; }
+    .cb-in-drawer .cb-slot[hidden] { display: none !important; }
+    .cb-field-error { outline: 2px solid var(--bad); }
+    .cb-check-message { color: var(--bad); font-size: .75rem; padding: .3rem; }
+    body.cbd-ready .manage-builder { display: none; }
+    .cbd-host .cb-fields { grid-template-columns: 1fr; gap: 0.15rem; max-width: none; }
+    .cbd-host .cb-fields .cb-label { margin-top: 0.35rem; }
+    /* Четыре поля в ряд в 360 пикселях дают по семьдесят на каждое — в
+       такое не целятся. Переносим по два. */
+    .cbd-host .cb-inline { gap: 0.3rem; flex-wrap: wrap; }
+    .cbd-host .cb-inline > * { flex: 1 1 40%; min-width: 6rem; }
+    .cbd-host .cb-inline .cb-input, .cbd-host .cb-inline .cb-select { width: 100%; }
+
+    /* Выпадающий список внутри ящика рисуется поверх всего, а не внутри
+       прокручиваемой области: `position: absolute` режется первым же
+       предком с `overflow`, а это и есть тело ящика. Список длиной в
+       двести пикселей у поля из нижней половины панели оказывался
+       обрезан по её краю — на экране это выглядело как «поле не
+       работает»: печатаешь, а выбрать не из чего. Координаты ставит
+       `cbdPlaceDropdowns`. */
+    .cbd-host .cb-sel-dropdown { position: fixed; z-index: 1000; }
+    .cbd-host .cb-preflight { margin-bottom: var(--space-sm); }
+    .cbd-host .cb-empty-hint { display: none; }
+    .cbd-tools { padding: 0 var(--space-sm) var(--space-sm); }
+    .cbd-tools .cbd-add { margin-top: 0; text-align: center; }
+    /* Кнопки формы — в столбик во всю ширину: в ряд они не помещаются. */
+    .cbd-host .cb-actions { display: flex; flex-direction: column; gap: var(--space-xs); }
+    .cbd-host .cb-actions button { width: 100%; }
+
+    /* На странице страны, пока форма в ящике. */
+    .cb-parked-note {
+      margin: 0.5rem 0; padding: 0.5rem 0.7rem;
+      border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
+      color: var(--muted); font-size: 0.8rem;
+    }
+    .cbd-foot {
+      padding: var(--space-sm) var(--space-md);
+      border-top: 1px solid var(--border);
+    }
+
+    /* Открытый ящик раздвигает страницу, а не накрывает её: читать нужно
+       ровно то, что сейчас закрыто панелью. Язычок входит в отступ — он
+       торчит слева от панели и иначе ложится поверх таблицы. На узком
+       экране двигать некуда: там ящик всё-таки накрывает. */
+    body.cbd-open { padding-right: calc(var(--cbd-w) + var(--cbd-handle-w)); }
+    @media (max-width: 1100px) {
+      body.cbd-open { padding-right: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cbd-root, .cbd-handle-arrow { transition: none; }
     }
   </style>
 </head>
@@ -2925,6 +3144,8 @@ async function dashRefresh(ev) {
     <th class="num">Net</th>
     <th class="num">CPA</th>
     <th class="num">ROI</th>
+    {# Пустой заголовок — над колонкой каретки «▸», а не над корзиной:
+       строк восемь, и без него таблица съезжает на колонку. #}
     <th></th>
   </tr></thead>
   <tbody>
@@ -3047,7 +3268,7 @@ async function dashRefresh(ev) {
   {% set pf = account_preflight.get(acc_label, {}) %}
   {% set ds = draft_status.get(acc_label, {}) %}
   {# Collect default asset from first rec for the Add Campaign button #}
-  {% set default_asset = recs[0].offer if recs else '' %}
+  {% set default_asset = '' %}
   {% set acc_id = acc_label | replace(' ', '_') | replace('.', '_') %}
 
   <div class="cb-acc-row" data-acc-label="{{ acc_label }}">
@@ -3171,138 +3392,24 @@ async function dashRefresh(ev) {
 
       </div>{# /cb-preflight-body #}
     </div>{# /cb-preflight #}
-    {#- Подсказка нужна всегда, когда карточек нет, а не только в запасном
-        режиме: пустая форма без объяснения читается как «здесь ничего нет»,
-        хотя кнопка «+ Add Campaign» рядом и работает. -#}
-    {% if not recs %}
-    <p style="font-size:0.78rem;color:var(--muted);margin:0.5rem 0 0.25rem">No recommendations for the chosen period — click <strong>+ Add Campaign</strong> to build manually.</p>
-    {% endif %}
+    {#- Пустая форма без объяснения читается как «здесь ничего нет», хотя
+        кнопка рядом и работает. Раньше эту роль играла строка «нет
+        рекомендаций за период» — она исчезла вместе с ними, а объяснить
+        пустоту по-прежнему надо. Прячется, как только карточка появилась:
+        подсказка про пустоту поверх непустого — шум. -#}
+    <p class="cb-empty-hint">No campaigns here yet — click <strong>+ Add Campaign</strong>, or build from the drawer on the right.</p>
     <div class="cb-slots">
-    {# One campaign card per rec; each creative becomes an ad row inside it #}
+    {#- Карточек из рекомендаций здесь больше нет.
+
+        Раньше на каждую открытую рекомендацию книги рисовалась готовая
+        карточка кампании. Заполнялось это плохо, и главное — решало не
+        только «чем заполнить», но и «показывать ли билдер вообще»: 9
+        сентября выбрали один день, рекомендаций за него не нашлось, и
+        рабочий инструмент исчез вместе с подключённым аккаунтом.
+
+        Кампания заводится пустой: «+ Add Campaign» здесь или «+ Campaign»
+        в ящике билдера справа. -#}
     {% set ns = namespace(idx=0) %}
-    {% for r in recs | sort(attribute='strategy_type') %}
-      {% set creatives = r.creatives if (r.creatives and r.creatives|length > 0) else [{'name': ''}] %}
-      {% set sel_targeting_label = r.targeting or '' %}
-      <div class="cb-slot" data-idx="{{ ns.idx }}">
-        <div class="cb-slot-header">
-          <span class="cb-slot-label">Campaign {{ ns.idx + 1 }}
-            {% if r.strategy_label %}<span style="color:var(--muted);font-weight:normal"> · {{ r.strategy_label }}</span>{% endif %}
-          </span>
-          <button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateSlot(this)" title="Duplicate this campaign (including its ads)">⧉</button>
-          <button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>
-        </div>
-        <div class="cb-slot-name" data-name-display></div>
-
-        {# ── Campaign-level fields ── #}
-        <div class="cb-fields">
-          <span class="cb-label">Targeting</span>
-          <div class="cb-sel-wrap cb-targeting-wrap">
-            <input type="text" class="cb-sel-text cb-targeting-search"
-                   placeholder="— search by code or interest —"
-                   autocomplete="off" value=""
-                   oninput="cbTargetingSearch(this)">
-            <div class="cb-sel-dropdown" hidden></div>
-            <input type="hidden" name="camp_{{ ns.idx }}_targeting" class="cb-targeting-hidden" value="{{ sel_targeting_label }}">
-            <div class="cb-targeting-hint" style="font-size:0.67rem;color:var(--muted);margin-top:0.15rem;word-break:break-word">{{ sel_targeting_label }}</div>
-          </div>
-
-          <span class="cb-label">OS / Age / Budget / Language</span>
-          <div class="cb-inline">
-            <div class="cb-sel-wrap">
-              <input type="text" class="cb-sel-text" placeholder="OS" autocomplete="off"
-                     value="{% if r.device == 'iOS' %}iOS{% else %}All{% endif %}">
-              <div class="cb-sel-dropdown" hidden>
-                <div class="cb-sel-opt" data-val="All">All</div>
-                <div class="cb-sel-opt" data-val="iOS">iOS</div>
-              </div>
-              <input type="hidden" name="camp_{{ ns.idx }}_os"
-                     value="{% if r.device == 'iOS' %}iOS{% else %}All{% endif %}">
-            </div>
-            <input type="number" name="camp_{{ ns.idx }}_age" class="cb-input cb-input-sm"
-                   value="{{ r.age or '35' }}" min="18" max="65"
-                   oninput="cbUpdateName(this.closest('.cb-slot'))">
-            <span style="color:var(--muted);font-size:0.72rem">$/day</span>
-            <input type="number" name="camp_{{ ns.idx }}_budget" class="cb-input cb-input-sm"
-                   value="" min="1" step="1" placeholder="50">
-            {#- Язык аудитории. Умолчание считает сервер тем же кодом, что
-                применяет правило при заливке: GCC — арабский, LatAm —
-                испанский. Для прочих стран поле пустое и подсвечено — угадывать
-                за человека язык мы не станем, но и промолчать об этом нельзя.
-                Снять язык можно у любой страны: пустое поле значит «не трогать
-                язык аудитории». -#}
-            {%- set geo_lang = c.country | geo_language %}
-            <input type="text" name="camp_{{ ns.idx }}_language"
-                   class="cb-input cb-input-sm cb-language{% if not geo_lang %} cb-language-empty{% endif %}"
-                   value="{{ geo_lang }}" placeholder="Language"
-                   oninput="cbLanguageChanged(this)"
-                   title="Audience language. Leave empty to skip the Language step in Ads Manager.">
-          </div>
-
-          <span class="cb-label">Asset / Offer</span>
-          <input type="text" name="camp_{{ ns.idx }}_asset" class="cb-input"
-                 value="{{ r.offer or default_asset }}"
-                 oninput="cbUpdateName(this.closest('.cb-slot'))">
-
-          <input type="hidden" name="camp_{{ ns.idx }}_name" class="cb-name-hidden" value="">
-        </div>
-
-        {# ── Ad rows + previews opposite them ── #}
-        <div class="cb-slot-grid">
-        <div class="cb-slot-main">
-        <div class="cb-ads-section">
-          <div class="cb-ads-divider">Ads</div>
-          <div class="cb-ad-rows">
-            {% for cr in creatives %}
-            {% set ctype = cr.name | creative_type %}
-            <div class="cb-ad-row" data-ad-idx="{{ loop.index0 }}">
-              <div class="cb-ad-row-header">
-                <span class="cb-ad-row-label">Ad {{ loop.index }}</span>
-                <button type="button" class="cb-dup-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate this ad">⧉</button>
-                <button type="button" class="cb-remove-ad-btn" onclick="cbRemoveAd(this)" title="Remove ad">×</button>
-              </div>
-              <div class="cb-ad-fields">
-                <span class="cb-label">Type</span>
-                <div class="cb-radio-group">
-                  <label><input type="radio" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_creative_type" value="Image" {% if ctype != 'Video' %}checked{% endif %} onchange="cbAdTypeChange(this)"> Image</label>
-                  <label><input type="radio" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_creative_type" value="Video" {% if ctype == 'Video' %}checked{% endif %} onchange="cbAdTypeChange(this)"> Video</label>
-                </div>
-                <span class="cb-label">File</span>
-                <div class="cb-sel-wrap cb-creative-sel-wrap" data-ctype="{{ ctype }}">
-                  <input type="text" class="cb-sel-text cb-creative-search"
-                         placeholder="— type to search file —"
-                         autocomplete="off" value=""
-                         oninput="cbCreativeSearch(this)">
-                  <div class="cb-sel-dropdown" hidden></div>
-                  <input type="hidden" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_creative_file" value="">
-                </div>
-                <span class="cb-label">Ad Title</span>
-                <div class="cb-sel-wrap cb-adtitle-sel-wrap">
-                  <input type="text" class="cb-sel-text cb-adtitle-search"
-                         placeholder="— type to search ad title —"
-                         autocomplete="off" value=""
-                         oninput="cbAdTitleSearch(this)">
-                  <div class="cb-sel-dropdown" hidden></div>
-                  <input type="hidden" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_copy" value="">
-                </div>
-                <span class="cb-label">CTA <span style="opacity:0.6">(preview only)</span></span>
-                <select class="cb-select cb-cta-select" name="camp_{{ ns.idx }}_ad_{{ loop.index0 }}_cta">
-                  {% for cta in ['Learn More', 'Sign Up', 'Get Offer', 'Download', 'Shop Now', 'Apply Now', 'Get Quote'] %}
-                  <option value="{{ cta }}">{{ cta }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-          <input type="hidden" name="camp_{{ ns.idx }}_ad_count" class="cb-ad-count" value="{{ creatives|length }}">
-          <button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>
-        </div>
-        </div>{# /cb-slot-main #}
-        <div class="cb-preview-col" data-preview-col></div>
-        </div>{# /cb-slot-grid #}
-      </div>
-      {% set ns.idx = ns.idx + 1 %}
-    {% endfor %}
     </div>{# /cb-slots #}
 
     <input type="hidden" name="camp_count" class="cb-count" value="{{ ns.idx }}">
@@ -3451,7 +3558,6 @@ async function dashRefresh(ev) {
         <th>Creative</th>
         <th class="num">Total dep</th>
         <th class="num">Recent dep</th>
-        <th></th>
       </tr></thead>
       <tbody>
       {% for row in rows %}
@@ -3462,10 +3568,6 @@ async function dashRefresh(ev) {
           <td>{{ row.creative or '—' }}</td>
           <td class="num">{{ row.deposits_total }}</td>
           <td class="num">{{ row.deposits_recent }}</td>
-          <td><button type="button" class="cb-cart-btn" data-kind="campaign" data-source="combo"
-                      data-country="{{ cid }}" data-country-name="{{ c.country }}"
-                      data-payload='{{ row | tojson | e }}'
-                      title="Add to build: new campaign">+ 🛒</button></td>
         </tr>
       {% endfor %}
       </tbody>
@@ -3489,7 +3591,6 @@ async function dashRefresh(ev) {
     <th class="num">Dep</th>
     <th class="num">Leads</th>
     <th class="num">Spend</th>
-    <th></th>
   </tr></thead>
   <tbody>
   {% for row in c.top_combos %}
@@ -3503,10 +3604,6 @@ async function dashRefresh(ev) {
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
       <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td><button type="button" class="cb-cart-btn" data-kind="campaign" data-source="combo"
-                  data-country="{{ cid }}" data-country-name="{{ c.country }}"
-                  data-payload='{{ row | tojson | e }}'
-                  title="Add to build: new campaign">+ 🛒</button></td>
     </tr>
   {% endfor %}
   </tbody>
@@ -3552,7 +3649,6 @@ async function dashRefresh(ev) {
     <th class="num">Leads</th>
     <th class="num">Spend</th>
     <th class="num">CPA</th>
-    <th></th>
   </tr></thead>
   <tbody>
   {% for row in c.creatives %}
@@ -3563,10 +3659,6 @@ async function dashRefresh(ev) {
       <td class="num">{{ row.leads }}</td>
       <td class="num">{{ row.spend | fmt_usd }}</td>
       <td class="num">{{ row.cpa | fmt_usd }}</td>
-      <td><button type="button" class="cb-cart-btn" data-kind="ad" data-source="creative"
-                  data-country="{{ cid }}" data-country-name="{{ c.country }}"
-                  data-payload='{{ row | tojson | e }}'
-                  title="Add to build: ad in the last campaign">+ 🛒</button></td>
     </tr>
   {% endfor %}
   </tbody>
@@ -3818,6 +3910,1017 @@ async function dashRefresh(ev) {
 </div>
 {% endif %}
 
+{# ── Ящик билдера ────────────────────────────────────────────────────────
+   Снаружи `{% if report.countries %}`: собирать кампании можно и когда
+   книги нет, а вкладка «Accounts» живёт и без стран.
+   Снаружи `.view-panel`: вкладки переключаются без перезагрузки, так что
+   ящик, стоящий рядом с ними, переживает переход сам собой — и открытым.
+   Один на страницу: панелей «по копии на страну» здесь уже хватило. #}
+<div id="cbd-root" class="cbd-root" data-open="0">
+  <button type="button" class="cbd-handle" id="cbd-handle"
+          aria-controls="cbd-panel" aria-expanded="false"
+          title="Campaign builder">
+    <span class="cbd-handle-arrow" aria-hidden="true">‹</span>
+    <span class="cbd-handle-text">Builder</span>
+    <span class="cbd-handle-count" id="cbd-count" hidden>0</span>
+  </button>
+  <aside class="cbd-panel" id="cbd-panel" role="complementary"
+         aria-label="Campaign builder">
+    <div class="cbd-head">
+      <span class="cbd-title">Builder</span>
+      <span class="cbd-sub" id="cbd-sub"></span>
+      <button type="button" class="cbd-close" id="cbd-close"
+              title="Close the builder" aria-label="Close the builder">×</button>
+    </div>
+    <div class="cbd-body" id="cbd-body">
+      <p class="cbd-empty">Nothing is being assembled yet.</p>
+    </div>
+    <div class="cbd-foot" id="cbd-foot" hidden></div>
+  </aside>
+</div>
+
+<script>
+/* Ящик билдера: открыть, закрыть, помнить.
+ *
+ * Ни одного обработчика на документе тут нет и не должно быть. Прежняя
+ * правая панель закрывалась по клику мимо себя, и из-за этого ею нельзя
+ * было пользоваться по назначению: выделяешь текст в таблице слева —
+ * панель захлопывается вместе с набранным. Escape тоже не вешаем: он
+ * прилетает из полей ввода, и закрыть ящик на полуслове — то же самое.
+ * Закрывают ящик ровно две вещи: язычок и крестик.
+ */
+window.cbDrawer = (function () {
+  var KEY = 'acl.builder.open';
+
+  var root = document.getElementById('cbd-root');
+  if (!root) return null;
+  var panel = document.getElementById('cbd-panel');
+  var handle = document.getElementById('cbd-handle');
+  var countEl = document.getElementById('cbd-count');
+  var subEl = document.getElementById('cbd-sub');
+  var count = 0;
+
+  /* Хранилище бывает закрыто: приватное окно, запрет на данные сайта.
+     Тогда ящик просто не помнит состояние — но работает. */
+  function remember(open) {
+    try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (e) { /* не помним */ }
+  }
+  function remembered() {
+    try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function isOpen() { return root.getAttribute('data-open') === '1'; }
+
+  function apply(open) {
+    root.setAttribute('data-open', open ? '1' : '0');
+    handle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    handle.title = open ? 'Close the builder' : 'Campaign builder';
+    /* Закрытый ящик стоит за краем экрана: убрать его из обхода клавишей
+       Tab и от чтения с экрана, иначе фокус уезжает в невидимое. */
+    panel.inert = !open;
+    document.body.classList.toggle('cbd-open', open);
+  }
+
+  function set(open, save) {
+    open = !!open;
+    if (open === isOpen()) return open;
+    apply(open);
+    if (save !== false) remember(open);
+    document.dispatchEvent(new CustomEvent('acl:builder-drawer', { detail: { open: open } }));
+    return open;
+  }
+
+  /* Сколько кампаний собирается прямо сейчас. Ноль — значка нет вовсе:
+     пустой кружок говорит меньше, чем его отсутствие. */
+  function setCount(n) {
+    count = Math.max(0, n | 0);
+    countEl.textContent = String(count);
+    countEl.hidden = count === 0;
+    subEl.textContent = count === 0 ? '' : count + (count === 1 ? ' campaign' : ' campaigns');
+    return count;
+  }
+
+  handle.addEventListener('click', function () { set(!isOpen()); });
+  document.getElementById('cbd-close').addEventListener('click', function () { set(false); });
+
+  apply(remembered());
+  setCount(0);
+
+  return {
+    open: function () { return set(true); },
+    close: function () { return set(false); },
+    toggle: function () { return set(!isOpen()); },
+    isOpen: isOpen,
+    setCount: setCount,
+    count: function () { return count; },
+    body: function () { return document.getElementById('cbd-body'); },
+    foot: function () { return document.getElementById('cbd-foot'); }
+  };
+})();
+</script>
+
+<script>
+/* Набранное переживает перезагрузку.
+ *
+ * Форму рисует сервер, и рисует пустой: карточек кампаний в разметке
+ * больше нет. Значит, после F5 в билдере чисто — а собранная наполовину
+ * кампания есть работа: имя, бюджет, таргетинг, тексты, выбранные
+ * креативы. Перезагрузка здесь случается часто, дешборд сам просит
+ * обновиться, и терять на ней час чужого вечера нельзя.
+ *
+ * Поэтому значения полей складываются в браузер при вводе и
+ * раскладываются обратно при загрузке. Дальше этого браузера они не
+ * едут: у десяти байеров десять разных наборов, общего места для них
+ * нет.
+ *
+ * Хранилище само ничего не забывает, поэтому забывать приходится нам:
+ * без срока годности через месяц здесь лежат позапрошлые черновики.
+ */
+window.cbKeep = (function () {
+  var KEY = 'acl.builder.v2';
+  var VERSION = 2;
+  /* Две недели без прикосновения — это уже не «собираю». Срок щедрый
+     нарочно: выбросить чужую работу хуже, чем подержать лишнее. */
+  var STALE_MS = 14 * 24 * 60 * 60 * 1000;
+
+  var state = { v: VERSION, forms: {} };
+  var restoring = false;
+
+  function read() {
+    var raw;
+    try { raw = localStorage.getItem(KEY); } catch (e) { return null; }
+    if (!raw) return null;
+    var parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { return null; }
+    if (!parsed || parsed.v !== VERSION || !parsed.forms) return null;
+    var fresh = {}, now = Date.now();
+    Object.keys(parsed.forms).forEach(function (k) {
+      var entry = parsed.forms[k];
+      if (entry && Array.isArray(entry.campaigns) && entry.campaigns.every(function(c) { return c && c.fields && typeof c.fields === 'object' && !Array.isArray(c.fields) && c.shown && typeof c.shown === 'object' && !Array.isArray(c.shown) && Number.isInteger(c.ads) && c.ads > 0 && c.ads <= 100; }) && entry.touched <= now && (now - (entry.touched || 0)) < STALE_MS) fresh[k] = entry;
+    });
+    return { v: VERSION, forms: fresh };
+  }
+
+  function write() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ }
+  }
+
+  /* Ключ ставится, пока форма ещё стоит в своём блоке: гостя в ящике, она
+     из блока вынута, и спросить у неё страну будет не у кого. */
+  function stamp(form) {
+    if (form.dataset.cbdKey) return form.dataset.cbdKey;
+    var row = form.closest('.cb-acc-row');
+    var panel = form.closest('.view-panel[data-country]');
+    var account = row ? (row.dataset.accLabel || '') : '';
+    var country = panel ? (panel.dataset.country || '') : '';
+    if (!account) return '';
+    form.dataset.cbdKey = country + '|' + account;
+    return form.dataset.cbdKey;
+  }
+
+  function field(el) {
+    var m = /^camp_\d+_(.+)$/.exec(el.name || '');
+    return m ? m[1] : '';
+  }
+
+  function readSlot(slot) {
+    var fields = {};
+    slot.querySelectorAll('[name]').forEach(function (el) {
+      var f = field(el);
+      if (!f) return;
+      if (el.type === 'radio') { if (el.checked) fields[f] = el.value; }
+      else fields[f] = el.value;
+    });
+    /* Видимый текст поиска хранится отдельно от выбранного значения:
+       в скрытом поле лежит список интересов, а в видимом — код, который
+       человек набрал. Без него после перезагрузки поле выглядит пустым
+       при заполненном значении. */
+    var shown = {};
+    slot.querySelectorAll('.cb-sel-wrap').forEach(function (wrap) {
+      var hidden = wrap.querySelector('[name]');
+      var text = wrap.querySelector('.cb-sel-text');
+      if (!hidden || !text) return;
+      var f = field(hidden);
+      if (f) shown[f] = text.value;
+    });
+    var hint = slot.querySelector('.cb-targeting-hint');
+    return {
+      fields: fields,
+      shown: shown,
+      hint: hint ? hint.textContent : '',
+      ads: slot.querySelectorAll('.cb-ad-row').length
+    };
+  }
+
+  function writeSlot(slot, data) {
+    var have = slot.querySelectorAll('.cb-ad-row').length;
+    var addAd = slot.querySelector('.cb-add-btn-sm');
+    for (var i = have; i < (data.ads || 1) && addAd; i += 1) window.cbAddAd(addAd);
+
+    slot.querySelectorAll('[name]').forEach(function (el) {
+      var f = field(el);
+      if (!f || !(f in data.fields)) return;
+      if (el.type === 'radio') el.checked = (el.value === data.fields[f]);
+      else el.value = data.fields[f];
+    });
+    slot.querySelectorAll('.cb-sel-wrap').forEach(function (wrap) {
+      var hidden = wrap.querySelector('[name]');
+      var text = wrap.querySelector('.cb-sel-text');
+      if (!hidden || !text) return;
+      var f = field(hidden);
+      if (f && f in data.shown) text.value = data.shown[f];
+    });
+    var hint = slot.querySelector('.cb-targeting-hint');
+    if (hint) hint.textContent = data.hint || '';
+    if (window.cbUpdateName) window.cbUpdateName(slot);
+  }
+
+  function forms() {
+    return Array.prototype.slice.call(document.querySelectorAll('form.open-account-form'));
+  }
+
+  function save() {
+    if (restoring) return;          // раскладываем своё же — записывать нечего
+    var now = Date.now();
+    var next = {};
+    forms().forEach(function (form) {
+      var key = stamp(form);
+      if (!key) return;
+      var slots = form.querySelectorAll('.cb-slot');
+      if (!slots.length) return;    // пустой аккаунт не занимает места
+      var campaigns = Array.prototype.map.call(slots, readSlot);
+      var link = form.querySelector('[name="tracking_link"]');
+      var tracking = link ? link.value : '';
+      var old = state.forms[key];
+      var unchanged = old && old.tracking === tracking && JSON.stringify(old.campaigns) === JSON.stringify(campaigns);
+      next[key] = { touched: unchanged ? old.touched : now, campaigns: campaigns, tracking: tracking };
+    });
+    state = { v: VERSION, forms: next };
+    write();
+  }
+
+  function restore() {
+    var stored = read();
+    if (!stored) { state = { v: VERSION, forms: {} }; return 0; }
+    state = stored;
+    restoring = true;
+    var made = 0;
+    forms().forEach(function (form) {
+      var key = stamp(form);
+      var entry = key && state.forms[key];
+      if (!entry || !entry.campaigns || !entry.campaigns.length) return;
+      /* Сервер отдал форму пустой; если в ней почему-то уже есть карточки,
+         не задваиваем — раскладываем только недостающие. */
+      var link = form.querySelector('[name="tracking_link"]');
+      if (link && typeof entry.tracking === 'string') link.value = entry.tracking;
+      var already = form.querySelectorAll('.cb-slot').length;
+      entry.campaigns.forEach(function (data, i) {
+        if (i < already) return;
+        window.cbAddSlot(form);
+        var slots = form.querySelectorAll('.cb-slot');
+        writeSlot(slots[slots.length - 1], data);
+        made += 1;
+      });
+    });
+    restoring = false;
+    return made;
+  }
+
+  window.addEventListener('pagehide', save);
+  var timer = null;
+  function saveSoon() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(function () { timer = null; save(); }, 400);
+  }
+
+  /* Слушаем ввод на документе, а не на каждой форме: формы приезжают и
+     уезжают — одна из них прямо сейчас гостит в ящике. */
+  document.addEventListener('input', function (e) {
+    if (e.target.closest && e.target.closest('form.open-account-form')) saveSoon();
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target.closest && e.target.closest('form.open-account-form')) saveSoon();
+  });
+
+  /* Ввод — не единственный способ изменить форму. Кампанию добавляют,
+     копируют и удаляют, объявления тоже, и ни одно из этих действий не
+     порождает события ввода: скопированная кампания не пережила бы
+     перезагрузку. Поэтому следим и за самими формами. */
+  function watchStructure() {
+    if (!window.MutationObserver) return;
+    var mo = new MutationObserver(function (records) {
+      var structural = records.some(function (r) {
+        return r.type === 'childList' && Array.from(r.addedNodes).concat(Array.from(r.removedNodes)).some(function(n) { return n.classList && (n.classList.contains('cb-slot') || n.classList.contains('cb-ad-row')); });
+      });
+      if (structural) saveSoon();
+    });
+    forms().forEach(function (form) {
+      if (form._cbdKeepWatched) return;
+      form._cbdKeepWatched = true;
+      mo.observe(form, { childList: true, subtree: true });
+    });
+  }
+
+  function boot() {
+    forms().forEach(stamp);          // пока все формы ещё в своих блоках
+    var made = restore();
+    watchStructure();
+    if (made && window.cbTree) window.cbTree.paint();
+    return made;
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+
+  return {
+    save: save,
+    saveSoon: saveSoon,
+    restore: restore,
+    watch: watchStructure,
+    readSlot: readSlot,
+    writeSlot: writeSlot,
+    all: function () { return state.forms; },
+    staleMs: STALE_MS,
+    forget: function () { state = { v: VERSION, forms: {} }; write(); }
+  };
+})();
+</script>
+
+<script>
+/* Дерево в ящике: страна → аккаунт → кампания → объявление.
+ *
+ * Подписями, а не лесенкой: два уровня отступов в панели шириной в 360
+ * пикселей не оставляют имени кампании места, где жить, — а имя тут
+ * длинное, и в нём вся суть.
+ *
+ * Страны и аккаунты берутся с самой страницы, а не отдельным списком с
+ * сервера. Список, живущий рядом с настоящим, рано или поздно начинает
+ * ему врать: здесь уже было двадцать копий одной панели и две формы
+ * подключения. Страница знает, какие аккаунты к какой стране привязаны,
+ * — её и спрашиваем.
+ */
+window.cbTree = (function () {
+  var OPEN_KEY = 'acl.builder.open-campaign';
+
+  var body = document.getElementById('cbd-body');
+  var foot = document.getElementById('cbd-foot');
+  if (!body || !foot) return null;
+
+  var openId = '';
+  try { openId = localStorage.getItem(OPEN_KEY) || ''; } catch (e) { openId = ''; }
+
+  /* ── дерево — отражение страницы, а не собственный список ──────────────
+     Ящик не ведёт своей бухгалтерии. Кампания, заведённая кнопкой
+     «+ Add Campaign» на странице страны, и кампания, заведённая здесь, —
+     одна и та же карточка в одной и той же форме; ящик просто показывает
+     то, что есть. Пока список был свой, половина работы была ящику не
+     видна, и добавлять приходилось только через него. */
+
+  var seq = 0;
+
+  /* Карточке нужно имя, которое переживёт перенумерацию: `data-idx`
+     меняется при каждом удалении соседа. */
+  function slotId(slot) {
+    if (!slot.dataset.cbdId) slot.dataset.cbdId = 'cbs' + (++seq);
+    return slot.dataset.cbdId;
+  }
+
+  function accountForm(row) {
+    /* Форма может гостить в ящике — тогда в строке её нет. */
+    if (BORROWED && BORROWED.row === row) return BORROWED.form;
+    return row.querySelector('form.open-account-form');
+  }
+
+  function slotName(slot) {
+    var hidden = slot.querySelector('.cb-name-hidden');
+    if (hidden && hidden.value) return hidden.value;
+    var shown = slot.querySelector('[data-name-display]');
+    return shown ? (shown.textContent || '').trim() : '';
+  }
+
+  function realTree() {
+    var out = [], byCountry = Object.create(null);
+    document.querySelectorAll('.view-panel[data-country]').forEach(function (panel) {
+      var id = panel.dataset.country;
+      if (!id) return;
+      if (!byCountry[id]) { byCountry[id] = { country:id, countryName:countryName(id), accounts:[] }; out.push(byCountry[id]); }
+      panel.querySelectorAll('.cb-acc-row[data-acc-label]').forEach(function (row) {
+        var label = row.dataset.accLabel;
+        if (!label) return;
+        var form = accountForm(row);
+        var slots = form ? Array.prototype.slice.call(form.querySelectorAll('.cb-slot')) : [];
+        if (!byCountry[id]) {
+          byCountry[id] = { country: id, countryName: countryName(id), accounts: [] };
+          out.push(byCountry[id]);
+        }
+        var campaigns = slots.map(function (slot) {
+          return {
+            id: slotId(slot),
+            slot: slot,
+            name: slotName(slot),
+            ads: slot.querySelectorAll('.cb-ad-row').length
+          };
+        });
+        /* Сервер собирает кампании по имени: две карточки с одинаковым
+           именем станут одной кампанией с объявлениями обеих. Иногда этого
+           и хотят — скопировал, поменял креатив, получил второе
+           объявление той же кампании. Но узнавать об этом на черновике
+           поздно, поэтому говорим сразу. */
+        var seen = {};
+        campaigns.forEach(function (c) { if (c.name) seen[c.name] = (seen[c.name] || 0) + 1; });
+        campaigns.forEach(function (c) { c.twin = !!(c.name && seen[c.name] > 1); });
+
+        byCountry[id].accounts.push({
+          account: label,
+          row: row,
+          form: form,
+          campaigns: campaigns
+        });
+      });
+    });
+    /* Аккаунт без единой кампании — всё равно место, куда её заводить:
+       строка остаётся, под ней «+ Campaign». А страна, у которой ни один
+       аккаунт ничего не собирает, в дереве не нужна. */
+    return out;
+  }
+
+  function countTotal(tree) {
+    var n = 0;
+    tree.forEach(function (g) {
+      g.accounts.forEach(function (a) { n += a.campaigns.length; });
+    });
+    return n;
+  }
+
+  function findCampaign(id) {
+    var found = null;
+    realTree().forEach(function (g) {
+      g.accounts.forEach(function (a) {
+        a.campaigns.forEach(function (c) {
+          if (c.id === id) found = { camp: c, account: a, group: g };
+        });
+      });
+    });
+    return found;
+  }
+
+  function countryName(id) {
+    var btn = document.querySelector('.sidebar-country-btn[data-country="' + id + '"]');
+    return btn ? (btn.textContent || '').trim() : id;
+  }
+
+  function currentCountry() {
+    var panel = document.querySelector('.view-panel.active[data-country]');
+    return panel ? (panel.dataset.country || '') : '';
+  }
+
+  /* Страны и аккаунты для нижнего выбора. Он остался не для того, чтобы
+     добавлять — добавляется всё на месте, — а чтобы начать в стране,
+     которую сейчас не смотришь. */
+  function places() {
+    return realTree().map(function (g) {
+      return {
+        country: g.country,
+        name: g.countryName,
+        accounts: g.accounts.map(function (a) { return a.account; })
+      };
+    });
+  }
+
+  // Readiness comes from the latest server check for this form snapshot.
+
+  function readiness(c) {
+    var r = c.slot && c.slot._drawerResult;
+    if (!r) return {state: 'wait', sign: '·', why: 'Checking campaign'};
+    if (r.state === 'ok' && c.twin) return {state: 'warn', sign: '△', why: 'Same name: Publish all combines these cards into one campaign.'};
+    return r;
+  }
+
+  /* ── отрисовка ────────────────────────────────────────────────────── */
+
+  function campaignHtml(c) {
+    var r = readiness(c);
+    var open = c.id === openId;
+    return '<div class="cbd-camp" data-camp="' + aclEscHtml(c.id) + '" data-open="' + (open ? '1' : '0') + '">'
+      + '<div class="cbd-camp-head">'
+      + '<button type="button" class="cbd-camp-row" data-act="toggle"'
+      + ' aria-expanded="' + (open ? 'true' : 'false') + '">'
+      + '<span class="cbd-caret" aria-hidden="true">▸</span>'
+      + '<span class="cbd-ind cbd-ind-' + r.state + '" title="' + aclEscHtml(r.why) + '">'
+      + '<span>' + r.sign + '</span></span>'
+      + (c.name
+          ? '<span class="cbd-camp-name">' + aclEscHtml(c.name) + '</span>'
+          : '<span class="cbd-camp-name cbd-camp-name-empty">Untitled campaign</span>')
+      + '<span class="cbd-camp-ads">' + c.ads + (c.ads === 1 ? ' ad' : ' ads') + '</span>'
+      + '</button>'
+      + '<button type="button" class="cbd-camp-drop" data-act="drop"'
+      + ' title="Remove this campaign" aria-label="Remove this campaign">×</button>'
+      + '</div>'
+      + '</div>';
+  }
+
+  function paint() {
+    // Structural changes can repaint after the user has already started typing.
+    var focused = document.activeElement;
+    var keepFocus = focused && (host.contains(focused) || connectHost.contains(focused));
+    var selection = keepFocus ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection] : null;
+    var tree = realTree();
+    /* Узел с гостящей формой держим в переменной и вынимаем ДО перерисовки:
+       иначе innerHTML снёс бы вместе с разметкой и саму форму. */
+    if (host.parentNode) host.parentNode.removeChild(host);
+
+    /* В ящике — то, что собирается, а не список всех аккаунтов. Аккаунтов
+       два десятка; показанные все, они делают стену пустых строк, в
+       которой не видно двух кампаний, ради которых ящик открыли. Начать в
+       аккаунте, где ещё ничего нет, — это выбор внизу. */
+    var busy = tree.map(function (g) {
+      return {
+        country: g.country,
+        countryName: g.countryName,
+        accounts: g.accounts.filter(function (a) { return a.campaigns.length; })
+      };
+    }).filter(function (g) { return g.accounts.length; });
+
+    if (connectHost.parentNode) connectHost.parentNode.removeChild(connectHost);
+
+    /* Страна, в которой открыли подключение, остаётся в дереве, даже если
+       в ней пока ничего не собирается: иначе строка исчезала бы прямо
+       под руками. */
+    if (openConnect && !busy.some(function (g) { return g.country === openConnect; })) {
+      var extra = null;
+      tree.forEach(function (g) { if (g.country === openConnect) extra = g; });
+      if (extra) busy.push({ country: extra.country, countryName: extra.countryName, accounts: [] });
+      else openConnect = '';
+    }
+
+    if (!busy.length) {
+      body.innerHTML = '<p class="cbd-empty">Nothing is being assembled yet.</p>';
+    } else {
+      body.innerHTML = busy.map(function (g) {
+        return '<div class="cbd-country">' + aclEscHtml(g.countryName || g.country)
+          + '<button type="button" class="cbd-country-add" data-act="connect"'
+          + ' data-country="' + aclEscHtml(g.country) + '"'
+          + ' data-country-name="' + aclEscHtml(g.countryName || g.country) + '"'
+          /* Подпись здесь короткая нарочно: словами подлиннее называлась
+             вторая форма подключения, которую убрали, и сторож стережёт её
+             возвращение именно по ним. Цитировать их даже в комментарии не
+             стоит — он тоже часть файла. Здесь не вторая форма, а та же
+             самая, показанная в другом месте. */
+          + ' title="Link an account here">+ Account</button></div>'
+          + (g.country === openConnect ? '<div class="cbd-connect-slot"></div>' : '')
+          + g.accounts.map(function (a) {
+              return '<div class="cbd-account">' + aclEscHtml(a.account) + '</div>'
+                + a.campaigns.map(campaignHtml).join('')
+                + '<button type="button" class="cbd-add" data-act="add-here"'
+                + ' data-country="' + aclEscHtml(g.country) + '"'
+                + ' data-account="' + aclEscHtml(a.account) + '">+ Campaign</button>';
+            }).join('');
+      }).join('');
+    }
+
+    /* Раскрытая карточка получает настоящую форму — ту самую, а не копию. */
+    var card = openId ? body.querySelector('.cbd-camp[data-camp="' + openId + '"]') : null;
+    if (card) card.appendChild(host);
+    else if (openId) release();
+
+    var slotEl = openConnect ? body.querySelector('.cbd-connect-slot') : null;
+    if (slotEl) slotEl.appendChild(connectHost);
+    else if (openConnect) { openConnect = ''; releaseConnect(); }
+
+    if (window.cbDrawer) window.cbDrawer.setCount(countTotal(tree));
+    paintFoot();
+    if (keepFocus && focused.isConnected) {
+      focused.focus({preventScroll:true});
+      if (selection[0] !== null && focused.setSelectionRange) {
+        try { focused.setSelectionRange(selection[0], selection[1], selection[2]); } catch (e) { /* non-text input */ }
+      }
+      cbdPlaceDropdowns();
+    }
+  }
+
+  function paintFoot() {
+    var list = places();
+    foot.hidden = false;
+    var chosen = foot.querySelector('.cbd-pick-country');
+    var keep = (chosen && chosen.value) || currentCountry();
+    var busy = countTotal(realTree());
+    foot.innerHTML = (busy || (window.CB_QUEUE && window.CB_QUEUE.progress)
+        ? '<button type="button" class="cbd-publish-all" data-act="publish-all">'
+          + 'Publish all → drafts (' + busy + ')</button>'
+          + '<div class="cbd-queue" hidden></div>'
+        : '')
+      + '<div class="cbd-pick">'
+      + '<select class="cbd-pick-country" aria-label="Country">'
+      + list.map(function (p) {
+          return '<option value="' + aclEscHtml(p.country) + '"'
+            + (p.country === keep ? ' selected' : '') + '>'
+            + aclEscHtml(p.name) + '</option>';
+        }).join('')
+      + '</select>'
+      + '<select class="cbd-pick-account" aria-label="Account"></select>'
+      + '<button type="button" class="cbd-add" data-act="add-picked">+ Campaign</button>'
+      + '</div>'
+      + '<button type="button" class="cbd-add" data-act="connect-picked">+ Account in selected country</button>'
+      + '<div class="cbd-pick cbd-newc">'
+      + '<input type="text" class="cbd-new-country" placeholder="new country…" autocomplete="off">'
+      + '<button type="button" class="cbd-add" data-act="add-country">+ Country</button>'
+      + '<span class="cbd-new-msg"></span>'
+      + '</div>';
+    paintAccounts();
+    if (window.CB_QUEUE && window.CB_QUEUE.progress) showQueue(window.CB_QUEUE.progress);
+  }
+
+  function paintAccounts() {
+    var countrySel = foot.querySelector('.cbd-pick-country');
+    var accountSel = foot.querySelector('.cbd-pick-account');
+    if (!countrySel || !accountSel) return;
+    var found = null;
+    places().forEach(function (p) { if (p.country === countrySel.value) found = p; });
+    accountSel.innerHTML = (found ? found.accounts : []).map(function (a) {
+      return '<option value="' + aclEscHtml(a) + '">' + aclEscHtml(a) + '</option>';
+    }).join('');
+  }
+
+  /* ── форма гостит в ящике ──────────────────────────────────────────────
+     Переносится ВСЯ форма аккаунта, а не одна карточка. Браузер собирает
+     данные формы только из того, что лежит внутри её тега: карточка,
+     вынутая наружу, ушла бы в публикацию без единого своего поля — молча.
+     На странице страны на её месте остаётся заметка, куда она делась. */
+
+  var host = document.createElement('div');
+  host.className = 'cbd-camp-body cbd-host';
+  var BORROWED = null;
+
+  /* Дублирование кампании. Своё, а не спрятанное: шапка карточки с
+     кнопкой `⧉` в ящике скрыта — имя кампании и так стоит строкой выше, в
+     дереве, — и вместе с ней пропала возможность скопировать кампанию.
+     Здесь она возвращается внизу, где её и ищут: рядом с «+ Add Campaign».
+
+     Копирует та же функция, что и прежняя кнопка: она обходит все поля
+     слота, а не список, записанный руками. Список однажды отстал — язык
+     добавили в форму позже, и копия молча уходила без него. */
+  var tools = document.createElement('div');
+  tools.className = 'cbd-tools';
+  tools.innerHTML = '<button type="button" class="cbd-add" data-act="duplicate">'
+    + '⧉ Duplicate campaign</button>';
+
+  /* ── подключить аккаунт, не уходя из ящика ─────────────────────────────
+     Третьей копии формы подключения здесь нет и не будет: их было две,
+     они разошлись, и сведение их в одну было отдельной задачей. Ящик
+     берёт ту самую форму из карты аккаунтов — со своим поиском профилей,
+     кнопкой Reload и строкой состояния Multilogin, — показывает её у себя
+     и возвращает на место. Понадобился вход — он там же, внутри неё. */
+  var connectHost = document.createElement('div');
+  connectHost.className = 'cbd-connect-host';
+  var CONNECT = null;
+  var openConnect = '';
+
+  /* Блок подключения страны ищется по её имени: в карте аккаунтов у
+     страны свой ключ (код или имя), и с адресом вкладки он не совпадает. */
+  function connectBlockFor(countryName) {
+    var found = null;
+    document.querySelectorAll('details.amap-country').forEach(function (d) {
+      if (found) return;
+      var name = d.dataset.countryName || '';
+      if (name === countryName) found = d.querySelector('.amap-add');
+    });
+    return found;
+  }
+
+  function borrowConnect(countryName) {
+    releaseConnect();
+    var block = connectBlockFor(countryName);
+    if (!block) return false;
+    var mark = document.createComment('cbd-connect');
+    block.parentNode.insertBefore(mark, block);
+    CONNECT = { block: block, mark: mark };
+    connectHost.appendChild(block);
+    /* Состояние Multilogin рисуется при первом взгляде на блок; перенос
+       взглядом не считается, поэтому просим перечитать. */
+    if (window.amapMlRefresh && window.amapMlInstance) {
+      try { window.amapMlRefresh(window.amapMlInstance(block), false); } catch (e) { /* не страшно */ }
+    }
+    return true;
+  }
+
+  function releaseConnect() {
+    if (!CONNECT) return;
+    var c = CONNECT;
+    CONNECT = null;
+    c.mark.parentNode.insertBefore(c.block, c.mark);
+    c.mark.remove();
+  }
+
+  function borrow(row, form, only) {
+    if (BORROWED && BORROWED.form === form) { showOnly(form, only); return; }
+    release();
+    var mark = document.createElement('p');
+    mark.className = 'cb-parked-note';
+    mark.textContent = 'Open in the builder drawer →';
+    form.parentNode.insertBefore(mark, form);
+    BORROWED = { row: row, form: form, mark: mark };
+    host.appendChild(form);
+    host.appendChild(tools);   // вне формы: кнопка внутри неё уходила бы на сервер
+    showOnly(form, only);
+  }
+
+  function release() {
+    if (!BORROWED) return;
+    var b = BORROWED;
+    BORROWED = null;
+    showOnly(b.form, null);
+    b.mark.parentNode.insertBefore(b.form, b.mark);
+    b.mark.remove();
+  }
+
+  /* Форма приносит с собой все кампании аккаунта; в ящике показываем ту,
+     которую раскрыли. Остальные скрыты, но сохранены. Кнопка этой карточки отправляет только
+     её; общая кнопка проверяет и отправляет все готовые кампании. */
+  function showOnly(form, id) {
+    form.querySelectorAll('.cb-slot').forEach(function (slot) {
+      slot.hidden = !!id && slot.dataset.cbdId !== id;
+    });
+    form.classList.toggle('cb-in-drawer', !!id);
+    var publish = form.querySelector('.cb-publish-btn');
+    if (id && publish) publish.disabled = false;
+  }
+
+  /* ── очередь публикации ────────────────────────────────────────────────
+     Аккаунтов может быть пять, каждый — минуты. Очередь видна: иначе
+     «нажал и жду» отличается от «нажал, и ничего не произошло» только
+     терпением. */
+  function showQueue(p) {
+    var box = foot.querySelector('.cbd-queue');
+    var btn = foot.querySelector('.cbd-publish-all');
+    if (!box) return;
+    box.hidden = false;
+
+    var lines = (p.report || []).map(function (r) {
+      var mark = r.state === 'ok' ? '<span class="cbd-q-ok">✓</span>' : '<span class="cbd-q-bad">✕</span>';
+      var tail = r.skipped ? ' · ' + r.skipped + ' skipped' : '';
+      return '<div class="cbd-q-line">' + mark + ' ' + aclEscHtml(r.account) + tail
+        + (r.why ? '<span class="cbd-q-why">' + aclEscHtml(r.why) + '</span>' : '') + '</div>';
+    });
+
+    if (btn) btn.disabled = !!(window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain));
+    if (p.done) {
+      var ok = (p.report || []).filter(function (r) { return r.state === 'ok'; }).length;
+      lines.unshift('<div class="cbd-q-head">Done — ' + ok + ' of ' + p.of + ' accounts</div>');
+      if (btn) btn.disabled = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
+    } else {
+      lines.push('<div class="cbd-q-line"><span class="cbd-q-run">⏳</span> '
+        + aclEscHtml(p.account) + ' — '
+        + (p.stage === 'checking' ? 'checking' : 'building the draft')
+        + ' <span class="cbd-q-why">' + p.at + ' of ' + p.of + '</span></div>');
+    }
+    box.innerHTML = lines.join('');
+  }
+
+  /* ── что делают руками ────────────────────────────────────────────── */
+
+  function rememberOpen(id) {
+    openId = id || '';
+    try { localStorage.setItem(OPEN_KEY, openId); } catch (e) { /* не помним */ }
+  }
+
+  function openCampaign(id) {
+    var found = findCampaign(id);
+    if (!found || !found.account.form) { rememberOpen(''); release(); paint(); return; }
+    rememberOpen(id);
+    borrow(found.account.row, found.account.form, id);
+    paint();
+  }
+
+  function closeCampaign() {
+    rememberOpen('');
+    release();
+    paint();
+  }
+
+  function addCampaign(country, account) {
+    var row = window.aclFindAccountRow ? window.aclFindAccountRow(country, account) : null;
+    if (!row) return null;
+    var form = accountForm(row);
+    if (!form) return null;
+    var before = {};
+    form.querySelectorAll('.cb-slot').forEach(function (s) { before[slotId(s)] = true; });
+    window.cbAddSlot(form);
+    var made = null;
+    form.querySelectorAll('.cb-slot').forEach(function (s) {
+      var id = slotId(s);
+      if (!before[id]) made = id;
+    });
+    if (made) openCampaign(made);   // заведённую пришли заполнять
+    return made;
+  }
+
+  document.getElementById('cbd-panel').addEventListener('click', function (e) {
+    var hit = e.target.closest('[data-act]');
+    if (!hit) return;
+    var act = hit.dataset.act;
+    var card = hit.closest('.cbd-camp');
+    var id = card ? card.dataset.camp : '';
+
+    if (act === 'toggle') {
+      if (id === openId) closeCampaign(); else openCampaign(id);   // одна за раз
+    } else if (act === 'drop') {
+      var found = findCampaign(id);
+      if (!found) return;
+      var what = found.camp.name ? '"' + found.camp.name + '"' : 'this unnamed campaign';
+      if (!window.confirm('Remove ' + what + ' from the builder?')) return;
+      if (id === openId) closeCampaign();
+      window.cbRemoveSlot(found.camp.slot);
+      paint();
+    } else if (act === 'add-here') {
+      addCampaign(hit.dataset.country, hit.dataset.account);
+    } else if (act === 'duplicate') {
+      var open = findCampaign(openId);
+      if (!open) return;
+      var source = open.camp.slot;
+      window.cbDuplicateSlot(source);
+      var copy = source.nextElementSibling;
+      if (copy && copy.classList.contains('cb-slot')) {
+        /* Копию сразу раскрываем: её и пришли править — тем одним полем,
+           ради которого копировали. */
+        openCampaign(slotId(copy));
+      } else {
+        paint();
+      }
+    } else if (act === 'connect' || act === 'connect-picked') {
+      var picked = foot.querySelector('.cbd-pick-country');
+      var country = act === 'connect-picked' ? (picked && picked.value) : hit.dataset.country;
+      if (!country) return;
+      var chosenCountryName = act === 'connect-picked' ? countryName(country) : hit.dataset.countryName;
+      if (openConnect === country) { openConnect = ''; releaseConnect(); paint(); return; }
+      openConnect = country;
+      paint();
+      if (!borrowConnect(chosenCountryName)) {
+        openConnect = '';
+        paint();
+        window.alert('This country is not on the account map yet — add it first with «+ Country».');
+        return;
+      }
+      paint();
+    } else if (act === 'add-country') {
+      var input = foot.querySelector('.cbd-new-country');
+      var msg = foot.querySelector('.cbd-new-msg');
+      var name = input ? (input.value || '').trim() : '';
+      if (!name) { if (msg) { msg.textContent = 'name the country'; msg.className = 'cbd-new-msg bad'; } return; }
+      /* Отправляет та же функция, что и кнопка в карте аккаунтов: свой
+         запрос завёл бы второе место, где решается, что значит «завести
+         страну». Она же перезагрузит страницу — набранное в билдере это
+         переживёт. */
+      window.amapSend({ action: 'add', kind: 'country', value: name }, msg);
+    } else if (act === 'publish-all') {
+      window.cbPublishAll(showQueue);
+    } else if (act === 'add-picked') {
+      var countrySel = foot.querySelector('.cbd-pick-country');
+      var accountSel = foot.querySelector('.cbd-pick-account');
+      if (!countrySel || !accountSel || !accountSel.value) return;
+      /* Вкладку не переключаем: ящик затем и сделан, чтобы не уходить с
+         того, что читаешь. Блок аккаунта найдётся и в скрытой вкладке — на
+         странице отрисованы все. */
+      addCampaign(countrySel.value, accountSel.value);
+    }
+  });
+
+  foot.addEventListener('change', function (e) {
+    if (e.target.classList.contains('cbd-pick-country')) paintAccounts();
+  });
+
+  /* Перешёл на другую страну — «+ Campaign» внизу едет за ним. */
+  document.addEventListener('acl:viewchange', function (e) {
+    var id = (e.detail && e.detail.country) || '';
+    var sel = foot.querySelector('.cbd-pick-country');
+    if (!id || !sel) return;
+    for (var i = 0; i < sel.options.length; i += 1) {
+      if (sel.options[i].value === id) { sel.value = id; paintAccounts(); return; }
+    }
+  });
+
+  /* ── экран идёт за страницей ───────────────────────────────────────────
+     Кампанию можно завести и убрать не только отсюда. Следим за самими
+     формами: что бы их ни изменило — кнопка на странице, дублирование,
+     удаление — ящик показывает это сразу, и добавлять через него не
+     обязательно. */
+  var repaintSoon = (function () {
+    var timer = null;
+    return function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () { timer = null; paint(); }, 120);
+    };
+  })();
+
+  /* ── выпадающие списки внутри ящика ───────────────────────────────────
+     Список у поля — `position: absolute`, и его режет первый же предок с
+     прокруткой, то есть само тело ящика. У поля из нижней половины панели
+     от списка оставалась полоска, и поле выглядело сломанным: печатаешь, а
+     выбрать не из чего. В ящике список рисуется поверх всего (`fixed`), и
+     координаты ему надо проставить руками — вот здесь.
+
+     Открывают список пять разных функций; ловим не их, а факт появления:
+     наблюдатель следит за атрибутом `hidden`. Так не забудется шестая. */
+  function cbdPlaceDropdowns() {
+    host.querySelectorAll('.cb-sel-dropdown').forEach(function (dd) {
+      if (dd.hidden) return;
+      var wrap = dd.closest('.cb-sel-wrap');
+      if (!wrap) return;
+      var r = wrap.getBoundingClientRect();
+      var below = window.innerHeight - r.bottom - 8;
+      var above = r.top - 8;
+      /* Внизу места может не остаться — тогда список открывается вверх. */
+      var down = below >= Math.min(220, above);
+      dd.style.left = r.left + 'px';
+      dd.style.width = r.width + 'px';
+      dd.style.maxHeight = Math.max(120, down ? below : above) + 'px';
+      if (down) { dd.style.top = r.bottom + 'px'; dd.style.bottom = 'auto'; }
+      else { dd.style.bottom = (window.innerHeight - r.top) + 'px'; dd.style.top = 'auto'; }
+    });
+  }
+
+  var dropWatcher = new MutationObserver(cbdPlaceDropdowns);
+  dropWatcher.observe(host, { attributes: true, attributeFilter: ['hidden'], subtree: true });
+  /* Панель прокрутили или окно изменили — список должен уехать за полем,
+     а не остаться висеть там, где поля уже нет. */
+  body.addEventListener('scroll', cbdPlaceDropdowns);
+  window.addEventListener('resize', cbdPlaceDropdowns);
+  host.addEventListener('input', cbdPlaceDropdowns);
+
+  /* Строка кампании обновляется на месте — без перерисовки дерева.
+     Перерисовка вынимает форму из документа и возвращает обратно, а это
+     снимает фокус с поля: вводишь букву, и тебя выбрасывает. Пока форма
+     гостит в ящике, её собственные изменения — это набор текста, и
+     трогать надо только подпись строки. */
+  function refreshOpenRow() {
+    if (!openId) return;
+    var card = body.querySelector('.cbd-camp[data-camp="' + openId + '"]');
+    var found = findCampaign(openId);
+    if (!card || !found) return;
+    var c = found.camp;
+    var nameEl = card.querySelector('.cbd-camp-name');
+    if (nameEl) {
+      nameEl.textContent = c.name || 'Untitled campaign';
+      nameEl.classList.toggle('cbd-camp-name-empty', !c.name);
+    }
+    var adsEl = card.querySelector('.cbd-camp-ads');
+    if (adsEl) adsEl.textContent = c.ads + (c.ads === 1 ? ' ad' : ' ads');
+    var ind = card.querySelector('.cbd-ind');
+    if (ind) {
+      var r = readiness(c);
+      ind.className = 'cbd-ind cbd-ind-' + r.state;
+      ind.title = r.why;
+      var sign = ind.querySelector('span');
+      if (sign) sign.textContent = r.sign;
+    }
+  }
+
+  /* Появилась или исчезла карточка — это уже не набор текста, дерево
+     обязано перестроиться. Различаем по тому, что именно изменилось. */
+  function touchesSlots(record) {
+    if (record.type !== 'childList') return false;
+    function has(list) {
+      for (var i = 0; i < list.length; i += 1) {
+        var n = list[i];
+        if (n.classList && n.classList.contains('cb-slot')) return true;
+      }
+      return false;
+    }
+    return has(record.addedNodes) || has(record.removedNodes);
+  }
+
+  var watcher = new MutationObserver(function (records) {
+    var full = records.some(function (r) {
+      return !host.contains(r.target) || touchesSlots(r);
+    });
+    if (full) repaintSoon(); else refreshOpenRow();
+  });
+  function watch() {
+    document.querySelectorAll('form.open-account-form').forEach(function (form) {
+      if (form._cbdWatched) return;
+      form._cbdWatched = true;
+      watcher.observe(form, { childList: true, subtree: true, characterData: true });
+    });
+  }
+  watch();
+  /* Формы приезжают и после загрузки — страну могли подключить только что. */
+  document.addEventListener('acl:viewchange', watch);
+
+  paint();
+  if (openId) openCampaign(openId);
+  document.body.classList.add('cbd-ready');
+
+  return {
+    paint: paint,
+    places: places,
+    readiness: readiness,
+    refresh: refreshOpenRow,
+    showQueue: showQueue,
+    open: openCampaign,
+    close: closeCampaign,
+    borrowed: function () { return BORROWED; }
+  };
+})();
+</script>
 
 <script>
 function aclCountryBuilder(country) {
@@ -6853,7 +7956,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     // Update visible name display
     var nameDisplay = slot.querySelector('[data-name-display]');
     if (nameDisplay) nameDisplay.textContent = name;
-    refreshReviewMarkers(slot);
   };
 
   // ── Searchable select ─────────────────────────────────────────────────
@@ -7050,8 +8152,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var wrap = input.closest('.cb-targeting-wrap');
       if (wrap) { var dd = wrap.querySelector('.cb-sel-dropdown'); if (dd) dd.hidden = true; }
       cbTargetingCommit(input);
-      var slot = input.closest('.cb-slot');
-      if (slot && typeof refreshReviewMarkers === 'function') refreshReviewMarkers(slot);
     }, 150);
   });
 
@@ -7341,8 +8441,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   window.cbUpdateCount = function cbUpdateCount(form) {
+    var n = form.querySelectorAll('.cb-slot').length;
     var c = form.querySelector('.cb-count');
-    if (c) c.value = form.querySelectorAll('.cb-slot').length;
+    if (c) c.value = n;
+    // Подсказка про пустоту — только пока пусто.
+    var hint = form.querySelector('.cb-empty-hint');
+    if (hint) hint.hidden = n > 0;
   };
 
   // ── Build blank campaign slot ─────────────────────────────────────────
@@ -7617,772 +8721,45 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     cbUpdateCount(form);
   };
 
-  // ── "Send to Builder" (Add-to-Cart style prefill) ─────────────────────
-  function mapDeviceToOS(device) {
-    return (device || '').toLowerCase() === 'ios' ? 'iOS' : 'All';
-  }
-  function numericAge(age) {
-    var m = String(age == null ? '' : age).match(/\d+/);
-    return m ? m[0] : '35';
-  }
-  // "Ad Title" values are frequently "<creative> - <ad copy/segment title>"
-  // (confirmed on real data: ~half of all Ad Title values follow this
-  // pattern, e.g. "Image 134.jpg - ES Invest Like a pro Amazon"). Only the
-  // left-hand side actually identifies the creative file — matching against
-  // the full string (including the copy title) misses real files. Falls
-  // back to the whole text unchanged when there's no " - " separator.
-  // Ad Title packs "<creative id> - <text name>" into one string. Mirror of
-  // split_ad_title() in analyze_fb_stats.py — a dash counts as the separator
-  // only when it has whitespace on at least one side, so names whose own
-  // dash is tight ("Vid 1-2257") stay whole. The old version required the
-  // exact " - " and therefore missed "2307_2- 6" and friends.
-  // Mirrors split_ad_title() in analyze_fb_stats.py — keep the two in step.
-  // Anchors on the creative NUMBER, not the dash: a large minority of titles
-  // are typed without any separator ("2257 Story3"), and the dash rule put
-  // their text into the creative half.
-  function splitAdTitle(text) {
-    var s = (text || '').trim();
-    var strip = function(v) { return v.replace(/^[\s\-_]+|[\s\-_]+$/g, ''); };
-    if (!s || s === '-') return { creative: '', textName: '' };
-    var num = /(?:^|\D)(\d{3,4})(?!\d)/.exec(s);
-    if (num) {
-      var after = s.indexOf(num[1], num.index) + num[1].length;
-      var rest = s.slice(after).replace(/^[\s_\-]+/, '');
-      // A digit straight after the number is a variant ("2046 1 - Story14"),
-      // unless dropping it would leave nothing ("2046 - 6").
-      var trimmed = rest.replace(/^\d+(?!\d)[\s_\-]*/, '');
-      if (strip(trimmed)) rest = trimmed;
-      return { creative: num[1], textName: strip(rest) };
-    }
-    var m = /\s-|-\s/.exec(s);
-    if (!m) return { creative: s, textName: '' };
-    return { creative: strip(s.slice(0, m.index)) || s,
-             textName: strip(s.slice(m.index + m[0].length)) };
-  }
-  function creativeNamePart(text) {
-    return splitAdTitle(text).creative;
-  }
-  function guessCreativeType(text) {
-    // Split on non-alphanumeric like the Python creative-skip-prefix check does
-    // (an underscore counts as a "word" char to \b, so a plain regex misses
-    // tokens like "promo_video_test") — match per-token startswith, not substring.
-    var tokens = (text || '').toLowerCase().split(/[^a-z0-9]+/);
-    var isVideo = tokens.some(function(tok) { return tok.indexOf('vid') === 0; });
-    return isVideo ? 'Video' : 'Image';
-  }
-  // Find a CREATIVES entry whose basename overlaps meaningfully with `text`.
-  // Deliberately conservative: a prior version also matched when the FILE's
-  // basename appeared anywhere inside `text`, which meant short/generic
-  // basenames like "1.jpg" matched almost anything containing the digit "1"
-  // (e.g. combo text "2012 Story3") and silently attached the wrong file.
-  // Only auto-match now when the shared substring is long enough to be a
-  // real signal; anything shorter is left blank for manual review instead
-  // of guessing wrong.
-  // Searches BOTH Image and Video pools rather than committing to one pool
-  // up front from a keyword guess — a prior version guessed the type first
-  // (guessCreativeType) and searched only that pool, so a real video file
-  // was never found whenever the combo/ad text didn't happen to contain a
-  // "vid"-prefixed token. Returns {file, type} from whichever pool actually
-  // matched (the keyword guess only breaks a tie if, rarely, both match).
-  var CREATIVE_MATCH_MIN_LEN = 6;
-  function findCreativeMatch(text) {
-    var q = (text || '').trim().toLowerCase();
-    if (!q) return null;
-    // stem found inside q at a real boundary — not just anywhere. Without
-    // this, a short numeric-ish stem like "image 1" (from "image 1.png")
-    // matches INSIDE "image 134.jpg" too, since "134" starts with "1" —
-    // confirmed live. Require the character right after the match to be
-    // absent or non-digit, so "image 1" only matches up to a real word break.
-    function stemFoundAtBoundary(q, stem) {
-      var pos = q.indexOf(stem);
-      if (pos < 0) return false;
-      var nextChar = q.charAt(pos + stem.length);
-      return !nextChar || !/[0-9]/.test(nextChar);
-    }
-    function search(pool) {
-      return pool.find(function(f) {
-        var stem = f.filename.toLowerCase().replace(/\.[a-z0-9]+$/, '');
-        if (stem.length < CREATIVE_MATCH_MIN_LEN) return false;
-        return f.filename.toLowerCase().indexOf(q) >= 0 || stemFoundAtBoundary(q, stem);
-      });
-    }
-    var hitImage = search(CREATIVES.filter(function(f) { return f.type === 'Image'; }));
-    var hitVideo = search(CREATIVES.filter(function(f) { return f.type === 'Video'; }));
-    if (hitImage && hitVideo) {
-      return guessCreativeType(text) === 'Video' ? { file: hitVideo, type: 'Video' } : { file: hitImage, type: 'Image' };
-    }
-    if (hitVideo) return { file: hitVideo, type: 'Video' };
-    if (hitImage) return { file: hitImage, type: 'Image' };
-    return null;
-  }
-
-  function setSlotField(slot, idx, suffix, value) {
-    var el = slot.querySelector('[name="camp_' + idx + '_' + suffix + '"]');
-    if (el) el.value = value;
-    return el;
-  }
-
-  // Fill a searchable .cb-sel-wrap (hidden value + visible text) directly,
-  // bypassing the dropdown-click path since we already know the resolved value.
-  function setSelWrap(wrap, hiddenVal, displayText) {
-    if (!wrap) return;
-    var hidden = wrap.querySelector('input[type="hidden"]');
-    var text = wrap.querySelector('.cb-sel-text');
-    if (hidden) hidden.value = hiddenVal;
-    if (text) text.value = displayText;
-  }
-
-  // Campaign-level fields (targeting/OS/age/asset). Returns true if targeting
-  // resolved with confidence — false means the slot needs a review flag.
-  function applyCampaignFields(slot, prefill) {
-    var idx = slot.dataset.idx;
-    var tgtWrap = slot.querySelector('.cb-targeting-wrap');
-    var tgt = prefill.targeting || {};
-    if (tgt.matched) {
-      setSelWrap(tgtWrap, tgt.fb_interest || '', tgt.code || '');
-      var hint = tgtWrap ? tgtWrap.querySelector('.cb-targeting-hint') : null;
-      if (hint) hint.textContent = tgt.fb_interest || '';
-    } else if (tgt.raw) {
-      var tgtInput = tgtWrap ? tgtWrap.querySelector('.cb-targeting-search') : null;
-      if (tgtInput) tgtInput.value = tgt.raw;
-    }
-    var osWrap = slot.querySelector('.cb-fields .cb-inline .cb-sel-wrap');
-    var os = mapDeviceToOS(prefill.device);
-    setSelWrap(osWrap, os, os);
-    setSlotField(slot, idx, 'age', numericAge(prefill.age));
-    setSlotField(slot, idx, 'asset', prefill.asset || '');
-    return !!tgt.matched;
-  }
-
-  // Per-ad-row fields — creative type + best-effort file match. `adRow` must
-  // already exist (created via the initial blank slot or a prior cbAddAd()).
-  // Returns true if a creative file was confidently matched. When nothing
-  // matches, the original hint text is left in the search box (instead of
-  // a blank field with no clue) so it's immediately visible what to search
-  // for manually.
-  function applyAdRowFields(adRow, slot, prefill) {
-    var idx = slot.dataset.idx;
-    var aIdx = adRow.dataset.adIdx;
-    var creativeName = creativeNamePart(prefill.creativeHint);
-    var match = findCreativeMatch(creativeName);
-    var ctype = match ? match.type : guessCreativeType(creativeName);
-    var typeRadio = adRow.querySelector('[name="camp_' + idx + '_ad_' + aIdx + '_creative_type"][value="' + ctype + '"]');
-    if (typeRadio) { typeRadio.checked = true; cbAdTypeChange(typeRadio); }
-    var creativeWrap = adRow.querySelector('.cb-creative-sel-wrap');
-    if (match) {
-      var creativeVal = match.file.rel_path || match.file.filename;
-      setSelWrap(creativeWrap, creativeVal, creativeVal);
-    } else if (creativeWrap) {
-      var searchInput = creativeWrap.querySelector('.cb-creative-search');
-      // Pre-fill with just the creative-name part (not the whole "creative -
-      // title" string) so clicking into the field (see the focusin listener
-      // below) immediately searches on the right thing.
-      if (searchInput) searchInput.value = creativeName;
-    }
-
-    // Ad Title is a closed set of named presets from the "ad texts" GSheet
-    // (not filenames), so this is always just a search starting point —
-    // never auto-selected — but it saves retyping the creative name a
-    // second time to go find the matching Ad Title preset, and keeps the
-    // ad's identifying text aligned with its creative like the rest of the
-    // pipeline expects.
-    var adTitleWrap = adRow.querySelector('.cb-adtitle-sel-wrap');
-    if (adTitleWrap) {
-      var adTitleSearch = adTitleWrap.querySelector('.cb-sel-text');
-      if (adTitleSearch && !adTitleSearch.value) adTitleSearch.value = creativeName;
-    }
-
-    return !!match;
-  }
-
-  // ── Auto-built review marker ───────────────────────────────────────────
-  // Slots created via Send-to-Builder that couldn't confidently resolve
-  // targeting and/or a creative get a badge + red field outlines. Re-derived
-  // from current DOM state every time (not cached booleans) so it stays
-  // correct as ads get added to an active campaign (see ACTIVE_CAMPAIGN
-  // below) — checked from cbUpdateName(), which already fires on every
-  // relevant field change (targeting pick, creative pick, OS/age/asset edit).
-  // Only slots flagged data-auto-built="1" (i.e. created via Send-to-Builder)
-  // are checked at all — manually-added blank slots are never flagged.
-  function refreshReviewMarkers(slot) {
-    if (slot.dataset.autoBuilt !== '1') return;
-    var tgtWrap = slot.querySelector('.cb-targeting-wrap');
-    var targetingOk = !!(tgtWrap && tgtWrap.querySelector('.cb-targeting-hidden') || {}).value;
-    if (tgtWrap) tgtWrap.classList.toggle('cb-field-needs-review', !targetingOk);
-
-    var creativeOk = true;
-    slot.querySelectorAll('.cb-ad-row').forEach(function(adRow) {
-      var wrap = adRow.querySelector('.cb-creative-sel-wrap');
-      var ok = !!(wrap && wrap.querySelector('input[type="hidden"]') || {}).value;
-      if (wrap) wrap.classList.toggle('cb-field-needs-review', !ok);
-      if (!ok) creativeOk = false;
-    });
-
-    var badge = slot.querySelector('.cb-autobuilt-badge');
-    if (targetingOk && creativeOk) {
-      slot.dataset.autoBuilt = '0';
-      if (badge) badge.remove();
-    } else if (!badge) {
-      var header = slot.querySelector('.cb-slot-header');
-      if (header) header.insertAdjacentHTML('afterend', '<div class="cb-autobuilt-badge">⚡ Auto-built — review before publish</div>');
-    }
-  }
-
-  function closeSendModal() {
-    var existing = document.getElementById('cb-send-modal');
-    if (existing) existing.remove();
-  }
-
-  // ── Send to Builder: single-item, immediate ────────────────────────────
-  // No cart/staging step — clicking "+ Builder" opens the resolve/confirm
-  // popup directly for that one ad; confirming sends it straight to its
-  // account (wherever that account currently is, on-screen or not) and
-  // inserts it as the first slot there, so browsing many ads across many
-  // accounts is just click → confirm → click → confirm, no batching needed.
-  function flashSent(btn) {
-    if (!btn) return;
-    var orig = btn.textContent;
-    btn.classList.add('cb-send-selected');
-    btn.textContent = '✓ Sent';
-    setTimeout(function() {
-      btn.classList.remove('cb-send-selected');
-      btn.textContent = orig;
-    }, 2000);
-  }
-
-  window.cbOpenSendToBuilderModal = function(btn) {
-    var source = btn.dataset.source;
-    var country = btn.dataset.country;
-    var countryName = btn.dataset.countryName || country;
-    var payload = {};
-    try { payload = JSON.parse(btn.dataset.payload || '{}'); } catch (e) {}
-
-    // A campaign is already open for adding more ads — as long as it's the
-    // same country, skip the popup entirely and append straight to it.
-    if (ACTIVE_CAMPAIGN && ACTIVE_CAMPAIGN.country === country) {
-      addAdToActiveCampaign(source, payload, btn);
-      return;
-    }
-
-    closeSendModal();
-    var overlay = document.createElement('div');
-    overlay.id = 'cb-send-modal';
-    overlay.className = 'cb-send-modal-overlay';
-    var box = document.createElement('div');
-    box.className = 'cb-send-modal-box';
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeSendModal(); });
-    box.innerHTML = '<div class="cb-send-modal-title">Send to Builder</div>'
-      + '<div class="cb-send-modal-msg">Resolving…</div>';
-
-    resolveItemPrefill(source, payload).then(function(prefill) {
-      renderSendModalBody(box, country, countryName, prefill, btn);
-    });
-  };
-
-  document.addEventListener('click', function(e) {
-    var btn = e.target.closest('.cb-send-btn');
-    if (btn) window.cbOpenSendToBuilderModal(btn);
-  });
-
-  // ── Resolve one item's targeting/device/age/asset (async) ─────────────
-  function resolveItemPrefill(source, payload) {
-    if (source === 'combo') {
-      var interestText = payload.interest || '';
-      return fetch('/api/resolve-targeting?text=' + encodeURIComponent(interestText))
-        .then(function(r) { return r.json(); })
-        .catch(function() { return { raw: interestText, matched: false }; })
-        .then(function(targeting) {
-          return {
-            asset: payload.offer, device: payload.device, age: payload.age,
-            targeting: targeting, creativeHint: payload.creative || payload.offer,
-            aliasGuess: payload.top_account || '',
-          };
-        });
-    }
-    // source === 'ad'
-    return fetch('/api/parse-adset?name=' + encodeURIComponent(payload.adset || ''))
-      .then(function(r) { return r.json(); })
-      .catch(function() { return { device: null, age: null, targeting: { matched: false } }; })
-      .then(function(parsed) {
-        return {
-          asset: payload.ad_asset, device: parsed.device, age: parsed.age,
-          targeting: parsed.targeting, creativeHint: payload.ad_title || payload.ad_asset,
-          aliasGuess: payload.account || '',
-        };
-      });
-  }
-
+  // Какие аккаунты у страны: и те, что уже нарисованы на странице, и те,
+  // что вообще за ней числятся. Раньше предлагался только точный алиас, и
+  // «подходящих аккаунтов нет» говорилось при живых подключённых. Функция
+  // пережила удаление корзинки: спрашивают её и дерево в ящике, и Manage.
   function accountOptionsFor(country) {
-    // Union of: accounts already loaded in the DOM (buildable instantly) and
-    // every account known for this country (may need a refresh first) — this
-    // is the fix for "relevant accounts aren't offered": previously only the
-    // exact alias match was ever shown.
     var panel = aclCountryBuilder(country);
-    var loaded = panel ? Array.from(panel.querySelectorAll('.cb-acc-row')).map(function(r) { return r.dataset.accLabel; }) : [];
+    var loaded = panel
+      ? Array.from(panel.querySelectorAll('.cb-acc-row')).map(function(r) { return r.dataset.accLabel; })
+      : [];
     var known = Object.values(ACCOUNT_ALIAS_MAP[country] || {});
     var all = Array.from(new Set(loaded.concat(known))).sort();
     return all.map(function(label) { return { label: label, loaded: loaded.indexOf(label) >= 0 }; });
   }
 
-  function bestAccountGuess(country, prefill, options) {
-    var alias = prefill.aliasGuess;
-    var label = alias && (ACCOUNT_ALIAS_MAP[country] || {})[alias];
-    if (label && options.some(function(o) { return o.label === label; })) return label;
-    return '';
-  }
-
-  function renderSendModalBody(box, country, countryName, prefill, sourceBtn) {
-    var tgtText = (prefill.targeting && prefill.targeting.matched)
-      ? prefill.targeting.code
-      : (prefill.targeting && prefill.targeting.raw ? prefill.targeting.raw + ' (?)' : '—');
-    var itemHtml = '<div class="cb-send-field-row"><span class="cb-send-field-label">Ad</span>'
-      + '<span class="cb-send-field-val' + (!(prefill.targeting && prefill.targeting.matched) ? ' cb-send-unresolved' : '') + '">'
-      + escHtml(prefill.asset || '—') + ' · ' + escHtml(tgtText) + '</span></div>';
-
-    var options = accountOptionsFor(country);
-    var guess = bestAccountGuess(country, prefill, options);
-    var optionsHtml = '<option value="">— choose account —</option>' + options.map(function(o) {
-      var sel = o.label === guess ? ' selected' : '';
-      var tag = o.loaded ? '' : ' (needs refresh)';
-      return '<option value="' + escHtml(o.label) + '"' + sel + '>' + escHtml(o.label) + tag + '</option>';
-    }).join('');
-
-    box.innerHTML = '<div class="cb-send-modal-title">Send to Builder — ' + escHtml(countryName) + '</div>'
-      + itemHtml
-      + '<div class="cb-send-field-row" style="align-items:center">'
-      + '<span class="cb-send-field-label">Account</span>'
-      + '<select id="cb-send-acc-select" class="cb-select" style="max-width:220px">' + optionsHtml + '</select>'
-      + '</div>'
-      + '<div id="cb-send-new-acc-wrap" style="display:flex;gap:0.4rem;margin-top:0.4rem">'
-      + '<input type="text" id="cb-send-new-acc-name" class="cb-input" placeholder="…or type a new account name" style="flex:1">'
-      + '<button type="button" id="cb-send-create-acc" style="padding:0.3rem 0.7rem;background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:4px;color:var(--accent);cursor:pointer;font-size:0.75rem">Add account</button>'
-      + '</div>'
-      + '<div id="cb-send-status" class="cb-send-modal-msg"></div>'
-      + '<div class="cb-send-modal-actions">'
-      + '<button type="button" id="cb-send-cancel" style="padding:0.32rem 0.85rem;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text);cursor:pointer;font-size:0.77rem">Cancel</button>'
-      + '<button type="button" id="cb-send-build" style="padding:0.35rem 0.9rem;background:var(--accent);border:none;border-radius:4px;color:var(--on-accent);cursor:pointer;font-size:0.78rem;font-weight:600">Build</button>'
-      + '</div>';
-
-    box.querySelector('#cb-send-cancel').onclick = closeSendModal;
-    box.querySelector('#cb-send-create-acc').onclick = function() {
-      var nameInput = box.querySelector('#cb-send-new-acc-name');
-      var name = (nameInput.value || '').trim();
-      if (!name) { nameInput.style.borderColor = 'var(--bad)'; return; }
-      var btn = box.querySelector('#cb-send-create-acc');
-      btn.disabled = true;
-      fetch('/account-map-patch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account_name: name, country: countryCode(countryName) }),
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        btn.disabled = false;
-        if (d.ok) {
-          ACCOUNT_ALIAS_MAP[country] = ACCOUNT_ALIAS_MAP[country] || {};
-          ACCOUNT_ALIAS_MAP[country][name] = name;
-          var select = box.querySelector('#cb-send-acc-select');
-          var opt = document.createElement('option');
-          opt.value = name; opt.textContent = name + ' (needs refresh)'; opt.selected = true;
-          select.appendChild(opt);
-          nameInput.value = '';
-        } else {
-          nameInput.style.borderColor = 'var(--bad)';
-        }
-      })
-      .catch(function() { btn.disabled = false; });
-    };
-    box.querySelector('#cb-send-build').onclick = function() {
-      var select = box.querySelector('#cb-send-acc-select');
-      var accountLabel = select.value;
-      if (!accountLabel) { select.style.borderColor = 'var(--bad)'; return; }
-      buildCampaign(prefill, accountLabel, country, countryName, sourceBtn);
-    };
-  }
-
-  // Prepend a brand-new blank slot (instead of appending at the bottom like
-  // the manual "+ Add Campaign" button does) and renumber everything so
-  // camp_N indices stay sequential in DOM order — this is what makes a
-  // Send-to-Builder campaign show up as the very first slot, above even the
-  // server-rendered recommendation slots.
-  function addSlotAtTop(form) {
-    var container = form.querySelector('.cb-slots');
-    var idx = container.querySelectorAll('.cb-slot').length;
-    container.insertAdjacentHTML('afterbegin', buildBlankSlotHTML(idx));
-    var newSlot = container.firstElementChild;
-    cbRenumber(form);
-    cbUpdateCount(form);
-    initAllSelects(newSlot);
-    return newSlot;
-  }
-
-  // ── Place one ad into a fresh top slot, refreshing first if the target
-  // account isn't loaded in the DOM yet — no separate manual Refresh click
-  // needed, Build handles it end-to-end. ─────────────────────────────────
-  function placeCampaignInRow(row, prefill) {
-    var form = row.querySelector('form.open-account-form');
-    if (!form) return null;
-    var slot = addSlotAtTop(form);
-    slot.dataset.autoBuilt = '1';
-
-    applyCampaignFields(slot, prefill);
-    var adRow = slot.querySelector('.cb-ad-row[data-ad-idx="0"]');
-    if (adRow) applyAdRowFields(adRow, slot, prefill);
-    cbUpdateName(slot);
-
-    closeSendModal();
-    aclOpenCountryBuilder(row.closest('.view-panel').dataset.country);
-    var body = row.querySelector('.cb-acc-body');
-    if (body && !body.classList.contains('cb-acc-open')) {
-      body.classList.add('cb-acc-open');
-      var chev = row.querySelector('.cb-acc-chevron');
-      if (chev) chev.textContent = '▾';
-    }
-    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return slot;
-  }
-
+  // Блок аккаунта на странице страны — по стране и подписи аккаунта.
   function findAccountRow(country, accountLabel) {
     var panel = aclCountryBuilder(country);
     return panel ? panel.querySelector('.cb-acc-row[data-acc-label="' + CSS.escape(accountLabel) + '"]') : null;
   }
 
-  // ── Active campaign: click more ads to add them to the same campaign ──
-  // After the first Build, the new slot becomes "active" — subsequent
-  // "+ Builder" clicks skip the popup entirely and add straight to it as a
-  // new ad row, until you press Done (or start a build for a different
-  // country, which isn't allowed while one campaign is mid-build anyway).
-  var ACTIVE_CAMPAIGN = null; // { slot, form, accountLabel, country }
+  window.aclAccountOptionsFor = accountOptionsFor;
+  window.aclFindAccountRow = findAccountRow;
 
-  function renderActiveCampaignBar() {
-    var bar = document.getElementById('cb-active-campaign-bar');
-    if (!ACTIVE_CAMPAIGN) { if (bar) bar.remove(); return; }
-    var adCount = ACTIVE_CAMPAIGN.slot.querySelectorAll('.cb-ad-row').length;
-    var name = (ACTIVE_CAMPAIGN.slot.querySelector('[data-name-display]') || {}).textContent || ACTIVE_CAMPAIGN.accountLabel;
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'cb-active-campaign-bar';
-      bar.className = 'cb-cart-bar';
-      document.body.appendChild(bar);
-    }
-    bar.innerHTML = '<span class="cb-cart-count">Adding to: <strong>' + escHtml(name) + '</strong> (' + adCount + ' ad' + (adCount === 1 ? '' : 's') + ')</span>'
-      + '<button type="button" id="cb-active-campaign-done">Done</button>';
-    bar.querySelector('#cb-active-campaign-done').onclick = clearActiveCampaign;
-  }
-
-  function setActiveCampaign(slot, form, accountLabel, country) {
-    ACTIVE_CAMPAIGN = { slot: slot, form: form, accountLabel: accountLabel, country: country };
-    renderActiveCampaignBar();
-  }
-
-  function clearActiveCampaign() {
-    ACTIVE_CAMPAIGN = null;
-    renderActiveCampaignBar();
-  }
-
-  // Add one more ad straight into the active campaign's slot — no popup,
-  // no account picker (already decided), just resolve + append + flash.
-  function addAdToActiveCampaign(source, payload, sourceBtn) {
-    resolveItemPrefill(source, payload).then(function(prefill) {
-      if (!ACTIVE_CAMPAIGN) return; // Done was pressed while this was resolving
-      var slot = ACTIVE_CAMPAIGN.slot;
-      cbAddAd(slot.querySelector('.cb-add-btn-sm'));
-      var rows = slot.querySelectorAll('.cb-ad-row');
-      var newAdRow = rows[rows.length - 1];
-      applyAdRowFields(newAdRow, slot, prefill);
-      cbUpdateName(slot);
-      renderActiveCampaignBar();
-      flashSent(sourceBtn);
-    });
-  }
-
-  function buildCampaign(prefill, accountLabel, country, countryName, sourceBtn) {
-    var row = findAccountRow(country, accountLabel);
-    if (row) {
-      var slot = placeCampaignInRow(row, prefill);
-      var form = row.querySelector('form.open-account-form');
-      if (slot) setActiveCampaign(slot, form, accountLabel, country);
-      flashSent(sourceBtn);
-      return;
-    }
-
-    // Account known but not yet loaded on this page — refresh silently and
-    // finish the build automatically once the page comes back, instead of
-    // asking the user to click the header Refresh button themselves.
-    var statusEl = document.getElementById('cb-send-status');
-    if (statusEl) statusEl.textContent = 'Account not loaded yet — refreshing…';
-    sessionStorage.setItem('cbPendingBuild', JSON.stringify({
-      prefill: prefill, accountLabel: accountLabel, country: country, countryName: countryName, hash: location.hash,
-    }));
-    fetch('/refresh', { method: 'POST' }).then(function() { location.reload(); }).catch(function() { location.reload(); });
-  }
-
-  // Resume an auto-refresh-triggered build after the page reloads.
-  (function resumePendingBuild() {
-    var raw = sessionStorage.getItem('cbPendingBuild');
-    if (!raw) return;
-    sessionStorage.removeItem('cbPendingBuild');
-    var pending;
-    try { pending = JSON.parse(raw); } catch (e) { return; }
-    if (pending.hash) location.hash = pending.hash;
-    setTimeout(function() {
-      var row = findAccountRow(pending.country, pending.accountLabel);
-      if (row) {
-        var slot = placeCampaignInRow(row, pending.prefill);
-        var form = row.querySelector('form.open-account-form');
-        if (slot) setActiveCampaign(slot, form, pending.accountLabel, pending.country);
-      } else {
-        alert('Account "' + pending.accountLabel + '" still not found after refresh — check config/ad_account_map.csv and that it has performance data for ' + pending.countryName + '.');
-      }
-    }, 300);
-  })();
-
-  // ── Prebuild cart (grill session №2, 2026-08-02: Q2–Q4 = a) ──────────
-  // Travel the stats, silently collect campaign/ad modules into a
-  // localStorage cart bound to (country, account); materialize on demand,
-  // replacing the untouched default slot. Campaign modules (Combos/Trend)
-  // open a new campaign; ad modules (Optimization drill, Creatives) append
-  // to the LAST campaign (a shell campaign is created if the cart is empty).
-  var CB_CART_KEY = 'cbCart:v1';
-  var CB_CART_ACC_KEY = 'cbCartAcc:v1';
-  var _cbCartTouched = false;
-
-  function cbCartLoadAll() {
-    try { return JSON.parse(localStorage.getItem(CB_CART_KEY)) || {}; } catch (e) { return {}; }
-  }
-  function cbCartSaveAll(all) {
-    try { localStorage.setItem(CB_CART_KEY, JSON.stringify(all)); } catch (e) {}
-  }
-  function cbCartAccGet(country) {
-    try { return (JSON.parse(localStorage.getItem(CB_CART_ACC_KEY)) || {})[country] || ''; } catch (e) { return ''; }
-  }
-  function cbCartAccSet(country, label) {
-    try {
-      var m = JSON.parse(localStorage.getItem(CB_CART_ACC_KEY)) || {};
-      m[country] = label;
-      localStorage.setItem(CB_CART_ACC_KEY, JSON.stringify(m));
-    } catch (e) {}
-  }
-
-  function cbCartToast(msg) {
-    var t = document.getElementById('cb-cart-toast');
-    if (!t) {
-      t = document.createElement('div');
-      t.id = 'cb-cart-toast';
-      document.body.appendChild(t);
-    }
-    t.textContent = msg;
-    t.classList.add('cb-cart-toast-show');
-    clearTimeout(t._hideTimer);
-    t._hideTimer = setTimeout(function() { t.classList.remove('cb-cart-toast-show'); }, 1800);
-  }
-
-  function cbCartActiveCountry() {
-    var panel = document.querySelector('.view-panel.active');
-    return panel ? panel.dataset.country : null;
-  }
-
-  function cbCartCounts(entry) {
-    var camps = entry ? entry.campaigns.length : 0;
-    var ads = 0;
-    if (entry) entry.campaigns.forEach(function(c) {
-      ads += (c.src ? 1 : 0) + (c.ads ? c.ads.length : 0);
-    });
-    return { camps: camps, ads: ads };
-  }
-
-  function cbCartBarRender() {
-    var country = cbCartActiveCountry();
-    var bar = document.getElementById('cb-cart-bar');
-    if (!country) { if (bar) bar.style.display = 'none'; return; }
-    var options = accountOptionsFor(country);
-    var label = cbCartAccGet(country) || (options[0] && options[0].label) || '';
-    var all = cbCartLoadAll();
-    var entry = all[country + '|' + label];
-    var n = cbCartCounts(entry);
-    if (!n.camps && !_cbCartTouched) { if (bar) bar.style.display = 'none'; return; }
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'cb-cart-bar';
-      bar.className = 'cb-cart-bar';
-      document.body.appendChild(bar);
-    }
-    bar.style.display = 'flex';
-    var optHtml = options.map(function(o) {
-      return '<option value="' + escHtml(o.label) + '"' + (o.label === label ? ' selected' : '') + '>'
-        + escHtml(o.label) + (o.loaded ? '' : ' (needs refresh)') + '</option>';
-    }).join('');
-    bar.innerHTML = '<span class="cb-cart-count">🛒 Building for:</span>'
-      + '<select id="cb-cart-acc" class="cb-select" style="max-width:190px;font-size:0.74rem">' + optHtml + '</select>'
-      + '<span class="cb-cart-count">' + n.camps + ' camp · ' + n.ads + ' ads</span>'
-      + '<button type="button" id="cb-cart-open"' + (n.camps ? '' : ' disabled') + '>Open in builder</button>'
-      + '<button type="button" id="cb-cart-clear" style="background:transparent;color:var(--text);border:1px solid var(--border-strong)"'
-      + (n.camps ? '' : ' disabled') + '>×</button>';
-    bar.querySelector('#cb-cart-acc').onchange = function() {
-      cbCartAccSet(country, this.value);
-      cbCartBarRender();
-    };
-    bar.querySelector('#cb-cart-open').onclick = cbCartOpenBuilder;
-    bar.querySelector('#cb-cart-clear').onclick = function() {
-      delete all[country + '|' + label];
-      cbCartSaveAll(all);
-      cbCartToast('Build cleared');
-      cbCartBarRender();
-    };
-  }
-
-  document.addEventListener('click', function(e) {
-    var btn = e.target.closest('.cb-cart-btn');
-    if (!btn) return;
-    var country = btn.dataset.country;
-    var options = accountOptionsFor(country);
-    var label = cbCartAccGet(country) || (options[0] && options[0].label) || '';
-    if (!label) { cbCartToast('No accounts for this country'); return; }
-    cbCartAccSet(country, label);
-    var payload = {};
-    try { payload = JSON.parse(btn.dataset.payload || '{}'); } catch (err) {}
-    var all = cbCartLoadAll();
-    var key = country + '|' + label;
-    var entry = all[key] || (all[key] = { country: country, accountLabel: label, campaigns: [] });
-    if (btn.dataset.kind === 'campaign') {
-      entry.campaigns.push({ src: { source: btn.dataset.source, payload: payload }, ads: [] });
-      cbCartToast('+ Campaign ' + entry.campaigns.length + ' → ' + label);
-    } else {
-      var last = entry.campaigns[entry.campaigns.length - 1];
-      if (!last) { last = { src: null, ads: [] }; entry.campaigns.push(last); }
-      last.ads.push({ source: btn.dataset.source, payload: payload });
-      cbCartToast('+ Ad → Campaign ' + entry.campaigns.length + ' (' + label + ')');
-    }
-    cbCartSaveAll(all);
-    _cbCartTouched = true;
-    flashSent(btn);
-    cbCartBarRender();
-  });
-
-  // 'creative' rows carry only an ad title — no adset to parse.
-  function cbCartResolve(mod) {
-    if (!mod) return Promise.resolve({ targeting: { matched: false } });
-    if (mod.source === 'creative') {
-      return Promise.resolve({ asset: '', creativeHint: (mod.payload || {}).ad_title || '',
-                               targeting: { matched: false } });
-    }
-    return resolveItemPrefill(mod.source, mod.payload);
-  }
-
-  function cbCartOpenBuilder() {
-    var country = cbCartActiveCountry();
-    if (!country) return;
-    var label = cbCartAccGet(country);
-    var all = cbCartLoadAll();
-    var entry = all[country + '|' + label];
-    if (!entry || !entry.campaigns.length) { cbCartToast('Nothing in the build'); return; }
-    var row = findAccountRow(country, label);
-    if (!row) {
-      sessionStorage.setItem('cbCartPending', JSON.stringify({ country: country, accountLabel: label }));
-      cbCartToast('Account not loaded — reloading the page…');
-      fetch('/refresh', { method: 'POST' }).then(function() { location.reload(); }).catch(function() { location.reload(); });
-      return;
-    }
-    cbCartMaterialize(row, entry, all, country, label);
-  }
-
-  function cbCartMaterialize(row, entry, all, country, label) {
-    var form = row.querySelector('form.open-account-form');
-    if (!form) return;
-    aclOpenCountryBuilder(country);
-    var body = row.querySelector('.cb-acc-body');
-    if (body && !body.classList.contains('cb-acc-open')) {
-      body.classList.add('cb-acc-open');
-      var chev = row.querySelector('.cb-acc-chevron');
-      if (chev) chev.textContent = '▾';
-    }
-
-    // Grill task 3: prebuilt slots REPLACE the untouched default slot(s) —
-    // "untouched" = no targeting, no creative file, no ad copy anywhere.
-    form.querySelectorAll('.cb-slot').forEach(function(slot) {
-      var touched = false;
-      var tgt = slot.querySelector('.cb-targeting-hidden');
-      var tgtSearch = slot.querySelector('.cb-targeting-search');
-      if ((tgt && tgt.value) || (tgtSearch && tgtSearch.value)) touched = true;
-      slot.querySelectorAll('.cb-ad-row').forEach(function(r) {
-        var f = r.querySelector('input[type="hidden"][name$="_creative_file"]');
-        var c = r.querySelector('input[type="hidden"][name$="_copy"]');
-        var fs = r.querySelector('.cb-creative-search');
-        var cs = r.querySelector('.cb-adtitle-search');
-        if ((f && f.value) || (c && c.value) || (fs && fs.value) || (cs && cs.value)) touched = true;
-      });
-      if (!touched) slot.remove();
-    });
-    cbRenumber(form);
-    cbUpdateCount(form);
-
-    var chain = Promise.resolve();
-    entry.campaigns.forEach(function(camp) {
-      chain = chain.then(function() {
-        var container = form.querySelector('.cb-slots');
-        var idx = container.querySelectorAll('.cb-slot').length;
-        container.insertAdjacentHTML('beforeend', buildBlankSlotHTML(idx));
-        var slot = container.querySelector('.cb-slot[data-idx="' + idx + '"]');
-        if (!slot) return;
-        initAllSelects(slot);
-        slot.dataset.autoBuilt = '1';
-        var first = camp.src || camp.ads[0] || null;
-        var extraAds = camp.src ? (camp.ads || []) : (camp.ads || []).slice(1);
-        return cbCartResolve(first).then(function(prefill) {
-          applyCampaignFields(slot, prefill);
-          var adRow = slot.querySelector('.cb-ad-row[data-ad-idx="0"]');
-          if (adRow) applyAdRowFields(adRow, slot, prefill);
-          var adChain = Promise.resolve();
-          extraAds.forEach(function(mod) {
-            adChain = adChain.then(function() {
-              return cbCartResolve(mod).then(function(p2) {
-                cbAddAd(slot.querySelector('.cb-add-btn-sm'));
-                var rows = slot.querySelectorAll('.cb-ad-row');
-                applyAdRowFields(rows[rows.length - 1], slot, p2);
-              });
-            });
-          });
-          return adChain.then(function() { cbUpdateName(slot); });
-        });
-      });
-    });
-    chain.then(function() {
-      delete all[country + '|' + label];
-      cbCartSaveAll(all);
-      cbCartBarRender();
-      cbpRenderAll();
-      row.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      cbCartToast('Built: ' + entry.campaigns.length + ' camp. → check it and press Preview');
-    });
-  }
-
-  // Resume materialization after the account-not-loaded refresh path.
-  (function resumeCartPending() {
-    var raw = sessionStorage.getItem('cbCartPending');
-    if (!raw) return;
-    sessionStorage.removeItem('cbCartPending');
-    var p;
-    try { p = JSON.parse(raw); } catch (e) { return; }
-    setTimeout(function() {
-      var row = findAccountRow(p.country, p.accountLabel);
-      var all = cbCartLoadAll();
-      var entry = all[p.country + '|' + p.accountLabel];
-      if (row && entry && entry.campaigns.length) {
-        cbCartMaterialize(row, entry, all, p.country, p.accountLabel);
-      }
-    }, 400);
-  })();
-
-  // Bar follows view switches; initial render after load.
-  document.addEventListener('click', function(e) {
-    if (e.target.closest && (e.target.closest('.sidebar-link') || e.target.closest('.sidebar-country-btn')
-        || e.target.closest('.sidebar-home'))) {
-      setTimeout(cbCartBarRender, 60);
-    }
-  });
-  setTimeout(cbCartBarRender, 300);
+  // ── Корзинка и «Send to Builder» убраны ───────────────────────────────
+  //
+  // Кнопки «+ 🛒» в таблицах комбо и креативов складывали кампании и
+  // объявления в корзину, а та раскладывала их готовыми карточками в форму
+  // аккаунта на странице страны. Автоматическое заполнение работало плохо:
+  // таргетинг и креатив угадывались по тексту строки — и не угадывались
+  // чаще, чем угадывались. Карточка приезжала с красными полями и значком
+  // «Auto-built — review before publish», то есть всё равно требовала
+  // ручной работы, только теперь ещё и с чужими значениями, которые надо
+  // было сначала заметить.
+  //
+  // Кампания заводится пустой и руками — в ящике билдера справа.
+  //
+  // Ушло вместе с механизмом: модалка выбора аккаунта, угадывание
+  // таргетинга и креатива по тексту, «активная кампания» с плашкой внизу
+  // экрана и метка автосборки. Ничто из этого больше не вызывается.
 
   // ── Visual ad preview (Feed / Reels mockups) ──────────────────────────
   // window-scoped: cbPreview() (further down the page) lives in a separate
@@ -8518,12 +8895,16 @@ function cbInvalidatePreview(form) {
   }, true);
 });
 
-window.cbPreview = function(form) {
+// `done(plan, error)` — необязательный: зовётся после того, как диагностика
+// отрисована. Нужен «Publish all», чтобы узнать, у какой кампании ошибки,
+// не делая второго запроса к серверу: превью — не дешёвый вызов, он
+// разрешает креативы и тексты.
+window.cbPreview = function(form, done, onlySlot) {
   cbInvalidatePreview(form);
   var requestId = form._previewRequest;
   var panel = form.querySelector('.cb-preview-panel');
   var publishBtn = form.querySelector('.cb-publish-btn');
-  if (!panel) return;
+  if (!panel) { if (done) done(null, 'Preview panel unavailable'); return; }
   panel.style.display = 'block';
   panel.innerHTML = '<span style="color:var(--muted)">Loading preview…</span>';
   if (publishBtn) publishBtn.disabled = true;
@@ -8544,19 +8925,27 @@ window.cbPreview = function(form) {
     return form._previewRequest === requestId && document.contains(form)
       && JSON.stringify(Array.from(new FormData(form).entries())) === snapshot;
   }
-  fetch('/preview-publish', { method: 'POST', body: fd })
+  var requestData = fd;
+  if (onlySlot) {
+    var omit = {}; form.querySelectorAll('.cb-slot').forEach(function(slot,i) { if(slot !== onlySlot) omit[i]=true; });
+    requestData = cbFormDataSkipping(form, omit, fd).body;
+  }
+  fetch('/preview-publish', { method: 'POST', body: requestData })
     .then(function(r) {
       if (!r.ok) {
-        return r.json().then(function(d) { return d; }, function() { return {error: 'Server error ' + r.status}; });
+        return r.json().then(function(d) { return {error:d.error || 'Server error ' + r.status}; }, function() { return {error: 'Server error ' + r.status}; });
       }
       return r.json();
     })
     .then(function(data) {
-      if (!current()) return;
-      if (!data) { panel.innerHTML = '<span class="cb-preview-errors">Empty response from server</span>'; return; }
+      if (!current()) { if (done) done(null, 'Campaign changed during check'); return; }
+      if (!data || !Array.isArray(data.plan)) {
+        var error = data && data.error || 'Invalid preview response';
+        panel.textContent = error; if (done) done(null, error); return;
+      }
       if (data.error) {
         panel.innerHTML = '<span class="cb-preview-errors">⚠ ' + aclEscHtml(data.error) + '</span>';
-        return;
+        if (done) done(null, data.error); return;
       }
       var plan = data.plan || [];
       var SKIP = ['errors', 'warnings', '_ads_raw'];
@@ -8674,12 +9063,299 @@ window.cbPreview = function(form) {
           });
         });
       });
+
+      if (done) done(plan, null, fd);
     })
     .catch(function(e) {
-      if (!current()) return;
+      if (!current()) { if (done) done(null, 'Campaign changed during check'); return; }
       panel.innerHTML = '<span class="cb-preview-errors">Request failed: ' + aclEscHtml(e.message) + '</span>';
+      if (done) done(null, e.message);
     });
 };
+
+/* ── «Publish all»: поднять черновиками всё, что собрано ────────────────
+ *
+ * Каждый аккаунт — отдельная работа RPA, и профиль в Multilogin один:
+ * два аккаунта одновременно дрались бы за окно. Поэтому очередь идёт по
+ * одному, и следующий начинается, только когда закончился прошлый.
+ *
+ * Перед каждой работой гоняется превью — тот же вызов, что и по кнопке
+ * Preview, с той же отрисовкой: кампания с ошибкой получает свою
+ * свёрнутую плашку диагностики там же, где получала бы всегда.
+ *
+ * Кампания с ошибкой не уходит. Уходят остальные кампании того же
+ * аккаунта: незаполненная кампания — не повод задержать соседнюю,
+ * собранную. Единственная ошибка, которая не держит, — пустая ссылка:
+ * её добавляют и после сборки, так решил владелец.
+ */
+// The drawer checks real server diagnostics without opening a preview panel.
+function cbDrawerRefreshIndicators() {
+  if (!window.cbTree) return;
+  document.querySelectorAll('.cbd-camp[data-camp]').forEach(function(card) {
+    var id = card.dataset.camp;
+    var slot = Array.from(document.querySelectorAll('.cb-slot')).find(function(s) { return s.dataset.cbdId === id; });
+    if (!slot) return;
+    var name = (slot.querySelector('.cb-name-hidden') || {}).value || '';
+    var form = slot.closest('form');
+    var twin = Array.from(form.querySelectorAll('.cb-name-hidden')).filter(function(x) { return name && x.value === name; }).length > 1;
+    var result = cbTree.readiness({slot:slot,name:name,twin:twin,ads:slot.querySelectorAll('.cb-ad-row').length});
+    var indicator = card.querySelector('.cbd-ind');
+    if (indicator) { indicator.className = 'cbd-ind cbd-ind-' + result.state; indicator.title = result.why; indicator.querySelector('span').textContent = result.sign; }
+  });
+}
+function cbDrawerClearFields(form) {
+  form.querySelectorAll('.cb-field-error').forEach(function(el) { el.classList.remove('cb-field-error'); el.removeAttribute('aria-invalid'); });
+  form.querySelectorAll('.cb-check-message').forEach(function(el) { el.remove(); });
+}
+function cbDrawerApplyPlan(form, plan, error) {
+  cbDrawerClearFields(form);
+  var byName = Object.create(null);
+  (plan || []).forEach(function(p) {
+    var name = String(p['Campaign Name'] || '');
+    if (!byName[name]) byName[name] = {errors:[],warnings:[]};
+    byName[name].errors = byName[name].errors.concat(cbBlockingErrors(p));
+    byName[name].warnings = byName[name].warnings.concat(p.warnings || [], (p.errors || []).filter(function(e) { return window.CB_LINK_NOT_BLOCKING.test(String(e)); }));
+  });
+  form.querySelectorAll('.cb-slot').forEach(function(slot) {
+    var name = (slot.querySelector('.cb-name-hidden') || {}).value || '';
+    var verdict = byName[name];
+    var errors = error ? [error] : verdict ? verdict.errors : ['This campaign was not checked'];
+    var warnings = verdict ? verdict.warnings : [];
+    slot._drawerResult = errors.length ? {state:'bad',sign:'✕',why:errors.join('; ')} : warnings.length ? {state:'warn',sign:'△',why:warnings.join('; ')} : {state:'ok',sign:'✓',why:'Checked — ready to build a draft'};
+    if (errors.length) {
+      var message = document.createElement('div'); message.className='cb-check-message'; message.textContent=errors.join('; '); slot.appendChild(message);
+      var selectors=[];
+      errors.forEach(function(e) {
+        if (/creative|file|image|video/i.test(e)) selectors.push('.cb-creative-search');
+        if (/text|copy|headline/i.test(e)) selectors.push('.cb-adtitle-search');
+        if (/budget/i.test(e)) selectors.push('[name$="_budget"]');
+        if (/target/i.test(e)) selectors.push('.cb-targeting-search');
+      });
+      selectors.forEach(function(sel) { slot.querySelectorAll(sel).forEach(function(el) { el.classList.add('cb-field-error');el.setAttribute('aria-invalid','true'); }); });
+    }
+  });
+  var publish = form.querySelector('.cb-publish-btn');
+  if (publish && form.classList.contains('cb-in-drawer')) {
+    var visible = Array.from(form.querySelectorAll('.cb-slot')).find(function(slot) { return !slot.hidden; });
+    publish.disabled = !visible || !visible._drawerResult || !/^(ok|warn)$/.test(visible._drawerResult.state) || !!(window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain));
+  }
+  cbDrawerRefreshIndicators();
+}
+function cbDrawerCheck(form) {
+  var version = form._drawerCheck;
+  var fd = cbCollectFormData(form), snapshot = JSON.stringify(Array.from(fd.entries()));
+  fetch('/preview-publish', {method:'POST',body:fd})
+    .then(function(r) { if (!r.ok) throw new Error('Check failed: HTTP '+r.status); return r.json(); })
+    .then(function(data) {
+      if (version !== form._drawerCheck || !document.contains(form)) return;
+      if (JSON.stringify(Array.from(new FormData(form).entries())) !== snapshot) { cbDrawerScheduleCheck(form); return; }
+      cbDrawerApplyPlan(form, data && Array.isArray(data.plan) ? data.plan : [], data && data.error || (!data || !Array.isArray(data.plan) ? 'Invalid check response' : ''));
+    })
+    .catch(function(e) { if (version === form._drawerCheck) cbDrawerApplyPlan(form, [], e.message); });
+}
+function cbDrawerScheduleCheck(form) {
+  if (!form || !form.querySelector('.cb-slot')) return;
+  form._drawerCheck = (form._drawerCheck || 0) + 1;
+  clearTimeout(form._drawerTimer);
+  cbDrawerClearFields(form);
+  form.querySelectorAll('.cb-slot').forEach(function(slot) { slot._drawerResult = {state:'wait',sign:'·',why:'Checking campaign'}; });
+  cbDrawerRefreshIndicators();
+  form._drawerTimer = setTimeout(function() { cbDrawerCheck(form); }, 350);
+}
+['input','change'].forEach(function(type) {
+  document.addEventListener(type,function(e) { var form=e.target.closest && e.target.closest('form.open-account-form'); if(form) cbDrawerScheduleCheck(form); });
+});
+['mousedown','click'].forEach(function(type) {
+  document.addEventListener(type,function(e) {
+    var opt=e.target.closest && e.target.closest('.cb-sel-opt');
+    var form=opt && opt.closest('form.open-account-form');
+    if (form) { cbDrawerScheduleCheck(form); form.dispatchEvent(new Event('change',{bubbles:true})); }
+  });
+});
+function cbDrawerWatchChecks() {
+  document.querySelectorAll('form.open-account-form').forEach(function(form) {
+    cbDrawerScheduleCheck(form);
+    new MutationObserver(function(records) {
+      if (records.some(function(r) { return Array.from(r.addedNodes).concat(Array.from(r.removedNodes)).some(function(n) { return n.classList && (n.classList.contains('cb-slot') || n.classList.contains('cb-ad-row')); }); })) cbDrawerScheduleCheck(form);
+    }).observe(form,{childList:true,subtree:true});
+  });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',cbDrawerWatchChecks);
+else cbDrawerWatchChecks();
+
+window.CB_LINK_NOT_BLOCKING = /link empty/i;
+
+function cbBlockingErrors(entry) {
+  return (entry.errors || []).filter(function (e) {
+    return !window.CB_LINK_NOT_BLOCKING.test(String(e));
+  });
+}
+
+/* Какие карточки не поедут — по ИМЕНИ, а не по номеру.
+ *
+ * План с сервера не стоит в одном ряду с карточками на экране. Сервер
+ * группирует кампании по имени: две карточки с одинаковым именем
+ * становятся одной кампанией, а карточка, у которой имя не собралось,
+ * выпадает вовсе. Три карточки на экране легко дают одну строку плана —
+ * это видно на живом дешборде, а не в теории.
+ *
+ * Отбирать по номеру значило бы при первом же совпадении имён пропустить
+ * не ту кампанию: сломанная ушла бы в публикацию, а собранная осталась
+ * бы дома. Поэтому карточка ищет свою строку плана по имени.
+ *
+ * Имени в плане не нашлось — карточка считается непроверенной и не едет.
+ * Отказ в сторону «не публиковать» здесь единственный допустимый: молча
+ * поднять черновик, который никто не проверял, хуже, чем не поднять. */
+function cbSkipByName(form, plan) {
+  var verdict = Object.create(null);
+  (plan || []).forEach(function (entry) {
+    var name = String(entry['Campaign Name'] || '');
+    if (name) verdict[name] = !!verdict[name] || cbBlockingErrors(entry).length > 0;
+  });
+
+  var total = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '0'), 10) || 0;
+  var skip = {}, unchecked = 0, broken = 0;
+  for (var i = 0; i < total; i += 1) {
+    var field = form.querySelector('[name="camp_' + i + '_name"]');
+    var name = field ? String(field.value || '') : '';
+    if (!(name in verdict)) { skip[i] = true; unchecked += 1; }
+    else if (verdict[name]) { skip[i] = true; broken += 1; }
+  }
+  return { skip: skip, unchecked: unchecked, broken: broken };
+}
+
+/* Payload без пропущенных кампаний.
+ *
+ * Поля называются по номеру — `camp_0_asset`, `camp_1_ad_0_copy`, — и
+ * сервер читает их подряд от нуля. Выбросив кампанию из середины, номера
+ * надо сдвинуть, иначе на сервере останется дыра и он прочитает меньше,
+ * чем отправлено. `camp_count` пересчитывается по оставшимся. */
+function cbFormDataSkipping(form, skip, snapshot) {
+  var total = parseInt(snapshot ? snapshot.get('camp_count') : ((form.querySelector('[name="camp_count"]') || {}).value || '0'), 10) || 0;
+  var renumber = {};
+  var kept = 0;
+  for (var i = 0; i < total; i += 1) if (!skip[i]) renumber[i] = kept++;
+
+  var out = new FormData();
+  (snapshot || new FormData(form)).forEach(function (value, key) {
+    if (key === 'camp_count') return;
+    var m = /^camp_(\d+)_(.+)$/.exec(key);
+    if (!m) { out.append(key, value); return; }
+    var old = parseInt(m[1], 10);
+    if (!(old in renumber)) return;      // пропущенная кампания не едет
+    out.append('camp_' + renumber[old] + '_' + m[2], value);
+  });
+  out.set('camp_count', String(kept));
+  return { body: out, kept: kept };
+}
+
+window.cbPublishAll = function (onProgress) {
+  if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
+  var forms = [];
+  document.querySelectorAll('form.open-account-form').forEach(function (form) {
+    if (form.querySelectorAll('.cb-slot').length) forms.push(form);
+  });
+  if (!forms.length) { window.alert('Nothing is being assembled yet.'); return; }
+
+  var names = forms.map(function (f) {
+    return ((f.querySelector('[name="account_label"]') || {}).value || '?').trim();
+  });
+
+  _safeConfirm('Build every campaign as a draft?',
+    'Accounts: <strong>' + forms.length + '</strong><br>'
+    + '<span style="color:var(--muted);font-size:0.85rem">' + aclEscHtml(names.join(', ')) + '</span><br><br>'
+    + '<span style="color:var(--muted);font-size:0.85rem">One account at a time — the Multilogin profile is single. '
+    + 'A campaign whose preview shows an error is skipped; the rest of its account still go.</span><br>'
+    + '<span style="color:var(--warn);font-size:0.85rem">Не блокируйте экран, пока идёт сборка — '
+    + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
+    + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
+    + 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook</span>',
+    function () { _runPublishQueue(forms, onProgress || function () {}); },
+    { confirmLabel: 'Publish all → drafts' });
+};
+
+function _runPublishQueue(forms, onProgress, onlySlot) {
+  if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
+  window.CB_QUEUE = { active:true, uncertain:false, progress:null };
+  var notify = onProgress;
+  onProgress = function(p) { window.CB_QUEUE.progress = p; notify(p); };
+  var i = 0;
+  var report = [];
+
+  function finish(entry) {
+    report.push(entry);
+    i += 1;
+    step();
+  }
+
+  function step() {
+    if (i >= forms.length) {
+      window.CB_QUEUE.active = false;
+      onProgress({ done: true, at: forms.length, of: forms.length, report: report });
+      return;
+    }
+    var form = forms[i];
+    var label = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
+    onProgress({ at: i + 1, of: forms.length, account: label, stage: 'checking', report: report });
+
+    window.cbPreview(form, function (plan, error, snapshot) {
+      if (error) { finish({ account: label, state: 'bad', why: error }); return; }
+
+      var verdict = cbSkipByName(form, plan);
+      var skipped = verdict.broken + verdict.unchecked;
+
+      if (onlySlot) form.querySelectorAll('.cb-slot').forEach(function(slot, index) { if (slot !== onlySlot) verdict.skip[index] = true; });
+      var payload = cbFormDataSkipping(form, verdict.skip, snapshot);
+      if (!payload.kept) {
+        finish({ account: label, state: 'bad', skipped: skipped,
+                 why: verdict.unchecked && !verdict.broken
+                   ? 'the check covered no campaign here'
+                   : 'every campaign has errors — see the diagnostics' });
+        return;
+      }
+
+      onProgress({ at: i + 1, of: forms.length, account: label, stage: 'publishing',
+                   skipped: skipped, report: report });
+
+      var statusPanel = form.querySelector('.cb-status-panel');
+      if (statusPanel) {
+        statusPanel.style.display = 'block';
+        statusPanel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
+      }
+      var fd = payload.body;
+      fd.set('via_multilogin', '1');
+      fd.set('activate', '0');
+      fd.set('dry_run', '0');
+      fd.set('hand_off', '1');
+      fd.set('user_confirmed', '1');
+
+      fetch('/publish-jobs', { method: 'POST', body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.error) { finish({ account: label, state: 'bad', why: data.error, skipped: skipped }); return; }
+          if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');
+          cbPollJob(data.job_id, statusPanel, form.querySelector('.cb-publish-btn'), function (job) {
+            if (job.status === 'unknown' || job.status === 'cancelled') {
+              window.CB_QUEUE.active = false; window.CB_QUEUE.uncertain = job.status === 'unknown';
+              report.push({account:label, state:'bad', why:job.status === 'unknown' ? 'Job status lost; verify the account before starting another run' : 'Queue stopped by user'});
+              onProgress({done:true,at:i+1,of:forms.length,report:report}); return;
+            }
+            var ok = !(job.errors || []).length && (job.results || []).length
+              && (job.results || []).every(function (r) { return r.publishable === true; });
+            finish({ account: label, state: ok ? 'ok' : 'bad', skipped: skipped,
+                     why: ok ? '' : 'draft blocked — see the account panel' });
+          });
+        })
+        .catch(function (e) {
+          window.CB_QUEUE.active = false; window.CB_QUEUE.uncertain = true;
+          report.push({account:label,state:'bad',why:'Submission outcome unknown: '+e.message});
+          onProgress({done:true,at:i+1,of:forms.length,report:report});
+        });
+    }, onlySlot);
+  }
+
+  step();
+}
 
 // ── Диагностика превью: панель поверх дешборда (acl-704) ─────────────
 // Плашка у слота — одна строка; полная таблица выезжает справа ПОВЕРХ
@@ -9009,9 +9685,11 @@ window.cbHighlightField = function(field) {
 };
 
 window.cbPublish = function(form) {
+  if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
+  var onlySlot = form.classList.contains('cb-in-drawer') ? Array.from(form.querySelectorAll('.cb-slot')).find(function(s) { return !s.hidden; }) : null;
   var accLabel  = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
   var country   = ((form.querySelector('[name="country"]') || {}).value || '?').trim();
-  var campCount = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '1'), 10) || 1;
+  var campCount = onlySlot ? 1 : (parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '1'), 10) || 1);
 
   var bodyHtml =
     'Account: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br>'
@@ -9063,7 +9741,8 @@ window.cbPublish = function(form) {
   }
 
   _safeConfirm('Build this campaign as a draft?', bodyHtml, function() {
-    _doCbPublish(form);
+    if (onlySlot) _runPublishQueue([form], window.cbTree.showQueue, onlySlot);
+    else _doCbPublish(form);
   }, { confirmLabel: (warn || lostTargeting.length) ? 'Собрать с предупреждением' : 'Publish → draft' });
 };
 
@@ -9100,7 +9779,10 @@ function _doCbPublish(form) {
     });
 }
 
-function cbPollJob(jobId, statusPanel, publishBtn) {
+// `done` — необязательный: зовётся один раз, когда работа кончилась любым
+// образом. Нужен очереди «Publish all»: профиль в Multilogin один, и
+// следующий аккаунт начинается только после того, как закончился прошлый.
+function cbPollJob(jobId, statusPanel, publishBtn, done) {
   var stopBtnId = 'cb-stop-' + jobId.replace(/-/g, '').slice(0, 12);
 
   function renderStatus(job) {
@@ -9273,6 +9955,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
         if (r.status === 404) {
           statusPanel.innerHTML += '<div class="cb-status-fatal">The dashboard was restarted — the status of this run is lost. Reload the page (F5).</div>';
           if (publishBtn) publishBtn.disabled = false;
+          if (done) { var lost = done; done = null; lost({status:'unknown',results:[]}); }
           return null;
         }
         return r.json();
@@ -9296,6 +9979,7 @@ function cbPollJob(jobId, statusPanel, publishBtn) {
           if ((job.errors || []).length > 0 || (job.results || []).some(function(r){return !r.success;})) {
             statusPanel.scrollIntoView({behavior: 'smooth', block: 'center'});
           }
+          if (done) { var f = done; done = null; f(job); }
         }
       })
       .catch(function(e) {

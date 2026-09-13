@@ -237,37 +237,37 @@ def test_the_form_field_reaches_the_slot():
 
 # ── два строителя одной карточки ──────────────────────────────────────────
 
-def test_both_slot_builders_produce_the_same_fields():
-    """Карточку кампании строят два места, и они обязаны совпадать.
+def test_the_campaign_card_has_exactly_one_builder():
+    """Карточку кампании строит одно место — и разойтись теперь не с чем.
 
-    Одно — шаблон на сервере, для карточек из рекомендаций. Второе — функция
-    `buildBlankSlotHTML` в JavaScript, для «+ Add Campaign».
+    Строителей было два. Один — шаблон на сервере, для карточек из
+    рекомендаций. Второй — `buildBlankSlotHTML` в JavaScript, для
+    «+ Add Campaign».
 
-    9 сентября поле языка добавили только в первое. Выглядело добавленным: на
+    9 сентября поле языка добавили только в первый. Выглядело добавленным: на
     странице девятнадцать полей. А человек в тот момент собирал кампанию
     вручную — рекомендаций за выбранный день не было ни у кого, — и на его
     половине поля не оказалось. «Я сделал рифреш, а языка всё ещё нет».
 
-    Поэтому сверяются **множества имён полей**, а не наличие одного поля:
-    следующее разойдётся так же тихо.
+    13 сентября автозаполнение из рекомендаций убрали по решению владельца, и
+    шаблонный строитель ушёл вместе с ним. Прежний сторож сверял два
+    множества имён полей; сверять больше нечего, но причина, по которой он
+    был написан, никуда не делась — поэтому он проверяет ровно её: строитель
+    остался один, и второй не завёлся обратно.
     """
     page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
 
-    slot = page[page.index('<div class="cb-slot" data-idx="{{ ns.idx }}">'):]
-    slot = slot[: slot.index("cb-slot-grid")]
-    from_template = set(re.findall(r'name="camp_\{\{ ns\.idx \}\}_([a-z_]+)"', slot))
+    assert 'name="camp_{{ ns.idx }}_' not in page, (
+        "шаблон снова строит карточку кампании — строителей опять два, "
+        "и следующее поле разойдётся так же тихо"
+    )
 
     js = page[page.index("function buildBlankSlotHTML"):]
     js = js[: js.index("cb-slot-grid")]
-    from_script = set(re.findall(r"name=\"camp_' \+ idx \+ '_([a-z_]+)\"", js))
-    from_script |= set(re.findall(r"mkSel\(idx, '([a-z_]+)'", js))
-
-    assert from_template, "не нашёл полей в шаблонной карточке — проверка сломана"
-    assert from_script, "не нашёл полей в скриптовой карточке — проверка сломана"
-    assert from_template == from_script, (
-        "строители карточки разошлись: только в шаблоне "
-        f"{sorted(from_template - from_script)}, только в скрипте "
-        f"{sorted(from_script - from_template)}"
+    fields = set(re.findall(r"name=\"camp_' \+ idx \+ '_([a-z_]+)\"", js))
+    fields |= set(re.findall(r"mkSel\(idx, '([a-z_]+)'", js))
+    assert {"language", "targeting", "age", "budget", "asset"} <= fields, (
+        f"единственный строитель растерял поля: есть только {sorted(fields)}"
     )
 
 
