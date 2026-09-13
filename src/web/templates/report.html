@@ -4030,6 +4030,171 @@ window.cbDrawer = (function () {
 </script>
 
 <script>
+/* Что собирается прямо сейчас.
+ *
+ * Живёт в браузере и переживает F5: собранная наполовину кампания —
+ * работа, и терять её на перезагрузке нельзя. Дальше этого браузера она
+ * не едет: ни на другую машину, ни к соседу.
+ *
+ * Хранилище само ничего не забывает, поэтому забывать приходится нам:
+ * без срока годности через месяц здесь лежат позапрошлые черновики, и
+ * список, который должен отвечать «что я собираю», отвечает «что я
+ * когда-либо начинал».
+ */
+window.cbDraft = (function () {
+  var KEY = 'acl.builder.v1';
+  var VERSION = 1;
+  /* Две недели без прикосновения — это уже не «собираю». Срок щедрый
+     нарочно: выбросить чужую работу хуже, чем подержать лишнее. */
+  var STALE_MS = 14 * 24 * 60 * 60 * 1000;
+  /* Потолок на случай, если что-то начнёт плодить записи само: он тут не
+     ради места, а чтобы поломка была видна как потолок, а не как
+     заполненное хранилище и молча переставший работать дешборд. */
+  var MAX = 200;
+
+  var listeners = [];
+  var state = null;
+
+  function now() { return Date.now(); }
+
+  function blank() { return { v: VERSION, campaigns: [] }; }
+
+  function read() {
+    var raw;
+    try { raw = localStorage.getItem(KEY); } catch (e) { return blank(); }
+    if (!raw) return blank();
+    var parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { return blank(); }
+    /* Чужая или будущая версия: молча начинаем с чистого, но не роняем
+       страницу. Мигрировать пока не с чего — версия первая. */
+    if (!parsed || parsed.v !== VERSION || !Array.isArray(parsed.campaigns)) return blank();
+    return parsed;
+  }
+
+  function write() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ }
+  }
+
+  function fresh(c) { return c && (now() - (c.touched || 0)) < STALE_MS; }
+
+  function load() {
+    state = read();
+    var kept = state.campaigns.filter(fresh);
+    var dropped = state.campaigns.length - kept.length;
+    state.campaigns = kept;
+    if (dropped) write();
+    return state;
+  }
+
+  function announce() {
+    if (window.cbDrawer) window.cbDrawer.setCount(state.campaigns.length);
+    listeners.forEach(function (fn) {
+      try { fn(state.campaigns); } catch (e) { /* один слушатель не роняет остальных */ }
+    });
+  }
+
+  function save() { write(); announce(); }
+
+  function nextId() {
+    /* Время плюс счётчик: две кампании, заведённые в одну миллисекунду,
+       должны остаться двумя. */
+    var n = 0;
+    var taken = {};
+    state.campaigns.forEach(function (c) { taken[c.id] = true; });
+    var id;
+    do { id = 'cbd' + now().toString(36) + (n ? '-' + n : ''); n += 1; } while (taken[id]);
+    return id;
+  }
+
+  function find(id) {
+    for (var i = 0; i < state.campaigns.length; i += 1) {
+      if (state.campaigns[i].id === id) return state.campaigns[i];
+    }
+    return null;
+  }
+
+  function add(where) {
+    where = where || {};
+    if (state.campaigns.length >= MAX) return null;
+    var c = {
+      id: nextId(),
+      country: where.country || '',
+      countryName: where.countryName || '',
+      account: where.account || '',
+      name: '',
+      fields: {},
+      ads: [],
+      created: now(),
+      touched: now()
+    };
+    state.campaigns.push(c);
+    save();
+    return c;
+  }
+
+  function update(id, patch) {
+    var c = find(id);
+    if (!c) return null;
+    Object.keys(patch || {}).forEach(function (k) {
+      if (k === 'id' || k === 'created') return;      // не переписываются
+      c[k] = patch[k];
+    });
+    c.touched = now();
+    save();
+    return c;
+  }
+
+  function remove(id) {
+    var before = state.campaigns.length;
+    state.campaigns = state.campaigns.filter(function (c) { return c.id !== id; });
+    if (state.campaigns.length === before) return false;
+    save();
+    return true;
+  }
+
+  /* Для показа: страна → аккаунт → кампании. Порядок — как заводили;
+     он же порядок публикации, и переставлять его молча нельзя. */
+  function grouped() {
+    var countries = [];
+    var byCountry = {};
+    state.campaigns.forEach(function (c) {
+      var ck = c.country || '';
+      if (!byCountry[ck]) {
+        byCountry[ck] = { country: ck, countryName: c.countryName || ck, accounts: [], _byAccount: {} };
+        countries.push(byCountry[ck]);
+      }
+      var group = byCountry[ck];
+      var ak = c.account || '';
+      if (!group._byAccount[ak]) {
+        group._byAccount[ak] = { account: ak, campaigns: [] };
+        group.accounts.push(group._byAccount[ak]);
+      }
+      group._byAccount[ak].campaigns.push(c);
+    });
+    countries.forEach(function (g) { delete g._byAccount; });
+    return countries;
+  }
+
+  load();
+
+  return {
+    all: function () { return state.campaigns; },
+    count: function () { return state.campaigns.length; },
+    get: find,
+    add: add,
+    update: update,
+    remove: remove,
+    grouped: grouped,
+    reload: function () { load(); announce(); return state.campaigns; },
+    onChange: function (fn) { listeners.push(fn); return fn; },
+    limit: MAX,
+    staleMs: STALE_MS
+  };
+})();
+if (window.cbDrawer) window.cbDrawer.setCount(window.cbDraft.count());
+</script>
+
+<script>
 function aclCountryBuilder(country) {
   return document.getElementById('manage-builder-' + country);
 }
