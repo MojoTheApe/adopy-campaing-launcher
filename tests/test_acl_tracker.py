@@ -1,4 +1,12 @@
-"""Tracker v2 integration contract replaces the retired snapshot/area renderer contract."""
+"""Tracker parsing and rendering against the repository's real config.
+
+A September 12 full-suite failure was reported while commits and merges were
+changing this checkout. Concurrent worktree writes are a possible explanation,
+not a reproduced root cause: isolated runs were clean. Preserve that distinction
+until the original exception or a reproduction establishes the cause. Never
+commit or merge in the same checkout while its tests are running; do not hide
+this test behind retries or skips.
+"""
 import json
 from types import SimpleNamespace
 import pytest
