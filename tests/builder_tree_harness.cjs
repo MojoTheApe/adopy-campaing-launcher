@@ -48,6 +48,10 @@ function sink(id) {
         ? { '.cbd-pick-country': el('select', { classes: ['cbd-pick-country'] }),
             '.cbd-pick-account': el('select', { classes: ['cbd-pick-account'] }) }
         : null;
+      // Место под форму подключения — такой же настоящий узел: дерево
+      // кладёт её туда после перерисовки.
+      node._connectSlot = /cbd-connect-slot/.test(v)
+        ? el('div', { classes: ['cbd-connect-slot'] }) : null;
       if (node._picks) {
         const opt = /<option value="([^"]*)"(?: selected)?>/.exec(v);
         node._picks['.cbd-pick-country'].value = opt ? opt[1] : '';
@@ -59,7 +63,9 @@ function sink(id) {
     const m = /^\.cbd-camp\[data-camp="([^"]+)"\]$/.exec(sel);
     if (m) return node._cards.get(m[1]) || null;
     if (sel === '.cbd-pick-country' || sel === '.cbd-pick-account') return node._picks?.[sel] || null;
-    return rawQS(sel);
+    if (sel === '.cbd-connect-slot') return node._connectSlot || null;
+    const hit = node._connectSlot && node._connectSlot.querySelector(sel);
+    return hit || rawQS(sel);
   };
   return node;
 }
@@ -93,7 +99,16 @@ function page(spec) {
     panels.push(panel);
     sideBtns.push(el('button', { classes: ['sidebar-country-btn'], dataset: { country: c.country }, textContent: c.name }));
   });
-  return { panels, sideBtns, forms };
+  // Карта аккаунтов: у каждой страны своя форма подключения. Ящик берёт
+  // её оттуда, а не заводит третью копию.
+  const maps = spec.map((c) => el('details', {
+    classes: ['amap-country'],
+    children: [
+      el('span', { classes: ['amap-cell-name'], textContent: c.name }),
+      el('div', { classes: ['amap-add'], dataset: { amapCountry: c.name } }),
+    ],
+  }));
+  return { panels, sideBtns, forms, maps };
 }
 
 function boot(spec, opts = {}) {
@@ -101,12 +116,14 @@ function boot(spec, opts = {}) {
   const bodyNode = sink('cbd-body');
   const footNode = sink('cbd-foot');
   const panelNode = el('div', { classes: ['cbd-panel'] });
-  const root = el('div', { children: p.panels.concat(p.sideBtns) });
+  const root = el('div', { children: p.panels.concat(p.sideBtns, p.maps) });
   const ids = { 'cbd-body': bodyNode, 'cbd-foot': footNode, 'cbd-panel': panelNode };
 
   const timers = [];
   const counts = [];
   const confirms = [];
+  const alerts = [];
+  const sent = [];
   const document = {
     getElementById: (id) => ids[id] || null,
     querySelectorAll: (sel) => root.querySelectorAll(sel),
@@ -114,6 +131,7 @@ function boot(spec, opts = {}) {
     addEventListener: (name, fn) => ((document._on = document._on || {})[name] = (document._on[name] || []).concat(fn)),
     fire: (name, e) => ((document._on || {})[name] || []).forEach((fn) => fn(e)),
     createElement: (tag) => el(tag),
+    createComment: () => el('#comment'),
   };
 
   const sandbox = {
@@ -135,13 +153,15 @@ function boot(spec, opts = {}) {
       },
       cbAddSlot: (form) => form.appendChild(slot('', 1)),
       cbRemoveSlot: (node) => node.closest('.cb-slot').remove(),
+      alert: (m) => alerts.push(m),
+      amapSend: (body) => sent.push(body),
     },
     Array, Object, String, JSON, Math, clearTimeout() {},
   };
   sandbox.window.window = sandbox.window;
   vm.runInNewContext(code, sandbox);
   return { api: sandbox.window.cbTree, body: bodyNode, foot: footNode, panel: panelNode,
-           p, counts, confirms, timers, sandbox, document };
+           p, counts, confirms, alerts, sent, timers, sandbox, document };
 }
 
 const SPEC = [
@@ -254,3 +274,52 @@ assert.ok(/SA_one/.test(t.confirms[0] || ''), 'в вопросе не назва
 assert.equal(t.p.forms[0].querySelectorAll('.cb-slot').length, 2, 'удалили, несмотря на отказ');
 
 console.log('ok');
+
+// ── подключить аккаунт, не уходя из ящика ─────────────────────────────
+// Третьей копии формы подключения нет: их было две, они разошлись, и
+// сведение в одну было отдельной задачей. Ящик берёт ту самую форму из
+// карты аккаунтов и возвращает её на место.
+t = boot(SPEC);
+const mapBlock = t.p.maps[0].querySelector('.amap-add');
+const mapDetails = t.p.maps[0];
+
+function clickAct(page, act, attrs) {
+  const hit = { dataset: Object.assign({ act }, attrs || {}),
+                closest: (sel) => (sel === '.cbd-camp' ? null : hit) };
+  page.panel.fire('click', { target: { closest: (sel) => (sel === '[data-act]' ? hit : null) } });
+}
+
+clickAct(t, 'connect', { country: 'sa', countryName: 'Saudi Arabia' });
+const connectHost = t.body.querySelector('.cbd-connect-host');
+assert.ok(connectHost, 'форме подключения негде встать в ящике');
+assert.equal(connectHost.querySelector('.amap-add'), mapBlock, 'в ящик приехала не та форма');
+assert.equal(mapBlock.parentNode, connectHost, 'форма осталась в карте');
+
+// Закрыли — вернулась туда, откуда взяли, на своё место.
+clickAct(t, 'connect', { country: 'sa', countryName: 'Saudi Arabia' });
+assert.equal(mapBlock.parentNode, mapDetails, 'форма не вернулась в карту');
+assert.equal(t.body.querySelector('.cbd-connect-host'), null);
+
+// Страна, которой нет в карте, — честный отказ, а не пустая панель.
+t = boot(SPEC);
+clickAct(t, 'connect', { country: 'sa', countryName: 'Страны-нет' });
+assert.ok(/not on the account map/.test(t.alerts[0] || ''), 'о ненайденной стране не сказали');
+assert.equal(t.body.querySelector('.cbd-connect-host'), null, 'осталась пустая панель подключения');
+
+// Открыта одна форма подключения за раз.
+t = boot(SPEC);
+clickAct(t, 'connect', { country: 'sa', countryName: 'Saudi Arabia' });
+clickAct(t, 'connect', { country: 'kw', countryName: 'Kuwait' });
+assert.equal(t.p.maps[0].querySelector('.amap-add'), mapBlockOf(t, 0), 'первая форма не вернулась');
+assert.ok(t.body.querySelector('.cbd-connect-host').querySelector('.amap-add'), 'вторая не приехала');
+
+function mapBlockOf(page, i) { return page.p.maps[i].querySelector('.amap-add'); }
+
+// ── завести страну — тем же отправителем, что и карта ─────────────────
+// Свой запрос завёл бы второе место, где решается, что значит «завести
+// страну».
+t = boot(SPEC);
+clickAct(t, 'add-country');
+assert.equal(t.sent.length, 0, 'пустое имя ушло на сервер');
+
+console.log('ok (connect)');

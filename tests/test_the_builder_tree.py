@@ -76,7 +76,11 @@ def test_the_indicator_is_never_colour_alone():
     к цвету добавлены форма и значок, и ни одно состояние не обходится
     только классом цвета."""
     css = TPL.read_text(encoding="utf-8")
-    css = css[css.index(".cbd-ind {"):css.index(".cbd-add {")]
+    # Конец среза ищется ПОСЛЕ начала: `.cbd-add {` встречается и внутри
+    # составного селектора выше по файлу, и срез уезжал в пустоту.
+    start = css.index(".cbd-ind {")
+    css = css[start: css.index(".cbd-add {", start)]
+    assert css, "срез стилей индикатора пуст — проверка ничего не сторожит"
     assert "border-radius: 50%" in css and "rotate(45deg)" in css and "border-style: dashed" in css, (
         "состояния различаются только цветом"
     )
@@ -123,6 +127,31 @@ def test_the_drawer_follows_the_page_without_being_told():
     block = _tree_block()
     assert "MutationObserver" in block, "за формами никто не следит"
     assert "form.open-account-form" in block
+
+
+def test_connecting_an_account_from_the_drawer_is_the_same_form():
+    """Третьей копии формы подключения быть не должно.
+
+    Их было две — строка привязки в карте аккаунтов и панель входа в
+    Multilogin внизу билдера, — они разошлись, и сведение их в одну было
+    отдельной задачей. Ящик берёт ту самую форму из карты, показывает у
+    себя и возвращает на место: со своим поиском профилей, кнопкой Reload
+    и строкой состояния. Понадобился вход — он там же, внутри неё.
+    """
+    block = _tree_block()
+    assert "connectHost.appendChild(block)" in block, "форма подключения не переносится, а копируется"
+    for forbidden in ("amap-known", "amap-find", "amap-ml-email", "amapLink("):
+        assert forbidden not in block, (
+            f"в ящике завелась своя форма подключения: {forbidden}"
+        )
+
+
+def test_adding_a_country_uses_the_map_sender():
+    """Свой запрос завёл бы второе место, где решается, что значит
+    «завести страну»."""
+    block = _tree_block()
+    assert "window.amapSend(" in block
+    assert "fetch(" not in block, "ящик пошёл на сервер сам"
 
 
 def test_the_tree_shows_what_is_being_assembled_not_every_account():
