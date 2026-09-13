@@ -2553,6 +2553,8 @@
     .cbd-host .cb-sel-dropdown { position: fixed; z-index: 1000; }
     .cbd-host .cb-preflight { margin-bottom: var(--space-sm); }
     .cbd-host .cb-empty-hint { display: none; }
+    .cbd-tools { padding: 0 var(--space-sm) var(--space-sm); }
+    .cbd-tools .cbd-add { margin-top: 0; text-align: center; }
     /* Кнопки формы — в столбик во всю ширину: в ряд они не помещаются. */
     .cbd-host .cb-actions { display: flex; flex-direction: column; gap: var(--space-xs); }
     .cbd-host .cb-actions button { width: 100%; }
@@ -4190,9 +4192,29 @@ window.cbKeep = (function () {
     if (e.target.closest && e.target.closest('form.open-account-form')) saveSoon();
   });
 
+  /* Ввод — не единственный способ изменить форму. Кампанию добавляют,
+     копируют и удаляют, объявления тоже, и ни одно из этих действий не
+     порождает события ввода: скопированная кампания не пережила бы
+     перезагрузку. Поэтому следим и за самими формами. */
+  function watchStructure() {
+    if (!window.MutationObserver) return;
+    var mo = new MutationObserver(function (records) {
+      var structural = records.some(function (r) {
+        return r.type === 'childList' && (r.addedNodes.length || r.removedNodes.length);
+      });
+      if (structural) saveSoon();
+    });
+    forms().forEach(function (form) {
+      if (form._cbdKeepWatched) return;
+      form._cbdKeepWatched = true;
+      mo.observe(form, { childList: true, subtree: true });
+    });
+  }
+
   function boot() {
     forms().forEach(stamp);          // пока все формы ещё в своих блоках
     var made = restore();
+    watchStructure();
     if (made && window.cbTree) window.cbTree.paint();
     return made;
   }
@@ -4204,6 +4226,7 @@ window.cbKeep = (function () {
     save: save,
     saveSoon: saveSoon,
     restore: restore,
+    watch: watchStructure,
     readSlot: readSlot,
     writeSlot: writeSlot,
     all: function () { return state.forms; },
@@ -4279,18 +4302,28 @@ window.cbTree = (function () {
           byCountry[id] = { country: id, countryName: countryName(id), accounts: [] };
           out.push(byCountry[id]);
         }
+        var campaigns = slots.map(function (slot) {
+          return {
+            id: slotId(slot),
+            slot: slot,
+            name: slotName(slot),
+            ads: slot.querySelectorAll('.cb-ad-row').length
+          };
+        });
+        /* Сервер собирает кампании по имени: две карточки с одинаковым
+           именем станут одной кампанией с объявлениями обеих. Иногда этого
+           и хотят — скопировал, поменял креатив, получил второе
+           объявление той же кампании. Но узнавать об этом на черновике
+           поздно, поэтому говорим сразу. */
+        var seen = {};
+        campaigns.forEach(function (c) { if (c.name) seen[c.name] = (seen[c.name] || 0) + 1; });
+        campaigns.forEach(function (c) { c.twin = !!(c.name && seen[c.name] > 1); });
+
         byCountry[id].accounts.push({
           account: label,
           row: row,
           form: form,
-          campaigns: slots.map(function (slot) {
-            return {
-              id: slotId(slot),
-              slot: slot,
-              name: slotName(slot),
-              ads: slot.querySelectorAll('.cb-ad-row').length
-            };
-          })
+          campaigns: campaigns
         });
       });
     });
@@ -4351,6 +4384,11 @@ window.cbTree = (function () {
   function readiness(c) {
     if (!c.name) return { state: 'bad', sign: '✕', why: 'Not named yet' };
     if (!c.ads) return { state: 'bad', sign: '✕', why: 'No ads yet' };
+    if (c.twin) {
+      return { state: 'warn', sign: '!', why: 'Same name as another campaign here — '
+        + 'they publish as one campaign with the ads of both. Change a field that '
+        + 'shows in the name (offer, targeting, age, OS, type) to split them.' };
+    }
     return { state: 'wait', sign: '·', why: 'Not checked yet — checks arrive with the form' };
   }
 
@@ -4501,6 +4539,19 @@ window.cbTree = (function () {
   host.className = 'cbd-camp-body cbd-host';
   var BORROWED = null;
 
+  /* Дублирование кампании. Своё, а не спрятанное: шапка карточки с
+     кнопкой `⧉` в ящике скрыта — имя кампании и так стоит строкой выше, в
+     дереве, — и вместе с ней пропала возможность скопировать кампанию.
+     Здесь она возвращается внизу, где её и ищут: рядом с «+ Add Campaign».
+
+     Копирует та же функция, что и прежняя кнопка: она обходит все поля
+     слота, а не список, записанный руками. Список однажды отстал — язык
+     добавили в форму позже, и копия молча уходила без него. */
+  var tools = document.createElement('div');
+  tools.className = 'cbd-tools';
+  tools.innerHTML = '<button type="button" class="cbd-add" data-act="duplicate">'
+    + '⧉ Duplicate campaign</button>';
+
   /* ── подключить аккаунт, не уходя из ящика ─────────────────────────────
      Третьей копии формы подключения здесь нет и не будет: их было две,
      они разошлись, и сведение их в одну было отдельной задачей. Ящик
@@ -4558,6 +4609,7 @@ window.cbTree = (function () {
     form.parentNode.insertBefore(mark, form);
     BORROWED = { row: row, form: form, mark: mark };
     host.appendChild(form);
+    host.appendChild(tools);   // вне формы: кнопка внутри неё уходила бы на сервер
     showOnly(form, only);
   }
 
@@ -4667,6 +4719,19 @@ window.cbTree = (function () {
       paint();
     } else if (act === 'add-here') {
       addCampaign(hit.dataset.country, hit.dataset.account);
+    } else if (act === 'duplicate') {
+      var open = findCampaign(openId);
+      if (!open) return;
+      var source = open.camp.slot;
+      window.cbDuplicateSlot(source);
+      var copy = source.nextElementSibling;
+      if (copy && copy.classList.contains('cb-slot')) {
+        /* Копию сразу раскрываем: её и пришли править — тем одним полем,
+           ради которого копировали. */
+        openCampaign(slotId(copy));
+      } else {
+        paint();
+      }
     } else if (act === 'connect') {
       var country = hit.dataset.country;
       if (openConnect === country) { openConnect = ''; releaseConnect(); paint(); return; }
