@@ -410,11 +410,14 @@ def test_the_recovery_runs_where_nothing_is_entered_yet():
 
 def _fake_procs(names):
     class _P:
-        def __init__(self, n): self.info = {"name": n}
+        def __init__(self, n):
+            self.info = {"name": n}
+            self.pid = 100
     return lambda attrs=None: [_P(n) for n in names]
 
 
 def test_the_lock_screen_process_is_the_signal(monkeypatch):
+    monkeypatch.setattr(rt, "_process_session_id", lambda pid: 1)
     import psutil
 
     monkeypatch.setattr(psutil, "process_iter", _fake_procs(["chrome.exe", "LogonUI.exe"]))
@@ -423,6 +426,7 @@ def test_the_lock_screen_process_is_the_signal(monkeypatch):
 
 
 def test_an_unlocked_machine_says_so(monkeypatch):
+    monkeypatch.setattr(rt, "_process_session_id", lambda pid: 1)
     import psutil
 
     monkeypatch.setattr(psutil, "process_iter", _fake_procs(["chrome.exe", "explorer.exe"]))
@@ -431,6 +435,7 @@ def test_an_unlocked_machine_says_so(monkeypatch):
 
 
 def test_the_name_is_matched_regardless_of_case(monkeypatch):
+    monkeypatch.setattr(rt, "_process_session_id", lambda pid: 1)
     import psutil
 
     monkeypatch.setattr(psutil, "process_iter", _fake_procs(["logonui.exe"]))
@@ -445,6 +450,7 @@ def test_elsewhere_the_answer_is_i_do_not_know(monkeypatch):
 
 
 def test_a_process_list_that_throws_does_not_break_the_record(monkeypatch):
+    monkeypatch.setattr(rt, "_process_session_id", lambda pid: 1)
     import psutil
 
     def _boom(attrs=None):
