@@ -2565,6 +2565,24 @@
        `cbdPlaceDropdowns`. */
     .cbd-host .cb-sel-dropdown { position: fixed; z-index: 1000; }
     .cbd-host .cb-preflight { margin-bottom: var(--space-sm); }
+    /* Настройки аккаунта рассчитаны на строку во всю ширину страницы:
+       подпись слева, поле и кнопка справа, переносов нет. В панели это
+       вылезало на сотню пикселей за край, и появлялась горизонтальная
+       прокрутка — видно только у НЕнастроенного аккаунта, потому что
+       строки `ad_account_id` и `profile_id` рисуются, лишь когда их
+       нет в карте. Здесь они складываются: подпись сверху, поле во всю
+       ширину, кнопка под ним. */
+    .cbd-host .cb-map-field-row, .cbd-host .cb-preflight-row { flex-wrap: wrap; }
+    .cbd-host .cb-map-field-label, .cbd-host .cb-preflight-label {
+      min-width: 0; flex: 1 1 100%;
+    }
+    .cbd-host .cb-map-input, .cbd-host .cb-input-url {
+      flex: 1 1 100%; min-width: 0; max-width: 100%;
+    }
+    .cbd-host .cb-field-status { flex: 1 1 100%; min-width: 0; }
+    /* Последняя защита от переполнения: в форме больше полусотни полей, и
+       следующее, добавленное с `size` или `min-width`, повторит это. */
+    .cbd-host, .cbd-host * { max-width: 100%; }
     .cbd-host .cb-empty-hint { display: none; }
     .cbd-tools { padding: 0 var(--space-sm) var(--space-sm); }
     .cbd-tools .cbd-add { margin-top: 0; text-align: center; }
