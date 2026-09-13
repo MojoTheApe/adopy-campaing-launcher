@@ -37,7 +37,7 @@
        Раскрытое человеком запоминается: дешборд перезагружает себя сам, и
        закрывать при этом страну, внутри которой человек работает, значило бы
        менять одну помеху на другую. #}
-    <details class="amap-country" data-country="{{ mc.key | e }}">
+    <details class="amap-country" data-country="{{ mc.key | e }}" data-country-name="{{ mc.country | e }}">
       <summary>
         {{ mc.country }}
         {#- ACL-356: свёрнутая строка несёт числа страны, а не пустоту.

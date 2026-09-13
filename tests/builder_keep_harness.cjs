@@ -78,6 +78,7 @@ function boot(opts = {}) {
     setTimeout: (fn) => { timers.push(fn); return timers.length; },
     clearTimeout() {},
     window: {
+      addEventListener: (n, fn) => ((listeners[n] = listeners[n] || []).push(fn)),
       cbAddSlot: (f) => {
         const n = f.querySelectorAll('.cb-slot').length;
         return f.appendChild(slot(n));

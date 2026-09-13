@@ -2534,7 +2534,12 @@
     .cbd-host .cb-acc-header, .cbd-host .cb-slot-header, .cbd-host .cb-slot-name { display: none; }
     .cbd-host .cb-slot { border: none; padding: var(--space-sm); margin: 0; }
     .cbd-host .cb-slot-grid { grid-template-columns: 1fr; column-gap: 0; }
-    .cbd-host .cb-preview-col { display: none; }
+    .cbd-host .cb-preview-col, .cbd-host .cb-preview-btn,
+    .cbd-host .cb-preview-panel, .cbd-host .cbp-diag-slot { display: none !important; }
+    .cb-in-drawer .cb-slot[hidden] { display: none !important; }
+    .cb-field-error { outline: 2px solid var(--bad); }
+    .cb-check-message { color: var(--bad); font-size: .75rem; padding: .3rem; }
+    body.cbd-ready .manage-builder { display: none; }
     .cbd-host .cb-fields { grid-template-columns: 1fr; gap: 0.15rem; max-width: none; }
     .cbd-host .cb-fields .cb-label { margin-top: 0.35rem; }
     /* Четыре поля в ряд в 360 пикселях дают по семьдесят на каждое — в
@@ -3263,7 +3268,7 @@ async function dashRefresh(ev) {
   {% set pf = account_preflight.get(acc_label, {}) %}
   {% set ds = draft_status.get(acc_label, {}) %}
   {# Collect default asset from first rec for the Add Campaign button #}
-  {% set default_asset = recs[0].offer if recs else '' %}
+  {% set default_asset = '' %}
   {% set acc_id = acc_label | replace(' ', '_') | replace('.', '_') %}
 
   <div class="cb-acc-row" data-acc-label="{{ acc_label }}">
@@ -4051,7 +4056,7 @@ window.cbKeep = (function () {
     var fresh = {}, now = Date.now();
     Object.keys(parsed.forms).forEach(function (k) {
       var entry = parsed.forms[k];
-      if (entry && (now - (entry.touched || 0)) < STALE_MS) fresh[k] = entry;
+      if (entry && Array.isArray(entry.campaigns) && entry.campaigns.every(function(c) { return c && c.fields && typeof c.fields === 'object' && !Array.isArray(c.fields) && c.shown && typeof c.shown === 'object' && !Array.isArray(c.shown) && Number.isInteger(c.ads) && c.ads > 0 && c.ads <= 100; }) && entry.touched <= now && (now - (entry.touched || 0)) < STALE_MS) fresh[k] = entry;
     });
     return { v: VERSION, forms: fresh };
   }
@@ -4143,10 +4148,12 @@ window.cbKeep = (function () {
       if (!key) return;
       var slots = form.querySelectorAll('.cb-slot');
       if (!slots.length) return;    // пустой аккаунт не занимает места
-      next[key] = {
-        touched: now,
-        campaigns: Array.prototype.map.call(slots, readSlot)
-      };
+      var campaigns = Array.prototype.map.call(slots, readSlot);
+      var link = form.querySelector('[name="tracking_link"]');
+      var tracking = link ? link.value : '';
+      var old = state.forms[key];
+      var unchanged = old && old.tracking === tracking && JSON.stringify(old.campaigns) === JSON.stringify(campaigns);
+      next[key] = { touched: unchanged ? old.touched : now, campaigns: campaigns, tracking: tracking };
     });
     state = { v: VERSION, forms: next };
     write();
@@ -4164,6 +4171,8 @@ window.cbKeep = (function () {
       if (!entry || !entry.campaigns || !entry.campaigns.length) return;
       /* Сервер отдал форму пустой; если в ней почему-то уже есть карточки,
          не задваиваем — раскладываем только недостающие. */
+      var link = form.querySelector('[name="tracking_link"]');
+      if (link && typeof entry.tracking === 'string') link.value = entry.tracking;
       var already = form.querySelectorAll('.cb-slot').length;
       entry.campaigns.forEach(function (data, i) {
         if (i < already) return;
@@ -4177,6 +4186,7 @@ window.cbKeep = (function () {
     return made;
   }
 
+  window.addEventListener('pagehide', save);
   var timer = null;
   function saveSoon() {
     if (timer) clearTimeout(timer);
@@ -4200,7 +4210,7 @@ window.cbKeep = (function () {
     if (!window.MutationObserver) return;
     var mo = new MutationObserver(function (records) {
       var structural = records.some(function (r) {
-        return r.type === 'childList' && (r.addedNodes.length || r.removedNodes.length);
+        return r.type === 'childList' && Array.from(r.addedNodes).concat(Array.from(r.removedNodes)).some(function(n) { return n.classList && (n.classList.contains('cb-slot') || n.classList.contains('cb-ad-row')); });
       });
       if (structural) saveSoon();
     });
@@ -4293,6 +4303,7 @@ window.cbTree = (function () {
     document.querySelectorAll('.view-panel[data-country]').forEach(function (panel) {
       var id = panel.dataset.country;
       if (!id) return;
+      if (!byCountry[id]) { byCountry[id] = { country:id, countryName:countryName(id), accounts:[] }; out.push(byCountry[id]); }
       panel.querySelectorAll('.cb-acc-row[data-acc-label]').forEach(function (row) {
         var label = row.dataset.accLabel;
         if (!label) return;
@@ -4376,20 +4387,13 @@ window.cbTree = (function () {
     });
   }
 
-  /* ── готовность ───────────────────────────────────────────────────────
-     Пока это заглушка, и она нарочно не зелёная: зелёный, поставленный
-     до проверки, — обещание, которое ещё не сдержано. Настоящие проверки
-     приедут вместе с формой, и заменить надо будет только эту функцию. */
+  // Readiness comes from the latest server check for this form snapshot.
 
   function readiness(c) {
-    if (!c.name) return { state: 'bad', sign: '✕', why: 'Not named yet' };
-    if (!c.ads) return { state: 'bad', sign: '✕', why: 'No ads yet' };
-    if (c.twin) {
-      return { state: 'warn', sign: '!', why: 'Same name as another campaign here — '
-        + 'they publish as one campaign with the ads of both. Change a field that '
-        + 'shows in the name (offer, targeting, age, OS, type) to split them.' };
-    }
-    return { state: 'wait', sign: '·', why: 'Not checked yet — checks arrive with the form' };
+    var r = c.slot && c.slot._drawerResult;
+    if (!r) return {state:'wait', sign:'·', why:'Checking campaign'};
+    if (r.state === 'ok' && c.twin) return {state:'warn', sign:'△', why:'Same name: Publish all combines these cards into one campaign.'};
+    return r;
   }
 
   /* ── отрисовка ────────────────────────────────────────────────────── */
@@ -4486,15 +4490,10 @@ window.cbTree = (function () {
   function paintFoot() {
     var list = places();
     foot.hidden = false;
-    if (!list.length) {
-      foot.innerHTML = '<p class="cbd-note">Connect an account in the account map,'
-        + ' and it can be built for here.</p>';
-      return;
-    }
     var chosen = foot.querySelector('.cbd-pick-country');
     var keep = (chosen && chosen.value) || currentCountry();
     var busy = countTotal(realTree());
-    foot.innerHTML = (busy
+    foot.innerHTML = (busy || (window.CB_QUEUE && window.CB_QUEUE.progress)
         ? '<button type="button" class="cbd-publish-all" data-act="publish-all">'
           + 'Publish all → drafts (' + busy + ')</button>'
           + '<div class="cbd-queue" hidden></div>'
@@ -4510,12 +4509,14 @@ window.cbTree = (function () {
       + '<select class="cbd-pick-account" aria-label="Account"></select>'
       + '<button type="button" class="cbd-add" data-act="add-picked">+ Campaign</button>'
       + '</div>'
+      + '<button type="button" class="cbd-add" data-act="connect-picked">+ Account in selected country</button>'
       + '<div class="cbd-pick cbd-newc">'
       + '<input type="text" class="cbd-new-country" placeholder="new country…" autocomplete="off">'
       + '<button type="button" class="cbd-add" data-act="add-country">+ Country</button>'
       + '<span class="cbd-new-msg"></span>'
       + '</div>';
     paintAccounts();
+    if (window.CB_QUEUE && window.CB_QUEUE.progress) showQueue(window.CB_QUEUE.progress);
   }
 
   function paintAccounts() {
@@ -4569,8 +4570,7 @@ window.cbTree = (function () {
     var found = null;
     document.querySelectorAll('details.amap-country').forEach(function (d) {
       if (found) return;
-      var cell = d.querySelector('.amap-cell-name') || d.querySelector('summary');
-      var name = cell ? (cell.textContent || '').trim() : '';
+      var name = d.dataset.countryName || '';
       if (name === countryName) found = d.querySelector('.amap-add');
     });
     return found;
@@ -4623,13 +4623,15 @@ window.cbTree = (function () {
   }
 
   /* Форма приносит с собой все кампании аккаунта; в ящике показываем ту,
-     которую раскрыли. Остальные скрыты, но не выброшены — они по-прежнему
-     кампании этого аккаунта и по-прежнему уйдут в публикацию. */
+     которую раскрыли. Остальные скрыты, но сохранены. Кнопка этой карточки отправляет только
+     её; общая кнопка проверяет и отправляет все готовые кампании. */
   function showOnly(form, id) {
     form.querySelectorAll('.cb-slot').forEach(function (slot) {
       slot.hidden = !!id && slot.dataset.cbdId !== id;
     });
     form.classList.toggle('cb-in-drawer', !!id);
+    var publish = form.querySelector('.cb-publish-btn');
+    if (id && publish) publish.disabled = false;
   }
 
   /* ── очередь публикации ────────────────────────────────────────────────
@@ -4649,10 +4651,11 @@ window.cbTree = (function () {
         + (r.why ? '<span class="cbd-q-why">' + aclEscHtml(r.why) + '</span>' : '') + '</div>';
     });
 
+    if (btn) btn.disabled = !!(window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain));
     if (p.done) {
       var ok = (p.report || []).filter(function (r) { return r.state === 'ok'; }).length;
       lines.unshift('<div class="cbd-q-head">Done — ' + ok + ' of ' + p.of + ' accounts</div>');
-      if (btn) { btn.disabled = false; }
+      if (btn) btn.disabled = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
     } else {
       lines.push('<div class="cbd-q-line"><span class="cbd-q-run">⏳</span> '
         + aclEscHtml(p.account) + ' — '
@@ -4732,12 +4735,15 @@ window.cbTree = (function () {
       } else {
         paint();
       }
-    } else if (act === 'connect') {
-      var country = hit.dataset.country;
+    } else if (act === 'connect' || act === 'connect-picked') {
+      var picked = foot.querySelector('.cbd-pick-country');
+      var country = act === 'connect-picked' ? (picked && picked.value) : hit.dataset.country;
+      if (!country) return;
+      var chosenCountryName = act === 'connect-picked' ? countryName(country) : hit.dataset.countryName;
       if (openConnect === country) { openConnect = ''; releaseConnect(); paint(); return; }
       openConnect = country;
       paint();
-      if (!borrowConnect(hit.dataset.countryName)) {
+      if (!borrowConnect(chosenCountryName)) {
         openConnect = '';
         paint();
         window.alert('This country is not on the account map yet — add it first with «+ Country».');
@@ -4755,7 +4761,6 @@ window.cbTree = (function () {
          переживёт. */
       window.amapSend({ action: 'add', kind: 'country', value: name }, msg);
     } else if (act === 'publish-all') {
-      hit.disabled = true;
       window.cbPublishAll(showQueue);
     } else if (act === 'add-picked') {
       var countrySel = foot.querySelector('.cbd-pick-country');
@@ -4891,11 +4896,14 @@ window.cbTree = (function () {
 
   paint();
   if (openId) openCampaign(openId);
+  document.body.classList.add('cbd-ready');
 
   return {
     paint: paint,
     places: places,
     readiness: readiness,
+    refresh: refreshOpenRow,
+    showQueue: showQueue,
     open: openCampaign,
     close: closeCampaign,
     borrowed: function () { return BORROWED; }
@@ -8880,12 +8888,12 @@ function cbInvalidatePreview(form) {
 // отрисована. Нужен «Publish all», чтобы узнать, у какой кампании ошибки,
 // не делая второго запроса к серверу: превью — не дешёвый вызов, он
 // разрешает креативы и тексты.
-window.cbPreview = function(form, done) {
+window.cbPreview = function(form, done, onlySlot) {
   cbInvalidatePreview(form);
   var requestId = form._previewRequest;
   var panel = form.querySelector('.cb-preview-panel');
   var publishBtn = form.querySelector('.cb-publish-btn');
-  if (!panel) return;
+  if (!panel) { if (done) done(null, 'Preview panel unavailable'); return; }
   panel.style.display = 'block';
   panel.innerHTML = '<span style="color:var(--muted)">Loading preview…</span>';
   if (publishBtn) publishBtn.disabled = true;
@@ -8906,19 +8914,27 @@ window.cbPreview = function(form, done) {
     return form._previewRequest === requestId && document.contains(form)
       && JSON.stringify(Array.from(new FormData(form).entries())) === snapshot;
   }
-  fetch('/preview-publish', { method: 'POST', body: fd })
+  var requestData = fd;
+  if (onlySlot) {
+    var omit = {}; form.querySelectorAll('.cb-slot').forEach(function(slot,i) { if(slot !== onlySlot) omit[i]=true; });
+    requestData = cbFormDataSkipping(form, omit, fd).body;
+  }
+  fetch('/preview-publish', { method: 'POST', body: requestData })
     .then(function(r) {
       if (!r.ok) {
-        return r.json().then(function(d) { return d; }, function() { return {error: 'Server error ' + r.status}; });
+        return r.json().then(function(d) { return {error:d.error || 'Server error ' + r.status}; }, function() { return {error: 'Server error ' + r.status}; });
       }
       return r.json();
     })
     .then(function(data) {
-      if (!current()) return;
-      if (!data) { panel.innerHTML = '<span class="cb-preview-errors">Empty response from server</span>'; return; }
+      if (!current()) { if (done) done(null, 'Campaign changed during check'); return; }
+      if (!data || !Array.isArray(data.plan)) {
+        var error = data && data.error || 'Invalid preview response';
+        panel.textContent = error; if (done) done(null, error); return;
+      }
       if (data.error) {
         panel.innerHTML = '<span class="cb-preview-errors">⚠ ' + aclEscHtml(data.error) + '</span>';
-        return;
+        if (done) done(null, data.error); return;
       }
       var plan = data.plan || [];
       var SKIP = ['errors', 'warnings', '_ads_raw'];
@@ -9037,10 +9053,10 @@ window.cbPreview = function(form, done) {
         });
       });
 
-      if (done) done(plan, null);
+      if (done) done(plan, null, fd);
     })
     .catch(function(e) {
-      if (!current()) return;
+      if (!current()) { if (done) done(null, 'Campaign changed during check'); return; }
       panel.innerHTML = '<span class="cb-preview-errors">Request failed: ' + aclEscHtml(e.message) + '</span>';
       if (done) done(null, e.message);
     });
@@ -9061,6 +9077,101 @@ window.cbPreview = function(form, done) {
  * собранную. Единственная ошибка, которая не держит, — пустая ссылка:
  * её добавляют и после сборки, так решил владелец.
  */
+// The drawer checks real server diagnostics without opening a preview panel.
+function cbDrawerRefreshIndicators() {
+  if (!window.cbTree) return;
+  document.querySelectorAll('.cbd-camp[data-camp]').forEach(function(card) {
+    var id = card.dataset.camp;
+    var slot = Array.from(document.querySelectorAll('.cb-slot')).find(function(s) { return s.dataset.cbdId === id; });
+    if (!slot) return;
+    var name = (slot.querySelector('.cb-name-hidden') || {}).value || '';
+    var form = slot.closest('form');
+    var twin = Array.from(form.querySelectorAll('.cb-name-hidden')).filter(function(x) { return name && x.value === name; }).length > 1;
+    var result = cbTree.readiness({slot:slot,name:name,twin:twin,ads:slot.querySelectorAll('.cb-ad-row').length});
+    var indicator = card.querySelector('.cbd-ind');
+    if (indicator) { indicator.className = 'cbd-ind cbd-ind-' + result.state; indicator.title = result.why; indicator.querySelector('span').textContent = result.sign; }
+  });
+}
+function cbDrawerClearFields(form) {
+  form.querySelectorAll('.cb-field-error').forEach(function(el) { el.classList.remove('cb-field-error'); el.removeAttribute('aria-invalid'); });
+  form.querySelectorAll('.cb-check-message').forEach(function(el) { el.remove(); });
+}
+function cbDrawerApplyPlan(form, plan, error) {
+  cbDrawerClearFields(form);
+  var byName = Object.create(null);
+  (plan || []).forEach(function(p) {
+    var name = String(p['Campaign Name'] || '');
+    if (!byName[name]) byName[name] = {errors:[],warnings:[]};
+    byName[name].errors = byName[name].errors.concat(cbBlockingErrors(p));
+    byName[name].warnings = byName[name].warnings.concat(p.warnings || []);
+  });
+  form.querySelectorAll('.cb-slot').forEach(function(slot) {
+    var name = (slot.querySelector('.cb-name-hidden') || {}).value || '';
+    var verdict = byName[name];
+    var errors = error ? [error] : verdict ? verdict.errors : ['This campaign was not checked'];
+    var warnings = verdict ? verdict.warnings : [];
+    slot._drawerResult = errors.length ? {state:'bad',sign:'✕',why:errors.join('; ')} : warnings.length ? {state:'warn',sign:'△',why:warnings.join('; ')} : {state:'ok',sign:'✓',why:'Checked — ready to build a draft'};
+    if (errors.length) {
+      var message = document.createElement('div'); message.className='cb-check-message'; message.textContent=errors.join('; '); slot.appendChild(message);
+      var selectors=[];
+      errors.forEach(function(e) {
+        if (/creative|file|image|video/i.test(e)) selectors.push('.cb-creative-search');
+        if (/text|copy|headline/i.test(e)) selectors.push('.cb-adtitle-search');
+        if (/budget/i.test(e)) selectors.push('[name$="_budget"]');
+        if (/target/i.test(e)) selectors.push('.cb-targeting-search');
+      });
+      selectors.forEach(function(sel) { slot.querySelectorAll(sel).forEach(function(el) { el.classList.add('cb-field-error');el.setAttribute('aria-invalid','true'); }); });
+    }
+  });
+  var publish = form.querySelector('.cb-publish-btn');
+  if (publish && form.classList.contains('cb-in-drawer')) {
+    var visible = Array.from(form.querySelectorAll('.cb-slot')).find(function(slot) { return !slot.hidden; });
+    publish.disabled = !visible || !visible._drawerResult || !/^(ok|warn)$/.test(visible._drawerResult.state) || !!(window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain));
+  }
+  cbDrawerRefreshIndicators();
+}
+function cbDrawerCheck(form) {
+  var version = form._drawerCheck;
+  var fd = cbCollectFormData(form), snapshot = JSON.stringify(Array.from(fd.entries()));
+  fetch('/preview-publish', {method:'POST',body:fd})
+    .then(function(r) { if (!r.ok) throw new Error('Check failed: HTTP '+r.status); return r.json(); })
+    .then(function(data) {
+      if (version !== form._drawerCheck || !document.contains(form)) return;
+      if (JSON.stringify(Array.from(new FormData(form).entries())) !== snapshot) { cbDrawerScheduleCheck(form); return; }
+      cbDrawerApplyPlan(form, data && Array.isArray(data.plan) ? data.plan : [], data && data.error || (!data || !Array.isArray(data.plan) ? 'Invalid check response' : ''));
+    })
+    .catch(function(e) { if (version === form._drawerCheck) cbDrawerApplyPlan(form, [], e.message); });
+}
+function cbDrawerScheduleCheck(form) {
+  if (!form || !form.querySelector('.cb-slot')) return;
+  form._drawerCheck = (form._drawerCheck || 0) + 1;
+  clearTimeout(form._drawerTimer);
+  cbDrawerClearFields(form);
+  form.querySelectorAll('.cb-slot').forEach(function(slot) { slot._drawerResult = {state:'wait',sign:'·',why:'Checking campaign'}; });
+  cbDrawerRefreshIndicators();
+  form._drawerTimer = setTimeout(function() { cbDrawerCheck(form); }, 350);
+}
+['input','change'].forEach(function(type) {
+  document.addEventListener(type,function(e) { var form=e.target.closest && e.target.closest('form.open-account-form'); if(form) cbDrawerScheduleCheck(form); });
+});
+['mousedown','click'].forEach(function(type) {
+  document.addEventListener(type,function(e) {
+    var opt=e.target.closest && e.target.closest('.cb-sel-opt');
+    var form=opt && opt.closest('form.open-account-form');
+    if (form) { cbDrawerScheduleCheck(form); form.dispatchEvent(new Event('change',{bubbles:true})); }
+  });
+});
+function cbDrawerWatchChecks() {
+  document.querySelectorAll('form.open-account-form').forEach(function(form) {
+    cbDrawerScheduleCheck(form);
+    new MutationObserver(function(records) {
+      if (records.some(function(r) { return Array.from(r.addedNodes).concat(Array.from(r.removedNodes)).some(function(n) { return n.classList && (n.classList.contains('cb-slot') || n.classList.contains('cb-ad-row')); }); })) cbDrawerScheduleCheck(form);
+    }).observe(form,{childList:true,subtree:true});
+  });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',cbDrawerWatchChecks);
+else cbDrawerWatchChecks();
+
 window.CB_LINK_NOT_BLOCKING = /link empty/i;
 
 function cbBlockingErrors(entry) {
@@ -9085,10 +9196,10 @@ function cbBlockingErrors(entry) {
  * Отказ в сторону «не публиковать» здесь единственный допустимый: молча
  * поднять черновик, который никто не проверял, хуже, чем не поднять. */
 function cbSkipByName(form, plan) {
-  var verdict = {};
+  var verdict = Object.create(null);
   (plan || []).forEach(function (entry) {
     var name = String(entry['Campaign Name'] || '');
-    if (name) verdict[name] = cbBlockingErrors(entry).length > 0;
+    if (name) verdict[name] = !!verdict[name] || cbBlockingErrors(entry).length > 0;
   });
 
   var total = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '0'), 10) || 0;
@@ -9108,14 +9219,14 @@ function cbSkipByName(form, plan) {
  * сервер читает их подряд от нуля. Выбросив кампанию из середины, номера
  * надо сдвинуть, иначе на сервере останется дыра и он прочитает меньше,
  * чем отправлено. `camp_count` пересчитывается по оставшимся. */
-function cbFormDataSkipping(form, skip) {
-  var total = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '0'), 10) || 0;
+function cbFormDataSkipping(form, skip, snapshot) {
+  var total = parseInt(snapshot ? snapshot.get('camp_count') : ((form.querySelector('[name="camp_count"]') || {}).value || '0'), 10) || 0;
   var renumber = {};
   var kept = 0;
   for (var i = 0; i < total; i += 1) if (!skip[i]) renumber[i] = kept++;
 
   var out = new FormData();
-  new FormData(form).forEach(function (value, key) {
+  (snapshot || new FormData(form)).forEach(function (value, key) {
     if (key === 'camp_count') return;
     var m = /^camp_(\d+)_(.+)$/.exec(key);
     if (!m) { out.append(key, value); return; }
@@ -9128,6 +9239,7 @@ function cbFormDataSkipping(form, skip) {
 }
 
 window.cbPublishAll = function (onProgress) {
+  if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
   var forms = [];
   document.querySelectorAll('form.open-account-form').forEach(function (form) {
     if (form.querySelectorAll('.cb-slot').length) forms.push(form);
@@ -9151,7 +9263,11 @@ window.cbPublishAll = function (onProgress) {
     { confirmLabel: 'Publish all → drafts' });
 };
 
-function _runPublishQueue(forms, onProgress) {
+function _runPublishQueue(forms, onProgress, onlySlot) {
+  if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
+  window.CB_QUEUE = { active:true, uncertain:false, progress:null };
+  var notify = onProgress;
+  onProgress = function(p) { window.CB_QUEUE.progress = p; notify(p); };
   var i = 0;
   var report = [];
 
@@ -9163,6 +9279,7 @@ function _runPublishQueue(forms, onProgress) {
 
   function step() {
     if (i >= forms.length) {
+      window.CB_QUEUE.active = false;
       onProgress({ done: true, at: forms.length, of: forms.length, report: report });
       return;
     }
@@ -9170,13 +9287,14 @@ function _runPublishQueue(forms, onProgress) {
     var label = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
     onProgress({ at: i + 1, of: forms.length, account: label, stage: 'checking', report: report });
 
-    window.cbPreview(form, function (plan, error) {
+    window.cbPreview(form, function (plan, error, snapshot) {
       if (error) { finish({ account: label, state: 'bad', why: error }); return; }
 
       var verdict = cbSkipByName(form, plan);
       var skipped = verdict.broken + verdict.unchecked;
 
-      var payload = cbFormDataSkipping(form, verdict.skip);
+      if (onlySlot) form.querySelectorAll('.cb-slot').forEach(function(slot, index) { if (slot !== onlySlot) verdict.skip[index] = true; });
+      var payload = cbFormDataSkipping(form, verdict.skip, snapshot);
       if (!payload.kept) {
         finish({ account: label, state: 'bad', skipped: skipped,
                  why: verdict.unchecked && !verdict.broken
@@ -9204,15 +9322,25 @@ function _runPublishQueue(forms, onProgress) {
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data.error) { finish({ account: label, state: 'bad', why: data.error, skipped: skipped }); return; }
+          if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');
           cbPollJob(data.job_id, statusPanel, form.querySelector('.cb-publish-btn'), function (job) {
-            var ok = (job.results || []).length
+            if (job.status === 'unknown' || job.status === 'cancelled') {
+              window.CB_QUEUE.active = false; window.CB_QUEUE.uncertain = job.status === 'unknown';
+              report.push({account:label, state:'bad', why:job.status === 'unknown' ? 'Job status lost; verify the account before starting another run' : 'Queue stopped by user'});
+              onProgress({done:true,at:i+1,of:forms.length,report:report}); return;
+            }
+            var ok = !(job.errors || []).length && (job.results || []).length
               && (job.results || []).every(function (r) { return r.publishable === true; });
             finish({ account: label, state: ok ? 'ok' : 'bad', skipped: skipped,
                      why: ok ? '' : 'draft blocked — see the account panel' });
           });
         })
-        .catch(function (e) { finish({ account: label, state: 'bad', why: e.message, skipped: skipped }); });
-    });
+        .catch(function (e) {
+          window.CB_QUEUE.active = false; window.CB_QUEUE.uncertain = true;
+          report.push({account:label,state:'bad',why:'Submission outcome unknown: '+e.message});
+          onProgress({done:true,at:i+1,of:forms.length,report:report});
+        });
+    }, onlySlot);
   }
 
   step();
@@ -9546,9 +9674,11 @@ window.cbHighlightField = function(field) {
 };
 
 window.cbPublish = function(form) {
+  if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
+  var onlySlot = form.classList.contains('cb-in-drawer') ? Array.from(form.querySelectorAll('.cb-slot')).find(function(s) { return !s.hidden; }) : null;
   var accLabel  = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
   var country   = ((form.querySelector('[name="country"]') || {}).value || '?').trim();
-  var campCount = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '1'), 10) || 1;
+  var campCount = onlySlot ? 1 : (parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '1'), 10) || 1);
 
   var bodyHtml =
     'Account: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br>'
@@ -9600,7 +9730,8 @@ window.cbPublish = function(form) {
   }
 
   _safeConfirm('Build this campaign as a draft?', bodyHtml, function() {
-    _doCbPublish(form);
+    if (onlySlot) _runPublishQueue([form], window.cbTree.showQueue, onlySlot);
+    else _doCbPublish(form);
   }, { confirmLabel: (warn || lostTargeting.length) ? 'Собрать с предупреждением' : 'Publish → draft' });
 };
 
@@ -9813,6 +9944,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
         if (r.status === 404) {
           statusPanel.innerHTML += '<div class="cb-status-fatal">The dashboard was restarted — the status of this run is lost. Reload the page (F5).</div>';
           if (publishBtn) publishBtn.disabled = false;
+          if (done) { var lost = done; done = null; lost({status:'unknown',results:[]}); }
           return null;
         }
         return r.json();
