@@ -20,6 +20,7 @@ import datetime as _dt
 import os
 import platform
 import sys
+import uuid
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent
@@ -29,24 +30,37 @@ _KEEP = 20
 _failures: list[dict] = []
 
 
-def pytest_runtest_logreport(report) -> None:
-    """Копим падения по ходу. Падение в setup или teardown — тоже падение:
-    именно они чаще всего и зависят от соседей по прогону."""
+def pytest_sessionstart(session) -> None:
+    # pytest.main can run more than one session in the same Python process.
+    _failures.clear()
+
+
+def _remember_failure(report, when: str) -> None:
     try:
-        if report.failed and report.when in ("setup", "call", "teardown"):
+        if report.failed:
             _failures.append({
                 "id": report.nodeid,
-                "when": report.when,
+                "when": when,
                 "seconds": round(getattr(report, "duration", 0.0), 2),
                 "text": report.longreprtext,
+                "sections": list(getattr(report, "sections", [])),
             })
     except Exception:
-        pass          # отчётность не имеет права ломать прогон
+        pass  # Reporting must not change the run's outcome.
 
 
-def _trim() -> None:
-    files = sorted(_REPORTS.glob("*.md"))
-    for stale in files[:-_KEEP]:
+def pytest_runtest_logreport(report) -> None:
+    if report.when in ("setup", "call", "teardown"):
+        _remember_failure(report, report.when)
+
+
+def pytest_collectreport(report) -> None:
+    _remember_failure(report, "collect")
+
+
+def _trim(current: Path) -> None:
+    files = sorted(p for p in _REPORTS.glob("*.md") if p != current)
+    for stale in files[:max(0, len(files) - (_KEEP - 1))]:
         try:
             stale.unlink()
         except OSError:
@@ -64,8 +78,8 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:
         return
     try:
         _REPORTS.mkdir(parents=True, exist_ok=True)
-        stamp = _dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        path = _REPORTS / f"{stamp}.md"
+        stamp = _dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")
+        path = _REPORTS / f"{stamp}_{uuid.uuid4().hex}.md"
 
         head = [
             f"# Падения прогона · {stamp}",
@@ -93,8 +107,12 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:
                 "```",
                 "",
             ]
-        path.write_text("\n".join(head + body), encoding="utf-8")
-        _trim()
+            for title, content in f["sections"]:
+                body += [f"### {title}", "", "```", str(content).rstrip(), "```", ""]
+        # Exclusive creation prevents one run from replacing another report.
+        with path.open("x", encoding="utf-8") as output:
+            output.write("\n".join(head + body))
+        _trim(path)
         terminalreporter.write_line(f"текст падений сохранён: {path}", bold=True)
     except Exception:
         pass          # см. выше: отчётность не ломает прогон
