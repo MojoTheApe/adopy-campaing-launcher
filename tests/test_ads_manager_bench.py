@@ -817,3 +817,48 @@ def test_an_already_open_category_is_not_collapsed_again(browser):
         assert pg.evaluate("() => window.__hits") == 0, "свернули уже раскрытую категорию"
     finally:
         pg.close()
+
+
+def _set_subitem(pg, label, want):
+    """Тот же вызов, что делает шаг для подпункта."""
+    from src.fb_ads_rpa import meta_dom
+
+    return pg.evaluate(meta_dom.PLACEMENTS_SUBITEM_JS, [label, want])
+
+
+def test_a_frozen_subitem_already_in_the_wanted_state_is_not_a_failure(browser):
+    """«Facebook Business Explore» Meta держит выключенной и трогать не даёт.
+
+    14.09, круги 15-16: подпункт оставался единственной причиной отказа шага,
+    хотя стоял ровно так, как нам нужно. Требовать клика от недоступной
+    галочки бессмысленно — но только когда состояние уже верное.
+    """
+    pg = browser.new_page()
+    try:
+        pg.set_content(
+            "<div data-rpa-placements-marker><ul>"
+            "<li><div><span>Facebook Business Explore</span></div>"
+            "<input type='checkbox' disabled></li>"
+            "</ul></div>"
+        )
+        assert _set_subitem(pg, "Facebook Business Explore", False)["ok"] is True
+        res = _set_subitem(pg, "Facebook Business Explore", True)
+        assert res["ok"] is False and res["why"] == "недоступна и не та", res
+    finally:
+        pg.close()
+
+
+def test_a_subitem_with_a_live_checkbox_is_still_clicked(browser):
+    """Обычный подпункт должен переключаться, а не «считаться подходящим»."""
+    pg = browser.new_page()
+    try:
+        pg.set_content(
+            "<div data-rpa-placements-marker><ul>"
+            "<li><div><span>Threads feed</span></div>"
+            "<input type='checkbox' checked></li>"
+            "</ul></div>"
+        )
+        assert _set_subitem(pg, "Threads feed", False)["ok"] is True
+        assert pg.evaluate("() => document.querySelector('input').checked") is False
+    finally:
+        pg.close()

@@ -3155,6 +3155,49 @@ PLACEMENTS_EXPAND_JS = (
 нам дня.
 """
 
+PLACEMENTS_SUBITEM_JS = """
+  ([label, wantChecked]) => {
+    const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+    const root = document.querySelector('[data-rpa-placements-marker]');
+    if (!root) return { ok: false, why: 'нет метки блока' };
+    const rows = [...root.querySelectorAll('*')].filter(e =>
+      e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
+    let frozen = null;
+    for (const row of rows) {
+      let container = row.parentElement;
+      for (let i = 0; i < 4 && container; i++) {
+        const cb = container.querySelector('input[type=checkbox]');
+        if (cb) {
+          if (!cb.disabled) {
+            if (cb.checked !== wantChecked) cb.click();
+            return { ok: cb.checked === wantChecked, checked: cb.checked };
+          }
+          if (frozen === null) frozen = cb.checked;
+        }
+        container = container.parentElement;
+      }
+    }
+    if (frozen !== null) {
+      return frozen === wantChecked
+        ? { ok: true, why: 'недоступна, но уже как надо', checked: frozen }
+        : { ok: false, why: 'недоступна и не та', checked: frozen };
+    }
+    return { ok: false, why: 'строка не найдена' };
+  }
+"""
+"""Подпункт категории: найти по словам и переключить.
+
+Подъём на четыре уровня, а не общий `rowFor`, и это не небрежность. 14.09 я
+свёл подпункты на `rowFor` «для единообразия» — и вместо семнадцати из
+восемнадцати круг 16 дал десять: подпункты лежат во вложенных `li` внутри
+категории, и граница по `li`, которая спасает категории от чужой галочки,
+здесь отрезает свою же. Работающий путь без причины не меняют.
+
+Недоступная галочка — не всегда беда: «Facebook Business Explore» Meta
+держит выключенной и трогать не даёт. Если она уже в нужном состоянии,
+требовать от неё клика бессмысленно; если нет — это честный отказ.
+"""
+
 _PLACEMENT_CATEGORIES = {
     # Пять категорий раздела Placement controls и то, чем они должны стать.
     # Порядок важен только для отчёта: снимаем и ставим по одной.
@@ -3940,35 +3983,26 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # Найдено И нажато одним вызовом: снятие галочки перекладывает
         # строки под ней, и координата, снятая отдельным шагом, к моменту
         # клика указывает уже на соседнюю.
+        # Подъём на четыре уровня, а не общий `rowFor`, и это не небрежность.
+        # 14.09: я свёл подпункты на `rowFor` «для единообразия» — и вместо
+        # семнадцати из восемнадцати круг 16 дал десять. Подпункты лежат во
+        # вложенных `li` внутри категории, и граница по `li`, которая спасает
+        # категории от чужой галочки, здесь отрезает свою же. Работающий путь
+        # без причины не меняют; правка откачена.
+        #
+        # Недоступная галочка — не всегда беда: «Facebook Business Explore»
+        # Meta держит выключенной и не даёт трогать. Если она уже в нужном
+        # состоянии, требовать от неё клика бессмысленно.
         try:
-            return bool(
-                page.evaluate(
-                    """
-                    ([label, wantChecked]) => {
-                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                      const root = document.querySelector('[data-rpa-placements-marker]');
-                      if (!root) return false;
-                      const rows = [...root.querySelectorAll('*')].filter(e =>
-                        e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
-                      for (const row of rows) {
-                        let container = row.parentElement;
-                        for (let i = 0; i < 4 && container; i++) {
-                          const cb = container.querySelector('input[type=checkbox]');
-                          if (cb && !cb.disabled) {
-                            if (cb.checked !== wantChecked) cb.click();
-                            return cb.checked === wantChecked;
-                          }
-                          container = container.parentElement;
-                        }
-                      }
-                      return false;
-                    }
-                    """,
-                    [label, want_checked],
-                )
-            )
-        except Exception:
-            return False
+            res = page.evaluate(
+                PLACEMENTS_SUBITEM_JS, [label, want_checked]
+            ) or {"ok": False, "why": "пустой ответ"}
+        except Exception as exc:
+            res = {"ok": False, "why": str(exc)[:80]}
+        if not res.get("ok"):
+            _dbg.append(f"подпункт[{label}]={res}")
+            report.setdefault("subitems_failed", {})[label] = res
+        return bool(res.get("ok"))
 
     # Категории ведут себя как гармошка: раскрытие следующей закрывает
     # предыдущую. Проверено живым прогоном 9 сентября — код раскрыл все три
