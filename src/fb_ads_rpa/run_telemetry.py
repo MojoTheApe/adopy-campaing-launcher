@@ -32,7 +32,6 @@ from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parents[2]
-from src import acl_log
 from config.paths import get_runtime_workspace
 TELEMETRY_PATH = get_runtime_workspace() / "output" / "rpa_telemetry.jsonl"
 
@@ -293,13 +292,8 @@ def record(
             rec["diag"] = scrub_diag(diag)
         if note:
             rec["note"] = note
-        # Через `acl_log`, а не `open(..., "a")`. Обоснование формата выше
-        # («concurrent runs ... can't lose or truncate history») верно для
-        # POSIX и неверно для Windows: там режим «a» эмулируется как «перейти
-        # в конец, затем записать». Замер 15.09 — двенадцать писателей, 720
-        # записей: целых 590, потеряно 130. Формат при этом правильный,
-        # менять его не нужно — нужен замок.
-        acl_log.append_line(p, json.dumps(rec, ensure_ascii=False))
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except Exception:
         pass
 

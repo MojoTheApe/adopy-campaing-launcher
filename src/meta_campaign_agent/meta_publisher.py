@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src import acl_log
 from src.meta_campaign_agent.campaign_builder import PublishJob
 from src.meta_campaign_agent.creative_uploader import CreativeUploader
 from src.meta_campaign_agent.meta_client import MetaClient, MetaGraphError
@@ -49,10 +48,10 @@ class MetaPublisher:
         self.log_path = Path(log_path)
 
     def _log(self, entry: dict) -> None:
-        # Через `acl_log`: две публикации, идущие одновременно, при простом
-        # дописывании на Windows затирают записи друг друга — замер 15.09.
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
         entry = {**entry, "ts": datetime.now(timezone.utc).isoformat()}
-        acl_log.append_line(self.log_path, json.dumps(entry, ensure_ascii=False))
+        with self.log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     def publish_job(self, job: PublishJob) -> PublishResult:
         result = PublishResult(job=job)
