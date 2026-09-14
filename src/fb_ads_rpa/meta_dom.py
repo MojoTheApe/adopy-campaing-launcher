@@ -11,6 +11,68 @@ from playwright.sync_api import Frame, Page
 
 from src.fb_ads_rpa import run_telemetry as _telemetry
 
+#: Порог, за которым Playwright отказывается передавать файл.
+#:
+#: Дословно из его же ошибки, пойманной 14.09 на живом прогоне:
+#: «FileChooser.set_files: Cannot transfer files larger than 50Mb to a browser
+#: not co-located with the server». Ограничение клиента Playwright: он шлёт
+#: СОДЕРЖИМОЕ файла по CDP и отказывается делать это для больших файлов, когда
+#: считает соединение удалённым. У нас оно таким и считается — CDP по TCP через
+#: Multilogin, — хотя браузер физически на этой же машине.
+#:
+#: Берём с запасом: 45, а не 50. Порог у них на содержимом, а не на размере
+#: файла, и упереться в него на 49.8 МБ было бы обидно.
+_PW_FILE_LIMIT_MB = 45
+
+
+def _set_file_via_cdp(page: Page, creative_path: str) -> bool:
+    """Отдать браузеру ПУТЬ к файлу вместо его содержимого.
+
+    Браузер живёт на этой же машине и прочитает файл сам — ограничение
+    Playwright снимается, потому что через нас содержимое не идёт вовсе.
+    Это то же, что делает сам Playwright для маленьких файлов
+    (`DOM.setFileInputFiles`), только без пересылки.
+
+    `pierce=True` не для красоты: 14.09 на живой странице
+    `query_selector_all("input[type=file]")` возвращал ноль полей в тот
+    момент, когда окно выбора уже было открыто, — поле лежит не в основном
+    дереве. CDP умеет заглянуть за теневые границы, Playwright здесь нет.
+
+    Возвращает True, только если файл действительно принят полем. «Отправили
+    команду» успехом не считается: ровно на такой подмене желаемого
+    действительным этот шаг уже горел — см. комментарий про `set_files` выше.
+    """
+    path = str(Path(creative_path).resolve())
+    try:
+        session = page.context.new_cdp_session(page)
+    except Exception:
+        return False
+    try:
+        doc = session.send("DOM.getDocument", {"depth": -1, "pierce": True})
+        root = (doc.get("root") or {}).get("nodeId")
+        if not root:
+            return False
+        found = session.send(
+            "DOM.querySelectorAll", {"nodeId": root, "selector": "input[type=file]"}
+        )
+        for node_id in (found.get("nodeIds") or []):
+            try:
+                session.send(
+                    "DOM.setFileInputFiles", {"files": [path], "nodeId": node_id}
+                )
+                return True
+            except Exception:
+                continue
+        return False
+    except Exception:
+        return False
+    finally:
+        try:
+            session.detach()
+        except Exception:
+            pass
+
+
 #: След последней попытки загрузить креатив — что шаг видел и делал.
 #: Читается тем, кто пишет отказ в телеметрию: без него `ad_creative_upload`
 #: приходил пустым, и шесть отказов подряд 14.09 не дали ни одной зацепки.
@@ -4716,8 +4778,19 @@ def upload_ad_creative(
                     if not _clicked:
                         upload_btn.first.click(timeout=5000)
                         _step["upload_fallback_clicked"] = True
-                fc_info.value.set_files(creative_path)
                 _step["chooser"] = True
+                # Окно выбора открыто — теперь поле для файла существует, и
+                # тяжёлый файл отдаём по пути, а не содержимым: Playwright
+                # откажется его передавать, и до 14.09 этот отказ глотался
+                # молча, стоив полутора дней поисков.
+                if _diag["size_mb"] > _PW_FILE_LIMIT_MB:
+                    _step["cdp"] = _set_file_via_cdp(page, creative_path)
+                    if not _step["cdp"]:
+                        # Пробуем обычным путём — пусть откажет вслух, с
+                        # текстом, а не тишиной.
+                        fc_info.value.set_files(creative_path)
+                else:
+                    fc_info.value.set_files(creative_path)
         except Exception as exc:
             # Здесь и была слепота: исключение глоталось молча, и отличить
             # «кнопки нет» от «окно выбора файла не открылось» было нечем.
