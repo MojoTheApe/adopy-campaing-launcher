@@ -89,7 +89,8 @@ def test_a_write_that_fails_does_not_take_the_page_down(monkeypatch):
         raise OSError("диск только для чтения")
 
     monkeypatch.setattr(ha, "_save", angry)
-    ha.set_hidden("Acc", True)          # не бросает
+    with pytest.raises(OSError):
+        ha.set_hidden("Acc", True)  # The API must report the failed write.
 
 
 # ── и это видно на экране ─────────────────────────────────────────────

@@ -2376,13 +2376,21 @@ async def api_accounts_hidden(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Expected JSON"}, status_code=400)
 
-    label = str((body or {}).get("label") or "").strip()
-    if not label:
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "Expected a JSON object"}, status_code=400)
+    label = body.get("label")
+    hide = body.get("hidden", True)
+    if not isinstance(label, str) or not label.strip():
         return JSONResponse({"ok": False, "error": "label is required"}, status_code=400)
-    hide = bool((body or {}).get("hidden", True))
-
-    keys = _hidden.set_hidden(label, hide)
+    if not isinstance(hide, bool):
+        return JSONResponse({"ok": False, "error": "hidden must be a boolean"}, status_code=400)
+    label = label.strip()
+    try:
+        keys = _hidden.set_hidden(label, hide)
+    except OSError:
+        return JSONResponse({"ok": False, "error": "Could not save this machine's hidden accounts. Try again."}, status_code=500)
     return JSONResponse({"ok": True, "label": label, "hidden": hide, "hidden_count": len(keys)})
+
 
 
 @app.post("/account-map-patch")

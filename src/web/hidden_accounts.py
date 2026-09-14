@@ -14,13 +14,42 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 from typing import Iterable
+from pathlib import Path
+from contextlib import contextmanager
+import threading
 
-from config.paths import get_hidden_accounts_path
+from config.paths import get_hidden_accounts_path, _atomic_write
 
-log = logging.getLogger(__name__)
+_lock = threading.RLock()
+
+
+@contextmanager
+def _transaction():
+    # Same machine-local transaction pattern as targeting_registry.
+    with _lock:
+        path = Path(get_hidden_accounts_path()).with_suffix(".lock")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a+b") as file:
+            if file.tell() == 0:
+                file.write(b"0")
+                file.flush()
+            file.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(file.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(file, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                file.seek(0)
+                if os.name == "nt":
+                    msvcrt.locking(file.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(file, fcntl.LOCK_UN)
 
 
 def _key(label: str) -> str:
@@ -43,16 +72,12 @@ def load() -> set[str]:
     items = data.get("hidden") if isinstance(data, dict) else data
     if not isinstance(items, list):
         return set()
-    return {_key(x) for x in items if str(x or "").strip()}
+    return {_key(x) for x in items if isinstance(x, str) and x.strip()}
 
 
 def _save(labels: Iterable[str]) -> None:
-    path = get_hidden_accounts_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"hidden": sorted(labels)}, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)          # либо целый файл, либо прежний
+    _atomic_write(get_hidden_accounts_path(),
+                  json.dumps({"hidden": sorted(labels)}, ensure_ascii=False, indent=2).encode("utf-8"))
 
 
 def is_hidden(label: str, hidden: set[str] | None = None) -> bool:
@@ -69,14 +94,11 @@ def set_hidden(label: str, hidden: bool) -> set[str]:
     key = _key(label)
     if not key:
         return load()
-    current = load()
-    if hidden:
-        current.add(key)
-    else:
-        current.discard(key)
-    try:
+    with _transaction():
+        current = load()
+        if hidden:
+            current.add(key)
+        else:
+            current.discard(key)
         _save(current)
-    except OSError as exc:
-        # Настройка вида не стоит того, чтобы ронять страницу аккаунтов.
-        log.warning("Не удалось записать список спрятанных аккаунтов: %s", exc)
-    return current
+        return current
