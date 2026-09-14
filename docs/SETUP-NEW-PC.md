@@ -45,6 +45,11 @@ windows, ask Evgeni for the current file, and start again. (To check a copy
 yourself: open it in Notepad and search for `NEEDRESTART`. The current file does
 not contain that word.)
 
+If a repair with `install_acl.bat` says the previous release was restored,
+close that window and run `install_acl.bat` again. Recovery replaces the installer
+too, so repair stops before using the restored files. It does not open another
+window automatically.
+
 **A GitHub sign-in window may open.** Use the company GitHub account you were
 given access with.
 

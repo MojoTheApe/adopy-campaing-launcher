@@ -50,34 +50,23 @@ if exist ".venv\Scripts\python.exe" (
     set "PY=.venv\Scripts\python.exe"
 )
 
-REM A manual repair must not install packages for a candidate whose previous
-REM dashboard launch never became healthy. Recover first, then restart this
-REM installer from the restored checkout so even the batch file is N-1.
-REM
-REM That restart happens AT MOST ONCE, and the marker argument is what enforces
-REM it. Recovery clears the pending marker, so a second call returns 0 and the
-REM chain stops on its own — but "on its own" is not a guarantee, it is a
-REM property of code somewhere else. When a bootstrap that reopened itself lost
-REM that property, a campaign manager watched terminal windows pile up with no
-REM end and no way to tell what was wrong. One window per repair, enforced here.
-if not exist "scripts\acl_runtime_manager.py" goto dependencies
-"%PY%" scripts\acl_runtime_manager.py recover-pending
-if errorlevel 10 (
-    if /i "%~1"=="recovered" (
-        echo ERROR: an unfinished ACL update is still being rolled back after a
-        echo repair attempt. Stopping instead of reopening this window again.
-        echo Send this message to Evgeni; nothing else was changed.
+REM Recovery may replace this batch file with an older release. Keep the
+REM recovery call and its exits in ONE parsed command block: cmd must not
+REM continue reading instructions at the same byte offset in the old file.
+REM Do not relaunch N-1 automatically; older files may have no restart guard.
+if exist "scripts\acl_runtime_manager.py" (
+    "%PY%" scripts\acl_runtime_manager.py recover-pending
+    if errorlevel 10 (
+        echo The previous ACL release was restored. Repair has stopped safely.
+        echo Run install_acl.bat again to finish repair using the restored files.
+        pause
+        exit /b 10
+    )
+    if errorlevel 1 (
+        echo ERROR: an unfinished ACL update could not be recovered safely.
         pause
         exit /b 1
     )
-    echo Restarting installer from the restored ACL release...
-    start "" "%~f0" recovered
-    exit /b 0
-)
-if errorlevel 1 (
-    echo ERROR: an unfinished ACL update could not be recovered safely.
-    pause
-    exit /b 1
 )
 
 :dependencies
