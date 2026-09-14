@@ -4022,12 +4022,23 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         _sleep_h(0.8)
         here = _subitem_labels()
         report["subitems_seen"].extend(x for x in here if x not in report["subitems_seen"])
-        for label in list(remaining_on):
-            if label in here and _set(label, True):
-                remaining_on.remove(label)
-        for label in list(remaining_off):
-            if label in here and _set(label, False):
-                remaining_off.remove(label)
+        # Два захода, пока категория ещё открыта. Первый клик по подпункту
+        # иногда не успевает отразиться: `_set` читает галочку в том же
+        # вызове, где кликает, и возвращает старое значение. У подпунктов
+        # первых двух категорий это сходило с рук — их добирал заход
+        # следующей категории. У последней такого захода нет, и 14.09
+        # «Ads on Facebook Reels» осталась единственной причиной отказа
+        # шага на прогоне пользователя.
+        for _ in range(2):
+            for label in list(remaining_on):
+                if label in here and _set(label, True):
+                    remaining_on.remove(label)
+            for label in list(remaining_off):
+                if label in here and _set(label, False):
+                    remaining_off.remove(label)
+            if not [x for x in remaining_on + remaining_off if x in here]:
+                break
+            _sleep_h(0.6)
 
     report["subitems_missing"] = remaining_on + remaining_off
     _dbg.append(f"subitems_seen={report['subitems_seen']}")
