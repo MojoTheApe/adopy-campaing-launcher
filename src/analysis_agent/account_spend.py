@@ -1858,7 +1858,8 @@ def turn_off_history(limit: int = 50, account: str = "") -> list[dict]:
     """
     try:
         lines = _turn_off_log().read_text(encoding="utf-8").splitlines()
-    except Exception:
+    except FileNotFoundError:
+        # A new installation has no journal; other read failures mean unavailable.
         return []
     out: list[dict] = []
     for line in reversed(lines):
@@ -1871,7 +1872,10 @@ def turn_off_history(limit: int = 50, account: str = "") -> list[dict]:
             continue
         if not isinstance(row, dict):
             continue
-        if account and not _same_account(row.get("account", ""), account):
+        row_account = row.get("account")
+        if not isinstance(row_account, str) or not row_account.strip():
+            continue
+        if account and not _same_account(row_account, account):
             continue
         out.append(row)
         if len(out) >= limit:

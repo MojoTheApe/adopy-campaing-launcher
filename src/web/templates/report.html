@@ -6116,13 +6116,16 @@ function amapLogLoad(block, account) {
   body.textContent = 'reading…';
   fetch('/account-spend/turn-off-history?account=' + encodeURIComponent(account),
         { credentials: 'same-origin' })
-    .then(function (r) { return r.json().catch(function () { return null; }); })
+    .then(function (r) {
+      if (!r.ok) throw new Error('The record could not be read.');
+      return r.json();
+    })
     .then(function (j) {
       /* Ответ проверяется, а не принимается на веру. Без этой проверки отказ
          чтения превращался в пустой список, а пустой список — в надпись
          «здесь ничего не меняли»: самый успокаивающий вывод из возможных,
          сделанный ровно тогда, когда журнал прочитать не удалось. */
-      if (!j || !j.ok) {
+      if (!j || !j.ok || !Array.isArray(j.entries)) {
         body.textContent = (j && j.error) || 'The record could not be read.';
         return;
       }

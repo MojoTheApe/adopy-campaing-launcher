@@ -205,7 +205,9 @@ def _tree_js() -> str:
     return page[start: page.index("function amapTurnOffSaid", start)]
 
 
-def test_an_unreadable_record_is_not_reported_as_an_empty_one(monkeypatch):
+@pytest.mark.parametrize("read_error", [PermissionError("denied"), OSError("disk unavailable"),
+                                      UnicodeError("invalid encoding")])
+def test_an_unreadable_record_is_not_reported_as_an_empty_one(monkeypatch, read_error):
     """Замечание ревьюера. Пустой список значит «здесь ничего не меняли» —
     самый успокаивающий вывод из возможных. Отдавать его вместо «прочитать не
     удалось» хуже, чем промолчать: человек уходит уверенным в том, чего никто
@@ -216,10 +218,11 @@ def test_an_unreadable_record_is_not_reported_as_an_empty_one(monkeypatch):
 
     from src.web.app import app
 
-    def explode(*a, **kw):
-        raise OSError("disk unavailable")
+    class UnreadableJournal:
+        def read_text(self, **kwargs):
+            raise read_error
 
-    monkeypatch.setattr(sp, "turn_off_history", explode)
+    monkeypatch.setattr(sp, "_turn_off_log", lambda: UnreadableJournal())
 
     async def go():
         t = httpx.ASGITransport(app=app, raise_app_exceptions=False)
@@ -232,6 +235,35 @@ def test_an_unreadable_record_is_not_reported_as_an_empty_one(monkeypatch):
     body = r.json()
     assert body["ok"] is False
     assert "entries" not in body, "к отказу приложен пустой список записей"
+
+
+@pytest.mark.parametrize("contents", [None, ""])
+def test_a_missing_or_empty_journal_is_empty(store, contents):
+    if contents is not None:
+        sp._turn_off_log().write_text(contents, encoding="utf-8")
+    assert sp.turn_off_history(account="FacebookDQ438") == []
+
+
+@pytest.mark.parametrize("bad_account", [42, True, None, [], {}, ""])
+def test_a_malformed_account_does_not_hide_valid_history(store, bad_account):
+    import asyncio
+    import httpx
+    from src.web.app import app
+
+    _write(object_id="good")
+    with sp._turn_off_log().open("a", encoding="utf-8") as journal:
+        journal.write(json.dumps({"account": bad_account, "object_id": "bad"}) + "\n")
+
+    async def read():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://127.0.0.1") as client:
+            return await client.get("/account-spend/turn-off-history",
+                                    params={"account": "FacebookDQ438", "limit": 1})
+
+    response = asyncio.run(read())
+    assert response.status_code == 200
+    assert [row["object_id"] for row in response.json()["entries"]] == ["good"]
+    assert [row["object_id"] for row in sp.turn_off_history(limit=1)] == ["good"]
 
 
 def test_the_screen_checks_the_answer_before_believing_it():

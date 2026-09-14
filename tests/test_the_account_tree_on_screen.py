@@ -790,6 +790,66 @@ def test_the_newest_record_comes_first(monkeypatch, tmp_path):
 # Persistent confirmation is exercised by test_turn_off_safety_browser.py.
 
 
+@pytest.mark.parametrize("status,payload", [
+    (500, {"ok": True, "entries": []}),
+    (200, {"ok": False, "error": "The record could not be read."}),
+    (200, {"ok": True}),
+    (200, {"ok": True, "entries": {}}),
+])
+def test_unavailable_history_is_not_rendered_as_empty(page, status, payload):
+    from playwright.sync_api import expect
+
+    page.evaluate("""({status, payload}) => {
+      window.fetch = async () => new Response(JSON.stringify(payload), {status});
+    }""", {"status": status, "payload": payload})
+    _paint(page, [ADSET])
+    _open(page)
+    page.locator('.amap-tree-log-head').click()
+    expect(page.locator('.amap-tree-log-body')).to_have_text('The record could not be read.')
+    assert page.locator('.amap-tree-log-none').count() == 0
+
+
+def test_the_open_journal_shows_an_unconfirmed_attempt_after_http_failure(page):
+    from playwright.sync_api import expect
+
+    page.add_script_tag(content=_one('function amapIso(d) {'))
+    page.evaluate("""() => {
+      window.__historyReads = 0;
+      window.__actions = 0;
+      window.fetch = async (url, options) => {
+        if (url.startsWith('/account-spend/turn-off-history?')) {
+          window.__historyReads++;
+          const entries = window.__actions ? [{
+            account: 'KLD_BFL_X84', object_id: '1', level: 'campaign', name: 'Reviewed campaign',
+            state: 'unconfirmed', error: 'Timed out', at: '2026-09-14 10:00:00',
+            requester: 'Test operator', route: 'rpa'
+          }] : [];
+          return new Response(JSON.stringify({ok: true, entries}), {status: 200});
+        }
+        if (url === '/account-spend/turn-off' && options.method === 'POST') {
+          window.__actions++;
+          return new Response(JSON.stringify({ok: false, error: 'Could not reach the account.'}),
+                              {status: 503});
+        }
+        throw new Error('Unexpected request: ' + url);
+      };
+    }""")
+    _paint(page, [ADSET])
+    _open(page)
+    page.locator('.amap-tree-log-head').click()
+    expect(page.locator('.amap-tree-log-none')).to_have_text(
+        'Nothing has been changed in this account from here.')
+    button = page.locator('.amap-tree-sw[data-object-id]').first
+    button.click()
+    button.click()
+    expect(page.locator('.amap-tree-log-said')).to_contain_text('result not confirmed')
+    expect(page.locator('.amap-tree-log-who')).to_have_text('Test operator · rpa')
+    expect(page.locator('.amap-tree-log-what')).to_contain_text('Reviewed campaign')
+    assert page.locator('.amap-tree-log-none').count() == 0
+    assert page.evaluate('window.__historyReads') == 2
+    assert page.evaluate('window.__actions') == 1
+
+
 # ══ дерево не остаётся старше действия ════════════════════════════════════
 #
 # 12.09 чтение легло в 15:52:14, выключение случилось в 15:52:38. После
