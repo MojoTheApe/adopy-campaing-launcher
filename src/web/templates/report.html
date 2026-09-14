@@ -3379,7 +3379,21 @@ async function dashRefresh(ev) {
         негде, кроме как здесь, и оно ничего не решало. Красная надпись при
         полностью рабочем аккаунте — это не предупреждение, а шум. -#}
     {% set pf_ok = pf.link_status == 'tracking' and not pf.missing_map_fields %}
-    <div class="cb-preflight {% if pf_ok %}cb-preflight-collapsed{% endif %}">
+    {#- Чего именно не хватает — словами, в самом заголовке. Красный значок без
+        продолжения это тупик: человек видит «не работает» и не знает, что
+        нажать. На вкладке Accounts это давно так («needs setup» там называет
+        задачу), здесь было иначе. -#}
+    {#- `or []` не для красоты: `pf` доходит сюда и без этого поля, и тогда
+        `not pf.missing_map_fields` выше — просто ложь, а сложение списка с
+        несуществующим атрибутом роняет отрисовку всей страницы. -#}
+    {% set pf_missing = (['tracking link'] if pf.link_status != 'tracking' else []) + (pf.missing_map_fields or []) %}
+    {#- Свёрнут ВСЕГДА, в том числе когда не настроен. Раньше блок раскрывался
+        именно у ненастроенного аккаунта — то есть занимал всю панель ровно
+        тогда, когда человеку и так труднее всего: строка ссылки, поле
+        ad_account_id, поле profile_id, у каждого своя кнопка Save, а Targeting,
+        бюджет и язык уходили за нижний край ящика. Настроить аккаунт — дело
+        одного раза, собирать кампании в этом ящике — дело каждого дня. -#}
+    <div class="cb-preflight cb-preflight-collapsed">
       <button type="button" class="cb-preflight-toggle"
               onclick="this.closest('.cb-preflight').classList.toggle('cb-preflight-collapsed')">
         <span class="cb-preflight-caret">▸</span> ⚙ Account
@@ -3387,7 +3401,8 @@ async function dashRefresh(ev) {
           <span class="cb-pf-ok">configured ✓</span>
           <span style="color:var(--muted);font-weight:400">· tracking and ids — all set</span>
         {% else %}
-          <span class="cb-pf-err">needs setup</span>
+          <span class="cb-pf-err">✗ needs setup</span>
+          <span style="color:var(--muted);font-weight:400">— {{ pf_missing | join(', ') }}</span>
         {% endif %}
       </button>
       <div class="cb-preflight-body">
