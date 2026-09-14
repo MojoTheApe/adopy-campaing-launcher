@@ -3314,6 +3314,50 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         except Exception:
             return 0
 
+    def _what_is_in_the_block() -> dict:
+        """Что шаг ВИДИТ в помеченном блоке — подписи, а не только их число.
+
+        14.09: шесть прогонов подряд дали «видно 0 категорий из 5», и по этому
+        числу нельзя понять главного — помечен ли вообще нужный блок. Отладка
+        показывала `textLen: 759` и размер 600×501: слишком мало для раздела с
+        пятью раскрывающимися категориями, слишком похоже на сводку
+        («Included: 21 · Allowed with limited spend: 0 · Excluded: 0»).
+
+        Две версии причины уже оказались неверны — про переименование категорий
+        и про включённый Advantage+, — и обе строились на догадке по
+        посмертному снимку. Поэтому здесь не догадка, а то, что видно шагу в
+        момент решения: сколько в блоке подписей, какие они и есть ли рядом
+        переключатели.
+        """
+        try:
+            return page.evaluate(
+                """
+                () => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const marked = document.querySelector('[data-rpa-placements-marker]');
+                  const root = marked || document;
+                  const vis = (e) => e.offsetParent !== null;
+                  const labels = [...root.querySelectorAll('label')].filter(vis)
+                    .map(l => norm(l.textContent)).filter(t => t && t.length < 60);
+                  const texts = [...root.querySelectorAll('*')].filter(e =>
+                      vis(e) && e.children.length === 0)
+                    .map(e => norm(e.textContent))
+                    .filter(t => t && t.length < 60);
+                  const seen = [];
+                  for (const t of texts) if (!seen.includes(t)) seen.push(t);
+                  return {
+                    marked: !!marked,
+                    rect: marked ? (({width, height}) => ({width, height}))(marked.getBoundingClientRect()) : null,
+                    labels: labels.slice(0, 25),
+                    switches: root.querySelectorAll('[role="switch"],[role="checkbox"]').length,
+                    texts: seen.slice(0, 40),
+                  };
+                }
+                """
+            )
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}"[:120]}
+
     def _expand_button(text: str) -> dict:
         """Раскрыть свёрнутый узел по началу его текста.
 
@@ -3451,6 +3495,12 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     report["categories_visible"] = seen
     _dbg.append(f"categories_visible={seen}")
     if seen < len(_PLACEMENT_CATEGORIES):
+        # Не «сколько не нашли», а «что вместо них». Число ничего не говорит о
+        # главном: помечен ли нужный блок. Без этого разбор шесть раз свёлся к
+        # догадкам по посмертным снимкам.
+        inside = _what_is_in_the_block()
+        report["block"] = inside
+        _dbg.append("block=" + json.dumps(inside, ensure_ascii=False)[:1500])
         report["why"] = f"видно {seen} категорий из {len(_PLACEMENT_CATEGORIES)}"
         _dump_dbg()
         return False
