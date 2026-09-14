@@ -2946,22 +2946,36 @@ async function dashRefresh(ev) {
 
   <section class="acc-connect">
     <h3>Connect an account</h3>
-    <p class="acc-sub">Pick an open profile — everything else is worked out for you.</p>
+    <p class="acc-sub">Find the profile by its last letters — open it if you need to, then connect.</p>
+
+    {#- Та же форма, что в разделе страны, а не третий её вариант.
+
+        Раньше здесь был свой выбор из выпадающего списка, и в нём лежали
+        ТОЛЬКО открытые профили: не открыт — выбрать нечем, оставался ручной
+        ввод имени и номера кабинета. Именно на этом встал аккаунт
+        KLD_BFL_X84 — в карте его нет, билдер пишет «needs setup», а
+        подключить неоткуда, потому что профиль не запущен.
+
+        В разделе страны это давно решено: поиск по последним буквам через
+        Multilogin, у находки кнопки Open и Connect. Нашёл, открыл, посмотрел
+        в самом кабинете что нужно, подключил. Решение владельца: равняться на
+        это место, а не наоборот.
+
+        Страна здесь необязательна, поэтому форма отдаётся с пустой — поле
+        ниже пишет выбранное прямо в `data-amap-country`, откуда его и берёт
+        `amapConnect` в момент нажатия. -#}
+    {% with amap_value = '' %}{% include "_account_map_add.html" %}{% endwith %}
 
     <div class="acc-form">
       <div class="acc-field">
-        <label for="ac-new-prof">Multilogin profile</label>
-        <select id="ac-new-prof"></select>
-      </div>
-      <div class="acc-field">
         <label for="ac-new-country">Country · optional</label>
-        <input id="ac-new-country" type="text" list="ac-countries" placeholder="e.g. Chile" autocomplete="off">
+        <input id="ac-new-country" type="text" list="ac-countries" placeholder="e.g. Chile"
+               autocomplete="off" oninput="acCountryChanged(this)">
         <datalist id="ac-countries"></datalist>
       </div>
-      <button type="button" id="ac-add-btn" class="acc-submit">Connect</button>
 
       <div class="acc-derived" id="ac-derived">
-        <span id="ac-derived-text">No profile selected.</span>
+        <span id="ac-derived-text">Find a profile above, or</span>
         <button type="button" class="acc-edit" id="ac-toggle-manual">enter manually</button>
       </div>
 
@@ -2976,11 +2990,18 @@ async function dashRefresh(ev) {
           <label for="ac-new-adid">Ad account</label>
           <input id="ac-new-adid" type="text" placeholder="Ads Manager link or act_…">
         </div>
+        {#- Кнопка переехала сюда из шапки формы, и это не перестановка. Пока
+            она стояла наверху, она была главным действием раздела, а ручной
+            ввод имени и номера кабинета — обычным путём. Теперь обычный путь
+            наверху: найти профиль и нажать Connect у него. Здесь остаётся
+            запасной, и кнопка принадлежит ему. -#}
+        <button type="button" id="ac-add-btn" class="acc-submit">Connect by hand</button>
       </div>
 
       <p class="acc-note">
-        Name and ad account come from the profile you pick: the name from its title, the
-        ad account from that profile's own history. If something is missing, use "enter manually".
+        Name and ad account come from the profile you find above: the name from its title,
+        the ad account from that profile's own history. A profile that has never been opened
+        on this machine has no history to read — open it, and it will.
       </p>
       <div class="acc-msg" id="ac-msg"></div>
     </div>
@@ -10144,7 +10165,10 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     var nameField = el('ac-new-label'), adField = el('ac-new-adid');
     var text = el('ac-derived-text');
     if (!text) return;
-    if (!pid) { text.textContent = 'No profile selected.'; return; }
+    /* Выбора профиля в этой форме больше нет — он наверху, в общей с картой.
+       Поэтому здесь не «профиль не выбран» (звучит как незаполненное поле
+       рядом), а указание, где искать, и запасной путь рядом. */
+    if (!pid) { text.textContent = 'Find a profile above, or'; return; }
 
     var guessName = accountForProfile(pid);
     var guessAd = detectedFor(pid);
@@ -10165,6 +10189,16 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
   function openManual() {
     var box = el('ac-manual'); if (box) box.classList.add('open');
   }
+
+  /* Страна тут необязательна и живёт отдельным полем, а форма подключения —
+     общая с картой и берёт страну из `data-amap-country` в момент нажатия
+     Connect. Пишем туда набранное, вместо того чтобы заводить второй путь
+     передачи: у общей формы должен остаться один источник этого значения,
+     иначе в карте и здесь она однажды начнёт брать страну по-разному. */
+  window.acCountryChanged = function (input) {
+    var box = document.querySelector('#view-accounts .amap-add');
+    if (box) box.setAttribute('data-amap-country', (input.value || '').trim());
+  };
 
   function addManual() {
     var pid = (el('ac-new-prof') || {}).value || '';
