@@ -10072,7 +10072,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
 // профиля. Ручной ввод остаётся, но убран с глаз: он нужен, только когда
 // вывести не удалось.
 (function () {
-  var loaded = false, openProfiles = [], knownLabels = [], showHidden = false;
+  var loaded = false, openProfiles = [], knownLabels = [], showHidden = false, loading = false;
 
   function esc(v) {
     return String(v == null ? '' : v)
@@ -10317,11 +10317,13 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
   }
 
   function load(force) {
-    if (loaded && !force) return;
+    if (loading || (loaded && !force)) return;
+    loading = true;
     var box = el('ac-list'); if (box) box.textContent = 'Loading…';
     fetch('/api/accounts-overview').then(function (r) { return r.json(); })
-      .then(function (d) { loaded = true; render(d); })
+      .then(function (d) { loading = false; loaded = true; render(d); })
       .catch(function (e) {
+        loading = false;
         if (box) box.innerHTML = '<p style="color:var(--bad)">' + esc(e) + '</p>';
       });
   }
@@ -10729,6 +10731,16 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     var view = t.getAttribute && t.getAttribute('data-view');
     if (view === 'accounts') { load(false); return; }
 
+  });
+  // The view may be restored directly or reached through browser history.
+  // The initial view event fires before this module, so check it on DOM ready.
+  function loadAccountsView() {
+    if (location.hash === '#accounts') load(false);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadAccountsView);
+  else loadAccountsView();
+  document.addEventListener('acl:viewchange', function(e) {
+    if (e.detail && e.detail.view === 'accounts') load(false);
   });
 })();
 
