@@ -8177,7 +8177,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         var interest = opt.dataset.interest || '';
         var code     = opt.dataset.code || '';
         input.value  = code;
-        if (hidden) hidden.value = interest;
+        /* В отправляемое поле идёт КОД, а не строка интересов.
+
+           Интересы здесь и лежали, и из-за этого детальный таргетинг не
+           ставился никогда. Сервер по этому полю ищет таргет в библиотеке
+           («PF» → «Foreign exchange market, Investor, …»), а получал уже
+           готовые интересы — по ним ничего не находится, и таргетинг
+           молча очищался. На экране при этом всё выглядело выбранным, и
+           даже имя кампании несло код.
+
+           Проверено 14.09: lookup('Foreign exchange market, …') → '',
+           lookup('PF') → полная строка интересов. */
+        if (hidden) hidden.value = code;
         if (hint)   hint.textContent = interest;
         dropdown.hidden = true;
         var slot = wrap.closest('.cb-slot');
@@ -8214,7 +8225,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
     if (hit.length === 1) {
       input.value = hit[0].code;
-      if (hidden) hidden.value = hit[0].fb_interest || '';
+      // Код, а не интересы — по той же причине, что и в выборе мышью выше.
+      if (hidden) hidden.value = hit[0].code;
       if (hint)   hint.textContent = hit[0].fb_interest || '';
       var slot = wrap.closest('.cb-slot');
       if (slot) cbUpdateName(slot);
