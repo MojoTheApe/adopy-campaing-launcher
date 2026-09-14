@@ -639,3 +639,181 @@ def test_upload_progress_ignores_hidden_bars_and_refuses_ambiguity(browser, dom)
         pg.evaluate("document.body.insertAdjacentHTML('beforeend', '<div role=progressbar aria-valuenow=10 style=height:20px></div>')")
         assert dom._upload_progress(pg) is None
     finally: pg.close()
+
+
+# ── разметка без обёртки <label> (DQ500/DQ501, 14.09) ─────────────────────
+#
+# Фикстуры на неё нет: строки категорий приходят свёрнутыми, и снять их можно
+# только живым прогоном. Форму строки взяли из отладки круга 11 — там у всех
+# пяти категорий настоящий `input[type=checkbox]`, но подписи `<label>` нет
+# ни одной. Поэтому здесь не снимок, а та же форма в двух строках.
+
+_ROW_WITHOUT_LABEL = """
+  <ul><li>
+    <div><div><div><span>Feeds</span></div>
+    <span>Get high visibility for your business with ads in feeds</span></div>
+    <input type="checkbox" checked>
+  </div></li></ul>
+"""
+
+
+def _row_hit(pg, name):
+    from src.fb_ads_rpa.meta_dom import PLACEMENTS_ROW_JS
+
+    return pg.evaluate(
+        "(name) => {" + PLACEMENTS_ROW_JS + """
+          const hit = rowFor(document, name);
+          return hit ? { tag: hit.row.tagName.toLowerCase(), checked: hit.cb.checked } : null;
+        }""",
+        name,
+    )
+
+
+def test_the_row_search_works_without_a_label_wrapper(browser):
+    """Опора — галочка в строке, а не элемент `<label>` вокруг слов.
+
+    Прежний код требовал обёртку, и на DQ500/DQ501 не находил ничего при всех
+    пяти категориях на экране: восемь кругов ушло на «видно 0 категорий из 5».
+    """
+    pg = browser.new_page()
+    try:
+        pg.set_content(_ROW_WITHOUT_LABEL)
+        hit = _row_hit(pg, "Feeds")
+        assert hit is not None, "строка без <label> снова не находится"
+        assert hit["checked"] is True
+    finally:
+        pg.close()
+
+
+def test_the_row_search_needs_the_checkbox_not_just_the_words(browser):
+    """Слова без контрола — не строка.
+
+    Иначе шаг отчитается «нашёл» там, где переключать нечего, и отказ снова
+    придётся выяснять по посмертному снимку.
+    """
+    pg = browser.new_page()
+    try:
+        pg.set_content(_ROW_WITHOUT_LABEL)
+        pg.evaluate("document.querySelector('input[type=checkbox]').remove()")
+        assert _row_hit(pg, "Feeds") is None, "нашлась строка, в которой нечего переключать"
+    finally:
+        pg.close()
+
+
+def test_the_row_search_does_not_reach_into_a_neighbouring_row(browser):
+    """Подъём упирается в `li`: у соседней строки своя галочка.
+
+    Без этой границы «Apps and sites» без собственной галочки подцепил бы
+    чужую и отчитался бы об успехе, выключив не ту категорию.
+    """
+    pg = browser.new_page()
+    try:
+        pg.set_content(
+            "<ul>"
+            "<li><div><span>Feeds</span></div><input type='checkbox' checked></li>"
+            "<li><div><span>Apps and sites</span></div></li>"
+            "</ul>"
+        )
+        assert _row_hit(pg, "Feeds") is not None
+        assert _row_hit(pg, "Apps and sites") is None, "дотянулся до галочки соседней строки"
+    finally:
+        pg.close()
+
+
+def test_the_row_search_skips_a_disabled_twin(browser):
+    """Одно имя может встретиться дважды, и первое — чужое.
+
+    14.09 на DQ501 «Search results» нашлась и как категория, и как
+    недоступный контрол внутри `<label>`. Шаг кликал в недоступный, читал
+    «всё ещё включена» и отчитывался об успехе: категория уезжала в кампанию
+    включённой, хотя должна была быть выключена.
+    """
+    pg = browser.new_page()
+    try:
+        pg.set_content(
+            "<ul>"
+            "<li><label><span>Search results</span>"
+            "<input type='checkbox' checked disabled></label></li>"
+            "<li><div><span>Search results</span></div>"
+            "<input type='checkbox' checked></li>"
+            "</ul>"
+        )
+        hit = _row_hit(pg, "Search results")
+        assert hit is not None
+        assert hit["tag"] == "li", "взяли не строку категории"
+        assert (
+            pg.evaluate(
+                "() => document.querySelectorAll('input')[1].disabled"
+            )
+            is False
+        )
+        disabled_first = pg.evaluate(
+            "() => document.querySelectorAll('input')[0].disabled"
+        )
+        assert disabled_first is True, "стенд перестал воспроизводить случай"
+    finally:
+        pg.close()
+
+
+def test_the_september_markup_has_no_expand_buttons(page):
+    """Обратная сторона: в старой разметке этих кнопок нет ни одной.
+
+    Значит добавленный способ её не трогает, и обе разметки живут в одном
+    коде без ветвления по аккаунту.
+    """
+    assert page.locator('[aria-label="Expand"]').count() == 0
+
+
+def _expand(pg, name):
+    from src.fb_ads_rpa.meta_dom import PLACEMENTS_EXPAND_JS
+
+    return pg.evaluate(PLACEMENTS_EXPAND_JS, [name])
+
+
+def test_the_expander_is_found_by_its_reader_label(browser):
+    """Раскрыватель без `aria-expanded`: состояние — в подписи для чталки.
+
+    14.09 на DQ501 в `li` каждой категории лежит `button[aria-label=Expand]`
+    и никакого `aria-expanded` рядом. Поиск шёл по атрибуту и не находил
+    ничего: подпункты не проставились ни у одной из трёх категорий.
+    """
+    pg = browser.new_page()
+    try:
+        pg.set_content(
+            "<div data-rpa-placements-marker>"
+            "<ul><li><div><span>Feeds</span></div><input type='checkbox' checked>"
+            "<button aria-label='Expand'>+</button></li></ul></div>"
+        )
+        pg.evaluate(
+            "() => { window.__hits = 0;"
+            " document.querySelector('button').addEventListener('click', () => window.__hits++) }"
+        )
+        res = _expand(pg, "Feeds")
+        assert res["where"] == "кнопка Expand", res
+        assert pg.evaluate("() => window.__hits") == 1, "кнопку не нажали"
+    finally:
+        pg.close()
+
+
+def test_an_already_open_category_is_not_collapsed_again(browser):
+    """Раскрытая кнопка называется «Collapse». Нажать её — свернуть категорию.
+
+    Тот же класс ошибки, что и «Show more settings» на уже открытом разделе:
+    шаг своим же кликом отменял то, чего добивался.
+    """
+    pg = browser.new_page()
+    try:
+        pg.set_content(
+            "<div data-rpa-placements-marker>"
+            "<ul><li><div><span>Feeds</span></div><input type='checkbox' checked>"
+            "<button aria-label='Collapse'>-</button></li></ul></div>"
+        )
+        pg.evaluate(
+            "() => { window.__hits = 0;"
+            " document.querySelector('button').addEventListener('click', () => window.__hits++) }"
+        )
+        res = _expand(pg, "Feeds")
+        assert res["where"] == "уже раскрыта", res
+        assert pg.evaluate("() => window.__hits") == 0, "свернули уже раскрытую категорию"
+    finally:
+        pg.close()

@@ -3051,6 +3051,110 @@ def run_recorded_campaign_flow(
     return ""
 
 
+PLACEMENTS_ROW_JS = """
+  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+  const rowsFor = (root, name) => {
+    const out = [];
+    const leaves = [...root.querySelectorAll('*')].filter(e =>
+      e.offsetParent !== null && e.children.length === 0
+      && norm(e.textContent) === name);
+    for (const leaf of leaves) {
+      let node = leaf.parentElement;
+      for (let i = 0; i < 8 && node; i++) {
+        const cb = node.querySelector('input[type=checkbox]');
+        if (cb) { if (!out.some(h => h.cb === cb)) out.push({ row: node, cb: cb }); break; }
+        if (node.tagName === 'LI') break;
+        node = node.parentElement;
+      }
+    }
+    return out;
+  };
+  // Одно имя может встретиться дважды. «Search results» на DQ501 нашлась и
+  // как категория, и как чужой контрол внутри `<label>` — недоступный, из-за
+  // чего шаг кликал в него и отчитывался, что категория осталась включённой.
+  // Берём доступную галочку; если доступных нет — первую, чтобы отказ
+  // назвал настоящую причину, а не «строка не найдена».
+  const rowFor = (root, name) => {
+    const all = rowsFor(root, name);
+    return all.find(h => !h.cb.disabled) || all[0] || null;
+  };
+"""
+"""Поиск строки раздела площадок по её тексту — в обеих разметках Meta.
+
+14.09, круг 11: на DQ500/DQ501 у всех пяти категорий есть настоящий
+`input[type=checkbox]`, и все пять включены («Included: 21»). Нет только
+обёртки `<label>`: строка — это `li`, текст и галочка в ней лежат порознь.
+На DQ204/UL921 обёртка есть, и код искал галочку внутри неё; восемь кругов
+ушло на «видно 0 категорий из 5» при всех пяти на экране.
+
+Отсюда один поиск на оба случая: от листа с нужным текстом вверх, до первого
+узла, в котором есть галочка. Через `<label>` подъём проходит насквозь, так
+что прежняя разметка обслуживается тем же кодом. Упирается он в `li` —
+дальше начинается чужая строка.
+
+Вынесено на уровень модуля, чтобы это можно было выполнить в тесте против
+сохранённой разметки: проверки стенда дёргают страницу локаторами Playwright
+и наш поиск не вызывают, так что их зелёный цвет о нём ничего не говорит.
+"""
+
+PLACEMENTS_EXPAND_JS = (
+    "([name]) => {"
+    + PLACEMENTS_ROW_JS
+    + """
+      const root = document.querySelector('[data-rpa-placements-marker]') || document;
+      const hit = rowFor(root, name);
+      if (!hit) return { found: false };
+      let node = hit.row;
+      for (let i = 0; i < 12 && node; i++) {
+        if (node.getAttribute('role') === 'list') break;
+        if (node.getAttribute('role') === 'button' && node.hasAttribute('aria-expanded')) {
+          const was = node.getAttribute('aria-expanded');
+          if (was === 'false') node.click();
+          return { found: true, was: was, depth: i, where: 'над строкой' };
+        }
+        node = node.parentElement;
+      }
+      // Над строкой кнопки нет — на DQ500/DQ501 все три категории дали
+      // `was: null`, и подпункты не появились ни у одной. Значит
+      // раскрыватель внутри самой строки: ищем его там, а не достраиваем
+      // предположение о ещё одном уровне вверх. Свой же переключатель
+      // категории не трогаем.
+      const inside = [...hit.row.querySelectorAll('[aria-expanded]')]
+        .filter(e => e.offsetParent !== null && !e.contains(hit.cb));
+      if (inside.length) {
+        const btn = inside[0];
+        const was = btn.getAttribute('aria-expanded');
+        if (was === 'false') btn.click();
+        return { found: true, was: was, where: 'внутри строки', count: inside.length };
+      }
+      // Третий способ — кнопка с подписью для чталки, без `aria-expanded`
+      // вовсе. Круг 14: в `li` каждой категории лежит
+      // `button[aria-label="Expand"]`, а состояние читается по самой
+      // подписи: раскрытая называется «Collapse», и жать её нельзя — это
+      // свернёт категорию обратно. Ею пользовался код до сентябрьской
+      // переписки; тогда её убрали, потому что в снимке 9 сентября таких
+      // кнопок нет ни одной.
+      const li = hit.row.closest('li') || hit.row;
+      const named = [...li.querySelectorAll('button[aria-label]')]
+        .filter(e => e.offsetParent !== null);
+      const open = named.find(e => /collapse/i.test(e.getAttribute('aria-label')));
+      if (open) return { found: true, was: 'true', where: 'уже раскрыта' };
+      const btn = named.find(e => /expand/i.test(e.getAttribute('aria-label')));
+      if (btn) {
+        btn.click();
+        return { found: true, was: 'false', where: 'кнопка Expand' };
+      }
+      return { found: true, was: null, where: 'не найден' };
+    }
+    """
+)
+"""Три способа раскрыть категорию — по порядку, от прежней разметки к новой.
+
+Вынесено рядом с `PLACEMENTS_ROW_JS` и по той же причине: иначе это нельзя
+выполнить в тесте, а осмотренный, но ни разу не выполненный скрипт уже стоил
+нам дня.
+"""
+
 _PLACEMENT_CATEGORIES = {
     # Пять категорий раздела Placement controls и то, чем они должны стать.
     # Порядок важен только для отчёта: снимаем и ставим по одной.
@@ -3305,16 +3409,21 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             return False
 
     def _categories_visible() -> int:
-        """Сколько из пяти категорий видно прямо сейчас."""
+        """Сколько из пяти категорий доступно прямо сейчас.
+
+        Считаем не подписи, а строки с галочкой: подпись бывает и без
+        `<label>`, а решение шага зависит от того, есть ли до чего дотянуться.
+        Прежний счёт по `<label>` на DQ500/DQ501 давал ноль при всех пяти
+        категориях на экране — восемь кругов ушло на этот ноль.
+        """
         try:
             return int(
                 page.evaluate(
-                    """
-                    (names) => {
-                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                    "(names) => {"
+                    + PLACEMENTS_ROW_JS
+                    + """
                       const root = document.querySelector('[data-rpa-placements-marker]') || document;
-                      return [...root.querySelectorAll('label')].filter(l =>
-                        l.offsetParent !== null && names.includes(norm(l.textContent))).length;
+                      return names.filter(n => rowFor(root, n)).length;
                     }
                     """,
                     list(_PLACEMENT_CATEGORIES),
@@ -3411,27 +3520,91 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         except Exception as exc:
             return {"found": False, "error": str(exc)[:80]}
 
-    def _set_category(name: str, want_checked: bool) -> dict:
-        """Галочка категории лежит внутри `<label>` с её же названием."""
+    def _click_category(name: str, want_checked: bool) -> dict:
+        """Один клик по галочке категории и её состояние сразу после него."""
         try:
             return page.evaluate(
-                """
-                ([name, want]) => {
-                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                "([name, want]) => {"
+                + PLACEMENTS_ROW_JS
+                + """
                   const root = document.querySelector('[data-rpa-placements-marker]') || document;
-                  const lab = [...root.querySelectorAll('label')].find(l =>
-                    l.offsetParent !== null && norm(l.textContent) === name);
-                  if (!lab) return { found: false };
-                  const cb = lab.querySelector('input[type=checkbox]');
-                  if (!cb) return { found: true, checkbox: false };
-                  if (cb.checked !== want) cb.click();
-                  return { found: true, checkbox: true, checked: cb.checked };
+                  const hit = rowFor(root, name);
+                  if (!hit) return { found: false };
+                  if (hit.cb.disabled) return { found: true, checkbox: false, why: 'недоступна' };
+                  const before = hit.cb.checked;
+                  if (before !== want) hit.cb.click();
+                  return { found: true, checkbox: true, before: before, checked: hit.cb.checked };
                 }
                 """,
                 [name, want_checked],
             ) or {"found": False}
         except Exception as exc:
             return {"found": False, "error": str(exc)[:80]}
+
+    def _read_category(name: str) -> dict:
+        """Состояние строки категории — без единого клика.
+
+        Отдельно от нажатия: значение, прочитанное в том же вызове, что и
+        клик, говорит лишь о том, что произошло в эту миллисекунду. React
+        может вернуть галочку обратно при следующей отрисовке, и именно так
+        «Search results» осталась включённой, отчитавшись об успехе.
+        """
+        try:
+            return page.evaluate(
+                "(name) => {"
+                + PLACEMENTS_ROW_JS
+                + """
+                  const norm2 = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const root = document.querySelector('[data-rpa-placements-marker]') || document;
+                  const hit = rowFor(root, name);
+                  if (!hit) return { found: false };
+                  const cb = hit.cb;
+                  const clickable = [...hit.row.querySelectorAll(
+                      '[role="button"],[role="checkbox"],button,label,[aria-expanded]')]
+                    .slice(0, 5)
+                    .map(e => ({
+                      t: norm2(e.textContent).slice(0, 28),
+                      role: e.getAttribute('role') || e.tagName.toLowerCase(),
+                      exp: e.getAttribute('aria-expanded'),
+                    }));
+                  return {
+                    found: true,
+                    checked: cb.checked,
+                    cbVisible: cb.offsetParent !== null,
+                    inLabel: !!cb.closest('label'),
+                    row: hit.row.tagName.toLowerCase(),
+                    clickable: clickable,
+                  };
+                }
+                """,
+                name,
+            ) or {"found": False}
+        except Exception as exc:
+            return {"found": False, "error": str(exc)[:80]}
+
+    def _set_category(name: str, want_checked: bool) -> dict:
+        """Поставить галочку категории и убедиться, что она такой осталась.
+
+        14.09, круг 12: «Apps and sites» снялась, а «Search results» тем же
+        кодом — нет, и шаг отчитался об успехе, потому что читал состояние в
+        том же вызове, что и кликал. Теперь после клика выжидаем отрисовку и
+        спрашиваем страницу заново; если не взялось — один повтор, и в отчёт
+        идёт итоговое значение, а не мгновенное.
+        """
+        res = _click_category(name, want_checked)
+        if not res.get("checkbox"):
+            return res
+        _sleep_h(0.5)
+        now = _read_category(name)
+        res["checked"] = now.get("checked")
+        if now.get("checked") is not want_checked:
+            again = _click_category(name, want_checked)
+            _sleep_h(0.7)
+            settled = _read_category(name)
+            res["retry"] = {"clicked": again.get("checkbox"), "checked": settled.get("checked")}
+            res["checked"] = settled.get("checked")
+            res["row"] = {k: settled.get(k) for k in ("cbVisible", "inLabel", "row", "clickable")}
+        return res
 
     def _expand_category(name: str) -> dict:
         """Раскрыватель категории — её собственная строка, а не кнопка рядом.
@@ -3442,29 +3615,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         весь раздел.
         """
         try:
-            return page.evaluate(
-                """
-                ([name]) => {
-                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                  const root = document.querySelector('[data-rpa-placements-marker]') || document;
-                  const lab = [...root.querySelectorAll('label')].find(l =>
-                    l.offsetParent !== null && norm(l.textContent) === name);
-                  if (!lab) return { found: false };
-                  let node = lab.parentElement;
-                  for (let i = 0; i < 12 && node; i++) {
-                    if (node.getAttribute('role') === 'list') break;
-                    if (node.getAttribute('role') === 'button' && node.hasAttribute('aria-expanded')) {
-                      const was = node.getAttribute('aria-expanded');
-                      if (was === 'false') node.click();
-                      return { found: true, was: was, depth: i };
-                    }
-                    node = node.parentElement;
-                  }
-                  return { found: true, was: null };
-                }
-                """,
-                [name],
-            ) or {"found": False}
+            return page.evaluate(PLACEMENTS_EXPAND_JS, [name]) or {"found": False}
         except Exception as exc:
             return {"found": False, "error": str(exc)[:80]}
 
@@ -3473,19 +3624,35 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
 
         Это ответ страницы на вопрос, на который наш июльский список
         ответить не может: как эти строки называются сегодня.
+
+        Подпункт здесь — строка, у которой есть галочка, а не элемент
+        `<label>`: на DQ500/DQ501 обёртки нет ни у одной строки, и прежний
+        список возвращал единственную подпись раздела («Value rules»).
         """
         try:
             return (
                 page.evaluate(
-                    """
-                    (skip) => {
-                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                    "(skip) => {"
+                    + PLACEMENTS_ROW_JS
+                    + """
                       const root = document.querySelector('[data-rpa-placements-marker]') || document;
                       const out = [];
-                      for (const l of root.querySelectorAll('label')) {
-                        if (l.offsetParent === null) continue;
-                        const t = norm(l.textContent);
-                        if (!t || t.length > 60 || skip.includes(t) || out.includes(t)) continue;
+                      // Одна галочка — одна строка. Описание категории лежит в
+                      // той же строке и упирается в ту же галочку, поэтому
+                      // круг 12 назвал подпунктами «Get high visibility for
+                      // your business with ads in feeds» и ещё восемнадцать
+                      // соседних надписей. Считаем по контролам: первым идёт
+                      // само название, остальное к этой галочке уже не
+                      // относится.
+                      const claimed = new Set();
+                      for (const leaf of root.querySelectorAll('*')) {
+                        if (leaf.offsetParent === null || leaf.children.length) continue;
+                        const t = norm(leaf.textContent);
+                        if (!t || t.length > 60) continue;
+                        const hit = rowFor(root, t);
+                        if (!hit || claimed.has(hit.cb)) continue;
+                        claimed.add(hit.cb);
+                        if (skip.includes(t) || out.includes(t)) continue;
                         out.push(t);
                       }
                       return out;
@@ -3497,6 +3664,117 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             )
         except Exception:
             return []
+
+    def _category_rows() -> dict:
+        """Чем управляется строка категории в новом варианте раздела.
+
+        14.09, круг 10: створка «Placements» открылась (`стало=true`), и за
+        ней оказались все пять июльских имён — «Feeds», «Stories, Status,
+        Reels», «In-stream ads for reels», «Search results», «Apps and
+        sites». То есть ни имена не менялись, ни раздел не перестраивался.
+
+        Но `<label>` в блоке остался один («Value rules»), а
+        `input[type=checkbox]` — ноль. Значит строки здесь не «подпись с
+        галочкой», как на DQ204/UL921, и `_set_category` до контрола не
+        дотянется. Чем они управляются, спрашиваем у страницы, а не
+        достраиваем по аналогии: три версии подряд, построенные по аналогии,
+        оказались неверны.
+        """
+        try:
+            return page.evaluate(
+                """
+                (names) => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const root = document.querySelector('[data-rpa-placements-marker]') || document;
+                  const vis = (e) => e.offsetParent !== null;
+                  const out = {};
+                  for (const name of names) {
+                    const leaf = [...root.querySelectorAll('*')].find(e =>
+                      vis(e) && e.children.length === 0 && norm(e.textContent) === name);
+                    if (!leaf) { out[name] = { leaf: false }; continue; }
+                    const chain = [];
+                    let node = leaf.parentElement;
+                    for (let i = 0; i < 6 && node; i++) {
+                      chain.push({
+                        tag: node.tagName.toLowerCase(),
+                        role: node.getAttribute('role'),
+                        checked: node.getAttribute('aria-checked'),
+                        exp: node.getAttribute('aria-expanded'),
+                        kids: node.children.length,
+                      });
+                      node = node.parentElement;
+                    }
+                    const box = leaf.closest('[role="listitem"],li,[role="row"]')
+                      || (leaf.parentElement && leaf.parentElement.parentElement
+                          && leaf.parentElement.parentElement.parentElement);
+                    const ctrls = box ? [...box.querySelectorAll(
+                        'input,[role="checkbox"],[role="switch"],[role="button"]')]
+                      .filter(vis)
+                      .slice(0, 6)
+                      .map(e => ({
+                        tag: e.tagName.toLowerCase(),
+                        type: e.getAttribute('type'),
+                        role: e.getAttribute('role'),
+                        checked: e.tagName === 'INPUT' ? e.checked : e.getAttribute('aria-checked'),
+                        label: norm(e.getAttribute('aria-label') || '').slice(0, 36),
+                      })) : [];
+                    out[name] = { leaf: true, chain: chain, ctrls: ctrls };
+                  }
+                  return out;
+                }
+                """,
+                list(_PLACEMENT_CATEGORIES),
+            ) or {}
+        except Exception as exc:
+            return {"error": str(exc)[:120]}
+
+    def _category_candidates() -> dict:
+        """Все совпадения имени категории, а не только первое.
+
+        14.09, круг 13: «Search results» осталась включённой, повтор вернул
+        «недоступна», а форма строки отличалась от остальных четырёх
+        (`inLabel: true`). То есть имя на странице не одно, и шаг всё это
+        время целился в чужой контрол. Отказ должен показывать это сам, а не
+        выясняться ещё одним кругом.
+
+        Заодно перечисляем, что лежит в объемлющем `li`: раскрывателя
+        подпунктов не нашлось ни над строкой, ни внутри неё, и следующий
+        вопрос — есть ли он вообще в разметке.
+        """
+        try:
+            return page.evaluate(
+                "(names) => {"
+                + PLACEMENTS_ROW_JS
+                + """
+                  const root = document.querySelector('[data-rpa-placements-marker]') || document;
+                  const out = {};
+                  for (const name of names) {
+                    out[name] = rowsFor(root, name).map((h, i) => {
+                      const li = h.row.closest('li') || h.row;
+                      const parts = [...li.querySelectorAll('[role],button,svg,i')]
+                        .filter(e => e.offsetParent !== null)
+                        .slice(0, 8)
+                        .map(e => (e.getAttribute('role') || e.tagName.toLowerCase())
+                          + (e.getAttribute('aria-label') ? ':' + e.getAttribute('aria-label').slice(0, 20) : '')
+                          + (e.hasAttribute('aria-expanded') ? '[exp=' + e.getAttribute('aria-expanded') + ']' : ''));
+                      return {
+                        i: i,
+                        checked: h.cb.checked,
+                        disabled: h.cb.disabled,
+                        inLabel: !!h.cb.closest('label'),
+                        row: h.row.tagName.toLowerCase(),
+                        liText: norm(li.textContent).slice(0, 60),
+                        parts: parts,
+                      };
+                    });
+                  }
+                  return out;
+                }
+                """,
+                list(_PLACEMENT_CATEGORIES),
+            ) or {}
+        except Exception as exc:
+            return {"error": str(exc)[:120]}
 
     def _node_candidates() -> str:
         """JS-кусок: створки раздела, чья подпись начинается с `prefix`.
@@ -3636,6 +3914,9 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         inside = _what_is_in_the_block()
         report["block"] = inside
         _dbg.append("block=" + json.dumps(inside, ensure_ascii=False)[:2500])
+        rows = _category_rows()
+        report["category_rows"] = rows
+        _dbg.append("rows=" + json.dumps(rows, ensure_ascii=False)[:4000])
         report["why"] = f"видно {seen} категорий из {len(_PLACEMENT_CATEGORIES)}"
         _dump_dbg()
         return False
@@ -3718,6 +3999,15 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     _dbg.append(f"subitems_seen={report['subitems_seen']}")
     if report["subitems_missing"]:
         ok = False
+
+    # Пока хоть что-то не сошлось, отказ должен принести разметку строк, а не
+    # одно число. Круг 13 стоил целого прогона ровно потому, что «Search
+    # results» осталась включённой, а чем она отличается от соседних — в
+    # отчёте не было.
+    if not ok:
+        cands = _category_candidates()
+        report["category_candidates"] = cands
+        _dbg.append("candidates=" + json.dumps(cands, ensure_ascii=False)[:3500])
 
     # «Allow limited spending to excluded placements»: в снимке 2026-09-09
     # её нет ни разу. Раньше она появлялась после исключения площадок, так
