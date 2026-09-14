@@ -27,8 +27,8 @@ def test_recovery_does_not_reenter_or_continue_replaced_batch(tmp_path, outcome)
     )
     result = subprocess.run(['cmd.exe', '/d', '/c', str(installer)], cwd=tmp_path,
                             input='\n', text=True, capture_output=True, timeout=20)
-    assert result.returncode == outcome, result.stdout + result.stderr
     assert (tmp_path / 'continued.txt').exists() is (outcome == 0)
     assert not (tmp_path / 'reentered.txt').exists()
+    assert result.returncode == outcome, result.stdout + result.stderr
     if outcome == 10:
         assert 'Run install_acl.bat again' in result.stdout

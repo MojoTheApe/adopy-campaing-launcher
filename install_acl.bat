@@ -60,6 +60,9 @@ if exist "scripts\acl_runtime_manager.py" (
         echo The previous ACL release was restored. Repair has stopped safely.
         echo Run install_acl.bat again to finish repair using the restored files.
         pause
+        REM N-1 can be shorter than cmd's current file offset. Set the child
+        REM process result too; EXIT /B alone can lose it after replacement.
+        cmd /d /c exit 10
         exit /b 10
     )
     if errorlevel 1 (
