@@ -666,6 +666,39 @@ def _build_account_map_view(
             ] + unknown_sums,
         })
 
+    # ── Одна таблица вместо двух (решение владельца 10.09, acl-356) ────
+    # Countries overview сливается в карту: каждая строка несёт книжные
+    # тоталы страны (my_totals — те же, что показывал overview), а страны
+    # с деньгами в книге, но БЕЗ размещённых аккаунтов, попадают в список
+    # «виртуальными» строками — их ноль аккаунтов подсвечивается: деньги
+    # идут, а покрытия картой нет.
+    book = {
+        (c.get("country") or "").strip().casefold(): (c.get("my_totals") or {})
+        for c in (report or {}).get("countries", [])
+    }
+    placed_keys = {(c["country"] or "").strip().casefold() for c in countries}
+    for mc in countries:
+        mc["book"] = book.get((mc["country"] or "").strip().casefold(), {})
+    for c in (report or {}).get("countries", []):
+        name = (c.get("country") or "").strip()
+        if not name or name.casefold() in placed_keys:
+            continue
+        if not float(c.get("my_spend") or 0):
+            continue
+        countries.append({
+            "country": name,
+            "key": "",
+            "virtual": True,
+            "rows": [],
+            "spend": 0, "leads": 0, "deposits": 0,
+            "live_read": 0, "live_sums": [],
+            "book": c.get("my_totals") or {},
+        })
+    # Порядок как был у overview: деньги сверху, дальше по алфавиту.
+    countries.sort(
+        key=lambda mc: (-float((mc.get("book") or {}).get("spend") or 0), (mc["country"] or "").lower())
+    )
+
     available = [
         {"account": label, "assets": account_links.values_for(label, "asset")}
         for label in account_links.available_accounts(all_known)
@@ -2179,10 +2212,20 @@ async def api_accounts_overview() -> JSONResponse:
         }
     )
 
+    # Спрятанное помечается, а не вырезается: счётчик спрятанных и кнопка
+    # «показать» должны на что-то опираться, а список, молча глотающий
+    # строки, хуже длинного списка.
+    from src.web import hidden_accounts as _hidden
+
+    hidden_keys = _hidden.load()
+    for acc in accounts:
+        acc["hidden"] = _hidden.is_hidden(acc.get("label", ""), hidden_keys)
+
     return JSONResponse({
         "ok": True,
         "map_path": map_path,
         "accounts": accounts,
+        "hidden_count": sum(1 for a in accounts if a["hidden"]),
         "suggestions": suggestions,
         # folder_id comes off the profile's own path, so the operator never
         # has to find or type it.
@@ -2346,6 +2389,41 @@ async def creative_file(path: str = "") -> Response:
     except AmbiguousCreativeError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
     return FileResponse(resolved)
+
+
+@app.post("/api/accounts-hidden")
+async def api_accounts_hidden(request: Request) -> JSONResponse:
+    """Убрать аккаунт с глаз на этой машине или вернуть его обратно.
+
+    Настройка вида и только она: аккаунт остаётся в общей таблице, сохраняет
+    свои цифры и работает везде, где работал. Строки, которые прячут, —
+    именно те, что удалить нельзя: они пришли из таблицы, а на машине про
+    них ничего не записано, и удалять попросту нечего.
+
+    Body JSON: {label, hidden}
+    """
+    from src.web import hidden_accounts as _hidden
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Expected JSON"}, status_code=400)
+
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "Expected a JSON object"}, status_code=400)
+    label = body.get("label")
+    hide = body.get("hidden", True)
+    if not isinstance(label, str) or not label.strip():
+        return JSONResponse({"ok": False, "error": "label is required"}, status_code=400)
+    if not isinstance(hide, bool):
+        return JSONResponse({"ok": False, "error": "hidden must be a boolean"}, status_code=400)
+    label = label.strip()
+    try:
+        keys = _hidden.set_hidden(label, hide)
+    except OSError:
+        return JSONResponse({"ok": False, "error": "Could not save this machine's hidden accounts. Try again."}, status_code=500)
+    return JSONResponse({"ok": True, "label": label, "hidden": hide, "hidden_count": len(keys)})
+
 
 
 @app.post("/account-map-patch")
