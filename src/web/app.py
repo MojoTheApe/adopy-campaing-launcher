@@ -1117,24 +1117,66 @@ def _mlx_extract_profiles(body: dict) -> list[dict]:
     ]
 
 
+#: Сколько раз повторять сбойную страницу и сколько ждать между попытками.
+#: Восемнадцать запросов подряд — это восемнадцать возможностей споткнуться,
+#: и Multilogin спотыкается: три подряд полных загрузки на живом рабочем
+#: пространстве дали две по 1759 профилей и один отказ 501.
+_MLX_TRIES = 3
+_MLX_RETRY_PAUSE_S = 0.8
+
+
+def _mlx_worth_retrying(status: int) -> bool:
+    """Стоит ли повторять этот отказ.
+
+    5xx и 429 — про «сейчас не вышло»: со второй попытки обычно выходит.
+    401 и 403 — про токен: он не станет живым оттого, что мы спросим ещё раз,
+    а повтор лишь оттянет честный ответ на пару секунд.
+    """
+    return status >= 500 or status == 429
+
+
 def _mlx_search_all(requests_mod, headers: dict, search_text: str) -> tuple[list[dict], str]:
-    """Every profile the token can see, paged. Returns (profiles, error)."""
+    """Every profile the token can see, paged. Returns (profiles, error).
+
+    Страницы тянутся по сотне, и в рабочем пространстве владельца их
+    восемнадцать. Раньше единственный сбой на любой из них обрушивал всю
+    загрузку: человек видел красное «Multilogin refused» — то есть слышал
+    «отказано в доступе» там, где случился разовый сбой, — и лечил это
+    нажатием Reload, о чём на экране не говорилось ни слова.
+    """
+    import time as _time
+
     found: list[dict] = []
     offset = 0
     while offset < _MLX_MAX_PROFILES:
-        r = requests_mod.post(
-            f"{MLX_API_BASE}/profile/search",
-            headers=headers,
-            json={"limit": _MLX_PAGE, "offset": offset, "search_text": search_text},
-            timeout=20,
-        )
+        r = None
+        last = ""
+        for attempt in range(_MLX_TRIES):
+            if attempt:
+                _time.sleep(_MLX_RETRY_PAUSE_S)
+            try:
+                r = requests_mod.post(
+                    f"{MLX_API_BASE}/profile/search",
+                    headers=headers,
+                    json={"limit": _MLX_PAGE, "offset": offset, "search_text": search_text},
+                    timeout=20,
+                )
+            except Exception as exc:
+                # Обрыв связи — из того же рода, что и 5xx: повторяем.
+                r, last = None, f"{type(exc).__name__}: {exc}"[:200]
+                continue
+            if r.status_code == 200 or not _mlx_worth_retrying(r.status_code):
+                break
+        if r is None:
+            return found, f"no answer after {_MLX_TRIES} tries" + (f": {last}" if last else "")
         if r.status_code != 200:
             detail = ""
             try:
                 detail = ((r.json().get("status") or {}).get("message") or "").strip()
             except Exception:
                 detail = (r.text or "")[:200]
-            return found, f"HTTP {r.status_code}" + (f": {detail}" if detail else "")
+            tries = f" after {_MLX_TRIES} tries" if _mlx_worth_retrying(r.status_code) else ""
+            return found, f"HTTP {r.status_code}{tries}" + (f": {detail}" if detail else "")
         page = _mlx_extract_profiles(r.json())
         found.extend(page)
         if len(page) < _MLX_PAGE:

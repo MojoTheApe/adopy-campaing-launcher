@@ -269,7 +269,12 @@ def test_connection_borrows_the_existing_country_form(ui):
     p.locator('[data-act="connect-picked"]').click()
     expect(p.locator('.cbd-connect-host .amap-add')).to_have_count(1)
     assert p.evaluate("document.querySelector('.cbd-connect-host .amap-add') === originalConnect")
-    expect(p.locator('.amap-add[data-amap-country]')).to_have_count(1)
+    # Одна на эту страну, а не две: форма ПЕРЕЕХАЛА в ящик, а не скопировалась.
+    # Счёт сузился до конкретной страны, потому что во вкладке Accounts теперь
+    # стоит такая же форма — но она ни к какой стране не привязана (значение
+    # пустое) и второй копией этой не является. Считать все подряд значило бы
+    # ловить не то: проверка здесь про переезд, а не про число форм на странице.
+    expect(p.locator('.amap-add[data-amap-country="Saudi Arabia"]')).to_have_count(1)
     p.locator('[data-act="connect-picked"]').click()
     assert p.evaluate("document.querySelector('#offline-map details.amap-country .amap-add') === originalConnect")
 

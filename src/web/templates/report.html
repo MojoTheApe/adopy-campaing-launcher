@@ -6502,21 +6502,38 @@ function amapClose(kind, value, label) {
 var _mlxCache = {};   // инстанс -> массив профилей
 var _mlxLoading = {}; // инстанс -> Promise
 
-function amapProfiles(inst, reload) {
-  if (reload) { delete _mlxCache[inst]; delete _mlxLoading[inst]; }
-  if (_mlxCache[inst]) return Promise.resolve(_mlxCache[inst]);
-  if (_mlxLoading[inst]) return _mlxLoading[inst];
+/* Спрашиваем ровно то, что набрано, а не всё рабочее пространство.
+
+   Раньше список тянулся один раз на инстанс — «чтобы Multilogin не дёргался
+   на каждую букву» — и фильтровался на месте. Довод верный, а цена
+   оказалась выше: у владельца 1760 профилей, то есть **восемнадцать
+   запросов подряд** на одну первичную загрузку. Multilogin такое отбивает:
+   пять полных выкачиваний подряд дали три удачных и два отказа 501, и
+   повторы не помогли — отказ приходил все три раза.
+
+   При этом узкий поиск через тот же API отвечает сразу и одним запросом:
+   «DQ500» — один профиль, без единой ошибки. Искать он умеет, мы его об
+   этом не просили.
+
+   Кэш остался, но теперь по паре (инстанс, набранное): повторный ввод тех же
+   букв не идёт в сеть, а Multilogin получает один запрос вместо восемнадцати. */
+function amapProfiles(inst, reload, text) {
+  var q = (text || '').trim();
+  var key = inst + ' ' + q.toLowerCase();
+  if (reload) { delete _mlxCache[key]; delete _mlxLoading[key]; }
+  if (_mlxCache[key]) return Promise.resolve(_mlxCache[key]);
+  if (_mlxLoading[key]) return _mlxLoading[key];
   var pending = fetch('/multilogin-search', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
-    body: JSON.stringify({ search_text: '', instance: inst })
+    body: JSON.stringify({ search_text: q, instance: inst })
   }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d || !d.ok) throw new Error((d && d.error) || 'Multilogin did not answer');
     var profiles = d.profiles || [];
-    if (_mlxLoading[inst] === pending) { _mlxCache[inst] = profiles; delete _mlxLoading[inst]; }
+    if (_mlxLoading[key] === pending) { _mlxCache[key] = profiles; delete _mlxLoading[key]; }
     return profiles;
-  }).catch(function (e) { if (_mlxLoading[inst] === pending) delete _mlxLoading[inst]; throw e; });
-  _mlxLoading[inst] = pending;
+  }).catch(function (e) { if (_mlxLoading[key] === pending) delete _mlxLoading[key]; throw e; });
+  _mlxLoading[key] = pending;
   return pending;
 }
 
@@ -6543,11 +6560,22 @@ function amapFilter(input, reload) {
 
   if (!q) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
   msg.className = 'amap-msg';
-  msg.textContent = _mlxCache[inst] ? '' : ('loading ' + (ACL_MLX_LABELS[inst] || inst) + '…');
+  msg.textContent = _mlxCache[inst + ' ' + q.toLowerCase()] ? ''
+    : ('searching ' + (ACL_MLX_LABELS[inst] || inst) + '…');
 
-  return amapProfiles(inst, reload).then(function (all) {
-    if (!current()) return;
-    // пока грузилось, могли набрать ещё — берём то, что в поле сейчас
+  /* Ждём, пока человек допечатает. Запрос теперь уходит на каждое слово, а
+     не один раз на инстанс, — и без этой паузы «dq500» стоил бы пяти
+     запросов вместо одного. Четверть секунды тишины короче любой паузы
+     между буквами и незаметна на глаз. */
+  clearTimeout(box._amapTypeTimer);
+  return new Promise(function (resolve) {
+    box._amapTypeTimer = setTimeout(resolve, reload ? 0 : 250);
+  }).then(function () {
+    if (!current()) return null;
+    return amapProfiles(inst, reload, q);
+  }).then(function (all) {
+    if (!current() || all === null) return;
+    // пока искали, могли набрать ещё — берём то, что в поле сейчас
     var now = (input.value || '').trim();
     if (!now) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
     var found = amapRank(all, now);
@@ -6738,8 +6766,17 @@ async function amapMlSubmit(btn, paste) {
     var j = await response.json();
     if (!response.ok || !j || !j.ok) throw new Error((j && j.error) || 'Connection failed');
     if (!paste && !j.token_saved) throw new Error(j.token_error || 'Signed in, but no automation token was saved. Ask the workspace owner for a token.');
-    // A new workspace token invalidates both cached profiles and in-flight results.
-    delete _mlxCache[inst]; delete _mlxLoading[inst];
+    /* A new workspace token invalidates both cached profiles and in-flight
+       results. Ключ кэша теперь «инстанс + набранное», поэтому чистим ВСЕ
+       записи этого инстанса: удалить одну по старому ключу значило бы
+       оставить на экране результаты, найденные прошлым токеном, — то есть
+       чужого рабочего пространства. */
+    Object.keys(_mlxCache).forEach(function (k) {
+      if (k === inst || k.indexOf(inst + ' ') === 0) delete _mlxCache[k];
+    });
+    Object.keys(_mlxLoading).forEach(function (k) {
+      if (k === inst || k.indexOf(inst + ' ') === 0) delete _mlxLoading[k];
+    });
     document.querySelectorAll('.amap-add').forEach(function (b) {
       if (amapMlInstance(b) !== inst) return;
       b._amapGeneration = (b._amapGeneration || 0) + 1;
