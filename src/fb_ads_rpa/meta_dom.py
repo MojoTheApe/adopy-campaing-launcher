@@ -25,86 +25,73 @@ from src.fb_ads_rpa import run_telemetry as _telemetry
 _PW_FILE_LIMIT_MB = 45
 
 
-def _set_file_via_cdp(page: Page, creative_path: str, diag: dict) -> bool:
-    """Отдать браузеру ПУТЬ к файлу вместо его содержимого.
+def _upload_heavy_via_chooser_event(
+    page: Page, creative_path: str, diag: dict, click, *, wait_s: float = 25.0
+) -> bool:
+    """Взять поле у самого браузера, а не искать его в дереве.
 
-    Браузер живёт на этой же машине и прочитает файл сам — ограничение
-    Playwright снимается, потому что через нас содержимое не идёт вовсе.
-    Это то же, что делает сам Playwright для маленьких файлов
-    (`DOM.setFileInputFiles`), только без пересылки.
+    14.09, живой прогон: обход всего дерева — с теневыми корнями и содержимым
+    iframe — нашёл **ноль** полей `input[type=file]` при открытом окне выбора
+    (`cdp_inputs: 0`). Искать было нечего: окно медиа живёт в кросс-доменном
+    iframe, который Chrome выносит в отдельный процесс, а `DOM.getDocument`
+    границу процесса не переходит, сколько ни ставь `pierce`.
 
-    `pierce=True` не для красоты: 14.09 на живой странице
-    `query_selector_all("input[type=file]")` возвращал ноль полей в тот
-    момент, когда окно выбора уже было открыто, — поле лежит не в основном
-    дереве. CDP умеет заглянуть за теневые границы, Playwright здесь нет.
+    Поэтому поле не ищется, а приходит само: событие `Page.fileChooserOpened`
+    несёт `backendNodeId`, и он **сквозной** — работает через границы
+    процессов, в отличие от `nodeId`, на котором обход и споткнулся.
 
-    Возвращает True, только если файл действительно принят полем. «Отправили
-    команду» успехом не считается: ровно на такой подмене желаемого
-    действительным этот шаг уже горел — см. комментарий про `set_files` выше.
+    Перехват включается на СВОЕЙ сессии, и Playwright тут не участвует:
+    `expect_file_chooser` перехватывает то же окно, и два перехватчика на одно
+    событие — заведомая драка. Поэтому нажатие делается здесь же, параметром
+    `click`, а не снаружи.
     """
     path = str(Path(creative_path).resolve())
-    # Молчать здесь нельзя — и я это уже сделал один раз.
-    #
-    # 14.09: первая версия этой функции глотала исключения через
-    # `except Exception: return False`, написанная в тот самый день, когда
-    # весь разбор упёрся в такое же молчание в шаге выше. Живой прогон вернул
-    # `cdp: false` и ни слова о причине; поля `cdp_inputs` в следе не было
-    # вовсе — значит падало ДО него, а где именно, узнать было нечем.
     try:
         session = page.context.new_cdp_session(page)
     except Exception as exc:
-        diag["cdp_error"] = f"new_cdp_session: {type(exc).__name__}: {exc}"[:200]
+        diag["heavy_error"] = f"new_cdp_session: {type(exc).__name__}: {exc}"[:200]
         return False
+
+    caught: dict = {}
     try:
-        doc = session.send("DOM.getDocument", {"depth": -1, "pierce": True})
-        root = doc.get("root") or {}
-        if not root:
+        session.on("Page.fileChooserOpened", lambda params: caught.update(params or {}))
+        session.send("Page.enable")
+        session.send("DOM.enable")
+        session.send("Page.setInterceptFileChooserDialog", {"enabled": True})
+    except Exception as exc:
+        diag["heavy_error"] = f"intercept: {type(exc).__name__}: {exc}"[:200]
+        try:
+            session.detach()
+        except Exception:
+            pass
+        return False
+
+    try:
+        diag["heavy_clicked"] = bool(click())
+        # Ждём событие. Двадцать пять секунд — столько же, сколько давал
+        # прежний путь: меняем способ, а не терпение.
+        deadline = time.time() + wait_s
+        while time.time() < deadline and "backendNodeId" not in caught:
+            time.sleep(0.25)
+
+        backend = caught.get("backendNodeId")
+        diag["heavy_backend_node"] = backend
+        if not backend:
+            diag["heavy_error"] = "событие Page.fileChooserOpened не пришло"
             return False
 
-        # Идём по самому дереву, а не через `DOM.querySelectorAll`.
-        #
-        # 14.09, первая попытка обхода: `pierce=True` стоял на `getDocument`,
-        # а искал я потом запросом — и вернулся ни с чем (`cdp: false`).
-        # `querySelectorAll` за теневые границы НЕ заглядывает: флаг влияет
-        # только на возвращаемое дерево. То есть я попросил заглянуть и тут же
-        # искал старым способом. Дерево с `pierce` содержит и теневые корни, и
-        # содержимое iframe — обходим его сами.
-        def _file_inputs(node: dict) -> list[int]:
-            out: list[int] = []
-            if (node.get("nodeName") or "").upper() == "INPUT":
-                attrs = node.get("attributes") or []
-                pairs = dict(zip(attrs[::2], attrs[1::2]))
-                if (pairs.get("type") or "").lower() == "file":
-                    out.append(node["nodeId"])
-            for key in ("children", "shadowRoots", "pseudoElements"):
-                for child in (node.get(key) or []):
-                    out.extend(_file_inputs(child))
-            content = node.get("contentDocument")
-            if content:
-                out.extend(_file_inputs(content))
-            return out
-
-        node_ids = _file_inputs(root)
-        diag["cdp_inputs"] = len(node_ids)
-        last = ""
-        for node_id in node_ids:
-            try:
-                session.send(
-                    "DOM.setFileInputFiles", {"files": [path], "nodeId": node_id}
-                )
-                return True
-            except Exception as exc:
-                last = f"{type(exc).__name__}: {exc}"[:200]
-                continue
-        if last:
-            diag["cdp_error"] = f"setFileInputFiles: {last}"
-        elif not node_ids:
-            diag["cdp_error"] = "полей input[type=file] нет даже за теневыми границами"
-        return False
+        session.send("DOM.setFileInputFiles", {"files": [path], "backendNodeId": backend})
+        return True
     except Exception as exc:
-        diag["cdp_error"] = f"getDocument/walk: {type(exc).__name__}: {exc}"[:200]
+        diag["heavy_error"] = f"setFileInputFiles: {type(exc).__name__}: {exc}"[:200]
         return False
     finally:
+        # Перехват снимаем обязательно: оставленный включённым, он проглотит
+        # окно выбора у следующего шага, и тот будет ждать его вечно.
+        try:
+            session.send("Page.setInterceptFileChooserDialog", {"enabled": False})
+        except Exception:
+            pass
         try:
             session.detach()
         except Exception:
@@ -4806,28 +4793,44 @@ def upload_ad_creative(
             #    match on *contains*; the old exact-'Upload' lookup missed it
             #    and that is why uploads failed from 24.08 onward.
             if not fed:
-                with page.expect_file_chooser(timeout=25000) as fc_info:
-                    _clicked = _click_xpath(
+                def _press_upload() -> bool:
+                    clicked = _click_xpath(
                         page,
                         "//*[@role='button' or self::button]"
                         "[contains(normalize-space(.), 'Upload')]",
                     )
-                    _step["upload_xpath_clicked"] = _clicked
-                    if not _clicked:
+                    _step["upload_xpath_clicked"] = clicked
+                    if not clicked:
                         upload_btn.first.click(timeout=5000)
                         _step["upload_fallback_clicked"] = True
-                _step["chooser"] = True
-                # Окно выбора открыто — теперь поле для файла существует, и
-                # тяжёлый файл отдаём по пути, а не содержимым: Playwright
-                # откажется его передавать, и до 14.09 этот отказ глотался
-                # молча, стоив полутора дней поисков.
+                        return True
+                    return clicked
+
+                # Тяжёлый файл идёт своей дорогой ДО перехватчика Playwright.
+                #
+                # `expect_file_chooser` перехватывает то же окно, что и мы, и
+                # два перехватчика на одно событие — заведомая драка. Поэтому
+                # здесь либо один путь, либо другой, но не оба сразу.
+                #
+                # Почему не через поиск поля: 14.09 обход всего дерева нашёл
+                # ноль полей при открытом окне выбора. Окно медиа живёт в
+                # отдельном процессе, и `DOM.getDocument` туда не дотягивается.
+                # `backendNodeId` из события браузера — дотягивается.
                 if _diag["size_mb"] > _PW_FILE_LIMIT_MB:
-                    _step["cdp"] = _set_file_via_cdp(page, creative_path, _diag)
-                    if not _step["cdp"]:
-                        # Пробуем обычным путём — пусть откажет вслух, с
-                        # текстом, а не тишиной.
+                    _step["heavy"] = _upload_heavy_via_chooser_event(
+                        page, creative_path, _diag, _press_upload
+                    )
+                    if not _step["heavy"]:
+                        # Не вышло — пусть откажет прежний путь, вслух и с
+                        # текстом. Молчание здесь стоило полутора дней.
+                        with page.expect_file_chooser(timeout=25000) as fc_info:
+                            _press_upload()
+                        _step["chooser"] = True
                         fc_info.value.set_files(creative_path)
                 else:
+                    with page.expect_file_chooser(timeout=25000) as fc_info:
+                        _press_upload()
+                    _step["chooser"] = True
                     fc_info.value.set_files(creative_path)
         except Exception as exc:
             # Здесь и была слепота: исключение глоталось молча, и отличить
