@@ -3118,6 +3118,16 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     одного упавшего прогона хватит, чтобы узнать настоящий список вместо
     гадания. Пустое `False` в телеметрии стоило пяти прогонов вслепую.
 
+    **Разметок две, и зависят они от аккаунта.** 14.09 те же шаги на новых
+    DQ500/DQ501 дали ноль категорий и ноль `Placement controls` — при том что
+    фикстура 9 сентября (DQ204/UL921) содержит и то, и другое, и стенд на ней
+    зелёный. Значит код не «сломался»: Meta отдаёт новым аккаунтам другой
+    вариант раздела, где пять категорий спрятаны за свёрнутой створкой
+    «Placements» со сводкой в подписи («Included: 21»). Поэтому ниже сначала
+    пробуется прежний путь, а створка раскрывается только если категорий не
+    видно. Вывод «Meta переделала раздел для всех» из одного аккаунта делать
+    нельзя — оба варианта живы одновременно.
+
     Найти и кликнуть — в одном вызове `page.evaluate`. Правая колонка
     («Audience definition», «Campaign score») пересчитывается сама и двигает
     строки, поэтому координата, снятая даже на доли секунды раньше, к
@@ -3345,12 +3355,30 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                     .filter(t => t && t.length < 60);
                   const seen = [];
                   for (const t of texts) if (!seen.includes(t)) seen.push(t);
+                  // Что здесь вообще можно нажать. Переключателя Advantage+ в
+                  // блоке нет ни одного (`switches: 0`), а сводка вместо
+                  // категорий показывается именно из-за него — значит режим
+                  // меняется чем-то другим, и гадать чем не надо: пусть
+                  // страница сама перечислит свои нажимаемые места.
+                  const clickable = [...root.querySelectorAll(
+                      '[role="button"],[role="link"],button,a,[aria-expanded],[tabindex="0"]')]
+                    .filter(vis)
+                    .map(e => ({
+                      t: norm(e.textContent).slice(0, 44),
+                      role: e.getAttribute('role') || e.tagName.toLowerCase(),
+                      exp: e.getAttribute('aria-expanded'),
+                    }))
+                    .filter(x => x.t);
+                  const uniq = [];
+                  for (const c of clickable)
+                    if (!uniq.some(u => u.t === c.t && u.role === c.role)) uniq.push(c);
                   return {
                     marked: !!marked,
                     rect: marked ? (({width, height}) => ({width, height}))(marked.getBoundingClientRect()) : null,
                     labels: labels.slice(0, 25),
                     switches: root.querySelectorAll('[role="switch"],[role="checkbox"]').length,
                     texts: seen.slice(0, 40),
+                    clickable: uniq.slice(0, 30),
                   };
                 }
                 """
@@ -3470,6 +3498,71 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         except Exception:
             return []
 
+    def _node_candidates() -> str:
+        """JS-кусок: створки раздела, чья подпись начинается с `prefix`.
+
+        `prefix` здесь — имя параметра самого скрипта, а не подстановка из
+        Python: текст уезжает в страницу аргументом, не склейкой строк.
+
+        Одно место на оба помощника ниже, чтобы «найти» и «проверить»
+        не разошлись в том, какой именно узел они имеют в виду.
+        """
+        return """
+          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          const root = document.querySelector('[data-rpa-placements-marker]');
+          if (!root) return null;
+          const cands = [...root.querySelectorAll('[role="button"][aria-expanded]')]
+            .filter(e => e.offsetParent !== null && norm(e.textContent).startsWith(prefix));
+          cands.sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length);
+        """
+
+    def _expand_node(prefix: str) -> dict:
+        """Раскрыть створку раздела по началу её подписи.
+
+        Из нескольких вложенных совпадений берём самое внутреннее — июльский
+        урок: `querySelectorAll` отдаёт предков раньше потомков, а обработчик
+        висит на потомке, и native-клик по обёртке до него не доходит.
+        """
+        try:
+            return page.evaluate(
+                "(prefix) => {"
+                + _node_candidates()
+                + """
+                  if (cands === null) return { found: false, why: 'нет метки блока' };
+                  if (!cands.length) return { found: false };
+                  const el = cands[0];
+                  const was = el.getAttribute('aria-expanded');
+                  el.scrollIntoView({ block: 'center', behavior: 'instant' });
+                  if (was === 'false') el.click();
+                  return {
+                    found: true,
+                    was: was,
+                    text: norm(el.textContent).slice(0, 60),
+                    candidates: cands.length,
+                  };
+                }
+                """,
+                prefix,
+            ) or {"found": False}
+        except Exception as exc:
+            return {"found": False, "error": str(exc)[:80]}
+
+    def _node_expanded(prefix: str) -> str | None:
+        """Открыта ли створка прямо сейчас — по мнению самой страницы."""
+        try:
+            return page.evaluate(
+                "(prefix) => {"
+                + _node_candidates()
+                + """
+                  if (cands === null || !cands.length) return null;
+                  return cands[0].getAttribute('aria-expanded');
+                }
+                """,
+                prefix,
+            )
+        except Exception:
+            return None
+
     # ── раскрытие ────────────────────────────────────────────────────────
     #
     # Смотрим не на надпись, а на то, что нужно на самом деле: видны ли пять
@@ -3492,6 +3585,48 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         _sleep_h(0.8)
         seen = _categories_visible()
 
+    # Раздел раскрыт, а узел внутри него — нет.
+    #
+    # 14.09: восемь отказов «видно 0 категорий из 5», и шаг научили
+    # перечислять, что в блоке можно нажать. Ответ пришёл первым же прогоном:
+    #
+    #   [button] PlacementsIncluded: 21Allowed with limited s  aria-expanded=false
+    #   [button] Platforms                                     aria-expanded=true
+    #   [a]      Hide settings
+    #
+    # Пять категорий лежат за свёрнутой кнопкой «Placements» — вложенной, со
+    # своей сводкой в подписи. `Placement controls`, который искал шаг, на
+    # странице отсутствует (`found: False`), а `Show more settings` уже нажат:
+    # рядом стоит `Hide settings`.
+    #
+    # Трогаем только «Placements». Соседний «Platforms» — другая настройка, и
+    # раскрытие соседа закрывает створку обратно: это гармошка, как у
+    # категорий (дневник, 9 сентября). Первый заход жал оба подряд, и в дампе
+    # «Placements» оказывался снова свёрнут — отсюда взялись площадки,
+    # принятые за новую разбивку раздела.
+    #
+    # Раскрываем по началу подписи — в ней сводка («Included: 21»), которая
+    # меняется от прогона к прогону, — и убеждаемся, что створка открылась.
+    # Сам факт клика ничего не значит: июльская хроника (пункт 6) — клик по
+    # внешней обёртке не долетает до React-обработчика на потомке.
+    if seen < len(_PLACEMENT_CATEGORIES):
+        node = _expand_node("Placements")
+        _dbg.append(f"expand[Placements]={node}")
+        report["expand_placements"] = node
+        if node.get("found"):
+            _sleep_h(1.0)
+            now = _node_expanded("Placements")
+            if now == "false":
+                kicked = _click_in_placements(
+                    "Placements", exact=False, max_children=2
+                )
+                _dbg.append(f"expand[Placements] повтор={kicked}")
+                _sleep_h(1.0)
+                now = _node_expanded("Placements")
+            _dbg.append(f"expand[Placements] стало={now}")
+            report["expand_placements_now"] = now
+            seen = _categories_visible()
+
     report["categories_visible"] = seen
     _dbg.append(f"categories_visible={seen}")
     if seen < len(_PLACEMENT_CATEGORIES):
@@ -3500,7 +3635,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # догадкам по посмертным снимкам.
         inside = _what_is_in_the_block()
         report["block"] = inside
-        _dbg.append("block=" + json.dumps(inside, ensure_ascii=False)[:1500])
+        _dbg.append("block=" + json.dumps(inside, ensure_ascii=False)[:2500])
         report["why"] = f"видно {seen} категорий из {len(_PLACEMENT_CATEGORIES)}"
         _dump_dbg()
         return False
@@ -8190,7 +8325,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                             e = selects.nth(k)
                             tag_k = e.evaluate("el => el.tagName.toLowerCase()")
                             outer_k = e.evaluate("el => el.outerHTML")
-                            dump_lines.append(f"[{k}] tag={tag_k}\n{outer_k[:1500]}")
+                            dump_lines.append(f"[{k}] tag={tag_k}\n{outer_k[:2500]}")
                         Path("output/debug_age_selects.txt").write_text(
                             "\n\n---\n\n".join(dump_lines), encoding="utf-8"
                         )
