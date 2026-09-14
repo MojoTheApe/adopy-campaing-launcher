@@ -49,13 +49,36 @@ def _set_file_via_cdp(page: Page, creative_path: str) -> bool:
         return False
     try:
         doc = session.send("DOM.getDocument", {"depth": -1, "pierce": True})
-        root = (doc.get("root") or {}).get("nodeId")
+        root = doc.get("root") or {}
         if not root:
             return False
-        found = session.send(
-            "DOM.querySelectorAll", {"nodeId": root, "selector": "input[type=file]"}
-        )
-        for node_id in (found.get("nodeIds") or []):
+
+        # Идём по самому дереву, а не через `DOM.querySelectorAll`.
+        #
+        # 14.09, первая попытка обхода: `pierce=True` стоял на `getDocument`,
+        # а искал я потом запросом — и вернулся ни с чем (`cdp: false`).
+        # `querySelectorAll` за теневые границы НЕ заглядывает: флаг влияет
+        # только на возвращаемое дерево. То есть я попросил заглянуть и тут же
+        # искал старым способом. Дерево с `pierce` содержит и теневые корни, и
+        # содержимое iframe — обходим его сами.
+        def _file_inputs(node: dict) -> list[int]:
+            out: list[int] = []
+            if (node.get("nodeName") or "").upper() == "INPUT":
+                attrs = node.get("attributes") or []
+                pairs = dict(zip(attrs[::2], attrs[1::2]))
+                if (pairs.get("type") or "").lower() == "file":
+                    out.append(node["nodeId"])
+            for key in ("children", "shadowRoots", "pseudoElements"):
+                for child in (node.get(key) or []):
+                    out.extend(_file_inputs(child))
+            content = node.get("contentDocument")
+            if content:
+                out.extend(_file_inputs(content))
+            return out
+
+        node_ids = _file_inputs(root)
+        _diag["cdp_inputs"] = len(node_ids)
+        for node_id in node_ids:
             try:
                 session.send(
                     "DOM.setFileInputFiles", {"files": [path], "nodeId": node_id}

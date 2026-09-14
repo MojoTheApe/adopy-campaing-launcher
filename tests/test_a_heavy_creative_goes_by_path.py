@@ -58,6 +58,39 @@ def test_it_looks_behind_shadow_boundaries():
     assert '"pierce": True' in helper
 
 
+def test_the_tree_is_walked_and_not_queried():
+    """Первая попытка обхода провалилась именно здесь, и тест этого не поймал.
+
+    `pierce=True` стоял на `DOM.getDocument`, а поиск шёл через
+    `DOM.querySelectorAll` — который за теневые границы НЕ заглядывает: флаг
+    влияет только на возвращаемое дерево. Живой прогон дал `cdp: false`.
+
+    Проверка выше при этом была зелёной: она сторожила наличие флага, а не то,
+    что мы им пользуемся. Поэтому здесь — про обход самого дерева.
+    """
+    # Комментарии снимаем: в них это имя упомянуто нарочно, как объяснение
+    # прошлой ошибки. Сторож, спотыкающийся о собственное объяснение, — уже
+    # было сегодня утром на проверке подключения аккаунта.
+    code = "\n".join(
+        line for line in _helper().splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    assert "DOM.querySelectorAll" not in code, (
+        "поиск снова идёт запросом — он не видит теневых корней"
+    )
+    helper = _helper()
+    assert "shadowRoots" in helper, "теневые корни не обходятся"
+    assert "contentDocument" in helper, "содержимое iframe не обходится"
+    assert 'nodeName' in helper and '"file"' in helper, "поля отбираются не по типу"
+
+
+def test_how_many_inputs_were_found_is_recorded():
+    """`cdp: false` не говорит, чего не хватило: полей не нашлось или нашлись,
+    но не приняли файл. Это разные починки."""
+    helper = _helper()
+    assert '_diag["cdp_inputs"]' in helper
+
+
 def test_sending_the_command_is_not_counted_as_success():
     """Ровно на подмене «отправили» вместо «приняли» этот шаг уже горел: до
     04.08 успехом считался сам `set_files`, и прогон уезжал в мастер, который
