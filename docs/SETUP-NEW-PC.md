@@ -46,7 +46,7 @@ yourself: open it in Notepad and search for `NEEDRESTART`. The current file does
 not contain that word.)
 
 If a repair with `install_acl.bat` says the previous release was restored,
-close that window and run `install_acl.bat` again. Recovery replaces the installer
+press a key to close that installer window, then run `install_acl.bat` again. Recovery replaces the installer
 too, so repair stops before using the restored files. It does not open another
 window automatically.
 
