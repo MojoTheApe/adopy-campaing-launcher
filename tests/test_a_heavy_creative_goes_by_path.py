@@ -86,9 +86,18 @@ def test_the_tree_is_walked_and_not_queried():
 
 def test_how_many_inputs_were_found_is_recorded():
     """`cdp: false` не говорит, чего не хватило: полей не нашлось или нашлись,
-    но не приняли файл. Это разные починки."""
+    но не приняли файл. Это разные починки.
+
+    След ведётся в словаре, который ПЕРЕДАЁТСЯ помощнику. Обращаться к
+    локальной переменной вызывающей функции он не может — на этом обход и
+    упал на живом прогоне с `NameError`, и ни один текстовый тест этого не
+    заметил. Само поведение проверяется исполнением ниже.
+    """
     helper = _helper()
-    assert '_diag["cdp_inputs"]' in helper
+    assert 'diag["cdp_inputs"]' in helper
+    assert "creative_path: str, diag: dict" in helper, (
+        "словарь следа снова не передаётся — помощник не видит его извне"
+    )
 
 
 def test_sending_the_command_is_not_counted_as_success():
@@ -169,3 +178,106 @@ def test_the_bypass_does_not_swallow_its_own_errors():
     assert "полей input[type=file] нет" in helper, (
         "пустой поиск не отличается от ошибки поиска"
     )
+
+
+# ── а теперь тесты, которые КОД ВЫПОЛНЯЮТ ─────────────────────────────
+#
+# 14.09: обход упал на живом прогоне с `NameError: name '_diag' is not
+# defined` — помощник на уровне модуля обращался к локальной переменной
+# вызывающей функции. Ни одна из двенадцати проверок выше этого не поймала:
+# все они читают исходник, а не исполняют его.
+#
+# Ровно то, в чём я в тот же день упрекал чужие сторожа: «проверялось наличие
+# слова, а не поведение». Ниже — поведение.
+
+class _FakeSession:
+    def __init__(self, doc, on_set=None):
+        self.doc, self.on_set, self.sent = doc, on_set, []
+
+    def send(self, method, params=None):
+        self.sent.append((method, params))
+        if method == "DOM.getDocument":
+            return {"root": self.doc}
+        if method == "DOM.setFileInputFiles":
+            if self.on_set:
+                return self.on_set(params)
+            return {}
+        return {}
+
+    def detach(self):
+        self.detached = True
+
+
+class _FakePage:
+    def __init__(self, session):
+        self.context = type("Ctx", (), {"new_cdp_session": lambda _s, _p: session})()
+
+
+def _input_node(node_id=7):
+    return {"nodeId": node_id, "nodeName": "INPUT",
+            "attributes": ["type", "file"], "children": []}
+
+
+def _call(doc, on_set=None):
+    from src.fb_ads_rpa import meta_dom
+    session = _FakeSession(doc, on_set)
+    diag: dict = {}
+    ok = meta_dom._set_file_via_cdp(_FakePage(session), __file__, diag)
+    return ok, diag, session
+
+
+def test_it_runs_at_all():
+    """Тот самый NameError: помощник не видел `_diag` вызывающей функции."""
+    ok, diag, _ = _call({"nodeId": 1, "nodeName": "#document", "children": []})
+    assert ok is False
+    assert "полей input[type=file] нет" in diag.get("cdp_error", ""), diag
+
+
+def test_a_plain_input_is_found_and_fed():
+    doc = {"nodeId": 1, "nodeName": "#document", "children": [_input_node()]}
+    ok, diag, session = _call(doc)
+    assert ok is True
+    assert diag["cdp_inputs"] == 1
+    method, params = session.sent[-1]
+    assert method == "DOM.setFileInputFiles"
+    assert params["nodeId"] == 7
+    assert params["files"][0].endswith(".py"), "браузеру ушёл не путь"
+
+
+def test_an_input_behind_a_shadow_root_is_found():
+    """Ради этого обход и писался: на живой странице поля не было в основном
+    дереве."""
+    doc = {"nodeId": 1, "nodeName": "#document",
+           "children": [{"nodeId": 2, "nodeName": "DIV", "children": [],
+                         "shadowRoots": [{"nodeId": 3, "nodeName": "#document-fragment",
+                                          "children": [_input_node(9)]}]}]}
+    ok, diag, session = _call(doc)
+    assert ok is True and diag["cdp_inputs"] == 1
+    assert session.sent[-1][1]["nodeId"] == 9
+
+
+def test_an_input_inside_an_iframe_is_found():
+    doc = {"nodeId": 1, "nodeName": "#document",
+           "children": [{"nodeId": 2, "nodeName": "IFRAME", "children": [],
+                         "contentDocument": {"nodeId": 3, "nodeName": "#document",
+                                             "children": [_input_node(11)]}}]}
+    ok, _, session = _call(doc)
+    assert ok is True and session.sent[-1][1]["nodeId"] == 11
+
+
+def test_a_refusing_input_is_reported_not_swallowed():
+    def refuse(_params):
+        raise RuntimeError("node is detached")
+
+    doc = {"nodeId": 1, "nodeName": "#document", "children": [_input_node()]}
+    ok, diag, _ = _call(doc, on_set=refuse)
+    assert ok is False
+    assert "setFileInputFiles" in diag["cdp_error"] and "detached" in diag["cdp_error"]
+
+
+def test_a_text_input_is_not_mistaken_for_a_file_one():
+    doc = {"nodeId": 1, "nodeName": "#document",
+           "children": [{"nodeId": 5, "nodeName": "INPUT",
+                         "attributes": ["type", "text"], "children": []}]}
+    ok, diag, _ = _call(doc)
+    assert ok is False and diag["cdp_inputs"] == 0

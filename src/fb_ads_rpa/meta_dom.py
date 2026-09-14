@@ -25,7 +25,7 @@ from src.fb_ads_rpa import run_telemetry as _telemetry
 _PW_FILE_LIMIT_MB = 45
 
 
-def _set_file_via_cdp(page: Page, creative_path: str) -> bool:
+def _set_file_via_cdp(page: Page, creative_path: str, diag: dict) -> bool:
     """Отдать браузеру ПУТЬ к файлу вместо его содержимого.
 
     Браузер живёт на этой же машине и прочитает файл сам — ограничение
@@ -53,7 +53,7 @@ def _set_file_via_cdp(page: Page, creative_path: str) -> bool:
     try:
         session = page.context.new_cdp_session(page)
     except Exception as exc:
-        _diag["cdp_error"] = f"new_cdp_session: {type(exc).__name__}: {exc}"[:200]
+        diag["cdp_error"] = f"new_cdp_session: {type(exc).__name__}: {exc}"[:200]
         return False
     try:
         doc = session.send("DOM.getDocument", {"depth": -1, "pierce": True})
@@ -85,7 +85,7 @@ def _set_file_via_cdp(page: Page, creative_path: str) -> bool:
             return out
 
         node_ids = _file_inputs(root)
-        _diag["cdp_inputs"] = len(node_ids)
+        diag["cdp_inputs"] = len(node_ids)
         last = ""
         for node_id in node_ids:
             try:
@@ -97,12 +97,12 @@ def _set_file_via_cdp(page: Page, creative_path: str) -> bool:
                 last = f"{type(exc).__name__}: {exc}"[:200]
                 continue
         if last:
-            _diag["cdp_error"] = f"setFileInputFiles: {last}"
+            diag["cdp_error"] = f"setFileInputFiles: {last}"
         elif not node_ids:
-            _diag["cdp_error"] = "полей input[type=file] нет даже за теневыми границами"
+            diag["cdp_error"] = "полей input[type=file] нет даже за теневыми границами"
         return False
     except Exception as exc:
-        _diag["cdp_error"] = f"getDocument/walk: {type(exc).__name__}: {exc}"[:200]
+        diag["cdp_error"] = f"getDocument/walk: {type(exc).__name__}: {exc}"[:200]
         return False
     finally:
         try:
@@ -4822,7 +4822,7 @@ def upload_ad_creative(
                 # откажется его передавать, и до 14.09 этот отказ глотался
                 # молча, стоив полутора дней поисков.
                 if _diag["size_mb"] > _PW_FILE_LIMIT_MB:
-                    _step["cdp"] = _set_file_via_cdp(page, creative_path)
+                    _step["cdp"] = _set_file_via_cdp(page, creative_path, _diag)
                     if not _step["cdp"]:
                         # Пробуем обычным путём — пусть откажет вслух, с
                         # текстом, а не тишиной.
