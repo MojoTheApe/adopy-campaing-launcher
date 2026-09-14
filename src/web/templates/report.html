@@ -1912,6 +1912,9 @@
     /* Отказ не красится успехом — той же рукой, что и кнопка. */
     .amap-tree-log-said { flex: 0 0 auto; color: var(--muted); }
     .amap-tree-log-said.bad { color: var(--danger); }
+    /* Неподтверждённое — не отказ и не успех. Третий цвет, потому что третий
+       исход: объявление могло выключиться, а могло и нет. */
+    .amap-tree-log-said.warn { color: var(--warn, var(--danger)); }
     .amap-tree-log-who { flex: 0 0 auto; color: var(--muted); opacity: 0.75; }
     .amap-tree-log-none { font-size: 0.73rem; color: var(--muted); }
     /* Оговорка, а не отказ: строки настоящие, просто их меньше, чем денег. */
@@ -6084,10 +6087,18 @@ function amapLogLine(e) {
      это не успех, и красить его в успех нельзя. */
   var said = document.createElement('span');
   var ok = e.state === 'off' || e.state === 'already_off';
-  said.className = 'amap-tree-log-said' + (ok ? '' : ' bad');
+  /* Три исхода, а не два. «did not turn off» — установленный факт: нажали, и
+     тумблер не стал выключенным. Оборванная попытка такого факта не даёт, и
+     называть её тем же словом значит толкать к выводу «значит, оно ещё
+     крутится» — тогда как объявление могло и выключиться. */
+  var unsure = e.state === 'unconfirmed';
+  said.className = 'amap-tree-log-said' + (ok ? '' : unsure ? ' warn' : ' bad');
   said.textContent = e.state === 'off' ? 'turned off'
     : e.state === 'already_off' ? 'was already off'
+    : unsure ? ('result not confirmed' + (e.error ? ' — ' + e.error : ''))
     : ('did not turn off' + (e.error ? ' — ' + e.error : ''));
+  if (unsure) said.title = 'The attempt broke off before the switch could be read. '
+    + 'It may have gone off. Check it in Ads Manager.';
   if (ok && e.how) said.title = e.how;
   line.appendChild(said);
 
@@ -6108,9 +6119,17 @@ function amapLogLoad(block, account) {
   body.textContent = 'reading…';
   fetch('/account-spend/turn-off-history?account=' + encodeURIComponent(account),
         { credentials: 'same-origin' })
-    .then(function (r) { return r.json(); })
+    .then(function (r) { return r.json().catch(function () { return null; }); })
     .then(function (j) {
-      var rows = (j && j.entries) || [];
+      /* Ответ проверяется, а не принимается на веру. Без этой проверки отказ
+         чтения превращался в пустой список, а пустой список — в надпись
+         «здесь ничего не меняли»: самый успокаивающий вывод из возможных,
+         сделанный ровно тогда, когда журнал прочитать не удалось. */
+      if (!j || !j.ok) {
+        body.textContent = (j && j.error) || 'The record could not be read.';
+        return;
+      }
+      var rows = j.entries || [];
       body.textContent = '';
       if (!rows.length) {
         var none = document.createElement('div');
@@ -6124,6 +6143,16 @@ function amapLogLoad(block, account) {
     .catch(function () {
       body.textContent = 'The record could not be read.';
     });
+}
+
+function amapLogRefresh(row, account) {
+  /* Перечитать журнал, если он раскрыт. Смотреть в раскрытую запись, где нет
+     того, что только что сделано, хуже, чем не открывать её вовсе. Свёрнутый
+     не трогаем: он перечитается сам при раскрытии. */
+  var block = row && row.querySelector('.amap-tree-log');
+  if (!block) return;
+  var body = block.querySelector('.amap-tree-log-body');
+  if (body && !body.hidden) amapLogLoad(block, account);
 }
 
 function amapLogAttach(box, row) {
@@ -6231,15 +6260,16 @@ function amapTurnOffDo(btn) {
       } else {
         amapTurnOffSaid(btn, 'failed', res.error || 'did not turn off');
       }
-      /* Если журнал открыт — перечитать. Смотреть в раскрытую запись, где нет
-         того, что только что сделано, хуже, чем не открывать её вовсе.
-         Отказ дописывается наравне с удавшимся: он тоже случился. */
-      var block = row && row.querySelector('.amap-tree-log');
-      if (block && !block.querySelector('.amap-tree-log-body').hidden) {
-        amapLogLoad(block, account);
-      }
+      amapLogRefresh(row, account);
     })
-    .catch(function (e) { amapTurnOffSaid(btn, 'failed', String((e && e.message) || e)); });
+    .catch(function (e) {
+      amapTurnOffSaid(btn, 'failed', String((e && e.message) || e));
+      /* И здесь тоже. Это не симметрия ради симметрии: именно упавшая
+         попытка пишет в журнал запись «результат не подтверждён», и именно
+         она нужнее всего на глазах. Обновляя журнал только по успешному
+         ответу, мы прятали бы ровно ту строку, ради которой его открывают. */
+      amapLogRefresh(row, account);
+    });
 }
 
 function amapTurnOffSaid(btn, state, words) {

@@ -73,6 +73,73 @@ def test_an_attempt_that_failed_is_recorded_too(monkeypatch):
     assert row["route"] == "rpa", "отказ тоже должен говорить, чем его делали"
 
 
+def test_a_crash_leaves_a_record_too(monkeypatch):
+    """Самая неудавшаяся попытка из всех — та, что упала.
+
+    Маршрут в `src/web/app.py` прямо ловит `Exception` и отвечает «Could not
+    reach the account»: значит падение здесь предусмотрено. Раньше в этом
+    случае в журнале не оставалось ничего — действие на живом кабинете было,
+    следа нет. Журнал, который молчит именно тогда, когда что-то пошло совсем
+    не так, не отвечает на «почему это выключилось вчера».
+    """
+    def explode(*a, **kw):
+        raise TimeoutError("switch never appeared")
+
+    monkeypatch.setattr(sp, "_turn_off", explode)
+
+    with pytest.raises(TimeoutError):
+        sp.turn_off("FacebookDQ438", "ad", "7", requester="Evgeni")
+
+    row = sp.turn_off_history()[0]
+    assert row["object_id"] == "7" and row["account"] == "FacebookDQ438"
+    assert "TimeoutError" in row["error"] and "switch never appeared" in row["error"]
+    assert row["requester"] == "Evgeni" and row["route"] == "rpa"
+    assert row["at"], "у записи о падении нет времени"
+
+
+def test_a_broken_attempt_is_not_called_a_failure(monkeypatch):
+    """Замечание ревьюера, и оно точнее моей первой правки.
+
+    `failed` означает «нажали, и тумблер НЕ стал выключенным» — установленный
+    факт. Оборванная попытка такого факта не даёт: объявление могло и
+    выключиться, просто подтвердить не успели. Записать «не удалось» значило
+    бы соврать в ту сторону, из которой делают вывод «значит, оно ещё
+    крутится», — и человек оставит выключенное объявление считаться
+    работающим.
+    """
+    def explode(*a, **kw):
+        raise TimeoutError("switch never appeared")
+
+    monkeypatch.setattr(sp, "_turn_off", explode)
+    with pytest.raises(TimeoutError):
+        sp.turn_off("FacebookDQ438", "ad", "7", requester="Evgeni")
+
+    assert sp.turn_off_history()[0]["state"] == "unconfirmed"
+
+
+def test_the_crash_is_not_swallowed():
+    """Записать и промолчать было бы хуже исходного: человек увидел бы
+    «ничего не произошло» вместо ошибки. Решать, что ответить, — не здесь."""
+    src = (ROOT / "src" / "analysis_agent" / "account_spend.py").read_text(encoding="utf-8")
+    body = src[src.index("def turn_off(account"):]
+    body = body[: body.index("\ndef _turn_off(")]
+    assert "raise" in body, "исключение больше не пробрасывается"
+    assert "except Exception" in body
+
+
+def test_a_journal_failure_does_not_hide_the_crash(monkeypatch):
+    """Если сломан сам журнал, наружу всё равно должно уйти исходное падение,
+    а не ошибка записи о нём."""
+    def explode(*a, **kw):
+        raise TimeoutError("switch never appeared")
+
+    monkeypatch.setattr(sp, "_turn_off", explode)
+    monkeypatch.setattr(sp, "_turn_off_log", lambda: (_ for _ in ()).throw(OSError("no disk")))
+
+    with pytest.raises(TimeoutError):
+        sp.turn_off("FacebookDQ438", "ad", "7", requester="Evgeni")
+
+
 def test_the_route_is_never_guessed():
     """Поле маршрута пустое по умолчанию — намеренно.
 
@@ -138,6 +205,63 @@ def _tree_js() -> str:
     return page[start: page.index("function amapTurnOffSaid", start)]
 
 
+def test_an_unreadable_record_is_not_reported_as_an_empty_one(monkeypatch):
+    """Замечание ревьюера. Пустой список значит «здесь ничего не меняли» —
+    самый успокаивающий вывод из возможных. Отдавать его вместо «прочитать не
+    удалось» хуже, чем промолчать: человек уходит уверенным в том, чего никто
+    не проверял."""
+    import asyncio
+
+    import httpx
+
+    from src.web.app import app
+
+    def explode(*a, **kw):
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(sp, "turn_off_history", explode)
+
+    async def go():
+        t = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=t, base_url="http://127.0.0.1") as c:
+            return await c.get("/account-spend/turn-off-history",
+                               params={"account": "FacebookDQ438"})
+
+    r = asyncio.run(go())
+    assert r.status_code == 500, "поломка чтения отвечает успехом"
+    body = r.json()
+    assert body["ok"] is False
+    assert "entries" not in body, "к отказу приложен пустой список записей"
+
+
+def test_the_screen_checks_the_answer_before_believing_it():
+    js = _tree_js()
+    load = js[js.index("function amapLogLoad"):]
+    load = load[: load.index("\nfunction ")]
+    assert "!j || !j.ok" in load, "ответ снова принимается на веру"
+    bad = load.index("!j || !j.ok")
+    nothing = load.index("Nothing has been changed")
+    assert bad < nothing, (
+        "проверка ответа должна стоять раньше вывода «ничего не меняли», "
+        "иначе отказ чтения снова прочитается как пустой журнал"
+    )
+
+
+def test_the_open_record_is_refreshed_after_a_failed_action():
+    """Замечание ревьюера: именно упавшая попытка пишет строку «результат не
+    подтверждён», и именно она нужнее всего на глазах. Обновление только по
+    успешному ответу прятало бы ровно её."""
+    page = TPL.read_text(encoding="utf-8")
+    do = page[page.index("function amapTurnOffDo"):]
+    do = do[: do.index("function amapTurnOffSaid")]
+    assert do.count("amapLogRefresh(row, account)") == 2, (
+        "журнал обновляется не на обоих исходах"
+    )
+    assert "amapLogRefresh(row, account)" in do[do.index(".catch("):], (
+        "после отказа журнал не перечитывается"
+    )
+
+
 def test_the_record_can_be_opened_from_the_tree():
     js = _tree_js()
     assert "/account-spend/turn-off-history?account=" in js
@@ -172,6 +296,19 @@ def test_a_failed_attempt_is_not_painted_as_success():
     assert "did not turn off" in said and "bad" in said
 
 
+def test_the_screen_shows_three_outcomes_not_two():
+    """Неподтверждённое нельзя называть тем же словом, что установленный
+    отказ: из «did not turn off» человек делает вывод «значит, оно ещё
+    крутится», тогда как объявление могло и выключиться."""
+    js = _tree_js()
+    said = js[js.index("var said = document.createElement"):]
+    said = said[: said.index("line.appendChild(said)")]
+    assert "unconfirmed" in said
+    assert "result not confirmed" in said
+    assert "' warn'" in said, "третий исход красится как отказ"
+    assert "Ads Manager" in said, "не сказано, где посмотреть, чем всё кончилось"
+
+
 def test_nothing_is_invented_when_the_name_is_missing():
     """Журнал без имени честнее журнала с подставленным."""
     js = _tree_js()
@@ -187,8 +324,14 @@ def test_an_open_record_is_refreshed_after_an_action():
     page = TPL.read_text(encoding="utf-8")
     do = page[page.index("function amapTurnOffDo"):]
     do = do[: do.index("function amapTurnOffSaid")]
-    assert "amapLogLoad(block, account)" in do
-    assert ".amap-tree-log-body').hidden" in do, "перечитываем только раскрытый"
+    assert "amapLogRefresh(row, account)" in do
+
+    # Перечитывается только раскрытый журнал: свёрнутый и так перечитается
+    # при раскрытии, а лишний запрос на каждое нажатие не нужен никому.
+    helper = page[page.index("function amapLogRefresh"):]
+    helper = helper[: helper.index("\nfunction ")]
+    assert "body.hidden" in helper
+    assert "amapLogLoad(block, account)" in helper
 
 
 def test_the_record_stays_open_across_a_reread():

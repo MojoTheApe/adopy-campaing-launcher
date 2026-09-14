@@ -2586,9 +2586,16 @@ async def account_spend_turn_off_history(request: Request) -> JSONResponse:
     try:
         rows = account_spend.turn_off_history(limit=limit, account=account)
     except Exception:
-        # Журнал — рассказ о работе, а не сама работа. Его поломка не повод
-        # ронять страницу, на которой человек останавливает кампании.
-        rows = []
+        # Журнал — рассказ о работе, а не сама работа: его поломка не повод
+        # ронять страницу, на которой человек останавливает кампании. Но и
+        # выдавать её за пустой журнал нельзя. Пустой список значит «здесь
+        # ничего не меняли» — самый успокаивающий ответ из возможных, и
+        # отдавать его вместо «прочитать не удалось» хуже, чем промолчать:
+        # человек уходит уверенным в том, чего никто не проверял.
+        return JSONResponse(
+            {"ok": False, "error": "The record could not be read."},
+            status_code=500,
+        )
     return JSONResponse({"ok": True, "entries": rows})
 
 

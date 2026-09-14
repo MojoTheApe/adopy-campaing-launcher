@@ -1887,7 +1887,13 @@ class TurnOffResult:
     level: str
     object_id: str
     name: str = ""
-    state: str = "failed"     # off | already_off | failed
+    #: off | already_off | failed | unconfirmed
+    #:
+    #: `failed` — нажали, и тумблер НЕ стал выключенным: это установленный
+    #: факт. `unconfirmed` — попытка оборвалась, и как оно там на самом деле,
+    #: мы не знаем: выключиться могло. Выдавать второе за первое нельзя ровно
+    #: по той же причине, по какой ниже не выдаётся «Processing» за «Off».
+    state: str = "failed"
     #: Что страница написала о доставке в момент подтверждения. Словами Meta:
     #: сразу после выключения она пишет «Processing», а не «Off», и выдавать
     #: одно за другое нельзя.
@@ -1983,10 +1989,36 @@ def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
 
     По той же причине здесь же проставляются «кто» и «чем»: это единственное
     место, через которое проходит любой исход, включая отказ.
+
+    «Любой исход» включает и падение. `_turn_off` возвращает результат на
+    двадцати путях, но не на всех: маршрут в `src/web/app.py` прямо ловит
+    `Exception` и отвечает «Could not reach the account» — значит исключение
+    здесь предусмотрено, и раньше в этом случае в журнале не оставалось
+    ничего. Действие на живом кабинете было, следа нет.
+
+    Для журнала, который обязан отличать неудавшуюся попытку от
+    подтверждённого изменения, это дыра в середине: самая неудавшаяся попытка
+    из всех не записывалась. Пишем и её — и пробрасываем исключение дальше,
+    потому что решать, что ответить человеку, не здесь.
+
+    Пишем её как `unconfirmed`, а не `failed`. `failed` означает «нажали, и
+    тумблер не стал выключенным» — установленный факт. Оборванная попытка
+    такого факта не даёт: объявление могло и выключиться, просто подтвердить
+    это не успели. Записать «не удалось» значило бы соврать в ту сторону, из
+    которой потом делают вывод «значит, оно ещё крутится».
     """
-    out = _turn_off(account, level, object_id, parent_id=parent_id,
-                    expected_name=expected_name, date_from=date_from, date_to=date_to)
-    out.requester = (requester or "").strip()
+    who = (requester or "").strip()
+    try:
+        out = _turn_off(account, level, object_id, parent_id=parent_id,
+                        expected_name=expected_name, date_from=date_from, date_to=date_to)
+    except Exception as exc:
+        _record_turn_off(TurnOffResult(
+            account=account, level=level, object_id=object_id, name=expected_name,
+            state="unconfirmed", error=f"{type(exc).__name__}: {exc}"[:300],
+            at=_now(), requester=who, route="rpa",
+        ))
+        raise
+    out.requester = who
     out.route = "rpa"
     if out.state in ("off", "already_off"):
         # Не «наверное выключилось»: сюда приходят только подтверждённые
