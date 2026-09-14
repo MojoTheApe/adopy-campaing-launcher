@@ -10,6 +10,11 @@ from typing import Any
 from playwright.sync_api import Frame, Page
 
 from src.fb_ads_rpa import run_telemetry as _telemetry
+
+#: След последней попытки загрузить креатив — что шаг видел и делал.
+#: Читается тем, кто пишет отказ в телеметрию: без него `ad_creative_upload`
+#: приходил пустым, и шесть отказов подряд 14.09 не дали ни одной зацепки.
+_LAST_UPLOAD_DIAG: dict = {}
 from src.fb_ads_rpa.config import get_reuse_library_media
 
 PageLike = Page | Frame
@@ -2793,7 +2798,11 @@ def run_recorded_campaign_flow(
         if reached_ad_level:
             try:
                 if not upload_ad_creative_with_retry(page, creative_type, creative_path, edit_url=ad_edit_url):
-                    _shot("fail_ad_creative_upload")
+                    # След попытки уходит в телеметрию вместе с отказом.
+                    # Раньше здесь было пусто, и «не загрузился» ничем не
+                    # отличалось от «не нашёл кнопку» — шесть отказов 14.09
+                    # не дали ни одной зацепки, и разбор свёлся к догадкам.
+                    _shot("fail_ad_creative_upload", dict(_LAST_UPLOAD_DIAG))
                     ad_level_fails.append("ad_creative_upload")
                 else:
                     creative_uploaded = True
@@ -4627,6 +4636,41 @@ def upload_ad_creative(
           .filter(e => e.offsetParent !== null && e.children.length === 0)
           .some(e => (e.textContent || '').replace(/\s+/g, ' ').trim() === name)
     """
+    # ── след попытки ─────────────────────────────────────────────────────
+    #
+    # 14.09: шесть отказов подряд на двух аккаунтах, и по телеметрии о них
+    # известно ровно ничего — шаг возвращал False без единого слова. Три
+    # разбора подряд свелись к догадкам по посмертным снимкам, и все три
+    # оказались неверны (переименованные категории, Advantage+, вес файла).
+    #
+    # По снимкам установлено твёрдо только это: `input[type=file]` на странице
+    # нет, «Uploading» нет, индикатора нет — то есть загрузка не начиналась.
+    # Почему окно медиа оказалось не в том состоянии, посмертный снимок не
+    # говорит: он снят ПОСЛЕ всех трёх попыток, когда след уже простыл.
+    #
+    # Поэтому шаг теперь записывает, что видел и делал на каждом шагу. Это не
+    # меняет поведения — только перестаёт молчать там, где принимается решение.
+    _diag: dict = {
+        "file": Path(creative_path).name,
+        "size_mb": 0.0,
+        "attempts": [],
+    }
+    try:
+        _diag["size_mb"] = round(Path(creative_path).stat().st_size / (1024 * 1024), 1)
+    except Exception:
+        pass
+
+    def _remember(**kw) -> None:
+        _diag["attempts"].append(kw)
+        global _LAST_UPLOAD_DIAG
+        _LAST_UPLOAD_DIAG = _diag
+        try:
+            Path("output/debug_creative_upload.txt").write_text(
+                json.dumps(_diag, ensure_ascii=False, indent=1), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
     landed = False
     for _attempt in range(3):
         # Hand the file straight to the hidden <input type=file> instead of
@@ -4637,17 +4681,22 @@ def upload_ad_creative(
         # the click never lands. set_input_files needs no click at all, so the
         # control's shape stops mattering. Clicking is kept as a fallback for
         # renders that only expose a chooser.
+        _step: dict = {"n": _attempt + 1}
         try:
             # 1) If a file input is already mounted, feed it — no click, so the
             #    control's shape cannot matter.
             fed = False
-            for h in page.query_selector_all("input[type=file]"):
+            _inputs = page.query_selector_all("input[type=file]")
+            _step["file_inputs"] = len(_inputs)
+            for h in _inputs:
                 try:
                     h.set_input_files(creative_path)
                     fed = True
                     break
-                except Exception:
+                except Exception as exc:
+                    _step["set_files_error"] = f"{type(exc).__name__}: {exc}"[:120]
                     continue
+            _step["fed"] = fed
 
             # 2) Otherwise click Upload INSIDE expect_file_chooser. It must be
             #    inside: the button opens a real OS file dialog, and a bare
@@ -4658,17 +4707,26 @@ def upload_ad_creative(
             #    and that is why uploads failed from 24.08 onward.
             if not fed:
                 with page.expect_file_chooser(timeout=25000) as fc_info:
-                    if not _click_xpath(
+                    _clicked = _click_xpath(
                         page,
                         "//*[@role='button' or self::button]"
                         "[contains(normalize-space(.), 'Upload')]",
-                    ):
+                    )
+                    _step["upload_xpath_clicked"] = _clicked
+                    if not _clicked:
                         upload_btn.first.click(timeout=5000)
+                        _step["upload_fallback_clicked"] = True
                 fc_info.value.set_files(creative_path)
-        except Exception:
+                _step["chooser"] = True
+        except Exception as exc:
+            # Здесь и была слепота: исключение глоталось молча, и отличить
+            # «кнопки нет» от «окно выбора файла не открылось» было нечем.
+            _step["error"] = f"{type(exc).__name__}: {exc}"[:160]
+            _remember(**_step)
             _sleep_h(1.5)
             continue
         # Give the grid time to show the new tile before judging.
+        _ticks = 0
         for _ in range(30):
             try:
                 if page.evaluate(_tile_present_js, _upload_name):
@@ -4676,7 +4734,19 @@ def upload_ad_creative(
                     break
             except Exception:
                 pass
+            _ticks += 1
             _sleep_h(1.0)
+        # Что показывала страница, пока мы ждали плитку: шла ли загрузка
+        # вообще. 10.09 было доказано, что «медленно» и «не начиналось» —
+        # разные вещи, и по одному лишь отсутствию плитки их не различить.
+        _step["waited_s"] = _ticks
+        _step["tile"] = landed
+        try:
+            _step["uploading"] = _upload_in_progress(page)
+            _step["progress"] = _upload_progress(page)
+        except Exception:
+            pass
+        _remember(**_step)
         if landed:
             break
     if not landed:
