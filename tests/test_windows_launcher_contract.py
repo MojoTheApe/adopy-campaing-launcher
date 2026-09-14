@@ -160,6 +160,40 @@ def test_bootstrap_scenarios_on_windows() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_nothing_a_buyer_runs_can_reopen_itself_without_a_limit() -> None:
+    """Terminal windows that pile up are the symptom; the cause is always the
+    same shape — a file that reopens itself with no way to notice it is the
+    second time.
+
+    The bootstrap once reopened itself to pick up a freshly installed Python, on
+    the belief that a new window gets a fresh environment. It does not: `start`
+    hands the child a copy of the parent's environment block, stale PATH and all.
+    So the new window failed the same check, installed again, reopened again, and
+    a campaign manager sat watching windows multiply with nothing telling them
+    what was wrong. The bootstrap no longer reopens at all.
+
+    `install_acl.bat` still reopens once after rolling back an unfinished update,
+    and that one is legitimate — the batch file itself must come from the
+    restored checkout. What makes it safe is not that recovery happens to clear
+    its marker: that is a property of a different file, which can change without
+    anyone here noticing. It is safe because the second pass is told it is the
+    second pass, and stops.
+    """
+    boot = _text("Install ACL.bat")
+    assert 'start "" "%~f0"' not in boot, "the bootstrap reopens itself again"
+    assert "NEEDRESTART" not in boot
+
+    installer = _text("install_acl.bat")
+    reopen = installer.index('start "" "%~f0"')
+    # The marker travels with the relaunch...
+    assert installer[reopen:reopen + 40].startswith('start "" "%~f0" recovered')
+    # ...and the second pass is stopped by it, before it can reopen anything.
+    guard = installer.index('if /i "%~1"=="recovered"')
+    assert guard < reopen, "the guard must be read before the window is opened"
+    stop = installer.index("exit /b 1", guard)
+    assert stop < reopen, "the guarded branch must end the run, not fall through"
+
+
 def test_a_green_install_opens_the_dashboard_itself() -> None:
     """"Start it with start_dashboard.bat" ended the install one step short.
 
