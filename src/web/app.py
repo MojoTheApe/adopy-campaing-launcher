@@ -666,6 +666,39 @@ def _build_account_map_view(
             ] + unknown_sums,
         })
 
+    # ── Одна таблица вместо двух (решение владельца 10.09, acl-356) ────
+    # Countries overview сливается в карту: каждая строка несёт книжные
+    # тоталы страны (my_totals — те же, что показывал overview), а страны
+    # с деньгами в книге, но БЕЗ размещённых аккаунтов, попадают в список
+    # «виртуальными» строками — их ноль аккаунтов подсвечивается: деньги
+    # идут, а покрытия картой нет.
+    book = {
+        (c.get("country") or "").strip().casefold(): (c.get("my_totals") or {})
+        for c in (report or {}).get("countries", [])
+    }
+    placed_keys = {(c["country"] or "").strip().casefold() for c in countries}
+    for mc in countries:
+        mc["book"] = book.get((mc["country"] or "").strip().casefold(), {})
+    for c in (report or {}).get("countries", []):
+        name = (c.get("country") or "").strip()
+        if not name or name.casefold() in placed_keys:
+            continue
+        if not float(c.get("my_spend") or 0):
+            continue
+        countries.append({
+            "country": name,
+            "key": "",
+            "virtual": True,
+            "rows": [],
+            "spend": 0, "leads": 0, "deposits": 0,
+            "live_read": 0, "live_sums": [],
+            "book": c.get("my_totals") or {},
+        })
+    # Порядок как был у overview: деньги сверху, дальше по алфавиту.
+    countries.sort(
+        key=lambda mc: (-float((mc.get("book") or {}).get("spend") or 0), (mc["country"] or "").lower())
+    )
+
     available = [
         {"account": label, "assets": account_links.values_for(label, "asset")}
         for label in account_links.available_accounts(all_known)
