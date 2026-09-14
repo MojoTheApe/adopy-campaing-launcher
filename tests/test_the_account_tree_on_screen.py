@@ -342,7 +342,18 @@ def test_nothing_here_can_turn_anything_on():
     assert "/account-spend/turn-off" in block, "выключать нечем"
     for forbidden in ("turn-on", "turn_on", "/account-spend/read"):
         assert forbidden not in block, f"в показе есть {forbidden}"
-    assert block.count("fetch(") == 1, "второй запрос наружу — какой?"
+
+    # Запросов наружу ровно два, и оба названы поимённо. Счёт остаётся
+    # жёстким: он и нужен затем, чтобы третий нельзя было добавить молча.
+    assert block.count("fetch(") == 2, "третий запрос наружу — какой?"
+    assert "/account-spend/turn-off-history?account=" in block, "журнал не читается"
+
+    # Второй — журнал, и он обязан быть читающим. Без `method` fetch делает
+    # GET; появление метода здесь означало бы, что чтение записи научилось
+    # что-то менять, а это ровно та дверь, которую закрывает вся проверка.
+    hist = block[block.index("fetch('/account-spend/turn-off-history"):]
+    hist = hist[: hist.index(".then(")]
+    assert "method" not in hist, "чтение журнала перестало быть чтением"
 
 
 def test_only_a_switched_on_row_is_a_button():
@@ -363,7 +374,10 @@ def test_the_listeners_are_the_arrows_and_the_off_button():
     assert block.count("document.addEventListener('click'") == 1, (
         "второй общий обработчик нажатий — что он делает?"
     )
-    assert block.count("addEventListener") == 3, "появился четвёртый обработчик"
+    # Четвёртый — заголовок журнала: он только сворачивает и разворачивает
+    # свой же блок. Назван здесь поимённо, чтобы пятый снова стал заметен.
+    assert block.count("head.addEventListener('click'") == 1, "журнал слушает не одно нажатие"
+    assert block.count("addEventListener") == 4, "появился пятый обработчик"
 
 
 # ── покрывают ли строки спенд аккаунта ────────────────────────────────────

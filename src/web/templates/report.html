@@ -1884,6 +1884,36 @@
     .amap-tree-sw.arming { flex-basis: 5rem; border-color: var(--danger); color: var(--danger); }
     .amap-tree-sw.failed { border-style: dashed; }
     button.amap-tree-sw:disabled { opacity: 0.6; cursor: default; }
+    /* Журнал изменений — под деревом и свёрнут. Он отвечает на вопрос,
+       который возникает реже, чем «что там сейчас», и не должен отбирать
+       место у строк, ради которых дерево открывают. */
+    .amap-tree-log { margin-top: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.35rem; }
+    .amap-tree-log-head {
+      background: none; border: 0; padding: 0.1rem 0; cursor: pointer;
+      font: inherit; font-size: 0.73rem; color: var(--muted);
+      display: flex; align-items: center; gap: 0.35rem;
+    }
+    .amap-tree-log-head:hover { color: var(--accent); }
+    .amap-tree-log-head::before {
+      content: '▸'; display: inline-block; transition: transform 0.12s;
+    }
+    .amap-tree-log-head.open::before { transform: rotate(90deg); }
+    .amap-tree-log-body { padding-top: 0.3rem; }
+    .amap-tree-log-line {
+      display: flex; gap: 0.5rem; align-items: baseline;
+      font-size: 0.73rem; padding: 0.15rem 0; line-height: 1.4;
+    }
+    .amap-tree-log-when {
+      flex: 0 0 3.4rem; color: var(--muted); font-variant-numeric: tabular-nums;
+    }
+    .amap-tree-log-what {
+      flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    /* Отказ не красится успехом — той же рукой, что и кнопка. */
+    .amap-tree-log-said { flex: 0 0 auto; color: var(--muted); }
+    .amap-tree-log-said.bad { color: var(--danger); }
+    .amap-tree-log-who { flex: 0 0 auto; color: var(--muted); opacity: 0.75; }
+    .amap-tree-log-none { font-size: 0.73rem; color: var(--muted); }
     /* Оговорка, а не отказ: строки настоящие, просто их меньше, чем денег. */
     .amap-tree-note {
       color: var(--warn, var(--muted)); font-size: 0.73rem;
@@ -5978,6 +6008,8 @@ function amapPaintTree(row, s) {
     box.appendChild(err);
   }
 
+  amapLogAttach(box, row);
+
   td.appendChild(box); tr.appendChild(td);
   row.parentNode.insertBefore(tr, row.nextSibling);
 
@@ -5993,6 +6025,128 @@ function amapPaintTree(row, s) {
     row.classList.toggle('amap-tree-open', !block.hidden);
     row.classList.toggle('amap-open', !block.hidden);
   });
+}
+
+/* ── Журнал: что дешборд менял в этом кабинете ───────────────────────────
+   Выключение — единственное, чем ACL сам меняет живой кабинет, и оно писалось
+   в журнал с первого живого нажатия. Прочитать журнал было негде: файл рос, а
+   на экране от него не было ничего. Запись, которую никто не может открыть,
+   не отвечает на «почему это выключилось вчера» — она лишь позволяет сказать,
+   что ответ где-то есть.
+
+   Журнал стоит внизу дерева и свёрнут. Вопрос «что я только что сделал»
+   возникает много чаще, чем «что было неделю назад», и первый ответ — сами
+   строки дерева; журнал нужен, когда их уже недостаточно.
+
+   Отказы показываются наравне с удавшимся. Попытка, которая не сработала, —
+   это тоже то, что человек делал с живым аккаунтом, и журнал, в котором всё
+   всегда получалось, хуже отсутствующего. */
+function amapRowAccount(row) {
+  var live = row && row.querySelector('.amap-live');
+  return (live && live.dataset.account) || '';
+}
+
+function amapLogWhen(at) {
+  /* Сегодняшнее — часами: в журнале своей же работы дата сегодняшнего дня
+     занимает место и ничего не добавляет. Вчерашнее — с датой. */
+  var s = String(at || '');
+  var today = new Date().toISOString().slice(0, 10);
+  if (s.slice(0, 10) === today) return s.slice(11, 16);
+  return s.slice(0, 16).replace('T', ' ');
+}
+
+function amapLogLine(e) {
+  var line = document.createElement('div');
+  line.className = 'amap-tree-log-line';
+
+  var when = document.createElement('span');
+  when.className = 'amap-tree-log-when';
+  when.textContent = amapLogWhen(e.at);
+  when.title = e.at || '';
+  line.appendChild(when);
+
+  var what = document.createElement('span');
+  what.className = 'amap-tree-log-what';
+  what.textContent = (e.level || 'item') + ' ' + (e.name || e.object_id || '');
+  line.appendChild(what);
+
+  /* Дословно, как и кнопка: «нажали, но тумблер не стал выключенным» —
+     это не успех, и красить его в успех нельзя. */
+  var said = document.createElement('span');
+  var ok = e.state === 'off' || e.state === 'already_off';
+  said.className = 'amap-tree-log-said' + (ok ? '' : ' bad');
+  said.textContent = e.state === 'off' ? 'turned off'
+    : e.state === 'already_off' ? 'was already off'
+    : ('did not turn off' + (e.error ? ' — ' + e.error : ''));
+  if (ok && e.how) said.title = e.how;
+  line.appendChild(said);
+
+  /* Кто и чем. Пустое не выдумываем: журнал без имени честнее журнала с
+     подставленным. */
+  var tail = [e.requester, e.route].filter(Boolean).join(' · ');
+  if (tail) {
+    var who = document.createElement('span');
+    who.className = 'amap-tree-log-who';
+    who.textContent = tail;
+    line.appendChild(who);
+  }
+  return line;
+}
+
+function amapLogLoad(block, account) {
+  var body = block.querySelector('.amap-tree-log-body');
+  body.textContent = 'reading…';
+  fetch('/account-spend/turn-off-history?account=' + encodeURIComponent(account),
+        { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      var rows = (j && j.entries) || [];
+      body.textContent = '';
+      if (!rows.length) {
+        var none = document.createElement('div');
+        none.className = 'amap-tree-log-none';
+        none.textContent = 'Nothing has been changed in this account from here.';
+        body.appendChild(none);
+        return;
+      }
+      rows.forEach(function (e) { body.appendChild(amapLogLine(e)); });
+    })
+    .catch(function () {
+      body.textContent = 'The record could not be read.';
+    });
+}
+
+function amapLogAttach(box, row) {
+  var account = amapRowAccount(row);
+  if (!account) return;
+
+  var block = document.createElement('div');
+  block.className = 'amap-tree-log';
+
+  var head = document.createElement('button');
+  head.type = 'button';
+  head.className = 'amap-tree-log-head';
+  head.textContent = 'What was changed here';
+
+  var body = document.createElement('div');
+  body.className = 'amap-tree-log-body';
+  /* Раскрытое переживает перечитывание дерева — как и раскрытые кампании.
+     Иначе каждое нажатие Read закрывало бы журнал, который человек открыл
+     именно чтобы посмотреть на последствия нажатия. */
+  body.hidden = row.dataset.logOpen !== '1';
+  head.classList.toggle('open', !body.hidden);
+
+  head.addEventListener('click', function () {
+    body.hidden = !body.hidden;
+    head.classList.toggle('open', !body.hidden);
+    row.dataset.logOpen = body.hidden ? '' : '1';
+    if (!body.hidden) amapLogLoad(block, account);
+  });
+
+  block.appendChild(head);
+  block.appendChild(body);
+  box.appendChild(block);
+  if (!body.hidden) amapLogLoad(block, account);
 }
 
 /* ── Выключить строку ────────────────────────────────────────────────────
@@ -6066,6 +6220,13 @@ function amapTurnOffDo(btn) {
         amapTurnOffSaid(btn, res.state, res.how || '');
       } else {
         amapTurnOffSaid(btn, 'failed', res.error || 'did not turn off');
+      }
+      /* Если журнал открыт — перечитать. Смотреть в раскрытую запись, где нет
+         того, что только что сделано, хуже, чем не открывать её вовсе.
+         Отказ дописывается наравне с удавшимся: он тоже случился. */
+      var block = row && row.querySelector('.amap-tree-log');
+      if (block && !block.querySelector('.amap-tree-log-body').hidden) {
+        amapLogLoad(block, account);
       }
     })
     .catch(function (e) { amapTurnOffSaid(btn, 'failed', String((e && e.message) || e)); });

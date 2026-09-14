@@ -1838,8 +1838,24 @@ def _mark_object_off(account: str, object_id: str, delivery: str = "") -> int:
     return touched
 
 
-def turn_off_history(limit: int = 50) -> list[dict]:
-    """Последние выключения — новыми вперёд. Для дешборда и для разбора."""
+def _same_account(a: str, b: str) -> bool:
+    """Одна и та же подпись аккаунта, записанная по-разному.
+
+    В журнал попадает то, что прислала страница, а спрашивают его по подписи
+    из карты. Расхождение в регистре или лишнем пробеле не должно прятать от
+    человека его собственное действие.
+    """
+    return " ".join((a or "").split()).casefold() == " ".join((b or "").split()).casefold()
+
+
+def turn_off_history(limit: int = 50, account: str = "") -> list[dict]:
+    """Последние выключения — новыми вперёд. Для дешборда и для разбора.
+
+    `account` отбирает записи одного кабинета: журнал общий на машину, а
+    дерево показывает один аккаунт, и чужая строка в нём читалась бы как своя.
+    Отбор идёт ДО счёта, иначе десять действий на соседнем аккаунте вытеснят
+    единственное нужное и человек решит, что его нажатие не записалось.
+    """
     try:
         lines = _turn_off_log().read_text(encoding="utf-8").splitlines()
     except Exception:
@@ -1850,9 +1866,14 @@ def turn_off_history(limit: int = 50) -> list[dict]:
         if not line:
             continue
         try:
-            out.append(json.loads(line))
+            row = json.loads(line)
         except Exception:
             continue
+        if not isinstance(row, dict):
+            continue
+        if account and not _same_account(row.get("account", ""), account):
+            continue
+        out.append(row)
         if len(out) >= limit:
             break
     return out
@@ -1874,6 +1895,14 @@ class TurnOffResult:
     error: str = ""
     how: str = ""             # чем подтверждено — чтобы знать, чему верить
     at: str = ""
+    #: Кто нажал. На машине байера это он сам, но «кто-то с этой машины» —
+    #: не ответ на вопрос «кто остановил кампанию»: у карты десять хозяев, а
+    #: разбирают случившееся потом и не за своим столом.
+    requester: str = ""
+    #: Чем сделано. Сегодня всегда `rpa`, и поле выглядит лишним — но пустым
+    #: по умолчанию оно остаётся намеренно: если однажды появится второй путь
+    #: и забудет представиться, журнал промолчит, а не соврёт, что это был RPA.
+    route: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -1945,14 +1974,20 @@ _SWITCH_ACTION_JS = """args => {
 
 @serialized_browser
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
-             expected_name: str = "", date_from: str = "", date_to: str = "") -> "TurnOffResult":
+             expected_name: str = "", date_from: str = "", date_to: str = "",
+             requester: str = "") -> "TurnOffResult":
     """Выключить и записать, что вышло.
 
     Запись стоит здесь, а не внутри: у `_turn_off` двадцать путей выхода, и
     расставленные по ним вызовы рано или поздно разойдутся — один забудут.
+
+    По той же причине здесь же проставляются «кто» и «чем»: это единственное
+    место, через которое проходит любой исход, включая отказ.
     """
     out = _turn_off(account, level, object_id, parent_id=parent_id,
                     expected_name=expected_name, date_from=date_from, date_to=date_to)
+    out.requester = (requester or "").strip()
+    out.route = "rpa"
     if out.state in ("off", "already_off"):
         # Не «наверное выключилось»: сюда приходят только подтверждённые
         # исходы, и сохранённое дерево обязано их отражать — иначе оно врёт
