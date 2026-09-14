@@ -2212,10 +2212,20 @@ async def api_accounts_overview() -> JSONResponse:
         }
     )
 
+    # Спрятанное помечается, а не вырезается: счётчик спрятанных и кнопка
+    # «показать» должны на что-то опираться, а список, молча глотающий
+    # строки, хуже длинного списка.
+    from src.web import hidden_accounts as _hidden
+
+    hidden_keys = _hidden.load()
+    for acc in accounts:
+        acc["hidden"] = _hidden.is_hidden(acc.get("label", ""), hidden_keys)
+
     return JSONResponse({
         "ok": True,
         "map_path": map_path,
         "accounts": accounts,
+        "hidden_count": sum(1 for a in accounts if a["hidden"]),
         "suggestions": suggestions,
         # folder_id comes off the profile's own path, so the operator never
         # has to find or type it.
@@ -2379,6 +2389,41 @@ async def creative_file(path: str = "") -> Response:
     except AmbiguousCreativeError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
     return FileResponse(resolved)
+
+
+@app.post("/api/accounts-hidden")
+async def api_accounts_hidden(request: Request) -> JSONResponse:
+    """Убрать аккаунт с глаз на этой машине или вернуть его обратно.
+
+    Настройка вида и только она: аккаунт остаётся в общей таблице, сохраняет
+    свои цифры и работает везде, где работал. Строки, которые прячут, —
+    именно те, что удалить нельзя: они пришли из таблицы, а на машине про
+    них ничего не записано, и удалять попросту нечего.
+
+    Body JSON: {label, hidden}
+    """
+    from src.web import hidden_accounts as _hidden
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Expected JSON"}, status_code=400)
+
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "Expected a JSON object"}, status_code=400)
+    label = body.get("label")
+    hide = body.get("hidden", True)
+    if not isinstance(label, str) or not label.strip():
+        return JSONResponse({"ok": False, "error": "label is required"}, status_code=400)
+    if not isinstance(hide, bool):
+        return JSONResponse({"ok": False, "error": "hidden must be a boolean"}, status_code=400)
+    label = label.strip()
+    try:
+        keys = _hidden.set_hidden(label, hide)
+    except OSError:
+        return JSONResponse({"ok": False, "error": "Could not save this machine's hidden accounts. Try again."}, status_code=500)
+    return JSONResponse({"ok": True, "label": label, "hidden": hide, "hidden_count": len(keys)})
+
 
 
 @app.post("/account-map-patch")

@@ -2294,6 +2294,14 @@
     }
     .acc-bulk.on { display: flex; }
 
+    /* Спрятанное видно счётчиком: список, молча глотающий строки, хуже
+       длинного списка. */
+    .acc-hidden-bar {
+      display: flex; align-items: center; gap: var(--space-sm);
+      margin: 0 0 var(--space-sm);
+      color: var(--muted); font-size: 0.8rem;
+    }
+
     @media (max-width: 860px) {
       .acc-form { grid-template-columns: 1fr; }
       .acc-manual.open { grid-template-columns: 1fr; }
@@ -10064,7 +10072,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
 // профиля. Ручной ввод остаётся, но убран с глаз: он нужен, только когда
 // вывести не удалось.
 (function () {
-  var loaded = false, openProfiles = [], knownLabels = [];
+  var loaded = false, openProfiles = [], knownLabels = [], showHidden = false, loading = false;
 
   function esc(v) {
     return String(v == null ? '' : v)
@@ -10219,20 +10227,36 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
             + 'open the profile for that account and it will appear in the list.</p>';
     }
 
+    /* Спрятанные не показываем, но и не теряем: счётчик и «показать» рядом.
+       Список, молча глотающий строки, хуже длинного списка. */
+    var hiddenCount = accs.filter(function (a) { return a.hidden; }).length;
+    if (hiddenCount) {
+      html += '<p class="acc-hidden-bar">'
+        + '<span>' + hiddenCount + (hiddenCount === 1 ? ' account hidden' : ' accounts hidden')
+        + ' on this machine</span> '
+        + '<button type="button" class="acc-btn" id="ac-show-hidden">'
+        + (showHidden ? 'hide them again' : 'show them') + '</button></p>';
+    }
+    var shown = showHidden ? accs : accs.filter(function (a) { return !a.hidden; });
+
     html += '<table class="acc-table"><thead><tr>'
       + '<th class="col-pick"><input type="checkbox" id="ac-check-all" title="Select everything that can be removed"></th>'
       + '<th>Account</th><th>Country</th><th>Ad account</th><th>Profile</th><th class="col-act"></th>'
       + '</tr></thead><tbody>';
 
-    accs.forEach(function (a) {
+    shown.forEach(function (a) {
       var removable = a.connected || a.local_only;
       var pill = a.connected
         ? '<span class="acc-pill ok">connected</span>'
         : '<span class="acc-pill todo">missing: ' + esc(a.missing.join(', ')) + '</span>';
       var local = a.local_only ? ' <span class="acc-pill local">only here</span>' : '';
       html += '<tr data-label="' + esc(a.label) + '">'
-        + '<td class="col-pick">' + (removable
-            ? '<input type="checkbox" class="ac-check" aria-label="select ' + esc(a.label) + '">' : '') + '</td>'
+        /* Галочка у каждой строки: выбирают и убирают одинаково, а
+           насколько аккаунт настроен — не дело того, кто наводит порядок
+           в списке. Что произойдёт под кнопкой, решается по строке. */
+        + '<td class="col-pick">'
+        + '<input type="checkbox" class="ac-check" data-removable="' + (removable ? '1' : '0')
+        + '" aria-label="select ' + esc(a.label) + '">' + '</td>'
         + '<td><div class="acc-name">' + esc(a.label) + '</div>'
         + '<div class="acc-meta">' + pill + local + '</div></td>'
         + '<td>' + countryCell(a) + '</td>'
@@ -10242,7 +10266,26 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
         + '<td><select class="ac-prof" style="max-width:15rem">'
         + profileOptions(a.profile_id, a.suggested_profile) + '</select></td>'
         + '<td class="col-act"><button type="button" class="acc-btn ac-save">Save</button>'
-        + (removable ? ' <button type="button" class="acc-btn danger ac-drop">Remove</button>' : '')
+        /* Удалить можно только то, что здесь записано. Строка из общей
+           таблицы, про которую на машине ничего нет, удалению не поддаётся —
+           удалять нечего, а вычеркнуть её из таблицы дешборд не вправе: она
+           вернётся на следующем обновлении. Поэтому не «Remove», а «Hide», и
+           подсказка объясняет разницу — прежде на этом месте была пустота, и
+           она читалась как сломанная кнопка. */
+        /* Кнопка одна и называется одинаково. Под ней разное, и это
+           честно: у настроенного аккаунта есть локальная запись, её и
+           убираем; у пришедшего из общей таблицы её нет — убирать нечего,
+           поэтому строка уходит с глаз. Результат для человека один: её
+           больше нет в списке. Подсказка говорит, что именно случится. */
+        + (a.hidden
+            ? ' <button type="button" class="acc-btn ac-hide" data-back="1"'
+              + ' title="Bring it back into the list">Unhide</button>'
+            : ' <button type="button" class="acc-btn danger ac-drop" data-removable="'
+              + (removable ? '1' : '0') + '" title="'
+              + (removable
+                  ? 'Drops this machine&#39;s row for the account. The shared sheet keeps it.'
+                  : 'Comes from the shared sheet — there is no local row to drop, so it is put out of sight here.')
+              + '">Remove</button>')
         + ' <span class="ac-row-msg acc-meta"></span></td>'
         + '</tr>';
     });
@@ -10274,11 +10317,13 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
   }
 
   function load(force) {
-    if (loaded && !force) return;
+    if (loading || (loaded && !force)) return;
+    loading = true;
     var box = el('ac-list'); if (box) box.textContent = 'Loading…';
     fetch('/api/accounts-overview').then(function (r) { return r.json(); })
-      .then(function (d) { loaded = true; render(d); })
+      .then(function (d) { loading = false; loaded = true; render(d); })
       .catch(function (e) {
+        loading = false;
         if (box) box.innerHTML = '<p style="color:var(--bad)">' + esc(e) + '</p>';
       });
   }
@@ -10315,10 +10360,17 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
       });
   }
 
+  /* Возвращается не только подпись, но и есть ли у строки запись на этой
+     машине: от этого зависит, что с ней делать, и решать это должен код, а
+     не человек, выбирающий строки вперемешку. */
   function selected() {
     return [].slice.call(document.querySelectorAll('#ac-list .ac-check:checked'))
-      .map(function (c) { return c.closest('tr').getAttribute('data-label'); })
-      .filter(Boolean);
+      .map(function (c) {
+        var row = c.closest('tr');
+        return { label: row && row.getAttribute('data-label'),
+                 removable: c.dataset.removable === '1' };
+      })
+      .filter(function (x) { return x.label; });
   }
 
   function refreshBulk() {
@@ -10329,47 +10381,115 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     label.textContent = 'Selected: ' + n;
   }
 
-  function removeMany(labels) {
-    if (!labels.length) return;
+  /* Группой — то же, что по одной: у кого есть запись на машине, у того
+     она убирается; остальные уходят с глаз. Выбирают их вперемешку, и
+     разбираться, какой строке что положено, человек не должен. */
+  function removeMany(picked) {
+    if (!picked.length) return;
+    var labels = picked.map(function (x) { return x.label; });
     var list = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ' and ' + (labels.length - 8) + ' more' : '');
-    if (!window.confirm('Remove ' + labels.length + ' account(s) from the map of THIS machine?'
+    var mapped = picked.filter(function (x) { return x.removable; }).map(function (x) { return x.label; });
+    var sheet = picked.filter(function (x) { return !x.removable; }).map(function (x) { return x.label; });
+    if (!window.confirm('Take ' + labels.length + ' account(s) out of this list?'
         + String.fromCharCode(10, 10) + list + String.fromCharCode(10, 10)
-        + 'Nothing in the shared sheet changes.')) return;
+        + (mapped.length ? mapped.length + ' had a row on this machine — it is dropped.' + String.fromCharCode(10) : '')
+        + (sheet.length ? sheet.length + ' came from the shared sheet with nothing stored here — '
+            + 'they are put out of sight and can be brought back.' + String.fromCharCode(10) : '')
+        + String.fromCharCode(10) + 'Nothing in the shared sheet changes.')) return;
+
     var btn = el('ac-bulk-drop');
     if (btn) btn.disabled = true;
-    say('Removing ' + labels.length + '…');
-    fetch('/account-map-remove', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account_names: labels })
-    }).then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (btn) btn.disabled = false;
-        if (!d.ok) { say(d.error || 'failed', 'err'); return; }
-        var m = 'Removed: ' + (d.removed || []).length;
-        if ((d.missing || []).length) m += ' · not found: ' + d.missing.join(', ');
-        say(m, 'ok'); load(true);
-      })
-      .catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); });
+    say('Working through ' + labels.length + '…');
+
+    var jobs = [];
+    if (mapped.length) {
+      jobs.push(fetch('/account-map-remove', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_names: mapped })
+      }).then(function (r) { return r.json(); }));
+    }
+    sheet.forEach(function (label) {
+      jobs.push(fetch('/api/accounts-hidden', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: label, hidden: true })
+      }).then(function (r) { return r.json(); }));
+    });
+
+    Promise.all(jobs).then(function (all) {
+      if (btn) btn.disabled = false;
+      var bad = all.filter(function (d) { return !d || !d.ok; });
+      if (bad.length) { say((bad[0] && bad[0].error) || 'failed', 'err'); load(true); return; }
+      var parts = [];
+      if (mapped.length) parts.push('removed: ' + mapped.length);
+      if (sheet.length) parts.push('out of sight: ' + sheet.length);
+      say(parts.join(' · '), 'ok');
+      load(true);
+    }).catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); load(true); });
   }
 
-  function drop(btn) {
+  /* Спрятать — не удалить. Удалять тут нечего: строка пришла из общей
+     таблицы, и на этой машине про неё не записано ничего. Прячем только
+     вид, и только на этой машине; в таблице аккаунт остаётся со всеми
+     своими цифрами и работает везде, где работал. */
+  function hide(btn) {
     var row = btn.closest('tr'); if (!row) return;
     var label = row.getAttribute('data-label');
-    if (!window.confirm('Remove "' + label + '" from the map of THIS machine?'
-        + String.fromCharCode(10, 10)
-        + 'The account stays in the shared sheet with all its history — this '
-        + 'computer simply stops knowing how to reach it.')) return;
+    var back = btn.textContent.trim() === 'Unhide';
     btn.disabled = true;
-    fetch('/account-map-remove', {
+    fetch('/api/accounts-hidden', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account_name: label })
+      body: JSON.stringify({ label: label, hidden: !back })
     }).then(function (r) { return r.json(); })
       .then(function (d) {
         btn.disabled = false;
         if (!d.ok) { say(d.error || 'failed', 'err'); return; }
-        say('Removed: ' + label, 'ok'); load(true);
+        say(back ? ('Back in the list: ' + label) : ('Hidden here: ' + label), 'ok');
+        load(true);
       })
       .catch(function (e) { btn.disabled = false; say(String(e), 'err'); });
+  }
+
+  /* Одна кнопка, два исхода — и выбирает их строка, а не человек.
+     У настроенного аккаунта есть запись на этой машине: её и убираем. У
+     пришедшего из общей таблицы её нет, убирать нечего — строка уходит с
+     глаз. Для человека результат один: аккаунта больше нет в списке, и
+     общая таблица не тронута ни в том, ни в другом случае. */
+  function drop(btn) {
+    var row = btn.closest('tr'); if (!row) return;
+    var label = row.getAttribute('data-label');
+    var hasRow = btn.dataset.removable === '1';
+    if (!window.confirm(hasRow
+        ? 'Remove "' + label + '" from the map of THIS machine?'
+          + String.fromCharCode(10, 10)
+          + 'The account stays in the shared sheet with all its history — this '
+          + 'computer simply stops knowing how to reach it.'
+        : 'Take "' + label + '" out of this list?'
+          + String.fromCharCode(10, 10)
+          + 'It comes from the shared sheet and nothing is stored for it here, '
+          + 'so there is nothing to delete — it is put out of sight on this '
+          + 'machine and can be brought back.')) return;
+    btn.disabled = true;
+    var done = function (ok, err) {
+      btn.disabled = false;
+      if (!ok) { say(err || 'failed', 'err'); return; }
+      say((hasRow ? 'Removed: ' : 'Out of sight here: ') + label, 'ok');
+      load(true);
+    };
+    if (!hasRow) {
+      fetch('/api/accounts-hidden', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: label, hidden: true })
+      }).then(function (r) { return r.json(); })
+        .then(function (d) { done(d && d.ok, d && d.error); })
+        .catch(function (e) { done(false, String(e)); });
+      return;
+    }
+    fetch('/account-map-remove', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_name: label })
+    }).then(function (r) { return r.json(); })
+      .then(function (d) { done(d && d.ok, d && d.error); })
+      .catch(function (e) { done(false, String(e)); });
   }
 
   // Клик по строке дрилла: открыть или закрыть, а не открывать ещё раз.
@@ -10606,9 +10726,21 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     if (t.classList && t.classList.contains('acq-add')) { addFromCountry(t); return; }
     if (t.classList && t.classList.contains('ac-save')) { save(t); return; }
     if (t.classList && t.classList.contains('ac-drop')) { drop(t); return; }
+    if (t.classList && t.classList.contains('ac-hide')) { hide(t); return; }
+    if (t.id === 'ac-show-hidden') { showHidden = !showHidden; load(true); return; }
     var view = t.getAttribute && t.getAttribute('data-view');
     if (view === 'accounts') { load(false); return; }
 
+  });
+  // The view may be restored directly or reached through browser history.
+  // The initial view event fires before this module, so check it on DOM ready.
+  function loadAccountsView() {
+    if (location.hash === '#accounts') load(false);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadAccountsView);
+  else loadAccountsView();
+  document.addEventListener('acl:viewchange', function(e) {
+    if (e.detail && e.detail.view === 'accounts') load(false);
   });
 })();
 
