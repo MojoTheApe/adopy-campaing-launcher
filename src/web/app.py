@@ -2630,10 +2630,51 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
             parent_id=(form.get("parent_id") or "").strip(),
             expected_name=(form.get("name") or "").strip(),
             date_from=date_from, date_to=date_to,
+            # Кто нажал. Берём ту же подпись, которой дешборд всюду называет
+            # хозяина машины; пустая — честнее выдуманной.
+            requester=(os.environ.get("MY_CM_NAME") or "").strip(),
         )
     except Exception:
         return JSONResponse({"ok": False, "error": "Could not reach the account. Check the launcher window."}, status_code=503)
     return JSONResponse({"ok": True, "result": result.to_dict()})
+
+
+@app.get("/account-spend/turn-off-history")
+async def account_spend_turn_off_history(request: Request) -> JSONResponse:
+    """Что дешборд менял в этом кабинете — и чем это кончилось.
+
+    Журнал писался с первого же живого нажатия, но прочитать его было негде:
+    файл рос, а на экране от него не было ничего. Запись, которую никто не
+    может открыть, не отвечает на вопрос «почему это выключилось вчера» — она
+    только позволяет сказать, что ответ где-то есть.
+
+    Отдаём как есть, включая отказы: попытка, которая не сработала, — это тоже
+    то, что человек делал с живым аккаунтом, и прятать её значило бы
+    показывать журнал, в котором всё всегда получалось.
+    """
+    from src.analysis_agent import account_spend
+
+    account = (request.query_params.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    try:
+        limit = max(1, min(200, int(request.query_params.get("limit") or 20)))
+    except ValueError:
+        limit = 20
+    try:
+        rows = account_spend.turn_off_history(limit=limit, account=account)
+    except Exception:
+        # Журнал — рассказ о работе, а не сама работа: его поломка не повод
+        # ронять страницу, на которой человек останавливает кампании. Но и
+        # выдавать её за пустой журнал нельзя. Пустой список значит «здесь
+        # ничего не меняли» — самый успокаивающий ответ из возможных, и
+        # отдавать его вместо «прочитать не удалось» хуже, чем промолчать:
+        # человек уходит уверенным в том, чего никто не проверял.
+        return JSONResponse(
+            {"ok": False, "error": "The record could not be read."},
+            status_code=500,
+        )
+    return JSONResponse({"ok": True, "entries": rows})
 
 
 @app.post("/account-spend/open-profile")
