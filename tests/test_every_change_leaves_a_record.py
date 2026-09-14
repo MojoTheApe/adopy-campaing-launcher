@@ -144,6 +144,25 @@ def test_the_record_can_be_opened_from_the_tree():
     assert "amapLogAttach" in TPL.read_text(encoding="utf-8")
 
 
+def test_yesterday_evening_is_not_shown_as_today():
+    """«Сегодня» считается по МЕСТНОЙ дате, а не по UTC.
+
+    Запись ставит время `datetime.now()` — местное. Если сравнивать его с
+    датой по UTC, то с полуночи до трёх часов ночи (у нас UTC+3) вчерашний
+    вечер совпадёт с «сегодня» по UTC и покажется без даты — как будто
+    сделан сегодня. В журнале, вся задача которого ответить «когда это
+    случилось», такая строка прямо врёт.
+    """
+    js = _tree_js()
+    when = js[js.index("function amapLogWhen"):]
+    when = when[: when.index("\nfunction ")]
+    assert "toISOString" not in when, "«сегодня» снова считается по UTC"
+    assert "amapIso(new Date())" in when, (
+        "местную дату считает amapIso — она уже есть в файле; своя похожая "
+        "формула рядом и есть то расхождение, которое потом ищут полдня"
+    )
+
+
 def test_a_failed_attempt_is_not_painted_as_success():
     """Той же рукой, что и кнопка: «нажали, но не выключилось» — не успех."""
     js = _tree_js()
