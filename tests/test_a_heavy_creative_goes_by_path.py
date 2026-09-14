@@ -151,3 +151,21 @@ def test_the_bypass_happens_after_the_chooser_opened():
     """Поле для файла появляется вместе с окном выбора — до клика его нет."""
     block = _upload_block()
     assert block.index('_step["chooser"] = True') < block.index("_set_file_via_cdp")
+
+
+def test_the_bypass_does_not_swallow_its_own_errors():
+    """Первая версия этой функции глотала исключения молча — написанная в тот
+    самый день, когда весь разбор упёрся ровно в такое же молчание шагом выше.
+
+    Живой прогон вернул `cdp: false` и ни слова о причине; поля `cdp_inputs` в
+    следе не было вовсе, то есть падало до него. Узнать где — нечем.
+    """
+    helper = _helper()
+    assert "except Exception:\n        return False" not in helper, (
+        "обход снова молчит о своём отказе"
+    )
+    for where in ("new_cdp_session", "getDocument/walk", "setFileInputFiles"):
+        assert where in helper, f"не сказано, что упало на «{where}»"
+    assert "полей input[type=file] нет" in helper, (
+        "пустой поиск не отличается от ошибки поиска"
+    )

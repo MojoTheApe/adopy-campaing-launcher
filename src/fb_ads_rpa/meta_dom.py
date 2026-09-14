@@ -43,9 +43,17 @@ def _set_file_via_cdp(page: Page, creative_path: str) -> bool:
     действительным этот шаг уже горел — см. комментарий про `set_files` выше.
     """
     path = str(Path(creative_path).resolve())
+    # Молчать здесь нельзя — и я это уже сделал один раз.
+    #
+    # 14.09: первая версия этой функции глотала исключения через
+    # `except Exception: return False`, написанная в тот самый день, когда
+    # весь разбор упёрся в такое же молчание в шаге выше. Живой прогон вернул
+    # `cdp: false` и ни слова о причине; поля `cdp_inputs` в следе не было
+    # вовсе — значит падало ДО него, а где именно, узнать было нечем.
     try:
         session = page.context.new_cdp_session(page)
-    except Exception:
+    except Exception as exc:
+        _diag["cdp_error"] = f"new_cdp_session: {type(exc).__name__}: {exc}"[:200]
         return False
     try:
         doc = session.send("DOM.getDocument", {"depth": -1, "pierce": True})
@@ -78,16 +86,23 @@ def _set_file_via_cdp(page: Page, creative_path: str) -> bool:
 
         node_ids = _file_inputs(root)
         _diag["cdp_inputs"] = len(node_ids)
+        last = ""
         for node_id in node_ids:
             try:
                 session.send(
                     "DOM.setFileInputFiles", {"files": [path], "nodeId": node_id}
                 )
                 return True
-            except Exception:
+            except Exception as exc:
+                last = f"{type(exc).__name__}: {exc}"[:200]
                 continue
+        if last:
+            _diag["cdp_error"] = f"setFileInputFiles: {last}"
+        elif not node_ids:
+            _diag["cdp_error"] = "полей input[type=file] нет даже за теневыми границами"
         return False
-    except Exception:
+    except Exception as exc:
+        _diag["cdp_error"] = f"getDocument/walk: {type(exc).__name__}: {exc}"[:200]
         return False
     finally:
         try:
