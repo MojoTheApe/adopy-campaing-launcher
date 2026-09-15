@@ -1641,6 +1641,26 @@
     }
     .amap-cell-read .amap-country-read b { color: var(--accent); font-weight: 600; }
     .amap-cell-read .amap-country-read span { color: var(--muted); margin-left: 2px; }
+
+    /* ACL-354: окно жалобы. Скромное намеренно — человек уже расстроен, и
+       разглядывать оформление ему незачем. */
+    .report-box {
+      border: 1px solid var(--border); border-radius: 10px; padding: var(--space-lg);
+      background: var(--bg-elev); color: var(--text); max-width: 34rem; width: 90vw;
+    }
+    .report-box::backdrop { background: rgba(0, 0, 0, .45); }
+    .report-box h3 { margin: 0 0 var(--space-sm); font-size: 1rem; }
+    .report-hint { margin: 0 0 var(--space-md); font-size: .8rem; color: var(--muted); line-height: 1.45; }
+    .report-box textarea {
+      width: 100%; box-sizing: border-box; font: inherit; font-size: .85rem;
+      padding: var(--space-sm); border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--text); resize: vertical;
+    }
+    .report-actions { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-md); }
+    .report-msg { flex: 1; font-size: .78rem; color: var(--muted); }
+    .report-msg.good { color: var(--good); }
+    .report-msg.bad { color: var(--bad); }
+
     .amap-cell-act { display: flex; justify-content: flex-end; }
     .amap-nocov > summary.amap-row { background: color-mix(in srgb, var(--bad) 9%, var(--bg-subtle)); }
     .amap-nocov-count b { color: var(--bad); }
@@ -2785,10 +2805,78 @@
     </button>
   </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
+    {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
+        с Refresh намеренно: беда случается на экране, и идти за ней в другое
+        место человек не станет. -#}
+    <button type="button" id="report-problem-btn" title="Tell us what went wrong — ACL attaches the machine's own facts">Report a problem</button>
     <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
     <button type="submit" id="dash-refresh-btn">Refresh</button>
   </form>
 </header>
+
+{#- Окно жалобы. Человек пишет только то, что видел; версию, машину, период и
+    последние отказавшие шаги прикладывает ACL сам. -#}
+<dialog id="report-problem-box" class="report-box">
+  <h3>Report a problem</h3>
+  <p class="report-hint">Write what happened in your own words. ACL attaches its
+     version, this machine, the dates on screen and the last failed steps —
+     account and profile numbers are removed before sending.</p>
+  <textarea id="report-problem-text" rows="6" maxlength="4000" placeholder="The campaign stopped at the creative and nothing happened for ten minutes…"></textarea>
+  <div class="report-actions">
+    <span class="report-msg" id="report-problem-msg"></span>
+    <button type="button" id="report-problem-cancel">Cancel</button>
+    <button type="button" id="report-problem-send">Send</button>
+  </div>
+</dialog>
+<script>
+(function () {
+  var box = document.getElementById('report-problem-box');
+  var text = document.getElementById('report-problem-text');
+  var msg = document.getElementById('report-problem-msg');
+  var send = document.getElementById('report-problem-send');
+  if (!box || !send) return;
+
+  document.getElementById('report-problem-btn').addEventListener('click', function () {
+    msg.textContent = '';
+    msg.className = 'report-msg';
+    box.showModal();
+    text.focus();
+  });
+  document.getElementById('report-problem-cancel').addEventListener('click', function () {
+    box.close();
+  });
+
+  send.addEventListener('click', function () {
+    var body = (text.value || '').trim();
+    if (!body) { msg.className = 'report-msg bad'; msg.textContent = 'Write a line first.'; return; }
+    send.disabled = true;
+    msg.className = 'report-msg';
+    msg.textContent = 'Sending…';
+    var form = new FormData();
+    form.append('text', body);
+    form.append('where', location.hash || location.pathname);
+    var period = typeof amapPeriod === 'function' ? amapPeriod() : {};
+    ['from', 'to', 'span'].forEach(function (key) { form.append(key, period[key] || ''); });
+    fetch('/report-problem', { method: 'POST', body: form, credentials: 'same-origin' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        // Queue acceptance is the strongest confirmation available from the SDK.
+        if (!res.ok || !res.d.ok || !res.d.queued || !res.d.event_id) {
+          msg.className = 'report-msg bad';
+          msg.textContent = (res.d && res.d.error) || 'Submission not confirmed. Your text is still here; retry when ready.';
+          return;
+        }
+        msg.className = 'report-msg good';
+        msg.textContent = 'Queued. Delivery is not confirmed. Reference ' + String(res.d.event_id).slice(0, 8);
+      })
+      .catch(function (e) {
+        msg.className = 'report-msg bad';
+        msg.textContent = 'Submission not confirmed. Your text is still here: ' + (e && e.message ? e.message : e);
+      })
+      .finally(function () { send.disabled = false; });
+  });
+})();
+</script>
 <script>
 async function dashRefresh(ev) {
   if (ev) ev.preventDefault();
@@ -3015,22 +3103,36 @@ async function dashRefresh(ev) {
 
   <section class="acc-connect">
     <h3>Connect an account</h3>
-    <p class="acc-sub">Pick an open profile — everything else is worked out for you.</p>
+    <p class="acc-sub">Find the profile by its last letters — open it if you need to, then connect.</p>
+
+    {#- Та же форма, что в разделе страны, а не третий её вариант.
+
+        Раньше здесь был свой выбор из выпадающего списка, и в нём лежали
+        ТОЛЬКО открытые профили: не открыт — выбрать нечем, оставался ручной
+        ввод имени и номера кабинета. Именно на этом встал аккаунт
+        KLD_BFL_X84 — в карте его нет, билдер пишет «needs setup», а
+        подключить неоткуда, потому что профиль не запущен.
+
+        В разделе страны это давно решено: поиск по последним буквам через
+        Multilogin, у находки кнопки Open и Connect. Нашёл, открыл, посмотрел
+        в самом кабинете что нужно, подключил. Решение владельца: равняться на
+        это место, а не наоборот.
+
+        Страна здесь необязательна, поэтому форма отдаётся с пустой — поле
+        ниже пишет выбранное прямо в `data-amap-country`, откуда его и берёт
+        `amapConnect` в момент нажатия. -#}
+    {% with amap_value = '' %}{% include "_account_map_add.html" %}{% endwith %}
 
     <div class="acc-form">
       <div class="acc-field">
-        <label for="ac-new-prof">Multilogin profile</label>
-        <select id="ac-new-prof"></select>
-      </div>
-      <div class="acc-field">
         <label for="ac-new-country">Country · optional</label>
-        <input id="ac-new-country" type="text" list="ac-countries" placeholder="e.g. Chile" autocomplete="off">
+        <input id="ac-new-country" type="text" list="ac-countries" placeholder="e.g. Chile"
+               autocomplete="off" oninput="acCountryChanged(this)">
         <datalist id="ac-countries"></datalist>
       </div>
-      <button type="button" id="ac-add-btn" class="acc-submit">Connect</button>
 
       <div class="acc-derived" id="ac-derived">
-        <span id="ac-derived-text">No profile selected.</span>
+        <span id="ac-derived-text">Find a profile above, or</span>
         <button type="button" class="acc-edit" id="ac-toggle-manual">enter manually</button>
       </div>
 
@@ -3045,11 +3147,18 @@ async function dashRefresh(ev) {
           <label for="ac-new-adid">Ad account</label>
           <input id="ac-new-adid" type="text" placeholder="Ads Manager link or act_…">
         </div>
+        {#- Кнопка переехала сюда из шапки формы, и это не перестановка. Пока
+            она стояла наверху, она была главным действием раздела, а ручной
+            ввод имени и номера кабинета — обычным путём. Теперь обычный путь
+            наверху: найти профиль и нажать Connect у него. Здесь остаётся
+            запасной, и кнопка принадлежит ему. -#}
+        <button type="button" id="ac-add-btn" class="acc-submit">Connect by hand</button>
       </div>
 
       <p class="acc-note">
-        Name and ad account come from the profile you pick: the name from its title, the
-        ad account from that profile's own history. If something is missing, use "enter manually".
+        Name and ad account come from the profile you find above: the name from its title,
+        the ad account from that profile's own history. A profile that has never been opened
+        on this machine has no history to read — open it, and it will.
       </p>
       <div class="acc-msg" id="ac-msg"></div>
     </div>
@@ -6863,21 +6972,38 @@ function amapClose(kind, value, label) {
 var _mlxCache = {};   // инстанс -> массив профилей
 var _mlxLoading = {}; // инстанс -> Promise
 
-function amapProfiles(inst, reload) {
-  if (reload) { delete _mlxCache[inst]; delete _mlxLoading[inst]; }
-  if (_mlxCache[inst]) return Promise.resolve(_mlxCache[inst]);
-  if (_mlxLoading[inst]) return _mlxLoading[inst];
+/* Спрашиваем ровно то, что набрано, а не всё рабочее пространство.
+
+   Раньше список тянулся один раз на инстанс — «чтобы Multilogin не дёргался
+   на каждую букву» — и фильтровался на месте. Довод верный, а цена
+   оказалась выше: у владельца 1760 профилей, то есть **восемнадцать
+   запросов подряд** на одну первичную загрузку. Multilogin такое отбивает:
+   пять полных выкачиваний подряд дали три удачных и два отказа 501, и
+   повторы не помогли — отказ приходил все три раза.
+
+   При этом узкий поиск через тот же API отвечает сразу и одним запросом:
+   «DQ500» — один профиль, без единой ошибки. Искать он умеет, мы его об
+   этом не просили.
+
+   Кэш остался, но теперь по паре (инстанс, набранное): повторный ввод тех же
+   букв не идёт в сеть, а Multilogin получает один запрос вместо восемнадцати. */
+function amapProfiles(inst, reload, text) {
+  var q = (text || '').trim();
+  var key = inst + '\0' + q.toLowerCase();
+  if (reload) { delete _mlxCache[key]; delete _mlxLoading[key]; }
+  if (_mlxCache[key]) return Promise.resolve(_mlxCache[key]);
+  if (_mlxLoading[key]) return _mlxLoading[key];
   var pending = fetch('/multilogin-search', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
-    body: JSON.stringify({ search_text: '', instance: inst })
+    body: JSON.stringify({ search_text: q, instance: inst })
   }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d || !d.ok) throw new Error((d && d.error) || 'Multilogin did not answer');
     var profiles = d.profiles || [];
-    if (_mlxLoading[inst] === pending) { _mlxCache[inst] = profiles; delete _mlxLoading[inst]; }
+    if (_mlxLoading[key] === pending) { _mlxCache[key] = profiles; delete _mlxLoading[key]; }
     return profiles;
-  }).catch(function (e) { if (_mlxLoading[inst] === pending) delete _mlxLoading[inst]; throw e; });
-  _mlxLoading[inst] = pending;
+  }).catch(function (e) { if (_mlxLoading[key] === pending) delete _mlxLoading[key]; throw e; });
+  _mlxLoading[key] = pending;
   return pending;
 }
 
@@ -6904,11 +7030,22 @@ function amapFilter(input, reload) {
 
   if (!q) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
   msg.className = 'amap-msg';
-  msg.textContent = _mlxCache[inst] ? '' : ('loading ' + (ACL_MLX_LABELS[inst] || inst) + '…');
+  msg.textContent = _mlxCache[inst + '\0' + q.toLowerCase()] ? ''
+    : ('searching ' + (ACL_MLX_LABELS[inst] || inst) + '…');
 
-  return amapProfiles(inst, reload).then(function (all) {
-    if (!current()) return;
-    // пока грузилось, могли набрать ещё — берём то, что в поле сейчас
+  /* Ждём, пока человек допечатает. Запрос теперь уходит на каждое слово, а
+     не один раз на инстанс, — и без этой паузы «dq500» стоил бы пяти
+     запросов вместо одного. Четверть секунды тишины короче любой паузы
+     между буквами и незаметна на глаз. */
+  clearTimeout(box._amapTypeTimer);
+  return new Promise(function (resolve) {
+    box._amapTypeTimer = setTimeout(resolve, reload ? 0 : 250);
+  }).then(function () {
+    if (!current()) return null;
+    return amapProfiles(inst, reload, q);
+  }).then(function (all) {
+    if (!current() || all === null) return;
+    // пока искали, могли набрать ещё — берём то, что в поле сейчас
     var now = (input.value || '').trim();
     if (!now) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
     var found = amapRank(all, now);
@@ -7099,8 +7236,17 @@ async function amapMlSubmit(btn, paste) {
     var j = await response.json();
     if (!response.ok || !j || !j.ok) throw new Error((j && j.error) || 'Connection failed');
     if (!paste && !j.token_saved) throw new Error(j.token_error || 'Signed in, but no automation token was saved. Ask the workspace owner for a token.');
-    // A new workspace token invalidates both cached profiles and in-flight results.
-    delete _mlxCache[inst]; delete _mlxLoading[inst];
+    /* A new workspace token invalidates both cached profiles and in-flight
+       results. Ключ кэша теперь «инстанс + набранное», поэтому чистим ВСЕ
+       записи этого инстанса: удалить одну по старому ключу значило бы
+       оставить на экране результаты, найденные прошлым токеном, — то есть
+       чужого рабочего пространства. */
+    Object.keys(_mlxCache).forEach(function (k) {
+      if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxCache[k];
+    });
+    Object.keys(_mlxLoading).forEach(function (k) {
+      if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxLoading[k];
+    });
     document.querySelectorAll('.amap-add').forEach(function (b) {
       if (amapMlInstance(b) !== inst) return;
       b._amapGeneration = (b._amapGeneration || 0) + 1;
@@ -8501,7 +8647,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         var interest = opt.dataset.interest || '';
         var code     = opt.dataset.code || '';
         input.value  = code;
-        if (hidden) hidden.value = interest;
+        /* В отправляемое поле идёт КОД, а не строка интересов.
+
+           Интересы здесь и лежали, и из-за этого детальный таргетинг не
+           ставился никогда. Сервер по этому полю ищет таргет в библиотеке
+           («PF» → «Foreign exchange market, Investor, …»), а получал уже
+           готовые интересы — по ним ничего не находится, и таргетинг
+           молча очищался. На экране при этом всё выглядело выбранным, и
+           даже имя кампании несло код.
+
+           Проверено 14.09: lookup('Foreign exchange market, …') → '',
+           lookup('PF') → полная строка интересов. */
+        if (hidden) hidden.value = code;
         if (hint)   hint.textContent = interest;
         dropdown.hidden = true;
         var slot = wrap.closest('.cb-slot');
@@ -8538,7 +8695,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
     if (hit.length === 1) {
       input.value = hit[0].code;
-      if (hidden) hidden.value = hit[0].fb_interest || '';
+      // Код, а не интересы — по той же причине, что и в выборе мышью выше.
+      if (hidden) hidden.value = hit[0].code;
       if (hint)   hint.textContent = hit[0].fb_interest || '';
       var slot = wrap.closest('.cb-slot');
       if (slot) cbUpdateName(slot);
@@ -10526,7 +10684,10 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     var nameField = el('ac-new-label'), adField = el('ac-new-adid');
     var text = el('ac-derived-text');
     if (!text) return;
-    if (!pid) { text.textContent = 'No profile selected.'; return; }
+    /* Выбора профиля в этой форме больше нет — он наверху, в общей с картой.
+       Поэтому здесь не «профиль не выбран» (звучит как незаполненное поле
+       рядом), а указание, где искать, и запасной путь рядом. */
+    if (!pid) { text.textContent = 'Find a profile above, or'; return; }
 
     var guessName = accountForProfile(pid);
     var guessAd = detectedFor(pid);
@@ -10547,6 +10708,16 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
   function openManual() {
     var box = el('ac-manual'); if (box) box.classList.add('open');
   }
+
+  /* Страна тут необязательна и живёт отдельным полем, а форма подключения —
+     общая с картой и берёт страну из `data-amap-country` в момент нажатия
+     Connect. Пишем туда набранное, вместо того чтобы заводить второй путь
+     передачи: у общей формы должен остаться один источник этого значения,
+     иначе в карте и здесь она однажды начнёт брать страну по-разному. */
+  window.acCountryChanged = function (input) {
+    var box = document.querySelector('#view-accounts .amap-add');
+    if (box) box.setAttribute('data-amap-country', (input.value || '').trim());
+  };
 
   function addManual() {
     var pid = (el('ac-new-prof') || {}).value || '';

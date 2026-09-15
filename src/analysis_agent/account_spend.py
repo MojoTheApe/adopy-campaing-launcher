@@ -31,7 +31,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from config import paths
-from src.fb_ads_rpa.operations import browser_operation, serialized_browser
+from src import acl_log
+from src.fb_ads_rpa.operations import browser_operation, profile_lock, serialized_browser
 
 _STORE_LOCK = threading.RLock()
 _UNSAVED: dict[str, "SpendReading"] = {}
@@ -302,9 +303,37 @@ def get_status(account: str) -> dict[str, str]:
 
 # ─────────────────────────── очередь ───────────────────────────
 
-#: один браузер за раз. Два профиля, поднятых одновременно с одной машины,
-#: это не «быстрее», это две сессии подряд с одного устройства.
-_LOCK = browser_operation
+def _profile_key(account: str, *_a, **_k) -> str:
+    """Чей браузер занимает вызов — профиль, а не ярлык аккаунта.
+
+    Ярлыков может оказаться несколько на один профиль: карта этого не
+    запрещает, а две очереди к одному браузеру — ровно то, от чего замок и
+    защищает. Если ярлык в профиль не разрешается (нет в карте, файл не
+    читается), ключом остаётся сам ярлык: занять лишнее безопаснее, чем не
+    занять нужное.
+    """
+    try:
+        entry = _entry_for(account)
+    except Exception:
+        entry = None
+    profile = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
+    return profile or str(account or "")
+
+
+def _lock_for(account: str):
+    """Очередь на профиль, а не на весь браузер (`acl-113e`).
+
+    Прежде здесь стоял один замок на всё: «один браузер за раз, две сессии
+    подряд с одного устройства». Два аккаунта — это два профиля, у каждого
+    свой прокси, и общего ресурса между ними нет; обоснование самого замка
+    говорило про «тот же самый профиль».
+
+    Публикация послабления не получает: она одна за раз по решению владельца
+    31.07 — см. `operations`.
+    """
+    return profile_lock(_profile_key(account))
+
+
 _RUNNING: set[str] = set()
 
 
@@ -353,7 +382,7 @@ def start_read(
     def run() -> None:
         started = time.time()
         try:
-            with _LOCK:
+            with browser_operation.reading(), _lock_for(account):
                 done = fn(account, date_from, date_to)
         except Exception as exc:  # noqa: BLE001 — падение чтения не должно ронять сервер
             done = SpendReading(
@@ -554,7 +583,7 @@ def _attach_only(entry, account_label: str):
     )
 
 
-@serialized_browser
+@serialized_browser(reading=True)
 def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -> dict:
     """Спросить у самого аккаунта, какой у него номер.
 
@@ -680,7 +709,7 @@ class _Profile:
         self.multilogin_instance = (instance or "A").strip() or "A"
 
 
-@serialized_browser
+@serialized_browser(reading=True)
 def open_profile_for_automation(profile_id: str, folder_id: str = "",
                                 instance: str = "A", label: str = "") -> tuple[bool, str]:
     """Поднять профиль автоматизацией и оставить окно открытым.
@@ -747,7 +776,7 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     return True, "профиль открыт — залогиньтесь, если нужно, и оставьте окно"
 
 
-@serialized_browser
+@serialized_browser(key=_profile_key, reading=True)
 def open_for_automation(account: str) -> tuple[bool, str]:
     """То же самое для аккаунта, который уже есть в карте."""
     entry = _entry_for(account)
@@ -761,7 +790,7 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     )
 
 
-@serialized_browser
+@serialized_browser(key=_profile_key, reading=True)
 def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReading:
     """Прочитать спенд аккаунта за период, выбранный на дешборде.
 
@@ -1800,6 +1829,16 @@ def _record_turn_off(out: "TurnOffResult") -> None:
 
     Ни запись, ни лог не смеют уронить сам результат, поэтому оба под
     `except`: потерять журнал плохо, потерять ответ — хуже.
+
+    Пишем через `acl_log.append_line`, а не `open(..., "a")`. Замер 15.09: при
+    одновременном выключении на нескольких аккаунтах простое дописывание на
+    Windows теряло каждую шестую запись — бесследно, потому что там режим
+    «a» эмулируется как «перейти в конец, затем записать». Для этого журнала
+    потеря особенно дорога: наутро нельзя отличить «действия не было» от
+    «запись пропала», а он существует именно ради такого разбора.
+
+    Отказ записи больше не проглатывается молча: прежде нехватка места,
+    отсутствие прав и занятый файл выглядели одинаково — никак.
     """
     try:
         log.info(
@@ -1810,12 +1849,13 @@ def _record_turn_off(out: "TurnOffResult") -> None:
     except Exception:
         pass
     try:
-        path = _turn_off_log()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(out.to_dict(), ensure_ascii=False) + "\n")
-    except Exception:
-        pass
+        acl_log.append_line(
+            _turn_off_log(), json.dumps(out.to_dict(), ensure_ascii=False)
+        )
+    except acl_log.JournalWriteError as exc:
+        log.error("журнал выключений не принял запись: %s", exc)
+    except Exception as exc:  # непредвиденное — но результат всё равно вернём
+        log.error("журнал выключений: неожиданный отказ %r", exc)
 
 
 def _mark_object_off(account: str, object_id: str, delivery: str = "") -> int:

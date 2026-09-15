@@ -10,6 +10,109 @@ from typing import Any
 from playwright.sync_api import Frame, Page
 
 from src.fb_ads_rpa import run_telemetry as _telemetry
+
+#: Порог, за которым Playwright отказывается передавать файл.
+#:
+#: Дословно из его же ошибки, пойманной 14.09 на живом прогоне:
+#: «FileChooser.set_files: Cannot transfer files larger than 50Mb to a browser
+#: not co-located with the server». Ограничение клиента Playwright: он шлёт
+#: СОДЕРЖИМОЕ файла по CDP и отказывается делать это для больших файлов, когда
+#: считает соединение удалённым. У нас оно таким и считается — CDP по TCP через
+#: Multilogin, — хотя браузер физически на этой же машине.
+#:
+#: Берём с запасом: 45, а не 50. Порог у них на содержимом, а не на размере
+#: файла, и упереться в него на 49.8 МБ было бы обидно.
+_PW_FILE_LIMIT_MB = 45
+
+
+def _upload_heavy_via_chooser_event(
+    page: Page, creative_path: str, diag: dict, click, *, wait_s: float = 25.0
+) -> bool:
+    """Set a local file through the CDP target that emits its chooser event.
+
+    An out-of-process media frame has a separate CDP session. Its backend
+    node ID must be used in that session, not in the main page's renderer.
+    Pump Playwright while waiting so delayed events can actually be received.
+    Temporary interception is disarmed and detached on every exit.
+    """
+    path = str(Path(creative_path).resolve())
+    sessions = []
+    attempted = set()
+    caught = {}
+
+    def disarm(session):
+        try:
+            session.send("Page.setInterceptFileChooserDialog", {"enabled": False})
+        except Exception:
+            pass
+        try:
+            session.detach()
+        except Exception:
+            pass
+
+    def arm(target, *, required=False):
+        try:
+            session = page.context.new_cdp_session(target)
+        except Exception as exc:
+            if required:
+                diag["heavy_error"] = f"new_cdp_session: {type(exc).__name__}: {exc}"[:200]
+            return False
+        try:
+            def chooser(params):
+                if not caught and (params or {}).get("backendNodeId"):
+                    caught.update(params)
+                    caught["session"] = session
+            session.on("Page.fileChooserOpened", chooser)
+            session.send("Page.enable")
+            session.send("DOM.enable")
+            session.send("Page.setInterceptFileChooserDialog", {"enabled": True})
+            sessions.append(session)
+            return True
+        except Exception as exc:
+            if required:
+                diag["heavy_error"] = f"intercept: {type(exc).__name__}: {exc}"[:200]
+            disarm(session)
+            return False
+
+    def arm_frames():
+        for frame in getattr(page, "frames", []):
+            if frame == page.main_frame:
+                continue
+            key = (frame, frame.url)
+            if key not in attempted:
+                attempted.add(key)
+                # In-process frames share their parent's session. Playwright
+                # refuses a separate CDP session for those; that is expected.
+                arm(frame)
+
+    try:
+        if not arm(page, required=True):
+            return False
+        arm_frames()
+        diag["heavy_clicked"] = bool(click())
+        deadline = time.monotonic() + wait_s
+        while time.monotonic() < deadline and not caught:
+            page.wait_for_timeout(100)
+            arm_frames()
+        backend = caught.get("backendNodeId")
+        diag["heavy_backend_node"] = backend
+        if not backend:
+            diag["heavy_error"] = "событие Page.fileChooserOpened не пришло"
+            return False
+        caught["session"].send("DOM.setFileInputFiles", {"files": [path], "backendNodeId": backend})
+        return True
+    except Exception as exc:
+        diag["heavy_error"] = f"setFileInputFiles: {type(exc).__name__}: {exc}"[:200]
+        return False
+    finally:
+        for session in reversed(sessions):
+            disarm(session)
+
+
+#: След последней попытки загрузить креатив — что шаг видел и делал.
+#: Читается тем, кто пишет отказ в телеметрию: без него `ad_creative_upload`
+#: приходил пустым, и шесть отказов подряд 14.09 не дали ни одной зацепки.
+_LAST_UPLOAD_DIAG: dict = {}
 from src.fb_ads_rpa.config import get_reuse_library_media
 
 PageLike = Page | Frame
@@ -2793,7 +2896,11 @@ def run_recorded_campaign_flow(
         if reached_ad_level:
             try:
                 if not upload_ad_creative_with_retry(page, creative_type, creative_path, edit_url=ad_edit_url):
-                    _shot("fail_ad_creative_upload")
+                    # След попытки уходит в телеметрию вместе с отказом.
+                    # Раньше здесь было пусто, и «не загрузился» ничем не
+                    # отличалось от «не нашёл кнопку» — шесть отказов 14.09
+                    # не дали ни одной зацепки, и разбор свёлся к догадкам.
+                    _shot("fail_ad_creative_upload", dict(_LAST_UPLOAD_DIAG))
                     ad_level_fails.append("ad_creative_upload")
                 else:
                     creative_uploaded = True
@@ -2955,6 +3062,153 @@ def run_recorded_campaign_flow(
     return ""
 
 
+PLACEMENTS_ROW_JS = """
+  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+  const rowsFor = (root, name) => {
+    const out = [];
+    const leaves = [...root.querySelectorAll('*')].filter(e =>
+      e.offsetParent !== null && e.children.length === 0
+      && norm(e.textContent) === name);
+    for (const leaf of leaves) {
+      let node = leaf.parentElement;
+      for (let i = 0; i < 8 && node; i++) {
+        const cb = node.querySelector('input[type=checkbox]');
+        if (cb) { if (!out.some(h => h.cb === cb)) out.push({ row: node, cb: cb }); break; }
+        if (node.tagName === 'LI') break;
+        node = node.parentElement;
+      }
+    }
+    return out;
+  };
+  // Одно имя может встретиться дважды. «Search results» на DQ501 нашлась и
+  // как категория, и как чужой контрол внутри `<label>` — недоступный, из-за
+  // чего шаг кликал в него и отчитывался, что категория осталась включённой.
+  // Берём доступную галочку; если доступных нет — первую, чтобы отказ
+  // назвал настоящую причину, а не «строка не найдена».
+  const rowFor = (root, name) => {
+    const all = rowsFor(root, name);
+    return all.find(h => !h.cb.disabled) || all[0] || null;
+  };
+"""
+"""Поиск строки раздела площадок по её тексту — в обеих разметках Meta.
+
+14.09, круг 11: на DQ500/DQ501 у всех пяти категорий есть настоящий
+`input[type=checkbox]`, и все пять включены («Included: 21»). Нет только
+обёртки `<label>`: строка — это `li`, текст и галочка в ней лежат порознь.
+На DQ204/UL921 обёртка есть, и код искал галочку внутри неё; восемь кругов
+ушло на «видно 0 категорий из 5» при всех пяти на экране.
+
+Отсюда один поиск на оба случая: от листа с нужным текстом вверх, до первого
+узла, в котором есть галочка. Через `<label>` подъём проходит насквозь, так
+что прежняя разметка обслуживается тем же кодом. Упирается он в `li` —
+дальше начинается чужая строка.
+
+Вынесено на уровень модуля, чтобы это можно было выполнить в тесте против
+сохранённой разметки: проверки стенда дёргают страницу локаторами Playwright
+и наш поиск не вызывают, так что их зелёный цвет о нём ничего не говорит.
+"""
+
+PLACEMENTS_EXPAND_JS = (
+    "([name]) => {"
+    + PLACEMENTS_ROW_JS
+    + """
+      const root = document.querySelector('[data-rpa-placements-marker]') || document;
+      const hit = rowFor(root, name);
+      if (!hit) return { found: false };
+      let node = hit.row;
+      for (let i = 0; i < 12 && node; i++) {
+        if (node.getAttribute('role') === 'list') break;
+        if (node.getAttribute('role') === 'button' && node.hasAttribute('aria-expanded')) {
+          const was = node.getAttribute('aria-expanded');
+          if (was === 'false') node.click();
+          return { found: true, was: was, depth: i, where: 'над строкой' };
+        }
+        node = node.parentElement;
+      }
+      // Над строкой кнопки нет — на DQ500/DQ501 все три категории дали
+      // `was: null`, и подпункты не появились ни у одной. Значит
+      // раскрыватель внутри самой строки: ищем его там, а не достраиваем
+      // предположение о ещё одном уровне вверх. Свой же переключатель
+      // категории не трогаем.
+      const inside = [...hit.row.querySelectorAll('[aria-expanded]')]
+        .filter(e => e.offsetParent !== null && !e.contains(hit.cb));
+      if (inside.length) {
+        const btn = inside[0];
+        const was = btn.getAttribute('aria-expanded');
+        if (was === 'false') btn.click();
+        return { found: true, was: was, where: 'внутри строки', count: inside.length };
+      }
+      // Третий способ — кнопка с подписью для чталки, без `aria-expanded`
+      // вовсе. Круг 14: в `li` каждой категории лежит
+      // `button[aria-label="Expand"]`, а состояние читается по самой
+      // подписи: раскрытая называется «Collapse», и жать её нельзя — это
+      // свернёт категорию обратно. Ею пользовался код до сентябрьской
+      // переписки; тогда её убрали, потому что в снимке 9 сентября таких
+      // кнопок нет ни одной.
+      const li = hit.row.closest('li') || hit.row;
+      const named = [...li.querySelectorAll('button[aria-label]')]
+        .filter(e => e.offsetParent !== null);
+      const open = named.find(e => /collapse/i.test(e.getAttribute('aria-label')));
+      if (open) return { found: true, was: 'true', where: 'уже раскрыта' };
+      const btn = named.find(e => /expand/i.test(e.getAttribute('aria-label')));
+      if (btn) {
+        btn.click();
+        return { found: true, was: 'false', where: 'кнопка Expand' };
+      }
+      return { found: true, was: null, where: 'не найден' };
+    }
+    """
+)
+"""Три способа раскрыть категорию — по порядку, от прежней разметки к новой.
+
+Вынесено рядом с `PLACEMENTS_ROW_JS` и по той же причине: иначе это нельзя
+выполнить в тесте, а осмотренный, но ни разу не выполненный скрипт уже стоил
+нам дня.
+"""
+
+PLACEMENTS_SUBITEM_JS = """
+  ([label, wantChecked]) => {
+    const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+    const root = document.querySelector('[data-rpa-placements-marker]');
+    if (!root) return { ok: false, why: 'нет метки блока' };
+    const rows = [...root.querySelectorAll('*')].filter(e =>
+      e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
+    let frozen = null;
+    for (const row of rows) {
+      let container = row.parentElement;
+      for (let i = 0; i < 4 && container; i++) {
+        const cb = container.querySelector('input[type=checkbox]');
+        if (cb) {
+          if (!cb.disabled) {
+            if (cb.checked !== wantChecked) cb.click();
+            return { ok: cb.checked === wantChecked, checked: cb.checked };
+          }
+          if (frozen === null) frozen = cb.checked;
+        }
+        container = container.parentElement;
+      }
+    }
+    if (frozen !== null) {
+      return frozen === wantChecked
+        ? { ok: true, why: 'недоступна, но уже как надо', checked: frozen }
+        : { ok: false, why: 'недоступна и не та', checked: frozen };
+    }
+    return { ok: false, why: 'строка не найдена' };
+  }
+"""
+"""Подпункт категории: найти по словам и переключить.
+
+Подъём на четыре уровня, а не общий `rowFor`, и это не небрежность. 14.09 я
+свёл подпункты на `rowFor` «для единообразия» — и вместо семнадцати из
+восемнадцати круг 16 дал десять: подпункты лежат во вложенных `li` внутри
+категории, и граница по `li`, которая спасает категории от чужой галочки,
+здесь отрезает свою же. Работающий путь без причины не меняют.
+
+Недоступная галочка — не всегда беда: «Facebook Business Explore» Meta
+держит выключенной и трогать не даёт. Если она уже в нужном состоянии,
+требовать от неё клика бессмысленно; если нет — это честный отказ.
+"""
+
 _PLACEMENT_CATEGORIES = {
     # Пять категорий раздела Placement controls и то, чем они должны стать.
     # Порядок важен только для отчёта: снимаем и ставим по одной.
@@ -3021,6 +3275,16 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     проверить. Поэтому код переписывает в `report` то, что увидел на месте:
     одного упавшего прогона хватит, чтобы узнать настоящий список вместо
     гадания. Пустое `False` в телеметрии стоило пяти прогонов вслепую.
+
+    **Разметок две, и зависят они от аккаунта.** 14.09 те же шаги на новых
+    DQ500/DQ501 дали ноль категорий и ноль `Placement controls` — при том что
+    фикстура 9 сентября (DQ204/UL921) содержит и то, и другое, и стенд на ней
+    зелёный. Значит код не «сломался»: Meta отдаёт новым аккаунтам другой
+    вариант раздела, где пять категорий спрятаны за свёрнутой створкой
+    «Placements» со сводкой в подписи («Included: 21»). Поэтому ниже сначала
+    пробуется прежний путь, а створка раскрывается только если категорий не
+    видно. Вывод «Meta переделала раздел для всех» из одного аккаунта делать
+    нельзя — оба варианта живы одновременно.
 
     Найти и кликнуть — в одном вызове `page.evaluate`. Правая колонка
     («Audience definition», «Campaign score») пересчитывается сама и двигает
@@ -3199,16 +3463,21 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             return False
 
     def _categories_visible() -> int:
-        """Сколько из пяти категорий видно прямо сейчас."""
+        """Сколько из пяти категорий доступно прямо сейчас.
+
+        Считаем не подписи, а строки с галочкой: подпись бывает и без
+        `<label>`, а решение шага зависит от того, есть ли до чего дотянуться.
+        Прежний счёт по `<label>` на DQ500/DQ501 давал ноль при всех пяти
+        категориях на экране — восемь кругов ушло на этот ноль.
+        """
         try:
             return int(
                 page.evaluate(
-                    """
-                    (names) => {
-                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                    "(names) => {"
+                    + PLACEMENTS_ROW_JS
+                    + """
                       const root = document.querySelector('[data-rpa-placements-marker]') || document;
-                      return [...root.querySelectorAll('label')].filter(l =>
-                        l.offsetParent !== null && names.includes(norm(l.textContent))).length;
+                      return names.filter(n => rowFor(root, n)).length;
                     }
                     """,
                     list(_PLACEMENT_CATEGORIES),
@@ -3217,6 +3486,68 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             )
         except Exception:
             return 0
+
+    def _what_is_in_the_block() -> dict:
+        """Что шаг ВИДИТ в помеченном блоке — подписи, а не только их число.
+
+        14.09: шесть прогонов подряд дали «видно 0 категорий из 5», и по этому
+        числу нельзя понять главного — помечен ли вообще нужный блок. Отладка
+        показывала `textLen: 759` и размер 600×501: слишком мало для раздела с
+        пятью раскрывающимися категориями, слишком похоже на сводку
+        («Included: 21 · Allowed with limited spend: 0 · Excluded: 0»).
+
+        Две версии причины уже оказались неверны — про переименование категорий
+        и про включённый Advantage+, — и обе строились на догадке по
+        посмертному снимку. Поэтому здесь не догадка, а то, что видно шагу в
+        момент решения: сколько в блоке подписей, какие они и есть ли рядом
+        переключатели.
+        """
+        try:
+            return page.evaluate(
+                """
+                () => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const marked = document.querySelector('[data-rpa-placements-marker]');
+                  const root = marked || document;
+                  const vis = (e) => e.offsetParent !== null;
+                  const labels = [...root.querySelectorAll('label')].filter(vis)
+                    .map(l => norm(l.textContent)).filter(t => t && t.length < 60);
+                  const texts = [...root.querySelectorAll('*')].filter(e =>
+                      vis(e) && e.children.length === 0)
+                    .map(e => norm(e.textContent))
+                    .filter(t => t && t.length < 60);
+                  const seen = [];
+                  for (const t of texts) if (!seen.includes(t)) seen.push(t);
+                  // Что здесь вообще можно нажать. Переключателя Advantage+ в
+                  // блоке нет ни одного (`switches: 0`), а сводка вместо
+                  // категорий показывается именно из-за него — значит режим
+                  // меняется чем-то другим, и гадать чем не надо: пусть
+                  // страница сама перечислит свои нажимаемые места.
+                  const clickable = [...root.querySelectorAll(
+                      '[role="button"],[role="link"],button,a,[aria-expanded],[tabindex="0"]')]
+                    .filter(vis)
+                    .map(e => ({
+                      t: norm(e.textContent).slice(0, 44),
+                      role: e.getAttribute('role') || e.tagName.toLowerCase(),
+                      exp: e.getAttribute('aria-expanded'),
+                    }))
+                    .filter(x => x.t);
+                  const uniq = [];
+                  for (const c of clickable)
+                    if (!uniq.some(u => u.t === c.t && u.role === c.role)) uniq.push(c);
+                  return {
+                    marked: !!marked,
+                    rect: marked ? (({width, height}) => ({width, height}))(marked.getBoundingClientRect()) : null,
+                    labels: labels.slice(0, 25),
+                    switches: root.querySelectorAll('[role="switch"],[role="checkbox"]').length,
+                    texts: seen.slice(0, 40),
+                    clickable: uniq.slice(0, 30),
+                  };
+                }
+                """
+            )
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}"[:120]}
 
     def _expand_button(text: str) -> dict:
         """Раскрыть свёрнутый узел по началу его текста.
@@ -3243,27 +3574,91 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         except Exception as exc:
             return {"found": False, "error": str(exc)[:80]}
 
-    def _set_category(name: str, want_checked: bool) -> dict:
-        """Галочка категории лежит внутри `<label>` с её же названием."""
+    def _click_category(name: str, want_checked: bool) -> dict:
+        """Один клик по галочке категории и её состояние сразу после него."""
         try:
             return page.evaluate(
-                """
-                ([name, want]) => {
-                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                "([name, want]) => {"
+                + PLACEMENTS_ROW_JS
+                + """
                   const root = document.querySelector('[data-rpa-placements-marker]') || document;
-                  const lab = [...root.querySelectorAll('label')].find(l =>
-                    l.offsetParent !== null && norm(l.textContent) === name);
-                  if (!lab) return { found: false };
-                  const cb = lab.querySelector('input[type=checkbox]');
-                  if (!cb) return { found: true, checkbox: false };
-                  if (cb.checked !== want) cb.click();
-                  return { found: true, checkbox: true, checked: cb.checked };
+                  const hit = rowFor(root, name);
+                  if (!hit) return { found: false };
+                  if (hit.cb.disabled) return { found: true, checkbox: false, why: 'недоступна' };
+                  const before = hit.cb.checked;
+                  if (before !== want) hit.cb.click();
+                  return { found: true, checkbox: true, before: before, checked: hit.cb.checked };
                 }
                 """,
                 [name, want_checked],
             ) or {"found": False}
         except Exception as exc:
             return {"found": False, "error": str(exc)[:80]}
+
+    def _read_category(name: str) -> dict:
+        """Состояние строки категории — без единого клика.
+
+        Отдельно от нажатия: значение, прочитанное в том же вызове, что и
+        клик, говорит лишь о том, что произошло в эту миллисекунду. React
+        может вернуть галочку обратно при следующей отрисовке, и именно так
+        «Search results» осталась включённой, отчитавшись об успехе.
+        """
+        try:
+            return page.evaluate(
+                "(name) => {"
+                + PLACEMENTS_ROW_JS
+                + """
+                  const norm2 = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const root = document.querySelector('[data-rpa-placements-marker]') || document;
+                  const hit = rowFor(root, name);
+                  if (!hit) return { found: false };
+                  const cb = hit.cb;
+                  const clickable = [...hit.row.querySelectorAll(
+                      '[role="button"],[role="checkbox"],button,label,[aria-expanded]')]
+                    .slice(0, 5)
+                    .map(e => ({
+                      t: norm2(e.textContent).slice(0, 28),
+                      role: e.getAttribute('role') || e.tagName.toLowerCase(),
+                      exp: e.getAttribute('aria-expanded'),
+                    }));
+                  return {
+                    found: true,
+                    checked: cb.checked,
+                    cbVisible: cb.offsetParent !== null,
+                    inLabel: !!cb.closest('label'),
+                    row: hit.row.tagName.toLowerCase(),
+                    clickable: clickable,
+                  };
+                }
+                """,
+                name,
+            ) or {"found": False}
+        except Exception as exc:
+            return {"found": False, "error": str(exc)[:80]}
+
+    def _set_category(name: str, want_checked: bool) -> dict:
+        """Поставить галочку категории и убедиться, что она такой осталась.
+
+        14.09, круг 12: «Apps and sites» снялась, а «Search results» тем же
+        кодом — нет, и шаг отчитался об успехе, потому что читал состояние в
+        том же вызове, что и кликал. Теперь после клика выжидаем отрисовку и
+        спрашиваем страницу заново; если не взялось — один повтор, и в отчёт
+        идёт итоговое значение, а не мгновенное.
+        """
+        res = _click_category(name, want_checked)
+        if not res.get("checkbox"):
+            return res
+        _sleep_h(0.5)
+        now = _read_category(name)
+        res["checked"] = now.get("checked")
+        if now.get("checked") is not want_checked:
+            again = _click_category(name, want_checked)
+            _sleep_h(0.7)
+            settled = _read_category(name)
+            res["retry"] = {"clicked": again.get("checkbox"), "checked": settled.get("checked")}
+            res["checked"] = settled.get("checked")
+            res["row"] = {k: settled.get(k) for k in ("cbVisible", "inLabel", "row", "clickable")}
+        return res
 
     def _expand_category(name: str) -> dict:
         """Раскрыватель категории — её собственная строка, а не кнопка рядом.
@@ -3274,29 +3669,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         весь раздел.
         """
         try:
-            return page.evaluate(
-                """
-                ([name]) => {
-                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                  const root = document.querySelector('[data-rpa-placements-marker]') || document;
-                  const lab = [...root.querySelectorAll('label')].find(l =>
-                    l.offsetParent !== null && norm(l.textContent) === name);
-                  if (!lab) return { found: false };
-                  let node = lab.parentElement;
-                  for (let i = 0; i < 12 && node; i++) {
-                    if (node.getAttribute('role') === 'list') break;
-                    if (node.getAttribute('role') === 'button' && node.hasAttribute('aria-expanded')) {
-                      const was = node.getAttribute('aria-expanded');
-                      if (was === 'false') node.click();
-                      return { found: true, was: was, depth: i };
-                    }
-                    node = node.parentElement;
-                  }
-                  return { found: true, was: null };
-                }
-                """,
-                [name],
-            ) or {"found": False}
+            return page.evaluate(PLACEMENTS_EXPAND_JS, [name]) or {"found": False}
         except Exception as exc:
             return {"found": False, "error": str(exc)[:80]}
 
@@ -3305,19 +3678,35 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
 
         Это ответ страницы на вопрос, на который наш июльский список
         ответить не может: как эти строки называются сегодня.
+
+        Подпункт здесь — строка, у которой есть галочка, а не элемент
+        `<label>`: на DQ500/DQ501 обёртки нет ни у одной строки, и прежний
+        список возвращал единственную подпись раздела («Value rules»).
         """
         try:
             return (
                 page.evaluate(
-                    """
-                    (skip) => {
-                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                    "(skip) => {"
+                    + PLACEMENTS_ROW_JS
+                    + """
                       const root = document.querySelector('[data-rpa-placements-marker]') || document;
                       const out = [];
-                      for (const l of root.querySelectorAll('label')) {
-                        if (l.offsetParent === null) continue;
-                        const t = norm(l.textContent);
-                        if (!t || t.length > 60 || skip.includes(t) || out.includes(t)) continue;
+                      // Одна галочка — одна строка. Описание категории лежит в
+                      // той же строке и упирается в ту же галочку, поэтому
+                      // круг 12 назвал подпунктами «Get high visibility for
+                      // your business with ads in feeds» и ещё восемнадцать
+                      // соседних надписей. Считаем по контролам: первым идёт
+                      // само название, остальное к этой галочке уже не
+                      // относится.
+                      const claimed = new Set();
+                      for (const leaf of root.querySelectorAll('*')) {
+                        if (leaf.offsetParent === null || leaf.children.length) continue;
+                        const t = norm(leaf.textContent);
+                        if (!t || t.length > 60) continue;
+                        const hit = rowFor(root, t);
+                        if (!hit || claimed.has(hit.cb)) continue;
+                        claimed.add(hit.cb);
+                        if (skip.includes(t) || out.includes(t)) continue;
                         out.push(t);
                       }
                       return out;
@@ -3329,6 +3718,182 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             )
         except Exception:
             return []
+
+    def _category_rows() -> dict:
+        """Чем управляется строка категории в новом варианте раздела.
+
+        14.09, круг 10: створка «Placements» открылась (`стало=true`), и за
+        ней оказались все пять июльских имён — «Feeds», «Stories, Status,
+        Reels», «In-stream ads for reels», «Search results», «Apps and
+        sites». То есть ни имена не менялись, ни раздел не перестраивался.
+
+        Но `<label>` в блоке остался один («Value rules»), а
+        `input[type=checkbox]` — ноль. Значит строки здесь не «подпись с
+        галочкой», как на DQ204/UL921, и `_set_category` до контрола не
+        дотянется. Чем они управляются, спрашиваем у страницы, а не
+        достраиваем по аналогии: три версии подряд, построенные по аналогии,
+        оказались неверны.
+        """
+        try:
+            return page.evaluate(
+                """
+                (names) => {
+                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+                  const root = document.querySelector('[data-rpa-placements-marker]') || document;
+                  const vis = (e) => e.offsetParent !== null;
+                  const out = {};
+                  for (const name of names) {
+                    const leaf = [...root.querySelectorAll('*')].find(e =>
+                      vis(e) && e.children.length === 0 && norm(e.textContent) === name);
+                    if (!leaf) { out[name] = { leaf: false }; continue; }
+                    const chain = [];
+                    let node = leaf.parentElement;
+                    for (let i = 0; i < 6 && node; i++) {
+                      chain.push({
+                        tag: node.tagName.toLowerCase(),
+                        role: node.getAttribute('role'),
+                        checked: node.getAttribute('aria-checked'),
+                        exp: node.getAttribute('aria-expanded'),
+                        kids: node.children.length,
+                      });
+                      node = node.parentElement;
+                    }
+                    const box = leaf.closest('[role="listitem"],li,[role="row"]')
+                      || (leaf.parentElement && leaf.parentElement.parentElement
+                          && leaf.parentElement.parentElement.parentElement);
+                    const ctrls = box ? [...box.querySelectorAll(
+                        'input,[role="checkbox"],[role="switch"],[role="button"]')]
+                      .filter(vis)
+                      .slice(0, 6)
+                      .map(e => ({
+                        tag: e.tagName.toLowerCase(),
+                        type: e.getAttribute('type'),
+                        role: e.getAttribute('role'),
+                        checked: e.tagName === 'INPUT' ? e.checked : e.getAttribute('aria-checked'),
+                        label: norm(e.getAttribute('aria-label') || '').slice(0, 36),
+                      })) : [];
+                    out[name] = { leaf: true, chain: chain, ctrls: ctrls };
+                  }
+                  return out;
+                }
+                """,
+                list(_PLACEMENT_CATEGORIES),
+            ) or {}
+        except Exception as exc:
+            return {"error": str(exc)[:120]}
+
+    def _category_candidates() -> dict:
+        """Все совпадения имени категории, а не только первое.
+
+        14.09, круг 13: «Search results» осталась включённой, повтор вернул
+        «недоступна», а форма строки отличалась от остальных четырёх
+        (`inLabel: true`). То есть имя на странице не одно, и шаг всё это
+        время целился в чужой контрол. Отказ должен показывать это сам, а не
+        выясняться ещё одним кругом.
+
+        Заодно перечисляем, что лежит в объемлющем `li`: раскрывателя
+        подпунктов не нашлось ни над строкой, ни внутри неё, и следующий
+        вопрос — есть ли он вообще в разметке.
+        """
+        try:
+            return page.evaluate(
+                "(names) => {"
+                + PLACEMENTS_ROW_JS
+                + """
+                  const root = document.querySelector('[data-rpa-placements-marker]') || document;
+                  const out = {};
+                  for (const name of names) {
+                    out[name] = rowsFor(root, name).map((h, i) => {
+                      const li = h.row.closest('li') || h.row;
+                      const parts = [...li.querySelectorAll('[role],button,svg,i')]
+                        .filter(e => e.offsetParent !== null)
+                        .slice(0, 8)
+                        .map(e => (e.getAttribute('role') || e.tagName.toLowerCase())
+                          + (e.getAttribute('aria-label') ? ':' + e.getAttribute('aria-label').slice(0, 20) : '')
+                          + (e.hasAttribute('aria-expanded') ? '[exp=' + e.getAttribute('aria-expanded') + ']' : ''));
+                      return {
+                        i: i,
+                        checked: h.cb.checked,
+                        disabled: h.cb.disabled,
+                        inLabel: !!h.cb.closest('label'),
+                        row: h.row.tagName.toLowerCase(),
+                        liText: norm(li.textContent).slice(0, 60),
+                        parts: parts,
+                      };
+                    });
+                  }
+                  return out;
+                }
+                """,
+                list(_PLACEMENT_CATEGORIES),
+            ) or {}
+        except Exception as exc:
+            return {"error": str(exc)[:120]}
+
+    def _node_candidates() -> str:
+        """JS-кусок: створки раздела, чья подпись начинается с `prefix`.
+
+        `prefix` здесь — имя параметра самого скрипта, а не подстановка из
+        Python: текст уезжает в страницу аргументом, не склейкой строк.
+
+        Одно место на оба помощника ниже, чтобы «найти» и «проверить»
+        не разошлись в том, какой именно узел они имеют в виду.
+        """
+        return """
+          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          const root = document.querySelector('[data-rpa-placements-marker]');
+          if (!root) return null;
+          const cands = [...root.querySelectorAll('[role="button"][aria-expanded]')]
+            .filter(e => e.offsetParent !== null && norm(e.textContent).startsWith(prefix));
+          cands.sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length);
+        """
+
+    def _expand_node(prefix: str) -> dict:
+        """Раскрыть створку раздела по началу её подписи.
+
+        Из нескольких вложенных совпадений берём самое внутреннее — июльский
+        урок: `querySelectorAll` отдаёт предков раньше потомков, а обработчик
+        висит на потомке, и native-клик по обёртке до него не доходит.
+        """
+        try:
+            return page.evaluate(
+                "(prefix) => {"
+                + _node_candidates()
+                + """
+                  if (cands === null) return { found: false, why: 'нет метки блока' };
+                  if (!cands.length) return { found: false };
+                  const el = cands[0];
+                  const was = el.getAttribute('aria-expanded');
+                  el.scrollIntoView({ block: 'center', behavior: 'instant' });
+                  if (was === 'false') el.click();
+                  return {
+                    found: true,
+                    was: was,
+                    text: norm(el.textContent).slice(0, 60),
+                    candidates: cands.length,
+                  };
+                }
+                """,
+                prefix,
+            ) or {"found": False}
+        except Exception as exc:
+            return {"found": False, "error": str(exc)[:80]}
+
+    def _node_expanded(prefix: str) -> str | None:
+        """Открыта ли створка прямо сейчас — по мнению самой страницы."""
+        try:
+            return page.evaluate(
+                "(prefix) => {"
+                + _node_candidates()
+                + """
+                  if (cands === null || !cands.length) return null;
+                  return cands[0].getAttribute('aria-expanded');
+                }
+                """,
+                prefix,
+            )
+        except Exception:
+            return None
 
     # ── раскрытие ────────────────────────────────────────────────────────
     #
@@ -3352,9 +3917,60 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         _sleep_h(0.8)
         seen = _categories_visible()
 
+    # Раздел раскрыт, а узел внутри него — нет.
+    #
+    # 14.09: восемь отказов «видно 0 категорий из 5», и шаг научили
+    # перечислять, что в блоке можно нажать. Ответ пришёл первым же прогоном:
+    #
+    #   [button] PlacementsIncluded: 21Allowed with limited s  aria-expanded=false
+    #   [button] Platforms                                     aria-expanded=true
+    #   [a]      Hide settings
+    #
+    # Пять категорий лежат за свёрнутой кнопкой «Placements» — вложенной, со
+    # своей сводкой в подписи. `Placement controls`, который искал шаг, на
+    # странице отсутствует (`found: False`), а `Show more settings` уже нажат:
+    # рядом стоит `Hide settings`.
+    #
+    # Трогаем только «Placements». Соседний «Platforms» — другая настройка, и
+    # раскрытие соседа закрывает створку обратно: это гармошка, как у
+    # категорий (дневник, 9 сентября). Первый заход жал оба подряд, и в дампе
+    # «Placements» оказывался снова свёрнут — отсюда взялись площадки,
+    # принятые за новую разбивку раздела.
+    #
+    # Раскрываем по началу подписи — в ней сводка («Included: 21»), которая
+    # меняется от прогона к прогону, — и убеждаемся, что створка открылась.
+    # Сам факт клика ничего не значит: июльская хроника (пункт 6) — клик по
+    # внешней обёртке не долетает до React-обработчика на потомке.
+    if seen < len(_PLACEMENT_CATEGORIES):
+        node = _expand_node("Placements")
+        _dbg.append(f"expand[Placements]={node}")
+        report["expand_placements"] = node
+        if node.get("found"):
+            _sleep_h(1.0)
+            now = _node_expanded("Placements")
+            if now == "false":
+                kicked = _click_in_placements(
+                    "Placements", exact=False, max_children=2
+                )
+                _dbg.append(f"expand[Placements] повтор={kicked}")
+                _sleep_h(1.0)
+                now = _node_expanded("Placements")
+            _dbg.append(f"expand[Placements] стало={now}")
+            report["expand_placements_now"] = now
+            seen = _categories_visible()
+
     report["categories_visible"] = seen
     _dbg.append(f"categories_visible={seen}")
     if seen < len(_PLACEMENT_CATEGORIES):
+        # Не «сколько не нашли», а «что вместо них». Число ничего не говорит о
+        # главном: помечен ли нужный блок. Без этого разбор шесть раз свёлся к
+        # догадкам по посмертным снимкам.
+        inside = _what_is_in_the_block()
+        report["block"] = inside
+        _dbg.append("block=" + json.dumps(inside, ensure_ascii=False)[:2500])
+        rows = _category_rows()
+        report["category_rows"] = rows
+        _dbg.append("rows=" + json.dumps(rows, ensure_ascii=False)[:4000])
         report["why"] = f"видно {seen} категорий из {len(_PLACEMENT_CATEGORIES)}"
         _dump_dbg()
         return False
@@ -3378,35 +3994,26 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # Найдено И нажато одним вызовом: снятие галочки перекладывает
         # строки под ней, и координата, снятая отдельным шагом, к моменту
         # клика указывает уже на соседнюю.
+        # Подъём на четыре уровня, а не общий `rowFor`, и это не небрежность.
+        # 14.09: я свёл подпункты на `rowFor` «для единообразия» — и вместо
+        # семнадцати из восемнадцати круг 16 дал десять. Подпункты лежат во
+        # вложенных `li` внутри категории, и граница по `li`, которая спасает
+        # категории от чужой галочки, здесь отрезает свою же. Работающий путь
+        # без причины не меняют; правка откачена.
+        #
+        # Недоступная галочка — не всегда беда: «Facebook Business Explore»
+        # Meta держит выключенной и не даёт трогать. Если она уже в нужном
+        # состоянии, требовать от неё клика бессмысленно.
         try:
-            return bool(
-                page.evaluate(
-                    """
-                    ([label, wantChecked]) => {
-                      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                      const root = document.querySelector('[data-rpa-placements-marker]');
-                      if (!root) return false;
-                      const rows = [...root.querySelectorAll('*')].filter(e =>
-                        e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
-                      for (const row of rows) {
-                        let container = row.parentElement;
-                        for (let i = 0; i < 4 && container; i++) {
-                          const cb = container.querySelector('input[type=checkbox]');
-                          if (cb && !cb.disabled) {
-                            if (cb.checked !== wantChecked) cb.click();
-                            return cb.checked === wantChecked;
-                          }
-                          container = container.parentElement;
-                        }
-                      }
-                      return false;
-                    }
-                    """,
-                    [label, want_checked],
-                )
-            )
-        except Exception:
-            return False
+            res = page.evaluate(
+                PLACEMENTS_SUBITEM_JS, [label, want_checked]
+            ) or {"ok": False, "why": "пустой ответ"}
+        except Exception as exc:
+            res = {"ok": False, "why": str(exc)[:80]}
+        if not res.get("ok"):
+            _dbg.append(f"подпункт[{label}]={res}")
+            report.setdefault("subitems_failed", {})[label] = res
+        return bool(res.get("ok"))
 
     # Категории ведут себя как гармошка: раскрытие следующей закрывает
     # предыдущую. Проверено живым прогоном 9 сентября — код раскрыл все три
@@ -3426,17 +4033,37 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         _sleep_h(0.8)
         here = _subitem_labels()
         report["subitems_seen"].extend(x for x in here if x not in report["subitems_seen"])
-        for label in list(remaining_on):
-            if label in here and _set(label, True):
-                remaining_on.remove(label)
-        for label in list(remaining_off):
-            if label in here and _set(label, False):
-                remaining_off.remove(label)
+        # Два захода, пока категория ещё открыта. Первый клик по подпункту
+        # иногда не успевает отразиться: `_set` читает галочку в том же
+        # вызове, где кликает, и возвращает старое значение. У подпунктов
+        # первых двух категорий это сходило с рук — их добирал заход
+        # следующей категории. У последней такого захода нет, и 14.09
+        # «Ads on Facebook Reels» осталась единственной причиной отказа
+        # шага на прогоне пользователя.
+        for _ in range(2):
+            for label in list(remaining_on):
+                if label in here and _set(label, True):
+                    remaining_on.remove(label)
+            for label in list(remaining_off):
+                if label in here and _set(label, False):
+                    remaining_off.remove(label)
+            if not [x for x in remaining_on + remaining_off if x in here]:
+                break
+            _sleep_h(0.6)
 
     report["subitems_missing"] = remaining_on + remaining_off
     _dbg.append(f"subitems_seen={report['subitems_seen']}")
     if report["subitems_missing"]:
         ok = False
+
+    # Пока хоть что-то не сошлось, отказ должен принести разметку строк, а не
+    # одно число. Круг 13 стоил целого прогона ровно потому, что «Search
+    # results» осталась включённой, а чем она отличается от соседних — в
+    # отчёте не было.
+    if not ok:
+        cands = _category_candidates()
+        report["category_candidates"] = cands
+        _dbg.append("candidates=" + json.dumps(cands, ensure_ascii=False)[:3500])
 
     # «Allow limited spending to excluded placements»: в снимке 2026-09-09
     # её нет ни разу. Раньше она появлялась после исключения площадок, так
@@ -4422,6 +5049,8 @@ def upload_ad_creative(
     /ads/edit/ URL captured right after the Next-to-ad-level click) instead
     of guessing a re-open control.
     """
+    global _LAST_UPLOAD_DIAG
+    _LAST_UPLOAD_DIAG = {"file": Path(creative_path).name, "attempts": []}
     is_video = (creative_type or "").strip().lower() == "video"
     option_label = "Video ad" if is_video else "Image ad"
 
@@ -4627,6 +5256,41 @@ def upload_ad_creative(
           .filter(e => e.offsetParent !== null && e.children.length === 0)
           .some(e => (e.textContent || '').replace(/\s+/g, ' ').trim() === name)
     """
+    # ── след попытки ─────────────────────────────────────────────────────
+    #
+    # 14.09: шесть отказов подряд на двух аккаунтах, и по телеметрии о них
+    # известно ровно ничего — шаг возвращал False без единого слова. Три
+    # разбора подряд свелись к догадкам по посмертным снимкам, и все три
+    # оказались неверны (переименованные категории, Advantage+, вес файла).
+    #
+    # По снимкам установлено твёрдо только это: `input[type=file]` на странице
+    # нет, «Uploading» нет, индикатора нет — то есть загрузка не начиналась.
+    # Почему окно медиа оказалось не в том состоянии, посмертный снимок не
+    # говорит: он снят ПОСЛЕ всех трёх попыток, когда след уже простыл.
+    #
+    # Поэтому шаг теперь записывает, что видел и делал на каждом шагу. Это не
+    # меняет поведения — только перестаёт молчать там, где принимается решение.
+    _diag: dict = {
+        "file": Path(creative_path).name,
+        "size_mb": 0.0,
+        "attempts": [],
+    }
+    try:
+        _diag["size_mb"] = round(Path(creative_path).stat().st_size / (1024 * 1024), 1)
+    except Exception:
+        pass
+
+    def _remember(**kw) -> None:
+        _diag["attempts"].append(kw)
+        global _LAST_UPLOAD_DIAG
+        _LAST_UPLOAD_DIAG = _diag
+        try:
+            Path("output/debug_creative_upload.txt").write_text(
+                json.dumps(_diag, ensure_ascii=False, indent=1), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
     landed = False
     for _attempt in range(3):
         # Hand the file straight to the hidden <input type=file> instead of
@@ -4637,17 +5301,22 @@ def upload_ad_creative(
         # the click never lands. set_input_files needs no click at all, so the
         # control's shape stops mattering. Clicking is kept as a fallback for
         # renders that only expose a chooser.
+        _step: dict = {"n": _attempt + 1}
         try:
             # 1) If a file input is already mounted, feed it — no click, so the
             #    control's shape cannot matter.
             fed = False
-            for h in page.query_selector_all("input[type=file]"):
+            _inputs = page.query_selector_all("input[type=file]")
+            _step["file_inputs"] = len(_inputs)
+            for h in _inputs:
                 try:
                     h.set_input_files(creative_path)
                     fed = True
                     break
-                except Exception:
+                except Exception as exc:
+                    _step["set_files_error"] = f"{type(exc).__name__}: {exc}"[:120]
                     continue
+            _step["fed"] = fed
 
             # 2) Otherwise click Upload INSIDE expect_file_chooser. It must be
             #    inside: the button opens a real OS file dialog, and a bare
@@ -4657,18 +5326,55 @@ def upload_ad_creative(
             #    match on *contains*; the old exact-'Upload' lookup missed it
             #    and that is why uploads failed from 24.08 onward.
             if not fed:
-                with page.expect_file_chooser(timeout=25000) as fc_info:
-                    if not _click_xpath(
+                def _press_upload() -> bool:
+                    clicked = _click_xpath(
                         page,
                         "//*[@role='button' or self::button]"
                         "[contains(normalize-space(.), 'Upload')]",
-                    ):
+                    )
+                    _step["upload_xpath_clicked"] = clicked
+                    if not clicked:
                         upload_btn.first.click(timeout=5000)
-                fc_info.value.set_files(creative_path)
-        except Exception:
+                        _step["upload_fallback_clicked"] = True
+                        return True
+                    return clicked
+
+                # Тяжёлый файл идёт своей дорогой ДО перехватчика Playwright.
+                #
+                # `expect_file_chooser` перехватывает то же окно, что и мы, и
+                # два перехватчика на одно событие — заведомая драка. Поэтому
+                # здесь либо один путь, либо другой, но не оба сразу.
+                #
+                # Почему не через поиск поля: 14.09 обход всего дерева нашёл
+                # ноль полей при открытом окне выбора. Окно медиа живёт в
+                # отдельном процессе, и `DOM.getDocument` туда не дотягивается.
+                # Событие и backendNodeId обрабатываются в CDP-сессии
+                # того фрейма, который открыл диалог.
+                if _diag["size_mb"] > _PW_FILE_LIMIT_MB:
+                    _step["heavy"] = _upload_heavy_via_chooser_event(
+                        page, creative_path, _diag, _press_upload
+                    )
+                    if not _step["heavy"]:
+                        # Не вышло — пусть откажет прежний путь, вслух и с
+                        # текстом. Молчание здесь стоило полутора дней.
+                        with page.expect_file_chooser(timeout=25000) as fc_info:
+                            _press_upload()
+                        _step["chooser"] = True
+                        fc_info.value.set_files(creative_path)
+                else:
+                    with page.expect_file_chooser(timeout=25000) as fc_info:
+                        _press_upload()
+                    _step["chooser"] = True
+                    fc_info.value.set_files(creative_path)
+        except Exception as exc:
+            # Здесь и была слепота: исключение глоталось молча, и отличить
+            # «кнопки нет» от «окно выбора файла не открылось» было нечем.
+            _step["error"] = f"{type(exc).__name__}: {exc}"[:160]
+            _remember(**_step)
             _sleep_h(1.5)
             continue
         # Give the grid time to show the new tile before judging.
+        _ticks = 0
         for _ in range(30):
             try:
                 if page.evaluate(_tile_present_js, _upload_name):
@@ -4676,7 +5382,19 @@ def upload_ad_creative(
                     break
             except Exception:
                 pass
+            _ticks += 1
             _sleep_h(1.0)
+        # Что показывала страница, пока мы ждали плитку: шла ли загрузка
+        # вообще. 10.09 было доказано, что «медленно» и «не начиналось» —
+        # разные вещи, и по одному лишь отсутствию плитки их не различить.
+        _step["waited_s"] = _ticks
+        _step["tile"] = landed
+        try:
+            _step["uploading"] = _upload_in_progress(page)
+            _step["progress"] = _upload_progress(page)
+        except Exception:
+            pass
+        _remember(**_step)
         if landed:
             break
     if not landed:
@@ -7956,7 +8674,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                             e = selects.nth(k)
                             tag_k = e.evaluate("el => el.tagName.toLowerCase()")
                             outer_k = e.evaluate("el => el.outerHTML")
-                            dump_lines.append(f"[{k}] tag={tag_k}\n{outer_k[:1500]}")
+                            dump_lines.append(f"[{k}] tag={tag_k}\n{outer_k[:2500]}")
                         Path("output/debug_age_selects.txt").write_text(
                             "\n\n---\n\n".join(dump_lines), encoding="utf-8"
                         )

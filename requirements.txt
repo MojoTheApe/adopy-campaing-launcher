@@ -37,3 +37,8 @@ google-auth-httplib2==0.3.0
 # --- Analysis / content helpers ---
 anthropic==0.117.0
 openai==2.32.0
+
+# --- Отчёты об отказах (ACL-354) ---
+# Отправка выключается пустой ACL_SENTRY_DSN и не нужна для работы ACL:
+# модуль `src.acl_sentry` молча ничего не делает, если пакета нет.
+sentry-sdk==2.69.1

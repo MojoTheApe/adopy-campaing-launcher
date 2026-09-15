@@ -1159,24 +1159,66 @@ def _mlx_extract_profiles(body: dict) -> list[dict]:
     ]
 
 
+#: Сколько раз повторять сбойную страницу и сколько ждать между попытками.
+#: Восемнадцать запросов подряд — это восемнадцать возможностей споткнуться,
+#: и Multilogin спотыкается: три подряд полных загрузки на живом рабочем
+#: пространстве дали две по 1759 профилей и один отказ 501.
+_MLX_TRIES = 3
+_MLX_RETRY_PAUSE_S = 0.8
+
+
+def _mlx_worth_retrying(status: int) -> bool:
+    """Стоит ли повторять этот отказ.
+
+    5xx и 429 — про «сейчас не вышло»: со второй попытки обычно выходит.
+    401 и 403 — про токен: он не станет живым оттого, что мы спросим ещё раз,
+    а повтор лишь оттянет честный ответ на пару секунд.
+    """
+    return status >= 500 or status == 429
+
+
 def _mlx_search_all(requests_mod, headers: dict, search_text: str) -> tuple[list[dict], str]:
-    """Every profile the token can see, paged. Returns (profiles, error)."""
+    """Every profile the token can see, paged. Returns (profiles, error).
+
+    Страницы тянутся по сотне, и в рабочем пространстве владельца их
+    восемнадцать. Раньше единственный сбой на любой из них обрушивал всю
+    загрузку: человек видел красное «Multilogin refused» — то есть слышал
+    «отказано в доступе» там, где случился разовый сбой, — и лечил это
+    нажатием Reload, о чём на экране не говорилось ни слова.
+    """
+    import time as _time
+
     found: list[dict] = []
     offset = 0
     while offset < _MLX_MAX_PROFILES:
-        r = requests_mod.post(
-            f"{MLX_API_BASE}/profile/search",
-            headers=headers,
-            json={"limit": _MLX_PAGE, "offset": offset, "search_text": search_text},
-            timeout=20,
-        )
+        r = None
+        last = ""
+        for attempt in range(_MLX_TRIES):
+            if attempt:
+                _time.sleep(_MLX_RETRY_PAUSE_S)
+            try:
+                r = requests_mod.post(
+                    f"{MLX_API_BASE}/profile/search",
+                    headers=headers,
+                    json={"limit": _MLX_PAGE, "offset": offset, "search_text": search_text},
+                    timeout=20,
+                )
+            except Exception as exc:
+                # Обрыв связи — из того же рода, что и 5xx: повторяем.
+                r, last = None, f"{type(exc).__name__}: {exc}"[:200]
+                continue
+            if r.status_code == 200 or not _mlx_worth_retrying(r.status_code):
+                break
+        if r is None:
+            return found, f"no answer after {_MLX_TRIES} tries" + (f": {last}" if last else "")
         if r.status_code != 200:
             detail = ""
             try:
                 detail = ((r.json().get("status") or {}).get("message") or "").strip()
             except Exception:
                 detail = (r.text or "")[:200]
-            return found, f"HTTP {r.status_code}" + (f": {detail}" if detail else "")
+            tries = f" after {_MLX_TRIES} tries" if _mlx_worth_retrying(r.status_code) else ""
+            return found, f"HTTP {r.status_code}{tries}" + (f": {detail}" if detail else "")
         page = _mlx_extract_profiles(r.json())
         found.extend(page)
         if len(page) < _MLX_PAGE:
@@ -2714,6 +2756,69 @@ async def account_spend_countries(
         "splits": country_split.all_splits(date_from, date_to),
         "note": note,
     })
+
+
+@app.post("/report-problem")
+async def report_problem(request: Request) -> JSONResponse:
+    """Пожаловаться из лаунчера: человек пишет, машина прикладывает факты.
+
+    Сегодня о поломке узнают из сообщения в переписке и фотографии экрана —
+    пересказанных, с опозданием и без фактов самой машины (ACL-354).
+
+    Окружение собирается здесь, а не человеком: версия потока, метка машины,
+    период на экране и последние отказавшие шаги. Всё это уже вычищено от
+    номеров кабинетов и профилей — тем же вычистителем, что и телеметрия.
+
+    **Неудача отправки не выдаётся за удачу.** Задача требует этого прямо:
+    «not falsely reported after a delivery failure». Пустой номер события —
+    это «не ушло», и так и сказано.
+    """
+    from src import acl_sentry
+
+    form = await request.form()
+    text = (form.get("text") or "").strip()
+    if not text:
+        return JSONResponse(
+            {"ok": False, "error": "Write what went wrong — even one line helps."},
+            status_code=400,
+        )
+
+    if len(text) > 4000:
+        return JSONResponse({"ok": False, "error": "Keep the report within 4000 characters."}, status_code=400)
+
+    context: dict[str, Any] = {
+        "where": (form.get("where") or "").strip()[:200],
+        "period": {k: str(form.get(k) or "")[:40] for k in ("from", "to", "span")},
+    }
+    try:
+        from src.fb_ads_rpa import run_telemetry, telemetry_sync
+
+        context["version"] = telemetry_sync.flow_version()
+        context["machine"] = telemetry_sync.machine_identity()[0]
+        failed = [
+            {k: r.get(k) for k in ("ts", "step", "campaign", "diag") if k in r}
+            for r in run_telemetry.load()[-400:]
+            if r.get("ok") is False
+        ]
+        context["last_failures"] = failed[-8:]
+    except Exception as exc:  # окружение не собралось — обращение всё равно уходит
+        context["context_error"] = str(exc)[:200]
+
+    event_id = ""
+    try:
+        event_id = acl_sentry.report_problem(text, context=context)
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": "Report submission was not confirmed. Your text is still available; retry when ready."}, status_code=502
+        )
+    if not event_id:
+        return JSONResponse(
+            {"ok": False,
+             "error": "Reporting is switched off on this machine, so nothing was sent."},
+            status_code=503,
+        )
+    # An SDK event ID confirms local queue acceptance, not network delivery.
+    return JSONResponse({"ok": True, "queued": True, "event_id": event_id}, status_code=202)
 
 
 @app.post("/account-spend/turn-off")
