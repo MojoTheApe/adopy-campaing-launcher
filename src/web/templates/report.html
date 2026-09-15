@@ -1627,6 +1627,21 @@
     }
     .amap-cell-read b { color: var(--text); font-weight: 600; }
     .amap-cell-read i { font-style: normal; font-size: 0.68rem; color: var(--muted); }
+    /* acl-357: спенд, привязанный к стране самим кабинетом. Своей строкой
+       под общим: у ячейки `white-space: nowrap`, и в одну строку это число
+       уехало бы за край под многоточие. Цветом отделено от общего спенда —
+       рядом стоят два числа об одних деньгах, и путать их нельзя. */
+    .amap-cell-read .amap-country-read {
+      display: block; font-size: 0.68rem; color: var(--accent);
+      /* Переносится, а не обрезается: у ячейки `nowrap`, и имя аккаунта
+         обрывалось посреди слова — «(FacebookDQ501 - Duan …». Имя тут не
+         украшение: под знаком валюты суммы разных кабинетов не
+         складываются, и видно, чей это. */
+      white-space: normal; line-height: 1.25;
+    }
+    .amap-cell-read .amap-country-read b { color: var(--accent); font-weight: 600; }
+    .amap-cell-read .amap-country-read span { color: var(--muted); margin-left: 2px; }
+
     /* ACL-354: окно жалобы. Скромное намеренно — человек уже расстроен, и
        разглядывать оформление ему незачем. */
     .report-box {
@@ -1690,7 +1705,29 @@
     .amap-caret:hover { color: var(--accent); }
     tr.amap-open .amap-caret { transform: rotate(90deg); display: inline-block; }
     .amap-caret-off { color: var(--border-strong); padding-right: 0.3rem; font-size: 0.7rem; }
+    /* acl-357: кнопок в строке стало три, и третья — Remove — уезжала за
+       край. Колонка фиксированной ширины (`table-layout: fixed`), а ячейка
+       не переносила содержимое, поэтому лишнее просто обрезалось: кнопка
+       оставалась в разметке, но нажать её было нельзя.
+
+       Перенос, а не сужение соседей: отнять ширину у колонок с числами
+       значит испортить то, ради чего таблицу и читают. Вторая строка
+       появляется только там, где кнопки не поместились.
+       Селектор длиннее соседних не для красоты: перенос запрещает
+       `.amap table.amap-grid td` — правило сильнее любого одиночного класса,
+       и короткая запись просто не сработает. Проверено в браузере:
+       `white-space` оставался `nowrap`, а Remove висел за краем. */
     .amap-actions { text-align: right; }
+    .amap table.amap-grid td.amap-actions {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      /* Кнопки прижаты вправо, и левое поле здесь только съедает место:
+         161px кнопок не влезали в колонку из-за 27px отступов, и строка
+         разъезжалась на две. */
+      padding-left: 0.3rem;
+    }
+    .amap table.amap-grid td.amap-actions > button { margin: 0.05rem 0 0.05rem 0.2rem; }
     .amap .amap-x {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -5690,6 +5727,8 @@ function amapWatchOpen() {
   Array.prototype.forEach.call(blocks, function (d) {
     var key = d.getAttribute('data-country');
     if (known.indexOf(key) !== -1) d.open = true;
+    if (d.dataset.openWatch === '1') return;
+    d.dataset.openWatch = '1';
     d.addEventListener('toggle', function () {
       var now = amapOpenList();
       var at = now.indexOf(key);
@@ -5722,7 +5761,9 @@ if (document.readyState === 'loading') {
     var boxes = document.querySelectorAll('details.manage-builder[id]');
     Array.prototype.forEach.call(boxes, function (d) {
       if (open.indexOf(d.id) !== -1) d.open = true;
-      d.addEventListener('toggle', function () {
+      if (d.dataset.openWatch === '1') return;
+    d.dataset.openWatch = '1';
+    d.addEventListener('toggle', function () {
         var now = [];
         Array.prototype.forEach.call(boxes, function (x) { if (x.open) now.push(x.id); });
         try { localStorage.setItem(KEY, JSON.stringify(now)); } catch (e) {}
@@ -5778,10 +5819,135 @@ function amapReadSpend(btn) {
     .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
 }
 
+/* ── Разбивка по странам (acl-357) ─────────────────────────────────────
+   Кнопка в строке аккаунта: спросить сам кабинет, каким странам он относит
+   свои деньги. Чтение дорогое — оно создаёт в кабинете отчёт, — поэтому
+   идёт в фоне и опрашивается тем же маршрутом, что и спенд: оба показания
+   живут в одной клетке и снимаются за один период. */
+
+function amapReadCountries(btn) {
+  if (amapReadAllBusy) return;
+  var cell = amapSpendCell(btn);
+  var account = cell && cell.dataset.account;
+  if (!account) return;
+  var per = amapPeriod();
+  if (!per.from || per.span === 'all') return;
+  btn.disabled = true;
+  btn.className = 'amap-btn amap-countries';
+  btn.textContent = 'countries…';
+  var body = new FormData();
+  body.append('account', account);
+  body.append('date_from', per.from);
+  body.append('date_to', per.to);
+  body.append('span', per.span);
+  fetch('/account-spend/read-countries', { method: 'POST', body: body, credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) throw new Error(j.error || 'refused');
+      amapPollCountries(account, btn, 0, per);
+    })
+    .catch(function (e) { amapCountriesFailed(btn, String(e && e.message || e)); });
+}
+
+function amapCountriesFailed(btn, why) {
+  btn.disabled = false;
+  btn.className = 'amap-btn amap-countries amap-live-bad';
+  btn.textContent = 'failed · retry';
+  btn.title = why || 'Could not read the country split';
+}
+
+function amapCountriesDone(btn) {
+  btn.disabled = false;
+  btn.className = 'amap-btn amap-countries';
+  btn.textContent = 'Countries';
+  btn.title = 'Read again';
+}
+
+function amapPollCountries(account, btn, tries, per) {
+  /* Тот же предел, что у спенда: пострановое чтение дольше, но человек не
+     должен гадать, идёт ли ещё что-то. Шесть минут молчания — это отказ. */
+  if (tries > 120) {
+    amapCountriesFailed(btn, 'no answer after six minutes — check the launcher window');
+    return;
+  }
+  setTimeout(function () {
+    fetch('/account-spend/status?account=' + encodeURIComponent(account)
+          + '&date_from=' + encodeURIComponent(per.from)
+          + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) throw new Error(j.error || 'Could not read status');
+        var s = j.split;
+        if (!s) { amapCountriesFailed(btn, 'the reading disappeared before it finished'); return; }
+        if (s.state === 'running') { amapPollCountries(account, btn, tries + 1, per); return; }
+        if (s.state === 'failed') amapCountriesFailed(btn, s.error || 'refused');
+        else if (s.state === 'ok' || s.state === 'empty') amapCountriesDone(btn);
+        else { amapCountriesFailed(btn, 'Unknown country reading state'); return; }
+        return amapRefreshCountryLines(per).catch(function () {
+          amapCountriesFailed(btn, (s.error ? s.error + '. ' : '') + 'Could not refresh the country totals; reload the page.');
+        });
+      })
+      .catch(function (e) { amapCountriesFailed(btn, String(e && e.message || e)); });
+  }, 3000);
+}
+
+function amapRefreshCountryLines(per) {
+  // Reuse server-rendered summaries, preserving existing forms and DOM listeners.
+  return fetch('/account-map?date_from=' + encodeURIComponent(per.from)
+               + '&date_to=' + encodeURIComponent(per.to)
+               + '&span=' + encodeURIComponent(per.span), { credentials: 'same-origin' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('Could not refresh the country totals');
+      return r.text();
+    })
+    .then(function (html) {
+      var slot = document.getElementById('amap-slot');
+      if (!slot) return;
+      var fresh = new DOMParser().parseFromString(html, 'text/html');
+      var map = slot.querySelector('.amap');
+      if (!map || !fresh.querySelector('.amap')) throw new Error('Invalid account map response');
+      var blocks = fresh.querySelectorAll('details.amap-country[data-country]');
+      blocks.forEach(function (block) {
+        var key = block.getAttribute('data-country');
+        var live = slot.querySelector('details.amap-country[data-country="' + CSS.escape(key) + '"]');
+        if (!live) {
+          var added = block.cloneNode(true);
+          added.open = true;
+          map.insertBefore(added, map.querySelector('.amap-available'));
+          return;
+        }
+        var holder = live.querySelector('.amap-live-summary');
+        if (!holder) return;
+        var was = holder.querySelector('.amap-country-read');
+        var now = block.querySelector('.amap-country-read');
+        if (was && now) was.replaceWith(now.cloneNode(true));
+        else if (now) holder.appendChild(now.cloneNode(true));
+        else if (was) was.remove();
+      });
+      // A failed retry may remove the only reading for a virtual country.
+      slot.querySelectorAll('details.amap-country[data-country]').forEach(function (live) {
+        var key = live.getAttribute('data-country');
+        if (!fresh.querySelector('details.amap-country[data-country="' + CSS.escape(key) + '"]')) {
+          var previous = live.querySelector('.amap-country-read');
+          if (previous) previous.remove();
+        }
+      });
+      var count = map.querySelector('.amap-head > .amap-note');
+      if (count) count.textContent = map.querySelectorAll('details.amap-country[data-country]').length + ' countries · numbers from the stats workbook';
+      if (typeof amapWatchOpen === 'function') amapWatchOpen();
+    });
+}
+
 function amapMoney(spend, currency) {
-  var code = String(currency || '').toUpperCase();
-  return (/^[A-Z]{3}$/.test(code) ? code : 'currency unknown') + ' '
-    + Number(spend).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  // Двойник `money_format.fmt_currency`: показываем то, что написала Meta —
+  // код кодом, знак знаком. Разойтись им нельзя: одна и та же сумма рисуется
+  // отсюда после Read и с сервера при загрузке страницы, и разная подпись
+  // читалась бы как разные деньги.
+  var written = String(currency || '').trim();
+  var amount = Number(spend).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  if (['$', '€', '£', '₪'].indexOf(written) >= 0) return written + amount;
+  var code = written.toUpperCase();
+  return (/^[A-Z]{3}$/.test(code) ? code : 'currency unknown') + ' ' + amount;
 }
 
 function amapUpdateCountrySummaries() {

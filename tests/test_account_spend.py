@@ -414,3 +414,40 @@ def test_the_url_end_crosses_a_month():
 
 def test_a_broken_date_does_not_break_the_url():
     assert "date=нет_нет" in sp._url("act_1", "нет", "нет")
+
+
+# ── валюта: передаём то, что написала Meta ────────────────────────────────
+
+class _TotalsPage:
+    """Страница, у которой в строке итогов одна сумма."""
+
+    def __init__(self, raw):
+        self._raw = raw
+
+    def evaluate(self, script, *args):
+        return {"spend": self._raw, "label": True}
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.mark.parametrize("raw, written", [
+    ("$44.17", "$"),
+    ("€12.00", "€"),
+    ("£9.50", "£"),
+    ("₪120.00", "₪"),
+    ("KWD 21.61", "KWD"),
+    ("", ""),
+    ("Results from 4 campaigns", ""),
+])
+def test_the_currency_is_passed_through_as_meta_wrote_it(raw, written):
+    """Ничего не переводим: `$` остаётся `$`.
+
+    Прежде здесь стояло `("$", "USD")`, и на мексиканском кабинете дешборд
+    молча подписывал песо долларами — цифра выглядела знакомой, усомниться
+    было не в чем. Знак сам по себе не говорит, чьи это доллары, но и не
+    врёт об этом, в отличие от подставленного кода.
+    """
+    page = _TotalsPage(raw)
+    sp._scan_totals(page)
+    assert getattr(page, "_acl_spend_currency", None) == written

@@ -15,11 +15,17 @@
         {#- Колонок и долей поровну, в сумме ровно 100%. Когда-то доль было на
             одну меньше: ширины сложились без последней, и колонка с кнопками
             уехала за правый край. Теперь счёт держит тест, а не память. -#}
+        {#- acl-357: кнопок в строке стало три (Read, Countries, Remove), и в
+            прежние 13% они не влезали — Remove оказывался за краем ячейки,
+            видимый в разметке и недоступный мышке. Доли взяты у самых
+            «рыхлых» колонок: имя аккаунта и так обрезается многоточием,
+            Status и Setup несут короткие подписи. Числа не тронуты: ради них
+            таблицу и читают. -#}
         <colgroup>
-          <col style="width:23%"><col style="width:8%"><col style="width:9%">
+          <col style="width:19%"><col style="width:8%"><col style="width:9%">
           <col style="width:5%"><col style="width:5%"><col style="width:5%">
-          <col style="width:5%"><col style="width:5%"><col style="width:10%">
-          <col style="width:12%"><col style="width:13%">
+          <col style="width:5%"><col style="width:5%"><col style="width:9%">
+          <col style="width:10%"><col style="width:20%">
         </colgroup>
         {#- Два спенда стоят рядом и подписаны источником: один из книги
             статистики, другой прочитан с самого кабинета. Порознь их легко
@@ -148,6 +154,23 @@
               {%- else -%}
                 <button type="button" class="amap-btn amap-read" title="Read spend for the selected dates in this account's Multilogin profile"
                         onclick="amapReadSpend(this)">Read</button>
+              {%- endif -%}
+              {#- acl-357: разбивка по странам. Отдельная кнопка, а не часть
+                  Read, потому что это другое чтение и стоит дороже: оно
+                  создаёт в кабинете отчёт и выставляет в нём период и
+                  разрезы. Привязать его к Read значило бы платить эту цену
+                  каждый раз, когда человеку нужна одна цифра спенда.
+
+                  Состояние строится на клиенте: на сервере пострановое
+                  чтение сведено по стране, а не по аккаунту, и тащить сюда
+                  вторую раскладку ради надписи на кнопке — лишняя связь. -#}
+              {%- if amap.span == 'all' or not amap.date_from -%}
+                <button type="button" class="amap-btn amap-countries" disabled
+                        title="Select dates to read the country split">Countries</button>
+              {%- else -%}
+                <button type="button" class="amap-btn amap-countries"
+                        title="Read which countries this account attributes its spend to, for the selected dates"
+                        onclick="amapReadCountries(this)">Countries</button>
               {%- endif -%}
               <button type="button" class="amap-x"
                       title="Take {{ r.account }} out of {{ mc.country }}. The country stays; the account keeps its Multilogin profile, its proxy and its history, and moves to Available accounts."

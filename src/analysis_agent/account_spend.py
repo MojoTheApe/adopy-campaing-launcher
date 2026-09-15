@@ -1206,6 +1206,23 @@ def _scroll_to_totals(page) -> None:
         pass
 
 
+def _written_currency(raw: str) -> str:
+    """Чем Meta подписала сумму — знаком или кодом, как написано.
+
+    Ничего не переводим и ничего не достраиваем: `$` остаётся `$`. Знак сам
+    по себе не говорит, доллары это США, Мексики или Австралии, — но и врать
+    об этом не будет, в отличие от подставленного «USD».
+    """
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    for sign in ("€", "£", "₪", "$"):
+        if text.startswith(sign):
+            return sign
+    head = text.split(" ", 1)[0]
+    return head if len(head) == 3 and head.isalpha() and head.isupper() else ""
+
+
 def _scan_totals(page) -> tuple[float | None, bool]:
     """Сумма из строки итогов и есть ли надпись, за которую берётся курсор."""
     try:
@@ -1213,7 +1230,14 @@ def _scan_totals(page) -> tuple[float | None, bool]:
     except Exception:
         return None, False
     raw = (found or {}).get("spend") or ""
-    page._acl_spend_currency = next((code for sign, code in (("$", "USD"), ("€", "EUR"), ("£", "GBP"), ("₪", "ILS")) if raw.strip().startswith(sign)), "")
+    # Передаём знак, который написала Meta, и ничего не переводим (решение
+    # владельца 15.09). Прежде здесь стояло `("$", "USD")`, и на мексиканском
+    # кабинете дешборд молча подписывал песо долларами: цифра выглядела
+    # знакомой, и повода усомниться не было.
+    #
+    # Показывать знак кабинета как есть — честнее перевода и дешевле поиска
+    # настоящей валюты: на страницах настроек Meta её больше не пишет.
+    page._acl_spend_currency = _written_currency(raw)
     return (_first_money(raw) if raw else None), bool((found or {}).get("label"))
 
 
