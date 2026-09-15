@@ -274,16 +274,26 @@ def money_and_currency(text: str) -> tuple[float | None, str]:
     )
     if not match or (match['sign1'] and match['sign2']):
         return None, ""
-    tokens = [match['prefix'], match['suffix']]
-    codes = {_CURRENCY_SIGNS.get(t, t) for t in tokens if t and t != "$"}
-    if len(codes) > 1:
+    # Передаём то, что написала Meta, и ничего не переводим: `$` остаётся
+    # `$`, `₪` остаётся `₪`. Прежде знак превращали в код, а `$` отбрасывали
+    # как неоднозначный — решение владельца 15.09: показывать знак кабинета
+    # как есть. Это снимает и выдуманное знание («$» = USD), и охоту за
+    # валютой кабинета по страницам Ads Manager.
+    #
+    # Таблица знаков осталась, но только для сверки: «€12.00 EUR» — одна
+    # валюта, записанная дважды, а «€1.00 GBP» — противоречие и отказ.
+    tokens = [t for t in (match['prefix'], match['suffix']) if t]
+    if len({_CURRENCY_SIGNS.get(t, t) for t in tokens}) > 1:
         return None, ""
     value = float(match['number'].replace(",", "").replace(" ", ""))
     if not math.isfinite(value):
         return None, ""
     if (match['sign1'] or match['sign2']) == "-":
         value = -value
-    return value, next(iter(codes), "")
+    # Если Meta написала и знак, и код («€12.00 EUR»), берём код: он точнее,
+    # и он тоже написан ею, а не выдуман нами.
+    written = next((t for t in tokens if len(t) == 3), "")
+    return value, written or (tokens[0] if tokens else "")
 
 
 _EMPTY_MARKERS = {"no data", "no results", "no data available", "no results found"}

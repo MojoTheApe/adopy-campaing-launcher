@@ -14,17 +14,27 @@ from src.analysis_agent.country_split import (
 
 # ── money_and_currency ─────────────────────────────────────────────────
 
-def test_dollar_amount_parses_without_guessing_currency():
-    # $ пишут за десяток валют — код не выдумывается.
-    assert money_and_currency("$1,234.56") == (1234.56, "")
+def test_dollar_amount_keeps_the_sign_meta_wrote():
+    # $ пишут за десяток валют. Код не выдумываем, но и знак не теряем:
+    # решение владельца 15.09 — показывать то, что стоит в кабинете.
+    assert money_and_currency("$1,234.56") == (1234.56, "$")
 
 
 def test_three_letter_code_wins():
     assert money_and_currency("KWD 12.00") == (12.0, "KWD")
 
 
-def test_euro_sign_maps_to_code():
-    assert money_and_currency("€45.50") == (45.5, "EUR")
+def test_euro_sign_stays_a_sign():
+    assert money_and_currency("€45.50") == (45.5, "€")
+
+
+def test_a_code_written_next_to_the_sign_wins():
+    """«€12.00 EUR» — одна валюта, записанная дважды; код точнее знака."""
+    assert money_and_currency("€12.00 EUR") == (12.0, "EUR")
+
+
+def test_a_sign_and_a_different_code_is_a_refusal():
+    assert money_and_currency("€1.00 GBP") == (None, "")
 
 
 def test_campaign_count_is_not_money():
@@ -56,7 +66,7 @@ def test_rows_extracted_by_header_words():
     ]
     rows, how = rows_from_cells(matrix)
     assert rows == [
-        {"country": "Kuwait", "spend": 23.89, "currency": ""},
+        {"country": "Kuwait", "spend": 23.89, "currency": "$"},
         {"country": "Saudi Arabia", "spend": 21.61, "currency": "KWD"},
     ]
     assert "header row 1" in how
@@ -91,7 +101,7 @@ def test_column_order_does_not_matter():
         ["$5.00", "Ecuador"],
     ]
     rows, _ = rows_from_cells(matrix)
-    assert rows == [{"country": "Ecuador", "spend": 5.0, "currency": ""}]
+    assert rows == [{"country": "Ecuador", "spend": 5.0, "currency": "$"}]
 
 
 def test_short_rows_do_not_crash():
