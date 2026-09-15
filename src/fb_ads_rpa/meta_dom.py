@@ -4803,6 +4803,20 @@ def upload_ad_creative_with_retry(
     report False forever — once media is attached, the "Set up creative"
     button this function waits for no longer exists).
     """
+    # Повторное использование медиатеки проверяем ДО быстрого отказа: копия
+    # могла появиться там от соседнего объявления, и тогда файл вообще никуда
+    # не поедет. Быстрый отказ — только про повторную ЗАГРУЗКУ.
+    if upload_already_failed(creative_path):
+        verdict = reuse_before_upload(page, creative_path)
+        if verdict is True:
+            return True
+        _telemetry.record(
+            "ad_creative_upload", False,
+            note="same_file_already_failed_this_run",
+            diag={"file": Path(creative_path).name},
+        )
+        return False
+
     for attempt in range(attempts):
         try:
             if upload_ad_creative(page, creative_type, creative_path, edit_url=edit_url):
@@ -4824,7 +4838,44 @@ def upload_ad_creative_with_retry(
                 return False
             _telemetry.record("creative_upload_stalled", None, note="reload_and_retry")
             _reload_editor(page, edit_url)
+    # Сдались — но убрать за собой обязаны. Незакрытый диалог перехватывает
+    # ВСЕ последующие шаги: 15.09 один отказ загрузки превратился в четыре
+    # (`ad_destination`, `ad2_name`, ...), у каждого в диагностике `dialogs: 1`,
+    # и каждый стоил ещё 15-25 секунд ожидания вхолостую. Настоящая причина при
+    # этом тонет среди одинаковых «не нашёл элемент».
+    try:
+        _close_creative_setup_modal(page)
+    except Exception:
+        pass
+    _remember_upload_failed(creative_path)
     return False
+
+
+#: Файлы, которые в этом прогоне уже не смогли загрузиться.
+#:
+#: Ключ — прогон и путь: у одной кампании три объявления с одним и тем же
+#: креативом, и после провала на первом остальные два платили полную цену без
+#: единого шанса. Замер 15.09: `ad2_creative_upload` — 178 секунд в среднем,
+#: почти всё впустую; за день это 10 минут из 48.
+_failed_uploads: set[tuple[str, str]] = set()
+
+
+def _upload_memo_key(creative_path: str) -> tuple[str, str]:
+    return (_telemetry._current.get("run_id") or "", str(creative_path or ""))
+
+
+def _remember_upload_failed(creative_path: str) -> None:
+    _failed_uploads.add(_upload_memo_key(creative_path))
+
+
+def upload_already_failed(creative_path: str) -> bool:
+    """Этот файл уже провалился в этом прогоне?
+
+    Память намеренно живёт в пределах прогона: между прогонами условия
+    меняются (другой кабинет, другая сеть, перезапущенный профиль), и
+    переносить туда приговор нельзя.
+    """
+    return _upload_memo_key(creative_path) in _failed_uploads
 
 
 def _upload_retry_can_reload(page: Page, edit_url: str = "") -> bool:
