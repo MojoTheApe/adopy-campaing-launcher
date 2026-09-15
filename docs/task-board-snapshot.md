@@ -1,6 +1,6 @@
 ---
 board: ACL
-updated: 2026-09-08
+updated: 2026-09-09
 ---
 
 # ACL — Task Board
@@ -106,6 +106,37 @@ python scripts/acl_board.py --render
         The count is now tested, not remembered: columns, colgroup shares,
         their sum, and the drill's colspan. The same class of slip once pushed
         the button column off the right edge.
+  - [x] `acl-338` The state of an account is written, not ticked #review @dashboard
+        Two columns this same branch had added, undone on sight.
+        **To do** carried the open recommendations — "Air/GMBL/Vid Blue - 3⚠" —
+        and took a sixth of the table's width. For a ready account that is
+        noise rather than a task: the optimization section already says it, and
+        in the account row it answers nothing.
+        **The ✅/❌ tick** answered a question nobody asks out loud — "is it
+        ready". People ask a different one: what is going on with this account.
+        The column now says `ready`, and when the account is not ready it says
+        why ("Video selfie"). That reason was the only thing worth keeping from
+        To do: for a not-ready account the workbook's to-do *is* the
+        explanation; for a ready one it is somebody else's list.
+        Status stays separate — it is what the account page said when it was
+        last read. An account can be set up and still carry a warning, so the
+        two must not be merged.
+  - [x] `acl-339` A day the workbook does not know must not look forbidden #review @dashboard
+        "For some reason I cannot set yesterday in the date picker." Checked on
+        the live dashboard: it can be set — the button is not `disabled`, the
+        click applies, the address becomes `?date_from=2026-09-08`. Only the
+        look was in the way.
+        Days and presets with no workbook rows were painted muted with
+        `opacity: .55` — the same language `:disabled` speaks two lines below.
+        The reading was correct: that is what a prohibition looks like.
+        This matters beyond the pixels. The workbook says what the *dashboard*
+        knows, not what can be asked of the *account*: Read goes to Ads
+        Manager, where yesterday and today always exist, while the workbook
+        lags a day or two almost every day. Dimming the choice by the workbook
+        ties two sources to one limit — the clipping itself was removed for
+        that reason, and the styling kept saying otherwise.
+        The colour is back; "no rows here" is now a dot under the day and a
+        dashed marker on the preset. A dot says "no data", dimming said "no".
 - [ ] `acl-103` Read spend from the company BI, not the workbook #next @analysis needs:acl-105
       Today every number comes from an Excel file somebody keeps up to date.
       **The BI gets its spend through Adverity** — read-only ETL that pulls
@@ -297,6 +328,102 @@ python scripts/acl_board.py --render
         impossible without publishing something. A closed profile is simply
         started — that is not a relaunch and cannot log anyone out; a
         hand-opened one is left alone with an explanation.
+  - [x] `acl-351` The builder takes its accounts from the links, not the workbook #review @dashboard
+        An account connected on the dashboard and absent from the stats
+        workbook showed in the country's account map — spend, status, a Read
+        button — and did not appear in the Campaign Builder at all. There was
+        nowhere to build on it, however much it was configured. That is exactly
+        a new test account: the working workbook has no row for it and should
+        not.
+        The builder answers "what are we launching", not "what made it into the
+        report". Its source is now the account↔country links.
+        This also switches on something the link store could do from the start
+        and nobody could use: **one account in several countries**. Links are
+        one row per link, `link()` takes nothing away, and the "already
+        connected…" list offers every known account — so pulling an account
+        from one country into another already worked. But in the builder it was
+        visible only where the workbook knew it, and the second country stayed
+        half-there.
+        Ordering matters: the accounts are added before the preflight list is
+        collected. Otherwise a linked account would get a builder row without a
+        configuration check — it would look ready while saying nothing about
+        itself.
+  - [x] `acl-350` Open the profile before connecting the account #review @dashboard
+        A closed circle. Connecting a profile found in Multilogin asked for the
+        ad account number. The dashboard can read that number itself — but only
+        from a profile opened by automation, or one this machine has opened
+        before. Opening a profile was offered only for an account already in
+        the map. And to get into the map, the number was required.
+        The only way out was to go and find the number by hand. The order
+        people actually work in — find it, open it, look inside the account,
+        connect it — was forbidden by code rather than by anything real.
+        Broken in three places. A profile now opens straight from the search
+        results, without the map. A missing profile folder is no longer a
+        refusal: Multilogin creates that folder on the first start here, so
+        refusing over it meant refusing to start a profile because it had never
+        been started. And an empty number no longer cancels the connect — the
+        account joins the map and the builder says `⚠ missing: ad_account_id`
+        until somebody fills it, which it already knew how to do.
+        What did not soften: a profile opened by hand in MLX Desktop is still
+        left alone. Restarting it is what logged x01 out.
+  - [x] `acl-352` The `act` parameter must be digits — Meta ignores the prefix #review @dashboard
+        `FacebookDQ438` refused to read spend: "Ads Manager opened a different
+        account". The number stored in the map was right — the browser's own
+        address bar showed it. What disagreed was our URL.
+        We put `act=act_<digits>` into the query, the number exactly as the map
+        stores it. Meta does not understand that parameter and **silently
+        ignores it**, opening the profile's default ad account instead.
+        **It looked like it worked for six weeks.** On a profile with one ad
+        account the default *is* that account: Meta ignored the parameter and
+        landed in the right place for the wrong reason. Seven successful reads
+        of `KLD_BFL_X84` — 259.48, 1072.39, 408.74 — were all made through a
+        broken address. It could only become visible on a profile with several
+        accounts, and `DQ438` was the first.
+        The guard that caught it was right to refuse: reading another account's
+        numbers and filing them under this one is worse than not reading.
+        One more reason it lived so long: our own URL parser **forgives** the
+        prefix — `(?:act_)?(\d+)`. We were lenient about our mistake when
+        reading and committed it when writing, so it never surfaced.
+        The refusal now names both accounts. It used to say only that they
+        differed; the fix is exactly those two numbers, and getting them took a
+        separate probe nobody at a screen can run.
+  - [x] `acl-345` The totals row has to be shown before it can be read #review @dashboard
+        The totals row sits **below** the campaign list in Ads Manager, and in
+        a short window Meta does not render it at all — so waiting for it was
+        waiting for something that was not being drawn. On 8 September a read
+        of 1–8 September failed exactly this way: the screenshot saved on
+        failure ends right under the first campaign row, the dates are right,
+        the Results spinner is still turning, and there is no totals row on the
+        page. Twenty seconds of waiting changed nothing.
+        The list is now scrolled before each look, not once — it loads as it
+        scrolls. Branch `fix/spend-totals-scroll`, commit `292c78a`, carried
+        whole inside `feature/manage-todo-column`.
+  - [x] `acl-346` One row per account, one place to connect #review @dashboard
+        Under the account map lived a second section describing the same
+        account again: its own numbers (`Cost` — the same spend), its own Ad
+        Asset column nobody could read, and its own connect form. That form was
+        worse than the one on the map: the map finds a profile by the last
+        letters of the name and reads the ad account id out of its own history,
+        while this one asked for the number by hand. Unique to it were only
+        "what is left to do" and "ready", which moved up into the row.
+        Commit `6e61025`.
+  - [x] `acl-337` The profile folder has two names and MLX uses the second #review @dashboard
+        `KLD_BFL_X84` refused with "the profile was opened by hand in MLX
+        Desktop" immediately after the dashboard itself had opened it with
+        "open profile". The message sounded familiar and reasonable, which is
+        why it drew no suspicion.
+        Everything on the machine was fine: the Mimic process carried
+        `--remote-debugging-port`, that same process held the listening socket,
+        CDP answered. One path did not match. Multilogin launches the browser
+        under the 8.3 short name
+        `C:\Users\EXAMPL~1\mlx\profiles\WORKSP~1\...`, we compute the long one,
+        and the ownership check compares them as strings — `abspath` and
+        `normcase` do not expand short names, so two names of one folder
+        disagree and no process is found.
+        Checking ownership by folder is right and stays: without it a read
+        could attach to *another* account's browser. Both spellings are offered
+        instead, long one first — a volume with 8.3 disabled has no short name
+        at all.
   - [x] `acl-108h` The read follows the period on screen #merged
         It always asked for yesterday. A number for a different stretch than
         the one shown beside it would read as two sources disagreeing while
@@ -305,16 +432,84 @@ python scripts/acl_board.py --render
         other.
   - [x] `acl-108c` Pull yesterday's spend off a live test account #merged
         The whole point. Until this happens `acl-108` is code, not a route.
-  - [ ] `acl-108e` A public "attach, never relaunch" in the RPA track #next @rpa
+  - [x] `acl-108e` A public "attach, never relaunch" in the RPA track #merged @rpa
+        PR #122, merged 11 September. Master carries the public pair and the
+        gathered selectors (`acl-108j`) — the reader calls them there now.
         Reading calls `_try_attach_existing` and `_profile_process_running`
         directly — private methods of another track — because there is no
         public way to say "use the window that is open, and if there is none,
         stop". Publishing wants the opposite and gets it; reading needs this.
-  - [ ] `acl-108d` Move the Ads Manager reading into the RPA track
+        **The dangerous half is closed** (11 September, `e6be77e`): a relaunch
+        would log the account out and can lose its proxy, and until then that
+        rule lived in a comment and two `strict_profile=True` arguments. A test
+        now records every call reading makes to the provider and names any new
+        one; a second test keeps every reading path going through the single
+        door. What remains is the track boundary itself, and moving reading
+        **Done 11 September** (`ec2edbb`, `feature/acl-108e-public-attach`):
+        `attach_existing_only` and `profile_is_running` on the provider. They
+        delegate to the same private methods, but from outside only the promise
+        is visible — the kitchen can change while the promise holds.
+        `strict_profile` is pinned inside the public path. A free port search
+        suits publishing, which just started the profile itself; reading it
+        would let attach to someone else's window and read someone else's
+        account. Three guards: reading calls nothing private, the public path
+        does nothing but delegate, and the strict flag stays.
+        The move itself (`acl-108d`) is still worth doing, but this no longer
+        waits on it.
+  - [x] `acl-108j` Gather the reading's Meta selectors in one place #review @dashboard
+        Groundwork for `acl-108d`, and useful on its own. Meta moves controls
+        for everyone at once: on 10 September it rewrote wording and eight
+        publishing steps fell over — reading looks at the same screens and
+        breaks the same way. Selectors scattered through the file mean fixing
+        them one at a time, found by search.
+        Seven names now sit above the first function, with the two JavaScript
+        blocks beside them. A test refuses any selector literal inside a
+        function, so the block cannot quietly spread back — it caught one the
+        eye had missed (`_wait_for_grid`).
+        `country_split.py` is deliberately untouched: the other session is
+        mid-work there (`acl-357`, `c069838`). Consolidating a file someone is
+        rewriting is how two people produce one bug twice.
+        Branch `feature/reading-selectors-in-one-place`.
+  - [ ] `acl-108k` The same for `country_split.py` #blocked @dashboard needs:acl-357
+        Waits on the other session's Ads Reporting work reaching master
+        (`acl-357`, `c069838`). Gathering a file while someone rewrites it is
+        how two people produce one bug twice — that already happened once on
+        11 September with the language field.
+        Most of it is already tidy: three named JavaScript constants
+        (`_GRAB_CELLS_JS`, `_CLICK_LABEL_JS`, `_CHECKED_JS`). What is left is
+        one query written inline at `_shown_period_text` — a whole page scan
+        and a date pattern spelled into a Python string, escapes and all.
+        Move those beside the rest and the file matches `account_spend.py`;
+        the guard from `acl-108j` can then cover it too.
+  - [ ] `acl-108d` Move the Ads Manager reading into the RPA track #next @rpa
+        Tracked in GitHub Issues as **ACL-1121** (#121), module Data & Reporting,
+        type Improvement, Backlog. Taken out of the ACL-108 checklist on 11
+        September: an unfinished item there would keep ACL-108 from ever
+        reaching Merged for work that is no longer part of it.
         The selectors for Meta's own screens belong beside the other ones, in
         `src/fb_ads_rpa`, owned by the session that fixes them when Meta moves
         a control. It sits in the dashboard track today only because that is
         whose hands were free.
+        **Half done, parked 11 September** (`29f3e14`,
+        `feature/acl-108d-reading-into-rpa`, pushed, merged nowhere). The code
+        has moved: `src/fb_ads_rpa/ads_manager_read.py` holds Meta's screens,
+        Multilogin profiles and the period sums; `account_spend` keeps the
+        readings store, the statuses and the read queue — dashboard questions
+        that never touch a Meta screen. The dependency runs one way.
+        What is left is not the move but the tests: 115 failures and 13 errors,
+        all from one mechanical cause. Around fifty
+        `monkeypatch.setattr(account_spend, "_period_matches", …)` targets
+        across thirteen files name things that have moved. Each has to be
+        re-pointed and checked that it patches the name the code actually
+        resolves.
+        Re-exporting the moved names back into `account_spend` would turn the
+        suite green and meaningless — the patch would stop reaching the real
+        call. Not an option.
+        Also on that branch: a copy of the `browser.py` change that shipped
+        separately as `acl-108e` (`ec2edbb`). The branch forked earlier; drop
+        it on rebase.
+        No longer urgent — `acl-108e` closed the dangerous half. What remains
+        is track ownership, and it costs a session of careful mechanical work.
   - [x] `acl-108i` Reading three days took three minutes #merged
         The retry added the day before was right and expensive: each look
         walked every div and span on the page one node at a time, thousands of
@@ -357,6 +552,36 @@ python scripts/acl_board.py --render
       One account, on demand, when a person asks. Never on a timer. This is
       the Marketing API route, separate from the BI: it answers "what does the
       account say right now", which is not the same question as `acl-103`.
+- [ ] `acl-353` "Read all" on the account map #next @dashboard
+      **Release-critical.** Every account has its own Read button; reading a
+      map of ten accounts is ten clicks and ten waits, and a buyer will do
+      that every morning. One button reads every connected account for the
+      period on screen.
+      The browser rule stands — one profile at a time (`acl-108a`) — so this
+      is a **queue, not a parallel run**: accounts are read one after another,
+      each row updates as its reading lands, and the button shows progress
+      ("3 of 10"). One account failing must not stop the queue: its row keeps
+      the error, the next account starts. Never on a timer — the button is
+      still a person asking (`никогда не поллить аккаунты` rule).
+      To settle first: one global button, per-country buttons, or both — a
+      country tab already shows its own accounts (`acl-102d`).
+- [x] `acl-710` Connect an account where the country has none #review @dashboard
+      A country shows up on the map because the workbook has money for it,
+      while nothing is linked to it yet — Guatemala, $1,894 spent, zero
+      accounts. Opening it gave a sentence, not a control: "connect the
+      account from the country's Accounts section, or add the country above
+      and place it." The person is already looking at the country and gets
+      sent to look for another place.
+      Nothing stood in the way: linking an account **creates** the country —
+      `account_links.link` writes a row and the country starts existing. So
+      the same form works, addressed by the country's name instead of a key
+      it does not have yet.
+      The form is now one piece (`_account_map_add.html`) used by both — a
+      country from the map and a country that is only a number in the
+      workbook. Two copies would have drifted: they get edited at different
+      times for different reasons.
+      Branch `feature/connect-empty-country`, based on `acl-356` iteration 2
+      (`20375c8`) because that is what the dashboard serves today.
 
 ### Open/close ads/ad sets
 
@@ -367,15 +592,127 @@ python scripts/acl_board.py --render
   - [ ] `acl-111b` Pause a single ad
   - [ ] `acl-111c` Refuse to touch anything outside the account being worked on
 - [ ] `acl-112` Request `ads_management` on the app #next @ops
-      Read access is not enough to pause anything. Nothing in this capability
-      moves until this is granted.
-- [ ] `acl-113` Open and close through the RPA #next @rpa
+      Read access is not enough to pause anything **through the token**. That
+      sentence used to read "nothing in this capability moves until this is
+      granted", and on 11 September that stopped being true: the review picked
+      the RPA route as the only one, and the browser carries the account's own
+      proxy and needs no permission from Meta. `acl-113` does not wait on this.
+      It still gates `acl-111`, if the token route is ever revived.
+- [x] `acl-113` Close campaigns and ads through the RPA #review @rpa
       Not a fallback — the second route, meant to work on its own. The browser
-      already carries the account's proxy, so it needs no permission from Meta
-      at all; only the code, which is not written.
-  - [ ] `acl-113a` Pause an ad set in Ads Manager, and start it again
-  - [ ] `acl-113b` Pause a single ad
-  - [ ] `acl-113c` Never near Publish
+      already carries the account's proxy, so it needs no permission from Meta.
+      **Works live since 12 September.**
+      **Owner's decisions.** The control is a toggle on the rows under an
+      account — no separate dialog. The levels are **campaign and ad**: the
+      11 September note here said ad set and ad, and that was wrong for how
+      this team works. Campaigns and ad sets run one-to-one, and the campaign
+      is what stops the money. The live account settled it — the same two rows
+      read at both levels: `on / Campaign off` at the ad-set level, `off / Off`
+      at the campaign level. A toggle on the ad set would have controlled the
+      wrong thing.
+      **Only turning off.** Turning off spends no money, turning on does; the
+      way back is by hand in Ads Manager, where the person sees the
+      consequences. Only a switched-on row is a button; a click takes two steps
+      so a mis-click cannot stop a live campaign.
+      Four checks before acting: the ad account, the period on screen, that the
+      page is Ads Manager, and that the row under that id still carries the
+      name the person saw. An id can go stale; turning off the wrong campaign
+      is worse than turning off none.
+      **Drawn off and staying off are different.** After the click it waits for
+      `aria-checked=false`, then reloads and reads the row again — up to twelve
+      looks. The first live turn-off confirmed on the **second** look, so the
+      patience was needed and not a precaution. A one-glance check had already
+      reported a failure for an ad that did turn off.
+      Never open an ad's editor (DQ204, 2 August): Meta pre-selects "Instant
+      form (suggested)" on every opening and autosaves it, so a clean Leads ad
+      picks up error #100 from a look-and-leave visit.
+      Every outcome is written down — `turn_off_log.jsonl` plus a launcher log
+      line. That is the part of `acl-117` without which the action could not
+      ship: "something changed yesterday" is not an answer.
+      Branch `feature/acl-113-toggle-in-the-tree`, stacked on `acl-118`.
+      GitHub: **#23, still To Do there** — the tracker will not move it to
+      Review while its dependency (ACL-1124 / PR #125) is unmerged, and that
+      rule is the team's. The work is done and confirmed live; the state in
+      GitHub follows the merge, not the keyboard. Do not read the two as
+      disagreeing.
+  - [x] `acl-113a` Close a campaign #review
+        Starting it again is deliberately out of scope — see "only turning
+        off" above.
+  - [x] `acl-113b` Close a single ad #review
+        First live confirmation 12 September, 15:52:38: `2025_23- Officialy`.
+  - [x] `acl-113c` Never near Publish #review
+        The switch's own label goes through `wizard_guard.forbidden_click_reason`
+        before the click. It reads "On/off" and never matches, which is the
+        point: the guard is there for the day we grab a different element.
+        Until now the `^Publish$` rule sat in `rpa_forbidden_zones.yaml`
+        connected only to the creation wizard.
+  - [ ] `acl-113d` Reading an account takes one and a half to three minutes #next @rpa
+        One visit for the campaigns, then one per campaign for its ads. At
+        twenty-five campaigns it hits the ceiling and the person waits five
+        minutes. Two honest ways out: read a campaign's ads when that campaign
+        is expanded rather than up front, or skip campaigns that are off and
+        have no spend. Neither is free — the first makes expanding slow, the
+        second hides rows.
+  - [ ] `acl-113e` The screen is not stolen, but the profile still is #next @rpa
+        The read no longer raises the profile window (the tab is created with
+        CDP's `background: true`; `context.new_page()` does not pass it). But
+        the profile is busy for minutes and one profile runs at a time, so a
+        second account waits. Worth knowing before ten buyers use this.
+- [x] `acl-118` Read an account's ad sets and ads with ids and on/off state #review @rpa
+      What the toggle stands on. The Read button already goes to that screen for
+      spend: attach to the open profile, never start one, verify the ad account,
+      wait for the grid. Owner's decision — this rides the same button rather
+      than a new control. Expanding an account shows workbook rows at once;
+      Read fills in ids and lights the toggles, so a live account is still read
+      when a person asks and never on a timer.
+      Per row: the name as the account spells it, the Meta id, the state in
+      Meta's own words (in review, rejected, archived — not flattened into a
+      boolean), the level, and which ad set an ad belongs to.
+      Costs tens of seconds per account, one account at a time. The interface
+      has to show it working rather than pretend the tree is already live.
+      **Done 11 September**, PR #125, `check-pr` verified, 23 tests. The parse
+      runs in a real browser against synthetic markup shaped like the grid —
+      a JS block is code, and faking its return value would test the fake.
+      State is two facts, not one: the switch (`on`/`off`/`unknown`) and the
+      Delivery column verbatim. "No switch visible" and "switched off" are
+      different answers, and "In review" is not flattened into a boolean.
+      Columns are found by their headers — people reorder them, and a fixed
+      index would read spend as a name. Caught on the way: the ads page also
+      shows an "Ad set name" column, and a shared header list found it before
+      "Ad name", so every ad of one ad set would have looked identical.
+      **Verified live 11 September** (`fb97ab1`): 5 ad sets and 6 ads with real
+      ids off KLD_BFL_X84. The first read returned zero rows with the headers
+      parsed, and the self-diagnosis named three mistakes at once — the grid
+      marks up only its header with roles (fifteen `columnheader`, zero
+      `role="cell"`; the body is `role="presentation"`), the id heuristic was
+      picking digits out of SVG path data, and the level was never checked.
+      All three are answered by `data-surface`, Meta's own logging labels,
+      which carry row id, cell purpose and object kind together.
+      **A trap worth remembering:** that vocabulary is legacy. Ad-set rows are
+      marked `CAMPAIGN`, ad rows `ADGROUP` — the names these levels had in the
+      old Ads API. Reading it literally is being wrong by a whole level.
+      Two facts, not one, proved right the same day: two ad sets came back with
+      the switch `on` and delivery `Campaign off` — switched on, delivering
+      nothing. A boolean would have shown them running.
+      Open for `acl-113`: the live ad row carries no link to its ad set.
+      **12 September, two corrections.** The tree walks **campaigns**, not ad
+      sets (see `acl-113`), and the flat ad list turned out to be lying: it
+      returned six rows worth $661 against the account's $2,117, while walking
+      the parents gave twenty-one worth $1,957 — one campaign alone has six.
+      The view tab honestly said "All ads"; what narrowed the list, the page
+      does not say. It is no longer read.
+      Ads come from `selected_campaign_ids`, so a parent is known by
+      construction rather than read off the page — the "Ad set name" column
+      exists in the header but has no cell in the row.
+      Also fixed here: the account's own status. The search was for a phrase I
+      invented ("account is restricted"); Meta writes "**We** restricted your
+      ad account". With that fixed it still passed as "no warning", because the
+      status was asked a moment after the grid drew and the banner arrives
+      later — the wait is now bounded and only a quiet page pays for it. And a
+      second layer: an unrecognised banner with "You can't run ads" reports
+      `blocked` in Meta's own words rather than silence.
+      GitHub: **ACL-1124** (#124), Data & Reporting, Feature, Review, High,
+      Release.
         Pausing stops money; publishing spends it. The rule that the RPA does
         not press Publish does not loosen because it learned a new verb.
 - [ ] `acl-116` One switch chooses the route #next @dashboard
@@ -479,10 +816,133 @@ python scripts/acl_board.py --render
 - [x] `acl-302` Ad level: creative, text, tracking link #shipped @rpa
 - [ ] `acl-303` Yotam's second supervised run #next @rpa
       The first run got partway. Not diagnosed yet.
+- [x] `acl-348` The builder belongs to an account, not to a recommendation #review @dashboard
+      9 September: the date was set to the 8th and the whole Campaign Builder
+      for Saudi Arabia disappeared — together with `KLD_BFL_X84`, connected and
+      ready, visible one row above in the account map with its spend and its
+      status.
+      The block was gated on the **sum of open recommendations**, and those are
+      computed inside the chosen period. One day had none for anybody, so a
+      working tool vanished for a reason that has nothing to do with it. Both
+      gates carried it — the outer `has_open` and the per-account row.
+      A campaign is built for an account, not for a stretch of days: the period
+      answers "how did it go", the builder answers "what are we launching".
+      Recommendations keep doing what they were for — filling the campaign
+      cards when they exist.
+      The empty-country message also lied: it blamed the GSheet and asked for a
+      Refresh, which sounded plausible next to missing recommendations and sent
+      people looking in the wrong place. It now points at the account map,
+      which is where a country with no accounts is actually fixed.
+- [x] `acl-347` A missing tracking link warns before upload, it does not forbid #review @dashboard
+      The owner's rule: no tracking link → highlight the field and warn before
+      upload, but the link is not required to upload. The builder form warns
+      and points at the field; it also tells three different silences apart —
+      nothing typed, typed but not saved, and a Jira address pasted where a
+      tracker belongs. Commit `4ce9c91`.
+      The other half of the rule lived in draft validation and did block. That
+      is `acl-343`, done a day later.
+- [x] `acl-342` Publishing no longer needs `Upload FB.xlsx` #review @dashboard needs:acl-343
+      The workbook still sits in the publish path for four things. Checked in
+      code, and two of the four turned out to be already done — the belief that
+      they were not was the only thing keeping the file there.
+      **Pixel — already dead weight.** `draft.pixel_id` is filled from the
+      workbook, stored, printed in the preview as `Pixel: —`, and used nowhere
+      else: no step types or picks it. Dropping it today costs nothing. The
+      rule for when it *is* needed (ACTIVE campaigns, conversion optimisation)
+      is the owner's: the account has exactly one pixel, so pick that one;
+      when it burns out, a new one replaces it.
+      **Creatives — already done.** `/api/creatives` scans the folder and the
+      builder searches that list; the Excel lookup only fires when the filename
+      is empty, which never happens for a builder draft. `image_files` and
+      `video_files` in `/api/ref-data` are leftovers nobody consumes.
+      **Interests — the fallback goes.** When a targeting name is not in the
+      library, the workbook's Interests sheet is used instead. It should not
+      be: missing interests are worth saying out loud, and a campaign can be
+      raised without them.
+      **Language — moves onto the dashboard**, into the setup row beside
+      OS / age / budget. The rule already beats the workbook in code
+      (`_geo_language_for_country(...) or excel_language`), so for GCC and
+      LatAm the sheet is never consulted; only other countries use it.
+      Defaults: GCC → Arabic, LatAm → Spanish (all), both clearable and
+      replaceable. **Anywhere else the field stays empty and is highlighted
+      when unset** — owner's decision, 9 September.
+      What is left after all four: the tracking link, which already has a home
+      in `ad_account_map.csv`. One thing has to flip — today the workbook wins
+      wherever it has a row, and the machine map is only consulted when it does
+      not. Reverse that and the file leaves the publish path entirely.
+- [x] `acl-343` An empty tracking link must warn, not block #review @rpa
+      Agreed with the owner: no tracking link → highlight the field and warn
+      before upload, but do not require it. Half of that shipped — the builder
+      form warns. The other half did not: `enrich_draft.py:151` still appends
+      "Link empty in Upload FB Accounts sheet" to `draft.errors`, and
+      `report.html` keeps Publish disabled while any error stands. So the link
+      is optional in words and mandatory in fact.
+      Two reasons this is the rule being wrong rather than caution: two lines
+      below in the same function `page_id` is handled correctly — a warning,
+      "required for ACTIVE campaigns only" — and the player reads the link as
+      `d.link or None`, so an empty one is simply not typed. A draft without a
+      destination URL is exactly what a draft is.
+      One line: `errors` → `warnings`. Same for the interests fallback above.
+      **RPA-track file** — `src/fb_ads_rpa/enrich_draft.py`. The dashboard
+      session found it and stopped there.
 
 ### Tests that survive Meta
 
-- [ ] `acl-340` A bench of recorded Ads Manager pages for `meta_dom` #next @rpa
+- [x] `acl-344` Cover the decisions a run is lost on #review @rpa
+      The owner's ask: campaign runs must stop breaking every time the
+      dashboard changes. Measured starting point — 18% of `src/fb_ads_rpa` and
+      `src/meta_campaign_agent`, 8,502 of 10,353 statements untested, eleven
+      modules at exactly zero.
+      Covered: the boundary the dashboard can break a run through (one lock on
+      everything that opens a browser), Multilogin profile pairing, the
+      relaunch gate that keeps an account off an unproxied browser, the
+      publisher's draft-only and plain-browser refusals, the Mimic version
+      choice, telemetry, pacing and config. 176 checks, each broken in reverse
+      first. Coverage 18% → 21%.
+      **One defect found while writing them:** `pacing.begin_teach_wait`
+      announced that the RPA was waiting for the human, and pacing was supposed
+      to pause — `_HUMAN_TAKEOVER` was missing from the `global` declaration,
+      so the flag never changed. The RPA asked the person to click and carried
+      on acting in the same browser.
+      Branch `feature/board-full-tests`, commits `aacb684`, `61fb88c`,
+      `839ce4b`, `08752a9`, `5364787`, `c61e88b`. What is deliberately not
+      covered, and why, is `acl-340` and `acl-341`.
+### Navigator — an agent that reads the run and says where to look
+
+> Project note: `Navigator` on the artifact wall. A rally navigator reads the
+> pace notes and calls the corners; it never takes the wheel. The name is the
+> red line: it does not drive the browser, it answers *where* and the RPA acts.
+
+- [x] `acl-360` Stage 1 — telemetry says *why*, not only *what* #review @rpa
+      The 9 September run produced six failures in a row — `placements`,
+      `ad_copy`, `ad_destination` twice — and the records said nothing about any
+      of them: `diag` empty on every one. Forty-three sites in the flow can
+      report a failure and **not one** passed a reason.
+      Worse: the detailed-targeting step sat entirely under
+      `if targeting_label:`. An empty interest list left no line at all — the
+      step simply did not exist in the stream. On screen it looked like "the
+      interests did not get set", and nothing could tell "there was nothing to
+      type" from "the field was not found": both outcomes looked identical,
+      which is to say invisible.
+      The context is now collected at the **single choke point** where the
+      record is written, not at forty-three call sites that would drift.
+      A skipped step gets its own outcome — `ok=None`, which stays out of the
+      failure rate: a skip is not a failure, but it is not a success either.
+      Everything is scrubbed before it is written: the context travels to the
+      company-wide telemetry sheet, and ad account ids do not.
+      Useful on its own — the person at the screen gets the reason — and it is
+      the precondition for `acl-361` and `acl-362`.
+- [x] `acl-361` Stage 2 — capture the page at a soft failure #review @rpa needs:acl-360
+      Screenshot, HTML and the step's parameters into the run's folder,
+      scrubbed. Same artefact as `acl-340`: one capture feeds both the test
+      bench and the agent, and doing it twice would be silly.
+- [ ] `acl-362` Stage 3 — a second opinion, one retry #later @rpa needs:acl-361
+      On a soft failure the run opens the seat that already exists for a human
+      (`pacing.begin_teach_wait`) and the agent answers with either "the control
+      is here" or "ask the human". One attempt, the same step, everything
+      recorded. Never chooses a value, never touches the browser, never adds a
+      step — Publish stays impossible by construction.
+- [x] `acl-340` A bench of recorded Ads Manager pages for `meta_dom` #review @rpa
       `meta_dom` is 3,175 statements and 6% covered — the largest untested
       thing we own, and the one that breaks a campaign run when Meta moves a
       button. 136 functions, and **103 of them take a page**: they cannot be
@@ -494,13 +954,26 @@ python scripts/acl_board.py --render
       Shape: save the Ads Manager pages at each step of a run, serve them from
       disk, drive them with Playwright as production does. Selector drift then
       fails a test instead of a buyer's run.
-  - [ ] `acl-340a` Scrub what the pages carry before they touch the repo #next
+      Built 9 September on the pages `acl-361` saved at that day's six
+      failures: `placements_2026_09_09.html` (106 KB),
+      `ad_copy_2026_09_09.html` (120 KB), `ad_destination_2026_09_09.html`
+      (93 KB) — cut from the 4 MB captures, scrubbed, `acl_scan_secrets.py`
+      clean. Local Chromium opens them from disk: no Multilogin, no ad
+      account, no proxy question. 30 checks, each broken in reverse first.
+      What it does **not** check is written into the file: the snapshot is
+      static and Meta's scripts are absent, so a checkbox fires no handler. It
+      proves a control is **found**, not that it behaves — which is exactly
+      the failure we have. It also ages on purpose: every fixture is dated in
+      its filename, and a fresh capture now lands beside each live failure, so
+      replacing one is cheaper than diagnosing from scratch.
+      Selector drift now fails a test: `acl-704` was written against it.
+  - [x] `acl-340a` Scrub what the pages carry before they touch the repo #review
         A saved page holds the account number, the account name, the balance
         and the campaigns. `acl_scan_secrets.py` will refuse the commit — as it
         already did on 8 September, when a real `act=…` reached a test file.
         Decide the scrub before recording, not after: what is replaced, by
         what, and how it stays readable enough to test against.
-  - [ ] `acl-340b` A stale bench is worse than none #next
+  - [x] `acl-340b` A stale bench is worse than none #review
         Saved pages age. When Meta changes its markup the bench keeps passing
         while production breaks — the failure we have been chasing all week,
         with a green suite on top. Each recording needs its date and the Meta
@@ -519,6 +992,177 @@ python scripts/acl_board.py --render
         Coverage of `meta_dom` stays at 6%: four functions against 3,175
         statements do not move the number. That is the whole point of
         `acl-340`.
+- [x] `acl-704` Meta rewrote the wording; four steps were looking for the old one #review @rpa
+      Five `placements` failures in a row, then six more across `ad_copy`,
+      `ad_destination` and `destination_sweep`. One cause, four places: the
+      code searched for words the page no longer has.
+      Gone from the markup: "Advantage+ placements", "Manual placements",
+      `ads_placement_expandable_list_item_{feed,story,stream}` (Meta generates
+      ids now — `js_14p`, `_r_d2_` — never anchor to them again), the "Allow
+      limited spending" checkbox, `placeholder="Write a short headline"`,
+      `role=combobox` named "Tell people what your ad is about", and
+      `placeholder="http://www.example.com/page"`.
+      What is left to hold on to is the words next to the control — the way a
+      person reads the page — plus `data-surface`, Meta's own markup for its
+      logs: `/message_field`, `/headline_field`, `/pce_website_url_field`, one
+      of each on the page. Ids and classes are regenerated; these are not.
+      Three findings the bench alone could not have given, all from the run
+      report `acl-360` added:
+      **The categories are an accordion.** Opening the next one closes the
+      last. The code opened all three and filled at the end, so it only ever
+      worked on the third — the report showed two sub-items found out of
+      eighteen, both children of the last category. Now: open one, fill it,
+      move on; which sub-item belongs where is asked of the page, not guessed.
+      **The reveal check could never say yes.** `fill_ad_copy` returned before
+      the fields, on a check for a combobox that does not exist — and left no
+      telemetry saying so. Six failures with not one row about a stage.
+      **The read-back lied.** The "did it stick" check searched by the same
+      dead placeholder, always answered no, and ran the repair loop on top of a
+      correctly filled field. Four lookups now go through one helper.
+      Result: run 19:24-19:44 on 9 September, both campaigns, 82 steps, both
+      `ad_level_summary` = ok, no soft-fails. Branch
+      `feature/bench-ads-manager`, merged into `work/dashboard` as `4e03f96`.
+- [x] `acl-705` A retry is not a failed step #review @rpa
+      `ad_copy_headline` wrote six `ok=False` rows in a run with six successful
+      `ad_copy`. The first CDP click regularly reports success without giving
+      the page focus; the read-back catches it and the second attempt always
+      lands. A step that never fell had a 100% failure rate on the reliability
+      board — and a board like that gets you fixing what works while missing
+      what is broken.
+      The attempt goes into the step's report, the report is attached to the
+      step's outcome. Nothing is lost: if the step does fail, every attempt's
+      stage lands beside the failure. Confirmed live 20:19-20:26 — not one such
+      row. Merged as `38c84aa`.
+- [ ] `acl-706` Two more clean runs before we trust the flow #blocked @rpa needs:acl-704
+      One clean run is not repeatability. Counter: **1 of 3**, and stuck there
+      for a reason outside the code: the proxy keeps dropping. Two attempts on
+      10 September lost forty minutes each to an upload whose progress bar
+      never moved, and a page reload during one of them landed on
+      `ERR_SSL_PROTOCOL_ERROR` — the connection, not Meta, not the file size.
+      Running again before the proxy is replaced buys nothing.
+      First one landed 10 September, 12:04-12:26 — both campaigns, 76 steps, no
+      failures, both `ad_level_summary` = ok, and on **video** creatives, which
+      had produced ads with no media all morning. Nothing before it that day
+      reached the second campaign at all.
+      Before the next attempt: delete the drafts left by the morning's failed
+      attempts. If the page crawls again, run the confirmation on a fresh
+      account — 9-10 September put well over a dozen campaigns through this one.
+- [x] `acl-707` The step believed a caption instead of a state #review @rpa
+      Four fixes, one shape. Each waited on something being *written* rather
+      than something *happening*, and each cost minutes per campaign.
+      **`_wait_loading`** matched `re.compile(r"Loading", re.I)` — no word
+      boundary. On the ad editor that finds a permanent visible sentence:
+      "Send people to a **fast-loading**, mobile-optimized experience", the
+      Instant Experience description. It can never hide, so `wait_for(hidden)`
+      burned the full 30s — before *every* attempt of *every* click. Telemetry
+      proved it: `ad3_name` had a flat floor of 31.7s across eight runs, while
+      `ad_name` ranged 0.7-32.6 depending on whether that sentence was on the
+      page.
+      **`onboarding_modal`** made five attempts to click a one-time modal's
+      button, each with an 8s visibility wait: exactly 43s, fourteen runs in a
+      row, and the modal was never there once.
+      **The creative upload** counted sixty passes (~70s) and the media check
+      counted 150 (~2.5 min) — with a comment claiming the time was "only spent
+      while work is in flight". It wasn't. A video that needed 166s was
+      declared a failure at 537s with "Uploading video …" still on screen.
+      **The error screen.** `ERR_SSL_PROTOCOL_ERROR` was not recognised at all,
+      so the step would report "couldn't find Create" — blaming Meta's markup
+      for a dead connection.
+      Result: ad set 3m21s → 1m48s, and the first fully clean run.
+- [x] `acl-708` Show what a creative weighs, not how long it will take #review @dashboard
+      One folder holds files from 30 KB to 1.5 GB and the names say nothing.
+      A buyer picked blind and found out ten minutes into an upload.
+      `/api/creatives` now returns the size, the picker shows it, and files
+      over 100 MB are marked.
+      **No time estimate, deliberately.** Six uploads in one run, all on 24-26 MB
+      files: 84, 248, 40, 68, 222, 163 seconds. Six-fold spread at identical
+      size — "≈9 min" would have been a number we invented. What the size does
+      buy is catching the gigabyte file before it is chosen.
+- [ ] `acl-709` Two reloads are not enough to clear a dead connection #next @rpa needs:acl-707
+      A run may hit `ERR_SSL_PROTOCOL_ERROR` between campaigns and stop dead.
+      The flow now checks for the browser's own error screen before each
+      campaign and reloads — twice — because on an error screen nothing has been
+      typed and a reload costs nothing. Mid-wizard it would cost the campaign,
+      so the rule is deliberately not applied everywhere; a test fails if it
+      spreads past two call sites.
+      **It has not been shown to work.** On 10 September at 12:00:36 it fired
+      on the real thing, wrote the reason down — and did not recover. Two
+      reloads were not enough; a person refreshed the tab by hand and the next
+      attempt ran clean. The clean run itself carries zero `browser_error` rows.
+      Open: how many reloads, how long between them, and whether waiting helps
+      at all when the proxy is the thing that broke.
+
+- [ ] `acl-349` A test that blinks teaches people not to look #next @dashboard
+      `test_multiple_processes_do_not_lose_writes` failed twice on 9 September
+      and passed both times when re-run on its own. It starts real processes,
+      so it depends on timing rather than on the code under test.
+      This is worth fixing rather than re-running: a suite that is red for no
+      reason trains everyone to ignore red, and the one failure that matters
+      arrives looking exactly like the noise.
+- [x] `acl-1126` Two more tests blinked in a full run #review @rpa
+      Same lesson, 12 September. One held a twelve-thread barrier on a
+      three-second timeout — a bet on machine speed, not a fact about the code;
+      under a full run the CPU is also driving Playwright browsers and the
+      threads do not arrive in time. The bound is 60 s now, and breaking the
+      store on purpose still fails it, so it did not become a stub.
+      The other was not a test problem at all: it reads the real
+      `tracker/config.json`, and it failed only in runs during which I was
+      committing in the same worktree. Git replaces a file wholesale. Written
+      into the module docstring with the rule that follows.
+      Ten consecutive clean runs. GitHub: **ACL-1126** (#126), Platform, Bug.
+- [x] `acl-1130` Connecting an account is one job, not two panels #review @dashboard
+      The owner circled two forms and said they felt like one thing torn in
+      half. He was right, and the measurement was worse than the screen: the
+      page carried **twenty copies** of the Multilogin sign-in — twenty
+      password fields, twenty token boxes, twenty copies of a help block — one
+      per country, for a setting that is global.
+      Now one panel: the link controls, a line of Multilogin state, and the
+      sign-in fields only when there is no live token.
+      Found by a test rather than planned: `{% set mlx = mlx_labels %}` is a
+      template-local, and included files never see it. Between updating the
+      templates and restarting the server — the supported order — the instance
+      picker would have rendered blank. The fallback now lives where the picker
+      lives.
+      The markup moved; the machinery did not. Thirteen `ml*` functions across
+      eighty-nine places stay as they are, some now without callers, and that
+      is written down. Removing code you have not traced is how something
+      breaks at night.
+      GitHub: **ACL-1130** (#130), PR #131.
+- [x] `acl-1134` Four things the builder let a person do wrong #review @dashboard
+      A creative's weight, invisible until it costs nine minutes. A locked
+      screen, which looks exactly like a hung run. Targeting typed and then
+      lost between the form and Publish. And the language dropped when a
+      campaign was duplicated.
+      **The same bug, fixed twice.** The language fix exists in master too — the
+      same hand-written field list with `'language'` added. This branch keeps
+      the general walk over every field, because the stale list *was* the
+      cause: the next field added to the form repeats it. That is an override
+      of someone else's merged work and is said so in the PR, not slipped in.
+      GitHub: **ACL-1134** (#134), PR #133.
+- [ ] `acl-1136` Eight branches were pushed with no PR #next @rpa
+      The red test everyone stepped over for two days was fixed on my own
+      branch, pushed that morning, never submitted. Looking for others found
+      eight — four of them finished work simply sitting there.
+      Four are now submitted as two PRs (#132, #133 — three of them turned out
+      to be nested, one line of work with checkpoints). One waits on a
+      colleague's branch reaching master. Three are deliberate: parked WIP, a
+      stack waiting on its parent, and the board copy.
+      The habit is the task, not the backlog: pushing a branch is not
+      submitting it. Work ends at a PR, not at a commit.
+- [x] `acl-1128` The red test on master was reading the machine #review @dashboard
+      `test_a_report_without_countries_does_not_break` had been red for two
+      days, and I wrote "red on master, not mine" in every PR — while the fix
+      sat on my own branch `fix/sidebar-without-workbook`, pushed that morning
+      with no PR.
+      The fixture patched where account links are stored but not where they
+      come from: `seed_from_account_map()` reads the machine's real
+      `ad_account_map.csv` and makes a link per country — eleven here. It
+      failed on the machine's data, not the code, and on an empty map it would
+      have passed while testing nothing.
+      Carries the other half of that branch too: a period the workbook does not
+      cover says so instead of drawing a page of zeros.
+      **1213 passed, nothing red** — the first fully clean run in two days.
+      GitHub: **ACL-1128** (#128), PR #129.
 - [ ] `acl-341` `recipe_player` is 1,064 statements at zero #later @rpa
       Waits on the same bench: it replays a recorded flow through `meta_dom`,
       so it cannot be tested without one. Listed separately so the size is not
@@ -576,6 +1220,55 @@ python scripts/acl_board.py --render
       Nothing carries the library between machines now. Whatever ends up
       distributing updates to every machine (`acl-313`) has to carry this too.
       The screen says "stored on this machine" so nobody assumes otherwise.
+
+### Ad text library
+
+- [x] `acl-334` Ad titles are a section, not a tab in someone's spreadsheet #review @dashboard
+      The texts lived in the "ad texts" tab of the same sheet as the targets,
+      and were hostage to the same access: on 8 September that sheet answered
+      `403` and the dashboard had nothing to show. They now live in a registry
+      beside the targets, built the same way — a version in the file, a lock
+      while it is written, tombstones so a removed text is not resurrected by
+      the next read. The tab stays as the source of the seeding; the section
+      does not write back to it.
+      327 rows in, 316 saved. What did not make it is named rather than
+      counted: five repeated titles, six pairs with identical content, and six
+      rows with no title at all, which were named by their row number so the
+      text in them would not be lost to an empty first cell.
+  - [x] `acl-334a` A text is a sequence, not a set #review @dashboard
+        This is where an ad text differs from a target, and copying the target
+        rule would have been wrong. A target is a set: "one, two, three" and
+        "three, one, two" are the same audience. A text is read in order —
+        "buy now, discount" and "discount, buy now" are two different ads and a
+        person tells them apart at a glance.
+        Same means the headline, the body and the description all match. Case
+        and stray spaces are ways of writing; a line break is not — paragraphs
+        are made of them, and an ad with them reads differently.
+  - [x] `acl-334b` Three hundred texts are not read top to bottom #review @dashboard
+        Search across every field, a language filter, and grouping by language
+        with the count in the heading. The body shows three lines and opens on
+        click, keeping its paragraphs — otherwise what is on screen stops
+        matching what Facebook will show, and that is the thing being judged.
+        Language is filled for 214 of the 327 rows; the rest sit in "Language
+        not set" rather than being guessed. Spanish and Portuguese are written
+        in the same script, and a guess would label a text with a language that
+        is not its own.
+- [ ] `acl-335` An ad text added on one machine does not reach the others #next @dashboard
+      The same hole as `acl-331`, for the same reason: the tab was the only
+      thing carrying anything between machines, and it is no longer a source.
+      Every machine gets the same 327 rows on first read and diverges from
+      there. Whatever solves `acl-331` has to carry this too.
+- [x] `acl-336` The builder takes its ad titles from the library #review @dashboard
+      Filed as "the builder reads from `Upload FB.xlsx`" — that was wrong, and
+      the truth was worse. `/api/ad-copy` went straight to the spreadsheet, and
+      without `GSHEET_TARGETS_ID` in the environment the loader returned an
+      empty dictionary. Silently: no error, no log line. On screen the builder
+      said **"No ad titles found"** under the Ad Title field while the Ad titles
+      section held 316 texts. An empty list and an unreachable source looked
+      identical, which is the same shape of failure the targeting library had.
+      The builder now reads the registry — the same list the person edits. The
+      spreadsheet stays as a fallback for one case only: a fresh machine whose
+      library has not been filled yet.
 
 ---
 
@@ -694,6 +1387,27 @@ python scripts/acl_board.py --render
       a second look at known ones: the hook could print the title it is about
       to tick, so a mismatch is read before it is committed rather than found
       afterwards.
+
+- [x] `acl-653` Next to "In review" — the branch and the commit #review @dashboard
+      A task marked "In review" said nothing about where that work is. Finding
+      it meant asking, or guessing from the commit log. The wall now prints the
+      branch and the short commit beside the status, so an update can be found
+      and merged without a conversation. Branch `feature/board-branch-link`,
+      commit `87a5ba7`.
+- [x] `acl-654` "In master" is a state of its own #review @dashboard
+      Merged and handed out are different things, and the board had one word
+      for both. A merge into master does not reach a buyer's machine until a
+      release goes out, so "shipped" on a merged-but-unreleased task was a
+      claim nobody could check. Branch `feature/board-merged-state`, commit
+      `113689b`.
+- [x] `acl-655` The plan itself has a history #review @dashboard
+      The source lives in Obsidian, which has neither git nor a bin. On
+      8 September one bad edit cut a whole area — eight tasks — out of the
+      board, and it came back only because a wall had been published shortly
+      before and its HTML still held the content. Luck, not a backup. The
+      build now writes a copy of the board into the repository, so the plan has
+      the same history and the same three addresses as the code. Branch
+      `feature/board-snapshot`, commit `b38c26d`.
 
 ### Who may change what
 
@@ -982,6 +1696,13 @@ python scripts/acl_board.py --render
 
 ## Log
 
+- 2026-09-09 · `9d82a44` · `feature/capture-page-on-fail` · `acl-361` — feat(телеметрия): разметка упавшего шага ложится на диск
+- 2026-09-09 · `9cf6a41` · `feature/upload-without-workbook` · `acl-342`, `acl-343` — feat(заливка): Upload FB.xlsx уходит из пути публикации
+- 2026-09-09 · `f3123eb` · `fix/calendar-days-not-disabled` · `acl-339` — fix(календарь): день без строк в книге больше не выглядит запрещённым
+- 2026-09-09 · `11cd654` · `feature/manage-todo-column` · `acl-338` — feat(карта): состояние аккаунта словом, колонка To do убрана
+- 2026-09-09 · `3aa45ef` · `feature/builder-ad-texts` · `acl-336` — fix(билдер): тексты берутся из библиотеки, а не из чужой таблицы
+- 2026-09-09 · `8129c88` · `fix/attach-short-path` · `acl-337` — fix(спенд): у папки профиля два имени, и Multilogin берёт второе
+- 2026-09-08 · `abd054e` · `feature/ad-text-library` · `acl-334`, `acl-334a`, `acl-334b` — feat(тексты): раздел Ad titles — библиотека объявлений уезжает из таблицы
 - 2026-09-08 · `005ca43` · `feature/account-country-links` · `acl-142a` — fix(карта): страны свёрнуты по умолчанию, раскрытое запоминается
 - 2026-09-08 · `22870e5` · `feature/account-country-links` · `acl-701` — feat(шапка): шесть разных вещей одним весом — теперь по-другому
 - 2026-09-08 · `2cec60f` · `feature/account-country-links` · `acl-105r` — fix(дешборд): страница проверяется настоящим разборщиком JavaScript
