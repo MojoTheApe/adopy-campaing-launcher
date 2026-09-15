@@ -31,7 +31,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from config import paths
-from src.fb_ads_rpa.operations import browser_operation, serialized_browser
+from src import acl_log
+from src.fb_ads_rpa.operations import browser_operation, profile_lock, serialized_browser
 
 _STORE_LOCK = threading.RLock()
 _UNSAVED: dict[str, "SpendReading"] = {}
@@ -302,9 +303,37 @@ def get_status(account: str) -> dict[str, str]:
 
 # ─────────────────────────── очередь ───────────────────────────
 
-#: один браузер за раз. Два профиля, поднятых одновременно с одной машины,
-#: это не «быстрее», это две сессии подряд с одного устройства.
-_LOCK = browser_operation
+def _profile_key(account: str, *_a, **_k) -> str:
+    """Чей браузер занимает вызов — профиль, а не ярлык аккаунта.
+
+    Ярлыков может оказаться несколько на один профиль: карта этого не
+    запрещает, а две очереди к одному браузеру — ровно то, от чего замок и
+    защищает. Если ярлык в профиль не разрешается (нет в карте, файл не
+    читается), ключом остаётся сам ярлык: занять лишнее безопаснее, чем не
+    занять нужное.
+    """
+    try:
+        entry = _entry_for(account)
+    except Exception:
+        entry = None
+    profile = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
+    return profile or str(account or "")
+
+
+def _lock_for(account: str):
+    """Очередь на профиль, а не на весь браузер (`acl-113e`).
+
+    Прежде здесь стоял один замок на всё: «один браузер за раз, две сессии
+    подряд с одного устройства». Два аккаунта — это два профиля, у каждого
+    свой прокси, и общего ресурса между ними нет; обоснование самого замка
+    говорило про «тот же самый профиль».
+
+    Публикация послабления не получает: она одна за раз по решению владельца
+    31.07 — см. `operations`.
+    """
+    return profile_lock(_profile_key(account))
+
+
 _RUNNING: set[str] = set()
 
 
@@ -353,7 +382,7 @@ def start_read(
     def run() -> None:
         started = time.time()
         try:
-            with _LOCK:
+            with browser_operation.reading(), _lock_for(account):
                 done = fn(account, date_from, date_to)
         except Exception as exc:  # noqa: BLE001 — падение чтения не должно ронять сервер
             done = SpendReading(
@@ -554,7 +583,7 @@ def _attach_only(entry, account_label: str):
     )
 
 
-@serialized_browser
+@serialized_browser(reading=True)
 def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -> dict:
     """Спросить у самого аккаунта, какой у него номер.
 
@@ -680,7 +709,7 @@ class _Profile:
         self.multilogin_instance = (instance or "A").strip() or "A"
 
 
-@serialized_browser
+@serialized_browser(reading=True)
 def open_profile_for_automation(profile_id: str, folder_id: str = "",
                                 instance: str = "A", label: str = "") -> tuple[bool, str]:
     """Поднять профиль автоматизацией и оставить окно открытым.
@@ -747,7 +776,7 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     return True, "профиль открыт — залогиньтесь, если нужно, и оставьте окно"
 
 
-@serialized_browser
+@serialized_browser(key=_profile_key, reading=True)
 def open_for_automation(account: str) -> tuple[bool, str]:
     """То же самое для аккаунта, который уже есть в карте."""
     entry = _entry_for(account)
@@ -761,7 +790,7 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     )
 
 
-@serialized_browser
+@serialized_browser(key=_profile_key, reading=True)
 def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReading:
     """Прочитать спенд аккаунта за период, выбранный на дешборде.
 
@@ -1776,6 +1805,16 @@ def _record_turn_off(out: "TurnOffResult") -> None:
 
     Ни запись, ни лог не смеют уронить сам результат, поэтому оба под
     `except`: потерять журнал плохо, потерять ответ — хуже.
+
+    Пишем через `acl_log.append_line`, а не `open(..., "a")`. Замер 15.09: при
+    одновременном выключении на нескольких аккаунтах простое дописывание на
+    Windows теряло каждую шестую запись — бесследно, потому что там режим
+    «a» эмулируется как «перейти в конец, затем записать». Для этого журнала
+    потеря особенно дорога: наутро нельзя отличить «действия не было» от
+    «запись пропала», а он существует именно ради такого разбора.
+
+    Отказ записи больше не проглатывается молча: прежде нехватка места,
+    отсутствие прав и занятый файл выглядели одинаково — никак.
     """
     try:
         log.info(
@@ -1786,12 +1825,13 @@ def _record_turn_off(out: "TurnOffResult") -> None:
     except Exception:
         pass
     try:
-        path = _turn_off_log()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(out.to_dict(), ensure_ascii=False) + "\n")
-    except Exception:
-        pass
+        acl_log.append_line(
+            _turn_off_log(), json.dumps(out.to_dict(), ensure_ascii=False)
+        )
+    except acl_log.JournalWriteError as exc:
+        log.error("журнал выключений не принял запись: %s", exc)
+    except Exception as exc:  # непредвиденное — но результат всё равно вернём
+        log.error("журнал выключений: неожиданный отказ %r", exc)
 
 
 def _mark_object_off(account: str, object_id: str, delivery: str = "") -> int:
@@ -1838,11 +1878,28 @@ def _mark_object_off(account: str, object_id: str, delivery: str = "") -> int:
     return touched
 
 
-def turn_off_history(limit: int = 50) -> list[dict]:
-    """Последние выключения — новыми вперёд. Для дешборда и для разбора."""
+def _same_account(a: str, b: str) -> bool:
+    """Одна и та же подпись аккаунта, записанная по-разному.
+
+    В журнал попадает то, что прислала страница, а спрашивают его по подписи
+    из карты. Расхождение в регистре или лишнем пробеле не должно прятать от
+    человека его собственное действие.
+    """
+    return " ".join((a or "").split()).casefold() == " ".join((b or "").split()).casefold()
+
+
+def turn_off_history(limit: int = 50, account: str = "") -> list[dict]:
+    """Последние выключения — новыми вперёд. Для дешборда и для разбора.
+
+    `account` отбирает записи одного кабинета: журнал общий на машину, а
+    дерево показывает один аккаунт, и чужая строка в нём читалась бы как своя.
+    Отбор идёт ДО счёта, иначе десять действий на соседнем аккаунте вытеснят
+    единственное нужное и человек решит, что его нажатие не записалось.
+    """
     try:
         lines = _turn_off_log().read_text(encoding="utf-8").splitlines()
-    except Exception:
+    except FileNotFoundError:
+        # A new installation has no journal; other read failures mean unavailable.
         return []
     out: list[dict] = []
     for line in reversed(lines):
@@ -1850,9 +1907,17 @@ def turn_off_history(limit: int = 50) -> list[dict]:
         if not line:
             continue
         try:
-            out.append(json.loads(line))
+            row = json.loads(line)
         except Exception:
             continue
+        if not isinstance(row, dict):
+            continue
+        row_account = row.get("account")
+        if not isinstance(row_account, str) or not row_account.strip():
+            continue
+        if account and not _same_account(row_account, account):
+            continue
+        out.append(row)
         if len(out) >= limit:
             break
     return out
@@ -1866,7 +1931,13 @@ class TurnOffResult:
     level: str
     object_id: str
     name: str = ""
-    state: str = "failed"     # off | already_off | failed
+    #: off | already_off | failed | unconfirmed
+    #:
+    #: `failed` — нажали, и тумблер НЕ стал выключенным: это установленный
+    #: факт. `unconfirmed` — попытка оборвалась, и как оно там на самом деле,
+    #: мы не знаем: выключиться могло. Выдавать второе за первое нельзя ровно
+    #: по той же причине, по какой ниже не выдаётся «Processing» за «Off».
+    state: str = "failed"
     #: Что страница написала о доставке в момент подтверждения. Словами Meta:
     #: сразу после выключения она пишет «Processing», а не «Off», и выдавать
     #: одно за другое нельзя.
@@ -1874,6 +1945,14 @@ class TurnOffResult:
     error: str = ""
     how: str = ""             # чем подтверждено — чтобы знать, чему верить
     at: str = ""
+    #: Кто нажал. На машине байера это он сам, но «кто-то с этой машины» —
+    #: не ответ на вопрос «кто остановил кампанию»: у карты десять хозяев, а
+    #: разбирают случившееся потом и не за своим столом.
+    requester: str = ""
+    #: Чем сделано. Сегодня всегда `rpa`, и поле выглядит лишним — но пустым
+    #: по умолчанию оно остаётся намеренно: если однажды появится второй путь
+    #: и забудет представиться, журнал промолчит, а не соврёт, что это был RPA.
+    route: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -1945,14 +2024,46 @@ _SWITCH_ACTION_JS = """args => {
 
 @serialized_browser
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
-             expected_name: str = "", date_from: str = "", date_to: str = "") -> "TurnOffResult":
+             expected_name: str = "", date_from: str = "", date_to: str = "",
+             requester: str = "") -> "TurnOffResult":
     """Выключить и записать, что вышло.
 
     Запись стоит здесь, а не внутри: у `_turn_off` двадцать путей выхода, и
     расставленные по ним вызовы рано или поздно разойдутся — один забудут.
+
+    По той же причине здесь же проставляются «кто» и «чем»: это единственное
+    место, через которое проходит любой исход, включая отказ.
+
+    «Любой исход» включает и падение. `_turn_off` возвращает результат на
+    двадцати путях, но не на всех: маршрут в `src/web/app.py` прямо ловит
+    `Exception` и отвечает «Could not reach the account» — значит исключение
+    здесь предусмотрено, и раньше в этом случае в журнале не оставалось
+    ничего. Действие на живом кабинете было, следа нет.
+
+    Для журнала, который обязан отличать неудавшуюся попытку от
+    подтверждённого изменения, это дыра в середине: самая неудавшаяся попытка
+    из всех не записывалась. Пишем и её — и пробрасываем исключение дальше,
+    потому что решать, что ответить человеку, не здесь.
+
+    Пишем её как `unconfirmed`, а не `failed`. `failed` означает «нажали, и
+    тумблер не стал выключенным» — установленный факт. Оборванная попытка
+    такого факта не даёт: объявление могло и выключиться, просто подтвердить
+    это не успели. Записать «не удалось» значило бы соврать в ту сторону, из
+    которой потом делают вывод «значит, оно ещё крутится».
     """
-    out = _turn_off(account, level, object_id, parent_id=parent_id,
-                    expected_name=expected_name, date_from=date_from, date_to=date_to)
+    who = (requester or "").strip()
+    try:
+        out = _turn_off(account, level, object_id, parent_id=parent_id,
+                        expected_name=expected_name, date_from=date_from, date_to=date_to)
+    except Exception as exc:
+        _record_turn_off(TurnOffResult(
+            account=account, level=level, object_id=object_id, name=expected_name,
+            state="unconfirmed", error=f"{type(exc).__name__}: {exc}"[:300],
+            at=_now(), requester=who, route="rpa",
+        ))
+        raise
+    out.requester = who
+    out.route = "rpa"
     if out.state in ("off", "already_off"):
         # Не «наверное выключилось»: сюда приходят только подтверждённые
         # исходы, и сохранённое дерево обязано их отражать — иначе оно врёт

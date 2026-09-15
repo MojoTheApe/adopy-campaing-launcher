@@ -37,6 +37,7 @@ from config import paths
 from src.fb_ads_rpa.operations import serialized_browser
 from src.analysis_agent.account_spend import (
     _act_from_url,
+    _profile_key,
     _attach_only,
     _entry_for,
     _period_matches,
@@ -347,7 +348,7 @@ def _shown_period_text(page) -> str:
     return " ".join((page.evaluate(_PERIOD_JS) or "").split())
 
 
-@serialized_browser
+@serialized_browser(key=_profile_key, reading=True)
 def read_country_split(account: str, date_from: str, date_to: str = "") -> CountrySplit:
     """Read one fresh report, refusing unverified or partial results.
 
