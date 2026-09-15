@@ -696,3 +696,83 @@ def test_a_scrollable_snapshot_does_not_claim_a_complete_tree(page):
     ]) + '</div>')
     objects, _, err = sp.read_level(page, "campaign")
     assert objects and "полнота не подтверждена" in err
+
+
+# ── acl-113d: не ходить туда, где смотреть нечего ─────────────────────────
+#
+# Чтение аккаунта занимало 1,5-3 минуты: один заход за списком кампаний плюс
+# по одному на каждую. Общий список объявлений доверия не заслужил (12.09 он
+# отдал шесть строк на $661 при спенде аккаунта $2 117), так что заходы
+# остаются — но выключенной кампании без спенда среди них делать нечего.
+
+
+@pytest.fixture
+def flow_mixed(monkeypatch):
+    """Четыре кампании: тратившая, включённая пустая, выключенная пустая, без тумблера."""
+    monkeypatch.setattr(sp, "_wait_for_grid", lambda page: True)
+    monkeypatch.setattr(sp, "_act_from_url", lambda page, tries=1: "act_123")
+    monkeypatch.setattr(sp, "_shown_period", lambda page, tries=12: "Sep 1, 2026 - Sep 10, 2026")
+    monkeypatch.setattr(sp, "_period_matches", lambda shown, a, b="": True)
+
+    camps = [
+        sp.AdObject(level="campaign", id="1" * 8, name="потратила", switch="off", spend="$12.30"),
+        sp.AdObject(level="campaign", id="2" * 8, name="включена пустая", switch="on", spend="$0.00"),
+        sp.AdObject(level="campaign", id="3" * 8, name="выключена пустая", switch="off", spend="$0.00"),
+        sp.AdObject(level="campaign", id="4" * 8, name="тумблер неизвестен", switch="unknown", spend=""),
+    ]
+
+    def _level(page, level):
+        if level == "campaign":
+            return (camps, "data-surface", "")
+        return ([sp.AdObject(level="ad", id=str(9900 + len(page.visited)), name="an ad")], "data-surface", "")
+
+    monkeypatch.setattr(sp, "read_level", _level)
+    return monkeypatch
+
+
+def test_an_idle_closed_campaign_costs_no_visit(flow_mixed):
+    """Выключена и ничего не потратила — заходить незачем."""
+    page = _Page()
+    _, _, err = sp._read_tree(page, "act_123", "act_123", "2026-09-01", "2026-09-10")
+    assert len(page.visited) == 4, f"заходов {len(page.visited)}, а надо 1 + 3"
+    assert "3" * 8 not in " ".join(page.visited), "сходили в выключенную пустую"
+    assert "не спрашивались у 1" in err, err
+
+
+def test_a_closed_campaign_that_spent_is_still_read(flow_mixed):
+    """Деньги за период потрачены — человек вправе увидеть, на что."""
+    page = _Page()
+    sp._read_tree(page, "act_123", "act_123", "2026-09-01", "2026-09-10")
+    assert "selected_campaign_ids=" + "1" * 8 in " ".join(page.visited)
+
+
+def test_a_live_campaign_without_spend_is_still_read(flow_mixed):
+    """Включена и пуста — может быть запущена сегодня."""
+    page = _Page()
+    sp._read_tree(page, "act_123", "act_123", "2026-09-01", "2026-09-10")
+    assert "selected_campaign_ids=" + "2" * 8 in " ".join(page.visited)
+
+
+def test_an_unknown_switch_is_not_taken_for_off(flow_mixed):
+    """Не знаем положения тумблера — значит не пропускаем."""
+    page = _Page()
+    sp._read_tree(page, "act_123", "act_123", "2026-09-01", "2026-09-10")
+    assert "selected_campaign_ids=" + "4" * 8 in " ".join(page.visited)
+
+
+def test_skipping_is_said_out_loud_not_silently(flow_mixed):
+    """Дерево без этих объявлений выглядит как полное — значит надо сказать."""
+    _, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01", "2026-09-10")
+    assert err, "пропуск прошёл молча"
+
+
+@pytest.mark.parametrize(
+    "text, spent",
+    [
+        ("$12.30", True), ("$0.00", False), ("", False), ("—", False),
+        ("0,00 ₪", False), ("1 957,42 ₪", True), ("$0.14", True), ("0", False),
+    ],
+)
+def test_what_counts_as_spent(text, spent):
+    """Число не разбираем: у Meta своя валюта, свои разделители и своя локаль."""
+    assert sp._looks_spent(text) is spent
