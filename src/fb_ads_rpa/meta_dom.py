@@ -5275,6 +5275,31 @@ def upload_ad_creative(
         "size_mb": 0.0,
         "attempts": [],
     }
+    # Тяжёлый ролик сжимается ДО того, как мы что-то решаем про пути загрузки
+    # (acl-1189). Замер 15.09: 247 МБ уходят в Meta порциями 2.8 МБ в минуту,
+    # то есть полтора часа при бюджете шага в девять минут. Тот же ролик в 24
+    # МБ едет обычной дорогой за минуту. Оригинал при этом не трогается —
+    # сжатое живёт в машинном кэше.
+    try:
+        from src.fb_ads_rpa import creative_compress
+
+        prepared = creative_compress.ensure_uploadable(creative_path)
+        _diag["prepared"] = {
+            "original_mb": round(prepared.original_mb, 1),
+            "sent_mb": round(prepared.sent_mb, 1),
+            "compressed": prepared.compressed,
+            "note": prepared.note,
+        }
+        if prepared.compressed:
+            # Оператор собирал кампанию из своего файла. Если уехала копия, он
+            # узнаёт об этом здесь, а не постфактум из кабинета.
+            _telemetry.record("ad_creative_compressed", True, note=prepared.note)
+            creative_path = prepared.path
+        elif prepared.reason:
+            _telemetry.record("ad_creative_compressed", None, note=prepared.reason)
+    except Exception as exc:  # сжатие — удобство, а не условие работы шага
+        _diag["prepared_error"] = f"{type(exc).__name__}: {exc}"[:160]
+
     try:
         _diag["size_mb"] = round(Path(creative_path).stat().st_size / (1024 * 1024), 1)
     except Exception:
