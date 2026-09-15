@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from config import paths
+from src import acl_log
 from src.fb_ads_rpa.operations import browser_operation, profile_lock, serialized_browser
 
 _STORE_LOCK = threading.RLock()
@@ -1804,6 +1805,16 @@ def _record_turn_off(out: "TurnOffResult") -> None:
 
     Ни запись, ни лог не смеют уронить сам результат, поэтому оба под
     `except`: потерять журнал плохо, потерять ответ — хуже.
+
+    Пишем через `acl_log.append_line`, а не `open(..., "a")`. Замер 15.09: при
+    одновременном выключении на нескольких аккаунтах простое дописывание на
+    Windows теряло каждую шестую запись — бесследно, потому что там режим
+    «a» эмулируется как «перейти в конец, затем записать». Для этого журнала
+    потеря особенно дорога: наутро нельзя отличить «действия не было» от
+    «запись пропала», а он существует именно ради такого разбора.
+
+    Отказ записи больше не проглатывается молча: прежде нехватка места,
+    отсутствие прав и занятый файл выглядели одинаково — никак.
     """
     try:
         log.info(
@@ -1814,12 +1825,13 @@ def _record_turn_off(out: "TurnOffResult") -> None:
     except Exception:
         pass
     try:
-        path = _turn_off_log()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(out.to_dict(), ensure_ascii=False) + "\n")
-    except Exception:
-        pass
+        acl_log.append_line(
+            _turn_off_log(), json.dumps(out.to_dict(), ensure_ascii=False)
+        )
+    except acl_log.JournalWriteError as exc:
+        log.error("журнал выключений не принял запись: %s", exc)
+    except Exception as exc:  # непредвиденное — но результат всё равно вернём
+        log.error("журнал выключений: неожиданный отказ %r", exc)
 
 
 def _mark_object_off(account: str, object_id: str, delivery: str = "") -> int:

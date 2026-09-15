@@ -16,8 +16,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
+
+from src import acl_log
 from typing import Any, Dict, List, Optional, Tuple
 
 _PROJ_ROOT = Path(__file__).resolve().parents[2]
@@ -180,11 +183,13 @@ def log_unknown_target(code: str, source: str = "") -> None:
     entry = f"{code}"
     if source:
         entry += f" | source: {source}"
+    # Через `acl_log`: этот журнал пополняется из разбора драфтов, а их может
+    # идти несколько сразу. Простое дописывание на Windows при этом теряет
+    # записи бесследно (замер 15.09).
     try:
-        with open(_UNKNOWN_LOG, "a", encoding="utf-8") as f:
-            f.write(entry + "\n")
-    except OSError:
-        pass
+        acl_log.append_line(_UNKNOWN_LOG, entry)
+    except acl_log.JournalWriteError as exc:
+        logging.getLogger(__name__).error("Unknown-target journal write failed (%s)", type(exc).__name__)
 
 
 def get_all_targets() -> Dict[str, Any]:
