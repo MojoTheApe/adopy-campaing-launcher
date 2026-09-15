@@ -309,6 +309,45 @@ def record(
         except Exception:
             pass  # Even a broken logging handler must not abort browser work.
 
+    # Отказ шага уезжает ещё и в общий приёмник (ACL-354). Место выбрано
+    # одно — здесь, — по той же причине, по какой здесь же присваивается
+    # номер прогона: сорок три места вызова получают это даром и не могут
+    # разойтись с журналом.
+    #
+    # Отдельно от записи в файл намеренно: если запись не удалась, сообщить
+    # об отказе тем более нужно. И под своим `except`: отправка не смеет
+    # уронить прогон — то же правило, что у самой телеметрии.
+    if ok is False:
+        try:
+            from src import acl_sentry
+
+            acl_sentry.report_step_failure(
+                step,
+                _why_of(note, diag),
+                run_id=run_id or _current["run_id"],
+                campaign=campaign or _current["campaign"],
+                diag=diag,
+            )
+        except Exception:
+            pass
+
+
+def _why_of(note: str, diag: dict[str, Any] | None) -> str:
+    """Чем шаг объяснил свой отказ.
+
+    Сам шаг кладёт причину то в `note`, то в `diag['why']`, то в
+    `diag['error']` — за полтора года так сложилось в сорока трёх местах, и
+    сводить их к одному полю сейчас значило бы трогать все сразу. Здесь мы
+    просто смотрим во все три по очереди.
+    """
+    if note:
+        return str(note)
+    for key in ("why", "error", "how"):
+        value = (diag or {}).get(key)
+        if value:
+            return str(value)
+    return ""
+
 
 def load(path: Path | None = None) -> list[dict[str, Any]]:
     p = path or TELEMETRY_PATH

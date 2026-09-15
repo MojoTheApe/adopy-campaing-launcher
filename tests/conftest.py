@@ -11,6 +11,7 @@ plus a synthetic accounts list. Designed so:
 """
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -22,6 +23,20 @@ import pytest
 _PROJ_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJ_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJ_ROOT))
+
+# Тесты не докладывают об отказах наружу (ACL-354).
+#
+# Отчёты в Sentry подвешены к `run_telemetry.record()`, а его зовут десятки
+# тестов — в том числе с `ok=False`, потому что именно отказы они и проверяют.
+# Без этой строки полный прогон отправляет выдуманные отказы в общий приёмник:
+# первый же прогон так и сделал («Sentry is attempting to send 1 pending
+# events»), и в CI это повторялось бы на каждом коммите, пряча настоящие
+# отказы с машин байеров под шумом.
+#
+# Пустая строка — штатный выключатель из `acl_sentry.dsn()`, а не заглушка
+# ради тестов. Ставится на уровне модуля, до импорта тестовых модулей:
+# фикстура успела бы сработать позже первого `init()`.
+os.environ["ACL_SENTRY_DSN"] = ""
 
 
 @pytest.fixture

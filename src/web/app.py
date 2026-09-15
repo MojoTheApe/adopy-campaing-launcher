@@ -2631,6 +2631,69 @@ async def account_spend_read(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
 
 
+@app.post("/report-problem")
+async def report_problem(request: Request) -> JSONResponse:
+    """Пожаловаться из лаунчера: человек пишет, машина прикладывает факты.
+
+    Сегодня о поломке узнают из сообщения в переписке и фотографии экрана —
+    пересказанных, с опозданием и без фактов самой машины (ACL-354).
+
+    Окружение собирается здесь, а не человеком: версия потока, метка машины,
+    период на экране и последние отказавшие шаги. Всё это уже вычищено от
+    номеров кабинетов и профилей — тем же вычистителем, что и телеметрия.
+
+    **Неудача отправки не выдаётся за удачу.** Задача требует этого прямо:
+    «not falsely reported after a delivery failure». Пустой номер события —
+    это «не ушло», и так и сказано.
+    """
+    from src import acl_sentry
+
+    form = await request.form()
+    text = (form.get("text") or "").strip()
+    if not text:
+        return JSONResponse(
+            {"ok": False, "error": "Write what went wrong — even one line helps."},
+            status_code=400,
+        )
+
+    if len(text) > 4000:
+        return JSONResponse({"ok": False, "error": "Keep the report within 4000 characters."}, status_code=400)
+
+    context: dict[str, Any] = {
+        "where": (form.get("where") or "").strip()[:200],
+        "period": {k: str(form.get(k) or "")[:40] for k in ("from", "to", "span")},
+    }
+    try:
+        from src.fb_ads_rpa import run_telemetry, telemetry_sync
+
+        context["version"] = telemetry_sync.flow_version()
+        context["machine"] = telemetry_sync.machine_identity()[0]
+        failed = [
+            {k: r.get(k) for k in ("ts", "step", "campaign", "diag") if k in r}
+            for r in run_telemetry.load()[-400:]
+            if r.get("ok") is False
+        ]
+        context["last_failures"] = failed[-8:]
+    except Exception as exc:  # окружение не собралось — обращение всё равно уходит
+        context["context_error"] = str(exc)[:200]
+
+    event_id = ""
+    try:
+        event_id = acl_sentry.report_problem(text, context=context)
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": "Report submission was not confirmed. Your text is still available; retry when ready."}, status_code=502
+        )
+    if not event_id:
+        return JSONResponse(
+            {"ok": False,
+             "error": "Reporting is switched off on this machine, so nothing was sent."},
+            status_code=503,
+        )
+    # An SDK event ID confirms local queue acceptance, not network delivery.
+    return JSONResponse({"ok": True, "queued": True, "event_id": event_id}, status_code=202)
+
+
 @app.post("/account-spend/turn-off")
 async def account_spend_turn_off(request: Request) -> JSONResponse:
     """Выключить одну кампанию или одно объявление на живом аккаунте.
