@@ -68,7 +68,7 @@ def test_report_route_returns_queue_state_and_selected_dates(monkeypatch):
 @pytest.mark.parametrize('success', [True, False])
 def test_actual_report_dialog_preserves_text_and_distinguishes_queue(success):
     from playwright.sync_api import sync_playwright, expect
-    source = Path('src/web/templates/report.html').read_text()
+    source = Path('src/web/templates/report.html').read_text(encoding='utf-8')
     start = source.index('<dialog id="report-problem-box"')
     end = source.index('</script>', start) + len('</script>')
     with sync_playwright() as pw:
