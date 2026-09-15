@@ -1488,9 +1488,23 @@ _TOTALS_ROW_ID = "-1"
 _READ_TREE_JS = r"""
 (level) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-  const visible = (el) => el.getClientRects().length > 0 &&
-    !el.closest('[hidden], [aria-hidden="true"]') &&
-    getComputedStyle(el).visibility !== 'hidden';
+  // `display: contents` — обёртка без собственной рамки, содержимое которой
+  // видно. Meta вешает на такие обёртки свою разметку `data-surface`, и
+  // проверка «есть ли рамка» отбрасывала их все.
+  //
+  // 15.09, живой кабинет KLD_BFL_X84 со спендом $3 344 за период: строк с
+  // меткой 163, под образец подходят 155, видимых — **ноль**. Все до одной
+  // `display: contents`, и в первой же лежит настоящая кампания
+  // («SA_ARM_iOS_IMG_GMBL_30_13.9»). Дерево читалось пустым, и выглядело это
+  // как «на аккаунте ничего нет».
+  const visible = (el) => {
+    if (el.closest('[hidden], [aria-hidden="true"]')) return false;
+    const style = getComputedStyle(el);
+    if (style.visibility === 'hidden') return false;
+    if (el.getClientRects().length > 0) return true;
+    return style.display === 'contents'
+      && Array.from(el.children).some(visible);
+  };
   const tables = Array.from(document.querySelectorAll('[role="table"], [role="grid"]'))
     .filter(visible).filter(el => !el.parentElement.closest('[role="table"], [role="grid"]'));
   const refuse = (how) => ({rows: [], how, kinds: [], error: how});

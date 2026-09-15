@@ -814,3 +814,56 @@ def test_a_table_that_never_settles_is_a_named_failure(flow, monkeypatch):
     objects, _how, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01", "2026-09-10")
     assert objects == []
     assert "table-loading" in err
+
+
+# ── обёртки без собственной рамки (`display: contents`) ───────────────────
+#
+# 15.09, живой кабинет KLD_BFL_X84 со спендом $3 344 за период: элементов с
+# меткой строки 163, под образец подходят 155, **видимых — ноль**. Все до
+# одной `display: contents`: у обёртки нет своей рамки, а содержимое видно, и
+# Meta вешает свою разметку `data-surface` именно на такие. Проверка «есть ли
+# рамка» отбрасывала их все, дерево читалось пустым, и выглядело это как «на
+# аккаунте ничего нет» — при исправно прочитанном спенде рядом.
+
+
+def _boxless_row(obj_id: str, kind: str, name: str) -> str:
+    """Строка, размеченная так, как её рисует Meta сегодня.
+
+    Обёртки с `data-surface` — `display: contents`: своей рамки нет, а текст
+    лежит глубже, в узлах с рамками. Поэтому `innerText` у обёртки работает,
+    хотя `getClientRects()` у неё пуст.
+    """
+    base = f"/am/table/table_row:{obj_id}unit/table_cell:"
+    box = 'style="display:block"'
+    return (
+        f'<div role="presentation" data-surface="/am/table/table_row:{obj_id}unit">'
+        f'<span data-surface="{base}forObjectType(toggle,{kind})">'
+        f'<span {box}><span role="switch" aria-checked="true" aria-label="On/off"></span></span></span>'
+        f'<span data-surface="{base}forObjectType(name,{kind})"><span {box}>{name}</span></span>'
+        f'<span data-surface="{base}forObjectType(delivery,{kind})"><span {box}>Active</span></span>'
+        f'<span data-surface="{base}spend"><span {box}>$412.02</span></span>'
+        f"</div>"
+    )
+
+
+def test_rows_marked_on_boxless_wrappers_are_still_read(page):
+    """`display: contents` — не «невидимо», а «нет своей рамки»."""
+    page.set_content(
+        "<style>[data-surface]{display:contents}</style>"
+        + _grid([_boxless_row("12345678900000000303", "CAMPAIGN_GROUP", "Live campaign")])
+    )
+    rows, how, err = sp.read_level(page, "campaign")
+    assert not err, err
+    assert [r.name for r in rows] == ["Live campaign"]
+    assert rows[0].switch == "on" and rows[0].delivery == "Active"
+
+
+def test_a_truly_hidden_wrapper_is_still_skipped(page):
+    """Спрятанное остаётся спрятанным: послабление только про рамку."""
+    page.set_content(
+        "<style>[data-surface]{display:contents;visibility:hidden}</style>"
+        + _grid([_boxless_row("12345678900000000303", "CAMPAIGN_GROUP", "Hidden")])
+    )
+    rows, _how, err = sp.read_level(page, "campaign")
+    assert rows == []
+    assert err, "пустой ответ без объяснения читается как «строк нет»"
