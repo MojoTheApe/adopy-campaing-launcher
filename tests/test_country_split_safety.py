@@ -65,7 +65,32 @@ def harness(monkeypatch, tmp_path):
     monkeypatch.setattr(cs, "_store_path", lambda: tmp_path / "country_splits.json")
     entry = SimpleNamespace(ad_account_id="act_123")
     page = Mock()
-    page.evaluate.return_value = {"matrix": COMPLETE, "error": ""}
+    # Страница отвечает по существу вопроса, а не одинаково на любой: вход в
+    # Reporting спрашивает её, отрисовалась ли она, не открыт ли запрос о
+    # несохранённых изменениях и выбран ли вид отчёта. Ответ «таблица» на все
+    # эти вопросы делал бы проверки зависимыми от порядка вызовов.
+    answers = SimpleNamespace(table={"matrix": COMPLETE, "error": ""})
+
+    def _evaluate(script, *args):
+        if script is cs._MOUNTED_JS:
+            return 9
+        if script is cs._UNSAVED_DIALOG_JS:
+            return False
+        if script is cs._PICK_PIVOT_JS:
+            return {"ok": True, "already": True}
+        if script is cs._CUSTOMIZE_OPEN_JS:
+            return True
+        if script is cs._SECTION_CHECKBOX_JS:
+            return {"ok": True, "was": args[0]["wanted"] if args else True}
+        if script is cs._DATE_CONTROLS_JS:
+            return ["This month: Sep 1, 2026 - Sep 15, 2026"]
+        if script is cs._MARK_DATE_FIELDS_JS:
+            return 2
+        if isinstance(script, str) and "data-acl-date" in script:
+            return ["Sep 10, 2026", "Sep 10, 2026"]
+        return answers.table
+
+    page.evaluate.side_effect = _evaluate
     conn = Mock(page=page)
     attach = Mock(return_value=conn)
     monkeypatch.setattr(cs, "_entry_for", lambda _: entry)
@@ -77,7 +102,7 @@ def harness(monkeypatch, tmp_path):
     monkeypatch.setattr(cs, "_set_checkbox", lambda *a, **k: True)
     monkeypatch.setattr(cs, "_shown_period_text", lambda _: "Sep 10, 2026")
     monkeypatch.setattr(cs, "_shoot", lambda *a: "synthetic.png")
-    return SimpleNamespace(entry=entry, page=page, conn=conn, attach=attach)
+    return SimpleNamespace(entry=entry, page=page, conn=conn, attach=attach, answers=answers)
 
 
 def read():
@@ -110,14 +135,33 @@ def test_invalid_inputs_never_attach(harness, act, start, end):
 
 
 def test_loading_header_retries_before_accepting_rows(harness):
-    harness.page.evaluate.side_effect = [{"matrix": [HEADER], "error": ""}, {"matrix": COMPLETE, "error": ""}]
+    """Пока видно только заголовок — отчёт ещё грузится, читать рано.
+
+    Считаются обращения **за таблицей**, а не все подряд: вход в Reporting
+    задаёт странице и другие вопросы (отрисовалась ли, открыт ли запрос о
+    несохранённых изменениях), и они к этой проверке отношения не имеют.
+    """
+    answers = [{"matrix": [HEADER], "error": ""}, {"matrix": COMPLETE, "error": ""}]
+    grabs = []
+
+    fixture_answers = harness.page.evaluate.side_effect
+
+    def _evaluate(script, *args):
+        if script is cs._GRAB_CELLS_JS:
+            grabs.append(script)
+            return answers[min(len(grabs), len(answers)) - 1]
+        # На всё остальное отвечает подделка из фикстуры: пусть у этой
+        # проверки будет одна забота — счёт обращений за таблицей.
+        return fixture_answers(script, *args)
+
+    harness.page.evaluate.side_effect = _evaluate
     assert read().state == "ok"
-    assert harness.page.evaluate.call_count == 2
+    assert len(grabs) == 2, f"за таблицей обратились {len(grabs)} раз"
 
 
 @pytest.mark.parametrize("matrix,expected", [([HEADER], "failed"), ([HEADER, ["No data"]], "empty")])
 def test_empty_vs_loading(harness, matrix, expected):
-    harness.page.evaluate.return_value = {"matrix": matrix, "error": ""}
+    harness.answers.table = {"matrix": matrix, "error": ""}
     out = read()
     assert out.state == expected
     if expected == "failed":
@@ -130,7 +174,7 @@ def test_browser_failures_are_structured_and_close_only_owned_tab(harness, monke
     if failure in ("goto", "evaluate"):
         getattr(harness.page, failure).side_effect = RuntimeError("synthetic failure")
     elif failure == "checkbox":
-        monkeypatch.setattr(cs, "_set_checkbox", lambda *a: False)
+        monkeypatch.setattr(cs, "_set_section_checkbox", lambda *a: (False, "синтетический отказ"))
     elif failure == "fresh_report":
         monkeypatch.setattr(cs, "_click_label", lambda *a, **k: False)
     elif failure == "account":
