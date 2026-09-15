@@ -4605,6 +4605,57 @@ def _library_tiles(page: Page, filename: str):
     )
 
 
+#: Сколько раз переспросить сетку, прежде чем поверить, что копии нет.
+#: Секунда на попытку: 15.09 файл не находился и через полторы минуты после
+#: собственной загрузки, так что ждать дольше бессмысленно — если задержка
+#: индексации такая, повторное использование всё равно не поможет.
+_LIBRARY_APPEAR_TRIES = 5
+
+
+def _library_sight(page: Page, filename: str) -> dict:
+    """Что шаг видел в медиатеке в момент, когда решил, что копии нет.
+
+    Пишется только при отказе найти. Причина появления этой функции проста:
+    15.09 поиск трижды ответил «копии нет» на файл, который сам же загрузил
+    минутой раньше, и разобрать это было нечем — ни числа плиток, ни
+    содержимого поиска, ни подписей соседей. Весь вечер ушёл на догадки о
+    том, что можно было прочитать.
+    """
+    sight: dict = {"looked_for": filename}
+    try:
+        box = page.get_by_placeholder(re.compile(r"Search media", re.I)).first
+        sight["search_box"] = box.input_value(timeout=1500) if box.count() else None
+    except Exception as exc:
+        sight["search_box_error"] = f"{type(exc).__name__}"[:40]
+    try:
+        # Подписи соседних плиток: если файл там под другим именем, это
+        # видно сразу, а если сетка пуста — тоже.
+        sight["captions"] = page.evaluate(
+            """
+            () => [...document.querySelectorAll('[role="button"]')]
+              .map(b => (b.textContent || '').replace(/\\s+/g, ' ').trim())
+              .filter(t => /\\.(mp4|mov|jpg|jpeg|png|gif)\\b/i.test(t))
+              .slice(0, 12)
+            """
+        )
+    except Exception as exc:
+        sight["captions_error"] = f"{type(exc).__name__}"[:40]
+    try:
+        # На какой вкладке стоим: Images | Videos | Upload | Account videos.
+        # Поиск по чужой вкладке не найдёт ничего, и это объяснило бы всё.
+        sight["tabs"] = page.evaluate(
+            """
+            () => [...document.querySelectorAll('[role="tab"],[role="radio"]')]
+              .filter(e => e.offsetParent !== null)
+              .map(e => ((e.textContent || '').trim() + (e.getAttribute('aria-selected') === 'true' ? ' *' : '')))
+              .slice(0, 8)
+            """
+        )
+    except Exception as exc:
+        sight["tabs_error"] = f"{type(exc).__name__}"[:40]
+    return sight
+
+
 def _library_undo_selection(page: Page, tiles, clicked: list[int], before: int) -> bool:
     """Снять то, что мы навыбирали, и подтвердить это счётчиком сетки.
 
@@ -4620,6 +4671,22 @@ def _library_undo_selection(page: Page, tiles, clicked: list[int], before: int) 
     застали. Ответ «нет» — не мелочь: он означает, что выбор остался
     применённым, и загружать поверх нельзя.
     """
+    # Сначала дать счётчику проснуться.
+    #
+    # Мы попали сюда, потому что он не двигался, пока мы ждали. Но «не
+    # двигался» — это то, что мы видели, а не то, что произошло: клик
+    # регистрируется с опозданием (замер 24.08). Если сразу спросить и
+    # поверить нулю, снятие выйдет не сняв ничего и доложит «чисто» — а
+    # выбор на экране останется, и загрузка ляжет поверх него. Ровно та
+    # поломка, ради которой эта функция и написана.
+    #
+    # Кликать вслепую нельзя: если клик действительно не прошёл, второй его
+    # ВЫБЕРЕТ. Поэтому не гадаем, а ждём и смотрим.
+    for _ in range(10):  # ~3с
+        if _library_selected_count(page) > before:
+            break
+        _sleep_h(0.3)
+
     for i in reversed(clicked):
         if _library_selected_count(page) <= before:
             break
@@ -4739,12 +4806,31 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     """
     before = _library_selected_count(page)
     _library_search(page, filename)
+
+    # Свежезагруженный файл появляется в сетке не мгновенно. 15.09 на живом
+    # прогоне поиск трижды подряд ответил «копии нет» — в том числе через
+    # полторы минуты после того, как сам же её загрузил. Ждём, но недолго и
+    # по состоянию, а не вслепую: если файла нет и через это время, значит
+    # дело не в задержке индексации, и тянуть незачем.
     tiles = _library_tiles(page, filename)
-    try:
-        available = tiles.count()
-    except Exception:
-        available = 0
+    available = 0
+    for _ in range(_LIBRARY_APPEAR_TRIES):
+        try:
+            available = tiles.count()
+        except Exception:
+            available = 0
+        if available:
+            break
+        _sleep_h(1.0)
+        tiles = _library_tiles(page, filename)
+
     if not available:
+        # Молчаливое «не нашли» — это то, из-за чего мы весь вечер гадали,
+        # виновата ли медиатека. Шаг обязан сказать, ЧТО он видел: сколько
+        # вообще плиток в сетке, что стоит в поиске и как подписаны соседи.
+        # Без этого следующая попытка починки снова будет догадкой.
+        _telemetry.record("ad_creative_reuse", None, note="not_in_library",
+                          diag=_library_sight(page, filename))
         return REUSE_ABSENT
 
     # Poll the counter for seconds, not milliseconds, before giving up on a
@@ -4757,12 +4843,20 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     # three identical CCblk.mp4 tiles in this account's library.
     picked = False
     clicked: list[int] = []
+    # Дневник выбора: по какой плитке кликнули, сработал ли клик вообще и что
+    # показывал счётчик после него. 15.09 второй прогон застрял именно здесь —
+    # копию нашёл, взять не смог, — и разобрать было нечем: наружу уходило
+    # одно слово `library_pick_left_selection`.
+    log: list[dict] = []
     for i in range(min(available, 6)):
+        note = {"tile": i, "before": before}
         try:
             tile = tiles.nth(i)
             tile.scroll_into_view_if_needed(timeout=3000)
             tile.click(timeout=3000)
-        except Exception:
+        except Exception as exc:
+            note["click_error"] = f"{type(exc).__name__}"[:40]
+            log.append(note)
             continue
         clicked.append(i)
         for _ in range(10):  # ~3s
@@ -4770,15 +4864,24 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             if _library_selected_count(page) > before:
                 picked = True
                 break
+        note["after"] = _library_selected_count(page)
+        note["took"] = picked
+        log.append(note)
         if picked:
             break
     if not picked:
         # Кликали, но счётчик не двинулся. «Не двинулся» — это то, что мы
         # видим, а не то, что произошло: клик мог и зарегистрироваться, просто
         # позже. Поэтому не уходим молча, а снимаем за собой.
-        if clicked and not _library_undo_selection(page, tiles, clicked, before):
-            return REUSE_DIRTY
-        return REUSE_ABSENT
+        clean = not clicked or _library_undo_selection(page, tiles, clicked, before)
+        sight = _library_sight(page, filename)
+        sight.update({"tiles_found": available, "picks": log, "undone": clean})
+        _telemetry.record(
+            "ad_creative_reuse", False if not clean else None,
+            note="library_pick_left_selection" if not clean else "pick_did_not_take",
+            diag=sight,
+        )
+        return REUSE_ABSENT if clean else REUSE_DIRTY
 
     # One ad, one creative. If a slow render still let two clicks through,
     # toggle the surplus back off — an over-selected ad silently becomes a
@@ -4861,9 +4964,15 @@ def reuse_before_upload(page: Page, creative_path: str) -> bool | None:
         # с несколькими креативами — то самое, из-за чего возможность
         # выключили 24.08. Отказ шага хуже для прогона, но его видно, а
         # лишний креатив не видно нигде, кроме глаз в кабинете.
-        _telemetry.record("ad_creative_reuse", False, note="library_pick_left_selection")
+        #
+        # Запись об этом уже сделана внутри, вместе с дневником выбора: по
+        # какой плитке кликали, сработал ли клик, что показывал счётчик.
+        # Здесь — только решение, без второй строки в телеметрии.
         return False
-    _telemetry.record("ad_creative_reuse", None, note="not_in_library")
+    # `REUSE_ABSENT` о себе уже отчитался — и подробно: `_try_reuse_library_media`
+    # пишет, что именно видел в сетке, когда решил, что копии нет. Вторая запись
+    # здесь была бы дублем, а в телеметрии дубль хуже молчания: он делает вид,
+    # что событий два.
     return None
 
 
