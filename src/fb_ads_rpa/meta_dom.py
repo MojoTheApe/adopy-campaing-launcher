@@ -3209,13 +3209,37 @@ PLACEMENTS_EXPAND_JS = (
 нам дня.
 """
 
+def _label_on_page(label: str, seen: list[str]) -> bool:
+    """Есть ли такой подпункт среди увиденных — не глядя на регистр букв.
+
+    15.09 живой прогон на кувейтском кабинете отчитался:
+
+        subitems_missing: ["Instagram feed", "Facebook Notifications"]
+        subitems_seen:    [… "Instagram Feed" … "Facebook notifications" …]
+
+    Обе строки приехали в одном тикете Sentry, рядом: «что искали» и «что
+    видели». Разница только в заглавной букве — и подпункт объявлялся
+    отсутствующим, а плейсменты отказывали.
+
+    Сводить регистр безопасно: названия плейсментов различаются словами, а не
+    регистром. В том же списке рядом живут «Facebook Feed» и «Facebook profile
+    feed» — их не спутать.
+    """
+    want = (label or "").strip().casefold()
+    return any((x or "").strip().casefold() == want for x in seen)
+
+
 PLACEMENTS_SUBITEM_JS = """
   ([label, wantChecked]) => {
     const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
     const root = document.querySelector('[data-rpa-placements-marker]');
     if (!root) return { ok: false, why: 'нет метки блока' };
     const rows = [...root.querySelectorAll('*')].filter(e =>
-      e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
+      e.children.length === 0 &&
+      // Регистр не сверяем: страница пишет «Instagram Feed», рецепт —
+      // «Instagram feed», и подпункт объявлялся отсутствующим (15.09).
+      norm(e.textContent).toLowerCase() === (label || '').toLowerCase() &&
+      e.offsetParent !== null);
     let frozen = null;
     for (const row of rows) {
       let container = row.parentElement;
@@ -4085,12 +4109,12 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # шага на прогоне пользователя.
         for _ in range(2):
             for label in list(remaining_on):
-                if label in here and _set(label, True):
+                if _label_on_page(label, here) and _set(label, True):
                     remaining_on.remove(label)
             for label in list(remaining_off):
-                if label in here and _set(label, False):
+                if _label_on_page(label, here) and _set(label, False):
                     remaining_off.remove(label)
-            if not [x for x in remaining_on + remaining_off if x in here]:
+            if not [x for x in remaining_on + remaining_off if _label_on_page(x, here)]:
                 break
             _sleep_h(0.6)
 
