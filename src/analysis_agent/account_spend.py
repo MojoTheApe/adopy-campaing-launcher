@@ -1184,7 +1184,18 @@ def _scan_totals(page) -> tuple[float | None, bool]:
     except Exception:
         return None, False
     raw = (found or {}).get("spend") or ""
-    page._acl_spend_currency = next((code for sign, code in (("$", "USD"), ("€", "EUR"), ("£", "GBP"), ("₪", "ILS")) if raw.strip().startswith(sign)), "")
+    # Знак доллара НЕ превращается в «USD»: `$` пишут и за MXN, и за AUD, и за
+    # CAD. Прежде здесь стояло `("$", "USD")`, и на мексиканском кабинете
+    # дешборд молча подписывал песо долларами — цифра при этом выглядела
+    # знакомой, и повода усомниться не было. Остальные три знака однозначны.
+    #
+    # Настоящая валюта берётся у самого кабинета (`account_currency`): она
+    # свойство аккаунта, а не строки отчёта, и знаку её подменять незачем.
+    page._acl_spend_currency = next(
+        (code for sign, code in (("€", "EUR"), ("£", "GBP"), ("₪", "ILS"))
+         if raw.strip().startswith(sign)),
+        "",
+    )
     return (_first_money(raw) if raw else None), bool((found or {}).get("label"))
 
 
