@@ -2784,7 +2784,7 @@
   <p class="report-hint">Write what happened in your own words. ACL attaches its
      version, this machine, the dates on screen and the last failed steps —
      account and profile numbers are removed before sending.</p>
-  <textarea id="report-problem-text" rows="6" placeholder="The campaign stopped at the creative and nothing happened for ten minutes…"></textarea>
+  <textarea id="report-problem-text" rows="6" maxlength="4000" placeholder="The campaign stopped at the creative and nothing happened for ten minutes…"></textarea>
   <div class="report-actions">
     <span class="report-msg" id="report-problem-msg"></span>
     <button type="button" id="report-problem-cancel">Cancel</button>
@@ -2818,22 +2818,23 @@
     var form = new FormData();
     form.append('text', body);
     form.append('where', location.hash || location.pathname);
+    var period = typeof amapPeriod === 'function' ? amapPeriod() : {};
+    ['from', 'to', 'span'].forEach(function (key) { form.append(key, period[key] || ''); });
     fetch('/report-problem', { method: 'POST', body: form, credentials: 'same-origin' })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
-        // Неудача не выдаётся за удачу: без номера события отправки не было.
-        if (!res.ok || !res.d.ok || !res.d.event_id) {
+        // Queue acceptance is the strongest confirmation available from the SDK.
+        if (!res.ok || !res.d.ok || !res.d.queued || !res.d.event_id) {
           msg.className = 'report-msg bad';
-          msg.textContent = (res.d && res.d.error) || 'Did not send. Nothing was lost — try again.';
+          msg.textContent = (res.d && res.d.error) || 'Submission not confirmed. Your text is still here; retry when ready.';
           return;
         }
         msg.className = 'report-msg good';
-        msg.textContent = 'Sent. Reference ' + String(res.d.event_id).slice(0, 8);
-        text.value = '';
+        msg.textContent = 'Queued. Delivery is not confirmed. Reference ' + String(res.d.event_id).slice(0, 8);
       })
       .catch(function (e) {
         msg.className = 'report-msg bad';
-        msg.textContent = 'Did not send: ' + (e && e.message ? e.message : e);
+        msg.textContent = 'Submission not confirmed. Your text is still here: ' + (e && e.message ? e.message : e);
       })
       .finally(function () { send.disabled = false; });
   });

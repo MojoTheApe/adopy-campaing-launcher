@@ -36,7 +36,7 @@ if str(_PROJ_ROOT) not in sys.path:
 # Пустая строка — штатный выключатель из `acl_sentry.dsn()`, а не заглушка
 # ради тестов. Ставится на уровне модуля, до импорта тестовых модулей:
 # фикстура успела бы сработать позже первого `init()`.
-os.environ.setdefault("ACL_SENTRY_DSN", "")
+os.environ["ACL_SENTRY_DSN"] = ""
 
 
 @pytest.fixture

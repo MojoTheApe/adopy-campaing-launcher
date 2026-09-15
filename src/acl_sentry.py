@@ -63,17 +63,9 @@ def _scrub_deep(value: Any) -> Any:
     Он написан для общей таблицы и знает наши опасные места: `act=`, токены,
     uuid профилей, длинные числа. Второй такой список разошёлся бы с первым.
     """
-    from src.fb_ads_rpa.run_telemetry import scrub
+    from src.fb_ads_rpa.run_telemetry import scrub_diag
 
-    if isinstance(value, str):
-        return scrub(value)
-    if isinstance(value, dict):
-        return {k: _scrub_deep(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_scrub_deep(v) for v in value]
-    if isinstance(value, tuple):
-        return tuple(_scrub_deep(v) for v in value)
-    return value
+    return scrub_diag(value)
 
 
 def _before_send(event: dict, _hint: dict) -> dict | None:
@@ -119,6 +111,7 @@ def init() -> bool:
         # Ни IP, ни заголовков: см. докстроку модуля.
         send_default_pii=False,
         include_local_variables=False,
+        max_value_length=8000,  # Preserve the bounded manual report in its context.
         # Трассировка и профилирование по умолчанию выключены — это машина
         # байера, а не наш стенд.
         traces_sample_rate=_float_env("ACL_SENTRY_TRACES", 0.0),
@@ -166,6 +159,8 @@ def report_step_failure(
             scope.set_tag("account", account)
         if run_id:
             scope.set_context("run", {"run_id": run_id, "campaign": campaign})
+        if why:
+            scope.set_context("failure", {"why": _scrub_deep(why)})
         if diag:
             scope.set_context("diag", _scrub_deep(diag))
         return sentry_sdk.capture_message(f"{step}: {reason}", level="error") or ""
@@ -207,6 +202,7 @@ def report_problem(text: str, *, context: dict | None = None) -> str:
     with sentry_sdk.new_scope() as scope:
         scope.fingerprint = ["acl-report", "manual"]
         scope.set_tag("kind", "report")
+        scope.set_context("report", {"text": _scrub_deep(text or "")[:4000]})
         if context:
             scope.set_context("acl", _scrub_deep(context))
         return sentry_sdk.capture_message(

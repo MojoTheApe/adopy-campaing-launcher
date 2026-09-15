@@ -132,7 +132,7 @@ def test_the_machine_attaches_its_own_facts(monkeypatch):
 
     monkeypatch.setattr(acl_sentry, "report_problem", _report)
     response = _post("зависло на креативе")
-    assert response.status_code == 200
+    assert response.status_code == 202
     assert _json.loads(response.body)["event_id"] == "abc123"
     assert seen["text"] == "зависло на креативе"
     assert "version" in seen["context"] and "machine" in seen["context"]

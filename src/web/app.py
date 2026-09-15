@@ -2656,7 +2656,13 @@ async def report_problem(request: Request) -> JSONResponse:
             status_code=400,
         )
 
-    context: dict[str, Any] = {"where": (form.get("where") or "").strip()[:200]}
+    if len(text) > 4000:
+        return JSONResponse({"ok": False, "error": "Keep the report within 4000 characters."}, status_code=400)
+
+    context: dict[str, Any] = {
+        "where": (form.get("where") or "").strip()[:200],
+        "period": {k: str(form.get(k) or "")[:40] for k in ("from", "to", "span")},
+    }
     try:
         from src.fb_ads_rpa import run_telemetry, telemetry_sync
 
@@ -2676,7 +2682,7 @@ async def report_problem(request: Request) -> JSONResponse:
         event_id = acl_sentry.report_problem(text, context=context)
     except Exception as exc:
         return JSONResponse(
-            {"ok": False, "error": f"Could not send the report: {exc}"}, status_code=502
+            {"ok": False, "error": "Report submission was not confirmed. Your text is still available; retry when ready."}, status_code=502
         )
     if not event_id:
         return JSONResponse(
@@ -2684,7 +2690,8 @@ async def report_problem(request: Request) -> JSONResponse:
              "error": "Reporting is switched off on this machine, so nothing was sent."},
             status_code=503,
         )
-    return JSONResponse({"ok": True, "event_id": event_id})
+    # An SDK event ID confirms local queue acceptance, not network delivery.
+    return JSONResponse({"ok": True, "queued": True, "event_id": event_id}, status_code=202)
 
 
 @app.post("/account-spend/turn-off")
