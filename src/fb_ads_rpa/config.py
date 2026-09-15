@@ -77,7 +77,7 @@ def get_reuse_library_media() -> bool:
     """When True, the ad-creative step first tries to attach an existing copy
     of the file from the account's media library instead of re-uploading it.
 
-    Default OFF since 2026-08-24. Enable with FB_RPA_REUSE_MEDIA=1.
+    Default ON since 2026-09-15. Disable with FB_RPA_REUSE_MEDIA=0.
 
     It was briefly off before, after a broken first version cost a whole run
     on 2026-07-29 (clicks landed on the filename caption instead of the tile,
@@ -85,7 +85,28 @@ def get_reuse_library_media() -> bool:
     back on once the pick learned to search by filename and verify the grid's
     own "N selected" counter.
 
-    Off again, and this time the claim that its worst case is "the old
+    ВКЛЮЧЕНО СНОВА 15.09, и вот на каком основании — потому что выключали не
+    от лени, и вернуть флаг, не сняв причину, было бы прямым вредом.
+
+    Причина отключения была одна и конкретная: у поиска по медиатеке было
+    ДВА исхода на ТРИ случая. «Не нашли» и «выбрали, но не смогли довести»
+    возвращали одинаковое False, вызывающий в обоих случаях уходил грузить
+    файл — и во втором клал его поверх уже выбранного. Теперь исхода три
+    (`REUSE_ATTACHED` / `REUSE_ABSENT` / `REUSE_DIRTY`), отступление снимает
+    за собой выбор и подтверждает это счётчиком сетки, а если снять не
+    удалось — шаг честно отказывает вместо тихой загрузки поверх. Худший
+    случай теперь «объявление без креатива, отказ видно», а не «объявление с
+    шестью креативами, которое никто не заметит».
+
+    Довод «оно ничего не экономит» тоже перестал быть верным. Он считался на
+    креативах, где загрузка стоила 30-60 секунд. 15.09 живой креатив весил
+    **247 МБ**, и за круг из шести кампаний по три объявления один и тот же
+    файл уезжает в Meta восемнадцать раз — около 4,4 ГБ.
+
+    История отключения ниже оставлена целиком: она объясняет, что именно
+    проверять, если флаг снова начнёт вредить.
+
+    Off again (24.08), and this time the claim that its worst case is "the old
     behaviour plus a couple of seconds" is simply not true. When the pick
     clicks tiles and then fails to advance the wizard, it returns False with
     those selections STILL APPLIED, and the upload path then adds its own on
@@ -102,7 +123,7 @@ def get_reuse_library_media() -> bool:
     the file it just sent — the behaviour we want — at a cost of ~30-60s per
     ad, which these runs were already paying.
     """
-    val = (os.environ.get("FB_RPA_REUSE_MEDIA") or "0").strip().lower()
+    val = (os.environ.get("FB_RPA_REUSE_MEDIA") or "1").strip().lower()
     return val in ("1", "true", "yes", "on")
 
 
