@@ -1719,6 +1719,31 @@ def _read_tree(
                 return False
         return True
 
+    def _read_settled(level: str, tries: int = 8):
+        """Дочитаться до таблицы, а не до её загрузки.
+
+        `read_level` отказывается, пока таблица помечена `aria-busy` или
+        показывает полоску загрузки, — и правильно делает: читать
+        недогруженную значит получить половину строк с видом целого. Но
+        звали её ровно один раз, и отказ был окончательным.
+
+        15.09, попытка измерить `acl-113d`: на живом кабинете дерево не
+        прочиталось ни разу из четырёх — `таблица campaign: table-loading`
+        при исправном спенде рядом. То есть дерево не работало вовсе, а
+        выглядело это как «дерево пустое».
+
+        Столько же попыток и с тем же смыслом, сколько у пострановой
+        разбивки: там та же таблица Ads Manager и та же беда.
+        """
+        rows, how, err = [], "", ""
+        for attempt in range(tries):
+            rows, how, err = read_level(page, level)
+            if "table-loading" not in f"{how} {err}":
+                return rows, how, err
+            if attempt < tries - 1:
+                _sleep(1.5)
+        return rows, how, err
+
     def _open(url: str, what: str, parent_id: str = "") -> bool:
         """Перейти и сверить, что открылось именно то, что просили."""
         try:
@@ -1734,7 +1759,7 @@ def _read_tree(
     # Сначала верхний уровень: его id нужны, чтобы спросить объявления каждого.
     top = TREE_LEVELS[0]
     if _open(_tree_url(act, top, date_from, date_to), top):
-        parents, how, err = read_level(page, top)
+        parents, how, err = _read_settled(top)
         if not _context_matches(top):
             return [], how, "; ".join(errors)
         if how:
@@ -1774,7 +1799,7 @@ def _read_tree(
                             parent_level=top, parent_id=parent.id)
             if not _open(url, what, parent.id):
                 continue
-            got, how, err = read_level(page, "ad")
+            got, how, err = _read_settled("ad")
             if not _context_matches(what, parent.id):
                 continue
             if how:

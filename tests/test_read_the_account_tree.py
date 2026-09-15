@@ -776,3 +776,41 @@ def test_skipping_is_said_out_loud_not_silently(flow_mixed):
 def test_what_counts_as_spent(text, spent):
     """Число не разбираем: у Meta своя валюта, свои разделители и своя локаль."""
     assert sp._looks_spent(text) is spent
+
+
+# ── таблица, которая ещё грузится ─────────────────────────────────────────
+#
+# `read_level` отказывается, пока таблица помечена занятой, — и правильно:
+# читать недогруженную значит получить половину строк с видом целого. Но
+# звали её ровно один раз, и отказ был окончательным. 15.09 на живом кабинете
+# дерево не прочиталось ни разу из четырёх: «таблица campaign: table-loading»
+# при исправном спенде рядом. Выглядело это как «дерево пустое».
+
+def test_a_loading_table_is_read_again_not_given_up_on(flow, monkeypatch):
+    """Пока таблица грузится — ждём и спрашиваем снова."""
+    monkeypatch.setattr(sp, "_sleep", lambda *a, **k: None)
+    calls = {"n": 0}
+
+    def _level(page, level):
+        calls["n"] += 1
+        if level == "campaign" and calls["n"] == 1:
+            return ([], "", "таблица campaign: table-loading")
+        if level == "campaign":
+            return ([sp.AdObject(level="campaign", id="11" * 8, name="camp A")], "data-surface", "")
+        return ([sp.AdObject(level="ad", id="9901", name="an ad")], "data-surface", "")
+
+    flow.setattr(sp, "read_level", _level)
+    objects, _how, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01", "2026-09-10")
+    assert not err, err
+    assert [o["level"] for o in objects] == ["campaign", "ad"]
+    assert calls["n"] >= 2, "сдались после первого отказа"
+
+
+def test_a_table_that_never_settles_is_a_named_failure(flow, monkeypatch):
+    """Не дождались — так и сказано, а не «дерево пустое»."""
+    monkeypatch.setattr(sp, "_sleep", lambda *a, **k: None)
+    flow.setattr(sp, "read_level",
+                 lambda page, level: ([], "", "таблица campaign: table-loading"))
+    objects, _how, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01", "2026-09-10")
+    assert objects == []
+    assert "table-loading" in err
