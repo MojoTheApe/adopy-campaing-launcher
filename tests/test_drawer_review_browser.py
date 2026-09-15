@@ -274,7 +274,7 @@ def test_connection_borrows_the_existing_country_form(ui):
     # стоит такая же форма — но она ни к какой стране не привязана (значение
     # пустое) и второй копией этой не является. Считать все подряд значило бы
     # ловить не то: проверка здесь про переезд, а не про число форм на странице.
-    expect(p.locator('.amap-add[data-amap-country="Saudi Arabia"]')).to_have_count(1)
+    expect(p.locator('.amap-add[data-amap-country="SA"]')).to_have_count(1)
     p.locator('[data-act="connect-picked"]').click()
     assert p.evaluate("document.querySelector('#offline-map details.amap-country .amap-add') === originalConnect")
 

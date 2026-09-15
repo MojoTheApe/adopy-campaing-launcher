@@ -6738,7 +6738,7 @@ var _mlxLoading = {}; // инстанс -> Promise
    букв не идёт в сеть, а Multilogin получает один запрос вместо восемнадцати. */
 function amapProfiles(inst, reload, text) {
   var q = (text || '').trim();
-  var key = inst + ' ' + q.toLowerCase();
+  var key = inst + '\0' + q.toLowerCase();
   if (reload) { delete _mlxCache[key]; delete _mlxLoading[key]; }
   if (_mlxCache[key]) return Promise.resolve(_mlxCache[key]);
   if (_mlxLoading[key]) return _mlxLoading[key];
@@ -6779,7 +6779,7 @@ function amapFilter(input, reload) {
 
   if (!q) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
   msg.className = 'amap-msg';
-  msg.textContent = _mlxCache[inst + ' ' + q.toLowerCase()] ? ''
+  msg.textContent = _mlxCache[inst + '\0' + q.toLowerCase()] ? ''
     : ('searching ' + (ACL_MLX_LABELS[inst] || inst) + '…');
 
   /* Ждём, пока человек допечатает. Запрос теперь уходит на каждое слово, а
@@ -6991,10 +6991,10 @@ async function amapMlSubmit(btn, paste) {
        оставить на экране результаты, найденные прошлым токеном, — то есть
        чужого рабочего пространства. */
     Object.keys(_mlxCache).forEach(function (k) {
-      if (k === inst || k.indexOf(inst + ' ') === 0) delete _mlxCache[k];
+      if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxCache[k];
     });
     Object.keys(_mlxLoading).forEach(function (k) {
-      if (k === inst || k.indexOf(inst + ' ') === 0) delete _mlxLoading[k];
+      if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxLoading[k];
     });
     document.querySelectorAll('.amap-add').forEach(function (b) {
       if (amapMlInstance(b) !== inst) return;

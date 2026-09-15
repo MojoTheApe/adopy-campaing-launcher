@@ -89,24 +89,11 @@ def test_both_paths_agree():
 
 # ── и это доходит до библиотеки ───────────────────────────────────────
 
-def test_the_library_resolves_a_code_and_not_an_interest_string():
-    """Проверка на настоящей библиотеке: та же пара, что разошлась на живом
-    прогоне. Если однажды поле снова начнёт нести интересы, здесь будет видно,
-    почему это не работает."""
+def test_the_library_resolves_a_code_and_not_an_interest_string(monkeypatch, tmp_path):
     from src.analysis_agent import targeting_registry as tr
 
-    tr.refresh()
-    known = [t for t in tr.all_targets() if (t.rpa_interests() or "").strip()]
-    if not known:
-        import pytest
-
-        pytest.skip("на этой машине библиотека таргетов пуста")
-
-    target = known[0]
-    interests = target.rpa_interests()
-
-    assert tr.resolve_interests(target.name) == interests, "код не разрешается"
-    assert tr.resolve_interests(interests) == "", (
-        "строка интересов не должна разрешаться в таргет — именно на этом "
-        "держится вся проверка: сервер ждёт код"
-    )
+    monkeypatch.setattr(tr, "_store", lambda: tmp_path / "targeting.json")
+    monkeypatch.setattr(tr, "refresh", lambda **kwargs: {})
+    target = tr.add("PF", "Foreign exchange market, Investor")
+    assert tr.resolve_interests(target.name) == target.rpa_interests()
+    assert tr.resolve_interests(target.rpa_interests()) == ""
