@@ -1,6 +1,7 @@
 """Playwright browser session via antidetect profile (Multilogin / Dolphin)."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import shutil
@@ -458,9 +459,26 @@ def _keep_renderer_active(context, page) -> None:
         session = context.new_cdp_session(page)
 
         def _ack(params: dict) -> None:
+            # Ловим и `CancelledError`, а не только `Exception`.
+            #
+            # С Python 3.8 `asyncio.CancelledError` наследуется от
+            # BaseException, а не от Exception — то есть прежний `except
+            # Exception` его НЕ ловил. Когда сессия закрывается под нами
+            # (закончился прогон, закрыли профиль), подтверждение кадра
+            # отменяется на полпути, исключение улетает в машинерию asyncio,
+            # и в лог падает «Exception in callback … CancelledError».
+            #
+            # Найдено 15.09 первым же настоящим исключением, приехавшим в
+            # Sentry (PYTHON-N): среди двадцати двух тикетов за сутки оно
+            # было единственным со стеком — всё остальное наши собственные
+            # сообщения о шагах.
+            #
+            # Подтверждение кадра — дело необязательное: не дошло, значит не
+            # дошло, скринкаст живёт ради того, чтобы Chrome не засыпал в
+            # свёрнутом окне. Ронять из-за него шум в лог незачем.
             try:
                 session.send("Page.screencastFrameAck", {"sessionId": params["sessionId"]})
-            except Exception:
+            except (Exception, asyncio.CancelledError):
                 pass
 
         session.on("Page.screencastFrame", _ack)
