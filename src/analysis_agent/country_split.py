@@ -348,7 +348,7 @@ def _shown_period_text(page) -> str:
     return " ".join((page.evaluate(_PERIOD_JS) or "").split())
 
 
-@serialized_browser(key=_profile_key)
+@serialized_browser(key=_profile_key, reading=True)
 def read_country_split(account: str, date_from: str, date_to: str = "") -> CountrySplit:
     """Read one fresh report, refusing unverified or partial results.
 

@@ -34,9 +34,11 @@ same live Multilogin profile» — то есть про один и тот же 
 
 Живёт всё это в одном процессе. Два **процесса** ACL на одной машине по-
 прежнему могут взяться за один профиль — от этого защищает не замок, а то,
-что профиль один и поднимает его Multilogin.
+оператор не запускает два процесса ACL на одном профиле; Multilogin сам
+по себе не гарантирует эксклюзивное управление через CDP.
 """
 import threading
+import inspect
 from functools import wraps
 
 
@@ -151,30 +153,32 @@ def profile_lock(key: str) -> threading.RLock:
         return lock
 
 
-def serialized_browser(fn=None, *, key=None):
-    """Занять профиль на время вызова и пропустить публикацию вперёд.
+def serialized_browser(fn=None, *, key=None, reading=False):
+    """Serialize mutations globally; opt reads into a shared, per-profile lease.
 
-    Ключ по умолчанию — первый позиционный аргумент: у всех обёрнутых функций
-    он и называет цель (`profile_id` либо ярлык аккаунта). Где ярлык нужно
-    свести к профилю, вызывающий передаёт `key`: карта аккаунтов живёт не
-    здесь, и тащить её сюда значило бы завязать слой браузера на дешборд.
-
-    Порядок захвата один и тот же везде — сперва воротник, потом профиль:
-    разный порядок у разных вызовов и есть обычная причина взаимной блокировки.
+    Publication remains exclusive even when called directly, outside the job
+    runner. Read keys are resolved from the function signature so positional
+    and keyword calls occupy the same profile. A failing key resolver refuses
+    the call instead of silently acquiring a different profile's lock.
     """
     def decorate(func):
+        signature = inspect.signature(func)
+        first_parameter = next(iter(signature.parameters), None)
+
         @wraps(func)
         def wrapped(*args, **kwargs):
-            try:
-                name = key(*args, **kwargs) if key else (args[0] if args else "")
-            except Exception:
-                name = ""
-            browser_operation.acquire_read()
-            try:
-                with profile_lock(name):
+            if not reading:
+                with browser_operation:
                     return func(*args, **kwargs)
-            finally:
-                browser_operation.release_read()
+            if key is not None:
+                name = key(*args, **kwargs)
+            else:
+                bound = signature.bind(*args, **kwargs)
+                bound.apply_defaults()
+                name = bound.arguments.get(first_parameter, "")
+            name = str(name or "").strip()
+            with browser_operation.reading(), profile_lock(name):
+                return func(*args, **kwargs)
         return wrapped
 
     return decorate(fn) if fn is not None else decorate

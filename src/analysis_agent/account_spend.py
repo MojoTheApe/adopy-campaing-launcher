@@ -582,7 +582,7 @@ def _attach_only(entry, account_label: str):
     )
 
 
-@serialized_browser
+@serialized_browser(reading=True)
 def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -> dict:
     """Спросить у самого аккаунта, какой у него номер.
 
@@ -708,7 +708,7 @@ class _Profile:
         self.multilogin_instance = (instance or "A").strip() or "A"
 
 
-@serialized_browser
+@serialized_browser(reading=True)
 def open_profile_for_automation(profile_id: str, folder_id: str = "",
                                 instance: str = "A", label: str = "") -> tuple[bool, str]:
     """Поднять профиль автоматизацией и оставить окно открытым.
@@ -775,7 +775,7 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     return True, "профиль открыт — залогиньтесь, если нужно, и оставьте окно"
 
 
-@serialized_browser(key=_profile_key)
+@serialized_browser(key=_profile_key, reading=True)
 def open_for_automation(account: str) -> tuple[bool, str]:
     """То же самое для аккаунта, который уже есть в карте."""
     entry = _entry_for(account)
@@ -789,7 +789,7 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     )
 
 
-@serialized_browser(key=_profile_key)
+@serialized_browser(key=_profile_key, reading=True)
 def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReading:
     """Прочитать спенд аккаунта за период, выбранный на дешборде.
 
@@ -2010,7 +2010,7 @@ _SWITCH_ACTION_JS = """args => {
 }"""
 
 
-@serialized_browser(key=_profile_key)
+@serialized_browser
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
              expected_name: str = "", date_from: str = "", date_to: str = "",
              requester: str = "") -> "TurnOffResult":

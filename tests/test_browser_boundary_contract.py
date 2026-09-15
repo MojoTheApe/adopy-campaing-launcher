@@ -212,7 +212,7 @@ def test_two_profiles_are_read_at_the_same_time():
     may_finish = threading.Event()
     inside_b = threading.Event()
 
-    @serialized_browser
+    @serialized_browser(reading=True)
     def read(profile):
         (inside_a if profile == "profile-a" else inside_b).set()
         if profile == "profile-a":
@@ -237,7 +237,7 @@ def test_the_same_profile_is_still_read_one_at_a_time():
     may_finish = threading.Event()
     second = threading.Event()
 
-    @serialized_browser
+    @serialized_browser(reading=True)
     def read(profile):
         if not inside.is_set():
             inside.set()
@@ -267,7 +267,7 @@ def test_a_read_waits_while_a_publish_holds_the_browser():
     """
     entered = threading.Event()
 
-    @serialized_browser
+    @serialized_browser(reading=True)
     def read(profile):
         entered.set()
 
@@ -286,7 +286,7 @@ def test_a_publish_waits_for_a_read_to_finish():
     may_finish = threading.Event()
     published = threading.Event()
 
-    @serialized_browser
+    @serialized_browser(reading=True)
     def read(profile):
         inside.set()
         may_finish.wait(timeout=5)
