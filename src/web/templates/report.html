@@ -1627,6 +1627,25 @@
     }
     .amap-cell-read b { color: var(--text); font-weight: 600; }
     .amap-cell-read i { font-style: normal; font-size: 0.68rem; color: var(--muted); }
+    /* ACL-354: окно жалобы. Скромное намеренно — человек уже расстроен, и
+       разглядывать оформление ему незачем. */
+    .report-box {
+      border: 1px solid var(--border); border-radius: 10px; padding: var(--space-lg);
+      background: var(--bg-elev); color: var(--text); max-width: 34rem; width: 90vw;
+    }
+    .report-box::backdrop { background: rgba(0, 0, 0, .45); }
+    .report-box h3 { margin: 0 0 var(--space-sm); font-size: 1rem; }
+    .report-hint { margin: 0 0 var(--space-md); font-size: .8rem; color: var(--muted); line-height: 1.45; }
+    .report-box textarea {
+      width: 100%; box-sizing: border-box; font: inherit; font-size: .85rem;
+      padding: var(--space-sm); border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--text); resize: vertical;
+    }
+    .report-actions { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-md); }
+    .report-msg { flex: 1; font-size: .78rem; color: var(--muted); }
+    .report-msg.good { color: var(--good); }
+    .report-msg.bad { color: var(--bad); }
+
     .amap-cell-act { display: flex; justify-content: flex-end; }
     .amap-nocov > summary.amap-row { background: color-mix(in srgb, var(--bad) 9%, var(--bg-subtle)); }
     .amap-nocov-count b { color: var(--bad); }
@@ -2749,10 +2768,77 @@
     </button>
   </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
+    {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
+        с Refresh намеренно: беда случается на экране, и идти за ней в другое
+        место человек не станет. -#}
+    <button type="button" id="report-problem-btn" title="Tell us what went wrong — ACL attaches the machine's own facts">Report a problem</button>
     <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
     <button type="submit" id="dash-refresh-btn">Refresh</button>
   </form>
 </header>
+
+{#- Окно жалобы. Человек пишет только то, что видел; версию, машину, период и
+    последние отказавшие шаги прикладывает ACL сам. -#}
+<dialog id="report-problem-box" class="report-box">
+  <h3>Report a problem</h3>
+  <p class="report-hint">Write what happened in your own words. ACL attaches its
+     version, this machine, the dates on screen and the last failed steps —
+     account and profile numbers are removed before sending.</p>
+  <textarea id="report-problem-text" rows="6" placeholder="The campaign stopped at the creative and nothing happened for ten minutes…"></textarea>
+  <div class="report-actions">
+    <span class="report-msg" id="report-problem-msg"></span>
+    <button type="button" id="report-problem-cancel">Cancel</button>
+    <button type="button" id="report-problem-send">Send</button>
+  </div>
+</dialog>
+<script>
+(function () {
+  var box = document.getElementById('report-problem-box');
+  var text = document.getElementById('report-problem-text');
+  var msg = document.getElementById('report-problem-msg');
+  var send = document.getElementById('report-problem-send');
+  if (!box || !send) return;
+
+  document.getElementById('report-problem-btn').addEventListener('click', function () {
+    msg.textContent = '';
+    msg.className = 'report-msg';
+    box.showModal();
+    text.focus();
+  });
+  document.getElementById('report-problem-cancel').addEventListener('click', function () {
+    box.close();
+  });
+
+  send.addEventListener('click', function () {
+    var body = (text.value || '').trim();
+    if (!body) { msg.className = 'report-msg bad'; msg.textContent = 'Write a line first.'; return; }
+    send.disabled = true;
+    msg.className = 'report-msg';
+    msg.textContent = 'Sending…';
+    var form = new FormData();
+    form.append('text', body);
+    form.append('where', location.hash || location.pathname);
+    fetch('/report-problem', { method: 'POST', body: form, credentials: 'same-origin' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        // Неудача не выдаётся за удачу: без номера события отправки не было.
+        if (!res.ok || !res.d.ok || !res.d.event_id) {
+          msg.className = 'report-msg bad';
+          msg.textContent = (res.d && res.d.error) || 'Did not send. Nothing was lost — try again.';
+          return;
+        }
+        msg.className = 'report-msg good';
+        msg.textContent = 'Sent. Reference ' + String(res.d.event_id).slice(0, 8);
+        text.value = '';
+      })
+      .catch(function (e) {
+        msg.className = 'report-msg bad';
+        msg.textContent = 'Did not send: ' + (e && e.message ? e.message : e);
+      })
+      .finally(function () { send.disabled = false; });
+  });
+})();
+</script>
 <script>
 async function dashRefresh(ev) {
   if (ev) ev.preventDefault();
