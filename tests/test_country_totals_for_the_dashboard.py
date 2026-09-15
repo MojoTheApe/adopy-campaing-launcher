@@ -233,3 +233,75 @@ def test_an_unwritten_currency_is_not_added_up_either():
     _save("A", [{"country": "Chile", "spend": 1.0, "currency": ""}])
     _save("B", [{"country": "Chile", "spend": 2.0, "currency": ""}])
     assert len(cs.totals_by_country(DAY_FROM, DAY_TO)) == 2
+
+
+# ── «читаю» без читателя — отказ, а не вечное ожидание ────────────────────
+#
+# Замечание ревьюера 14.09: «при ошибке сохранения результат навсегда остаётся
+# running». Так и было: флаг в памяти снимался, а на диске оставалась запись от
+# начала чтения — и экран читает именно её.
+
+
+def test_a_failed_save_does_not_leave_the_screen_waiting_forever(monkeypatch):
+    saved: list[str] = []
+    real_save = cs.save_split
+
+    def save_once_then_break(split):
+        if split.state == "running":
+            saved.append("start")
+            return real_save(split)
+        raise OSError("диск занят")
+
+    monkeypatch.setattr(cs, "save_split", save_once_then_break)
+
+    def reader(account, date_from, date_to):
+        return cs.CountrySplit(account=account, date_from=date_from, date_to=date_to,
+                               state="ok", rows=[{"country": "Chile", "spend": 1.0,
+                                                  "currency": "$"}])
+
+    cs.start_split("C", DAY_FROM, DAY_TO, reader=reader)
+    import time
+    for _ in range(50):
+        if "C" not in cs.running_now():
+            break
+        time.sleep(0.1)
+    assert "C" not in cs.running_now(), "чтение должно было закончиться"
+
+    stored = cs.get_split("C", DAY_FROM, DAY_TO)
+    assert stored["state"] == "failed", "«running» без читателя — ложь"
+    assert stored["error"]
+
+
+def test_a_restart_in_the_middle_does_not_strand_the_reading():
+    """Дешборд перезапустили — поток умер, запись пережила его."""
+    _save("D", [], state="running")
+    cs._RUNNING.discard(cs._key("D", DAY_FROM, DAY_TO))
+
+    assert cs.get_split("D", DAY_FROM, DAY_TO)["state"] == "failed"
+    assert cs.all_splits(DAY_FROM, DAY_TO)["D"]["state"] == "failed"
+
+
+def test_a_reading_actually_in_flight_still_says_running():
+    """Обратная сторона: живое чтение не должно объявляться отказом."""
+    key = cs._key("E", DAY_FROM, DAY_TO)
+    _save("E", [], state="running")
+    cs._RUNNING.add(key)
+    try:
+        assert cs.get_split("E", DAY_FROM, DAY_TO)["state"] == "running"
+        assert cs.all_splits(DAY_FROM, DAY_TO)["E"]["state"] == "running"
+    finally:
+        cs._RUNNING.discard(key)
+
+
+def test_the_stored_file_is_not_rewritten_by_reading_it():
+    """Разбор осиротевшей записи — взгляд, а не правка.
+
+    Переписывать хранилище на чтении значило бы, что показ страницы меняет
+    данные: две вкладки подряд дают разный файл, а восстановить исходное
+    состояние после разбора уже нельзя.
+    """
+    _save("F", [], state="running")
+    cs._RUNNING.discard(cs._key("F", DAY_FROM, DAY_TO))
+    before = cs._store_path().read_text(encoding="utf-8")
+    assert cs.get_split("F", DAY_FROM, DAY_TO)["state"] == "failed"
+    assert cs._store_path().read_text(encoding="utf-8") == before

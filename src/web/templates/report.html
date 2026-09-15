@@ -1685,7 +1685,29 @@
     .amap-caret:hover { color: var(--accent); }
     tr.amap-open .amap-caret { transform: rotate(90deg); display: inline-block; }
     .amap-caret-off { color: var(--border-strong); padding-right: 0.3rem; font-size: 0.7rem; }
+    /* acl-357: кнопок в строке стало три, и третья — Remove — уезжала за
+       край. Колонка фиксированной ширины (`table-layout: fixed`), а ячейка
+       не переносила содержимое, поэтому лишнее просто обрезалось: кнопка
+       оставалась в разметке, но нажать её было нельзя.
+
+       Перенос, а не сужение соседей: отнять ширину у колонок с числами
+       значит испортить то, ради чего таблицу и читают. Вторая строка
+       появляется только там, где кнопки не поместились. */
+       Селектор длиннее соседних не для красоты: перенос запрещает
+       `.amap table.amap-grid td` — правило сильнее любого одиночного класса,
+       и короткая запись просто не сработает. Проверено в браузере:
+       `white-space` оставался `nowrap`, а Remove висел за краем. */
     .amap-actions { text-align: right; }
+    .amap table.amap-grid td.amap-actions {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      /* Кнопки прижаты вправо, и левое поле здесь только съедает место:
+         161px кнопок не влезали в колонку из-за 27px отступов, и строка
+         разъезжалась на две. */
+      padding-left: 0.3rem;
+    }
+    .amap table.amap-grid td.amap-actions > button { margin: 0.05rem 0 0.05rem 0.2rem; }
     .amap .amap-x {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -5682,6 +5704,127 @@ function amapReadSpend(btn) {
       amapPollSpend(account, cell, btn, 0, per);
     })
     .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
+}
+
+/* ── Разбивка по странам (acl-357) ─────────────────────────────────────
+   Кнопка в строке аккаунта: спросить сам кабинет, каким странам он относит
+   свои деньги. Чтение дорогое — оно создаёт в кабинете отчёт, — поэтому
+   идёт в фоне и опрашивается тем же маршрутом, что и спенд: оба показания
+   живут в одной клетке и снимаются за один период. */
+
+function amapReadCountries(btn) {
+  if (amapReadAllBusy) return;
+  var cell = amapSpendCell(btn);
+  var account = cell && cell.dataset.account;
+  if (!account) return;
+  var per = amapPeriod();
+  if (!per.from || per.span === 'all') return;
+  btn.disabled = true;
+  btn.className = 'amap-btn amap-countries';
+  btn.textContent = 'countries…';
+  var body = new FormData();
+  body.append('account', account);
+  body.append('date_from', per.from);
+  body.append('date_to', per.to);
+  body.append('span', per.span);
+  fetch('/account-spend/read-countries', { method: 'POST', body: body, credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) throw new Error(j.error || 'refused');
+      amapPollCountries(account, btn, 0, per);
+    })
+    .catch(function (e) { amapCountriesFailed(btn, String(e && e.message || e)); });
+}
+
+function amapCountriesFailed(btn, why) {
+  btn.disabled = false;
+  btn.className = 'amap-btn amap-countries amap-live-bad';
+  btn.textContent = 'failed · retry';
+  btn.title = why || 'Could not read the country split';
+}
+
+function amapCountriesDone(btn) {
+  btn.disabled = false;
+  btn.className = 'amap-btn amap-countries';
+  btn.textContent = 'Countries';
+  btn.title = 'Read again';
+}
+
+function amapPollCountries(account, btn, tries, per) {
+  /* Тот же предел, что у спенда: пострановое чтение дольше, но человек не
+     должен гадать, идёт ли ещё что-то. Шесть минут молчания — это отказ. */
+  if (tries > 120) {
+    amapCountriesFailed(btn, 'no answer after six minutes — check the launcher window');
+    return;
+  }
+  setTimeout(function () {
+    fetch('/account-spend/status?account=' + encodeURIComponent(account)
+          + '&date_from=' + encodeURIComponent(per.from)
+          + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) throw new Error(j.error || 'Could not read status');
+        var s = j.split;
+        if (!s) { amapCountriesFailed(btn, 'the reading disappeared before it finished'); return; }
+        if (s.state === 'running') { amapPollCountries(account, btn, tries + 1, per); return; }
+        if (s.state === 'failed') { amapCountriesFailed(btn, s.error || 'refused'); return; }
+        amapCountriesDone(btn);
+        amapRefreshCountryLines(per);
+      })
+      .catch(function (e) { amapCountriesFailed(btn, String(e && e.message || e)); });
+  }, 3000);
+}
+
+function amapRefreshCountryLines(per) {
+  /* Строки рисует сервер, а не мы. Второй раз собирать ту же разметку на
+     клиенте — верный способ развести их: рядом уже есть предупреждение про
+     `amap-live-summary`, которое разошлось ровно так.
+
+     Страна, которой в карте не было, приходит из показаний отдельным
+     блоком — точечной заменой её не вставить, поэтому для этого случая
+     слот перерисовывается целиком, а раскрытые блоки открываются заново. */
+  return fetch('/account-map?date_from=' + encodeURIComponent(per.from)
+               + '&date_to=' + encodeURIComponent(per.to)
+               + '&span=' + encodeURIComponent(per.span), { credentials: 'same-origin' })
+    .then(function (r) { return r.text(); })
+    .then(function (html) {
+      var slot = document.getElementById('amap-slot');
+      if (!slot) return;
+      var fresh = new DOMParser().parseFromString(html, 'text/html');
+      var blocks = fresh.querySelectorAll('details.amap-country[data-country]');
+      var missing = false;
+      blocks.forEach(function (block) {
+        var key = block.getAttribute('data-country');
+        if (!document.querySelector('details.amap-country[data-country="' + CSS.escape(key) + '"]')) missing = true;
+      });
+      if (missing) {
+        var open = [];
+        document.querySelectorAll('details.amap-country[open]').forEach(function (d) {
+          open.push(d.getAttribute('data-country'));
+        });
+        slot.innerHTML = fresh.getElementById('amap-slot')
+          ? fresh.getElementById('amap-slot').innerHTML : html;
+        open.forEach(function (key) {
+          var d = document.querySelector('details.amap-country[data-country="' + CSS.escape(key) + '"]');
+          if (d) d.open = true;
+        });
+        if (typeof amapUpdateCountrySummaries === 'function') amapUpdateCountrySummaries();
+        return;
+      }
+      blocks.forEach(function (block) {
+        var key = block.getAttribute('data-country');
+        var live = document.querySelector('details.amap-country[data-country="' + CSS.escape(key) + '"]');
+        if (!live) return;
+        var holder = live.querySelector('.amap-live-summary');
+        if (!holder) return;
+        var was = holder.querySelector('.amap-country-read');
+        var now = block.querySelector('.amap-country-read');
+        if (was && now) was.replaceWith(now.cloneNode(true));
+        else if (now) holder.appendChild(now.cloneNode(true));
+        else if (was) was.remove();
+      });
+    })
+    .catch(function () { /* строки обновятся при следующей загрузке страницы */ });
 }
 
 function amapMoney(spend, currency) {

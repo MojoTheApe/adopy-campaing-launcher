@@ -2877,16 +2877,22 @@ async def account_probe_ad_account(request: Request) -> JSONResponse:
 async def account_spend_status(
     account: str = "", date_from: str = "", date_to: str = "", span: str = ""
 ) -> JSONResponse:
-    from src.analysis_agent import account_spend
+    from src.analysis_agent import account_spend, country_split
 
     try:
         date_from, date_to = _spend_period(date_from, date_to, span)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     if account.strip():
+        # Пострановое чтение отдаётся здесь же, а не отдельным маршрутом.
+        # Оба показания живут в одной клетке строки и снимаются за один и тот
+        # же период; второй опрос ходил бы за тем же аккаунтом в те же
+        # секунды и удваивал бы запросы ради разделения, которого на экране
+        # нет. `split` отсутствует, пока страны у этого аккаунта не читали.
         return JSONResponse({
             "ok": True,
             "reading": account_spend.get_reading(account.strip(), date_from, date_to).to_dict(),
+            "split": country_split.get_split(account.strip(), date_from, date_to),
         })
     return JSONResponse(
         {

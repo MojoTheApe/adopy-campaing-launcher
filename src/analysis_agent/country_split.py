@@ -163,6 +163,9 @@ def start_split(
             try:
                 save_split(done)
             except Exception:
+                # Результат потерян, но ронять поток нечем и некуда. Важно, что
+                # после этого на диске остаётся «running» от начала чтения —
+                # его разбирает `_honest`, иначе экран ждал бы вечно.
                 pass
             finally:
                 _RUNNING.discard(key)
@@ -195,7 +198,10 @@ def all_splits(date_from: str, date_to: str = "") -> dict[str, dict]:
             continue
         account = str(value.get("account") or "")
         if account:
-            out[account] = value
+            # Тот же разбор осиротевших записей, что и в `get_split`: экран
+            # берёт аккаунты отсюда, и вечное «читаю» попало бы прямо в него.
+            with _LOCK:
+                out[account] = _honest(_key(account, date_from, date_to), value)
     return out
 
 
@@ -256,7 +262,40 @@ def totals_by_country(date_from: str, date_to: str = "") -> list[dict]:
     return out
 
 
+#: Что показывать вместо «running», за которым никого нет.
+_ORPHANED = "чтение прервалось и не досказало результат"
+
+
+def _honest(key: str, value: dict | None) -> dict | None:
+    """Снять «running» с записи, которую не держит ни один живой читатель.
+
+    Хранилище говорит «читаю» с того момента, как чтение началось, и до того,
+    как результат записан. Между этими двумя записями есть два способа
+    оборваться, и оба оставляли на экране вечное «читаю»:
+
+    * запись результата не удалась (диск занят, файл перечитывают) — флаг в
+      памяти снимался в `finally`, а на диске оставалось «running», и экран
+      читает именно диск;
+    * дешборд перезапустили посреди чтения — поток умер вместе с процессом,
+      а запись пережила его.
+
+    Правда здесь у памяти: `_RUNNING` знает, кого действительно читают
+    **сейчас**. Если записи там нет, а на диске «running» — это осиротевшая
+    запись, и честнее показать отказ, чем бесконечное ожидание. Человек
+    нажмёт ещё раз; вечное «читаю» не даёт даже этого.
+    """
+    if not isinstance(value, dict) or value.get("state") != "running":
+        return value
+    if key in _RUNNING:
+        return value
+    orphan = dict(value)
+    orphan["state"] = "failed"
+    orphan["error"] = orphan.get("error") or _ORPHANED
+    return orphan
+
+
 def get_split(account: str, date_from: str, date_to: str) -> dict | None:
+    key = _key(account, date_from, date_to or date_from)
     with _LOCK:
         path = _store_path()
         try:
@@ -265,8 +304,8 @@ def get_split(account: str, date_from: str, date_to: str) -> dict | None:
             return None
         if not isinstance(data, dict):
             return None
-        value = data.get(_key(account, date_from, date_to or date_from))
-        return value if isinstance(value, dict) else None
+        value = data.get(key)
+        return _honest(key, value) if isinstance(value, dict) else None
 
 
 # ── Разбор ячеек: чистый Python, тестируется без браузера ──────────────
