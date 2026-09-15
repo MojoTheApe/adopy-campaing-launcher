@@ -4538,6 +4538,35 @@ def _library_tiles(page: Page, filename: str):
     )
 
 
+def _library_undo_selection(page: Page, tiles, clicked: list[int], before: int) -> bool:
+    """Снять то, что мы навыбирали, и подтвердить это счётчиком сетки.
+
+    Без этого повторное использование медиатеки опаснее, чем отсутствие
+    повторного использования, и 24.08 его именно поэтому и выключили: шаг
+    отказывался УЖЕ выбрав плитки, вызывающий честно уходил грузить файл, и
+    объявление выходило с 3-6 креативами вместо одного (прогоны 5bff134ea745,
+    770bd7e5fb7b: «3 of 10 selected», «6 of 10 selected»). Meta делает из
+    лишних отдельные вариации, то есть публикуется не то объявление, которое
+    собрал оператор, — и заметить это можно только глазами в кабинете.
+
+    Возвращает, удалось ли вернуть сетку ровно в то состояние, в котором мы её
+    застали. Ответ «нет» — не мелочь: он означает, что выбор остался
+    применённым, и загружать поверх нельзя.
+    """
+    for i in reversed(clicked):
+        if _library_selected_count(page) <= before:
+            break
+        try:
+            tiles.nth(i).click(timeout=3000)
+        except Exception:
+            continue
+        for _ in range(6):  # ~1.8s: счётчик догоняет клик не мгновенно
+            _sleep_h(0.3)
+            if _library_selected_count(page) <= before:
+                break
+    return _library_selected_count(page) <= before
+
+
 def _library_search(page: Page, filename: str) -> bool:
     """Filter the media library grid down to `filename` before picking one.
 
@@ -4590,12 +4619,41 @@ def _library_search(page: Page, filename: str) -> bool:
     return True
 
 
-def _try_reuse_library_media(page: Page, filename: str) -> bool:
-    """Attach an already-uploaded copy of `filename` from the media library.
+#: Исходы поиска в медиатеке. Их три, а не два, и это главное в этом шаге.
+#:
+#: `absent` и `dirty` оба означают «не прикрепили», но требуют
+#: противоположного от вызывающего: после `absent` грузить файл нужно, после
+#: `dirty` — категорически нельзя, иначе получится объявление с несколькими
+#: креативами. Пока исход был булевым, эти два случая были неразличимы, и
+#: возможность повторного использования пришлось выключить целиком.
+REUSE_ATTACHED = "attached"
+REUSE_ABSENT = "absent"
+REUSE_DIRTY = "dirty"
 
-    Saves the whole CDP file-transfer round-trip on repeat runs. Returns
-    False — leaving the Media step untouched so the caller can upload
-    normally — whenever a copy can't be selected.
+
+def _try_reuse_library_media(page: Page, filename: str) -> str:
+    """Прикрепить уже загруженную копию `filename` из медиатеки аккаунта.
+
+    Экономит полную переброску файла: сегодняшний креатив весит 247 МБ, и за
+    круг из шести кампаний по три объявления тот же самый файл уезжает в Meta
+    восемнадцать раз.
+
+    Возвращает один из трёх исходов:
+
+    * `REUSE_ATTACHED` — медиа прикреплено, шаг закончен;
+    * `REUSE_ABSENT` — копии нет либо мы отступили, ничего не изменив;
+      сетка ровно в том состоянии, в котором мы её застали, и вызывающий
+      спокойно грузит файл;
+    * `REUSE_DIRTY` — мы выбрали плитки и **не смогли снять выбор**. Грузить
+      поверх нельзя: объявление выйдет с несколькими креативами. Это отказ
+      шага, а не повод для запасного пути.
+
+    Third state существует из-за конкретной поломки: 24.08 повторное
+    использование выключили, потому что отказ «после клика» возвращал то же
+    самое `False`, что и «ничего не нашли», вызывающий уходил грузить поверх
+    выбранного, и объявления выходили с 3-6 креативами (прогоны 5bff134ea745,
+    770bd7e5fb7b). Meta делает из лишних отдельные вариации — публикуется не
+    то, что собрал оператор, и видно это только глазами в кабинете.
 
     Two things make this harder than it looks, both confirmed live:
 
@@ -4620,7 +4678,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> bool:
     except Exception:
         available = 0
     if not available:
-        return False
+        return REUSE_ABSENT
 
     # Poll the counter for seconds, not milliseconds, before giving up on a
     # click. The old 0.5s check raced Meta's own render: the click HAD
@@ -4648,7 +4706,12 @@ def _try_reuse_library_media(page: Page, filename: str) -> bool:
         if picked:
             break
     if not picked:
-        return False
+        # Кликали, но счётчик не двинулся. «Не двинулся» — это то, что мы
+        # видим, а не то, что произошло: клик мог и зарегистрироваться, просто
+        # позже. Поэтому не уходим молча, а снимаем за собой.
+        if clicked and not _library_undo_selection(page, tiles, clicked, before):
+            return REUSE_DIRTY
+        return REUSE_ABSENT
 
     # One ad, one creative. If a slow render still let two clicks through,
     # toggle the surplus back off — an over-selected ad silently becomes a
@@ -4663,8 +4726,9 @@ def _try_reuse_library_media(page: Page, filename: str) -> bool:
             continue
         _sleep_h(0.8)
 
-    # Past this point the grid state has changed, so a failure here is a
-    # real failure rather than something the upload path can pick up from.
+    # Дальше сетка уже изменена. Любой отказ здесь — либо чистое отступление
+    # (мы сняли выбор и сетка как была), либо `dirty`. Третьего не дано, и
+    # молча возвращать «не получилось» больше нельзя.
     try:
         advanced = False
         for root in _roots(page):
@@ -4678,12 +4742,62 @@ def _try_reuse_library_media(page: Page, filename: str) -> bool:
                 advanced = True
             break
         if not advanced:
-            return False
+            return _retreat(page, tiles, clicked, before)
         _close_creative_setup_modal(page)
         _sleep_h(0.5)
-        return "/ads/edit/" in page.url and _verify_ad_media_present(page)
+        if "/ads/edit/" in page.url and _verify_ad_media_present(page):
+            return REUSE_ATTACHED
+        # Мастер продвинулся, а медиа на объявлении нет. Выбор при этом
+        # где-то остался, и снять его отсюда уже нечем: сетки на экране нет.
+        return REUSE_DIRTY
     except Exception:
+        return _retreat(page, tiles, clicked, before)
+
+
+def _retreat(page: Page, tiles, clicked: list[int], before: int) -> str:
+    """Отступить так, чтобы за нами можно было грузить файл.
+
+    Отдельной функцией, потому что зовётся из трёх мест, и в каждом соблазн
+    написать `return False` — ровно та ошибка, которая стоила отключения всей
+    возможности 24.08.
+    """
+    try:
+        _close_creative_setup_modal(page)
+    except Exception:
+        pass
+    if not clicked:
+        return REUSE_ABSENT
+    return REUSE_ABSENT if _library_undo_selection(page, tiles, clicked, before) else REUSE_DIRTY
+
+
+def reuse_before_upload(page: Page, creative_path: str) -> bool | None:
+    """Брать ли копию из медиатеки, и что делать, если взять не вышло.
+
+    Возвращает `True` — прикрепили, шаг закончен; `False` — шаг обязан
+    отказать; `None` — грузить файл как обычно.
+
+    Отдельной функцией, а не тремя `if` посреди двухсотстрочной загрузки,
+    потому что решается здесь ровно тот вопрос, из-за которого возможность
+    выключали 24.08: можно ли после неудачи класть файл поверх. Проверить это
+    внутри `upload_ad_creative` нельзя — до неё сто восемьдесят строк работы
+    с живым мастером, и без браузера туда не добраться. Ошибка, которую
+    стоило отключения, жила именно в такой непроверяемой ветке.
+    """
+    if not get_reuse_library_media():
+        return None
+    outcome = _try_reuse_library_media(page, Path(creative_path).name)
+    if outcome == REUSE_ATTACHED:
+        _telemetry.record("ad_creative_reuse", True, note="attached_from_library")
+        return True
+    if outcome == REUSE_DIRTY:
+        # Сетка осталась с нашим выбором. Загрузка поверх дала бы объявление
+        # с несколькими креативами — то самое, из-за чего возможность
+        # выключили 24.08. Отказ шага хуже для прогона, но его видно, а
+        # лишний креатив не видно нигде, кроме глаз в кабинете.
+        _telemetry.record("ad_creative_reuse", False, note="library_pick_left_selection")
         return False
+    _telemetry.record("ad_creative_reuse", None, note="not_in_library")
+    return None
 
 
 def upload_ad_creative_with_retry(
@@ -4700,6 +4814,20 @@ def upload_ad_creative_with_retry(
     report False forever — once media is attached, the "Set up creative"
     button this function waits for no longer exists).
     """
+    # Повторное использование медиатеки проверяем ДО быстрого отказа: копия
+    # могла появиться там от соседнего объявления, и тогда файл вообще никуда
+    # не поедет. Быстрый отказ — только про повторную ЗАГРУЗКУ.
+    if upload_already_failed(creative_path):
+        verdict = reuse_before_upload(page, creative_path)
+        if verdict is True:
+            return True
+        _telemetry.record(
+            "ad_creative_upload", False,
+            note="same_file_already_failed_this_run",
+            diag={"file": Path(creative_path).name},
+        )
+        return False
+
     for attempt in range(attempts):
         try:
             if upload_ad_creative(page, creative_type, creative_path, edit_url=edit_url):
@@ -4721,7 +4849,44 @@ def upload_ad_creative_with_retry(
                 return False
             _telemetry.record("creative_upload_stalled", None, note="reload_and_retry")
             _reload_editor(page, edit_url)
+    # Сдались — но убрать за собой обязаны. Незакрытый диалог перехватывает
+    # ВСЕ последующие шаги: 15.09 один отказ загрузки превратился в четыре
+    # (`ad_destination`, `ad2_name`, ...), у каждого в диагностике `dialogs: 1`,
+    # и каждый стоил ещё 15-25 секунд ожидания вхолостую. Настоящая причина при
+    # этом тонет среди одинаковых «не нашёл элемент».
+    try:
+        _close_creative_setup_modal(page)
+    except Exception:
+        pass
+    _remember_upload_failed(creative_path)
     return False
+
+
+#: Файлы, которые в этом прогоне уже не смогли загрузиться.
+#:
+#: Ключ — прогон и путь: у одной кампании три объявления с одним и тем же
+#: креативом, и после провала на первом остальные два платили полную цену без
+#: единого шанса. Замер 15.09: `ad2_creative_upload` — 178 секунд в среднем,
+#: почти всё впустую; за день это 10 минут из 48.
+_failed_uploads: set[tuple[str, str]] = set()
+
+
+def _upload_memo_key(creative_path: str) -> tuple[str, str]:
+    return (_telemetry._current.get("run_id") or "", str(creative_path or ""))
+
+
+def _remember_upload_failed(creative_path: str) -> None:
+    _failed_uploads.add(_upload_memo_key(creative_path))
+
+
+def upload_already_failed(creative_path: str) -> bool:
+    """Этот файл уже провалился в этом прогоне?
+
+    Память намеренно живёт в пределах прогона: между прогонами условия
+    меняются (другой кабинет, другая сеть, перезапущенный профиль), и
+    переносить туда приговор нельзя.
+    """
+    return _upload_memo_key(creative_path) in _failed_uploads
 
 
 def _upload_retry_can_reload(page: Page, edit_url: str = "") -> bool:
@@ -5218,8 +5383,9 @@ def upload_ad_creative(
     # Note the `.name`, not `.stem`: the library captions each tile with the
     # full filename including extension ("2046_2.mp4"), so matching on the
     # stem finds nothing.
-    if get_reuse_library_media() and _try_reuse_library_media(page, Path(creative_path).name):
-        return True
+    verdict = reuse_before_upload(page, creative_path)
+    if verdict is not None:
+        return verdict
 
     # Clear the library search box before uploading. The reuse attempt just
     # above types the filename into it; when reuse fails the filter STAYS,
