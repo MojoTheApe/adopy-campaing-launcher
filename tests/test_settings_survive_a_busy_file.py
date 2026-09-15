@@ -26,6 +26,8 @@ sys.path.insert(0, str(ROOT))
 
 from config import paths  # noqa: E402
 
+_REPLACE = os.replace
+
 
 class _BusyThenFree:
     """`os.replace`, который отказывает первые `times` раз."""
@@ -39,7 +41,7 @@ class _BusyThenFree:
         if self.left > 0:
             self.left -= 1
             raise PermissionError(5, "Access is denied")
-        os.rename(temp, target)
+        _REPLACE(temp, target)
 
 
 def test_a_briefly_busy_target_does_not_lose_the_write(monkeypatch, tmp_path):
@@ -48,6 +50,7 @@ def test_a_briefly_busy_target_does_not_lose_the_write(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "_REPLACE_PAUSE", 0)
 
     target = tmp_path / "hidden_accounts.json"
+    target.write_bytes(b'{"hidden": []}')
     paths._atomic_write(target, b'{"hidden": ["KLD_BFL_X84"]}')
 
     assert target.read_bytes() == b'{"hidden": ["KLD_BFL_X84"]}'
@@ -60,8 +63,11 @@ def test_a_target_held_for_good_still_fails(monkeypatch, tmp_path):
     monkeypatch.setattr(paths.os, "replace", replace)
     monkeypatch.setattr(paths, "_REPLACE_PAUSE", 0)
 
+    target = tmp_path / "settings.json"
+    target.write_bytes(b'{"saved": true}')
     with pytest.raises(PermissionError):
-        paths._atomic_write(tmp_path / "settings.json", b"{}")
+        paths._atomic_write(target, b"{}")
+    assert target.read_bytes() == b'{"saved": true}'
 
     assert replace.calls == paths._REPLACE_ATTEMPTS
 
