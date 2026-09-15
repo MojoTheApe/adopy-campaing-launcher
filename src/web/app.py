@@ -2589,6 +2589,91 @@ async def account_spend_read(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
 
 
+@app.post("/account-spend/read-countries")
+async def account_spend_read_countries(request: Request) -> JSONResponse:
+    """Прочитать пострановую разбивку аккаунта. Только по нажатию человека.
+
+    То же правило, что и у чтения спенда: никакого расписания. Обход живых
+    кабинетов по таймеру уже однажды предшествовал чекпоинту на телефон.
+
+    Чтение дорогое — оно создаёт в кабинете отчёт и выставляет в нём период и
+    разрезы, — поэтому запускается в фоне и сразу отвечает «running». Ответ
+    смотрят через `/account-spend/countries`.
+    """
+    from src.analysis_agent import country_split
+
+    form = await request.form()
+    account = (form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    try:
+        date_from, date_to = _spend_period(
+            str(form.get("date_from") or ""), str(form.get("date_to") or ""),
+            str(form.get("span") or ""),
+        )
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    try:
+        split = country_split.start_split(account, date_from, date_to)
+    except Exception:
+        return JSONResponse(
+            {"ok": False, "error": "Could not start or save the country reading. "
+                                   "Check disk space and retry."},
+            status_code=500,
+        )
+    return JSONResponse({"ok": True, "split": split.to_dict()})
+
+
+@app.get("/account-spend/countries")
+async def account_spend_countries(
+    date_from: str = "", date_to: str = "", span: str = ""
+) -> JSONResponse:
+    """Сколько потрачено на каждую страну — по прочитанным аккаунтам.
+
+    **Страны берутся из показаний, а не из карты аккаунтов.** В этом весь
+    смысл: деньги нередко уходят на страну, к которой аккаунт не привязан, и
+    показывать их под привязанной страной значит показывать неправду.
+    Страна, которой в отчёте ещё нет, приходит с пометкой `known: false` —
+    дешборду остаётся открыть под неё раздел, а не умолчать о ней.
+
+    Ошибка чтения отчёта не должна прятать уже снятые показания: страны
+    отдаются и тогда, когда книга не читается, просто без пометок.
+    """
+    from src.analysis_agent import country_split
+
+    try:
+        date_from, date_to = _spend_period(date_from, date_to, span)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    totals = country_split.totals_by_country(date_from, date_to)
+
+    known: set[str] = set()
+    note = ""
+    try:
+        report, _df, _warnings = get_cached_report()
+        _enrich_country_overview(report)
+        for section in report.get("countries") or []:
+            name = str((section or {}).get("country") or "").strip()
+            if name:
+                known.add(name.casefold())
+    except Exception as exc:  # книга не прочиталась — показания всё равно наши
+        note = f"Could not tell which countries are already on the report: {exc}"
+
+    for row in totals:
+        row["known"] = row["country"].casefold() in known if known else None
+
+    return JSONResponse({
+        "ok": True,
+        "date_from": date_from,
+        "date_to": date_to,
+        "running": country_split.running_now(),
+        "countries": totals,
+        "splits": country_split.all_splits(date_from, date_to),
+        "note": note,
+    })
+
+
 @app.post("/account-spend/turn-off")
 async def account_spend_turn_off(request: Request) -> JSONResponse:
     """Выключить одну кампанию или одно объявление на живом аккаунте.

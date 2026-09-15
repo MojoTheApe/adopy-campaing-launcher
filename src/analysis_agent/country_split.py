@@ -107,6 +107,144 @@ def save_split(split: "CountrySplit") -> None:
         tmp.replace(path)
 
 
+#: Чтения, которые идут прямо сейчас. Ключ тот же, что у хранилища.
+_RUNNING: set[str] = set()
+
+
+def running_now() -> list[str]:
+    """Какие аккаунты читаются в эту минуту — для экрана, а не для решений.
+
+    Имена аккаунтов, а не ключи хранилища: тем же, чем отвечает
+    `account_spend.running_now`, иначе на экране рядом окажутся две разные
+    вещи под одним словом.
+    """
+    with _LOCK:
+        return sorted({k.split("|")[0] for k in _RUNNING})
+
+
+def start_split(
+    account: str,
+    date_from: str,
+    date_to: str = "",
+    *,
+    reader=None,
+) -> "CountrySplit":
+    """Поставить пострановое чтение в работу и сразу вернуть его состояние.
+
+    Тем же порядком, что и чтение спенда: профиль отвечает десятки секунд, и
+    держать всё это время страницу — значит показать человеку зависший
+    дешборд вместо ответа.
+    """
+    date_to = date_to or date_from
+    key = _key(account, date_from, date_to)
+    with _LOCK:
+        if key in _RUNNING:
+            stored = get_split(account, date_from, date_to)
+            return CountrySplit(**stored) if stored else CountrySplit(
+                account=account, date_from=date_from, date_to=date_to, state="running")
+        started = CountrySplit(account=account, date_from=date_from,
+                               date_to=date_to, state="running")
+        _RUNNING.add(key)
+        try:
+            save_split(started)
+        except Exception:
+            _RUNNING.discard(key)
+            raise
+
+    fn = reader or read_country_split
+
+    def run() -> None:
+        try:
+            done = fn(account, date_from, date_to)
+        except Exception as exc:  # падение чтения не должно ронять сервер
+            done = CountrySplit(account=account, date_from=date_from, date_to=date_to,
+                                state="failed", error=f"{type(exc).__name__}: {exc}")
+        with _LOCK:
+            try:
+                save_split(done)
+            except Exception:
+                pass
+            finally:
+                _RUNNING.discard(key)
+
+    try:
+        threading.Thread(target=run, name=f"split:{account}", daemon=True).start()
+    except Exception:
+        with _LOCK:
+            _RUNNING.discard(key)
+        raise
+    return started
+
+
+def all_splits(date_from: str, date_to: str = "") -> dict[str, dict]:
+    """Все сохранённые пострановые чтения за период: аккаунт → чтение."""
+    date_to = date_to or date_from
+    with _LOCK:
+        path = _store_path()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        except Exception:
+            return {}
+    if not isinstance(data, dict):
+        return {}
+    out: dict[str, dict] = {}
+    for value in data.values():
+        if not isinstance(value, dict):
+            continue
+        if value.get("date_from") != date_from or value.get("date_to") != date_to:
+            continue
+        account = str(value.get("account") or "")
+        if account:
+            out[account] = value
+    return out
+
+
+def totals_by_country(date_from: str, date_to: str = "") -> list[dict]:
+    """Сколько потрачено на каждую страну — по всем прочитанным аккаунтам.
+
+    **Список строится из показаний, а не из карты аккаунтов.** Это и есть
+    смысл задачи: деньги нередко уходят на страну, к которой аккаунт не
+    привязан, и такая страна обязана появиться сама, а не как особый случай.
+    `account_country` уже зафиксировал замером, что у аккаунта не одна
+    страна: пять из четырнадцати стоят сразу под двумя.
+
+    Валюты **не складываются между собой**. Ключ — пара «страна и валюта»,
+    поэтому кабинет в шекелях и кабинет в долларах дадут по стране две
+    строки, а не одну выдуманную сумму. Пустая валюта — это «Meta написала
+    только знак», и она тоже отдельный ключ: `$` ставят и за AUD, и за MXN.
+
+    Считаются только удавшиеся чтения. Отказ — это «не знаем», и подмешивать
+    его нулём значило бы показать неполную картину полной.
+    """
+    buckets: dict[tuple[str, str], dict] = {}
+    for account, split in sorted(all_splits(date_from, date_to).items()):
+        if split.get("state") not in ("ok", "empty"):
+            continue
+        for row in split.get("rows") or []:
+            country = str(row.get("country") or "").strip()
+            if not country:
+                continue
+            currency = str(row.get("currency") or "")
+            try:
+                spend = Decimal(str(row.get("spend")))
+            except Exception:
+                continue
+            bucket = buckets.setdefault(
+                (country, currency),
+                {"country": country, "currency": currency,
+                 "spend": Decimal(0), "accounts": []},
+            )
+            bucket["spend"] += spend
+            if account not in bucket["accounts"]:
+                bucket["accounts"].append(account)
+    out = [
+        {**b, "spend": float(b["spend"])}
+        for b in buckets.values()
+    ]
+    out.sort(key=lambda b: (-b["spend"], b["country"]))
+    return out
+
+
 def get_split(account: str, date_from: str, date_to: str) -> dict | None:
     with _LOCK:
         path = _store_path()
