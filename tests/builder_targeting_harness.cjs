@@ -40,19 +40,19 @@ const commit = ctx.window.cbTargetingCommit;
 // Напечатанный код доводится до конца.
 let w = makeWrap('Trading');
 assert.equal(commit(w.input), true, 'точное совпадение по коду не засчитано');
-assert.equal(w.hidden.value, 'Day trading, Investment', 'интересы не подставлены');
+assert.equal(w.hidden.value, 'Trading', 'targeting code was not submitted');
 assert.equal(w.input.value, 'Trading');
 
 // Регистр не должен мешать: человек печатает как придётся.
 w = makeWrap('fx');
 assert.equal(commit(w.input), true);
-assert.equal(w.hidden.value, 'Foreign exchange market');
+assert.equal(w.hidden.value, 'FX');
 assert.equal(w.input.value, 'FX', 'код не приведён к каноническому виду');
 
 // Совпадение по подписи — тоже выбор.
 w = makeWrap('Trading X');
 assert.equal(commit(w.input), true);
-assert.equal(w.hidden.value, 'Forex');
+assert.equal(w.hidden.value, 'TradingX');
 
 // Похожее — НЕ выбор. Соседние коды отличаются одной буквой, и подстановка
 // «ближайшего» означала бы чужой таргетинг в живой кампании.

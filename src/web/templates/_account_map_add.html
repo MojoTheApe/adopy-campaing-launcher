@@ -28,7 +28,13 @@
 
     Теперь: строка состояния всегда, поля входа — только когда токена
     нет. Подключился — и они исчезли везде, потому что состояние общее. -#}
+{#- `amap_value` пустое — значит форма стоит там, где страны нет (вкладка
+    Accounts). Тогда привязки «уже подключённый аккаунт → эта страна» не
+    показываем: привязывать не к чему, и выпадающий список из тринадцати имён
+    с кнопкой Add означал бы там действие, которого не существует. Поиск
+    профиля работает одинаково в обоих местах — он к стране не привязан. -#}
 <div class="amap-add" data-amap-country="{{ amap_value | e }}">
+  {% if amap_value %}
   <select class="amap-known">
     <option value="">already connected…</option>
     {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
@@ -36,6 +42,7 @@
   <button type="button" class="amap-btn"
           onclick="amapLink(this.previousElementSibling,'country',{{ amap_value | tojson | forceescape }})">Add</button>
   <span style="color:var(--border-strong)">|</span>
+  {% endif %}
   {#- Запасные имена здесь свои: шаблоны перечитываются на каждый
       запрос, а Python — только при перезапуске. Между обновлением файлов
       и рестартом `mlx` в контексте может не оказаться, и селектор
