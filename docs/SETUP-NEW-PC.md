@@ -2,7 +2,16 @@
 
 Windows 10/11. About 15 minutes. No coding, no terminal.
 
-**Release to install: `acl-release-2026-09-03e`**
+**Which version gets installed:** the promoted release — the one tagged on the
+production head with a green build. You do not pick it, and this page does not
+name it: a number written here goes stale the moment the next release is
+promoted, and a stale number is worse than none.
+
+If the installer stops with *"Production has no verified annotated ACL release
+tag"*, nothing is broken on your computer. It means master has been integrated
+but not yet promoted to a release, and the installer refuses to put an untagged
+branch on a working machine. Ask Evgeni to promote a release, then run the file
+again.
 
 ---
 
@@ -28,10 +37,18 @@ It does everything that used to be four separate steps: installs Python and Git
 if they are missing, downloads ACL, installs it, makes a desktop shortcut, checks
 the machine, and opens the dashboard.
 
-**If it says Python or Git was installed and the window reopens** — that is
-correct and expected. A program installed a moment ago is not on the PATH of a
-window that was already open, so the file restarts itself once to pick it up.
-Let the new window finish.
+**The file never reopens itself.** One window, start to finish. If you see a
+second black window appear, and then a third, you are running an **old copy** of
+`Install ACL.bat` — one from before 2026-09-08, which reopened itself to pick up
+a newly installed Python and could end up doing it over and over. Close all the
+windows, ask Evgeni for the current file, and start again. (To check a copy
+yourself: open it in Notepad and search for `NEEDRESTART`. The current file does
+not contain that word.)
+
+If a repair with `install_acl.bat` says the previous release was restored,
+press a key to close that installer window, then run `install_acl.bat` again. Recovery replaces the installer
+too, so repair stops before using the restored files. It does not open another
+window automatically.
 
 **A GitHub sign-in window may open.** Use the company GitHub account you were
 given access with.
