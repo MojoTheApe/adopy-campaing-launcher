@@ -31,7 +31,8 @@ concurrent runs and crashed runs can't lose or truncate history».
   сам же дописываешь, значит спорить с собственным режимом открытия.
 
 Отдельный файл-замок ещё и переживает смену формата журнала: он не участвует в
-чтении и его можно удалить в любой момент.
+чтении. Пока писатели работают, удалять его нельзя: новый файл создал бы
+другой замок и позволил двум писателям войти одновременно.
 
 Чего здесь намеренно нет — `fsync`. Он стоит миллисекунды на каждой записи, а
 защищает от потери питания, а не от соперничества. Журнал прогонов пишется
@@ -61,7 +62,7 @@ _locks_guard = threading.Lock()
 
 
 def _lock_for(path: Path) -> threading.Lock:
-    key = str(path.resolve() if path.is_absolute() else path)
+    key = os.path.normcase(str(path.resolve()))
     with _locks_guard:
         lock = _locks.get(key)
         if lock is None:

@@ -7,9 +7,9 @@
 эмулируется как «перейти в конец, затем записать».
 
 Проверки падают на прежнем способе записи и проходят на `acl_log.append_line`.
-Первая из них — `test_plain_append_loses_lines_on_this_platform` — держит
-именно это различие: если однажды платформа станет честной, она об этом
-скажет, и модуль можно будет упростить.
+Отдельная проверка держит замок ОС в родителе и проверяет, что дочерний
+писатель ждёт. Контроль с отключённым замком показывает, что этот сценарий
+обнаруживает потерю защиты без требования случайной гонки в каждом CI.
 """
 from __future__ import annotations
 
@@ -61,11 +61,6 @@ def _run(writer, path: Path) -> tuple[int, int]:
     return good, bad
 
 
-def _plain_append(path: Path, line: str) -> None:
-    """Как писали журналы до 15.09."""
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(line + "\n")
-
 
 def test_the_journal_keeps_every_line_under_concurrent_writers(tmp_path):
     """Главная проверка: ни одна запись не пропала и ни одна не порвалась."""
@@ -74,21 +69,6 @@ def test_the_journal_keeps_every_line_under_concurrent_writers(tmp_path):
     assert bad == 0, f"{bad} строк склеились — писатели наложились друг на друга"
     assert good == EXPECTED, f"потеряно {EXPECTED - good} записей из {EXPECTED}"
 
-
-@pytest.mark.skipif(sys.platform != "win32", reason="потеря воспроизводится на Windows")
-def test_plain_append_loses_lines_on_this_platform(tmp_path):
-    """Прежний способ действительно теряет записи — иначе чинить нечего.
-
-    Эта проверка охраняет смысл модуля. Если она однажды станет зелёной,
-    значит платформа (или Python) перестала эмулировать дописывание, и
-    `acl_log` можно свести к обычному `open(..., "a")`.
-    """
-    path = tmp_path / "plain.jsonl"
-    good, _ = _run(_plain_append, path)
-    assert good < EXPECTED, (
-        "прежний способ ничего не потерял — перечитать acl_log: "
-        "возможно, замок больше не нужен"
-    )
 
 
 def test_a_line_without_a_newline_does_not_glue_to_the_next(tmp_path):
@@ -171,3 +151,55 @@ def test_separate_processes_do_not_overwrite_each_other(tmp_path):
             bad += 1
     assert bad == 0, f"{bad} строк склеились между процессами"
     assert good == PROCS * PROC_PER, f"потеряно {PROCS * PROC_PER - good} записей"
+
+
+def test_telemetry_write_failure_is_visible_without_breaking_the_run(monkeypatch, caplog, tmp_path):
+    import logging
+    from src import acl_log
+    from src.fb_ads_rpa import run_telemetry
+    def fail(*args):
+        raise acl_log.JournalWriteError('synthetic write failure')
+    monkeypatch.setattr(acl_log, 'append_line', fail)
+    with caplog.at_level(logging.ERROR):
+        run_telemetry.record('synthetic-step', False, path=tmp_path / 'events.jsonl')
+    assert any('journal' in r.message.lower() and 'JournalWriteError' in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize('bypass', [False, True])
+def test_os_lock_serializes_processes_with_an_unlocked_control(tmp_path, bypass):
+    import subprocess
+    from src import acl_log
+    path = tmp_path / 'locked.jsonl'
+    script = """
+import sys
+from src import acl_log
+if sys.argv[2] == 'bypass':
+    acl_log._grab = lambda guard: None
+    acl_log._release = lambda guard: None
+print('ready', flush=True)
+acl_log.append_line(sys.argv[1], '{"record": 1}')
+"""
+    with open(str(path) + '.lock', 'a+b') as guard:
+        guard.seek(0)
+        acl_log._grab(guard)
+        proc = None
+        try:
+            proc = subprocess.Popen([sys.executable, '-c', script, str(path),
+                                     'bypass' if bypass else 'locked'],
+                                    cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            assert proc.stdout.readline().strip() == 'ready'
+            if bypass:
+                _, err = proc.communicate(timeout=10)
+                assert proc.returncode == 0, err
+            else:
+                with pytest.raises(subprocess.TimeoutExpired):
+                    proc.communicate(timeout=.3)
+        finally:
+            acl_log._release(guard)
+            if proc is not None:
+                try:
+                    _, err = proc.communicate(timeout=10)
+                except subprocess.TimeoutExpired:
+                    proc.kill(); proc.communicate(); raise
+        assert proc.returncode == 0, err
+    assert path.read_text(encoding='utf-8').splitlines() == ['{"record": 1}']

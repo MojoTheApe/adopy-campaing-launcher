@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 
@@ -187,8 +188,8 @@ def log_unknown_target(code: str, source: str = "") -> None:
     # записи бесследно (замер 15.09).
     try:
         acl_log.append_line(_UNKNOWN_LOG, entry)
-    except acl_log.JournalWriteError:
-        pass
+    except acl_log.JournalWriteError as exc:
+        logging.getLogger(__name__).error("Unknown-target journal write failed (%s)", type(exc).__name__)
 
 
 def get_all_targets() -> Dict[str, Any]:

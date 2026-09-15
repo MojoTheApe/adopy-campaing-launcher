@@ -23,6 +23,7 @@ Each record:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
@@ -300,8 +301,13 @@ def record(
         # записей: целых 590, потеряно 130. Формат при этом правильный,
         # менять его не нужно — нужен замок.
         acl_log.append_line(p, json.dumps(rec, ensure_ascii=False))
-    except Exception:
-        pass
+    except Exception as exc:
+        # Recording must not interrupt a run, but a lost record must be visible.
+        # Avoid copying the event payload or credentials into the fallback log.
+        try:
+            logging.getLogger(__name__).error("Telemetry journal write failed (%s)", type(exc).__name__)
+        except Exception:
+            pass  # Even a broken logging handler must not abort browser work.
 
 
 def load(path: Path | None = None) -> list[dict[str, Any]]:
