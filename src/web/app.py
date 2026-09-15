@@ -694,6 +694,48 @@ def _build_account_map_view(
             "live_read": 0, "live_sums": [],
             "book": c.get("my_totals") or {},
         })
+
+    # ── acl-357: спенд, привязанный к стране самим кабинетом ──────────────
+    #
+    # Соседняя колонка «Account read» честно подписана «not country-attributed
+    # spend»: она показывает весь спенд привязанных кабинетов по всем странам.
+    # Эти числа — про страну: Ads Reporting разбивает спенд кабинета по
+    # Country, и 15.09 живое чтение DQ501 показало Chile на аккаунте, где весь
+    # вечер запускали кампании на Гватемалу.
+    #
+    # Страна, которой нет ни в связях, ни в книге, получает свою строку: иначе
+    # её деньги не видно нигде, а это ровно тот случай, ради которого разбивка
+    # и заводилась.
+    by_country: dict[str, list[dict]] = {}
+    try:
+        from src.analysis_agent import country_split
+
+        if date_from:
+            for row in country_split.totals_by_country(date_from, date_to or date_from):
+                by_country.setdefault(
+                    (row.get("country") or "").strip().casefold(), []
+                ).append(row)
+    except Exception:  # pragma: no cover — показания не должны ронять страницу
+        by_country = {}
+
+    for mc in countries:
+        mc["country_read"] = by_country.get((mc["country"] or "").strip().casefold(), [])
+
+    seen_keys = {(mc["country"] or "").strip().casefold() for mc in countries}
+    for key, rows in sorted(by_country.items()):
+        if key in seen_keys:
+            continue
+        countries.append({
+            "country": rows[0].get("country") or key,
+            "key": "",
+            "virtual": True,
+            "from_reading": True,
+            "rows": [],
+            "spend": 0, "leads": 0, "deposits": 0,
+            "live_read": 0, "live_sums": [],
+            "book": {},
+            "country_read": rows,
+        })
     # Порядок как был у overview: деньги сверху, дальше по алфавиту.
     countries.sort(
         key=lambda mc: (-float((mc.get("book") or {}).get("spend") or 0), (mc["country"] or "").lower())

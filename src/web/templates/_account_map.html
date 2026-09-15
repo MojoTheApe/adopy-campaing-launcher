@@ -73,6 +73,21 @@
           {%- for s in mc.live_sums %}<b>{{ s.spend | fmt_currency(s.currency) }}{% if s.account %} ({{ s.account }}){% endif %}</b>{% if not loop.last %} · {% endif %}{% endfor %}
           {%- else %}<b>—</b>{% endif %}</span>
           <i class="amap-live-summary-count">{{ mc.live_read or 0 }}/{{ mc.rows | length }} read</i>
+          {#- acl-357: спенд, привязанный к стране самим кабинетом. Стоит в
+              той же ячейке, что и общий: порознь их путают, а разница между
+              ними — весь смысл разбивки. Сумма без пометки `summed` — это
+              один кабинет: под знаком валюты (`$`) складывать нельзя, он не
+              говорит, песо это или доллары. -#}
+          {%- if mc.country_read %}
+          <i class="amap-country-read"
+             title="Spend the accounts themselves attribute to {{ mc.country | e }} for these dates, read from Ads Reporting">
+            in {{ mc.country }}:
+            {%- for r in mc.country_read %}
+            <b>{{ r.spend | fmt_currency(r.currency) }}</b>{% if not r.summed %}<span
+              title="One account: the currency is written as a sign, and a sign does not say which currency it is, so amounts from different accounts are not added up">({{ r.accounts | join(', ') }})</span>{% endif %}{% if not loop.last %} · {% endif %}
+            {%- endfor %}
+          </i>
+          {%- endif %}
         </span>
         <span class="num"><b>{{ bk.spend | fmt_usd if bk.spend else '—' }}</b></span>
         <span class="num"><b>{{ bk.deposits if bk.deposits is defined and bk.deposits is not none else '—' }}</b></span>
@@ -95,8 +110,19 @@
           сделать здесь. Форма та же, что у стран из карты; привязка заводит
           страну сама, отдельного «создать» не нужно. -#}
       <div class="amap-empty">
+        {%- if mc.from_reading %}
+        {#- acl-357: страна пришла не из книги и не из связей, а от самого
+            кабинета: Ads Reporting отнёс сюда часть спенда. Это не ошибка
+            карты — так бывает, когда кампании крутят не на ту страну, к
+            которой аккаунт привязан. Молчать об этом нельзя: деньги ушли, а
+            видно их было бы негде. -#}
+        {{ mc.country }} is not on the map at all — the accounts themselves
+        attributed spend here for these dates. Connect an account below, or
+        leave it: the money is shown either way.
+        {%- else %}
         {{ mc.country }} has workbook money for this period but no accounts
         placed here — the spend is not covered by the map. Connect one below.
+        {%- endif %}
       </div>
       {% with amap_value = mc.country %}{% include "_account_map_add.html" %}{% endwith %}
       {% endif %}
