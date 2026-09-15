@@ -146,3 +146,22 @@ def test_instance_switch_discards_other_workspace_credentials(browser):
         assert p.locator('.amap-ml-signin').count() == 0
         assert not errors
     finally: ctx.close()
+
+
+def test_token_change_invalidates_every_search_query_for_that_instance(browser):
+    ctx, p, state, errors = _page(browser, alive=True)
+    try:
+        p.evaluate("async () => {await amapProfiles('A', false, 'keep'); await amapProfiles('B', false, 'X84'); await amapProfiles('B', false, 'X85');}")
+        before = len([x for x in state['calls'] if x[0] == '/multilogin-search'])
+        p.locator('.amap-inst').first.select_option('B')
+        p.locator('.amap-ml-open').first.click()
+        p.locator('.amap-ml-token').fill('replacement-synthetic-token')
+        p.get_by_role('button', name='Save token', exact=True).click()
+        p.wait_for_function("AMAP_ML_STATE.B.alive === true")
+        p.evaluate("async () => {await amapProfiles('A', false, 'keep'); await amapProfiles('B', false, 'X84'); await amapProfiles('B', false, 'X85');}")
+        calls = [x for x in state['calls'] if x[0] == '/multilogin-search'][before:]
+        assert [x[1]['search_text'] for x in calls] == ['X84', 'X85']
+        assert all(x[1]['instance'] == 'B' for x in calls)
+        assert not errors
+    finally:
+        ctx.close()

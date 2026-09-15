@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -125,6 +126,35 @@ def get_google_oauth_token_path() -> str:
     return os.path.join(get_local_config_dir(), "token_accounts.json")
 
 
+#: Сколько ждать, пока чужой открытый дескриптор освободит цель.
+#:
+#: На Windows `os.replace` падает с `PermissionError [WinError 5]`, если файл
+#: в этот момент кем-то открыт — не заблокирован намеренно, а просто открыт:
+#: вторая машина читает тот же `hidden_accounts.json`, антивирус смотрит
+#: свежесозданный файл, дешборд перечитывает настройки. Окно — миллисекунды,
+#: но пишем мы в эти файлы из нескольких процессов, и промах означает
+#: потерянную правку оператора.
+#:
+#: POSIX такого не знает: там `rename` поверх открытого файла разрешён. Отсюда
+#: и форма починки — не «сделать запись атомарной» (она атомарна), а
+#: переждать. Полсекунды с запасом покрывают наблюдаемое окно; дольше ждать
+#: незачем — если цель держат всерьёз, лучше честно упасть, чем зависнуть.
+_REPLACE_ATTEMPTS = 10
+_REPLACE_PAUSE = 0.05
+
+
+def _replace_when_free(temp: Path, target: Path) -> None:
+    """`os.replace` с ожиданием: последняя попытка бросает как обычно."""
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(temp, target)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_PAUSE)
+
+
 def _atomic_write(path: str | Path, data: bytes) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -134,7 +164,7 @@ def _atomic_write(path: str | Path, data: bytes) -> None:
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(temp, target)
+        _replace_when_free(temp, target)
     finally:
         try:
             temp.unlink(missing_ok=True)

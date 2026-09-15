@@ -108,7 +108,11 @@ def test_failed_thread_start_can_be_retried(monkeypatch):
 
 def test_read_and_probe_wait_for_publish_lease(monkeypatch):
     from src.web import publish_jobs
-    assert publish_jobs._publish_serial is sp._LOCK
+    # Воротник один на всех: публикация держит его как писатель, чтение —
+    # как читатель. Прежде это был один и тот же `RLock`, и свойство
+    # «чтение ждёт публикацию» держалось само собой; теперь роли разные,
+    # и проверять его надо прямо (acl-113e).
+    assert publish_jobs._publish_serial is sp.browser_operation
     entered = threading.Event()
     def reader(a, f, t):
         entered.set()

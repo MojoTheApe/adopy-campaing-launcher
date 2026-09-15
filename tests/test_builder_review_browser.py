@@ -48,7 +48,7 @@ def test_changing_selected_targeting_never_submits_previous_interests(page):
     inp = page.locator('.cb-targeting-search').first
     inp.fill('FX')
     page.evaluate('cbTargetingCommit(document.querySelector(".cb-targeting-search"))')
-    assert page.locator('.cb-targeting-hidden').first.input_value() == 'Foreign exchange'
+    assert page.locator('.cb-targeting-hidden').first.input_value() == 'FX'
     inp.fill('Tradin')
     assert page.locator('.cb-targeting-hidden').first.input_value() == ''
     page.evaluate('cbPublish(document.querySelector("form"))')
@@ -56,7 +56,7 @@ def test_changing_selected_targeting_never_submits_previous_interests(page):
     assert 'Таргетинг не выбран' in page.evaluate('confirmation.body')
     inp.fill('Trading')
     data = page.evaluate('Object.fromEntries(cbCollectFormData(document.querySelector("form")))')
-    assert data['camp_0_targeting'] == 'Day trading'
+    assert data['camp_0_targeting'] == 'Trading'
 
 
 def test_duplicate_copies_actual_slot_and_ad_fields_and_keeps_the_next_slot(page):
@@ -92,3 +92,16 @@ def test_publish_warning_and_creative_size_use_the_actual_handlers(page):
     assert '1.5 GB' in page.evaluate('cbSizeTag(1500000000)')
     assert 'warn' in page.evaluate('cbSizeTag(1500000000)')
     assert page.evaluate('cbSizeTag(0)') == ''
+
+
+def test_mouse_selected_targeting_reaches_the_server_library(page, monkeypatch, tmp_path):
+    from src.analysis_agent import targeting_registry as tr
+    monkeypatch.setattr(tr, "_store", lambda: tmp_path / "targeting.json")
+    tr.add("FX", "Foreign exchange")
+    inp = page.locator('.cb-targeting-search').first
+    inp.fill('FX')
+    option = page.locator('.cb-targeting-wrap').first.locator('[data-code="FX"]')
+    option.dispatch_event('mousedown')
+    data = page.evaluate('Object.fromEntries(cbCollectFormData(document.querySelector("form")))')
+    assert data['camp_0_targeting'] == 'FX'
+    assert tr.resolve_interests(data['camp_0_targeting']) == 'Foreign exchange'
