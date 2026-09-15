@@ -4593,6 +4593,22 @@ def _library_undo_selection(page: Page, tiles, clicked: list[int], before: int) 
     застали. Ответ «нет» — не мелочь: он означает, что выбор остался
     применённым, и загружать поверх нельзя.
     """
+    # Сначала дать счётчику проснуться.
+    #
+    # Мы попали сюда, потому что он не двигался, пока мы ждали. Но «не
+    # двигался» — это то, что мы видели, а не то, что произошло: клик
+    # регистрируется с опозданием (замер 24.08). Если сразу спросить и
+    # поверить нулю, снятие выйдет не сняв ничего и доложит «чисто» — а
+    # выбор на экране останется, и загрузка ляжет поверх него. Ровно та
+    # поломка, ради которой эта функция и написана.
+    #
+    # Кликать вслепую нельзя: если клик действительно не прошёл, второй его
+    # ВЫБЕРЕТ. Поэтому не гадаем, а ждём и смотрим.
+    for _ in range(10):  # ~3с
+        if _library_selected_count(page) > before:
+            break
+        _sleep_h(0.3)
+
     for i in reversed(clicked):
         if _library_selected_count(page) <= before:
             break
@@ -4749,12 +4765,20 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     # three identical CCblk.mp4 tiles in this account's library.
     picked = False
     clicked: list[int] = []
+    # Дневник выбора: по какой плитке кликнули, сработал ли клик вообще и что
+    # показывал счётчик после него. 15.09 второй прогон застрял именно здесь —
+    # копию нашёл, взять не смог, — и разобрать было нечем: наружу уходило
+    # одно слово `library_pick_left_selection`.
+    log: list[dict] = []
     for i in range(min(available, 6)):
+        note = {"tile": i, "before": before}
         try:
             tile = tiles.nth(i)
             tile.scroll_into_view_if_needed(timeout=3000)
             tile.click(timeout=3000)
-        except Exception:
+        except Exception as exc:
+            note["click_error"] = f"{type(exc).__name__}"[:40]
+            log.append(note)
             continue
         clicked.append(i)
         for _ in range(10):  # ~3s
@@ -4762,15 +4786,24 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             if _library_selected_count(page) > before:
                 picked = True
                 break
+        note["after"] = _library_selected_count(page)
+        note["took"] = picked
+        log.append(note)
         if picked:
             break
     if not picked:
         # Кликали, но счётчик не двинулся. «Не двинулся» — это то, что мы
         # видим, а не то, что произошло: клик мог и зарегистрироваться, просто
         # позже. Поэтому не уходим молча, а снимаем за собой.
-        if clicked and not _library_undo_selection(page, tiles, clicked, before):
-            return REUSE_DIRTY
-        return REUSE_ABSENT
+        clean = not clicked or _library_undo_selection(page, tiles, clicked, before)
+        sight = _library_sight(page, filename)
+        sight.update({"tiles_found": available, "picks": log, "undone": clean})
+        _telemetry.record(
+            "ad_creative_reuse", False if not clean else None,
+            note="library_pick_left_selection" if not clean else "pick_did_not_take",
+            diag=sight,
+        )
+        return REUSE_ABSENT if clean else REUSE_DIRTY
 
     # One ad, one creative. If a slow render still let two clicks through,
     # toggle the surplus back off — an over-selected ad silently becomes a
@@ -4853,7 +4886,10 @@ def reuse_before_upload(page: Page, creative_path: str) -> bool | None:
         # с несколькими креативами — то самое, из-за чего возможность
         # выключили 24.08. Отказ шага хуже для прогона, но его видно, а
         # лишний креатив не видно нигде, кроме глаз в кабинете.
-        _telemetry.record("ad_creative_reuse", False, note="library_pick_left_selection")
+        #
+        # Запись об этом уже сделана внутри, вместе с дневником выбора: по
+        # какой плитке кликали, сработал ли клик, что показывал счётчик.
+        # Здесь — только решение, без второй строки в телеметрии.
         return False
     # `REUSE_ABSENT` о себе уже отчитался — и подробно: `_try_reuse_library_media`
     # пишет, что именно видел в сетке, когда решил, что копии нет. Вторая запись

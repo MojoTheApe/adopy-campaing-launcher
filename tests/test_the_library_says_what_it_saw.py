@@ -133,3 +133,111 @@ def test_a_broken_page_does_not_break_the_report(blind):
     assert md._try_reuse_library_media(_Mute(), "x.mp4") == md.REUSE_ABSENT
     sight = blind[0].get("diag") or {}
     assert "captions_error" in sight or "captions" in sight
+
+
+# ── «нашли, но не взяли» тоже обязано рассказать ─────────────────────────
+
+
+class _StuckGrid:
+    """Плитки есть, клики проходят, а счётчик не двигается.
+
+    Ровно то, что случилось 15.09 во второй кампании: копия в медиатеке уже
+    лежала — её загрузила первая кампания, — поиск её нашёл, а взять не смог.
+    """
+
+    def __init__(self, tiles: int = 3, sticky: bool = True):
+        self._tiles = tiles
+        self.sticky = sticky
+        self.selected: set[int] = set()
+        #: Счётчик «просыпается» только когда мы пошли снимать за собой —
+        #: то есть клик регистрируется ПОЗЖЕ, чем мы перестали его ждать.
+        #: Это не выдумка: так описано в самом коде и измерено 24.08.
+        self.awake = False
+        #: После скольких опросов счётчика правда всплывает.
+        #: Больше, чем длится ожидание клика, и меньше, чем пауза в снятии.
+        self.wakes_after = tiles * 11 + 2
+
+    def count(self) -> int:
+        return self._tiles
+
+    def nth(self, i: int):
+        grid = self
+
+        class _Tile:
+            def scroll_into_view_if_needed(self_inner, timeout=0):
+                pass
+
+            def click(self_inner, timeout=0):
+                if i in grid.selected:
+                    grid.awake = True  # второй клик по той же плитке — это снятие
+                    if not grid.sticky:
+                        grid.selected.discard(i)
+                else:
+                    grid.selected.add(i)
+
+        return _Tile()
+
+
+def _wire(monkeypatch, grid):
+    """Счётчик сетки, который «просыпается» поздно.
+
+    Пока мы ждём подтверждения клика, он отвечает нулём — значит выбор
+    считается несостоявшимся. А на экране он уже есть, и обнаруживается это
+    только когда мы идём снимать за собой. Ровно этим и опасно повторное
+    использование: загрузка поверх такого невидимого выбора даёт объявление
+    с двумя креативами.
+    """
+    reads = {"n": 0}
+
+    def count(_page):
+        # Счётчик просыпается сам, после того как мы перестали ждать клик:
+        # `_library_undo_selection` начинается с паузы именно на этот случай.
+        reads["n"] += 1
+        if reads["n"] > grid.wakes_after:
+            grid.awake = True
+        return len(grid.selected) if grid.awake else 0
+
+    said: list[dict] = []
+    monkeypatch.setattr(md, "_library_tiles", lambda page, name: grid)
+    monkeypatch.setattr(md, "_library_search", lambda page, name: True)
+    monkeypatch.setattr(md, "_library_selected_count", count)
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md._telemetry, "record",
+                        lambda step, ok, **kw: said.append({"step": step, "ok": ok, **kw}))
+    return said
+
+
+def test_a_pick_that_did_not_take_reports_the_attempts(monkeypatch):
+    """Что кликали и что показывал счётчик — иначе чинить нечего."""
+    said = _wire(monkeypatch, _StuckGrid(tiles=3, sticky=False))
+    md._try_reuse_library_media(_Page(), "1_es_2292_post.mp4")
+
+    assert len(said) == 1, "одна запись на событие"
+    diag = said[0].get("diag") or {}
+    assert diag.get("tiles_found") == 3, "сколько копий нашлось"
+    picks = diag.get("picks") or []
+    assert picks, "дневник выбора обязан быть непустым"
+    assert {"tile", "before"} <= set(picks[0]), picks[0]
+    assert "after" in picks[0], "счётчик после клика — главное число здесь"
+    assert diag.get("undone") is True
+
+
+def test_a_stuck_selection_is_reported_as_a_failure(monkeypatch):
+    """Снять не удалось — это отказ, и он обязан нести тот же дневник."""
+    said = _wire(monkeypatch, _StuckGrid(tiles=2, sticky=True))
+    out = md._try_reuse_library_media(_Page(), "x.mp4")
+
+    assert out == md.REUSE_DIRTY
+    assert said[0]["ok"] is False
+    assert said[0]["note"] == "library_pick_left_selection"
+    assert (said[0].get("diag") or {}).get("undone") is False
+
+
+def test_the_two_outcomes_are_named_apart(monkeypatch):
+    """«Кликнул и снял» и «кликнул и застрял» — разные беды, и в телеметрии
+    они не должны выглядеть одинаково."""
+    clean = _wire(monkeypatch, _StuckGrid(sticky=False))
+    md._try_reuse_library_media(_Page(), "x.mp4")
+    stuck = _wire(monkeypatch, _StuckGrid(sticky=True))
+    md._try_reuse_library_media(_Page(), "x.mp4")
+    assert clean[0]["note"] != stuck[0]["note"]
