@@ -44,9 +44,10 @@ def _save(account, rows, state="ok", date_from=DAY_FROM, date_to=DAY_TO):
 # ── сведение ──────────────────────────────────────────────────────────────
 
 def test_spend_is_summed_across_accounts_by_country():
-    _save("A", [{"country": "Chile", "spend": 44.17, "currency": ""}])
-    _save("B", [{"country": "Chile", "spend": 5.83, "currency": ""},
-                {"country": "Peru", "spend": 10.0, "currency": ""}])
+    """Валюта названа кодом — складывать поперёк кабинетов безопасно."""
+    _save("A", [{"country": "Chile", "spend": 44.17, "currency": "CLP"}])
+    _save("B", [{"country": "Chile", "spend": 5.83, "currency": "CLP"},
+                {"country": "Peru", "spend": 10.0, "currency": "CLP"}])
     totals = cs.totals_by_country(DAY_FROM, DAY_TO)
     assert [(t["country"], t["spend"]) for t in totals] == [("Chile", 50.0), ("Peru", 10.0)]
     assert totals[0]["accounts"] == ["A", "B"]
@@ -189,3 +190,46 @@ def test_a_reader_that_raises_leaves_a_named_failure_not_silence():
     stored = cs.get_split("B", DAY_FROM, DAY_TO)
     assert stored["state"] == "failed"
     assert "профиль не отвечает" in stored["error"]
+
+
+# ── знак не валюта: поперёк аккаунтов складываем только код ───────────────
+
+def test_the_same_sign_on_two_accounts_is_not_added_up():
+    """Два кабинета, оба со знаком `$`, могут вести учёт в песо и в долларах.
+
+    Сложенное число выглядело бы обычным и было бы бессмысленным. Решение
+    владельца 15.09: под знаком не складывать.
+    """
+    _save("A", [{"country": "Chile", "spend": 44.17, "currency": "$"}])
+    _save("B", [{"country": "Chile", "spend": 10.0, "currency": "$"}])
+    totals = cs.totals_by_country(DAY_FROM, DAY_TO)
+    assert len(totals) == 2, "сложили два кабинета под одним знаком"
+    assert {t["accounts"][0] for t in totals} == {"A", "B"}
+    assert all(t["summed"] is False for t in totals)
+    assert all(len(t["accounts"]) == 1 for t in totals)
+
+
+def test_a_named_code_is_added_up_across_accounts():
+    """«KWD» — валюта названа, и складывать её поперёк кабинетов безопасно."""
+    _save("A", [{"country": "Kuwait", "spend": 20.0, "currency": "KWD"}])
+    _save("B", [{"country": "Kuwait", "spend": 5.5, "currency": "KWD"}])
+    totals = cs.totals_by_country(DAY_FROM, DAY_TO)
+    assert len(totals) == 1
+    assert totals[0]["spend"] == 25.5
+    assert totals[0]["accounts"] == ["A", "B"]
+    assert totals[0]["summed"] is True
+
+
+def test_rows_of_one_account_still_add_up_under_a_sign():
+    """Внутри одного кабинета валюта одна, что бы ни было написано."""
+    _save("A", [{"country": "Peru", "spend": 1.5, "currency": "$"},
+                {"country": "Peru", "spend": 2.5, "currency": "$"}])
+    totals = cs.totals_by_country(DAY_FROM, DAY_TO)
+    assert len(totals) == 1 and totals[0]["spend"] == 4.0
+
+
+def test_an_unwritten_currency_is_not_added_up_either():
+    """Пустая валюта — тоже «не названа»."""
+    _save("A", [{"country": "Chile", "spend": 1.0, "currency": ""}])
+    _save("B", [{"country": "Chile", "spend": 2.0, "currency": ""}])
+    assert len(cs.totals_by_country(DAY_FROM, DAY_TO)) == 2

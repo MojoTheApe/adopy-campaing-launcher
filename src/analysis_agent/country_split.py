@@ -208,15 +208,24 @@ def totals_by_country(date_from: str, date_to: str = "") -> list[dict]:
     `account_country` уже зафиксировал замером, что у аккаунта не одна
     страна: пять из четырнадцати стоят сразу под двумя.
 
-    Валюты **не складываются между собой**. Ключ — пара «страна и валюта»,
-    поэтому кабинет в шекелях и кабинет в долларах дадут по стране две
-    строки, а не одну выдуманную сумму. Пустая валюта — это «Meta написала
-    только знак», и она тоже отдельный ключ: `$` ставят и за AUD, и за MXN.
+    Валюты **не складываются между собой**: ключ — «страна и валюта», поэтому
+    кабинет в шекелях и кабинет в долларах дадут по стране две строки, а не
+    одну выдуманную сумму.
+
+    Больше того: **поперёк аккаунтов складываем только код** — «KWD», «EUR».
+    Знак валютой не является. Два кабинета, оба показывающие `$`, могут вести
+    учёт в песо и в долларах, и сложенное число было бы бессмысленным, хотя и
+    выглядело бы обычным. Такие строки остаются по одной на аккаунт, и это
+    видно по полю `summed`.
 
     Считаются только удавшиеся чтения. Отказ — это «не знаем», и подмешивать
     его нулём значило бы показать неполную картину полной.
     """
-    buckets: dict[tuple[str, str], dict] = {}
+    def _is_code(currency: str) -> bool:
+        """Названа ли валюта кодом. Знак и пустота — не названа."""
+        return len(currency) == 3 and currency.isalpha()
+
+    buckets: dict[tuple, dict] = {}
     for account, split in sorted(all_splits(date_from, date_to).items()):
         if split.get("state") not in ("ok", "empty"):
             continue
@@ -229,10 +238,12 @@ def totals_by_country(date_from: str, date_to: str = "") -> list[dict]:
                 spend = Decimal(str(row.get("spend")))
             except Exception:
                 continue
+            summed = _is_code(currency)
+            key = (country, currency) if summed else (country, currency, account)
             bucket = buckets.setdefault(
-                (country, currency),
-                {"country": country, "currency": currency,
-                 "spend": Decimal(0), "accounts": []},
+                key,
+                {"country": country, "currency": currency, "spend": Decimal(0),
+                 "accounts": [], "summed": summed},
             )
             bucket["spend"] += spend
             if account not in bucket["accounts"]:
@@ -241,7 +252,7 @@ def totals_by_country(date_from: str, date_to: str = "") -> list[dict]:
         {**b, "spend": float(b["spend"])}
         for b in buckets.values()
     ]
-    out.sort(key=lambda b: (-b["spend"], b["country"]))
+    out.sort(key=lambda b: (b["country"], -b["spend"], b["accounts"][0] if b["accounts"] else ""))
     return out
 
 
