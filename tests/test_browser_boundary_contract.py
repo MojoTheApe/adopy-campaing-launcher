@@ -1,4 +1,4 @@
-"""Граница дешборда и RPA: один замок на всё, что открывает браузер.
+"""Граница дешборда и RPA: кто и когда открывает браузер.
 
 Зачем эти проверки существуют. Прогон кампании и чтение спенда с дешборда
 работают с одним живым профилем Multilogin. Если дешборд откроет браузер, пока
@@ -178,8 +178,8 @@ def test_every_browser_path_goes_through_the_queue(path, funcs):
         )
 
 
-def test_everyone_shares_one_and_the_same_lock():
-    """Свой `RLock` в новом модуле выключил бы защиту беззвучно.
+def test_everyone_goes_through_the_same_gate():
+    """Свой замок в новом модуле выключил бы защиту беззвучно.
 
     Код продолжил бы работать, тесты — проходить, а разошлось бы только на
     живом профиле, в середине прогона.
@@ -187,9 +187,123 @@ def test_everyone_shares_one_and_the_same_lock():
     from src.analysis_agent import account_spend
     from src.web import publish_jobs
 
-    assert account_spend._LOCK is browser_operation, (
+    assert account_spend.browser_operation is browser_operation, (
         "чтение спенда встало в свою очередь, а не в общую"
     )
     assert publish_jobs._publish_serial is browser_operation, (
-        "очередь публикации перестала делить замок с чтением"
+        "очередь публикации перестала делить воротник с чтением"
     )
+
+
+# ─────────────── роли: публикация против чтений (acl-113e) ───────────────
+#
+# Прежде замок был один на всё, и «чтение не лезет в браузер во время
+# публикации» держалось само собой. Теперь роли разные, и каждую надо
+# проверять отдельно — потерять любую из них молча очень легко.
+
+
+def test_two_profiles_are_read_at_the_same_time():
+    """Второй аккаунт больше не ждёт первого: это два разных профиля.
+
+    Ради этого 113e и заводился. Общего ресурса у них нет — у каждого свой
+    профиль Multilogin и свой прокси.
+    """
+    inside_a = threading.Event()
+    may_finish = threading.Event()
+    inside_b = threading.Event()
+
+    @serialized_browser(reading=True)
+    def read(profile):
+        (inside_a if profile == "profile-a" else inside_b).set()
+        if profile == "profile-a":
+            may_finish.wait(timeout=5)
+
+    a = threading.Thread(target=read, args=("profile-a",))
+    a.start()
+    assert inside_a.wait(timeout=5)
+
+    b = threading.Thread(target=read, args=("profile-b",))
+    b.start()
+    assert inside_b.wait(timeout=2), "второй профиль ждёт первого без причины"
+
+    may_finish.set()
+    a.join(timeout=5)
+    b.join(timeout=5)
+
+
+def test_the_same_profile_is_still_read_one_at_a_time():
+    """Один профиль — одна очередь: два захода в один браузер его и ломают."""
+    inside = threading.Event()
+    may_finish = threading.Event()
+    second = threading.Event()
+
+    @serialized_browser(reading=True)
+    def read(profile):
+        if not inside.is_set():
+            inside.set()
+            may_finish.wait(timeout=5)
+        else:
+            second.set()
+
+    first = threading.Thread(target=read, args=("profile-a",))
+    first.start()
+    assert inside.wait(timeout=5)
+
+    other = threading.Thread(target=read, args=("profile-a",))
+    other.start()
+    assert not second.wait(timeout=0.5), "два чтения вошли в один профиль разом"
+
+    may_finish.set()
+    first.join(timeout=5)
+    assert second.wait(timeout=5)
+    other.join(timeout=5)
+
+
+def test_a_read_waits_while_a_publish_holds_the_browser():
+    """Свойство, которое держалось само собой, пока замок был один.
+
+    Публикация ведёт живой профиль; чтение, влезшее посреди неё, срывает
+    сборку, а выглядит это как «RPA сыпется».
+    """
+    entered = threading.Event()
+
+    @serialized_browser(reading=True)
+    def read(profile):
+        entered.set()
+
+    with browser_operation:
+        thread = threading.Thread(target=read, args=("profile-a",))
+        thread.start()
+        assert not entered.wait(timeout=0.5), "чтение полезло в браузер во время публикации"
+
+    assert entered.wait(timeout=5), "чтение так и не дождалось конца публикации"
+    thread.join(timeout=5)
+
+
+def test_a_publish_waits_for_a_read_to_finish():
+    """И наоборот: публикация не начинается поверх идущего чтения."""
+    inside = threading.Event()
+    may_finish = threading.Event()
+    published = threading.Event()
+
+    @serialized_browser(reading=True)
+    def read(profile):
+        inside.set()
+        may_finish.wait(timeout=5)
+
+    def publish():
+        with browser_operation:
+            published.set()
+
+    reader = threading.Thread(target=read, args=("profile-a",))
+    reader.start()
+    assert inside.wait(timeout=5)
+
+    writer = threading.Thread(target=publish)
+    writer.start()
+    assert not published.wait(timeout=0.5), "публикация началась поверх чтения"
+
+    may_finish.set()
+    reader.join(timeout=5)
+    assert published.wait(timeout=5)
+    writer.join(timeout=5)
