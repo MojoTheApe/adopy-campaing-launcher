@@ -32,7 +32,7 @@ _PAGE = """
 <div id="card">
   <div role="heading">Placements</div><div>Advantage+ on</div>
   <div role="button" aria-expanded="true">Placement value rules</div>
-  <div role="button" aria-expanded="false" id="acrow" onclick="expand()">Account controls<div><span id="summary">Excluded placements: %(summary)s</span></div></div>
+  <div role="button" aria-expanded="false" id="acrow" onclick="expand()">Account controls<div><span id="summary"><b>Excluded placements:</b> %(summary)s</span></div></div>
   <div id="acbody" style="display:none">Account controls let you limit where your ads appear.
     <div role="button" onclick="openDlg()">Edit placement controls</div></div>
 </div>
@@ -64,7 +64,7 @@ _PAGE = """
   function confirmIt() {
     window.log.push('confirm'); hide('rev');
     const off = [...document.querySelectorAll('#list input')].filter(i => !i.checked).length;
-    document.getElementById('summary').textContent = 'Excluded placements: ' + (off ? off + ' placements' : 'None');
+    document.getElementById('summary').innerHTML = '<b>Excluded placements:</b> ' + (off ? [...document.querySelectorAll('#list span')].map(x => x.textContent).join(', ') : 'None');
   }
 </script>
 </body></html>
@@ -73,7 +73,7 @@ _PAGE = """
 
 def _html(*, done: bool = False) -> str:
     return _PAGE % {
-        "summary": "4 placements" if done else "None",
+        "summary": ", ".join(md._ACCOUNT_EXCLUDED_PLACEMENTS) if done else "None",
         "sw": "checked" if done else "",
         "list": "block" if done else "none",
         "c": "" if done else "checked",
@@ -117,7 +117,7 @@ def test_the_four_placements_are_excluded_and_confirmed(page, tmp_path):
     assert page.evaluate("window.log") == ["open", "review", "confirm"]
     assert page.evaluate("[...document.querySelectorAll('#list input')].every(i => !i.checked)")
     assert report["account_exclusions"] == "excluded"
-    assert md._excluded_placements_summary(page) == "4 placements"
+    assert md._excluded_placements_summary(page) == ", ".join(md._ACCOUNT_EXCLUDED_PLACEMENTS)
     row = [r for r in _rows(tmp_path) if r["step"] == "account_placement_exclusions"][-1]
     assert row["ok"] is True and sorted(row["diag"]["changed"]) == sorted(md._ACCOUNT_EXCLUDED_PLACEMENTS)
 

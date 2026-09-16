@@ -3326,9 +3326,16 @@ def _excluded_placements_summary(page: Page) -> str | None:
         return page.evaluate(
             r"""() => {
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-              const el = [...document.querySelectorAll('*')].find(e =>
-                e.children.length === 0 && /^Excluded placements:/i.test(norm(e.textContent)));
-              return el ? norm(el.textContent).replace(/^Excluded placements:\s*/i, '') : null;
+              // «Excluded placements:» — отдельный жирный узел, список идёт
+              // соседним текстом (скриншот S15, 23:27). Берём самый короткий
+              // элемент, чей текст начинается с метки: это абзац целиком.
+              const els = [...document.querySelectorAll('*')].filter(e =>
+                /^Excluded placements:/i.test(norm(e.textContent)));
+              if (!els.length) return null;
+              els.sort((a, b) => norm(a.textContent).length - norm(b.textContent).length);
+              const own = els.find(e => norm(e.textContent).replace(/^Excluded placements:\s*/i, '').length) || els[0];
+              let t = norm(own.textContent).replace(/^Excluded placements:\s*/i, '');
+              return t.replace(/\s*Account controls let you.*$/i, '');
             }"""
         )
     except Exception:
@@ -3456,6 +3463,11 @@ def ensure_account_placement_exclusions(page: Page, report: dict | None = None) 
     summary = _excluded_placements_summary(page)
     if summary is not None and summary.strip().lower() in ("", "none"):
         return _record(False, "summary_still_none", changed=changed, confirmed=confirmed, summary=summary)
+    if summary:
+        absent = [n for n in _ACCOUNT_EXCLUDED_PLACEMENTS if n.lower() not in summary.lower()]
+        if absent:
+            return _record(False, "summary_missing_placements", changed=changed,
+                           confirmed=confirmed, summary=summary, absent=absent)
     return _record(True, "excluded", changed=changed, confirmed=confirmed, summary=summary)
 
 
