@@ -8257,6 +8257,16 @@ def _pick_advantage_plus_leads_off(page: Page) -> bool:
     # heading — an expander whose accessible text is "Open". The earlier
     # guesses ("a button reading On", a switch) matched nothing at all,
     # which is why three parallel runs logged `picked_off: false`.
+    # Keep the page BEFORE touching anything: the second parallel batch
+    # (15:04) found no expander at all on a resized window, and without a
+    # capture that is one more guess. What the control looks like right now
+    # is the one fact the next fix needs.
+    try:
+        from src.fb_ads_rpa import page_capture as _pc
+
+        _pc.capture(page, step="advantage_plus_before")
+    except Exception:
+        pass
     opened = _click_xpath(
         page,
         "(//*[normalize-space(text())='Advantage+ leads campaign']"
@@ -8267,8 +8277,6 @@ def _pick_advantage_plus_leads_off(page: Page) -> bool:
     _sleep_h(0.8)
     # What opened is not known offline. Keep the page so the next run says.
     try:
-        from src.fb_ads_rpa import page_capture as _pc
-
         _pc.capture(page, step="advantage_plus_control")
     except Exception:
         pass
