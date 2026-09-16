@@ -1240,17 +1240,44 @@ class RecipePlayer:
         return bool(ok)
 
     def _run_targeting(self, interests: str) -> bool:
+        """Fill Detailed targeting, one AND group at a time.
+
+        The library hands over "group1 [AND] group2" (`Target.rpa_interests`);
+        the second group means "and ALSO matches", which Meta expresses with
+        the Define further button. This used to split on commas only: the
+        "[AND]" stayed glued inside one term, the button was never pressed,
+        and every interest of both groups landed in one OR list — the
+        opposite audience (Doc20, KW_trl_All_Video_Mix, 2026-09-16). The
+        older `ads_manager_flow` path had handled it; the recorded flow that
+        replaced it did not.
+        """
         if not interests:
+            return True
+        # `[AND]`, `|` and `\` are one instruction written three ways — the
+        # same reading `ads_manager_flow` has always applied.
+        groups = [
+            [t.strip() for t in g.split(",") if t.strip()]
+            for g in re.split(r"\[AND\]|\|", interests.replace("\\", "|"), flags=re.IGNORECASE)
+        ]
+        groups = [g for g in groups if g]
+        if not groups:
             return True
         if not md.open_detailed_targeting_field(self.page):
             return False
-        ok_any = False
-        for term in [t.strip() for t in interests.split(",") if t.strip()]:
-            if md.fill_targeting_interest(self.page, term):
-                md.pick_first_suggestion(self.page)
-                ok_any = True
-                pause_short(self.page)
-        return ok_any
+        for index, terms in enumerate(groups):
+            if index > 0 and not md.click_define_further(self.page):
+                self._record("targeting", "define_further", False, "", f"group {index + 1}")
+                return False
+            added = False
+            for term in terms:
+                if md.fill_targeting_interest(self.page, term, last=index > 0):
+                    md.pick_first_suggestion(self.page)
+                    added = True
+                    pause_short(self.page)
+            if not added:
+                self._record("targeting", "group", False, "", f"group {index + 1} took no terms")
+                return False
+        return True
 
     # ── page (best-effort) ──────────────────────────────────────────────────────
     def _pick_available_page(self, step: dict[str, Any]) -> bool:
