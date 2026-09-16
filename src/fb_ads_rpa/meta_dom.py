@@ -3346,6 +3346,41 @@ _SUBITEMS_OFF = (
 )
 
 
+def _wheel_to_placements_card(page: Page, max_ticks: int = 40) -> int:
+    """Прокрутить колонку редактора колесом до карточки Placements.
+
+    Возвращает число сделанных прокруток или -1, если карточка так и не
+    показалась.
+    """
+    probe = r"""() => {
+      const h = [...document.querySelectorAll('[role=heading]')].find(e =>
+        (e.textContent || '').replace(/\s+/g, ' ').trim().startsWith('Placements'));
+      if (!h) return 'absent';
+      const r = h.getBoundingClientRect();
+      if (r.height > 0 && r.y > 60 && r.y < window.innerHeight * 0.6) return 'on_screen';
+      return r.height > 0 && r.y >= window.innerHeight * 0.6 ? 'below' : (r.height > 0 ? 'above' : 'unlaid');
+    }"""
+    try:
+        vw = page.evaluate("() => [window.innerWidth, window.innerHeight]")
+        x, y = int(vw[0] * 0.45), int(vw[1] * 0.5)
+    except Exception:
+        x, y = 700, 450
+    for i in range(max_ticks):
+        try:
+            state = page.evaluate(probe)
+        except Exception:
+            return -1
+        if state == "on_screen":
+            return i
+        try:
+            page.mouse.move(x, y)
+            page.mouse.wheel(0, -350 if state == "above" else 450)
+        except Exception:
+            return -1
+        _sleep_h(0.4)
+    return -1
+
+
 def _placements_exclusion_removed(page: Page) -> bool:
     """Карточка Placements, на которой Meta убрала ручной выбор площадок.
 
@@ -3755,6 +3790,15 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     # (same pattern already seen for the Ad-level creative fields). Force-
     # scroll toward increasing fractions of the container's scrollHeight
     # and retry instead of searching the DOM as-is.
+    # 17.09 00:40, живьём на Doc20: редактор не раскладывает карточку
+    # Placements, пока она за экраном — у неё и у «Show more settings» размер
+    # 0×0, и весь путь ниже промахивался. `_text_y` при этом находил строку
+    # «Placements» в правой панели Campaign score и прокрутку пропускал.
+    # Колесо над колонкой редактора, пока заголовок карточки
+    # (`role=heading`) не окажется на экране с настоящим размером. Под «Show
+    # more settings» ручной выбор цел: «Placements · Included: 17», пять
+    # категорий с живыми галочками.
+    _dbg.append(f"wheel_to_card={_wheel_to_placements_card(page)}")
     placements_y = _text_y("Placements")
     for frac in (0.5, 0.6, 0.7, 0.8, 0.9, 1.0):
         if placements_y is not None:
@@ -4420,14 +4464,14 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             # Решение владельца 16.09: исключения ставим сами — на уровне
             # аккаунта, единственном, где Meta их ещё принимает.
             _dump_dbg()
-            if ensure_account_placement_exclusions(page, report):
-                report["why"] = "excluded_at_account_level"
-                return True
-            report["why"] = "manual_placements_removed_by_meta"
+            # Исключения аккаунта — только страховка (четыре площадки из
+            # списка «выключить»), а не успех шага: 17.09 Doc21 так ушёл с 17
+            # площадками вместо 7. Успех — только пять категорий по списку.
+            report["account_exclusions_ok"] = ensure_account_placement_exclusions(page, report)
+            report["why"] = "placement_categories_not_reached"
             report["notice"] = (
-                "Meta no longer offers manual placements for this ad set, and "
-                "the placement exclusions could not be set in the ad account's "
-                "Account controls."
+                "The placement categories under Show more settings could not be "
+                "set, so the ad set would run on more placements than requested."
             )
             return False
         _dump_dbg()
