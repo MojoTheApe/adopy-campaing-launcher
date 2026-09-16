@@ -259,3 +259,44 @@ def test_advantage_plus_is_switched_off_before_the_controls_run(page, monkeypatc
     monkeypatch.setattr(meta_dom, "_fill_audience_age_controls", lambda p, a, b: order.append("controls") or True)
     assert meta_dom.fill_audience_age(page, 35, 65) is True
     assert order == ["off", "controls"]
+
+
+# ── 16.09, e79f678f1450: «Off» у Dynamic creative — не наш пункт ───────────
+
+_DYNAMIC_PAGE = """
+<!doctype html><html><body>
+<div id="card">
+  <div>Audience</div><span id="badge">Advantage+ on</span>
+  <div role="button" onclick="document.getElementById('checklist').style.display='block'">
+    <span role="heading">Advantage+ leads campaign</span><span>On</span>
+  </div>
+  <div id="checklist" style="display:none"><div>Budget</div><div>Audience</div></div>
+  <div role="button"><div role="heading">Dynamic creative</div>
+    <label onclick="openDialog()">Off</label><input type="checkbox" role="switch" aria-label="Off"></div>
+  <div><div>Age</div><div><div class="v">18</div><div class="v">65+</div></div></div>
+</div>
+<div id="dlg" role="dialog" style="display:none">
+  <div>How to create ads using dynamic creative</div>
+  <div role="button" onclick="window.dlg.push('cancel');document.getElementById('dlg').style.display='none'">Cancel</div>
+  <div role="button" onclick="window.dlg.push('continue')">Continue</div>
+</div>
+<script>
+  window.dlg = [];
+  function openDialog() { window.dlg.push('opened'); document.getElementById('dlg').style.display = 'block'; }
+</script>
+</body></html>
+"""
+
+
+def test_the_dynamic_creative_off_label_is_never_clicked(page):
+    page.set_content(_DYNAMIC_PAGE)
+    assert meta_dom._pick_advantage_plus_leads_off(page) is False
+    assert page.evaluate("window.dlg") == []
+
+
+def test_an_open_dynamic_creative_dialog_is_cancelled_not_continued(page, tmp_path):
+    page.set_content(_DYNAMIC_PAGE)
+    page.evaluate("openDialog()")
+    assert meta_dom._cancel_dynamic_creative_dialog(page) is True
+    assert page.evaluate("window.dlg") == ["opened", "cancel"]
+    assert not page.is_visible("#dlg")

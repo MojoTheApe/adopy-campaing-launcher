@@ -9211,11 +9211,39 @@ def _pick_advantage_plus_leads_off(page: Page) -> bool:
         _pc.capture(page, step="advantage_plus_control")
     except Exception:
         pass
-    return _click_xpath(
+    # Only a real menu item. 16.09, run e79f678f1450 (Doc21 FX): the row
+    # opens a checklist (Budget / Audience / Placements), not a menu, and the
+    # old path also accepted any div/span starting with "Off" — it hit the
+    # label of the **Dynamic creative** switch, Meta raised "How to create ads
+    # using dynamic creative", and that dialog sat over the age dropdowns.
+    picked = _click_xpath(
         page,
-        "//*[@role='menuitem' or @role='option' or @role='menuitemradio' or @role='radio' or self::div or self::span]"
-        "[starts-with(normalize-space(.), 'Off') and string-length(normalize-space(.)) < 40][1]",
+        "(//*[@role='menuitem' or @role='option' or @role='menuitemradio']"
+        "[starts-with(normalize-space(.), 'Off') and string-length(normalize-space(.)) < 40])[1]",
     )
+    _cancel_dynamic_creative_dialog(page)
+    return picked
+
+
+def _cancel_dynamic_creative_dialog(page: Page) -> bool:
+    """Dismiss Meta's "How to create ads using dynamic creative" with Cancel.
+
+    Continue would switch the ad set to dynamic creative and drop its
+    customisations — never what the operator built. True when a dialog was
+    found and cancelled.
+    """
+    try:
+        dialog = page.locator("[role=dialog]").filter(
+            has_text=re.compile(r"dynamic creative", re.I)
+        )
+        if not dialog.count():
+            return False
+        dialog.last.get_by_role("button", name=re.compile(r"^Cancel$", re.I)).first.click(timeout=3000)
+        _sleep_h(0.5)
+        _telemetry.record("dynamic_creative_dialog", None, note="cancelled")
+        return True
+    except Exception:
+        return False
 
 
 _AGE_VALUE_RE = re.compile(r"^\d{2}\+?$")
@@ -9282,6 +9310,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     # the old code had set it in three runs of four. The read-back below is
     # the real check of whether the age took.
     _ensure_manual_audience(page)
+    _cancel_dynamic_creative_dialog(page)
     if not _fill_audience_age_controls(page, age_min, age_max):
         return False
     wanted = [str(age_min), str(age_max) if age_max < 65 else "65+"]
