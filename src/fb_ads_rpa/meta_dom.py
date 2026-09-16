@@ -2505,6 +2505,12 @@ def run_recorded_campaign_flow(
     wait_editor_saved(page)
     _shot("after_campaign_name")
 
+    # 17.09 00:05 (S15, 71f6bddbcf7c): Meta открыла черновик с «Ad set
+    # budget» по умолчанию — поля бюджета на уровне кампании нет, и шаг
+    # 133 с искал его. Бюджет у нас кампанийный: переключить до ввода.
+    if _ensure_campaign_budget(page):
+        wait_editor_saved(page)
+
     try:
         page.get_by_role("textbox", name="Budget").click(timeout=3000)
     except Exception:
@@ -7345,6 +7351,51 @@ def _editor_is_busy_saving(page: Page) -> bool:
         except Exception:
             pass
     return False
+
+
+def _ensure_campaign_budget(page: Page) -> bool:
+    """Если выбран «Ad set budget», выбрать «Campaign budget». True — переключили.
+
+    Радио ищется по подписи; клик — по самой строке с подписью, затем
+    проверка `checked`. Ничего не нашли или уже кампанийный — False, без
+    кликов.
+    """
+    try:
+        state = page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const radioFor = (label) => {
+                const leaf = [...document.querySelectorAll('*')].find(e =>
+                  e.children.length === 0 && norm(e.textContent) === label && e.getBoundingClientRect().width > 0);
+                if (!leaf) return null;
+                let n = leaf;
+                for (let i = 0; i < 6 && n; i++) {
+                  n = n.parentElement;
+                  const r = n && n.querySelector('input[type=radio], [role=radio]');
+                  if (r) { return {radio: r, row: n}; }
+                }
+                return null;
+              };
+              const checked = (r) => r.checked === true || r.getAttribute('aria-checked') === 'true';
+              const camp = radioFor('Campaign budget');
+              const adset = radioFor('Ad set budget');
+              if (!camp || !adset) return 'absent';
+              if (checked(camp.radio)) return 'campaign';
+              if (!checked(adset.radio)) return 'unknown';
+              camp.radio.setAttribute('data-rpa-mark', 'campaign-budget-radio');
+              return 'adset';
+            }"""
+        )
+    except Exception:
+        return False
+    if state != "adset":
+        return False
+    if not _click_marked(page, "campaign-budget-radio"):
+        _telemetry.record("campaign_budget_strategy", False, note="radio_not_clickable")
+        return False
+    _sleep_h(1.0)
+    _telemetry.record("campaign_budget_strategy", None, note="switched_from_ad_set_budget")
+    return True
 
 
 def wait_editor_saved(page: Page, *, timeout_s: float = 15, appear_s: float = 1.5) -> None:
