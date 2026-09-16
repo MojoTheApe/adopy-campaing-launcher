@@ -192,6 +192,28 @@ def values_for(account: str, kind: str) -> list[str]:
     )
 
 
+def all_pairs(kind: str) -> list[tuple[str, str]]:
+    """Every (account, value) of this kind, in one pass.
+
+    `values_for` and `accounts_for` each answer about one side, and asking them
+    per account re-reads the file once per account. The Accounts overview needs
+    the whole picture at once — it resolves a country for every account on every
+    page load — and that is what this is for.
+    """
+    kind = _norm(kind).lower()
+    seen: set[tuple[str, str]] = set()
+    out: list[tuple[str, str]] = []
+    for r in load():
+        if r["kind"] != kind:
+            continue
+        pair = (r["account_name"], r["value"])
+        if not pair[0] or not pair[1] or pair in seen:
+            continue
+        seen.add(pair)
+        out.append(pair)
+    return out
+
+
 def accounts_for(kind: str, value: str) -> list[str]:
     kind, value = _norm(kind).lower(), _norm(value).lower()
     return sorted(
