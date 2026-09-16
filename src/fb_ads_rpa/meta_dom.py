@@ -8733,9 +8733,16 @@ def _ensure_manual_audience(page: Page) -> bool | None:
                           note="already_off" if before is False else "not_found")
         return before
     flipped = _turn_off_advantage_plus_leads(page)
+    picked = False
     if not flipped:
-        # Newer layout: the Audience card offers a link out of Advantage+
-        # audience rather than a switch. Best effort, verified below.
+        # On the 2026-09 layout the leads-campaign control is not a switch
+        # at all: a `role=button` reading "On" beside the label that opens a
+        # menu with "Off" (page dump of run 86b7cd7edda9 — three switches on
+        # the page, none of them this one). Open it and pick Off.
+        picked = _pick_advantage_plus_leads_off(page)
+    if not flipped and not picked:
+        # Older Audience card: a link out of Advantage+ audience. Best
+        # effort, verified below like everything else here.
         _click_xpath(
             page,
             "//*[self::a or @role='button' or @role='link' or self::button]"
@@ -8745,8 +8752,35 @@ def _ensure_manual_audience(page: Page) -> bool | None:
     after = _advantage_plus_audience_on(page)
     _telemetry.record("advantage_plus_off", after is not True,
                       note="switched" if after is not True else "still_on",
-                      diag={"flipped_switch": flipped})
+                      diag={"flipped_switch": flipped, "picked_off": picked})
     return after
+
+
+def _pick_advantage_plus_leads_off(page: Page) -> bool:
+    """Open the "Advantage+ leads campaign · On ˅" menu and choose Off.
+
+    True when Off was clicked; the caller re-reads the page to see whether
+    it took. The trigger is the first `role=button` after the label whose
+    own text is "On"; the menu item is a visible leaf reading "Off".
+    """
+    # The trigger sits INSIDE the label's own container on Meta's markup, so
+    # it is a descendant of the element carrying the text, not a follower;
+    # `_click_xpath` then takes the smallest boxed match, i.e. the button.
+    opened = _click_xpath(
+        page,
+        "(//*[contains(normalize-space(.), 'Advantage+ leads campaign')]"
+        "//*[@role='button' and normalize-space(.)='On']"
+        " | //*[contains(normalize-space(.), 'Advantage+ leads campaign')]"
+        "/following::*[@role='button' and normalize-space(.)='On'])[1]",
+    )
+    if not opened:
+        return False
+    _sleep_h(0.6)
+    return _click_xpath(
+        page,
+        "//*[@role='menuitem' or @role='option' or @role='menuitemradio' or @role='button' or self::div]"
+        "[normalize-space(.)='Off'][1]",
+    )
 
 
 _AGE_VALUE_RE = re.compile(r"^\d{2}\+?$")

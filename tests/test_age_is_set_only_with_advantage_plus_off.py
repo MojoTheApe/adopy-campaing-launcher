@@ -134,6 +134,43 @@ def test_already_off_is_recorded_not_touched(page, tmp_path):
     assert rows and rows[-1]["ok"] is None and rows[-1]["note"] == "already_off"
 
 
+_MENU_PAGE = """
+<!doctype html><html><body>
+<div id="card">
+  <div>Audience</div>
+  <span id="badge">Advantage+ on</span>
+  <div>Advantage+ leads campaign
+    <div id="trig" role="button" tabindex="0" onclick="openMenu()">On</div>
+  </div>
+  <div id="menu" style="display:none">
+    <div role="menuitem" onclick="pick('On')">On</div>
+    <div role="menuitem" onclick="pick('Off')">Off</div>
+  </div>
+  <div><div>Age</div><div><div class="v">18</div><div class="v">65+</div></div></div>
+</div>
+<script>
+  window.picked = [];
+  function openMenu() { document.getElementById('menu').style.display = 'block'; }
+  function pick(v) {
+    window.picked.push(v);
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('trig').textContent = v;
+    document.getElementById('badge').textContent = v === 'Off' ? 'Advantage+ off' : 'Advantage+ on';
+  }
+</script>
+</body></html>
+"""
+
+
+def test_the_menu_shaped_control_is_opened_and_off_is_picked(page, tmp_path):
+    """Раскладка 2026-09: не переключатель, а кнопка «On ˅» с меню (дамп прогона 86b7cd7edda9)."""
+    page.set_content(_MENU_PAGE)
+    assert meta_dom._ensure_manual_audience(page) is False
+    assert page.evaluate("window.picked") == ["Off"]
+    rows = [r for r in _rows(tmp_path) if r["step"] == "advantage_plus_off"]
+    assert rows[-1]["note"] == "switched" and rows[-1]["diag"]["picked_off"] is True
+
+
 # ── чтение экрана ─────────────────────────────────────────────────────────
 
 def test_reading_the_dropdowns_gives_what_they_show(page):
