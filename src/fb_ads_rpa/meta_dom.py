@@ -7526,10 +7526,64 @@ def open_detailed_targeting_field(page: Page) -> bool:
     return False
 
 
-def fill_targeting_interest(page: Page, text: str) -> bool:
-    """Type into Detailed targeting interests field — not 'Search existing audiences'."""
+_DEFINE_FURTHER_XPATH = (
+    "//*[@role='button' or self::button]"
+    "[normalize-space(.)='Define further' or normalize-space(.)='Narrow further'"
+    " or normalize-space(.)='Narrow audience' or normalize-space(.)='Definir más']"
+)
+
+
+def targeting_input_count(page: Page) -> int:
+    """How many Detailed targeting inputs are on the page (one per AND group)."""
+    try:
+        return int(page.evaluate(
+            """
+            () => [...document.querySelectorAll('input, textarea')].filter((inp) => {
+              const r = inp.getBoundingClientRect();
+              if (r.width <= 2 || r.height <= 2) return false;
+              const blob = ((inp.getAttribute('placeholder') || '') + ' ' +
+                            (inp.getAttribute('aria-label') || '')).toLowerCase();
+              if (['existing audience', 'audiencia existente', 'saved audience'].some(b => blob.includes(b))) return false;
+              return ['add interests', 'interests, behaviors', 'interests or behaviours',
+                      'interests or behaviors', 'añadir intereses', 'demographics', 'demografía']
+                .some(g => blob.includes(g));
+            }).length
+            """
+        ))
+    except Exception:
+        return 0
+
+
+def click_define_further(page: Page) -> bool:
+    """Press "Define further" and confirm a new targeting group opened.
+
+    The Mix targets are two groups joined by AND: finance interests, and
+    people who ALSO match travel/luxury. Meta expresses that with this
+    button; without it both lists land in one OR group and the audience is
+    the opposite of what the target means (Doc20, KW_trl_All_Video_Mix,
+    2026-09-16: all sixteen interests in one "Include people who match",
+    the button untouched). Success is a new input appearing, not the click.
+    """
+    before = targeting_input_count(page)
+    for _ in range(3):
+        if not _click_xpath(page, _DEFINE_FURTHER_XPATH):
+            _sleep_h(0.8)
+            continue
+        for _ in range(10):
+            _sleep_h(0.3)
+            if targeting_input_count(page) > before:
+                return True
+    return False
+
+
+def fill_targeting_interest(page: Page, text: str, *, last: bool = False) -> bool:
+    """Type into Detailed targeting interests field — not 'Search existing audiences'.
+
+    `last=True` types into the last such field on the page — the one
+    "Define further" just opened for the next AND group.
+    """
     script = """
-    (text) => {
+    ([text, last]) => {
       const visible = (el) => {
         if (!el || el.offsetParent === null) return false;
         const r = el.getBoundingClientRect();
@@ -7542,6 +7596,7 @@ def fill_targeting_interest(page: Page, text: str) -> bool:
         'incluir personas', 'demographics', 'demografía'
       ];
       const inputs = [...document.querySelectorAll('input, textarea')].filter(visible);
+      if (last) inputs.reverse();
       for (const inp of inputs) {
         const ph = (inp.getAttribute('placeholder') || '').toLowerCase();
         const aria = (inp.getAttribute('aria-label') || '').toLowerCase();
@@ -7561,7 +7616,7 @@ def fill_targeting_interest(page: Page, text: str) -> bool:
     """
     for root in _roots(page):
         try:
-            if root.evaluate(script, text):
+            if root.evaluate(script, [text, last]):
                 return True
         except Exception:
             pass
