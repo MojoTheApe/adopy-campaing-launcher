@@ -4623,6 +4623,39 @@ def _library_undo_selection(page: Page, tiles, clicked: list[int], before: int) 
     return _library_selected_count(page) <= before
 
 
+def _library_tile_shape(page: Page, filename: str) -> dict:
+    """Короткое описание плитки медиатеки для разбора — без полного снимка."""
+    js = r"""
+    (name) => {
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+      const cap = [...document.querySelectorAll('*')].find(e => e.children.length === 0 && norm(e.textContent) === name);
+      if (!cap) return {caption: false};
+      const attrs = (e) => {
+        const o = {tag: e.tagName};
+        for (const a of ['role', 'aria-checked', 'aria-selected', 'aria-pressed', 'aria-label', 'tabindex', 'type', 'data-testid']) {
+          const v = e.getAttribute(a); if (v !== null) o[a] = v.slice(0, 60);
+        }
+        const r = e.getBoundingClientRect(); o.box = [Math.round(r.width), Math.round(r.height)];
+        return o;
+      };
+      const chain = []; let n = cap;
+      for (let i = 0; i < 9 && n; i++) { chain.push(attrs(n)); n = n.parentElement; }
+      let tile = cap; for (let i = 0; i < 6 && tile.parentElement; i++) tile = tile.parentElement;
+      const marks = [...tile.querySelectorAll('input, [role=checkbox], [aria-checked], [aria-selected], [aria-pressed], [role=button]')]
+        .slice(0, 12).map(attrs);
+      const dialog = cap.closest('[role=dialog]');
+      const counters = dialog ? [...dialog.querySelectorAll('*')].filter(e => e.children.length === 0 && /selected/i.test(e.textContent))
+        .slice(0, 5).map(e => norm(e.textContent).slice(0, 60)) : [];
+      const buttons = dialog ? [...dialog.querySelectorAll('[role=button]')].map(e => norm(e.textContent)).filter(Boolean).slice(0, 15) : [];
+      return {caption: true, chain, marks, html: tile.outerHTML.replace(/class="[^"]*"/g, '').slice(0, 2500), counters, buttons};
+    }
+    """
+    try:
+        return page.evaluate(js, filename)
+    except Exception as exc:
+        return {"error": type(exc).__name__}
+
+
 def _library_tile_selected(tile) -> bool:
     """Does this tile say it is selected — by its own ARIA state or a checked
     box inside it? False when it cannot say (a double without attributes,
@@ -4833,6 +4866,10 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         sight = _library_sight(page, filename)
         if saved_page:
             sight["page"] = saved_page
+        # Снимок страницы режется на 4 МБ раньше модалки (Doc20, 22:54), так
+        # что устройство плитки пишется прямо сюда: сама плитка, её предки и
+        # всё отмечаемое рядом — чекбоксы, aria-checked/selected/pressed.
+        sight["tile_shape"] = _library_tile_shape(page, filename)
         sight.update({"tiles_found": available, "picks": log, "undone": clean})
         _telemetry.record(
             "ad_creative_reuse", False if not clean else None,
