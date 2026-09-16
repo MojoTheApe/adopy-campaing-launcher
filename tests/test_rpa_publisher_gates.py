@@ -166,13 +166,19 @@ def test_an_unknown_account_is_named_plainly():
     assert "not in ad_account_map.csv" in str(e.value)
 
 
-def test_an_open_profile_goes_straight_to_direct_cdp():
-    """MLX API отказывается стартовать уже открытый профиль.
+def test_an_open_profile_goes_straight_to_direct_cdp(monkeypatch):
+    """Без attach-only MLX API отказывается стартовать уже открытый профиль.
 
     Пробовать его первым — значит потратить время и получить 401. Работа с
     уже открытым аккаунтом — обычный случай, а не исключение: человек не
     должен закрывать браузер, чтобы прогон начался.
+
+    Только **без** attach-only: там настроенный провайдер сам подключается к
+    открытому профилю, а не сумев — перезапускает его через MLX API с прокси.
+    Ярлык через DirectCDP там давал один отказ и скрывал причину (ACL-1200,
+    см. `test_an_open_profile_reaches_the_mlx_api.py`).
     """
+    monkeypatch.setenv("FB_MLX_ATTACH_ONLY", "0")
     p = _publisher()
     with patch.object(p, "_resolve_entry", return_value=object()), \
          patch.object(p, "_profile_already_running", return_value=True), \
@@ -180,6 +186,18 @@ def test_an_open_profile_goes_straight_to_direct_cdp():
         assert p._ensure_browser("TEST_ACCOUNT") == "прямое"
     direct.assert_called_once()
     p._provider.open.assert_not_called(), "API дёрнули впустую"
+
+
+def test_under_attach_only_an_open_profile_is_handed_to_the_provider():
+    """Умолчание: открытый профиль — дело настроенного провайдера, не ярлыка."""
+    p = _publisher()
+    p._provider.open.return_value = "через API"
+    with patch.object(p, "_resolve_entry", return_value=object()), \
+         patch.object(p, "_profile_already_running", return_value=True), \
+         patch.object(p, "_open_multilogin_direct") as direct:
+        assert p._ensure_browser("TEST_ACCOUNT") == "через API"
+    direct.assert_not_called()
+    p._provider.open.assert_called_once()
 
 
 def test_attach_only_refuses_to_fall_back(monkeypatch):
