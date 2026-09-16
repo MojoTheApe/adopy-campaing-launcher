@@ -113,3 +113,75 @@ def test_a_failed_upload_closes_the_dialog_behind_it(monkeypatch):
 
     md.upload_ad_creative_with_retry(object(), "video", FILE)
     assert closed, "после окончательного отказа диалог обязан быть закрыт"
+
+
+# ── удачная загрузка тоже не повторяется ─────────────────────────────────
+#
+# Замер 15.09 по восьми живым прогонам: 83 минуты, 39 из них (47%) впустую, и
+# 35 минут из этих 39 — объявления 2 и 3, заливающие файл, который Meta уже не
+# примет. `ad2_creative_upload`: 130 секунд в среднем, сто процентов впустую.
+
+
+def _quiet(monkeypatch):
+    monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)
+    monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: False)
+    monkeypatch.setattr(md, "_upload_stalled", lambda page: False)
+    monkeypatch.setattr(md, "reuse_before_upload", lambda page, path: None)
+
+
+def test_the_second_ad_does_not_re_upload_what_already_went(monkeypatch):
+    """Meta не берёт вторую заливку того же файла — пытаться незачем."""
+    md._uploaded_ok.clear()
+    tries: list[str] = []
+    monkeypatch.setattr(md, "upload_ad_creative",
+                        lambda *a, **k: tries.append("try") or True)
+    _quiet(monkeypatch)
+
+    assert md.upload_ad_creative_with_retry(object(), "video", FILE) is True
+    assert len(tries) == 1
+
+    tries.clear()
+    assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
+    assert tries == [], "второе объявление не должно заливать заново"
+    md._uploaded_ok.clear()
+
+
+def test_the_library_still_wins_over_the_fast_refusal(monkeypatch):
+    """Единственный работающий путь для объявлений 2 и 3 — взять копию.
+
+    Быстрый отказ не должен его перекрывать: сначала спрашиваем медиатеку.
+    """
+    md._uploaded_ok.clear()
+    monkeypatch.setattr(md, "upload_ad_creative", lambda *a, **k: True)
+    _quiet(monkeypatch)
+    md.upload_ad_creative_with_retry(object(), "video", FILE)
+
+    monkeypatch.setattr(md, "reuse_before_upload", lambda page, path: True)
+    assert md.upload_ad_creative_with_retry(object(), "video", FILE) is True
+    md._uploaded_ok.clear()
+
+
+def test_the_two_refusals_are_named_apart(monkeypatch):
+    """«Уже грузили и не вышло» и «уже загрузили» — разные вещи, и в
+    телеметрии их путать нельзя: первая про поломку, вторая про правило Meta."""
+    md._uploaded_ok.clear(); md._failed_uploads.clear()
+    said: list[dict] = []
+    monkeypatch.setattr(md._telemetry, "record",
+                        lambda step, ok, **kw: said.append({"step": step, **kw}))
+    monkeypatch.setattr(md, "upload_ad_creative", lambda *a, **k: True)
+    _quiet(monkeypatch)
+    md.upload_ad_creative_with_retry(object(), "video", FILE)
+    md.upload_ad_creative_with_retry(object(), "video", FILE)
+    assert said and said[-1]["note"] == "same_file_already_uploaded_this_run"
+    md._uploaded_ok.clear()
+
+
+def test_a_new_run_starts_clean(monkeypatch):
+    md._uploaded_ok.clear()
+    monkeypatch.setattr(md, "upload_ad_creative", lambda *a, **k: True)
+    _quiet(monkeypatch)
+    md.upload_ad_creative_with_retry(object(), "video", FILE)
+    assert md.upload_already_succeeded(FILE) is True
+    rt.set_current_run("run-next", "CAMP")
+    assert md.upload_already_succeeded(FILE) is False
+    md._uploaded_ok.clear()
