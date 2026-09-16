@@ -34,8 +34,8 @@ from src.fb_ads_rpa.rpa_publisher import RpaPublisher  # noqa: E402
 
 
 class _Entry:
-    profile_id = "2a5d0c87-04e6-43fb-bdd1-f9bcb1a3be6b"
-    folder_id = "b8301b4d-0558-48d6-9861-8cf12c49ef7c"
+    profile_id = "550e8400-e29b-41d4-a716-446655440000"
+    folder_id = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     multilogin_instance = "A"
 
 
