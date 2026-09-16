@@ -2337,18 +2337,18 @@ async def api_accounts_overview() -> JSONResponse:
         "accounts": accounts,
         "hidden_count": sum(1 for a in accounts if a["hidden"]),
         "suggestions": suggestions,
-        # folder_id comes off the profile's own path, so the operator never
-        # has to find or type it.
         "open_profiles": [
             {
                 "profile_id": p["profile_id"],
-                # The Multilogin profile NAME, read off the browser window
-                # title — the only place it is available, since the profile
-                # API answers 404/403 with the token we have. A dropdown of
-                # bare UUIDs told the operator nothing.
+                # The Multilogin profile NAME, as Multilogin itself reports it.
+                # A dropdown of bare UUIDs told the operator nothing, and the
+                # older way of getting a name — off the browser window title —
+                # gave nothing at all for names containing a space.
                 "name": p.get("name") or "",
                 "key": profile_name_key(p.get("name") or ""),
-                "folder_id": folder_id_for(p["profile_id"]),
+                # Multilogin's own answer, falling back to the profile's path
+                # on disk. Either way the operator never has to find or type it.
+                "folder_id": p.get("folder_id") or folder_id_for(p["profile_id"]),
                 # The ad account this profile actually works in, read from its
                 # own browser history — the last field a person had to copy.
                 "ad_account_id": ad_account_id_for(p["profile_id"]),
