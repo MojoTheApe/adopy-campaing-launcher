@@ -7986,6 +7986,95 @@ def _remove_stale_default_locations(page: Page, keep_text: str) -> None:
             continue
 
 
+def _location_rows(page: Page) -> list[dict]:
+    """Included locations as the Locations card lists them now, each with the
+    centre of its own remove control.
+
+    The 2026-09 layout groups included locations by country: a heading
+    ("United States") with an ✕ beside it, then the location row. The older
+    `<li>` + "Close" button shape is still read for accounts that have it.
+    Everything is scoped to the card that holds "Search locations", so an ✕
+    elsewhere on the page — the WhatsApp Status banner in Placements has one
+    — is never a candidate. That banner is very likely what the old code
+    clicked on Doc21 (2026-09-16 17:40: `removedTrue`, United States still
+    included).
+    """
+    try:
+        return page.evaluate(
+            r"""
+            () => {
+              const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+              const search = [...document.querySelectorAll('input')].find(i =>
+                /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''));
+              if (!search) return [];
+              let card = search;
+              for (let i = 0; i < 12 && card; i++, card = card.parentElement) {
+                if (/^Locations/i.test(norm(card.textContent)) || /Ubicaciones/i.test(norm(card.textContent).slice(0, 40))) break;
+              }
+              if (!card) return [];
+              const searchBox = search.closest('[role=combobox]') || search.parentElement;
+              const rows = [];
+              const controls = [...card.querySelectorAll('[role=button], button')].filter(b => {
+                if (searchBox && searchBox.contains(b)) return false;
+                const r = b.getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0 || r.width > 60 || r.height > 60) return false;
+                // Named controls only. An unnamed icon button here may be the
+                // card's collapse chevron or the search box's expander, and
+                // clicking either would be worse than leaving a default.
+                const label = norm(b.getAttribute('aria-label') || '') + ' ' + norm(b.textContent);
+                return /\b(close|remove|delete|quitar|eliminar)\b/i.test(label);
+              });
+              for (const b of controls) {
+                let row = b.parentElement, name = '';
+                for (let i = 0; i < 5 && row && row !== card; i++, row = row.parentElement) {
+                  const t = norm(row.textContent).replace(/\b(Close|Remove)\b/gi, '').trim();
+                  if (t && t.length <= 80) { name = t; break; }
+                }
+                if (!name) continue;
+                const r = b.getBoundingClientRect();
+                rows.push({ name, x: r.x + r.width / 2, y: r.y + r.height / 2 });
+              }
+              return rows;
+            }
+            """
+        ) or []
+    except Exception:
+        return []
+
+
+def _clear_other_locations(page: Page, keep_text: str) -> list[str]:
+    """Remove every included location that is not `keep_text`; return the
+    names still left afterwards (empty list = clean).
+
+    Verified by reading the card again after each click, not by the click
+    being sent: `_remove_stale_default_locations` reported `removedTrue` on a
+    run whose draft still targeted United States next to Guatemala.
+    """
+    keep = (keep_text or "").strip().lower()
+    seen = _location_rows(page)
+    if not seen:
+        # Not even the target's own row was read: the card's shape is not
+        # the one this knows. Say so rather than pass silently, and keep the
+        # page so the next fix is read off it, not guessed.
+        _telemetry.record("audience_location", None, note="location_rows_not_read",
+                          diag={"keep": keep_text})
+        try:
+            from src.fb_ads_rpa import page_capture as _pc
+
+            _pc.capture(page, step="locations_unread")
+        except Exception:
+            pass
+        return []
+    for _ in range(6):
+        others = [r for r in _location_rows(page) if keep not in r["name"].lower()]
+        if not others:
+            return []
+        target = others[0]
+        _cdp_mouse_click(page, target["x"], target["y"])
+        _sleep_h(0.9)
+    return [r["name"] for r in _location_rows(page) if keep not in r["name"].lower()]
+
+
 def _pick_country_and_clear_defaults(root, page: Page, search_term: str) -> bool:
     if not _pick_country_suggestion(root, page, search_term):
         return False
@@ -7993,6 +8082,14 @@ def _pick_country_and_clear_defaults(root, page: Page, search_term: str) -> bool
         _remove_stale_default_locations(page, search_term)
     except Exception:
         pass
+    # The old remover above can report success on the wrong ✕; this is the
+    # check that decides. A default country left beside the target means the
+    # campaign spends in two markets, so it fails the step instead of passing.
+    left = _clear_other_locations(page, search_term)
+    if left:
+        _telemetry.record("audience_location", False, note="default_location_left",
+                          diag={"keep": search_term, "left": left[:5]})
+        return False
     return True
 
 
