@@ -4815,11 +4815,24 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         if picked:
             break
     if not picked:
+        # Разметка медиатеки — до отката, пока сетка такая, какой её видел
+        # клик. 16.09 вечером на S15 и Doc20 каждая плитка давала `before 0,
+        # after 0, tile_selected false`, а на Doc21 в те же минуты копия
+        # бралась; без снимка отличие не увидеть.
+        saved_page = None
+        try:
+            from src.fb_ads_rpa import page_capture as _pages
+
+            saved_page = _pages.capture(page, step="ad_creative_reuse_pick", diag={"picks": log})
+        except Exception:
+            pass
         # Кликали, но счётчик не двинулся. «Не двинулся» — это то, что мы
         # видим, а не то, что произошло: клик мог и зарегистрироваться, просто
         # позже. Поэтому не уходим молча, а снимаем за собой.
         clean = not clicked or _library_undo_selection(page, tiles, clicked, before)
         sight = _library_sight(page, filename)
+        if saved_page:
+            sight["page"] = saved_page
         sight.update({"tiles_found": available, "picks": log, "undone": clean})
         _telemetry.record(
             "ad_creative_reuse", False if not clean else None,
