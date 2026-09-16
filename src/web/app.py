@@ -2101,6 +2101,7 @@ async def api_accounts_overview() -> JSONResponse:
     """
     from src.analysis_agent.account_country import (
         country_from_stats,
+        linked_countries,
         primary_country,
         resolve_countries,
     )
@@ -2183,7 +2184,21 @@ async def api_accounts_overview() -> JSONResponse:
             country_by_alias = country_from_stats(list(frame.itertuples(index=False)))
     except Exception:
         country_by_alias = {}
-    _resolved = resolve_countries(country_by_alias, sheet_rows)
+    # Третий источник: то, что оператор соединил руками на дешборде.
+    #
+    # До 16.09 обзор его не читал вовсе, и аккаунт, подключённый к стране на
+    # этом же экране, мог показываться как «страны нет». Дальше он падал в
+    # «Available accounts», где у строки нет ни ячейки спенда, ни кнопки Read —
+    # то есть прочитать его было нельзя никак. Так вёл себя Doc19: связь на
+    # диске была, обзор её не спрашивал (ACL-1196).
+    try:
+        from src.web import account_links as _links
+
+        by_link = linked_countries(_links.all_pairs("country"))
+    except Exception:
+        by_link = {}
+
+    _resolved = resolve_countries(country_by_alias, sheet_rows, by_link)
     country_by_alias = primary_country(_resolved)
 
     selected_cm = (get_selected_cm() or "").strip()
@@ -2216,7 +2231,18 @@ async def api_accounts_overview() -> JSONResponse:
             # market someone might build a campaign for.
             "countries": _resolved.get(normalize_account_alias(label), {}).get("countries", []),
             "country_ambiguous": _resolved.get(normalize_account_alias(label), {}).get("ambiguous", False),
-            "country": row.get("country_code") or "",
+            # Разрешённая страна вперёд, строка таблицы — запасным.
+            #
+            # До 16.09 здесь была только строка, и аккаунт со связью, но без
+            # строки, оставался без страны совсем (Doc19, ACL-1196). Обратный
+            # порядок тоже нельзя: у аккаунта с ДВУМЯ названными странами
+            # разрешение честно отвечает пустотой, пока статистика не выберет
+            # одну, — и тогда запасной ответ лучше пустого.
+            "country": (
+                country_by_alias.get(normalize_account_alias(label), "")
+                or row.get("country_code")
+                or ""
+            ),
             "stock": row.get("stock") or "",
             "status": row.get("account_status") or "",
             "ad_account_id": ad_id,

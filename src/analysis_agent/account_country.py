@@ -87,8 +87,27 @@ def sheet_countries(sheet_rows: Iterable[dict]) -> dict[str, list[str]]:
     return live
 
 
+def linked_countries(links: Iterable[tuple[str, str]]) -> dict[str, list[str]]:
+    """{account key: countries} from what the operator connected by hand.
+
+    Takes (account label, country) pairs — `account_links.all_pairs("country")`
+    gives exactly that.
+    """
+    out: dict[str, list[str]] = {}
+    for label, country in links or []:
+        key = normalize_account_alias(str(label or ""))
+        name = str(country or "").strip()
+        if not key or not name:
+            continue
+        if name not in out.setdefault(key, []):
+            out[key].append(name)
+    return out
+
+
 def resolve_countries(
-    from_stats: dict[str, str], sheet_rows: Iterable[dict]
+    from_stats: dict[str, str],
+    sheet_rows: Iterable[dict],
+    linked: dict[str, list[str]] | None = None,
 ) -> dict[str, dict]:
     """{account key: {"country": str, "countries": [str], "ambiguous": bool}}.
 
@@ -101,12 +120,34 @@ def resolve_countries(
     account most recently ran is the one it is running now. When the stats do
     not name any of them, no country is picked — an invented answer here aims a
     campaign at a market.
+
+    **Three sources, and the order between them is the point.** What a person
+    stated — the sheet's country section and the links they made on the
+    dashboard — says where the account is *meant* to be. The stats say where it
+    has *been*, and only break ties between stated options. The suffix in the
+    account label is never a source: reading it produced seven false mismatches
+    out of twenty-four accounts on 2026-08-30, every one of them a stale name.
+
+    Links joined this list on 16.09. Until then an account connected to a
+    country on the dashboard could still report no country at all: the link was
+    on disk, the overview never read it, and the account fell into "Available
+    accounts" — a row with no spend cell and no Read button, so it could not be
+    read at all. Stated intent is stated intent whichever screen it was typed
+    on, so links sit beside the sheet rather than below the stats.
     """
     out: dict[str, dict] = {}
     by_sheet = sheet_countries(sheet_rows)
+    by_link = dict(linked or {})
 
-    for key in set(by_sheet) | set(from_stats):
-        listed = by_sheet.get(key, [])
+    for key in set(by_sheet) | set(from_stats) | set(by_link):
+        # Союз, а не победа одного над другим: аккаунт, названный и в таблице,
+        # и в связях, честно принадлежит обоим спискам. Несколько стран у
+        # одного аккаунта — обычное дело, а не исключение: ради этого и
+        # заведено пострановое чтение.
+        listed = list(by_sheet.get(key, []))
+        for name in by_link.get(key, []):
+            if name not in listed:
+                listed.append(name)
         recent = from_stats.get(key, "")
 
         if not listed:
