@@ -4870,10 +4870,23 @@ def _click_xpath(page: Page, xpath: str, *, scroll: bool = True) -> bool:
       const [xp, doScroll] = args;
       const it = document.evaluate(xp, document, null,
         XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+      // Visibility by computed style, not by `offsetParent`: an element
+      // inside a `position: fixed` container has offsetParent === null
+      // while being perfectly visible. The Advantage+ row sits in the
+      // fixed right-hand panel of the ad set editor — measured 2026-09-16:
+      // the same XPath clicked it on the saved page (no site CSS, nothing
+      // fixed) and matched nothing live, four runs in a row.
+      const shown = (e) => {
+        for (let n = e; n; n = n.parentElement) {
+          const s = getComputedStyle(n);
+          if (s.display === 'none' || s.visibility === 'hidden') return false;
+        }
+        return true;
+      };
       let best = null, bestArea = Infinity;
       for (let i = 0; i < it.snapshotLength; i++) {
         const el = it.snapshotItem(i);
-        if (!el || el.offsetParent === null) continue;
+        if (!el || !shown(el)) continue;
         const r = el.getBoundingClientRect();
         if (r.width <= 0 || r.height <= 0) continue;
         const area = r.width * r.height;
