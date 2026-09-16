@@ -142,3 +142,10 @@ def test_a_missing_placement_fails_and_leaves_nothing_saved(page):
 def test_the_card_with_only_account_controls_is_recognised(page):
     page.set_content(_html())
     assert md._placements_exclusion_removed(page) is True
+
+
+def test_a_row_playwright_calls_invisible_is_still_opened(page):
+    """Прогон 0054550ac608: `row.click` — TimeoutError на обоих аккаунтах."""
+    page.set_content(_html().replace('id="acrow"', 'id="acrow" style="height:0;overflow:hidden"'))
+    assert md.ensure_account_placement_exclusions(page, {}) is True
+    assert page.evaluate("window.log") == ["open", "review", "confirm"]
