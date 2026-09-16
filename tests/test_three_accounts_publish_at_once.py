@@ -152,6 +152,24 @@ def test_the_old_call_sites_still_get_the_run_id_for_free(tmp_path, monkeypatch)
     assert row["run_id"] == "run-Z" and row["campaign"] == "camp-Z"
 
 
+def test_the_old_dict_shaped_current_still_answers_for_this_thread():
+    """Открытые ветки читают `_telemetry._current.get("run_id")` (мемо
+    загрузки acl-1171); первое живое дерево с acl-1210 рядом с ней уронило
+    все загрузки на «no attribute '_current'» (прогон 86b7cd7edda9)."""
+    run_telemetry.set_current_run("run-compat", "camp")
+    assert run_telemetry._current.get("run_id") == "run-compat"
+    assert run_telemetry._current["campaign"] == "camp"
+    seen = {}
+
+    def other():
+        seen["id"] = run_telemetry._current.get("run_id")
+
+    t = threading.Thread(target=other); t.start(); t.join(5)
+    assert seen["id"] == "", "чужой поток увидел наш номер прогона через _current"
+    run_telemetry._current["run_id"] = "run-set"
+    assert run_telemetry.current_run_id() == "run-set"
+
+
 # ── диагностика загрузки — своя у каждого потока ──────────────────────────
 
 def test_upload_diagnostics_do_not_overwrite_each_other_across_threads():

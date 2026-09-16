@@ -9829,7 +9829,8 @@ window.cbPublishAll = function (onProgress) {
   _safeConfirm('Build every campaign as a draft?',
     'Accounts: <strong>' + forms.length + '</strong><br>'
     + '<span style="color:var(--muted);font-size:0.85rem">' + aclEscHtml(names.join(', ')) + '</span><br><br>'
-    + '<span style="color:var(--muted);font-size:0.85rem">One account at a time — the Multilogin profile is single. '
+    + '<span style="color:var(--muted);font-size:0.85rem">Accounts run at the same time, each in its own Multilogin profile; '
+    + 'two jobs on one profile queue. '
     + 'A campaign whose preview shows an error is skipped; the rest of its account still go.</span><br>'
     + '<span style="color:var(--warn);font-size:0.85rem">Не блокируйте экран, пока идёт сборка — '
     + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
@@ -9839,32 +9840,51 @@ window.cbPublishAll = function (onProgress) {
     { confirmLabel: 'Publish all → drafts' });
 };
 
+/* Все аккаунты уходят на сервер СРАЗУ (acl-1210), а не один за другим.
+ * До 16.09 очередь ждала конца каждого задания перед следующим — потому
+ * что публикация на сервере была одна на процесс. Теперь сервер сам
+ * ставит в очередь только задания на один и тот же профиль; разные
+ * профили идут разом. Превью по-прежнему гоняется перед каждой отправкой —
+ * последовательно, оно быстрое, — а вот ожидание результата общее: отчёт
+ * закрывается, когда закончилось последнее задание, в любом порядке.
+ *
+ * Первый живой запуск «Publish all» на параллельном сервере (14:01 16.09)
+ * дал одно задание — сервер ждал второго, а страница второго не слала. */
 function _runPublishQueue(forms, onProgress, onlySlot) {
   if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
   window.CB_QUEUE = { active:true, uncertain:false, progress:null };
   var notify = onProgress;
   onProgress = function(p) { window.CB_QUEUE.progress = p; notify(p); };
-  var i = 0;
   var report = [];
+  var submitted = 0;   // сколько форм прошли превью и отправку (или отпали)
+  var settled = 0;     // сколько заданий дошли до конца (или отпали)
+  var stopped = false;
 
-  function finish(entry) {
+  function settle(entry) {
     report.push(entry);
-    i += 1;
-    step();
-  }
-
-  function step() {
-    if (i >= forms.length) {
+    settled += 1;
+    onProgress({ at: settled, of: forms.length, account: entry.account, stage: 'settled', report: report });
+    if (settled >= forms.length && !stopped) {
       window.CB_QUEUE.active = false;
       onProgress({ done: true, at: forms.length, of: forms.length, report: report });
-      return;
     }
+  }
+
+  function halt(entry) {
+    stopped = true;
+    report.push(entry);
+    window.CB_QUEUE.active = false;
+    onProgress({ done: true, at: settled, of: forms.length, report: report });
+  }
+
+  function submit(i) {
+    if (i >= forms.length || stopped) return;
     var form = forms[i];
     var label = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
     onProgress({ at: i + 1, of: forms.length, account: label, stage: 'checking', report: report });
 
     window.cbPreview(form, function (plan, error, snapshot) {
-      if (error) { finish({ account: label, state: 'bad', why: error }); return; }
+      if (error) { settle({ account: label, state: 'bad', why: error }); submit(i + 1); return; }
 
       var verdict = cbSkipByName(form, plan);
       var skipped = verdict.broken + verdict.unchecked;
@@ -9872,10 +9892,11 @@ function _runPublishQueue(forms, onProgress, onlySlot) {
       if (onlySlot) form.querySelectorAll('.cb-slot').forEach(function(slot, index) { if (slot !== onlySlot) verdict.skip[index] = true; });
       var payload = cbFormDataSkipping(form, verdict.skip, snapshot);
       if (!payload.kept) {
-        finish({ account: label, state: 'bad', skipped: skipped,
+        settle({ account: label, state: 'bad', skipped: skipped,
                  why: verdict.unchecked && !verdict.broken
                    ? 'the check covered no campaign here'
                    : 'every campaign has errors — see the diagnostics' });
+        submit(i + 1);
         return;
       }
 
@@ -9897,29 +9918,31 @@ function _runPublishQueue(forms, onProgress, onlySlot) {
       fetch('/publish-jobs', { method: 'POST', body: fd })
         .then(function (r) { return r.json(); })
         .then(function (data) {
-          if (data.error) { finish({ account: label, state: 'bad', why: data.error, skipped: skipped }); return; }
+          if (data.error) { settle({ account: label, state: 'bad', why: data.error, skipped: skipped }); return; }
           if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');
           cbPollJob(data.job_id, statusPanel, form.querySelector('.cb-publish-btn'), function (job) {
             if (job.status === 'unknown' || job.status === 'cancelled') {
-              window.CB_QUEUE.active = false; window.CB_QUEUE.uncertain = job.status === 'unknown';
-              report.push({account:label, state:'bad', why:job.status === 'unknown' ? 'Job status lost; verify the account before starting another run' : 'Queue stopped by user'});
-              onProgress({done:true,at:i+1,of:forms.length,report:report}); return;
+              window.CB_QUEUE.uncertain = job.status === 'unknown';
+              halt({account:label, state:'bad', why:job.status === 'unknown' ? 'Job status lost; verify the account before starting another run' : 'Queue stopped by user'});
+              return;
             }
             var ok = !(job.errors || []).length && (job.results || []).length
               && (job.results || []).every(function (r) { return r.publishable === true; });
-            finish({ account: label, state: ok ? 'ok' : 'bad', skipped: skipped,
+            settle({ account: label, state: ok ? 'ok' : 'bad', skipped: skipped,
                      why: ok ? '' : 'draft blocked — see the account panel' });
           });
         })
         .catch(function (e) {
-          window.CB_QUEUE.active = false; window.CB_QUEUE.uncertain = true;
-          report.push({account:label,state:'bad',why:'Submission outcome unknown: '+e.message});
-          onProgress({done:true,at:i+1,of:forms.length,report:report});
+          window.CB_QUEUE.uncertain = true;
+          halt({account:label,state:'bad',why:'Submission outcome unknown: '+e.message});
         });
+      // Следующий аккаунт — сразу после отправки этого, не после его конца.
+      submitted += 1;
+      submit(i + 1);
     }, onlySlot);
   }
 
-  step();
+  submit(0);
 }
 
 // ── Диагностика превью: панель поверх дешборда (acl-704) ─────────────
