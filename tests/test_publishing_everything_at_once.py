@@ -1,8 +1,9 @@
 """«Publish all»: поднять черновиками всё собранное, кроме сломанного.
 
-Кнопка одна, а работ за ней столько, сколько аккаунтов. Профиль в
-Multilogin один, поэтому очередь идёт по одному: два аккаунта
-одновременно дрались бы за окно браузера.
+Кнопка одна, а работ за ней столько, сколько аккаунтов. С acl-1210 они
+уходят на сервер разом: у каждого аккаунта свой профиль Multilogin, а
+очередь на один и тот же профиль держит сервер. До 16.09 страница ждала
+конца каждой работы перед следующей — и была вторым замком.
 
 Кампания с ошибкой не уходит, но и не задерживает соседнюю: незаполненная
 карточка — не повод не поднять ту, что рядом и собрана. Единственная
@@ -62,11 +63,14 @@ def test_it_never_clicks_meta_publish():
     assert "fd.set('dry_run', '0')" in block
 
 
-def test_accounts_go_one_at_a_time():
-    """Профиль в Multilogin один. Две работы разом дрались бы за окно."""
+def test_accounts_are_sent_at_once_and_each_is_watched():
+    """Очередь — на сервере, по профилю. Страница шлёт всех и следит за каждым."""
     block = _block()
-    assert "cbPollJob(" in block, "следующий аккаунт начинается, не дождавшись прошлого"
+    assert "cbPollJob(" in block, "за работой перестали следить"
     assert "function _runPublishQueue" in block
+    queue = block[block.index("function _runPublishQueue"):]
+    assert "submit(i + 1);" in queue, "следующий аккаунт снова ждёт конца предыдущего"
+    assert "One account at a time" not in block, "подтверждение обещает очередь, которой больше нет"
 
 
 def test_the_owner_is_asked_once_and_told_what_will_happen():

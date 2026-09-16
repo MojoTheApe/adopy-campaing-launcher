@@ -141,19 +141,25 @@ def test_cancel_confirmation_and_active_queue_survive_repaint(ui):
     expect(p.locator('.cbd-publish-all')).to_be_enabled()
     state['status'] = 'running'
     all_confirm(p)
+    # Оба аккаунта уходят сразу (acl-1210); повторный «Publish all» поверх
+    # идущей очереди не добавляет ни одной работы.
     p.wait_for_function("CB_QUEUE.progress.stage === 'publishing'")
-    p.wait_for_timeout(100)
-    assert len(state['posts']) == 1
+    p.wait_for_timeout(300)
+    assert len(state['posts']) == 2
     p.evaluate('cbTree.paint(); cbPublishAll()')
     expect(p.locator('.cbd-publish-all')).to_be_disabled()
-    assert len(state['posts']) == 1
+    assert len(state['posts']) == 2
     state['status'] = 'done'
     p.wait_for_function('!CB_QUEUE.active', timeout=12000)
     assert [f['account_label'] for f in state['posts']] == ['Demo', 'Other']
 
 
 @pytest.mark.parametrize('status', ['missing', 'cancelled'])
-def test_lost_or_cancelled_job_stops_remaining_accounts(ui, status):
+def test_lost_or_cancelled_job_closes_the_queue_and_marks_it(ui, status):
+    # С acl-1210 оба аккаунта уходят на сервер сразу после своих превью —
+    # раньше, чем первый опрос состояния успевает ответить «отменено».
+    # Потерянная/отменённая работа закрывает очередь и помечает её; уже
+    # отправленные работы не трогает — у каждой свой Stop.
     p, state = ui
     add(p)
     add(p, account=1)
@@ -161,12 +167,12 @@ def test_lost_or_cancelled_job_stops_remaining_accounts(ui, status):
     state['status'] = status
     all_confirm(p)
     p.wait_for_function('window.CB_QUEUE && !CB_QUEUE.active')
-    assert len(state['posts']) == 1
+    assert len(state['posts']) == 2
     assert p.evaluate('CB_QUEUE.uncertain') is (status == 'missing')
     if status == 'missing':
         p.evaluate('cbPublishAll()')
         expect(p.locator('#sfc-ok')).to_have_count(0)
-        assert len(state['posts']) == 1
+        assert len(state['posts']) == 2
 
 
 def test_edit_during_preview_completes_without_submitting_stale_values(ui):
