@@ -5288,23 +5288,6 @@ def upload_ad_creative(
     if get_reuse_library_media() and _try_reuse_library_media(page, Path(creative_path).name):
         return True
 
-    # Clear the library search box before uploading. The reuse attempt just
-    # above types the filename into it; when reuse fails the filter STAYS,
-    # and the freshly uploaded file lands in a grid that is still filtered
-    # to a term matching nothing — measured live 2026-08-04: "No images
-    # match your search", 0 tiles, "0 selected", Next aria-disabled, so the
-    # wizard could never be advanced and the media never attached.
-    try:
-        search_box = page.get_by_placeholder(re.compile(r"Search media", re.I)).first
-        if search_box.count() and (search_box.input_value(timeout=1500) or "").strip():
-            handle = _focus_via_cdp_click(page, search_box)
-            if handle is not None:
-                page.keyboard.press("Control+A")
-                page.keyboard.press("Delete")
-                _sleep_h(1.2)
-    except Exception:
-        pass
-
     # Trusted click here too: a Playwright locator click on this panel gets
     # rejected as "not stable" the same way the trigger did (2026-08-04), so
     # the file chooser never opens and the whole step fails after the wizard
@@ -5317,7 +5300,6 @@ def upload_ad_creative(
     # runs continue into a wizard that could never be advanced. Verify the
     # observable result — a tile captioned with the filename — and re-upload
     # if it never shows.
-    _upload_name = Path(creative_path).name
     _tile_present_js = r"""
         (name) => [...document.querySelectorAll('*')]
           .filter(e => e.offsetParent !== null && e.children.length === 0)
@@ -5342,8 +5324,66 @@ def upload_ad_creative(
         "size_mb": 0.0,
         "attempts": [],
     }
+    # Тяжёлый ролик сжимается ДО того, как мы что-то решаем про пути загрузки
+    # (acl-1189). Замер 15.09: 247 МБ уходят в Meta порциями 2.8 МБ в минуту,
+    # то есть полтора часа при бюджете шага в девять минут. Тот же ролик в 24
+    # МБ едет обычной дорогой за минуту. Оригинал при этом не трогается —
+    # сжатое живёт в машинном кэше.
+    try:
+        from src.fb_ads_rpa import creative_compress
+
+        prepared = (creative_compress.ensure_uploadable(creative_path) if is_video
+                    else creative_compress.Prepared(creative_path,
+                         creative_compress.size_mb(creative_path),
+                         creative_compress.size_mb(creative_path)))
+        _diag["prepared"] = {
+            "original_mb": round(prepared.original_mb, 1),
+            "sent_mb": round(prepared.sent_mb, 1),
+            "compressed": prepared.compressed,
+            "seconds": round(prepared.seconds, 3),
+            "note": prepared.note,
+        }
+        if prepared.compressed:
+            # Оператор собирал кампанию из своего файла. Если уехала копия, он
+            # узнаёт об этом здесь, а не постфактум из кабинета.
+            _telemetry.record("ad_creative_compressed", True, note=prepared.note,
+                              diag=_diag["prepared"])
+            creative_compress.report_preparation(creative_path, prepared)
+            creative_path = prepared.path
+        elif prepared.reason:
+            _telemetry.record("ad_creative_compressed", None, note=prepared.reason,
+                              diag=_diag["prepared"])
+            creative_compress.report_preparation(creative_path, prepared)
+    except Exception as exc:  # сжатие — удобство, а не условие работы шага
+        _diag["prepared_error"] = f"{type(exc).__name__}: {exc}"[:160]
+
     try:
         _diag["size_mb"] = round(Path(creative_path).stat().st_size / (1024 * 1024), 1)
+    except Exception:
+        pass
+
+    # Compression changes the library caption. Keep original-name reuse above,
+    # then also look for an already uploaded derived copy when reuse is enabled.
+    if (Path(creative_path).name != _diag["file"] and get_reuse_library_media()
+            and _try_reuse_library_media(page, Path(creative_path).name)):
+        _diag["reused"] = True
+        _LAST_UPLOAD_DIAG = _diag
+        return True
+
+    # Clear the library search box before uploading. The reuse attempt just
+    # above types the filename into it; when reuse fails the filter STAYS,
+    # and the freshly uploaded file lands in a grid that is still filtered
+    # to a term matching nothing — measured live 2026-08-04: "No images
+    # match your search", 0 tiles, "0 selected", Next aria-disabled, so the
+    # wizard could never be advanced and the media never attached.
+    try:
+        search_box = page.get_by_placeholder(re.compile(r"Search media", re.I)).first
+        if search_box.count() and (search_box.input_value(timeout=1500) or "").strip():
+            handle = _focus_via_cdp_click(page, search_box)
+            if handle is not None:
+                page.keyboard.press("ControlOrMeta+A")
+                page.keyboard.press("Delete")
+                _sleep_h(1.2)
     except Exception:
         pass
 
@@ -5358,6 +5398,7 @@ def upload_ad_creative(
         except Exception:
             pass
 
+    _upload_name = Path(creative_path).name
     landed = False
     for _attempt in range(3):
         # Hand the file straight to the hidden <input type=file> instead of
