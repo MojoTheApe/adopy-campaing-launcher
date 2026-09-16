@@ -8646,7 +8646,159 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
     return False
 
 
+def _advantage_plus_audience_on(page: Page) -> bool | None:
+    """Is the ad set's audience in Advantage+ mode right now?
+
+    Two tells, either is enough: the "Advantage+ on" badge on the Audience
+    card, or the "Advantage+ leads campaign" switch reading checked. None
+    when neither control can be found at all — unknown is not "off".
+
+    Live run `ceab1a4bf031` (2026-09-16): the age step ran with both tells
+    on screen, clicked 35, and the dropdowns stayed at 18–65+. In that mode
+    the age controls are Advantage+ suggestions, not a hard range.
+    """
+    js = r"""
+    () => {
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const leaves = [...document.querySelectorAll('*')]
+        .filter(e => e.offsetParent !== null && e.children.length === 0);
+      let seen = false;
+      for (const e of leaves) {
+        const t = norm(e.textContent);
+        if (t === 'advantage+ on') return true;
+        if (t === 'advantage+ off') seen = true;
+      }
+      for (const el of document.querySelectorAll('*')) {
+        if (!el.offsetParent) continue;
+        const t = norm(el.textContent).slice(0, 80);
+        if (!t.includes('advantage+ leads')) continue;
+        let node = el;
+        for (let i = 0; i < 6 && node; i++, node = node.parentElement) {
+          const sw = node.querySelector('[role=switch], input[type=checkbox], [aria-checked]');
+          if (!sw || !sw.offsetParent) continue;
+          seen = true;
+          if (sw.getAttribute('aria-checked') === 'true' || sw.checked === true) return true;
+          break;
+        }
+      }
+      return seen ? false : null;
+    }
+    """
+    for root in _roots(page):
+        try:
+            got = root.evaluate(js)
+        except Exception:
+            continue
+        if got is not None:
+            return bool(got)
+    return None
+
+
+def _ensure_manual_audience(page: Page) -> bool | None:
+    """Leave Advantage+ audience mode before touching the age controls.
+
+    Returns the state AFTER: False = manual, True = still Advantage+, None =
+    could not tell. Records its own telemetry row either way, so a run where
+    the switch-off did not hold can be told from one where it was never
+    attempted — until 2026-09-16 nothing recorded either.
+
+    The conversion step already switches Advantage+ off ("Advantage+ On
+    forces Website and instant forms"), and on three of four runs that held.
+    On the fourth it was On again by the age step. Checking here, right
+    before the control that depends on it, is cheaper than working out why.
+    """
+    before = _advantage_plus_audience_on(page)
+    if before is not True:
+        _telemetry.record("advantage_plus_off", None,
+                          note="already_off" if before is False else "not_found")
+        return before
+    flipped = _turn_off_advantage_plus_leads(page)
+    if not flipped:
+        # Newer layout: the Audience card offers a link out of Advantage+
+        # audience rather than a switch. Best effort, verified below.
+        _click_xpath(
+            page,
+            "//*[self::a or @role='button' or @role='link' or self::button]"
+            "[contains(normalize-space(.), 'Switch to original audience')]",
+        )
+    _sleep_h(0.8)
+    after = _advantage_plus_audience_on(page)
+    _telemetry.record("advantage_plus_off", after is not True,
+                      note="switched" if after is not True else "still_on",
+                      diag={"flipped_switch": flipped})
+    return after
+
+
+_AGE_VALUE_RE = re.compile(r"^\d{2}\+?$")
+
+
+def _age_triggers_read(page: Page) -> list[str]:
+    """What the two closed age dropdowns show right now, e.g. ['18', '65+'].
+
+    Visible leaves that look like an age value, inside the Age row (the
+    nearest ancestor of the "Age" label that holds two of them), and not
+    inside an open listbox. Empty when the row cannot be found.
+    """
+    js = r"""
+    () => {
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+      const isAge = (t) => /^\d{2}\+?$/.test(t);
+      const leaves = [...document.querySelectorAll('*')]
+        .filter(e => e.offsetParent !== null && e.children.length === 0);
+      const label = leaves.find(e => /^(Age|Edad)$/i.test(norm(e.textContent)));
+      if (!label) return [];
+      let node = label;
+      for (let i = 0; i < 8 && node; i++, node = node.parentElement) {
+        const vals = [...node.querySelectorAll('*')]
+          .filter(e => e.offsetParent !== null && e.children.length === 0
+                    && !e.closest('[role=listbox]') && isAge(norm(e.textContent)))
+          .map(e => norm(e.textContent));
+        if (vals.length >= 2) return vals.slice(0, 2);
+      }
+      return [];
+    }
+    """
+    for root in _roots(page):
+        try:
+            got = root.evaluate(js)
+        except Exception:
+            continue
+        if got:
+            return [str(v) for v in got]
+    return []
+
+
 def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
+    """Set the audience age range, and only say so when the page shows it.
+
+    Three parts since 2026-09-16, each answering a question the old single
+    function did not:
+
+    * Is the audience in Advantage+ mode? Then the age controls are
+      suggestions and a click on 35 does not take (run `ceab1a4bf031`).
+      Switch it off first, and record whether that held.
+    * Set the two dropdowns — `_fill_audience_age_controls`, the previous
+      body unchanged.
+    * What do the dropdowns show now? "clicked 35" and "shows 35" are
+      different facts, and only the first was ever logged. A mismatch is a
+      failure with both numbers in the diagnostic.
+    """
+    state = _ensure_manual_audience(page)
+    if state is True:
+        _telemetry.record("audience_age", False, note="advantage_plus_still_on")
+        return False
+    if not _fill_audience_age_controls(page, age_min, age_max):
+        return False
+    wanted = [str(age_min), str(age_max) if age_max < 65 else "65+"]
+    seen = _age_triggers_read(page)
+    if seen and seen != wanted:
+        _telemetry.record("audience_age", False, note="read_back_mismatch",
+                          diag={"wanted": wanted, "seen": seen})
+        return False
+    return True
+
+
+def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
     """Set audience age range dropdowns / inputs (min and max)."""
     # Same reasoning as fill_audience_location: skip the fuzzy
     # scroll_to_section heading match — the precise marker search a few
