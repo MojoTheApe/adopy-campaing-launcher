@@ -89,3 +89,17 @@ def test_nothing_to_clear_is_clean(page):
     page.evaluate("document.querySelector('.grp[data-c=\"United States\"]').remove()")
     assert md._clear_other_locations(page, "Guatemala") == []
     assert page.evaluate("window.clicked") == []
+
+
+# ── площадки: карточка, на которой Meta убрала ручной выбор (16.09) ─────────
+
+def test_the_card_without_manual_placements_is_recognised(page):
+    page.set_content(
+        "<div role=heading>Placements</div><div>Advantage+ on</div>"
+        "<div role=heading>Changes to placement settings are coming soon</div>"
+        "Excluding placements or platforms will\n no longer be available for your ad sets."
+        "<div>Account controls</div><div>Excluded placements: None</div>"
+    )
+    assert md._placements_exclusion_removed(page) is True
+    page.set_content("<div>Placements</div><div>Feeds</div><div>Stories, Status, Reels</div>")
+    assert md._placements_exclusion_removed(page) is False

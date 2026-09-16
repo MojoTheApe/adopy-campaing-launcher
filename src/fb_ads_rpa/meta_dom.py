@@ -3330,6 +3330,19 @@ _SUBITEMS_OFF = (
 )
 
 
+def _placements_exclusion_removed(page: Page) -> bool:
+    """Карточка Placements, на которой Meta убрала ручной выбор площадок."""
+    try:
+        return bool(page.evaluate(
+            """() => {
+              const t = (document.body.textContent || '').replace(/\\s+/g, ' ');
+              return /Excluding placements or platforms will no longer be available/i.test(t);
+            }"""
+        ))
+    except Exception:
+        return False
+
+
 def fill_placements(page: Page, report: dict | None = None) -> bool:
     """Выставить ручные площадки вместо автоматических Advantage+.
 
@@ -4069,6 +4082,19 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         report["category_rows"] = rows
         _dbg.append("rows=" + json.dumps(rows, ensure_ascii=False)[:4000])
         report["why"] = f"видно {seen} категорий из {len(_PLACEMENT_CATEGORIES)}"
+        # 16.09, 17:26–18:53: карточка без единого контрола — «Advantage+ on»,
+        # «Placement value rules», «Account controls · Excluded placements:
+        # None» и объявление Meta «Excluding placements or platforms will no
+        # longer be available for your ad sets». Кликать там нечего; в том же
+        # кабинете соседнее ad set ещё получало старую карточку (17:41 PF ok).
+        # Отличаем это от промаха селектора, чтобы оператор видел причину.
+        if _placements_exclusion_removed(page):
+            report["why"] = "manual_placements_removed_by_meta"
+            report["notice"] = (
+                "Meta no longer offers manual placements for this ad set: "
+                "placements stay automatic (Advantage+ on). Placement exclusions "
+                "now live in the ad account's Account controls."
+            )
         _dump_dbg()
         return False
 
@@ -6597,6 +6623,21 @@ def mark_ad_copy_field(
         return False
 
 
+def _handle_text(handle) -> str:
+    try:
+        return str(handle.evaluate(
+            "el => el.value !== undefined ? el.value : (el.innerText || el.textContent || '')"
+        ) or "")
+    except Exception:
+        return ""
+
+
+def _copy_matches(seen: str, expected: str) -> bool:
+    """Сравнение текста объявления без учёта пробелов, переносов и U+200B."""
+    squash = lambda s: re.sub(r"[\s​﻿]+", "", s or "")
+    return squash(seen) == squash(expected)
+
+
 def fill_ad_copy(
     page: Page, ad_title: str, ad_body: str, report: dict | None = None
 ) -> bool:
@@ -6632,6 +6673,37 @@ def fill_ad_copy(
             ))
         except Exception:
             return False
+
+    def _handle_shows(handle, expected: str) -> bool:
+        """Поле показывает ровно тот текст, что мы вводили (пробелы не в счёт).
+
+        «Непусто» — не проверка: 16.09 18:53, три браузера разом, в заголовок
+        легло «★★★★☆.6k» вместо заголовка целиком, часть нажатий пропала, а
+        шаг принял это за успех. Основной текст в том же прогоне — пустой.
+        """
+        return _copy_matches(_handle_text(handle), expected)
+
+    def _type_and_confirm(handle, text: str) -> bool:
+        """Набрать; если экран показывает не то — стереть и вставить целиком.
+
+        Вставка `insert_text` не теряет символов (одна операция, без
+        отдельных нажатий), поэтому она — запасной путь, когда нажатия
+        потерялись.
+        """
+        _type_human(page, text)
+        _sleep_h(0.4)
+        if _handle_shows(handle, text):
+            return True
+        report["attempts"].append({"stage": "typed_text_mismatch", "seen": _handle_text(handle)[:80]})
+        try:
+            handle.focus()
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Backspace")
+            page.keyboard.insert_text(text)
+        except Exception:
+            return False
+        _sleep_h(0.4)
+        return _handle_shows(handle, text)
 
     # Both fields verified post-insert — Playwright's own click can report
     # success under connect_over_cdp without the page actually receiving
@@ -6674,9 +6746,7 @@ def fill_ad_copy(
             if count:
                 handle = _click_via_cdp_handle(primary_box)
                 if handle is not None:
-                    _type_human(page, ad_body)
-                    _sleep_h(0.4)
-                    if _handle_has_content(handle):
+                    if _type_and_confirm(handle, ad_body):
                         return True
                     _dump_stage("primary_text", "content_check_failed_after_insert", {"count": count})
                 else:
@@ -6695,9 +6765,7 @@ def fill_ad_copy(
                 handle = _click_via_cdp_handle(headline_box)
                 if handle is not None:
                     page.keyboard.press("Control+A")
-                    _type_human(page, ad_title)
-                    _sleep_h(0.4)
-                    if _handle_has_content(handle):
+                    if _type_and_confirm(handle, ad_title):
                         return True
                     _dump_stage("headline", "content_check_failed_after_insert", {"count": count})
                 else:
@@ -8352,13 +8420,21 @@ def paste_targeting_interests(page: Page, targeting_label: str) -> bool:
         page.get_by_text("Verifying your edits", exact=False).first.wait_for(state="hidden", timeout=8000)
     except Exception:
         pass
-    first_term = text.split(",")[0].strip()
-    if not first_term:
-        return False
-    try:
-        return bool(page.get_by_text(first_term, exact=False).first.is_visible())
-    except Exception:
-        return False
+    # Any term of the pasted list showing up counts, not only the first. Meta
+    # resolves each name on its own and silently drops the ones it does not
+    # know: the second Mix group starts with "Frequent international
+    # travelers", which never appears, while Business class, Business jet,
+    # FirstClass, Horse racing and luxury all did (Doc20, 18:51, operator-
+    # visible "and must also match" group full) — and the step reported
+    # `group_not_added`.
+    terms = [t.strip() for t in text.split(",") if t.strip()]
+    for term in terms:
+        try:
+            if page.get_by_text(term, exact=False).first.is_visible():
+                return True
+        except Exception:
+            continue
+    return False
 
 
 # ── Country code → search name mapping ───────────────────────────────────────
