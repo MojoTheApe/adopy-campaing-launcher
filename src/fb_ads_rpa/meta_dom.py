@@ -4623,6 +4623,22 @@ def _library_undo_selection(page: Page, tiles, clicked: list[int], before: int) 
     return _library_selected_count(page) <= before
 
 
+def _library_tile_selected(tile) -> bool:
+    """Does this tile say it is selected — by its own ARIA state or a checked
+    box inside it? False when it cannot say (a double without attributes,
+    a detached handle), so the counter test still decides on its own."""
+    try:
+        for attr in ("aria-pressed", "aria-checked", "aria-selected"):
+            if (tile.get_attribute(attr) or "").strip().lower() == "true":
+                return True
+        box = tile.locator("input[type=checkbox]").first
+        if box.count() and box.is_checked():
+            return True
+    except Exception:
+        return False
+    return False
+
+
 def _library_search(page: Page, filename: str) -> bool:
     """Filter the media library grid down to `filename` before picking one.
 
@@ -4783,10 +4799,17 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         clicked.append(i)
         for _ in range(10):  # ~3s
             _sleep_h(0.3)
-            if _library_selected_count(page) > before:
+            # The counter growing is the old test, written for an empty
+            # grid. On a live page it already reads 1 before we arrive
+            # (acl-1192: six clicks, `before: 1, after: 1, took: false`,
+            # every one of them), and a choice is exclusive — it cannot
+            # grow. So the tile's own word counts too: a tile that reports
+            # itself selected after our click is our pick.
+            if _library_selected_count(page) > before or _library_tile_selected(tile):
                 picked = True
                 break
         note["after"] = _library_selected_count(page)
+        note["tile_selected"] = _library_tile_selected(tile)
         note["took"] = picked
         log.append(note)
         if picked:
@@ -4926,8 +4949,18 @@ def upload_ad_creative_with_retry(
     # единственный работающий путь для объявлений 2 и 3.
     known = upload_already_failed(creative_path) or upload_already_succeeded(creative_path)
     if known:
-        verdict = reuse_before_upload(page, creative_path)
-        if verdict is True:
+        # Through the wizard, not straight at the library. The library lives
+        # on the wizard's Media step; asked on the bare ad page it has no
+        # search box and no tiles, and answered "not_in_library" for every
+        # second ad of 2026-09-16 (three batches, run 26f3ab66f66f among
+        # them) — the copy was there, the dialog was not.
+        try:
+            attached = upload_ad_creative(
+                page, creative_type, creative_path, edit_url=edit_url, reuse_only=True
+            )
+        except Exception:
+            attached = False
+        if attached:
             return True
         why = ("same_file_already_uploaded_this_run"
                if upload_already_succeeded(creative_path)
@@ -5338,7 +5371,8 @@ def _close_creative_setup_modal(page: Page) -> bool:
 
 
 def upload_ad_creative(
-    page: Page, creative_type: str, creative_path: str, *, edit_url: str = ""
+    page: Page, creative_type: str, creative_path: str, *, edit_url: str = "",
+    reuse_only: bool = False,
 ) -> bool:
     """Set up creative -> Video/Image ad -> Media -> upload the real file.
 
@@ -5523,6 +5557,15 @@ def upload_ad_creative(
     verdict = reuse_before_upload(page, creative_path)
     if verdict is not None:
         return verdict
+    if reuse_only:
+        # The memo said this file already went up in this run, so a second
+        # upload is pointless (Meta refuses it) — the library was the only
+        # way, and it had no copy. Leave the ad as it was and say so; the
+        # caller records the refusal by name.
+        _close_creative_setup_modal(page)
+        _telemetry.record("ad_creative_reuse", None, note="library_has_no_copy",
+                          diag={"file": Path(creative_path).name})
+        return False
 
     # Clear the library search box before uploading. The reuse attempt just
     # above types the filename into it; when reuse fails the filter STAYS,
