@@ -110,6 +110,43 @@ def test_define_further_that_does_not_open_a_group_fails_the_step(page):
     assert any(s.action == "define_further" and not s.ok for s in player.result.steps)
 
 
+# ── путь, которым идёт живой поток: вставка группы целиком ────────────────
+# Живой прогон 17:29 показал: записанный поток не зовёт `_run_targeting`, он
+# вставляет строку таргета через `paste_targeting_interests`. Проверяем его.
+
+_PASTE_PAGE = _PAGE.replace(
+    "document.addEventListener('input'",
+    """document.addEventListener('paste', (e) => {
+    window.filled.push([e.target.dataset.group, e.clipboardData.getData('text/plain')]);
+    const chip = document.createElement('div');
+    chip.textContent = e.clipboardData.getData('text/plain').split(',')[0].trim();
+    e.target.parentElement.appendChild(chip);
+  });
+  document.addEventListener('input'""",
+)
+
+
+def test_the_live_paste_path_puts_each_group_into_its_own_field(page, monkeypatch):
+    page.set_content(_PASTE_PAGE)
+    page.focus("input[data-group='1']")
+    monkeypatch.setattr(md, "_telemetry", type("T", (), {"record": staticmethod(lambda *a, **k: None)})())
+    ok = md.paste_targeting_groups(
+        page, "Investment banking, Asset management [AND] Business jet, Yacht club"
+    )
+    assert ok is True
+    assert page.evaluate("window.filled") == [
+        ["1", "Investment banking, Asset management"],
+        ["2", "Business jet, Yacht club"],
+    ]
+
+
+def test_the_group_splitter_reads_all_three_spellings():
+    assert md.targeting_groups("A, B [AND] C") == ["A, B", "C"]
+    assert md.targeting_groups("A | B") == ["A", "B"]
+    assert md.targeting_groups("A \\ B") == ["A", "B"]
+    assert md.targeting_groups("Day trading, FxPro") == ["Day trading, FxPro"]
+
+
 def test_the_click_is_confirmed_by_a_new_field_not_by_the_click(page):
     assert md.targeting_input_count(page) == 1
     assert md.click_define_further(page) is True
