@@ -4912,16 +4912,28 @@ def upload_ad_creative_with_retry(
     report False forever — once media is attached, the "Set up creative"
     button this function waits for no longer exists).
     """
-    # Повторное использование медиатеки проверяем ДО быстрого отказа: копия
-    # могла появиться там от соседнего объявления, и тогда файл вообще никуда
-    # не поедет. Быстрый отказ — только про повторную ЗАГРУЗКУ.
-    if upload_already_failed(creative_path):
+    # Повторно тот же файл не заливаем — ни после неудачи, ни после удачи.
+    #
+    # После неудачи очевидно. После УДАЧИ — потому что Meta не принимает
+    # вторую заливку того же файла в тот же кабинет: первое объявление
+    # загружается, все следующие висят на `progress: 0` и отказывают
+    # (проверено на двух кампаниях 15.09). Замер того же дня:
+    # `ad2_creative_upload` — 130 секунд в среднем и сто процентов впустую,
+    # а всего на заведомо безнадёжные заливки ушло 35 минут из 83.
+    #
+    # Медиатеку спрашиваем в обоих случаях и ДО отказа: копия могла появиться
+    # от соседнего объявления, и тогда файл вообще никуда не поедет — это
+    # единственный работающий путь для объявлений 2 и 3.
+    known = upload_already_failed(creative_path) or upload_already_succeeded(creative_path)
+    if known:
         verdict = reuse_before_upload(page, creative_path)
         if verdict is True:
             return True
+        why = ("same_file_already_uploaded_this_run"
+               if upload_already_succeeded(creative_path)
+               else "same_file_already_failed_this_run")
         _telemetry.record(
-            "ad_creative_upload", False,
-            note="same_file_already_failed_this_run",
+            "ad_creative_upload", False, note=why,
             diag={"file": Path(creative_path).name},
         )
         return False
@@ -4929,12 +4941,14 @@ def upload_ad_creative_with_retry(
     for attempt in range(attempts):
         try:
             if upload_ad_creative(page, creative_type, creative_path, edit_url=edit_url):
+                remember_upload_succeeded(creative_path)
                 return True
         except Exception:
             pass
         _close_creative_setup_modal(page)
         _sleep_h(0.8)
         if _verify_ad_media_present(page):
+            remember_upload_succeeded(creative_path)
             return True
         # Застрявшая загрузка — отдельная беда, и повтор на той же странице
         # её не лечит: состояние висит в этой же вкладке. Перезагружаем
@@ -4975,6 +4989,33 @@ def _upload_memo_key(creative_path: str) -> tuple[str, str]:
 
 def _remember_upload_failed(creative_path: str) -> None:
     _failed_uploads.add(_upload_memo_key(creative_path))
+
+
+#: Файлы, которые в этом прогоне уже успешно загрузились.
+#:
+#: Замер 15.09 по восьми живым прогонам: 83 минуты всего, **39 (47%) впустую**,
+#: и почти всё — объявления 2 и 3, заливающие файл, который Meta уже не
+#: примет. `ad2_creative_upload` — 130 секунд в среднем, **сто процентов
+#: впустую**.
+#:
+#: Meta не берёт повторную заливку того же файла в тот же кабинет: первое
+#: объявление загружается, все следующие висят на `progress: 0` и отказывают.
+#: Проверено на двух кампаниях подряд. Значит второй раз пытаться незачем — не
+#: ради экономии трафика, а потому что шанса нет.
+_uploaded_ok: set[tuple[str, str]] = set()
+
+
+def remember_upload_succeeded(creative_path: str) -> None:
+    _uploaded_ok.add(_upload_memo_key(creative_path))
+
+
+def upload_already_succeeded(creative_path: str) -> bool:
+    """Этот файл уже уехал в этом прогоне?
+
+    Как и у неудач, память живёт в пределах прогона: в новом прогоне кабинет,
+    сеть и профиль другие, и переносить туда вывод нельзя.
+    """
+    return _upload_memo_key(creative_path) in _uploaded_ok
 
 
 def upload_already_failed(creative_path: str) -> bool:
