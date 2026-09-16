@@ -139,11 +139,12 @@ _MENU_PAGE = """
 <div id="card">
   <div>Audience</div>
   <span id="badge">Advantage+ on</span>
-  <div>
+  <div id="trig" role="button" tabindex="-1" onclick="openMenu()">
     <span role="heading">Advantage+ leads campaign</span>
     <span id="state">On</span>
-    <div id="trig" role="button" tabindex="0" onclick="openMenu()">Open</div>
+    <span role="presentation">⌄</span>
   </div>
+  <div role="button" id="close-btn" onclick="window.picked.push('CLOSE')">Close</div>
   <div id="menu" style="display:none">
     <div role="menuitem" onclick="pick('On')">On</div>
     <div role="menuitem" onclick="pick('Off')">Off — Turn off Advantage+</div>

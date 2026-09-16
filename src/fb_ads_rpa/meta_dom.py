@@ -8779,10 +8779,18 @@ def _pick_advantage_plus_leads_off(page: Page) -> bool:
         _pc.capture(page, step="advantage_plus_before")
     except Exception:
         pass
+    # The control is the row itself: a `role=button` (325×36) that CONTAINS
+    # the heading, its state text "On" and the chevron. Measured on the page
+    # captured right before the click (run b238c187884b, 15:29). Two earlier
+    # readings were wrong in instructive ways: a button reading "On" does
+    # not exist, and the first button AFTER the heading at that moment is
+    # the editor's **Close** at the bottom of the screen — the unscoped
+    # `following::` path clicked it. The ancestor is the one thing that is
+    # there whenever the heading is.
     opened = _click_xpath(
         page,
         "(//*[normalize-space(text())='Advantage+ leads campaign']"
-        "/following::*[@role='button'][1])[1]",
+        "/ancestor::*[@role='button'][1])[1]",
     )
     if not opened:
         return False
