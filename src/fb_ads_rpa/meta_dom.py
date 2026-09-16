@@ -8460,37 +8460,42 @@ def open_detailed_targeting_field(page: Page) -> bool:
     # info-icon div at all — click the header/row via CDP (the proven
     # pattern from Locations/Languages) then poll for the real input.
     targeting_placeholders = placeholders  # reuse the list already defined above
-    for root in _roots(page):
-        try:
-            heading = root.get_by_text(re.compile(r"^Detailed targeting$|^Segmentación detallada$", re.I)).first
-            heading.wait_for(state="visible", timeout=2000)
-            heading.scroll_into_view_if_needed(timeout=2000)
-            header_block = heading.locator("xpath=ancestor::*[2]")
-            row = heading.locator("xpath=ancestor::*[3]")
-            for candidate in (header_block, row):
-                try:
-                    box = candidate.bounding_box(timeout=1500)
-                    if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
-                        _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-                        break
-                except Exception:
-                    continue
-            break
-        except Exception:
-            continue
+    # Три захода, а не один. 16.09 22:49 (S15, 4b296e9963e1): клик пришёлся
+    # на момент, когда раскрытый Languages ещё перестраивал колонку, строка
+    # «Detailed targeting» осталась свёрнутой, и шаг сдался через 3 с.
+    for _attempt in range(3):
+        # Строка уже раскрылась, просто поздно — второй клик её свернул бы.
+        for root in ([] if _attempt and targeting_input_count(page) else _roots(page)):
+            try:
+                heading = root.get_by_text(re.compile(r"^Detailed targeting$|^Segmentación detallada$", re.I)).first
+                heading.wait_for(state="visible", timeout=2000)
+                heading.scroll_into_view_if_needed(timeout=2000)
+                header_block = heading.locator("xpath=ancestor::*[2]")
+                row = heading.locator("xpath=ancestor::*[3]")
+                for candidate in (header_block, row):
+                    try:
+                        box = candidate.bounding_box(timeout=1500)
+                        if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
+                            _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                            break
+                    except Exception:
+                        continue
+                break
+            except Exception:
+                continue
 
-    for _ in range(15):
-        _sleep_h(0.2)
-        for root in _roots(page):
-            for ph in targeting_placeholders:
-                try:
-                    inp = root.get_by_placeholder(ph).first
-                    if inp.count() and inp.is_visible():
-                        inp.click(timeout=3000)
-                        _sleep_h(0.3)
-                        return True
-                except Exception:
-                    continue
+        for _ in range(15):
+            _sleep_h(0.2)
+            for root in _roots(page):
+                for ph in targeting_placeholders:
+                    try:
+                        inp = root.get_by_placeholder(ph).first
+                        if inp.count() and inp.is_visible():
+                            inp.click(timeout=3000)
+                            _sleep_h(0.3)
+                            return True
+                    except Exception:
+                        continue
     return False
 
 
