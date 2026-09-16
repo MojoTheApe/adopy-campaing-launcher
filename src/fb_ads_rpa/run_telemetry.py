@@ -287,6 +287,34 @@ def clear_current_run() -> None:
     _current_var.set({"run_id": "", "campaign": ""})
 
 
+class _CurrentView:
+    """`_current` as callers knew it — a dict-like view of THIS thread's run.
+
+    Kept on purpose: open branches read `_telemetry._current.get("run_id")`
+    (the upload memo of acl-1171), and the first live tree that merged
+    acl-1210 next to it failed every upload with "no attribute '_current'"
+    (run 86b7cd7edda9, 2026-09-16 14:03). New code should call
+    `current_run_id()`; old code keeps working through this.
+    """
+
+    def get(self, key: str, default: str = "") -> str:
+        return _current_state().get(key, default) or default
+
+    def __getitem__(self, key: str) -> str:
+        return _current_state()[key]
+
+    def __setitem__(self, key: str, value: str) -> None:
+        state = dict(_current_state())
+        state[key] = value
+        _current_var.set(state)
+
+    def __contains__(self, key: str) -> bool:
+        return key in _current_state()
+
+
+_current = _CurrentView()
+
+
 def current_run_id() -> str:
     return _current_state().get("run_id") or ""
 
