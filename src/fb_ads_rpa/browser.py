@@ -1205,15 +1205,20 @@ class MultiloginAttachOnlyProvider:
                             stop_exc,
                         )
                         _kill_chrome_for_user_data_dir(udd, profile_id, mlx_only=True)
+                    else:
+                        # Said out loud so a log can tell the stop from the
+                        # kill: for weeks every run went through the kill and
+                        # nothing in the log distinguished the two.
+                        log.info("Profile %s stopped through the MLX API", profile_id)
                     time.sleep(3)
                     continue
                 raise RuntimeError(
-                    f"Не удалось запустить профиль {account_label!r} через MLX automation. "
+                    f"Could not start profile {account_label!r} through MLX automation. "
                     f"MLX API: {exc}"
                 ) from exc
         raise RuntimeError(
-            f"MLX API не вернул CDP-порт для {account_label!r}. "
-            f"Последняя ошибка: {last_exc}"
+            f"MLX API returned no CDP port for {account_label!r}. "
+            f"Last error: {last_exc}"
         )
 
     def open(self, entry: AccountMapEntry, account_label: str, *,
