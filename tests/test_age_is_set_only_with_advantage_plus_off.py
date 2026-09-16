@@ -165,6 +165,22 @@ _MENU_PAGE = """
 """
 
 
+def test_a_label_split_into_several_text_nodes_is_still_found(page, tmp_path):
+    """Так рендерит React: «Advantage+» и « leads campaign» — два текстовых
+    узла. `text()` видит только первый; сохранённый HTML склеивает их, поэтому
+    на дампе путь находил строку, а вживую — нет, пять прогонов подряд."""
+    page.set_content(_MENU_PAGE)
+    page.evaluate("""() => {
+      const h = document.querySelector('[role=heading]');
+      h.textContent = '';
+      h.appendChild(document.createTextNode('Advantage+'));
+      h.appendChild(document.createTextNode(' leads campaign'));
+    }""")
+    assert page.evaluate("document.querySelector('[role=heading]').childNodes.length") == 2
+    assert meta_dom._ensure_manual_audience(page) is False
+    assert page.evaluate("window.picked") == ["Off"]
+
+
 def test_a_row_inside_a_fixed_panel_is_still_clickable(page, tmp_path):
     """Живая раскладка: правая панель `position: fixed`, `offsetParent` у
     строки — null, а видна она прекрасно. Четыре прогона подряд путь не
