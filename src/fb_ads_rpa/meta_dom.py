@@ -5250,7 +5250,6 @@ def upload_ad_creative(
     # runs continue into a wizard that could never be advanced. Verify the
     # observable result — a tile captioned with the filename — and re-upload
     # if it never shows.
-    _upload_name = Path(creative_path).name
     _tile_present_js = r"""
         (name) => [...document.querySelectorAll('*')]
           .filter(e => e.offsetParent !== null && e.children.length === 0)
@@ -5283,20 +5282,28 @@ def upload_ad_creative(
     try:
         from src.fb_ads_rpa import creative_compress
 
-        prepared = creative_compress.ensure_uploadable(creative_path)
+        prepared = (creative_compress.ensure_uploadable(creative_path) if is_video
+                    else creative_compress.Prepared(creative_path,
+                         creative_compress.size_mb(creative_path),
+                         creative_compress.size_mb(creative_path)))
         _diag["prepared"] = {
             "original_mb": round(prepared.original_mb, 1),
             "sent_mb": round(prepared.sent_mb, 1),
             "compressed": prepared.compressed,
+            "seconds": round(prepared.seconds, 3),
             "note": prepared.note,
         }
         if prepared.compressed:
             # Оператор собирал кампанию из своего файла. Если уехала копия, он
             # узнаёт об этом здесь, а не постфактум из кабинета.
-            _telemetry.record("ad_creative_compressed", True, note=prepared.note)
+            _telemetry.record("ad_creative_compressed", True, note=prepared.note,
+                              diag=_diag["prepared"])
+            creative_compress.report_preparation(creative_path, prepared)
             creative_path = prepared.path
         elif prepared.reason:
-            _telemetry.record("ad_creative_compressed", None, note=prepared.reason)
+            _telemetry.record("ad_creative_compressed", None, note=prepared.reason,
+                              diag=_diag["prepared"])
+            creative_compress.report_preparation(creative_path, prepared)
     except Exception as exc:  # сжатие — удобство, а не условие работы шага
         _diag["prepared_error"] = f"{type(exc).__name__}: {exc}"[:160]
 
@@ -5316,6 +5323,7 @@ def upload_ad_creative(
         except Exception:
             pass
 
+    _upload_name = Path(creative_path).name
     landed = False
     for _attempt in range(3):
         # Hand the file straight to the hidden <input type=file> instead of
