@@ -12,7 +12,21 @@ log = logging.getLogger(__name__)
 
 
 def screenshot_dir(base: str | Path = "output/rpa_screenshots") -> Path:
+    """Where this run's pictures go: `<base>/<run_id>` while a run is on.
+
+    Two runs at once (acl-1210) would interleave in one folder; names are
+    timestamped so nothing is lost, but a run's pictures should read as one
+    sequence. Outside a run — the base folder, as before.
+    """
     p = Path(base)
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        run = _rt.current_run_id()
+    except Exception:
+        run = ""
+    if run and p.name != run:
+        p = p / run
     p.mkdir(parents=True, exist_ok=True)
     return p
 

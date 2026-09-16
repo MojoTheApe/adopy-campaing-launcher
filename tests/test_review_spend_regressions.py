@@ -111,16 +111,16 @@ def test_failed_thread_start_can_be_retried(monkeypatch):
 
 def test_read_and_probe_wait_for_publish_lease(monkeypatch):
     from src.web import publish_jobs
-    # Воротник один на всех: публикация держит его как писатель, чтение —
-    # как читатель. Прежде это был один и тот же `RLock`, и свойство
-    # «чтение ждёт публикацию» держалось само собой; теперь роли разные,
-    # и проверять его надо прямо (acl-113e).
-    assert publish_jobs._publish_serial is sp.browser_operation
+    # Замок один на профиль: публикация держит его на весь прогон, чтение
+    # того же профиля — на время чтения, и очередь у них общая (acl-113e →
+    # acl-1210). Ключ чтения «Acc» без карты — сам ярлык; публикация берёт
+    # тот же ключ тем же правилом.
+    assert publish_jobs._publish_serial is sp.publish_lease
     entered = threading.Event()
     def reader(a, f, t):
         entered.set()
         return sp.SpendReading(a, f, t, state="ok", spend=1)
-    with publish_jobs._publish_serial:
+    with publish_jobs._publish_serial(sp._profile_key("Acc")):
         sp.start_read("Acc", DAY, DAY, reader=reader)
         assert not entered.wait(.1)
     assert entered.wait(2)
@@ -128,7 +128,7 @@ def test_read_and_probe_wait_for_publish_lease(monkeypatch):
     entered.clear()
     monkeypatch.setattr(sp, "_probe_entry", lambda *a: entered.set())
     monkeypatch.setattr(sp, "_attach_only", lambda *a: (_ for _ in ()).throw(sp.ProfileNotAttachable("test")))
-    with publish_jobs._publish_serial:
+    with publish_jobs._publish_serial("profile-a"):
         thread = threading.Thread(target=sp.read_ad_account, args=("profile-a",))
         thread.start()
         assert not entered.wait(.1)

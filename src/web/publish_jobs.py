@@ -20,15 +20,16 @@ from typing import Any
 from config.paths import get_draft_status_path
 from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.draft import RpaPublishResult
-from src.fb_ads_rpa.rpa_publisher import RpaPublisher
-from src.fb_ads_rpa.operations import browser_operation
+from src.fb_ads_rpa.rpa_publisher import RpaPublisher, profile_key_for
+from src.fb_ads_rpa.operations import publish_lease
 from src.web.keep_awake import keep_display_awake
 
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
-# Serialises actual publishing across jobs/accounts — see _run_job.
-_publish_serial = browser_operation
+# Serialises publishing PER PROFILE — see _run_job. Two accounts on two
+# profiles run at once; two jobs on one profile still queue (acl-1210).
+_publish_serial = publish_lease
 _active_publishers: dict[str, RpaPublisher] = {}
 
 def _now_iso() -> str:
@@ -237,15 +238,16 @@ def _run_job(
     # async handler (Python 3.14+ ContextVar propagation via threading.Thread).
     _clear_inherited_asyncio_loop()
 
-    # One publish at a time, account-agnostic. Multi-account support
-    # (2026-07-31, user request) works by QUEUEING: launching builders for
-    # two accounts starts two jobs, and the second waits here in "queued"
-    # until the first finishes — never two Multilogin browsers driven at
-    # once. Parallel profiles are a later, deliberate step, not a default.
-    # The semaphore is held for the WHOLE run, not just the status flip.
+    # One publish at a time PER PROFILE. Until 2026-09-16 this was one at a
+    # time per process (2026-07-31: "parallel profiles are a later,
+    # deliberate step"); the owner took that step in acl-1210. Two accounts
+    # on two profiles run at once, each in its own thread with its own
+    # Playwright; two jobs on the same profile still queue here in "queued"
+    # until the first finishes — never two drivers on one browser. The lease
+    # is held for the WHOLE run, not just the status flip.
     with _jobs_lock:
         _jobs[job_id]["status"] = "queued"
-    with _publish_serial:
+    with _publish_serial(profile_key_for(account_label)):
         if _is_cancelled(job_id):
             _finish(job_id, cancelled=True)
             return
