@@ -3331,16 +3331,225 @@ _SUBITEMS_OFF = (
 
 
 def _placements_exclusion_removed(page: Page) -> bool:
-    """Карточка Placements, на которой Meta убрала ручной выбор площадок."""
+    """Карточка Placements, на которой Meta убрала ручной выбор площадок.
+
+    Два признака, любого достаточно. Объявление «Excluding placements or
+    platforms will no longer be available» было в дампе Doc20 (18:51), но в
+    живом Doc21 (22:35) его уже нет — там только строка «Account controls ·
+    Excluded placements: …». Зовётся лишь тогда, когда категорий не видно.
+    """
     try:
         return bool(page.evaluate(
             """() => {
               const t = (document.body.textContent || '').replace(/\\s+/g, ' ');
-              return /Excluding placements or platforms will no longer be available/i.test(t);
+              return /Excluding placements or platforms will no longer be available/i.test(t)
+                  || /Excluded placements:/i.test(t);
             }"""
         ))
     except Exception:
         return False
+
+
+#: Что исключается на уровне рекламного аккаунта. Это ровно те площадки из
+#: `_SUBITEMS_OFF`/«Apps and sites», которые Meta даёт исключить в окне
+#: «Placement controls for this ad account» (живое чтение Doc21, 16.09 22:35:
+#: Apps and sites → Audience Network native, banner and interstitial;
+#: Audience Network rewarded videos; Feeds → Facebook Marketplace; Facebook
+#: right column). Остальное из прежнего списка там не предлагается.
+_ACCOUNT_EXCLUDED_PLACEMENTS = (
+    "Audience Network native, banner and interstitial",
+    "Audience Network rewarded videos",
+    "Facebook Marketplace",
+    "Facebook right column",
+)
+
+_ACCOUNT_CONTROLS_DIALOG = "Placement controls for this ad account"
+_ACCOUNT_CONTROLS_SWITCH = "My business can only advertise on specific placements"
+
+
+def _account_controls_dialog(page: Page):
+    return page.locator("[role=dialog]").filter(has_text=_ACCOUNT_CONTROLS_DIALOG).last
+
+
+def _account_exclusion_boxes(page: Page) -> dict:
+    """Галочки окна Account controls по имени площадки: {имя: checked|None}.
+
+    Галочка берётся в ближайшем предке подписи, где она одна: у группы
+    («Apps and sites») их несколько, у строки площадки — одна.
+    """
+    js = r"""
+    ([dialogText, names]) => {
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+      const dlg = [...document.querySelectorAll('[role=dialog]')]
+        .filter(d => d.getBoundingClientRect().width > 0 && norm(d.textContent).includes(dialogText)).pop();
+      if (!dlg) return null;
+      const out = {};
+      for (const name of names) {
+        const leaf = [...dlg.querySelectorAll('*')].find(e => e.children.length === 0 && norm(e.textContent) === name);
+        if (!leaf) { out[name] = null; continue; }
+        let n = leaf, box = null;
+        for (let k = 0; k < 8 && n; k++) {
+          n = n.parentElement;
+          const boxes = n ? n.querySelectorAll('input[type=checkbox]:not([role=switch])') : [];
+          if (boxes.length === 1) { box = boxes[0]; break; }
+          if (boxes.length > 1) break;
+        }
+        if (box) { box.setAttribute('data-rpa-exclude', name); out[name] = box.checked; }
+        else out[name] = null;
+      }
+      return out;
+    }
+    """
+    try:
+        return page.evaluate(js, [_ACCOUNT_CONTROLS_DIALOG, list(_ACCOUNT_EXCLUDED_PLACEMENTS)]) or {}
+    except Exception:
+        return {}
+
+
+def _excluded_placements_summary(page: Page) -> str | None:
+    """Текст «Excluded placements: …» на карточке, без префикса."""
+    try:
+        return page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const el = [...document.querySelectorAll('*')].find(e =>
+                e.children.length === 0 && /^Excluded placements:/i.test(norm(e.textContent)));
+              return el ? norm(el.textContent).replace(/^Excluded placements:\s*/i, '') : null;
+            }"""
+        )
+    except Exception:
+        return None
+
+
+def ensure_account_placement_exclusions(page: Page, report: dict | None = None) -> bool:
+    """Исключить площадки на уровне рекламного аккаунта (Account controls).
+
+    Нужен там, где Meta убрала ручной выбор площадок у ad set (16.09): единственное
+    место, где их ещё можно исключить, — окно «Placement controls for this ad
+    account». Настройка общая для всех кампаний аккаунта; решение владельца —
+    ставить её автоматически (16.09, «давай автоматом, делай»).
+
+    Идемпотентен: если переключатель включён и все четыре площадки уже сняты,
+    окно закрывается через Cancel, ничего не меняя.
+    """
+    report = report if report is not None else {}
+
+    def _record(ok, note, **diag):
+        report.update({"account_exclusions": note, **diag})
+        _telemetry.record("account_placement_exclusions", ok, note=note, diag=diag or None)
+        return bool(ok)
+
+    report["summary_before"] = _excluded_placements_summary(page)
+
+    # 1. Строка «Account controls» — раскрывашка; внутри кнопка «Edit placement controls».
+    edit = page.get_by_role("button", name=re.compile(r"^Edit placement controls$", re.I))
+    if not edit.count():
+        row = page.locator("[role=button][aria-expanded]").filter(
+            has_text=re.compile(r"^\s*Account controls", re.I)
+        )
+        if not row.count():
+            return _record(False, "account_controls_row_not_found")
+        try:
+            row.first.scroll_into_view_if_needed(timeout=3000)
+            if (row.first.get_attribute("aria-expanded") or "") != "true":
+                row.first.click(timeout=3000)
+            _sleep_h(1.0)
+        except Exception as exc:
+            return _record(False, "account_controls_row_click_failed", error=type(exc).__name__)
+    try:
+        edit.first.click(timeout=5000)
+    except Exception as exc:
+        return _record(False, "edit_placement_controls_not_clickable", error=type(exc).__name__)
+
+    dialog = _account_controls_dialog(page)
+    try:
+        dialog.wait_for(state="visible", timeout=8000)
+    except Exception:
+        return _record(False, "dialog_did_not_open")
+
+    # 2. Переключатель «My business can only advertise on specific placements».
+    switch = dialog.get_by_label(_ACCOUNT_CONTROLS_SWITCH)
+    try:
+        if not switch.first.is_checked():
+            switch.first.click(force=True, timeout=3000)
+            _sleep_h(1.5)
+    except Exception as exc:
+        return _record(False, "switch_not_clickable", error=type(exc).__name__)
+
+    # 3. Снять четыре площадки.
+    before = _account_exclusion_boxes(page)
+    missing = [n for n, v in before.items() if v is None]
+    changed = []
+    for name, checked in before.items():
+        if checked:
+            try:
+                page.locator(f'[data-rpa-exclude="{name}"]').first.click(force=True, timeout=3000)
+                changed.append(name)
+                _sleep_h(0.5)
+            except Exception:
+                pass
+    after = _account_exclusion_boxes(page)
+    still_on = [n for n, v in after.items() if v]
+    if still_on or missing:
+        _cancel_account_controls(page)
+        return _record(False, "placements_not_unchecked", before=before, after=after, missing=missing)
+
+    if not changed:
+        _cancel_account_controls(page)
+        return _record(True, "already_excluded", after=after)
+
+    # 4. Review changes → подтверждение.
+    try:
+        dialog.get_by_role("button", name=re.compile(r"^Review changes$", re.I)).first.click(timeout=5000)
+    except Exception as exc:
+        _cancel_account_controls(page)
+        return _record(False, "review_not_clickable", error=type(exc).__name__, changed=changed)
+    _sleep_h(2.0)
+    try:
+        from src.fb_ads_rpa import page_capture as _pages
+
+        _pages.capture(page, step="account_controls_review", diag={"changed": changed})
+    except Exception:
+        pass
+    confirmed = None
+    for label in ("Confirm", "Save changes", "Save", "Apply", "Publish", "Update", "Done"):
+        btn = page.locator("[role=dialog]").get_by_role("button", name=re.compile(rf"^{label}$", re.I))
+        try:
+            if btn.count() and btn.last.is_visible():
+                btn.last.click(timeout=5000)
+                confirmed = label
+                break
+        except Exception:
+            continue
+    if not confirmed:
+        texts = _visible_dialog_texts(page)
+        return _record(False, "confirm_button_not_found", changed=changed, dialogs=texts)
+    _sleep_h(3.0)
+
+    # 5. Проверка: карточка больше не говорит «None».
+    summary = _excluded_placements_summary(page)
+    if summary is not None and summary.strip().lower() in ("", "none"):
+        return _record(False, "summary_still_none", changed=changed, confirmed=confirmed, summary=summary)
+    return _record(True, "excluded", changed=changed, confirmed=confirmed, summary=summary)
+
+
+def _cancel_account_controls(page: Page) -> None:
+    try:
+        _account_controls_dialog(page).get_by_role("button", name=re.compile(r"^Cancel$", re.I)).first.click(timeout=3000)
+        _sleep_h(0.8)
+    except Exception:
+        pass
+
+
+def _visible_dialog_texts(page: Page) -> list[str]:
+    try:
+        return page.evaluate(
+            r"""() => [...document.querySelectorAll('[role=dialog]')]
+                .filter(d => d.getBoundingClientRect().width > 0)
+                .map(d => (d.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 400))"""
+        )
+    except Exception:
+        return []
 
 
 def fill_placements(page: Page, report: dict | None = None) -> bool:
@@ -4089,12 +4298,19 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # кабинете соседнее ad set ещё получало старую карточку (17:41 PF ok).
         # Отличаем это от промаха селектора, чтобы оператор видел причину.
         if _placements_exclusion_removed(page):
+            # Решение владельца 16.09: исключения ставим сами — на уровне
+            # аккаунта, единственном, где Meta их ещё принимает.
+            _dump_dbg()
+            if ensure_account_placement_exclusions(page, report):
+                report["why"] = "excluded_at_account_level"
+                return True
             report["why"] = "manual_placements_removed_by_meta"
             report["notice"] = (
-                "Meta no longer offers manual placements for this ad set: "
-                "placements stay automatic (Advantage+ on). Placement exclusions "
-                "now live in the ad account's Account controls."
+                "Meta no longer offers manual placements for this ad set, and "
+                "the placement exclusions could not be set in the ad account's "
+                "Account controls."
             )
+            return False
         _dump_dbg()
         return False
 
