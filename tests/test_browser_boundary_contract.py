@@ -186,12 +186,22 @@ def test_everyone_goes_through_the_same_gate():
     """
     from src.analysis_agent import account_spend
     from src.web import publish_jobs
+    from src.fb_ads_rpa.operations import profile_lock, publish_lease
 
     assert account_spend.browser_operation is browser_operation, (
         "чтение спенда встало в свою очередь, а не в общую"
     )
-    assert publish_jobs._publish_serial is browser_operation, (
-        "очередь публикации перестала делить воротник с чтением"
+    assert account_spend.profile_lock is profile_lock, (
+        "чтение спенда завело свой замок по профилю"
+    )
+    # С acl-1210 публикация занимает профиль, а не процесс — тем же замком,
+    # что и чтения этого профиля. Своя очередь у публикации выключила бы
+    # «чтение ждёт публикацию» так же беззвучно, как и прежде.
+    assert publish_jobs._publish_serial is publish_lease, (
+        "очередь публикации перестала делить замок профиля с чтением"
+    )
+    assert publish_lease("profile-x") is profile_lock("profile-x"), (
+        "публикация и чтение одного профиля стоят в разных очередях"
     )
 
 
@@ -265,13 +275,15 @@ def test_a_read_waits_while_a_publish_holds_the_browser():
     Публикация ведёт живой профиль; чтение, влезшее посреди неё, срывает
     сборку, а выглядит это как «RPA сыпется».
     """
+    from src.fb_ads_rpa.operations import publish_lease
+
     entered = threading.Event()
 
     @serialized_browser(reading=True)
     def read(profile):
         entered.set()
 
-    with browser_operation:
+    with publish_lease("profile-a"):
         thread = threading.Thread(target=read, args=("profile-a",))
         thread.start()
         assert not entered.wait(timeout=0.5), "чтение полезло в браузер во время публикации"
@@ -280,8 +292,80 @@ def test_a_read_waits_while_a_publish_holds_the_browser():
     thread.join(timeout=5)
 
 
+def test_a_read_of_another_profile_does_not_wait_for_a_publish():
+    """Свойство acl-1210: публикация занимает свой профиль, а не всех."""
+    from src.fb_ads_rpa.operations import publish_lease
+
+    entered = threading.Event()
+
+    @serialized_browser(reading=True)
+    def read(profile):
+        entered.set()
+
+    with publish_lease("profile-a"):
+        thread = threading.Thread(target=read, args=("profile-b",))
+        thread.start()
+        assert entered.wait(timeout=2), "чтение другого профиля ждёт чужую публикацию"
+    thread.join(timeout=5)
+
+
+def test_two_profiles_publish_at_the_same_time():
+    """Ради этого acl-1210 и заводился: три аккаунта — три браузера разом."""
+    from src.fb_ads_rpa.operations import publish_lease
+
+    inside_a = threading.Event()
+    may_finish = threading.Event()
+    inside_b = threading.Event()
+
+    def publish(profile):
+        with publish_lease(profile):
+            (inside_a if profile == "profile-a" else inside_b).set()
+            if profile == "profile-a":
+                may_finish.wait(timeout=5)
+
+    a = threading.Thread(target=publish, args=("profile-a",))
+    a.start()
+    assert inside_a.wait(timeout=5)
+    b = threading.Thread(target=publish, args=("profile-b",))
+    b.start()
+    assert inside_b.wait(timeout=2), "вторая публикация ждёт первую без причины"
+    may_finish.set()
+    a.join(timeout=5)
+    b.join(timeout=5)
+
+
+def test_the_same_profile_still_publishes_one_at_a_time():
+    """Два задания на один профиль — по-прежнему очередь: два водителя на один браузер его и ломают."""
+    from src.fb_ads_rpa.operations import publish_lease
+
+    inside = threading.Event()
+    may_finish = threading.Event()
+    second = threading.Event()
+
+    def publish():
+        with publish_lease("profile-a"):
+            if not inside.is_set():
+                inside.set()
+                may_finish.wait(timeout=5)
+            else:
+                second.set()
+
+    first = threading.Thread(target=publish)
+    first.start()
+    assert inside.wait(timeout=5)
+    other = threading.Thread(target=publish)
+    other.start()
+    assert not second.wait(timeout=0.5), "две публикации вошли в один профиль разом"
+    may_finish.set()
+    first.join(timeout=5)
+    assert second.wait(timeout=5)
+    other.join(timeout=5)
+
+
 def test_a_publish_waits_for_a_read_to_finish():
     """И наоборот: публикация не начинается поверх идущего чтения."""
+    from src.fb_ads_rpa.operations import publish_lease
+
     inside = threading.Event()
     may_finish = threading.Event()
     published = threading.Event()
@@ -292,7 +376,7 @@ def test_a_publish_waits_for_a_read_to_finish():
         may_finish.wait(timeout=5)
 
     def publish():
-        with browser_operation:
+        with publish_lease("profile-a"):
             published.set()
 
     reader = threading.Thread(target=read, args=("profile-a",))

@@ -28,6 +28,7 @@ import os
 import re
 import sys
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -248,11 +249,25 @@ def browser_error(page) -> str:
     return match.group(0) if match else ""
 
 
-_current: dict[str, str] = {"run_id": "", "campaign": ""}
+#: Какой прогон идёт **в этом потоке**. Контекстная переменная, а не словарь
+#: на модуль: с acl-1210 два прогона идут разом в двух потоках, и общий
+#: словарь подписал бы строки одного номером другого — а разбор любого
+#: прогона это фильтр по `run_id`. Поток задания ставит своё значение при
+#: старте; всё, что он вызывает, читает его даром, как и прежде.
+_current_var: ContextVar[dict[str, str]] = ContextVar("acl_current_run")
+
+
+def _current_state() -> dict[str, str]:
+    try:
+        return _current_var.get()
+    except LookupError:
+        state = {"run_id": "", "campaign": ""}
+        _current_var.set(state)
+        return state
 
 
 def set_current_run(run_id: str = "", campaign: str = "") -> None:
-    """Запомнить, какой прогон идёт сейчас.
+    """Запомнить, какой прогон идёт сейчас — в этом потоке.
 
     Об отказах сообщают сорок три места, и не все они знают номер прогона:
     `create_additional_ad` 9 сентября записался с пустым `run_id` и потому
@@ -260,8 +275,24 @@ def set_current_run(run_id: str = "", campaign: str = "") -> None:
     Место, которое знает номер, называет его один раз; остальные получают
     его даром.
     """
-    _current["run_id"] = run_id or _current["run_id"]
-    _current["campaign"] = campaign or _current["campaign"]
+    old = _current_state()
+    _current_var.set({
+        "run_id": run_id or old["run_id"],
+        "campaign": campaign or old["campaign"],
+    })
+
+
+def clear_current_run() -> None:
+    """Забыть прогон в этом потоке — для тестов и для конца задания."""
+    _current_var.set({"run_id": "", "campaign": ""})
+
+
+def current_run_id() -> str:
+    return _current_state().get("run_id") or ""
+
+
+def current_campaign() -> str:
+    return _current_state().get("campaign") or ""
 
 
 def record(
@@ -280,12 +311,12 @@ def record(
         p = path or TELEMETRY_PATH
         p.parent.mkdir(parents=True, exist_ok=True)
         rec: dict[str, Any] = {
-            "run_id": run_id or _current["run_id"],
+            "run_id": run_id or current_run_id(),
             "ts": datetime.now(timezone.utc).isoformat(),
             "step": step,
             "ok": ok,
         }
-        campaign = campaign or _current["campaign"]
+        campaign = campaign or current_campaign()
         if campaign:
             rec["campaign"] = campaign
         if duration_s is not None:
@@ -324,8 +355,8 @@ def record(
             acl_sentry.report_step_failure(
                 step,
                 _why_of(note, diag),
-                run_id=run_id or _current["run_id"],
-                campaign=campaign or _current["campaign"],
+                run_id=run_id or current_run_id(),
+                campaign=campaign or current_campaign(),
                 diag=diag,
             )
         except Exception:

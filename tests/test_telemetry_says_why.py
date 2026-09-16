@@ -205,8 +205,7 @@ def test_a_direct_writer_inherits_the_current_run(tmp_path):
         row = json.loads(p.read_text(encoding="utf-8").strip())
         assert row["run_id"] == "runA" and row["campaign"] == "SA_camp"
     finally:
-        rt._current["run_id"] = ""
-        rt._current["campaign"] = ""
+        rt.clear_current_run()
 
 
 def test_a_writer_that_knows_better_is_not_overruled(tmp_path):
@@ -217,8 +216,7 @@ def test_a_writer_that_knows_better_is_not_overruled(tmp_path):
         row = json.loads(p.read_text(encoding="utf-8").strip())
         assert row["run_id"] == "runB" and row["campaign"] == "other"
     finally:
-        rt._current["run_id"] = ""
-        rt._current["campaign"] = ""
+        rt.clear_current_run()
 
 
 def test_the_flow_names_the_run_once():

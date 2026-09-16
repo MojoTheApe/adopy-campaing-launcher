@@ -141,8 +141,8 @@ def capture(
             try:
                 from src.fb_ads_rpa import run_telemetry as _tel
 
-                run_id = run_id or _tel._current["run_id"]
-                campaign = campaign or _tel._current["campaign"]
+                run_id = run_id or _tel.current_run_id()
+                campaign = campaign or _tel.current_campaign()
             except Exception:
                 pass
         key = run_id or "no_run"
