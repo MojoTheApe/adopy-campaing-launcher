@@ -165,6 +165,16 @@ _MENU_PAGE = """
 """
 
 
+def test_a_row_inside_a_fixed_panel_is_still_clickable(page, tmp_path):
+    """Живая раскладка: правая панель `position: fixed`, `offsetParent` у
+    строки — null, а видна она прекрасно. Четыре прогона подряд путь не
+    находил её только поэтому."""
+    fixed = _MENU_PAGE.replace('<div id="card">', '<div id="card" style="position:fixed;right:0;top:0;width:400px">')
+    page.set_content(fixed)
+    assert meta_dom._ensure_manual_audience(page) is False
+    assert page.evaluate("window.picked") == ["Off"]
+
+
 def test_the_menu_shaped_control_is_opened_and_off_is_picked(page, tmp_path):
     """Раскладка 2026-09: не переключатель, а кнопка «On ˅» с меню (дамп прогона 86b7cd7edda9)."""
     page.set_content(_MENU_PAGE)
