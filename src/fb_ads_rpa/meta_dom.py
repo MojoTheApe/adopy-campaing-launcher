@@ -3442,24 +3442,36 @@ def ensure_account_placement_exclusions(page: Page, report: dict | None = None) 
     report["summary_before"] = _excluded_placements_summary(page)
 
     # 1. Строка «Account controls» — раскрывашка; внутри кнопка «Edit placement controls».
-    edit = page.get_by_role("button", name=re.compile(r"^Edit placement controls$", re.I))
-    if not edit.count():
-        row = page.locator("[role=button][aria-expanded]").filter(
-            has_text=re.compile(r"^\s*Account controls", re.I)
-        )
-        if not row.count():
-            return _record(False, "account_controls_row_not_found")
-        try:
-            row.first.scroll_into_view_if_needed(timeout=3000)
-            if (row.first.get_attribute("aria-expanded") or "") != "true":
-                row.first.click(timeout=3000)
-            _sleep_h(1.0)
-        except Exception as exc:
-            return _record(False, "account_controls_row_click_failed", error=type(exc).__name__)
-    try:
-        edit.first.click(timeout=5000)
-    except Exception as exc:
-        return _record(False, "edit_placement_controls_not_clickable", error=type(exc).__name__)
+    #
+    # Живой прогон 0054550ac608 (22:49): `row.click` — TimeoutError на обоих
+    # аккаунтах, хотя после прогона тот же клик в том же окне проходил. Во
+    # время шага карточка ещё не прокручена в видимую часть редактора, и
+    # Playwright ждёт «видимости», которой без прокрутки нет. Поэтому: сперва
+    # прокрутить сам узел, затем честный клик, а если он всё равно отказал —
+    # клик DOM по тому же узлу.
+    row_state = _scroll_and_mark(
+        page,
+        r"[...document.querySelectorAll('[role=button][aria-expanded]')]"
+        r".find(e => /^Account controls/i.test(norm(e.textContent)))",
+        "account-controls-row",
+    )
+    if row_state is None:
+        return _record(False, "account_controls_row_not_found")
+    if row_state.get("expanded") != "true":
+        how = _click_marked(page, "account-controls-row")
+        if not how:
+            return _record(False, "account_controls_row_click_failed", row=row_state)
+        _sleep_h(1.2)
+    edit_state = _scroll_and_mark(
+        page,
+        r"[...document.querySelectorAll('[role=button]')]"
+        r".find(e => norm(e.textContent) === 'Edit placement controls')",
+        "edit-placement-controls",
+    )
+    if edit_state is None:
+        return _record(False, "edit_placement_controls_not_found", row=row_state)
+    if not _click_marked(page, "edit-placement-controls"):
+        return _record(False, "edit_placement_controls_not_clickable", row=row_state)
 
     dialog = _account_controls_dialog(page)
     try:
@@ -3531,6 +3543,49 @@ def ensure_account_placement_exclusions(page: Page, report: dict | None = None) 
     if summary is not None and summary.strip().lower() in ("", "none"):
         return _record(False, "summary_still_none", changed=changed, confirmed=confirmed, summary=summary)
     return _record(True, "excluded", changed=changed, confirmed=confirmed, summary=summary)
+
+
+def _scroll_and_mark(page: Page, finder_js: str, mark: str) -> dict | None:
+    """Найти узел выражением `finder_js`, прокрутить к нему и пометить.
+
+    Возвращает {expanded, w, h} после прокрутки или None, если узла нет.
+    """
+    js = (
+        "(mark) => { const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();"
+        f" const el = {finder_js};"
+        " if (!el) return null;"
+        " document.querySelectorAll(`[data-rpa-mark=\"${mark}\"]`).forEach(e => e.removeAttribute('data-rpa-mark'));"
+        " el.setAttribute('data-rpa-mark', mark);"
+        " el.scrollIntoView({block: 'center', behavior: 'instant'});"
+        " const r = el.getBoundingClientRect();"
+        " return {expanded: el.getAttribute('aria-expanded'), w: Math.round(r.width), h: Math.round(r.height)}; }"
+    )
+    try:
+        state = page.evaluate(js, mark)
+    except Exception:
+        return None
+    _sleep_h(0.6)
+    return state
+
+
+def _click_marked(page: Page, mark: str) -> str:
+    """Клик по помеченному узлу: честный, иначе DOM. Возвращает способ или ""."""
+    loc = page.locator(f'[data-rpa-mark="{mark}"]').first
+    try:
+        loc.click(timeout=4000)
+        return "trusted"
+    except Exception:
+        pass
+    try:
+        if page.evaluate(
+            "(mark) => { const el = document.querySelector(`[data-rpa-mark=\"${mark}\"]`);"
+            " if (!el) return false; el.click(); return true; }",
+            mark,
+        ):
+            return "dom"
+    except Exception:
+        pass
+    return ""
 
 
 def _cancel_account_controls(page: Page) -> None:
