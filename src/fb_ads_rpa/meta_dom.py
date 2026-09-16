@@ -5110,19 +5110,34 @@ def _library_tile_shape(page: Page, filename: str) -> dict:
 
 
 def _library_tile_selected(tile) -> bool:
-    """Does this tile say it is selected — by its own ARIA state or a checked
-    box inside it? False when it cannot say (a double without attributes,
-    a detached handle), so the counter test still decides on its own."""
+    """Does this tile say it is selected — by its own ARIA state, a checked
+    box inside it, or Meta's selection decoration on its wrapper? False when
+    it cannot say (a double without attributes, a detached handle), so the
+    counter test still decides on its own. Each check stands alone: one that
+    cannot run must not hide the others."""
     try:
         for attr in ("aria-pressed", "aria-checked", "aria-selected"):
             if (tile.get_attribute(attr) or "").strip().lower() == "true":
                 return True
+    except Exception:
+        pass
+    try:
         box = tile.locator("input[type=checkbox]").first
         if box.count() and box.is_checked():
             return True
     except Exception:
+        pass
+    # Живая разметка 16.09 23:28 (S15, tile_shape): у выбранной плитки нет
+    # ни aria-*, ни чекбокса — признак висит на обёртке над `role=button`:
+    # `data-test-decoration="selected"`.
+    try:
+        return bool(tile.evaluate(
+            "el => { for (let n = el, i = 0; n && i < 3; n = n.parentElement, i++)"
+            " if (n.getAttribute && n.getAttribute('data-test-decoration') === 'selected') return true;"
+            " return false; }"
+        ))
+    except Exception:
         return False
-    return False
 
 
 def _library_search(page: Page, filename: str) -> bool:
@@ -5272,7 +5287,18 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     # копию нашёл, взять не смог, — и разобрать было нечем: наружу уходило
     # одно слово `library_pick_left_selection`.
     log: list[dict] = []
+    # Копия может быть уже выбрана до нас: «1 selected» и плитка нужного файла
+    # с отметкой. 16.09 23:28 (S15) шаг щёлкал по ней — клик снимал выбор, —
+    # и потом решал, что копии нет. Уже выбранная плитка — это наш выбор.
     for i in range(min(available, 6)):
+        try:
+            if _library_tile_selected(tiles.nth(i)):
+                log.append({"tile": i, "before": before, "already_selected": True, "took": True})
+                picked = True
+                break
+        except Exception:
+            continue
+    for i in ([] if picked else range(min(available, 6))):
         note = {"tile": i, "before": before}
         try:
             tile = tiles.nth(i)
