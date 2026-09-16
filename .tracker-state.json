@@ -81,7 +81,8 @@
     },
     "1f68ab3b80c2132ab0463c09b47d1f69558e9a3198f256a610207449785f12bb": {
       "title": "An account linked to a country on the dashboard still shows no country",
-      "state": "creating"
+      "state": "created",
+      "issue": 196
     }
   }
 }
