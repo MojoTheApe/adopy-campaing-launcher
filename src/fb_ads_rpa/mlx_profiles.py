@@ -248,7 +248,16 @@ def running_profiles_from_launcher() -> list[dict]:
         for pid, state in states.items():
             if not isinstance(state, dict):
                 continue
-            profile_id = (state.get("profile_id") or pid or "").strip()
+            # A launcher upgrade or partial response must not break Accounts.
+            # Reject a malformed record before using any of its string fields.
+            fields = (state.get("profile_id"), state.get("name"),
+                      state.get("folder_id"), state.get("status"))
+            if any(value is not None and not isinstance(value, str) for value in fields):
+                continue
+            profile_id = fields[0] or pid
+            if not isinstance(profile_id, str):
+                continue
+            profile_id = profile_id.strip()
             # `states` lists the active profiles, but one caught mid-shutdown
             # would be offered as connectable and then disappear.
             if not profile_id or "stop" in (state.get("status") or "").lower():
@@ -321,7 +330,8 @@ def profile_name_key(name: str) -> str:
     """
     import re as _re
 
-    first = (name or "").strip().split(" ", 1)[0]
+    words = (name or "").split()
+    first = words[0] if words else ""
     m = _re.search(r"([A-Za-z])(\d{1,4})\s*$", first)
     return (m.group(1) + m.group(2)).upper() if m else ""
 

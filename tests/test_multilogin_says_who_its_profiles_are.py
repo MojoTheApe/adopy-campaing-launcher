@@ -13,7 +13,7 @@
 Локальный лаунчер отвечает на всё это сразу:
 
     GET https://launcher.mlx.yt:45001/api/v1/profile/statuses
-    2a5d0c87-… | 'FacebookDQ501 - Duan Guyen' | folder=b8301b4d-… | browser_running
+    550e8400-… | 'FacebookDQ501 - Duan Guyen' | folder=9b1deb4d-… | browser_running
 
 Проверяется здесь: имя с пробелами доходит целиком, folder_id приезжает вместе
 с ним, пустой слот одного инстанса не мешает спросить через другой, а любой
@@ -33,9 +33,9 @@ sys.path.insert(0, str(ROOT))
 from src.fb_ads_rpa import mlx_profiles  # noqa: E402
 
 
-DQ501 = "2a5d0c87-04e6-43fb-bdd1-f9bcb1a3be6b"
-DOC19 = "cabcf42f-3699-4d78-9886-231fd44b3498"
-FOLDER = "b8301b4d-0558-48d6-9861-8cf12c49ef7c"
+DQ501 = "550e8400-e29b-41d4-a716-446655440000"
+DOC19 = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+FOLDER = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
 
 
 def _state(profile_id: str, name: str, status: str = "browser_running") -> dict:
@@ -82,6 +82,9 @@ def launcher(monkeypatch):
 @pytest.fixture
 def no_machine_scan(monkeypatch):
     """Старый путь чтения машины отвечает пусто — чтобы не зависеть от неё."""
+    import psutil
+
+    monkeypatch.setattr(psutil, "process_iter", lambda *args, **kwargs: iter(()))
     monkeypatch.setattr(mlx_profiles, "all_profile_ids", lambda: [])
     monkeypatch.setattr(mlx_profiles, "open_profile_ids", lambda: [])
     monkeypatch.setattr(mlx_profiles, "_window_titles_by_pid", lambda: {})
@@ -212,3 +215,20 @@ def test_no_token_at_all_means_no_question(monkeypatch, no_machine_scan):
     monkeypatch.setenv("MULTILOGIN_AUTOMATION_TOKEN_B", "")
     assert mlx_profiles.running_profiles_from_launcher() == []
     assert calls == []
+
+
+@pytest.mark.parametrize("field", ["profile_id", "name", "folder_id", "status"])
+@pytest.mark.parametrize("value", [42, ["invalid"], {"invalid": True}])
+def test_malformed_profile_fields_fall_back_to_machine(launcher, no_machine_scan, monkeypatch, field, value):
+    state = _state(DQ501, "ExampleQ501 - Example User")
+    state[field] = value
+    launcher["reply"]["value"] = _Reply({"data": {"states": {DQ501: state}}})
+    seen = []
+    monkeypatch.setattr(mlx_profiles, "all_profile_ids", lambda: seen.append(True) or [])
+    assert mlx_profiles.open_profiles_detailed() == []
+    assert seen, "Malformed launcher data must use the existing machine fallback"
+
+
+@pytest.mark.parametrize("separator", ["\t", "\n", "\u00a0", "  "])
+def test_profile_name_key_uses_any_whitespace(separator):
+    assert mlx_profiles.profile_name_key("ExampleQ501" + separator + "Example User") == "Q501"
