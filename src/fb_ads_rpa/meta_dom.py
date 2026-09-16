@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -22,7 +23,49 @@ from src.fb_ads_rpa import run_telemetry as _telemetry
 #:
 #: Берём с запасом: 45, а не 50. Порог у них на содержимом, а не на размере
 #: файла, и упереться в него на 49.8 МБ было бы обидно.
-_PW_FILE_LIMIT_MB = 45
+#:
+#: **15.09: порог опущен до 4 МБ, и вот почему.** Пятьдесят мегабайт — это
+#: граница, за которой Playwright отказывается передавать *в принципе*. Но
+#: задолго до неё есть вторая, куда более близкая: у `set_files` свой таймаут в
+#: **30 секунд**, а содержимое идёт по CDP через Multilogin со скоростью,
+#: которую мы в тот день намерили — **0.13 МБ/с**. Тридцать секунд на такой
+#: скорости — это около четырёх мегабайт. Всё, что тяжелее, физически не
+#: успевает, и шаг отказывает не «сломавшись», а упёршись в чужой таймаут:
+#:
+#:     попытка 1  chooser: True   FileChooser.set_files: Timeout 30000ms exceeded
+#:     попытка 2  окно выбора уже не приходит вовсе
+#:     попытка 3  то же самое
+#:
+#: Ролик на 24 МБ отказывал так трижды подряд — и с включённым поиском по
+#: медиатеке, и с выключенным, то есть дело именно здесь.
+#:
+#: Тяжёлая дорога этой беды не знает: она передаёт **путь**, а не содержимое, —
+#: Chrome читает файл с диска сам, мгновенно, и скорость CDP значения не имеет.
+#: Она и написана ради этого; просто включалась непозволительно поздно.
+#:
+#: Почему не ноль: для мелочи (медиана креатива — 0.8 МБ) простая дорога
+#: проверена сотней загрузок, а тяжёлая тянет за собой перехват диалога и
+#: отдельную CDP-сессию.
+#:
+#: Почему именно три, а не четыре: 30 секунд × 0.13 МБ/с = 3.9 МБ. Четыре —
+#: это уже за краем, и тест на это падает. Число здесь **выводится из замера**,
+#: а не выбирается на глаз; в этом и смысл проверки рядом.
+#:
+#: Скорость сети меряется в мегабайтах в секунду и меняется; поэтому порог
+#: задан переменной. Если однажды окажется, что и четыре не успевают, менять
+#: надо здесь, а не гадать по симптомам.
+_PW_FILE_LIMIT_MB = float(os.environ.get("FB_RPA_PW_FILE_LIMIT_MB") or 3)
+
+#: Сколько даём `set_files` на передачу содержимого.
+#:
+#: Умолчание Playwright — 30 секунд, и именно в него упирался ролик на 24 МБ.
+#: Порог выше сделан так, чтобы до этого таймаута дело не доходило вовсе; но
+#: страховка дешёвая, а сеть у байера может оказаться медленнее нашей. Три
+#: минуты — это 4 МБ даже на 0.02 МБ/с, вдесятеро хуже намеренного.
+#:
+#: Ждать дольше незачем: если за три минуты не ушло четыре мегабайта, дело не
+#: в терпении, и отказ полезнее ещё одного молчаливого ожидания.
+_PW_SET_FILES_MS = 180_000
 
 
 def _upload_heavy_via_chooser_event(
@@ -3166,13 +3209,37 @@ PLACEMENTS_EXPAND_JS = (
 нам дня.
 """
 
+def _label_on_page(label: str, seen: list[str]) -> bool:
+    """Есть ли такой подпункт среди увиденных — не глядя на регистр букв.
+
+    15.09 живой прогон на кувейтском кабинете отчитался:
+
+        subitems_missing: ["Instagram feed", "Facebook Notifications"]
+        subitems_seen:    [… "Instagram Feed" … "Facebook notifications" …]
+
+    Обе строки приехали в одном тикете Sentry, рядом: «что искали» и «что
+    видели». Разница только в заглавной букве — и подпункт объявлялся
+    отсутствующим, а плейсменты отказывали.
+
+    Сводить регистр безопасно: названия плейсментов различаются словами, а не
+    регистром. В том же списке рядом живут «Facebook Feed» и «Facebook profile
+    feed» — их не спутать.
+    """
+    want = (label or "").strip().casefold()
+    return any((x or "").strip().casefold() == want for x in seen)
+
+
 PLACEMENTS_SUBITEM_JS = """
   ([label, wantChecked]) => {
     const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
     const root = document.querySelector('[data-rpa-placements-marker]');
     if (!root) return { ok: false, why: 'нет метки блока' };
     const rows = [...root.querySelectorAll('*')].filter(e =>
-      e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
+      e.children.length === 0 &&
+      // Регистр не сверяем: страница пишет «Instagram Feed», рецепт —
+      // «Instagram feed», и подпункт объявлялся отсутствующим (15.09).
+      norm(e.textContent).toLowerCase() === (label || '').toLowerCase() &&
+      e.offsetParent !== null);
     let frozen = null;
     for (const row of rows) {
       let container = row.parentElement;
@@ -4042,12 +4109,12 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # шага на прогоне пользователя.
         for _ in range(2):
             for label in list(remaining_on):
-                if label in here and _set(label, True):
+                if _label_on_page(label, here) and _set(label, True):
                     remaining_on.remove(label)
             for label in list(remaining_off):
-                if label in here and _set(label, False):
+                if _label_on_page(label, here) and _set(label, False):
                     remaining_off.remove(label)
-            if not [x for x in remaining_on + remaining_off if x in here]:
+            if not [x for x in remaining_on + remaining_off if _label_on_page(x, here)]:
                 break
             _sleep_h(0.6)
 
@@ -5401,12 +5468,12 @@ def upload_ad_creative(
                         with page.expect_file_chooser(timeout=25000) as fc_info:
                             _press_upload()
                         _step["chooser"] = True
-                        fc_info.value.set_files(creative_path)
+                        fc_info.value.set_files(creative_path, timeout=_PW_SET_FILES_MS)
                 else:
                     with page.expect_file_chooser(timeout=25000) as fc_info:
                         _press_upload()
                     _step["chooser"] = True
-                    fc_info.value.set_files(creative_path)
+                    fc_info.value.set_files(creative_path, timeout=_PW_SET_FILES_MS)
         except Exception as exc:
             # Здесь и была слепота: исключение глоталось молча, и отличить
             # «кнопки нет» от «окно выбора файла не открылось» было нечем.
