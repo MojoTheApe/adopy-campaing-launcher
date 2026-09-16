@@ -73,6 +73,7 @@ _DIST = {
     "google_auth_httplib2": "google-auth-httplib2",
     "PIL": "pillow",
     "sentry_sdk": "sentry-sdk",
+    "imageio_ffmpeg": "imageio-ffmpeg",
 }
 
 _LOCAL = {"src", "config", "tests", "scripts"}
