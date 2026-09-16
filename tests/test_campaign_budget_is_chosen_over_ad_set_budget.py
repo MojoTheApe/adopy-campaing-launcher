@@ -67,3 +67,14 @@ def test_campaign_budget_already_chosen_is_left_alone(page):
 def test_a_page_without_the_strategy_block_is_untouched(page):
     page.set_content("<input placeholder='Please enter amount'>")
     assert md._ensure_campaign_budget(page) is False
+
+
+# ── лишний «New Leads ad» после Create ad (Doc20, 17.09 00:02) ──────────────
+
+def test_new_ad_shells_are_counted_only_in_the_left_tree(page):
+    page.set_viewport_size({"width": 1500, "height": 800})
+    page.set_content(
+        "<div style='position:absolute;left:10px;top:10px'><div>New Leads ad</div><div>2221 - AR Trolley partner</div>"
+        "<div>New Leads ad</div></div><div style='position:absolute;left:900px;top:10px'><span>New Leads ad</span></div>"
+    )
+    assert md._tree_new_ad_shells(page) == 2

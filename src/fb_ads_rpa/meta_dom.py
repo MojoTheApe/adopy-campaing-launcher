@@ -3008,6 +3008,7 @@ def run_recorded_campaign_flow(
         if reached_ad_level and additional_ads:
             for i, extra in enumerate(additional_ads, start=2):
                 tag = f"ad{i}"
+                shells_before = _tree_new_ad_shells(page)
                 try:
                     created = create_additional_ad(page, adset_name)
                     if not created:
@@ -3032,6 +3033,15 @@ def run_recorded_campaign_flow(
                         ad_level_fails.append(f"{tag}_create")
                         continue
                     _shot(f"after_{tag}_create")
+                    # 17.09 00:02 (Doc20, cbe566db70b2): один «Create ad» дал
+                    # ДВА «New Leads ad» — лишнее осталось пустым в кампании.
+                    # Удалять сами не берёмся; отказ шага с именем причины,
+                    # чтобы черновик не ушёл в публикацию с пустым объявлением.
+                    shells_after = _tree_new_ad_shells(page)
+                    if shells_before >= 0 and shells_after - shells_before > 1:
+                        _telemetry.record(f"{tag}_create", False, note="extra_ad_shell",
+                                          diag={"before": shells_before, "after": shells_after})
+                        ad_level_fails.append(f"{tag}_create:extra_empty_ad")
                 except Exception as exc:
                     _shot(f"fail_{tag}_create")
                     ad_level_fails.append(f"{tag}_create:{str(exc)[:60]}")
@@ -7535,6 +7545,23 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
                 break
 
     return _both_ok()
+
+
+def _tree_new_ad_shells(page: Page) -> int:
+    """Сколько строк «New Leads ad» в левом дереве (-1 — не прочитать)."""
+    try:
+        return int(page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              return [...document.querySelectorAll('*')].filter(e => {
+                if (e.children.length !== 0 || !/^New Leads ad$/i.test(norm(e.textContent))) return false;
+                const r = e.getBoundingClientRect();
+                return r.width > 0 && r.x < window.innerWidth * 0.34;
+              }).length;
+            }"""
+        ))
+    except Exception:
+        return -1
 
 
 def _open_tree_ad(page: Page, ad_name: str) -> bool:
