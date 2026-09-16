@@ -3545,6 +3545,11 @@ def ensure_account_placement_exclusions(page: Page, report: dict | None = None) 
         return _record(False, "confirm_button_not_found", changed=changed, dialogs=texts)
     _sleep_h(3.0)
 
+    # Уведомление «Account controls updating» ложится в правый нижний угол —
+    # ровно на кнопку Next. Doc20, 23:27: «next_to_ad ok» кликнул в него,
+    # редактор остался на ad set, и `ad_name` упал. Закрываем крестиком.
+    _close_account_controls_toast(page)
+
     # 5. Проверка: карточка больше не говорит «None».
     summary = _excluded_placements_summary(page)
     if summary is not None and summary.strip().lower() in ("", "none"):
@@ -3598,6 +3603,37 @@ def _click_marked(page: Page, mark: str) -> str:
     except Exception:
         pass
     return ""
+
+
+def _close_account_controls_toast(page: Page) -> bool:
+    """Закрыть «Account controls updating» (✕ в самом уведомлении)."""
+    js = r"""
+    () => {
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+      const title = [...document.querySelectorAll('*')].find(e =>
+        e.children.length === 0 && norm(e.textContent) === 'Account controls updating'
+        && e.getBoundingClientRect().width > 0);
+      if (!title) return 'absent';
+      let box = title;
+      for (let i = 0; i < 8 && box.parentElement; i++) {
+        box = box.parentElement;
+        const btn = [...box.querySelectorAll('[role=button], button, [aria-label]')].find(b =>
+          /^(close|dismiss)$/i.test(norm(b.getAttribute('aria-label') || b.textContent)));
+        if (btn) { btn.click(); return 'closed'; }
+      }
+      return 'no_button';
+    }
+    """
+    for _ in range(3):
+        try:
+            state = page.evaluate(js)
+        except Exception:
+            return False
+        if state == "absent":
+            return True
+        _sleep_h(0.8)
+    _telemetry.record("account_controls_toast", None, note="still_open")
+    return False
 
 
 def _cancel_account_controls(page: Page) -> None:
