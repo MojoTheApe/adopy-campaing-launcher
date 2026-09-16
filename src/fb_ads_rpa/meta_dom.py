@@ -8384,10 +8384,16 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
       different facts, and only the first was ever logged. A mismatch is a
       failure with both numbers in the diagnostic.
     """
-    state = _ensure_manual_audience(page)
-    if state is True:
-        _telemetry.record("audience_age", False, note="advantage_plus_still_on")
-        return False
+    # Switch-off is attempted and recorded, but it no longer GATES the
+    # controls. The "still on" signal comes from the campaign-level
+    # "Advantage+ leads campaign" switch in the right panel, and that switch
+    # stays On even after "Further limit the reach of your ads" has put the
+    # audience into manual mode with live age dropdowns (run 2182744d1126,
+    # 16:06: screenshot shows 18/65+ dropdowns editable, panel still "On").
+    # Gating on it refused a settable age in every run of the evening, where
+    # the old code had set it in three runs of four. The read-back below is
+    # the real check of whether the age took.
+    _ensure_manual_audience(page)
     if not _fill_audience_age_controls(page, age_min, age_max):
         return False
     wanted = [str(age_min), str(age_max) if age_max < 65 else "65+"]

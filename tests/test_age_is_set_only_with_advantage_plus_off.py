@@ -214,16 +214,20 @@ def test_a_value_inside_an_open_list_is_not_a_reading(page):
 
 # ── сам шаг ───────────────────────────────────────────────────────────────
 
-def test_the_controls_are_not_touched_while_advantage_plus_stays_on(page, tmp_path, monkeypatch):
-    """Кликать по подсказкам бессмысленно — и вредно: клик мог уйти куда угодно."""
-    page.set_content(_html(on=True))
+def test_a_switch_that_stays_on_does_not_block_settable_age_controls(page, tmp_path, monkeypatch):
+    """Переключатель «Advantage+ leads campaign» — кампанийный и остаётся On
+    даже после «Further limit the reach», когда выпадашки возраста уже живые
+    (прогон 2182744d1126). Запрет по нему отказывал в каждом прогоне вечера;
+    решает сверка экрана после установки."""
+    page.set_content(_html(on=True, amin="35", amax="65+"))
     monkeypatch.setattr(meta_dom, "_turn_off_advantage_plus_leads", lambda p: False)
+    monkeypatch.setattr(meta_dom, "_pick_advantage_plus_leads_off", lambda p: False)
     touched = []
     monkeypatch.setattr(meta_dom, "_fill_audience_age_controls", lambda p, a, b: touched.append((a, b)) or True)
-    assert meta_dom.fill_audience_age(page, 35, 65) is False
-    assert touched == []
-    rows = _rows(tmp_path)
-    assert any(r["step"] == "audience_age" and r["note"] == "advantage_plus_still_on" for r in rows)
+    assert meta_dom.fill_audience_age(page, 35, 65) is True
+    assert touched == [(35, 65)]
+    rows = [r for r in _rows(tmp_path) if r["step"] == "advantage_plus_off"]
+    assert rows and rows[-1]["note"] == "still_on", "попытка выключить всё равно записана"
 
 
 def test_clicked_35_is_not_the_same_as_shows_35(page, tmp_path, monkeypatch):
