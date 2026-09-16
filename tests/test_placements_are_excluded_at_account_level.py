@@ -51,6 +51,10 @@ _PAGE = """
   <div role="button" onclick="window.log.push('cancel');hide('dlg')">Cancel</div>
   <div role="button" onclick="review()">Review changes</div>
 </div>
+<div id="toast" style="display:none;position:fixed;right:0;bottom:0">
+  <div><span>Account controls updating</span><div role="button" aria-label="Close" onclick="window.log.push('toast_closed');hide('toast')"><svg width="10" height="10"></svg></div></div>
+  <div>Your account controls have been saved.</div>
+</div>
 <div role="dialog" id="rev" style="display:none">
   <div>Review changes</div>
   <div role="button" onclick="confirmIt()">Confirm</div>
@@ -62,7 +66,7 @@ _PAGE = """
   function openDlg() { window.log.push('open'); document.getElementById('dlg').style.display='block'; }
   function review() { window.log.push('review'); hide('dlg'); document.getElementById('rev').style.display='block'; }
   function confirmIt() {
-    window.log.push('confirm'); hide('rev');
+    window.log.push('confirm'); hide('rev'); document.getElementById('toast').style.display = 'block';
     const off = [...document.querySelectorAll('#list input')].filter(i => !i.checked).length;
     document.getElementById('summary').innerHTML = '<b>Excluded placements:</b> ' + (off ? [...document.querySelectorAll('#list span')].map(x => x.textContent).join(', ') : 'None');
   }
@@ -114,7 +118,8 @@ def test_the_four_placements_are_excluded_and_confirmed(page, tmp_path):
     page.set_content(_html())
     report: dict = {}
     assert md.ensure_account_placement_exclusions(page, report) is True
-    assert page.evaluate("window.log") == ["open", "review", "confirm"]
+    assert page.evaluate("window.log") == ["open", "review", "confirm", "toast_closed"]
+    assert not page.is_visible("#toast")
     assert page.evaluate("[...document.querySelectorAll('#list input')].every(i => !i.checked)")
     assert report["account_exclusions"] == "excluded"
     assert md._excluded_placements_summary(page) == ", ".join(md._ACCOUNT_EXCLUDED_PLACEMENTS)
@@ -148,4 +153,4 @@ def test_a_row_playwright_calls_invisible_is_still_opened(page):
     """Прогон 0054550ac608: `row.click` — TimeoutError на обоих аккаунтах."""
     page.set_content(_html().replace('id="acrow"', 'id="acrow" style="height:0;overflow:hidden"'))
     assert md.ensure_account_placement_exclusions(page, {}) is True
-    assert page.evaluate("window.log") == ["open", "review", "confirm"]
+    assert page.evaluate("window.log")[:3] == ["open", "review", "confirm"]
