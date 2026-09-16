@@ -186,3 +186,31 @@ def test_a_tile_without_a_word_of_its_own_does_not_pass_on_its_own(monkeypatch):
     monkeypatch.setattr(_Tile, "get_attribute", lambda self, name: None)
     monkeypatch.setattr(md, "_library_undo_selection", lambda page, tiles, clicked, before: True)
     assert md._try_reuse_library_media(page, "1_es_2292_post.mp4") == md.REUSE_ABSENT
+
+
+def test_a_copy_already_selected_is_taken_without_a_click(monkeypatch):
+    """16.09 23:28 (S15): «1 selected», у плитки `data-test-decoration="selected"`
+    на обёртке. Клик по ней снимал выбор, и шаг решал, что копии нет."""
+    grid = _Grid()
+    page = _wire(monkeypatch, grid)
+    monkeypatch.setattr(_Tile, "get_attribute", lambda self, name: None)
+    monkeypatch.setattr(_Tile, "evaluate", lambda self, js: self._index == 1, raising=False)
+    clicks = []
+    monkeypatch.setattr(_Tile, "click", lambda self, timeout=0: clicks.append(self._index))
+    assert md._try_reuse_library_media(page, "2046_1.mp4") == md.REUSE_ATTACHED
+    assert clicks == []
+
+
+def test_the_decoration_on_the_wrapper_marks_a_real_tile_selected():
+    from playwright.sync_api import sync_playwright
+    import os
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        p = b.new_page()
+        p.set_content(
+            '<div data-test-decoration="selected"><div role="button" tabindex="0" id="a"><div>2046_1.mp4</div></div></div>'
+            '<div><div role="button" tabindex="0" id="b"><div>2046_1.mp4</div></div></div>'
+        )
+        assert md._library_tile_selected(p.locator("#a")) is True
+        assert md._library_tile_selected(p.locator("#b")) is False
+        b.close()
