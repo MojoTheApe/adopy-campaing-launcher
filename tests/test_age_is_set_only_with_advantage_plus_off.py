@@ -139,12 +139,14 @@ _MENU_PAGE = """
 <div id="card">
   <div>Audience</div>
   <span id="badge">Advantage+ on</span>
-  <div>Advantage+ leads campaign
-    <div id="trig" role="button" tabindex="0" onclick="openMenu()">On</div>
+  <div>
+    <span role="heading">Advantage+ leads campaign</span>
+    <span id="state">On</span>
+    <div id="trig" role="button" tabindex="0" onclick="openMenu()">Open</div>
   </div>
   <div id="menu" style="display:none">
     <div role="menuitem" onclick="pick('On')">On</div>
-    <div role="menuitem" onclick="pick('Off')">Off</div>
+    <div role="menuitem" onclick="pick('Off')">Off — Turn off Advantage+</div>
   </div>
   <div><div>Age</div><div><div class="v">18</div><div class="v">65+</div></div></div>
 </div>
@@ -154,7 +156,7 @@ _MENU_PAGE = """
   function pick(v) {
     window.picked.push(v);
     document.getElementById('menu').style.display = 'none';
-    document.getElementById('trig').textContent = v;
+    document.getElementById('state').textContent = v;
     document.getElementById('badge').textContent = v === 'Off' ? 'Advantage+ off' : 'Advantage+ on';
   }
 </script>
