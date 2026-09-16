@@ -37,21 +37,25 @@ def clean(monkeypatch):
 
 
 def test_the_same_file_is_not_uploaded_again_after_it_failed(monkeypatch):
-    tries: list[str] = []
+    tries: list[dict] = []
     monkeypatch.setattr(md, "upload_ad_creative",
-                        lambda *a, **k: tries.append("try") or False)
+                        lambda *a, **k: tries.append(k) or False)
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)
     monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: False)
     monkeypatch.setattr(md, "_upload_stalled", lambda page: False)
     monkeypatch.setattr(md, "reuse_before_upload", lambda page, path: None)
 
     assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
-    spent = len(tries)
-    assert spent >= 1
+    spent = [t for t in tries if not t.get("reuse_only")]
+    assert len(spent) >= 1
 
     tries.clear()
     assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
-    assert tries == [], "второе объявление не должно платить за ту же загрузку"
+    # Второе объявление идёт за копией через мастер (acl-1192) — это не
+    # заливка: `reuse_only` останавливает шаг до неё.
+    assert all(t.get("reuse_only") for t in tries), (
+        "второе объявление не должно платить за ту же загрузку"
+    )
 
 
 def test_a_copy_that_appeared_meanwhile_still_wins(monkeypatch):
@@ -60,14 +64,18 @@ def test_a_copy_that_appeared_meanwhile_still_wins(monkeypatch):
     Пока шло первое объявление, копия могла появиться в медиатеке. Тогда файл
     вообще никуда не поедет, и отказывать нечему.
     """
-    monkeypatch.setattr(md, "upload_ad_creative", lambda *a, **k: False)
+    copy_there = {"yes": False}
+    # Копия ищется внутри мастера (acl-1192): `reuse_only`-заход отвечает
+    # «прикрепили», когда она появилась.
+    monkeypatch.setattr(md, "upload_ad_creative",
+                        lambda *a, **k: bool(k.get("reuse_only") and copy_there["yes"]))
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)
     monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: False)
     monkeypatch.setattr(md, "_upload_stalled", lambda page: False)
     monkeypatch.setattr(md, "reuse_before_upload", lambda page, path: None)
     assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
 
-    monkeypatch.setattr(md, "reuse_before_upload", lambda page, path: True)
+    copy_there["yes"] = True
     assert md.upload_ad_creative_with_retry(object(), "video", FILE) is True
 
 
@@ -130,19 +138,29 @@ def _quiet(monkeypatch):
 
 
 def test_the_second_ad_does_not_re_upload_what_already_went(monkeypatch):
-    """Meta не берёт вторую заливку того же файла — пытаться незачем."""
+    """Meta не берёт вторую заливку того же файла — пытаться незачем.
+
+    Но за копией в медиатеку идти надо — через мастер, где медиатека и живёт
+    (acl-1192): второй заход открывает мастер с `reuse_only=True` и не грузит.
+    """
     md._uploaded_ok.clear()
-    tries: list[str] = []
-    monkeypatch.setattr(md, "upload_ad_creative",
-                        lambda *a, **k: tries.append("try") or True)
+    tries: list[dict] = []
+
+    def fake_upload(*a, **k):
+        tries.append(k)
+        return not k.get("reuse_only")
+
+    monkeypatch.setattr(md, "upload_ad_creative", fake_upload)
     _quiet(monkeypatch)
 
     assert md.upload_ad_creative_with_retry(object(), "video", FILE) is True
-    assert len(tries) == 1
+    assert len(tries) == 1 and not tries[0].get("reuse_only")
 
     tries.clear()
     assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
-    assert tries == [], "второе объявление не должно заливать заново"
+    assert [t.get("reuse_only") for t in tries] == [True], (
+        "второе объявление должно открыть мастер за копией, но не заливать"
+    )
     md._uploaded_ok.clear()
 
 
@@ -168,7 +186,8 @@ def test_the_two_refusals_are_named_apart(monkeypatch):
     said: list[dict] = []
     monkeypatch.setattr(md._telemetry, "record",
                         lambda step, ok, **kw: said.append({"step": step, **kw}))
-    monkeypatch.setattr(md, "upload_ad_creative", lambda *a, **k: True)
+    # Первая заливка удаётся; заход за копией (`reuse_only`) — нет.
+    monkeypatch.setattr(md, "upload_ad_creative", lambda *a, **k: not k.get("reuse_only"))
     _quiet(monkeypatch)
     md.upload_ad_creative_with_retry(object(), "video", FILE)
     md.upload_ad_creative_with_retry(object(), "video", FILE)
