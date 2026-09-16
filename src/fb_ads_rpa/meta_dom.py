@@ -2859,7 +2859,7 @@ def run_recorded_campaign_flow(
                 _shot("fail_targeting_open")
                 soft_fails.append("targeting_open")
             else:
-                any_added = paste_targeting_interests(page, targeting_label)
+                any_added = paste_targeting_groups(page, targeting_label)
                 _shot("after_targeting" if any_added else "fail_targeting_none_added")
                 if not any_added:
                     soft_fails.append("targeting_none_added")
@@ -8215,6 +8215,87 @@ def pick_first_suggestion(page: Page) -> bool:
         except Exception:
             pass
     return False
+
+
+def _focus_last_targeting_input(page: Page) -> bool:
+    """Trusted-click the last Detailed targeting input — the one "Define
+    further" just opened — so a paste lands in the new AND group."""
+    try:
+        pt = page.evaluate(
+            """
+            () => {
+              const inputs = [...document.querySelectorAll('input, textarea')].filter((inp) => {
+                const r = inp.getBoundingClientRect();
+                if (r.width <= 2 || r.height <= 2) return false;
+                const blob = ((inp.getAttribute('placeholder') || '') + ' ' +
+                              (inp.getAttribute('aria-label') || '')).toLowerCase();
+                if (['existing audience', 'audiencia existente', 'saved audience'].some(b => blob.includes(b))) return false;
+                return ['add interests', 'interests, behaviors', 'interests or behaviours',
+                        'interests or behaviors', 'añadir intereses', 'demographics', 'demografía']
+                  .some(g => blob.includes(g));
+              });
+              const el = inputs[inputs.length - 1];
+              if (!el) return null;
+              el.scrollIntoView({ block: 'center', behavior: 'instant' });
+              const r = el.getBoundingClientRect();
+              return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+            }
+            """
+        )
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.4)
+    return True
+
+
+def targeting_groups(targeting_label: str) -> list[str]:
+    """Split a library target into its AND groups.
+
+    `[AND]`, `|` and `\\` are one instruction written three ways — the same
+    reading `ads_manager_flow` has always applied. Each group is returned as
+    the comma-separated text Meta's field parses on paste.
+    """
+    raw = (targeting_label or "").replace("\\", "|")
+    groups = []
+    for chunk in re.split(r"\[AND\]|\|", raw, flags=re.IGNORECASE):
+        terms = [t.strip() for t in chunk.split(",") if t.strip()]
+        if terms:
+            groups.append(", ".join(terms))
+    return groups
+
+
+def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
+    """Paste each AND group into its own field, pressing "Define further"
+    between them. True only when every group went in.
+
+    The recorded flow pasted the whole library string at once. For a
+    two-group target (Mix, Mix2, …) that string is "group1 [AND] group2":
+    Meta parsed it as one comma list, every interest of both groups landed
+    in one "Include people who match", and "Define further" was never
+    pressed — "finance AND luxury" became "finance OR luxury" (Doc20,
+    KW_trl_All_Video_Mix_35_16.09, 2026-09-16, operator's screenshot).
+    """
+    groups = targeting_groups(targeting_label)
+    if not groups:
+        return False
+    for index, group in enumerate(groups):
+        if index > 0:
+            if not click_define_further(page):
+                _telemetry.record("targeting", False, note="define_further_did_not_open",
+                                  diag={"group": index + 1, "groups": len(groups)})
+                return False
+            if not _focus_last_targeting_input(page):
+                _telemetry.record("targeting", False, note="define_further_field_not_found",
+                                  diag={"group": index + 1})
+                return False
+        if not paste_targeting_interests(page, group):
+            _telemetry.record("targeting", False, note="group_not_added",
+                              diag={"group": index + 1, "groups": len(groups)})
+            return False
+    return True
 
 
 def paste_targeting_interests(page: Page, targeting_label: str) -> bool:
