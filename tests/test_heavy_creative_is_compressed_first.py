@@ -85,7 +85,7 @@ def test_a_heavy_file_is_compressed_and_the_original_survives(tmp_path, cache, m
     assert out.path != src, "отправлять должны копию"
     assert os.path.getsize(src) == int(120 * 1048576), "оригинал обязан остаться нетронутым"
     assert 23 < out.sent_mb < 25
-    assert "МБ" in out.note and "→" in out.note
+    assert "MB" in out.note and "→" in out.note
 
 
 def test_the_second_ad_takes_the_cached_copy(tmp_path, cache, monkeypatch):

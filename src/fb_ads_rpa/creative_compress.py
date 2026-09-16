@@ -38,8 +38,11 @@ import shutil
 import subprocess
 import tempfile
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from config import paths
 
@@ -79,8 +82,31 @@ class Prepared:
     def note(self) -> str:
         if not self.compressed:
             return self.reason or ""
-        return (f"сжат перед отправкой: {self.original_mb:.0f} МБ → "
-                f"{self.sent_mb:.1f} МБ за {self.seconds:.0f}с")
+        # Shown to the operator on the job card — English, like every other
+        # dashboard message.
+        timing = f" ({self.reason})" if self.reason else f" in {self.seconds:.0f}s"
+        return (f"compressed before upload: {self.original_mb:.0f} MB → "
+                f"{self.sent_mb:.1f} MB{timing}")
+
+
+# The publishing worker owns this callback; concurrent jobs/CLI calls do not
+# inherit another job's notices. Always reset it, including on cancellation.
+_notice_sink: ContextVar[Callable[[str], None] | None] = ContextVar("creative_notice", default=None)
+
+
+@contextmanager
+def observe_preparation(callback: Callable[[str], None]):
+    token = _notice_sink.set(callback)
+    try:
+        yield
+    finally:
+        _notice_sink.reset(token)
+
+
+def report_preparation(original_path: str, prepared: Prepared) -> None:
+    callback = _notice_sink.get()
+    if callback and prepared.note:
+        callback(f"{Path(original_path).name}: {prepared.note}")
 
 
 def size_mb(path: str | Path) -> float:
@@ -112,6 +138,7 @@ def _run(args: list[str], timeout: float) -> tuple[int, str]:
     proc = subprocess.run(
         args, capture_output=True, text=True, encoding="utf-8",
         errors="replace", timeout=timeout,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     return proc.returncode, (proc.stderr or "") + (proc.stdout or "")
 
@@ -167,8 +194,10 @@ def cache_path(src: str, target_mb: float) -> Path:
         stamp = f"{stat.st_mtime_ns}:{stat.st_size}"
     except OSError:
         stamp = "?"
-    key = hashlib.sha1(f"{os.path.abspath(src)}|{stamp}|{target_mb}".encode("utf-8")).hexdigest()[:16]
-    return cache_dir() / f"{Path(src).stem}.{key}{Path(src).suffix or '.mp4'}"
+    # v2 excludes incomplete files left by the former direct-to-cache writer.
+    # Always use an MP4 container for the H.264/AAC copy, including AVI/WebM inputs.
+    key = hashlib.sha1(f"v2|{os.path.abspath(src)}|{stamp}|{target_mb}".encode("utf-8")).hexdigest()[:16]
+    return cache_dir() / f"{Path(src).stem}.{key}.mp4"
 
 
 def compress(src: str, dst: str, video_kbps: int, *, run=_run,
@@ -185,7 +214,7 @@ def compress(src: str, dst: str, video_kbps: int, *, run=_run,
     Path(dst).parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         log = str(Path(tmp) / "pass")
-        common = [exe, "-y", "-hide_banner", "-loglevel", "error", "-i", src,
+        common = [exe, "-y", "-nostdin", "-hide_banner", "-loglevel", "error", "-i", src,
                   "-c:v", "libx264", "-b:v", f"{video_kbps}k", "-preset", "medium",
                   "-passlogfile", log]
         try:
@@ -218,25 +247,37 @@ def ensure_uploadable(path: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
     exe = ffmpeg_exe()
     if not exe:
         return Prepared(path=path, original_mb=original, sent_mb=original,
-                        reason="сжать нечем: ffmpeg не найден")
+                        reason="cannot compress: ffmpeg not found")
 
     dst = cache_path(path, target_mb)
-    if dst.is_file() and dst.stat().st_size > 0:
+    if dst.is_file() and 0 < size_mb(dst) <= min(limit_mb, original):
         got = size_mb(dst)
         return Prepared(path=str(dst), original_mb=original, sent_mb=got,
-                        compressed=True, reason="взят из кэша")
+                        compressed=True, reason="from cache")
 
     seconds_long = duration_s(path, run=run, exe=exe)
     kbps = video_bitrate_kbps(seconds_long, target_mb)
     if not kbps:
         return Prepared(path=path, original_mb=original, sent_mb=original,
-                        reason=f"сжатие не поможет: нужно ниже {MIN_VIDEO_KBPS} кб/с")
+                        reason=f"compression would not help: it needs under {MIN_VIDEO_KBPS} kbps")
 
-    started = time.time()
-    ok = compress(path, str(dst), kbps, run=run, exe=exe)
-    spent = time.time() - started
-    if not ok:
+    started = time.monotonic()
+    # Never expose a half-written file under the reusable cache name. A
+    # separate directory per attempt also isolates concurrent encoders.
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="encode-", dir=dst.parent) as tmp:
+            pending = Path(tmp) / "creative.mp4"
+            ok = compress(path, str(pending), kbps, run=run, exe=exe)
+            got = size_mb(pending)
+            if not ok or not (0 < got <= min(limit_mb, original)):
+                raise ValueError("encoded copy is incomplete or too large")
+            if cache_path(path, target_mb) != dst:
+                raise ValueError("source changed during encoding")
+            os.replace(pending, dst)
+    except Exception:
         return Prepared(path=path, original_mb=original, sent_mb=original,
-                        reason="сжатие не удалось")
-    return Prepared(path=str(dst), original_mb=original, sent_mb=size_mb(dst),
-                    compressed=True, seconds=spent)
+                        seconds=time.monotonic() - started,
+                        reason="compression failed — sending the original")
+    return Prepared(path=str(dst), original_mb=original, sent_mb=got,
+                    compressed=True, seconds=time.monotonic() - started)
