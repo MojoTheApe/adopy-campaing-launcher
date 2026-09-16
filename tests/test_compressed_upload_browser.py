@@ -80,7 +80,7 @@ def test_compression_notice_visible_and_escaped_while_running(browser):
     html = _render({'Demo': []})
     context = browser.new_context()
     page = context.new_page()
-    notice = '<img src=x onerror=alert(1)>.mp4: сжат перед отправкой: 247 МБ → 24.0 МБ за 2с'
+    notice = '<img src=x onerror=alert(1)>.mp4: compressed before upload: 247 MB → 24.0 MB in 2s'
     def route(r):
         if r.request.resource_type == 'document':
             r.fulfill(content_type='text/html', body=html)

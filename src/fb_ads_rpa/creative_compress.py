@@ -82,9 +82,11 @@ class Prepared:
     def note(self) -> str:
         if not self.compressed:
             return self.reason or ""
-        timing = f" ({self.reason})" if self.reason else f" за {self.seconds:.0f}с"
-        return (f"сжат перед отправкой: {self.original_mb:.0f} МБ → "
-                f"{self.sent_mb:.1f} МБ{timing}")
+        # Shown to the operator on the job card — English, like every other
+        # dashboard message.
+        timing = f" ({self.reason})" if self.reason else f" in {self.seconds:.0f}s"
+        return (f"compressed before upload: {self.original_mb:.0f} MB → "
+                f"{self.sent_mb:.1f} MB{timing}")
 
 
 # The publishing worker owns this callback; concurrent jobs/CLI calls do not
@@ -245,19 +247,19 @@ def ensure_uploadable(path: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
     exe = ffmpeg_exe()
     if not exe:
         return Prepared(path=path, original_mb=original, sent_mb=original,
-                        reason="сжать нечем: ffmpeg не найден")
+                        reason="cannot compress: ffmpeg not found")
 
     dst = cache_path(path, target_mb)
     if dst.is_file() and 0 < size_mb(dst) <= min(limit_mb, original):
         got = size_mb(dst)
         return Prepared(path=str(dst), original_mb=original, sent_mb=got,
-                        compressed=True, reason="взят из кэша")
+                        compressed=True, reason="from cache")
 
     seconds_long = duration_s(path, run=run, exe=exe)
     kbps = video_bitrate_kbps(seconds_long, target_mb)
     if not kbps:
         return Prepared(path=path, original_mb=original, sent_mb=original,
-                        reason=f"сжатие не поможет: нужно ниже {MIN_VIDEO_KBPS} кб/с")
+                        reason=f"compression would not help: it needs under {MIN_VIDEO_KBPS} kbps")
 
     started = time.monotonic()
     # Never expose a half-written file under the reusable cache name. A
@@ -276,6 +278,6 @@ def ensure_uploadable(path: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
     except Exception:
         return Prepared(path=path, original_mb=original, sent_mb=original,
                         seconds=time.monotonic() - started,
-                        reason="сжатие не удалось — отправляется оригинал")
+                        reason="compression failed — sending the original")
     return Prepared(path=str(dst), original_mb=original, sent_mb=got,
                     compressed=True, seconds=time.monotonic() - started)
