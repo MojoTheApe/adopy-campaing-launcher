@@ -3455,21 +3455,32 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         """
         () => {
           const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-          const heading = [...document.querySelectorAll('*')].find(e =>
-            e.children.length === 0 && norm(e.textContent) === 'Placements' && e.offsetParent !== null);
-          if (!heading) return { tagged: false };
-          let node = heading;
-          for (let i = 0; i < 10 && node; i++) {
-            const t = norm(node.textContent);
-            if (t.includes('Account controls')) {
-              node.setAttribute('data-rpa-placements-marker', '1');
-              const showMoreCount = [...node.querySelectorAll('*')].filter(e =>
-                e.offsetParent !== null && norm(e.textContent).toLowerCase().includes('show more settings')).length;
-              return { tagged: true, depth: i, textLen: t.length, showMoreCount, rect: node.getBoundingClientRect() };
+          // Every leaf reading "Placements", not the first visible one. The
+          // right-hand "Campaign score" panel has its own "Placements" row;
+          // taking the first by document order + offsetParent picked that
+          // one or skipped the real card depending on which panel is
+          // position:fixed on the account's layout (tag_info tagged:false on
+          // three runs of 2026-09-16). The real card is the one with
+          // "Account controls" among its ancestors — ask that of each.
+          const headings = [...document.querySelectorAll('*')].filter(e =>
+            e.children.length === 0 && norm(e.textContent) === 'Placements');
+          if (!headings.length) return { tagged: false, headings: 0 };
+          for (const heading of headings) {
+            let node = heading;
+            for (let i = 0; i < 10 && node; i++) {
+              const t = norm(node.textContent);
+              if (t.includes('Account controls')) {
+                node.setAttribute('data-rpa-placements-marker', '1');
+                const showMoreCount = [...node.querySelectorAll('*')].filter(e =>
+                  norm(e.textContent).toLowerCase().includes('show more settings')
+                  && e.getBoundingClientRect().width > 0).length;
+                return { tagged: true, depth: i, textLen: t.length, showMoreCount,
+                         headings: headings.length, rect: node.getBoundingClientRect() };
+              }
+              node = node.parentElement;
             }
-            node = node.parentElement;
           }
-          return { tagged: false };
+          return { tagged: false, headings: headings.length };
         }
         """
     )
