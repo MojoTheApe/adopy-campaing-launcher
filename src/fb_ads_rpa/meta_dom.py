@@ -8257,6 +8257,17 @@ def _ensure_manual_audience(page: Page) -> bool | None:
     return after
 
 
+def _count_xpath(page: Page, xpath: str) -> int:
+    """How many nodes an XPath matches on the live page; -1 if it could not ask."""
+    try:
+        return int(page.evaluate(
+            "(xp) => document.evaluate(xp, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null).snapshotLength",
+            xpath,
+        ))
+    except Exception:
+        return -1
+
+
 def _pick_advantage_plus_leads_off(page: Page) -> bool:
     """Open the "Advantage+ leads campaign · On ˅" menu and choose Off.
 
@@ -8288,12 +8299,23 @@ def _pick_advantage_plus_leads_off(page: Page) -> bool:
     # the editor's **Close** at the bottom of the screen — the unscoped
     # `following::` path clicked it. The ancestor is the one thing that is
     # there whenever the heading is.
+    #
+    # Matched on the element's whole string value `normalize-space(.)`, not
+    # on `text()`. React renders "Advantage+" and " leads campaign" as
+    # separate text nodes; `text()` then yields only the first one, and the
+    # path matched nothing live — five runs in a row — while matching every
+    # saved page, because serialising to HTML and parsing back merges
+    # adjacent text nodes into one. The row itself does not equal the label
+    # (its string value also carries "On"), so only the label elements match
+    # and their nearest `role=button` ancestor is the row.
     opened = _click_xpath(
         page,
-        "(//*[normalize-space(text())='Advantage+ leads campaign']"
+        "(//*[normalize-space(.)='Advantage+ leads campaign']"
         "/ancestor::*[@role='button'][1])[1]",
     )
     if not opened:
+        _telemetry.record("advantage_plus_off", None, note="row_not_found",
+                          diag={"labels": _count_xpath(page, "//*[normalize-space(.)='Advantage+ leads campaign']")})
         return False
     _sleep_h(0.8)
     # What opened is not known offline. Keep the page so the next run says.
