@@ -8763,23 +8763,31 @@ def _pick_advantage_plus_leads_off(page: Page) -> bool:
     it took. The trigger is the first `role=button` after the label whose
     own text is "On"; the menu item is a visible leaf reading "Off".
     """
-    # The trigger sits INSIDE the label's own container on Meta's markup, so
-    # it is a descendant of the element carrying the text, not a follower;
-    # `_click_xpath` then takes the smallest boxed match, i.e. the button.
+    # Measured on the saved page of run 86b7cd7edda9 (offline Chrome over the
+    # dump): the label is a `role=heading` span; "On" next to it is plain
+    # text, not a button; the control is the FIRST `role=button` after the
+    # heading — an expander whose accessible text is "Open". The earlier
+    # guesses ("a button reading On", a switch) matched nothing at all,
+    # which is why three parallel runs logged `picked_off: false`.
     opened = _click_xpath(
         page,
-        "(//*[contains(normalize-space(.), 'Advantage+ leads campaign')]"
-        "//*[@role='button' and normalize-space(.)='On']"
-        " | //*[contains(normalize-space(.), 'Advantage+ leads campaign')]"
-        "/following::*[@role='button' and normalize-space(.)='On'])[1]",
+        "(//*[normalize-space(text())='Advantage+ leads campaign']"
+        "/following::*[@role='button'][1])[1]",
     )
     if not opened:
         return False
-    _sleep_h(0.6)
+    _sleep_h(0.8)
+    # What opened is not known offline. Keep the page so the next run says.
+    try:
+        from src.fb_ads_rpa import page_capture as _pc
+
+        _pc.capture(page, step="advantage_plus_control")
+    except Exception:
+        pass
     return _click_xpath(
         page,
-        "//*[@role='menuitem' or @role='option' or @role='menuitemradio' or @role='button' or self::div]"
-        "[normalize-space(.)='Off'][1]",
+        "//*[@role='menuitem' or @role='option' or @role='menuitemradio' or @role='radio' or self::div or self::span]"
+        "[starts-with(normalize-space(.), 'Off') and string-length(normalize-space(.)) < 40][1]",
     )
 
 
