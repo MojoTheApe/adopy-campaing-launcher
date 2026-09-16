@@ -4986,6 +4986,11 @@ def _library_tiles(page: Page, filename: str):
 #: индексации такая, повторное использование всё равно не поможет.
 _LIBRARY_APPEAR_TRIES = 5
 
+#: Сколько подходящих плиток пробовать. Было 6: 17.09 00:03 (S15) копий
+#: `2046_1.mp4` было семь — шесть старых не брались, а свежая, загруженная в
+#: этом же прогоне, так и не получила клика.
+_LIBRARY_MAX_PICKS = 12
+
 
 def _library_sight(page: Page, filename: str) -> dict:
     """Что шаг видел в медиатеке в момент, когда решил, что копии нет.
@@ -5290,7 +5295,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     # Копия может быть уже выбрана до нас: «1 selected» и плитка нужного файла
     # с отметкой. 16.09 23:28 (S15) шаг щёлкал по ней — клик снимал выбор, —
     # и потом решал, что копии нет. Уже выбранная плитка — это наш выбор.
-    for i in range(min(available, 6)):
+    for i in range(min(available, _LIBRARY_MAX_PICKS)):
         try:
             if _library_tile_selected(tiles.nth(i)):
                 log.append({"tile": i, "before": before, "already_selected": True, "took": True})
@@ -5298,7 +5303,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
                 break
         except Exception:
             continue
-    for i in ([] if picked else range(min(available, 6))):
+    for i in ([] if picked else range(min(available, _LIBRARY_MAX_PICKS))):
         note = {"tile": i, "before": before}
         try:
             tile = tiles.nth(i)
@@ -5323,6 +5328,12 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         note["after"] = _library_selected_count(page)
         note["tile_selected"] = _library_tile_selected(tile)
         note["took"] = picked
+        try:
+            # Есть ли на миниатюре значок (кружок с минусом) — кандидат в
+            # «копия недоступна»; проверяется по накопленным прогонам.
+            note["icon"] = bool(tile.evaluate("el => !!el.querySelector('svg')"))
+        except Exception:
+            pass
         log.append(note)
         if picked:
             break
