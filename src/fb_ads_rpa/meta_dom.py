@@ -4481,12 +4481,29 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
 
     # ── категории ────────────────────────────────────────────────────────
     report["categories"] = {}
+    locked_ok: list[str] = []
     for name, want in _PLACEMENT_CATEGORIES.items():
         res = _set_category(name, want)
         report["categories"][name] = res
         if not res.get("checkbox") or res.get("checked") is not want:
-            ok = False
+            # Недоступная категория в нужном состоянии — не отказ. 17.09
+            # 04:22 (S15): «Apps and sites» заблокирована, потому что Audience
+            # Network исключён в Account controls, и стоит снятой — ровно
+            # как надо. Тот же принцип, что у подпунктов («Facebook Business
+            # Explore»). Состояние берём у самой страницы, не из `res`.
+            try:
+                cands = (_category_candidates() or {}).get(name) or []
+            except Exception:
+                cands = []
+            if cands and all(c.get("disabled") for c in cands) and all(
+                bool(c.get("checked")) is want for c in cands
+            ):
+                locked_ok.append(name)
+            else:
+                ok = False
         _sleep_h(0.3)
+    if locked_ok:
+        report["categories_locked_as_wanted"] = locked_ok
 
     # ── подпункты ────────────────────────────────────────────────────────
     report["expanded"] = {}
