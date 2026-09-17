@@ -3225,7 +3225,7 @@ PLACEMENTS_EXPAND_JS = (
 нам дня.
 """
 
-PLACEMENTS_SUBITEM_READ_JS = """
+PLACEMENTS_SUBITEM_READ_JS = r"""
   (label) => {
     const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
     const root = document.querySelector('[data-rpa-placements-marker]');
@@ -4572,6 +4572,29 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             if not [x for x in remaining_on + remaining_off if x in here]:
                 break
             _sleep_h(0.6)
+
+        # 17.09 21:13 (CO_bnc FX): «Threads feed» и «Facebook Notifications»
+        # в разметке не появились вовсе — нижние строки раскрытой категории
+        # видны только после прокрутки. Докручиваем и перечитываем список.
+        for _ in range(3):
+            if not (remaining_on or remaining_off):
+                break
+            try:
+                page.mouse.wheel(0, 400)
+            except Exception:
+                break
+            _sleep_h(0.6)
+            more = [x for x in _subitem_labels() if x not in here]
+            if not more:
+                continue
+            here = here + more
+            report["subitems_seen"].extend(x for x in more if x not in report["subitems_seen"])
+            for label in list(remaining_on):
+                if label in more and _set(label, True):
+                    remaining_on.remove(label)
+            for label in list(remaining_off):
+                if label in more and _set(label, False):
+                    remaining_off.remove(label)
 
     # Meta обновляет галочку не сразу: 17.09 20:59 (CR_ait Day) семь
     # подпунктов отчитались «ещё включены», а на дампе, снятом через пару
