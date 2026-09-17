@@ -2033,7 +2033,10 @@ SEL_MARKED_SWITCH = '[data-acl-switch="1"]'
 _FIND_SWITCH_JS = r"""
 (args) => {
   const norm = s => (s || '').replace(/\s+/g, ' ').trim();
-  const visible = e => e.getClientRects().length && !e.closest('[hidden],[aria-hidden="true"],[inert]') && getComputedStyle(e).visibility !== 'hidden';
+  // display:contents-обёртки строк (Meta, 17.09) своих прямоугольников не имеют —
+  // их видимость берётся у содержимого, как в чтении дерева.
+  const hasBox = e => e.getClientRects().length > 0 || (getComputedStyle(e).display === 'contents' && [...e.children].some(hasBox));
+  const visible = e => hasBox(e) && !e.closest('[hidden],[aria-hidden="true"],[inert]') && getComputedStyle(e).visibility !== 'hidden';
   const fail = why => ({found: false, why});
   document.querySelectorAll('[data-acl-switch]').forEach(e => e.removeAttribute('data-acl-switch'));
   const tables = [...document.querySelectorAll('[role="table"],[role="grid"]')].filter(visible);
@@ -2216,7 +2219,14 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
             out.error = "account, period, level or parent changed — nothing touched"
             return out
         args = {"id":out.object_id, "kind":_LEVEL_KIND[level], "name":expected_name}
-        found = page.evaluate(_FIND_SWITCH_JS, args)
+        # «Занятая» таблица — ждём, как в чтении дерева: 17.09 выключение на
+        # Doc20 отказало «table is still loading» сразу после открытия списка.
+        found = None
+        for _attempt in range(TABLE_BUSY_TRIES):
+            found = page.evaluate(_FIND_SWITCH_JS, args)
+            if not (isinstance(found, dict) and found.get("why") == "table is still loading"):
+                break
+            page.wait_for_timeout(1000)
         if not found or not found.get("found"):
             out.error = (found or {}).get("why") or "row not found"
             return out

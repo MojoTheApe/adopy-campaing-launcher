@@ -92,3 +92,27 @@ def test_rows_marked_on_display_contents_wrappers_are_read():
         b.close()
     assert not err, err
     assert len(rows) == 1 and rows[0].name == "KW_trl_All_Video_Day_35_16.09" and rows[0].spend == "$55.81"
+
+
+def test_turn_off_finds_a_switch_row_on_display_contents_wrappers():
+    """17.09 Doc20: выключение подключилось и отказало — строки на обёртках
+    display:contents для него были «невидимы»."""
+    import os
+    from playwright.sync_api import sync_playwright
+
+    row = "120249333289990244"
+    html = (
+        '<div role="table"><div role="presentation">'
+        f'<span style="display:contents" data-surface="/am/table/table_row:{row}unit/table_cell:forObjectType(name,ADGROUP)">'
+        '<div>2221 - AR Trolley Officially</div></span>'
+        f'<span style="display:contents" data-surface="/am/table/table_row:{row}unit/table_cell:forObjectType(toggle,ADGROUP)">'
+        '<div><input type="checkbox" role="switch" aria-checked="true" aria-label="On/off"></div></span>'
+        "</div></div>"
+    )
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        p = b.new_page()
+        p.set_content(html)
+        found = p.evaluate(sp._FIND_SWITCH_JS, {"id": row, "kind": "ADGROUP", "name": "2221 - AR Trolley Officially"})
+        b.close()
+    assert found.get("found") is True and found.get("on") is True, found
