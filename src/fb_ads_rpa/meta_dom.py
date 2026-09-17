@@ -9636,6 +9636,41 @@ def _location_rows(page: Page) -> list[dict]:
         return []
 
 
+_LOCATION_SUMMARY_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const leaves = [...document.querySelectorAll('*')]
+      .filter(e => e.offsetParent !== null && e.children.length === 0)
+      .map(e => norm(e.textContent));
+    const line = leaves.find(t => /^(Inclusion|Inclusion|Incluir)\s*:/i.test(t));
+    if (!line) return null;
+    return line.split(':').slice(1).join(':').split(',').map(x => norm(x)).filter(Boolean);
+  }
+"""
+"""Свёрнутая строка «Inclusion: Colombia» — страны, которые Meta показывает списком."""
+
+
+def _location_summary_countries(page: Page) -> list[str] | None:
+    try:
+        return page.evaluate(_LOCATION_SUMMARY_JS)
+    except Exception:
+        return None
+
+
+def _only_wanted_in_summary(page: Page, keep_text: str) -> bool:
+    """В сводке ровно наша страна и никого больше.
+
+    18.09 06:32 (CO_bnc GMBL): строки карточки не прочитались
+    (`location_rows_not_read`), и шаг отказал, хотя страна была одна. Когда
+    строки не читаются, вопрос «сколько там стран» ещё можно задать сводке.
+    """
+    got = _location_summary_countries(page)
+    if not got:
+        return False
+    keep = (keep_text or "").strip().lower()
+    return len(got) == 1 and keep in got[0].lower()
+
+
 def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     """Remove every included location that is not `keep_text`; return the
     names still left afterwards (empty list = clean, None = unreadable).
@@ -9646,6 +9681,13 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     """
     keep = (keep_text or "").strip().lower()
     seen = _location_rows(page)
+    if not seen and _only_wanted_in_summary(page, keep_text):
+        # 18.09 06:32 (CO_bnc GMBL): карточку прочитать не удалось, а страна
+        # была одна — это видно по свёрнутой строке «Inclusion: …».
+        _telemetry.record("audience_location", None, note="rows_unread_summary_clean",
+                          diag={"keep": keep_text,
+                                "summary": _location_summary_countries(page)})
+        return []
     if not seen:
         # Not even the target's own row was read: the card's shape is not
         # the one this knows. Say so rather than pass silently, and keep the
@@ -9662,7 +9704,7 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     for _ in range(6):
         rows = _location_rows(page)
         if not rows:
-            return None
+            return [] if _only_wanted_in_summary(page, keep_text) else None
         if not any(keep in r["name"].lower() for r in rows):
             # Do not delete the old country before the target is confirmed.
             return [r["name"] for r in rows]
@@ -9674,7 +9716,7 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
         _sleep_h(0.9)
     rows = _location_rows(page)
     if not rows:
-        return None
+        return [] if _only_wanted_in_summary(page, keep_text) else None
     return [r["name"] for r in rows if keep not in r["name"].lower()]
 
 
@@ -10231,6 +10273,37 @@ def _age_triggers_read(page: Page) -> list[str]:
     return []
 
 
+def _uncheck_age_suggestion(page: Page) -> None:
+    """Снять «Use as a suggestion» — иначе Meta расширяет возраст сама.
+
+    Галочка живёт прямо под границами и по умолчанию включена, а с ней возраст
+    становится пожеланием: итог «Your suggestion 35–65+».
+    """
+    try:
+        page.evaluate(
+            """() => {
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              const row = [...document.querySelectorAll('*')].find(e =>
+                norm(e.textContent).startsWith('Use as a suggestion') && e.offsetParent !== null);
+              if (!row) return;
+              let box = row;
+              for (let i = 0; i < 6 && box; i++) {
+                const cb = box.querySelector('input[type=checkbox]');
+                if (cb) {
+                  const aria = cb.getAttribute('aria-checked');
+                  const on = aria === 'true' ? true : aria === 'false' ? false : cb.checked;
+                  if (on) cb.click();
+                  return;
+                }
+                box = box.parentElement;
+              }
+            }"""
+        )
+        _sleep_h(0.3)
+    except Exception:
+        pass
+
+
 def _age_shows_value(page: Page, value: str) -> bool:
     """Стоит ли граница возраста на `value` — по той же разметке, что и клик.
 
@@ -10346,10 +10419,21 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     wanted = [str(age_min), str(age_max) if age_max < 65 else "65+"]
     seen = _age_triggers_read(page)
     if seen != wanted:
+        # 18.09 06:32: на CL_ml, CO_bnc и CR_ait `_age_triggers_read` вернул
+        # пусто на всех трёх кампаниях, хотя на экране стояло «35 – 65+»: его
+        # подъём от подписи «Age» не доходит до значений этой разметки.
+        # Спрашиваем тем же поиском, которым по границе кликаем.
+        by_label = [v for v in wanted if _age_shows_value(page, v)]
+        if len(by_label) == len(wanted):
+            _telemetry.record("audience_age", None, note="read_back_by_label",
+                              diag={"wanted": wanted, "seen": seen})
+            _uncheck_age_suggestion(page)
+            return True
         _telemetry.record("audience_age", False,
                           note="read_back_mismatch" if seen else "read_back_unavailable",
                           diag={"wanted": wanted, "seen": seen})
         return False
+    _uncheck_age_suggestion(page)
     return True
 
 
