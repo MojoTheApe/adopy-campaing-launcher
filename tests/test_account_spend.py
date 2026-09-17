@@ -177,7 +177,7 @@ def test_url_sends_digits_because_meta_ignores_the_prefix():
 def test_a_missing_account_fails_before_any_browser_opens(monkeypatch):
     monkeypatch.setattr(sp, "_entry_for", lambda account: None)
     out = sp.read_via_rpa("Нет такого", "2026-09-06", "2026-09-06")
-    assert out.state == "failed" and "нет в карте" in out.error
+    assert out.state == "failed" and "not in the account map" in out.error
 
 
 def test_an_account_without_an_id_fails_before_any_browser_opens(monkeypatch):
@@ -244,19 +244,19 @@ def test_a_hand_opened_profile_is_refused_not_restarted(monkeypatch):
     _fake_browser(monkeypatch, attach=None, running=True)
     with pytest.raises(sp.ProfileNotAttachable) as exc:
         sp._attach_only(_Entry(), "Acc")
-    assert "вручную" in str(exc.value)
-    assert "Перезапускать не будем" in str(exc.value)
+    assert "opened manually" in str(exc.value)
+    assert "will not be restarted" in str(exc.value)
 
 
 def test_a_closed_profile_says_so(monkeypatch):
     _fake_browser(monkeypatch, attach=None, running=False)
-    with pytest.raises(sp.ProfileNotAttachable, match="не открыт"):
+    with pytest.raises(sp.ProfileNotAttachable, match="is not open"):
         sp._attach_only(_Entry(), "Acc")
 
 
 def test_a_missing_profile_directory_is_named(monkeypatch):
     _fake_browser(monkeypatch, attach=None, running=False, has_dir=False)
-    with pytest.raises(sp.ProfileNotAttachable, match="папка профиля"):
+    with pytest.raises(sp.ProfileNotAttachable, match="Profile folder"):
         sp._attach_only(_Entry(), "Acc")
 
 
@@ -330,7 +330,7 @@ def test_attached_but_no_account_says_so(monkeypatch):
     monkeypatch.setattr(sp, "_attach_only", lambda entry, label: Conn())
     monkeypatch.setattr(sp, "_act_from_url", lambda page, tries=20: "")
     out = sp.read_ad_account("p-1")
-    assert out["ok"] is False and "номера кабинета в адресе нет" in out["error"]
+    assert out["ok"] is False and "no ad account number" in out["error"]
 
 
 def test_a_good_probe_returns_the_number_and_the_name(monkeypatch):
