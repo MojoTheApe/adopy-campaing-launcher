@@ -3225,6 +3225,31 @@ PLACEMENTS_EXPAND_JS = (
 нам дня.
 """
 
+PLACEMENTS_SUBITEM_READ_JS = """
+  (label) => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const root = document.querySelector('[data-rpa-placements-marker]');
+    if (!root) return { found: false, why: 'нет метки блока' };
+    const rows = [...root.querySelectorAll('*')].filter(e =>
+      e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
+    for (const row of rows) {
+      let container = row.parentElement;
+      for (let i = 0; i < 4 && container; i++) {
+        const cb = container.querySelector('input[type=checkbox]');
+        if (cb) {
+          const aria = cb.getAttribute('aria-checked');
+          return { found: true,
+                   checked: aria === 'true' ? true : aria === 'false' ? false : cb.checked };
+        }
+        container = container.parentElement;
+      }
+    }
+    return { found: false, why: 'строка не найдена' };
+  }
+"""
+"""Состояние подпункта без клика — для перепроверки после паузы."""
+
+
 PLACEMENTS_SUBITEM_JS = """
   ([label, wantChecked]) => {
     const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
@@ -4547,6 +4572,25 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             if not [x for x in remaining_on + remaining_off if x in here]:
                 break
             _sleep_h(0.6)
+
+    # Meta обновляет галочку не сразу: 17.09 20:59 (CR_ait Day) семь
+    # подпунктов отчитались «ещё включены», а на дампе, снятом через пару
+    # секунд, все были в нужном состоянии. Перед отказом перечитываем.
+    still = [(x, True) for x in remaining_on] + [(x, False) for x in remaining_off]
+    if still:
+        _sleep_h(2.0)
+        settled = {}
+        for label, want in still:
+            try:
+                res = page.evaluate(PLACEMENTS_SUBITEM_READ_JS, label) or {}
+            except Exception as exc:
+                res = {"found": False, "why": str(exc)[:80]}
+            if res.get("found") and res.get("checked") is want:
+                settled[label] = res
+                (remaining_on if want else remaining_off).remove(label)
+                report.get("subitems_failed", {}).pop(label, None)
+        if settled:
+            report["subitems_settled"] = settled
 
     report["subitems_missing"] = remaining_on + remaining_off
     _dbg.append(f"subitems_seen={report['subitems_seen']}")
