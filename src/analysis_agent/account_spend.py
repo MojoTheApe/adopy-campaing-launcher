@@ -32,7 +32,12 @@ from typing import Any, Callable
 
 from config import paths
 from src import acl_log
-from src.fb_ads_rpa.operations import browser_operation, profile_lock, serialized_browser
+from src.fb_ads_rpa.operations import (
+    browser_operation,
+    profile_lock,
+    publish_lease,
+    serialized_browser,
+)
 
 _STORE_LOCK = threading.RLock()
 _UNSAVED: dict[str, "SpendReading"] = {}
@@ -2106,7 +2111,7 @@ _SWITCH_ACTION_JS = """args => {
 }"""
 
 
-@serialized_browser
+@serialized_browser(key=_profile_key)
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
              expected_name: str = "", date_from: str = "", date_to: str = "",
              requester: str = "") -> "TurnOffResult":

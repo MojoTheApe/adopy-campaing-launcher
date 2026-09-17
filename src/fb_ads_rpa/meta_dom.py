@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -113,6 +114,24 @@ def _upload_heavy_via_chooser_event(
 #: Читается тем, кто пишет отказ в телеметрию: без него `ad_creative_upload`
 #: приходил пустым, и шесть отказов подряд 14.09 не дали ни одной зацепки.
 _LAST_UPLOAD_DIAG: dict = {}
+
+#: The same record, per thread. Two publishes run at once since acl-1210,
+#: and the module-level copy above is whichever thread wrote last — kept for
+#: the tests and for anyone reading it from the outside, but the flow reads
+#: its own thread's record through `last_upload_diag()`.
+_upload_diag_tls = threading.local()
+
+
+def last_upload_diag() -> dict:
+    """The upload diagnostic of THIS thread's last creative, or the global one."""
+    own = getattr(_upload_diag_tls, "diag", None)
+    return dict(own if own is not None else _LAST_UPLOAD_DIAG)
+
+
+def _set_last_upload_diag(diag: dict) -> None:
+    global _LAST_UPLOAD_DIAG
+    _LAST_UPLOAD_DIAG = diag
+    _upload_diag_tls.diag = diag
 from src.fb_ads_rpa.config import get_reuse_library_media
 
 PageLike = Page | Frame
@@ -2900,7 +2919,7 @@ def run_recorded_campaign_flow(
                     # Раньше здесь было пусто, и «не загрузился» ничем не
                     # отличалось от «не нашёл кнопку» — шесть отказов 14.09
                     # не дали ни одной зацепки, и разбор свёлся к догадкам.
-                    _shot("fail_ad_creative_upload", dict(_LAST_UPLOAD_DIAG))
+                    _shot("fail_ad_creative_upload", last_upload_diag())
                     ad_level_fails.append("ad_creative_upload")
                 else:
                     creative_uploaded = True
@@ -5062,8 +5081,7 @@ def upload_ad_creative(
     /ads/edit/ URL captured right after the Next-to-ad-level click) instead
     of guessing a re-open control.
     """
-    global _LAST_UPLOAD_DIAG
-    _LAST_UPLOAD_DIAG = {"file": Path(creative_path).name, "attempts": []}
+    _set_last_upload_diag({"file": Path(creative_path).name, "attempts": []})
     is_video = (creative_type or "").strip().lower() == "video"
     option_label = "Video ad" if is_video else "Image ad"
 
@@ -5295,10 +5313,12 @@ def upload_ad_creative(
 
     def _remember(**kw) -> None:
         _diag["attempts"].append(kw)
-        global _LAST_UPLOAD_DIAG
-        _LAST_UPLOAD_DIAG = _diag
+        _set_last_upload_diag(_diag)
         try:
-            Path("output/debug_creative_upload.txt").write_text(
+            # One file per run: two runs at once would otherwise overwrite
+            # each other's record mid-step (acl-1210).
+            run = _telemetry.current_run_id() or "run"
+            Path(f"output/debug_creative_upload.{run}.txt").write_text(
                 json.dumps(_diag, ensure_ascii=False, indent=1), encoding="utf-8"
             )
         except Exception:
