@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 import requests
 
 from src.meta_campaign_agent.multilogin_config import MultiloginInstanceConfig
+
+log = logging.getLogger(__name__)
 
 
 class MultiloginLauncherError(RuntimeError):
@@ -160,21 +163,33 @@ class MultiloginLauncher:
         return None
 
     def stop_profile(self, profile_id: str, folder_id: str | None = None) -> None:
-        """Stop a running MLX profile.
+        """Stop a running MLX profile through the launcher.
 
-        MLX X requires folder_id in the URL (same as start).  Provide it for
-        a reliable stop; without it we fall back to legacy endpoints.
+        The address is `GET /api/v1/profile/stop/p/{profile_id}` — no folder in
+        the path, unlike start. Taken from Multilogin's own Postman collection
+        and confirmed on launcher 12.13.0 (2026-09-16): a profile that is not
+        running answers 500 "profile already stopped", which is a structured
+        reply and not a routing miss.
+
+        Before that the code tried three other addresses, and every one of
+        them was "404 page not found" on the launcher in use. The caller then
+        fell back to killing Mimic for the profile, and the run survived — but
+        a kill is not a stop: the profile's state is whatever Chrome flushed,
+        and Multilogin's own "in use by" for it is left to time out. The first
+        live run after ACL-1200 went that way (FacebookDQ501, 12:08:36).
+
+        "Already stopped" is treated as done: the caller wanted the profile
+        not running, and it is not. The old addresses stay as a tail, so a
+        launcher that still serves one of them keeps working; a 404 is logged
+        with the address it came from, once, so the next move of the API can
+        be read off the log instead of rediscovered.
         """
+        candidates = [f"{self.config.launcher_base_v1}/profile/stop/p/{profile_id}"]
         resolved_folder = (folder_id or "").strip() or None
-        if not resolved_folder:
-            resolved_folder = self._resolve_folder_id(profile_id)
-
-        candidates: list[str] = []
         if resolved_folder:
             candidates.append(
                 f"{self.config.launcher_base_v2}/profile/f/{resolved_folder}/p/{profile_id}/stop"
             )
-        # Legacy endpoints (may 404 but worth trying)
         candidates += [
             f"{self.config.launcher_base_v2}/profile/{profile_id}/stop",
             f"{self.config.launcher_base_v1}/profile/stop",
@@ -185,16 +200,23 @@ class MultiloginLauncher:
             params = {"profile_id": profile_id} if url.endswith("/profile/stop") else {}
             try:
                 r = requests.get(url, headers=self._headers(), params=params, timeout=self.timeout)
-                if r.status_code < 400:
-                    return  # success
-                try:
-                    body = r.json()
-                    msg = body.get("status", {}).get("message") if isinstance(body.get("status"), dict) else r.text
-                except ValueError:
-                    msg = r.text[:200]
-                last_err = f"HTTP {r.status_code}: {msg}"
-                if r.status_code != 404:
-                    break  # non-404 error → stop trying
             except Exception as exc:
                 last_err = str(exc)
+                continue
+            if r.status_code < 400:
+                return
+            try:
+                body = r.json()
+                status = body.get("status") if isinstance(body, dict) else None
+                msg = status.get("message") if isinstance(status, dict) else r.text
+            except ValueError:
+                msg = r.text[:200]
+            msg = msg or ""
+            if "already stopped" in msg.lower():
+                return
+            last_err = f"HTTP {r.status_code}: {msg}"
+            if r.status_code == 404:
+                log.info("MLX stop address not served here: %s", url.split("/api/", 1)[-1])
+                continue
+            break
         raise MultiloginLauncherError(f"Stop profile failed {last_err}")
