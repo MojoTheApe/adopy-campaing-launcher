@@ -546,12 +546,48 @@ def _ensure_wide_window(context, page) -> None:
             "Browser.setWindowBounds",
             {"windowId": window_id, "bounds": {"windowState": "normal"}},
         )
-        session.send(
-            "Browser.setWindowBounds",
-            {"windowId": window_id,
-             "bounds": {"left": 0, "top": 0, "width": 1920, "height": 1040}},
-        )
-        time.sleep(1.0)  # let Chrome actually relayout at the new size
+        # Размер — не больше доступной области экрана профиля. 17.09 (S15):
+        # профиль эмулирует экран 1536×864, запрос 1920×1040 Chrome молча не
+        # применял, и окно оставалось 1039×583 — страница рисовалась в
+        # 1136×542, редактор уезжал в горизонтальную прокрутку, Destination
+        # второго объявления не находился. У Doc20/Doc21 экран 3840×2160, там
+        # 1920×1040 проходило.
+        target_w, target_h = 1920, 1040
+        try:
+            avail = page.evaluate("() => [screen.availWidth, screen.availHeight]")
+            if avail and avail[0] and avail[1]:
+                target_w = min(target_w, int(avail[0]))
+                target_h = min(target_h, int(avail[1]))
+        except Exception:
+            pass
+        after = {}
+        for w, h in ((target_w, target_h), (1920, 1040)):
+            try:
+                session.send(
+                    "Browser.setWindowBounds",
+                    {"windowId": window_id,
+                     "bounds": {"left": 0, "top": 0, "width": w, "height": h}},
+                )
+            except Exception as exc:
+                log.debug("setWindowBounds %sx%s refused: %s", w, h, exc)
+            time.sleep(1.0)  # let Chrome actually relayout at the new size
+            try:
+                after = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+            except Exception:
+                after = {}
+            if (after.get("width") or 0) >= min(w, 1280):
+                break
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+
+            _rt.record("window_resize", (after.get("width") or 0) >= 1280, diag={
+                "before": {"width": bounds.get("width"), "height": bounds.get("height"),
+                           "state": bounds.get("windowState")},
+                "target": [target_w, target_h],
+                "after": {"width": after.get("width"), "height": after.get("height")},
+            })
+        except Exception:
+            pass
 
         # Repair the impossible geometry this can leave behind. Measured
         # 2026-07-31: outerWidth 1280 while innerWidth was 1600 — a window
