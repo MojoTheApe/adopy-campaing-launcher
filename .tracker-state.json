@@ -111,7 +111,8 @@
     },
     "1ef683544de81b43bc92ddff76fe6b1af6a0ee4dcaaa0d471f091f65f8d6c25d": {
       "title": "Country is not added when location suggestions do not open",
-      "state": "creating"
+      "state": "created",
+      "issue": 226
     }
   }
 }
