@@ -300,3 +300,15 @@ def test_an_open_dynamic_creative_dialog_is_cancelled_not_continued(page, tmp_pa
     assert meta_dom._cancel_dynamic_creative_dialog(page) is True
     assert page.evaluate("window.dlg") == ["opened", "cancel"]
     assert not page.is_visible("#dlg")
+
+
+def test_the_age_step_believes_the_field_over_its_own_boundary_report(page, monkeypatch):
+    """17.09 22:12 CR_ait FX_Y: на экране «35 – 65+», а шаг отказал и не снял галочку."""
+    monkeypatch.setattr(meta_dom, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(meta_dom, "_mark_age_trigger", lambda *a, **k: False)
+    page.set_content(
+        "<div><div>Age</div><div><div>35</div><div>65+</div></div>"
+        "<div><span>Use as a suggestion</span><input id='sug' type='checkbox' checked></div></div>"
+    )
+    assert meta_dom.fill_audience_age(page, 35, 65) is True
+    assert page.eval_on_selector("#sug", "el => el.checked") is False

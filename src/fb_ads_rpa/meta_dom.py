@@ -10460,7 +10460,21 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
                     pass
                 boundary_results.append(False)
                 continue
-        if len(boundary_results) == 2 and all(boundary_results):
+        # 17.09 22:12 (CR_ait FX_Y): на экране стояло ровно «35 – 65+», но
+        # одна из границ отчиталась провалом, и из-за этого не сняли галочку
+        # «Use as a suggestion» — шаг отказал при верном возрасте. Верим
+        # итоговому виду поля, а не отчёту по каждой границе.
+        read_back = False
+        if not (len(boundary_results) == 2 and all(boundary_results)):
+            read_back = _age_boundary_shows(page, age_min_str) and _age_boundary_shows(page, age_max_str)
+            if read_back:
+                try:
+                    _telemetry.record("audience_age", None, note="read_back_ok",
+                                      diag={"boundaries": boundary_results,
+                                            "shows": [age_min_str, age_max_str]})
+                except Exception:
+                    pass
+        if (len(boundary_results) == 2 and all(boundary_results)) or read_back:
             # "Use as a suggestion" appears right below the Age boundaries
             # once both are set to non-default values — confirmed live
             # 2026-07-27 it's checked by default ("We'll also reach people
