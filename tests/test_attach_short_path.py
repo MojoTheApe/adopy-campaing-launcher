@@ -168,7 +168,7 @@ def test_a_window_without_a_debug_port_still_says_what_to_do(wired):
     provider = wired(_Provider(knows="ни то ни другое"))
     with pytest.raises(sp.ProfileNotAttachable) as exc:
         sp._attach_only(_Entry(), "KLD_BFL_X84")
-    assert "вручную" in str(exc.value)
+    assert "opened manually" in str(exc.value)
     assert provider.tried == [LONG, SHORT]
 
 
@@ -194,7 +194,7 @@ def test_open_profile_recognises_a_window_it_already_opened(wired, monkeypatch):
     monkeypatch.setattr(sp, "_entry_for", lambda account: _Entry())
     ok, message = sp.open_for_automation("KLD_BFL_X84")
     assert ok is True
-    assert "уже открыт автоматизацией" in message
+    assert "already open through automation" in message
     assert provider.conn.closed_keeping_window, "окно закрыли за человеком"
 
 
