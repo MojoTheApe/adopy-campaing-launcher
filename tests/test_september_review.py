@@ -124,7 +124,7 @@ def test_short_named_manual_profile_is_not_started_again(monkeypatch):
     monkeypatch.setattr(browser, "MultiloginDirectCDPProvider", lambda: provider)
     monkeypatch.setattr(browser, "get_browser_provider", lambda name: NS(open=lambda *a: calls.append(a)))
     ok, message = spend.open_for_automation("Demo")
-    assert not ok and "вручную" in message
+    assert not ok and "opened manually" in message
     assert calls == [], "must not start a profile whose short-named process is already running"
 
 
