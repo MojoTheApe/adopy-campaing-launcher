@@ -2497,6 +2497,12 @@ def run_recorded_campaign_flow(
     if _recover_from_browser_error(page):
         _shot("skip_browser_error_recovered")
 
+    # Record geometry for diagnosing failures without changing window sizing.
+    try:
+        _telemetry.record("browser_window", None, diag=_telemetry.window_state(page) or None)
+    except Exception:
+        pass
+
     for _ in range(3):
         _dismiss_floating_banners(page)
         _sleep_h(0.4)
@@ -2575,6 +2581,12 @@ def run_recorded_campaign_flow(
     # trusting the value and moving on.
     wait_editor_saved(page)
     _shot("after_campaign_name")
+
+    # 17.09 00:05 (S15, 71f6bddbcf7c): Meta открыла черновик с «Ad set
+    # budget» по умолчанию — поля бюджета на уровне кампании нет, и шаг
+    # 133 с искал его. Бюджет у нас кампанийный: переключить до ввода.
+    if _ensure_campaign_budget(page):
+        wait_editor_saved(page)
 
     try:
         page.get_by_role("textbox", name="Budget").click(timeout=3000)
@@ -2777,6 +2789,13 @@ def run_recorded_campaign_flow(
             except Exception:
                 pass
             _sleep_h(0.5)
+        if not continued and _audience_already_manual(page):
+            # 17.09 (S15 06:53, Doc21 04:19/04:28): выбор радио применился
+            # сразу, окна с Continue не было — на экране уже «Switch to
+            # recommended setup» и живые выпадашки возраста. Прежде это был
+            # отказ, и на Doc21 PF он оборвал кампанию целиком.
+            _telemetry.record("further_limit_continue", None, note="applied_without_dialog")
+            continued = True
         _shot("after_further_limit_continue" if continued else "fail_further_limit_continue")
         if not continued:
             return "further_limit_reach_continue"
@@ -3011,6 +3030,7 @@ def run_recorded_campaign_flow(
         if reached_ad_level and additional_ads:
             for i, extra in enumerate(additional_ads, start=2):
                 tag = f"ad{i}"
+                shells_before = _tree_new_ad_shells(page)
                 try:
                     created = create_additional_ad(page, adset_name)
                     if not created:
@@ -3035,6 +3055,15 @@ def run_recorded_campaign_flow(
                         ad_level_fails.append(f"{tag}_create")
                         continue
                     _shot(f"after_{tag}_create")
+                    # 17.09 00:02 (Doc20, cbe566db70b2): один «Create ad» дал
+                    # ДВА «New Leads ad» — лишнее осталось пустым в кампании.
+                    # Удалять сами не берёмся; отказ шага с именем причины,
+                    # чтобы черновик не ушёл в публикацию с пустым объявлением.
+                    shells_after = _tree_new_ad_shells(page)
+                    if shells_before >= 0 and shells_after - shells_before > 1:
+                        _telemetry.record(f"{tag}_create", False, note="extra_ad_shell",
+                                          diag={"before": shells_before, "after": shells_after})
+                        ad_level_fails.append(f"{tag}_extra_empty_ad")
                 except Exception as exc:
                     _shot(f"fail_{tag}_create")
                     ad_level_fails.append(f"{tag}_create:{str(exc)[:60]}")
@@ -3101,6 +3130,25 @@ def run_recorded_campaign_flow(
                 sweep_failed = verify_and_fix_ad_destinations(page, sweep_names, destination_url)
                 for bad in sweep_failed:
                     ad_level_fails.append(f"destination_sweep:{bad}")
+                # Проход открыл каждое объявление и подтвердил (или починил)
+                # назначение. Ранний отказ того же объявления после этого —
+                # устаревшая запись: 17.09 06:13 (S15 Day) ad2_destination упал в
+                # узком окне, проход в конце его поправил, а сводка всё равно
+                # пометила кампанию непубликуемой.
+                unverified = {b.split(":", 1)[0] for b in sweep_failed}
+                confirmed = {
+                    ("ad" if i == 1 else f"ad{i}"): n
+                    for i, n in enumerate(sweep_names, start=1)
+                    if n not in unverified
+                }
+                cleared = [
+                    f for f in ad_level_fails
+                    if f.split(":", 1)[0].endswith("_destination")
+                    and f.split(":", 1)[0][: -len("_destination")] in confirmed
+                ]
+                if cleared:
+                    ad_level_fails[:] = [f for f in ad_level_fails if f not in cleared]
+                    _telemetry.record("destination_sweep_cleared", None, diag={"cleared": cleared})
                 _shot("after_destination_sweep")
             except Exception as exc:
                 ad_level_fails.append(f"destination_sweep:{str(exc)[:60]}")
@@ -3274,11 +3322,26 @@ PLACEMENTS_SUBITEM_JS = """
       for (let i = 0; i < 4 && container; i++) {
         const cb = container.querySelector('input[type=checkbox]');
         if (cb) {
+          // Состояние — по aria-checked, свойство checked у Meta отстаёт.
+          // 17.09 20:00 (CR_ait FX_Y): отказ «checked: true» у пяти подпунктов,
+          // а на дампе после отказа у всех aria-checked="false" — галочки
+          // были сняты. Второй заход по устаревшему checked кликнул бы снова
+          // и поставил их обратно.
+          const state = () => {
+            const aria = cb.getAttribute('aria-checked');
+            return aria === 'true' ? true : aria === 'false' ? false : cb.checked;
+          };
           if (!cb.disabled) {
-            if (cb.checked !== wantChecked) cb.click();
-            return { ok: cb.checked === wantChecked, checked: cb.checked };
+            if (state() !== wantChecked) cb.click();
+            return { ok: state() === wantChecked, checked: state() };
           }
-          if (frozen === null) frozen = cb.checked;
+          // У недоступной галочки правду говорит aria-checked: 17.09 (Doc20)
+          // «Ads on Facebook Reels» — aria-checked="false", disabled, а
+          // свойство checked осталось true от разметки.
+          if (frozen === null) {
+            const aria = cb.getAttribute('aria-checked');
+            frozen = aria === 'true' ? true : aria === 'false' ? false : cb.checked;
+          }
         }
         container = container.parentElement;
       }
@@ -3337,6 +3400,366 @@ _SUBITEMS_OFF = (
     "WhatsApp Status",
     "Ads on Facebook Reels",
 )
+
+
+def _wheel_to_placements_card(page: Page, max_ticks: int = 40) -> int:
+    """Прокрутить колонку редактора колесом до карточки Placements.
+
+    Возвращает число сделанных прокруток или -1, если карточка так и не
+    показалась.
+    """
+    probe = r"""() => {
+      const h = [...document.querySelectorAll('[role=heading]')].find(e =>
+        (e.textContent || '').replace(/\s+/g, ' ').trim().startsWith('Placements'));
+      if (!h) return 'absent';
+      const r = h.getBoundingClientRect();
+      if (r.height > 0 && r.y > 60 && r.y < window.innerHeight * 0.6) return 'on_screen';
+      return r.height > 0 && r.y >= window.innerHeight * 0.6 ? 'below' : (r.height > 0 ? 'above' : 'unlaid');
+    }"""
+    try:
+        vw = page.evaluate("() => [window.innerWidth, window.innerHeight]")
+        x, y = int(vw[0] * 0.45), int(vw[1] * 0.5)
+    except Exception:
+        x, y = 700, 450
+    for i in range(max_ticks):
+        try:
+            state = page.evaluate(probe)
+        except Exception:
+            return -1
+        if state == "on_screen":
+            return i
+        try:
+            page.mouse.move(x, y)
+            page.mouse.wheel(0, -350 if state == "above" else 450)
+        except Exception:
+            return -1
+        _sleep_h(0.4)
+    return -1
+
+
+def _placements_exclusion_removed(page: Page) -> bool:
+    """Карточка Placements, на которой Meta убрала ручной выбор площадок.
+
+    Два признака, любого достаточно. Объявление «Excluding placements or
+    platforms will no longer be available» было в дампе Doc20 (18:51), но в
+    живом Doc21 (22:35) его уже нет — там только строка «Account controls ·
+    Excluded placements: …». Зовётся лишь тогда, когда категорий не видно.
+    """
+    try:
+        return bool(page.evaluate(
+            """() => {
+              const t = (document.body.textContent || '').replace(/\\s+/g, ' ');
+              return /Excluding placements or platforms will no longer be available/i.test(t)
+                  || /Excluded placements:/i.test(t);
+            }"""
+        ))
+    except Exception:
+        return False
+
+
+#: Что исключается на уровне рекламного аккаунта. Это ровно те площадки из
+#: `_SUBITEMS_OFF`/«Apps and sites», которые Meta даёт исключить в окне
+#: «Placement controls for this ad account» (живое чтение Doc21, 16.09 22:35:
+#: Apps and sites → Audience Network native, banner and interstitial;
+#: Audience Network rewarded videos; Feeds → Facebook Marketplace; Facebook
+#: right column). Остальное из прежнего списка там не предлагается.
+_ACCOUNT_EXCLUDED_PLACEMENTS = (
+    "Audience Network native, banner and interstitial",
+    "Audience Network rewarded videos",
+    "Facebook Marketplace",
+    "Facebook right column",
+)
+
+_ACCOUNT_CONTROLS_DIALOG = "Placement controls for this ad account"
+_ACCOUNT_CONTROLS_SWITCH = "My business can only advertise on specific placements"
+
+
+def _account_controls_dialog(page: Page):
+    return page.locator("[role=dialog]").filter(has_text=_ACCOUNT_CONTROLS_DIALOG).last
+
+
+def _account_exclusion_boxes(page: Page) -> dict:
+    """Галочки окна Account controls по имени площадки: {имя: checked|None}.
+
+    Галочка берётся в ближайшем предке подписи, где она одна: у группы
+    («Apps and sites») их несколько, у строки площадки — одна.
+    """
+    js = r"""
+    ([dialogText, names]) => {
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+      const dlg = [...document.querySelectorAll('[role=dialog]')]
+        .filter(d => d.getBoundingClientRect().width > 0 && norm(d.textContent).includes(dialogText)).pop();
+      if (!dlg) return null;
+      const out = {};
+      for (const name of names) {
+        const leaf = [...dlg.querySelectorAll('*')].find(e => e.children.length === 0 && norm(e.textContent) === name);
+        if (!leaf) { out[name] = null; continue; }
+        let n = leaf, box = null;
+        for (let k = 0; k < 8 && n; k++) {
+          n = n.parentElement;
+          const boxes = n ? n.querySelectorAll('input[type=checkbox]:not([role=switch])') : [];
+          if (boxes.length === 1) { box = boxes[0]; break; }
+          if (boxes.length > 1) break;
+        }
+        if (box) { box.setAttribute('data-rpa-exclude', name); out[name] = box.checked; }
+        else out[name] = null;
+      }
+      return out;
+    }
+    """
+    try:
+        return page.evaluate(js, [_ACCOUNT_CONTROLS_DIALOG, list(_ACCOUNT_EXCLUDED_PLACEMENTS)]) or {}
+    except Exception:
+        return {}
+
+
+def _excluded_placements_summary(page: Page) -> str | None:
+    """Текст «Excluded placements: …» на карточке, без префикса."""
+    try:
+        return page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              // «Excluded placements:» — отдельный жирный узел, список идёт
+              // соседним текстом (скриншот S15, 23:27). Берём самый короткий
+              // элемент, чей текст начинается с метки: это абзац целиком.
+              const els = [...document.querySelectorAll('*')].filter(e =>
+                /^Excluded placements:/i.test(norm(e.textContent)));
+              if (!els.length) return null;
+              els.sort((a, b) => norm(a.textContent).length - norm(b.textContent).length);
+              const own = els.find(e => norm(e.textContent).replace(/^Excluded placements:\s*/i, '').length) || els[0];
+              let t = norm(own.textContent).replace(/^Excluded placements:\s*/i, '');
+              return t.replace(/\s*Account controls let you.*$/i, '');
+            }"""
+        )
+    except Exception:
+        return None
+
+
+def ensure_account_placement_exclusions(page: Page, report: dict | None = None) -> bool:
+    """Исключить площадки на уровне рекламного аккаунта (Account controls).
+
+    Нужен там, где Meta убрала ручной выбор площадок у ad set (16.09): единственное
+    место, где их ещё можно исключить, — окно «Placement controls for this ad
+    account». Настройка общая для всех кампаний аккаунта; решение владельца —
+    ставить её автоматически (16.09, «давай автоматом, делай»).
+
+    Идемпотентен: если переключатель включён и все четыре площадки уже сняты,
+    окно закрывается через Cancel, ничего не меняя.
+    """
+    report = report if report is not None else {}
+
+    def _record(ok, note, **diag):
+        report.update({"account_exclusions": note, **diag})
+        _telemetry.record("account_placement_exclusions", ok, note=note, diag=diag or None)
+        return bool(ok)
+
+    report["summary_before"] = _excluded_placements_summary(page)
+
+    # 1. Строка «Account controls» — раскрывашка; внутри кнопка «Edit placement controls».
+    #
+    # Живой прогон 0054550ac608 (22:49): `row.click` — TimeoutError на обоих
+    # аккаунтах, хотя после прогона тот же клик в том же окне проходил. Во
+    # время шага карточка ещё не прокручена в видимую часть редактора, и
+    # Playwright ждёт «видимости», которой без прокрутки нет. Поэтому: сперва
+    # прокрутить сам узел, затем честный клик, а если он всё равно отказал —
+    # клик DOM по тому же узлу.
+    row_state = _scroll_and_mark(
+        page,
+        r"[...document.querySelectorAll('[role=button][aria-expanded]')]"
+        r".find(e => /^Account controls/i.test(norm(e.textContent)))",
+        "account-controls-row",
+    )
+    if row_state is None:
+        return _record(False, "account_controls_row_not_found")
+    if row_state.get("expanded") != "true":
+        how = _click_marked(page, "account-controls-row")
+        if not how:
+            return _record(False, "account_controls_row_click_failed", row=row_state)
+        _sleep_h(1.2)
+    edit_state = _scroll_and_mark(
+        page,
+        r"[...document.querySelectorAll('[role=button]')]"
+        r".find(e => norm(e.textContent) === 'Edit placement controls')",
+        "edit-placement-controls",
+    )
+    if edit_state is None:
+        return _record(False, "edit_placement_controls_not_found", row=row_state)
+    if not _click_marked(page, "edit-placement-controls"):
+        return _record(False, "edit_placement_controls_not_clickable", row=row_state)
+
+    dialog = _account_controls_dialog(page)
+    try:
+        dialog.wait_for(state="visible", timeout=8000)
+    except Exception:
+        return _record(False, "dialog_did_not_open")
+
+    # 2. Переключатель «My business can only advertise on specific placements».
+    switch = dialog.get_by_label(_ACCOUNT_CONTROLS_SWITCH)
+    try:
+        if not switch.first.is_checked():
+            switch.first.click(force=True, timeout=3000)
+            _sleep_h(1.5)
+    except Exception as exc:
+        return _record(False, "switch_not_clickable", error=type(exc).__name__)
+
+    # 3. Снять четыре площадки.
+    before = _account_exclusion_boxes(page)
+    missing = [n for n, v in before.items() if v is None]
+    changed = []
+    for name, checked in before.items():
+        if checked:
+            try:
+                page.locator(f'[data-rpa-exclude="{name}"]').first.click(force=True, timeout=3000)
+                changed.append(name)
+                _sleep_h(0.5)
+            except Exception:
+                pass
+    after = _account_exclusion_boxes(page)
+    still_on = [n for n, v in after.items() if v]
+    if still_on or missing:
+        _cancel_account_controls(page)
+        return _record(False, "placements_not_unchecked", before=before, after=after, missing=missing)
+
+    if not changed:
+        _cancel_account_controls(page)
+        return _record(True, "already_excluded", after=after)
+
+    # 4. Review changes → подтверждение.
+    try:
+        dialog.get_by_role("button", name=re.compile(r"^Review changes$", re.I)).first.click(timeout=5000)
+    except Exception as exc:
+        _cancel_account_controls(page)
+        return _record(False, "review_not_clickable", error=type(exc).__name__, changed=changed)
+    _sleep_h(2.0)
+    try:
+        from src.fb_ads_rpa import page_capture as _pages
+
+        _pages.capture(page, step="account_controls_review", diag={"changed": changed})
+    except Exception:
+        pass
+    confirmed = None
+    for label in ("Confirm", "Save changes", "Save", "Apply", "Publish", "Update", "Done"):
+        btn = page.locator("[role=dialog]").get_by_role("button", name=re.compile(rf"^{label}$", re.I))
+        try:
+            if btn.count() and btn.last.is_visible():
+                btn.last.click(timeout=5000)
+                confirmed = label
+                break
+        except Exception:
+            continue
+    if not confirmed:
+        texts = _visible_dialog_texts(page)
+        return _record(False, "confirm_button_not_found", changed=changed, dialogs=texts)
+    _sleep_h(3.0)
+
+    # Уведомление «Account controls updating» ложится в правый нижний угол —
+    # ровно на кнопку Next. Doc20, 23:27: «next_to_ad ok» кликнул в него,
+    # редактор остался на ad set, и `ad_name` упал. Закрываем крестиком.
+    _close_account_controls_toast(page)
+
+    # 5. Проверка: карточка больше не говорит «None».
+    summary = _excluded_placements_summary(page)
+    if summary is not None and summary.strip().lower() in ("", "none"):
+        return _record(False, "summary_still_none", changed=changed, confirmed=confirmed, summary=summary)
+    if summary:
+        absent = [n for n in _ACCOUNT_EXCLUDED_PLACEMENTS if n.lower() not in summary.lower()]
+        if absent:
+            return _record(False, "summary_missing_placements", changed=changed,
+                           confirmed=confirmed, summary=summary, absent=absent)
+    return _record(True, "excluded", changed=changed, confirmed=confirmed, summary=summary)
+
+
+def _scroll_and_mark(page: Page, finder_js: str, mark: str) -> dict | None:
+    """Найти узел выражением `finder_js`, прокрутить к нему и пометить.
+
+    Возвращает {expanded, w, h} после прокрутки или None, если узла нет.
+    """
+    js = (
+        "(mark) => { const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();"
+        f" const el = {finder_js};"
+        " if (!el) return null;"
+        " document.querySelectorAll(`[data-rpa-mark=\"${mark}\"]`).forEach(e => e.removeAttribute('data-rpa-mark'));"
+        " el.setAttribute('data-rpa-mark', mark);"
+        " el.scrollIntoView({block: 'center', behavior: 'instant'});"
+        " const r = el.getBoundingClientRect();"
+        " return {expanded: el.getAttribute('aria-expanded'), w: Math.round(r.width), h: Math.round(r.height)}; }"
+    )
+    try:
+        state = page.evaluate(js, mark)
+    except Exception:
+        return None
+    _sleep_h(0.6)
+    return state
+
+
+def _click_marked(page: Page, mark: str) -> str:
+    """Клик по помеченному узлу: честный, иначе DOM. Возвращает способ или ""."""
+    loc = page.locator(f'[data-rpa-mark="{mark}"]').first
+    try:
+        loc.click(timeout=4000)
+        return "trusted"
+    except Exception:
+        pass
+    try:
+        if page.evaluate(
+            "(mark) => { const el = document.querySelector(`[data-rpa-mark=\"${mark}\"]`);"
+            " if (!el) return false; el.click(); return true; }",
+            mark,
+        ):
+            return "dom"
+    except Exception:
+        pass
+    return ""
+
+
+def _close_account_controls_toast(page: Page) -> bool:
+    """Закрыть «Account controls updating» (✕ в самом уведомлении)."""
+    js = r"""
+    () => {
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+      const title = [...document.querySelectorAll('*')].find(e =>
+        e.children.length === 0 && norm(e.textContent) === 'Account controls updating'
+        && e.getBoundingClientRect().width > 0);
+      if (!title) return 'absent';
+      let box = title;
+      for (let i = 0; i < 8 && box.parentElement; i++) {
+        box = box.parentElement;
+        const btn = [...box.querySelectorAll('[role=button], button, [aria-label]')].find(b =>
+          /^(close|dismiss)$/i.test(norm(b.getAttribute('aria-label') || b.textContent)));
+        if (btn) { btn.click(); return 'closed'; }
+      }
+      return 'no_button';
+    }
+    """
+    for _ in range(3):
+        try:
+            state = page.evaluate(js)
+        except Exception:
+            return False
+        if state == "absent":
+            return True
+        _sleep_h(0.8)
+    _telemetry.record("account_controls_toast", None, note="still_open")
+    return False
+
+
+def _cancel_account_controls(page: Page) -> None:
+    try:
+        _account_controls_dialog(page).get_by_role("button", name=re.compile(r"^Cancel$", re.I)).first.click(timeout=3000)
+        _sleep_h(0.8)
+    except Exception:
+        pass
+
+
+def _visible_dialog_texts(page: Page) -> list[str]:
+    try:
+        return page.evaluate(
+            r"""() => [...document.querySelectorAll('[role=dialog]')]
+                .filter(d => d.getBoundingClientRect().width > 0)
+                .map(d => (d.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 400))"""
+        )
+    except Exception:
+        return []
 
 
 def fill_placements(page: Page, report: dict | None = None) -> bool:
@@ -3423,6 +3846,15 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     # (same pattern already seen for the Ad-level creative fields). Force-
     # scroll toward increasing fractions of the container's scrollHeight
     # and retry instead of searching the DOM as-is.
+    # 17.09 00:40, живьём на Doc20: редактор не раскладывает карточку
+    # Placements, пока она за экраном — у неё и у «Show more settings» размер
+    # 0×0, и весь путь ниже промахивался. `_text_y` при этом находил строку
+    # «Placements» в правой панели Campaign score и прокрутку пропускал.
+    # Колесо над колонкой редактора, пока заголовок карточки
+    # (`role=heading`) не окажется на экране с настоящим размером. Под «Show
+    # more settings» ручной выбор цел: «Placements · Included: 17», пять
+    # категорий с живыми галочками.
+    _dbg.append(f"wheel_to_card={_wheel_to_placements_card(page)}")
     placements_y = _text_y("Placements")
     for frac in (0.5, 0.6, 0.7, 0.8, 0.9, 1.0):
         if placements_y is not None:
@@ -3464,21 +3896,32 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         """
         () => {
           const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-          const heading = [...document.querySelectorAll('*')].find(e =>
-            e.children.length === 0 && norm(e.textContent) === 'Placements' && e.offsetParent !== null);
-          if (!heading) return { tagged: false };
-          let node = heading;
-          for (let i = 0; i < 10 && node; i++) {
-            const t = norm(node.textContent);
-            if (t.includes('Account controls')) {
-              node.setAttribute('data-rpa-placements-marker', '1');
-              const showMoreCount = [...node.querySelectorAll('*')].filter(e =>
-                e.offsetParent !== null && norm(e.textContent).toLowerCase().includes('show more settings')).length;
-              return { tagged: true, depth: i, textLen: t.length, showMoreCount, rect: node.getBoundingClientRect() };
+          // Every leaf reading "Placements", not the first visible one. The
+          // right-hand "Campaign score" panel has its own "Placements" row;
+          // taking the first by document order + offsetParent picked that
+          // one or skipped the real card depending on which panel is
+          // position:fixed on the account's layout (tag_info tagged:false on
+          // three runs of 2026-09-16). The real card is the one with
+          // "Account controls" among its ancestors — ask that of each.
+          const headings = [...document.querySelectorAll('*')].filter(e =>
+            e.children.length === 0 && norm(e.textContent) === 'Placements');
+          if (!headings.length) return { tagged: false, headings: 0 };
+          for (const heading of headings) {
+            let node = heading;
+            for (let i = 0; i < 10 && node; i++) {
+              const t = norm(node.textContent);
+              if (t.includes('Account controls')) {
+                node.setAttribute('data-rpa-placements-marker', '1');
+                const showMoreCount = [...node.querySelectorAll('*')].filter(e =>
+                  norm(e.textContent).toLowerCase().includes('show more settings')
+                  && e.getBoundingClientRect().width > 0).length;
+                return { tagged: true, depth: i, textLen: t.length, showMoreCount,
+                         headings: headings.length, rect: node.getBoundingClientRect() };
+              }
+              node = node.parentElement;
             }
-            node = node.parentElement;
           }
-          return { tagged: false };
+          return { tagged: false, headings: headings.length };
         }
         """
     )
@@ -3680,9 +4123,13 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                   const hit = rowFor(root, name);
                   if (!hit) return { found: false };
                   if (hit.cb.disabled) return { found: true, checkbox: false, why: 'недоступна' };
-                  const before = hit.cb.checked;
+                  const state = () => {
+                    const a = hit.cb.getAttribute('aria-checked');
+                    return a === 'true' ? true : a === 'false' ? false : hit.cb.checked;
+                  };
+                  const before = state();
                   if (before !== want) hit.cb.click();
-                  return { found: true, checkbox: true, before: before, checked: hit.cb.checked };
+                  return { found: true, checkbox: true, before: before, checked: state() };
                 }
                 """,
                 [name, want_checked],
@@ -3716,9 +4163,10 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                       role: e.getAttribute('role') || e.tagName.toLowerCase(),
                       exp: e.getAttribute('aria-expanded'),
                     }));
+                  const aria = cb.getAttribute('aria-checked');
                   return {
                     found: true,
-                    checked: cb.checked,
+                    checked: aria === 'true' ? true : aria === 'false' ? false : cb.checked,
                     cbVisible: cb.offsetParent !== null,
                     inLabel: !!cb.closest('label'),
                     row: hit.row.tagName.toLowerCase(),
@@ -3908,7 +4356,8 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                           + (e.hasAttribute('aria-expanded') ? '[exp=' + e.getAttribute('aria-expanded') + ']' : ''));
                       return {
                         i: i,
-                        checked: h.cb.checked,
+                        checked: h.cb.getAttribute('aria-checked') === 'true' ? true
+                          : h.cb.getAttribute('aria-checked') === 'false' ? false : h.cb.checked,
                         disabled: h.cb.disabled,
                         inLabel: !!h.cb.closest('label'),
                         row: h.row.tagName.toLowerCase(),
@@ -4067,6 +4516,26 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         report["category_rows"] = rows
         _dbg.append("rows=" + json.dumps(rows, ensure_ascii=False)[:4000])
         report["why"] = f"видно {seen} категорий из {len(_PLACEMENT_CATEGORIES)}"
+        # 16.09, 17:26–18:53: карточка без единого контрола — «Advantage+ on»,
+        # «Placement value rules», «Account controls · Excluded placements:
+        # None» и объявление Meta «Excluding placements or platforms will no
+        # longer be available for your ad sets». Кликать там нечего; в том же
+        # кабинете соседнее ad set ещё получало старую карточку (17:41 PF ok).
+        # Отличаем это от промаха селектора, чтобы оператор видел причину.
+        if _placements_exclusion_removed(page):
+            # Решение владельца 16.09: исключения ставим сами — на уровне
+            # аккаунта, единственном, где Meta их ещё принимает.
+            _dump_dbg()
+            # Исключения аккаунта — только страховка (четыре площадки из
+            # списка «выключить»), а не успех шага: 17.09 Doc21 так ушёл с 17
+            # площадками вместо 7. Успех — только пять категорий по списку.
+            report["account_exclusions_ok"] = ensure_account_placement_exclusions(page, report)
+            report["why"] = "placement_categories_not_reached"
+            report["notice"] = (
+                "The placement categories under Show more settings could not be "
+                "set, so the ad set would run on more placements than requested."
+            )
+            return False
         _dump_dbg()
         return False
 
@@ -4074,12 +4543,29 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
 
     # ── категории ────────────────────────────────────────────────────────
     report["categories"] = {}
+    locked_ok: list[str] = []
     for name, want in _PLACEMENT_CATEGORIES.items():
         res = _set_category(name, want)
         report["categories"][name] = res
         if not res.get("checkbox") or res.get("checked") is not want:
-            ok = False
+            # Недоступная категория в нужном состоянии — не отказ. 17.09
+            # 04:22 (S15): «Apps and sites» заблокирована, потому что Audience
+            # Network исключён в Account controls, и стоит снятой — ровно
+            # как надо. Тот же принцип, что у подпунктов («Facebook Business
+            # Explore»). Состояние берём у самой страницы, не из `res`.
+            try:
+                cands = (_category_candidates() or {}).get(name) or []
+            except Exception:
+                cands = []
+            if cands and all(c.get("disabled") for c in cands) and all(
+                bool(c.get("checked")) is want for c in cands
+            ):
+                locked_ok.append(name)
+            else:
+                ok = False
         _sleep_h(0.3)
+    if locked_ok:
+        report["categories_locked_as_wanted"] = locked_ok
 
     # ── подпункты ────────────────────────────────────────────────────────
     report["expanded"] = {}
@@ -4572,6 +5058,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
         _sleep_h(0.6)
 
     if _creative_modal_open(page):
+        _diag("creative_modal_left_open")
         return False
 
     # Readiness is the ad-name field specifically — that is what the caller
@@ -4581,6 +5068,10 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
             state="visible", timeout=10000
         )
     except Exception:
+        # Объявление к этому моменту уже создано — отказ здесь значит «поле
+        # имени не показалось», а не «ничего не случилось». Doc20 17.09:
+        # молчаливый False, повторный Create ad, два пустых объявления.
+        _diag("ad_name_field_not_visible")
         return False
     return True
 
@@ -6192,6 +6683,21 @@ def mark_ad_copy_field(
         return False
 
 
+def _handle_text(handle) -> str:
+    try:
+        return str(handle.evaluate(
+            "el => el.value !== undefined ? el.value : (el.innerText || el.textContent || '')"
+        ) or "")
+    except Exception:
+        return ""
+
+
+def _copy_matches(seen: str, expected: str) -> bool:
+    """Сравнение текста объявления без учёта пробелов, переносов и U+200B."""
+    squash = lambda s: re.sub(r"[\s​﻿]+", "", s or "")
+    return squash(seen) == squash(expected)
+
+
 def fill_ad_copy(
     page: Page, ad_title: str, ad_body: str, report: dict | None = None
 ) -> bool:
@@ -6227,6 +6733,37 @@ def fill_ad_copy(
             ))
         except Exception:
             return False
+
+    def _handle_shows(handle, expected: str) -> bool:
+        """Поле показывает ровно тот текст, что мы вводили (пробелы не в счёт).
+
+        «Непусто» — не проверка: 16.09 18:53, три браузера разом, в заголовок
+        легло «★★★★☆.6k» вместо заголовка целиком, часть нажатий пропала, а
+        шаг принял это за успех. Основной текст в том же прогоне — пустой.
+        """
+        return _copy_matches(_handle_text(handle), expected)
+
+    def _type_and_confirm(handle, text: str) -> bool:
+        """Набрать; если экран показывает не то — стереть и вставить целиком.
+
+        Вставка `insert_text` не теряет символов (одна операция, без
+        отдельных нажатий), поэтому она — запасной путь, когда нажатия
+        потерялись.
+        """
+        _type_human(page, text)
+        _sleep_h(0.4)
+        if _handle_shows(handle, text):
+            return True
+        report["attempts"].append({"stage": "typed_text_mismatch", "seen": _handle_text(handle)[:80]})
+        try:
+            handle.focus()
+            page.keyboard.press("ControlOrMeta+A")
+            page.keyboard.press("Backspace")
+            page.keyboard.insert_text(text)
+        except Exception:
+            return False
+        _sleep_h(0.4)
+        return _handle_shows(handle, text)
 
     # Both fields verified post-insert — Playwright's own click can report
     # success under connect_over_cdp without the page actually receiving
@@ -6269,9 +6806,7 @@ def fill_ad_copy(
             if count:
                 handle = _click_via_cdp_handle(primary_box)
                 if handle is not None:
-                    _type_human(page, ad_body)
-                    _sleep_h(0.4)
-                    if _handle_has_content(handle):
+                    if _type_and_confirm(handle, ad_body):
                         return True
                     _dump_stage("primary_text", "content_check_failed_after_insert", {"count": count})
                 else:
@@ -6289,10 +6824,8 @@ def fill_ad_copy(
             if count:
                 handle = _click_via_cdp_handle(headline_box)
                 if handle is not None:
-                    page.keyboard.press("Control+A")
-                    _type_human(page, ad_title)
-                    _sleep_h(0.4)
-                    if _handle_has_content(handle):
+                    page.keyboard.press("ControlOrMeta+A")
+                    if _type_and_confirm(handle, ad_title):
                         return True
                     _dump_stage("headline", "content_check_failed_after_insert", {"count": count})
                 else:
@@ -6652,6 +7185,42 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     return _both_ok()
 
 
+def _audience_already_manual(page: Page) -> bool:
+    """Аудитория уже в ручном режиме: открытого диалога нет, а на экране
+    «Switch to recommended setup» (кнопка возврата к рекомендованному)."""
+    try:
+        return bool(page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const dialogOpen = [...document.querySelectorAll('[role=dialog]')]
+                .some(d => d.getBoundingClientRect().width > 0 && /further limit the reach/i.test(d.textContent || ''));
+              if (dialogOpen) return false;
+              return [...document.querySelectorAll('*')].some(e =>
+                e.children.length === 0 && norm(e.textContent) === 'Switch to recommended setup'
+                && e.getBoundingClientRect().width > 0);
+            }"""
+        ))
+    except Exception:
+        return False
+
+
+def _tree_new_ad_shells(page: Page) -> int:
+    """Сколько строк «New Leads ad» в левом дереве (-1 — не прочитать)."""
+    try:
+        return int(page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              return [...document.querySelectorAll('*')].filter(e => {
+                if (e.children.length !== 0 || !/^New Leads ad$/i.test(norm(e.textContent))) return false;
+                const r = e.getBoundingClientRect();
+                return r.width > 0 && r.x < window.innerWidth * 0.34;
+              }).length;
+            }"""
+        ))
+    except Exception:
+        return -1
+
+
 def _open_tree_ad(page: Page, ad_name: str) -> bool:
     """Select an ad in the left campaign-structure tree by name.
 
@@ -6663,11 +7232,15 @@ def _open_tree_ad(page: Page, ad_name: str) -> bool:
     point = page.evaluate(
         """(adName) => {
           const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          // Без учёта регистра: Doc20 называет заготовку «New Leads ad»,
+          // S15/Doc21 — «New Leads Ad». Точное сравнение не находило
+          // заготовку, и вызывающий создавал второе объявление (17.09).
+          const want = adName.toLowerCase();
           const nameMatches = (raw) => {
-            const t = norm(raw).replace(/[…\\u2026]+$/, '');
+            const t = norm(raw).replace(/[…\\u2026]+$/, '').toLowerCase();
             if (!t) return false;
-            if (t === adName) return true;
-            return t.length >= 10 && adName.startsWith(t);
+            if (t === want) return true;
+            return t.length >= 10 && want.startsWith(t);
           };
           const cands = [...document.querySelectorAll('*')].filter(e =>
             e.offsetParent !== null && e.children.length === 0 && nameMatches(e.textContent));
@@ -7121,6 +7694,51 @@ def _editor_is_busy_saving(page: Page) -> bool:
         except Exception:
             pass
     return False
+
+
+def _ensure_campaign_budget(page: Page) -> bool:
+    """Если выбран «Ad set budget», выбрать «Campaign budget». True — переключили.
+
+    Радио ищется по подписи; клик — по самой строке с подписью, затем
+    проверка `checked`. Ничего не нашли или уже кампанийный — False, без
+    кликов.
+    """
+    try:
+        state = page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const radioFor = (label) => {
+                const leaf = [...document.querySelectorAll('*')].find(e =>
+                  e.children.length === 0 && norm(e.textContent) === label && e.getBoundingClientRect().width > 0);
+                if (!leaf) return null;
+                let n = leaf;
+                for (let i = 0; i < 6 && n; i++) {
+                  n = n.parentElement;
+                  const r = n && n.querySelector('input[type=radio], [role=radio]');
+                  if (r) { return {radio: r, row: n}; }
+                }
+                return null;
+              };
+              const checked = (r) => r.checked === true || r.getAttribute('aria-checked') === 'true';
+              const camp = radioFor('Campaign budget');
+              const adset = radioFor('Ad set budget');
+              if (!camp || !adset) return 'absent';
+              if (checked(camp.radio)) return 'campaign';
+              if (!checked(adset.radio)) return 'unknown';
+              camp.radio.setAttribute('data-rpa-mark', 'campaign-budget-radio');
+              return 'adset';
+            }"""
+        )
+    except Exception:
+        return False
+    if state != "adset":
+        return False
+    if not _click_marked(page, "campaign-budget-radio"):
+        _telemetry.record("campaign_budget_strategy", False, note="radio_not_clickable")
+        return False
+    _sleep_h(1.0)
+    _telemetry.record("campaign_budget_strategy", None, note="switched_from_ad_set_budget")
+    return True
 
 
 def wait_editor_saved(page: Page, *, timeout_s: float = 15, appear_s: float = 1.5) -> None:
@@ -7907,6 +8525,26 @@ def _country_search_term(code: str) -> str:
     return raw
 
 
+def _wait_location_options(root, timeout_s: float = 6.0) -> bool:
+    """Ждёт, пока под полем поиска локаций появятся подсказки."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            # Подсказки Meta не всегда размечены role=option (17.09 19:45:
+            # на всех кампаниях ждали впустую, а Enter потом добавлял страну);
+            # открытый список виден по aria-expanded у поля поиска.
+            if root.locator("[role=option]:visible").count() or root.locator(
+                "input[placeholder*='location' i][aria-expanded='true'],"
+                " input[placeholder*='ubicaci' i][aria-expanded='true']"
+            ).count():
+                return True
+        except Exception:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.3)
+
+
 def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     """Pick the country-level suggestion from an open location autocomplete.
 
@@ -7919,6 +8557,22 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     visible option, then a bare Enter, if no country-tagged option shows up.
     """
     country_re = re.compile(rf"^{re.escape(search_term)}\s*\(country\)", re.I)
+    if not _wait_location_options(root):
+        # 17.09 (CO_bnc FX, два прогона подряд): «Colombia» в поле, а список
+        # подсказок так и не открылся (aria-expanded=false) — Enter ничего не
+        # добавлял, осталась United States. Набираем заново, чтобы поиск
+        # запустился ещё раз.
+        try:
+            page.keyboard.press("ControlOrMeta+A")
+            page.keyboard.press("Backspace")
+            _sleep_h(0.5)
+            page.keyboard.type(search_term, delay=60)
+        except Exception:
+            pass
+        if not _wait_location_options(root):
+            _telemetry.record("audience_location", None, note="no_location_suggestions",
+                              diag={"typed": search_term})
+            return False
     for sel in ("[role=option]:visible", "li[role=option]"):
         try:
             opt = root.locator(sel).filter(has_text=country_re).first
@@ -8013,13 +8667,119 @@ def _remove_stale_default_locations(page: Page, keep_text: str) -> None:
             continue
 
 
+def _location_rows(page: Page) -> list[dict]:
+    """Included locations as the Locations card lists them now, each with the
+    centre of its own remove control.
+
+    The 2026-09 layout groups included locations by country: a heading
+    ("United States") with an ✕ beside it, then the location row. The older
+    `<li>` + "Close" button shape is still read for accounts that have it.
+    Everything is scoped to the card that holds "Search locations", so an ✕
+    elsewhere on the page — the WhatsApp Status banner in Placements has one
+    — is never a candidate. That banner is very likely what the old code
+    clicked on Doc21 (2026-09-16 17:40: `removedTrue`, United States still
+    included).
+    """
+    try:
+        return page.evaluate(
+            r"""
+            () => {
+              const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+              const search = [...document.querySelectorAll('input')].find(i =>
+                /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''));
+              if (!search) return [];
+              let card = search;
+              for (let i = 0; i < 12 && card; i++, card = card.parentElement) {
+                if (/^Locations/i.test(norm(card.textContent)) || /Ubicaciones/i.test(norm(card.textContent).slice(0, 40))) break;
+              }
+              if (!card) return [];
+              const searchBox = search.closest('[role=combobox]') || search.parentElement;
+              const rows = [];
+              const controls = [...card.querySelectorAll('[role=button], button')].filter(b => {
+                if (searchBox && searchBox.contains(b)) return false;
+                const r = b.getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0 || r.width > 60 || r.height > 60) return false;
+                // Named controls only. An unnamed icon button here may be the
+                // card's collapse chevron or the search box's expander, and
+                // clicking either would be worse than leaving a default.
+                const label = norm(b.getAttribute('aria-label') || '') + ' ' + norm(b.textContent);
+                return /\b(close|remove|delete|quitar|eliminar)\b/i.test(label);
+              });
+              for (const b of controls) {
+                let row = b.parentElement, name = '';
+                for (let i = 0; i < 5 && row && row !== card; i++, row = row.parentElement) {
+                  const t = norm(row.textContent).replace(/\b(Close|Remove)\b/gi, '').trim();
+                  if (t && t.length <= 80) { name = t; break; }
+                }
+                if (!name) continue;
+                const r = b.getBoundingClientRect();
+                rows.push({ name, x: r.x + r.width / 2, y: r.y + r.height / 2 });
+              }
+              return rows;
+            }
+            """
+        ) or []
+    except Exception:
+        return []
+
+
+def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
+    """Remove every included location that is not `keep_text`; return the
+    names still left afterwards (empty list = clean, None = unreadable).
+
+    Verified by reading the card again after each click, not by the click
+    being sent: `_remove_stale_default_locations` reported `removedTrue` on a
+    run whose draft still targeted United States next to Guatemala.
+    """
+    keep = (keep_text or "").strip().lower()
+    seen = _location_rows(page)
+    if not seen:
+        # Not even the target's own row was read: the card's shape is not
+        # the one this knows. Say so rather than pass silently, and keep the
+        # page so the next fix is read off it, not guessed.
+        _telemetry.record("audience_location", None, note="location_rows_not_read",
+                          diag={"keep": keep_text})
+        try:
+            from src.fb_ads_rpa import page_capture as _pc
+
+            _pc.capture(page, step="locations_unread")
+        except Exception:
+            pass
+        return None
+    for _ in range(6):
+        rows = _location_rows(page)
+        if not rows:
+            return None
+        if not any(keep in r["name"].lower() for r in rows):
+            # Do not delete the old country before the target is confirmed.
+            return [r["name"] for r in rows]
+        others = [r for r in rows if keep not in r["name"].lower()]
+        if not others:
+            return []
+        target = others[0]
+        _cdp_mouse_click(page, target["x"], target["y"])
+        _sleep_h(0.9)
+    rows = _location_rows(page)
+    if not rows:
+        return None
+    return [r["name"] for r in rows if keep not in r["name"].lower()]
+
+
 def _pick_country_and_clear_defaults(root, page: Page, search_term: str) -> bool:
     if not _pick_country_suggestion(root, page, search_term):
         return False
-    try:
-        _remove_stale_default_locations(page, search_term)
-    except Exception:
-        pass
+    # The old remover above can report success on the wrong ✕; this is the
+    # check that decides. A default country left beside the target means the
+    # campaign spends in two markets, so it fails the step instead of passing.
+    left = _clear_other_locations(page, search_term)
+    if left is None:
+        _telemetry.record("audience_location", False, note="location_rows_not_read",
+                          diag={"keep": search_term})
+        return False
+    if left:
+        _telemetry.record("audience_location", False, note="default_location_left",
+                          diag={"keep": search_term, "left": left[:5]})
+        return False
     return True
 
 
@@ -8558,6 +9318,79 @@ def _age_triggers_read(page: Page) -> list[str]:
     return []
 
 
+def _age_boundary_shows(page: Page, value: str) -> bool:
+    """В закрытой выпадашке возраста рядом с «Age» видно `value` (не в открытом списке)."""
+    try:
+        return bool(page.evaluate(
+            r"""(value) => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const label = [...document.querySelectorAll('*')].find(e =>
+                e.children.length === 0 && /^(Age|Edad)$/i.test(norm(e.textContent))
+                && e.getBoundingClientRect().width > 0);
+              if (!label) return false;
+              let box = label;
+              for (let i = 0; i < 6 && box.parentElement; i++) {
+                box = box.parentElement;
+                const hit = [...box.querySelectorAll('*')].some(e =>
+                  e.children.length === 0 && norm(e.textContent) === value
+                  && e.getBoundingClientRect().width > 0 && !e.closest('[role=listbox]'));
+                if (hit) return true;
+              }
+              return false;
+            }""",
+            value,
+        ))
+    except Exception:
+        return False
+
+
+_MARK_AGE_TRIGGER_JS = r"""(value) => {
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  document.querySelectorAll('[data-acl-age-trigger]').forEach(e =>
+    e.removeAttribute('data-acl-age-trigger'));
+  // Все видимые подписи «Age», кроме диалогов: 17.09 19:44 (CR_ait Day)
+  // первой находилась подпись из закрывающегося диалога Further limit,
+  // и «18» оказывалось выше неё.
+  const labels = [...document.querySelectorAll('*')].filter(e =>
+    e.children.length === 0 && /^(Age|Edad)$/i.test(norm(e.textContent))
+    && e.getBoundingClientRect().width > 0 && !e.closest('[role=dialog]'));
+  if (!labels.length) return false;
+  const own = (e) => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('');
+  let best = null, bestGap = Infinity;
+  for (const e of document.querySelectorAll('*')) {
+    if (norm(own(e)) !== value) continue;
+    const r = e.getBoundingClientRect();
+    if (r.width <= 0 || e.closest('[role=listbox], [role=dialog]')) continue;
+    for (const label of labels) {
+      const gap = r.top - label.getBoundingClientRect().top;
+      if (gap < 0 || gap > 400) continue;
+      if (gap < bestGap) { best = e; bestGap = gap; }
+    }
+  }
+  if (!best) return false;
+  best.setAttribute('data-acl-age-trigger', '1');
+  return true;
+}"""
+
+
+def _mark_age_trigger(root, value: str) -> bool:
+    """Помечает выпадашку возраста со значением `value` — ближайшую под подписью «Age».
+
+    Всё, что выше подписи (поле Start time с часом «18») или далеко ниже,
+    не подходит.
+    """
+    deadline = time.monotonic() + 3.0
+    while True:
+        try:
+            if root.evaluate(_MARK_AGE_TRIGGER_JS, value):
+                return True
+        except Exception:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.3)
+
+
 def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     """Set the audience age range, and only say so when the page shows it.
 
@@ -8667,8 +9500,22 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
         # independently and only report success if BOTH are confirmed.
         boundary_results = []
         for default_text, target_val in (("18", age_min_str), ("65+", age_max_str)):
+            if target_val == default_text and _age_boundary_shows(page, default_text):
+                # Граница уже стоит как надо — открывать выпадашку незачем.
+                # 17.09 13:19 (CL_ml): клик по «65+» упал на прокрутке
+                # (TimeoutError), граница записалась как проваленная, и шаг
+                # отказал при 35–65+ на экране — а заодно не сняли галочку
+                # «Use as a suggestion», которая снимается только при успехе.
+                boundary_results.append(True)
+                continue
             try:
-                el = root.get_by_text(re.compile(rf"^{re.escape(default_text)}$"), exact=True).first
+                # 17.09 15:21 (CR_ait Day): первым «18» на странице оказался
+                # час в поле Start time («18:20») — кликнули по часам, возраст
+                # остался 18. Берём значение только из поля Age.
+                if not _mark_age_trigger(root, default_text):
+                    boundary_results.append(False)
+                    continue
+                el = root.locator("[data-acl-age-trigger]").first
                 if not el.count() or not el.is_visible():
                     boundary_results.append(False)
                     continue
@@ -9305,7 +10152,51 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
                 break
         except Exception:
             continue
+    if not ok_any:
+        # 17.09 06:56 (S15): «Spanish (All)» уже стоял — Meta подставляет язык
+        # по стране, выбранный язык в подсказках не показывается, кликать
+        # нечего, и шаг отказывал при верном поле. Выбранный язык — успех.
+        # Без Escape: в редакторе Ads Manager он закрывает сам редактор (17.09
+        # 13:19, CR_ait Day — после шага языков на экране список ad set, и все
+        # следующие шаги упали). Открытая выпадашка чтению выбранных не мешает.
+        present = _languages_selected(page)
+        wanted = [n.strip().lower() for n in language_names if n.strip()]
+        if wanted and all(any(p.lower().startswith(w) for p in present) for w in wanted):
+            _telemetry.record("languages", None, note="already_selected", diag={"selected": present})
+            return True
     return ok_any
+
+
+def _languages_selected(page: Page) -> list[str]:
+    """Подписи уже выбранных языков в блоке Languages (например «Spanish (All)»).
+
+    Поднимаемся от поля поиска языков, а не от подписи «Languages»: 17.09
+    (CL_ml, CR_ait) «Spanish (All)» стоял, а подъём на 6 уровней от подписи до
+    него не доставал — шаг отказывал при верном поле.
+    """
+    try:
+        return page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const looks = (t) => /\((All|Todos)\)$/.test(t) || /^[A-Z][a-z]+ \([^)]+\)$/.test(t);
+              const inputs = [...document.querySelectorAll('input[placeholder]')]
+                .filter(i => /language|idioma/i.test(i.getAttribute('placeholder') || ''));
+              for (const inp of inputs) {
+                let box = inp;
+                for (let k = 0; k < 10 && box.parentElement; k++) {
+                  box = box.parentElement;
+                  const found = [...box.querySelectorAll('*')]
+                    .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
+                    .map(e => norm(e.textContent))
+                    .filter(looks);
+                  if (found.length) return found;
+                }
+              }
+              return [];
+            }"""
+        ) or []
+    except Exception:
+        return []
 
 
 def select_manual_placements(page: Page) -> bool:
