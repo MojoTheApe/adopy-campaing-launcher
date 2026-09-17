@@ -93,9 +93,27 @@ def test_the_threshold_can_be_moved_without_touching_code(monkeypatch):
         importlib.reload(md)
 
 
-def test_the_calls_pass_the_timeout_explicitly():
-    """Умолчание Playwright — то самое, в которое мы упёрлись. Полагаться на
-    него нельзя: оно чужое и может смениться с версией."""
-    src = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
-    assert "set_files(creative_path)" not in src, "вызов без таймаута вернулся"
-    assert src.count("set_files(creative_path, timeout=_PW_SET_FILES_MS)") >= 2
+@pytest.mark.parametrize('raw', ['bad', 'nan', 'inf', '-1', '0', '100'])
+def test_invalid_threshold_uses_safe_default(monkeypatch, raw):
+    monkeypatch.setenv('FB_RPA_PW_FILE_LIMIT_MB', raw)
+    assert md._pw_file_limit_mb() == 3.0
+
+
+def test_small_mounted_input_receives_explicit_timeout():
+    calls = []
+    class Handle:
+        def set_input_files(self, path, **kwargs): calls.append((path, kwargs))
+    assert md._feed_mounted_file(None, Handle(), 'small.mp4', 0.8, {})
+    assert calls == [('small.mp4', {'timeout': md._PW_SET_FILES_MS})]
+
+
+def test_large_mounted_input_never_falls_back_to_bytes(monkeypatch):
+    class Handle:
+        def set_input_files(self, *a, **kw): raise AssertionError('large file sent as bytes')
+    seen = []
+    def refuse(page, path, diag, click):
+        seen.append(path)
+        return False
+    monkeypatch.setattr(md, '_upload_heavy_via_chooser_event', refuse)
+    assert md._feed_mounted_file(None, Handle(), 'large.mp4', 24.4, {}) is False
+    assert seen == ['large.mp4']

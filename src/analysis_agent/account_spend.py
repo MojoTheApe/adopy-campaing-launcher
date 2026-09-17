@@ -2081,8 +2081,15 @@ _FIND_SWITCH_JS = r"""
       // Попадание в эту же ячейку тумблера этой строки — наш тумблер; всё,
       // что вне ячейки (диалог, баннер), по-прежнему закрывает его.
       const cell = sw.closest('[data-surface*="/table_cell:forObjectType(toggle"]');
-      const own = hit && (hit === sw || sw.contains(hit) || (cell && cell.contains(hit)) ||
-        (sw.parentElement && sw.parentElement.contains(hit) && !hit.closest('[role="dialog"]')));
+      // A cell can also host a menu or confirmation popup. Only accept
+      // non-interactive decoration from this exact toggle cell; never click
+      // through a dialog or a different control, even if it shares the cell.
+      const overlay = hit && hit.closest('[role="dialog"],[role="alertdialog"],[aria-modal="true"],[role="menu"],[role="tooltip"]');
+      const control = hit && hit.closest('button,a,input,select,textarea,[role="button"],[role="switch"],[role="checkbox"],[role="menuitem"],[contenteditable="true"]');
+      const own = hit && !overlay && (
+        hit === sw || sw.contains(hit) ||
+        (cell && cell.contains(hit) && (!control || control === sw || control.contains(sw)))
+      );
       if (!own) {
         const d = hit ? (hit.tagName + (hit.getAttribute('role') ? '[' + hit.getAttribute('role') + ']' : '') + ' ' + norm(hit.innerText || '').slice(0, 40)) : 'nothing';
         return {found: false, why: 'switch is covered', covered_by: d, rect: [Math.round(r.x), Math.round(r.y)]};

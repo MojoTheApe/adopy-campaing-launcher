@@ -544,6 +544,9 @@ def _ensure_wide_window(context, page) -> None:
     user-visible state (and the background-throttling test mode) is
     preserved — layout keeps the last non-minimised size.
     """
+    session = None
+    window_id = None
+    was_minimized = False
     try:
         session = context.new_cdp_session(page)
         info = session.send("Browser.getWindowForTarget")
@@ -640,13 +643,55 @@ def _ensure_wide_window(context, page) -> None:
         # Mimic profile disagree. Override the reported outer* values to
         # sit just outside the real viewport (normal chrome thickness).
         _patch_window_geometry(session, page)
-        if was_minimized:
-            session.send(
-                "Browser.setWindowBounds",
-                {"windowId": window_id, "bounds": {"windowState": "minimized"}},
-            )
     except Exception as exc:
         log.debug("ensure_wide_window skipped: %s", exc)
+    finally:
+        if session is not None:
+            if was_minimized and window_id is not None:
+                try:
+                    session.send("Browser.setWindowBounds", {
+                        "windowId": window_id, "bounds": {"windowState": "minimized"},
+                    })
+                except Exception as exc:
+                    log.debug("restore minimized window failed: %s", exc)
+            try:
+                session.detach()
+            except Exception:
+                pass
+
+
+# Actual successful desktop viewport from ACL-1214's recorded reproduction.
+# Browser bounds/screen.availWidth may be spoofed by the profile: use innerWidth.
+MIN_EDITOR_WIDTH = 1168
+
+
+def ensure_editor_window(page, section: str) -> bool:
+    """Check at section boundaries; recover once, then stop without replaying drafts."""
+    from src.fb_ads_rpa import run_telemetry as rt
+
+    def readable(state: dict) -> bool:
+        inner = state.get("inner")
+        return (
+            isinstance(inner, (list, tuple)) and len(inner) == 2
+            and all(type(v) in (int, float) and v > 0 for v in inner)
+            and inner[0] >= MIN_EDITOR_WIDTH
+        )
+
+    before = rt.window_state(page)
+    after = before
+    if not readable(before):
+        try:
+            _ensure_wide_window(page.context, page)
+        except Exception as exc:
+            log.debug("editor window recovery failed: %s", exc)
+        after = rt.window_state(page)
+    ok = readable(after)
+    diag = {"section": section, "minimum_width": MIN_EDITOR_WIDTH,
+            "before": before, "after": after}
+    rt.record("window_bounds", ok, diag=diag)
+    if not ok:
+        rt.record("window_too_small", False, diag=diag)
+    return ok
 
 
 def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None, new_page: bool = False) -> BrowserConnection:
@@ -672,6 +717,8 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
             page = context.new_page()
         _disable_background_throttling(context, page)
         _ensure_wide_window(context, page)
+        from src.fb_ads_rpa import run_telemetry as rt
+        rt.record("window_bounds", None, diag={"section": "attach", "after": rt.window_state(page)})
         _keep_renderer_active(context, page)
         # Новая вкладка в Chrome сразу становится активной, и окно человека на
         # минуты уезжает на нашу страницу. Возвращаем то, на что он смотрел:

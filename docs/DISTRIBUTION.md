@@ -169,3 +169,7 @@
   можно одной командой в любой момент.
 
   Сюда же относится решение не добавлять `opencv-python` (см. выше).
+
+## Parallel draft building
+
+Each concurrent account uses its own Multilogin browser and may also run a video encoder. Three accounts can therefore occupy three browser processes and up to three encoders, increasing memory, CPU and disk usage. On smaller Windows machines, build fewer accounts at once or start them individually. Jobs sharing the same profile still queue; keep the desktop unlocked during a run. Cancelling one job does not cancel other jobs already submitted.

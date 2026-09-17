@@ -176,3 +176,20 @@ def test_a_covered_switch_says_what_covers_it_and_stays_marked():
         marked = p.locator(sp.SEL_MARKED_SWITCH).count()
         b.close()
     assert got["why"] == "switch is covered" and "dialog" in got["covered_by"] and marked == 1
+
+
+def test_dialog_nested_in_the_toggle_cell_still_blocks_the_click():
+    overlay = ('<div role="dialog" style="position:absolute;inset:0;background:white">'
+               '<span>Confirm changes</span></div>')
+    html = _switch_page("").replace('</div></span></div></div>',
+                                     overlay + '</div></span></div></div>')
+    got, clicked = _press(html)
+    assert got.get("why") == "switch is covered" and not clicked
+
+
+def test_another_control_in_the_toggle_cell_is_not_its_track():
+    overlay = '<button style="position:absolute;inset:0">Menu</button>'
+    html = _switch_page("").replace('</div></span></div></div>',
+                                     overlay + '</div></span></div></div>')
+    got, clicked = _press(html)
+    assert got.get("why") == "switch is covered" and not clicked

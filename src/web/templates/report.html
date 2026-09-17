@@ -9853,39 +9853,48 @@ window.cbPublishAll = function (onProgress) {
  * дал одно задание — сервер ждал второго, а страница второго не слала. */
 function _runPublishQueue(forms, onProgress, onlySlot) {
   if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
-  window.CB_QUEUE = { active:true, uncertain:false, progress:null };
+  var batch = window.CB_QUEUE = { active:true, uncertain:false, progress:null };
   var notify = onProgress;
-  onProgress = function(p) { window.CB_QUEUE.progress = p; notify(p); };
+  onProgress = function(p) { if (window.CB_QUEUE === batch) { batch.progress = p; notify(p); } };
   var report = [];
-  var submitted = 0;   // сколько форм прошли превью и отправку (или отпали)
+  var states = forms.map(function() { return "new"; });
   var settled = 0;     // сколько заданий дошли до конца (или отпали)
   var stopped = false;
 
-  function settle(entry) {
+  function settle(i, entry) {
+    if (window.CB_QUEUE !== batch || states[i] === "settled") return;
+    states[i] = "settled";
     report.push(entry);
     settled += 1;
     onProgress({ at: settled, of: forms.length, account: entry.account, stage: 'settled', report: report });
-    if (settled >= forms.length && !stopped) {
-      window.CB_QUEUE.active = false;
+    if (settled >= forms.length) {
+      batch.active = false;
       onProgress({ done: true, at: forms.length, of: forms.length, report: report });
     }
   }
 
-  function halt(entry) {
+  function halt(i, entry) {
     stopped = true;
-    report.push(entry);
-    window.CB_QUEUE.active = false;
-    onProgress({ done: true, at: settled, of: forms.length, report: report });
+    settle(i, entry);
+    // Already submitted jobs keep the batch occupied. A pending preview
+    // may still return, but it must never submit after cancellation.
+    forms.forEach(function(form, index) {
+      if (states[index] !== "new" && states[index] !== "preview") return;
+      var name = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
+      settle(index, {account:name, state:'bad', why:'Not submitted because the batch stopped'});
+    });
   }
 
   function submit(i) {
-    if (i >= forms.length || stopped) return;
+    if (i >= forms.length || stopped || window.CB_QUEUE !== batch) return;
+    states[i] = "preview";
     var form = forms[i];
     var label = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
     onProgress({ at: i + 1, of: forms.length, account: label, stage: 'checking', report: report });
 
     window.cbPreview(form, function (plan, error, snapshot) {
-      if (error) { settle({ account: label, state: 'bad', why: error }); submit(i + 1); return; }
+      if (stopped || window.CB_QUEUE !== batch || states[i] !== "preview") return;
+      if (error) { settle(i, { account: label, state: 'bad', why: error }); submit(i + 1); return; }
 
       var verdict = cbSkipByName(form, plan);
       var skipped = verdict.broken + verdict.unchecked;
@@ -9893,7 +9902,7 @@ function _runPublishQueue(forms, onProgress, onlySlot) {
       if (onlySlot) form.querySelectorAll('.cb-slot').forEach(function(slot, index) { if (slot !== onlySlot) verdict.skip[index] = true; });
       var payload = cbFormDataSkipping(form, verdict.skip, snapshot);
       if (!payload.kept) {
-        settle({ account: label, state: 'bad', skipped: skipped,
+        settle(i, { account: label, state: 'bad', skipped: skipped,
                  why: verdict.unchecked && !verdict.broken
                    ? 'the check covered no campaign here'
                    : 'every campaign has errors — see the diagnostics' });
@@ -9916,29 +9925,32 @@ function _runPublishQueue(forms, onProgress, onlySlot) {
       fd.set('hand_off', '1');
       fd.set('user_confirmed', '1');
 
+      states[i] = 'submitted';
       fetch('/publish-jobs', { method: 'POST', body: fd })
         .then(function (r) { return r.json(); })
         .then(function (data) {
-          if (data.error) { settle({ account: label, state: 'bad', why: data.error, skipped: skipped }); return; }
+          if (window.CB_QUEUE !== batch || states[i] === "settled") return;
+          if (data.error) { settle(i, { account: label, state: 'bad', why: data.error, skipped: skipped }); return; }
           if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');
           cbPollJob(data.job_id, statusPanel, form.querySelector('.cb-publish-btn'), function (job) {
+            if (window.CB_QUEUE !== batch || states[i] === "settled") return;
             if (job.status === 'unknown' || job.status === 'cancelled') {
-              window.CB_QUEUE.uncertain = job.status === 'unknown';
-              halt({account:label, state:'bad', why:job.status === 'unknown' ? 'Job status lost; verify the account before starting another run' : 'Queue stopped by user'});
+              if (job.status === 'unknown') batch.uncertain = true;
+              halt(i, {account:label, state:'bad', why:job.status === 'unknown' ? 'Job status lost; verify the account before starting another run' : 'Queue stopped by user'});
               return;
             }
             var ok = !(job.errors || []).length && (job.results || []).length
               && (job.results || []).every(function (r) { return r.publishable === true; });
-            settle({ account: label, state: ok ? 'ok' : 'bad', skipped: skipped,
+            settle(i, { account: label, state: ok ? 'ok' : 'bad', skipped: skipped,
                      why: ok ? '' : 'draft blocked — see the account panel' });
           });
         })
         .catch(function (e) {
-          window.CB_QUEUE.uncertain = true;
-          halt({account:label,state:'bad',why:'Submission outcome unknown: '+e.message});
+          if (window.CB_QUEUE !== batch || states[i] === 'settled') return;
+          batch.uncertain = true;
+          halt(i, {account:label,state:'bad',why:'Submission outcome unknown: '+e.message});
         });
       // Следующий аккаунт — сразу после отправки этого, не после его конца.
-      submitted += 1;
       submit(i + 1);
     }, onlySlot);
   }

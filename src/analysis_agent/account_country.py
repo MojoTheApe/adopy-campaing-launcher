@@ -13,14 +13,15 @@ alive.
 
 Sources, in order:
 
-1. **The accounts sheet.** The operator maintains it; it is the only statement
+1. **The accounts sheet.** The operator maintains it; it is the primary statement
    of intent. Rows marked dead are dropped when the account has a live row —
    that is exactly how a move looks on paper.
-2. **Recent stats, by LATEST DATE.** Used to choose between several live
+2. **Operator links.** Used when the sheet does not name a country.
+3. **Recent stats, by LATEST DATE.** Used to choose between several live
    countries, and as the whole answer for accounts the sheet does not mention.
-3. **Never the suffix in the account label.**
+4. **Never the suffix in the account label or the legacy map column.**
 
-That third line is the one that cost time. `FacebookElf303 PA Amz` reads as
+The label-suffix rule is the one that cost time. `FacebookElf303 PA Amz` reads as
 "Panama, Amazon" and looks authoritative; it is typed by hand, is sometimes
 wrong, and stays put while the account moves. Reading a country off it produced
 seven "mismatches" out of twenty-four accounts — every one of them a stale
@@ -36,6 +37,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Sequence
 
 from src.analysis_agent.analyze_fb_stats import normalize_account_alias
+from src.analysis_agent.country_names import country_key
 
 # Statuses that mean "not running any more". Compared case-insensitively; an
 # unknown status counts as alive, because guessing an account dead hides it.
@@ -121,32 +123,23 @@ def resolve_countries(
     not name any of them, no country is picked — an invented answer here aims a
     campaign at a market.
 
-    **Three sources, and the order between them is the point.** What a person
-    stated — the sheet's country section and the links they made on the
-    dashboard — says where the account is *meant* to be. The stats say where it
-    has *been*, and only break ties between stated options. The suffix in the
-    account label is never a source: reading it produced seven false mismatches
-    out of twenty-four accounts on 2026-08-30, every one of them a stale name.
-
-    Links joined this list on 16.09. Until then an account connected to a
-    country on the dashboard could still report no country at all: the link was
-    on disk, the overview never read it, and the account fell into "Available
-    accounts" — a row with no spend cell and no Read button, so it could not be
-    read at all. Stated intent is stated intent whichever screen it was typed
-    on, so links sit beside the sheet rather than below the stats.
+    Source precedence is sheet sections, then operator links, then recent
+    stats. Lower-priority sources never add countries to a stated set. Stats
+    may choose a primary country only from that set. Unknown country names
+    are preserved rather than inferred from the account label or legacy map.
     """
     out: dict[str, dict] = {}
     by_sheet = sheet_countries(sheet_rows)
     by_link = dict(linked or {})
 
     for key in set(by_sheet) | set(from_stats) | set(by_link):
-        # Союз, а не победа одного над другим: аккаунт, названный и в таблице,
-        # и в связях, честно принадлежит обоим спискам. Несколько стран у
-        # одного аккаунта — обычное дело, а не исключение: ради этого и
-        # заведено пострановое чтение.
-        listed = list(by_sheet.get(key, []))
-        for name in by_link.get(key, []):
-            if name not in listed:
+        # Preserve every option from the highest-priority available source.
+        listed = []
+        seen = set()
+        for name in by_sheet.get(key) or by_link.get(key, []):
+            identity = country_key(name)
+            if identity and identity not in seen:
+                seen.add(identity)
                 listed.append(name)
         recent = from_stats.get(key, "")
 
@@ -159,7 +152,7 @@ def resolve_countries(
             out[key] = {"country": listed[0], "countries": listed, "ambiguous": False}
             continue
 
-        chosen = recent if recent in listed else ""
+        chosen = next((name for name in listed if country_key(name) == country_key(recent)), "")
         out[key] = {"country": chosen, "countries": listed, "ambiguous": True}
 
     return out

@@ -69,47 +69,8 @@ def _scrub_deep(value: Any) -> Any:
     return scrub_diag(value)
 
 
-#: Исключения, которые asyncio на Windows выдаёт при закрытии соединений.
-#:
-#: 15.09 за один вечер приёмник получил три их вида подряд: `CancelledError`
-#: из подтверждения кадра скринкаста, `TargetClosedError` у брошенного Future,
-#: `ConnectionResetError [WinError 10054]` при гашении сокета. Все три
-#: помечены `handled`, ни одна не влияет на прогон — это цена того, что
-#: браузер и вкладки закрываются, пока цикл событий ещё что-то доделывает.
-#:
-#: На одной машине это мелочь. У десяти байтеров такой шум утопит настоящие
-#: отказы шагов — ровно то, от чего в тот же день закрывали утечку событий из
-#: тестов.
-_TEARDOWN_NOISE = {
-    "CancelledError",
-    "ConnectionResetError",
-    "ConnectionAbortedError",
-    "BrokenPipeError",
-    "TargetClosedError",
-}
-
-
-def _is_teardown_noise(event: dict) -> bool:
-    """Это системный шум закрытия соединения, а не наша поломка?
-
-    **Фильтруем по виду исключения, а не по логгеру целиком.** Соблазн был
-    выключить логгер `asyncio` — но через него же приходит `RuntimeError: loop
-    is not the running loop`, от которого 15.09 дважды умирал дешборд
-    (ACL-1163). Заглушить логгер значило бы спрятать единственный вредный
-    случай вместе с тремя безобидными.
-    """
-    if (event.get("logger") or "") != "asyncio":
-        return False
-    values = ((event.get("exception") or {}).get("values") or [])
-    if not values:
-        return False
-    return all((v.get("type") or "") in _TEARDOWN_NOISE for v in values)
-
-
 def _before_send(event: dict, _hint: dict) -> dict | None:
     try:
-        if _is_teardown_noise(event):
-            return None
         return _scrub_deep(event)
     except Exception:
         # Не вычистили — не отправляем. Событие ценно, но не настолько.

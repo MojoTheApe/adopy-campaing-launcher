@@ -129,3 +129,30 @@ def test_an_expanded_location_search_counts_as_open_suggestions(page):
     assert md._wait_location_options(page, 0.5) is True
     page.set_content("<input placeholder='Search locations' aria-expanded='false' value='Chile'>")
     assert md._wait_location_options(page, 0.5) is False
+
+
+def test_no_suggestions_after_retry_fails_without_blind_enter(page, monkeypatch):
+    page.set_content("<input placeholder='Search locations' id='country'>")
+    page.locator('#country').fill('Colombia')
+    page.locator('#country').focus()
+    monkeypatch.setattr(md, '_wait_location_options', lambda root: False)
+    monkeypatch.setattr(md._telemetry, 'record', lambda *a, **k: None)
+    page.evaluate("window.entered=false; document.addEventListener('keydown', e => {if(e.key==='Enter') window.entered=true;})")
+    assert md._pick_country_suggestion(page, page, 'Colombia') is False
+    assert page.evaluate('window.entered') is False
+
+
+def test_unreadable_country_rows_cannot_confirm_success(page, monkeypatch):
+    page.set_content("<input placeholder='Search locations'>")
+    monkeypatch.setattr(md, '_pick_country_suggestion', lambda *a: True)
+    monkeypatch.setattr(md._telemetry, 'record', lambda *a, **k: None)
+    import src.fb_ads_rpa.page_capture as pc
+    monkeypatch.setattr(pc, 'capture', lambda *a, **k: None)
+    assert md._pick_country_and_clear_defaults(page, page, 'Colombia') is False
+
+
+def test_missing_target_does_not_remove_the_only_remaining_country(page):
+    page.set_content(_CARD % {'us_click': 'onclick="drop(\'United States\')"'})
+    page.evaluate("document.querySelector('.grp[data-c=Guatemala]').remove()")
+    assert md._clear_other_locations(page, 'Guatemala')
+    assert page.evaluate('window.clicked') == []

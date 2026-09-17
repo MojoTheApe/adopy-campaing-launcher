@@ -168,6 +168,7 @@ function runQueue(accounts, opts = {}) {
     _safeConfirm: (title, body, onYes) => { events.push('asked'); if (opts.confirm !== false) onYes(); },
     cbPreview: (form, done) => {
       events.push('preview:' + form._label);
+      if (opts.preview) return opts.preview(form, done);
       done(opts.plan ? opts.plan(form._label) : [{ 'Campaign Name': form._label, errors: [] }], null);
     },
     cbSkipByName: opts.skip || (() => ({ skip: {}, unchecked: 0, broken: 0 })),
@@ -217,15 +218,50 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   assert.equal(posts(q), 3, 'после последнего аккаунта запущено что-то ещё');
   assert.equal(q.sandbox.window.CB_QUEUE.progress.report.length, 3);
 
-  // Отменённая или потерянная работа закрывает очередь и помечает её:
-  // уже отправленные работы идут дальше (у каждой свой Stop), отчёт
-  // говорит, что случилось.
+  // A lost job stays uncertain; other submitted jobs still own the batch.
   q = runQueue(['A', 'B']);
   await flush();
   q.pending[0]({ status: 'unknown' });
   await flush();
-  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.ok(q.sandbox.window.CB_QUEUE.active);
   assert.ok(q.sandbox.window.CB_QUEUE.uncertain, 'потерянная работа не помечена как неизвестный исход');
+
+  q.pending[1]({ status: 'cancelled' });
+  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.ok(q.sandbox.window.CB_QUEUE.uncertain, 'a later cancellation erased an unknown outcome');
+  q.sandbox.window.cbPublishAll(() => {});
+  assert.equal(posts(q), 2, 'unknown outcome allowed duplicate work');
+
+  q = runQueue(['A', 'B', 'C']);
+  await flush();
+  q.pending[0]({ status: 'cancelled' });
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'cancelling A released running B and C');
+  q.sandbox.window.cbPublishAll(() => {});
+  assert.equal(posts(q), 3, 'a duplicate batch was submitted');
+  q.pending[1]({ results: [{ publishable: true }] });
+  assert.ok(q.sandbox.window.CB_QUEUE.active);
+  q.pending[2]({ results: [{ publishable: true }] });
+  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  const currentBatch = q.sandbox.window.CB_QUEUE;
+  const progress = currentBatch.progress;
+  q.pending[0]({ status: 'unknown' }); // stale callback from the previous batch
+  assert.strictEqual(currentBatch.progress, progress);
+  assert.ok(currentBatch.active && !currentBatch.uncertain);
+
+  let delayedPreview;
+  q = runQueue(['A', 'B', 'C'], { preview: (form, done) => {
+    if (form._label === 'B') delayedPreview = done;
+    else done([{ 'Campaign Name': form._label, errors: [] }], null);
+  }});
+  await flush();
+  q.pending[0]({ status: 'cancelled' });
+  delayedPreview([{ 'Campaign Name': 'B', errors: [] }], null);
+  await flush();
+  assert.equal(posts(q), 1, 'a late preview submitted another job after cancellation');
+  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.equal(q.sandbox.window.CB_QUEUE.progress.report.length, 3);
 
   // Отказ на вопросе — ни одной работы.
   q = runQueue(['A'], { confirm: false });

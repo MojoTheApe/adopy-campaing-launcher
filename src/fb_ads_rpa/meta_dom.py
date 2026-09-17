@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import threading
@@ -55,7 +56,15 @@ from src.fb_ads_rpa import run_telemetry as _telemetry
 #: Скорость сети меряется в мегабайтах в секунду и меняется; поэтому порог
 #: задан переменной. Если однажды окажется, что и четыре не успевают, менять
 #: надо здесь, а не гадать по симптомам.
-_PW_FILE_LIMIT_MB = float(os.environ.get("FB_RPA_PW_FILE_LIMIT_MB") or 3)
+def _pw_file_limit_mb() -> float:
+    try:
+        value = float(os.environ.get("FB_RPA_PW_FILE_LIMIT_MB") or 3)
+    except (TypeError, ValueError):
+        return 3.0
+    return value if math.isfinite(value) and 0 < value <= 45 else 3.0
+
+
+_PW_FILE_LIMIT_MB = _pw_file_limit_mb()
 
 #: Сколько даём `set_files` на передачу содержимого.
 #:
@@ -2488,18 +2497,12 @@ def run_recorded_campaign_flow(
     if _recover_from_browser_error(page):
         _shot("skip_browser_error_recovered")
 
-    # Окно подгоняется перед каждой кампанией, а не только при подключении:
-    # 17.09 19:40 CR_ait растянули до 1920 (страница 2541), но к следующей
-    # кампании того же задания окно снова было 1280 (страница 1707).
-    try:
-        from src.fb_ads_rpa.browser import _ensure_wide_window
+    from src.fb_ads_rpa.browser import ensure_editor_window
 
-        _ensure_wide_window(page.context, page)
-    except Exception:
-        pass
+    if not ensure_editor_window(page, "campaign"):
+        return "window_too_small"
 
-    # Одна строка на прогон: каким было окно в начале (размер, масштаб,
-    # свёрнуто ли). Чтобы сбои сравнивать с состоянием окна, а не гадать.
+    # Record geometry for diagnosing failures.
     try:
         _telemetry.record("browser_window", None, diag=_telemetry.window_state(page) or None)
     except Exception:
@@ -2626,6 +2629,8 @@ def run_recorded_campaign_flow(
         return "next_to_adset"
     _wait_loading()
     _shot("after_next_to_adset")
+    if not ensure_editor_window(page, "adset"):
+        return "window_too_small"
 
     if not _fill(page.get_by_placeholder("Enter your ad set name here..."), adset_name):
         _shot("fail_adset_name")
@@ -2975,6 +2980,8 @@ def run_recorded_campaign_flow(
         ad_edit_url = page.url
         reached_ad_level = True
         _shot("after_next_to_ad")
+        if not ensure_editor_window(page, "ad"):
+            return "window_too_small"
 
         if reached_ad_level:
             final_ad_name = ad_name or f"{campaign_name} Ad"
@@ -3070,6 +3077,9 @@ def run_recorded_campaign_flow(
                     _shot(f"fail_{tag}_create")
                     ad_level_fails.append(f"{tag}_create:{str(exc)[:60]}")
                     continue
+
+                if not ensure_editor_window(page, tag):
+                    return "window_too_small"
 
                 extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
                 if not _fill(page.get_by_placeholder("Enter your ad name here..."), extra_name):
@@ -3313,24 +3323,24 @@ PLACEMENTS_SUBITEM_READ_JS = r"""
     const root = document.querySelector('[data-rpa-placements-marker]');
     if (!root) return { found: false, why: 'нет метки блока' };
     const rows = [...root.querySelectorAll('*')].filter(e =>
-      e.children.length === 0 &&
-      // Регистр не сверяем — как и в PLACEMENTS_SUBITEM_JS: страница пишет
-      // «Facebook notifications», рецепт — «Facebook Notifications».
-      norm(e.textContent).toLowerCase() === (label || '').toLowerCase() &&
-      e.offsetParent !== null);
+      e.children.length === 0 && norm(e.textContent).toLowerCase() === (label || '').toLowerCase() && e.offsetParent !== null);
+    let frozen = null;
     for (const row of rows) {
       let container = row.parentElement;
       for (let i = 0; i < 4 && container; i++) {
         const cb = container.querySelector('input[type=checkbox]');
         if (cb) {
           const aria = cb.getAttribute('aria-checked');
-          return { found: true,
-                   checked: aria === 'true' ? true : aria === 'false' ? false : cb.checked };
+          const checked = aria === 'true' ? true : aria === 'false' ? false : cb.checked;
+          if (!cb.disabled) return { found: true, checked };
+          if (frozen === null) frozen = checked;
+          break;
         }
         container = container.parentElement;
       }
     }
-    return { found: false, why: 'строка не найдена' };
+    return frozen === null ? { found: false, why: 'строка не найдена' }
+                           : { found: true, checked: frozen };
   }
 """
 """Состояние подпункта без клика — для перепроверки после паузы."""
@@ -4638,6 +4648,29 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     # принадлежность значило бы добавить второе предположение к первому.
     remaining_on = list(_SUBITEMS_ON)
     remaining_off = list(_SUBITEMS_OFF)
+    def _settle_visible(here: list[str]) -> None:
+        # Meta обновляет галочку не сразу: 17.09 20:59 (CR_ait Day) семь
+        # подпунктов отчитались «ещё включены», а на дампе, снятом через пару
+        # секунд, все были в нужном состоянии. Читаем, пока эта категория ещё
+        # раскрыта: открытие следующей скрывает её подпункты.
+        still = ([(x, True) for x in remaining_on if _label_on_page(x, here)]
+                 + [(x, False) for x in remaining_off if _label_on_page(x, here)])
+        if still:
+            _sleep_h(2.0)
+            settled = {}
+            for label, want in still:
+                try:
+                    res = page.evaluate(PLACEMENTS_SUBITEM_READ_JS, label) or {}
+                except Exception as exc:
+                    res = {"found": False, "why": str(exc)[:80]}
+                if res.get("found") and res.get("checked") is want:
+                    settled[label] = res
+                    (remaining_on if want else remaining_off).remove(label)
+                    report.get("subitems_failed", {}).pop(label, None)
+            if settled:
+                report.setdefault("subitems_settled", {}).update(settled)
+
+
     for name, want in _PLACEMENT_CATEGORIES.items():
         if not want:
             continue
@@ -4663,47 +4696,33 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                 break
             _sleep_h(0.6)
 
-        # 17.09 21:13 (CO_bnc FX): «Threads feed» и «Facebook Notifications»
-        # в разметке не появились вовсе — нижние строки раскрытой категории
-        # видны только после прокрутки. Докручиваем и перечитываем список.
+        _settle_visible(here)
+
+        # Source 8e9acb2/5b16886: lower placement rows are virtualized until
+        # scrolling. Aim at this card, not wherever the operator left the
+        # pointer. Settle current rows BEFORE scrolling can unmount them.
         for _ in range(3):
-            if not (remaining_on or remaining_off):
+            if not any(not _label_on_page(x, here) for x in remaining_on + remaining_off):
                 break
             try:
+                page.locator('[data-rpa-placements-marker]').first.hover(timeout=2000)
                 page.mouse.wheel(0, 400)
-            except Exception:
+            except Exception as exc:
+                report["subitems_scroll_error"] = type(exc).__name__
                 break
             _sleep_h(0.6)
             more = [x for x in _subitem_labels() if not _label_on_page(x, here)]
             if not more:
                 continue
-            here = here + more
-            report["subitems_seen"].extend(x for x in more if x not in report["subitems_seen"])
+            here.extend(more)
+            report["subitems_seen"].extend(x for x in more if not _label_on_page(x, report["subitems_seen"]))
             for label in list(remaining_on):
                 if _label_on_page(label, more) and _set(label, True):
                     remaining_on.remove(label)
             for label in list(remaining_off):
                 if _label_on_page(label, more) and _set(label, False):
                     remaining_off.remove(label)
-
-    # Meta обновляет галочку не сразу: 17.09 20:59 (CR_ait Day) семь
-    # подпунктов отчитались «ещё включены», а на дампе, снятом через пару
-    # секунд, все были в нужном состоянии. Перед отказом перечитываем.
-    still = [(x, True) for x in remaining_on] + [(x, False) for x in remaining_off]
-    if still:
-        _sleep_h(2.0)
-        settled = {}
-        for label, want in still:
-            try:
-                res = page.evaluate(PLACEMENTS_SUBITEM_READ_JS, label) or {}
-            except Exception as exc:
-                res = {"found": False, "why": str(exc)[:80]}
-            if res.get("found") and res.get("checked") is want:
-                settled[label] = res
-                (remaining_on if want else remaining_off).remove(label)
-                report.get("subitems_failed", {}).pop(label, None)
-        if settled:
-            report["subitems_settled"] = settled
+            _settle_visible(more)
 
     report["subitems_missing"] = remaining_on + remaining_off
     _dbg.append(f"subitems_seen={report['subitems_seen']}")
@@ -6137,6 +6156,29 @@ def _creative_wizard_open(page: Page) -> bool:
         return False
 
 
+def _creative_post_media_step(page: Page) -> bool:
+    """The observed Trim/Crop screen with Skip and continue (ACL-1207).
+
+    This can also be left open from a previous attempt. Callers must observe
+    a transition after feeding THIS upload, not treat its presence as identity.
+    """
+    if not _creative_wizard_open(page):
+        return False
+    try:
+        return bool(page.evaluate(r"""() => {
+          const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+          const visible = [...document.querySelectorAll('*')]
+            .filter(e => e.offsetParent !== null && e.children.length === 0)
+            .map(e => norm(e.textContent));
+          return visible.some(t => t === 'Trim' || t === 'Crop')
+            && [...document.querySelectorAll('button,[role=button]')].some(e =>
+              e.offsetParent !== null && !e.disabled && e.getAttribute('aria-disabled') !== 'true'
+              && norm(e.textContent) === 'Skip and continue');
+        }"""))
+    except Exception:
+        return False
+
+
 #: What the wizard's forward button reads, step by step. "Done"/"Save"/"Next"
 #: were the whole list until 2026-09-16; the Trim step that a fresh video
 #: upload now opens reads **"Skip and continue"**, and the walk pressed
@@ -6278,6 +6320,30 @@ def _close_creative_setup_modal(page: Page) -> bool:
     if _click_modal_corner_icon(page, "Creative setup"):
         return not _creative_wizard_open(page)
     return False
+
+
+def _reuse_upload_decision(page: Page, filename: str) -> bool | None:
+    """Normalize the old boolean and pending explicit media-reuse contract.
+
+    True means attached, None permits upload, False blocks it. Unknown outcomes
+    fail closed; nonempty strings must never be interpreted as success.
+    """
+    result = _try_reuse_library_media(page, filename)
+    if result is True or result == "attached":
+        return True
+    if result is False or result == "absent":
+        return None
+    return False
+
+
+def _feed_mounted_file(page: Page, handle, creative_path: str, size_mb: float, diag: dict) -> bool:
+    """Use the same size/timeout policy even when the input is already mounted."""
+    if size_mb > _PW_FILE_LIMIT_MB:
+        return _upload_heavy_via_chooser_event(
+            page, creative_path, diag, lambda: handle.evaluate("el => el.click()") or True
+        )
+    handle.set_input_files(creative_path, timeout=_PW_SET_FILES_MS)
+    return True
 
 
 def upload_ad_creative(
@@ -6436,14 +6502,29 @@ def upload_ad_creative(
     if verdict is not None:
         return verdict
     if reuse_only:
-        # The memo said this file already went up in this run, so a second
-        # upload is pointless (Meta refuses it) — the library was the only
-        # way, and it had no copy. Leave the ad as it was and say so; the
-        # caller records the refusal by name.
+        # Память прогона говорит, что файл уже уходил наверх: второй раз Meta
+        # его не берёт, медиатека была единственным путём, и копии там нет.
+        # Объявление оставляем как есть и называем причину.
         _close_creative_setup_modal(page)
         _telemetry.record("ad_creative_reuse", None, note="library_has_no_copy",
                           diag={"file": Path(creative_path).name})
         return False
+
+    # Clear the library search box before uploading. The reuse attempt just
+    # above types the filename into it; when reuse fails the filter STAYS,
+    # and the freshly uploaded file lands in a grid that is still filtered
+    # to a term matching nothing — measured live 2026-08-04: "No images
+    # match your search", 0 tiles, "0 selected", Next aria-disabled.
+    try:
+        search_box = page.get_by_placeholder(re.compile(r"Search media", re.I)).first
+        if search_box.count() and (search_box.input_value(timeout=1500) or "").strip():
+            handle = _focus_via_cdp_click(page, search_box)
+            if handle is not None:
+                page.keyboard.press("ControlOrMeta+A")
+                page.keyboard.press("Delete")
+                _sleep_h(1.2)
+    except Exception:
+        pass
 
     # Trusted click here too: a Playwright locator click on this panel gets
     # rejected as "not stable" the same way the trigger did (2026-08-04), so
@@ -6514,18 +6595,21 @@ def upload_ad_creative(
     except Exception as exc:  # сжатие — удобство, а не условие работы шага
         _diag["prepared_error"] = f"{type(exc).__name__}: {exc}"[:160]
 
+    _file_size_mb = float("inf")  # unknown sizes must not enter the byte-transfer path
     try:
-        _diag["size_mb"] = round(Path(creative_path).stat().st_size / (1024 * 1024), 1)
+        _file_size_mb = Path(creative_path).stat().st_size / (1024 * 1024)
+        _diag["size_mb"] = round(_file_size_mb, 1)
     except Exception:
         pass
 
     # Compression changes the library caption. Keep original-name reuse above,
     # then also look for an already uploaded derived copy when reuse is enabled.
-    if (Path(creative_path).name != _diag["file"] and get_reuse_library_media()
-            and _try_reuse_library_media(page, Path(creative_path).name)):
-        _diag["reused"] = True
-        _LAST_UPLOAD_DIAG = _diag
-        return True
+    if Path(creative_path).name != _diag["file"] and get_reuse_library_media():
+        decision = _reuse_upload_decision(page, Path(creative_path).name)
+        if decision is not None:
+            _diag["reused"] = decision
+            _set_last_upload_diag(_diag)
+            return decision
 
     # Clear the library search box before uploading. The reuse attempt just
     # above types the filename into it; when reuse fails the filter STAYS,
@@ -6557,6 +6641,39 @@ def upload_ad_creative(
         except Exception:
             pass
 
+    def _finish_upload() -> bool:
+        # Advance until the wizard closes (or we run out of patience). Said in
+        # the diagnostic either way: a wizard left open is what breaks every
+        # step after this one, and until 2026-09-16 the only trace of it was
+        # `dialogs: 1` on the NEXT step's failure.
+        _diag["wizard"] = "closed" if _walk_creative_wizard(page) else "left_open"
+        _set_last_upload_diag(_diag)
+        if _diag["wizard"] != "closed":
+            return False
+
+        # Confirm we're still on the ad editor, not bounced back to the ads
+        # list by some other in-between click — recover via the saved edit URL
+        # rather than guessing a re-open control.
+        if edit_url and "/ads/edit/" not in page.url:
+            try:
+                page.goto(edit_url)
+                _sleep_h(1.0)
+            except Exception:
+                return False
+
+        if "/ads/edit/" not in page.url:
+            return False
+
+        # Confirmed live (2026-07-29): being on the right URL says nothing about
+        # whether the media actually landed on the ad. A run reported
+        # `after_ad_creative_upload` success for all three ads, yet two of them
+        # were later found in Ads Manager still showing the empty-media state —
+        # the same async-save-race class already confirmed for campaign
+        # name/budget and ad destination. Wait for Meta's own save indicator to
+        # clear, then assert the Ad creative section really left the empty
+        # state before reporting success.
+        return _verify_ad_media_present(page)
+
     _upload_name = Path(creative_path).name
     landed = False
     for _attempt in range(3):
@@ -6569,6 +6686,8 @@ def upload_ad_creative(
         # control's shape stops mattering. Clicking is kept as a fallback for
         # renders that only expose a chooser.
         _step: dict = {"n": _attempt + 1}
+        post_media_before = _creative_post_media_step(page)
+        advanced_after_upload = False
         try:
             # 1) If a file input is already mounted, feed it — no click, so the
             #    control's shape cannot matter.
@@ -6577,9 +6696,9 @@ def upload_ad_creative(
             _step["file_inputs"] = len(_inputs)
             for h in _inputs:
                 try:
-                    h.set_input_files(creative_path)
-                    fed = True
-                    break
+                    fed = _feed_mounted_file(page, h, creative_path, _file_size_mb, _diag)
+                    if fed:
+                        break
                 except Exception as exc:
                     _step["set_files_error"] = f"{type(exc).__name__}: {exc}"[:120]
                     continue
@@ -6617,17 +6736,12 @@ def upload_ad_creative(
                 # отдельном процессе, и `DOM.getDocument` туда не дотягивается.
                 # Событие и backendNodeId обрабатываются в CDP-сессии
                 # того фрейма, который открыл диалог.
-                if _diag["size_mb"] > _PW_FILE_LIMIT_MB:
+                if _file_size_mb > _PW_FILE_LIMIT_MB:
                     _step["heavy"] = _upload_heavy_via_chooser_event(
                         page, creative_path, _diag, _press_upload
                     )
                     if not _step["heavy"]:
-                        # Не вышло — пусть откажет прежний путь, вслух и с
-                        # текстом. Молчание здесь стоило полутора дней.
-                        with page.expect_file_chooser(timeout=25000) as fc_info:
-                            _press_upload()
-                        _step["chooser"] = True
-                        fc_info.value.set_files(creative_path, timeout=_PW_SET_FILES_MS)
+                        raise RuntimeError("Browser did not accept the file by path; byte-transfer fallback is disabled for large files")
                 else:
                     with page.expect_file_chooser(timeout=25000) as fc_info:
                         _press_upload()
@@ -6643,6 +6757,11 @@ def upload_ad_creative(
         # Give the grid time to show the new tile before judging.
         _ticks = 0
         for _ in range(30):
+            # The file can leave the library immediately: a NEW Trim/Crop
+            # screen after set_files is positive progress even without a tile.
+            if not post_media_before and _creative_post_media_step(page):
+                advanced_after_upload = True
+                break
             try:
                 if page.evaluate(_tile_present_js, _upload_name):
                     landed = True
@@ -6656,12 +6775,18 @@ def upload_ad_creative(
         # разные вещи, и по одному лишь отсутствию плитки их не различить.
         _step["waited_s"] = _ticks
         _step["tile"] = landed
+        _step["state"] = ("wizard_after_upload" if advanced_after_upload
+                          else "tile" if landed else "neither")
         try:
             _step["uploading"] = _upload_in_progress(page)
             _step["progress"] = _upload_progress(page)
         except Exception:
             pass
+        if not advanced_after_upload and not landed and _step.get("uploading"):
+            _step["state"] = "progress"
         _remember(**_step)
+        if advanced_after_upload:
+            return _finish_upload()
         if landed:
             break
     if not landed:
@@ -6724,6 +6849,9 @@ def upload_ad_creative(
     last_progress = _upload_progress(page)
     deadline = time.time() + _UPLOAD_MAX_S
     while idle < 60 and frozen < _UPLOAD_FROZEN_S and time.time() < deadline:
+        if not post_media_before and _creative_post_media_step(page):
+            _diag["state"] = "wizard_after_upload"
+            return _finish_upload()
         try:
             if page.evaluate(sel_js) or page.evaluate(tile_js, fname):
                 break
@@ -6788,34 +6916,7 @@ def upload_ad_creative(
             _click_trusted(page, tile, timeout=3000)
             _sleep_h(0.8)
 
-    # Advance until the wizard closes (or we run out of patience). Said in
-    # the diagnostic either way: a wizard left open is what breaks every
-    # step after this one, and until 2026-09-16 the only trace of it was
-    # `dialogs: 1` on the NEXT step's failure.
-    _diag["wizard"] = "closed" if _walk_creative_wizard(page) else "left_open"
-
-    # Confirm we're still on the ad editor, not bounced back to the ads
-    # list by some other in-between click — recover via the saved edit URL
-    # rather than guessing a re-open control.
-    if edit_url and "/ads/edit/" not in page.url:
-        try:
-            page.goto(edit_url)
-            _sleep_h(1.0)
-        except Exception:
-            return False
-
-    if "/ads/edit/" not in page.url:
-        return False
-
-    # Confirmed live (2026-07-29): being on the right URL says nothing about
-    # whether the media actually landed on the ad. A run reported
-    # `after_ad_creative_upload` success for all three ads, yet two of them
-    # were later found in Ads Manager still showing the empty-media state —
-    # the same async-save-race class already confirmed for campaign
-    # name/budget and ad destination. Wait for Meta's own save indicator to
-    # clear, then assert the Ad creative section really left the empty
-    # state before reporting success.
-    return _verify_ad_media_present(page)
+    return _finish_upload()
 
 
 def _media_block_filled_now(page: Page) -> bool:
@@ -7350,7 +7451,7 @@ def fill_ad_copy(
         report["attempts"].append({"stage": "typed_text_mismatch", "seen": _handle_text(handle)[:80]})
         try:
             handle.focus()
-            page.keyboard.press("Control+A")
+            page.keyboard.press("ControlOrMeta+A")
             page.keyboard.press("Backspace")
             page.keyboard.insert_text(text)
         except Exception:
@@ -7417,7 +7518,7 @@ def fill_ad_copy(
             if count:
                 handle = _click_via_cdp_handle(headline_box)
                 if handle is not None:
-                    page.keyboard.press("Control+A")
+                    page.keyboard.press("ControlOrMeta+A")
                     if _type_and_confirm(handle, ad_title):
                         return True
                     _dump_stage("headline", "content_check_failed_after_insert", {"count": count})
@@ -9375,7 +9476,7 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
         # добавлял, осталась United States. Набираем заново, чтобы поиск
         # запустился ещё раз.
         try:
-            page.keyboard.press("Control+A")
+            page.keyboard.press("ControlOrMeta+A")
             page.keyboard.press("Backspace")
             _sleep_h(0.5)
             page.keyboard.type(search_term, delay=60)
@@ -9384,6 +9485,7 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
         if not _wait_location_options(root):
             _telemetry.record("audience_location", None, note="no_location_suggestions",
                               diag={"typed": search_term})
+            return False
     for sel in ("[role=option]:visible", "li[role=option]"):
         try:
             opt = root.locator(sel).filter(has_text=country_re).first
@@ -9534,9 +9636,9 @@ def _location_rows(page: Page) -> list[dict]:
         return []
 
 
-def _clear_other_locations(page: Page, keep_text: str) -> list[str]:
+def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     """Remove every included location that is not `keep_text`; return the
-    names still left afterwards (empty list = clean).
+    names still left afterwards (empty list = clean, None = unreadable).
 
     Verified by reading the card again after each click, not by the click
     being sent: `_remove_stale_default_locations` reported `removedTrue` on a
@@ -9556,28 +9658,37 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str]:
             _pc.capture(page, step="locations_unread")
         except Exception:
             pass
-        return []
+        return None
     for _ in range(6):
-        others = [r for r in _location_rows(page) if keep not in r["name"].lower()]
+        rows = _location_rows(page)
+        if not rows:
+            return None
+        if not any(keep in r["name"].lower() for r in rows):
+            # Do not delete the old country before the target is confirmed.
+            return [r["name"] for r in rows]
+        others = [r for r in rows if keep not in r["name"].lower()]
         if not others:
             return []
         target = others[0]
         _cdp_mouse_click(page, target["x"], target["y"])
         _sleep_h(0.9)
-    return [r["name"] for r in _location_rows(page) if keep not in r["name"].lower()]
+    rows = _location_rows(page)
+    if not rows:
+        return None
+    return [r["name"] for r in rows if keep not in r["name"].lower()]
 
 
 def _pick_country_and_clear_defaults(root, page: Page, search_term: str) -> bool:
     if not _pick_country_suggestion(root, page, search_term):
         return False
-    try:
-        _remove_stale_default_locations(page, search_term)
-    except Exception:
-        pass
     # The old remover above can report success on the wrong ✕; this is the
     # check that decides. A default country left beside the target means the
     # campaign spends in two markets, so it fails the step instead of passing.
     left = _clear_other_locations(page, search_term)
+    if left is None:
+        _telemetry.record("audience_location", False, note="location_rows_not_read",
+                          diag={"keep": search_term})
+        return False
     if left:
         _telemetry.record("audience_location", False, note="default_location_left",
                           diag={"keep": search_term, "left": left[:5]})
@@ -10223,8 +10334,9 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
         return False
     wanted = [str(age_min), str(age_max) if age_max < 65 else "65+"]
     seen = _age_triggers_read(page)
-    if seen and seen != wanted:
-        _telemetry.record("audience_age", False, note="read_back_mismatch",
+    if seen != wanted:
+        _telemetry.record("audience_age", False,
+                          note="read_back_mismatch" if seen else "read_back_unavailable",
                           diag={"wanted": wanted, "seen": seen})
         return False
     return True

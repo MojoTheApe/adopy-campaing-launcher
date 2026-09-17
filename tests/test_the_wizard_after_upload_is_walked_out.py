@@ -184,3 +184,61 @@ def test_the_upload_diagnostic_names_the_wizard_outcome():
     import inspect
     src = inspect.getsource(meta_dom.upload_ad_creative)
     assert '_diag["wizard"]' in src and "left_open" in src
+
+
+@pytest.mark.parametrize('heavy', [False, True])
+def test_public_upload_advances_from_media_to_trim_without_a_filename_tile(page, monkeypatch, tmp_path, heavy):
+    _fresh_upload_page(page)
+    _prepare_upload(monkeypatch, heavy)
+    media = tmp_path / 'synthetic.mp4'
+    media.write_bytes(b'offline fixture')
+    assert meta_dom.upload_ad_creative(page, 'video', str(media)) is True
+    assert page.evaluate('window.uploads') == 1
+    assert not meta_dom._creative_wizard_open(page)
+    assert page.locator('#filled').is_visible()
+    diag = meta_dom.last_upload_diag()
+    assert diag['attempts'][0]['tile'] is False
+    assert diag['attempts'][0]['state'] == 'wizard_after_upload'
+    assert diag['wizard'] == 'closed'
+
+
+def _prepare_upload(monkeypatch, heavy=False):
+    monkeypatch.setattr(meta_dom, '_scroll_until_mounted', lambda *a, **kw: True)
+    monkeypatch.setattr(meta_dom, 'get_reuse_library_media', lambda: False)
+    monkeypatch.setattr(meta_dom, 'wait_editor_saved', lambda *a, **kw: None)
+    if heavy:
+        monkeypatch.setattr(meta_dom, '_PW_FILE_LIMIT_MB', 0)
+
+
+def _fresh_upload_page(page, *, advances=True, already_trim=False, keeps_media=True):
+    html = _page_html(NEW_SHAPE, start=2 if already_trim else 1)
+    handler = 'window.uploads++;' + ('at=2;paint();' if advances else '')
+    html = html.replace('<button id="cancel">',
+        '<input type="file" style="display:none" onchange="' + handler + '">'
+        '<button>Upload</button><button id="cancel">')
+    html = html.replace('const clicks = [];', 'window.uploads=0; const clicks = [];')
+    if not keeps_media:
+        html = html.replace("document.getElementById('empty').style.display = 'none';", '')
+        html = html.replace("document.getElementById('filled').style.display = 'block';", '')
+    page.route('https://fixture.invalid/**', lambda route: route.fulfill(body=html, content_type='text/html'))
+    page.goto('https://fixture.invalid/ads/edit/synthetic')
+
+
+@pytest.mark.parametrize('already_trim', [False, True])
+def test_upload_without_new_attached_state_is_not_accepted(page, monkeypatch, tmp_path, already_trim):
+    _fresh_upload_page(page, advances=False, already_trim=already_trim)
+    _prepare_upload(monkeypatch)
+    media = tmp_path / 'synthetic.mp4'
+    media.write_bytes(b'offline fixture')
+    assert meta_dom.upload_ad_creative(page, 'video', str(media)) is False
+    assert meta_dom._creative_wizard_open(page)
+    assert page.evaluate('window.clicks') == []
+
+
+def test_walked_upload_that_does_not_attach_media_still_fails(page, monkeypatch, tmp_path):
+    _fresh_upload_page(page, keeps_media=False)
+    _prepare_upload(monkeypatch)
+    media = tmp_path / 'synthetic.mp4'
+    media.write_bytes(b'offline fixture')
+    assert meta_dom.upload_ad_creative(page, 'video', str(media)) is False
+    assert not meta_dom._creative_wizard_open(page)
