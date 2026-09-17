@@ -95,11 +95,26 @@ class RpaPublisher:
         )
 
     def _open_multilogin_direct(self, entry, account_label: str) -> BrowserConnection:
+        """Try DirectCDP, and leave the publisher as it was if it does not work.
+
+        The provider moves only on success. It used to move on the way in, and
+        a failed attempt left the publisher holding DirectCDP: the next line of
+        `_ensure_browser` — the one the log calls "the normal chain" — then ran
+        DirectCDP a second time and failed the same way, while the configured
+        provider was never asked at all (measured on DQ501, 2026-09-16).
+        """
         from src.fb_ads_rpa.browser import MultiloginDirectCDPProvider
 
         log.warning("Falling back to MultiloginDirectCDP (Mimic + CDP, no MLX API token).")
-        self._provider = MultiloginDirectCDPProvider()
-        return self._provider.open(entry, account_label)
+        previous = self._provider
+        direct = MultiloginDirectCDPProvider()
+        try:
+            conn = direct.open(entry, account_label)
+        except Exception:
+            self._provider = previous
+            raise
+        self._provider = direct
+        return conn
 
     @staticmethod
     def _profile_already_running(entry) -> bool:
@@ -192,7 +207,15 @@ class RpaPublisher:
         # Working on an already-open account is the normal case, not an
         # exception — the user should never have to close their browser
         # for a run to start.
-        if self._profile_already_running(entry):
+        #
+        # Not under attach-only, though, which is the default. There the
+        # configured provider already attaches to a running profile before it
+        # starts one, and when that fails it restarts the profile through the
+        # MLX API — keeping the proxy and the cookies, which is precisely what
+        # DirectCDP cannot do and rightly refuses to fake. Taking the shortcut
+        # there only produced a refusal, and the buyer was told to close a
+        # window that the RPA was able to take over by itself.
+        if not attach_only and self._profile_already_running(entry):
             log.info("Profile already open in MLX — using DirectCDP instead of the API.")
             try:
                 self._conn = self._open_multilogin_direct(entry, account_label)
@@ -208,11 +231,14 @@ class RpaPublisher:
             err_str = str(exc)
             self._reset_browser(keep_browser_open=soft)
             if attach_only:
+                # The reason above is the one from the Multilogin automation
+                # API, and it is the whole message worth reading. A profile
+                # left open in MLX Desktop is no longer a reason to do
+                # anything: that path restarts it by itself.
                 raise RuntimeError(
                     f"{exc} "
-                    "(MLX attach-only: RPA connects via Multilogin automation API on Publish. "
-                    "If the profile was opened manually in MLX Desktop, close it or retry Publish — "
-                    "RPA will restart it with automation enabled.)"
+                    "(MLX attach-only: RPA connects through the Multilogin automation API "
+                    "on Publish, restarting the profile itself when it has no debug port.)"
                 ) from exc
             if "401" in err_str or "Authorization" in err_str or "authorization" in err_str:
                 log.warning("MLX API returned 401 (token expired). Trying DirectCDP.")
