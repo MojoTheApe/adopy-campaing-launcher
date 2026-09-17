@@ -88,6 +88,10 @@
       "title": "Mix targets use Define further for AND groups, and the default country is really removed",
       "state": "created",
       "issue": 219
+    },
+    "b594eb1de49c039e636d902d94e41526ffd8f080ec8d3ccb3176f5a4b4697de5": {
+      "title": "Placements are set manually under Show more settings on the new ad set card",
+      "state": "creating"
     }
   }
 }
