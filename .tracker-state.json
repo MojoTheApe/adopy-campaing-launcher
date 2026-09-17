@@ -101,7 +101,8 @@
     },
     "d80d4af9eece4951ebf55d54f677168737aa733be56cfb90a8c72c10df7c8172": {
       "title": "Spend read refuses day-first dates like 16 Sep 2026, and its errors are not in English",
-      "state": "creating"
+      "state": "created",
+      "issue": 223
     }
   }
 }
