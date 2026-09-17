@@ -159,3 +159,20 @@ def test_a_dialog_over_the_switch_still_blocks_the_click():
     overlay = '<div role="dialog" style="position:fixed;left:0;top:0;width:400px;height:400px;background:#fff">x</div>'
     got, clicked = _press(_switch_page(overlay))
     assert got.get("why") == "switch is covered" and not clicked
+
+
+def test_a_covered_switch_says_what_covers_it_and_stays_marked():
+    overlay = '<div role="dialog" style="position:fixed;left:0;top:0;width:400px;height:400px;background:#fff">Tooltip</div>'
+    import os
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        p = b.new_page()
+        p.set_content(_switch_page(overlay))
+        args = {"id": "120249333289990244", "kind": "ADGROUP", "name": "2221 - AR Trolley Officially",
+                "click": True, "url": p.url, "label": "On/off"}
+        got = p.evaluate(sp._FIND_SWITCH_JS, args)
+        marked = p.locator(sp.SEL_MARKED_SWITCH).count()
+        b.close()
+    assert got["why"] == "switch is covered" and "dialog" in got["covered_by"] and marked == 1

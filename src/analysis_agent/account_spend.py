@@ -2068,6 +2068,8 @@ _FIND_SWITCH_JS = r"""
     aria === null && sw.matches('input[type="checkbox"]') && !sw.indeterminate ? (sw.checked ? 'on' : 'off') : 'unknown';
   const label = norm(sw.getAttribute('aria-label'));
   const result = {found:true, name, delivery:deliveries.size === 1 ? [...deliveries][0] : '', on:state === 'on', off:state === 'off', label};
+  // Метка до нажатия: при «covered» вызывающий прокручивает именно этот тумблер.
+  sw.setAttribute('data-acl-switch', '1');
   if (args.click) {
     // Identity, context and state are read and acted upon in one JS task.
     // If Meta switched it off meanwhile, clicking again would turn it ON.
@@ -2081,7 +2083,10 @@ _FIND_SWITCH_JS = r"""
       const cell = sw.closest('[data-surface*="/table_cell:forObjectType(toggle"]');
       const own = hit && (hit === sw || sw.contains(hit) || (cell && cell.contains(hit)) ||
         (sw.parentElement && sw.parentElement.contains(hit) && !hit.closest('[role="dialog"]')));
-      if (!own) return fail('switch is covered');
+      if (!own) {
+        const d = hit ? (hit.tagName + (hit.getAttribute('role') ? '[' + hit.getAttribute('role') + ']' : '') + ' ' + norm(hit.innerText || '').slice(0, 40)) : 'nothing';
+        return {found: false, why: 'switch is covered', covered_by: d, rect: [Math.round(r.x), Math.round(r.y)]};
+      }
       sw.click();
       result.clicked = true;
     }
@@ -2276,11 +2281,30 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         if not _period_matches(period, date_from, date_to):
             out.error = "period could not be confirmed before action"
             return out
-        acted = page.evaluate(_SWITCH_ACTION_JS, dict(args, click=True, url=approved_url,
-            label=found.get("label"), period=period,
-            period_args=[list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE]))
+        # Перекрытие бывает мгновенным: 17.09 Doc20 дважды «switch is covered»,
+        # а через минуту на той же странице в центре тумблера лежал он сам —
+        # строку у края накрывала липкая шапка таблицы. Строку — в центр
+        # экрана, и ещё раз, не больше трёх.
+        acted = None
+        for _attempt in range(3):
+            acted = page.evaluate(_SWITCH_ACTION_JS, dict(args, click=True, url=approved_url,
+                label=found.get("label"), period=period,
+                period_args=[list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE]))
+            if not (isinstance(acted, dict) and acted.get("why") == "switch is covered"):
+                break
+            try:
+                page.evaluate(
+                    "sel => { const e = document.querySelector(sel); if (e) e.scrollIntoView({block: 'center', behavior: 'instant'}); }",
+                    SEL_MARKED_SWITCH,
+                )
+            except Exception:
+                pass
+            page.wait_for_timeout(1000)
         if not acted or not acted.get("found"):
-            out.error = (acted or {}).get("why") or "action refused"
+            why = (acted or {}).get("why") or "action refused"
+            if (acted or {}).get("covered_by"):
+                why = f"{why} by {acted['covered_by']}"
+            out.error = why
             return out
         if not acted.get("clicked"):
             out.state = "already_off"
