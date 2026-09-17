@@ -9671,6 +9671,51 @@ def _only_wanted_in_summary(page: Page, keep_text: str) -> bool:
     return len(got) == 1 and keep in got[0].lower()
 
 
+_LOCATIONS_EDIT_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const label = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && /^(Locations|Ubicaciones)$/i.test(norm(e.textContent))
+      && e.getBoundingClientRect().width > 0);
+    if (!label) return null;
+    let row = label.parentElement;
+    for (let i = 0; i < 4 && row; i++, row = row.parentElement) {
+      const btns = [...row.querySelectorAll('[role=button], button, [aria-label]')].filter(b => {
+        const r = b.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0 || r.width > 80) return false;
+        const name = (norm(b.getAttribute('aria-label')) + ' ' + norm(b.textContent)).toLowerCase();
+        return /edit|editar|pencil/.test(name) || (!norm(b.textContent) && r.width <= 48);
+      });
+      if (btns.length) {
+        const r = btns[btns.length - 1].getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+    }
+    return null;
+  }
+"""
+"""Карандаш строки «Locations», когда карточка свёрнута в сводку."""
+
+
+def _click_locations_edit(page: Page) -> bool:
+    """Раскрыть карточку локаций её собственной кнопкой правки.
+
+    18.09 07:07 (CL_ml Day) и 07:09 (CO_bnc GMBL): в сводке стояло
+    «Inclusion: Chile, United States» — нужная страна добавлена, лишняя
+    осталась, а снять её нечем: у свёрнутой строки нет крестиков. Разметку
+    строк (`_location_rows`) в таком виде тоже не прочитать.
+    """
+    try:
+        pt = page.evaluate(_LOCATIONS_EDIT_JS)
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.8)
+    return True
+
+
 def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     """Remove every included location that is not `keep_text`; return the
     names still left afterwards (empty list = clean, None = unreadable).
@@ -9681,6 +9726,9 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     """
     keep = (keep_text or "").strip().lower()
     seen = _location_rows(page)
+    if not seen and _click_locations_edit(page):
+        # Свёрнутая карточка: строк нет, пока её не раскрыли карандашом.
+        seen = _location_rows(page)
     if not seen and _only_wanted_in_summary(page, keep_text):
         # 18.09 06:32 (CO_bnc GMBL): карточку прочитать не удалось, а страна
         # была одна — это видно по свёрнутой строке «Inclusion: …».

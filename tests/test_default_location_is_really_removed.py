@@ -156,3 +156,33 @@ def test_missing_target_does_not_remove_the_only_remaining_country(page):
     page.evaluate("document.querySelector('.grp[data-c=Guatemala]').remove()")
     assert md._clear_other_locations(page, 'Guatemala')
     assert page.evaluate('window.clicked') == []
+
+
+def test_a_collapsed_locations_card_is_opened_by_its_pencil(page, monkeypatch):
+    """18.09 07:07 CL_ml Day: «Inclusion: Chile, United States», снять лишнюю нечем."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0'>"
+        "<div><span>Locations</span><span>Inclusion: Chile, United States</span>"
+        "<div role='button' aria-label='Edit' id='pen' style='width:24px;height:24px'"
+        " onclick=\"window.opened=true\"></div></div></div>"
+    )
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: pg.eval_on_selector("#pen", "el => el.click()"))
+    assert md._click_locations_edit(page) is True
+    assert page.evaluate("window.opened") is True
+
+
+def test_the_pencil_is_used_before_giving_up_on_unreadable_rows(page, monkeypatch):
+    """Строки читаются только после раскрытия карточки."""
+    opened = {"yes": False}
+    rows = [{"name": "United States", "x": 1.0, "y": 2.0}, {"name": "Chile", "x": 3.0, "y": 4.0}]
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_click_locations_edit",
+                        lambda pg: opened.update(yes=True) or True)
+    monkeypatch.setattr(md, "_location_rows", lambda pg: rows if opened["yes"] else [])
+    monkeypatch.setattr(md, "_cdp_mouse_click", lambda pg, x, y: rows.pop(0))
+    monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
+    page.set_content("<div>Locations</div>")
+    assert md._clear_other_locations(page, "Chile") == []
+    assert opened["yes"] is True
