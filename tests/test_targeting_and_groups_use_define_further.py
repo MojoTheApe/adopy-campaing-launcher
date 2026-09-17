@@ -151,3 +151,20 @@ def test_the_click_is_confirmed_by_a_new_field_not_by_the_click(page):
     assert md.targeting_input_count(page) == 1
     assert md.click_define_further(page) is True
     assert md.targeting_input_count(page) == 2
+
+
+def test_typing_without_a_selected_suggestion_does_not_fill_a_group(page, monkeypatch):
+    monkeypatch.setattr(md, 'pick_first_suggestion', lambda p: False)
+    assert _player(page)._run_targeting('Banking [AND] Travel') is False
+
+
+def test_age_trigger_skips_start_time_before_age(page):
+    page.set_content("""<div>Start time</div><button id='hour' onclick='window.clockClicked=true'>18</button>
+      <div>Age</div><button id='age-min'>18</button><button id='age-max'>65+</button>""")
+    assert md._mark_age_trigger(page, '18') is True
+    marked = page.locator('[data-acl-age-trigger]')
+    assert marked.get_attribute('id') == 'age-min'
+    marked.click()
+    assert page.evaluate('window.clockClicked === undefined')
+    assert md._mark_age_trigger(page, '65+') is True
+    assert page.locator('[data-acl-age-trigger]').get_attribute('id') == 'age-max'

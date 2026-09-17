@@ -6569,7 +6569,7 @@ def fill_ad_copy(
         report["attempts"].append({"stage": "typed_text_mismatch", "seen": _handle_text(handle)[:80]})
         try:
             handle.focus()
-            page.keyboard.press("Control+A")
+            page.keyboard.press("ControlOrMeta+A")
             page.keyboard.press("Backspace")
             page.keyboard.insert_text(text)
         except Exception:
@@ -8518,7 +8518,7 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
         # добавлял, осталась United States. Набираем заново, чтобы поиск
         # запустился ещё раз.
         try:
-            page.keyboard.press("Control+A")
+            page.keyboard.press("ControlOrMeta+A")
             page.keyboard.press("Backspace")
             _sleep_h(0.5)
             page.keyboard.type(search_term, delay=60)

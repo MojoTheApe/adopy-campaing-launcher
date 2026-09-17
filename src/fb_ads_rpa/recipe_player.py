@@ -1271,8 +1271,8 @@ class RecipePlayer:
             added = False
             for term in terms:
                 if md.fill_targeting_interest(self.page, term, last=index > 0):
-                    md.pick_first_suggestion(self.page)
-                    added = True
+                    if md.pick_first_suggestion(self.page):
+                        added = True
                     pause_short(self.page)
             if not added:
                 self._record("targeting", "group", False, "", f"group {index + 1} took no terms")
