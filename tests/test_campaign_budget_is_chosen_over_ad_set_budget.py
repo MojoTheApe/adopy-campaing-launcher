@@ -126,3 +126,13 @@ def test_a_language_already_selected_counts(page):
     )
     assert "Spanish (All)" in md._languages_selected(page)
     assert md.fill_audience_languages(page, ["Spanish"]) is True
+
+
+def test_the_language_step_never_presses_escape(page, monkeypatch):
+    """Escape в редакторе Ads Manager закрывает редактор (17.09 13:19)."""
+    pressed = []
+    orig = page.keyboard.press
+    monkeypatch.setattr(page.keyboard, "press", lambda k, *a, **kw: (pressed.append(k), orig(k, *a, **kw))[1])
+    page.set_content("<div><div>Languages</div><span>Spanish (All)</span><input placeholder='Search languages'></div>")
+    assert md.fill_audience_languages(page, ["Spanish"]) is True
+    assert "Escape" not in pressed

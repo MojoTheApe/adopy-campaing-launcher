@@ -9717,10 +9717,9 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
         # 17.09 06:56 (S15): «Spanish (All)» уже стоял — Meta подставляет язык
         # по стране, выбранный язык в подсказках не показывается, кликать
         # нечего, и шаг отказывал при верном поле. Выбранный язык — успех.
-        try:
-            page.keyboard.press("Escape")
-        except Exception:
-            pass
+        # Без Escape: в редакторе Ads Manager он закрывает сам редактор (17.09
+        # 13:19, CR_ait Day — после шага языков на экране список ad set, и все
+        # следующие шаги упали). Открытая выпадашка чтению выбранных не мешает.
         present = _languages_selected(page)
         wanted = [n.strip().lower() for n in language_names if n.strip()]
         if wanted and all(any(p.lower().startswith(w) for p in present) for w in wanted):
