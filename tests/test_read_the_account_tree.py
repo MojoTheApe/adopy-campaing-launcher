@@ -215,7 +215,7 @@ def test_rows_without_a_stated_kind_are_refused(page):
         "</div></div>"
     )
     rows, _, err = sp.read_level(page, "campaign")
-    assert rows == [] and "что это за объекты" in err
+    assert rows == [] and "object type" in err
 
 
 def test_svg_paths_are_not_mistaken_for_ids(page):
@@ -353,14 +353,14 @@ def test_a_wrong_account_stops_everything(flow):
     flow.setattr(sp, "_act_from_url", lambda page, tries=1: "act_999")
     objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
     assert objects == []
-    assert "не тот кабинет" in err
+    assert "a different ad account" in err
 
 
 def test_a_wrong_period_stops_everything(flow):
     flow.setattr(sp, "_period_matches", lambda shown, a, b="": False)
     objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
     assert objects == []
-    assert "другой период" in err
+    assert "a different period" in err
 
 
 def test_the_account_is_rechecked_after_every_navigation(flow):
@@ -655,7 +655,7 @@ def test_a_parent_filter_lost_on_navigation_refuses_the_ads(flow):
             self.url = url.split('&selected_campaign_ids=')[0]
     objects, _, err = sp._read_tree(Redirected(), "act_123", "act_123", "2026-09-01")
     assert objects and all(o["level"] == "campaign" for o in objects)
-    assert "фильтр" in err
+    assert "filter" in err
 
 
 @pytest.mark.parametrize("change", ["account", "period", "parent"])
@@ -686,7 +686,7 @@ def test_the_same_ad_under_different_campaigns_has_no_guessed_parent(flow):
     flow.setattr(sp, "read_level", duplicated)
     objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
     assert objects and all(o["level"] == "campaign" for o in objects)
-    assert "разных кампаний" in err
+    assert "different campaigns" in err
 
 
 def test_a_scrollable_snapshot_does_not_claim_a_complete_tree(page):
@@ -695,4 +695,4 @@ def test_a_scrollable_snapshot_does_not_claim_a_complete_tree(page):
         _row("222", "CAMPAIGN_GROUP", "second", "Active", "true"),
     ]) + '</div>')
     objects, _, err = sp.read_level(page, "campaign")
-    assert objects and "полнота не подтверждена" in err
+    assert objects and "completeness is not confirmed" in err

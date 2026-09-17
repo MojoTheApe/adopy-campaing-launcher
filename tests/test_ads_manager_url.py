@@ -83,7 +83,7 @@ def test_wrong_or_missing_account_names_the_mismatch_and_never_reads_total(reade
     out = sp.read_via_rpa("Synthetic account", DAY)
     assert out.state == "failed" and out.spend is None and not out.status
     assert "act_" + DIGITS in out.error
-    assert ("act_456" if opened else "в адресе нет act") in out.error
+    assert ("act_456" if opened else "no act in the URL") in out.error
     reader.total.assert_not_called()
     assert_reader_tab_closed(reader)
 

@@ -137,7 +137,7 @@ def test_a_profile_opened_by_hand_is_still_refused(browser, monkeypatch, tmp_pat
     monkeypatch.setattr("src.fb_ads_rpa.browser.MultiloginDirectCDPProvider", _Running)
     ok, message = sp.open_profile_for_automation("prof-1", label="DQ438")
     assert not ok
-    assert "вручную" in message
+    assert "opened manually" in message
     assert browser.opened_with is None, "профиль, открытый руками, всё-таки трогали"
 
 
@@ -164,7 +164,7 @@ def test_an_already_automated_profile_is_not_restarted(browser, monkeypatch, tmp
 
     monkeypatch.setattr("src.fb_ads_rpa.browser.MultiloginDirectCDPProvider", _Attached)
     ok, message = sp.open_profile_for_automation("prof-1")
-    assert ok and "уже открыт" in message
+    assert ok and "already open" in message
     assert closed == [True], "окно закрыли за человеком"
     assert browser.opened_with is None, "профиль подняли заново вместо того, чтобы прицепиться"
 
@@ -182,7 +182,7 @@ def test_the_map_based_entry_point_still_works(browser, monkeypatch):
 def test_an_account_missing_from_the_map_says_so(browser, monkeypatch):
     monkeypatch.setattr(sp, "_entry_for", lambda account: None)
     ok, message = sp.open_for_automation("Никогда не подключали")
-    assert not ok and "нет в карте" in message
+    assert not ok and "not in the account map" in message
 
 
 def test_opening_a_profile_goes_through_the_serialized_browser_lock():
