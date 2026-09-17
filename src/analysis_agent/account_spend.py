@@ -2074,7 +2074,14 @@ _FIND_SWITCH_JS = r"""
     if (location.href !== args.url || label !== args.label || state === 'unknown') return fail('context or switch changed before action');
     if (state === 'on') {
       const r = sw.getBoundingClientRect(), hit = document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
-      if (!hit || (hit !== sw && !sw.contains(hit))) return fail('switch is covered');
+      // Сам input тумблера Meta прячет под нарисованной «дорожкой» — соседом в
+      // той же ячейке (17.09 Doc20: «switch is covered» на свободной странице).
+      // Попадание в эту же ячейку тумблера этой строки — наш тумблер; всё,
+      // что вне ячейки (диалог, баннер), по-прежнему закрывает его.
+      const cell = sw.closest('[data-surface*="/table_cell:forObjectType(toggle"]');
+      const own = hit && (hit === sw || sw.contains(hit) || (cell && cell.contains(hit)) ||
+        (sw.parentElement && sw.parentElement.contains(hit) && !hit.closest('[role="dialog"]')));
+      if (!own) return fail('switch is covered');
       sw.click();
       result.clicked = true;
     }

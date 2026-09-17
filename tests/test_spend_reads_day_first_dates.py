@@ -116,3 +116,46 @@ def test_turn_off_finds_a_switch_row_on_display_contents_wrappers():
         found = p.evaluate(sp._FIND_SWITCH_JS, {"id": row, "kind": "ADGROUP", "name": "2221 - AR Trolley Officially"})
         b.close()
     assert found.get("found") is True and found.get("on") is True, found
+
+
+def _switch_page(overlay: str) -> str:
+    row = "120249333289990244"
+    return (
+        '<div role="table"><div role="presentation">'
+        f'<span style="display:contents" data-surface="/am/table/table_row:{row}unit/table_cell:forObjectType(name,ADGROUP)">'
+        '<div>2221 - AR Trolley Officially</div></span>'
+        f'<span style="display:contents" data-surface="/am/table/table_row:{row}unit/table_cell:forObjectType(toggle,ADGROUP)">'
+        '<div style="position:relative;width:40px;height:20px">'
+        '<input type="checkbox" role="switch" aria-checked="true" aria-label="On/off" id="sw" '
+        'onclick="this.setAttribute(\'aria-checked\', \'false\'); window.clicked = true;" '
+        'style="position:absolute;inset:0;width:40px;height:20px;margin:0">'
+        '<div style="position:absolute;inset:0;background:#08f"></div>'
+        '</div></span></div></div>' + overlay
+    )
+
+
+def _press(page_html: str):
+    import os
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        p = b.new_page()
+        p.set_content(page_html)
+        args = {"id": "120249333289990244", "kind": "ADGROUP", "name": "2221 - AR Trolley Officially",
+                "click": True, "url": p.url, "label": "On/off"}
+        got = p.evaluate(sp._FIND_SWITCH_JS, args)
+        clicked = p.evaluate("!!window.clicked")
+        b.close()
+    return got, clicked
+
+
+def test_a_switch_drawn_over_by_its_own_track_is_pressed():
+    got, clicked = _press(_switch_page(""))
+    assert got.get("clicked") is True and clicked
+
+
+def test_a_dialog_over_the_switch_still_blocks_the_click():
+    overlay = '<div role="dialog" style="position:fixed;left:0;top:0;width:400px;height:400px;background:#fff">x</div>'
+    got, clicked = _press(_switch_page(overlay))
+    assert got.get("why") == "switch is covered" and not clicked
