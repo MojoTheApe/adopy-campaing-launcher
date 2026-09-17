@@ -3238,9 +3238,18 @@ PLACEMENTS_SUBITEM_JS = """
       for (let i = 0; i < 4 && container; i++) {
         const cb = container.querySelector('input[type=checkbox]');
         if (cb) {
+          // Состояние — по aria-checked, свойство checked у Meta отстаёт.
+          // 17.09 20:00 (CR_ait FX_Y): отказ «checked: true» у пяти подпунктов,
+          // а на дампе после отказа у всех aria-checked="false" — галочки
+          // были сняты. Второй заход по устаревшему checked кликнул бы снова
+          // и поставил их обратно.
+          const state = () => {
+            const aria = cb.getAttribute('aria-checked');
+            return aria === 'true' ? true : aria === 'false' ? false : cb.checked;
+          };
           if (!cb.disabled) {
-            if (cb.checked !== wantChecked) cb.click();
-            return { ok: cb.checked === wantChecked, checked: cb.checked };
+            if (state() !== wantChecked) cb.click();
+            return { ok: state() === wantChecked, checked: state() };
           }
           // У недоступной галочки правду говорит aria-checked: 17.09 (Doc20)
           // «Ads on Facebook Reels» — aria-checked="false", disabled, а
@@ -4030,9 +4039,13 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                   const hit = rowFor(root, name);
                   if (!hit) return { found: false };
                   if (hit.cb.disabled) return { found: true, checkbox: false, why: 'недоступна' };
-                  const before = hit.cb.checked;
+                  const state = () => {
+                    const a = hit.cb.getAttribute('aria-checked');
+                    return a === 'true' ? true : a === 'false' ? false : hit.cb.checked;
+                  };
+                  const before = state();
                   if (before !== want) hit.cb.click();
-                  return { found: true, checkbox: true, before: before, checked: hit.cb.checked };
+                  return { found: true, checkbox: true, before: before, checked: state() };
                 }
                 """,
                 [name, want_checked],
@@ -4066,9 +4079,10 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                       role: e.getAttribute('role') || e.tagName.toLowerCase(),
                       exp: e.getAttribute('aria-expanded'),
                     }));
+                  const aria = cb.getAttribute('aria-checked');
                   return {
                     found: true,
-                    checked: cb.checked,
+                    checked: aria === 'true' ? true : aria === 'false' ? false : cb.checked,
                     cbVisible: cb.offsetParent !== null,
                     inLabel: !!cb.closest('label'),
                     row: hit.row.tagName.toLowerCase(),
@@ -4258,7 +4272,8 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                           + (e.hasAttribute('aria-expanded') ? '[exp=' + e.getAttribute('aria-expanded') + ']' : ''));
                       return {
                         i: i,
-                        checked: h.cb.checked,
+                        checked: h.cb.getAttribute('aria-checked') === 'true' ? true
+                          : h.cb.getAttribute('aria-checked') === 'false' ? false : h.cb.checked,
                         disabled: h.cb.disabled,
                         inLabel: !!h.cb.closest('label'),
                         row: h.row.tagName.toLowerCase(),
