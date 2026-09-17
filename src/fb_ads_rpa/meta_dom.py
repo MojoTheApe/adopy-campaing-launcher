@@ -10715,25 +10715,31 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
 
 
 def _languages_selected(page: Page) -> list[str]:
-    """Подписи уже выбранных языков в блоке Languages (например «Spanish (All)»)."""
+    """Подписи уже выбранных языков в блоке Languages (например «Spanish (All)»).
+
+    Поднимаемся от поля поиска языков, а не от подписи «Languages»: 17.09
+    (CL_ml, CR_ait) «Spanish (All)» стоял, а подъём на 6 уровней от подписи до
+    него не доставал — шаг отказывал при верном поле.
+    """
     try:
         return page.evaluate(
             r"""() => {
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-              const label = [...document.querySelectorAll('*')].find(e =>
-                e.children.length === 0 && /^(Languages|Idiomas)$/i.test(norm(e.textContent))
-                && e.getBoundingClientRect().width > 0);
-              if (!label) return [];
-              let box = label;
-              for (let i = 0; i < 6 && box.parentElement; i++) {
-                box = box.parentElement;
-                if (box.querySelector('input[placeholder]')) break;
+              const looks = (t) => /\((All|Todos)\)$/.test(t) || /^[A-Z][a-z]+ \([^)]+\)$/.test(t);
+              const inputs = [...document.querySelectorAll('input[placeholder]')]
+                .filter(i => /language|idioma/i.test(i.getAttribute('placeholder') || ''));
+              for (const inp of inputs) {
+                let box = inp;
+                for (let k = 0; k < 10 && box.parentElement; k++) {
+                  box = box.parentElement;
+                  const found = [...box.querySelectorAll('*')]
+                    .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
+                    .map(e => norm(e.textContent))
+                    .filter(looks);
+                  if (found.length) return found;
+                }
               }
-              return [...box.querySelectorAll('*')]
-                .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
-                .map(e => norm(e.textContent))
-                .filter(t => /\((All|Todos)\)$|^[A-Z][a-z]+( \([^)]+\))?$/.test(t)
-                  && !/^(Languages|Idiomas|All languages)$/i.test(t));
+              return [];
             }"""
         ) or []
     except Exception:
