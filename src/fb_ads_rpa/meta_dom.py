@@ -9716,6 +9716,56 @@ def _click_locations_edit(page: Page) -> bool:
     return True
 
 
+_LOCATIONS_COLLAPSE_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const label = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && /^(Locations|Ubicaciones)$/i.test(norm(e.textContent))
+      && e.getBoundingClientRect().width > 0);
+    if (!label) return null;
+    let row = label.parentElement;
+    for (let i = 0; i < 5 && row; i++, row = row.parentElement) {
+      const open = [...row.querySelectorAll('[aria-expanded="true"]')].filter(b => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.width <= 80;
+      });
+      if (open.length) {
+        const r = open[open.length - 1].getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+    }
+    return null;
+  }
+"""
+"""Кнопка-створка раскрытой карточки локаций."""
+
+
+def _collapse_locations_card(page: Page) -> bool:
+    """Свернуть карточку локаций обратно.
+
+    18.09 07:42 (CL_ml Day, CO_bnc GMBL): после карандаша карточка осталась
+    раскрытой — с картой и полем поиска, — страница уехала, и следующие шаги
+    (языки, открытие детального таргетинга) своих полей уже не нашли. Страну
+    поставили правильно, а соседние шаги сломали.
+    """
+    try:
+        pt = page.evaluate(_LOCATIONS_COLLAPSE_JS)
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.6)
+    return True
+
+
+def _done(page: Page, opened_by_us: bool, result):
+    """Вернуть ответ шага, свернув карточку, если раскрывали её мы."""
+    if opened_by_us:
+        _collapse_locations_card(page)
+    return result
+
+
 def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     """Remove every included location that is not `keep_text`; return the
     names still left afterwards (empty list = clean, None = unreadable).
@@ -9725,9 +9775,11 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     run whose draft still targeted United States next to Guatemala.
     """
     keep = (keep_text or "").strip().lower()
+    opened_by_us = False
     seen = _location_rows(page)
     if not seen and _click_locations_edit(page):
         # Свёрнутая карточка: строк нет, пока её не раскрыли карандашом.
+        opened_by_us = True
         seen = _location_rows(page)
     if not seen and _only_wanted_in_summary(page, keep_text):
         # 18.09 06:32 (CO_bnc GMBL): карточку прочитать не удалось, а страна
@@ -9735,7 +9787,7 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
         _telemetry.record("audience_location", None, note="rows_unread_summary_clean",
                           diag={"keep": keep_text,
                                 "summary": _location_summary_countries(page)})
-        return []
+        return _done(page, opened_by_us, [])
     if not seen:
         # Not even the target's own row was read: the card's shape is not
         # the one this knows. Say so rather than pass silently, and keep the
@@ -9748,24 +9800,26 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
             _pc.capture(page, step="locations_unread")
         except Exception:
             pass
-        return None
+        return _done(page, opened_by_us, None)
     for _ in range(6):
         rows = _location_rows(page)
         if not rows:
-            return [] if _only_wanted_in_summary(page, keep_text) else None
+            return _done(page, opened_by_us,
+                         [] if _only_wanted_in_summary(page, keep_text) else None)
         if not any(keep in r["name"].lower() for r in rows):
             # Do not delete the old country before the target is confirmed.
-            return [r["name"] for r in rows]
+            return _done(page, opened_by_us, [r["name"] for r in rows])
         others = [r for r in rows if keep not in r["name"].lower()]
         if not others:
-            return []
+            return _done(page, opened_by_us, [])
         target = others[0]
         _cdp_mouse_click(page, target["x"], target["y"])
         _sleep_h(0.9)
     rows = _location_rows(page)
     if not rows:
-        return [] if _only_wanted_in_summary(page, keep_text) else None
-    return [r["name"] for r in rows if keep not in r["name"].lower()]
+        return _done(page, opened_by_us,
+                     [] if _only_wanted_in_summary(page, keep_text) else None)
+    return _done(page, opened_by_us, [r["name"] for r in rows if keep not in r["name"].lower()])
 
 
 def _pick_country_and_clear_defaults(root, page: Page, search_term: str) -> bool:
