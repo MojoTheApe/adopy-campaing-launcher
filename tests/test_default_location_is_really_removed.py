@@ -122,3 +122,10 @@ def test_the_country_is_typed_again_when_no_suggestions_open(page, monkeypatch):
                         lambda root, timeout_s=6.0, _orig=md._wait_location_options: _orig(root, 1.0))
     assert md._pick_country_suggestion(page, page, "Colombia") is True
     assert page.evaluate("window.picked") == "Colombia (Country)"
+
+
+def test_an_expanded_location_search_counts_as_open_suggestions(page):
+    page.set_content("<input placeholder='Search locations' aria-expanded='true' value='Chile'>")
+    assert md._wait_location_options(page, 0.5) is True
+    page.set_content("<input placeholder='Search locations' aria-expanded='false' value='Chile'>")
+    assert md._wait_location_options(page, 0.5) is False

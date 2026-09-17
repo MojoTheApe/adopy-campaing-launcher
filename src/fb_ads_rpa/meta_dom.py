@@ -8491,7 +8491,13 @@ def _wait_location_options(root, timeout_s: float = 6.0) -> bool:
     deadline = time.monotonic() + timeout_s
     while True:
         try:
-            if root.locator("[role=option]:visible").count():
+            # Подсказки Meta не всегда размечены role=option (17.09 19:45:
+            # на всех кампаниях ждали впустую, а Enter потом добавлял страну);
+            # открытый список виден по aria-expanded у поля поиска.
+            if root.locator("[role=option]:visible").count() or root.locator(
+                "input[placeholder*='location' i][aria-expanded='true'],"
+                " input[placeholder*='ubicaci' i][aria-expanded='true']"
+            ).count():
                 return True
         except Exception:
             pass
@@ -9063,20 +9069,24 @@ _MARK_AGE_TRIGGER_JS = r"""(value) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
   document.querySelectorAll('[data-acl-age-trigger]').forEach(e =>
     e.removeAttribute('data-acl-age-trigger'));
-  const label = [...document.querySelectorAll('*')].find(e =>
+  // Все видимые подписи «Age», кроме диалогов: 17.09 19:44 (CR_ait Day)
+  // первой находилась подпись из закрывающегося диалога Further limit,
+  // и «18» оказывалось выше неё.
+  const labels = [...document.querySelectorAll('*')].filter(e =>
     e.children.length === 0 && /^(Age|Edad)$/i.test(norm(e.textContent))
-    && e.getBoundingClientRect().width > 0);
-  if (!label) return false;
-  const top = label.getBoundingClientRect().top;
+    && e.getBoundingClientRect().width > 0 && !e.closest('[role=dialog]'));
+  if (!labels.length) return false;
+  const own = (e) => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('');
   let best = null, bestGap = Infinity;
   for (const e of document.querySelectorAll('*')) {
-    const own = [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('');
-    if (norm(own) !== value) continue;
+    if (norm(own(e)) !== value) continue;
     const r = e.getBoundingClientRect();
-    if (r.width <= 0 || e.closest('[role=listbox]')) continue;
-    const gap = r.top - top;
-    if (gap < 0 || gap > 400) continue;
-    if (gap < bestGap) { best = e; bestGap = gap; }
+    if (r.width <= 0 || e.closest('[role=listbox], [role=dialog]')) continue;
+    for (const label of labels) {
+      const gap = r.top - label.getBoundingClientRect().top;
+      if (gap < 0 || gap > 400) continue;
+      if (gap < bestGap) { best = e; bestGap = gap; }
+    }
   }
   if (!best) return false;
   best.setAttribute('data-acl-age-trigger', '1');
@@ -9090,10 +9100,16 @@ def _mark_age_trigger(root, value: str) -> bool:
     Всё, что выше подписи (поле Start time с часом «18») или далеко ниже,
     не подходит.
     """
-    try:
-        return bool(root.evaluate(_MARK_AGE_TRIGGER_JS, value))
-    except Exception:
-        return False
+    deadline = time.monotonic() + 3.0
+    while True:
+        try:
+            if root.evaluate(_MARK_AGE_TRIGGER_JS, value):
+                return True
+        except Exception:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.3)
 
 
 def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
