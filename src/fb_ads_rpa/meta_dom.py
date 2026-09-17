@@ -2426,6 +2426,16 @@ def run_recorded_campaign_flow(
     if _recover_from_browser_error(page):
         _shot("skip_browser_error_recovered")
 
+    # Окно подгоняется перед каждой кампанией, а не только при подключении:
+    # 17.09 19:40 CR_ait растянули до 1920 (страница 2541), но к следующей
+    # кампании того же задания окно снова было 1280 (страница 1707).
+    try:
+        from src.fb_ads_rpa.browser import _ensure_wide_window
+
+        _ensure_wide_window(page.context, page)
+    except Exception:
+        pass
+
     # Одна строка на прогон: каким было окно в начале (размер, масштаб,
     # свёрнуто ли). Чтобы сбои сравнивать с состоянием окна, а не гадать.
     try:
