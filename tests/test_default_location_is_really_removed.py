@@ -186,3 +186,33 @@ def test_the_pencil_is_used_before_giving_up_on_unreadable_rows(page, monkeypatc
     page.set_content("<div>Locations</div>")
     assert md._clear_other_locations(page, "Chile") == []
     assert opened["yes"] is True
+
+
+def test_a_row_without_a_pencil_is_opened_by_clicking_its_value(page, monkeypatch):
+    """18.09 08:23 CL_ml Trading: у свёрнутой строки ни одной кнопки, только текст."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0'>"
+        "<div><div>Locations​</div><div id='val'>Inclusion: Chile, United States</div></div></div>"
+    )
+    clicked = {}
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: clicked.update(at=pg.evaluate(
+                            "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
+    assert md._click_locations_edit(page) is True
+    assert clicked["at"] == "val", clicked
+
+
+def test_the_value_click_is_not_used_when_a_pencil_exists(page, monkeypatch):
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0'>"
+        "<div><div>Locations</div><div>Inclusion: Chile</div>"
+        "<div role='button' aria-label='Edit' id='pen' style='width:24px;height:24px'></div></div></div>"
+    )
+    clicked = {}
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: clicked.update(at=pg.evaluate(
+                            "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
+    assert md._click_locations_edit(page) is True
+    assert clicked["at"] == "pen", clicked

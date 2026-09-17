@@ -9697,6 +9697,44 @@ _LOCATIONS_EDIT_JS = r"""
 """Карандаш строки «Locations», когда карточка свёрнута в сводку."""
 
 
+_SUMMARY_ROW_JS = r"""
+  ([label, valueHint]) => {
+    const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+    const leaves = [...document.querySelectorAll('*')]
+      .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0);
+    const head = leaves.find(e => new RegExp('^(' + label + ')$', 'i').test(norm(e.textContent)));
+    if (!head) return null;
+    const re = new RegExp(valueHint, 'i');
+    // Значение строки: ближайший к подписи текст, похожий на сводку.
+    const hit = leaves.find(e => re.test(norm(e.textContent))
+      && Math.abs(e.getBoundingClientRect().top - head.getBoundingClientRect().top) < 80);
+    const el = hit || head;
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2, text: norm(el.textContent).slice(0, 60) };
+  }
+"""
+"""Координаты значения свёрнутой строки — по ним и надо жать."""
+
+
+def _click_summary_row(page: Page, label: str, value_hint: str) -> bool:
+    """Открыть свёрнутую строку кликом по её значению.
+
+    18.09 08:23 (CL_ml Trading, CR_ait Day): у Meta два вида свёрнутого блока
+    аудитории. В одном у строки есть карандаш, в другом — ни одной кнопки,
+    только текст «Inclusion: Chile, United States» / «All languages», и
+    строка раскрывается кликом по самому тексту.
+    """
+    try:
+        pt = page.evaluate(_SUMMARY_ROW_JS, [label, value_hint])
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.8)
+    return True
+
+
 def _click_locations_edit(page: Page) -> bool:
     """Раскрыть карточку локаций её собственной кнопкой правки.
 
@@ -9710,7 +9748,7 @@ def _click_locations_edit(page: Page) -> bool:
     except Exception:
         return False
     if not pt:
-        return False
+        return _click_summary_row(page, "Locations|Ubicaciones", "^(Inclusion|Inclusión)\\s*:")
     _cdp_mouse_click(page, pt["x"], pt["y"])
     _sleep_h(0.8)
     return True
@@ -11216,7 +11254,7 @@ def _click_languages_edit(page: Page) -> bool:
     except Exception:
         return False
     if not pt:
-        return False
+        return _click_summary_row(page, "Languages|Idiomas", "^(All languages|Todos los idiomas)")
     _cdp_mouse_click(page, pt["x"], pt["y"])
     _sleep_h(0.6)
     return True
