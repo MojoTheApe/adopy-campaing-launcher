@@ -83,6 +83,10 @@
       "title": "An account linked to a country on the dashboard still shows no country",
       "state": "created",
       "issue": 196
+    },
+    "100a3a5d7652e062850d9caced2b7ba0ede6fdcc9fc8f81451b109bc8478a40e": {
+      "title": "Mix targets use Define further for AND groups, and the default country is really removed",
+      "state": "creating"
     }
   }
 }
