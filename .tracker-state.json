@@ -98,6 +98,10 @@
       "title": "Ad-level steps report what the screen shows: ad copy, extra empty ad, destination sweep, budget strategy",
       "state": "created",
       "issue": 221
+    },
+    "d80d4af9eece4951ebf55d54f677168737aa733be56cfb90a8c72c10df7c8172": {
+      "title": "Spend read refuses day-first dates like 16 Sep 2026, and its errors are not in English",
+      "state": "creating"
     }
   }
 }
