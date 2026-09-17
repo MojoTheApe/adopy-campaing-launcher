@@ -108,6 +108,10 @@
       "title": "Age step clicks the Start time hour 18 instead of the minimum age",
       "state": "created",
       "issue": 225
+    },
+    "1ef683544de81b43bc92ddff76fe6b1af6a0ee4dcaaa0d471f091f65f8d6c25d": {
+      "title": "Country is not added when location suggestions do not open",
+      "state": "creating"
     }
   }
 }
