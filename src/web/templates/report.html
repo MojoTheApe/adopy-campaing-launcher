@@ -10421,6 +10421,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
         + '<span style="font-size:0.7rem;color:var(--muted);margin-left:0.5rem">'
         + 'stops the RPA; the Multilogin window stays open</span></div>';
     }
+    (job.creative_notices || []).forEach(function(note) {
+      html += '<div class="cb-status-cause">' + aclEscHtml(note) + '</div>';
+    });
     (job.results || []).forEach(function(r) {
       // Three states, not two. `success` only says the automation reached the
       // end and a draft exists; `publishable` says a human may send it out.

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import math
+import os
 import re
 import threading
 import time
@@ -23,7 +25,57 @@ from src.fb_ads_rpa import run_telemetry as _telemetry
 #:
 #: Берём с запасом: 45, а не 50. Порог у них на содержимом, а не на размере
 #: файла, и упереться в него на 49.8 МБ было бы обидно.
-_PW_FILE_LIMIT_MB = 45
+#:
+#: **15.09: порог опущен до 4 МБ, и вот почему.** Пятьдесят мегабайт — это
+#: граница, за которой Playwright отказывается передавать *в принципе*. Но
+#: задолго до неё есть вторая, куда более близкая: у `set_files` свой таймаут в
+#: **30 секунд**, а содержимое идёт по CDP через Multilogin со скоростью,
+#: которую мы в тот день намерили — **0.13 МБ/с**. Тридцать секунд на такой
+#: скорости — это около четырёх мегабайт. Всё, что тяжелее, физически не
+#: успевает, и шаг отказывает не «сломавшись», а упёршись в чужой таймаут:
+#:
+#:     попытка 1  chooser: True   FileChooser.set_files: Timeout 30000ms exceeded
+#:     попытка 2  окно выбора уже не приходит вовсе
+#:     попытка 3  то же самое
+#:
+#: Ролик на 24 МБ отказывал так трижды подряд — и с включённым поиском по
+#: медиатеке, и с выключенным, то есть дело именно здесь.
+#:
+#: Тяжёлая дорога этой беды не знает: она передаёт **путь**, а не содержимое, —
+#: Chrome читает файл с диска сам, мгновенно, и скорость CDP значения не имеет.
+#: Она и написана ради этого; просто включалась непозволительно поздно.
+#:
+#: Почему не ноль: для мелочи (медиана креатива — 0.8 МБ) простая дорога
+#: проверена сотней загрузок, а тяжёлая тянет за собой перехват диалога и
+#: отдельную CDP-сессию.
+#:
+#: Почему именно три, а не четыре: 30 секунд × 0.13 МБ/с = 3.9 МБ. Четыре —
+#: это уже за краем, и тест на это падает. Число здесь **выводится из замера**,
+#: а не выбирается на глаз; в этом и смысл проверки рядом.
+#:
+#: Скорость сети меряется в мегабайтах в секунду и меняется; поэтому порог
+#: задан переменной. Если однажды окажется, что и четыре не успевают, менять
+#: надо здесь, а не гадать по симптомам.
+def _pw_file_limit_mb() -> float:
+    try:
+        value = float(os.environ.get("FB_RPA_PW_FILE_LIMIT_MB") or 3)
+    except (TypeError, ValueError):
+        return 3.0
+    return value if math.isfinite(value) and 0 < value <= 45 else 3.0
+
+
+_PW_FILE_LIMIT_MB = _pw_file_limit_mb()
+
+#: Сколько даём `set_files` на передачу содержимого.
+#:
+#: Умолчание Playwright — 30 секунд, и именно в него упирался ролик на 24 МБ.
+#: Порог выше сделан так, чтобы до этого таймаута дело не доходило вовсе; но
+#: страховка дешёвая, а сеть у байера может оказаться медленнее нашей. Три
+#: минуты — это 4 МБ даже на 0.02 МБ/с, вдесятеро хуже намеренного.
+#:
+#: Ждать дольше незачем: если за три минуты не ушло четыре мегабайта, дело не
+#: в терпении, и отказ полезнее ещё одного молчаливого ожидания.
+_PW_SET_FILES_MS = 180_000
 
 
 def _upload_heavy_via_chooser_event(
@@ -3185,13 +3237,37 @@ PLACEMENTS_EXPAND_JS = (
 нам дня.
 """
 
+def _label_on_page(label: str, seen: list[str]) -> bool:
+    """Есть ли такой подпункт среди увиденных — не глядя на регистр букв.
+
+    15.09 живой прогон на кувейтском кабинете отчитался:
+
+        subitems_missing: ["Instagram feed", "Facebook Notifications"]
+        subitems_seen:    [… "Instagram Feed" … "Facebook notifications" …]
+
+    Обе строки приехали в одном тикете Sentry, рядом: «что искали» и «что
+    видели». Разница только в заглавной букве — и подпункт объявлялся
+    отсутствующим, а плейсменты отказывали.
+
+    Сводить регистр безопасно: названия плейсментов различаются словами, а не
+    регистром. В том же списке рядом живут «Facebook Feed» и «Facebook profile
+    feed» — их не спутать.
+    """
+    want = (label or "").strip().casefold()
+    return any((x or "").strip().casefold() == want for x in seen)
+
+
 PLACEMENTS_SUBITEM_JS = """
   ([label, wantChecked]) => {
     const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
     const root = document.querySelector('[data-rpa-placements-marker]');
     if (!root) return { ok: false, why: 'нет метки блока' };
     const rows = [...root.querySelectorAll('*')].filter(e =>
-      e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
+      e.children.length === 0 &&
+      // Регистр не сверяем: страница пишет «Instagram Feed», рецепт —
+      // «Instagram feed», и подпункт объявлялся отсутствующим (15.09).
+      norm(e.textContent).toLowerCase() === (label || '').toLowerCase() &&
+      e.offsetParent !== null);
     let frozen = null;
     for (const row of rows) {
       let container = row.parentElement;
@@ -4061,12 +4137,12 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # шага на прогоне пользователя.
         for _ in range(2):
             for label in list(remaining_on):
-                if label in here and _set(label, True):
+                if _label_on_page(label, here) and _set(label, True):
                     remaining_on.remove(label)
             for label in list(remaining_off):
-                if label in here and _set(label, False):
+                if _label_on_page(label, here) and _set(label, False):
                     remaining_off.remove(label)
-            if not [x for x in remaining_on + remaining_off if x in here]:
+            if not [x for x in remaining_on + remaining_off if _label_on_page(x, here)]:
                 break
             _sleep_h(0.6)
 
@@ -5065,6 +5141,30 @@ def _close_creative_setup_modal(page: Page) -> bool:
     return False
 
 
+def _reuse_upload_decision(page: Page, filename: str) -> bool | None:
+    """Normalize the old boolean and pending explicit media-reuse contract.
+
+    True means attached, None permits upload, False blocks it. Unknown outcomes
+    fail closed; nonempty strings must never be interpreted as success.
+    """
+    result = _try_reuse_library_media(page, filename)
+    if result is True or result == "attached":
+        return True
+    if result is False or result == "absent":
+        return None
+    return False
+
+
+def _feed_mounted_file(page: Page, handle, creative_path: str, size_mb: float, diag: dict) -> bool:
+    """Use the same size/timeout policy even when the input is already mounted."""
+    if size_mb > _PW_FILE_LIMIT_MB:
+        return _upload_heavy_via_chooser_event(
+            page, creative_path, diag, lambda: handle.evaluate("el => el.click()") or True
+        )
+    handle.set_input_files(creative_path, timeout=_PW_SET_FILES_MS)
+    return True
+
+
 def upload_ad_creative(
     page: Page, creative_type: str, creative_path: str, *, edit_url: str = ""
 ) -> bool:
@@ -5249,25 +5349,10 @@ def upload_ad_creative(
     # Note the `.name`, not `.stem`: the library captions each tile with the
     # full filename including extension ("2046_2.mp4"), so matching on the
     # stem finds nothing.
-    if get_reuse_library_media() and _try_reuse_library_media(page, Path(creative_path).name):
-        return True
-
-    # Clear the library search box before uploading. The reuse attempt just
-    # above types the filename into it; when reuse fails the filter STAYS,
-    # and the freshly uploaded file lands in a grid that is still filtered
-    # to a term matching nothing — measured live 2026-08-04: "No images
-    # match your search", 0 tiles, "0 selected", Next aria-disabled, so the
-    # wizard could never be advanced and the media never attached.
-    try:
-        search_box = page.get_by_placeholder(re.compile(r"Search media", re.I)).first
-        if search_box.count() and (search_box.input_value(timeout=1500) or "").strip():
-            handle = _focus_via_cdp_click(page, search_box)
-            if handle is not None:
-                page.keyboard.press("Control+A")
-                page.keyboard.press("Delete")
-                _sleep_h(1.2)
-    except Exception:
-        pass
+    if get_reuse_library_media():
+        decision = _reuse_upload_decision(page, Path(creative_path).name)
+        if decision is not None:
+            return decision
 
     # Trusted click here too: a Playwright locator click on this panel gets
     # rejected as "not stable" the same way the trigger did (2026-08-04), so
@@ -5281,7 +5366,6 @@ def upload_ad_creative(
     # runs continue into a wizard that could never be advanced. Verify the
     # observable result — a tile captioned with the filename — and re-upload
     # if it never shows.
-    _upload_name = Path(creative_path).name
     _tile_present_js = r"""
         (name) => [...document.querySelectorAll('*')]
           .filter(e => e.offsetParent !== null && e.children.length === 0)
@@ -5306,8 +5390,69 @@ def upload_ad_creative(
         "size_mb": 0.0,
         "attempts": [],
     }
+    # Тяжёлый ролик сжимается ДО того, как мы что-то решаем про пути загрузки
+    # (acl-1189). Замер 15.09: 247 МБ уходят в Meta порциями 2.8 МБ в минуту,
+    # то есть полтора часа при бюджете шага в девять минут. Тот же ролик в 24
+    # МБ едет обычной дорогой за минуту. Оригинал при этом не трогается —
+    # сжатое живёт в машинном кэше.
     try:
-        _diag["size_mb"] = round(Path(creative_path).stat().st_size / (1024 * 1024), 1)
+        from src.fb_ads_rpa import creative_compress
+
+        prepared = (creative_compress.ensure_uploadable(creative_path) if is_video
+                    else creative_compress.Prepared(creative_path,
+                         creative_compress.size_mb(creative_path),
+                         creative_compress.size_mb(creative_path)))
+        _diag["prepared"] = {
+            "original_mb": round(prepared.original_mb, 1),
+            "sent_mb": round(prepared.sent_mb, 1),
+            "compressed": prepared.compressed,
+            "seconds": round(prepared.seconds, 3),
+            "note": prepared.note,
+        }
+        if prepared.compressed:
+            # Оператор собирал кампанию из своего файла. Если уехала копия, он
+            # узнаёт об этом здесь, а не постфактум из кабинета.
+            _telemetry.record("ad_creative_compressed", True, note=prepared.note,
+                              diag=_diag["prepared"])
+            creative_compress.report_preparation(creative_path, prepared)
+            creative_path = prepared.path
+        elif prepared.reason:
+            _telemetry.record("ad_creative_compressed", None, note=prepared.reason,
+                              diag=_diag["prepared"])
+            creative_compress.report_preparation(creative_path, prepared)
+    except Exception as exc:  # сжатие — удобство, а не условие работы шага
+        _diag["prepared_error"] = f"{type(exc).__name__}: {exc}"[:160]
+
+    _file_size_mb = float("inf")  # unknown sizes must not enter the byte-transfer path
+    try:
+        _file_size_mb = Path(creative_path).stat().st_size / (1024 * 1024)
+        _diag["size_mb"] = round(_file_size_mb, 1)
+    except Exception:
+        pass
+
+    # Compression changes the library caption. Keep original-name reuse above,
+    # then also look for an already uploaded derived copy when reuse is enabled.
+    if Path(creative_path).name != _diag["file"] and get_reuse_library_media():
+        decision = _reuse_upload_decision(page, Path(creative_path).name)
+        if decision is not None:
+            _diag["reused"] = decision
+            _set_last_upload_diag(_diag)
+            return decision
+
+    # Clear the library search box before uploading. The reuse attempt just
+    # above types the filename into it; when reuse fails the filter STAYS,
+    # and the freshly uploaded file lands in a grid that is still filtered
+    # to a term matching nothing — measured live 2026-08-04: "No images
+    # match your search", 0 tiles, "0 selected", Next aria-disabled, so the
+    # wizard could never be advanced and the media never attached.
+    try:
+        search_box = page.get_by_placeholder(re.compile(r"Search media", re.I)).first
+        if search_box.count() and (search_box.input_value(timeout=1500) or "").strip():
+            handle = _focus_via_cdp_click(page, search_box)
+            if handle is not None:
+                page.keyboard.press("ControlOrMeta+A")
+                page.keyboard.press("Delete")
+                _sleep_h(1.2)
     except Exception:
         pass
 
@@ -5324,6 +5469,7 @@ def upload_ad_creative(
         except Exception:
             pass
 
+    _upload_name = Path(creative_path).name
     landed = False
     for _attempt in range(3):
         # Hand the file straight to the hidden <input type=file> instead of
@@ -5343,9 +5489,9 @@ def upload_ad_creative(
             _step["file_inputs"] = len(_inputs)
             for h in _inputs:
                 try:
-                    h.set_input_files(creative_path)
-                    fed = True
-                    break
+                    fed = _feed_mounted_file(page, h, creative_path, _file_size_mb, _diag)
+                    if fed:
+                        break
                 except Exception as exc:
                     _step["set_files_error"] = f"{type(exc).__name__}: {exc}"[:120]
                     continue
@@ -5383,22 +5529,17 @@ def upload_ad_creative(
                 # отдельном процессе, и `DOM.getDocument` туда не дотягивается.
                 # Событие и backendNodeId обрабатываются в CDP-сессии
                 # того фрейма, который открыл диалог.
-                if _diag["size_mb"] > _PW_FILE_LIMIT_MB:
+                if _file_size_mb > _PW_FILE_LIMIT_MB:
                     _step["heavy"] = _upload_heavy_via_chooser_event(
                         page, creative_path, _diag, _press_upload
                     )
                     if not _step["heavy"]:
-                        # Не вышло — пусть откажет прежний путь, вслух и с
-                        # текстом. Молчание здесь стоило полутора дней.
-                        with page.expect_file_chooser(timeout=25000) as fc_info:
-                            _press_upload()
-                        _step["chooser"] = True
-                        fc_info.value.set_files(creative_path)
+                        raise RuntimeError("Browser did not accept the file by path; byte-transfer fallback is disabled for large files")
                 else:
                     with page.expect_file_chooser(timeout=25000) as fc_info:
                         _press_upload()
                     _step["chooser"] = True
-                    fc_info.value.set_files(creative_path)
+                    fc_info.value.set_files(creative_path, timeout=_PW_SET_FILES_MS)
         except Exception as exc:
             # Здесь и была слепота: исключение глоталось молча, и отличить
             # «кнопки нет» от «окно выбора файла не открылось» было нечем.

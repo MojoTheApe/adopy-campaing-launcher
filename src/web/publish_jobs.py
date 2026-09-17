@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from config.paths import get_draft_status_path
+from src.fb_ads_rpa.creative_compress import observe_preparation
 from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.draft import RpaPublishResult
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher, profile_key_for
@@ -34,6 +35,13 @@ _active_publishers: dict[str, RpaPublisher] = {}
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _append_creative_notice(job_id: str, note: str) -> None:
+    with _jobs_lock:
+        notices = _jobs[job_id].setdefault("creative_notices", [])
+        if note not in notices:
+            notices.append(note)
 
 
 def _job_result_from_rpa(result: RpaPublishResult) -> dict[str, Any]:
@@ -78,6 +86,7 @@ def create_job(
             "started_at": None,
             "finished_at": None,
             "results": [],
+            "creative_notices": [],
             "errors": [],
             "total": total if total is not None else len(slots),
             "done_count": 0,
@@ -138,6 +147,7 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         snap = dict(job)
         snap["results"] = list(job["results"])
         snap["errors"] = list(job["errors"])
+        snap["creative_notices"] = list(job.get("creative_notices", []))
         expected = int(snap.get("total") or 0)
         snap["publishable"] = (
             snap.get("status") == "done"
@@ -474,7 +484,8 @@ def _run_rpa(
             if _is_cancelled(job_id):
                 cancelled = True
                 break
-            result = publisher.publish_draft(draft)
+            with observe_preparation(lambda note: _append_creative_notice(job_id, note)):
+                result = publisher.publish_draft(draft)
             _append_result(job_id, _job_result_from_rpa(result))
     except Exception as e:
         if _is_cancelled(job_id):
