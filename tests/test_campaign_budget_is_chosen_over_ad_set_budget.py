@@ -242,3 +242,43 @@ def test_delayed_subitems_are_read_before_their_accordion_closes(page, monkeypat
     assert md.fill_placements(page, report) is settles, report
     assert ('Threads feed' in report.get('subitems_settled', {})) is settles
     assert page.evaluate('window.clicks') == 2
+
+
+@pytest.mark.parametrize('reveals', [True, False])
+def test_scrolling_targets_the_placement_card_and_finds_case_varied_virtual_rows(page, monkeypatch, reveals):
+    import html
+    rows = []
+    for name, want in md._PLACEMENT_CATEGORIES.items():
+        rows.append("<li><div role='button' aria-expanded='false' onclick='expand(this)'>"
+                    f"<label><span>{html.escape(name)}</span><input type='checkbox' "
+                    f"{'checked' if want else ''}></label></div>"
+                    "<ul class='sub' style='display:none'></ul></li>")
+    page.set_content("<section style='margin-left:100px;width:600px'>"
+                     "<h3>Placements</h3><span>Account controls</span><a>Hide settings</a>"
+                     "<ul role='list'>" + ''.join(rows) + "</ul></section>" + """
+        <script>window.wheels=0;
+        function expand(el) {
+          document.querySelectorAll('.sub').forEach(e=>e.style.display='none');
+          document.querySelectorAll('[aria-expanded]').forEach(e=>e.setAttribute('aria-expanded','false'));
+          el.setAttribute('aria-expanded','true'); el.nextElementSibling.style.display='block';
+        }
+        document.addEventListener('wheel', e => {
+          if(!e.target.closest('[data-rpa-placements-marker]')) return;
+          window.wheels++;
+          const category=document.querySelector('[aria-expanded=true]');
+          if(window.reveals && category && category.textContent.trim()==='Feeds' && !document.getElementById('virtual')) {
+            category.nextElementSibling.innerHTML='<li><span>Facebook notifications</span><input id="virtual" type="checkbox" checked aria-checked="true"></li>';
+            document.getElementById('virtual').addEventListener('change', e => e.target.setAttribute('aria-checked',String(e.target.checked)));
+          }
+        });</script>""")
+    page.evaluate('(value) => window.reveals = value', reveals)
+    page.mouse.move(0, 0)  # A wheel alone would go to the unrelated body.
+    monkeypatch.setattr(md, '_SUBITEMS_ON', ())
+    monkeypatch.setattr(md, '_SUBITEMS_OFF', ('Facebook Notifications',))
+    # Chromium delivers wheel/scroll asynchronously; wait only for fixture rendering.
+    monkeypatch.setattr(md, '_sleep_h', lambda s: page.wait_for_timeout(20))
+    report = {}
+    assert md.fill_placements(page, report) is reveals, report
+    assert page.evaluate('window.wheels') > 0
+    if reveals:
+        assert page.locator('#virtual').get_attribute('aria-checked') == 'false'
