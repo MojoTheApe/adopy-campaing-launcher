@@ -9,6 +9,8 @@ Routes:
 """
 from __future__ import annotations
 
+from src.analysis_agent.country_names import COUNTRY_CODES as _COUNTRY_CODES
+
 import asyncio
 import ipaddress
 import json
@@ -1437,44 +1439,6 @@ def _render_report(
     )
 
 
-_COUNTRY_CODES: dict[str, str] = {
-    "afghanistan": "AF", "albania": "AL", "algeria": "DZ", "angola": "AO",
-    "argentina": "AR", "armenia": "AM", "australia": "AU", "austria": "AT",
-    "azerbaijan": "AZ", "bahrain": "BH", "bangladesh": "BD", "belarus": "BY",
-    "belgium": "BE", "bolivia": "BO", "bolivia (plurinational state of)": "BO",
-    "bosnia and herzegovina": "BA", "botswana": "BW", "brazil": "BR",
-    "bulgaria": "BG", "cambodia": "KH", "cameroon": "CM", "canada": "CA",
-    "chile": "CL", "china": "CN", "colombia": "CO", "costa rica": "CR",
-    "croatia": "HR", "cuba": "CU", "czech republic": "CZ", "czechia": "CZ",
-    "denmark": "DK", "dominican republic": "DO", "ecuador": "EC", "egypt": "EG",
-    "el salvador": "SV", "ethiopia": "ET", "finland": "FI", "france": "FR",
-    "georgia": "GE", "germany": "DE", "ghana": "GH", "greece": "GR",
-    "guatemala": "GT", "honduras": "HN", "hungary": "HU", "india": "IN",
-    "indonesia": "ID", "iran": "IR", "iraq": "IQ", "ireland": "IE",
-    "israel": "IL", "italy": "IT", "ivory coast": "CI", "cote d'ivoire": "CI",
-    "jamaica": "JM", "japan": "JP", "jordan": "JO", "kazakhstan": "KZ",
-    "kenya": "KE", "kuwait": "KW", "kyrgyzstan": "KG", "laos": "LA",
-    "latvia": "LV", "lebanon": "LB", "libya": "LY", "lithuania": "LT",
-    "luxembourg": "LU", "malaysia": "MY", "mali": "ML", "mexico": "MX",
-    "moldova": "MD", "morocco": "MA", "mozambique": "MZ", "myanmar": "MM",
-    "namibia": "NA", "nepal": "NP", "netherlands": "NL", "new zealand": "NZ",
-    "nicaragua": "NI", "nigeria": "NG", "north korea": "KP", "norway": "NO",
-    "oman": "OM", "pakistan": "PK", "panama": "PA", "paraguay": "PY",
-    "peru": "PE", "philippines": "PH", "poland": "PL", "portugal": "PT",
-    "qatar": "QA", "romania": "RO", "russia": "RU", "russian federation": "RU",
-    "saudi arabia": "SA", "senegal": "SN", "serbia": "RS", "singapore": "SG",
-    "slovakia": "SK", "somalia": "SO", "south africa": "ZA",
-    "south korea": "KR", "republic of korea": "KR", "spain": "ES",
-    "sri lanka": "LK", "sudan": "SD", "sweden": "SE", "switzerland": "CH",
-    "syria": "SY", "syrian arab republic": "SY", "taiwan": "TW",
-    "tajikistan": "TJ", "tanzania": "TZ", "united republic of tanzania": "TZ",
-    "thailand": "TH", "tunisia": "TN", "turkey": "TR", "turkmenistan": "TM",
-    "ukraine": "UA", "united arab emirates": "AE", "united kingdom": "GB",
-    "united states": "US", "usa": "US", "uruguay": "UY", "uzbekistan": "UZ",
-    "venezuela": "VE", "venezuela (bolivarian republic of)": "VE",
-    "vietnam": "VN", "viet nam": "VN", "yemen": "YE", "zambia": "ZM",
-    "zimbabwe": "ZW",
-}
 
 
 def _account_status(account: str) -> dict:
@@ -2101,6 +2065,7 @@ async def api_accounts_overview() -> JSONResponse:
     """
     from src.analysis_agent.account_country import (
         country_from_stats,
+        linked_countries,
         primary_country,
         resolve_countries,
     )
@@ -2153,9 +2118,9 @@ async def api_accounts_overview() -> JSONResponse:
     #
     #   1. the country SECTION of the accounts sheet — the operator maintains
     #      it, and it is the only statement of intent we have;
-    #   2. failing that, the account's own recent stats — by LATEST DATE, not by
-    #      how many rows each country has;
-    #   3. never the suffix in the account label.
+    #   2. operator links, when the sheet has no country;
+    #   3. recent stats, by latest date, fill the remaining gaps and break ties;
+    # Never the suffix in the account label or the legacy map column.
     #
     # The suffix ("… CL ML", "… PA Amz") looks authoritative and is not: it is
     # typed by hand, sometimes wrong, and accounts move between countries while
@@ -2183,7 +2148,21 @@ async def api_accounts_overview() -> JSONResponse:
             country_by_alias = country_from_stats(list(frame.itertuples(index=False)))
     except Exception:
         country_by_alias = {}
-    _resolved = resolve_countries(country_by_alias, sheet_rows)
+    # Третий источник: то, что оператор соединил руками на дешборде.
+    #
+    # До 16.09 обзор его не читал вовсе, и аккаунт, подключённый к стране на
+    # этом же экране, мог показываться как «страны нет». Дальше он падал в
+    # «Available accounts», где у строки нет ни ячейки спенда, ни кнопки Read —
+    # то есть прочитать его было нельзя никак. Так вёл себя Doc19: связь на
+    # диске была, обзор её не спрашивал (ACL-1196).
+    try:
+        from src.web import account_links as _links
+
+        by_link = linked_countries(_links.all_pairs("country"))
+    except Exception:
+        by_link = {}
+
+    _resolved = resolve_countries(country_by_alias, sheet_rows, by_link)
     country_by_alias = primary_country(_resolved)
 
     selected_cm = (get_selected_cm() or "").strip()
@@ -2216,7 +2195,7 @@ async def api_accounts_overview() -> JSONResponse:
             # market someone might build a campaign for.
             "countries": _resolved.get(normalize_account_alias(label), {}).get("countries", []),
             "country_ambiguous": _resolved.get(normalize_account_alias(label), {}).get("ambiguous", False),
-            "country": row.get("country_code") or "",
+            "country": country_by_alias.get(normalize_account_alias(label), ""),
             "stock": row.get("stock") or "",
             "status": row.get("account_status") or "",
             "ad_account_id": ad_id,
@@ -2248,7 +2227,7 @@ async def api_accounts_overview() -> JSONResponse:
             # market someone might build a campaign for.
             "countries": _resolved.get(normalize_account_alias(label), {}).get("countries", []),
             "country_ambiguous": _resolved.get(normalize_account_alias(label), {}).get("ambiguous", False),
-            "country": (getattr(entry, "country", "") or ""),
+            "country": country_by_alias.get(normalize_account_alias(label), ""),
             "stock": "",
             "status": "",
             "ad_account_id": ad_id,
@@ -2311,18 +2290,18 @@ async def api_accounts_overview() -> JSONResponse:
         "accounts": accounts,
         "hidden_count": sum(1 for a in accounts if a["hidden"]),
         "suggestions": suggestions,
-        # folder_id comes off the profile's own path, so the operator never
-        # has to find or type it.
         "open_profiles": [
             {
                 "profile_id": p["profile_id"],
-                # The Multilogin profile NAME, read off the browser window
-                # title — the only place it is available, since the profile
-                # API answers 404/403 with the token we have. A dropdown of
-                # bare UUIDs told the operator nothing.
+                # The Multilogin profile NAME, as Multilogin itself reports it.
+                # A dropdown of bare UUIDs told the operator nothing, and the
+                # older way of getting a name — off the browser window title —
+                # gave nothing at all for names containing a space.
                 "name": p.get("name") or "",
                 "key": profile_name_key(p.get("name") or ""),
-                "folder_id": folder_id_for(p["profile_id"]),
+                # Multilogin's own answer, falling back to the profile's path
+                # on disk. Either way the operator never has to find or type it.
+                "folder_id": p.get("folder_id") or folder_id_for(p["profile_id"]),
                 # The ad account this profile actually works in, read from its
                 # own browser history — the last field a person had to copy.
                 "ad_account_id": ad_account_id_for(p["profile_id"]),

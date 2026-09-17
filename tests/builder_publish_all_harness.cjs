@@ -142,16 +142,14 @@ assert.equal(out.body.get('camp_count'), '0');
 
 console.log('ok');
 
-// ── очередь: один аккаунт за раз ──────────────────────────────────────
-// Сервер и так пускает по одному: `_run_job` держит общий замок
-// (`browser_operation`) весь прогон — решение проекта от 2026-07-31,
-// «никогда два браузера Multilogin одновременно; параллельные профили —
-// отдельный осознанный шаг, не умолчание». Тот же замок берёт и чтение
-// аккаунта.
-//
-// Очередь здесь нужна не вместо него, а чтобы экран не врал. Отправив все
-// работы разом, мы получили бы пять «running», из которых четыре стоят в
-// ожидании замка, и остановить не ту было бы нечем.
+// ── очередь: все аккаунты уходят разом (acl-1210) ─────────────────────
+// До 16.09 страница отправляла следующий аккаунт только после конца
+// предыдущего — потому что сервер пускал по одному (`browser_operation`,
+// решение 2026-07-31). Сервер теперь держит замок по профилю: разные
+// профили идут разом, один и тот же — по очереди, и «queued» на карточке
+// говорит правду сам. Страница шлёт все работы сразу после их превью и ждёт
+// последнюю в любом порядке. Первый живой «Publish all» на параллельном
+// сервере дал одно задание — второй замок был здесь.
 const queueCode = cut('window.cbPublishAll = function', '// ── Диагностика превью');
 
 function runQueue(accounts, opts = {}) {
@@ -170,6 +168,7 @@ function runQueue(accounts, opts = {}) {
     _safeConfirm: (title, body, onYes) => { events.push('asked'); if (opts.confirm !== false) onYes(); },
     cbPreview: (form, done) => {
       events.push('preview:' + form._label);
+      if (opts.preview) return opts.preview(form, done);
       done(opts.plan ? opts.plan(form._label) : [{ 'Campaign Name': form._label, errors: [] }], null);
     },
     cbSkipByName: opts.skip || (() => ({ skip: {}, unchecked: 0, broken: 0 })),
@@ -188,7 +187,7 @@ function runQueue(accounts, opts = {}) {
     'window.cbSkipByName = cbSkipByName; window.cbFormDataSkipping = cbFormDataSkipping;\n' + queueCode,
     sandbox);
   sandbox.window.cbPublishAll(() => {});
-  return { events, pending };
+  return { events, pending, sandbox };
 }
 
 // Запрос уходит через микрозадачи — без этого проверка смотрит на «ещё
@@ -202,21 +201,67 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   assert.equal(q.events.filter((e) => e === 'asked').length, 1, 'спрашивают на каждый аккаунт');
 
   await flush();
-  assert.equal(posts(q), 1, 'запущено больше одной работы разом — они подерутся за окно Multilogin');
-  assert.equal(q.pending.length, 1, 'вторая работа не ждёт первую');
+  assert.equal(posts(q), 3, 'аккаунты снова ждут друг друга — сервер сам ставит в очередь только один и тот же профиль');
+  assert.equal(q.pending.length, 3, 'не за каждой работой следят');
+  assert.deepEqual(q.events.filter((e) => e.startsWith('preview')), ['preview:A', 'preview:B', 'preview:C'],
+    'превью пропущено или перепутан порядок');
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'очередь закрылась, не дождавшись работ');
 
-  // Закончилась первая — пошла вторая, и снова одна.
+  // Закончились в любом порядке — очередь закрывается с последней.
+  q.pending[2]({ results: [{ publishable: true }] });
   q.pending[0]({ results: [{ publishable: true }] });
   await flush();
-  assert.equal(posts(q), 2, 'следующий аккаунт не начался после завершения прошлого');
-  assert.equal(q.pending.length, 2);
-
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'очередь закрылась, пока одна работа ещё шла');
   q.pending[1]({ results: [{ publishable: true }] });
   await flush();
-  assert.equal(posts(q), 3);
-  q.pending[2]({ results: [{ publishable: true }] });
-  await flush();
+  assert.ok(!q.sandbox.window.CB_QUEUE.active, 'очередь не закрылась после последней работы');
   assert.equal(posts(q), 3, 'после последнего аккаунта запущено что-то ещё');
+  assert.equal(q.sandbox.window.CB_QUEUE.progress.report.length, 3);
+
+  // A lost job stays uncertain; other submitted jobs still own the batch.
+  q = runQueue(['A', 'B']);
+  await flush();
+  q.pending[0]({ status: 'unknown' });
+  await flush();
+  assert.ok(q.sandbox.window.CB_QUEUE.active);
+  assert.ok(q.sandbox.window.CB_QUEUE.uncertain, 'потерянная работа не помечена как неизвестный исход');
+
+  q.pending[1]({ status: 'cancelled' });
+  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.ok(q.sandbox.window.CB_QUEUE.uncertain, 'a later cancellation erased an unknown outcome');
+  q.sandbox.window.cbPublishAll(() => {});
+  assert.equal(posts(q), 2, 'unknown outcome allowed duplicate work');
+
+  q = runQueue(['A', 'B', 'C']);
+  await flush();
+  q.pending[0]({ status: 'cancelled' });
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'cancelling A released running B and C');
+  q.sandbox.window.cbPublishAll(() => {});
+  assert.equal(posts(q), 3, 'a duplicate batch was submitted');
+  q.pending[1]({ results: [{ publishable: true }] });
+  assert.ok(q.sandbox.window.CB_QUEUE.active);
+  q.pending[2]({ results: [{ publishable: true }] });
+  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  const currentBatch = q.sandbox.window.CB_QUEUE;
+  const progress = currentBatch.progress;
+  q.pending[0]({ status: 'unknown' }); // stale callback from the previous batch
+  assert.strictEqual(currentBatch.progress, progress);
+  assert.ok(currentBatch.active && !currentBatch.uncertain);
+
+  let delayedPreview;
+  q = runQueue(['A', 'B', 'C'], { preview: (form, done) => {
+    if (form._label === 'B') delayedPreview = done;
+    else done([{ 'Campaign Name': form._label, errors: [] }], null);
+  }});
+  await flush();
+  q.pending[0]({ status: 'cancelled' });
+  delayedPreview([{ 'Campaign Name': 'B', errors: [] }], null);
+  await flush();
+  assert.equal(posts(q), 1, 'a late preview submitted another job after cancellation');
+  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.equal(q.sandbox.window.CB_QUEUE.progress.report.length, 3);
 
   // Отказ на вопросе — ни одной работы.
   q = runQueue(['A'], { confirm: false });

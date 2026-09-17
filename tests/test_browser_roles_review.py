@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.analysis_agent import account_spend
-from src.fb_ads_rpa.operations import browser_operation
+from src.fb_ads_rpa.operations import browser_operation, profile_lock
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 
 
@@ -40,14 +40,33 @@ def invoke(obj, draft, method):
 
 @pytest.mark.parametrize('method', ['publish_draft', 'publish_slots'])
 def test_direct_publisher_waits_for_readers(method):
+    # С acl-1210 публикация занимает профиль, а не процесс: ждёт она
+    # чтение СВОЕГО профиля — ключ у обоих один, `synthetic` (ярлык без
+    # карты — сам ключ), и берётся тем же `profile_lock`, что и у чтений.
     entered, release = threading.Event(), threading.Event()
     obj, draft = publisher(entered, release)
     thread = threading.Thread(target=invoke, args=(obj, draft, method))
     try:
-        with browser_operation.reading():
+        with browser_operation.reading(), profile_lock('synthetic'):
             thread.start()
             assert not entered.wait(.2)
         assert entered.wait(3)
+    finally:
+        release.set()
+        thread.join(5)
+    assert not thread.is_alive()
+
+
+@pytest.mark.parametrize('method', ['publish_draft', 'publish_slots'])
+def test_direct_publisher_does_not_wait_for_a_reader_of_another_profile(method):
+    """Свойство acl-1210: чтение чужого профиля публикации не мешает."""
+    entered, release = threading.Event(), threading.Event()
+    obj, draft = publisher(entered, release)
+    thread = threading.Thread(target=invoke, args=(obj, draft, method))
+    try:
+        with browser_operation.reading(), profile_lock('another-profile'):
+            thread.start()
+            assert entered.wait(2), "публикация ждёт чтение чужого профиля"
     finally:
         release.set()
         thread.join(5)

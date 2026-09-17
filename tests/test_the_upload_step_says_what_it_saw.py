@@ -91,7 +91,9 @@ def test_the_reason_reaches_the_telemetry_and_not_only_a_file():
     """Файл на диске читает тот, кто знает, что он есть. Телеметрию читают
     всегда — значит причина должна быть там."""
     text = SRC.read_text(encoding="utf-8")
-    assert '_shot("fail_ad_creative_upload", dict(_LAST_UPLOAD_DIAG))' in text, (
+    # С acl-1210 запись своя у каждого потока — читается через
+    # `last_upload_diag()`, а не из модульной переменной.
+    assert '_shot("fail_ad_creative_upload", last_upload_diag())' in text, (
         "отказ снова уходит в телеметрию пустым"
     )
 

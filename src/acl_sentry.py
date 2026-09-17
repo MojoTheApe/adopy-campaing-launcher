@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 from typing import Any
 
 #: Общий приёмник ACL. Право только на запись.
@@ -68,47 +69,8 @@ def _scrub_deep(value: Any) -> Any:
     return scrub_diag(value)
 
 
-#: Исключения, которые asyncio на Windows выдаёт при закрытии соединений.
-#:
-#: 15.09 за один вечер приёмник получил три их вида подряд: `CancelledError`
-#: из подтверждения кадра скринкаста, `TargetClosedError` у брошенного Future,
-#: `ConnectionResetError [WinError 10054]` при гашении сокета. Все три
-#: помечены `handled`, ни одна не влияет на прогон — это цена того, что
-#: браузер и вкладки закрываются, пока цикл событий ещё что-то доделывает.
-#:
-#: На одной машине это мелочь. У десяти байтеров такой шум утопит настоящие
-#: отказы шагов — ровно то, от чего в тот же день закрывали утечку событий из
-#: тестов.
-_TEARDOWN_NOISE = {
-    "CancelledError",
-    "ConnectionResetError",
-    "ConnectionAbortedError",
-    "BrokenPipeError",
-    "TargetClosedError",
-}
-
-
-def _is_teardown_noise(event: dict) -> bool:
-    """Это системный шум закрытия соединения, а не наша поломка?
-
-    **Фильтруем по виду исключения, а не по логгеру целиком.** Соблазн был
-    выключить логгер `asyncio` — но через него же приходит `RuntimeError: loop
-    is not the running loop`, от которого 15.09 дважды умирал дешборд
-    (ACL-1163). Заглушить логгер значило бы спрятать единственный вредный
-    случай вместе с тремя безобидными.
-    """
-    if (event.get("logger") or "") != "asyncio":
-        return False
-    values = ((event.get("exception") or {}).get("values") or [])
-    if not values:
-        return False
-    return all((v.get("type") or "") in _TEARDOWN_NOISE for v in values)
-
-
 def _before_send(event: dict, _hint: dict) -> dict | None:
     try:
-        if _is_teardown_noise(event):
-            return None
         return _scrub_deep(event)
     except Exception:
         # Не вычистили — не отправляем. Событие ценно, но не настолько.
@@ -215,15 +177,60 @@ _REASONS = (
     ("wrong-account", ("не тот кабинет", "different account", "changed during")),
     ("wrong-period", ("другой период", "period does not match", "период не")),
     ("refused", ("refused:", "отказ", "недоступна")),
+    # Увиденное на живых прогонах 15.09 — каждая строка добавлена потому, что
+    # отказ случился и был разобран, а не «на всякий случай».
+    #
+    # **Стоит выше `timeout` намеренно.** «FileChooser.set_files: Timeout
+    # 30000ms exceeded» содержит слово timeout и без этого попадало бы в общий
+    # вид, а чинится оно совсем иначе: там не «подождать подольше», там окно
+    # выбора файла не дожило до передачи. Частное проверяем раньше общего.
+    ("file-chooser-lost", ("filechooser", "file_chooser", "set_files")),
+    ("upload-never-started", ("progress: 0", "fed: false")),
     ("timeout", ("timeout", "timed out", "не дождал")),
 )
 
 
+#: Причина, состоящая из одного машинного слова, — сама себе вид.
+#:
+#: Шаги пишут в `note` короткие устойчивые метки: `library_pick_left_selection`,
+#: `same_file_already_failed_this_run`, `reload_and_retry`. Такая метка не
+#: меняется от прогона к прогону и не несёт в себе ни имён кампаний, ни
+#: номеров — то есть годится как вид причины без всякой таблицы.
+#:
+#: Это не косметика. 15.09 первый живой тикет пришёл с заголовком
+#: `ad_creative_reuse: other`, а настоящая причина —
+#: `library_pick_left_selection` — лежала внутри, в контексте. В списке тикетов
+#: видно «прочее», и чтобы понять, про что он, надо открыть каждый. Правило
+#: ниже делает заголовок говорящим само, без дописывания таблицы под каждый
+#: новый отказ, — а таблица остаётся для причин, написанных словами.
+#: Только буквы: цифра внутри метки почти всегда означает номер — кампании,
+#: объявления, строки, — и такая «метка» дала бы отдельный тикет на каждый
+#: номер. Ровно то, от чего отпечаток и защищает. Пример из живого прогона:
+#: `destination_sweep:2292 - ES Text 5 Ait:row_not_found`.
+_TOKEN_RE = re.compile(r"^[a-z]+(?:_[a-z]+){1,6}$")
+
+
 def _reason_kind(why: str) -> str:
-    text = (why or "").lower()
+    """Вид причины — то, по чему одинаковые отказы складываются в один тикет.
+
+    Три исхода, и различать их важно:
+
+    * найденный вид — отказ узнан;
+    * сама метка — отказ имеет устойчивое машинное имя, годное как вид;
+    * `silent` — шаг **не сказал ничего**. Это отдельная беда, а не
+      разновидность «прочего»: три из четырёх отказов 15.09 пришли с пустой
+      причиной, и сложить их в общую кучу с неузнанными значило бы спрятать
+      самое частое, что у нас есть (ACL-1172).
+    """
+    text = (why or "").strip()
+    if not text:
+        return "silent"
+    lowered = text.lower()
     for kind, needles in _REASONS:
-        if any(n in text for n in needles):
+        if any(n in lowered for n in needles):
             return kind
+    if _TOKEN_RE.match(lowered):
+        return lowered.replace("_", "-")
     return "other"
 
 

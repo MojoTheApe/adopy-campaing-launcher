@@ -32,7 +32,12 @@ from typing import Any, Callable
 
 from config import paths
 from src import acl_log
-from src.fb_ads_rpa.operations import browser_operation, profile_lock, serialized_browser
+from src.fb_ads_rpa.operations import (
+    browser_operation,
+    profile_lock,
+    publish_lease,
+    serialized_browser,
+)
 
 _STORE_LOCK = threading.RLock()
 _UNSAVED: dict[str, "SpendReading"] = {}
@@ -50,6 +55,10 @@ TABLE_TIMEOUT_MS = 90_000
 #: а платит за ожидание только неудачный прогон — на удачном сумма находится с
 #: первой попытки.
 TOTALS_TRIES = 20
+
+#: Сколько секунд ждать, пока таблица перестанет быть «занятой» (aria-busy /
+#: progressbar), прежде чем отказать чтению дерева.
+TABLE_BUSY_TRIES = 15
 
 
 # ── Чем чтение цепляется за экраны Meta ──────────────────────────────────
@@ -82,7 +91,12 @@ SEL_PERIOD = (
     'span:has-text("Yesterday")',
 )
 SEL_PERIOD_FALLBACK = 'div[role="button"], [role="combobox"]'
-RE_PERIOD_DATE = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},\s*\d{4}"
+#: Оба порядка: «Sep 16, 2026» и «16 Sep 2026» — 17.09 Doc20 показал второй, и
+#: чтение отказывало при спенде на экране.
+RE_PERIOD_DATE = (
+    r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+\d{1,2},?\s*\d{4}"
+    r"|\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?,?\s+\d{4}"
+)
 
 #: Надпись строки итогов, помеченная нашим же атрибутом из `_FIND_TOTALS_JS`:
 #: к ней надо подвести курсор, а через evaluate ручку не получить.
@@ -107,13 +121,14 @@ SEL_GRID = 'div[role="table"], [role="grid"], [aria-label*="Amount spent" i]'
 _FIND_TOTALS_JS = r"""
 () => {
   const out = {spend: null, label: false};
-  const money = /([$€£₪]\s*[\d,]+(?:\.\d{1,2})?)\s*Total spent/;
+  // «Total spent» и «Total Spent» (британская локаль Doc20, 17.09) — без учёта регистра.
+  const money = /([$€£₪]\s*[\d,]+(?:\.\d{1,2})?)\s*Total spent/i;
   document.querySelectorAll('[data-acl-totals]').forEach(
     e => e.removeAttribute('data-acl-totals'));
   for (const n of document.querySelectorAll('div, span')) {
     const t = (n.innerText || '').replace(/\s+/g, ' ').trim();
     if (!t) continue;
-    if (out.spend === null && t.length <= 600 && t.indexOf('Total spent') !== -1) {
+    if (out.spend === null && t.length <= 600 && t.toLowerCase().indexOf('total spent') !== -1) {
       const m = t.match(money);
       if (m) out.spend = m[1];
     }
@@ -545,18 +560,18 @@ def _attach_only(entry, account_label: str):
 
     profile_id = (getattr(entry, "profile_id", "") or "").strip()
     if not profile_id:
-        raise ProfileNotAttachable(f"у {account_label} не заполнен profile_id")
+        raise ProfileNotAttachable(f"{account_label} has no profile_id in the account map")
 
     direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
     if direct_cls is None:
         raise ProfileNotAttachable(
-            "слой браузера RPA изменился — обновите подключение (см. acl-108e)"
+            "The RPA browser layer changed; update the connection (see acl-108e)"
         )
 
     udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
     if udd is None:
         raise ProfileNotAttachable(
-            f"папка профиля {profile_id} не найдена — открыт ли этот профиль на этой машине?"
+            f"Profile folder {profile_id} was not found. Is this profile open on this machine?"
         )
 
     direct = direct_cls()
@@ -572,14 +587,13 @@ def _attach_only(entry, account_label: str):
         pass
     if running:
         raise ProfileNotAttachable(
-            f"{account_label}: профиль открыт вручную в MLX Desktop — у такого окна нет "
-            "отладочного порта, прицепиться не к чему. Перезапускать не будем: "
-            "именно перезапуск разлогинил x01. Закройте профиль и откройте его "
-            "автоматизацией — дальше чтения будут цепляться к этому же окну."
+            f"{account_label}: the profile was opened manually in MLX Desktop, so its window has no "
+            "debugging port to attach to. It will not be restarted, because a restart logged x01 out. "
+            "Close the profile and open it through automation; later reads will attach to that window."
         )
     raise ProfileNotAttachable(
-        f"{account_label}: профиль не открыт. Откройте его автоматизацией и оставьте окно — "
-        "чтение прицепится к нему, ничего не перезапуская."
+        f"{account_label}: the profile is not open. Open it through automation and leave the window open; "
+        "the read will attach to it without restarting anything."
     )
 
 
@@ -603,7 +617,7 @@ def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -
     out = {"ok": False, "act": "", "account_name": "", "error": ""}
     profile_id = (profile_id or "").strip()
     if not profile_id:
-        out["error"] = "не задан profile_id"
+        out["error"] = "profile_id is not set"
         return out
 
     entry = _probe_entry(profile_id, folder_id, instance)
@@ -620,8 +634,8 @@ def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -
         act = _act_from_url(page)
         if not act:
             out["error"] = (
-                "Ads Manager открылся, но номера кабинета в адресе нет — "
-                "возможно, у этого профиля нет доступа ни к одному кабинету"
+                "Ads Manager opened, but the URL has no ad account number. "
+                "This profile may have no access to any ad account."
             )
             return out
         out["act"] = act
@@ -730,9 +744,9 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     возвращаем отказ и никогда не останавливаем его ради этой кнопки.
     """
     profile_id = (profile_id or "").strip()
-    who = label or profile_id[:8] or "профиль"
+    who = label or profile_id[:8] or "profile"
     if not profile_id:
-        return False, f"у {who} не заполнен profile_id"
+        return False, f"{who} has no profile_id in the account map"
     instance = (instance or "A").strip().upper()
     if instance not in {"A", "B"}:
         return False, "Unknown Multilogin instance; choose A or B"
@@ -741,7 +755,7 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
 
     direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
     if direct_cls is None:
-        return False, "слой браузера RPA изменился (см. acl-108e)"
+        return False, "The RPA browser layer changed (see acl-108e)"
 
     udd = _mlx_profile_dir(profile_id, folder_id)
     if udd is not None:
@@ -750,16 +764,16 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
             attached = direct.attach_existing_only(profile_id, spelling)
             if attached is not None:
                 attached.close(keep_browser_open=True)
-                return True, "профиль уже открыт автоматизацией — можно читать"
+                return True, "The profile is already open through automation. You can read it."
         try:
             if any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd)):
                 return False, (
-                    f"{who}: профиль открыт вручную в MLX Desktop. Поднять его "
-                    "автоматизацией можно только остановив — а это разлогинивает. "
-                    "Закройте окно в MLX Desktop и нажмите ещё раз."
+                    f"{who}: the profile was opened manually in MLX Desktop. Opening it through "
+                    "automation would require stopping it, which logs the account out. "
+                    "Close the window in MLX Desktop and try again."
                 )
         except Exception as exc:
-            return False, f"Не удалось проверить открытые профили: {exc}. Новый запуск не выполнялся."
+            return False, f"Could not check open profiles: {exc}. Nothing was launched."
 
 
     entry = _Profile(profile_id, folder_id, instance)
@@ -773,7 +787,7 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
         conn.close(keep_browser_open=True)
     except Exception:
         pass
-    return True, "профиль открыт — залогиньтесь, если нужно, и оставьте окно"
+    return True, "The profile is open. Log in if needed and leave the window open."
 
 
 @serialized_browser(key=_profile_key, reading=True)
@@ -781,7 +795,7 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     """То же самое для аккаунта, который уже есть в карте."""
     entry = _entry_for(account)
     if entry is None:
-        return False, f"{account} нет в карте аккаунтов"
+        return False, f"{account} is not in the account map"
     return open_profile_for_automation(
         (getattr(entry, "profile_id", "") or ""),
         (getattr(entry, "folder_id", "") or ""),
@@ -806,11 +820,11 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
 
     entry = _entry_for(account)
     if entry is None:
-        out.error = f"{account} нет в карте аккаунтов"
+        out.error = f"{account} is not in the account map"
         return out
     act = (entry.ad_account_id or "").strip()
     if not act:
-        out.error = f"у {account} не заполнен ad_account_id"
+        out.error = f"{account} has no ad_account_id in the account map"
         return out
     try:
         url = _url(act, date_from, date_to)
@@ -838,16 +852,16 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         if opened != expected_act:
             # Оба номера помогают сверить карту и доступ профиля без нового чтения.
             out.error = (
-                f"Ads Manager открыл кабинет {opened or '(в адресе нет act)'}, "
-                f"а у {account} записан {expected_act} — чтение отменено. "
-                "Либо в карте не тот номер, либо у профиля нет доступа к этому кабинету."
+                f"Ads Manager opened ad account {opened or '(no act in the URL)'}, "
+                f"but {account} is mapped to {expected_act}. Reading cancelled: "
+                "either the account map has the wrong number, or the profile has no access to that ad account."
             )
             return out
         if not grid_ready:
             # Статус спрашиваем и здесь: у отключённого кабинета таблицы может
             # не быть вовсе, а знать о нём надо именно тогда.
             out.status, out.status_text = _read_status(page)
-            out.error = "Ads Manager не отрисовался за отведённое время"
+            out.error = "Ads Manager did not finish loading in time"
             # было `day` — переменной, которой здесь нет. Ошибка жила только на
             # пути отказа, то есть ровно там, где снимок и нужен: вместо
             # «не отрисовался» человек получил бы NameError.
@@ -862,15 +876,15 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         if not _period_matches(shown, date_from, date_to):
             asked = date_from if date_from == date_to else f"{date_from}…{date_to}"
             out.error = (
-                f"на экране период «{shown or 'не найден'}», а спрашивали {asked} — "
-                "число не берём"
+                f"The period on screen is \"{shown or 'not found'}\", but {asked} was requested; "
+                "the amount was not taken"
             )
             out.shot = _shoot(page, account, date_from)
             return out
 
         spend, how = _read_total(page)
         if spend is None:
-            out.error = "не нашёл итоговую строку со спендом"
+            out.error = "The totals row with spend was not found"
             out.how = how
             out.shot = _shoot(page, account, date_from)
             return out
@@ -898,7 +912,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
                 page, act, expected_act, date_from, date_to
             )
         except Exception as exc:            # noqa: BLE001 — см. выше
-            out.objects_error = f"дерево не прочитано: {exc}"
+            out.objects_error = f"Campaign tree was not read: {exc}"
         return out
     finally:
         if conn is not None:
@@ -1046,7 +1060,7 @@ def _url(act: str, date_from: str, date_to: str = "") -> str:
 
     act_id = act.strip().removeprefix("act_")
     if not re.fullmatch(r"[0-9]+", act_id):
-        raise ValueError("ad_account_id должен содержать только цифры, с необязательным префиксом act_")
+        raise ValueError("ad_account_id must contain only digits, with an optional act_ prefix")
     end = date_to or date_from
     try:
         y, m, d = (int(x) for x in end.split("-"))
@@ -1157,13 +1171,25 @@ def _dates_in(text: str) -> list[str]:
     out: list[str] = []
     for m in re.finditer(r"(\d{4})-(\d{2})-(\d{2})", text):
         out.append(m.group(0))
+    # Оба порядка записи: «Sep 16, 2026» и «16 Sep 2026» (17.09, Doc20). Порядок
+    # в тексте сохраняется, чтобы отрезок читался «от — до».
+    found: list[tuple[int, str]] = []
     for m in re.finditer(
-        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+(\d{1,2}),?\s*(\d{4})",
+        r"(?<!\d)(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?,?\s+(\d{4})",
+        text,
+        re.I,
+    ):
+        month = _MONTHS[m.group(2)[:3].lower()]
+        found.append((m.start(), f"{int(m.group(3)):04d}-{month:02d}-{int(m.group(1)):02d}"))
+    for m in re.finditer(
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+(\d{1,2}),?\s*(\d{4})",
         text,
         re.I,
     ):
         month = _MONTHS[m.group(1)[:3].lower()]
-        out.append(f"{int(m.group(3)):04d}-{month:02d}-{int(m.group(2)):02d}")
+        found.append((m.start(), f"{int(m.group(3)):04d}-{month:02d}-{int(m.group(2)):02d}"))
+    for _, iso in sorted(found):
+        out.append(iso)
     seen: list[str] = []
     for d in out:
         if d not in seen:
@@ -1254,7 +1280,7 @@ def _read_total(page) -> tuple[float | None, str]:
     сейчас, и только потом трогаем мышь.
     """
     if not _wait_for_grid(page):
-        return None, "таблица не появилась"
+        return None, "the table did not appear"
 
     # Итоги появляются позже таблицы: строки кампаний уже нарисованы, а над
     # колонкой Results ещё крутится спиннер. Один взгляд сразу после таблицы
@@ -1269,7 +1295,7 @@ def _read_total(page) -> tuple[float | None, str]:
         _scroll_to_totals(page)
         value, has_label = _scan_totals(page)
         if value is not None:
-            return value, "строка итогов, «Total spent»"
+            return value, "totals row, Total spent"
         if has_label:
             label = page.query_selector(SEL_TOTALS_LABEL)
             if label is not None:
@@ -1277,15 +1303,15 @@ def _read_total(page) -> tuple[float | None, str]:
         _sleep(1)
     if label is None:
         return None, (
-            f"строка «Results from …» не появилась за {TOTALS_TRIES} с "
-            "даже после прокрутки к низу списка"
+            f"the \"Results from …\" row did not appear within {TOTALS_TRIES} s "
+            "even after scrolling to the bottom of the list"
         )
 
     try:
         label.scroll_into_view_if_needed(timeout=5_000)
         label.hover(timeout=5_000)
     except Exception:
-        return None, "к надписи итогов не удалось подвести курсор"
+        return None, "could not hover the totals label"
 
     _sleep(1.5)
     clicked = False
@@ -1301,16 +1327,16 @@ def _read_total(page) -> tuple[float | None, str]:
     except Exception:
         pass
     if not clicked:
-        return None, "кнопки «View results» не появилось при наведении"
+        return None, "View results did not appear on hover"
 
     # Сумма после раскрытия тоже приходит не мгновенно: фиксированная пауза
     # была ставкой на то, что трёх секунд хватит.
     for _ in range(TOTALS_TRIES):
         value, _label = _scan_totals(page)
         if value is not None:
-            return value, "строка итогов раскрыта наведением, «Total spent»"
+            return value, "totals row opened on hover, Total spent"
         _sleep(1)
-    return None, "итоги раскрыты, но суммы рядом с «Total spent» нет"
+    return None, "totals opened, but no amount next to Total spent"
 
 
 def _sleep(seconds: float) -> None:
@@ -1451,17 +1477,17 @@ def _tree_url(act: str, level: str, date_from: str, date_to: str = "",
     страница не говорит — а раз так, доверять ему нельзя.
     """
     if level not in ADS_MANAGER_LEVELS:
-        raise ValueError(f"неизвестный уровень {level!r}")
+        raise ValueError(f"unknown level {level!r}")
     base = _url(act, date_from, date_to)
     url = ADS_MANAGER_LEVELS[level] + base[len(ADS_MANAGER):]
     if parent_id:
         if level != "ad":
-            raise ValueError("сузить до родителя можно только список объявлений")
+            raise ValueError("only the ads list can be narrowed to a parent")
         param = TREE_PARENT_PARAM.get(parent_level)
         if not param:
-            raise ValueError(f"неизвестный родительский уровень {parent_level!r}")
+            raise ValueError(f"unknown parent level {parent_level!r}")
         if not parent_id.isdigit():
-            raise ValueError("id родителя должен состоять из цифр")
+            raise ValueError("parent id must contain only digits")
         url += "&" + param + "=" + parent_id
     return url
 
@@ -1507,7 +1533,15 @@ _TOTALS_ROW_ID = "-1"
 _READ_TREE_JS = r"""
 (level) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-  const visible = (el) => el.getClientRects().length > 0 &&
+  // Разметку строк Meta теперь вешает на обёртки `display: contents` (17.09):
+  // своих прямоугольников у них нет, и все 88 строк Doc20 считались
+  // невидимыми. Видимость такой обёртки — видимость её содержимого.
+  const hasBox = (el) => {
+    if (el.getClientRects().length > 0) return true;
+    if (getComputedStyle(el).display !== 'contents') return false;
+    return Array.from(el.children).some(hasBox);
+  };
+  const visible = (el) => hasBox(el) &&
     !el.closest('[hidden], [aria-hidden="true"]') &&
     getComputedStyle(el).visibility !== 'hidden';
   const tables = Array.from(document.querySelectorAll('[role="table"], [role="grid"]'))
@@ -1627,13 +1661,22 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
     страницей, — вопрос к ней.
     """
     if level not in ADS_MANAGER_LEVELS:
-        return [], "", f"неизвестный уровень {level!r}"
-    try:
-        got = page.evaluate(_READ_TREE_JS, level)
-    except Exception as exc:
-        return [], "", f"таблица {level} не разобрана: {exc}"
+        return [], "", f"unknown level {level!r}"
+    # Таблица «занята» — ждём, а не отказываем с первого взгляда. 17.09 на
+    # Doc20/Doc21/S15 дерево упало на `table-loading` сразу после раскрытия
+    # итогов (таблица перерисовывалась), а через секунды те же таблицы были
+    # свободны: 88, 68 и 60 строк.
+    got = None
+    for _attempt in range(TABLE_BUSY_TRIES):
+        try:
+            got = page.evaluate(_READ_TREE_JS, level)
+        except Exception as exc:
+            return [], "", f"{level} table was not parsed: {exc}"
+        if not (isinstance(got, dict) and got.get("error") == "table-loading"):
+            break
+        _sleep(1)
     if not isinstance(got, dict):
-        return [], "", f"таблица {level}: страница ответила не тем"
+        return [], "", f"{level} table: unexpected page response"
 
     how = str(got.get("how") or "")
     view = str(got.get("view") or "")
@@ -1643,7 +1686,7 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         # строк в них значит разное.
         how = f"{how}({view})"
     if got.get("error"):
-        return [], how, f"таблица {level}: {got['error']}"
+        return [], how, f"{level} table: {got['error']}"
     rows = got.get("rows") or []
     want = _LEVEL_KIND[level]
     # Every accepted object must identify itself, not borrow another row's kind.
@@ -1654,7 +1697,7 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         or set(r.get("kinds") or []) != {want}
         for r in rows
     ):
-        return [], how, f"таблица {level}: строка не подтвердила id, имя или что это за объекты ({want})"
+        return [], how, f"{level} table: a row did not confirm its id, name or object type ({want})"
     objects = [
         AdObject(
             level=level,
@@ -1672,7 +1715,7 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         if isinstance(r, dict)
     ]
     if not objects:
-        return [], how, f"в таблице {level} не нашлось ни одной строки ({how})"
+        return [], how, f"{level} table has no rows ({how})"
 
     # Уровень сверяется по тому, что Meta написала о самих строках, а не по
     # адресу: открыть `/manage/adsets` и получить другой список — можно, и по
@@ -1683,13 +1726,13 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
     want = _LEVEL_KIND[level]
     if kinds and kinds != {want}:
         return [], how, (
-            f"на уровне {level} ждали объекты {want}, а страница разметила "
-            f"{', '.join(sorted(kinds))} — список не тот, ничего не берём"
+            f"{level} level: expected {want} objects, but the page marked "
+            f"{', '.join(sorted(kinds))}; wrong list, nothing taken"
         )
     if not kinds:
-        return [], how, f"на уровне {level} страница не сказала, что это за объекты"
+        return [], how, f"{level} level: the page did not say what these objects are"
     warning = (
-        "прочитаны отрисованные строки; список прокручивается, полнота не подтверждена"
+        "read the rendered rows; the list scrolls, so completeness is not confirmed"
         if got.get("partial") else ""
     )
     return objects, how, warning
@@ -1718,15 +1761,15 @@ def _read_tree(
         from urllib.parse import parse_qs, urlsplit
 
         if _act_from_url(page, tries=1) != expected_act:
-            errors.append(f"{what}: открылся не тот кабинет — пропущено")
+            errors.append(f"{what}: a different ad account opened; skipped")
             return False
         if not _period_matches(_shown_period(page), date_from, date_to):
-            errors.append(f"{what}: на экране другой период — пропущено")
+            errors.append(f"{what}: a different period is on screen; skipped")
             return False
         if parent_id:
             params = parse_qs(urlsplit(page.url).query)
             if params.get(TREE_PARENT_PARAM[top]) != [parent_id]:
-                errors.append(f"{what}: фильтр родительской кампании изменился — пропущено")
+                errors.append(f"{what}: the parent campaign filter changed; skipped")
                 return False
         return True
 
@@ -1735,10 +1778,10 @@ def _read_tree(
         try:
             page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
         except Exception as exc:
-            errors.append(f"{what}: переход не удался ({exc})")
+            errors.append(f"{what}: navigation failed ({exc})")
             return False
         if not _wait_for_grid(page):
-            errors.append(f"{what}: таблица не отрисовалась за отведённое время")
+            errors.append(f"{what}: the table did not load in time")
             return False
         return _context_matches(what, parent_id)
 
@@ -1758,8 +1801,8 @@ def _read_tree(
         if len(wanted) > TREE_MAX_PARENTS:
             # Молчаливое усечение читается как «это всё». Говорим вслух.
             errors.append(
-                f"объявления прочитаны у первых {TREE_MAX_PARENTS} из "
-                f"{len(wanted)}: каждая — отдельный заход на аккаунт"
+                f"ads were read for the first {TREE_MAX_PARENTS} of "
+                f"{len(wanted)} campaigns: each one is a separate visit to the account"
             )
             wanted = wanted[:TREE_MAX_PARENTS]
 
@@ -1792,7 +1835,7 @@ def _read_tree(
     ambiguous = {oid for oid, parents in owners.items() if len(parents) > 1}
     if ambiguous:
         objects = [o for o in objects if not (o["level"] == "ad" and o["id"] in ambiguous)]
-        errors.append("одни объявления вернулись у разных кампаний — неоднозначные связи пропущены")
+        errors.append("the same ads came back under different campaigns; ambiguous links skipped")
     return objects, " ".join(hows), "; ".join(errors)
 
 
@@ -1990,7 +2033,10 @@ SEL_MARKED_SWITCH = '[data-acl-switch="1"]'
 _FIND_SWITCH_JS = r"""
 (args) => {
   const norm = s => (s || '').replace(/\s+/g, ' ').trim();
-  const visible = e => e.getClientRects().length && !e.closest('[hidden],[aria-hidden="true"],[inert]') && getComputedStyle(e).visibility !== 'hidden';
+  // display:contents-обёртки строк (Meta, 17.09) своих прямоугольников не имеют —
+  // их видимость берётся у содержимого, как в чтении дерева.
+  const hasBox = e => e.getClientRects().length > 0 || (getComputedStyle(e).display === 'contents' && [...e.children].some(hasBox));
+  const visible = e => hasBox(e) && !e.closest('[hidden],[aria-hidden="true"],[inert]') && getComputedStyle(e).visibility !== 'hidden';
   const fail = why => ({found: false, why});
   document.querySelectorAll('[data-acl-switch]').forEach(e => e.removeAttribute('data-acl-switch'));
   const tables = [...document.querySelectorAll('[role="table"],[role="grid"]')].filter(visible);
@@ -2022,13 +2068,32 @@ _FIND_SWITCH_JS = r"""
     aria === null && sw.matches('input[type="checkbox"]') && !sw.indeterminate ? (sw.checked ? 'on' : 'off') : 'unknown';
   const label = norm(sw.getAttribute('aria-label'));
   const result = {found:true, name, delivery:deliveries.size === 1 ? [...deliveries][0] : '', on:state === 'on', off:state === 'off', label};
+  // Метка до нажатия: при «covered» вызывающий прокручивает именно этот тумблер.
+  sw.setAttribute('data-acl-switch', '1');
   if (args.click) {
     // Identity, context and state are read and acted upon in one JS task.
     // If Meta switched it off meanwhile, clicking again would turn it ON.
     if (location.href !== args.url || label !== args.label || state === 'unknown') return fail('context or switch changed before action');
     if (state === 'on') {
       const r = sw.getBoundingClientRect(), hit = document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
-      if (!hit || (hit !== sw && !sw.contains(hit))) return fail('switch is covered');
+      // Сам input тумблера Meta прячет под нарисованной «дорожкой» — соседом в
+      // той же ячейке (17.09 Doc20: «switch is covered» на свободной странице).
+      // Попадание в эту же ячейку тумблера этой строки — наш тумблер; всё,
+      // что вне ячейки (диалог, баннер), по-прежнему закрывает его.
+      const cell = sw.closest('[data-surface*="/table_cell:forObjectType(toggle"]');
+      // A cell can also host a menu or confirmation popup. Only accept
+      // non-interactive decoration from this exact toggle cell; never click
+      // through a dialog or a different control, even if it shares the cell.
+      const overlay = hit && hit.closest('[role="dialog"],[role="alertdialog"],[aria-modal="true"],[role="menu"],[role="tooltip"]');
+      const control = hit && hit.closest('button,a,input,select,textarea,[role="button"],[role="switch"],[role="checkbox"],[role="menuitem"],[contenteditable="true"]');
+      const own = hit && !overlay && (
+        hit === sw || sw.contains(hit) ||
+        (cell && cell.contains(hit) && (!control || control === sw || control.contains(sw)))
+      );
+      if (!own) {
+        const d = hit ? (hit.tagName + (hit.getAttribute('role') ? '[' + hit.getAttribute('role') + ']' : '') + ' ' + norm(hit.innerText || '').slice(0, 40)) : 'nothing';
+        return {found: false, why: 'switch is covered', covered_by: d, rect: [Math.round(r.x), Math.round(r.y)]};
+      }
       sw.click();
       result.clicked = true;
     }
@@ -2046,7 +2111,7 @@ _SWITCH_ACTION_JS = """args => {
 }"""
 
 
-@serialized_browser
+@serialized_browser(key=_profile_key)
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
              expected_name: str = "", date_from: str = "", date_to: str = "",
              requester: str = "") -> "TurnOffResult":
@@ -2113,27 +2178,27 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
     out = TurnOffResult(account=account, level=level, object_id=str(object_id),
                         name=expected_name, at=_now())
     if level not in ("campaign", "ad"):
-        out.error = f"выключать умеем кампанию и объявление, а не {level!r}"
+        out.error = f"only a campaign or an ad can be turned off, not {level!r}"
         return out
     if not expected_name.strip():
         out.error = "row name is required — read the account again"
         return out
     if not str(object_id).isdigit():
-        out.error = "id объекта должен состоять из цифр"
+        out.error = "object id must contain only digits"
         return out
     if level == "ad" and not str(parent_id).isdigit():
         # Список объявлений сужается по кампании: другого проверенного способа
         # добраться до одной строки у нас нет.
-        out.error = "чтобы выключить объявление, нужна его кампания"
+        out.error = "turning off an ad requires its campaign"
         return out
 
     entry = _entry_for(account)
     if entry is None:
-        out.error = f"{account} нет в карте аккаунтов"
+        out.error = f"{account} is not in the account map"
         return out
     act = (entry.ad_account_id or "").strip()
     if not act:
-        out.error = f"у {account} не заполнен ad_account_id"
+        out.error = f"{account} has no ad_account_id in the account map"
         return out
     date_from = date_from or yesterday()
     date_to = date_to or date_from
@@ -2154,7 +2219,7 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         page = conn.page
         page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
         if not _wait_for_grid(page):
-            out.error = "Ads Manager не отрисовался за отведённое время"
+            out.error = "Ads Manager did not finish loading in time"
             return out
 
         from urllib.parse import parse_qs, urlsplit
@@ -2173,9 +2238,16 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
             out.error = "account, period, level or parent changed — nothing touched"
             return out
         args = {"id":out.object_id, "kind":_LEVEL_KIND[level], "name":expected_name}
-        found = page.evaluate(_FIND_SWITCH_JS, args)
+        # «Занятая» таблица — ждём, как в чтении дерева: 17.09 выключение на
+        # Doc20 отказало «table is still loading» сразу после открытия списка.
+        found = None
+        for _attempt in range(TABLE_BUSY_TRIES):
+            found = page.evaluate(_FIND_SWITCH_JS, args)
+            if not (isinstance(found, dict) and found.get("why") == "table is still loading"):
+                break
+            page.wait_for_timeout(1000)
         if not found or not found.get("found"):
-            out.error = (found or {}).get("why") or "строку не нашли"
+            out.error = (found or {}).get("why") or "row not found"
             return out
         if not context_matches():
             out.error = "context changed during lookup"
@@ -2186,8 +2258,8 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         # под ним — оказаться чужой. Выключить не то хуже, чем не выключить.
         if expected_name and out.name and out.name != expected_name:
             out.error = (
-                f"под этим id на странице «{out.name}», а дешборд показывал "
-                f"«{expected_name}» — ничего не трогаем"
+                f"the page shows \"{out.name}\" under this id, but the dashboard showed "
+                f"\"{expected_name}\"; nothing was touched"
             )
             return out
 
@@ -2196,16 +2268,16 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         # в том, чтобы поймать случай, когда мы схватили не тот элемент.
         why = wg.forbidden_click_reason(found.get("label"))
         if why:
-            out.error = f"нажимать это нельзя: {why}"
+            out.error = f"this cannot be clicked: {why}"
             return out
 
         if found.get("off"):
             out.delivery = str(found.get("delivery") or "")
             out.state = "already_off"
-            out.how = "тумблер уже выключен — ничего не нажимали"
+            out.how = "the toggle is already off; nothing was clicked"
             return out
         if not found.get("on"):
-            out.error = "положение тумблера непонятно — ничего не трогаем"
+            out.error = "the toggle state is unclear; nothing was touched"
             return out
 
         page.locator(SEL_MARKED_SWITCH).scroll_into_view_if_needed(timeout=15_000)
@@ -2216,11 +2288,30 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         if not _period_matches(period, date_from, date_to):
             out.error = "period could not be confirmed before action"
             return out
-        acted = page.evaluate(_SWITCH_ACTION_JS, dict(args, click=True, url=approved_url,
-            label=found.get("label"), period=period,
-            period_args=[list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE]))
+        # Перекрытие бывает мгновенным: 17.09 Doc20 дважды «switch is covered»,
+        # а через минуту на той же странице в центре тумблера лежал он сам —
+        # строку у края накрывала липкая шапка таблицы. Строку — в центр
+        # экрана, и ещё раз, не больше трёх.
+        acted = None
+        for _attempt in range(3):
+            acted = page.evaluate(_SWITCH_ACTION_JS, dict(args, click=True, url=approved_url,
+                label=found.get("label"), period=period,
+                period_args=[list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE]))
+            if not (isinstance(acted, dict) and acted.get("why") == "switch is covered"):
+                break
+            try:
+                page.evaluate(
+                    "sel => { const e = document.querySelector(sel); if (e) e.scrollIntoView({block: 'center', behavior: 'instant'}); }",
+                    SEL_MARKED_SWITCH,
+                )
+            except Exception:
+                pass
+            page.wait_for_timeout(1000)
         if not acted or not acted.get("found"):
-            out.error = (acted or {}).get("why") or "action refused"
+            why = (acted or {}).get("why") or "action refused"
+            if (acted or {}).get("covered_by"):
+                why = f"{why} by {acted['covered_by']}"
+            out.error = why
             return out
         if not acted.get("clicked"):
             out.state = "already_off"
@@ -2257,12 +2348,12 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
                 return out
 
         if not again or not again.get("found"):
-            out.error = "после перезагрузки строку не нашли — состояние неизвестно"
+            out.error = "after reload the row was not found; state unknown"
             return out
-        out.error = "после перезагрузки тумблер снова включён — Meta не приняла"
+        out.error = "after reload the toggle is on again; Meta did not accept it"
         return out
     except Exception as exc:                      # noqa: BLE001
-        out.error = f"не получилось: {exc}"
+        out.error = f"failed: {exc}"
         return out
     finally:
         if conn is not None:

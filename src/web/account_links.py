@@ -32,7 +32,7 @@ import os
 import uuid
 from pathlib import Path
 
-from config.paths import get_ad_account_map_path, get_local_config_dir
+from config.paths import _replace_when_free, get_ad_account_map_path, get_local_config_dir
 
 FIELDNAMES = ["account_name", "kind", "value"]
 KINDS = ("country", "asset")
@@ -87,7 +87,12 @@ def _write(rows: list[dict[str, str]]) -> None:
             writer.writerows(rows)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(temp, path)
+        # Wait for Windows to let go of the target rather than fail on the
+        # first refusal: `os.replace` answers PermissionError while the file
+        # is merely open for a moment (the previous replace's handle,
+        # Defender, the indexer). Nine links in a row hit it on 2026-09-16.
+        # Same remedy the settings file already has.
+        _replace_when_free(temp, path)
     finally:
         temp.unlink(missing_ok=True)
 
@@ -190,6 +195,28 @@ def values_for(account: str, kind: str) -> list[str]:
     return sorted(
         {r["value"] for r in load() if r["account_name"].lower() == account and r["kind"] == kind}
     )
+
+
+def all_pairs(kind: str) -> list[tuple[str, str]]:
+    """Every (account, value) of this kind, in one pass.
+
+    `values_for` and `accounts_for` each answer about one side, and asking them
+    per account re-reads the file once per account. The Accounts overview needs
+    the whole picture at once — it resolves a country for every account on every
+    page load — and that is what this is for.
+    """
+    kind = _norm(kind).lower()
+    seen: set[tuple[str, str]] = set()
+    out: list[tuple[str, str]] = []
+    for r in load():
+        if r["kind"] != kind:
+            continue
+        pair = (r["account_name"], r["value"])
+        if not pair[0] or not pair[1] or pair in seen:
+            continue
+        seen.add(pair)
+        out.append(pair)
+    return out
 
 
 def accounts_for(kind: str, value: str) -> list[str]:

@@ -265,8 +265,7 @@ def test_a_capture_finds_the_run_it_belongs_to_without_being_told():
         assert Path(folder).parent.name == "run77"
         assert json.loads(_read(folder, "context.json"))["campaign"] == "SA_test"
     finally:
-        tel._current["run_id"] = ""
-        tel._current["campaign"] = ""
+        tel.clear_current_run()
 
 
 def test_an_explicit_run_id_still_wins():
@@ -277,8 +276,7 @@ def test_an_explicit_run_id_still_wins():
         folder = pc.capture(_Page(), step="s", run_id="explicit")
         assert Path(folder).parent.name == "explicit"
     finally:
-        tel._current["run_id"] = ""
-        tel._current["campaign"] = ""
+        tel.clear_current_run()
 
 
 def test_the_create_step_saves_its_markup_too():

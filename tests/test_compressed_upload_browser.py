@@ -20,7 +20,7 @@ def browser():
         b.close()
 
 
-@pytest.mark.parametrize("reuse", ["disabled", "miss", "hit"])
+@pytest.mark.parametrize("reuse", ["disabled", "miss", "hit", "absent", "attached", "dirty_original", "dirty_derived"])
 def test_upload_waits_for_the_actual_compressed_filename(browser, tmp_path, monkeypatch, reuse):
     original = tmp_path / 'original.mp4'
     original.write_bytes(b'original')
@@ -50,27 +50,35 @@ def test_upload_waits_for_the_actual_compressed_filename(browser, tmp_path, monk
     def reuse_copy(p, name):
         searched.append(name)
         p.get_by_placeholder('Search media').fill(name)
-        if reuse == 'hit' and name == derived.name:
+        if reuse == 'dirty_original' or (reuse == 'dirty_derived' and name == derived.name):
+            return 'dirty'
+        if reuse in ('hit', 'attached') and name == derived.name:
             p.evaluate("document.getElementById('wizard').remove(); document.getElementById('editor').textContent='Edit media'")
-            return True
-        return False
+            return True if reuse == "hit" else "attached"
+        return "absent" if reuse in ("absent", "attached", "dirty_derived") else False
     monkeypatch.setattr(meta_dom, '_try_reuse_library_media', reuse_copy)
     notices = []
     try:
         with cc.observe_preparation(notices.append):
-            assert meta_dom.upload_ad_creative(page, 'video', str(original))
+            result = meta_dom.upload_ad_creative(page, 'video', str(original))
+        if reuse.startswith('dirty_'):
+            assert result is False
+            assert page.evaluate('window.uploadFilter === undefined')
+            assert page.locator('#editor').inner_text() == ''
+            return
+        assert result is True
         assert page.locator('#editor').inner_text() == 'Edit media'
         if reuse != 'disabled':
             assert searched == [original.name, derived.name]
-        if reuse == 'hit':
-            assert meta_dom._LAST_UPLOAD_DIAG['reused'] is True
-            assert meta_dom._LAST_UPLOAD_DIAG['attempts'] == []
+        if reuse in ('hit', 'attached'):
+            assert meta_dom.last_upload_diag()['reused'] is True
+            assert meta_dom.last_upload_diag()['attempts'] == []
             assert page.evaluate('window.uploadFilter === undefined')
         else:
-            assert len(meta_dom._LAST_UPLOAD_DIAG['attempts']) == 1
-            assert meta_dom._LAST_UPLOAD_DIAG['attempts'][0]['tile'] is True
+            assert len(meta_dom.last_upload_diag()['attempts']) == 1
+            assert meta_dom.last_upload_diag()['attempts'][0]['tile'] is True
             assert page.evaluate('window.uploadFilter') == ''
-        assert meta_dom._LAST_UPLOAD_DIAG['prepared']['seconds'] == 1
+        assert meta_dom.last_upload_diag()['prepared']['seconds'] == 1
         assert notices and 'original.mp4' in notices[0]
     finally:
         context.close()

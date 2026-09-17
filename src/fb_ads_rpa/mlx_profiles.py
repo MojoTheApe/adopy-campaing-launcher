@@ -4,19 +4,29 @@ Connecting an ad account means pairing it with a Multilogin profile id. Buyers
 were doing that by copying a UUID out of the Multilogin window into a CSV — the
 kind of step that is easy to get subtly wrong and impossible to verify by eye.
 
-Multilogin's own profile-listing API is not usable here: the launcher answers
-404 for `/profile` and the cloud API answers 403 with the automation token we
-hold (checked 2026-08-29). So profile NAMES are unavailable, and a dropdown of
-140 bare UUIDs would be no better than typing one.
+Multilogin's own CATALOGUE is not usable here: the launcher answers 404 for
+`/profile`, and the cloud API answers about a different workspace than the one
+these profiles live in (checked 2026-09-16). So the full list of profiles — the
+closed ones included — stays out of reach until a token for the right workspace
+exists.
 
 What does work is noticing which profiles are open right now. That fits how the
 work actually happens: to connect an account you open its profile anyway. So
 the dashboard can offer "the profiles you have open" instead of asking for an
 identifier.
 
-Windows shortens the path in the process command line
-(`…\\mlx\\profiles\\B18D03~1\\3EF7F4~1\\359D3E~1`), so the running profile is
-matched back to its full id by prefix against the profile directories on disk.
+For those open profiles Multilogin will say who they are. The local launcher
+answers `GET /api/v1/profile/statuses` with the profile id, its NAME and its
+folder id (measured 2026-09-16 with the token already in `.env`). That is the
+whole answer, so it is the first place we ask.
+
+Everything below it is the older way of finding out, kept for when Multilogin
+is not answering: the running processes are matched to profile directories, and
+the name is read off the browser window title. Both are guesses. Windows
+shortens the path in the process command line
+(`…\\mlx\\profiles\\B18D03~1\\3EF7F4~1\\359D3E~1`), so an id is recovered by
+prefix — and two profiles sharing a prefix are dropped rather than confused.
+The window title carries the name only when Mimic is showing it.
 """
 from __future__ import annotations
 
@@ -169,12 +179,112 @@ def _name_from_title(title: str) -> str:
     return name if name and len(name) <= 60 and " " not in name else ""
 
 
+# The Accounts overview asks this on every load, so a Multilogin that is not
+# running has to cost a moment rather than a page. The launcher is on this same
+# machine: it answers in milliseconds or it is not there at all.
+_LAUNCHER_TIMEOUT = 4.0
+
+
+def _launcher_instances() -> list:
+    """Configured Multilogin instances that actually carry a token.
+
+    `get_multilogin_instance` raises when a slot is unset, and most machines
+    have exactly one filled: the second slot belongs to the KLD account and a
+    buyer who never uses it leaves it empty. So an unset slot is skipped rather
+    than raised over — it is the normal state, not a fault.
+
+    Either token will do. What we are asking about is this machine, not a
+    workspace: slot B answered about profiles belonging to slot A's workspace
+    (measured 2026-09-16).
+    """
+    from src.meta_campaign_agent.multilogin_config import get_multilogin_instance
+
+    out = []
+    for key in ("A", "B"):
+        try:
+            out.append(get_multilogin_instance(key))
+        except Exception:
+            continue
+    return out
+
+
+def running_profiles_from_launcher() -> list[dict]:
+    """Open profiles as Multilogin itself reports them: id, name, folder id.
+
+    `GET /api/v1/profile/statuses` on the local launcher gives all three
+    outright, which is better than every way of working them out from the
+    machine: the name is the real one instead of whatever the window title
+    happens to show, the id is exact instead of a prefix match, and `folder_id`
+    arrives with it rather than being read off the profile's path.
+
+    Empty list on anything unexpected — no Multilogin, no token, a shape we did
+    not expect. The caller then reads the machine, as it always did. This feeds
+    a picker, and one that raises would be worse than one that offers less.
+    """
+    try:
+        import requests
+    except Exception:
+        return []
+
+    for cfg in _launcher_instances():
+        try:
+            resp = requests.get(
+                f"{cfg.launcher_base_v1}/profile/statuses",
+                headers={
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {cfg.automation_token}",
+                },
+                timeout=_LAUNCHER_TIMEOUT,
+            )
+            if resp.status_code != 200:
+                continue
+            states = ((resp.json() or {}).get("data") or {}).get("states") or {}
+        except Exception:
+            continue
+        if not isinstance(states, dict):
+            continue
+
+        found: list[dict] = []
+        for pid, state in states.items():
+            if not isinstance(state, dict):
+                continue
+            # A launcher upgrade or partial response must not break Accounts.
+            # Reject a malformed record before using any of its string fields.
+            fields = (state.get("profile_id"), state.get("name"),
+                      state.get("folder_id"), state.get("status"))
+            if any(value is not None and not isinstance(value, str) for value in fields):
+                continue
+            profile_id = fields[0] or pid
+            if not isinstance(profile_id, str):
+                continue
+            profile_id = profile_id.strip()
+            # `states` lists the active profiles, but one caught mid-shutdown
+            # would be offered as connectable and then disappear.
+            if not profile_id or "stop" in (state.get("status") or "").lower():
+                continue
+            found.append({
+                "profile_id": profile_id,
+                "name": (state.get("name") or "").strip(),
+                "folder_id": (state.get("folder_id") or "").strip(),
+            })
+        if found:
+            return found
+    return []
+
+
 def open_profiles_detailed() -> list[dict]:
-    """Open profiles as {profile_id, name}, name empty when it can't be read."""
+    """Open profiles as {profile_id, name, folder_id}, blank where unknown.
+
+    Multilogin's own answer first; the machine is read only when it has none.
+    """
+    told = running_profiles_from_launcher()
+    if told:
+        return told
+
     try:
         import psutil
     except Exception:
-        return [{"profile_id": p, "name": ""} for p in open_profile_ids()]
+        return [{"profile_id": p, "name": "", "folder_id": ""} for p in open_profile_ids()]
 
     known = all_profile_ids()
     titles = _window_titles_by_pid()
@@ -199,7 +309,10 @@ def open_profiles_detailed() -> list[dict]:
         except Exception:
             continue
 
-    return [{"profile_id": pid, "name": nm} for pid, nm in by_profile.items()]
+    return [
+        {"profile_id": pid, "name": nm, "folder_id": ""}
+        for pid, nm in by_profile.items()
+    ]
 
 
 def profile_name_key(name: str) -> str:
@@ -208,10 +321,18 @@ def profile_name_key(name: str) -> str:
     Multilogin names read "KLD_BFL_W27" while the same account is
     "FacebookMKTOBFLW27 SV Ait" in the sheet. The prefixes differ and always
     will; what matches is the tail, so compare on that alone.
+
+    The tail of the FIRST word, because a name can carry a person after it:
+    "FacebookDQ501 - Duan Guyen" ends in a surname, and read whole it has no
+    key at all. That is the same rule the account side of the comparison has
+    always applied to its own label, so the two now agree; a name without
+    spaces is unaffected.
     """
     import re as _re
 
-    m = _re.search(r"([A-Za-z])(\d{1,4})\s*$", (name or "").strip())
+    words = (name or "").split()
+    first = words[0] if words else ""
+    m = _re.search(r"([A-Za-z])(\d{1,4})\s*$", first)
     return (m.group(1) + m.group(2)).upper() if m else ""
 
 

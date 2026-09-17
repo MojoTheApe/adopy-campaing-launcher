@@ -1,21 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Шум закрытия соединений не топит настоящие отказы (ACL-354).
+"""Exception types alone cannot establish harmless browser teardown.
 
-15.09 за один вечер приёмник получил три вида системного шума подряд:
-
-    PYTHON-N  CancelledError        подтверждение кадра скринкаста
-    PYTHON-Q  TargetClosedError     брошенный Future после закрытия страницы
-    PYTHON-R  ConnectionResetError  [WinError 10054] при гашении сокета
-
-Все три помечены `handled`, ни одна не влияет на прогон: это цена того, что
-браузер и вкладки закрываются, пока цикл событий ещё что-то доделывает. На
-одной машине — мелочь. У десяти байтеров такой шум утопит настоящие отказы
-шагов, ровно как чуть раньше их топили выдуманные отказы из тестов.
-
-Ключевое решение здесь — **фильтровать по виду исключения, а не по логгеру**.
-Через тот же логгер `asyncio` приходит `RuntimeError: loop is not the running
-loop`, от которого дешборд в тот день умирал дважды (ACL-1163). Заглушить
-логгер значило бы спрятать единственный вредный случай вместе с безобидными.
+Keep asynchronous connection failures visible unless cleanup is positively
+identified where it happens. Handled logger events can still be real failures.
 """
 from __future__ import annotations
 
@@ -43,8 +30,8 @@ def _event(logger: str, *types: str) -> dict:
     "TargetClosedError",
     "BrokenPipeError",
 ])
-def test_the_three_kinds_seen_that_night_are_dropped(kind):
-    assert acl_sentry._before_send(_event("asyncio", kind), {}) is None
+def test_known_types_without_teardown_evidence_are_preserved(kind):
+    assert acl_sentry._before_send(_event("asyncio", kind), {}) is not None
 
 
 def test_the_one_that_killed_the_dashboard_still_gets_through():
@@ -82,4 +69,10 @@ def test_step_failures_are_untouched():
 
 def test_the_manual_report_is_untouched():
     event = {"message": "Report: кампания встала", "logger": None}
+    assert acl_sentry._before_send(event, {}) is not None
+
+
+def test_unhandled_connection_loss_during_upload_is_preserved():
+    event = _event('asyncio', 'ConnectionResetError')
+    event['exception']['values'][0]['mechanism'] = {'handled': False}
     assert acl_sentry._before_send(event, {}) is not None
