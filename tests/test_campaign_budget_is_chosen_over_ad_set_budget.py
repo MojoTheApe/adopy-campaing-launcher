@@ -90,3 +90,15 @@ def test_a_locked_subitem_is_read_by_aria_checked(page):
     )
     res = page.evaluate(md.PLACEMENTS_SUBITEM_JS, ["Ads on Facebook Reels", False])
     assert res["ok"] is True and res["checked"] is False
+
+
+# ── заготовка объявления ищется без учёта регистра (Doc20: «New Leads ad») ──
+
+def test_the_new_ad_shell_is_found_whatever_the_case(page, monkeypatch):
+    clicks = []
+    monkeypatch.setattr(md, "_cdp_mouse_click", lambda p, x, y: clicks.append((x, y)))
+    monkeypatch.setattr(md, "wait_editor_saved", lambda *a, **k: None)
+    page.set_viewport_size({"width": 1400, "height": 800})
+    page.set_content("<div style='position:absolute;left:20px;top:40px'><span>New Leads ad</span></div>")
+    assert md._open_tree_ad(page, "New Leads Ad") is True
+    assert len(clicks) == 1
