@@ -3317,6 +3317,35 @@ def _label_on_page(label: str, seen: list[str]) -> bool:
     return any((x or "").strip().casefold() == want for x in seen)
 
 
+PLACEMENTS_SUBITEM_READ_JS = r"""
+  (label) => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const root = document.querySelector('[data-rpa-placements-marker]');
+    if (!root) return { found: false, why: 'нет метки блока' };
+    const rows = [...root.querySelectorAll('*')].filter(e =>
+      e.children.length === 0 && norm(e.textContent).toLowerCase() === (label || '').toLowerCase() && e.offsetParent !== null);
+    let frozen = null;
+    for (const row of rows) {
+      let container = row.parentElement;
+      for (let i = 0; i < 4 && container; i++) {
+        const cb = container.querySelector('input[type=checkbox]');
+        if (cb) {
+          const aria = cb.getAttribute('aria-checked');
+          const checked = aria === 'true' ? true : aria === 'false' ? false : cb.checked;
+          if (!cb.disabled) return { found: true, checked };
+          if (frozen === null) frozen = checked;
+          break;
+        }
+        container = container.parentElement;
+      }
+    }
+    return frozen === null ? { found: false, why: 'строка не найдена' }
+                           : { found: true, checked: frozen };
+  }
+"""
+"""Состояние подпункта без клика — для перепроверки после паузы."""
+
+
 PLACEMENTS_SUBITEM_JS = """
   ([label, wantChecked]) => {
     const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
@@ -4619,6 +4648,29 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     # принадлежность значило бы добавить второе предположение к первому.
     remaining_on = list(_SUBITEMS_ON)
     remaining_off = list(_SUBITEMS_OFF)
+    def _settle_visible(here: list[str]) -> None:
+        # Meta обновляет галочку не сразу: 17.09 20:59 (CR_ait Day) семь
+        # подпунктов отчитались «ещё включены», а на дампе, снятом через пару
+        # секунд, все были в нужном состоянии. Читаем, пока эта категория ещё
+        # раскрыта: открытие следующей скрывает её подпункты.
+        still = ([(x, True) for x in remaining_on if _label_on_page(x, here)]
+                 + [(x, False) for x in remaining_off if _label_on_page(x, here)])
+        if still:
+            _sleep_h(2.0)
+            settled = {}
+            for label, want in still:
+                try:
+                    res = page.evaluate(PLACEMENTS_SUBITEM_READ_JS, label) or {}
+                except Exception as exc:
+                    res = {"found": False, "why": str(exc)[:80]}
+                if res.get("found") and res.get("checked") is want:
+                    settled[label] = res
+                    (remaining_on if want else remaining_off).remove(label)
+                    report.get("subitems_failed", {}).pop(label, None)
+            if settled:
+                report.setdefault("subitems_settled", {}).update(settled)
+
+
     for name, want in _PLACEMENT_CATEGORIES.items():
         if not want:
             continue
@@ -4643,6 +4695,34 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             if not [x for x in remaining_on + remaining_off if _label_on_page(x, here)]:
                 break
             _sleep_h(0.6)
+
+        _settle_visible(here)
+
+        # Source 8e9acb2/5b16886: lower placement rows are virtualized until
+        # scrolling. Aim at this card, not wherever the operator left the
+        # pointer. Settle current rows BEFORE scrolling can unmount them.
+        for _ in range(3):
+            if not any(not _label_on_page(x, here) for x in remaining_on + remaining_off):
+                break
+            try:
+                page.locator('[data-rpa-placements-marker]').first.hover(timeout=2000)
+                page.mouse.wheel(0, 400)
+            except Exception as exc:
+                report["subitems_scroll_error"] = type(exc).__name__
+                break
+            _sleep_h(0.6)
+            more = [x for x in _subitem_labels() if not _label_on_page(x, here)]
+            if not more:
+                continue
+            here.extend(more)
+            report["subitems_seen"].extend(x for x in more if not _label_on_page(x, report["subitems_seen"]))
+            for label in list(remaining_on):
+                if _label_on_page(label, more) and _set(label, True):
+                    remaining_on.remove(label)
+            for label in list(remaining_off):
+                if _label_on_page(label, more) and _set(label, False):
+                    remaining_off.remove(label)
+            _settle_visible(more)
 
     report["subitems_missing"] = remaining_on + remaining_off
     _dbg.append(f"subitems_seen={report['subitems_seen']}")
