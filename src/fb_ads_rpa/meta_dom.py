@@ -5002,6 +5002,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
         _sleep_h(0.6)
 
     if _creative_modal_open(page):
+        _diag("creative_modal_left_open")
         return False
 
     # Readiness is the ad-name field specifically — that is what the caller
@@ -5011,6 +5012,10 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
             state="visible", timeout=10000
         )
     except Exception:
+        # Объявление к этому моменту уже создано — отказ здесь значит «поле
+        # имени не показалось», а не «ничего не случилось». Doc20 17.09:
+        # молчаливый False, повторный Create ad, два пустых объявления.
+        _diag("ad_name_field_not_visible")
         return False
     return True
 
@@ -7672,11 +7677,15 @@ def _open_tree_ad(page: Page, ad_name: str) -> bool:
     point = page.evaluate(
         """(adName) => {
           const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          // Без учёта регистра: Doc20 называет заготовку «New Leads ad»,
+          // S15/Doc21 — «New Leads Ad». Точное сравнение не находило
+          // заготовку, и вызывающий создавал второе объявление (17.09).
+          const want = adName.toLowerCase();
           const nameMatches = (raw) => {
-            const t = norm(raw).replace(/[…\\u2026]+$/, '');
+            const t = norm(raw).replace(/[…\\u2026]+$/, '').toLowerCase();
             if (!t) return false;
-            if (t === adName) return true;
-            return t.length >= 10 && adName.startsWith(t);
+            if (t === want) return true;
+            return t.length >= 10 && want.startsWith(t);
           };
           const cands = [...document.querySelectorAll('*')].filter(e =>
             e.offsetParent !== null && e.children.length === 0 && nameMatches(e.textContent));
