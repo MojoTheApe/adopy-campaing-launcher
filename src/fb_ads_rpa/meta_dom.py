@@ -5049,6 +5049,14 @@ def upload_ad_creative_with_retry(
             attached = False
         if attached:
             return True
+        # 17.09 04:30 (S15, 3-е объявление): медиа уже стояло — Meta перенесла
+        # ролик в новое объявление, мастер не открылся, и шаг объявил
+        # объявление пустым, хотя на экране «Uploaded media · 1 selected».
+        # Файл здесь тот же, что уже поднят в этом прогоне, — медиа на месте.
+        if _media_block_filled_now(page):
+            _telemetry.record("ad_creative_upload", True, note="media_already_on_ad",
+                              diag={"file": Path(creative_path).name})
+            return True
         why = ("same_file_already_uploaded_this_run"
                if upload_already_succeeded(creative_path)
                else "same_file_already_failed_this_run")
@@ -6014,6 +6022,24 @@ def upload_ad_creative(
     return _verify_ad_media_present(page)
 
 
+def _media_block_filled_now(page: Page) -> bool:
+    """Мгновенно: показывает ли блок Media прикреплённое медиа (без ожиданий)."""
+    try:
+        return bool(page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const visible = [...document.querySelectorAll('*')]
+                .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
+                .map(e => norm(e.textContent));
+              if (visible.some(t => t.includes('Please specify the media'))) return false;
+              return visible.some(t => t === 'Edit media' || t === 'Remove media'
+                || t === 'Change selections' || t === 'Customize media');
+            }"""
+        ))
+    except Exception:
+        return False
+
+
 def _verify_ad_media_present(page: Page) -> bool:
     """True once the ad's creative section is out of its empty state.
 
@@ -6057,7 +6083,11 @@ def _verify_ad_media_present(page: Page) -> bool:
                     .map(e => norm(e.textContent));
                   return {
                     empty: visible.some(t => t.includes('Please specify the media')),
-                    filled: visible.some(t => t === 'Edit media' || t === 'Remove media'),
+                    // 17.09: «Uploaded media · 1 selected», «Change selections»,
+                    // «Customize media» — нынешние подписи заполненного блока.
+                    filled: visible.some(t => t === 'Edit media' || t === 'Remove media'
+                      || t === 'Change selections' || t === 'Customize media'
+                      || /^\\d+ selected$/.test(t) && visible.includes('Uploaded media')),
                     uploading: visible.some(t => /^Uploading (video|image)\\b/.test(t)),
                   };
                 }

@@ -214,3 +214,18 @@ def test_the_decoration_on_the_wrapper_marks_a_real_tile_selected():
         assert md._library_tile_selected(p.locator("#a")) is True
         assert md._library_tile_selected(p.locator("#b")) is False
         b.close()
+
+
+def test_media_already_on_the_ad_is_recognised_by_todays_labels():
+    """17.09 (S15, 3-е объявление): «Uploaded media · 1 selected · Change selections»."""
+    from playwright.sync_api import sync_playwright
+    import os
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        p = b.new_page()
+        p.set_content("<div>Media</div><div>Uploaded media</div><div>1 selected</div>"
+                      "<div role='button'>Change selections</div><div role='button'>Customize media</div>")
+        assert md._media_block_filled_now(p) is True
+        p.set_content("<div>Media</div><div>Please specify the media to run with this ad.</div>")
+        assert md._media_block_filled_now(p) is False
+        b.close()
