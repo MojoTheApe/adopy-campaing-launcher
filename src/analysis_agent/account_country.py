@@ -13,14 +13,15 @@ alive.
 
 Sources, in order:
 
-1. **The accounts sheet.** The operator maintains it; it is the only statement
+1. **The accounts sheet.** The operator maintains it; it is the primary statement
    of intent. Rows marked dead are dropped when the account has a live row —
    that is exactly how a move looks on paper.
-2. **Recent stats, by LATEST DATE.** Used to choose between several live
+2. **Operator links.** Used when the sheet does not name a country.
+3. **Recent stats, by LATEST DATE.** Used to choose between several live
    countries, and as the whole answer for accounts the sheet does not mention.
-3. **Never the suffix in the account label.**
+4. **Never the suffix in the account label or the legacy map column.**
 
-That third line is the one that cost time. `FacebookElf303 PA Amz` reads as
+The label-suffix rule is the one that cost time. `FacebookElf303 PA Amz` reads as
 "Panama, Amazon" and looks authoritative; it is typed by hand, is sometimes
 wrong, and stays put while the account moves. Reading a country off it produced
 seven "mismatches" out of twenty-four accounts — every one of them a stale
@@ -36,6 +37,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Sequence
 
 from src.analysis_agent.analyze_fb_stats import normalize_account_alias
+from src.analysis_agent.country_names import country_key
 
 # Statuses that mean "not running any more". Compared case-insensitively; an
 # unknown status counts as alive, because guessing an account dead hides it.
@@ -87,8 +89,27 @@ def sheet_countries(sheet_rows: Iterable[dict]) -> dict[str, list[str]]:
     return live
 
 
+def linked_countries(links: Iterable[tuple[str, str]]) -> dict[str, list[str]]:
+    """{account key: countries} from what the operator connected by hand.
+
+    Takes (account label, country) pairs — `account_links.all_pairs("country")`
+    gives exactly that.
+    """
+    out: dict[str, list[str]] = {}
+    for label, country in links or []:
+        key = normalize_account_alias(str(label or ""))
+        name = str(country or "").strip()
+        if not key or not name:
+            continue
+        if name not in out.setdefault(key, []):
+            out[key].append(name)
+    return out
+
+
 def resolve_countries(
-    from_stats: dict[str, str], sheet_rows: Iterable[dict]
+    from_stats: dict[str, str],
+    sheet_rows: Iterable[dict],
+    linked: dict[str, list[str]] | None = None,
 ) -> dict[str, dict]:
     """{account key: {"country": str, "countries": [str], "ambiguous": bool}}.
 
@@ -101,12 +122,25 @@ def resolve_countries(
     account most recently ran is the one it is running now. When the stats do
     not name any of them, no country is picked — an invented answer here aims a
     campaign at a market.
+
+    Source precedence is sheet sections, then operator links, then recent
+    stats. Lower-priority sources never add countries to a stated set. Stats
+    may choose a primary country only from that set. Unknown country names
+    are preserved rather than inferred from the account label or legacy map.
     """
     out: dict[str, dict] = {}
     by_sheet = sheet_countries(sheet_rows)
+    by_link = dict(linked or {})
 
-    for key in set(by_sheet) | set(from_stats):
-        listed = by_sheet.get(key, [])
+    for key in set(by_sheet) | set(from_stats) | set(by_link):
+        # Preserve every option from the highest-priority available source.
+        listed = []
+        seen = set()
+        for name in by_sheet.get(key) or by_link.get(key, []):
+            identity = country_key(name)
+            if identity and identity not in seen:
+                seen.add(identity)
+                listed.append(name)
         recent = from_stats.get(key, "")
 
         if not listed:
@@ -118,7 +152,7 @@ def resolve_countries(
             out[key] = {"country": listed[0], "countries": listed, "ambiguous": False}
             continue
 
-        chosen = recent if recent in listed else ""
+        chosen = next((name for name in listed if country_key(name) == country_key(recent)), "")
         out[key] = {"country": chosen, "countries": listed, "ambiguous": True}
 
     return out
