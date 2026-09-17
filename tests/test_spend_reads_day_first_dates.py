@@ -67,3 +67,28 @@ def test_a_busy_table_is_waited_for(monkeypatch):
     monkeypatch.setattr(sp, "_sleep", lambda s: None)
     rows, how, err = sp.read_level(P(), "campaign")
     assert len(calls) == 3 and "table-loading" not in (err or "")
+
+
+def test_rows_marked_on_display_contents_wrappers_are_read():
+    """17.09: Meta вешает data-surface строк на <span style="display:contents"> —
+    без собственных прямоугольников; дерево читало ноль строк из 88."""
+    import os
+    from playwright.sync_api import sync_playwright
+
+    row = "120249333114990244"
+    html = (
+        '<div role="table"><div role="presentation">'
+        f'<span style="display:contents" data-surface="/am/table/table_row:{row}unit/table_cell:forObjectType(name,CAMPAIGN_GROUP)">'
+        '<div>KW_trl_All_Video_Day_35_16.09</div></span>'
+        f'<span style="display:contents" data-surface="/am/table/table_row:{row}unit/table_cell:spend">'
+        '<div>$55.81</div></span>'
+        "</div></div>"
+    )
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        p = b.new_page()
+        p.set_content(html)
+        rows, how, err = sp.read_level(p, "campaign")
+        b.close()
+    assert not err, err
+    assert len(rows) == 1 and rows[0].name == "KW_trl_All_Video_Day_35_16.09" and rows[0].spend == "$55.81"

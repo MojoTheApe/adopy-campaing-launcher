@@ -1528,7 +1528,15 @@ _TOTALS_ROW_ID = "-1"
 _READ_TREE_JS = r"""
 (level) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-  const visible = (el) => el.getClientRects().length > 0 &&
+  // Разметку строк Meta теперь вешает на обёртки `display: contents` (17.09):
+  // своих прямоугольников у них нет, и все 88 строк Doc20 считались
+  // невидимыми. Видимость такой обёртки — видимость её содержимого.
+  const hasBox = (el) => {
+    if (el.getClientRects().length > 0) return true;
+    if (getComputedStyle(el).display !== 'contents') return false;
+    return Array.from(el.children).some(hasBox);
+  };
+  const visible = (el) => hasBox(el) &&
     !el.closest('[hidden], [aria-hidden="true"]') &&
     getComputedStyle(el).visibility !== 'hidden';
   const tables = Array.from(document.querySelectorAll('[role="table"], [role="grid"]'))
