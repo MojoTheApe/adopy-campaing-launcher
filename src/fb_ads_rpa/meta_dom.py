@@ -3285,7 +3285,13 @@ PLACEMENTS_SUBITEM_JS = """
             if (cb.checked !== wantChecked) cb.click();
             return { ok: cb.checked === wantChecked, checked: cb.checked };
           }
-          if (frozen === null) frozen = cb.checked;
+          // У недоступной галочки правду говорит aria-checked: 17.09 (Doc20)
+          // «Ads on Facebook Reels» — aria-checked="false", disabled, а
+          // свойство checked осталось true от разметки.
+          if (frozen === null) {
+            const aria = cb.getAttribute('aria-checked');
+            frozen = aria === 'true' ? true : aria === 'false' ? false : cb.checked;
+          }
         }
         container = container.parentElement;
       }
