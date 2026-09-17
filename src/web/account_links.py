@@ -32,7 +32,7 @@ import os
 import uuid
 from pathlib import Path
 
-from config.paths import get_ad_account_map_path, get_local_config_dir
+from config.paths import _replace_when_free, get_ad_account_map_path, get_local_config_dir
 
 FIELDNAMES = ["account_name", "kind", "value"]
 KINDS = ("country", "asset")
@@ -87,7 +87,12 @@ def _write(rows: list[dict[str, str]]) -> None:
             writer.writerows(rows)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(temp, path)
+        # Wait for Windows to let go of the target rather than fail on the
+        # first refusal: `os.replace` answers PermissionError while the file
+        # is merely open for a moment (the previous replace's handle,
+        # Defender, the indexer). Nine links in a row hit it on 2026-09-16.
+        # Same remedy the settings file already has.
+        _replace_when_free(temp, path)
     finally:
         temp.unlink(missing_ok=True)
 
