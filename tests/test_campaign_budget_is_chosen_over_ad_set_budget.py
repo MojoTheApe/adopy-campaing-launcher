@@ -195,3 +195,14 @@ def test_a_subitem_state_is_read_without_clicking(page):
     assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Threads feed") == {"found": True, "checked": False}
     assert page.evaluate("window.clicks") == 0
     assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Facebook Feed")["found"] is False
+
+
+def test_a_subitem_is_read_whatever_the_case(page):
+    """17.09 CO_bnc FX: в списке «Facebook Notifications», на странице «Facebook notifications»."""
+    page.set_content(
+        "<div data-rpa-placements-marker='1'><ul>"
+        "<li><span>Facebook notifications</span><input type='checkbox' aria-checked='false'></li>"
+        "</ul></div>"
+    )
+    assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Facebook Notifications") == {
+        "found": True, "checked": False}

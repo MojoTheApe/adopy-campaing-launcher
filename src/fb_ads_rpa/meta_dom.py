@@ -3313,7 +3313,11 @@ PLACEMENTS_SUBITEM_READ_JS = r"""
     const root = document.querySelector('[data-rpa-placements-marker]');
     if (!root) return { found: false, why: 'нет метки блока' };
     const rows = [...root.querySelectorAll('*')].filter(e =>
-      e.children.length === 0 && norm(e.textContent) === label && e.offsetParent !== null);
+      e.children.length === 0 &&
+      // Регистр не сверяем — как и в PLACEMENTS_SUBITEM_JS: страница пишет
+      // «Facebook notifications», рецепт — «Facebook Notifications».
+      norm(e.textContent).toLowerCase() === (label || '').toLowerCase() &&
+      e.offsetParent !== null);
     for (const row of rows) {
       let container = row.parentElement;
       for (let i = 0; i < 4 && container; i++) {
@@ -4670,16 +4674,16 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             except Exception:
                 break
             _sleep_h(0.6)
-            more = [x for x in _subitem_labels() if x not in here]
+            more = [x for x in _subitem_labels() if not _label_on_page(x, here)]
             if not more:
                 continue
             here = here + more
             report["subitems_seen"].extend(x for x in more if x not in report["subitems_seen"])
             for label in list(remaining_on):
-                if label in more and _set(label, True):
+                if _label_on_page(label, more) and _set(label, True):
                     remaining_on.remove(label)
             for label in list(remaining_off):
-                if label in more and _set(label, False):
+                if _label_on_page(label, more) and _set(label, False):
                     remaining_off.remove(label)
 
     # Meta обновляет галочку не сразу: 17.09 20:59 (CR_ait Day) семь
