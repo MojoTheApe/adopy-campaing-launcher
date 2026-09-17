@@ -48,3 +48,22 @@ def test_total_spent_with_a_capital_s_is_read():
         got = p.evaluate(sp._FIND_TOTALS_JS)
         b.close()
     assert got["spend"] == "$55.81" and got["label"] is True
+
+
+def test_a_busy_table_is_waited_for(monkeypatch):
+    """17.09: дерево падало на table-loading сразу после раскрытия итогов."""
+    answers = [
+        {"rows": [], "how": "table-loading", "kinds": [], "error": "table-loading"},
+        {"rows": [], "how": "table-loading", "kinds": [], "error": "table-loading"},
+        {"rows": [], "how": "no-row-surfaces", "kinds": []},
+    ]
+    calls = []
+
+    class P:
+        def evaluate(self, js, level):
+            calls.append(level)
+            return answers[min(len(calls) - 1, len(answers) - 1)]
+
+    monkeypatch.setattr(sp, "_sleep", lambda s: None)
+    rows, how, err = sp.read_level(P(), "campaign")
+    assert len(calls) == 3 and "table-loading" not in (err or "")
