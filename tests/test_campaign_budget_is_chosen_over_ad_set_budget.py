@@ -78,3 +78,15 @@ def test_new_ad_shells_are_counted_only_in_the_left_tree(page):
         "<div>New Leads ad</div></div><div style='position:absolute;left:900px;top:10px'><span>New Leads ad</span></div>"
     )
     assert md._tree_new_ad_shells(page) == 2
+
+
+# ── недоступный подпункт площадок: состояние по aria-checked (Doc20, 17.09) ──
+
+def test_a_locked_subitem_is_read_by_aria_checked(page):
+    page.set_content(
+        "<div data-rpa-placements-marker='1'><ul>"
+        "<li><span>Ads on Facebook Reels</span><input type='checkbox' aria-checked='false' aria-disabled='true' checked disabled></li>"
+        "</ul></div>"
+    )
+    res = page.evaluate(md.PLACEMENTS_SUBITEM_JS, ["Ads on Facebook Reels", False])
+    assert res["ok"] is True and res["checked"] is False
