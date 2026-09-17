@@ -571,15 +571,21 @@ def _ensure_wide_window(context, page) -> None:
         # второго объявления не находился. У Doc20/Doc21 экран 3840×2160, там
         # 1920×1040 проходило.
         target_w, target_h = 1920, 1040
+        small_screen = False
         try:
             avail = page.evaluate("() => [screen.availWidth, screen.availHeight]")
             if avail and avail[0] and avail[1]:
-                target_w = min(target_w, int(avail[0]))
-                target_h = min(target_h, int(avail[1]))
+                small_screen = int(avail[0]) < 1920 or int(avail[1]) < 1040
         except Exception:
             pass
-        after = {}
-        for w, h in ((target_w, target_h), (1920, 1040)):
+        # Откат подгонки под экран. 17.09 06:51 окно S15 подогнали до 1536×816 —
+        # и Mimic пересчитал масштаб страницы до 0.5 (было 0.9 при 1039×583):
+        # в том же прогоне у S15 отказали Further limit, Languages и загрузка
+        # креатива, тогда как в 06:00 на узком окне кампания прошла целиком.
+        # На маленьком экране профиля окно не трогаем, только записываем.
+        attempts = [] if small_screen else [(target_w, target_h)]
+        after = dict(bounds)
+        for w, h in attempts:
             try:
                 session.send(
                     "Browser.setWindowBounds",
@@ -598,7 +604,8 @@ def _ensure_wide_window(context, page) -> None:
         try:
             from src.fb_ads_rpa import run_telemetry as _rt
 
-            _rt.record("window_resize", (after.get("width") or 0) >= 1280, diag={
+            _rt.record("window_resize", None if small_screen else (after.get("width") or 0) >= 1280,
+                       note="skipped_small_screen" if small_screen else None, diag={
                 "before": {"width": bounds.get("width"), "height": bounds.get("height"),
                            "state": bounds.get("windowState")},
                 "target": [target_w, target_h],
