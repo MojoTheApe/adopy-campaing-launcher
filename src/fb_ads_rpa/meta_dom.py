@@ -2497,6 +2497,12 @@ def run_recorded_campaign_flow(
     if _recover_from_browser_error(page):
         _shot("skip_browser_error_recovered")
 
+    # Record geometry for diagnosing failures without changing window sizing.
+    try:
+        _telemetry.record("browser_window", None, diag=_telemetry.window_state(page) or None)
+    except Exception:
+        pass
+
     for _ in range(3):
         _dismiss_floating_banners(page)
         _sleep_h(0.4)
@@ -2575,6 +2581,12 @@ def run_recorded_campaign_flow(
     # trusting the value and moving on.
     wait_editor_saved(page)
     _shot("after_campaign_name")
+
+    # 17.09 00:05 (S15, 71f6bddbcf7c): Meta открыла черновик с «Ad set
+    # budget» по умолчанию — поля бюджета на уровне кампании нет, и шаг
+    # 133 с искал его. Бюджет у нас кампанийный: переключить до ввода.
+    if _ensure_campaign_budget(page):
+        wait_editor_saved(page)
 
     try:
         page.get_by_role("textbox", name="Budget").click(timeout=3000)
@@ -2777,6 +2789,13 @@ def run_recorded_campaign_flow(
             except Exception:
                 pass
             _sleep_h(0.5)
+        if not continued and _audience_already_manual(page):
+            # 17.09 (S15 06:53, Doc21 04:19/04:28): выбор радио применился
+            # сразу, окна с Continue не было — на экране уже «Switch to
+            # recommended setup» и живые выпадашки возраста. Прежде это был
+            # отказ, и на Doc21 PF он оборвал кампанию целиком.
+            _telemetry.record("further_limit_continue", None, note="applied_without_dialog")
+            continued = True
         _shot("after_further_limit_continue" if continued else "fail_further_limit_continue")
         if not continued:
             return "further_limit_reach_continue"
@@ -3011,6 +3030,7 @@ def run_recorded_campaign_flow(
         if reached_ad_level and additional_ads:
             for i, extra in enumerate(additional_ads, start=2):
                 tag = f"ad{i}"
+                shells_before = _tree_new_ad_shells(page)
                 try:
                     created = create_additional_ad(page, adset_name)
                     if not created:
@@ -3035,6 +3055,15 @@ def run_recorded_campaign_flow(
                         ad_level_fails.append(f"{tag}_create")
                         continue
                     _shot(f"after_{tag}_create")
+                    # 17.09 00:02 (Doc20, cbe566db70b2): один «Create ad» дал
+                    # ДВА «New Leads ad» — лишнее осталось пустым в кампании.
+                    # Удалять сами не берёмся; отказ шага с именем причины,
+                    # чтобы черновик не ушёл в публикацию с пустым объявлением.
+                    shells_after = _tree_new_ad_shells(page)
+                    if shells_before >= 0 and shells_after - shells_before > 1:
+                        _telemetry.record(f"{tag}_create", False, note="extra_ad_shell",
+                                          diag={"before": shells_before, "after": shells_after})
+                        ad_level_fails.append(f"{tag}_extra_empty_ad")
                 except Exception as exc:
                     _shot(f"fail_{tag}_create")
                     ad_level_fails.append(f"{tag}_create:{str(exc)[:60]}")
@@ -3101,6 +3130,25 @@ def run_recorded_campaign_flow(
                 sweep_failed = verify_and_fix_ad_destinations(page, sweep_names, destination_url)
                 for bad in sweep_failed:
                     ad_level_fails.append(f"destination_sweep:{bad}")
+                # Проход открыл каждое объявление и подтвердил (или починил)
+                # назначение. Ранний отказ того же объявления после этого —
+                # устаревшая запись: 17.09 06:13 (S15 Day) ad2_destination упал в
+                # узком окне, проход в конце его поправил, а сводка всё равно
+                # пометила кампанию непубликуемой.
+                unverified = {b.split(":", 1)[0] for b in sweep_failed}
+                confirmed = {
+                    ("ad" if i == 1 else f"ad{i}"): n
+                    for i, n in enumerate(sweep_names, start=1)
+                    if n not in unverified
+                }
+                cleared = [
+                    f for f in ad_level_fails
+                    if f.split(":", 1)[0].endswith("_destination")
+                    and f.split(":", 1)[0][: -len("_destination")] in confirmed
+                ]
+                if cleared:
+                    ad_level_fails[:] = [f for f in ad_level_fails if f not in cleared]
+                    _telemetry.record("destination_sweep_cleared", None, diag={"cleared": cleared})
                 _shot("after_destination_sweep")
             except Exception as exc:
                 ad_level_fails.append(f"destination_sweep:{str(exc)[:60]}")
@@ -5010,6 +5058,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
         _sleep_h(0.6)
 
     if _creative_modal_open(page):
+        _diag("creative_modal_left_open")
         return False
 
     # Readiness is the ad-name field specifically — that is what the caller
@@ -5019,6 +5068,10 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
             state="visible", timeout=10000
         )
     except Exception:
+        # Объявление к этому моменту уже создано — отказ здесь значит «поле
+        # имени не показалось», а не «ничего не случилось». Doc20 17.09:
+        # молчаливый False, повторный Create ad, два пустых объявления.
+        _diag("ad_name_field_not_visible")
         return False
     return True
 
@@ -6630,6 +6683,21 @@ def mark_ad_copy_field(
         return False
 
 
+def _handle_text(handle) -> str:
+    try:
+        return str(handle.evaluate(
+            "el => el.value !== undefined ? el.value : (el.innerText || el.textContent || '')"
+        ) or "")
+    except Exception:
+        return ""
+
+
+def _copy_matches(seen: str, expected: str) -> bool:
+    """Сравнение текста объявления без учёта пробелов, переносов и U+200B."""
+    squash = lambda s: re.sub(r"[\s​﻿]+", "", s or "")
+    return squash(seen) == squash(expected)
+
+
 def fill_ad_copy(
     page: Page, ad_title: str, ad_body: str, report: dict | None = None
 ) -> bool:
@@ -6665,6 +6733,37 @@ def fill_ad_copy(
             ))
         except Exception:
             return False
+
+    def _handle_shows(handle, expected: str) -> bool:
+        """Поле показывает ровно тот текст, что мы вводили (пробелы не в счёт).
+
+        «Непусто» — не проверка: 16.09 18:53, три браузера разом, в заголовок
+        легло «★★★★☆.6k» вместо заголовка целиком, часть нажатий пропала, а
+        шаг принял это за успех. Основной текст в том же прогоне — пустой.
+        """
+        return _copy_matches(_handle_text(handle), expected)
+
+    def _type_and_confirm(handle, text: str) -> bool:
+        """Набрать; если экран показывает не то — стереть и вставить целиком.
+
+        Вставка `insert_text` не теряет символов (одна операция, без
+        отдельных нажатий), поэтому она — запасной путь, когда нажатия
+        потерялись.
+        """
+        _type_human(page, text)
+        _sleep_h(0.4)
+        if _handle_shows(handle, text):
+            return True
+        report["attempts"].append({"stage": "typed_text_mismatch", "seen": _handle_text(handle)[:80]})
+        try:
+            handle.focus()
+            page.keyboard.press("ControlOrMeta+A")
+            page.keyboard.press("Backspace")
+            page.keyboard.insert_text(text)
+        except Exception:
+            return False
+        _sleep_h(0.4)
+        return _handle_shows(handle, text)
 
     # Both fields verified post-insert — Playwright's own click can report
     # success under connect_over_cdp without the page actually receiving
@@ -6707,9 +6806,7 @@ def fill_ad_copy(
             if count:
                 handle = _click_via_cdp_handle(primary_box)
                 if handle is not None:
-                    _type_human(page, ad_body)
-                    _sleep_h(0.4)
-                    if _handle_has_content(handle):
+                    if _type_and_confirm(handle, ad_body):
                         return True
                     _dump_stage("primary_text", "content_check_failed_after_insert", {"count": count})
                 else:
@@ -6727,10 +6824,8 @@ def fill_ad_copy(
             if count:
                 handle = _click_via_cdp_handle(headline_box)
                 if handle is not None:
-                    page.keyboard.press("Control+A")
-                    _type_human(page, ad_title)
-                    _sleep_h(0.4)
-                    if _handle_has_content(handle):
+                    page.keyboard.press("ControlOrMeta+A")
+                    if _type_and_confirm(handle, ad_title):
                         return True
                     _dump_stage("headline", "content_check_failed_after_insert", {"count": count})
                 else:
@@ -7090,6 +7185,42 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     return _both_ok()
 
 
+def _audience_already_manual(page: Page) -> bool:
+    """Аудитория уже в ручном режиме: открытого диалога нет, а на экране
+    «Switch to recommended setup» (кнопка возврата к рекомендованному)."""
+    try:
+        return bool(page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const dialogOpen = [...document.querySelectorAll('[role=dialog]')]
+                .some(d => d.getBoundingClientRect().width > 0 && /further limit the reach/i.test(d.textContent || ''));
+              if (dialogOpen) return false;
+              return [...document.querySelectorAll('*')].some(e =>
+                e.children.length === 0 && norm(e.textContent) === 'Switch to recommended setup'
+                && e.getBoundingClientRect().width > 0);
+            }"""
+        ))
+    except Exception:
+        return False
+
+
+def _tree_new_ad_shells(page: Page) -> int:
+    """Сколько строк «New Leads ad» в левом дереве (-1 — не прочитать)."""
+    try:
+        return int(page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              return [...document.querySelectorAll('*')].filter(e => {
+                if (e.children.length !== 0 || !/^New Leads ad$/i.test(norm(e.textContent))) return false;
+                const r = e.getBoundingClientRect();
+                return r.width > 0 && r.x < window.innerWidth * 0.34;
+              }).length;
+            }"""
+        ))
+    except Exception:
+        return -1
+
+
 def _open_tree_ad(page: Page, ad_name: str) -> bool:
     """Select an ad in the left campaign-structure tree by name.
 
@@ -7101,11 +7232,15 @@ def _open_tree_ad(page: Page, ad_name: str) -> bool:
     point = page.evaluate(
         """(adName) => {
           const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+          // Без учёта регистра: Doc20 называет заготовку «New Leads ad»,
+          // S15/Doc21 — «New Leads Ad». Точное сравнение не находило
+          // заготовку, и вызывающий создавал второе объявление (17.09).
+          const want = adName.toLowerCase();
           const nameMatches = (raw) => {
-            const t = norm(raw).replace(/[…\\u2026]+$/, '');
+            const t = norm(raw).replace(/[…\\u2026]+$/, '').toLowerCase();
             if (!t) return false;
-            if (t === adName) return true;
-            return t.length >= 10 && adName.startsWith(t);
+            if (t === want) return true;
+            return t.length >= 10 && want.startsWith(t);
           };
           const cands = [...document.querySelectorAll('*')].filter(e =>
             e.offsetParent !== null && e.children.length === 0 && nameMatches(e.textContent));
@@ -7559,6 +7694,51 @@ def _editor_is_busy_saving(page: Page) -> bool:
         except Exception:
             pass
     return False
+
+
+def _ensure_campaign_budget(page: Page) -> bool:
+    """Если выбран «Ad set budget», выбрать «Campaign budget». True — переключили.
+
+    Радио ищется по подписи; клик — по самой строке с подписью, затем
+    проверка `checked`. Ничего не нашли или уже кампанийный — False, без
+    кликов.
+    """
+    try:
+        state = page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const radioFor = (label) => {
+                const leaf = [...document.querySelectorAll('*')].find(e =>
+                  e.children.length === 0 && norm(e.textContent) === label && e.getBoundingClientRect().width > 0);
+                if (!leaf) return null;
+                let n = leaf;
+                for (let i = 0; i < 6 && n; i++) {
+                  n = n.parentElement;
+                  const r = n && n.querySelector('input[type=radio], [role=radio]');
+                  if (r) { return {radio: r, row: n}; }
+                }
+                return null;
+              };
+              const checked = (r) => r.checked === true || r.getAttribute('aria-checked') === 'true';
+              const camp = radioFor('Campaign budget');
+              const adset = radioFor('Ad set budget');
+              if (!camp || !adset) return 'absent';
+              if (checked(camp.radio)) return 'campaign';
+              if (!checked(adset.radio)) return 'unknown';
+              camp.radio.setAttribute('data-rpa-mark', 'campaign-budget-radio');
+              return 'adset';
+            }"""
+        )
+    except Exception:
+        return False
+    if state != "adset":
+        return False
+    if not _click_marked(page, "campaign-budget-radio"):
+        _telemetry.record("campaign_budget_strategy", False, note="radio_not_clickable")
+        return False
+    _sleep_h(1.0)
+    _telemetry.record("campaign_budget_strategy", None, note="switched_from_ad_set_budget")
+    return True
 
 
 def wait_editor_saved(page: Page, *, timeout_s: float = 15, appear_s: float = 1.5) -> None:
@@ -9743,7 +9923,51 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
                 break
         except Exception:
             continue
+    if not ok_any:
+        # 17.09 06:56 (S15): «Spanish (All)» уже стоял — Meta подставляет язык
+        # по стране, выбранный язык в подсказках не показывается, кликать
+        # нечего, и шаг отказывал при верном поле. Выбранный язык — успех.
+        # Без Escape: в редакторе Ads Manager он закрывает сам редактор (17.09
+        # 13:19, CR_ait Day — после шага языков на экране список ad set, и все
+        # следующие шаги упали). Открытая выпадашка чтению выбранных не мешает.
+        present = _languages_selected(page)
+        wanted = [n.strip().lower() for n in language_names if n.strip()]
+        if wanted and all(any(p.lower().startswith(w) for p in present) for w in wanted):
+            _telemetry.record("languages", None, note="already_selected", diag={"selected": present})
+            return True
     return ok_any
+
+
+def _languages_selected(page: Page) -> list[str]:
+    """Подписи уже выбранных языков в блоке Languages (например «Spanish (All)»).
+
+    Поднимаемся от поля поиска языков, а не от подписи «Languages»: 17.09
+    (CL_ml, CR_ait) «Spanish (All)» стоял, а подъём на 6 уровней от подписи до
+    него не доставал — шаг отказывал при верном поле.
+    """
+    try:
+        return page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const looks = (t) => /\((All|Todos)\)$/.test(t) || /^[A-Z][a-z]+ \([^)]+\)$/.test(t);
+              const inputs = [...document.querySelectorAll('input[placeholder]')]
+                .filter(i => /language|idioma/i.test(i.getAttribute('placeholder') || ''));
+              for (const inp of inputs) {
+                let box = inp;
+                for (let k = 0; k < 10 && box.parentElement; k++) {
+                  box = box.parentElement;
+                  const found = [...box.querySelectorAll('*')]
+                    .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
+                    .map(e => norm(e.textContent))
+                    .filter(looks);
+                  if (found.length) return found;
+                }
+              }
+              return [];
+            }"""
+        ) or []
+    except Exception:
+        return []
 
 
 def select_manual_placements(page: Page) -> bool:

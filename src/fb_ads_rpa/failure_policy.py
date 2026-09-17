@@ -127,10 +127,15 @@ PER_AD_POLICY: dict[str, tuple[str, str]] = {
         "the ad destination was not verified, so leads may be sent to the "
         "wrong place or into an Instant Form",
     ),
+    "extra_empty_ad": (
+        BLOCKING,
+        "Meta created an extra empty ad in this ad set; delete the empty "
+        "\"New Leads ad\" before publishing",
+    ),
 }
 
 _PER_AD_NAME = re.compile(
-    r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination)$"
+    r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination|extra_empty_ad)$"
 )
 
 
