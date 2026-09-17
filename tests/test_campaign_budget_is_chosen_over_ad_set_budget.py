@@ -161,3 +161,12 @@ def test_the_start_time_hour_18_is_not_taken_for_the_minimum_age(page):
 def test_no_age_field_marks_nothing(page):
     page.set_content("<div>Start time</div><span>18</span>")
     assert md._mark_age_trigger(page, "18") is False
+
+
+def test_an_age_label_inside_a_closing_dialog_is_ignored(page):
+    page.set_content(
+        "<div>Age</div><div><div id='min'>18</div><div id='max'>65+</div></div>"
+        "<div role='dialog' style='position:fixed;top:300px'>Further limit the reach <span>Age</span></div>"
+    )
+    assert md._mark_age_trigger(page, "18") is True
+    assert page.locator("[data-acl-age-trigger]").get_attribute("id") == "min"
