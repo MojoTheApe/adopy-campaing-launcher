@@ -8486,6 +8486,20 @@ def _country_search_term(code: str) -> str:
     return raw
 
 
+def _wait_location_options(root, timeout_s: float = 6.0) -> bool:
+    """Ждёт, пока под полем поиска локаций появятся подсказки."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            if root.locator("[role=option]:visible").count():
+                return True
+        except Exception:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.3)
+
+
 def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     """Pick the country-level suggestion from an open location autocomplete.
 
@@ -8498,6 +8512,21 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     visible option, then a bare Enter, if no country-tagged option shows up.
     """
     country_re = re.compile(rf"^{re.escape(search_term)}\s*\(country\)", re.I)
+    if not _wait_location_options(root):
+        # 17.09 (CO_bnc FX, два прогона подряд): «Colombia» в поле, а список
+        # подсказок так и не открылся (aria-expanded=false) — Enter ничего не
+        # добавлял, осталась United States. Набираем заново, чтобы поиск
+        # запустился ещё раз.
+        try:
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Backspace")
+            _sleep_h(0.5)
+            page.keyboard.type(search_term, delay=60)
+        except Exception:
+            pass
+        if not _wait_location_options(root):
+            _telemetry.record("audience_location", None, note="no_location_suggestions",
+                              diag={"typed": search_term})
     for sel in ("[role=option]:visible", "li[role=option]"):
         try:
             opt = root.locator(sel).filter(has_text=country_re).first
