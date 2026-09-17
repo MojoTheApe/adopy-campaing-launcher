@@ -2497,7 +2497,12 @@ def run_recorded_campaign_flow(
     if _recover_from_browser_error(page):
         _shot("skip_browser_error_recovered")
 
-    # Record geometry for diagnosing failures without changing window sizing.
+    from src.fb_ads_rpa.browser import ensure_editor_window
+
+    if not ensure_editor_window(page, "campaign"):
+        return "window_too_small"
+
+    # Record geometry for diagnosing failures.
     try:
         _telemetry.record("browser_window", None, diag=_telemetry.window_state(page) or None)
     except Exception:
@@ -2624,6 +2629,8 @@ def run_recorded_campaign_flow(
         return "next_to_adset"
     _wait_loading()
     _shot("after_next_to_adset")
+    if not ensure_editor_window(page, "adset"):
+        return "window_too_small"
 
     if not _fill(page.get_by_placeholder("Enter your ad set name here..."), adset_name):
         _shot("fail_adset_name")
@@ -2973,6 +2980,8 @@ def run_recorded_campaign_flow(
         ad_edit_url = page.url
         reached_ad_level = True
         _shot("after_next_to_ad")
+        if not ensure_editor_window(page, "ad"):
+            return "window_too_small"
 
         if reached_ad_level:
             final_ad_name = ad_name or f"{campaign_name} Ad"
@@ -3068,6 +3077,9 @@ def run_recorded_campaign_flow(
                     _shot(f"fail_{tag}_create")
                     ad_level_fails.append(f"{tag}_create:{str(exc)[:60]}")
                     continue
+
+                if not ensure_editor_window(page, tag):
+                    return "window_too_small"
 
                 extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
                 if not _fill(page.get_by_placeholder("Enter your ad name here..."), extra_name):
