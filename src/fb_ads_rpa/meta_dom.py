@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
@@ -54,7 +55,15 @@ from src.fb_ads_rpa import run_telemetry as _telemetry
 #: Скорость сети меряется в мегабайтах в секунду и меняется; поэтому порог
 #: задан переменной. Если однажды окажется, что и четыре не успевают, менять
 #: надо здесь, а не гадать по симптомам.
-_PW_FILE_LIMIT_MB = float(os.environ.get("FB_RPA_PW_FILE_LIMIT_MB") or 3)
+def _pw_file_limit_mb() -> float:
+    try:
+        value = float(os.environ.get("FB_RPA_PW_FILE_LIMIT_MB") or 3)
+    except (TypeError, ValueError):
+        return 3.0
+    return value if math.isfinite(value) and 0 < value <= 45 else 3.0
+
+
+_PW_FILE_LIMIT_MB = _pw_file_limit_mb()
 
 #: Сколько даём `set_files` на передачу содержимого.
 #:
@@ -5100,6 +5109,16 @@ def _close_creative_setup_modal(page: Page) -> bool:
     return False
 
 
+def _feed_mounted_file(page: Page, handle, creative_path: str, size_mb: float, diag: dict) -> bool:
+    """Use the same size/timeout policy even when the input is already mounted."""
+    if size_mb > _PW_FILE_LIMIT_MB:
+        return _upload_heavy_via_chooser_event(
+            page, creative_path, diag, lambda: handle.evaluate("el => el.click()") or True
+        )
+    handle.set_input_files(creative_path, timeout=_PW_SET_FILES_MS)
+    return True
+
+
 def upload_ad_creative(
     page: Page, creative_type: str, creative_path: str, *, edit_url: str = ""
 ) -> bool:
@@ -5342,8 +5361,10 @@ def upload_ad_creative(
         "size_mb": 0.0,
         "attempts": [],
     }
+    _file_size_mb = float("inf")  # unknown sizes must not enter the byte-transfer path
     try:
-        _diag["size_mb"] = round(Path(creative_path).stat().st_size / (1024 * 1024), 1)
+        _file_size_mb = Path(creative_path).stat().st_size / (1024 * 1024)
+        _diag["size_mb"] = round(_file_size_mb, 1)
     except Exception:
         pass
 
@@ -5377,9 +5398,9 @@ def upload_ad_creative(
             _step["file_inputs"] = len(_inputs)
             for h in _inputs:
                 try:
-                    h.set_input_files(creative_path)
-                    fed = True
-                    break
+                    fed = _feed_mounted_file(page, h, creative_path, _file_size_mb, _diag)
+                    if fed:
+                        break
                 except Exception as exc:
                     _step["set_files_error"] = f"{type(exc).__name__}: {exc}"[:120]
                     continue
@@ -5417,17 +5438,12 @@ def upload_ad_creative(
                 # отдельном процессе, и `DOM.getDocument` туда не дотягивается.
                 # Событие и backendNodeId обрабатываются в CDP-сессии
                 # того фрейма, который открыл диалог.
-                if _diag["size_mb"] > _PW_FILE_LIMIT_MB:
+                if _file_size_mb > _PW_FILE_LIMIT_MB:
                     _step["heavy"] = _upload_heavy_via_chooser_event(
                         page, creative_path, _diag, _press_upload
                     )
                     if not _step["heavy"]:
-                        # Не вышло — пусть откажет прежний путь, вслух и с
-                        # текстом. Молчание здесь стоило полутора дней.
-                        with page.expect_file_chooser(timeout=25000) as fc_info:
-                            _press_upload()
-                        _step["chooser"] = True
-                        fc_info.value.set_files(creative_path, timeout=_PW_SET_FILES_MS)
+                        raise RuntimeError("Browser did not accept the file by path; byte-transfer fallback is disabled for large files")
                 else:
                     with page.expect_file_chooser(timeout=25000) as fc_info:
                         _press_upload()

@@ -46,3 +46,27 @@ def test_early_upload_failure_does_not_reuse_previous_creative_diagnostics(monke
     with pytest.raises(RuntimeError):
         meta_dom.upload_ad_creative(object(), 'video', '/synthetic/current.mp4')
     assert meta_dom._LAST_UPLOAD_DIAG == {"file": "current.mp4", "attempts": []}
+
+
+@pytest.mark.parametrize('in_child_frame', [False, True])
+def test_large_mounted_input_is_fed_by_path_in_its_frame(tmp_path, in_child_frame):
+    creative = tmp_path / 'synthetic-mounted.mp4'
+    with creative.open('wb') as fh:
+        fh.truncate(4 * 1024 * 1024)
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(executable_path=os.environ.get('ACL_BROWSER_EXECUTABLE') or None,
+                                     args=['--site-per-process'])
+        try:
+            context = browser.new_context()
+            context.route('**/*', lambda r: r.fulfill(content_type='text/html', body=
+                '<iframe src="http://media.test/"></iframe>' if in_child_frame and 'parent.test' in r.request.url
+                else '<input type="file" hidden>'))
+            page = context.new_page(); page.goto('http://parent.test/')
+            frame = page.frame(url='http://media.test/') if in_child_frame else page.main_frame
+            handle = frame.query_selector('input')
+            diag = {}
+            assert meta_dom._feed_mounted_file(page, handle, str(creative), 4.0, diag), diag
+            assert handle.evaluate('e => [e.files[0].name, e.files[0].size]') == [creative.name, creative.stat().st_size]
+            assert diag.get('heavy_backend_node')
+        finally:
+            browser.close()
