@@ -180,6 +180,15 @@ def test_the_subitems_are_not_in_the_page_until_a_category_is_opened(page):
 def fresh_page(browser):
     """Своя страница на тест: код ниже жмёт галочки и меняет состояние."""
     pg = _open(browser)
+    # The saved DOM has no React handlers. For interactive checks, reflect a
+    # successful native change in ARIA as the live page does. A cancelled
+    # click produces no change event, so rejected changes remain rejected.
+    pg.evaluate("""() => document.addEventListener('change', event => {
+        const box = event.target;
+        if (box.matches('input[type=checkbox][aria-checked]')) {
+            box.setAttribute('aria-checked', String(box.checked));
+        }
+    })""")
     try:
         yield pg
     finally:
