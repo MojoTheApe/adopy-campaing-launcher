@@ -3041,7 +3041,7 @@ def run_recorded_campaign_flow(
                     if shells_before >= 0 and shells_after - shells_before > 1:
                         _telemetry.record(f"{tag}_create", False, note="extra_ad_shell",
                                           diag={"before": shells_before, "after": shells_after})
-                        ad_level_fails.append(f"{tag}_create:extra_empty_ad")
+                        ad_level_fails.append(f"{tag}_extra_empty_ad")
                 except Exception as exc:
                     _shot(f"fail_{tag}_create")
                     ad_level_fails.append(f"{tag}_create:{str(exc)[:60]}")
