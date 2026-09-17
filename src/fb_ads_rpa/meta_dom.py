@@ -4870,10 +4870,23 @@ def _click_xpath(page: Page, xpath: str, *, scroll: bool = True) -> bool:
       const [xp, doScroll] = args;
       const it = document.evaluate(xp, document, null,
         XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+      // Visibility by computed style, not by `offsetParent`: an element
+      // inside a `position: fixed` container has offsetParent === null
+      // while being perfectly visible. The Advantage+ row sits in the
+      // fixed right-hand panel of the ad set editor — measured 2026-09-16:
+      // the same XPath clicked it on the saved page (no site CSS, nothing
+      // fixed) and matched nothing live, four runs in a row.
+      const shown = (e) => {
+        for (let n = e; n; n = n.parentElement) {
+          const s = getComputedStyle(n);
+          if (s.display === 'none' || s.visibility === 'hidden') return false;
+        }
+        return true;
+      };
       let best = null, bestArea = Infinity;
       for (let i = 0; i < it.snapshotLength; i++) {
         const el = it.snapshotItem(i);
-        if (!el || el.offsetParent === null) continue;
+        if (!el || !shown(el)) continue;
         const r = el.getBoundingClientRect();
         if (r.width <= 0 || r.height <= 0) continue;
         const area = r.width * r.height;
@@ -8154,7 +8167,275 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
     return False
 
 
+def _advantage_plus_audience_on(page: Page) -> bool | None:
+    """Is the ad set's audience in Advantage+ mode right now?
+
+    Two tells, either is enough: the "Advantage+ on" badge on the Audience
+    card, or the "Advantage+ leads campaign" switch reading checked. None
+    when neither control can be found at all — unknown is not "off".
+
+    Live run `ceab1a4bf031` (2026-09-16): the age step ran with both tells
+    on screen, clicked 35, and the dropdowns stayed at 18–65+. In that mode
+    the age controls are Advantage+ suggestions, not a hard range.
+    """
+    js = r"""
+    () => {
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const leaves = [...document.querySelectorAll('*')]
+        .filter(e => e.offsetParent !== null && e.children.length === 0);
+      let seen = false;
+      for (const e of leaves) {
+        const t = norm(e.textContent);
+        if (t === 'advantage+ on') return true;
+        if (t === 'advantage+ off') seen = true;
+      }
+      for (const el of document.querySelectorAll('*')) {
+        if (!el.offsetParent) continue;
+        const t = norm(el.textContent).slice(0, 80);
+        if (!t.includes('advantage+ leads')) continue;
+        let node = el;
+        for (let i = 0; i < 6 && node; i++, node = node.parentElement) {
+          const sw = node.querySelector('[role=switch], input[type=checkbox], [aria-checked]');
+          if (!sw || !sw.offsetParent) continue;
+          seen = true;
+          if (sw.getAttribute('aria-checked') === 'true' || sw.checked === true) return true;
+          break;
+        }
+      }
+      return seen ? false : null;
+    }
+    """
+    for root in _roots(page):
+        try:
+            got = root.evaluate(js)
+        except Exception:
+            continue
+        if got is not None:
+            return bool(got)
+    return None
+
+
+def _ensure_manual_audience(page: Page) -> bool | None:
+    """Leave Advantage+ audience mode before touching the age controls.
+
+    Returns the state AFTER: False = manual, True = still Advantage+, None =
+    could not tell. Records its own telemetry row either way, so a run where
+    the switch-off did not hold can be told from one where it was never
+    attempted — until 2026-09-16 nothing recorded either.
+
+    The conversion step already switches Advantage+ off ("Advantage+ On
+    forces Website and instant forms"), and on three of four runs that held.
+    On the fourth it was On again by the age step. Checking here, right
+    before the control that depends on it, is cheaper than working out why.
+    """
+    before = _advantage_plus_audience_on(page)
+    if before is not True:
+        _telemetry.record("advantage_plus_off", None,
+                          note="already_off" if before is False else "not_found")
+        return before
+    flipped = _turn_off_advantage_plus_leads(page)
+    picked = False
+    if not flipped:
+        # On the 2026-09 layout the leads-campaign control is not a switch
+        # at all: a `role=button` reading "On" beside the label that opens a
+        # menu with "Off" (page dump of run 86b7cd7edda9 — three switches on
+        # the page, none of them this one). Open it and pick Off.
+        picked = _pick_advantage_plus_leads_off(page)
+    if not flipped and not picked:
+        # Older Audience card: a link out of Advantage+ audience. Best
+        # effort, verified below like everything else here.
+        _click_xpath(
+            page,
+            "//*[self::a or @role='button' or @role='link' or self::button]"
+            "[contains(normalize-space(.), 'Switch to original audience')]",
+        )
+    _sleep_h(0.8)
+    after = _advantage_plus_audience_on(page)
+    _telemetry.record("advantage_plus_off", after is not True,
+                      note="switched" if after is not True else "still_on",
+                      diag={"flipped_switch": flipped, "picked_off": picked})
+    return after
+
+
+def _count_xpath(page: Page, xpath: str) -> int:
+    """How many nodes an XPath matches on the live page; -1 if it could not ask."""
+    try:
+        return int(page.evaluate(
+            "(xp) => document.evaluate(xp, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null).snapshotLength",
+            xpath,
+        ))
+    except Exception:
+        return -1
+
+
+def _pick_advantage_plus_leads_off(page: Page) -> bool:
+    """Open the "Advantage+ leads campaign · On ˅" menu and choose Off.
+
+    True when Off was clicked; the caller re-reads the page to see whether
+    it took. The trigger is the first `role=button` after the label whose
+    own text is "On"; the menu item is a visible leaf reading "Off".
+    """
+    # Measured on the saved page of run 86b7cd7edda9 (offline Chrome over the
+    # dump): the label is a `role=heading` span; "On" next to it is plain
+    # text, not a button; the control is the FIRST `role=button` after the
+    # heading — an expander whose accessible text is "Open". The earlier
+    # guesses ("a button reading On", a switch) matched nothing at all,
+    # which is why three parallel runs logged `picked_off: false`.
+    # Keep the page BEFORE touching anything: the second parallel batch
+    # (15:04) found no expander at all on a resized window, and without a
+    # capture that is one more guess. What the control looks like right now
+    # is the one fact the next fix needs.
+    try:
+        from src.fb_ads_rpa import page_capture as _pc
+
+        _pc.capture(page, step="advantage_plus_before")
+    except Exception:
+        pass
+    # The control is the row itself: a `role=button` (325×36) that CONTAINS
+    # the heading, its state text "On" and the chevron. Measured on the page
+    # captured right before the click (run b238c187884b, 15:29). Two earlier
+    # readings were wrong in instructive ways: a button reading "On" does
+    # not exist, and the first button AFTER the heading at that moment is
+    # the editor's **Close** at the bottom of the screen — the unscoped
+    # `following::` path clicked it. The ancestor is the one thing that is
+    # there whenever the heading is.
+    #
+    # Matched on the element's whole string value `normalize-space(.)`, not
+    # on `text()`. React renders "Advantage+" and " leads campaign" as
+    # separate text nodes; `text()` then yields only the first one, and the
+    # path matched nothing live — five runs in a row — while matching every
+    # saved page, because serialising to HTML and parsing back merges
+    # adjacent text nodes into one. The row itself does not equal the label
+    # (its string value also carries "On"), so only the label elements match
+    # and their nearest `role=button` ancestor is the row.
+    opened = _click_xpath(
+        page,
+        "(//*[normalize-space(.)='Advantage+ leads campaign']"
+        "/ancestor::*[@role='button'][1])[1]",
+    )
+    if not opened:
+        _telemetry.record("advantage_plus_off", None, note="row_not_found",
+                          diag={"labels": _count_xpath(page, "//*[normalize-space(.)='Advantage+ leads campaign']")})
+        return False
+    _sleep_h(0.8)
+    # What opened is not known offline. Keep the page so the next run says.
+    try:
+        _pc.capture(page, step="advantage_plus_control")
+    except Exception:
+        pass
+    # Only a real menu item. 16.09, run e79f678f1450 (Doc21 FX): the row
+    # opens a checklist (Budget / Audience / Placements), not a menu, and the
+    # old path also accepted any div/span starting with "Off" — it hit the
+    # label of the **Dynamic creative** switch, Meta raised "How to create ads
+    # using dynamic creative", and that dialog sat over the age dropdowns.
+    picked = _click_xpath(
+        page,
+        "(//*[@role='menuitem' or @role='option' or @role='menuitemradio']"
+        "[starts-with(normalize-space(.), 'Off') and string-length(normalize-space(.)) < 40])[1]",
+    )
+    _cancel_dynamic_creative_dialog(page)
+    return picked
+
+
+def _cancel_dynamic_creative_dialog(page: Page) -> bool:
+    """Dismiss Meta's "How to create ads using dynamic creative" with Cancel.
+
+    Continue would switch the ad set to dynamic creative and drop its
+    customisations — never what the operator built. True when a dialog was
+    found and cancelled.
+    """
+    try:
+        dialog = page.locator("[role=dialog]").filter(
+            has_text=re.compile(r"dynamic creative", re.I)
+        )
+        if not dialog.count():
+            return False
+        dialog.last.get_by_role("button", name=re.compile(r"^Cancel$", re.I)).first.click(timeout=3000)
+        _sleep_h(0.5)
+        _telemetry.record("dynamic_creative_dialog", None, note="cancelled")
+        return True
+    except Exception:
+        return False
+
+
+_AGE_VALUE_RE = re.compile(r"^\d{2}\+?$")
+
+
+def _age_triggers_read(page: Page) -> list[str]:
+    """What the two closed age dropdowns show right now, e.g. ['18', '65+'].
+
+    Visible leaves that look like an age value, inside the Age row (the
+    nearest ancestor of the "Age" label that holds two of them), and not
+    inside an open listbox. Empty when the row cannot be found.
+    """
+    js = r"""
+    () => {
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+      const isAge = (t) => /^\d{2}\+?$/.test(t);
+      const leaves = [...document.querySelectorAll('*')]
+        .filter(e => e.offsetParent !== null && e.children.length === 0);
+      const label = leaves.find(e => /^(Age|Edad)$/i.test(norm(e.textContent)));
+      if (!label) return [];
+      let node = label;
+      for (let i = 0; i < 8 && node; i++, node = node.parentElement) {
+        const vals = [...node.querySelectorAll('*')]
+          .filter(e => e.offsetParent !== null && e.children.length === 0
+                    && !e.closest('[role=listbox]') && isAge(norm(e.textContent)))
+          .map(e => norm(e.textContent));
+        if (vals.length >= 2) return vals.slice(0, 2);
+      }
+      return [];
+    }
+    """
+    for root in _roots(page):
+        try:
+            got = root.evaluate(js)
+        except Exception:
+            continue
+        if got:
+            return [str(v) for v in got]
+    return []
+
+
 def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
+    """Set the audience age range, and only say so when the page shows it.
+
+    Three parts since 2026-09-16, each answering a question the old single
+    function did not:
+
+    * Is the audience in Advantage+ mode? Then the age controls are
+      suggestions and a click on 35 does not take (run `ceab1a4bf031`).
+      Switch it off first, and record whether that held.
+    * Set the two dropdowns — `_fill_audience_age_controls`, the previous
+      body unchanged.
+    * What do the dropdowns show now? "clicked 35" and "shows 35" are
+      different facts, and only the first was ever logged. A mismatch is a
+      failure with both numbers in the diagnostic.
+    """
+    # Switch-off is attempted and recorded, but it no longer GATES the
+    # controls. The "still on" signal comes from the campaign-level
+    # "Advantage+ leads campaign" switch in the right panel, and that switch
+    # stays On even after "Further limit the reach of your ads" has put the
+    # audience into manual mode with live age dropdowns (run 2182744d1126,
+    # 16:06: screenshot shows 18/65+ dropdowns editable, panel still "On").
+    # Gating on it refused a settable age in every run of the evening, where
+    # the old code had set it in three runs of four. The read-back below is
+    # the real check of whether the age took.
+    _ensure_manual_audience(page)
+    _cancel_dynamic_creative_dialog(page)
+    if not _fill_audience_age_controls(page, age_min, age_max):
+        return False
+    wanted = [str(age_min), str(age_max) if age_max < 65 else "65+"]
+    seen = _age_triggers_read(page)
+    if seen != wanted:
+        _telemetry.record("audience_age", False,
+                          note="read_back_mismatch" if seen else "read_back_unavailable",
+                          diag={"wanted": wanted, "seen": seen})
+        return False
+    return True
+
+
+def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
     """Set audience age range dropdowns / inputs (min and max)."""
     # Same reasoning as fill_audience_location: skip the fuzzy
     # scroll_to_section heading match — the precise marker search a few
