@@ -38,12 +38,17 @@ class _Session:
 
 
 class _Page:
-    def __init__(self, avail):
+    def __init__(self, avail, session=None, scale=None):
         self.avail = avail
+        self.session = session
+        self.scale = scale or (lambda b: 1.0)
 
     def evaluate(self, js, *a):
         if "availWidth" in js:
             return list(self.avail)
+        if "devicePixelRatio" in js:
+            w = self.session.bounds["width"] if self.session else 1000
+            return [self.scale(w), w]
         return None
 
 
@@ -55,19 +60,27 @@ class _Ctx:
         return self.session
 
 
-def test_a_small_profile_screen_is_left_alone(monkeypatch):
-    """Подгонка до 1536×816 дала S15 масштаб 0.5 и три отказа подряд (17.09 06:51)."""
+def test_a_small_screen_resize_that_drops_the_scale_is_reverted(monkeypatch):
+    """S15 17.09: 1039×583 → 1536×816 дало масштаб 0.9 → 0.5; окно возвращается."""
     monkeypatch.setattr(br.time, "sleep", lambda s: None)
     s = _Session(screen_cap=(1536, 816))
-    br._ensure_wide_window(_Ctx(s), _Page((1536, 816)))
-    sizes = [p["bounds"] for m, p in s.sent if m == "Browser.setWindowBounds" and "width" in p["bounds"]]
-    assert sizes == []
-    assert s.bounds["windowState"] == "minimized", "свёрнутое окно сворачивается обратно"
+    page = _Page((1536, 816), s, scale=lambda w: 0.5 if w > 1100 else 0.9)
+    br._ensure_wide_window(_Ctx(s), page)
+    assert s.bounds["width"] == 1039 and s.bounds["windowState"] == "minimized"
+
+
+def test_a_small_screen_resize_that_keeps_the_scale_stays(monkeypatch):
+    monkeypatch.setattr(br.time, "sleep", lambda s: None)
+    s = _Session(screen_cap=(1536, 816))
+    page = _Page((1536, 816), s, scale=lambda w: 1.0)
+    br._ensure_wide_window(_Ctx(s), page)
+    assert s.bounds["width"] == 1536
 
 
 def test_a_big_screen_still_gets_1920(monkeypatch):
     monkeypatch.setattr(br.time, "sleep", lambda s: None)
     s = _Session(screen_cap=(3840, 2112))
-    br._ensure_wide_window(_Ctx(s), _Page((3840, 2112)))
+    br._ensure_wide_window(_Ctx(s), _Page((3840, 2112), s))
     sizes = [p["bounds"] for m, p in s.sent if m == "Browser.setWindowBounds" and "width" in p["bounds"]]
     assert sizes[0]["width"] == 1920 and sizes[0]["height"] == 1040
+    assert s.bounds["windowState"] == "minimized", "свёрнутое окно сворачивается обратно"

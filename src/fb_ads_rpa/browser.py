@@ -560,31 +560,42 @@ def _ensure_wide_window(context, page) -> None:
             # even on a window that was already wide.
             _patch_window_geometry(session, page)
             return
+        def _page_scale() -> tuple[float, int]:
+            try:
+                got = page.evaluate("() => [devicePixelRatio, innerWidth]")
+                return float(got[0] or 0), int(got[1] or 0)
+            except Exception:
+                return 0.0, 0
+
+        dpr_before, inner_before = _page_scale()
         session.send(
             "Browser.setWindowBounds",
             {"windowId": window_id, "bounds": {"windowState": "normal"}},
         )
-        # Размер — не больше доступной области экрана профиля. 17.09 (S15):
-        # профиль эмулирует экран 1536×864, запрос 1920×1040 Chrome молча не
-        # применял, и окно оставалось 1039×583 — страница рисовалась в
-        # 1136×542, редактор уезжал в горизонтальную прокрутку, Destination
-        # второго объявления не находился. У Doc20/Doc21 экран 3840×2160, там
-        # 1920×1040 проходило.
+        # Chrome не всегда принимает размер в тот же миг, что и выход из
+        # свёрнутого состояния: 17.09 13:14 окно 912×615 так и осталось 912×615
+        # (ok=false), страница 1347×780, креатив второго объявления уехал под
+        # горизонтальную прокрутку.
+        time.sleep(0.6)
+
         target_w, target_h = 1920, 1040
         small_screen = False
         try:
             avail = page.evaluate("() => [screen.availWidth, screen.availHeight]")
             if avail and avail[0] and avail[1]:
                 small_screen = int(avail[0]) < 1920 or int(avail[1]) < 1040
+                if small_screen:
+                    target_w = min(target_w, int(avail[0]))
+                    target_h = min(target_h, int(avail[1]))
         except Exception:
             pass
-        # Откат подгонки под экран. 17.09 06:51 окно S15 подогнали до 1536×816 —
-        # и Mimic пересчитал масштаб страницы до 0.5 (было 0.9 при 1039×583):
-        # в том же прогоне у S15 отказали Further limit, Languages и загрузка
-        # креатива, тогда как в 06:00 на узком окне кампания прошла целиком.
-        # На маленьком экране профиля окно не трогаем, только записываем.
-        attempts = [] if small_screen else [(target_w, target_h)]
+        # Маленький экран профиля: растягиваем под него, но проверяем масштаб.
+        # 17.09 06:51 S15 растянули до 1536×816, Mimic пересчитал масштаб 0.9 →
+        # 0.5, и в том прогоне у S15 не открывался мастер загрузки. Упал масштаб
+        # заметно — возвращаем окну прежний размер.
+        attempts = [(target_w, target_h), (target_w, target_h)]
         after = dict(bounds)
+        note = None
         for w, h in attempts:
             try:
                 session.send(
@@ -601,15 +612,30 @@ def _ensure_wide_window(context, page) -> None:
                 after = {}
             if (after.get("width") or 0) >= min(w, 1280):
                 break
+        dpr_after, inner_after = _page_scale()
+        if dpr_before and dpr_after and dpr_after < dpr_before * 0.85:
+            try:
+                session.send(
+                    "Browser.setWindowBounds",
+                    {"windowId": window_id,
+                     "bounds": {"width": bounds.get("width"), "height": bounds.get("height")}},
+                )
+                time.sleep(1.0)
+                after = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+            except Exception:
+                pass
+            note = "reverted_scale_drop"
+            dpr_after, inner_after = _page_scale()
         try:
             from src.fb_ads_rpa import run_telemetry as _rt
 
-            _rt.record("window_resize", None if small_screen else (after.get("width") or 0) >= 1280,
-                       note="skipped_small_screen" if small_screen else None, diag={
+            _rt.record("window_resize", None if note else (after.get("width") or 0) >= min(target_w, 1280),
+                       note=note, diag={
                 "before": {"width": bounds.get("width"), "height": bounds.get("height"),
-                           "state": bounds.get("windowState")},
+                           "state": bounds.get("windowState"), "dpr": dpr_before, "inner": inner_before},
                 "target": [target_w, target_h],
-                "after": {"width": after.get("width"), "height": after.get("height")},
+                "after": {"width": after.get("width"), "height": after.get("height"),
+                          "dpr": dpr_after, "inner": inner_after},
             })
         except Exception:
             pass
