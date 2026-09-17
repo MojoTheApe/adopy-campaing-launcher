@@ -156,3 +156,56 @@ def test_reuse_is_on_by_default(monkeypatch):
     assert rpa_config.get_reuse_library_media() is True
     monkeypatch.setenv("FB_RPA_REUSE_MEDIA", "0")
     assert rpa_config.get_reuse_library_media() is False
+
+
+def test_a_wrong_or_broken_file_is_rolled_back_so_upload_can_follow(grid, monkeypatch):
+    """Прикрепилось не то (или файл не обработался) — выбор снимаем.
+
+    ACL-1171/1192: иначе поверх чужой плитки ляжет загрузка, и объявление
+    уедет с двумя креативами — ровно та беда, из-за которой повторное
+    использование выключали 24.08.
+    """
+    class _Dialog:
+        def is_visible(self, timeout: int = 0) -> bool:
+            return True
+
+        def get_by_role(self, role, name=""):
+            return _Btn()
+
+    class _Btn:
+        first = None
+
+        def __init__(self):
+            self.first = self
+
+        def count(self) -> int:
+            return 1
+
+        def is_disabled(self) -> bool:
+            return False
+
+        def click(self, timeout: int = 0) -> None:
+            pass
+
+    class _Root:
+        def get_by_role(self, role, name=""):
+            d = _Dialog()
+            d.first = d
+            return d
+
+    said = []
+    monkeypatch.setattr(md, "_roots", lambda page: [_Root()])
+    monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: True)
+    monkeypatch.setattr(md, "_verify_ad_media_is_the_file",
+                        lambda page, filename: (False, {"why": "other_file_attached"}))
+    monkeypatch.setattr(md._telemetry, "record",
+                        lambda step, ok, **kw: said.append({"step": step, "ok": ok, **kw}))
+
+    class _P:
+        url = "https://adsmanager.facebook.com/adsmanager/manage/ads/edit/standalone"
+
+    out = md._try_reuse_library_media(_P(), "2012.mp4")
+
+    assert out == md.REUSE_ABSENT, "после отката загрузка должна быть разрешена"
+    assert grid.selected == set(), "чужая плитка обязана быть снята"
+    assert [s["note"] for s in said if s["step"] == "ad_creative_reuse"] == ["other_file_attached"]

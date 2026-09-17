@@ -4883,6 +4883,13 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             pass
         log.append(note)
         if picked:
+            try:
+                from src.fb_ads_rpa import page_capture as _pages
+
+                _pages.capture(page, step="library_pick_selected",
+                               diag={"tile": i, "file": filename, "picks": log})
+            except Exception:
+                pass
             break
     if not picked:
         # Разметка медиатеки — до отката, пока сетка такая, какой её видел
@@ -4948,6 +4955,26 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         _close_creative_setup_modal(page)
         _sleep_h(0.5)
         if "/ads/edit/" in page.url and _verify_ad_media_present(page):
+            right, detail = _verify_ad_media_is_the_file(page, filename)
+            if not right:
+                # Не тот файл или файл не обработался: откатываемся так, чтобы
+                # поверх можно было загрузить файл обычным путём.
+                try:
+                    from src.fb_ads_rpa import page_capture as _pages
+
+                    detail["page"] = _pages.capture(
+                        page, step="ad_media_" + str(detail.get("why")), diag=detail)
+                except Exception:
+                    pass
+                _telemetry.record("ad_creative_reuse", False,
+                                  note=str(detail.get("why")), diag=detail)
+                return _retreat(page, tiles, clicked, before)
+            try:
+                from src.fb_ads_rpa import page_capture as _pages
+
+                _pages.capture(page, step="ad_media_ready", diag=detail)
+            except Exception:
+                pass
             return REUSE_ATTACHED
         # Мастер продвинулся, а медиа на объявлении нет. Выбор при этом
         # где-то остался, и снять его отсюда уже нечем: сетки на экране нет.
@@ -6038,6 +6065,69 @@ def _media_block_filled_now(page: Page) -> bool:
         ))
     except Exception:
         return False
+
+
+_AD_MEDIA_STATE_JS = r"""
+  (stem) => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const visible = [...document.querySelectorAll('*')]
+      .filter(e => e.offsetParent !== null && e.children.length === 0)
+      .map(e => norm(e.textContent))
+      .filter(Boolean);
+    const low = visible.map(t => t.toLowerCase());
+    const want = (stem || '').toLowerCase();
+    // Имя файла Meta показывает по-разному: «2012.mp4», «2012», иногда с
+    // суффиксом копии. Совпадением считаем вхождение основы имени.
+    const named = want ? low.filter(t => t.includes(want)) : [];
+    const processing = low.some(t => t.includes('processing') || t.includes('being processed'));
+    const failed = low.some(t => t.includes("couldn't be processed") || t.includes('could not be processed')
+      || t.includes('failed to process') || t.includes('processing failed')
+      || t.includes("media couldn't") || t.includes('upload failed'));
+    // Имена ДРУГИХ файлов рядом с медиа: нашего нет, а чужой есть — взяли не то.
+    const others = low.filter(t => /\.(mp4|mov|jpg|jpeg|png|gif|webm)\b/.test(t) && (!want || !t.includes(want)));
+    return { named: named.slice(0, 5), others: others.slice(0, 5),
+             processing: processing, failed: failed };
+  }
+"""
+"""Что сейчас в медиа-блоке объявления: наше имя, чужие имена, обработка, ошибка."""
+
+
+def _ad_media_state(page: Page, filename: str) -> dict:
+    stem = Path(filename or "").stem.lower()
+    try:
+        return page.evaluate(_AD_MEDIA_STATE_JS, stem) or {}
+    except Exception as exc:
+        return {"error": str(exc)[:80]}
+
+
+_MEDIA_PROCESSING_MAX_S = 180
+
+
+def _verify_ad_media_is_the_file(page: Page, filename: str) -> tuple[bool, dict]:
+    """Прикрепился ли ИМЕННО наш файл и пригоден ли он (ACL-1171/1192).
+
+    Проверка «медиа есть» пропускает две беды: прикрепилась чужая плитка
+    (в медиатеке несколько похожих имён) и файл, который Meta не смогла
+    обработать — объявление с таким медиа не опубликуется.
+    """
+    deadline = time.time() + _MEDIA_PROCESSING_MAX_S
+    state: dict = {}
+    while True:
+        state = _ad_media_state(page, filename)
+        if state.get("failed"):
+            return False, {"state": state, "why": "processing_failed"}
+        if not state.get("processing"):
+            break
+        if time.time() >= deadline:
+            return False, {"state": state, "why": "still_processing"}
+        _sleep_h(2.0)
+    if state.get("named"):
+        return True, {"state": state}
+    if state.get("others"):
+        return False, {"state": state, "why": "other_file_attached"}
+    # Имя видно не всегда — Meta подписывает не каждую плитку. Само наличие
+    # медиа уже проверено отдельно, поэтому это не отказ.
+    return True, {"state": state, "why": "name_not_shown"}
 
 
 def _verify_ad_media_present(page: Page) -> bool:
