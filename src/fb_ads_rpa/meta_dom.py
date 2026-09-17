@@ -2488,6 +2488,13 @@ def run_recorded_campaign_flow(
     if _recover_from_browser_error(page):
         _shot("skip_browser_error_recovered")
 
+    # Одна строка на прогон: каким было окно в начале (размер, масштаб,
+    # свёрнуто ли). Чтобы сбои сравнивать с состоянием окна, а не гадать.
+    try:
+        _telemetry.record("browser_window", None, diag=_telemetry.window_state(page) or None)
+    except Exception:
+        pass
+
     for _ in range(3):
         _dismiss_floating_banners(page)
         _sleep_h(0.4)

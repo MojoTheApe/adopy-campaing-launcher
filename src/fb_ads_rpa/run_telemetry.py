@@ -161,6 +161,25 @@ def screen_locked() -> bool | None:
         return None
 
 
+def window_state(page) -> dict:
+    """Размер и состояние окна браузера; {} если прочитать нельзя. Не бросает."""
+    try:
+        w = page.evaluate(
+            "() => ({inner: [innerWidth, innerHeight], outer: [outerWidth, outerHeight],"
+            " dpr: devicePixelRatio, visibility: document.visibilityState,"
+            " focus: document.hasFocus()})"
+        )
+    except Exception:
+        return {}
+    if not isinstance(w, dict):
+        return {}
+    try:
+        w["minimized"] = bool(w["outer"][0] < 200 or w["outer"][1] < 100)
+    except Exception:
+        pass
+    return w
+
+
 def page_context(page, *, timeout_ms: int = 1200) -> dict:
     """Что было на странице в момент отказа — коротко и безопасно.
 
@@ -197,6 +216,12 @@ def page_context(page, *, timeout_ms: int = 1200) -> dict:
             info[name] = value
         except Exception:
             continue
+    # Окно браузера: размер, масштаб, свёрнуто ли. 17.09 04:20 сбои S15/Doc21
+    # совпали со свёрнутыми окнами и масштабом 0.75, но раньше свёрнутые окна
+    # проходили — без этой записи связь не проверить.
+    window = window_state(page)
+    if window:
+        info["window"] = window
     # Верхний баннер Meta закрывает и сдвигает контролы — это самая частая
     # причина, по которой шаг «не нашёл» существующую кнопку.
     try:
