@@ -60,16 +60,11 @@ def test_such_an_account_is_no_longer_country_less():
 
 # ── порядок источников ────────────────────────────────────────────────────
 
-def test_the_sheet_and_the_links_are_joined_not_ranked():
-    """Аккаунт, названный и там, и там, принадлежит обоим спискам.
-
-    Несколько стран у одного аккаунта — обычное дело, а не исключение: ради
-    этого и заведено пострановое чтение.
-    """
+def test_the_sheet_takes_priority_over_links_and_stats():
     linked = linked_countries([("acc", "Kuwait")])
-    out = resolve_countries({}, [sheet("acc", "Saudi Arabia")], linked)
-    assert set(out["acc"]["countries"]) == {"Saudi Arabia", "Kuwait"}
-    assert out["acc"]["ambiguous"] is True
+    out = resolve_countries({"acc": "Kuwait"}, [sheet("acc", "Saudi Arabia")], linked)
+    assert out["acc"] == {"country": "Saudi Arabia", "countries": ["Saudi Arabia"], "ambiguous": False}
+
 
 
 def test_the_stats_only_break_a_tie_between_stated_options():
@@ -128,3 +123,79 @@ def test_half_written_links_are_ignored(pair):
 def test_spacing_around_a_country_does_not_create_a_second_one():
     got = linked_countries([("acc", "Kuwait"), ("acc", "  Kuwait  ")])
     assert got == {"acc": ["Kuwait"]}
+
+
+def test_country_codes_and_names_are_one_option():
+    linked = linked_countries([("acc", "KW"), ("acc", "Kuwait"), ("acc", "Chile")])
+    out = resolve_countries({"acc": "kuwait"}, [], linked)
+    assert out["acc"] == {"country": "KW", "countries": ["KW", "Chile"], "ambiguous": True}
+
+
+@pytest.fixture
+def overview(monkeypatch, tmp_path):
+    import asyncio, importlib, json
+    from src.web import account_links as links
+    from src.meta_campaign_agent.ad_account_map import AccountMapEntry
+    web = importlib.import_module("src.web.app")
+    path = tmp_path / "map.csv"
+    path.touch()
+    rows = []
+    entries = {}
+    monkeypatch.setattr(links, "get_local_config_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(links, "get_ad_account_map_path", lambda: str(path))
+    monkeypatch.setattr(web, "get_ad_account_map_path", lambda: str(path))
+    monkeypatch.setattr(web, "load_ad_account_map", lambda p: entries)
+    monkeypatch.setattr(web, "get_cached_report", lambda: ({}, None, []))
+    monkeypatch.setattr("src.analysis_agent.gsheet_accounts.fetch_account_rows", lambda: rows)
+    monkeypatch.setattr("src.web.buyer.get_selected_cm", lambda: "")
+    monkeypatch.setattr("src.fb_ads_rpa.mlx_profiles.open_profiles_detailed", lambda: [])
+    monkeypatch.setattr(web, "_live_spend", lambda *a: {})
+    monkeypatch.setattr(web, "_account_status", lambda *a: {})
+    def read():
+        return json.loads(asyncio.run(web.api_accounts_overview()).body)["accounts"]
+    return read, rows, entries, links, web, AccountMapEntry
+
+
+def test_overview_uses_links_and_never_legacy_map_or_label_suffix(overview):
+    read, rows, entries, links, web, Entry = overview
+    entries["FacebookReviewA"] = Entry(ad_account_id="", country="Chile")
+    entries["FacebookReviewB PA"] = Entry(ad_account_id="", country="Panama")
+    links.link("FacebookReviewA", "country", "Saudi Arabia")
+    links.link("FacebookReviewA", "country", "Kuwait")
+    accounts = {a["label"]: a for a in read()}
+    a = accounts["FacebookReviewA"]
+    assert set(a["countries"]) == {"Saudi Arabia", "Kuwait"}
+    assert a["country"] == a["country_name"] == ""
+    assert a["country_ambiguous"] is True
+    unknown = accounts["FacebookReviewB PA"]
+    assert unknown["country"] == unknown["country_name"] == ""
+    assert unknown["countries"] == []
+
+
+def test_overview_preserves_sheet_priority_and_ambiguous_plural_rows(overview):
+    read, rows, entries, links, web, Entry = overview
+    rows.extend([sheet("FacebookReviewA", "Chile"), sheet("FacebookReviewA", "Panama")])
+    links.link("FacebookReviewA", "country", "Kuwait")
+    accounts = read()
+    assert len(accounts) == 2
+    for a in accounts:
+        assert a["countries"] == ["Chile", "Panama"]
+        assert a["country"] == a["country_name"] == ""
+        assert a["country_ambiguous"] is True
+
+
+def test_linked_local_account_has_country_spend_cell_and_read_control(overview):
+    read, rows, entries, links, web, Entry = overview
+    entries["FacebookReviewA"] = Entry(ad_account_id="")
+    links.link("FacebookReviewA", "country", "Saudi Arabia")
+    account = read()[0]
+    assert account["country"] == account["country_name"] == "Saudi Arabia"
+    assert account["countries"] == ["Saudi Arabia"]
+    view = web._build_account_map_view({}, date_from="2026-09-16", date_to="2026-09-16")
+    country = view["countries"][0]
+    assert country["rows"][0]["account"] == "FacebookReviewA"
+    rendered = web.templates.get_template("_account_map_country.html").render(mc=country, amap=view)
+    assert "FacebookReviewA" in rendered
+    assert "Account spend" in rendered
+    assert 'onclick="amapReadSpend(this)"' in rendered
+    assert '>Read</button>' in rendered
