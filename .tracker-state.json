@@ -93,6 +93,10 @@
       "title": "Placements are set manually under Show more settings on the new ad set card",
       "state": "created",
       "issue": 220
+    },
+    "4947111d863075a494c141b1cf9f1cc9ae6caedd42fe1619e23b2b64d5e5ec86": {
+      "title": "Ad-level steps report what the screen shows: ad copy, extra empty ad, destination sweep, budget strategy",
+      "state": "creating"
     }
   }
 }
