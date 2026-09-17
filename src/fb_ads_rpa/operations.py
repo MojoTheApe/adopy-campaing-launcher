@@ -19,12 +19,21 @@ same live Multilogin profile» — то есть про один и тот же 
 Публикация меняет чужой кабинет и тратит деньги; чтение — нет. Поэтому роли
 разные:
 
-    публикация   исключительна — ни с чем не соседствует, одна за раз
-                 (решение владельца 31.07: несколько аккаунтов обслуживаются
-                 очередью, «parallel profiles are a later, deliberate step»)
+    публикация   исключительна **на своём профиле** — одна за раз на профиль,
+                 разные профили публикуются разом (решение владельца
+                 16.09, acl-1210; до этого — одна за раз на весь процесс,
+                 решение 31.07: «parallel profiles are a later, deliberate
+                 step». Этот шаг и сделан.)
     чтения       идут параллельно друг другу, но по одному на профиль
-    чтение при   ждёт, пока публикация закончится
-    публикации
+    чтение при   ждёт, пока публикация **этого** профиля закончится;
+    публикации   чтение другого профиля не ждёт ничего
+
+Держится это на одном замке на профиль: `profile_lock(key)`, реентерантном.
+Публикация берёт его на весь прогон (`publish_lease`), чтение — на время
+чтения, и очередь у обоих одна — потому чтение и не влезает в публикуемый
+профиль. Общий воротник `browser_operation` остался для писателей без ключа
+(их не осталось в проде, но контракт для чужого кода сохранён) и для
+неблокирующих проверок границы.
 
 **Чего этот порядок не обещает.** Публикация может ждать дольше, чем хотелось
 бы: новых читателей она не отсекает, а дожидается, пока кончатся нынешние.
@@ -153,31 +162,50 @@ def profile_lock(key: str) -> threading.RLock:
         return lock
 
 
-def serialized_browser(fn=None, *, key=None, reading=False):
-    """Serialize mutations globally; opt reads into a shared, per-profile lease.
+def publish_lease(key: str):
+    """Занять профиль на всю публикацию.
 
-    Publication remains exclusive even when called directly, outside the job
-    runner. Read keys are resolved from the function signature so positional
-    and keyword calls occupy the same profile. A failing key resolver refuses
-    the call instead of silently acquiring a different profile's lock.
+    Тот же замок, что берут чтения этого профиля, — поэтому чтение,
+    пришедшее посреди публикации, ждёт её конца, а чтение другого профиля
+    не ждёт ничего. Реентерантен: `_run_job` берёт его на прогон, а
+    `publish_draft` внутри — ещё раз, тем же потоком.
+    """
+    return profile_lock(str(key or "").strip())
+
+
+def serialized_browser(fn=None, *, key=None, reading=False):
+    """Serialize work on one profile; reads share, writes are exclusive.
+
+    A write with a `key` (or a resolvable first parameter) takes that
+    profile's lock and nothing else, so two profiles publish at once. A write
+    with no key at all keeps the old process-wide gate — the safe default
+    for code that has not said which browser it drives. Read keys are
+    resolved from the function signature so positional and keyword calls
+    occupy the same profile. A failing key resolver refuses the call instead
+    of silently acquiring a different profile's lock.
     """
     def decorate(func):
         signature = inspect.signature(func)
         first_parameter = next(iter(signature.parameters), None)
 
-        @wraps(func)
-        def wrapped(*args, **kwargs):
-            if not reading:
-                with browser_operation:
-                    return func(*args, **kwargs)
+        def resolve(args, kwargs) -> str:
             if key is not None:
                 name = key(*args, **kwargs)
             else:
                 bound = signature.bind(*args, **kwargs)
                 bound.apply_defaults()
                 name = bound.arguments.get(first_parameter, "")
-            name = str(name or "").strip()
-            with browser_operation.reading(), profile_lock(name):
+            return str(name or "").strip()
+
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            if not reading:
+                if key is None:
+                    with browser_operation:
+                        return func(*args, **kwargs)
+                with publish_lease(resolve(args, kwargs)):
+                    return func(*args, **kwargs)
+            with browser_operation.reading(), profile_lock(resolve(args, kwargs)):
                 return func(*args, **kwargs)
         return wrapped
 

@@ -125,6 +125,6 @@ def test_the_queue_does_not_hold_the_screen_while_it_waits():
     src = (ROOT / "src" / "web" / "publish_jobs.py").read_text(encoding="utf-8")
     body = src[src.index("def _run_job("):]
     body = body[: body.index("\ndef ")]
-    assert body.index("with _publish_serial:") < body.index("with keep_display_awake("), (
+    assert body.index("with _publish_serial(") < body.index("with keep_display_awake("), (
         "экран удерживается ещё до входа в очередь"
     )

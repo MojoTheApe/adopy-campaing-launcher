@@ -73,7 +73,9 @@ def test_real_runner_holds_guard_inside_queue_and_releases(job, monkeypatch, out
     acquired, calls = threading.Event(), []
     gate = threading.Lock()
     gate.acquire()
-    monkeypatch.setattr(pj, '_publish_serial', gate)
+    # С acl-1210 очередь берётся по ключу профиля; подставной замок — один
+    # на любой ключ, чтобы проверка порядка осталась той же.
+    monkeypatch.setattr(pj, '_publish_serial', lambda key: gate)
     def set_state(flags):
         calls.append((flags, threading.get_ident()))
         if flags == ka._BUSY: acquired.set()

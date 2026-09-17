@@ -37,6 +37,16 @@ Write-Host "Checking packaged imports..."
 & $Executable --smoke-check
 Assert-LastExitCode "Packaged import smoke check"
 
+# Verify the encoder shipped inside this bundle, not one installed on the runner.
+Write-Host "Checking bundled creative encoder..."
+$EncoderDirectory = Join-Path $BundleDirectory "_internal/imageio_ffmpeg/binaries"
+$Encoders = @(Get-ChildItem -Path $EncoderDirectory -Filter "ffmpeg*.exe" -File)
+if ($Encoders.Count -ne 1) {
+    throw "Expected one bundled ffmpeg executable, found $($Encoders.Count)."
+}
+& $Encoders[0].FullName -hide_banner -version
+Assert-LastExitCode "Bundled creative encoder"
+
 Write-Host "Checking packaged Setup Wizard imports..."
 & $Executable --wizard-smoke-check
 Assert-LastExitCode "Packaged Setup Wizard import check"

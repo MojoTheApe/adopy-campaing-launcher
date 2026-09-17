@@ -171,3 +171,20 @@ def test_an_empty_history_summarizes_to_nothing(tmp_path):
 
 def test_run_ids_are_unique():
     assert len({rt.new_run_id() for _ in range(200)}) == 200
+
+
+def test_window_state_marks_a_minimized_window():
+    class P:
+        def evaluate(self, js):
+            return {"inner": [2048, 964], "outer": [108, 20], "dpr": 0.75, "visibility": "hidden", "focus": False}
+    from src.fb_ads_rpa import run_telemetry as rt
+    w = rt.window_state(P())
+    assert w["minimized"] is True and w["dpr"] == 0.75
+
+
+def test_window_state_never_raises():
+    class P:
+        def evaluate(self, js):
+            raise RuntimeError("closed")
+    from src.fb_ads_rpa import run_telemetry as rt
+    assert rt.window_state(P()) == {}

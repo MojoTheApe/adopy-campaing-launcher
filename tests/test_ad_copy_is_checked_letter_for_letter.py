@@ -1,0 +1,93 @@
+# -*- coding: utf-8 -*-
+"""Текст объявления сверяется с тем, что вводили, а не «непусто» (16.09, 18:53).
+
+Три браузера разом: в заголовок легло «★★★★☆.6k» — часть нажатий пропала, а
+проверка «в поле что-то есть» приняла это за успех; основной текст остался
+пустым. Теперь поле читается обратно и сравнивается с исходной строкой; при
+расхождении — стереть и вставить целиком.
+"""
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+import pytest
+from playwright.sync_api import sync_playwright
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from src.fb_ads_rpa import meta_dom as md  # noqa: E402
+
+_PAGE = """
+<!doctype html><html><body>
+<label>Primary text</label>
+<div role="combobox" contenteditable="true" aria-label="Tell people what your ad is about" id="body"></div>
+<label>Headline</label>
+<input id="title" placeholder="Headline">
+</body></html>
+"""
+
+
+@pytest.fixture(scope="module")
+def browser():
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        try:
+            yield b
+        finally:
+            b.close()
+
+
+@pytest.fixture
+def page(browser, monkeypatch):
+    monkeypatch.setattr(md, "_sleep_h", lambda s: None)
+    monkeypatch.setattr(md, "_reveal_ad_copy_fields", lambda p: True)
+
+    def mark(p, key, label, m):
+        sel = "#body" if key == "message_field" else "#title"
+        p.evaluate("([s, m]) => document.querySelector(s).setAttribute('data-rpa-field', m)", [sel, m])
+        return True
+
+    monkeypatch.setattr(md, "mark_ad_copy_field", mark)
+    monkeypatch.setattr(md, "_focus_via_cdp_click", lambda p, loc: (loc.focus(), loc.element_handle())[1])
+    ctx = browser.new_context(viewport={"width": 1280, "height": 800})
+    p = ctx.new_page()
+    p.set_content(_PAGE)
+    try:
+        yield p
+    finally:
+        ctx.close()
+
+
+def _lossy(page, text):
+    # Как вживую: половина нажатий не дошла.
+    page.keyboard.insert_text(text[::2])
+
+
+def test_lost_keystrokes_are_replaced_by_a_whole_insert(page, monkeypatch):
+    monkeypatch.setattr(md, "_type_human", _lossy)
+    report: dict = {}
+    assert md.fill_ad_copy(page, "★★★★★ 4.6k", "Regístrese hoy, cupos limitados", report) is True
+    assert page.input_value("#title") == "★★★★★ 4.6k"
+    assert page.inner_text("#body").strip() == "Regístrese hoy, cupos limitados"
+    assert any(a.get("stage") == "typed_text_mismatch" for a in report["attempts"])
+
+
+def test_clean_typing_needs_no_second_pass(page, monkeypatch):
+    monkeypatch.setattr(md, "_type_human", lambda p, t: p.keyboard.insert_text(t))
+    report: dict = {}
+    assert md.fill_ad_copy(page, "Title", "Body text", report) is True
+    assert not report["attempts"]
+
+
+def test_a_field_that_never_shows_the_text_fails(page, monkeypatch):
+    monkeypatch.setattr(md, "_type_human", lambda p, t: None)
+    page.evaluate("document.getElementById('title').addEventListener('input', e => e.target.value = 'x')")
+    assert md.fill_ad_copy(page, "Title", "", {}) is False
+
+
+def test_whitespace_and_line_breaks_do_not_count():
+    assert md._copy_matches("Line one\nLine two​", "Line one\n\nLine two")
+    assert not md._copy_matches("★★★★☆.6k", "★★★★★ 4.6k")
