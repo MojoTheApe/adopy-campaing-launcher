@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Окно браузера подгоняется под экран профиля, а не просит 1920×1040 вслепую (ACL-1214).
+"""Окно браузера разворачивается под настоящий экран, а не растягивается до 1920×1040 (ACL-1214).
 
 17.09: профиль S15 эмулирует экран 1536×864; запрос 1920×1040 Chrome не
 применял, окно оставалось 1039×583, страница — 1136×542, и редактор уезжал в
@@ -17,9 +17,11 @@ from src.fb_ads_rpa import browser as br  # noqa: E402
 
 
 class _Session:
-    def __init__(self, screen_cap):
-        self.cap = screen_cap
-        self.bounds = {"left": 0, "top": 0, "width": 1039, "height": 583, "windowState": "minimized"}
+    """Chrome: maximized = настоящий монитор (`screen`), свёрнутое хранит размер."""
+
+    def __init__(self, screen, width=1039, height=583, state="minimized"):
+        self.screen = screen
+        self.bounds = {"left": 0, "top": 0, "width": width, "height": height, "windowState": state}
         self.sent = []
 
     def send(self, method, params=None):
@@ -28,26 +30,23 @@ class _Session:
             return {"windowId": 7, "bounds": dict(self.bounds)}
         if method == "Browser.setWindowBounds":
             b = params["bounds"]
-            if "windowState" in b:
+            if b.get("windowState") == "maximized":
+                self.bounds.update(width=self.screen[0], height=self.screen[1], windowState="maximized")
+            elif "windowState" in b:
                 self.bounds["windowState"] = b["windowState"]
             if "width" in b:
-                # Chrome молча не принимает окно больше экрана.
-                if b["width"] <= self.cap[0] and b["height"] <= self.cap[1]:
-                    self.bounds.update(width=b["width"], height=b["height"])
+                self.bounds.update(width=b["width"], height=b["height"])
         return {}
 
 
 class _Page:
-    def __init__(self, avail, session=None, scale=None):
-        self.avail = avail
+    def __init__(self, session, scale=None):
         self.session = session
         self.scale = scale or (lambda b: 1.0)
 
     def evaluate(self, js, *a):
-        if "availWidth" in js:
-            return list(self.avail)
         if "devicePixelRatio" in js:
-            w = self.session.bounds["width"] if self.session else 1000
+            w = self.session.bounds["width"]
             return [self.scale(w), w]
         return None
 
@@ -60,45 +59,37 @@ class _Ctx:
         return self.session
 
 
-def test_a_small_screen_resize_that_drops_the_scale_is_reverted(monkeypatch):
-    """S15 17.09: 1039×583 → 1536×816 дало масштаб 0.9 → 0.5; окно возвращается."""
+def _no_sleep(monkeypatch):
     monkeypatch.setattr(br.time, "sleep", lambda s: None)
-    s = _Session(screen_cap=(1536, 816))
-    page = _Page((1536, 816), s, scale=lambda w: 0.5 if w > 1100 else 0.9)
-    br._ensure_wide_window(_Ctx(s), page)
-    assert s.bounds["width"] == 1039 and s.bounds["windowState"] == "minimized"
 
 
-def test_a_small_screen_resize_that_keeps_the_scale_stays(monkeypatch):
-    monkeypatch.setattr(br.time, "sleep", lambda s: None)
-    s = _Session(screen_cap=(1536, 816))
-    page = _Page((1536, 816), s, scale=lambda w: 1.0)
-    br._ensure_wide_window(_Ctx(s), page)
-    assert s.bounds["width"] == 1536
+def test_a_minimised_window_is_maximised_to_the_real_screen_and_minimised_back(monkeypatch):
+    _no_sleep(monkeypatch)
+    s = _Session(screen=(1536, 816))
+    br._ensure_wide_window(_Ctx(s), _Page(s))
+    assert ("Browser.setWindowBounds", {"windowId": 7, "bounds": {"windowState": "maximized"}}) in s.sent
+    assert not [p for m, p in s.sent if m == "Browser.setWindowBounds" and p["bounds"].get("width") == 1920]
+    assert s.bounds["windowState"] == "minimized"
 
 
-def test_a_big_screen_still_gets_1920(monkeypatch):
-    monkeypatch.setattr(br.time, "sleep", lambda s: None)
-    s = _Session(screen_cap=(3840, 2112))
-    br._ensure_wide_window(_Ctx(s), _Page((3840, 2112), s))
-    sizes = [p["bounds"] for m, p in s.sent if m == "Browser.setWindowBounds" and "width" in p["bounds"]]
-    assert sizes[0]["width"] == 1920 and sizes[0]["height"] == 1040
-    assert s.bounds["windowState"] == "minimized", "свёрнутое окно сворачивается обратно"
+def test_the_window_is_never_made_bigger_than_the_screen(monkeypatch):
+    """17.09 19:57: 1920×1040 не влезало в монитор — страница уезжала за край."""
+    _no_sleep(monkeypatch)
+    s = _Session(screen=(1280, 680), width=1280, height=752, state="normal")
+    br._ensure_wide_window(_Ctx(s), _Page(s))
+    assert s.bounds["width"] == 1280 and s.bounds["windowState"] == "maximized"
 
 
-def test_an_open_1280_window_on_a_big_screen_is_widened_and_left_open(monkeypatch):
-    """17.09 18:18: развёрнутое окно CR_ait 1280 пропускалось — страница 1707, площадки падали."""
-    monkeypatch.setattr(br.time, "sleep", lambda s: None)
-    s = _Session(screen_cap=(3840, 2112))
-    s.bounds.update(width=1280, height=752, windowState="normal")
-    br._ensure_wide_window(_Ctx(s), _Page((3840, 2112), s))
-    assert s.bounds["width"] == 1920
-    assert s.bounds["windowState"] == "normal"
-
-
-def test_a_window_already_1920_is_not_touched(monkeypatch):
-    monkeypatch.setattr(br.time, "sleep", lambda s: None)
-    s = _Session(screen_cap=(3840, 2112))
-    s.bounds.update(width=1920, height=1040, windowState="normal")
-    br._ensure_wide_window(_Ctx(s), _Page((3840, 2112), s))
+def test_a_window_the_user_maximised_is_left_alone(monkeypatch):
+    _no_sleep(monkeypatch)
+    s = _Session(screen=(1920, 1040), width=1920, height=1040, state="maximized")
+    br._ensure_wide_window(_Ctx(s), _Page(s))
     assert not [m for m, p in s.sent if m == "Browser.setWindowBounds"]
+
+
+def test_a_maximise_that_drops_the_scale_is_reverted(monkeypatch):
+    """S15 17.09: окно больше дало масштаб 0.9 → 0.5; окно возвращается."""
+    _no_sleep(monkeypatch)
+    s = _Session(screen=(1536, 816))
+    br._ensure_wide_window(_Ctx(s), _Page(s, scale=lambda w: 0.5 if w > 1100 else 0.9))
+    assert s.bounds["width"] == 1039 and s.bounds["windowState"] == "minimized"
