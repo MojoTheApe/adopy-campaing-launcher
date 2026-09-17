@@ -340,3 +340,17 @@ def test_clock_18_is_untouched_by_the_integrated_age_setter(page, monkeypatch):
     assert meta_dom._age_triggers_read(page) == ['35', '65+']
     assert page.evaluate('window.clockClicked === undefined')
     assert page.evaluate('window.maximumClicked === undefined')
+
+
+def test_the_age_field_is_read_the_same_way_the_click_finds_it(page, monkeypatch):
+    """18.09 CL_ml Trading: «35 – 65+» на экране, а старое чтение отвечало «нет»."""
+    monkeypatch.setattr(meta_dom, "_sleep_h", lambda *a, **k: None)
+    # Живая страница (дамп 9b73f875e3b4): значения видно, а прежняя проверка
+    # отвечала «нет» на обе границы.
+    page.set_content(
+        "<div><div>Age</div>"
+        "<div><div><div><div><div><div><div><div>35</div><div>65+</div>"
+        "</div></div></div></div></div></div></div>"
+    )
+    assert meta_dom._age_shows_value(page, "35") is True
+    assert meta_dom._age_shows_value(page, "65+") is True

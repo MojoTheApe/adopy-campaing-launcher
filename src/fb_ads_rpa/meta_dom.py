@@ -10231,6 +10231,17 @@ def _age_triggers_read(page: Page) -> list[str]:
     return []
 
 
+def _age_shows_value(page: Page, value: str) -> bool:
+    """Стоит ли граница возраста на `value` — по той же разметке, что и клик.
+
+    18.09 06:15 (CL_ml Trading): на экране «35 – 65+», а `_age_boundary_shows`
+    отвечал «нет» на обе границы (подъём на шесть уровней от подписи «Age» не
+    доходит до значений), поэтому шаг не снял «Use as a suggestion» и отказал
+    при верном возрасте. `_mark_age_trigger` те же значения находит.
+    """
+    return _mark_age_trigger(page, value) or _age_boundary_shows(page, value)
+
+
 def _age_boundary_shows(page: Page, value: str) -> bool:
     """В закрытой выпадашке возраста рядом с «Age» видно `value` (не в открытом списке)."""
     try:
@@ -10413,7 +10424,7 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
         # independently and only report success if BOTH are confirmed.
         boundary_results = []
         for default_text, target_val in (("18", age_min_str), ("65+", age_max_str)):
-            if target_val == default_text and _age_boundary_shows(page, default_text):
+            if target_val == default_text and _age_shows_value(page, default_text):
                 # Граница уже стоит как надо — открывать выпадашку незачем.
                 # 17.09 13:19 (CL_ml): клик по «65+» упал на прокрутке
                 # (TimeoutError), граница записалась как проваленная, и шаг
@@ -10648,7 +10659,7 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
         # итоговому виду поля, а не отчёту по каждой границе.
         read_back = False
         if not (len(boundary_results) == 2 and all(boundary_results)):
-            read_back = _age_boundary_shows(page, age_min_str) and _age_boundary_shows(page, age_max_str)
+            read_back = _age_shows_value(page, age_min_str) and _age_shows_value(page, age_max_str)
             if read_back:
                 try:
                     _telemetry.record("audience_age", None, note="read_back_ok",
