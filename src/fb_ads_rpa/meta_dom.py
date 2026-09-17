@@ -9089,6 +9089,53 @@ def targeting_groups(targeting_label: str) -> list[str]:
     return groups
 
 
+_TARGETING_GROUP_JS = r"""
+  (terms) => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const isTargetingInput = (inp) => {
+      const blob = ((inp.getAttribute('placeholder') || '') + ' ' +
+                    (inp.getAttribute('aria-label') || '')).toLowerCase();
+      if (['existing audience', 'audiencia existente', 'saved audience'].some(b => blob.includes(b))) return false;
+      return ['add interests', 'interests, behaviors', 'interests or behaviours',
+              'interests or behaviors', 'añadir intereses', 'demographics', 'demografía']
+        .some(g => blob.includes(g));
+    };
+    const inputs = [...document.querySelectorAll('input, textarea')].filter(inp => {
+      const r = inp.getBoundingClientRect();
+      return r.width > 2 && r.height > 2 && isTargetingInput(inp);
+    });
+    const last = inputs[inputs.length - 1];
+    if (!last) return { found: false, why: 'нет поля интересов' };
+    // Коробка своей группы: поднимаемся, пока внутри не окажется чужое поле
+    // интересов — тогда это уже общий контейнер обеих групп.
+    let box = last.parentElement, chosen = null;
+    for (let i = 0; i < 12 && box; i++, box = box.parentElement) {
+      const inside = [...box.querySelectorAll('input, textarea')].filter(isTargetingInput);
+      if (inside.length > 1) break;
+      chosen = box;
+    }
+    if (!chosen) return { found: false, why: 'нет коробки группы' };
+    // Живая Meta кладёт интересы отдельными плашками (текст), синтетическая
+    // страница тестов — значением поля. Считаем и то, и другое.
+    const text = norm(chosen.textContent + ' ' + (last.value || ''));
+    const hits = terms.filter(t => text.includes(norm(t)));
+    return { found: true, hits: hits, text: text.slice(0, 400) };
+  }
+"""
+"""Есть ли интересы в СВОЕЙ группе, а не где-то на странице.
+
+16.09 (Doc20, Mix): проверка искала термин по всей странице, и интерес первой
+группы подтверждал вторую — пустую. ACL-1219.
+"""
+
+
+def _group_has_terms(page: Page, terms: list[str]) -> dict:
+    try:
+        return page.evaluate(_TARGETING_GROUP_JS, terms) or {"found": False}
+    except Exception as exc:
+        return {"found": False, "why": str(exc)[:80]}
+
+
 def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
     """Paste each AND group into its own field, pressing "Define further"
     between them. True only when every group went in.
@@ -9117,6 +9164,29 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
             _telemetry.record("targeting", False, note="group_not_added",
                               diag={"group": index + 1, "groups": len(groups)})
             return False
+        # Проверка на своей группе: paste_targeting_interests ищет термин по
+        # всей странице, и интерес первой группы подтверждал вторую (ACL-1219).
+        terms = [t.strip() for t in group.split(",") if t.strip()]
+        own = _group_has_terms(page, terms)
+        if own.get("found") and not own.get("hits"):
+            _telemetry.record("targeting", False, note="group_empty",
+                              diag={"group": index + 1, "groups": len(groups),
+                                    "terms": terms[:5], "box": own.get("text", "")[:200]})
+            try:
+                from src.fb_ads_rpa import page_capture as _pc
+
+                _pc.capture(page, step=f"targeting_group{index + 1}_empty")
+            except Exception:
+                pass
+            return False
+    if len(groups) > 1:
+        # Снимок заполненных AND-групп: по нему пишутся тесты разметки.
+        try:
+            from src.fb_ads_rpa import page_capture as _pc
+
+            _pc.capture(page, step="targeting_and_groups")
+        except Exception:
+            pass
     return True
 
 

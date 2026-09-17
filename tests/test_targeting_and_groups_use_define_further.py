@@ -151,3 +151,64 @@ def test_the_click_is_confirmed_by_a_new_field_not_by_the_click(page):
     assert md.targeting_input_count(page) == 1
     assert md.click_define_further(page) is True
     assert md.targeting_input_count(page) == 2
+
+
+# ── интерес засчитывается только в своей группе (ACL-1219) ──────────────────
+
+_CHIPS_PAGE = """
+<!doctype html><html><body>
+<div id="groups">
+  <div class="group">
+    <div>Include people who match</div>
+    <div class="chips"><span>Investment banking</span><span>Asset management</span></div>
+    <input placeholder="Add demographics, interests or behaviours" data-group="1">
+  </div>
+</div>
+<div role="button" id="define" onclick="addGroup()">Define further</div>
+<script>
+  window.dropTerms = false;
+  function addGroup() {
+    const n = document.querySelectorAll('.group').length + 1;
+    const d = document.createElement('div'); d.className = 'group';
+    d.innerHTML = '<div>And must also match</div><div class="chips"></div>' +
+      '<input placeholder="Add demographics, interests or behaviours" data-group="' + n + '">';
+    document.getElementById('groups').appendChild(d);
+  }
+  // Вставка кладёт плашки в свою группу, если Meta её приняла.
+  document.addEventListener('paste', (e) => {
+    const inp = e.target;
+    if (window.dropTerms) return;
+    const chips = inp.parentElement.querySelector('.chips');
+    for (const t of (e.clipboardData.getData('text/plain') || '').split(',')) {
+      const s = document.createElement('span'); s.textContent = t.trim(); chips.appendChild(s);
+    }
+  });
+</script>
+</body></html>
+"""
+
+
+def test_an_interest_of_the_first_group_does_not_confirm_an_empty_second(page, monkeypatch):
+    """16.09 Doc20 Mix: вторая группа осталась пустой, а шаг отчитался успехом."""
+    notes = []
+    monkeypatch.setattr(md, "_telemetry",
+                        type("T", (), {"record": staticmethod(lambda *a, **k: notes.append(k.get("note")))})())
+    page.set_content(_CHIPS_PAGE)
+    page.focus("input[data-group='1']")
+    page.evaluate("window.dropTerms = true")  # Meta не приняла вставку второй группы
+    # Термины второй группы уже видны на странице — плашками первой. Старая
+    # проверка («термин виден где угодно») на этом и обманывалась.
+    ok = md.paste_targeting_groups(
+        page, "Investment banking [AND] Investment banking, Asset management")
+    assert ok is False
+    assert "group_empty" in notes
+
+
+def test_a_filled_second_group_is_confirmed_in_its_own_box(page, monkeypatch):
+    monkeypatch.setattr(md, "_telemetry", type("T", (), {"record": staticmethod(lambda *a, **k: None)})())
+    page.set_content(_CHIPS_PAGE)
+    page.focus("input[data-group='1']")
+    assert md.paste_targeting_groups(page, "Investment banking [AND] Business jet, Yacht club") is True
+    assert page.evaluate(
+        "[...document.querySelectorAll('.group')].map(g => g.querySelector('.chips').textContent)"
+    ) == ["Investment bankingAsset managementInvestment banking", "Business jetYacht club"]
