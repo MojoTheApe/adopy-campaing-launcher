@@ -107,3 +107,76 @@ def test_an_account_spending_today_is_not_taken_out_without_a_word(monkeypatch):
 
     assert asyncio.run(_try(True)).status_code == 200
     assert links.accounts_for("country", "KW") == []
+
+
+# ── acl-357: спенд, привязанный к стране самим кабинетом ──────────────────
+#
+# Соседняя колонка «Account read» подписана «not country-attributed spend» —
+# это весь спенд привязанных кабинетов по всем странам. Здесь числа про
+# страну: 15.09 живое чтение DQ501 отнесло деньги к Chile на аккаунте, где
+# весь вечер запускали кампании на Гватемалу.
+
+@pytest.fixture
+def splits(monkeypatch, tmp_path):
+    from src.analysis_agent import country_split as cs
+
+    monkeypatch.setattr(cs, "_store_path", lambda: tmp_path / "splits.json")
+    return cs
+
+
+def _split(cs, account, rows, date_from="2026-09-01", date_to="2026-09-15"):
+    cs.save_split(cs.CountrySplit(account=account, date_from=date_from,
+                                  date_to=date_to, state="ok", rows=rows))
+
+
+def test_a_mapped_country_carries_what_the_account_attributed_to_it(splits):
+    links.link("FacebookX", "country", "Kuwait")
+    _split(splits, "FacebookX", [{"country": "Kuwait", "spend": 23.89, "currency": "KWD"}])
+
+    view = _build_account_map_view(_report_with("Kuwait", "FacebookX", 120.0),
+                                   date_from="2026-09-01", date_to="2026-09-15")
+
+    country = next(c for c in view["countries"] if c["country"] == "Kuwait")
+    assert country["country_read"] == [
+        {"country": "Kuwait", "currency": "KWD", "spend": 23.89,
+         "accounts": ["FacebookX"], "summed": True}
+    ]
+
+
+def test_a_country_only_the_accounts_know_about_gets_its_own_row(splits):
+    """Страны нет ни в связях, ни в книге — но деньги туда ушли.
+
+    Ради этого случая разбивка и заводилась. Промолчать о нём значит
+    потерять спенд: показывать его негде.
+    """
+    links.link("FacebookX", "country", "Kuwait")
+    _split(splits, "FacebookX", [{"country": "Chile", "spend": 44.17, "currency": "$"}])
+
+    view = _build_account_map_view(_report_with("Kuwait", "FacebookX", 120.0),
+                                   date_from="2026-09-01", date_to="2026-09-15")
+
+    chile = next((c for c in view["countries"] if c["country"] == "Chile"), None)
+    assert chile is not None, "страна из показаний не попала на экран"
+    assert chile["virtual"] is True and chile["from_reading"] is True
+    assert chile["rows"] == [] and chile["country_read"][0]["spend"] == 44.17
+
+
+def test_a_country_already_on_the_map_is_not_duplicated(splits):
+    links.link("FacebookX", "country", "Kuwait")
+    _split(splits, "FacebookX", [{"country": "Kuwait", "spend": 1.0, "currency": "KWD"}])
+
+    view = _build_account_map_view(_report_with("Kuwait", "FacebookX", 120.0),
+                                   date_from="2026-09-01", date_to="2026-09-15")
+
+    assert [c["country"] for c in view["countries"]].count("Kuwait") == 1
+
+
+def test_without_a_period_nothing_country_attributed_is_claimed(splits):
+    """Без дат читать нечего: показания хранятся по периоду."""
+    links.link("FacebookX", "country", "Kuwait")
+    _split(splits, "FacebookX", [{"country": "Chile", "spend": 44.17, "currency": "$"}])
+
+    view = _build_account_map_view(_report_with("Kuwait", "FacebookX", 120.0), span="all")
+
+    assert all(not c.get("country_read") for c in view["countries"])
+    assert "Chile" not in [c["country"] for c in view["countries"]]

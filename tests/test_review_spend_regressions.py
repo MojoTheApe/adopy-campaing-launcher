@@ -38,7 +38,10 @@ def test_full_amount_is_read(text, amount):
 def test_currency_comes_from_the_total_not_other_page_amounts():
     page = NS(evaluate=lambda js: {"spend": "€1234.56", "label": True}, inner_text=lambda _: "Budget $20.00")
     assert sp._scan_totals(page) == (1234.56, True)
-    assert sp._currency(page) == "EUR"
+    # Знак передаётся как написан, без перевода в код (решение владельца
+    # 15.09). Смысл проверки прежний: валюта берётся из строки итогов, а не
+    # из «Budget $20.00» по соседству.
+    assert sp._currency(page) == "€"
 
 
 def test_concurrent_readings_and_statuses_survive():
@@ -108,7 +111,11 @@ def test_failed_thread_start_can_be_retried(monkeypatch):
 
 def test_read_and_probe_wait_for_publish_lease(monkeypatch):
     from src.web import publish_jobs
-    assert publish_jobs._publish_serial is sp._LOCK
+    # Воротник один на всех: публикация держит его как писатель, чтение —
+    # как читатель. Прежде это был один и тот же `RLock`, и свойство
+    # «чтение ждёт публикацию» держалось само собой; теперь роли разные,
+    # и проверять его надо прямо (acl-113e).
+    assert publish_jobs._publish_serial is sp.browser_operation
     entered = threading.Event()
     def reader(a, f, t):
         entered.set()

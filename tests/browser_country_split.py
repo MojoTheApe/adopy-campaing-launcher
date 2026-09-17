@@ -79,5 +79,26 @@ with sync_playwright() as pw:
     assert not page.evaluate(cs._CLICK_LABEL_JS, "Create report")
     count += 1
 
+
+    # ── одинаковые подписи: «Create report» на пустом списке рисуется дважды
+    # (живой прогон 15.09: вверху панели и в середине пустого состояния).
+    page.set_content(
+        '<div><button>Create report</button></div>'
+        '<div><span><button>Create report</button></span></div>'
+        '<button>Customize</button>'
+    )
+    page.evaluate("() => { window.__hits = 0; "
+                  "document.querySelectorAll('button').forEach(b => "
+                  "b.addEventListener('click', () => window.__hits++)) }")
+    assert cs._click_label(page, "Create report", tries=1) is False, \
+        "две одинаковые подписи нажались без явного разрешения"
+    assert page.evaluate("() => window.__hits") == 0
+    assert cs._click_label(page, "Create report", tries=1, allow_many=True) is True, \
+        "с явным разрешением нажать не удалось"
+    assert page.evaluate("() => window.__hits") == 1
+    # Строгое правило остаётся строгим там, где его не снимали.
+    assert cs._click_label(page, "Customize", tries=1) is True
+    count += 3
+
     browser.close()
-    print(f"{count} synthetic browser scenarios passed; no live Meta/Multilogin access")
+    print(f"synthetic checks passed: {count}")

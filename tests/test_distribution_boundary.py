@@ -42,7 +42,12 @@ SHIPPING_TREES = [
     "src/upload_agent",
     "src/web",
 ]
-SHIPPING_FILES = ["serve.py"]
+#: Одиночные файлы продукта — те, что лежат не внутри перечисленных пакетов.
+#: Такой файл легко не заметить: список выше перечисляет папки, и новый модуль
+#: рядом с ними в обход не попадает. `src/acl_sentry.py` так и появился, и
+#: проверка поймала это с другого конца — пожаловалась, что `sentry-sdk` в
+#: requirements никому не нужен.
+SHIPPING_FILES = ["serve.py", "src/acl_sentry.py"]
 
 # Deliberately NOT part of ACL. Their dependencies must not be in the file a
 # buyer's install reads.
@@ -67,6 +72,7 @@ _DIST = {
     "google_auth_oauthlib": "google-auth-oauthlib",
     "google_auth_httplib2": "google-auth-httplib2",
     "PIL": "pillow",
+    "sentry_sdk": "sentry-sdk",
 }
 
 _LOCAL = {"src", "config", "tests", "scripts"}

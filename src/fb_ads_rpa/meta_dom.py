@@ -28,66 +28,19 @@ _PW_FILE_LIMIT_MB = 45
 def _upload_heavy_via_chooser_event(
     page: Page, creative_path: str, diag: dict, click, *, wait_s: float = 25.0
 ) -> bool:
-    """Взять поле у самого браузера, а не искать его в дереве.
+    """Set a local file through the CDP target that emits its chooser event.
 
-    14.09, живой прогон: обход всего дерева — с теневыми корнями и содержимым
-    iframe — нашёл **ноль** полей `input[type=file]` при открытом окне выбора
-    (`cdp_inputs: 0`). Искать было нечего: окно медиа живёт в кросс-доменном
-    iframe, который Chrome выносит в отдельный процесс, а `DOM.getDocument`
-    границу процесса не переходит, сколько ни ставь `pierce`.
-
-    Поэтому поле не ищется, а приходит само: событие `Page.fileChooserOpened`
-    несёт `backendNodeId`, и он **сквозной** — работает через границы
-    процессов, в отличие от `nodeId`, на котором обход и споткнулся.
-
-    Перехват включается на СВОЕЙ сессии, и Playwright тут не участвует:
-    `expect_file_chooser` перехватывает то же окно, и два перехватчика на одно
-    событие — заведомая драка. Поэтому нажатие делается здесь же, параметром
-    `click`, а не снаружи.
+    An out-of-process media frame has a separate CDP session. Its backend
+    node ID must be used in that session, not in the main page's renderer.
+    Pump Playwright while waiting so delayed events can actually be received.
+    Temporary interception is disarmed and detached on every exit.
     """
     path = str(Path(creative_path).resolve())
-    try:
-        session = page.context.new_cdp_session(page)
-    except Exception as exc:
-        diag["heavy_error"] = f"new_cdp_session: {type(exc).__name__}: {exc}"[:200]
-        return False
+    sessions = []
+    attempted = set()
+    caught = {}
 
-    caught: dict = {}
-    try:
-        session.on("Page.fileChooserOpened", lambda params: caught.update(params or {}))
-        session.send("Page.enable")
-        session.send("DOM.enable")
-        session.send("Page.setInterceptFileChooserDialog", {"enabled": True})
-    except Exception as exc:
-        diag["heavy_error"] = f"intercept: {type(exc).__name__}: {exc}"[:200]
-        try:
-            session.detach()
-        except Exception:
-            pass
-        return False
-
-    try:
-        diag["heavy_clicked"] = bool(click())
-        # Ждём событие. Двадцать пять секунд — столько же, сколько давал
-        # прежний путь: меняем способ, а не терпение.
-        deadline = time.time() + wait_s
-        while time.time() < deadline and "backendNodeId" not in caught:
-            time.sleep(0.25)
-
-        backend = caught.get("backendNodeId")
-        diag["heavy_backend_node"] = backend
-        if not backend:
-            diag["heavy_error"] = "событие Page.fileChooserOpened не пришло"
-            return False
-
-        session.send("DOM.setFileInputFiles", {"files": [path], "backendNodeId": backend})
-        return True
-    except Exception as exc:
-        diag["heavy_error"] = f"setFileInputFiles: {type(exc).__name__}: {exc}"[:200]
-        return False
-    finally:
-        # Перехват снимаем обязательно: оставленный включённым, он проглотит
-        # окно выбора у следующего шага, и тот будет ждать его вечно.
+    def disarm(session):
         try:
             session.send("Page.setInterceptFileChooserDialog", {"enabled": False})
         except Exception:
@@ -96,6 +49,64 @@ def _upload_heavy_via_chooser_event(
             session.detach()
         except Exception:
             pass
+
+    def arm(target, *, required=False):
+        try:
+            session = page.context.new_cdp_session(target)
+        except Exception as exc:
+            if required:
+                diag["heavy_error"] = f"new_cdp_session: {type(exc).__name__}: {exc}"[:200]
+            return False
+        try:
+            def chooser(params):
+                if not caught and (params or {}).get("backendNodeId"):
+                    caught.update(params)
+                    caught["session"] = session
+            session.on("Page.fileChooserOpened", chooser)
+            session.send("Page.enable")
+            session.send("DOM.enable")
+            session.send("Page.setInterceptFileChooserDialog", {"enabled": True})
+            sessions.append(session)
+            return True
+        except Exception as exc:
+            if required:
+                diag["heavy_error"] = f"intercept: {type(exc).__name__}: {exc}"[:200]
+            disarm(session)
+            return False
+
+    def arm_frames():
+        for frame in getattr(page, "frames", []):
+            if frame == page.main_frame:
+                continue
+            key = (frame, frame.url)
+            if key not in attempted:
+                attempted.add(key)
+                # In-process frames share their parent's session. Playwright
+                # refuses a separate CDP session for those; that is expected.
+                arm(frame)
+
+    try:
+        if not arm(page, required=True):
+            return False
+        arm_frames()
+        diag["heavy_clicked"] = bool(click())
+        deadline = time.monotonic() + wait_s
+        while time.monotonic() < deadline and not caught:
+            page.wait_for_timeout(100)
+            arm_frames()
+        backend = caught.get("backendNodeId")
+        diag["heavy_backend_node"] = backend
+        if not backend:
+            diag["heavy_error"] = "событие Page.fileChooserOpened не пришло"
+            return False
+        caught["session"].send("DOM.setFileInputFiles", {"files": [path], "backendNodeId": backend})
+        return True
+    except Exception as exc:
+        diag["heavy_error"] = f"setFileInputFiles: {type(exc).__name__}: {exc}"[:200]
+        return False
+    finally:
+        for session in reversed(sessions):
+            disarm(session)
 
 
 #: След последней попытки загрузить креатив — что шаг видел и делал.
@@ -5480,6 +5491,8 @@ def upload_ad_creative(
     /ads/edit/ URL captured right after the Next-to-ad-level click) instead
     of guessing a re-open control.
     """
+    global _LAST_UPLOAD_DIAG
+    _LAST_UPLOAD_DIAG = {"file": Path(creative_path).name, "attempts": []}
     is_video = (creative_type or "").strip().lower() == "video"
     option_label = "Video ad" if is_video else "Image ad"
 
@@ -5787,7 +5800,8 @@ def upload_ad_creative(
                 # Почему не через поиск поля: 14.09 обход всего дерева нашёл
                 # ноль полей при открытом окне выбора. Окно медиа живёт в
                 # отдельном процессе, и `DOM.getDocument` туда не дотягивается.
-                # `backendNodeId` из события браузера — дотягивается.
+                # Событие и backendNodeId обрабатываются в CDP-сессии
+                # того фрейма, который открыл диалог.
                 if _diag["size_mb"] > _PW_FILE_LIMIT_MB:
                     _step["heavy"] = _upload_heavy_via_chooser_event(
                         page, creative_path, _diag, _press_upload
