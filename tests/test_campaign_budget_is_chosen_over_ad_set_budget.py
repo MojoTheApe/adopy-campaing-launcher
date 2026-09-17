@@ -161,3 +161,25 @@ def test_the_start_time_hour_18_is_not_taken_for_the_minimum_age(page):
 def test_no_age_field_marks_nothing(page):
     page.set_content("<div>Start time</div><span>18</span>")
     assert md._mark_age_trigger(page, "18") is False
+
+
+def test_an_age_label_inside_a_closing_dialog_is_ignored(page):
+    page.set_content(
+        "<div>Age</div><div><div id='min'>18</div><div id='max'>65+</div></div>"
+        "<div role='dialog' style='position:fixed;top:300px'>Further limit the reach <span>Age</span></div>"
+    )
+    assert md._mark_age_trigger(page, "18") is True
+    assert page.locator("[data-acl-age-trigger]").get_attribute("id") == "min"
+
+
+def test_an_unchecked_subitem_with_a_stale_checked_property_is_not_clicked_again(page):
+    """17.09 20:00 CR_ait FX_Y: aria-checked="false", а свойство checked ещё true."""
+    page.set_content(
+        "<div data-rpa-placements-marker='1'><ul>"
+        "<li><span>Messenger Stories</span><input id='cb' type='checkbox' aria-checked='false' checked></li>"
+        "</ul></div>"
+        "<script>window.clicks=0; document.getElementById('cb').addEventListener('click',()=>window.clicks++)</script>"
+    )
+    res = page.evaluate(md.PLACEMENTS_SUBITEM_JS, ["Messenger Stories", False])
+    assert res["ok"] is True and res["checked"] is False
+    assert page.evaluate("window.clicks") == 0

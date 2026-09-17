@@ -551,18 +551,18 @@ def _ensure_wide_window(context, page) -> None:
         bounds = info.get("bounds") or {}
         if window_id is None:
             return
-        was_minimized = bounds.get("windowState") == "minimized"
-        width = bounds.get("width") or 0
-        # 17.09 18:18: окна CR_ait/CO_bnc были развёрнуты шириной 1280/1284 и
-        # пропускались — у CR_ait страница 1707 px, и площадки не проставились
-        # (в прогоне с окном 1920 они проходили). Растягиваем всё, что уже 1920.
-        if not was_minimized and width >= 1900:
-            # Nothing to resize — but the geometry patch must still run:
-            # the outerWidth<innerWidth anomaly comes from the profile's
-            # device-pixel-ratio, not from our resize, so it is present
-            # even on a window that was already wide.
+        state = bounds.get("windowState")
+        was_minimized = state == "minimized"
+        # 17.09 19:57: окно растягивали до 1920×1040, а это больше реального
+        # монитора пользователя — страница уезжала за правый край, даже если
+        # окно перед прогоном развернули на весь экран. Размер экрана внутри
+        # профиля Mimic подделан (screen.availWidth ему верить нельзя),
+        # поэтому не задаём размер, а разворачиваем окно — Chrome сам берёт
+        # настоящий экран. Уже развёрнутое окно не трогаем.
+        if state in ("maximized", "fullscreen"):
             _patch_window_geometry(session, page)
             return
+
         def _page_scale() -> tuple[float, int]:
             try:
                 got = page.evaluate("() => [devicePixelRatio, innerWidth]")
@@ -571,53 +571,42 @@ def _ensure_wide_window(context, page) -> None:
                 return 0.0, 0
 
         dpr_before, inner_before = _page_scale()
-        session.send(
-            "Browser.setWindowBounds",
-            {"windowId": window_id, "bounds": {"windowState": "normal"}},
-        )
-        # Chrome не всегда принимает размер в тот же миг, что и выход из
-        # свёрнутого состояния: 17.09 13:14 окно 912×615 так и осталось 912×615
-        # (ok=false), страница 1347×780, креатив второго объявления уехал под
-        # горизонтальную прокрутку.
-        time.sleep(0.6)
-
-        target_w, target_h = 1920, 1040
-        small_screen = False
-        try:
-            avail = page.evaluate("() => [screen.availWidth, screen.availHeight]")
-            if avail and avail[0] and avail[1]:
-                small_screen = int(avail[0]) < 1920 or int(avail[1]) < 1040
-                if small_screen:
-                    target_w = min(target_w, int(avail[0]))
-                    target_h = min(target_h, int(avail[1]))
-        except Exception:
-            pass
-        # Маленький экран профиля: растягиваем под него, но проверяем масштаб.
-        # 17.09 06:51 S15 растянули до 1536×816, Mimic пересчитал масштаб 0.9 →
-        # 0.5, и в том прогоне у S15 не открывался мастер загрузки. Упал масштаб
-        # заметно — возвращаем окну прежний размер.
-        attempts = [(target_w, target_h), (target_w, target_h)]
+        if was_minimized:
+            session.send(
+                "Browser.setWindowBounds",
+                {"windowId": window_id, "bounds": {"windowState": "normal"}},
+            )
+            # 17.09 13:14: сразу после выхода из свёрнутого Chrome новое
+            # состояние не принимал.
+            time.sleep(0.6)
         after = dict(bounds)
         note = None
-        for w, h in attempts:
+        for _ in range(2):
             try:
                 session.send(
                     "Browser.setWindowBounds",
-                    {"windowId": window_id,
-                     "bounds": {"left": 0, "top": 0, "width": w, "height": h}},
+                    {"windowId": window_id, "bounds": {"windowState": "maximized"}},
                 )
             except Exception as exc:
-                log.debug("setWindowBounds %sx%s refused: %s", w, h, exc)
+                log.debug("maximize refused: %s", exc)
             time.sleep(1.0)  # let Chrome actually relayout at the new size
             try:
                 after = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
             except Exception:
                 after = {}
-            if (after.get("width") or 0) >= min(w, 1280):
+            if after.get("windowState") == "maximized":
                 break
         dpr_after, inner_after = _page_scale()
+        # 17.09 06:51 S15: окно больше — Mimic пересчитал масштаб 0.9 → 0.5, и
+        # мастер загрузки не открывался. Упал масштаб заметно — возвращаем
+        # окну прежний размер.
         if dpr_before and dpr_after and dpr_after < dpr_before * 0.85:
             try:
+                session.send(
+                    "Browser.setWindowBounds",
+                    {"windowId": window_id, "bounds": {"windowState": "normal"}},
+                )
+                time.sleep(0.6)
                 session.send(
                     "Browser.setWindowBounds",
                     {"windowId": window_id,
@@ -632,13 +621,13 @@ def _ensure_wide_window(context, page) -> None:
         try:
             from src.fb_ads_rpa import run_telemetry as _rt
 
-            _rt.record("window_resize", None if note else (after.get("width") or 0) >= min(target_w, 1280),
+            _rt.record("window_resize", None if note else after.get("windowState") == "maximized",
                        note=note, diag={
                 "before": {"width": bounds.get("width"), "height": bounds.get("height"),
-                           "state": bounds.get("windowState"), "dpr": dpr_before, "inner": inner_before},
-                "target": [target_w, target_h],
+                           "state": state, "dpr": dpr_before, "inner": inner_before},
+                "target": "maximized",
                 "after": {"width": after.get("width"), "height": after.get("height"),
-                          "dpr": dpr_after, "inner": inner_after},
+                          "state": after.get("windowState"), "dpr": dpr_after, "inner": inner_after},
             })
         except Exception:
             pass
