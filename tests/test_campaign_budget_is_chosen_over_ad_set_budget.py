@@ -114,3 +114,15 @@ def test_manual_audience_without_the_continue_dialog_is_recognised(page):
     assert md._audience_already_manual(page) is False
     page.set_content("<div>Use recommended setup</div>")
     assert md._audience_already_manual(page) is False
+
+
+# ── язык, который уже стоит, — успех (S15, 17.09 06:56) ─────────────────────
+
+def test_a_language_already_selected_counts(page):
+    page.set_content(
+        "<div><div>Languages</div><div>Only enter a language if you need to limit your audience.</div>"
+        "<div><span>Spanish (All)</span><div role='button'>x</div></div>"
+        "<input placeholder='Search languages'></div>"
+    )
+    assert "Spanish (All)" in md._languages_selected(page)
+    assert md.fill_audience_languages(page, ["Spanish"]) is True
