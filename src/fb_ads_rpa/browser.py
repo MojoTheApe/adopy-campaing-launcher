@@ -526,6 +526,9 @@ def _ensure_wide_window(context, page) -> None:
     user-visible state (and the background-throttling test mode) is
     preserved — layout keeps the last non-minimised size.
     """
+    session = None
+    window_id = None
+    was_minimized = False
     try:
         session = context.new_cdp_session(page)
         info = session.send("Browser.getWindowForTarget")
@@ -533,25 +536,86 @@ def _ensure_wide_window(context, page) -> None:
         bounds = info.get("bounds") or {}
         if window_id is None:
             return
-        was_minimized = bounds.get("windowState") == "minimized"
-        width = bounds.get("width") or 0
-        if not was_minimized and width >= 1280:
-            # Nothing to resize — but the geometry patch must still run:
-            # the outerWidth<innerWidth anomaly comes from the profile's
-            # device-pixel-ratio, not from our resize, so it is present
-            # even on a window that was already wide.
+        state = bounds.get("windowState")
+        was_minimized = state == "minimized"
+        # 17.09 19:57: окно растягивали до 1920×1040, а это больше реального
+        # монитора пользователя — страница уезжала за правый край, даже если
+        # окно перед прогоном развернули на весь экран. Размер экрана внутри
+        # профиля Mimic подделан (screen.availWidth ему верить нельзя),
+        # поэтому не задаём размер, а разворачиваем окно — Chrome сам берёт
+        # настоящий экран. Уже развёрнутое окно не трогаем.
+        if state in ("maximized", "fullscreen"):
             _patch_window_geometry(session, page)
             return
-        session.send(
-            "Browser.setWindowBounds",
-            {"windowId": window_id, "bounds": {"windowState": "normal"}},
-        )
-        session.send(
-            "Browser.setWindowBounds",
-            {"windowId": window_id,
-             "bounds": {"left": 0, "top": 0, "width": 1920, "height": 1040}},
-        )
-        time.sleep(1.0)  # let Chrome actually relayout at the new size
+
+        def _page_scale() -> tuple[float, int]:
+            try:
+                got = page.evaluate("() => [devicePixelRatio, innerWidth]")
+                return float(got[0] or 0), int(got[1] or 0)
+            except Exception:
+                return 0.0, 0
+
+        dpr_before, inner_before = _page_scale()
+        if was_minimized:
+            session.send(
+                "Browser.setWindowBounds",
+                {"windowId": window_id, "bounds": {"windowState": "normal"}},
+            )
+            # 17.09 13:14: сразу после выхода из свёрнутого Chrome новое
+            # состояние не принимал.
+            time.sleep(0.6)
+        after = dict(bounds)
+        note = None
+        for _ in range(2):
+            try:
+                session.send(
+                    "Browser.setWindowBounds",
+                    {"windowId": window_id, "bounds": {"windowState": "maximized"}},
+                )
+            except Exception as exc:
+                log.debug("maximize refused: %s", exc)
+            time.sleep(1.0)  # let Chrome actually relayout at the new size
+            try:
+                after = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+            except Exception:
+                after = {}
+            if after.get("windowState") == "maximized":
+                break
+        dpr_after, inner_after = _page_scale()
+        # 17.09 06:51 S15: окно больше — Mimic пересчитал масштаб 0.9 → 0.5, и
+        # мастер загрузки не открывался. Упал масштаб заметно — возвращаем
+        # окну прежний размер.
+        if dpr_before and dpr_after and dpr_after < dpr_before * 0.85:
+            try:
+                session.send(
+                    "Browser.setWindowBounds",
+                    {"windowId": window_id, "bounds": {"windowState": "normal"}},
+                )
+                time.sleep(0.6)
+                session.send(
+                    "Browser.setWindowBounds",
+                    {"windowId": window_id,
+                     "bounds": {"width": bounds.get("width"), "height": bounds.get("height")}},
+                )
+                time.sleep(1.0)
+                after = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+            except Exception:
+                pass
+            note = "reverted_scale_drop"
+            dpr_after, inner_after = _page_scale()
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+
+            _rt.record("window_resize", None if note else after.get("windowState") == "maximized",
+                       note=note, diag={
+                "before": {"width": bounds.get("width"), "height": bounds.get("height"),
+                           "state": state, "dpr": dpr_before, "inner": inner_before},
+                "target": "maximized",
+                "after": {"width": after.get("width"), "height": after.get("height"),
+                          "state": after.get("windowState"), "dpr": dpr_after, "inner": inner_after},
+            })
+        except Exception:
+            pass
 
         # Repair the impossible geometry this can leave behind. Measured
         # 2026-07-31: outerWidth 1280 while innerWidth was 1600 — a window
@@ -561,13 +625,55 @@ def _ensure_wide_window(context, page) -> None:
         # Mimic profile disagree. Override the reported outer* values to
         # sit just outside the real viewport (normal chrome thickness).
         _patch_window_geometry(session, page)
-        if was_minimized:
-            session.send(
-                "Browser.setWindowBounds",
-                {"windowId": window_id, "bounds": {"windowState": "minimized"}},
-            )
     except Exception as exc:
         log.debug("ensure_wide_window skipped: %s", exc)
+    finally:
+        if session is not None:
+            if was_minimized and window_id is not None:
+                try:
+                    session.send("Browser.setWindowBounds", {
+                        "windowId": window_id, "bounds": {"windowState": "minimized"},
+                    })
+                except Exception as exc:
+                    log.debug("restore minimized window failed: %s", exc)
+            try:
+                session.detach()
+            except Exception:
+                pass
+
+
+# Actual successful desktop viewport from ACL-1214's recorded reproduction.
+# Browser bounds/screen.availWidth may be spoofed by the profile: use innerWidth.
+MIN_EDITOR_WIDTH = 1168
+
+
+def ensure_editor_window(page, section: str) -> bool:
+    """Check at section boundaries; recover once, then stop without replaying drafts."""
+    from src.fb_ads_rpa import run_telemetry as rt
+
+    def readable(state: dict) -> bool:
+        inner = state.get("inner")
+        return (
+            isinstance(inner, (list, tuple)) and len(inner) == 2
+            and all(type(v) in (int, float) and v > 0 for v in inner)
+            and inner[0] >= MIN_EDITOR_WIDTH
+        )
+
+    before = rt.window_state(page)
+    after = before
+    if not readable(before):
+        try:
+            _ensure_wide_window(page.context, page)
+        except Exception as exc:
+            log.debug("editor window recovery failed: %s", exc)
+        after = rt.window_state(page)
+    ok = readable(after)
+    diag = {"section": section, "minimum_width": MIN_EDITOR_WIDTH,
+            "before": before, "after": after}
+    rt.record("window_bounds", ok, diag=diag)
+    if not ok:
+        rt.record("window_too_small", False, diag=diag)
+    return ok
 
 
 def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None, new_page: bool = False) -> BrowserConnection:
@@ -593,6 +699,8 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
             page = context.new_page()
         _disable_background_throttling(context, page)
         _ensure_wide_window(context, page)
+        from src.fb_ads_rpa import run_telemetry as rt
+        rt.record("window_bounds", None, diag={"section": "attach", "after": rt.window_state(page)})
         _keep_renderer_active(context, page)
         # Новая вкладка в Chrome сразу становится активной, и окно человека на
         # минуты уезжает на нашу страницу. Возвращаем то, на что он смотрел:
