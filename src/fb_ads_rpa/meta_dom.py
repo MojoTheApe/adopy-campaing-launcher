@@ -9004,6 +9004,32 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
     return False
 
 
+def _age_boundary_shows(page: Page, value: str) -> bool:
+    """В закрытой выпадашке возраста рядом с «Age» видно `value` (не в открытом списке)."""
+    try:
+        return bool(page.evaluate(
+            r"""(value) => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const label = [...document.querySelectorAll('*')].find(e =>
+                e.children.length === 0 && /^(Age|Edad)$/i.test(norm(e.textContent))
+                && e.getBoundingClientRect().width > 0);
+              if (!label) return false;
+              let box = label;
+              for (let i = 0; i < 6 && box.parentElement; i++) {
+                box = box.parentElement;
+                const hit = [...box.querySelectorAll('*')].some(e =>
+                  e.children.length === 0 && norm(e.textContent) === value
+                  && e.getBoundingClientRect().width > 0 && !e.closest('[role=listbox]'));
+                if (hit) return true;
+              }
+              return false;
+            }""",
+            value,
+        ))
+    except Exception:
+        return False
+
+
 def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     """Set audience age range dropdowns / inputs (min and max)."""
     # Same reasoning as fill_audience_location: skip the fuzzy
@@ -9075,6 +9101,14 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
         # independently and only report success if BOTH are confirmed.
         boundary_results = []
         for default_text, target_val in (("18", age_min_str), ("65+", age_max_str)):
+            if target_val == default_text and _age_boundary_shows(page, default_text):
+                # Граница уже стоит как надо — открывать выпадашку незачем.
+                # 17.09 13:19 (CL_ml): клик по «65+» упал на прокрутке
+                # (TimeoutError), граница записалась как проваленная, и шаг
+                # отказал при 35–65+ на экране — а заодно не сняли галочку
+                # «Use as a suggestion», которая снимается только при успехе.
+                boundary_results.append(True)
+                continue
             try:
                 el = root.get_by_text(re.compile(rf"^{re.escape(default_text)}$"), exact=True).first
                 if not el.count() or not el.is_visible():
