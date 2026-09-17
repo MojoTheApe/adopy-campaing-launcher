@@ -553,7 +553,10 @@ def _ensure_wide_window(context, page) -> None:
             return
         was_minimized = bounds.get("windowState") == "minimized"
         width = bounds.get("width") or 0
-        if not was_minimized and width >= 1280:
+        # 17.09 18:18: окна CR_ait/CO_bnc были развёрнуты шириной 1280/1284 и
+        # пропускались — у CR_ait страница 1707 px, и площадки не проставились
+        # (в прогоне с окном 1920 они проходили). Растягиваем всё, что уже 1920.
+        if not was_minimized and width >= 1900:
             # Nothing to resize — but the geometry patch must still run:
             # the outerWidth<innerWidth anomaly comes from the profile's
             # device-pixel-ratio, not from our resize, so it is present

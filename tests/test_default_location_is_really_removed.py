@@ -103,3 +103,22 @@ def test_the_card_without_manual_placements_is_recognised(page):
     assert md._placements_exclusion_removed(page) is True
     page.set_content("<div>Placements</div><div>Feeds</div><div>Stories, Status, Reels</div>")
     assert md._placements_exclusion_removed(page) is False
+
+
+def test_the_country_is_typed_again_when_no_suggestions_open(page, monkeypatch):
+    """17.09 CO_bnc FX: «Colombia» в поле, подсказок нет — набираем заново."""
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    page.set_content(
+        "<input id='q' placeholder='Search locations'><ul id='list'></ul>"
+        "<script>let cleared=false; const q=document.getElementById('q');"
+        "q.addEventListener('input',()=>{ if(!q.value) cleared=true;"
+        " if(cleared && q.value==='Colombia'){ document.getElementById('list').innerHTML="
+        "\"<li role='option' onclick=\\\"window.picked=this.textContent\\\">Colombia (Country)</li>\"; } });"
+        "</script>"
+    )
+    page.click("#q")
+    page.keyboard.type("Colombia")
+    monkeypatch.setattr(md, "_wait_location_options",
+                        lambda root, timeout_s=6.0, _orig=md._wait_location_options: _orig(root, 1.0))
+    assert md._pick_country_suggestion(page, page, "Colombia") is True
+    assert page.evaluate("window.picked") == "Colombia (Country)"

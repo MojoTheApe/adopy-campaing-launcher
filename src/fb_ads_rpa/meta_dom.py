@@ -9171,6 +9171,20 @@ def _country_search_term(code: str) -> str:
     return raw
 
 
+def _wait_location_options(root, timeout_s: float = 6.0) -> bool:
+    """Ждёт, пока под полем поиска локаций появятся подсказки."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            if root.locator("[role=option]:visible").count():
+                return True
+        except Exception:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.3)
+
+
 def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     """Pick the country-level suggestion from an open location autocomplete.
 
@@ -9183,6 +9197,21 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     visible option, then a bare Enter, if no country-tagged option shows up.
     """
     country_re = re.compile(rf"^{re.escape(search_term)}\s*\(country\)", re.I)
+    if not _wait_location_options(root):
+        # 17.09 (CO_bnc FX, два прогона подряд): «Colombia» в поле, а список
+        # подсказок так и не открылся (aria-expanded=false) — Enter ничего не
+        # добавлял, осталась United States. Набираем заново, чтобы поиск
+        # запустился ещё раз.
+        try:
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Backspace")
+            _sleep_h(0.5)
+            page.keyboard.type(search_term, delay=60)
+        except Exception:
+            pass
+        if not _wait_location_options(root):
+            _telemetry.record("audience_location", None, note="no_location_suggestions",
+                              diag={"typed": search_term})
     for sel in ("[role=option]:visible", "li[role=option]"):
         try:
             opt = root.locator(sel).filter(has_text=country_re).first
@@ -9945,6 +9974,43 @@ def _age_boundary_shows(page: Page, value: str) -> bool:
         return False
 
 
+_MARK_AGE_TRIGGER_JS = r"""(value) => {
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  document.querySelectorAll('[data-acl-age-trigger]').forEach(e =>
+    e.removeAttribute('data-acl-age-trigger'));
+  const label = [...document.querySelectorAll('*')].find(e =>
+    e.children.length === 0 && /^(Age|Edad)$/i.test(norm(e.textContent))
+    && e.getBoundingClientRect().width > 0);
+  if (!label) return false;
+  const top = label.getBoundingClientRect().top;
+  let best = null, bestGap = Infinity;
+  for (const e of document.querySelectorAll('*')) {
+    const own = [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('');
+    if (norm(own) !== value) continue;
+    const r = e.getBoundingClientRect();
+    if (r.width <= 0 || e.closest('[role=listbox]')) continue;
+    const gap = r.top - top;
+    if (gap < 0 || gap > 400) continue;
+    if (gap < bestGap) { best = e; bestGap = gap; }
+  }
+  if (!best) return false;
+  best.setAttribute('data-acl-age-trigger', '1');
+  return true;
+}"""
+
+
+def _mark_age_trigger(root, value: str) -> bool:
+    """Помечает выпадашку возраста со значением `value` — ближайшую под подписью «Age».
+
+    Всё, что выше подписи (поле Start time с часом «18») или далеко ниже,
+    не подходит.
+    """
+    try:
+        return bool(root.evaluate(_MARK_AGE_TRIGGER_JS, value))
+    except Exception:
+        return False
+
+
 def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     """Set the audience age range, and only say so when the page shows it.
 
@@ -10062,7 +10128,13 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
                 boundary_results.append(True)
                 continue
             try:
-                el = root.get_by_text(re.compile(rf"^{re.escape(default_text)}$"), exact=True).first
+                # 17.09 15:21 (CR_ait Day): первым «18» на странице оказался
+                # час в поле Start time («18:20») — кликнули по часам, возраст
+                # остался 18. Берём значение только из поля Age.
+                if not _mark_age_trigger(root, default_text):
+                    boundary_results.append(False)
+                    continue
+                el = root.locator("[data-acl-age-trigger]").first
                 if not el.count() or not el.is_visible():
                     boundary_results.append(False)
                     continue

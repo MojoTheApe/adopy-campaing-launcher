@@ -84,3 +84,21 @@ def test_a_big_screen_still_gets_1920(monkeypatch):
     sizes = [p["bounds"] for m, p in s.sent if m == "Browser.setWindowBounds" and "width" in p["bounds"]]
     assert sizes[0]["width"] == 1920 and sizes[0]["height"] == 1040
     assert s.bounds["windowState"] == "minimized", "свёрнутое окно сворачивается обратно"
+
+
+def test_an_open_1280_window_on_a_big_screen_is_widened_and_left_open(monkeypatch):
+    """17.09 18:18: развёрнутое окно CR_ait 1280 пропускалось — страница 1707, площадки падали."""
+    monkeypatch.setattr(br.time, "sleep", lambda s: None)
+    s = _Session(screen_cap=(3840, 2112))
+    s.bounds.update(width=1280, height=752, windowState="normal")
+    br._ensure_wide_window(_Ctx(s), _Page((3840, 2112), s))
+    assert s.bounds["width"] == 1920
+    assert s.bounds["windowState"] == "normal"
+
+
+def test_a_window_already_1920_is_not_touched(monkeypatch):
+    monkeypatch.setattr(br.time, "sleep", lambda s: None)
+    s = _Session(screen_cap=(3840, 2112))
+    s.bounds.update(width=1920, height=1040, windowState="normal")
+    br._ensure_wide_window(_Ctx(s), _Page((3840, 2112), s))
+    assert not [m for m, p in s.sent if m == "Browser.setWindowBounds"]
