@@ -143,3 +143,21 @@ def test_an_age_boundary_already_at_its_value_is_read_from_the_closed_dropdown(p
                      "<div role='listbox'><div>64</div></div></div>")
     assert md._age_boundary_shows(page, "65+") is True
     assert md._age_boundary_shows(page, "64") is False
+
+
+def test_the_start_time_hour_18_is_not_taken_for_the_minimum_age(page):
+    page.set_content(
+        "<div>Start date</div><div role='group'><span>18</span>:<span>20</span> GMT+3</div>"
+        "<div style='height:300px'></div>"
+        "<div>Age</div><div><div id='min'>18<i></i></div><div id='max'>65+</div></div>"
+    )
+    assert md._mark_age_trigger(page, "18") is True
+    assert page.locator("[data-acl-age-trigger]").get_attribute("id") == "min"
+    assert md._mark_age_trigger(page, "65+") is True
+    assert page.locator("[data-acl-age-trigger]").count() == 1
+    assert page.locator("[data-acl-age-trigger]").get_attribute("id") == "max"
+
+
+def test_no_age_field_marks_nothing(page):
+    page.set_content("<div>Start time</div><span>18</span>")
+    assert md._mark_age_trigger(page, "18") is False
