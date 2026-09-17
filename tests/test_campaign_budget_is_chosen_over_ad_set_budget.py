@@ -183,3 +183,15 @@ def test_an_unchecked_subitem_with_a_stale_checked_property_is_not_clicked_again
     res = page.evaluate(md.PLACEMENTS_SUBITEM_JS, ["Messenger Stories", False])
     assert res["ok"] is True and res["checked"] is False
     assert page.evaluate("window.clicks") == 0
+
+
+def test_a_subitem_state_is_read_without_clicking(page):
+    page.set_content(
+        "<div data-rpa-placements-marker='1'><ul>"
+        "<li><span>Threads feed</span><input id='cb' type='checkbox' aria-checked='false' checked disabled></li>"
+        "</ul></div>"
+        "<script>window.clicks=0; document.getElementById('cb').addEventListener('click',()=>window.clicks++)</script>"
+    )
+    assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Threads feed") == {"found": True, "checked": False}
+    assert page.evaluate("window.clicks") == 0
+    assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Facebook Feed")["found"] is False
