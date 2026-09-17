@@ -21,6 +21,24 @@ from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_
 log = logging.getLogger(__name__)
 
 
+def profile_key_for(account_label: str) -> str:
+    """Whose browser a publish of this account occupies: the profile, not the label.
+
+    The same rule the spend reader applies (`account_spend._profile_key`), so
+    a publish and a read of one account queue on one lock. Two labels can map
+    to one profile; two queues to one browser is exactly what the lock is
+    against. When the label does not resolve (not in the map, map unreadable)
+    the label itself is the key: holding too much is safer than too little.
+    """
+    label = str(account_label or "").strip()
+    try:
+        entry = resolve_account_entry(load_ad_account_map(get_ad_account_map_path()), label)
+    except Exception:
+        entry = None
+    profile = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
+    return profile or label
+
+
 class RpaPublisher:
     """Publish dashboard slots via Playwright + antidetect browser."""
 
@@ -289,7 +307,7 @@ class RpaPublisher:
                 pass
             self._entry = None
 
-    @serialized_browser
+    @serialized_browser(key=lambda self, draft: profile_key_for(draft.account_label))
     def publish_draft(self, draft: CampaignDraft) -> RpaPublishResult:
         if (draft.status or "").strip().upper() != "DRAFT":
             raise ValueError(
@@ -339,7 +357,7 @@ class RpaPublisher:
             )
         return result
 
-    @serialized_browser
+    @serialized_browser(key=lambda self, slots, *, account_label, **kw: profile_key_for(account_label))
     def publish_slots(
         self,
         slots: list[dict[str, Any]],
