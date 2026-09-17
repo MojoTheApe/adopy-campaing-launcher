@@ -20,9 +20,11 @@ from setup_wizard import (
     validate_campaign_manager_name,
     validate_creatives_directory,
     validate_stats_workbook,
-    test_multilogin_access,
     write_ready_state,
 )
+# Продуктовая функция мастера называется test_*; под своим именем pytest
+# собирал бы её как тест, поэтому импортируем под псевдонимом.
+from setup_wizard import test_multilogin_access as check_multilogin_access
 from machine_config import AccountAssignment, MachineConfiguration
 
 
@@ -50,12 +52,12 @@ class SetupWizardTests(unittest.TestCase):
 
     def test_multilogin_check_requires_a_token(self):
         with self.assertRaisesRegex(WizardValidationError, "access code"):
-            test_multilogin_access({"A": "", "B": ""})
+            check_multilogin_access({"A": "", "B": ""})
 
     @mock.patch("urllib.request.urlopen")
     def test_multilogin_check_accepts_a_working_token(self, urlopen):
         urlopen.return_value.__enter__.return_value.status = 200
-        result = test_multilogin_access({"A": "working-token"})
+        result = check_multilogin_access({"A": "working-token"})
         self.assertEqual(result, "Multilogin connection verified (A).")
         self.assertNotIn("working-token", result)
 
