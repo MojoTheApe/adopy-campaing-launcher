@@ -43,11 +43,14 @@ CAMPAIGN_RETRY_STEPS = frozenset(
     }
 )
 
-# Canonical late-stage failures emitted through soft_fails_out.  They are
-# "soft" only in the sense that execution continues far enough to preserve a
-# useful draft.  The publication verdict is blocking for every one of them.
+# These stops preserve the current draft; replaying Create cannot fix them.
+NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small"})
+
+
+# Stops and field failures that block publication and need review.
 BLOCKING_REVIEW_STEPS = frozenset(
     {
+        "window_too_small",
         "conversion_event",
         "audience_age",
         "audience_location",

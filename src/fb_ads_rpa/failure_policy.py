@@ -40,6 +40,8 @@ WARNING = "warning"
 # Names are the base part, before any ":detail" suffix. Add a new step here in
 # the same commit that starts producing it, otherwise it blocks by default.
 POLICY: dict[str, tuple[str, str]] = {
+    "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
+                         "restore a desktop-sized window before continuing the draft"),
     # ── Ad level ────────────────────────────────────────────────────────────
     # Keyed without the ad prefix: meta_dom emits "ad_creative_upload" for the
     # first ad and "ad2_creative_upload", "ad3_..." for the rest, so the entry

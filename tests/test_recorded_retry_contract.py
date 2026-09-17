@@ -41,7 +41,7 @@ def _recorded_flow_hard_failures() -> set[str]:
 
 
 def test_every_hard_failure_has_an_explicit_campaign_retry_contract() -> None:
-    assert _recorded_flow_hard_failures() == set(retry_policy.CAMPAIGN_RETRY_STEPS)
+    assert _recorded_flow_hard_failures() == set(retry_policy.CAMPAIGN_RETRY_STEPS | retry_policy.NON_RETRYABLE_FLOW_STEPS)
 
 
 def test_campaign_retry_is_bounded_without_an_off_by_one() -> None:
