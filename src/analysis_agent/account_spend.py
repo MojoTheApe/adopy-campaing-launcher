@@ -56,6 +56,10 @@ TABLE_TIMEOUT_MS = 90_000
 #: первой попытки.
 TOTALS_TRIES = 20
 
+#: Сколько секунд ждать, пока таблица перестанет быть «занятой» (aria-busy /
+#: progressbar), прежде чем отказать чтению дерева.
+TABLE_BUSY_TRIES = 15
+
 
 # ── Чем чтение цепляется за экраны Meta ──────────────────────────────────
 #
@@ -1650,10 +1654,19 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
     """
     if level not in ADS_MANAGER_LEVELS:
         return [], "", f"unknown level {level!r}"
-    try:
-        got = page.evaluate(_READ_TREE_JS, level)
-    except Exception as exc:
-        return [], "", f"{level} table was not parsed: {exc}"
+    # Таблица «занята» — ждём, а не отказываем с первого взгляда. 17.09 на
+    # Doc20/Doc21/S15 дерево упало на `table-loading` сразу после раскрытия
+    # итогов (таблица перерисовывалась), а через секунды те же таблицы были
+    # свободны: 88, 68 и 60 строк.
+    got = None
+    for _attempt in range(TABLE_BUSY_TRIES):
+        try:
+            got = page.evaluate(_READ_TREE_JS, level)
+        except Exception as exc:
+            return [], "", f"{level} table was not parsed: {exc}"
+        if not (isinstance(got, dict) and got.get("error") == "table-loading"):
+            break
+        _sleep(1)
     if not isinstance(got, dict):
         return [], "", f"{level} table: unexpected page response"
 
