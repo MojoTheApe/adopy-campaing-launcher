@@ -8427,8 +8427,9 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
         return False
     wanted = [str(age_min), str(age_max) if age_max < 65 else "65+"]
     seen = _age_triggers_read(page)
-    if seen and seen != wanted:
-        _telemetry.record("audience_age", False, note="read_back_mismatch",
+    if seen != wanted:
+        _telemetry.record("audience_age", False,
+                          note="read_back_mismatch" if seen else "read_back_unavailable",
                           diag={"wanted": wanted, "seen": seen})
         return False
     return True

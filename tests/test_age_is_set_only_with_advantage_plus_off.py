@@ -300,3 +300,12 @@ def test_an_open_dynamic_creative_dialog_is_cancelled_not_continued(page, tmp_pa
     assert meta_dom._cancel_dynamic_creative_dialog(page) is True
     assert page.evaluate("window.dlg") == ["opened", "cancel"]
     assert not page.is_visible("#dlg")
+
+
+def test_unreadable_age_does_not_count_as_verified(page, tmp_path, monkeypatch):
+    page.set_content('<div>Advantage+ off</div><div>Age</div>')
+    monkeypatch.setattr(meta_dom, '_fill_audience_age_controls', lambda p, a, b: True)
+    assert meta_dom.fill_audience_age(page, 35, 65) is False
+    row = [r for r in _rows(tmp_path) if r['step'] == 'audience_age'][-1]
+    assert row['note'] == 'read_back_unavailable'
+    assert row['diag'] == {'wanted': ['35', '65+'], 'seen': []}
