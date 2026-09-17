@@ -9176,6 +9176,79 @@ def _age_triggers_read(page: Page) -> list[str]:
     return []
 
 
+def _age_boundary_shows(page: Page, value: str) -> bool:
+    """В закрытой выпадашке возраста рядом с «Age» видно `value` (не в открытом списке)."""
+    try:
+        return bool(page.evaluate(
+            r"""(value) => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const label = [...document.querySelectorAll('*')].find(e =>
+                e.children.length === 0 && /^(Age|Edad)$/i.test(norm(e.textContent))
+                && e.getBoundingClientRect().width > 0);
+              if (!label) return false;
+              let box = label;
+              for (let i = 0; i < 6 && box.parentElement; i++) {
+                box = box.parentElement;
+                const hit = [...box.querySelectorAll('*')].some(e =>
+                  e.children.length === 0 && norm(e.textContent) === value
+                  && e.getBoundingClientRect().width > 0 && !e.closest('[role=listbox]'));
+                if (hit) return true;
+              }
+              return false;
+            }""",
+            value,
+        ))
+    except Exception:
+        return False
+
+
+_MARK_AGE_TRIGGER_JS = r"""(value) => {
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  document.querySelectorAll('[data-acl-age-trigger]').forEach(e =>
+    e.removeAttribute('data-acl-age-trigger'));
+  // Все видимые подписи «Age», кроме диалогов: 17.09 19:44 (CR_ait Day)
+  // первой находилась подпись из закрывающегося диалога Further limit,
+  // и «18» оказывалось выше неё.
+  const labels = [...document.querySelectorAll('*')].filter(e =>
+    e.children.length === 0 && /^(Age|Edad)$/i.test(norm(e.textContent))
+    && e.getBoundingClientRect().width > 0 && !e.closest('[role=dialog]'));
+  if (!labels.length) return false;
+  const own = (e) => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('');
+  let best = null, bestGap = Infinity;
+  for (const e of document.querySelectorAll('*')) {
+    if (norm(own(e)) !== value) continue;
+    const r = e.getBoundingClientRect();
+    if (r.width <= 0 || e.closest('[role=listbox], [role=dialog]')) continue;
+    for (const label of labels) {
+      const gap = r.top - label.getBoundingClientRect().top;
+      if (gap < 0 || gap > 400) continue;
+      if (gap < bestGap) { best = e; bestGap = gap; }
+    }
+  }
+  if (!best) return false;
+  best.setAttribute('data-acl-age-trigger', '1');
+  return true;
+}"""
+
+
+def _mark_age_trigger(root, value: str) -> bool:
+    """Помечает выпадашку возраста со значением `value` — ближайшую под подписью «Age».
+
+    Всё, что выше подписи (поле Start time с часом «18») или далеко ниже,
+    не подходит.
+    """
+    deadline = time.monotonic() + 3.0
+    while True:
+        try:
+            if root.evaluate(_MARK_AGE_TRIGGER_JS, value):
+                return True
+        except Exception:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.3)
+
+
 def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     """Set the audience age range, and only say so when the page shows it.
 
@@ -9285,8 +9358,22 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
         # independently and only report success if BOTH are confirmed.
         boundary_results = []
         for default_text, target_val in (("18", age_min_str), ("65+", age_max_str)):
+            if target_val == default_text and _age_boundary_shows(page, default_text):
+                # Граница уже стоит как надо — открывать выпадашку незачем.
+                # 17.09 13:19 (CL_ml): клик по «65+» упал на прокрутке
+                # (TimeoutError), граница записалась как проваленная, и шаг
+                # отказал при 35–65+ на экране — а заодно не сняли галочку
+                # «Use as a suggestion», которая снимается только при успехе.
+                boundary_results.append(True)
+                continue
             try:
-                el = root.get_by_text(re.compile(rf"^{re.escape(default_text)}$"), exact=True).first
+                # 17.09 15:21 (CR_ait Day): первым «18» на странице оказался
+                # час в поле Start time («18:20») — кликнули по часам, возраст
+                # остался 18. Берём значение только из поля Age.
+                if not _mark_age_trigger(root, default_text):
+                    boundary_results.append(False)
+                    continue
+                el = root.locator("[data-acl-age-trigger]").first
                 if not el.count() or not el.is_visible():
                     boundary_results.append(False)
                     continue

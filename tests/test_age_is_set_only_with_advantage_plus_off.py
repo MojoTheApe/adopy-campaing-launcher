@@ -309,3 +309,24 @@ def test_unreadable_age_does_not_count_as_verified(page, tmp_path, monkeypatch):
     row = [r for r in _rows(tmp_path) if r['step'] == 'audience_age'][-1]
     assert row['note'] == 'read_back_unavailable'
     assert row['diag'] == {'wanted': ['35', '65+'], 'seen': []}
+
+
+def test_clock_18_is_untouched_by_the_integrated_age_setter(page, monkeypatch):
+    """Exercise the real setter and mandatory readback together after extraction."""
+    monkeypatch.setattr(meta_dom, '_ensure_manual_audience', lambda p: False)
+    import src.fb_ads_rpa.screenshots as screenshots
+    monkeypatch.setattr(screenshots, 'capture', lambda *a, **k: None)
+    page.set_content("""
+      <div>Start time</div><button id="clock" onclick="window.clockClicked=true">18</button>
+      <div id="age-row"><div>Age</div>
+        <button id="minimum" onclick="document.getElementById('options').style.display='block'">18</button>
+        <button id="maximum" onclick="window.maximumClicked=true">65+</button>
+      </div>
+      <div role="listbox" id="options" style="display:none">
+        <div role="option" onclick="document.getElementById('minimum').textContent='35';this.parentElement.style.display='none'">35</div>
+      </div>
+    """)
+    assert meta_dom.fill_audience_age(page, 35, 65) is True
+    assert meta_dom._age_triggers_read(page) == ['35', '65+']
+    assert page.evaluate('window.clockClicked === undefined')
+    assert page.evaluate('window.maximumClicked === undefined')
