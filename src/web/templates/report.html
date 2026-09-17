@@ -1627,6 +1627,40 @@
     }
     .amap-cell-read b { color: var(--text); font-weight: 600; }
     .amap-cell-read i { font-style: normal; font-size: 0.68rem; color: var(--muted); }
+    /* acl-357: спенд, привязанный к стране самим кабинетом. Своей строкой
+       под общим: у ячейки `white-space: nowrap`, и в одну строку это число
+       уехало бы за край под многоточие. Цветом отделено от общего спенда —
+       рядом стоят два числа об одних деньгах, и путать их нельзя. */
+    .amap-cell-read .amap-country-read {
+      display: block; font-size: 0.68rem; color: var(--accent);
+      /* Переносится, а не обрезается: у ячейки `nowrap`, и имя аккаунта
+         обрывалось посреди слова — «(FacebookDQ501 - Duan …». Имя тут не
+         украшение: под знаком валюты суммы разных кабинетов не
+         складываются, и видно, чей это. */
+      white-space: normal; line-height: 1.25;
+    }
+    .amap-cell-read .amap-country-read b { color: var(--accent); font-weight: 600; }
+    .amap-cell-read .amap-country-read span { color: var(--muted); margin-left: 2px; }
+
+    /* ACL-354: окно жалобы. Скромное намеренно — человек уже расстроен, и
+       разглядывать оформление ему незачем. */
+    .report-box {
+      border: 1px solid var(--border); border-radius: 10px; padding: var(--space-lg);
+      background: var(--bg-elev); color: var(--text); max-width: 34rem; width: 90vw;
+    }
+    .report-box::backdrop { background: rgba(0, 0, 0, .45); }
+    .report-box h3 { margin: 0 0 var(--space-sm); font-size: 1rem; }
+    .report-hint { margin: 0 0 var(--space-md); font-size: .8rem; color: var(--muted); line-height: 1.45; }
+    .report-box textarea {
+      width: 100%; box-sizing: border-box; font: inherit; font-size: .85rem;
+      padding: var(--space-sm); border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--text); resize: vertical;
+    }
+    .report-actions { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-md); }
+    .report-msg { flex: 1; font-size: .78rem; color: var(--muted); }
+    .report-msg.good { color: var(--good); }
+    .report-msg.bad { color: var(--bad); }
+
     .amap-cell-act { display: flex; justify-content: flex-end; }
     .amap-nocov > summary.amap-row { background: color-mix(in srgb, var(--bad) 9%, var(--bg-subtle)); }
     .amap-nocov-count b { color: var(--bad); }
@@ -1671,7 +1705,29 @@
     .amap-caret:hover { color: var(--accent); }
     tr.amap-open .amap-caret { transform: rotate(90deg); display: inline-block; }
     .amap-caret-off { color: var(--border-strong); padding-right: 0.3rem; font-size: 0.7rem; }
+    /* acl-357: кнопок в строке стало три, и третья — Remove — уезжала за
+       край. Колонка фиксированной ширины (`table-layout: fixed`), а ячейка
+       не переносила содержимое, поэтому лишнее просто обрезалось: кнопка
+       оставалась в разметке, но нажать её было нельзя.
+
+       Перенос, а не сужение соседей: отнять ширину у колонок с числами
+       значит испортить то, ради чего таблицу и читают. Вторая строка
+       появляется только там, где кнопки не поместились.
+       Селектор длиннее соседних не для красоты: перенос запрещает
+       `.amap table.amap-grid td` — правило сильнее любого одиночного класса,
+       и короткая запись просто не сработает. Проверено в браузере:
+       `white-space` оставался `nowrap`, а Remove висел за краем. */
     .amap-actions { text-align: right; }
+    .amap table.amap-grid td.amap-actions {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      /* Кнопки прижаты вправо, и левое поле здесь только съедает место:
+         161px кнопок не влезали в колонку из-за 27px отступов, и строка
+         разъезжалась на две. */
+      padding-left: 0.3rem;
+    }
+    .amap table.amap-grid td.amap-actions > button { margin: 0.05rem 0 0.05rem 0.2rem; }
     .amap .amap-x {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -1907,6 +1963,39 @@
     .amap-tree-sw.arming { flex-basis: 5rem; border-color: var(--danger); color: var(--danger); }
     .amap-tree-sw.failed { border-style: dashed; }
     button.amap-tree-sw:disabled { opacity: 0.6; cursor: default; }
+    /* Журнал изменений — под деревом и свёрнут. Он отвечает на вопрос,
+       который возникает реже, чем «что там сейчас», и не должен отбирать
+       место у строк, ради которых дерево открывают. */
+    .amap-tree-log { margin-top: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.35rem; }
+    .amap-tree-log-head {
+      background: none; border: 0; padding: 0.1rem 0; cursor: pointer;
+      font: inherit; font-size: 0.73rem; color: var(--muted);
+      display: flex; align-items: center; gap: 0.35rem;
+    }
+    .amap-tree-log-head:hover { color: var(--accent); }
+    .amap-tree-log-head::before {
+      content: '▸'; display: inline-block; transition: transform 0.12s;
+    }
+    .amap-tree-log-head.open::before { transform: rotate(90deg); }
+    .amap-tree-log-body { padding-top: 0.3rem; }
+    .amap-tree-log-line {
+      display: flex; gap: 0.5rem; align-items: baseline;
+      font-size: 0.73rem; padding: 0.15rem 0; line-height: 1.4;
+    }
+    .amap-tree-log-when {
+      flex: 0 0 3.4rem; color: var(--muted); font-variant-numeric: tabular-nums;
+    }
+    .amap-tree-log-what {
+      flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    /* Отказ не красится успехом — той же рукой, что и кнопка. */
+    .amap-tree-log-said { flex: 0 0 auto; color: var(--muted); }
+    .amap-tree-log-said.bad { color: var(--danger); }
+    /* Неподтверждённое — не отказ и не успех. Третий цвет, потому что третий
+       исход: объявление могло выключиться, а могло и нет. */
+    .amap-tree-log-said.warn { color: var(--warn, var(--danger)); }
+    .amap-tree-log-who { flex: 0 0 auto; color: var(--muted); opacity: 0.75; }
+    .amap-tree-log-none { font-size: 0.73rem; color: var(--muted); }
     /* Оговорка, а не отказ: строки настоящие, просто их меньше, чем денег. */
     .amap-tree-note {
       color: var(--warn, var(--muted)); font-size: 0.73rem;
@@ -2716,10 +2805,78 @@
     </button>
   </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
+    {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
+        с Refresh намеренно: беда случается на экране, и идти за ней в другое
+        место человек не станет. -#}
+    <button type="button" id="report-problem-btn" title="Tell us what went wrong — ACL attaches the machine's own facts">Report a problem</button>
     <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
     <button type="submit" id="dash-refresh-btn">Refresh</button>
   </form>
 </header>
+
+{#- Окно жалобы. Человек пишет только то, что видел; версию, машину, период и
+    последние отказавшие шаги прикладывает ACL сам. -#}
+<dialog id="report-problem-box" class="report-box">
+  <h3>Report a problem</h3>
+  <p class="report-hint">Write what happened in your own words. ACL attaches its
+     version, this machine, the dates on screen and the last failed steps —
+     account and profile numbers are removed before sending.</p>
+  <textarea id="report-problem-text" rows="6" maxlength="4000" placeholder="The campaign stopped at the creative and nothing happened for ten minutes…"></textarea>
+  <div class="report-actions">
+    <span class="report-msg" id="report-problem-msg"></span>
+    <button type="button" id="report-problem-cancel">Cancel</button>
+    <button type="button" id="report-problem-send">Send</button>
+  </div>
+</dialog>
+<script>
+(function () {
+  var box = document.getElementById('report-problem-box');
+  var text = document.getElementById('report-problem-text');
+  var msg = document.getElementById('report-problem-msg');
+  var send = document.getElementById('report-problem-send');
+  if (!box || !send) return;
+
+  document.getElementById('report-problem-btn').addEventListener('click', function () {
+    msg.textContent = '';
+    msg.className = 'report-msg';
+    box.showModal();
+    text.focus();
+  });
+  document.getElementById('report-problem-cancel').addEventListener('click', function () {
+    box.close();
+  });
+
+  send.addEventListener('click', function () {
+    var body = (text.value || '').trim();
+    if (!body) { msg.className = 'report-msg bad'; msg.textContent = 'Write a line first.'; return; }
+    send.disabled = true;
+    msg.className = 'report-msg';
+    msg.textContent = 'Sending…';
+    var form = new FormData();
+    form.append('text', body);
+    form.append('where', location.hash || location.pathname);
+    var period = typeof amapPeriod === 'function' ? amapPeriod() : {};
+    ['from', 'to', 'span'].forEach(function (key) { form.append(key, period[key] || ''); });
+    fetch('/report-problem', { method: 'POST', body: form, credentials: 'same-origin' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        // Queue acceptance is the strongest confirmation available from the SDK.
+        if (!res.ok || !res.d.ok || !res.d.queued || !res.d.event_id) {
+          msg.className = 'report-msg bad';
+          msg.textContent = (res.d && res.d.error) || 'Submission not confirmed. Your text is still here; retry when ready.';
+          return;
+        }
+        msg.className = 'report-msg good';
+        msg.textContent = 'Queued. Delivery is not confirmed. Reference ' + String(res.d.event_id).slice(0, 8);
+      })
+      .catch(function (e) {
+        msg.className = 'report-msg bad';
+        msg.textContent = 'Submission not confirmed. Your text is still here: ' + (e && e.message ? e.message : e);
+      })
+      .finally(function () { send.disabled = false; });
+  });
+})();
+</script>
 <script>
 async function dashRefresh(ev) {
   if (ev) ev.preventDefault();
@@ -2946,22 +3103,36 @@ async function dashRefresh(ev) {
 
   <section class="acc-connect">
     <h3>Connect an account</h3>
-    <p class="acc-sub">Pick an open profile — everything else is worked out for you.</p>
+    <p class="acc-sub">Find the profile by its last letters — open it if you need to, then connect.</p>
+
+    {#- Та же форма, что в разделе страны, а не третий её вариант.
+
+        Раньше здесь был свой выбор из выпадающего списка, и в нём лежали
+        ТОЛЬКО открытые профили: не открыт — выбрать нечем, оставался ручной
+        ввод имени и номера кабинета. Именно на этом встал аккаунт
+        KLD_BFL_X84 — в карте его нет, билдер пишет «needs setup», а
+        подключить неоткуда, потому что профиль не запущен.
+
+        В разделе страны это давно решено: поиск по последним буквам через
+        Multilogin, у находки кнопки Open и Connect. Нашёл, открыл, посмотрел
+        в самом кабинете что нужно, подключил. Решение владельца: равняться на
+        это место, а не наоборот.
+
+        Страна здесь необязательна, поэтому форма отдаётся с пустой — поле
+        ниже пишет выбранное прямо в `data-amap-country`, откуда его и берёт
+        `amapConnect` в момент нажатия. -#}
+    {% with amap_value = '' %}{% include "_account_map_add.html" %}{% endwith %}
 
     <div class="acc-form">
       <div class="acc-field">
-        <label for="ac-new-prof">Multilogin profile</label>
-        <select id="ac-new-prof"></select>
-      </div>
-      <div class="acc-field">
         <label for="ac-new-country">Country · optional</label>
-        <input id="ac-new-country" type="text" list="ac-countries" placeholder="e.g. Chile" autocomplete="off">
+        <input id="ac-new-country" type="text" list="ac-countries" placeholder="e.g. Chile"
+               autocomplete="off" oninput="acCountryChanged(this)">
         <datalist id="ac-countries"></datalist>
       </div>
-      <button type="button" id="ac-add-btn" class="acc-submit">Connect</button>
 
       <div class="acc-derived" id="ac-derived">
-        <span id="ac-derived-text">No profile selected.</span>
+        <span id="ac-derived-text">Find a profile above, or</span>
         <button type="button" class="acc-edit" id="ac-toggle-manual">enter manually</button>
       </div>
 
@@ -2976,11 +3147,18 @@ async function dashRefresh(ev) {
           <label for="ac-new-adid">Ad account</label>
           <input id="ac-new-adid" type="text" placeholder="Ads Manager link or act_…">
         </div>
+        {#- Кнопка переехала сюда из шапки формы, и это не перестановка. Пока
+            она стояла наверху, она была главным действием раздела, а ручной
+            ввод имени и номера кабинета — обычным путём. Теперь обычный путь
+            наверху: найти профиль и нажать Connect у него. Здесь остаётся
+            запасной, и кнопка принадлежит ему. -#}
+        <button type="button" id="ac-add-btn" class="acc-submit">Connect by hand</button>
       </div>
 
       <p class="acc-note">
-        Name and ad account come from the profile you pick: the name from its title, the
-        ad account from that profile's own history. If something is missing, use "enter manually".
+        Name and ad account come from the profile you find above: the name from its title,
+        the ad account from that profile's own history. A profile that has never been opened
+        on this machine has no history to read — open it, and it will.
       </p>
       <div class="acc-msg" id="ac-msg"></div>
     </div>
@@ -3346,7 +3524,21 @@ async function dashRefresh(ev) {
         негде, кроме как здесь, и оно ничего не решало. Красная надпись при
         полностью рабочем аккаунте — это не предупреждение, а шум. -#}
     {% set pf_ok = pf.link_status == 'tracking' and not pf.missing_map_fields %}
-    <div class="cb-preflight {% if pf_ok %}cb-preflight-collapsed{% endif %}">
+    {#- Чего именно не хватает — словами, в самом заголовке. Красный значок без
+        продолжения это тупик: человек видит «не работает» и не знает, что
+        нажать. На вкладке Accounts это давно так («needs setup» там называет
+        задачу), здесь было иначе. -#}
+    {#- `or []` не для красоты: `pf` доходит сюда и без этого поля, и тогда
+        `not pf.missing_map_fields` выше — просто ложь, а сложение списка с
+        несуществующим атрибутом роняет отрисовку всей страницы. -#}
+    {% set pf_missing = (['tracking link'] if pf.link_status != 'tracking' else []) + (pf.missing_map_fields or []) %}
+    {#- Свёрнут ВСЕГДА, в том числе когда не настроен. Раньше блок раскрывался
+        именно у ненастроенного аккаунта — то есть занимал всю панель ровно
+        тогда, когда человеку и так труднее всего: строка ссылки, поле
+        ad_account_id, поле profile_id, у каждого своя кнопка Save, а Targeting,
+        бюджет и язык уходили за нижний край ящика. Настроить аккаунт — дело
+        одного раза, собирать кампании в этом ящике — дело каждого дня. -#}
+    <div class="cb-preflight cb-preflight-collapsed">
       <button type="button" class="cb-preflight-toggle"
               onclick="this.closest('.cb-preflight').classList.toggle('cb-preflight-collapsed')">
         <span class="cb-preflight-caret">▸</span> ⚙ Account
@@ -3354,7 +3546,8 @@ async function dashRefresh(ev) {
           <span class="cb-pf-ok">configured ✓</span>
           <span style="color:var(--muted);font-weight:400">· tracking and ids — all set</span>
         {% else %}
-          <span class="cb-pf-err">needs setup</span>
+          <span class="cb-pf-err">✗ needs setup</span>
+          <span style="color:var(--muted);font-weight:400">— {{ pf_missing | join(', ') }}</span>
         {% endif %}
       </button>
       <div class="cb-preflight-body">
@@ -5534,6 +5727,8 @@ function amapWatchOpen() {
   Array.prototype.forEach.call(blocks, function (d) {
     var key = d.getAttribute('data-country');
     if (known.indexOf(key) !== -1) d.open = true;
+    if (d.dataset.openWatch === '1') return;
+    d.dataset.openWatch = '1';
     d.addEventListener('toggle', function () {
       var now = amapOpenList();
       var at = now.indexOf(key);
@@ -5566,7 +5761,9 @@ if (document.readyState === 'loading') {
     var boxes = document.querySelectorAll('details.manage-builder[id]');
     Array.prototype.forEach.call(boxes, function (d) {
       if (open.indexOf(d.id) !== -1) d.open = true;
-      d.addEventListener('toggle', function () {
+      if (d.dataset.openWatch === '1') return;
+    d.dataset.openWatch = '1';
+    d.addEventListener('toggle', function () {
         var now = [];
         Array.prototype.forEach.call(boxes, function (x) { if (x.open) now.push(x.id); });
         try { localStorage.setItem(KEY, JSON.stringify(now)); } catch (e) {}
@@ -5622,10 +5819,135 @@ function amapReadSpend(btn) {
     .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
 }
 
+/* ── Разбивка по странам (acl-357) ─────────────────────────────────────
+   Кнопка в строке аккаунта: спросить сам кабинет, каким странам он относит
+   свои деньги. Чтение дорогое — оно создаёт в кабинете отчёт, — поэтому
+   идёт в фоне и опрашивается тем же маршрутом, что и спенд: оба показания
+   живут в одной клетке и снимаются за один период. */
+
+function amapReadCountries(btn) {
+  if (amapReadAllBusy) return;
+  var cell = amapSpendCell(btn);
+  var account = cell && cell.dataset.account;
+  if (!account) return;
+  var per = amapPeriod();
+  if (!per.from || per.span === 'all') return;
+  btn.disabled = true;
+  btn.className = 'amap-btn amap-countries';
+  btn.textContent = 'countries…';
+  var body = new FormData();
+  body.append('account', account);
+  body.append('date_from', per.from);
+  body.append('date_to', per.to);
+  body.append('span', per.span);
+  fetch('/account-spend/read-countries', { method: 'POST', body: body, credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) throw new Error(j.error || 'refused');
+      amapPollCountries(account, btn, 0, per);
+    })
+    .catch(function (e) { amapCountriesFailed(btn, String(e && e.message || e)); });
+}
+
+function amapCountriesFailed(btn, why) {
+  btn.disabled = false;
+  btn.className = 'amap-btn amap-countries amap-live-bad';
+  btn.textContent = 'failed · retry';
+  btn.title = why || 'Could not read the country split';
+}
+
+function amapCountriesDone(btn) {
+  btn.disabled = false;
+  btn.className = 'amap-btn amap-countries';
+  btn.textContent = 'Countries';
+  btn.title = 'Read again';
+}
+
+function amapPollCountries(account, btn, tries, per) {
+  /* Тот же предел, что у спенда: пострановое чтение дольше, но человек не
+     должен гадать, идёт ли ещё что-то. Шесть минут молчания — это отказ. */
+  if (tries > 120) {
+    amapCountriesFailed(btn, 'no answer after six minutes — check the launcher window');
+    return;
+  }
+  setTimeout(function () {
+    fetch('/account-spend/status?account=' + encodeURIComponent(account)
+          + '&date_from=' + encodeURIComponent(per.from)
+          + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) throw new Error(j.error || 'Could not read status');
+        var s = j.split;
+        if (!s) { amapCountriesFailed(btn, 'the reading disappeared before it finished'); return; }
+        if (s.state === 'running') { amapPollCountries(account, btn, tries + 1, per); return; }
+        if (s.state === 'failed') amapCountriesFailed(btn, s.error || 'refused');
+        else if (s.state === 'ok' || s.state === 'empty') amapCountriesDone(btn);
+        else { amapCountriesFailed(btn, 'Unknown country reading state'); return; }
+        return amapRefreshCountryLines(per).catch(function () {
+          amapCountriesFailed(btn, (s.error ? s.error + '. ' : '') + 'Could not refresh the country totals; reload the page.');
+        });
+      })
+      .catch(function (e) { amapCountriesFailed(btn, String(e && e.message || e)); });
+  }, 3000);
+}
+
+function amapRefreshCountryLines(per) {
+  // Reuse server-rendered summaries, preserving existing forms and DOM listeners.
+  return fetch('/account-map?date_from=' + encodeURIComponent(per.from)
+               + '&date_to=' + encodeURIComponent(per.to)
+               + '&span=' + encodeURIComponent(per.span), { credentials: 'same-origin' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('Could not refresh the country totals');
+      return r.text();
+    })
+    .then(function (html) {
+      var slot = document.getElementById('amap-slot');
+      if (!slot) return;
+      var fresh = new DOMParser().parseFromString(html, 'text/html');
+      var map = slot.querySelector('.amap');
+      if (!map || !fresh.querySelector('.amap')) throw new Error('Invalid account map response');
+      var blocks = fresh.querySelectorAll('details.amap-country[data-country]');
+      blocks.forEach(function (block) {
+        var key = block.getAttribute('data-country');
+        var live = slot.querySelector('details.amap-country[data-country="' + CSS.escape(key) + '"]');
+        if (!live) {
+          var added = block.cloneNode(true);
+          added.open = true;
+          map.insertBefore(added, map.querySelector('.amap-available'));
+          return;
+        }
+        var holder = live.querySelector('.amap-live-summary');
+        if (!holder) return;
+        var was = holder.querySelector('.amap-country-read');
+        var now = block.querySelector('.amap-country-read');
+        if (was && now) was.replaceWith(now.cloneNode(true));
+        else if (now) holder.appendChild(now.cloneNode(true));
+        else if (was) was.remove();
+      });
+      // A failed retry may remove the only reading for a virtual country.
+      slot.querySelectorAll('details.amap-country[data-country]').forEach(function (live) {
+        var key = live.getAttribute('data-country');
+        if (!fresh.querySelector('details.amap-country[data-country="' + CSS.escape(key) + '"]')) {
+          var previous = live.querySelector('.amap-country-read');
+          if (previous) previous.remove();
+        }
+      });
+      var count = map.querySelector('.amap-head > .amap-note');
+      if (count) count.textContent = map.querySelectorAll('details.amap-country[data-country]').length + ' countries · numbers from the stats workbook';
+      if (typeof amapWatchOpen === 'function') amapWatchOpen();
+    });
+}
+
 function amapMoney(spend, currency) {
-  var code = String(currency || '').toUpperCase();
-  return (/^[A-Z]{3}$/.test(code) ? code : 'currency unknown') + ' '
-    + Number(spend).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  // Двойник `money_format.fmt_currency`: показываем то, что написала Meta —
+  // код кодом, знак знаком. Разойтись им нельзя: одна и та же сумма рисуется
+  // отсюда после Read и с сервера при загрузке страницы, и разная подпись
+  // читалась бы как разные деньги.
+  var written = String(currency || '').trim();
+  var amount = Number(spend).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  if (['$', '€', '£', '₪'].indexOf(written) >= 0) return written + amount;
+  var code = written.toUpperCase();
+  return (/^[A-Z]{3}$/.test(code) ? code : 'currency unknown') + ' ' + amount;
 }
 
 function amapUpdateCountrySummaries() {
@@ -5975,6 +6297,8 @@ function amapPaintTree(row, s) {
     box.appendChild(err);
   }
 
+  amapLogAttach(box, row);
+
   td.appendChild(box); tr.appendChild(td);
   row.parentNode.insertBefore(tr, row.nextSibling);
 
@@ -5990,6 +6314,167 @@ function amapPaintTree(row, s) {
     row.classList.toggle('amap-tree-open', !block.hidden);
     row.classList.toggle('amap-open', !block.hidden);
   });
+}
+
+/* ── Журнал: что дешборд менял в этом кабинете ───────────────────────────
+   Выключение — единственное, чем ACL сам меняет живой кабинет, и оно писалось
+   в журнал с первого живого нажатия. Прочитать журнал было негде: файл рос, а
+   на экране от него не было ничего. Запись, которую никто не может открыть,
+   не отвечает на «почему это выключилось вчера» — она лишь позволяет сказать,
+   что ответ где-то есть.
+
+   Журнал стоит внизу дерева и свёрнут. Вопрос «что я только что сделал»
+   возникает много чаще, чем «что было неделю назад», и первый ответ — сами
+   строки дерева; журнал нужен, когда их уже недостаточно.
+
+   Отказы показываются наравне с удавшимся. Попытка, которая не сработала, —
+   это тоже то, что человек делал с живым аккаунтом, и журнал, в котором всё
+   всегда получалось, хуже отсутствующего. */
+function amapRowAccount(row) {
+  var live = row && row.querySelector('.amap-live');
+  return (live && live.dataset.account) || '';
+}
+
+function amapLogWhen(at) {
+  /* Сегодняшнее — часами: в журнале своей же работы дата сегодняшнего дня
+     занимает место и ничего не добавляет. Вчерашнее — с датой.
+
+     «Сегодня» берётся МЕСТНОЕ, и это не придирка. Запись ставит время
+     `datetime.now()` — местное; сравнивать его с датой по UTC значит с
+     полуночи до трёх часов ночи (у нас UTC+3) считать вчерашний вечер
+     сегодняшним и показывать его без даты. В журнале, вся задача которого
+     ответить «когда это случилось», такая строка прямо врёт.
+
+     Считает `amapIso` — та, что уже считает местную дату для календаря
+     карты. Написать рядом похожее было бы ровно тем расхождением, которое
+     потом ищут полдня. */
+  var s = String(at || '');
+  var today = amapIso(new Date());
+  if (s.slice(0, 10) === today) return s.slice(11, 16);
+  return s.slice(0, 16).replace('T', ' ');
+}
+
+function amapLogLine(e) {
+  var line = document.createElement('div');
+  line.className = 'amap-tree-log-line';
+
+  var when = document.createElement('span');
+  when.className = 'amap-tree-log-when';
+  when.textContent = amapLogWhen(e.at);
+  when.title = e.at || '';
+  line.appendChild(when);
+
+  var what = document.createElement('span');
+  what.className = 'amap-tree-log-what';
+  what.textContent = (e.level || 'item') + ' ' + (e.name || e.object_id || '');
+  line.appendChild(what);
+
+  /* Дословно, как и кнопка: «нажали, но тумблер не стал выключенным» —
+     это не успех, и красить его в успех нельзя. */
+  var said = document.createElement('span');
+  var ok = e.state === 'off' || e.state === 'already_off';
+  /* Три исхода, а не два. «did not turn off» — установленный факт: нажали, и
+     тумблер не стал выключенным. Оборванная попытка такого факта не даёт, и
+     называть её тем же словом значит толкать к выводу «значит, оно ещё
+     крутится» — тогда как объявление могло и выключиться. */
+  var unsure = e.state === 'unconfirmed';
+  said.className = 'amap-tree-log-said' + (ok ? '' : unsure ? ' warn' : ' bad');
+  said.textContent = e.state === 'off' ? 'turned off'
+    : e.state === 'already_off' ? 'was already off'
+    : unsure ? ('result not confirmed' + (e.error ? ' — ' + e.error : ''))
+    : ('did not turn off' + (e.error ? ' — ' + e.error : ''));
+  if (unsure) said.title = 'The attempt broke off before the switch could be read. '
+    + 'It may have gone off. Check it in Ads Manager.';
+  if (ok && e.how) said.title = e.how;
+  line.appendChild(said);
+
+  /* Кто и чем. Пустое не выдумываем: журнал без имени честнее журнала с
+     подставленным. */
+  var tail = [e.requester, e.route].filter(Boolean).join(' · ');
+  if (tail) {
+    var who = document.createElement('span');
+    who.className = 'amap-tree-log-who';
+    who.textContent = tail;
+    line.appendChild(who);
+  }
+  return line;
+}
+
+function amapLogLoad(block, account) {
+  var body = block.querySelector('.amap-tree-log-body');
+  body.textContent = 'reading…';
+  fetch('/account-spend/turn-off-history?account=' + encodeURIComponent(account),
+        { credentials: 'same-origin' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('The record could not be read.');
+      return r.json();
+    })
+    .then(function (j) {
+      /* Ответ проверяется, а не принимается на веру. Без этой проверки отказ
+         чтения превращался в пустой список, а пустой список — в надпись
+         «здесь ничего не меняли»: самый успокаивающий вывод из возможных,
+         сделанный ровно тогда, когда журнал прочитать не удалось. */
+      if (!j || !j.ok || !Array.isArray(j.entries)) {
+        body.textContent = (j && j.error) || 'The record could not be read.';
+        return;
+      }
+      var rows = j.entries || [];
+      body.textContent = '';
+      if (!rows.length) {
+        var none = document.createElement('div');
+        none.className = 'amap-tree-log-none';
+        none.textContent = 'Nothing has been changed in this account from here.';
+        body.appendChild(none);
+        return;
+      }
+      rows.forEach(function (e) { body.appendChild(amapLogLine(e)); });
+    })
+    .catch(function () {
+      body.textContent = 'The record could not be read.';
+    });
+}
+
+function amapLogRefresh(row, account) {
+  /* Перечитать журнал, если он раскрыт. Смотреть в раскрытую запись, где нет
+     того, что только что сделано, хуже, чем не открывать её вовсе. Свёрнутый
+     не трогаем: он перечитается сам при раскрытии. */
+  var block = row && row.querySelector('.amap-tree-log');
+  if (!block) return;
+  var body = block.querySelector('.amap-tree-log-body');
+  if (body && !body.hidden) amapLogLoad(block, account);
+}
+
+function amapLogAttach(box, row) {
+  var account = amapRowAccount(row);
+  if (!account) return;
+
+  var block = document.createElement('div');
+  block.className = 'amap-tree-log';
+
+  var head = document.createElement('button');
+  head.type = 'button';
+  head.className = 'amap-tree-log-head';
+  head.textContent = 'What was changed here';
+
+  var body = document.createElement('div');
+  body.className = 'amap-tree-log-body';
+  /* Раскрытое переживает перечитывание дерева — как и раскрытые кампании.
+     Иначе каждое нажатие Read закрывало бы журнал, который человек открыл
+     именно чтобы посмотреть на последствия нажатия. */
+  body.hidden = row.dataset.logOpen !== '1';
+  head.classList.toggle('open', !body.hidden);
+
+  head.addEventListener('click', function () {
+    body.hidden = !body.hidden;
+    head.classList.toggle('open', !body.hidden);
+    row.dataset.logOpen = body.hidden ? '' : '1';
+    if (!body.hidden) amapLogLoad(block, account);
+  });
+
+  block.appendChild(head);
+  block.appendChild(body);
+  box.appendChild(block);
+  if (!body.hidden) amapLogLoad(block, account);
 }
 
 /* ── Выключить строку ────────────────────────────────────────────────────
@@ -6064,8 +6549,16 @@ function amapTurnOffDo(btn) {
       } else {
         amapTurnOffSaid(btn, 'failed', res.error || 'did not turn off');
       }
+      amapLogRefresh(row, account);
     })
-    .catch(function (e) { amapTurnOffSaid(btn, 'failed', String((e && e.message) || e)); });
+    .catch(function (e) {
+      amapTurnOffSaid(btn, 'failed', String((e && e.message) || e));
+      /* И здесь тоже. Это не симметрия ради симметрии: именно упавшая
+         попытка пишет в журнал запись «результат не подтверждён», и именно
+         она нужнее всего на глазах. Обновляя журнал только по успешному
+         ответу, мы прятали бы ровно ту строку, ради которой его открывают. */
+      amapLogRefresh(row, account);
+    });
 }
 
 function amapTurnOffSaid(btn, state, words) {
@@ -6481,21 +6974,38 @@ function amapClose(kind, value, label) {
 var _mlxCache = {};   // инстанс -> массив профилей
 var _mlxLoading = {}; // инстанс -> Promise
 
-function amapProfiles(inst, reload) {
-  if (reload) { delete _mlxCache[inst]; delete _mlxLoading[inst]; }
-  if (_mlxCache[inst]) return Promise.resolve(_mlxCache[inst]);
-  if (_mlxLoading[inst]) return _mlxLoading[inst];
+/* Спрашиваем ровно то, что набрано, а не всё рабочее пространство.
+
+   Раньше список тянулся один раз на инстанс — «чтобы Multilogin не дёргался
+   на каждую букву» — и фильтровался на месте. Довод верный, а цена
+   оказалась выше: у владельца 1760 профилей, то есть **восемнадцать
+   запросов подряд** на одну первичную загрузку. Multilogin такое отбивает:
+   пять полных выкачиваний подряд дали три удачных и два отказа 501, и
+   повторы не помогли — отказ приходил все три раза.
+
+   При этом узкий поиск через тот же API отвечает сразу и одним запросом:
+   «DQ500» — один профиль, без единой ошибки. Искать он умеет, мы его об
+   этом не просили.
+
+   Кэш остался, но теперь по паре (инстанс, набранное): повторный ввод тех же
+   букв не идёт в сеть, а Multilogin получает один запрос вместо восемнадцати. */
+function amapProfiles(inst, reload, text) {
+  var q = (text || '').trim();
+  var key = inst + '\0' + q.toLowerCase();
+  if (reload) { delete _mlxCache[key]; delete _mlxLoading[key]; }
+  if (_mlxCache[key]) return Promise.resolve(_mlxCache[key]);
+  if (_mlxLoading[key]) return _mlxLoading[key];
   var pending = fetch('/multilogin-search', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
-    body: JSON.stringify({ search_text: '', instance: inst })
+    body: JSON.stringify({ search_text: q, instance: inst })
   }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d || !d.ok) throw new Error((d && d.error) || 'Multilogin did not answer');
     var profiles = d.profiles || [];
-    if (_mlxLoading[inst] === pending) { _mlxCache[inst] = profiles; delete _mlxLoading[inst]; }
+    if (_mlxLoading[key] === pending) { _mlxCache[key] = profiles; delete _mlxLoading[key]; }
     return profiles;
-  }).catch(function (e) { if (_mlxLoading[inst] === pending) delete _mlxLoading[inst]; throw e; });
-  _mlxLoading[inst] = pending;
+  }).catch(function (e) { if (_mlxLoading[key] === pending) delete _mlxLoading[key]; throw e; });
+  _mlxLoading[key] = pending;
   return pending;
 }
 
@@ -6522,11 +7032,22 @@ function amapFilter(input, reload) {
 
   if (!q) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
   msg.className = 'amap-msg';
-  msg.textContent = _mlxCache[inst] ? '' : ('loading ' + (ACL_MLX_LABELS[inst] || inst) + '…');
+  msg.textContent = _mlxCache[inst + '\0' + q.toLowerCase()] ? ''
+    : ('searching ' + (ACL_MLX_LABELS[inst] || inst) + '…');
 
-  return amapProfiles(inst, reload).then(function (all) {
-    if (!current()) return;
-    // пока грузилось, могли набрать ещё — берём то, что в поле сейчас
+  /* Ждём, пока человек допечатает. Запрос теперь уходит на каждое слово, а
+     не один раз на инстанс, — и без этой паузы «dq500» стоил бы пяти
+     запросов вместо одного. Четверть секунды тишины короче любой паузы
+     между буквами и незаметна на глаз. */
+  clearTimeout(box._amapTypeTimer);
+  return new Promise(function (resolve) {
+    box._amapTypeTimer = setTimeout(resolve, reload ? 0 : 250);
+  }).then(function () {
+    if (!current()) return null;
+    return amapProfiles(inst, reload, q);
+  }).then(function (all) {
+    if (!current() || all === null) return;
+    // пока искали, могли набрать ещё — берём то, что в поле сейчас
     var now = (input.value || '').trim();
     if (!now) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
     var found = amapRank(all, now);
@@ -6717,8 +7238,17 @@ async function amapMlSubmit(btn, paste) {
     var j = await response.json();
     if (!response.ok || !j || !j.ok) throw new Error((j && j.error) || 'Connection failed');
     if (!paste && !j.token_saved) throw new Error(j.token_error || 'Signed in, but no automation token was saved. Ask the workspace owner for a token.');
-    // A new workspace token invalidates both cached profiles and in-flight results.
-    delete _mlxCache[inst]; delete _mlxLoading[inst];
+    /* A new workspace token invalidates both cached profiles and in-flight
+       results. Ключ кэша теперь «инстанс + набранное», поэтому чистим ВСЕ
+       записи этого инстанса: удалить одну по старому ключу значило бы
+       оставить на экране результаты, найденные прошлым токеном, — то есть
+       чужого рабочего пространства. */
+    Object.keys(_mlxCache).forEach(function (k) {
+      if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxCache[k];
+    });
+    Object.keys(_mlxLoading).forEach(function (k) {
+      if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxLoading[k];
+    });
     document.querySelectorAll('.amap-add').forEach(function (b) {
       if (amapMlInstance(b) !== inst) return;
       b._amapGeneration = (b._amapGeneration || 0) + 1;
@@ -8119,7 +8649,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         var interest = opt.dataset.interest || '';
         var code     = opt.dataset.code || '';
         input.value  = code;
-        if (hidden) hidden.value = interest;
+        /* В отправляемое поле идёт КОД, а не строка интересов.
+
+           Интересы здесь и лежали, и из-за этого детальный таргетинг не
+           ставился никогда. Сервер по этому полю ищет таргет в библиотеке
+           («PF» → «Foreign exchange market, Investor, …»), а получал уже
+           готовые интересы — по ним ничего не находится, и таргетинг
+           молча очищался. На экране при этом всё выглядело выбранным, и
+           даже имя кампании несло код.
+
+           Проверено 14.09: lookup('Foreign exchange market, …') → '',
+           lookup('PF') → полная строка интересов. */
+        if (hidden) hidden.value = code;
         if (hint)   hint.textContent = interest;
         dropdown.hidden = true;
         var slot = wrap.closest('.cb-slot');
@@ -8156,7 +8697,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
     if (hit.length === 1) {
       input.value = hit[0].code;
-      if (hidden) hidden.value = hit[0].fb_interest || '';
+      // Код, а не интересы — по той же причине, что и в выборе мышью выше.
+      if (hidden) hidden.value = hit[0].code;
       if (hint)   hint.textContent = hit[0].fb_interest || '';
       var slot = wrap.closest('.cb-slot');
       if (slot) cbUpdateName(slot);
@@ -10144,7 +10686,10 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     var nameField = el('ac-new-label'), adField = el('ac-new-adid');
     var text = el('ac-derived-text');
     if (!text) return;
-    if (!pid) { text.textContent = 'No profile selected.'; return; }
+    /* Выбора профиля в этой форме больше нет — он наверху, в общей с картой.
+       Поэтому здесь не «профиль не выбран» (звучит как незаполненное поле
+       рядом), а указание, где искать, и запасной путь рядом. */
+    if (!pid) { text.textContent = 'Find a profile above, or'; return; }
 
     var guessName = accountForProfile(pid);
     var guessAd = detectedFor(pid);
@@ -10165,6 +10710,16 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
   function openManual() {
     var box = el('ac-manual'); if (box) box.classList.add('open');
   }
+
+  /* Страна тут необязательна и живёт отдельным полем, а форма подключения —
+     общая с картой и берёт страну из `data-amap-country` в момент нажатия
+     Connect. Пишем туда набранное, вместо того чтобы заводить второй путь
+     передачи: у общей формы должен остаться один источник этого значения,
+     иначе в карте и здесь она однажды начнёт брать страну по-разному. */
+  window.acCountryChanged = function (input) {
+    var box = document.querySelector('#view-accounts .amap-add');
+    if (box) box.setAttribute('data-amap-country', (input.value || '').trim());
+  };
 
   function addManual() {
     var pid = (el('ac-new-prof') || {}).value || '';

@@ -50,20 +50,26 @@ if exist ".venv\Scripts\python.exe" (
     set "PY=.venv\Scripts\python.exe"
 )
 
-REM A manual repair must not install packages for a candidate whose previous
-REM dashboard launch never became healthy. Recover first, then restart this
-REM installer from the restored checkout so even the batch file is N-1.
-if not exist "scripts\acl_runtime_manager.py" goto dependencies
-"%PY%" scripts\acl_runtime_manager.py recover-pending
-if errorlevel 10 (
-    echo Restarting installer from the restored ACL release...
-    start "" "%~f0"
-    exit /b 0
-)
-if errorlevel 1 (
-    echo ERROR: an unfinished ACL update could not be recovered safely.
-    pause
-    exit /b 1
+REM Recovery may replace this batch file with an older release. Keep the
+REM recovery call and its exits in ONE parsed command block: cmd must not
+REM continue reading instructions at the same byte offset in the old file.
+REM Do not relaunch N-1 automatically; older files may have no restart guard.
+if exist "scripts\acl_runtime_manager.py" (
+    "%PY%" scripts\acl_runtime_manager.py recover-pending
+    if errorlevel 10 (
+        echo The previous ACL release was restored. Repair has stopped safely.
+        echo Run install_acl.bat again to finish repair using the restored files.
+        pause
+        REM The running batch may no longer exist at cmd's current offset.
+        REM End this installer command process; EXIT /B can report success
+        REM after the file is replaced even with an explicit error code.
+        exit 10
+    )
+    if errorlevel 1 (
+        echo ERROR: an unfinished ACL update could not be recovered safely.
+        pause
+        exit /b 1
+    )
 )
 
 :dependencies

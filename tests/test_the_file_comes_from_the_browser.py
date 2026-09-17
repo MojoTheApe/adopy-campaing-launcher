@@ -6,8 +6,9 @@ iframe — нашёл НОЛЬ полей `input[type=file]` при открыт
 кросс-доменном iframe, вынесенном в отдельный процесс, а `DOM.getDocument`
 границу процесса не переходит, сколько ни ставь `pierce`.
 
-Событие `Page.fileChooserOpened` несёт `backendNodeId`, и он сквозной —
-работает через границы процессов, в отличие от `nodeId`.
+Событие `Page.fileChooserOpened` несёт `backendNodeId`; он применяется в
+сессии фрейма, который открыл диалог. Проверки настоящих OOPIF находятся
+в test_upload_chooser_review.py.
 
 Все проверки здесь ИСПОЛНЯЮТ код. Предыдущий обход был покрыт двенадцатью
 текстовыми проверками, все зелёные — а он падал на первой строке с NameError,
@@ -50,6 +51,10 @@ class _Session:
 
 
 class _Page:
+    def wait_for_timeout(self, ms):
+        import time
+        time.sleep(ms / 1000)
+
     def __init__(self, session):
         self.context = type("Ctx", (), {"new_cdp_session": lambda _s, _p: session})()
 

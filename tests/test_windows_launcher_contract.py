@@ -160,6 +160,12 @@ def test_bootstrap_scenarios_on_windows() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_installers_do_not_relaunch_themselves() -> None:
+    for name in ("Install ACL.bat", "install_acl.bat"):
+        assert 'start "" "%~f0"' not in _text(name)
+    assert "NEEDRESTART" not in _text("Install ACL.bat")
+
+
 def test_a_green_install_opens_the_dashboard_itself() -> None:
     """"Start it with start_dashboard.bat" ended the install one step short.
 

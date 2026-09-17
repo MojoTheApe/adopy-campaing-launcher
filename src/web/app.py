@@ -694,6 +694,48 @@ def _build_account_map_view(
             "live_read": 0, "live_sums": [],
             "book": c.get("my_totals") or {},
         })
+
+    # ── acl-357: спенд, привязанный к стране самим кабинетом ──────────────
+    #
+    # Соседняя колонка «Account read» честно подписана «not country-attributed
+    # spend»: она показывает весь спенд привязанных кабинетов по всем странам.
+    # Эти числа — про страну: Ads Reporting разбивает спенд кабинета по
+    # Country, и 15.09 живое чтение DQ501 показало Chile на аккаунте, где весь
+    # вечер запускали кампании на Гватемалу.
+    #
+    # Страна, которой нет ни в связях, ни в книге, получает свою строку: иначе
+    # её деньги не видно нигде, а это ровно тот случай, ради которого разбивка
+    # и заводилась.
+    by_country: dict[str, list[dict]] = {}
+    try:
+        from src.analysis_agent import country_split
+
+        if date_from:
+            for row in country_split.totals_by_country(date_from, date_to or date_from):
+                by_country.setdefault(
+                    (row.get("country") or "").strip().casefold(), []
+                ).append(row)
+    except Exception:  # pragma: no cover — показания не должны ронять страницу
+        by_country = {}
+
+    for mc in countries:
+        mc["country_read"] = by_country.get((mc["country"] or "").strip().casefold(), [])
+
+    seen_keys = {(mc["country"] or "").strip().casefold() for mc in countries}
+    for key, rows in sorted(by_country.items()):
+        if key in seen_keys:
+            continue
+        countries.append({
+            "country": rows[0].get("country") or key,
+            "key": "",
+            "virtual": True,
+            "from_reading": True,
+            "rows": [],
+            "spend": 0, "leads": 0, "deposits": 0,
+            "live_read": 0, "live_sums": [],
+            "book": {},
+            "country_read": rows,
+        })
     # Порядок как был у overview: деньги сверху, дальше по алфавиту.
     countries.sort(
         key=lambda mc: (-float((mc.get("book") or {}).get("spend") or 0), (mc["country"] or "").lower())
@@ -1117,24 +1159,66 @@ def _mlx_extract_profiles(body: dict) -> list[dict]:
     ]
 
 
+#: Сколько раз повторять сбойную страницу и сколько ждать между попытками.
+#: Восемнадцать запросов подряд — это восемнадцать возможностей споткнуться,
+#: и Multilogin спотыкается: три подряд полных загрузки на живом рабочем
+#: пространстве дали две по 1759 профилей и один отказ 501.
+_MLX_TRIES = 3
+_MLX_RETRY_PAUSE_S = 0.8
+
+
+def _mlx_worth_retrying(status: int) -> bool:
+    """Стоит ли повторять этот отказ.
+
+    5xx и 429 — про «сейчас не вышло»: со второй попытки обычно выходит.
+    401 и 403 — про токен: он не станет живым оттого, что мы спросим ещё раз,
+    а повтор лишь оттянет честный ответ на пару секунд.
+    """
+    return status >= 500 or status == 429
+
+
 def _mlx_search_all(requests_mod, headers: dict, search_text: str) -> tuple[list[dict], str]:
-    """Every profile the token can see, paged. Returns (profiles, error)."""
+    """Every profile the token can see, paged. Returns (profiles, error).
+
+    Страницы тянутся по сотне, и в рабочем пространстве владельца их
+    восемнадцать. Раньше единственный сбой на любой из них обрушивал всю
+    загрузку: человек видел красное «Multilogin refused» — то есть слышал
+    «отказано в доступе» там, где случился разовый сбой, — и лечил это
+    нажатием Reload, о чём на экране не говорилось ни слова.
+    """
+    import time as _time
+
     found: list[dict] = []
     offset = 0
     while offset < _MLX_MAX_PROFILES:
-        r = requests_mod.post(
-            f"{MLX_API_BASE}/profile/search",
-            headers=headers,
-            json={"limit": _MLX_PAGE, "offset": offset, "search_text": search_text},
-            timeout=20,
-        )
+        r = None
+        last = ""
+        for attempt in range(_MLX_TRIES):
+            if attempt:
+                _time.sleep(_MLX_RETRY_PAUSE_S)
+            try:
+                r = requests_mod.post(
+                    f"{MLX_API_BASE}/profile/search",
+                    headers=headers,
+                    json={"limit": _MLX_PAGE, "offset": offset, "search_text": search_text},
+                    timeout=20,
+                )
+            except Exception as exc:
+                # Обрыв связи — из того же рода, что и 5xx: повторяем.
+                r, last = None, f"{type(exc).__name__}: {exc}"[:200]
+                continue
+            if r.status_code == 200 or not _mlx_worth_retrying(r.status_code):
+                break
+        if r is None:
+            return found, f"no answer after {_MLX_TRIES} tries" + (f": {last}" if last else "")
         if r.status_code != 200:
             detail = ""
             try:
                 detail = ((r.json().get("status") or {}).get("message") or "").strip()
             except Exception:
                 detail = (r.text or "")[:200]
-            return found, f"HTTP {r.status_code}" + (f": {detail}" if detail else "")
+            tries = f" after {_MLX_TRIES} tries" if _mlx_worth_retrying(r.status_code) else ""
+            return found, f"HTTP {r.status_code}{tries}" + (f": {detail}" if detail else "")
         page = _mlx_extract_profiles(r.json())
         found.extend(page)
         if len(page) < _MLX_PAGE:
@@ -2227,18 +2311,18 @@ async def api_accounts_overview() -> JSONResponse:
         "accounts": accounts,
         "hidden_count": sum(1 for a in accounts if a["hidden"]),
         "suggestions": suggestions,
-        # folder_id comes off the profile's own path, so the operator never
-        # has to find or type it.
         "open_profiles": [
             {
                 "profile_id": p["profile_id"],
-                # The Multilogin profile NAME, read off the browser window
-                # title — the only place it is available, since the profile
-                # API answers 404/403 with the token we have. A dropdown of
-                # bare UUIDs told the operator nothing.
+                # The Multilogin profile NAME, as Multilogin itself reports it.
+                # A dropdown of bare UUIDs told the operator nothing, and the
+                # older way of getting a name — off the browser window title —
+                # gave nothing at all for names containing a space.
                 "name": p.get("name") or "",
                 "key": profile_name_key(p.get("name") or ""),
-                "folder_id": folder_id_for(p["profile_id"]),
+                # Multilogin's own answer, falling back to the profile's path
+                # on disk. Either way the operator never has to find or type it.
+                "folder_id": p.get("folder_id") or folder_id_for(p["profile_id"]),
                 # The ad account this profile actually works in, read from its
                 # own browser history — the last field a person had to copy.
                 "ad_account_id": ad_account_id_for(p["profile_id"]),
@@ -2589,6 +2673,154 @@ async def account_spend_read(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
 
 
+@app.post("/account-spend/read-countries")
+async def account_spend_read_countries(request: Request) -> JSONResponse:
+    """Прочитать пострановую разбивку аккаунта. Только по нажатию человека.
+
+    То же правило, что и у чтения спенда: никакого расписания. Обход живых
+    кабинетов по таймеру уже однажды предшествовал чекпоинту на телефон.
+
+    Чтение дорогое — оно создаёт в кабинете отчёт и выставляет в нём период и
+    разрезы, — поэтому запускается в фоне и сразу отвечает «running». Ответ
+    смотрят через `/account-spend/countries`.
+    """
+    from src.analysis_agent import country_split
+
+    form = await request.form()
+    account = (form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    try:
+        date_from, date_to = _spend_period(
+            str(form.get("date_from") or ""), str(form.get("date_to") or ""),
+            str(form.get("span") or ""),
+        )
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    try:
+        split = country_split.start_split(account, date_from, date_to)
+    except Exception:
+        return JSONResponse(
+            {"ok": False, "error": "Could not start or save the country reading. "
+                                   "Check disk space and retry."},
+            status_code=500,
+        )
+    return JSONResponse({"ok": True, "split": split.to_dict()})
+
+
+@app.get("/account-spend/countries")
+async def account_spend_countries(
+    date_from: str = "", date_to: str = "", span: str = ""
+) -> JSONResponse:
+    """Сколько потрачено на каждую страну — по прочитанным аккаунтам.
+
+    **Страны берутся из показаний, а не из карты аккаунтов.** В этом весь
+    смысл: деньги нередко уходят на страну, к которой аккаунт не привязан, и
+    показывать их под привязанной страной значит показывать неправду.
+    Страна, которой в отчёте ещё нет, приходит с пометкой `known: false` —
+    дешборду остаётся открыть под неё раздел, а не умолчать о ней.
+
+    Ошибка чтения отчёта не должна прятать уже снятые показания: страны
+    отдаются и тогда, когда книга не читается, просто без пометок.
+    """
+    from src.analysis_agent import country_split
+
+    try:
+        date_from, date_to = _spend_period(date_from, date_to, span)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    totals = country_split.totals_by_country(date_from, date_to)
+
+    known: set[str] = set()
+    note = ""
+    try:
+        report, _df, _warnings = get_cached_report()
+        _enrich_country_overview(report)
+        for section in report.get("countries") or []:
+            name = str((section or {}).get("country") or "").strip()
+            if name:
+                known.add(name.casefold())
+    except Exception as exc:  # книга не прочиталась — показания всё равно наши
+        note = f"Could not tell which countries are already on the report: {exc}"
+
+    for row in totals:
+        row["known"] = row["country"].casefold() in known if known else None
+
+    return JSONResponse({
+        "ok": True,
+        "date_from": date_from,
+        "date_to": date_to,
+        "running": country_split.running_now(),
+        "countries": totals,
+        "splits": country_split.all_splits(date_from, date_to),
+        "note": note,
+    })
+
+
+@app.post("/report-problem")
+async def report_problem(request: Request) -> JSONResponse:
+    """Пожаловаться из лаунчера: человек пишет, машина прикладывает факты.
+
+    Сегодня о поломке узнают из сообщения в переписке и фотографии экрана —
+    пересказанных, с опозданием и без фактов самой машины (ACL-354).
+
+    Окружение собирается здесь, а не человеком: версия потока, метка машины,
+    период на экране и последние отказавшие шаги. Всё это уже вычищено от
+    номеров кабинетов и профилей — тем же вычистителем, что и телеметрия.
+
+    **Неудача отправки не выдаётся за удачу.** Задача требует этого прямо:
+    «not falsely reported after a delivery failure». Пустой номер события —
+    это «не ушло», и так и сказано.
+    """
+    from src import acl_sentry
+
+    form = await request.form()
+    text = (form.get("text") or "").strip()
+    if not text:
+        return JSONResponse(
+            {"ok": False, "error": "Write what went wrong — even one line helps."},
+            status_code=400,
+        )
+
+    if len(text) > 4000:
+        return JSONResponse({"ok": False, "error": "Keep the report within 4000 characters."}, status_code=400)
+
+    context: dict[str, Any] = {
+        "where": (form.get("where") or "").strip()[:200],
+        "period": {k: str(form.get(k) or "")[:40] for k in ("from", "to", "span")},
+    }
+    try:
+        from src.fb_ads_rpa import run_telemetry, telemetry_sync
+
+        context["version"] = telemetry_sync.flow_version()
+        context["machine"] = telemetry_sync.machine_identity()[0]
+        failed = [
+            {k: r.get(k) for k in ("ts", "step", "campaign", "diag") if k in r}
+            for r in run_telemetry.load()[-400:]
+            if r.get("ok") is False
+        ]
+        context["last_failures"] = failed[-8:]
+    except Exception as exc:  # окружение не собралось — обращение всё равно уходит
+        context["context_error"] = str(exc)[:200]
+
+    event_id = ""
+    try:
+        event_id = acl_sentry.report_problem(text, context=context)
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": "Report submission was not confirmed. Your text is still available; retry when ready."}, status_code=502
+        )
+    if not event_id:
+        return JSONResponse(
+            {"ok": False,
+             "error": "Reporting is switched off on this machine, so nothing was sent."},
+            status_code=503,
+        )
+    # An SDK event ID confirms local queue acceptance, not network delivery.
+    return JSONResponse({"ok": True, "queued": True, "event_id": event_id}, status_code=202)
+
+
 @app.post("/account-spend/turn-off")
 async def account_spend_turn_off(request: Request) -> JSONResponse:
     """Выключить одну кампанию или одно объявление на живом аккаунте.
@@ -2630,10 +2862,51 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
             parent_id=(form.get("parent_id") or "").strip(),
             expected_name=(form.get("name") or "").strip(),
             date_from=date_from, date_to=date_to,
+            # Кто нажал. Берём ту же подпись, которой дешборд всюду называет
+            # хозяина машины; пустая — честнее выдуманной.
+            requester=(os.environ.get("MY_CM_NAME") or "").strip(),
         )
     except Exception:
         return JSONResponse({"ok": False, "error": "Could not reach the account. Check the launcher window."}, status_code=503)
     return JSONResponse({"ok": True, "result": result.to_dict()})
+
+
+@app.get("/account-spend/turn-off-history")
+async def account_spend_turn_off_history(request: Request) -> JSONResponse:
+    """Что дешборд менял в этом кабинете — и чем это кончилось.
+
+    Журнал писался с первого же живого нажатия, но прочитать его было негде:
+    файл рос, а на экране от него не было ничего. Запись, которую никто не
+    может открыть, не отвечает на вопрос «почему это выключилось вчера» — она
+    только позволяет сказать, что ответ где-то есть.
+
+    Отдаём как есть, включая отказы: попытка, которая не сработала, — это тоже
+    то, что человек делал с живым аккаунтом, и прятать её значило бы
+    показывать журнал, в котором всё всегда получалось.
+    """
+    from src.analysis_agent import account_spend
+
+    account = (request.query_params.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    try:
+        limit = max(1, min(200, int(request.query_params.get("limit") or 20)))
+    except ValueError:
+        limit = 20
+    try:
+        rows = account_spend.turn_off_history(limit=limit, account=account)
+    except Exception:
+        # Журнал — рассказ о работе, а не сама работа: его поломка не повод
+        # ронять страницу, на которой человек останавливает кампании. Но и
+        # выдавать её за пустой журнал нельзя. Пустой список значит «здесь
+        # ничего не меняли» — самый успокаивающий ответ из возможных, и
+        # отдавать его вместо «прочитать не удалось» хуже, чем промолчать:
+        # человек уходит уверенным в том, чего никто не проверял.
+        return JSONResponse(
+            {"ok": False, "error": "The record could not be read."},
+            status_code=500,
+        )
+    return JSONResponse({"ok": True, "entries": rows})
 
 
 @app.post("/account-spend/open-profile")
@@ -2709,16 +2982,22 @@ async def account_probe_ad_account(request: Request) -> JSONResponse:
 async def account_spend_status(
     account: str = "", date_from: str = "", date_to: str = "", span: str = ""
 ) -> JSONResponse:
-    from src.analysis_agent import account_spend
+    from src.analysis_agent import account_spend, country_split
 
     try:
         date_from, date_to = _spend_period(date_from, date_to, span)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     if account.strip():
+        # Пострановое чтение отдаётся здесь же, а не отдельным маршрутом.
+        # Оба показания живут в одной клетке строки и снимаются за один и тот
+        # же период; второй опрос ходил бы за тем же аккаунтом в те же
+        # секунды и удваивал бы запросы ради разделения, которого на экране
+        # нет. `split` отсутствует, пока страны у этого аккаунта не читали.
         return JSONResponse({
             "ok": True,
             "reading": account_spend.get_reading(account.strip(), date_from, date_to).to_dict(),
+            "split": country_split.get_split(account.strip(), date_from, date_to),
         })
     return JSONResponse(
         {

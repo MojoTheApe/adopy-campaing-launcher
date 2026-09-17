@@ -98,7 +98,7 @@ def test_a_page_that_never_shows_totals_says_so_and_mentions_scrolling():
 
     value, how = _read(_Empty())
     assert value is None
-    assert "прокрутки" in how, "человек не поймёт, что этот путь уже пройден"
+    assert "scrolling" in how, "человек не поймёт, что этот путь уже пройден"
 
 
 def test_a_page_that_refuses_to_scroll_does_not_break_the_read():

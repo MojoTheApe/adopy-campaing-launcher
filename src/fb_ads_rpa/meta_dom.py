@@ -28,66 +28,19 @@ _PW_FILE_LIMIT_MB = 45
 def _upload_heavy_via_chooser_event(
     page: Page, creative_path: str, diag: dict, click, *, wait_s: float = 25.0
 ) -> bool:
-    """Взять поле у самого браузера, а не искать его в дереве.
+    """Set a local file through the CDP target that emits its chooser event.
 
-    14.09, живой прогон: обход всего дерева — с теневыми корнями и содержимым
-    iframe — нашёл **ноль** полей `input[type=file]` при открытом окне выбора
-    (`cdp_inputs: 0`). Искать было нечего: окно медиа живёт в кросс-доменном
-    iframe, который Chrome выносит в отдельный процесс, а `DOM.getDocument`
-    границу процесса не переходит, сколько ни ставь `pierce`.
-
-    Поэтому поле не ищется, а приходит само: событие `Page.fileChooserOpened`
-    несёт `backendNodeId`, и он **сквозной** — работает через границы
-    процессов, в отличие от `nodeId`, на котором обход и споткнулся.
-
-    Перехват включается на СВОЕЙ сессии, и Playwright тут не участвует:
-    `expect_file_chooser` перехватывает то же окно, и два перехватчика на одно
-    событие — заведомая драка. Поэтому нажатие делается здесь же, параметром
-    `click`, а не снаружи.
+    An out-of-process media frame has a separate CDP session. Its backend
+    node ID must be used in that session, not in the main page's renderer.
+    Pump Playwright while waiting so delayed events can actually be received.
+    Temporary interception is disarmed and detached on every exit.
     """
     path = str(Path(creative_path).resolve())
-    try:
-        session = page.context.new_cdp_session(page)
-    except Exception as exc:
-        diag["heavy_error"] = f"new_cdp_session: {type(exc).__name__}: {exc}"[:200]
-        return False
+    sessions = []
+    attempted = set()
+    caught = {}
 
-    caught: dict = {}
-    try:
-        session.on("Page.fileChooserOpened", lambda params: caught.update(params or {}))
-        session.send("Page.enable")
-        session.send("DOM.enable")
-        session.send("Page.setInterceptFileChooserDialog", {"enabled": True})
-    except Exception as exc:
-        diag["heavy_error"] = f"intercept: {type(exc).__name__}: {exc}"[:200]
-        try:
-            session.detach()
-        except Exception:
-            pass
-        return False
-
-    try:
-        diag["heavy_clicked"] = bool(click())
-        # Ждём событие. Двадцать пять секунд — столько же, сколько давал
-        # прежний путь: меняем способ, а не терпение.
-        deadline = time.time() + wait_s
-        while time.time() < deadline and "backendNodeId" not in caught:
-            time.sleep(0.25)
-
-        backend = caught.get("backendNodeId")
-        diag["heavy_backend_node"] = backend
-        if not backend:
-            diag["heavy_error"] = "событие Page.fileChooserOpened не пришло"
-            return False
-
-        session.send("DOM.setFileInputFiles", {"files": [path], "backendNodeId": backend})
-        return True
-    except Exception as exc:
-        diag["heavy_error"] = f"setFileInputFiles: {type(exc).__name__}: {exc}"[:200]
-        return False
-    finally:
-        # Перехват снимаем обязательно: оставленный включённым, он проглотит
-        # окно выбора у следующего шага, и тот будет ждать его вечно.
+    def disarm(session):
         try:
             session.send("Page.setInterceptFileChooserDialog", {"enabled": False})
         except Exception:
@@ -96,6 +49,64 @@ def _upload_heavy_via_chooser_event(
             session.detach()
         except Exception:
             pass
+
+    def arm(target, *, required=False):
+        try:
+            session = page.context.new_cdp_session(target)
+        except Exception as exc:
+            if required:
+                diag["heavy_error"] = f"new_cdp_session: {type(exc).__name__}: {exc}"[:200]
+            return False
+        try:
+            def chooser(params):
+                if not caught and (params or {}).get("backendNodeId"):
+                    caught.update(params)
+                    caught["session"] = session
+            session.on("Page.fileChooserOpened", chooser)
+            session.send("Page.enable")
+            session.send("DOM.enable")
+            session.send("Page.setInterceptFileChooserDialog", {"enabled": True})
+            sessions.append(session)
+            return True
+        except Exception as exc:
+            if required:
+                diag["heavy_error"] = f"intercept: {type(exc).__name__}: {exc}"[:200]
+            disarm(session)
+            return False
+
+    def arm_frames():
+        for frame in getattr(page, "frames", []):
+            if frame == page.main_frame:
+                continue
+            key = (frame, frame.url)
+            if key not in attempted:
+                attempted.add(key)
+                # In-process frames share their parent's session. Playwright
+                # refuses a separate CDP session for those; that is expected.
+                arm(frame)
+
+    try:
+        if not arm(page, required=True):
+            return False
+        arm_frames()
+        diag["heavy_clicked"] = bool(click())
+        deadline = time.monotonic() + wait_s
+        while time.monotonic() < deadline and not caught:
+            page.wait_for_timeout(100)
+            arm_frames()
+        backend = caught.get("backendNodeId")
+        diag["heavy_backend_node"] = backend
+        if not backend:
+            diag["heavy_error"] = "событие Page.fileChooserOpened не пришло"
+            return False
+        caught["session"].send("DOM.setFileInputFiles", {"files": [path], "backendNodeId": backend})
+        return True
+    except Exception as exc:
+        diag["heavy_error"] = f"setFileInputFiles: {type(exc).__name__}: {exc}"[:200]
+        return False
+    finally:
+        for session in reversed(sessions):
+            disarm(session)
 
 
 #: След последней попытки загрузить креатив — что шаг видел и делал.
@@ -4487,27 +4498,26 @@ def _creative_modal_open(page: Page) -> bool:
         return False
 
 
-def _library_selected_count(page: Page) -> int:
-    """Sum of the media library's own "N selected" counters."""
+def _library_selected_count(page: Page) -> int | None:
+    """The visible library counter, or None when its state is unavailable."""
     try:
-        return int(
-            page.evaluate(
-                """
-                () => {
-                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                  let total = 0;
-                  for (const el of document.querySelectorAll('*')) {
-                    if (!el.offsetParent || el.children.length !== 0) continue;
-                    const m = norm(el.textContent).match(/^(\\d+) selected$/);
-                    if (m) total += parseInt(m[1], 10);
-                  }
-                  return total;
-                }
-                """
-            )
+        value = page.evaluate(
+            r"""() => {
+              let total = 0, found = false;
+              for (const el of document.querySelectorAll('*')) {
+                const r = el.getBoundingClientRect();
+                const style = getComputedStyle(el);
+                if (!r.width || !r.height || el.children.length ||
+                    style.visibility === 'hidden' || el.closest('[hidden],[inert],[aria-hidden="true"]')) continue;
+                const m = (el.textContent || '').trim().match(/^(\d+) selected$/);
+                if (m) { found = true; total += Number(m[1]); }
+              }
+              return found ? total : null;
+            }"""
         )
+        return int(value) if value is not None else None
     except Exception:
-        return 0
+        return None
 
 
 def _library_tiles(page: Page, filename: str):
@@ -4584,48 +4594,36 @@ def _library_sight(page: Page, filename: str) -> dict:
 
 
 def _library_undo_selection(page: Page, tiles, clicked: list[int], before: int) -> bool:
-    """Снять то, что мы навыбирали, и подтвердить это счётчиком сетки.
-
-    Без этого повторное использование медиатеки опаснее, чем отсутствие
-    повторного использования, и 24.08 его именно поэтому и выключили: шаг
-    отказывался УЖЕ выбрав плитки, вызывающий честно уходил грузить файл, и
-    объявление выходило с 3-6 креативами вместо одного (прогоны 5bff134ea745,
-    770bd7e5fb7b: «3 of 10 selected», «6 of 10 selected»). Meta делает из
-    лишних отдельные вариации, то есть публикуется не то объявление, которое
-    собрал оператор, — и заметить это можно только глазами в кабинете.
-
-    Возвращает, удалось ли вернуть сетку ровно в то состояние, в котором мы её
-    застали. Ответ «нет» — не мелочь: он означает, что выбор остался
-    применённым, и загружать поверх нельзя.
-    """
-    # Сначала дать счётчику проснуться.
-    #
-    # Мы попали сюда, потому что он не двигался, пока мы ждали. Но «не
-    # двигался» — это то, что мы видели, а не то, что произошло: клик
-    # регистрируется с опозданием (замер 24.08). Если сразу спросить и
-    # поверить нулю, снятие выйдет не сняв ничего и доложит «чисто» — а
-    # выбор на экране останется, и загрузка ляжет поверх него. Ровно та
-    # поломка, ради которой эта функция и написана.
-    #
-    # Кликать вслепую нельзя: если клик действительно не прошёл, второй его
-    # ВЫБЕРЕТ. Поэтому не гадаем, а ждём и смотрим.
-    for _ in range(10):  # ~3с
-        if _library_selected_count(page) > before:
+    """Undo while the grid is observable. A count cannot restore item identity."""
+    if before != 0:
+        # An exclusive replacement can keep count=1 while changing the item.
+        # Without the original item identity, do not authorize a fresh upload.
+        return False
+    for _ in range(10):
+        count = _library_selected_count(page)
+        if count is None:
+            return False
+        if count > 0:
             break
         _sleep_h(0.3)
-
     for i in reversed(clicked):
-        if _library_selected_count(page) <= before:
+        count = _library_selected_count(page)
+        if count is None:
+            return False
+        if count == 0:
             break
         try:
             tiles.nth(i).click(timeout=3000)
         except Exception:
-            continue
-        for _ in range(6):  # ~1.8s: счётчик догоняет клик не мгновенно
+            return False
+        for _ in range(10):
             _sleep_h(0.3)
-            if _library_selected_count(page) <= before:
+            count = _library_selected_count(page)
+            if count is None:
+                return False
+            if count == 0:
                 break
-    return _library_selected_count(page) <= before
+    return _library_selected_count(page) == 0
 
 
 def _library_tile_shape(page: Page, filename: str) -> dict:
@@ -4796,6 +4794,9 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
       selection applied rather than discarding it.
     """
     before = _library_selected_count(page)
+    if before is None:
+        _telemetry.record("ad_creative_reuse", False, note="selection_state_unavailable")
+        return REUSE_DIRTY
     _library_search(page, filename)
 
     # Свежезагруженный файл появляется в сетке не мгновенно. 15.09 на живом
@@ -4822,7 +4823,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Без этого следующая попытка починки снова будет догадкой.
         _telemetry.record("ad_creative_reuse", None, note="not_in_library",
                           diag=_library_sight(page, filename))
-        return REUSE_ABSENT
+        return REUSE_ABSENT if before == 0 else REUSE_DIRTY
 
     # Poll the counter for seconds, not milliseconds, before giving up on a
     # click. The old 0.5s check raced Meta's own render: the click HAD
@@ -4869,7 +4870,8 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             # every one of them), and a choice is exclusive — it cannot
             # grow. So the tile's own word counts too: a tile that reports
             # itself selected after our click is our pick.
-            if _library_selected_count(page) > before or _library_tile_selected(tile):
+            count = _library_selected_count(page)
+            if (count is not None and count > before) or _library_tile_selected(tile):
                 picked = True
                 break
         note["after"] = _library_selected_count(page)
@@ -4906,7 +4908,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Кликали, но счётчик не двинулся. «Не двинулся» — это то, что мы
         # видим, а не то, что произошло: клик мог и зарегистрироваться, просто
         # позже. Поэтому не уходим молча, а снимаем за собой.
-        clean = not clicked or _library_undo_selection(page, tiles, clicked, before)
+        clean = (before == 0 and _library_selected_count(page) == 0) if not clicked else _library_undo_selection(page, tiles, clicked, before)
         sight = _library_sight(page, filename)
         if saved_page:
             sight["page"] = saved_page
@@ -4927,13 +4929,19 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     # multi-media ad Meta then spins into extra variations, which is not the
     # campaign the operator built on the dashboard.
     for i in reversed(clicked[:-1]):
-        if _library_selected_count(page) <= before + 1:
+        count = _library_selected_count(page)
+        if count is None:
+            return REUSE_DIRTY
+        if count <= 1:
             break
         try:
             tiles.nth(i).click(timeout=3000)
         except Exception:
             continue
         _sleep_h(0.8)
+
+    if _library_selected_count(page) != 1:
+        return REUSE_DIRTY
 
     # Дальше сетка уже изменена. Любой отказ здесь — либо чистое отступление
     # (мы сняли выбор и сетка как была), либо `dirty`. Третьего не дано, и
@@ -4990,13 +4998,14 @@ def _retreat(page: Page, tiles, clicked: list[int], before: int) -> str:
     написать `return False` — ровно та ошибка, которая стоила отключения всей
     возможности 24.08.
     """
+    clean = (before == 0 and _library_selected_count(page) == 0) if not clicked else _library_undo_selection(page, tiles, clicked, before)
+    if not clean:
+        return REUSE_DIRTY
     try:
         _close_creative_setup_modal(page)
     except Exception:
-        pass
-    if not clicked:
-        return REUSE_ABSENT
-    return REUSE_ABSENT if _library_undo_selection(page, tiles, clicked, before) else REUSE_DIRTY
+        return REUSE_DIRTY
+    return REUSE_ABSENT
 
 
 def reuse_before_upload(page: Page, creative_path: str) -> bool | None:
@@ -5509,6 +5518,8 @@ def upload_ad_creative(
     /ads/edit/ URL captured right after the Next-to-ad-level click) instead
     of guessing a re-open control.
     """
+    global _LAST_UPLOAD_DIAG
+    _LAST_UPLOAD_DIAG = {"file": Path(creative_path).name, "attempts": []}
     is_video = (creative_type or "").strip().lower() == "video"
     option_label = "Video ad" if is_video else "Image ad"
 
@@ -5816,7 +5827,8 @@ def upload_ad_creative(
                 # Почему не через поиск поля: 14.09 обход всего дерева нашёл
                 # ноль полей при открытом окне выбора. Окно медиа живёт в
                 # отдельном процессе, и `DOM.getDocument` туда не дотягивается.
-                # `backendNodeId` из события браузера — дотягивается.
+                # Событие и backendNodeId обрабатываются в CDP-сессии
+                # того фрейма, который открыл диалог.
                 if _diag["size_mb"] > _PW_FILE_LIMIT_MB:
                     _step["heavy"] = _upload_heavy_via_chooser_event(
                         page, creative_path, _diag, _press_upload
