@@ -117,13 +117,14 @@ SEL_GRID = 'div[role="table"], [role="grid"], [aria-label*="Amount spent" i]'
 _FIND_TOTALS_JS = r"""
 () => {
   const out = {spend: null, label: false};
-  const money = /([$€£₪]\s*[\d,]+(?:\.\d{1,2})?)\s*Total spent/;
+  // «Total spent» и «Total Spent» (британская локаль Doc20, 17.09) — без учёта регистра.
+  const money = /([$€£₪]\s*[\d,]+(?:\.\d{1,2})?)\s*Total spent/i;
   document.querySelectorAll('[data-acl-totals]').forEach(
     e => e.removeAttribute('data-acl-totals'));
   for (const n of document.querySelectorAll('div, span')) {
     const t = (n.innerText || '').replace(/\s+/g, ' ').trim();
     if (!t) continue;
-    if (out.spend === null && t.length <= 600 && t.indexOf('Total spent') !== -1) {
+    if (out.spend === null && t.length <= 600 && t.toLowerCase().indexOf('total spent') !== -1) {
       const m = t.match(money);
       if (m) out.spend = m[1];
     }

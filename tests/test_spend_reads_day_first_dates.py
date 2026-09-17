@@ -32,3 +32,19 @@ def test_a_different_day_is_still_refused():
     assert sp._period_matches("16 Sep 2026", "2026-09-16") is True
     assert sp._period_matches("16 Sep 2026", "2026-09-15") is False
     assert sp._period_matches("1 Sep 2026 – 5 Sep 2026", "2026-09-01", "2026-09-06") is False
+
+
+def test_total_spent_with_a_capital_s_is_read():
+    """Doc20 17.09: итоговая строка «$55.81 Total Spent» — британская локаль."""
+    import os
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        p = b.new_page()
+        p.set_content(
+            "<div><span>Results from 4 campaigns</span><div><span>$55.81</span><span>Total Spent</span></div></div>"
+        )
+        got = p.evaluate(sp._FIND_TOTALS_JS)
+        b.close()
+    assert got["spend"] == "$55.81" and got["label"] is True
