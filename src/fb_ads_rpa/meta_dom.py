@@ -3053,6 +3053,25 @@ def run_recorded_campaign_flow(
                 sweep_failed = verify_and_fix_ad_destinations(page, sweep_names, destination_url)
                 for bad in sweep_failed:
                     ad_level_fails.append(f"destination_sweep:{bad}")
+                # Проход открыл каждое объявление и подтвердил (или починил)
+                # назначение. Ранний отказ того же объявления после этого —
+                # устаревшая запись: 17.09 06:13 (S15 Day) ad2_destination упал в
+                # узком окне, проход в конце его поправил, а сводка всё равно
+                # пометила кампанию непубликуемой.
+                unverified = {b.split(":", 1)[0] for b in sweep_failed}
+                confirmed = {
+                    ("ad" if i == 1 else f"ad{i}"): n
+                    for i, n in enumerate(sweep_names, start=1)
+                    if n not in unverified
+                }
+                cleared = [
+                    f for f in ad_level_fails
+                    if f.split(":", 1)[0].endswith("_destination")
+                    and f.split(":", 1)[0][: -len("_destination")] in confirmed
+                ]
+                if cleared:
+                    ad_level_fails[:] = [f for f in ad_level_fails if f not in cleared]
+                    _telemetry.record("destination_sweep_cleared", None, diag={"cleared": cleared})
                 _shot("after_destination_sweep")
             except Exception as exc:
                 ad_level_fails.append(f"destination_sweep:{str(exc)[:60]}")
