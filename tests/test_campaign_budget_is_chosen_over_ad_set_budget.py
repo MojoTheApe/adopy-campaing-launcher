@@ -136,3 +136,10 @@ def test_the_language_step_never_presses_escape(page, monkeypatch):
     page.set_content("<div><div>Languages</div><span>Spanish (All)</span><input placeholder='Search languages'></div>")
     assert md.fill_audience_languages(page, ["Spanish"]) is True
     assert "Escape" not in pressed
+
+
+def test_an_age_boundary_already_at_its_value_is_read_from_the_closed_dropdown(page):
+    page.set_content("<div><div>Age</div><div><div>35</div><div>65+</div></div>"
+                     "<div role='listbox'><div>64</div></div></div>")
+    assert md._age_boundary_shows(page, "65+") is True
+    assert md._age_boundary_shows(page, "64") is False
