@@ -102,3 +102,15 @@ def test_the_new_ad_shell_is_found_whatever_the_case(page, monkeypatch):
     page.set_content("<div style='position:absolute;left:20px;top:40px'><span>New Leads ad</span></div>")
     assert md._open_tree_ad(page, "New Leads Ad") is True
     assert len(clicks) == 1
+
+
+# ── «Further limit» применился без окна Continue (S15/Doc21, 17.09) ─────────
+
+def test_manual_audience_without_the_continue_dialog_is_recognised(page):
+    page.set_content("<div>Age</div><div role='button'>Switch to recommended setup</div>")
+    assert md._audience_already_manual(page) is True
+    page.set_content("<div role='dialog'>Further limit the reach of your ads <div role='button'>Continue</div></div>"
+                     "<div role='button'>Switch to recommended setup</div>")
+    assert md._audience_already_manual(page) is False
+    page.set_content("<div>Use recommended setup</div>")
+    assert md._audience_already_manual(page) is False

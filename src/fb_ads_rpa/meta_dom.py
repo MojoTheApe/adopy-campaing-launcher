@@ -2781,6 +2781,13 @@ def run_recorded_campaign_flow(
             except Exception:
                 pass
             _sleep_h(0.5)
+        if not continued and _audience_already_manual(page):
+            # 17.09 (S15 06:53, Doc21 04:19/04:28): выбор радио применился
+            # сразу, окна с Continue не было — на экране уже «Switch to
+            # recommended setup» и живые выпадашки возраста. Прежде это был
+            # отказ, и на Doc21 PF он оборвал кампанию целиком.
+            _telemetry.record("further_limit_continue", None, note="applied_without_dialog")
+            continued = True
         _shot("after_further_limit_continue" if continued else "fail_further_limit_continue")
         if not continued:
             return "further_limit_reach_continue"
@@ -7673,6 +7680,25 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
                 break
 
     return _both_ok()
+
+
+def _audience_already_manual(page: Page) -> bool:
+    """Аудитория уже в ручном режиме: открытого диалога нет, а на экране
+    «Switch to recommended setup» (кнопка возврата к рекомендованному)."""
+    try:
+        return bool(page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const dialogOpen = [...document.querySelectorAll('[role=dialog]')]
+                .some(d => d.getBoundingClientRect().width > 0 && /further limit the reach/i.test(d.textContent || ''));
+              if (dialogOpen) return false;
+              return [...document.querySelectorAll('*')].some(e =>
+                e.children.length === 0 && norm(e.textContent) === 'Switch to recommended setup'
+                && e.getBoundingClientRect().width > 0);
+            }"""
+        ))
+    except Exception:
+        return False
 
 
 def _tree_new_ad_shells(page: Page) -> int:
