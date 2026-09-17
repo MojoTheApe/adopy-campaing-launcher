@@ -55,12 +55,13 @@ class _Ctx:
         return self.session
 
 
-def test_a_small_profile_screen_gets_a_window_that_fits(monkeypatch):
+def test_a_small_profile_screen_is_left_alone(monkeypatch):
+    """Подгонка до 1536×816 дала S15 масштаб 0.5 и три отказа подряд (17.09 06:51)."""
     monkeypatch.setattr(br.time, "sleep", lambda s: None)
     s = _Session(screen_cap=(1536, 816))
     br._ensure_wide_window(_Ctx(s), _Page((1536, 816)))
     sizes = [p["bounds"] for m, p in s.sent if m == "Browser.setWindowBounds" and "width" in p["bounds"]]
-    assert sizes[0]["width"] == 1536 and sizes[0]["height"] == 816
+    assert sizes == []
     assert s.bounds["windowState"] == "minimized", "свёрнутое окно сворачивается обратно"
 
 
