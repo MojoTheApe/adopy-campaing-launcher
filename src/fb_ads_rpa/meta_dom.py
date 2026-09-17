@@ -5577,33 +5577,136 @@ def _scroll_until_mounted(
     return False
 
 
-def _close_creative_setup_modal(page: Page) -> bool:
-    """Force-close the "Set up your creative" modal via its own top-right
-    icon, regardless of which sub-step it's currently on (Trim/Crop/Text/
-    Image generation/Enhancements/Translation/...).
+def _creative_wizard_open(page: Page) -> bool:
+    """Is the creative wizard on screen?
 
-    This modal isn't a role=dialog, so it's scoped by walking up from the
-    "Set up your creative" heading to its own modal container (the
-    ancestor whose bounding box covers most of the viewport) rather than a
-    page-wide `[aria-label="Close"]` search — confirmed live (2026-07-26)
-    that a page-wide search can hit the whole ad editor's close button
-    instead of a toast/modal-local one. Confirmed live (2026-07-29): doing
-    this even mid-wizard (e.g. on the Enhancements step, after picking an
-    existing media-library thumbnail) keeps the current media selection
-    applied to the ad rather than discarding it.
+    Meta reshaped this modal on 2026-08-24: the "Set up your creative"
+    title is GONE, the panel became a narrow centred modal, and the step
+    list moved from a vertical column on the left to a horizontal row
+    across the top. Keying on the old title made the code open the wizard
+    and then fail to notice it had — every creative upload in the runs of
+    24.08 died that way while the screenshot clearly showed it open.
+
+    "Creative setup" alone is NOT enough: it also appears on the plain ad
+    page ("Creative setup (0/1)"). Require several sibling step labels
+    that exist only inside the wizard, plus one of its own buttons.
+
+    Module-level since 2026-09-16 so the force-close can ask the same
+    question the walk asks; it used to be a closure inside
+    `upload_ad_creative`, and the force-close still looked for the title
+    that was gone — which is how a wizard on its Trim step stayed open
+    through the whole rest of the ad (run b31b45bc8599).
     """
     try:
-        modal_heading = page.get_by_text("Set up your creative", exact=True).first
-        if not modal_heading.count() or not modal_heading.is_visible(timeout=1500):
-            return False
+        return bool(page.evaluate(
+            r"""
+            () => {
+              const norm = (x) => (x || '').replace(/\s+/g, ' ').trim();
+              const vis = [...document.querySelectorAll('*')]
+                .filter(e => e.offsetParent !== null && e.children.length === 0)
+                .map(e => norm(e.textContent));
+              if (vis.includes('Set up your creative')) return true;  // legacy shape
+              const steps = ['Creative setup', 'Media', 'Text',
+                             'Image generation', 'Enhancements', 'Translation'];
+              const hits = steps.filter(t => vis.includes(t)).length;
+              const nav = ['Next', 'Cancel', 'Skip and continue', 'Continue', 'Done', 'Save'];
+              const hasNav = [...document.querySelectorAll('[role=button],button')]
+                .filter(e => e.offsetParent !== null)
+                .some(e => nav.includes(norm(e.textContent)));
+              return hits >= 3 && hasNav;
+            }
+            """
+        ))
+    except Exception:
+        return False
+
+
+def _creative_post_media_step(page: Page) -> bool:
+    """The observed Trim/Crop screen with Skip and continue (ACL-1207).
+
+    This can also be left open from a previous attempt. Callers must observe
+    a transition after feeding THIS upload, not treat its presence as identity.
+    """
+    if not _creative_wizard_open(page):
+        return False
+    try:
+        return bool(page.evaluate(r"""() => {
+          const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+          const visible = [...document.querySelectorAll('*')]
+            .filter(e => e.offsetParent !== null && e.children.length === 0)
+            .map(e => norm(e.textContent));
+          return visible.some(t => t === 'Trim' || t === 'Crop')
+            && [...document.querySelectorAll('button,[role=button]')].some(e =>
+              e.offsetParent !== null && !e.disabled && e.getAttribute('aria-disabled') !== 'true'
+              && norm(e.textContent) === 'Skip and continue');
+        }"""))
+    except Exception:
+        return False
+
+
+#: What the wizard's forward button reads, step by step. "Done"/"Save"/"Next"
+#: were the whole list until 2026-09-16; the Trim step that a fresh video
+#: upload now opens reads **"Skip and continue"**, and the walk pressed
+#: nothing four rounds in a row, gave up, and left the modal on screen
+#: (screenshot 094000_recorded_fail_ad_creative_upload.png: "Media ✓ · Trim",
+#: Skip and continue). Order matters only as a tie-break within one step.
+_WIZARD_ADVANCE_LABELS = ("Done", "Save", "Next", "Skip and continue", "Continue", "Skip")
+
+
+def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
+    """Press the wizard forward until it closes. True when it is gone.
+
+    Each round clicks the one enabled forward button this step shows, then
+    asks the SAME detector that opened the wizard whether it is still there.
+    A transient render can leave no enabled button for a beat — measured
+    live 2026-08-04: rounds where the selection counter briefly vanished
+    still had Next a moment later — so a miss is counted, not acted on, and
+    only four in a row end the walk.
+    """
+    misses = 0
+    for _ in range(rounds):
+        if not _creative_wizard_open(page):
+            return True
+        advanced = False
+        for label in _WIZARD_ADVANCE_LABELS:
+            if _click_xpath(
+                page,
+                "//*[@role='button' or self::button]"
+                f"[normalize-space(.)='{label}' and not(@aria-disabled='true')]",
+            ):
+                advanced = True
+                break
+        if not advanced:
+            misses += 1
+            if misses >= 4:
+                break
+            _sleep_h(1.2)
+            continue
+        misses = 0
+        _sleep_h(1.4)
+    return not _creative_wizard_open(page)
+
+
+def _click_modal_corner_icon(page: Page, anchor_text: str) -> bool:
+    """CDP-click the small icon nearest the top-right corner of the modal
+    that contains a visible leaf reading `anchor_text`.
+
+    The modal is not a role=dialog; it is found by walking up from the
+    anchor to the ancestor whose box covers most of the viewport. A
+    page-wide `[aria-label="Close"]` search was seen (2026-07-26) hitting the
+    whole ad editor's close button instead, so the search stays inside.
+    """
+    try:
         box = page.evaluate(
             """
-            () => {
+            (anchor) => {
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
               const all = [...document.querySelectorAll('*')];
-              const heading = all.find(e => e.textContent.trim() === 'Set up your creative' && e.offsetParent !== null);
+              const heading = all.find(e => e.children.length === 0
+                && norm(e.textContent) === anchor && e.offsetParent !== null);
               if (!heading) return null;
               let modal = heading;
-              for (let i = 0; i < 10 && modal; i++) {
+              for (let i = 0; i < 12 && modal; i++) {
                 const r = modal.getBoundingClientRect();
                 if (r.width > window.innerWidth * 0.5 && r.height > window.innerHeight * 0.5) break;
                 modal = modal.parentElement;
@@ -5621,14 +5724,66 @@ def _close_creative_setup_modal(page: Page) -> bool:
               if (!best) return null;
               return { x: best.x + best.width / 2, y: best.y + best.height / 2 };
             }
-            """
+            """,
+            anchor_text,
         )
-        if box:
-            _cdp_mouse_click(page, box["x"], box["y"])
-            _sleep_h(0.8)
-            return True
     except Exception:
-        pass
+        return False
+    if not box:
+        return False
+    _cdp_mouse_click(page, box["x"], box["y"])
+    _sleep_h(0.8)
+    return True
+
+
+def _close_creative_setup_modal(page: Page) -> bool:
+    """Force-close the creative wizard, whichever shape and step it is on.
+
+    Two shapes. The legacy one has a "Set up your creative" heading and is
+    closed by its own top-right icon. The 2026-08-24 shape has no such
+    heading — it is recognised by its step row — and is first walked
+    forward (the forward button keeps the media applied), then, if it
+    still stands, closed by its corner icon the same way.
+
+    Until 2026-09-16 only the legacy branch existed. On the new shape this
+    returned False without touching anything, so the retry between upload
+    attempts never closed the wizard, `_verify_ad_media_present` could not
+    see "Edit media" behind it, and every step after the upload failed
+    under a modal that the log recorded only as `dialogs: 1`.
+
+    Confirmed live (2026-07-29) for the legacy shape: closing mid-wizard
+    (e.g. on the Enhancements step, after picking an existing media-library
+    thumbnail) keeps the current media selection applied to the ad rather
+    than discarding it.
+
+    This modal isn't a role=dialog, so it's scoped by walking up from the
+    "Set up your creative" heading to its own modal container (the
+    ancestor whose bounding box covers most of the viewport) rather than a
+    page-wide `[aria-label="Close"]` search — confirmed live (2026-07-26)
+    that a page-wide search can hit the whole ad editor's close button
+    instead of a toast/modal-local one. Confirmed live (2026-07-29): doing
+    this even mid-wizard (e.g. on the Enhancements step, after picking an
+    existing media-library thumbnail) keeps the current media selection
+    applied to the ad rather than discarding it.
+    """
+    legacy = False
+    try:
+        modal_heading = page.get_by_text("Set up your creative", exact=True).first
+        legacy = bool(modal_heading.count()) and modal_heading.is_visible(timeout=1500)
+    except Exception:
+        legacy = False
+    if legacy:
+        return _click_modal_corner_icon(page, "Set up your creative")
+
+    if not _creative_wizard_open(page):
+        return False
+    if _walk_creative_wizard(page):
+        return True
+    # Walking did not get it closed — the step shows a button we do not know.
+    # The corner icon is the way out that keeps the media; the step row's
+    # first label anchors the search since the heading is gone.
+    if _click_modal_corner_icon(page, "Creative setup"):
+        return not _creative_wizard_open(page)
     return False
 
 
@@ -5719,40 +5874,7 @@ def upload_ad_creative(
     )
 
     def _wizard_open() -> bool:
-        """Is the creative wizard on screen?
-
-        Meta reshaped this modal on 2026-08-24: the "Set up your creative"
-        title is GONE, the panel became a narrow centred modal, and the step
-        list moved from a vertical column on the left to a horizontal row
-        across the top. Keying on the old title made the code open the wizard
-        and then fail to notice it had — every creative upload in the runs of
-        24.08 died that way while the screenshot clearly showed it open.
-
-        "Creative setup" alone is NOT enough: it also appears on the plain ad
-        page ("Creative setup (0/1)"). Require several sibling step labels
-        that exist only inside the wizard, plus its own Next/Cancel pair.
-        """
-        try:
-            return page.evaluate(
-                r"""
-                () => {
-                  const norm = (x) => (x || '').replace(/\s+/g, ' ').trim();
-                  const vis = [...document.querySelectorAll('*')]
-                    .filter(e => e.offsetParent !== null && e.children.length === 0)
-                    .map(e => norm(e.textContent));
-                  if (vis.includes('Set up your creative')) return true;  // legacy shape
-                  const steps = ['Creative setup', 'Media', 'Text',
-                                 'Image generation', 'Enhancements', 'Translation'];
-                  const hits = steps.filter(t => vis.includes(t)).length;
-                  const hasNav = [...document.querySelectorAll('[role=button],button')]
-                    .filter(e => e.offsetParent !== null)
-                    .some(e => ['Next', 'Cancel'].includes(norm(e.textContent)));
-                  return hits >= 3 && hasNav;
-                }
-                """
-            )
-        except Exception:
-            return False
+        return _creative_wizard_open(page)
 
     opened = False
     for _attempt in range(4):
@@ -5960,6 +6082,39 @@ def upload_ad_creative(
         except Exception:
             pass
 
+    def _finish_upload() -> bool:
+        # Advance until the wizard closes (or we run out of patience). Said in
+        # the diagnostic either way: a wizard left open is what breaks every
+        # step after this one, and until 2026-09-16 the only trace of it was
+        # `dialogs: 1` on the NEXT step's failure.
+        _diag["wizard"] = "closed" if _walk_creative_wizard(page) else "left_open"
+        _set_last_upload_diag(_diag)
+        if _diag["wizard"] != "closed":
+            return False
+
+        # Confirm we're still on the ad editor, not bounced back to the ads
+        # list by some other in-between click — recover via the saved edit URL
+        # rather than guessing a re-open control.
+        if edit_url and "/ads/edit/" not in page.url:
+            try:
+                page.goto(edit_url)
+                _sleep_h(1.0)
+            except Exception:
+                return False
+
+        if "/ads/edit/" not in page.url:
+            return False
+
+        # Confirmed live (2026-07-29): being on the right URL says nothing about
+        # whether the media actually landed on the ad. A run reported
+        # `after_ad_creative_upload` success for all three ads, yet two of them
+        # were later found in Ads Manager still showing the empty-media state —
+        # the same async-save-race class already confirmed for campaign
+        # name/budget and ad destination. Wait for Meta's own save indicator to
+        # clear, then assert the Ad creative section really left the empty
+        # state before reporting success.
+        return _verify_ad_media_present(page)
+
     _upload_name = Path(creative_path).name
     landed = False
     for _attempt in range(3):
@@ -5972,6 +6127,8 @@ def upload_ad_creative(
         # control's shape stops mattering. Clicking is kept as a fallback for
         # renders that only expose a chooser.
         _step: dict = {"n": _attempt + 1}
+        post_media_before = _creative_post_media_step(page)
+        advanced_after_upload = False
         try:
             # 1) If a file input is already mounted, feed it — no click, so the
             #    control's shape cannot matter.
@@ -6041,6 +6198,11 @@ def upload_ad_creative(
         # Give the grid time to show the new tile before judging.
         _ticks = 0
         for _ in range(30):
+            # The file can leave the library immediately: a NEW Trim/Crop
+            # screen after set_files is positive progress even without a tile.
+            if not post_media_before and _creative_post_media_step(page):
+                advanced_after_upload = True
+                break
             try:
                 if page.evaluate(_tile_present_js, _upload_name):
                     landed = True
@@ -6054,12 +6216,18 @@ def upload_ad_creative(
         # разные вещи, и по одному лишь отсутствию плитки их не различить.
         _step["waited_s"] = _ticks
         _step["tile"] = landed
+        _step["state"] = ("wizard_after_upload" if advanced_after_upload
+                          else "tile" if landed else "neither")
         try:
             _step["uploading"] = _upload_in_progress(page)
             _step["progress"] = _upload_progress(page)
         except Exception:
             pass
+        if not advanced_after_upload and not landed and _step.get("uploading"):
+            _step["state"] = "progress"
         _remember(**_step)
+        if advanced_after_upload:
+            return _finish_upload()
         if landed:
             break
     if not landed:
@@ -6122,6 +6290,9 @@ def upload_ad_creative(
     last_progress = _upload_progress(page)
     deadline = time.time() + _UPLOAD_MAX_S
     while idle < 60 and frozen < _UPLOAD_FROZEN_S and time.time() < deadline:
+        if not post_media_before and _creative_post_media_step(page):
+            _diag["state"] = "wizard_after_upload"
+            return _finish_upload()
         try:
             if page.evaluate(sel_js) or page.evaluate(tile_js, fname):
                 break
@@ -6186,65 +6357,7 @@ def upload_ad_creative(
             _click_trusted(page, tile, timeout=3000)
             _sleep_h(0.8)
 
-    # Advance until the wizard closes (or we run out of patience): each
-    # round clicks the enabled Next/Done, then checks whether the wizard
-    # title is still on screen.
-    misses = 0
-    for _ in range(16):
-        # Ask the SAME detector that opened the wizard. This used to test for
-        # the literal title 'Set up your creative', which the 2026-08-24
-        # redesign removed: the check reported "already closed" on the very
-        # first round, the loop broke before pressing anything, and the ad was
-        # left sitting in an open wizard with the tile selected and Next
-        # untouched — media never committed, so _verify_ad_media_present then
-        # failed the whole step (measured run d5aa7a96bbd1, all 4 ads).
-        if not _wizard_open():
-            break
-        advanced = False
-        for label in ("Done", "Save", "Next"):
-            if _click_xpath(
-                page,
-                "//*[@role='button' or self::button]"
-                f"[normalize-space(.)='{label}' and not(@aria-disabled='true')]",
-            ):
-                advanced = True
-                break
-        if not advanced:
-            # A transient render can leave no enabled button for a beat —
-            # measured live 2026-08-04 walking this wizard: rounds where the
-            # selection counter briefly vanished still had Next a moment
-            # later. Breaking on the first miss left the wizard open and the
-            # media uncommitted, which is exactly how the step kept failing.
-            misses += 1
-            if misses >= 4:
-                break
-            _sleep_h(1.2)
-            continue
-        misses = 0
-        _sleep_h(1.4)
-
-    # Confirm we're still on the ad editor, not bounced back to the ads
-    # list by some other in-between click — recover via the saved edit URL
-    # rather than guessing a re-open control.
-    if edit_url and "/ads/edit/" not in page.url:
-        try:
-            page.goto(edit_url)
-            _sleep_h(1.0)
-        except Exception:
-            return False
-
-    if "/ads/edit/" not in page.url:
-        return False
-
-    # Confirmed live (2026-07-29): being on the right URL says nothing about
-    # whether the media actually landed on the ad. A run reported
-    # `after_ad_creative_upload` success for all three ads, yet two of them
-    # were later found in Ads Manager still showing the empty-media state —
-    # the same async-save-race class already confirmed for campaign
-    # name/budget and ad destination. Wait for Meta's own save indicator to
-    # clear, then assert the Ad creative section really left the empty
-    # state before reporting success.
-    return _verify_ad_media_present(page)
+    return _finish_upload()
 
 
 def _verify_ad_media_present(page: Page) -> bool:
