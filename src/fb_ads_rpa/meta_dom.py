@@ -8491,7 +8491,13 @@ def _wait_location_options(root, timeout_s: float = 6.0) -> bool:
     deadline = time.monotonic() + timeout_s
     while True:
         try:
-            if root.locator("[role=option]:visible").count():
+            # Подсказки Meta не всегда размечены role=option (17.09 19:45:
+            # на всех кампаниях ждали впустую, а Enter потом добавлял страну);
+            # открытый список виден по aria-expanded у поля поиска.
+            if root.locator("[role=option]:visible").count() or root.locator(
+                "input[placeholder*='location' i][aria-expanded='true'],"
+                " input[placeholder*='ubicaci' i][aria-expanded='true']"
+            ).count():
                 return True
         except Exception:
             pass
