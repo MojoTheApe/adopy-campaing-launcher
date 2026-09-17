@@ -9713,7 +9713,46 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
                 break
         except Exception:
             continue
+    if not ok_any:
+        # 17.09 06:56 (S15): «Spanish (All)» уже стоял — Meta подставляет язык
+        # по стране, выбранный язык в подсказках не показывается, кликать
+        # нечего, и шаг отказывал при верном поле. Выбранный язык — успех.
+        try:
+            page.keyboard.press("Escape")
+        except Exception:
+            pass
+        present = _languages_selected(page)
+        wanted = [n.strip().lower() for n in language_names if n.strip()]
+        if wanted and all(any(p.lower().startswith(w) for p in present) for w in wanted):
+            _telemetry.record("languages", None, note="already_selected", diag={"selected": present})
+            return True
     return ok_any
+
+
+def _languages_selected(page: Page) -> list[str]:
+    """Подписи уже выбранных языков в блоке Languages (например «Spanish (All)»)."""
+    try:
+        return page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const label = [...document.querySelectorAll('*')].find(e =>
+                e.children.length === 0 && /^(Languages|Idiomas)$/i.test(norm(e.textContent))
+                && e.getBoundingClientRect().width > 0);
+              if (!label) return [];
+              let box = label;
+              for (let i = 0; i < 6 && box.parentElement; i++) {
+                box = box.parentElement;
+                if (box.querySelector('input[placeholder]')) break;
+              }
+              return [...box.querySelectorAll('*')]
+                .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
+                .map(e => norm(e.textContent))
+                .filter(t => /\((All|Todos)\)$|^[A-Z][a-z]+( \([^)]+\))?$/.test(t)
+                  && !/^(Languages|Idiomas|All languages)$/i.test(t));
+            }"""
+        ) or []
+    except Exception:
+        return []
 
 
 def select_manual_placements(page: Page) -> bool:
