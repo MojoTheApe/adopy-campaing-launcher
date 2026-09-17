@@ -183,3 +183,62 @@ def test_an_unchecked_subitem_with_a_stale_checked_property_is_not_clicked_again
     res = page.evaluate(md.PLACEMENTS_SUBITEM_JS, ["Messenger Stories", False])
     assert res["ok"] is True and res["checked"] is False
     assert page.evaluate("window.clicks") == 0
+
+
+def test_a_subitem_state_is_read_without_clicking(page):
+    page.set_content(
+        "<div data-rpa-placements-marker='1'><ul>"
+        "<li><span>Threads feed</span><input id='cb' type='checkbox' aria-checked='false' checked disabled></li>"
+        "</ul></div>"
+        "<script>window.clicks=0; document.getElementById('cb').addEventListener('click',()=>window.clicks++)</script>"
+    )
+    assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Threads feed") == {"found": True, "checked": False}
+    assert page.evaluate("window.clicks") == 0
+    assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Facebook Feed")["found"] is False
+
+
+def test_settled_read_preserves_case_insensitive_matching(page):
+    page.set_content("<div data-rpa-placements-marker><li><span>Instagram Feed</span>"
+                     "<input type='checkbox' aria-checked='false'></li></div>")
+    assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Instagram feed") == {"found": True, "checked": False}
+
+
+def test_settled_read_does_not_confirm_a_disabled_twin_instead_of_the_active_row(page):
+    page.set_content("<div data-rpa-placements-marker>"
+                     "<li><span>Threads feed</span><input type='checkbox' aria-checked='false' disabled></li>"
+                     "<li><span>Threads feed</span><input type='checkbox' aria-checked='true' checked></li></div>")
+    assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Threads feed") == {"found": True, "checked": True}
+
+
+@pytest.mark.parametrize('settles', [True, False])
+def test_delayed_subitems_are_read_before_their_accordion_closes(page, monkeypatch, settles):
+    import html
+    rows = []
+    for i, (name, want) in enumerate(md._PLACEMENT_CATEGORIES.items()):
+        rows.append(f"<li><div role='button' aria-expanded='false' onclick='expand(this)'>"
+                    f"<label><span>{html.escape(name)}</span><input type='checkbox' "
+                    f"{'checked' if want else ''}></label></div>"
+                    + ("<ul class='sub' style='display:none'><li><span>Threads feed</span>"
+                       "<input id='sub' type='checkbox' checked aria-checked='true' "
+                       "onclick='event.preventDefault(); window.pending=true; window.clicks++'></li></ul>"
+                       if i == 0 else "<ul class='sub' style='display:none'></ul>") + "</li>")
+    page.set_content("<section><h3>Placements</h3><span>Account controls</span><a>Hide settings</a>"
+                     "<ul role='list'>" + ''.join(rows) + "</ul></section>" + """
+        <script>window.pending=false; window.clicks=0;
+        function expand(el) {
+          document.querySelectorAll('.sub').forEach(e=>e.style.display='none');
+          document.querySelectorAll('[aria-expanded]').forEach(e=>e.setAttribute('aria-expanded','false'));
+          el.setAttribute('aria-expanded','true'); el.nextElementSibling.style.display='block';
+        }</script>""")
+    monkeypatch.setattr(md, '_SUBITEMS_ON', ())
+    monkeypatch.setattr(md, '_SUBITEMS_OFF', ('Threads feed',))
+    def settle(seconds):
+        if settles and seconds == 2.0:
+            page.evaluate("""() => { const cb=document.getElementById('sub');
+              if(window.pending && cb.offsetParent!==null) {cb.checked=false;cb.setAttribute('aria-checked','false');}
+            }""")
+    monkeypatch.setattr(md, '_sleep_h', settle)
+    report = {}
+    assert md.fill_placements(page, report) is settles, report
+    assert ('Threads feed' in report.get('subitems_settled', {})) is settles
+    assert page.evaluate('window.clicks') == 2
