@@ -206,3 +206,27 @@ def test_a_subitem_is_read_whatever_the_case(page):
     )
     assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Facebook Notifications") == {
         "found": True, "checked": False}
+
+
+def test_a_collapsed_languages_row_is_opened_by_its_pencil(page, monkeypatch):
+    """17.09 23:04 CR_ait Day: блок аудитории сводкой, поля языков нет — жмём карандаш."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0'>"
+        "<div><span>Languages</span><span>All languages</span>"
+        "<div role='button' aria-label='Edit' id='pen' style='width:24px;height:24px'"
+        " onclick=\"window.opened=true\"></div></div></div>"
+    )
+    clicks = []
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: clicks.append((round(x), round(y))) or
+                        pg.eval_on_selector("#pen", "el => el.click()"))
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    assert md._click_languages_edit(page) is True
+    assert page.evaluate("window.opened") is True
+    assert clicks, "клик должен был уйти по координатам карандаша"
+
+
+def test_no_pencil_no_click(page, monkeypatch):
+    page.set_content("<div><span>Languages</span><span>All languages</span></div>")
+    monkeypatch.setattr(md, "_cdp_mouse_click", lambda *a: pytest.fail("лишний клик"))
+    assert md._click_languages_edit(page) is False

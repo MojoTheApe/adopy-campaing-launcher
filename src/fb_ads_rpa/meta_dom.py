@@ -10869,6 +10869,50 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
     return False
 
 
+_LANG_EDIT_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const label = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && /^(Languages|Idiomas)$/i.test(norm(e.textContent))
+      && e.getBoundingClientRect().width > 0);
+    if (!label) return null;
+    let row = label.parentElement;
+    for (let i = 0; i < 4 && row; i++, row = row.parentElement) {
+      const btns = [...row.querySelectorAll('[role=button], button, [aria-label]')].filter(b => {
+        const r = b.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0 || r.width > 80) return false;
+        const name = (norm(b.getAttribute('aria-label')) + ' ' + norm(b.textContent)).toLowerCase();
+        return /edit|изменить|editar|pencil/.test(name) || (!norm(b.textContent) && r.width <= 48);
+      });
+      if (btns.length) {
+        const r = btns[btns.length - 1].getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+    }
+    return null;
+  }
+"""
+"""Карандаш строки «Languages» в свёрнутом виде блока аудитории."""
+
+
+def _click_languages_edit(page: Page) -> bool:
+    """Раскрыть строку языков её собственной кнопкой правки.
+
+    17.09 23:04 (CR_ait Day): блок аудитории показан сводкой — «Languages: All
+    languages», поля поиска нет вовсе, а клик по центру строки его не открывал.
+    Справа у строки живёт карандаш — жать надо его.
+    """
+    try:
+        pt = page.evaluate(_LANG_EDIT_JS)
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.6)
+    return True
+
+
 def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
     """Type language(s) into Audience → Languages and pick suggestions.
 
@@ -10903,6 +10947,12 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
         return None, None
 
     root, inp = _find_lang_input()
+    if inp is None and _click_languages_edit(page):
+        for _ in range(10):
+            _sleep_h(0.2)
+            root, inp = _find_lang_input()
+            if inp is not None:
+                break
     if inp is None:
         for root in _roots(page):
             try:
