@@ -488,3 +488,19 @@ def test_the_currency_is_passed_through_as_meta_wrote_it(raw, written):
     page = _TotalsPage(raw)
     sp._scan_totals(page)
     assert getattr(page, "_acl_spend_currency", None) == written
+
+
+def test_an_empty_campaign_table_is_saved_for_diagnosis(monkeypatch, tmp_path):
+    """18.09 Doc19: «no-row-surfaces» без скриншота — теперь таблица сохраняется целиком."""
+    from src.fb_ads_rpa import page_capture as pc
+
+    saved = {}
+    monkeypatch.setattr(pc, "capture", lambda page, **kw: saved.update(kw) or str(tmp_path))
+
+    class _Page:
+        def evaluate(self, js, *a):
+            return "<div role='grid'><div role='columnheader'>Campaign</div></div>"
+
+    sp._snapshot_empty_table(_Page(), "campaign", "no-row-surfaces")
+    assert saved["step"] == "tree_campaign_no_rows"
+    assert "columnheader" in (tmp_path / "block_table.html").read_text(encoding="utf-8")
