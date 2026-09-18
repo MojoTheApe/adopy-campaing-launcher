@@ -234,3 +234,44 @@ def test_a_selected_interest_chip_is_counted(page):
         "<input placeholder='Add demographics, interests or behaviours'></div>"
     )
     assert md._group_has_terms(page, ["Yacht club"])["hits"] == ["Yacht club"]
+
+
+# ── реальная разметка: снимок 991d22be57ef, CR_ait_All_Video_Mix_35_18.09 ─────
+# Блок AND-групп сохранён целиком page_capture.capture(blocks=...) на живом
+# прогоне 18.09. Группа 1 — финансы, группа 2 — люкс; в группе 2 Meta не
+# распознала «Frequent international travelers».
+
+_REAL = (Path(__file__).parent / "fixtures" / "meta" / "and_groups_two_filled.html").read_text(encoding="utf-8")
+_GROUP1 = ["Asset management", "Personal finance", "Private banking", "Investment banking"]
+_GROUP2 = ["Frequent international travelers", "Business class", "Business jet",
+           "Luxury resorts", "Yacht club"]
+
+
+def test_real_markup_selected_interests_are_the_chips_of_the_last_group(page):
+    page.set_content(_REAL)
+    res = md._group_has_terms(page, _GROUP2)
+    assert res["by"] == "chips", res
+    assert set(res["hits"]) == {"Business class", "Business jet", "Luxury resorts", "Yacht club"}, res
+    assert res["missing"] == ["Frequent international travelers"], res
+
+
+def test_real_markup_first_group_interests_do_not_confirm_the_second(page):
+    """Сам баг ACL-1219: интересы группы 1 не засчитываются группе 2."""
+    page.set_content(_REAL)
+    res = md._group_has_terms(page, _GROUP1)
+    assert res["hits"] == [], res
+
+
+def test_real_markup_an_emptied_second_group_is_empty(page):
+    """Вторая группа без плашек — пустая, даже если группа 1 полна."""
+    page.set_content(_REAL)
+    page.evaluate("""() => {
+      const inputs = [...document.querySelectorAll('input')];
+      let box = inputs[inputs.length - 1].parentElement;
+      for (let i = 0; i < 12 && box; i++, box = box.parentElement) {
+        if (box.querySelectorAll('input').length > 1) break;
+        box.querySelectorAll('li').forEach(li => li.remove());
+      }
+    }""")
+    res = md._group_has_terms(page, _GROUP2 + _GROUP1)
+    assert res["hits"] == [] and res["selected"] == [], res

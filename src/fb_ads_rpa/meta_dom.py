@@ -9231,10 +9231,25 @@ _TARGETING_GROUP_JS = r"""
       if (r.width <= 0 || r.height <= 0) continue;
       parts.push(n.textContent);
     }
-    const text = norm(parts.join(' '));
-    const hits = terms.filter(t => text.includes(norm(t)));
-    const missing = terms.filter(t => !text.includes(norm(t)));
-    return { found: true, hits: hits, missing: missing, text: text.slice(0, 400) };
+    // Реальная разметка (снимок 991d22be57ef, CR_ait Mix, 18.09): выбранный
+    // интерес — это <li> с текстом и кнопкой «Close». Плашки и считаем; текст
+    // группы остаётся запасным путём на случай другой отрисовки.
+    const isClose = (b) => /^(close|remove|quitar|eliminar)$/i.test(norm(b.textContent))
+      || /close|remove/i.test(b.getAttribute('aria-label') || '');
+    const chips = [...chosen.querySelectorAll('li')]
+      .filter(li => !skip(li) && [...li.querySelectorAll('button')].some(isClose))
+      .map(li => {
+        const clone = li.cloneNode(true);
+        clone.querySelectorAll('button').forEach(b => b.remove());
+        return norm(clone.textContent);
+      })
+      .filter(Boolean);
+    const pool = chips.length ? chips : [norm(parts.join(' '))];
+    const has = (t) => pool.some(c => c.includes(norm(t)));
+    const hits = terms.filter(has);
+    const missing = terms.filter(t => !has(t));
+    return { found: true, hits: hits, missing: missing, selected: chips.slice(0, 40),
+             by: chips.length ? 'chips' : 'text', text: norm(parts.join(' ')).slice(0, 400) };
   }
 """
 """Есть ли интересы в СВОЕЙ группе, а не где-то на странице.
