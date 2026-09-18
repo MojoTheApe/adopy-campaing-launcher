@@ -113,6 +113,10 @@
       "title": "Country is not added when location suggestions do not open",
       "state": "created",
       "issue": 226
+    },
+    "b4b46653b602746193b611c530924f7c7beda8b2acdf83421dfdb0062afbd267": {
+      "title": "Read spend restarts a manually opened profile the way Publish does",
+      "state": "creating"
     }
   }
 }
