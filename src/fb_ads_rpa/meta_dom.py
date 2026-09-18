@@ -5408,8 +5408,11 @@ def _library_any_tile_marked(page: Page) -> bool | None:
     try:
         value = page.evaluate(
             "() => { const d = " + _LIBRARY_DIALOG_JS + "; if (!d) return null;"
-            " return !!d.querySelector('[data-test-decoration=\"selected\"],"
-            " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked'); }"
+            # The captured Account tab has aria-selected=true even when no
+            # media is selected. It must not make clean fallback impossible.
+            " return [...d.querySelectorAll('[data-test-decoration=\"selected\"],"
+            " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked')]"
+            " .some(el => !el.closest('[role=tab]')); }"
         )
         return value if isinstance(value, bool) else None
     except Exception:

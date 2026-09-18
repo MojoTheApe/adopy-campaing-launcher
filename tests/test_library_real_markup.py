@@ -75,6 +75,20 @@ def test_an_unmarked_real_grid_is_clean(page):
     assert md._library_any_tile_marked(page) is False
 
 
+def test_account_tab_selection_is_not_a_selected_video(page, monkeypatch):
+    _load(page, "library_one_picked.html")
+    page.locator('[data-test-decoration="selected"]').evaluate(
+        "el => el.removeAttribute('data-test-decoration')")
+    page.get_by_text('1 selected', exact=True).evaluate("el => el.textContent = '0 selected'")
+    # Keep the actual Account tab's aria-selected=true. Only media changed.
+    assert page.get_by_role('tab', name='Account', exact=True).get_attribute('aria-selected') == 'true'
+    monkeypatch.setattr(md, '_sleep_h', lambda *_: None)
+    monkeypatch.setattr(md, '_library_search', lambda *_: True)
+    monkeypatch.setattr(md._telemetry, 'record', lambda *a, **k: None)
+    assert md._library_any_tile_marked(page) is False
+    assert md._try_reuse_library_media(page, 'not-in-the-library.mp4') == md.REUSE_ABSENT
+
+
 def test_the_picked_video_is_identified_on_the_ad_by_its_thumbnail(page):
     """ACL-1171: у объявления миниатюра того же файла, что у выбранной плитки."""
     page.set_content((FIX / "ad_media_attached.html").read_text(encoding="utf-8"))
