@@ -1611,24 +1611,25 @@ _READ_TREE_JS = r"""
     // порядке, что заголовки после toggle и name. Читаем по имени и честно
     // говорим, что id нет (how: by-name).
     const heads = Array.from(t.querySelectorAll('[data-surface*="table_column_header:"]'))
+      .filter(visible)
       .map(h => (h.getAttribute('data-surface') || '').split(':').pop());
     const dataCols = heads.filter(c => c !== 'toggle' && c !== 'name');
     const nameEls = Array.from(t.querySelectorAll('[data-tooltip-content]'))
-      .filter(e => e.querySelector('a') && norm(e.getAttribute('data-tooltip-content')));
+      .filter(e => visible(e) && e.querySelector('a') && norm(e.getAttribute('data-tooltip-content')));
     if (!nameEls.length) return {rows: [], how: 'no-row-surfaces', kinds: []};
     const firstLeaf = (c) => {
-      const leaf = Array.from(c.querySelectorAll('*')).find(e => !e.children.length && norm(e.textContent));
-      return leaf ? norm(leaf.textContent) : norm(c.textContent);
+      const leaf = Array.from(c.querySelectorAll('*')).find(e => visible(e) && !e.children.length && norm(e.textContent));
+      return leaf ? norm(leaf.textContent) : norm(c.innerText);
     };
     const rows = [];
     for (const n of nameEls) {
-      let el = n, row = n;
-      for (let i = 0; i < 16 && el.parentElement; i++) {
-        el = el.parentElement;
-        const k = Array.from(el.querySelectorAll('[data-tooltip-content]')).filter(e => e.querySelector('a')).length;
-        if (k !== 1) break;
-        row = el;
-      }
+      // The recorded layout wraps each virtualized row in presentation.
+      // Counting names while walking upwards escapes the row when there is
+      // only one campaign, and then reads the table headings as its values.
+      const row = n.closest('[role="presentation"]');
+      if (!row || !t.contains(row) ||
+          nameEls.filter(e => row.contains(e)).length !== 1)
+        return refuse('unrecognized-name-row');
       let wide = row;
       const q = [row];
       while (q.length) { const x = q.shift(); if (x.children.length > wide.children.length) wide = x; q.push(...x.children); }
@@ -1646,7 +1647,7 @@ _READ_TREE_JS = r"""
     }
     // Уровень — из меток подсказок Meta: /am/table/hc(type=recs,level=CAMPAIGN_GROUP,id=…).
     const lk = new Set();
-    t.querySelectorAll('[data-surface*="level="]').forEach(e => {
+    Array.from(t.querySelectorAll('[data-surface*="level="]')).filter(visible).forEach(e => {
       const m = (e.getAttribute('data-surface') || '').match(/level=([A-Z_]+)/);
       if (m) lk.add(m[1]);
     });
@@ -1833,10 +1834,6 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         return [], how, (
             f"{level} level: expected {want} objects, but the page marked "
             f"{', '.join(sorted(kinds))}; wrong list, nothing taken"
-        )
-    if not kinds and by_name:
-        return objects, how, (
-            f"read by name: this account's table has no {level} ids and did not confirm the level"
         )
     if not kinds:
         return [], how, f"{level} level: the page did not say what these objects are"
