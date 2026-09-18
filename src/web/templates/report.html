@@ -3101,6 +3101,27 @@ async function dashRefresh(ev) {
     Multilogin profile.
   </p>
 
+  {#- Пути этой машины (ACL-1239): мастер установки спрашивает их один раз,
+      дальше менеджер меняет их здесь, а не в .env. -#}
+  <section class="acc-connect" id="mp-box">
+    <h3>This computer</h3>
+    <p class="acc-sub">Where ACL reads your stats and looks for creatives. Paste a path from Explorer (Shift + right-click → Copy as path).</p>
+    <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:70ch">
+      <label>
+        <div style="font-size:0.75rem;color:var(--muted)">Stats workbook (Excel)</div>
+        <input id="mp-stats" type="text" style="width:100%" autocomplete="off">
+      </label>
+      <label>
+        <div style="font-size:0.75rem;color:var(--muted)">Creatives folder</div>
+        <input id="mp-creatives" type="text" style="width:100%" autocomplete="off">
+      </label>
+      <div style="display:flex;gap:0.6rem;align-items:center">
+        <button type="button" id="mp-save" class="btn">Save</button>
+        <span id="mp-msg" style="font-size:0.85rem"></span>
+      </div>
+    </div>
+  </section>
+
   <section class="acc-connect">
     <h3>Connect an account</h3>
     <p class="acc-sub">Find the profile by its last letters — open it if you need to, then connect.</p>
@@ -11340,6 +11361,59 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
   document.addEventListener('acl:viewchange', function(e) {
     if (e.detail && e.detail.view === 'accounts') load(false);
   });
+})();
+
+// ── Пути этой машины: книга статистики и папка Creatives ─────────────────
+// Machine paths UI.
+(function () {
+  var pending = false, loaded = {};
+  function el(id) { return document.getElementById(id); }
+  function say(text, error) { el('mp-msg').textContent = text || ''; el('mp-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
+  function show(d) {
+    loaded = {stats: d.stats_workbook || '', creatives: d.creatives_folder || ''};
+    el('mp-stats').value = loaded.stats;
+    el('mp-creatives').value = loaded.creatives;
+    var missing = [];
+    if (!d.stats_workbook_found) missing.push('the Stats workbook is not at this path');
+    if (!d.creatives_folder_found) missing.push('the Creatives folder does not exist yet');
+    if (missing.length) say('Check: ' + missing.join('; ') + '.', true);
+  }
+  async function load() {
+    try {
+      var r = await fetch('/api/machine-paths');
+      var d = await r.json();
+      if (r.ok && d.ok) show(d);
+    } catch (e) { say(String(e), true); }
+  }
+  async function save() {
+    if (pending) return;
+    var body = {};
+    if (el('mp-stats').value !== loaded.stats) body.stats_workbook = el('mp-stats').value;
+    if (el('mp-creatives').value !== loaded.creatives) body.creatives_folder = el('mp-creatives').value;
+    if (!Object.keys(body).length) { say('Nothing changed.'); return; }
+    pending = true; el('mp-save').disabled = true; say('Saving…');
+    try {
+      var r = await fetch('/api/machine-paths', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+      var d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'Could not save');
+      show(d);
+      var parts = ['Saved.'];
+      if (d.creatives_created) parts.push('The Creatives folder was created.');
+      if (d.stats_changed) parts.push('Reload the page to see the report from the new workbook.');
+      say(parts.join(' '));
+    } catch (e) { say(e.message || String(e), true); }
+    finally { pending = false; el('mp-save').disabled = false; }
+  }
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t || !t.getAttribute) return;
+    if (t.id === 'mp-save') { save(); return; }
+    if (t.getAttribute('data-view') === 'accounts') load();
+  });
+  document.addEventListener('acl:viewchange', function (e) {
+    if (e.detail && e.detail.view === 'accounts') load();
+  });
+  if ((location.hash || '').indexOf('accounts') !== -1) document.addEventListener('DOMContentLoaded', load);
 })();
 
 // ── Таргеты: общая библиотека ────────────────────────────────────────────
