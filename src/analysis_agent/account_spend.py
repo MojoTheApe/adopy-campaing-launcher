@@ -1604,7 +1604,54 @@ _READ_TREE_JS = r"""
     return refuse('table-loading');
 
   const marked = t.querySelectorAll('[data-surface*="table_row:"]');
-  if (!marked.length) return {rows: [], how: 'no-row-surfaces', kinds: []};
+  if (!marked.length) {
+    // Новая таблица (FacebookDoc19, 18.09): меток table_row нет вовсе, ссылка
+    // на имени ведёт в «#», id кампании в строке нет. Имя — в подсказке у
+    // ссылки, переключатель — role=switch, а правые ячейки идут в том же
+    // порядке, что заголовки после toggle и name. Читаем по имени и честно
+    // говорим, что id нет (how: by-name).
+    const heads = Array.from(t.querySelectorAll('[data-surface*="table_column_header:"]'))
+      .map(h => (h.getAttribute('data-surface') || '').split(':').pop());
+    const dataCols = heads.filter(c => c !== 'toggle' && c !== 'name');
+    const nameEls = Array.from(t.querySelectorAll('[data-tooltip-content]'))
+      .filter(e => e.querySelector('a') && norm(e.getAttribute('data-tooltip-content')));
+    if (!nameEls.length) return {rows: [], how: 'no-row-surfaces', kinds: []};
+    const firstLeaf = (c) => {
+      const leaf = Array.from(c.querySelectorAll('*')).find(e => !e.children.length && norm(e.textContent));
+      return leaf ? norm(leaf.textContent) : norm(c.textContent);
+    };
+    const rows = [];
+    for (const n of nameEls) {
+      let el = n, row = n;
+      for (let i = 0; i < 16 && el.parentElement; i++) {
+        el = el.parentElement;
+        const k = Array.from(el.querySelectorAll('[data-tooltip-content]')).filter(e => e.querySelector('a')).length;
+        if (k !== 1) break;
+        row = el;
+      }
+      let wide = row;
+      const q = [row];
+      while (q.length) { const x = q.shift(); if (x.children.length > wide.children.length) wide = x; q.push(...x.children); }
+      const cells = Array.from(wide.children);
+      const val = (col) => { const i = dataCols.indexOf(col); return i >= 0 && i < cells.length ? firstLeaf(cells[i]) : ''; };
+      const sw = row.querySelector('[role="switch"]');
+      const aria = sw ? sw.getAttribute('aria-checked') : null;
+      rows.push({
+        id: '', id_from: 'none', name: norm(n.getAttribute('data-tooltip-content')),
+        switch: aria === 'true' ? 'on' : aria === 'false' ? 'off' : 'unknown',
+        switch_label: sw ? norm(sw.getAttribute('aria-label')) : '',
+        delivery: val('delivery'), results: val('results'),
+        cost_per_result: val('cost_per_result'), spend: val('spend'), kinds: [],
+      });
+    }
+    // Уровень — из меток подсказок Meta: /am/table/hc(type=recs,level=CAMPAIGN_GROUP,id=…).
+    const lk = new Set();
+    t.querySelectorAll('[data-surface*="level="]').forEach(e => {
+      const m = (e.getAttribute('data-surface') || '').match(/level=([A-Z_]+)/);
+      if (m) lk.add(m[1]);
+    });
+    return {rows, how: 'by-name', kinds: Array.from(lk)};
+  }
 
   const rows = new Map();
   const kinds = new Set();
@@ -1738,14 +1785,22 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         return [], how, f"{level} table: {got['error']}"
     rows = got.get("rows") or []
     want = _LEVEL_KIND[level]
+    by_name = str(got.get("how") or "") == "by-name"
+    if by_name:
+        # Новая таблица без id: принимаем строку, если у неё есть имя. Выключать
+        # такие объекты по id нельзя — turn_off это знает.
+        if not isinstance(rows, list) or any(
+            not isinstance(r, dict) or not str(r.get("name") or "").strip() for r in rows
+        ):
+            return [], how, f"{level} table: a row has no name"
     # Every accepted object must identify itself, not borrow another row's kind.
-    if not isinstance(rows, list) or any(
+    if not by_name and (not isinstance(rows, list) or any(
         not isinstance(r, dict)
         or not re.fullmatch(r"[0-9]+", str(r.get("id") or ""))
         or not str(r.get("name") or "").strip()
         or set(r.get("kinds") or []) != {want}
         for r in rows
-    ):
+    )):
         return [], how, f"{level} table: a row did not confirm its id, name or object type ({want})"
     objects = [
         AdObject(
@@ -1779,8 +1834,14 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
             f"{level} level: expected {want} objects, but the page marked "
             f"{', '.join(sorted(kinds))}; wrong list, nothing taken"
         )
+    if not kinds and by_name:
+        return objects, how, (
+            f"read by name: this account's table has no {level} ids and did not confirm the level"
+        )
     if not kinds:
         return [], how, f"{level} level: the page did not say what these objects are"
+    if by_name:
+        return objects, how, f"read by name: this account's table has no {level} ids"
     warning = (
         "read the rendered rows; the list scrolls, so completeness is not confirmed"
         if got.get("partial") else ""
@@ -2232,6 +2293,10 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         return out
     if not expected_name.strip():
         out.error = "row name is required — read the account again"
+        return out
+    if not str(object_id).strip():
+        out.error = ("This account shows the new Ads Manager table without campaign ids. "
+                     "Turning off by name is not available yet; turn it off in Ads Manager.")
         return out
     if not str(object_id).isdigit():
         out.error = "object id must contain only digits"
