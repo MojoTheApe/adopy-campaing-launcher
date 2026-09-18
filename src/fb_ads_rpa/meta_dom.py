@@ -5369,11 +5369,12 @@ def _ad_media_fingerprint(page: Page) -> list[str]:
 def _library_any_tile_marked(page: Page) -> bool | None:
     """Осталась ли в сетке хоть одна отмеченная плитка (None — сетку не прочесть)."""
     try:
-        return bool(page.evaluate(
+        value = page.evaluate(
             "() => { const d = " + _LIBRARY_DIALOG_JS + "; if (!d) return null;"
             " return !!d.querySelector('[data-test-decoration=\"selected\"],"
             " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked'); }"
-        ))
+        )
+        return value if isinstance(value, bool) else None
     except Exception:
         return None
 
@@ -5705,7 +5706,8 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Кликали, но счётчик не двинулся. «Не двинулся» — это то, что мы
         # видим, а не то, что произошло: клик мог и зарегистрироваться, просто
         # позже. Поэтому не уходим молча, а снимаем за собой.
-        clean = (before == 0 and _library_selected_count(page) == 0) if not clicked else _library_undo_selection(page, tiles, clicked, before)
+        clean = (before == 0 and _library_selected_count(page) == 0
+                 and _library_any_tile_marked(page) is False) if not clicked else _library_undo_selection(page, tiles, clicked, before)
         sight = _library_sight(page, filename)
         if saved_page:
             sight["page"] = saved_page
@@ -5822,7 +5824,8 @@ def _retreat(page: Page, tiles, clicked: list[int], before: int) -> str:
     написать `return False` — ровно та ошибка, которая стоила отключения всей
     возможности 24.08.
     """
-    clean = (before == 0 and _library_selected_count(page) == 0) if not clicked else _library_undo_selection(page, tiles, clicked, before)
+    clean = (before == 0 and _library_selected_count(page) == 0
+                 and _library_any_tile_marked(page) is False) if not clicked else _library_undo_selection(page, tiles, clicked, before)
     if not clean:
         return REUSE_DIRTY
     try:

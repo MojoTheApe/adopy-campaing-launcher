@@ -41,6 +41,7 @@ def browser():
 def page(browser):
     ctx = browser.new_context(viewport={"width": 1707, "height": 1400})
     p = ctx.new_page()
+    p.route("**/*", lambda route: route.abort())
     try:
         yield p
     finally:
@@ -84,3 +85,12 @@ def test_the_picked_tile_carries_the_same_thumbnail_id(page):
     _load(page, "library_one_picked.html")
     tile = page.locator('[data-test-decoration="selected"]').first
     assert PICKED_ID in md._tile_thumb_ids(tile)
+
+
+def test_a_missing_grid_is_unknown_even_when_an_unrelated_counter_is_zero(page, monkeypatch):
+    page.set_content('<div>0 selected</div>')
+    monkeypatch.setattr(md, "_sleep_h", lambda *_: None)
+    monkeypatch.setattr(md, "_close_creative_setup_modal", lambda *_: None)
+    assert md._library_any_tile_marked(page) is None
+    assert md._retreat(page, None, [0], 0) == md.REUSE_DIRTY
+    assert md._retreat(page, None, [], 0) == md.REUSE_DIRTY
