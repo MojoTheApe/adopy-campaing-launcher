@@ -126,8 +126,14 @@ def capture(
     campaign: str = "",
     diag: dict[str, Any] | None = None,
     timeout_ms: int = 5000,
+    blocks: dict[str, str] | None = None,
 ) -> str:
     """Снять страницу упавшего шага. Возвращает путь к папке снимка или "".
+
+    `blocks` — имя → JS-выражение, возвращающее элемент. Каждый найденный
+    элемент сохраняется в `block_<имя>.html` целиком: страница Ads Manager
+    больше MAX_HTML_BYTES и обрезается, а проверка по снимку должна видеть
+    нужный блок полностью, а не кусок до обрезки (ревью ACL-1219/1171/1192).
 
     Пустая строка — обычный ответ, а не сбой: снимков за прогон может быть
     больше положенного, страница может быть уже закрыта. Ни то, ни другое не
@@ -160,6 +166,25 @@ def capture(
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "page.html").write_text(body, encoding="utf-8")
 
+        saved_blocks: dict[str, Any] = {}
+        for name, js in (blocks or {}).items():
+            try:
+                outer = page.evaluate(
+                    "(expr) => { const el = (new Function('return (' + expr + ')'))();"
+                    " return el ? el.outerHTML : null; }",
+                    js,
+                )
+            except Exception as exc:
+                saved_blocks[name] = {"found": False, "error": str(exc)[:120]}
+                continue
+            if not outer:
+                saved_blocks[name] = {"found": False}
+                continue
+            block_body, block_cut = scrub_html(outer)
+            (folder / f"block_{_safe(name)}.html").write_text(block_body, encoding="utf-8")
+            saved_blocks[name] = {"found": True, "bytes": len(block_body.encode("utf-8", "replace")),
+                                  "truncated": block_cut}
+
         try:
             url = scrub(str(getattr(page, "url", "") or ""))
         except Exception:
@@ -177,6 +202,7 @@ def capture(
                     # Обрезанная разметка, поданная как полная, — это селектор,
                     # написанный по тому, чего на странице нет.
                     "html_truncated": truncated,
+                    "blocks": saved_blocks,
                     "took_s": round(time.time() - started, 2),
                     # Эти файлы никуда не отправляются. Написано здесь же,
                     # чтобы тот, кто найдёт папку через месяц, знал правило.

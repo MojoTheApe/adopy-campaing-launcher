@@ -212,3 +212,25 @@ def test_a_filled_second_group_is_confirmed_in_its_own_box(page, monkeypatch):
     assert page.evaluate(
         "[...document.querySelectorAll('.group')].map(g => g.querySelector('.chips').textContent)"
     ) == ["Investment bankingAsset managementInvestment banking", "Business jetYacht club"]
+
+
+def test_typed_text_and_suggestions_are_not_counted_as_selected(page):
+    """Ревью 18.09: набранное в поле и подсказки под ним — не выбранные интересы."""
+    page.set_content(
+        "<div class='group'><div>Include people who match</div>"
+        "<div class='chips'></div>"
+        "<input placeholder='Add demographics, interests or behaviours' value='Yacht club'>"
+        "<ul role='listbox'><li role='option'>Yacht club</li></ul></div>"
+    )
+    res = md._group_has_terms(page, ["Yacht club"])
+    assert res["found"] is True
+    assert res["hits"] == [] and res["missing"] == ["Yacht club"], res
+
+
+def test_a_selected_interest_chip_is_counted(page):
+    page.set_content(
+        "<div class='group'><div>Include people who match</div>"
+        "<div class='chips'><span>Yacht club</span></div>"
+        "<input placeholder='Add demographics, interests or behaviours'></div>"
+    )
+    assert md._group_has_terms(page, ["Yacht club"])["hits"] == ["Yacht club"]
