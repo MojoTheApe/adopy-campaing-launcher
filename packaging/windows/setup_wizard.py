@@ -260,7 +260,7 @@ def sanitized_setup_summary(configuration: MachineConfiguration, version: str) -
             f"Multilogin instances: {', '.join(instances)}",
             "Stats workbook and Creatives folder: validated (paths omitted)",
             "Safety mode: RPA / recorded_flow / attach-only",
-            "Automatic updates: disabled",
+            "Updates: offered in the dashboard, installed only when the user clicks Update",
             "Campaign actions during setup: none",
         )
     )
@@ -396,7 +396,7 @@ class SetupWizard:
         self._text(
             "This wizard only configures the local application. It cannot create, publish, or change a campaign."
         )
-        self._text("Automatic software updates are disabled for this installer pilot.")
+        self._text("New versions are offered in the dashboard and installed only when you click Update.")
 
     def _system(self) -> None:
         self.system_checks = system_readiness(self.config_directory)

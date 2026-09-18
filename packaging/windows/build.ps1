@@ -30,7 +30,8 @@ try {
     python packaging/windows/build_manifest.py `
         --version $Version `
         --output $ManifestPath `
-        --current-output $CurrentPath
+        --current-output $CurrentPath `
+        --channel-output (Join-Path $BuildRoot "acl-update-channel.json")
     Assert-LastExitCode "Build manifest generation"
 
     $env:ACL_BUILD_MANIFEST = $ManifestPath

@@ -36,6 +36,7 @@ datas = [
     (str(PROJECT_ROOT / "src" / "web" / "static"), "src/web/static"),
     (str(PROJECT_ROOT / "src" / "web" / "templates"), "src/web/templates"),
     (str(MANIFEST_PATH), "."),
+    (str(MANIFEST_PATH.with_name("acl-update-channel.json")), "."),
 ] + playwright_datas
 
 # Uvicorn chooses its event loop, HTTP implementation and lifespan handler at
@@ -44,6 +45,7 @@ hiddenimports = collect_submodules("uvicorn") + playwright_hiddenimports + [
     "diagnostics",
     "machine_config",
     "setup_wizard",
+    "updater",
     "tkinter",
     "scripts.acl_runtime_manager",
     "scripts.acl_smoke",

@@ -71,7 +71,14 @@ jobs:
 
       - name: Build onedir bundle
         shell: pwsh
-        run: ./packaging/windows/build.ps1 -Version "$env:ACL_PACKAGE_VERSION"
+        env:
+          # The installed build reads updates from here (ACL-1240). The token is
+          # read-only and should be scoped to the releases repository only.
+          ACL_RELEASES_REPO: ${{ vars.ACL_RELEASES_REPO || github.repository }}
+          ACL_UPDATE_TOKEN: ${{ secrets.ACL_UPDATE_TOKEN }}
+        run: |
+          if (-not $env:ACL_UPDATE_TOKEN) { Remove-Item Env:ACL_RELEASES_REPO; Write-Warning "ACL_UPDATE_TOKEN is not set: this release cannot update itself." }
+          ./packaging/windows/build.ps1 -Version "$env:ACL_PACKAGE_VERSION"
 
       - name: Test the packaged executable
         shell: pwsh

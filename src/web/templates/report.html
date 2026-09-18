@@ -2924,25 +2924,42 @@ async function dashRefresh(ev) {
   var btn = document.getElementById('acl-update-btn');
   if (!btn) return;
 
-  fetch('/acl/update/check', { credentials: 'same-origin' })
-    .then(function (r) { return r.json(); })
-    .then(function (s) {
-      if (!s || !s.available || !s.supervised) return;
-      var name = (s.candidate && (s.candidate.tag || s.candidate.short)) || '';
-      btn.textContent = 'Update ACL';
-      btn.title = 'A newer release is available' + (name ? ': ' + name : '')
-        + '. Installing takes a minute and restarts the dashboard.';
-      btn.hidden = false;
-      btn.dataset.target = name;
-    })
-    .catch(function () { /* offline, or not a git install — no button, no noise */ });
+  // Дешборд держат открытым днями: спрашиваем раз в час, а сервер сам ходит
+  // в GitHub не чаще раза в сутки (ACL-1240).
+  function aclCheck() {
+    if (btn.disabled) return;
+    fetch('/acl/update/check', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (s) {
+        if (!s) return;
+        aclLastAttempt(s.last_attempt);
+        if (!s.available || !s.supervised) return;
+        // Выпуски GitHub (установленный ACL.exe) называют версию, git — тег.
+        var name = (s.candidate && (s.candidate.version || s.candidate.tag || s.candidate.short)) || '';
+        var fixed = (s.fixed || []).map(function (f) {
+          return '• ' + f.issue + (f.notes && f.notes.length ? ' — ' + f.notes.join('; ') : '');
+        });
+        btn.textContent = name && s.channel === 'release' ? 'Update to ' + name : 'Update ACL';
+        btn.title = 'A newer release is available' + (name ? ': ' + name : '')
+          + (fixed.length ? '\n\nWhat changed:\n' + fixed.join('\n') : '')
+          + '\n\nInstalling takes a few minutes and restarts the dashboard.';
+        btn.hidden = false;
+        btn.dataset.target = name;
+        btn.dataset.fixed = fixed.join('\n');
+      })
+      .catch(function () { /* offline, or not a git install — no button, no noise */ });
+  }
+  aclCheck();
+  setInterval(aclCheck, 60 * 60 * 1000);
 
   btn.addEventListener('click', function () {
     if (btn.disabled) return;
     var name = btn.dataset.target || 'the latest release';
+    var fixed = btn.dataset.fixed || '';
     if (!confirm('Update ACL to ' + name + '?\n\n'
+      + (fixed ? 'What changed:\n' + fixed + '\n\n' : '')
       + 'The dashboard will restart and this page will reload by itself. '
-      + 'It usually takes under a minute. Do not close the black ACL window.')) return;
+      + 'It takes a few minutes. If the new version does not start, the current one comes back by itself.')) return;
 
     btn.disabled = true;
     btn.textContent = 'Updating…';
@@ -2968,6 +2985,19 @@ async function dashRefresh(ev) {
       });
   });
 
+  // Итог последней установки пишет помощник обновления (ACL-1240). Показываем
+  // один раз: ключ — время, когда он закончил.
+  function aclLastAttempt(a) {
+    if (!a || !a.finished_at || !a.result || a.result === 'updated') return;
+    var key = 'acl-update-seen:' + a.finished_at;
+    try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { /* без памяти — покажем снова */ }
+    alert(a.result === 'rolled_back'
+      ? 'The update to ' + (a.to || 'the new version') + ' did not work, so ACL went back to '
+        + (a.from || 'the previous version') + '.\n\n' + (a.reason || '')
+        + '\n\nNothing else changed. Use Report a problem so it gets fixed.'
+      : 'The update to ' + (a.to || 'the new version') + ' did not start: ' + (a.reason || 'unknown reason'));
+  }
+
   // The launcher builds an isolated runtime for the new release before starting
   // it, which on a slow machine is a few minutes of nothing to see. Say so, and
   // keep saying it, rather than leaving a frozen page.
@@ -2981,9 +3011,9 @@ async function dashRefresh(ev) {
       if (Date.now() - started > LIMIT_MS) {
         btn.disabled = false;
         btn.textContent = 'Update ACL';
-        alert('ACL did not come back within 10 minutes. Check the black ACL '
-          + 'window — it says what happened, and the previous version is '
-          + 'restored automatically if the new one did not start.');
+        alert('ACL did not come back within 10 minutes. Open it again from the desktop '
+          + 'shortcut. If the new version did not start, the previous one is restored '
+          + 'automatically; use Report a problem if it still does not open.');
         return;
       }
       fetch('/health', { cache: 'no-store' })

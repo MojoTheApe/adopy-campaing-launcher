@@ -80,13 +80,22 @@ Connect. ACL reads the ad account from the profile, so you type no IDs.
 
 ## Keeping ACL up to date
 
-When Evgeni sends a new installer, stop ACL first. Go to **Start → Adopy Campaign
-Launcher → Stop Campaign Launcher**; closing the browser tab alone does not stop
-it. Then run the new file. Your name, files, accounts, profiles and tokens stay
-as they are. They live in `%LOCALAPPDATA%\ACL`, outside the program folder.
+When a new version is out, the dashboard header shows **Update to <version>**.
+Hover over it or click it to see what changed. Click **Update** and confirm.
 
-An **Update** button in the dashboard, which will install new versions without a
-file from Evgeni, is coming next (ACL-1240).
+- Wait for a campaign run to finish first. While a run is in progress, ACL
+  refuses to update.
+- ACL downloads the new version, checks that the file is exactly the published
+  one, installs it and restarts. The page reloads by itself after a few minutes.
+- If the new version does not start, ACL puts the previous one back by itself
+  and tells you so once. You are never left without a working dashboard.
+
+Nothing updates on its own, and your name, files, accounts, profiles and tokens
+are never touched. They live in `%LOCALAPPDATA%\ACL`, outside the program folder.
+
+If Evgeni sends you an installer file instead, stop ACL first. Go to **Start →
+Adopy Campaign Launcher → Stop Campaign Launcher**; closing the browser tab alone
+does not stop it. Then run the new file.
 
 ---
 

@@ -1263,8 +1263,11 @@ def mlx_instance_labels() -> dict[str, str]:
 
 @app.get("/health", include_in_schema=False)
 async def health() -> JSONResponse:
-    """Fast identity check for the Windows launcher; never loads workbooks."""
-    return JSONResponse({"app": "ACL", "ok": True})
+    """Fast identity check for the Windows launcher; never loads workbooks.
+
+    `version` lets the update helper tell the new release from the old one.
+    """
+    return JSONResponse({"app": "ACL", "ok": True, "version": _installed_release().get("tag", "")})
 
 
 @app.get("/acl/update/check")
@@ -1274,10 +1277,16 @@ async def acl_update_check(request: Request) -> JSONResponse:
     Reached on every page load, so it must never raise and never block for long:
     a machine with no network still has a dashboard to run.
     """
+    from starlette.concurrency import run_in_threadpool
     from src.web import acl_update
 
     skip_fetch = (request.query_params.get("fetch") or "1").strip().lower() in {"0", "false", "no"}
     try:
+        if getattr(sys, "frozen", False):
+            # Установленный ACL.exe: выпуски GitHub, не git (ACL-1240).
+            from src.web import release_updates
+            force = (request.query_params.get("force") or "").strip().lower() in {"1", "true", "yes"}
+            return JSONResponse(await run_in_threadpool(release_updates.check, force=force))
         return JSONResponse(acl_update.check(fetch=not skip_fetch))
     except Exception as exc:  # pragma: no cover - defensive
         return JSONResponse(
@@ -1295,6 +1304,9 @@ async def acl_update_apply() -> JSONResponse:
     """
     from src.web import acl_update
     from src.web.publish_jobs import active_job_count
+
+    if getattr(sys, "frozen", False):
+        return await _apply_release_update(active_job_count)
 
     if not acl_update.is_supervised():
         return JSONResponse(
@@ -1331,6 +1343,34 @@ async def acl_update_apply() -> JSONResponse:
     acl_update.request_restart(target=target)
     acl_update.schedule_exit()
     return JSONResponse({"ok": True, "target": target})
+
+
+async def _apply_release_update(active_jobs) -> JSONResponse:
+    """Installed ACL.exe: download, verify, hand over to the helper, then exit."""
+    from starlette.concurrency import run_in_threadpool
+    from src.web import acl_update, release_updates
+
+    def refuse_if_busy() -> JSONResponse | None:
+        busy = active_jobs()
+        if busy:
+            return JSONResponse({"ok": False, "error": f"{busy} campaign job(s) still running. Updating restarts "
+                                                       "ACL, which would abandon them half-built."}, status_code=409)
+        return None
+
+    if (refused := refuse_if_busy()) is not None:
+        return refused
+    try:
+        setup, manifest = await run_in_threadpool(release_updates.download)
+        if manifest["version"] == release_updates.installed_version():
+            return JSONResponse({"ok": False, "error": "ACL is already on the latest version."}, status_code=400)
+        # Скачивание идёт минуты — за это время могли запустить публикацию.
+        if (refused := refuse_if_busy()) is not None:
+            return refused
+        release_updates.start_helper(setup, manifest)
+    except release_updates.UpdateError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    acl_update.schedule_exit()
+    return JSONResponse({"ok": True, "target": manifest["version"]})
 
 
 def _enrich_country_overview(report: Dict[str, Any]) -> None:
