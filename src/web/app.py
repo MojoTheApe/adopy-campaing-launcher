@@ -861,9 +861,9 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
 
 
 def _load_sheet_targets() -> list[dict]:
-    """Local library plus refreshed shared entries, including narrowing."""
+    """The team targeting library (read copy refreshed from the repository)."""
     from src.analysis_agent import targeting_registry as tr
-    tr.refresh()
+    tr.pull(force=True)
     return [{"code": t.name, "label": t.name, "fb_interest": t.rpa_interests()}
             for t in tr.all_targets()]
 
@@ -1956,7 +1956,7 @@ def _ad_copy_rows() -> list[dict]:
 
     return [{"ad_title": t.name, "headline": t.headline, "body": t.body,
              "description": t.description, "asset": t.asset,
-             "language": t.language} for t in ar.builder_texts()]
+             "language": t.language} for t in ar.builder_texts(force=True)]
 
 
 @app.get("/api/ad-copy")
@@ -2314,14 +2314,15 @@ async def api_accounts_overview() -> JSONResponse:
 
 @app.get("/api/targeting-profiles")
 def api_targeting_profiles(force: bool = False) -> JSONResponse:
-    """Run Sheets and disk I/O in FastAPI's worker pool."""
+    """Refresh the read copy from the team library, then answer from it."""
     from src.analysis_agent import targeting_registry as tr
     try:
-        sheet = tr.refresh(force=force)
+        library = tr.pull(force=True)
         targets = tr.all_targets()
-        return JSONResponse({"ok": True, "can_add": True, "sheet": sheet,
+        return JSONResponse({"ok": True, "can_add": True, "library": library,
                              "duplicates": tr.duplicates(targets),
-                             "profiles": [t.to_dict() for t in targets]})
+                             "profiles": [t.to_dict() for t in targets],
+                             "deleted": tr.recently_deleted()})
     except tr.TargetingError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
 
@@ -2329,37 +2330,27 @@ def api_targeting_profiles(force: bool = False) -> JSONResponse:
 def _edit_targeting_profile(data: dict) -> JSONResponse:
     from src.analysis_agent import targeting_registry as tr
     if not isinstance(data, dict) or any(not isinstance(data.get(k, ""), str)
-            for k in ("action", "name", "interests", "narrow", "was", "confirmation")):
+            for k in ("action", "name", "interests", "narrow", "was")):
         return JSONResponse({"ok": False, "error": "Expected an object with string fields"}, status_code=400)
     action = (data.get("action") or "add").strip().lower()
     name, interests, narrow = (data.get(k, "") for k in ("name", "interests", "narrow"))
     try:
         if action == "delete":
             tr.remove(name)
-            return JSONResponse({"ok": True, "removed": name, "scope": "local"})
-        if action == "export":
-            if data.get("confirmation") != "replace_shared_library":
-                raise tr.TargetingError("Подтвердите замену всей общей таблицы локальной библиотекой.")
-            written, backup = tr.push_all()
-            return JSONResponse({"ok": True, "exported": written, "backup": backup})
+            return JSONResponse({"ok": True, "removed": name, "scope": "team" if tr.team_library.configured() else "local"})
         if action == "update":
             target = tr.update(data.get("was") or name, name, interests, narrow)
         elif action == "add":
             target = tr.add(name, interests, narrow)
-            tr.share(target)
-        elif action == "share":
-            target = tr.lookup(name)
-            if target is None:
-                raise tr.TargetingError("Таргет не найден.")
-            tr.share(target)
+        elif action == "restore":
+            target = tr.restore(name)
         else:
-            raise tr.TargetingError(f"Неизвестное действие: {action}")
+            raise tr.TargetingError(f"Unknown action: {action}")
     except tr.TargetingError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-    return JSONResponse({"ok": True, "shared": target.shared,
-                         "shared_error": target.shared_error, "profile": target.to_dict()})
+    return JSONResponse({"ok": True, "profile": target.to_dict(), "scope": "team" if tr.team_library.configured() else "local"})
 
 
 @app.post("/api/targeting-profiles")
@@ -2374,14 +2365,15 @@ async def api_edit_targeting_profile(request: Request) -> JSONResponse:
 
 @app.get("/api/ad-texts")
 def api_ad_texts(force: bool = False) -> JSONResponse:
-    """Библиотека рекламных текстов. Чтение вкладки — в рабочем пуле FastAPI."""
+    """Refresh the read copy from the team library, then answer from it."""
     from src.analysis_agent import ad_text_registry as ar
     try:
-        sheet = ar.refresh(force=True) if force else ar.ensure_loaded()
+        library = ar.pull(force=True)
         texts = ar.all_texts()
-        return JSONResponse({"ok": True, "sheet": sheet,
+        return JSONResponse({"ok": True, "library": library,
                              "duplicates": ar.duplicates(texts),
-                             "texts": [t.to_dict() for t in texts]})
+                             "texts": [t.to_dict() for t in texts],
+                             "deleted": ar.recently_deleted()})
     except ar.AdTextError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
 
@@ -2400,18 +2392,20 @@ def _edit_ad_text(data: dict) -> JSONResponse:
     try:
         if action == "delete":
             ar.remove(name)
-            return JSONResponse({"ok": True, "removed": name})
+            return JSONResponse({"ok": True, "removed": name, "scope": "team" if ar.team_library.configured() else "local"})
         if action == "update":
             text = ar.update(data.get("was") or name, name, headline, body, description, asset, language)
         elif action == "add":
             text = ar.add(name, headline, body, description, asset, language)
+        elif action == "restore":
+            text = ar.restore(name)
         else:
-            raise ar.AdTextError(f"Неизвестное действие: {action}")
+            raise ar.AdTextError(f"Unknown action: {action}")
     except ar.AdTextError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-    return JSONResponse({"ok": True, "text": text.to_dict()})
+    return JSONResponse({"ok": True, "text": text.to_dict(), "scope": "team" if ar.team_library.configured() else "local"})
 
 
 @app.post("/api/ad-texts")

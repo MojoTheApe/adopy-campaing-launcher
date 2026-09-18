@@ -7,20 +7,13 @@ import pytest
 
 from scripts import acl_board as board
 from src.analysis_agent import ad_text_registry as ar, account_spend as spend
-from src.web import app as web, ad_copy_gsheet as copy_source
+from src.web import app as web, ad_copy as copy_source
 
 
 @pytest.fixture
 def library(tmp_path, monkeypatch):
     monkeypatch.setattr(ar.paths, "get_local_config_dir", lambda: str(tmp_path))
-    # Both the new sheet reader and the previous adapter are isolated.
-    from src.analysis_agent import gsheet_ad_texts as gs
-    rows = [["Saved", "Old headline", "Old body", "", "", "ES"]]
-    monkeypatch.setattr(gs, "load_ad_text_rows", lambda **kw: rows)
-    monkeypatch.setattr(gs, "last_error", "")
-    monkeypatch.setattr(copy_source, "_fetch_rows", lambda: [list(ar.SHEET_COLUMNS), *rows], raising=False)
-    copy_source.reload_cache()
-    return tmp_path, rows
+    return tmp_path, []
 
 
 def test_rpa_uses_the_same_local_text_as_the_builder(library, monkeypatch):
@@ -41,8 +34,8 @@ def test_rpa_uses_the_same_local_text_as_the_builder(library, monkeypatch):
         "Local headline", "Local body", "Local description")
 
 
-def test_deleting_the_last_text_does_not_restore_it_from_the_sheet(library):
-    ar.import_texts(library[1])
+def test_deleting_the_last_text_leaves_the_library_empty(library):
+    ar.add("Saved", "Old headline", "Old body", language="ES")
     ar.remove("Saved")
     assert web._ad_copy_rows() == []
     with pytest.raises(ar.AdTextError):
@@ -63,19 +56,6 @@ def test_unknown_text_cannot_match_a_different_ad_by_substring(library):
     ar.add("Saved longer", "Different", "Other copy")
     with pytest.raises(ar.AdTextError):
         copy_source.lookup_ad_copy_by_title("Saved")
-
-
-def test_import_releases_the_previous_content_fingerprint(library):
-    ar.import_texts([["A", "Original", "Body"]])
-    report = ar.import_texts([["A", "Changed", "Body"], ["B", "Original", "Body"]])
-    assert report["added"] == 1 and report["updated"] == 1
-    assert {t.name: t.headline for t in ar.all_texts()} == {"A": "Changed", "B": "Original"}
-
-
-def test_import_rejects_invalid_names_and_reports_the_row(library):
-    report = ar.import_texts([["Bad\nname", "Headline", "Body"], ["Good", "Good headline", "Body"]])
-    assert [t.name for t in ar.all_texts()] == ["Good"]
-    assert len(report["skipped"]) == 1
 
 
 def test_master_updates_the_board_to_merged_without_claiming_rollout():
