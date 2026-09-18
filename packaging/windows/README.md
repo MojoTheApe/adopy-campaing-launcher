@@ -36,7 +36,7 @@ on the campaign manager's computer.
 
 The Inno Setup build creates a non-admin per-user installer under
 `packaging/windows/.artifacts/installer/`. It installs versioned program files
-under `%LOCALAPPDATA%\Programs\ACL`, creates Start Menu and optional desktop
+under `%LOCALAPPDATA%\Programs\ACL`, creates Start Menu and (by default) desktop
 shortcuts, and keeps all user configuration under `%LOCALAPPDATA%\ACL`.
 
 CI builds the actual combined runtime, exercises packaged identity and local
