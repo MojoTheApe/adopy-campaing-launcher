@@ -116,7 +116,8 @@
     },
     "b4b46653b602746193b611c530924f7c7beda8b2acdf83421dfdb0062afbd267": {
       "title": "Read spend restarts a manually opened profile the way Publish does",
-      "state": "creating"
+      "state": "created",
+      "issue": 234
     }
   }
 }
