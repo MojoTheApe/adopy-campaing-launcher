@@ -1258,6 +1258,7 @@ class MultiloginAttachOnlyProvider:
         udd: str,
         *,
         allow_restart: bool = True,
+        allow_kill: bool = True,
     ) -> Any:
         from src.meta_campaign_agent.multilogin_config import get_multilogin_instance
         from src.meta_campaign_agent.multilogin_launcher import (
@@ -1324,6 +1325,14 @@ class MultiloginAttachOnlyProvider:
                     try:
                         self._launcher.stop_profile(profile_id, folder_id=folder_id)
                     except MultiloginLauncherError as stop_exc:
+                        if not allow_kill:
+                            # Чтение спенда окно не убивает никогда: жёсткий
+                            # перезапуск однажды разлогинил x01 (ACL-1234).
+                            raise RuntimeError(
+                                f"{account_label}: the profile is open in MLX Desktop and Multilogin "
+                                f"could not stop it ({stop_exc}). Nothing was closed. Close the window "
+                                "in MLX Desktop and read again."
+                            ) from stop_exc
                         # Last resort: kill Mimic for THIS profile's dir only (scoped).
                         log.warning(
                             "MLX stop_profile failed (%s); killing Mimic for this "
@@ -1348,7 +1357,8 @@ class MultiloginAttachOnlyProvider:
         )
 
     def open(self, entry: AccountMapEntry, account_label: str, *,
-             allow_missing_dir: bool = False, allow_restart: bool = True) -> BrowserConnection:
+             allow_missing_dir: bool = False, allow_restart: bool = True,
+             allow_kill: bool = True) -> BrowserConnection:
         profile_id = entry.profile_id
         if not profile_id:
             raise RuntimeError(f"{account_label}: profile_id is required")
@@ -1379,7 +1389,8 @@ class MultiloginAttachOnlyProvider:
                 profile_id,
             )
 
-        started = self._start_via_mlx_api(entry, account_label, profile_id, udd, allow_restart=allow_restart)
+        started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
+                                          allow_restart=allow_restart, allow_kill=allow_kill)
         ws = started.ws_endpoint or ""
         if ws and not ws.startswith("/"):
             ws = f"/{ws}"
