@@ -2894,7 +2894,7 @@ def run_recorded_campaign_flow(
                 _shot("fail_targeting_open")
                 soft_fails.append("targeting_open")
             else:
-                any_added = paste_targeting_interests(page, targeting_label)
+                any_added = paste_targeting_groups(page, targeting_label)
                 _shot("after_targeting" if any_added else "fail_targeting_none_added")
                 if not any_added:
                     soft_fails.append("targeting_none_added")
@@ -8489,48 +8489,111 @@ def open_detailed_targeting_field(page: Page) -> bool:
     # info-icon div at all — click the header/row via CDP (the proven
     # pattern from Locations/Languages) then poll for the real input.
     targeting_placeholders = placeholders  # reuse the list already defined above
-    for root in _roots(page):
-        try:
-            heading = root.get_by_text(re.compile(r"^Detailed targeting$|^Segmentación detallada$", re.I)).first
-            heading.wait_for(state="visible", timeout=2000)
-            heading.scroll_into_view_if_needed(timeout=2000)
-            header_block = heading.locator("xpath=ancestor::*[2]")
-            row = heading.locator("xpath=ancestor::*[3]")
-            for candidate in (header_block, row):
-                try:
-                    box = candidate.bounding_box(timeout=1500)
-                    if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
-                        _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-                        break
-                except Exception:
-                    continue
-            break
-        except Exception:
-            continue
+    # Три захода, а не один. 16.09 22:49 (S15, 4b296e9963e1): клик пришёлся
+    # на момент, когда раскрытый Languages ещё перестраивал колонку, строка
+    # «Detailed targeting» осталась свёрнутой, и шаг сдался через 3 с.
+    for _attempt in range(3):
+        # Строка уже раскрылась, просто поздно — второй клик её свернул бы.
+        for root in ([] if _attempt and targeting_input_count(page) else _roots(page)):
+            try:
+                heading = root.get_by_text(re.compile(r"^Detailed targeting$|^Segmentación detallada$", re.I)).first
+                heading.wait_for(state="visible", timeout=2000)
+                heading.scroll_into_view_if_needed(timeout=2000)
+                header_block = heading.locator("xpath=ancestor::*[2]")
+                row = heading.locator("xpath=ancestor::*[3]")
+                for candidate in (header_block, row):
+                    try:
+                        box = candidate.bounding_box(timeout=1500)
+                        if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
+                            _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                            break
+                    except Exception:
+                        continue
+                break
+            except Exception:
+                continue
 
-    for _ in range(15):
-        _sleep_h(0.2)
-        for root in _roots(page):
-            for ph in targeting_placeholders:
-                try:
-                    inp = root.get_by_placeholder(ph).first
-                    if inp.count() and inp.is_visible():
-                        inp.click(timeout=3000)
-                        _sleep_h(0.3)
-                        return True
-                except Exception:
-                    continue
+        for _ in range(15):
+            _sleep_h(0.2)
+            for root in _roots(page):
+                for ph in targeting_placeholders:
+                    try:
+                        inp = root.get_by_placeholder(ph).first
+                        if inp.count() and inp.is_visible():
+                            inp.click(timeout=3000)
+                            _sleep_h(0.3)
+                            return True
+                    except Exception:
+                        continue
     return False
 
 
-def fill_targeting_interest(page: Page, text: str) -> bool:
-    """Type into Detailed targeting interests field — not 'Search existing audiences'."""
+_DEFINE_FURTHER_XPATH = (
+    "//*[@role='button' or self::button]"
+    "[normalize-space(.)='Define further' or normalize-space(.)='Narrow further'"
+    " or normalize-space(.)='Narrow audience' or normalize-space(.)='Definir más']"
+)
+
+
+def targeting_input_count(page: Page) -> int:
+    """How many Detailed targeting inputs are on the page (one per AND group)."""
+    try:
+        return int(page.evaluate(
+            """
+            () => [...document.querySelectorAll('input, textarea')].filter((inp) => {
+              const r = inp.getBoundingClientRect();
+              if (r.width <= 2 || r.height <= 2 ||
+                  getComputedStyle(inp).visibility === 'hidden' ||
+                  inp.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+              const blob = ((inp.getAttribute('placeholder') || '') + ' ' +
+                            (inp.getAttribute('aria-label') || '')).toLowerCase();
+              if (['existing audience', 'audiencia existente', 'saved audience'].some(b => blob.includes(b))) return false;
+              return ['add interests', 'interests, behaviors', 'interests or behaviours',
+                      'interests or behaviors', 'añadir intereses', 'demographics', 'demografía']
+                .some(g => blob.includes(g));
+            }).length
+            """
+        ))
+    except Exception:
+        return 0
+
+
+def click_define_further(page: Page) -> bool:
+    """Press "Define further" and confirm a new targeting group opened.
+
+    The Mix targets are two groups joined by AND: finance interests, and
+    people who ALSO match travel/luxury. Meta expresses that with this
+    button; without it both lists land in one OR group and the audience is
+    the opposite of what the target means (Doc20, KW_trl_All_Video_Mix,
+    2026-09-16: all sixteen interests in one "Include people who match",
+    the button untouched). Success is a new input appearing, not the click.
+    """
+    before = targeting_input_count(page)
+    for _ in range(3):
+        if not _click_xpath(page, _DEFINE_FURTHER_XPATH):
+            _sleep_h(0.8)
+            continue
+        for _ in range(10):
+            _sleep_h(0.3)
+            if targeting_input_count(page) > before:
+                return True
+    return False
+
+
+def fill_targeting_interest(page: Page, text: str, *, last: bool = False) -> bool:
+    """Type into Detailed targeting interests field — not 'Search existing audiences'.
+
+    `last=True` types into the last such field on the page — the one
+    "Define further" just opened for the next AND group.
+    """
     script = """
-    (text) => {
+    ([text, last]) => {
       const visible = (el) => {
         if (!el || el.offsetParent === null) return false;
         const r = el.getBoundingClientRect();
-        return r.width > 2 && r.height > 2;
+        return r.width > 2 && r.height > 2 &&
+          getComputedStyle(el).visibility !== 'hidden' &&
+          !el.closest('[hidden], [inert], [aria-hidden="true"]');
       };
       const bad = ['existing audience', 'audiencia existente', 'saved audience'];
       const good = [
@@ -8539,6 +8602,7 @@ def fill_targeting_interest(page: Page, text: str) -> bool:
         'incluir personas', 'demographics', 'demografía'
       ];
       const inputs = [...document.querySelectorAll('input, textarea')].filter(visible);
+      if (last) inputs.reverse();
       for (const inp of inputs) {
         const ph = (inp.getAttribute('placeholder') || '').toLowerCase();
         const aria = (inp.getAttribute('aria-label') || '').toLowerCase();
@@ -8558,7 +8622,7 @@ def fill_targeting_interest(page: Page, text: str) -> bool:
     """
     for root in _roots(page):
         try:
-            if root.evaluate(script, text):
+            if root.evaluate(script, [text, last]):
                 return True
         except Exception:
             pass
@@ -8589,6 +8653,183 @@ def pick_first_suggestion(page: Page) -> bool:
         except Exception:
             pass
     return False
+
+
+def _focus_last_targeting_input(page: Page) -> bool:
+    """Trusted-click the last Detailed targeting input — the one "Define
+    further" just opened — so a paste lands in the new AND group."""
+    try:
+        pt = page.evaluate(
+            """
+            () => {
+              const inputs = [...document.querySelectorAll('input, textarea')].filter((inp) => {
+                const r = inp.getBoundingClientRect();
+                if (r.width <= 2 || r.height <= 2 ||
+                  getComputedStyle(inp).visibility === 'hidden' ||
+                  inp.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+                const blob = ((inp.getAttribute('placeholder') || '') + ' ' +
+                              (inp.getAttribute('aria-label') || '')).toLowerCase();
+                if (['existing audience', 'audiencia existente', 'saved audience'].some(b => blob.includes(b))) return false;
+                return ['add interests', 'interests, behaviors', 'interests or behaviours',
+                        'interests or behaviors', 'añadir intereses', 'demographics', 'demografía']
+                  .some(g => blob.includes(g));
+              });
+              const el = inputs[inputs.length - 1];
+              if (!el) return null;
+              el.scrollIntoView({ block: 'center', behavior: 'instant' });
+              const r = el.getBoundingClientRect();
+              return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+            }
+            """
+        )
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.4)
+    return True
+
+
+def targeting_groups(targeting_label: str) -> list[str]:
+    """Split a library target into its AND groups.
+
+    `[AND]`, `|` and `\\` are one instruction written three ways — the same
+    reading `ads_manager_flow` has always applied. Each group is returned as
+    the comma-separated text Meta's field parses on paste.
+    """
+    raw = (targeting_label or "").replace("\\", "|")
+    groups = []
+    for chunk in re.split(r"\[AND\]|\|", raw, flags=re.IGNORECASE):
+        terms = [t.strip() for t in chunk.split(",") if t.strip()]
+        if terms:
+            groups.append(", ".join(terms))
+    return groups
+
+
+_TARGETING_GROUP_JS = r"""
+  (terms) => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const visible = el => !!el && el.getClientRects().length > 0
+      && getComputedStyle(el).visibility !== 'hidden'
+      && !el.closest('[hidden], [inert], [aria-hidden="true"]');
+    const isTargetingInput = inp => {
+      const blob = norm((inp.getAttribute('placeholder') || '') + ' ' +
+                        (inp.getAttribute('aria-label') || ''));
+      if (['existing audience', 'audiencia existente', 'saved audience'].some(b => blob.includes(b))) return false;
+      return ['add interests', 'interests, behaviors', 'interests or behaviours',
+              'interests or behaviors', 'añadir intereses', 'demographics', 'demografía']
+        .some(g => blob.includes(g));
+    };
+    const inputs = [...document.querySelectorAll('input, textarea')]
+      .filter(inp => visible(inp) && isTargetingInput(inp));
+    const last = inputs[inputs.length - 1];
+    if (!last) return {found: false, why: 'targeting input unavailable'};
+    // The recorded Meta block gives each group its own presentation wrapper.
+    // An ancestor walk based only on input count can reach the entire page.
+    const chosen = last.closest('[role="presentation"]');
+    if (!chosen || [...chosen.querySelectorAll('input, textarea')].filter(isTargetingInput).length !== 1)
+      return {found: false, why: 'targeting group unavailable'};
+    const skip = el => !visible(el) || !!el.closest(
+      '[role=listbox], [role=option], [role=menu], [role=menuitem]');
+    const isClose = b => visible(b) &&
+      /^(close|remove|quitar|eliminar)$/i.test(norm(b.getAttribute('aria-label') || b.textContent));
+    // Only leaf list items with their own removal control are selected chips.
+    // Outer li elements also contain category headings and other chips.
+    const chips = [...chosen.querySelectorAll('li')]
+      .filter(li => !skip(li) && !li.querySelector('li') &&
+        [...li.querySelectorAll('button')].some(isClose))
+      .map(li => {
+        const clone = li.cloneNode(true);
+        clone.querySelectorAll('button').forEach(b => b.remove());
+        return norm(clone.textContent);
+      }).filter(Boolean);
+    // Meta appends a category in parentheses to some selected names.
+    // A substring elsewhere (or in a longer interest name) is not a match.
+    const has = term => chips.some(c => c === norm(term) || c.startsWith(norm(term) + ' ('));
+    return {found: true, hits: terms.filter(has), missing: terms.filter(t => !has(t)),
+            selected: chips.slice(0, 40), by: 'chips', text: chips.join(', ').slice(0, 400)};
+  }
+"""
+"""Verify actual selected chips in the last AND group's recorded container."""
+
+
+# Общий контейнер всех полей интересов — блок AND-групп целиком.
+_GROUPS_BLOCK_JS = (
+    "(() => { const ins = [...document.querySelectorAll('input, textarea')].filter(i =>"
+    " /interests|demograph|intereses/i.test((i.getAttribute('placeholder') || '') + ' ' +"
+    " (i.getAttribute('aria-label') || ''))); if (!ins.length) return null;"
+    " let el = ins[0]; while (el && !ins.every(i => el.contains(i))) el = el.parentElement;"
+    " for (let k = 0; k < 2 && el && el.parentElement; k++) el = el.parentElement; return el; })()"
+)
+
+
+def _group_has_terms(page: Page, terms: list[str]) -> dict:
+    try:
+        return page.evaluate(_TARGETING_GROUP_JS, terms) or {"found": False}
+    except Exception as exc:
+        return {"found": False, "why": str(exc)[:80]}
+
+
+def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
+    """Paste each AND group into its own field, pressing "Define further"
+    between them. True only when every group went in.
+
+    The recorded flow pasted the whole library string at once. For a
+    two-group target (Mix, Mix2, …) that string is "group1 [AND] group2":
+    Meta parsed it as one comma list, every interest of both groups landed
+    in one "Include people who match", and "Define further" was never
+    pressed — "finance AND luxury" became "finance OR luxury" (Doc20,
+    KW_trl_All_Video_Mix_35_16.09, 2026-09-16, operator's screenshot).
+    """
+    groups = targeting_groups(targeting_label)
+    if not groups:
+        return False
+    for index, group in enumerate(groups):
+        if index > 0:
+            if not click_define_further(page):
+                _telemetry.record("targeting", False, note="define_further_did_not_open",
+                                  diag={"group": index + 1, "groups": len(groups)})
+                return False
+            if not _focus_last_targeting_input(page):
+                _telemetry.record("targeting", False, note="define_further_field_not_found",
+                                  diag={"group": index + 1})
+                return False
+        if not paste_targeting_interests(page, group):
+            _telemetry.record("targeting", False, note="group_not_added",
+                              diag={"group": index + 1, "groups": len(groups)})
+            return False
+        # Проверка на своей группе: paste_targeting_interests ищет термин по
+        # всей странице, и интерес первой группы подтверждал вторую (ACL-1219).
+        terms = [t.strip() for t in group.split(",") if t.strip()]
+        own = _group_has_terms(page, terms)
+        if own.get("found") and own.get("hits") and own.get("missing"):
+            # Meta может не распознать часть интересов — это не отказ, но
+            # должно быть видно, какие именно не встали.
+            _telemetry.record("targeting", None, note="group_partial",
+                              diag={"group": index + 1, "missing": own["missing"][:10]})
+        if not own.get("found") or not own.get("hits"):
+            _telemetry.record("targeting", False, note="group_empty",
+                              diag={"group": index + 1, "groups": len(groups),
+                                    "terms": terms[:5], "box": own.get("text", "")[:200]})
+            try:
+                from src.fb_ads_rpa import page_capture as _pc
+
+                _pc.capture(page, step=f"targeting_group{index + 1}_empty",
+                            blocks={"groups": _GROUPS_BLOCK_JS})
+            except Exception:
+                pass
+            return False
+    if len(groups) > 1:
+        # Снимок заполненных AND-групп: по нему пишутся тесты разметки.
+        try:
+            from src.fb_ads_rpa import page_capture as _pc
+
+            _pc.capture(page, step="targeting_and_groups",
+                        blocks={"groups": _GROUPS_BLOCK_JS})
+        except Exception:
+            pass
+    return True
 
 
 def paste_targeting_interests(page: Page, targeting_label: str) -> bool:
@@ -8634,13 +8875,21 @@ def paste_targeting_interests(page: Page, targeting_label: str) -> bool:
         page.get_by_text("Verifying your edits", exact=False).first.wait_for(state="hidden", timeout=8000)
     except Exception:
         pass
-    first_term = text.split(",")[0].strip()
-    if not first_term:
-        return False
-    try:
-        return bool(page.get_by_text(first_term, exact=False).first.is_visible())
-    except Exception:
-        return False
+    # Any term of the pasted list showing up counts, not only the first. Meta
+    # resolves each name on its own and silently drops the ones it does not
+    # know: the second Mix group starts with "Frequent international
+    # travelers", which never appears, while Business class, Business jet,
+    # FirstClass, Horse racing and luxury all did (Doc20, 18:51, operator-
+    # visible "and must also match" group full) — and the step reported
+    # `group_not_added`.
+    terms = [t.strip() for t in text.split(",") if t.strip()]
+    for term in terms:
+        try:
+            if page.get_by_text(term, exact=False).first.is_visible():
+                return True
+        except Exception:
+            continue
+    return False
 
 
 # ── Country code → search name mapping ───────────────────────────────────────
