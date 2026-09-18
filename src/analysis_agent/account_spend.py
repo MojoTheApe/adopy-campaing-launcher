@@ -586,11 +586,26 @@ def _attach_only(entry, account_label: str):
     except Exception:
         pass
     if running:
-        raise ProfileNotAttachable(
-            f"{account_label}: the profile was opened manually in MLX Desktop, so its window has no "
-            "debugging port to attach to. It will not be restarted, because a restart logged x01 out. "
-            "Close the profile and open it through automation; later reads will attach to that window."
-        )
+        # Как у Publish: вручную открытое окно (без отладочного порта) мягко
+        # останавливаем через API Multilogin — куки и вход сохраняются, другие
+        # профили не трогаются — и поднимаем заново с автоматизацией. Убивать
+        # окно чтению нельзя: жёсткий перезапуск однажды разлогинил x01, поэтому
+        # allow_kill=False, и при отказе API окно остаётся как было (ACL-1234).
+        try:
+            conn = rpa_browser.get_browser_provider("multilogin_attach").open(
+                entry, account_label, allow_restart=True, allow_kill=False)
+        except Exception as exc:  # noqa: BLE001
+            raise ProfileNotAttachable(
+                f"{account_label}: the profile is open in MLX Desktop and could not be reopened "
+                f"with automation: {exc}"
+            ) from exc
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+
+            _rt.record("spend_profile_restarted", True, diag={"account": account_label})
+        except Exception:
+            pass
+        return conn
     raise ProfileNotAttachable(
         f"{account_label}: the profile is not open. Open it through automation and leave the window open; "
         "the read will attach to it without restarting anything."
