@@ -16,7 +16,7 @@ from src.upload_agent.build_upload_excel import (
     lookup_creative_file,
     lookup_interest,
 )
-from src.web.ad_copy_gsheet import lookup_ad_copy_by_title
+from src.web.ad_copy import lookup_ad_copy_by_title
 
 
 def _interest_names_from_targeting(ref: dict, targeting_name: str) -> str:
@@ -182,9 +182,9 @@ def enrich_campaign_drafts(
                 # поднимается, просто без детального таргетинга.
                 resolved = ""
                 try:
-                    from src.analysis_agent.gsheet_targeting import lookup_targeting_interests
+                    from src.analysis_agent.targeting_registry import resolve_interests
 
-                    resolved = lookup_targeting_interests(ad_set.targeting_label)
+                    resolved = resolve_interests(ad_set.targeting_label)
                 except Exception as exc:
                     draft.errors.append(f"Targeting library could not resolve {ad_set.targeting_label!r}: {exc}")
                     continue

@@ -1,9 +1,8 @@
-"""Machine-local library of ad texts — headline, body, description.
+"""Library of ad texts — headline, body, description.
 
-Устроено как реестр таргетов и по той же причине: тексты жили вкладкой в чужой
-таблице, а таблица однажды уже отказала в доступе целиком (8 сентября,
-сервисному аккаунту `403`). Здесь они лежат в обычном файле рядом с остальными
-машинными данными; вкладка участвует только в наполнении.
+Устроено как реестр таргетов: общая копия живёт в репозитории библиотеки
+(ACL-1241, `team_library`), каждая правка уходит туда сразу, а на машине лежит
+копия для чтения. Вкладка Google-таблицы больше не участвует ни в чём.
 
 **Что делает текст неповторимым — не то же, что у таргета.** Таргет это набор,
 и порядок значений в нём ничего не меняет. Текст — последовательность: «купите
@@ -31,6 +30,7 @@ from pathlib import Path
 from typing import Iterable
 
 from config import paths
+from src.analysis_agent import team_library
 
 
 class AdTextError(RuntimeError):
@@ -46,7 +46,10 @@ class AdText:
     asset: str = ""
     language: str = ""
     added_at: str = ""
-    source: str = "dashboard"  # dashboard | sheet | local
+    source: str = "dashboard"  # dashboard | sheet (перенесённые из таблицы)
+    added_by: str = ""
+    updated_at: str = ""
+    updated_by: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -116,7 +119,7 @@ def _transaction():
 def _load_raw() -> dict:
     p = _store()
     if not p.exists():
-        return {"version": 1, "texts": {}, "hidden": []}
+        return {"version": 1, "texts": {}, "hidden": [], "deleted": {}}
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
@@ -135,11 +138,13 @@ def _load_raw() -> dict:
             if not t.name.strip() or not (t.headline.strip() or t.body.strip()):
                 raise ValueError("empty text")
             data["texts"][key] = t.to_dict()
+        if not isinstance(data.setdefault("deleted", {}), dict):
+            raise ValueError("invalid deleted section")
         return data
     except Exception as exc:
         raise AdTextError(
-            "Не удалось прочитать библиотеку текстов. Файл сохранён без изменений; "
-            "восстановите его из резервной копии или загрузите заново из таблицы."
+            "The ad text library on this machine could not be read. The file was left as it is; "
+            "restore it from a backup."
         ) from exc
 
 
@@ -166,19 +171,8 @@ def all_texts() -> list[AdText]:
                       key=lambda t: normalise_one(t.name))
 
 
-def ensure_loaded() -> dict:
-    """Bootstrap a new machine once; an intentionally empty library stays empty."""
-    with _transaction():
-        initialized = _store().exists()
-    if not initialized:
-        return refresh()
-    return {"tried": False, "error": "", "added": 0, "updated": 0, "skipped": [], "renamed": []}
-
-
 def builder_texts() -> list[AdText]:
-    report = ensure_loaded()
-    if report.get("error") and not _store().exists():
-        raise AdTextError("Не удалось загрузить библиотеку текстов: " + report["error"])
+    pull()
     return all_texts()
 
 
@@ -201,32 +195,33 @@ def _check(data: dict, name: str, headline: str, body: str, description: str,
            *, ignore: str = "") -> None:
     values = (name, headline, body, description)
     if any(not isinstance(v, str) for v in values):
-        raise AdTextError("Название, заголовок, тело и описание должны быть строками.")
+        raise AdTextError("Title, headline, body and description must be text.")
     # Перенос строки в теле объявления законен — им разбивают абзацы.
     # Остальные управляющие символы приезжают из копипаста и ломают разметку.
     if any(ord(c) < 32 and c != "\n" for v in values for c in v):
-        raise AdTextError("Уберите управляющие символы из полей текста.")
+        raise AdTextError("Remove control characters from the text fields.")
     if any(c == "\n" for c in name):
-        raise AdTextError("Название текста должно быть в одну строку.")
+        raise AdTextError("The ad title must be a single line.")
     if not tidy(name):
-        raise AdTextError("У текста должно быть название.")
+        raise AdTextError("The text needs an ad title.")
     if not tidy(headline) and not tidy(body):
-        raise AdTextError("Пустой текст сохранять незачем: заполните заголовок или тело.")
+        raise AdTextError("Fill in the headline or the body — an empty text cannot be saved.")
+    known = AdText.__dataclass_fields__
     for raw in data["texts"].values():
-        t = AdText(**raw)
+        t = AdText(**{k: v for k, v in raw.items() if k in known})
         if normalise_one(t.name) == normalise_one(ignore):
             continue
         if normalise_one(t.name) == normalise_one(name):
-            raise AdTextError(f"Имя «{tidy(name)}» уже занято другим текстом.")
+            raise AdTextError(f"The title “{tidy(name)}” is already taken by another text.")
         if fingerprint(t.headline, t.body, t.description) == fingerprint(headline, body, description):
             raise AdTextError(
-                f"Такой текст уже есть — «{t.name}». Заголовок, тело и описание "
-                "совпадают; регистр и лишние пробелы значения не имеют."
+                f"This text already exists as “{t.name}”: headline, body and description match "
+                "(letter case and extra spaces do not count)."
             )
 
 
 def _make(name: str, headline: str, body: str, description: str,
-          asset: str, language: str, added_at: str, source: str) -> AdText:
+          asset: str, language: str, added_at: str, source: str, **meta) -> AdText:
     return AdText(
         name=tidy(name),
         headline=tidy(headline),
@@ -236,142 +231,130 @@ def _make(name: str, headline: str, body: str, description: str,
         language=tidy(language).upper(),
         added_at=added_at,
         source=source,
+        **meta,
     )
+
+
+# ── правки: в репозиторий библиотеки или, без него, в файл на машине ──────
+
+def _clean(raw_texts: dict) -> dict:
+    known = AdText.__dataclass_fields__
+    out = {}
+    for key, raw in (raw_texts or {}).items():
+        try:
+            t = AdText(**{k: v for k, v in raw.items() if k in known})
+        except Exception:
+            continue
+        if key == t.name and t.name.strip() and (t.headline.strip() or t.body.strip()) \
+                and all(isinstance(getattr(t, k), str) for k in known):
+            out[key] = t.to_dict()
+    return out
+
+
+def _apply_library(lib: dict) -> None:
+    """Свежая версия библиотеки становится копией на этой машине."""
+    deleted = lib.get("deleted") or {}
+    with _transaction():
+        _save_raw({"version": 1, "texts": _clean(lib.get("texts")),
+                   "hidden": sorted({normalise_one(n) for n in deleted}), "deleted": deleted})
+
+
+team_library.on_update("ad_texts", _apply_library)
+
+
+def _mutate(change, message: str):
+    if team_library.configured():
+        try:
+            return team_library.transact("ad_texts", change, message)[1]
+        except team_library.LibraryError as exc:
+            raise AdTextError(f"{exc} Nothing was saved.") from exc
+    with _transaction():
+        data = _load_raw()
+        result = change(data)
+        data["hidden"] = sorted(set(data["hidden"]) | {normalise_one(n) for n in data["deleted"]})
+        _save_raw(data)
+        return result
+
+
+def _forget_deleted(lib: dict, name: str) -> None:
+    for key in [k for k in lib["deleted"] if normalise_one(k) == normalise_one(name)]:
+        del lib["deleted"][key]
+    if "hidden" in lib:
+        lib["hidden"] = [n for n in lib["hidden"] if n != normalise_one(name)]
 
 
 def add(name: str, headline: str, body: str, description: str = "",
         asset: str = "", language: str = "", *, source: str = "dashboard") -> AdText:
-    with _transaction():
-        data = _load_raw()
-        _check(data, name, headline, body, description)
+    def change(lib):
+        _check(lib, name, headline, body, description)
         t = _make(name, headline, body, description, asset, language,
-                  time.strftime("%Y-%m-%d %H:%M:%S"), source)
-        data["texts"][t.name] = t.to_dict()
-        data["hidden"] = [n for n in data["hidden"] if n != normalise_one(t.name)]
-        _save_raw(data)
+                  team_library.now(), source, added_by=team_library.author())
+        lib["texts"][t.name] = t.to_dict()
+        _forget_deleted(lib, t.name)
         return t
+    return _mutate(change, f"Add ad text {tidy(name)}")
 
 
 def update(old_name: str, name: str, headline: str, body: str, description: str = "",
            asset: str = "", language: str = "") -> AdText:
-    with _transaction():
-        data = _load_raw()
-        if old_name not in data["texts"]:
-            raise AdTextError(f"Текста «{old_name}» нет в библиотеке.")
-        _check(data, name, headline, body, description, ignore=old_name)
-        was = data["texts"].pop(old_name)
-        t = _make(name, headline, body, description, asset, language, was["added_at"], "local")
-        # Метка на прежнее имя: следующая загрузка из таблицы не воскресит его.
-        data["hidden"] = sorted(set(data["hidden"]) | {normalise_one(old_name)})
-        data["texts"][t.name] = t.to_dict()
-        _save_raw(data)
+    def change(lib):
+        if old_name not in lib["texts"]:
+            raise AdTextError(f"There is no text “{old_name}” in the library. It may have been removed on another machine.")
+        _check(lib, name, headline, body, description, ignore=old_name)
+        was = lib["texts"].pop(old_name)
+        t = _make(name, headline, body, description, asset, language,
+                  was.get("added_at", ""), was.get("source", "dashboard"),
+                  added_by=was.get("added_by", ""), updated_at=team_library.now(),
+                  updated_by=team_library.author())
+        lib["texts"][t.name] = t.to_dict()
+        _forget_deleted(lib, t.name)
         return t
+    return _mutate(change, f"Edit ad text {old_name}")
 
 
 def remove(name: str) -> None:
+    def change(lib):
+        if name not in lib["texts"]:
+            raise AdTextError(f"There is no text “{name}” in the library. It may have been removed on another machine.")
+        lib["deleted"][name] = {"data": lib["texts"].pop(name),
+                                "deleted_by": team_library.author(), "deleted_at": team_library.now()}
+    _mutate(change, f"Remove ad text {name}")
+
+
+def restore(name: str) -> AdText:
+    def change(lib):
+        rec = lib["deleted"].get(name)
+        if rec is None:
+            raise AdTextError(f"“{name}” is not in Recently deleted. It may have been restored on another machine.")
+        was = rec.get("data") or {}
+        _check(lib, name, was.get("headline", ""), was.get("body", ""), was.get("description", ""))
+        t = _make(name, was.get("headline", ""), was.get("body", ""), was.get("description", ""),
+                  was.get("asset", ""), was.get("language", ""), was.get("added_at", ""),
+                  was.get("source", "dashboard"), added_by=was.get("added_by", ""),
+                  updated_at=team_library.now(), updated_by=team_library.author())
+        del lib["deleted"][name]
+        lib["texts"][t.name] = t.to_dict()
+        _forget_deleted(lib, t.name)
+        return t
+    return _mutate(change, f"Restore ad text {name}")
+
+
+def recently_deleted() -> list[dict]:
+    with _transaction():
+        return team_library.recently_deleted(_load_raw())
+
+
+def snapshot() -> dict:
+    """Библиотека этой машины в формате репозитория — для первого наполнения."""
     with _transaction():
         data = _load_raw()
-        if name not in data["texts"]:
-            raise AdTextError(f"Текста «{name}» нет в библиотеке.")
-        del data["texts"][name]
-        data["hidden"] = sorted(set(data["hidden"]) | {normalise_one(name)})
-        _save_raw(data)
+    return {"version": 1, "texts": data["texts"], "deleted": data["deleted"]}
+
+
+def pull(*, force: bool = False) -> dict:
+    return team_library.pull("ad_texts", force=force)
 
 
 def lookup(name: str) -> AdText | None:
     key = normalise_one(name)
     return next((t for t in all_texts() if normalise_one(t.name) == key), None)
-
-
-#: Колонки вкладки «ad texts» в том порядке, в каком они там лежат.
-SHEET_COLUMNS = ("Ad Title", "Headline", "Body", "Description", "Asset", "Language")
-
-
-def import_texts(rows: Iterable) -> dict:
-    """Наполнить библиотеку строками вкладки. Возвращает отчёт, а не число.
-
-    Отчёт, потому что вкладка неровная: 8 сентября в ней было 327 строк, из них
-    шесть без названия, шесть повторяющихся имён и шесть пар с одинаковым
-    содержанием. Молчаливый перенос оставил бы человека в уверенности, что
-    доехало всё, — а треть месяца спустя обнаружилось бы, что нет.
-
-    Строки без названия получают имя по номеру строки: содержимое в них есть, и
-    терять его из-за пустой первой клетки не за что. Имя видно в списке, его
-    можно переписать.
-    """
-    with _transaction():
-        data = _load_raw()
-        before = json.dumps(data, sort_keys=True)
-        report: dict = {"added": 0, "updated": 0, "skipped": [], "renamed": []}
-        by_name = {normalise_one(k): k for k in data["texts"]}
-        by_text = {fingerprint(v["headline"], v["body"], v["description"]): k
-                   for k, v in data["texts"].items()}
-        seen_here: set[str] = set()
-        now = time.strftime("%Y-%m-%d %H:%M:%S")
-
-        for number, row in enumerate(rows, start=2):  # строка 1 — заголовки
-            cells = [str(c or "") for c in list(row)[:6]]
-            cells += [""] * (6 - len(cells))
-            name, headline, body, description, asset, language = cells
-            if not any(tidy(c) for c in cells):
-                continue
-            if not tidy(headline) and not tidy(body):
-                report["skipped"].append(f"строка {number}: ни заголовка, ни тела")
-                continue
-            if not tidy(name):
-                name = f"Без названия · строка {number}"
-                report["renamed"].append(name)
-
-            key = normalise_one(name)
-            if key in data["hidden"]:
-                continue  # удалён или переименован на этой машине — не воскрешать
-
-            mark = fingerprint(headline, body, description)
-            twin = by_text.get(mark)
-            if twin is not None and normalise_one(twin) != key:
-                report["skipped"].append(f"строка {number} «{tidy(name)}»: то же содержание, что у «{twin}»")
-                continue
-            if key in seen_here:
-                # Во вкладке имя встречается дважды. Побеждает первая строка —
-                # так же, как в загрузчике таргетов, и так же предсказуемо.
-                report["skipped"].append(f"строка {number}: имя «{tidy(name)}» уже занято строкой выше")
-                continue
-
-            old_key = by_name.get(key)
-            if old_key and data["texts"][old_key]["source"] != "sheet":
-                continue  # правку руками таблица не перебивает
-
-            try:
-                _check(data, name, headline, body, description, ignore=old_key or "")
-            except AdTextError as exc:
-                report["skipped"].append(f"строка {number}: {exc}")
-                continue
-
-            t = _make(name, headline, body, description, asset, language,
-                      (data["texts"].get(old_key) or {}).get("added_at") or now, "sheet")
-            seen_here.add(key)
-            if old_key and data["texts"][old_key] == t.to_dict():
-                continue  # строка не изменилась — это не «обновление»
-            if old_key:
-                old = data["texts"][old_key]
-                old_mark = fingerprint(old["headline"], old["body"], old["description"])
-                if by_text.get(old_mark) == old_key:
-                    del by_text[old_mark]
-            if old_key and old_key != t.name:
-                del data["texts"][old_key]
-            data["texts"][t.name] = t.to_dict()
-            by_name[key] = t.name
-            by_text[mark] = t.name
-            report["added" if old_key is None else "updated"] += 1
-
-        if json.dumps(data, sort_keys=True) != before:
-            _save_raw(data)
-        return report
-
-
-def refresh(*, force: bool = False) -> dict:
-    """Забрать вкладку и наполнить библиотеку. Ошибка чтения — не ошибка страницы."""
-    from src.analysis_agent import gsheet_ad_texts as gs
-    rows = gs.load_ad_text_rows(force=force)
-    report = import_texts(rows) if rows else {"added": 0, "updated": 0, "skipped": [], "renamed": []}
-    return {"tried": True, "error": gs.last_error, **report}

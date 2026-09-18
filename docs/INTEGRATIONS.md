@@ -129,14 +129,31 @@ flowchart TB
 
 ### 3.3 Google Sheets — чтение
 
-Дешборд читает три вещи. Все — через **пользовательский OAuth**, не сервисный
-аккаунт (политика Workspace Adopy сервисные аккаунты запрещает).
+Дешборд читает из таблиц только статус аккаунтов — через **пользовательский
+OAuth**, не сервисный аккаунт (политика Workspace Adopy сервисные аккаунты запрещает).
 
 | Что | Переменная | Модуль |
 |---|---|---|
 | Статус аккаунтов | `GSHEET_ACCOUNTS_ID` / `GSHEET_ACCOUNTS_SHEET` | `analysis_agent/gsheet_accounts.py` |
-| Библиотека таргетов | `GSHEET_TARGETING_SPREADSHEET_ID` / `GSHEET_TARGETING_TAB` | `analysis_agent/gsheet_targeting.py` |
-| Тексты объявлений | `GSHEET_ADCOPY_ID` (иначе `GSHEET_TARGETS_ID`) / `GSHEET_ADCOPY_SHEET`, по умолчанию вкладка `ad texts` | `web/ad_copy_gsheet.py` |
+
+Таргеты и тексты объявлений из таблиц больше не читаются (ACL-1241): они живут
+в общей библиотеке — приватном репозитории GitHub, см. раздел ниже.
+
+### Общая библиотека таргетов и текстов (ACL-1241)
+
+| Что | Где |
+|---|---|
+| Данные | приватный репозиторий `ACL_LIBRARY_REPO`: `targets.json`, `ad_texts.json` |
+| Доступ | `ACL_LIBRARY_TOKEN` — fine-grained, только этот репозиторий, Contents: Read and write |
+| Код | `analysis_agent/team_library.py`, реестры `targeting_registry.py` и `ad_text_registry.py` |
+| Копия для чтения | `%LOCALAPPDATA%\ACL\targeting_registry.json`, `ad_text_registry.json` |
+| Первое наполнение | `python scripts/seed_team_library.py` (`--dry-run`, `--add-missing`) |
+
+Правка (Add, Edit, Remove, Restore) читает свежий файл, применяет изменение и
+пишет его с sha прочитанной версии; если файл за это время поменял другой
+менеджер, правка повторяется на новой версии вместе с проверкой повторов. Нет
+связи — ошибка «Nothing was saved». Удалённое лежит в `deleted` с автором и
+временем — это «Recently deleted» с кнопкой Restore.
 
 OAuth-клиент: `%LOCALAPPDATA%\ACL\oauth_client.json`. Токен чтения:
 `%LOCALAPPDATA%\ACL\token_accounts.json`, права **только на чтение**.
@@ -144,7 +161,7 @@ OAuth-клиент: `%LOCALAPPDATA%\ACL\oauth_client.json`. Токен чтен�
 Лист аккаунтов берётся с **самой правой вкладки** — они именуются по дате
 (`27.08`), и правая всегда свежая.
 
-### 3.4 Google Sheets — запись (телеметрия и таргеты)
+### 3.4 Google Sheets — запись (телеметрия)
 
 **Отдельный токен с правом записи**: `%LOCALAPPDATA%\ACL\token_telemetry.json`.
 Разделение намеренное — расширение прав здесь не может стоить дешборду его

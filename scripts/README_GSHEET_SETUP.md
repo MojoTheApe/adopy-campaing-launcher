@@ -75,14 +75,8 @@ GOOGLE_CREDENTIALS_JSON=config/google_credentials.json
 
 ## Запуск синхронизации
 
-```bash
-python scripts/sync_targets_from_gsheet.py
-```
-
-С явным указанием файла credentials:
-```bash
-python scripts/sync_targets_from_gsheet.py --credentials config/google_credentials.json
-```
+Скрипт `sync_targets_from_gsheet.py` удалён (ACL-1241): таргеты и тексты живут в
+общей библиотеке — приватном репозитории GitHub (`docs/INTEGRATIONS.md`).
 
 После выполнения обновятся:
 - `knowledge_base/targets.md`

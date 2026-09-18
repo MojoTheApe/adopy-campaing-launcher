@@ -21,7 +21,8 @@ const get = id => elements[id] ||= {
   id, value:'', style:{}, hidden:false, disabled:false, innerHTML:'', textContent:'',
   getAttribute(){ return null; }, scrollIntoView(){},
 };
-let confirmed = true, saveOk = true, imported = 2;
+let confirmed = true, saveOk = true;
+let library = {connected:true, ok:true, error:'', synced_at:'2026-09-18 10:05:00 UTC'};
 const context = {
   document: {
     getElementById: get,
@@ -41,7 +42,8 @@ const context = {
     }
     return {ok:true, json:async()=>({
       ok:true, texts:rows, duplicates:{names:[], texts:[]},
-      sheet:{added:imported, updated:0, skipped:['строка 7: ни заголовка, ни тела'], renamed:['Без названия · строка 9']},
+      library:library,
+      deleted:[{name:'Old <b>', deleted_by:'Anna', deleted_at:'2026-09-18 10:00:00 UTC', item:{headline:'H', body:'B'}}],
     })};
   },
 };
@@ -72,9 +74,11 @@ const type = (id, value) => { get(id).value = value; fire('input', get(id)); };
   assert(list().indexOf('Language not set') > list().indexOf('>ES<'), 'безъязыкие должны быть последними');
   assert.equal(get('at-count').textContent, '3 texts');
 
-  // Отчёт о переносе называет пропущенное поимённо.
-  assert(get('at-msg').textContent.includes('skipped 1'), 'о пропущенной строке не сказано: ' + get('at-msg').textContent);
-  assert(get('at-msg').textContent.includes('row number'), 'о строках без названия не сказано');
+  // Строка состояния говорит, откуда список и насколько он свежий.
+  assert(get('at-status').textContent.includes('refreshed 2026-09-18 10:05:00 UTC'), get('at-status').textContent);
+  // Удалённое видно с автором, экранировано и восстанавливается.
+  assert(get('at-deleted').innerHTML.includes('removed by Anna'), 'нет автора удаления');
+  assert(!get('at-deleted').innerHTML.includes('Old <b>'), 'имя удалённого попало в разметку сырым');
 
   // Поиск идёт по всем полям, включая тело.
   type('at-search', 'linha dois');
@@ -118,7 +122,7 @@ const type = (id, value) => { get(id).value = value; fire('input', get(id)); };
   // Список перечитывается сразу после сохранения — и отчёт о переносе не
   // должен затирать результат действия человека. Ровно так и было на первом
   // живом прогоне: нажал Add, а на экране «updated 316 · skipped 11…».
-  assert.equal(get('at-msg').textContent, 'Added.',
+  assert.equal(get('at-msg').textContent, 'Added. Everyone gets it.',
     'сообщение о сохранении затёрто отчётом о переносе: ' + get('at-msg').textContent);
 
   // Отказ сервера виден на экране, а не только в консоли.
@@ -142,8 +146,15 @@ const type = (id, value) => { get(id).value = value; fire('input', get(id)); };
   click('', {'data-at-del':'AR how much'});
   await flush();
   assert.equal(requests[requests.length - 1].action, 'delete');
-  imported = 0;
+  click('', {'data-at-restore':'Old <b>'});
+  await flush();
+  assert.equal(requests[requests.length - 1].action, 'restore');
+  assert.equal(requests[requests.length - 1].name, 'Old <b>');
+
+  // GitHub недоступен: список по копии, и это сказано прямо.
+  library = {connected:true, ok:false, error:'GitHub is unreachable: timed out', synced_at:'2026-09-18 10:05:00 UTC'};
   click('at-refresh-btn');
   await flush();
-  assert(get('at-msg').textContent.includes('skipped 1'), 'A rejected-only import was reported as nothing new');
+  assert(get('at-status').textContent.includes('unreachable'), get('at-status').textContent);
+  assert(get('at-status').textContent.includes('cannot be saved'), get('at-status').textContent);
 })().catch(e => { console.error(e); process.exitCode = 1; });
