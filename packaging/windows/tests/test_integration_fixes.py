@@ -21,16 +21,12 @@ import setup_wizard as wizard
 import verify_core_isolation as guard
 
 
-CLIENT = b'{"installed":{"client_id":"test-client","auth_uri":"https://accounts.example/auth","token_uri":"https://accounts.example/token"}}'
-
-
 def configuration():
-    return mc.MachineConfiguration('Test Operator', 'sheet' + 'x' * 30,
-                                   (mc.AccountAssignment('Test Account', 'act_test'),), CLIENT)
+    return mc.MachineConfiguration('Test Operator', (mc.AccountAssignment('Test Account', 'act_test'),))
 
 
 def apply(config, root, **kwargs):
-    mc.apply_machine_configuration(config, root, stats_workbook='stats.xlsx', upload_workbook='upload.xlsx', creatives_directory='creatives', **kwargs)
+    mc.apply_machine_configuration(config, root, stats_workbook='stats.xlsx', creatives_directory='creatives', **kwargs)
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -66,7 +62,7 @@ class ConfigurationTests(unittest.TestCase):
     def test_failed_replace_rolls_back_all_committed_files(self):
         with tempfile.TemporaryDirectory() as raw:
             root=Path(raw)
-            originals={root/'.env':b'KEEP=old\n', root/'ad_account_map.csv':b'account_name,ad_account_id\n', root/'oauth_client.json':CLIENT}
+            originals={root/'.env':b'KEEP=old\n', root/'ad_account_map.csv':b'account_name,ad_account_id\n'}
             for p,b in originals.items(): p.write_bytes(b)
             actual=mc.os.replace
             calls=[]
@@ -80,27 +76,6 @@ class ConfigurationTests(unittest.TestCase):
 
 
 class WizardTests(unittest.TestCase):
-    def test_google_checks_are_staged_until_finish_including_failure(self):
-        from src.analysis_agent import gsheet_accounts
-        with tempfile.TemporaryDirectory() as raw:
-            root=Path(raw)
-            old=b'{"client_id":"old-client","token":"keep-existing"}'
-            (root/'token_accounts.json').write_bytes(old)
-            service=mock.MagicMock()
-            def build(client, token):
-                self.assertNotEqual(Path(token).parent,root)
-                self.assertFalse(Path(token).exists(), 'mismatched client token must not be reused')
-                Path(token).write_bytes(b'{"client_id":"test-client","token":"new-token"}')
-                return service
-            with mock.patch.object(gsheet_accounts,'_build_sheets_service_oauth',side_effect=build):
-                result=wizard.test_google_read_access(configuration(),root)
-                self.assertIn(b'new-token',result.token)
-                self.assertEqual((root/'token_accounts.json').read_bytes(),old)
-                service.spreadsheets().get().execute.side_effect=RuntimeError('403 denied')
-                with self.assertRaises(wizard.WizardValidationError):
-                    wizard.test_google_read_access(configuration(),root)
-            self.assertEqual((root/'token_accounts.json').read_bytes(),old)
-
     def test_delayed_exception_callback_keeps_its_message(self):
         w=wizard.SetupWizard.__new__(wizard.SetupWizard)
         w.busy=False;w.status=mock.MagicMock();w._render=mock.MagicMock();w._worker_failed=mock.MagicMock()
@@ -117,17 +92,24 @@ class WizardTests(unittest.TestCase):
 
     def test_edited_tokens_cannot_reuse_a_previous_success(self):
         w=wizard.SetupWizard.__new__(wizard.SetupWizard)
-        w.busy=False;w.step=5;w.multilogin_ok=True;w._verified_tokens={'A':'old'};w._tokens=lambda:{'A':'changed'}
+        w.busy=False;w.step=4;w.multilogin_ok=True;w._verified_tokens={'A':'old'};w._tokens=lambda:{'A':'changed'}
         with self.assertRaises(wizard.WizardValidationError): w._validate_step()
-        w.step=6;w.configuration=configuration();w._verified_google_configuration=w.configuration;w.google_ok=True;w.google_token=b'token'
+        w.step=5;w.configuration=configuration()
         with mock.patch.object(wizard,'apply_machine_configuration') as apply_mock:
             with self.assertRaises(wizard.WizardValidationError): w._validate_step()
             apply_mock.assert_not_called()
 
-    def test_changed_workspace_invalidates_google(self):
+    def test_finish_writes_configuration_once_tokens_are_verified(self):
         w=wizard.SetupWizard.__new__(wizard.SetupWizard)
-        w.google_ok=True;w.google_token=b'old';w._invalidate_google()
-        self.assertFalse(w.google_ok);self.assertIsNone(w.google_token)
+        w.busy=False;w.step=5;w.configuration=configuration();w.multilogin_ok=True
+        w._verified_tokens={'A':'ok'};w._tokens=lambda:{'A':'ok'}
+        w.stats_path=SimpleNamespace(get=lambda:'stats.xlsx');w.creatives_path=SimpleNamespace(get=lambda:'creatives')
+        w.config_directory=Path('cfg');w.version_text='ACL 1.2.3'
+        with mock.patch.object(wizard,'apply_machine_configuration') as apply_mock, mock.patch.object(wizard,'write_ready_state') as ready:
+            w._validate_step()
+        apply_mock.assert_called_once_with(w.configuration,Path('cfg'),stats_workbook='stats.xlsx',creatives_directory='creatives',multilogin_tokens={'A':'ok'})
+        ready.assert_called_once_with(Path('cfg'),'1.2.3')
+        self.assertTrue(w.completed)
 
 
 class LauncherOwnershipTests(unittest.TestCase):

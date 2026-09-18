@@ -15,6 +15,7 @@ from setup_wizard import (
     STATS_COLUMNS,
     WizardValidationError,
     build_manual_setup,
+    default_creatives_directory,
     sanitized_setup_summary,
     setup_is_complete,
     validate_campaign_manager_name,
@@ -46,6 +47,18 @@ class SetupWizardTests(unittest.TestCase):
             with self.assertRaises(WizardValidationError):
                 validate_creatives_directory(str(Path(tmp) / "missing"))
 
+    def test_creatives_directory_is_created_when_asked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wanted = Path(tmp) / "Documents" / "ACL" / "Creatives"
+            self.assertEqual(validate_creatives_directory(str(wanted), create=True), str(wanted.resolve()))
+            self.assertTrue(wanted.is_dir())
+
+    def test_default_creatives_directory_is_in_documents(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict("os.environ", {"USERPROFILE": tmp}):
+            self.assertEqual(default_creatives_directory(), Path(tmp) / "Documents" / "ACL" / "Creatives")
+            self.assertEqual(validate_creatives_directory("", create=True),
+                             str((Path(tmp) / "Documents" / "ACL" / "Creatives").resolve()))
+
     def test_missing_stats_workbook_is_actionable(self):
         with self.assertRaisesRegex(WizardValidationError, "does not exist"):
             validate_stats_workbook("missing.xlsx")
@@ -74,8 +87,6 @@ class SetupWizardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             stats = root / "stats.xlsx"
-            upload = root / "upload.xlsx"
-            oauth = root / "google-access.json"
 
             headers = sorted(STATS_COLUMNS)
             stats_book = Workbook()
@@ -90,50 +101,23 @@ class SetupWizardTests(unittest.TestCase):
                 return row
 
             stats_sheet.append(stats_row("Anna Smith", "FacebookAnna1"))
+            stats_sheet.append(stats_row("anna smith", "FacebookAnna1"))
             stats_sheet.append(stats_row("Other Person", "FacebookOther2"))
             stats_book.save(stats)
 
-            upload_book = Workbook()
-            accounts = upload_book.active
-            accounts.title = "Accounts"
-            accounts.append(["Account", "Ad account ID"])
-            accounts.append(["FacebookAnna1", "8" * 15])
-            for sheet_name in ("Ad copy", "Countries", "Interests", "Upload all"):
-                upload_book.create_sheet(sheet_name)
-            upload_book.save(upload)
-
-            oauth.write_text(
-                json.dumps(
-                    {
-                        "installed": {
-                            "client_id": "test-client",
-                            "auth_uri": "https://accounts.example/auth",
-                            "token_uri": "https://accounts.example/token",
-                        }
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            configuration = build_manual_setup(
-                campaign_manager_name="Anna Smith",
-                accounts_sheet="sheet" + ("x" * 30),
-                oauth_client_path=str(oauth),
-                stats_workbook=str(stats),
-                upload_workbook=str(upload),
-            )
+            configuration = build_manual_setup(campaign_manager_name="Anna Smith", stats_workbook=str(stats))
+            with self.assertRaisesRegex(WizardValidationError, "No accounts"):
+                build_manual_setup(campaign_manager_name="Nobody Here", stats_workbook=str(stats))
 
         self.assertEqual(configuration.campaign_manager_name, "Anna Smith")
         self.assertEqual([a.account_name for a in configuration.accounts], ["FacebookAnna1"])
-        self.assertEqual(configuration.accounts[0].ad_account_id, "act_" + ("8" * 15))
+        self.assertEqual(configuration.accounts[0].ad_account_id, "")
         self.assertEqual(configuration.accounts[0].profile_id, "")
 
     def test_setup_summary_omits_identity_and_account_identifiers(self):
         account_id = "act_" + ("7" * 15)
-        sheet_id = "sheet" + ("x" * 30)
         configuration = MachineConfiguration(
             "Private Person",
-            sheet_id,
             (
                 AccountAssignment(
                     account_name="Private Account Label",
@@ -144,13 +128,12 @@ class SetupWizardTests(unittest.TestCase):
                     profile_id="private-profile-id",
                 ),
             ),
-            b"{}",
         )
         summary = sanitized_setup_summary(configuration, "0.1.0-test")
         self.assertNotIn("Private Person", summary)
         self.assertNotIn("Private Account Label", summary)
         self.assertNotIn(account_id, summary)
-        self.assertNotIn(sheet_id, summary)
+        self.assertNotIn("Google", summary)
         self.assertIn("Assigned accounts: 1", summary)
 
 

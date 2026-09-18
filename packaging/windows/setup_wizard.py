@@ -18,8 +18,6 @@ from machine_config import (
     MachineConfiguration,
     MachineConfigError,
     apply_machine_configuration,
-    extract_sheet_id,
-    validate_oauth_client,
 )
 
 
@@ -35,7 +33,6 @@ STATS_COLUMNS = {
     "Ad Asset",
     "$ Net",
 }
-UPLOAD_SHEETS = {"Accounts", "Ad copy", "Countries", "Interests", "Upload all"}
 
 
 class WizardValidationError(ValueError):
@@ -88,28 +85,19 @@ def validate_stats_workbook(path: str) -> str:
     return str(workbook_path.resolve())
 
 
-def validate_upload_workbook(path: str) -> str:
-    workbook_path = Path(path)
-    if not workbook_path.is_file():
-        raise WizardValidationError("Upload FB workbook does not exist.")
-    if workbook_path.suffix.casefold() not in {".xlsx", ".xlsm"}:
-        raise WizardValidationError("Upload FB workbook must be an .xlsx or .xlsm file.")
-    try:
-        from openpyxl import load_workbook
-
-        workbook = load_workbook(workbook_path, read_only=True, data_only=True)
-        names = set(workbook.sheetnames)
-        workbook.close()
-    except Exception as exc:
-        raise WizardValidationError(f"Upload FB workbook cannot be opened: {exc}") from exc
-    missing = sorted(UPLOAD_SHEETS - names)
-    if missing:
-        raise WizardValidationError("Upload FB workbook is missing sheets: " + ", ".join(missing))
-    return str(workbook_path.resolve())
+def default_creatives_directory() -> Path:
+    """Documents\\ACL\\Creatives — created by setup, changeable later in the dashboard."""
+    home = Path(os.environ.get("USERPROFILE") or Path.home())
+    return home / "Documents" / "ACL" / "Creatives"
 
 
-def validate_creatives_directory(path: str) -> str:
-    directory = Path(path)
+def validate_creatives_directory(path: str, *, create: bool = False) -> str:
+    directory = Path(path) if (path or "").strip() else default_creatives_directory()
+    if create and not directory.exists():
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise WizardValidationError(f"Creatives folder could not be created: {exc}") from exc
     if not directory.is_dir():
         raise WizardValidationError("Creatives folder does not exist.")
     if not os.access(directory, os.R_OK):
@@ -128,54 +116,16 @@ def validate_campaign_manager_name(value: str) -> str:
     return name
 
 
-def validate_google_access_file(path: str) -> tuple[str, bytes]:
-    client_path = Path(path)
-    if not client_path.is_file():
-        raise WizardValidationError("Choose the company Google access file supplied by support.")
-    try:
-        raw = client_path.read_bytes()
-        validate_oauth_client(raw)
-    except MachineConfigError as exc:
-        raise WizardValidationError(f"The company Google access file is invalid: {exc}") from exc
-    return str(client_path.resolve()), raw
-
-
-def _normalise_ad_account_id(raw: str) -> str:
-    import re
-
-    text = (raw or "").strip()
-    if not text:
-        return ""
-    match = re.search(r"act[=_](\d{6,})", text, re.IGNORECASE) or re.search(
-        r"(?<!\d)(\d{8,})(?!\d)", text
-    )
-    return f"act_{match.group(1)}" if match else ""
-
-
-def build_manual_setup(
-    *,
-    campaign_manager_name: str,
-    accounts_sheet: str,
-    oauth_client_path: str,
-    stats_workbook: str,
-    upload_workbook: str,
-) -> MachineConfiguration:
+def build_manual_setup(*, campaign_manager_name: str, stats_workbook: str) -> MachineConfiguration:
     """Build machine configuration from fields entered in the setup wizard.
 
-    Account labels come from the Stats workbook and ad-account IDs are filled
-    from the Upload FB workbook when available. Multilogin profile connections
-    remain blank intentionally: ACL's Accounts screen lets the user connect an
-    open, human-readable profile without ever typing a UUID.
+    Account labels come from the Stats workbook. Ad-account IDs and Multilogin
+    profiles stay blank on purpose: on the Accounts screen the manager picks an
+    open profile by name, and ACL reads the ad account from that profile.
     """
     from openpyxl import load_workbook
 
     name = validate_campaign_manager_name(campaign_manager_name)
-    try:
-        sheet_id = extract_sheet_id(accounts_sheet)
-    except MachineConfigError as exc:
-        raise WizardValidationError(str(exc)) from exc
-    _oauth_path, oauth_raw = validate_google_access_file(oauth_client_path)
-
     workbook = load_workbook(stats_workbook, read_only=True, data_only=True)
     try:
         sheet = workbook[workbook.sheetnames[0]]
@@ -200,51 +150,10 @@ def build_manual_setup(
             "No accounts were found for this campaign manager in the Stats workbook. "
             "Check the name or ask support."
         )
-
-    upload_book = load_workbook(upload_workbook, read_only=True, data_only=True)
-    try:
-        account_sheet = upload_book["Accounts"]
-        upload_rows = account_sheet.iter_rows(values_only=True)
-        upload_headers = [str(value or "").strip().casefold() for value in next(upload_rows)]
-        if "account" not in upload_headers:
-            raise WizardValidationError("Upload FB workbook Accounts sheet is missing the Account column.")
-        account_col = upload_headers.index("account")
-        ad_id_col = upload_headers.index("ad account id") if "ad account id" in upload_headers else None
-        upload_ids: dict[str, str] = {}
-        token_ids: dict[str, set[str]] = {}
-        for row in upload_rows:
-            label = str(row[account_col] or "").strip() if account_col < len(row) else ""
-            raw_id = (
-                str(row[ad_id_col] or "").strip()
-                if ad_id_col is not None and ad_id_col < len(row)
-                else ""
-            )
-            normalized_id = _normalise_ad_account_id(raw_id)
-            if not label or not normalized_id:
-                continue
-            upload_ids[label.casefold()] = normalized_id
-            token = label.split()[0].casefold()
-            token_ids.setdefault(token, set()).add(normalized_id)
-    finally:
-        upload_book.close()
-
-    assignments = []
-    for alias in sorted(aliases.values(), key=str.casefold):
-        ad_account_id = upload_ids.get(alias.casefold(), "")
-        if not ad_account_id:
-            matches = token_ids.get(alias.split()[0].casefold(), set())
-            ad_account_id = next(iter(matches)) if len(matches) == 1 else ""
-        assignments.append(
-            AccountAssignment(
-                account_name=alias,
-                ad_account_id=ad_account_id,
-                page_id="",
-                multilogin_instance="A",
-                folder_id="",
-                profile_id="",
-            )
-        )
-    return MachineConfiguration(name, sheet_id, tuple(assignments), oauth_raw)
+    return MachineConfiguration(
+        name,
+        tuple(AccountAssignment(account_name=alias) for alias in sorted(aliases.values(), key=str.casefold)),
+    )
 
 
 def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[ReadinessCheck]:
@@ -287,45 +196,6 @@ def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[
         )
     )
     return checks
-
-
-@dataclass(frozen=True)
-class GoogleReadCheck:
-    message: str
-    token: bytes
-
-
-def test_google_read_access(configuration: MachineConfiguration, config_directory: str | Path) -> GoogleReadCheck:
-    """Verify in a temporary workspace; cancellation/failure preserves old tokens."""
-    config_dir = Path(config_directory)
-    try:
-        from src.analysis_agent.gsheet_accounts import _build_sheets_service_oauth
-        with tempfile.TemporaryDirectory(prefix="acl-setup-oauth-") as raw:
-            staging = Path(raw)
-            client = staging / "oauth_client.json"
-            token = staging / "token_accounts.json"
-            client.write_bytes(configuration.oauth_client)
-            incoming = json.loads(configuration.oauth_client)
-            client_id = (incoming.get("installed") or incoming.get("web") or {}).get("client_id")
-            previous_token = config_dir / "token_accounts.json"
-            if previous_token.is_file():
-                try:
-                    saved = json.loads(previous_token.read_bytes())
-                    if saved.get("client_id") == client_id:
-                        token.write_bytes(previous_token.read_bytes())
-                except (ValueError, OSError):
-                    pass
-            service = _build_sheets_service_oauth(str(client), str(token))
-            if service is None:
-                raise WizardValidationError("Google authorization did not complete.")
-            service.spreadsheets().get(spreadsheetId=configuration.accounts_sheet_id, fields="spreadsheetId").execute()
-            if not token.is_file():
-                raise WizardValidationError("Google access was checked but the login token was not saved.")
-            return GoogleReadCheck("Company Google Sheet is readable with read-only access.", token.read_bytes())
-    except WizardValidationError:
-        raise
-    except Exception as exc:
-        raise WizardValidationError(f"Google Sheet read failed: {exc}") from exc
 
 
 def test_multilogin_access(tokens: dict[str, str]) -> str:
@@ -388,8 +258,7 @@ def sanitized_setup_summary(configuration: MachineConfiguration, version: str) -
             "Status: base setup ready; account connection continues in the dashboard",
             f"Assigned accounts: {len(configuration.accounts)} (labels and IDs omitted)",
             f"Multilogin instances: {', '.join(instances)}",
-            "Google Sheet: read verified (ID omitted)",
-            "Local workbooks and Creatives folder: validated (paths omitted)",
+            "Stats workbook and Creatives folder: validated (paths omitted)",
             "Safety mode: RPA / recorded_flow / attach-only",
             "Automatic updates: disabled",
             "Campaign actions during setup: none",
@@ -401,13 +270,13 @@ class SetupWizard:
     STEPS = (
         "Welcome",
         "System check",
-        "Your workspace",
+        "Your name",
         "Local files",
-        "Google access",
         "Multilogin",
         "Readiness",
         "Finish",
     )
+    LAST = len(STEPS) - 1
 
     def __init__(self, root, config_directory: Path, version_text: str):
         import tkinter as tk
@@ -418,20 +287,14 @@ class SetupWizard:
         self.version_text = version_text
         self.step = 0
         self.configuration: MachineConfiguration | None = None
-        self.google_ok = False
-        self.google_token: bytes | None = None
-        self._verified_google_configuration = None
         self._verified_tokens = None
         self.multilogin_ok = False
         self.completed = False
         self.busy = False
         self.campaign_manager_name = tk.StringVar(value=self._existing_env_value("MY_CM_NAME"))
-        self.accounts_sheet = tk.StringVar(value=self._existing_env_value("GSHEET_ACCOUNTS_ID"))
-        existing_oauth = self.config_directory / "oauth_client.json"
-        self.oauth_client_path = tk.StringVar(value=str(existing_oauth) if existing_oauth.is_file() else "")
         self.stats_path = tk.StringVar(value=self._existing_env_value("FB_STATS_EXCEL"))
-        self.upload_path = tk.StringVar(value=self._existing_env_value("UPLOAD_FB_EXCEL"))
-        self.creatives_path = tk.StringVar(value=self._existing_env_value("FB_CREATIVES_ROOT"))
+        self.creatives_path = tk.StringVar(
+            value=self._existing_env_value("FB_CREATIVES_ROOT") or str(default_creatives_directory()))
         self.token_a = tk.StringVar(value=self._existing_env_value("MULTILOGIN_AUTOMATION_TOKEN_A"))
         self.token_b = tk.StringVar(value=self._existing_env_value("MULTILOGIN_AUTOMATION_TOKEN_B"))
         self.status = tk.StringVar()
@@ -468,15 +331,9 @@ class SetupWizard:
         self.back_button.pack(side="right", padx=(8, 0))
         self.next_button = tk.Button(self.footer, text="Next", width=12, command=self._next)
         self.next_button.pack(side="right")
-        for variable in (self.campaign_manager_name, self.accounts_sheet, self.oauth_client_path, self.stats_path, self.upload_path):
-            variable.trace_add("write", self._invalidate_google)
         for variable in (self.token_a, self.token_b):
             variable.trace_add("write", self._invalidate_multilogin)
         self._render()
-
-    def _invalidate_google(self, *_args) -> None:
-        self.google_ok = False
-        self.google_token = None
 
     def _invalidate_multilogin(self, *_args) -> None:
         self.multilogin_ok = False
@@ -509,14 +366,13 @@ class SetupWizard:
         self.status.set("")
         self.heading.config(text=self.STEPS[self.step])
         self.progress.config(text=f"Step {self.step + 1} of {len(self.STEPS)}")
-        self.back_button.config(state="normal" if 0 < self.step < 7 else "disabled")
-        self.next_button.config(text="Close" if self.step == 7 else "Finish" if self.step == 6 else "Next")
+        self.back_button.config(state="normal" if 0 < self.step < self.LAST else "disabled")
+        self.next_button.config(text="Close" if self.step == self.LAST else "Finish" if self.step == self.LAST - 1 else "Next")
         renderers: tuple[Callable[[], None], ...] = (
             self._welcome,
             self._system,
             self._identity,
             self._files,
-            self._google,
             self._multilogin,
             self._readiness,
             self._finish,
@@ -552,25 +408,10 @@ class SetupWizard:
             )
 
     def _identity(self) -> None:
-        from tkinter import filedialog
-
-        self._text("Enter your own workspace details. The installer creates the technical settings for you.")
-        self.tk.Label(self.body, text="Your name (as written in the Stats workbook)", anchor="w").pack(fill="x")
+        self._text("Enter your name exactly as it is written in the CM column of the Stats workbook.")
+        self.tk.Label(self.body, text="Your name", anchor="w").pack(fill="x")
         self.tk.Entry(self.body, textvariable=self.campaign_manager_name).pack(fill="x", pady=(2, 12))
-        self.tk.Label(self.body, text="Company Accounts Google Sheet link", anchor="w").pack(fill="x")
-        self.tk.Entry(self.body, textvariable=self.accounts_sheet).pack(fill="x", pady=(2, 12))
-        self.tk.Label(self.body, text="Company Google access file", anchor="w").pack(fill="x")
-        row = self.tk.Frame(self.body)
-        row.pack(fill="x", pady=(2, 12))
-        self.tk.Entry(row, textvariable=self.oauth_client_path).pack(side="left", fill="x", expand=True)
-
-        def choose() -> None:
-            selected = filedialog.askopenfilename(filetypes=[("Google access file", "*.json")])
-            if selected:
-                self.oauth_client_path.set(selected)
-
-        self.tk.Button(row, text="Browse…", command=choose).pack(side="left", padx=(8, 0))
-        self._text("Choose the Google access file supplied by support. You do not need to open or edit it.")
+        self._text("ACL finds your ad accounts in the workbook by this name.")
 
     def _path_row(self, label: str, variable, directory: bool = False) -> None:
         from tkinter import filedialog
@@ -593,21 +434,10 @@ class SetupWizard:
 
     def _files(self) -> None:
         self._text("Use the file pickers; no path needs to be typed or edited.")
-        self._path_row("Stats workbook", self.stats_path)
-        self._path_row("Upload FB workbook", self.upload_path)
+        self._path_row("Stats workbook (Excel)", self.stats_path)
         self._path_row("Creatives folder", self.creatives_path, directory=True)
-
-    def _google(self) -> None:
-        self._text("The launcher requests read-only Google Sheets access using the company access file.")
-        self._text("Sign in only with the approved company Google account. The token remains on this computer.")
-        if self.google_ok:
-            self._text("✓ Google Sheet read verified", bold=True, color="#17663a")
-        self.tk.Button(
-            self.body,
-            text="Connect Google and test Sheet",
-            command=self._start_google_check,
-            state="disabled" if self.busy else "normal",
-        ).pack(anchor="w", pady=10)
+        self._text("Put your videos and images into the Creatives folder. ACL creates it if it does not exist yet. "
+                   "Both paths can be changed later in the dashboard.")
 
     def _multilogin(self) -> None:
         self._text("Open Multilogin Desktop and sign in. Paste only the approved automation token; never a password.")
@@ -627,9 +457,8 @@ class SetupWizard:
     def _readiness(self) -> None:
         checks = [
             ("Runtime", all(check.ok for check in getattr(self, "system_checks", []))),
-            ("Your workspace", self.configuration is not None),
-            ("Local files", bool(self.stats_path.get() and self.upload_path.get() and self.creatives_path.get())),
-            ("Google", self.google_ok),
+            ("Your accounts", self.configuration is not None),
+            ("Local files", bool(self.stats_path.get() and self.creatives_path.get())),
             ("Multilogin", self.multilogin_ok),
             ("Safety mode", True),
         ]
@@ -687,20 +516,6 @@ class SetupWizard:
         done(message)
         self._render()
 
-    def _start_google_check(self) -> None:
-        if not self.configuration:
-            self.status.set("Complete your workspace and local files first.")
-            return
-
-        configuration = self.configuration
-        self.google_ok = False
-        self.google_token = None
-        def done(result: GoogleReadCheck) -> None:
-            self.google_ok = self.configuration == configuration
-            self.google_token = result.token if self.google_ok else None
-            self._verified_google_configuration = configuration
-        self._run_worker(lambda: test_google_read_access(configuration, self.config_directory), done)
-
     def _tokens(self) -> dict[str, str]:
         return {"A": self.token_a.get().strip(), "B": self.token_b.get().strip()}
 
@@ -721,47 +536,33 @@ class SetupWizard:
                 raise WizardValidationError("Resolve failed system checks: " + ", ".join(failed))
         elif self.step == 2:
             self.campaign_manager_name.set(validate_campaign_manager_name(self.campaign_manager_name.get()))
-            try:
-                self.accounts_sheet.set(extract_sheet_id(self.accounts_sheet.get()))
-            except MachineConfigError as exc:
-                raise WizardValidationError(str(exc)) from exc
-            oauth_path, _raw = validate_google_access_file(self.oauth_client_path.get())
-            self.oauth_client_path.set(oauth_path)
         elif self.step == 3:
             self.stats_path.set(validate_stats_workbook(self.stats_path.get()))
-            self.upload_path.set(validate_upload_workbook(self.upload_path.get()))
-            self.creatives_path.set(validate_creatives_directory(self.creatives_path.get()))
+            self.creatives_path.set(validate_creatives_directory(self.creatives_path.get(), create=True))
             self.configuration = build_manual_setup(
                 campaign_manager_name=self.campaign_manager_name.get(),
-                accounts_sheet=self.accounts_sheet.get(),
-                oauth_client_path=self.oauth_client_path.get(),
                 stats_workbook=self.stats_path.get(),
-                upload_workbook=self.upload_path.get(),
             )
-        elif self.step == 4 and not self.google_ok:
-            raise WizardValidationError("Connect Google and verify the company Sheet before continuing.")
-        elif self.step == 5 and (not self.multilogin_ok or self._verified_tokens != self._tokens()):
+        elif self.step == 4 and (not self.multilogin_ok or self._verified_tokens != self._tokens()):
             raise WizardValidationError("Test the Multilogin connection before continuing.")
-        elif self.step == 6:
-            if not self.configuration or self.configuration != self._verified_google_configuration or not self.google_ok or self.google_token is None:
-                raise WizardValidationError("Verify Google access for these workspace settings before finishing.")
+        elif self.step == 5:
+            if not self.configuration:
+                raise WizardValidationError("Go back and confirm your name and the Stats workbook.")
             if not self.multilogin_ok or self._verified_tokens != self._tokens():
                 raise WizardValidationError("Verify the current Multilogin access codes before finishing.")
             apply_machine_configuration(
                 self.configuration,
                 self.config_directory,
                 stats_workbook=self.stats_path.get(),
-                upload_workbook=self.upload_path.get(),
                 creatives_directory=self.creatives_path.get(),
                 multilogin_tokens=self._tokens(),
-                google_token=self.google_token,
             )
             version = self.version_text.splitlines()[0].rsplit(" ", 1)[-1]
             write_ready_state(self.config_directory, version)
             self.completed = True
 
     def _next(self) -> None:
-        if self.step == 7:
+        if self.step == self.LAST:
             self._close()
             return
         try:
