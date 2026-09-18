@@ -221,3 +221,58 @@ def test_a_zero_counter_with_a_tile_still_marked_is_not_a_clean_grid(grid, monke
 def test_an_unreadable_grid_is_not_a_clean_grid(grid, monkeypatch):
     monkeypatch.setattr(md, "_library_any_tile_marked", lambda page: None)
     assert md._try_reuse_library_media(object(), "x.mp4") == md.REUSE_DIRTY
+
+
+def _advancing_dialog(monkeypatch):
+    class _Btn:
+        def __init__(self):
+            self.first = self
+
+        def count(self):
+            return 1
+
+        def is_disabled(self):
+            return False
+
+        def click(self, timeout=0):
+            pass
+
+    class _Dialog:
+        def __init__(self):
+            self.first = self
+
+        def is_visible(self, timeout=0):
+            return True
+
+        def get_by_role(self, role, name=""):
+            return _Btn()
+
+    class _Root:
+        def get_by_role(self, role, name=""):
+            return _Dialog()
+
+    monkeypatch.setattr(md, "_roots", lambda page: [_Root()])
+    monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: True)
+    monkeypatch.setattr(md, "_verify_ad_media_is_the_file",
+                        lambda page, filename: (True, {"why": "name_not_shown"}))
+    monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
+
+    class _P:
+        url = "https://adsmanager.facebook.com/adsmanager/manage/ads/edit/standalone"
+
+    return _P()
+
+
+def test_a_different_thumbnail_on_the_ad_is_a_wrong_file(grid, monkeypatch):
+    """ACL-1171: имя не показано, но миниатюра объявления — не та, что выбрали."""
+    p = _advancing_dialog(monkeypatch)
+    monkeypatch.setattr(md, "_tile_thumb_ids", lambda tile: ["111_2222222222_3333333333_n"])
+    monkeypatch.setattr(md, "_ad_media_thumb_ids", lambda page: ["999_8888888888_7777777777_n"])
+    assert md._try_reuse_library_media(p, "2012.mp4") == md.REUSE_DIRTY
+
+
+def test_the_same_thumbnail_on_the_ad_confirms_the_pick(grid, monkeypatch):
+    p = _advancing_dialog(monkeypatch)
+    monkeypatch.setattr(md, "_tile_thumb_ids", lambda tile: ["111_2222222222_3333333333_n"])
+    monkeypatch.setattr(md, "_ad_media_thumb_ids", lambda page: ["111_2222222222_3333333333_n"])
+    assert md._try_reuse_library_media(p, "2012.mp4") == md.REUSE_ATTACHED
