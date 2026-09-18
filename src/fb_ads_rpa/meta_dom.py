@@ -5187,7 +5187,9 @@ def _library_selected_count(page: Page) -> int | None:
                 const style = getComputedStyle(el);
                 if (!r.width || !r.height || el.children.length ||
                     style.visibility === 'hidden' || el.closest('[hidden],[inert],[aria-hidden="true"]')) continue;
-                const m = (el.textContent || '').trim().match(/^(\d+) selected$/);
+                // 18.09 (CR_ait Mix): в режиме «до 10 файлов» счётчик пишется
+                // «1 of 10 selected»; читали только «1 selected» и видели 0.
+                const m = (el.textContent || '').trim().match(/^(\d+)(?: of \d+)? selected$/);
                 if (m) { found = true; total += Number(m[1]); }
               }
               return found ? total : null;
@@ -5282,7 +5284,9 @@ _AD_MEDIA_BLOCK_JS = (
     " const mark = [...document.querySelectorAll('*')].find(e => e.children.length === 0"
     " && /^(Edit media|Change selections|Uploaded media|Customize media|Media)$/.test(norm(e.textContent))"
     " && e.getBoundingClientRect().width > 0); if (!mark) return null; let el = mark;"
-    " for (let i = 0; i < 6 && el.parentElement; i++) el = el.parentElement; return el; })()"
+    " for (let i = 0; i < 14 && el.parentElement; i++) { el = el.parentElement;"
+    " if (el.querySelector('img[src*=\"t15.5256-10\"], [src*=\"t15.5256-10\"]')) break; }"
+    " return el; })()"
 )
 """Блок «Media» объявления, для снимка целиком."""
 
@@ -5304,6 +5308,44 @@ _MEDIA_FINGERPRINT_JS = r"""
     return [...out].slice(0, 40);
   }
 """
+
+
+_THUMB_ID_JS = r"""
+  (scope) => {
+    // Миниатюра видео на CDN Meta: <...>/813948786_38351125907864671_2841079256059848182_n.jpg.
+    // Живые снимки 18.09 (CO_bnc Mix2): у выбранной плитки медиатеки и у
+    // строк размещения в блоке Media объявления — один и тот же идентификатор.
+    const re = /\d{6,}_\d{10,}_\d{10,}_n/g;
+    const out = new Set();
+    const root = scope || document;
+    const nodes = [root, ...root.querySelectorAll('img, [src], [style*="background-image"]')];
+    for (const n of nodes) {
+      if (!n || !n.getAttribute) continue;
+      if (!scope && n.closest && n.closest('[role=dialog]')) continue;
+      for (const v of [n.getAttribute('src'), n.getAttribute('style')]) {
+        (String(v || '').match(re) || []).forEach(x => out.add(x));
+      }
+    }
+    return [...out];
+  }
+"""
+"""Идентификаторы миниатюр видео — внутри элемента или по странице вне диалогов."""
+
+
+def _tile_thumb_ids(tile) -> list[str]:
+    try:
+        return list(tile.evaluate(_THUMB_ID_JS) or [])
+    except Exception:
+        return []
+
+
+def _ad_media_thumb_ids(page: Page) -> list[str]:
+    """Миниатюры видео в редакторе объявления (открытые диалоги не считаются)."""
+    try:
+        return list(page.evaluate("(js) => (new Function('return (' + js + ')'))()(null)",
+                                  _THUMB_ID_JS) or [])
+    except Exception:
+        return []
 
 
 def _tile_fingerprint(tile) -> list[str]:
@@ -5593,6 +5635,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     # с отметкой. 16.09 23:28 (S15) шаг щёлкал по ней — клик снимал выбор, —
     # и потом решал, что копии нет. Уже выбранная плитка — это наш выбор.
     picked_fingerprint: list[str] = []
+    picked_thumbs: list[str] = []
     for i in range(min(available, _LIBRARY_MAX_PICKS)):
         try:
             if _library_tile_selected(tiles.nth(i)):
@@ -5636,6 +5679,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         log.append(note)
         if picked:
             picked_fingerprint = _tile_fingerprint(tile)
+            picked_thumbs = _tile_thumb_ids(tile)
             try:
                 from src.fb_ads_rpa import page_capture as _pages
 
@@ -5693,7 +5737,12 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             continue
         _sleep_h(0.8)
 
-    if _library_selected_count(page) != 1:
+    after_pick = _library_selected_count(page)
+    if after_pick != 1:
+        # Раньше — молчаливый отказ: 18.09 CR_ait Mix оставил отмеченную
+        # плитку и ни одной записи, почему. Теперь причина видна.
+        _telemetry.record("ad_creative_reuse", False, note="count_after_pick",
+                          diag={"count": after_pick, "picks": log[-3:]})
         return REUSE_DIRTY
 
     # Дальше сетка уже изменена. Любой отказ здесь — либо чистое отступление
@@ -5717,6 +5766,19 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         _sleep_h(0.5)
         if "/ads/edit/" in page.url and _verify_ad_media_present(page):
             right, detail = _verify_ad_media_is_the_file(page, filename)
+            ad_thumbs = _ad_media_thumb_ids(page)
+            if picked_thumbs and ad_thumbs:
+                if set(picked_thumbs) & set(ad_thumbs):
+                    detail["thumb"] = "match"
+                else:
+                    # Миниатюра на объявлении не та, что у выбранной плитки:
+                    # прикрепилось другое видео, как бы ни совпало имя.
+                    right = False
+                    detail["why"] = "other_file_attached"
+                    detail["thumb"] = "mismatch"
+            else:
+                detail["thumb"] = "unconfirmed"
+            detail["thumbs"] = {"picked": picked_thumbs[:5], "ad": ad_thumbs[:5]}
             media_fp = _ad_media_fingerprint(page)
             detail["identity"] = {
                 "tile": picked_fingerprint[:10], "ad": media_fp[:10],
