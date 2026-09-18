@@ -15,9 +15,15 @@ from src.analysis_agent import targeting_registry as tr
 from src.analysis_agent import team_library as tl
 
 
+def initialized(backend):
+    for kind, (path, _) in tl.FILES.items():
+        backend.files[path] = (tl._dump(tl.empty(kind)), f"seed-{kind}")
+    return backend
+
+
 @pytest.fixture
 def team(tmp_path, monkeypatch):
-    backend = tl.MemoryBackend()
+    backend = initialized(tl.MemoryBackend())
     tl.use_backend(backend)
     monkeypatch.setattr(tl, "_status", {})
 
@@ -156,7 +162,7 @@ def test_two_managers_saving_at_once_both_keep_their_change(tmp_path, monkeypatc
         tl.MemoryBackend.put(backend, "targets.json", tl._dump(data), backend.get("targets.json").sha, "other")
 
     monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
-    tl.use_backend(Racing(other_machine))
+    tl.use_backend(initialized(Racing(other_machine)))
     try:
         tr.add("Invest", "Finance")
         assert names() == ["Crypto", "Invest"]
@@ -171,7 +177,7 @@ def test_a_racing_duplicate_is_caught_on_the_retry(tmp_path, monkeypatch):
         tl.MemoryBackend.put(backend, "targets.json", tl._dump(data), backend.get("targets.json").sha, "other")
 
     monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
-    tl.use_backend(Racing(other_machine))
+    tl.use_backend(initialized(Racing(other_machine)))
     try:
         with pytest.raises(tr.TargetingError, match="already exists as “Money”"):
             tr.add("Invest", "Finance")
@@ -192,7 +198,7 @@ class Down(tl.MemoryBackend):
 
 def test_without_github_nothing_is_saved_and_the_copy_still_publishes(tmp_path, monkeypatch):
     monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
-    backend = Down()
+    backend = initialized(Down())
     tl.use_backend(backend)
     monkeypatch.setattr(tl, "_status", {})
     try:
@@ -312,3 +318,275 @@ def test_github_stale_sha_is_a_conflict(monkeypatch):
     monkeypatch.setattr(gh, "_call", lambda *a, **k: (409, b'{"message": "is at abc but expected def"}'))
     with pytest.raises(tl.Conflict):
         gh.put("targets.json", "{}", "def", "msg")
+
+
+# Reviewer regressions: preservation and truthful save outcomes.
+@pytest.mark.parametrize("kind", ["targets", "ad_texts"])
+def test_missing_remote_file_preserves_the_pre_migration_library(team, kind):
+    backend, on = team
+    on("Anna")
+    registry = tr if kind == "targets" else ar
+    if kind == "targets":
+        tr.add("Keep", "Finance")
+    else:
+        ar.add("Keep", "Headline", "Body")
+    before = registry._store().read_bytes()
+    del backend.files[tl.FILES[kind][0]]
+    state = registry.pull(force=True)
+    assert state["ok"] is False and "missing" in state["error"]
+    assert registry._store().read_bytes() == before
+    with pytest.raises((tr.TargetingError, ar.AdTextError), match="Seed"):
+        registry.remove("Keep")
+    assert tl.FILES[kind][0] not in backend.files
+
+
+@pytest.mark.parametrize("kind,broken", [
+    ("targets", {"name": "Keep"}),
+    ("targets", {"name": "Keep", "interests": 123}),
+    ("ad_texts", {"name": "Keep", "headline": ""}),
+    ("ad_texts", {"name": "Keep", "headline": 123}),
+])
+def test_invalid_remote_rows_do_not_replace_a_good_read_copy(team, kind, broken):
+    backend, on = team
+    on("Anna")
+    registry = tr if kind == "targets" else ar
+    if kind == "targets":
+        tr.add("Keep", "Finance")
+    else:
+        ar.add("Keep", "Headline", "Body")
+    before = registry._store().read_bytes()
+    path, key = tl.FILES[kind]
+    data = tl.empty(kind)
+    data[key]["Keep"] = broken
+    backend.files[path] = (tl._dump(data), "broken")
+    state = registry.pull(force=True)
+    assert not state["ok"] and "damaged" in state["error"]
+    assert registry._store().read_bytes() == before
+
+
+def test_invalid_deleted_record_does_not_poison_the_read_copy(team):
+    backend, on = team
+    on("Anna")
+    tr.add("Keep", "Finance")
+    before = tr._store().read_bytes()
+    data = tl.fetch("targets")
+    data["deleted"]["Gone"] = None
+    backend.files["targets.json"] = (tl._dump(data), "broken")
+    assert not tr.pull(force=True)["ok"]
+    assert tr._store().read_bytes() == before
+
+
+def test_migration_keeps_original_data_for_later_add_missing(team):
+    backend, on = team
+    tl.use_backend(None)
+    on("Anna")
+    tr.add("Local-only", "Finance")
+    before = tr._store().read_bytes()
+    data = tl.empty("targets")
+    data["targets"]["Team"] = tr.Target("Team", "Travel").to_dict()
+    backend.files["targets.json"] = (tl._dump(data), "team")
+    tl.use_backend(backend)
+    tr.pull(force=True)
+    backup = tr._store().with_name("targeting_registry.pre-team-library.json")
+    assert backup.read_bytes() == before
+    tr.pull(force=True)
+    assert backup.read_bytes() == before
+    assert names() == ["Team"]
+
+
+@pytest.mark.parametrize("missing", ["ACL_LIBRARY_TOKEN", "ACL_LIBRARY_REPO"])
+def test_partial_configuration_does_not_silently_save_locally(team, monkeypatch, missing):
+    _, on = team
+    on("Anna")
+    tl.use_backend(None)
+    monkeypatch.setenv("ACL_LIBRARY_REPO", "example/library")
+    monkeypatch.setenv("ACL_LIBRARY_TOKEN", "synthetic")
+    monkeypatch.delenv(missing)
+    with pytest.raises(tr.TargetingError, match="configuration is incomplete"):
+        tr.add("Keep", "Finance")
+    assert names() == []
+    assert not tr.pull(force=True)["ok"]
+
+
+def test_confirmed_remote_save_survives_a_local_disk_error(team, monkeypatch):
+    backend, on = team
+    on("Anna")
+    def fail(_):
+        raise OSError("disk full")
+    monkeypatch.setattr(tr, "_save_raw", fail)
+    result = tr.add("Keep", "Finance")
+    assert result.name == "Keep"
+    assert "Keep" in json.loads(backend.files["targets.json"][0])["targets"]
+    assert not tl.status("targets")["ok"]
+    assert "Saved to the team library" in tl.status("targets")["error"]
+
+
+def test_an_uncertain_put_is_confirmed_by_readback_without_repeating(team, monkeypatch):
+    backend, on = team
+    on("Anna")
+    put = backend.put
+    def lose_response(*args):
+        put(*args)
+        raise tl.WriteUncertain("response lost")
+    monkeypatch.setattr(backend, "put", lose_response)
+    assert tr.add("Keep", "Finance").name == "Keep"
+    assert len(backend.commits) == 1 and names() == ["Keep"]
+
+
+def test_unconfirmed_save_does_not_claim_nothing_was_saved(team, monkeypatch):
+    backend, on = team
+    on("Anna")
+    def fail(*args):
+        raise tl.WriteUncertain("response lost")
+    monkeypatch.setattr(backend, "put", fail)
+    with pytest.raises(tr.TargetingError) as error:
+        tr.add("Keep", "Finance")
+    assert "Nothing was saved" not in str(error.value)
+    assert "Refresh" in str(error.value)
+
+
+def test_a_delayed_pull_cannot_overwrite_a_newer_successful_save(team, monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    backend, on = team
+    on("Anna")
+    tr.add("Old", "Finance")
+    fetched, release, writing = threading.Event(), threading.Event(), threading.Event()
+    get = backend.get
+    def delayed(path):
+        result = get(path)
+        if threading.current_thread().name == "slow-pull":
+            fetched.set()
+            assert release.wait(5)
+        return result
+    monkeypatch.setattr(backend, "get", delayed)
+    def pull():
+        threading.current_thread().name = "slow-pull"
+        return tr.pull(force=True)
+    def add():
+        writing.set()
+        return tr.add("New", "Travel")
+    with ThreadPoolExecutor(2) as pool:
+        first = pool.submit(pull)
+        assert fetched.wait(5)
+        second = pool.submit(add)
+        assert writing.wait(5)
+        # Before the fix the add finishes while the older read is still held.
+        try:
+            second.result(timeout=0.2)
+        except TimeoutError:
+            pass
+        finally:
+            release.set()
+        first.result(timeout=5)
+        second.result(timeout=5)
+    assert names() == ["New", "Old"]
+
+
+def test_default_seed_does_not_resurrect_a_previously_emptied_library():
+    from scripts.seed_team_library import plan
+    remote = tl.empty("targets")
+    remote["deleted"]["Removed"] = {"data": tr.Target("Removed", "Travel").to_dict(),
+                                     "deleted_by": "Anna", "deleted_at": "earlier"}
+    local = tl.empty("targets")
+    local["targets"]["Old alias"] = tr.Target("Old alias", "Travel").to_dict()
+    items, skipped = plan("targets", remote, local, False)
+    assert not items and skipped
+
+
+@pytest.mark.parametrize("kind", ["targets", "ad_texts"])
+def test_cache_age_survives_restart_during_an_outage(team, monkeypatch, kind):
+    backend, on = team
+    on("Anna")
+    registry = tr if kind == "targets" else ar
+    registry.pull(force=True)
+    stamp = tl.status(kind)["synced_at"]
+    tl._pulled.clear()
+    tl._status.clear()
+    def unavailable(_):
+        raise tl.LibraryError("offline")
+    monkeypatch.setattr(backend, "get", unavailable)
+    assert registry.pull(force=True)["synced_at"] == stamp
+
+
+def test_unknown_team_target_cannot_silently_become_broad_targeting(team):
+    _, on = team
+    on("Anna")
+    with pytest.raises(tr.TargetingError, match="not available"):
+        tr.resolve_interests("Missing")
+
+
+def test_publish_refreshes_recent_builder_data_and_reports_offline_copy(team, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from src.fb_ads_rpa import enrich_draft as en
+    from src.fb_ads_rpa.draft import CampaignDraft, AdSetDraft
+    backend, on = team
+    on("Anna")
+    tr.add("Keep", "Old interests")
+    data = tl.fetch("targets")
+    data["targets"]["Keep"]["interests"] = "Latest interests"
+    remote = backend.get("targets.json")
+    backend.put("targets.json", tl._dump(data), remote.sha, "other manager")
+    monkeypatch.setattr(en, "load_ad_account_map", lambda p: {})
+    monkeypatch.setattr(en, "resolve_account_entry", lambda *a: SimpleNamespace(
+        ad_account_id="act_test", page_id="page", profile_id="profile"))
+    def enrich():
+        draft = CampaignDraft("Test", "CL", "Test", ad_sets=[AdSetDraft("Set", targeting_label="Keep")])
+        en.enrich_campaign_drafts([draft], account_label="Test", upload_fb_path=str(tmp_path/"none"),
+                                 ad_account_map_path=str(tmp_path/"map"), creatives_root=str(tmp_path))
+        return draft
+    assert enrich().ad_sets[0].targeting_label == "Latest interests"
+    def unavailable(_):
+        raise tl.LibraryError("offline")
+    monkeypatch.setattr(backend, "get", unavailable)
+    draft = enrich()
+    assert draft.ad_sets[0].targeting_label == "Latest interests"
+    assert any("saved copy from" in w for w in draft.warnings)
+
+
+def test_github_lost_put_response_is_uncertain_and_never_leaks_exception_text(monkeypatch):
+    import urllib.error
+    gh = tl.GitHubBackend("example/library", "test-secret")
+    def timeout(*a, **kw):
+        raise urllib.error.URLError("test-secret")
+    monkeypatch.setattr(tl.urllib.request, "urlopen", timeout)
+    with pytest.raises(tl.WriteUncertain) as error:
+        gh.put("targets.json", "{}", "old", "test")
+    assert "test-secret" not in str(error.value)
+    assert "Nothing was saved" not in str(error.value)
+
+
+def test_unreadable_github_response_is_a_named_library_error(monkeypatch):
+    gh = tl.GitHubBackend("example/library", "synthetic")
+    monkeypatch.setattr(gh, "_call", lambda *a, **k: (200, b"not json"))
+    with pytest.raises(tl.LibraryError, match="unreadable"):
+        gh.get("targets.json")
+
+
+def test_api_save_reports_its_actual_scope(team):
+    from src.web import app as web
+    backend, on = team
+    on("Anna")
+    target = json.loads(web._edit_targeting_profile({"name": "Team", "interests": "Finance"}).body)
+    text = json.loads(web._edit_ad_text({"name": "Team", "headline": "Headline"}).body)
+    assert target["scope"] == text["scope"] == "team"
+    tl.use_backend(None)
+    target = json.loads(web._edit_targeting_profile({"name": "Local", "interests": "Travel"}).body)
+    text = json.loads(web._edit_ad_text({"name": "Local", "headline": "Other headline"}).body)
+    assert target["scope"] == text["scope"] == "local"
+
+
+def test_offline_publish_retries_are_throttled_across_ads(team, monkeypatch):
+    backend, on = team
+    on('Anna')
+    tr.add('Keep', 'Finance')
+    tl._pulled.clear()
+    calls = []
+    def offline(path):
+        calls.append(path)
+        raise tl.LibraryError('offline')
+    monkeypatch.setattr(backend, 'get', offline)
+    for _ in range(3):
+        assert tr.resolve_interests('Keep') == 'Finance'
+    assert calls == ['targets.json']
+    assert not tl.status('targets')['ok']

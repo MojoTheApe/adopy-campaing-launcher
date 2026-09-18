@@ -37,7 +37,7 @@ const context = {
     if (opts) {
       requests.push(JSON.parse(opts.body));
       return saveOk
-        ? {ok:true, json:async()=>({ok:true, text:{name:'x'}})}
+        ? {ok:true, json:async()=>({ok:true, text:{name:'x'}, scope:library.connected ? 'team' : 'local'})}
         : {ok:false, json:async()=>({ok:false, error:'Такой текст уже есть — «AR how much».'})};
     }
     return {ok:true, json:async()=>({
@@ -157,4 +157,10 @@ const type = (id, value) => { get(id).value = value; fire('input', get(id)); };
   await flush();
   assert(get('at-status').textContent.includes('unreachable'), get('at-status').textContent);
   assert(get('at-status').textContent.includes('cannot be saved'), get('at-status').textContent);
+  library = {connected:false, ok:true};
+  click('at-refresh-btn'); await flush();
+  get('at-name').value = 'Local'; get('at-headline').value = 'Local headline';
+  click('at-add-btn'); await flush();
+  assert(get('at-msg').textContent.includes('on this computer only'), get('at-msg').textContent);
+  assert(!get('at-msg').textContent.includes('Everyone'));
 })().catch(e => { console.error(e); process.exitCode = 1; });

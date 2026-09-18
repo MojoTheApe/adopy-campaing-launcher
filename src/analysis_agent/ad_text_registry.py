@@ -171,8 +171,8 @@ def all_texts() -> list[AdText]:
                       key=lambda t: normalise_one(t.name))
 
 
-def builder_texts() -> list[AdText]:
-    pull()
+def builder_texts(*, force: bool = False) -> list[AdText]:
+    pull(force=force)
     return all_texts()
 
 
@@ -255,17 +255,21 @@ def _apply_library(lib: dict) -> None:
     """Свежая версия библиотеки становится копией на этой машине."""
     deleted = lib.get("deleted") or {}
     with _transaction():
+        team_library.preserve_local_copy(_store())
         _save_raw({"version": 1, "texts": _clean(lib.get("texts")),
-                   "hidden": sorted({normalise_one(n) for n in deleted}), "deleted": deleted})
+                   "hidden": sorted({normalise_one(n) for n in deleted}), "deleted": deleted,
+                   "library_synced_at": lib.get("library_synced_at", "")})
 
 
-team_library.on_update("ad_texts", _apply_library)
+team_library.on_update("ad_texts", _apply_library, lambda: _load_raw().get("library_synced_at", ""))
 
 
 def _mutate(change, message: str):
     if team_library.configured():
         try:
             return team_library.transact("ad_texts", change, message)[1]
+        except team_library.WriteUncertain as exc:
+            raise AdTextError(str(exc)) from exc
         except team_library.LibraryError as exc:
             raise AdTextError(f"{exc} Nothing was saved.") from exc
     with _transaction():

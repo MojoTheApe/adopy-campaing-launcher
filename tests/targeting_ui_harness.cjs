@@ -14,7 +14,7 @@ const context = {
    if (opts) {
      requests.push(JSON.parse(opts.body));
      if (release) await new Promise(r => release = r);
-     return saveOk ? {ok:true, json:async()=>({ok:true,profile:{name}})}
+     return saveOk ? {ok:true, json:async()=>({ok:true,profile:{name},scope:library.connected ? 'team' : 'local'})}
                    : {ok:false, json:async()=>({ok:false,error:'GitHub is unreachable: timed out Nothing was saved.'})};
    }
    return {ok:true,json:async()=>({ok:true,library,profiles:[{name,interests:'Finance',narrow:'Owners',added_by:'Anna',added_at:'2026-09-18'},
@@ -54,4 +54,8 @@ const click = (id, attrs={}) => listeners.click({target:{id,getAttribute(k){retu
  library = {connected:false, ok:true, error:'', synced_at:''};
  click('tg-refresh-btn'); await flush();
  assert(get('tg-status').textContent.includes('not connected'), get('tg-status').textContent);
+ get('tg-name').value='Local'; get('tg-interests').value='Local interest';
+ click('tg-add-btn'); await flush();
+ assert(get('tg-msg').textContent.includes('on this computer only'), get('tg-msg').textContent);
+ assert(!get('tg-msg').textContent.includes('Everyone'));
 })().catch(e=>{console.error(e);process.exitCode=1;});

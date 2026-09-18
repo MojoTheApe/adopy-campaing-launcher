@@ -863,7 +863,7 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
 def _load_sheet_targets() -> list[dict]:
     """The team targeting library (read copy refreshed from the repository)."""
     from src.analysis_agent import targeting_registry as tr
-    tr.pull()
+    tr.pull(force=True)
     return [{"code": t.name, "label": t.name, "fb_interest": t.rpa_interests()}
             for t in tr.all_targets()]
 
@@ -1956,7 +1956,7 @@ def _ad_copy_rows() -> list[dict]:
 
     return [{"ad_title": t.name, "headline": t.headline, "body": t.body,
              "description": t.description, "asset": t.asset,
-             "language": t.language} for t in ar.builder_texts()]
+             "language": t.language} for t in ar.builder_texts(force=True)]
 
 
 @app.get("/api/ad-copy")
@@ -2337,7 +2337,7 @@ def _edit_targeting_profile(data: dict) -> JSONResponse:
     try:
         if action == "delete":
             tr.remove(name)
-            return JSONResponse({"ok": True, "removed": name})
+            return JSONResponse({"ok": True, "removed": name, "scope": "team" if tr.team_library.configured() else "local"})
         if action == "update":
             target = tr.update(data.get("was") or name, name, interests, narrow)
         elif action == "add":
@@ -2350,7 +2350,7 @@ def _edit_targeting_profile(data: dict) -> JSONResponse:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-    return JSONResponse({"ok": True, "profile": target.to_dict()})
+    return JSONResponse({"ok": True, "profile": target.to_dict(), "scope": "team" if tr.team_library.configured() else "local"})
 
 
 @app.post("/api/targeting-profiles")
@@ -2392,7 +2392,7 @@ def _edit_ad_text(data: dict) -> JSONResponse:
     try:
         if action == "delete":
             ar.remove(name)
-            return JSONResponse({"ok": True, "removed": name})
+            return JSONResponse({"ok": True, "removed": name, "scope": "team" if ar.team_library.configured() else "local"})
         if action == "update":
             text = ar.update(data.get("was") or name, name, headline, body, description, asset, language)
         elif action == "add":
@@ -2405,7 +2405,7 @@ def _edit_ad_text(data: dict) -> JSONResponse:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-    return JSONResponse({"ok": True, "text": text.to_dict()})
+    return JSONResponse({"ok": True, "text": text.to_dict(), "scope": "team" if ar.team_library.configured() else "local"})
 
 
 @app.post("/api/ad-texts")

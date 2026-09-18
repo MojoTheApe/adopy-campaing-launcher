@@ -204,18 +204,22 @@ def _apply_library(lib: dict) -> None:
     """Свежая версия библиотеки становится копией на этой машине."""
     deleted = lib.get("deleted") or {}
     with _transaction():
+        team_library.preserve_local_copy(_store())
         _save_raw({"version": 1, "targets": _clean(lib.get("targets")),
                    "hidden": sorted({normalise_one(n) for n in deleted}), "deleted": deleted,
-                   "renamed": lib.get("renamed") or {}})
+                   "renamed": lib.get("renamed") or {},
+                   "library_synced_at": lib.get("library_synced_at", "")})
 
 
-team_library.on_update("targets", _apply_library)
+team_library.on_update("targets", _apply_library, lambda: _load_raw().get("library_synced_at", ""))
 
 
 def _mutate(change, message: str):
     if team_library.configured():
         try:
             return team_library.transact("targets", change, message)[1]
+        except team_library.WriteUncertain as exc:
+            raise TargetingError(str(exc)) from exc
         except team_library.LibraryError as exc:
             raise TargetingError(f"{exc} Nothing was saved.") from exc
     with _transaction():
@@ -325,4 +329,7 @@ def resolve_interests(name: str) -> str:
         raise TargetingError(f"The target “{name}” was renamed to “{renamed[normalise_one(name)]}”. Choose it in the builder.")
     if normalise_one(name) in {normalise_one(n) for n in data["deleted"]} or normalise_one(name) in data["hidden"]:
         raise TargetingError(f"The target “{name}” was removed from the library. Restore it in Targeting or choose another target.")
+    if team_library.configured():
+        raise TargetingError(f"The target “{name}” is not available in the team library copy. "
+                             "Refresh Targeting and choose an available target before publishing.")
     return ""

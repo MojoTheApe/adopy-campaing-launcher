@@ -35,8 +35,8 @@ def plan(kind: str, remote: dict, local: dict, add_missing: bool) -> tuple[dict,
     """What to upload and why the rest is skipped."""
     _, key, norm, mark = KINDS[kind]
     items, skipped = {}, []
-    if remote[key] and not add_missing:
-        return {}, [f"the team library already has {len(remote[key])} {kind}; use --add-missing"]
+    if (remote[key] or remote.get("deleted") or remote.get("renamed")) and not add_missing:
+        return {}, [f"the team library already has {len(remote[key])} {kind} and may have deletion/rename history; use --add-missing"]
     taken = {norm(n) for n in remote[key]} | {norm(n) for n in remote.get("deleted", {})}
     marks = {mark(r) for r in remote[key].values()}
     for name, rec in sorted(local[key].items()):
@@ -55,7 +55,7 @@ def seed(kind: str, *, add_missing: bool, dry_run: bool) -> tuple[int, list[str]
     snapshot, key, _, _ = KINDS[kind]
     local = snapshot()
     if dry_run:
-        items, skipped = plan(kind, tl.fetch(kind), local, add_missing)
+        items, skipped = plan(kind, tl._parse(kind, tl.backend().get(tl.FILES[kind][0])), local, add_missing)
         return len(items), skipped
     report: dict = {}
 
@@ -66,7 +66,7 @@ def seed(kind: str, *, add_missing: bool, dry_run: bool) -> tuple[int, list[str]
             remote[key][name] = {**rec, **{k: v for k, v in stamp.items() if not rec.get(k)}}
         report["n"], report["skipped"] = len(items), skipped
 
-    tl.transact(kind, change, f"Seed {kind} from {tl.author()}")
+    tl.transact(kind, change, f"Seed {kind} from {tl.author()}", allow_create=True)
     return report["n"], report["skipped"]
 
 

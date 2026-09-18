@@ -11415,8 +11415,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
       saved = true;
       if (body.action === 'delete') say('Removed: ' + body.name + '. It is in Recently deleted if you need it back.');
       else if (body.action === 'restore') say('Restored: ' + body.name + '.');
-      else if (body.action === 'update') say('Saved. Everyone gets the change.');
-      else say('Added. Everyone gets it.');
+      else if (body.action === 'update') say(d.scope === 'local' ? 'Saved on this computer only.' : 'Saved. Everyone gets the change.');
+      else say(d.scope === 'local' ? 'Added on this computer only.' : 'Added. Everyone gets it.');
       if (body.action === 'add' || body.action === 'update') clearForm();
     } catch (e) { say(e.message || String(e), true); }
     finally { busy(false); }
@@ -11599,8 +11599,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
       document.dispatchEvent(new CustomEvent('acl:adtextschange'));
       if (body.action === 'delete') say('Removed: ' + body.name + '. It is in Recently deleted if you need it back.');
       else if (body.action === 'restore') say('Restored: ' + body.name + '.');
-      else if (body.action === 'update') say('Saved. Everyone gets the change.');
-      else say('Added. Everyone gets it.');
+      else if (body.action === 'update') say(d.scope === 'local' ? 'Saved on this computer only.' : 'Saved. Everyone gets the change.');
+      else say(d.scope === 'local' ? 'Added on this computer only.' : 'Added. Everyone gets it.');
       if (body.action === 'add' || body.action === 'update') clearForm();
     } catch (e) { say(e.message || String(e), true); }
     finally { busy(false); }

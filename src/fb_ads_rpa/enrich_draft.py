@@ -124,7 +124,21 @@ def enrich_campaign_drafts(
     entry = resolve_account_entry(account_map, account_label)
     account_info = get_account_info(ref, account_label, account_map=account_map)
 
+    # A publish must see changes made since the builder opened, even inside
+    # the per-ad read throttle. Refresh each needed registry once per batch.
+    from src.analysis_agent import targeting_registry, ad_text_registry
+    library_states = []
+    if any(getattr(a, "targeting_label", "") for d in drafts for a in d.ad_sets):
+        library_states.append(("Targeting", targeting_registry.pull(force=True)))
+    if any(ad.copy_name for d in drafts for a in d.ad_sets for ad in a.ads):
+        library_states.append(("Ad texts", ad_text_registry.pull(force=True)))
+
     for draft in drafts:
+        for label, state in library_states:
+            if state.get("connected") and not state.get("ok"):
+                stamp = state.get("synced_at") or "unknown time"
+                draft.warnings.append(f"{label}: team library unavailable; using the saved copy from {stamp}. "
+                                      + state.get("error", ""))
         draft.ad_account_id = entry.ad_account_id if entry else None
         draft.page_id = (entry.page_id if entry else None)
         # Что набрано в билдере, то и берём. Раньше строка ниже перетирала

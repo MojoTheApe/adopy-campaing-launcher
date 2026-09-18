@@ -29,9 +29,13 @@ import copy
 import json
 import os
 import threading
+import tempfile
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import quote
+from contextlib import contextmanager
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Callable, Protocol
 
@@ -49,6 +53,10 @@ PULL_EVERY_SECONDS = 15.0
 
 class LibraryError(RuntimeError):
     """Общую библиотеку не удалось прочитать или записать."""
+
+
+class WriteUncertain(LibraryError):
+    """The server may have committed; a retry must not be presented as safe."""
 
 
 class Conflict(Exception):
@@ -106,23 +114,26 @@ class GitHubBackend:
         except urllib.error.HTTPError as exc:
             return exc.code, exc.read()
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            raise LibraryError(f"GitHub is unreachable: {getattr(exc, 'reason', exc)}") from exc
+            if method == "PUT":
+                raise WriteUncertain("The save response was lost. GitHub may have saved the change; "
+                                     "refresh the library before retrying.") from exc
+            raise LibraryError("GitHub is unreachable. Try again when the connection is restored.") from exc
 
     def _fail(self, status: int, raw: bytes, what: str) -> LibraryError:
         try:
             msg = json.loads(raw or b"{}").get("message", "")
-        except ValueError:
+        except (ValueError, AttributeError):
             msg = ""
         if status in (401, 403):
             hint = "the library token is missing access or has expired"
         elif status == 404:
             hint = f"repository {self.repo} was not found or the token cannot see it"
         else:
-            hint = msg or f"HTTP {status}"
+            hint = str(msg or f"HTTP {status}").replace(self.token, "[redacted]") if self.token else f"HTTP {status}"
         return LibraryError(f"Could not {what} the team library: {hint}.")
 
     def get(self, path: str) -> Remote:
-        status, raw = self._call("GET", f"{API}/repos/{self.repo}/contents/{path}?ref={self.branch}")
+        status, raw = self._call("GET", f"{API}/repos/{self.repo}/contents/{path}?ref={quote(self.branch, safe='')}")
         if status == 404:
             # Файла нет, или нет репозитория/доступа. Различаем по репозиторию.
             s2, raw2 = self._call("GET", f"{API}/repos/{self.repo}")
@@ -131,15 +142,21 @@ class GitHubBackend:
             return Remote(None, None)
         if status != 200:
             raise self._fail(status, raw, "read")
-        meta = json.loads(raw)
-        if meta.get("content") and meta.get("encoding") == "base64":
-            data = base64.b64decode(meta["content"])
-        else:  # больше мегабайта Contents API содержимое не отдаёт — берём блоб
-            s2, data = self._call("GET", f"{API}/repos/{self.repo}/git/blobs/{meta['sha']}",
-                                  accept="application/vnd.github.raw+json")
-            if s2 != 200:
-                raise self._fail(s2, data, "read")
-        return Remote(data.decode("utf-8"), meta["sha"])
+        try:
+            meta = json.loads(raw)
+            sha = meta["sha"]
+            if not isinstance(sha, str) or not sha or meta.get("type", "file") != "file":
+                raise ValueError("expected a file")
+            if meta.get("encoding") == "base64":
+                data = base64.b64decode(meta.get("content", ""))
+            else:  # Contents API omits content above 1 MiB.
+                s2, data = self._call("GET", f"{API}/repos/{self.repo}/git/blobs/{sha}",
+                                      accept="application/vnd.github.raw+json")
+                if s2 != 200:
+                    raise self._fail(s2, data, "read")
+            return Remote(data.decode("utf-8"), sha)
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            raise LibraryError("GitHub returned an unreadable library file response; the local copy was kept.") from exc
 
     def put(self, path: str, text: str, sha: str | None, message: str) -> str:
         body = {"message": message, "branch": self.branch,
@@ -151,9 +168,15 @@ class GitHubBackend:
             raise Conflict()
         if status == 409:
             raise Conflict()
+        if status >= 500:
+            raise WriteUncertain("GitHub could not confirm the save. Refresh the library before retrying.")
         if status not in (200, 201):
             raise self._fail(status, raw, "save to")
-        return json.loads(raw)["content"]["sha"]
+        try:
+            return json.loads(raw)["content"]["sha"]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise WriteUncertain("GitHub accepted the save but its confirmation was unreadable. "
+                                 "Refresh the library before retrying.") from exc
 
 
 # ── настройка ─────────────────────────────────────────────────────────────
@@ -173,13 +196,20 @@ def backend() -> Backend | None:
         return _backend_override
     repo = (os.environ.get("ACL_LIBRARY_REPO") or "").strip()
     token = (os.environ.get("ACL_LIBRARY_TOKEN") or "").strip()
-    if not repo or not token:
+    if not repo and not token:
         return None
+    if not repo or not token:
+        raise LibraryError("The team library configuration is incomplete: both ACL_LIBRARY_REPO "
+                           "and ACL_LIBRARY_TOKEN are required. Local-only saving is disabled.")
     return GitHubBackend(repo, token, (os.environ.get("ACL_LIBRARY_BRANCH") or "main").strip())
 
 
 def configured() -> bool:
-    return backend() is not None
+    # Partial configuration is an attempted team connection, never permission
+    # to silently write changes only to this machine.
+    return _backend_override is not None or bool(
+        (os.environ.get("ACL_LIBRARY_REPO") or "").strip()
+        or (os.environ.get("ACL_LIBRARY_TOKEN") or "").strip())
 
 
 # ── чтение и запись ───────────────────────────────────────────────────────
@@ -195,10 +225,67 @@ def _parse(kind: str, remote: Remote) -> dict:
         if not isinstance(data.get("deleted", {}), dict):
             raise ValueError("invalid deleted section")
         data.setdefault("deleted", {})
+        validate(kind, data)
         return data
     except Exception as exc:
         raise LibraryError(f"The team library file {FILES[kind][0]} is damaged: {exc}. "
                            "Nothing was changed; restore it from the repository history.") from exc
+
+
+def validate(kind: str, data: dict) -> None:
+    """Reject the complete snapshot if any record is invalid; never drop rows."""
+    if kind == "targets":
+        from src.analysis_agent.targeting_registry import Target as Record
+        required = ("interests",)
+    else:
+        from src.analysis_agent.ad_text_registry import AdText as Record
+        required = ("headline", "body")
+    key = FILES[kind][1]
+
+    def record(name, raw):
+        if not isinstance(name, str) or not isinstance(raw, dict):
+            raise ValueError("invalid record")
+        item = Record(**{k: v for k, v in raw.items() if k in Record.__dataclass_fields__})
+        if any(not isinstance(getattr(item, k), str) for k in Record.__dataclass_fields__):
+            raise ValueError("invalid record fields")
+        if name != item.name or not name.strip() or not any(getattr(item, k).strip() for k in required):
+            raise ValueError("empty or mismatched record")
+
+    for name, raw in data[key].items():
+        record(name, raw)
+    for name, rec in data["deleted"].items():
+        if not isinstance(rec, dict) or not all(isinstance(rec.get(k), str) for k in ("deleted_by", "deleted_at")):
+            raise ValueError("invalid deleted record")
+        record(name, rec.get("data"))
+        if name in data[key]:
+            raise ValueError("record is both active and deleted")
+    renamed = data.get("renamed", {})
+    if not isinstance(renamed, dict) or any(not isinstance(k, str) or not isinstance(v, str) or not v.strip()
+                                            for k, v in renamed.items()):
+        raise ValueError("invalid renamed section")
+
+
+def preserve_local_copy(path: Path) -> None:
+    """Keep the pre-migration library before replacing it with shared data."""
+    if not path.exists():
+        return
+    backup = path.with_name(path.stem + ".pre-team-library.json")
+    if backup.exists():
+        return
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=backup.name, suffix=".tmp", delete=False) as out:
+            tmp = Path(out.name)
+            out.write(path.read_bytes())
+            out.flush()
+            os.fsync(out.fileno())
+        try:
+            os.link(tmp, backup)  # Atomic create without replacing an earlier backup.
+        except FileExistsError:
+            pass
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
 
 
 def _dump(data: dict) -> str:
@@ -209,10 +296,21 @@ def fetch(kind: str) -> dict:
     b = backend()
     if b is None:
         raise LibraryError("The team library is not connected on this machine.")
-    return _parse(kind, b.get(FILES[kind][0]))
+    remote = b.get(FILES[kind][0])
+    if remote.text is None:
+        raise LibraryError(f"The team library file {FILES[kind][0]} is missing. "
+                           "Seed the library before connecting dashboards; the local copy was kept.")
+    return _parse(kind, remote)
 
 
-def transact(kind: str, change: Callable[[dict], object], message: str) -> tuple[dict, object]:
+def transact(kind: str, change: Callable[[dict], object], message: str, *,
+             allow_create: bool = False) -> tuple[dict, object]:
+    with _sync_transaction(kind):
+        return _transact(kind, change, message, allow_create=allow_create)
+
+
+def _transact(kind: str, change: Callable[[dict], object], message: str, *,
+              allow_create: bool) -> tuple[dict, object]:
     """Прочитать свежий файл, применить правку, записать; при гонке — заново.
 
     ``change`` правит данные на месте и возвращает результат для вызывающего;
@@ -224,8 +322,11 @@ def transact(kind: str, change: Callable[[dict], object], message: str) -> tuple
     path = FILES[kind][0]
     for _ in range(_CONFLICT_RETRIES):
         remote = b.get(path)
+        if remote.text is None and not allow_create:
+            raise LibraryError(f"The team library file {path} is missing. Seed it before editing.")
         data = _parse(kind, remote)
         result = change(data)
+        validate(kind, data)
         text = _dump(data)
         if remote.text is not None and text == remote.text:
             _remember(kind, data)
@@ -234,7 +335,26 @@ def transact(kind: str, change: Callable[[dict], object], message: str) -> tuple
             b.put(path, text, remote.sha, f"{message} — {author()}")
         except Conflict:
             continue
-        _remember(kind, data)
+        except WriteUncertain:
+            # One read is safe; repeating the mutation after an uncertain PUT
+            # could duplicate work or overwrite a later manager's correction.
+            try:
+                confirmed = b.get(path)
+                matches = confirmed.text is not None and _dump(_parse(kind, confirmed)) == text
+            except Exception:
+                matches = False
+            if not matches:
+                raise WriteUncertain("Could not confirm whether GitHub saved the change. "
+                                     "Refresh the library before retrying.") from None
+        try:
+            _remember(kind, data)
+        except Exception:
+            # The remote commit is already confirmed. Never claim 'nothing
+            # saved' merely because the local read copy could not be updated.
+            _pulled.pop(kind, None)
+            _status[kind] = {"connected": True, "ok": False,
+                             "error": "Saved to the team library, but the local copy could not be updated. Refresh it.",
+                             "synced_at": _status.get(kind, {}).get("synced_at", "")}
         return data, result
     raise LibraryError("The team library kept changing while saving. Try again in a moment.")
 
@@ -242,35 +362,72 @@ def transact(kind: str, change: Callable[[dict], object], message: str) -> tuple
 # ── копия для чтения на машине ────────────────────────────────────────────
 
 _pulled: dict[str, float] = {}
-_pull_lock = threading.Lock()
+_pull_lock = threading.RLock()
 _status: dict[str, dict] = {}
 _listeners: dict[str, Callable[[dict], None]] = {}
+_sync_readers: dict[str, Callable[[], str]] = {}
 
 
-def on_update(kind: str, apply: Callable[[dict], None]) -> None:
+@contextmanager
+def _sync_transaction(kind: str):
+    # Serialize GET -> local apply with writes, including a second dashboard
+    # process. Registry locks are distinct and acquired only inside this lock.
+    from config import paths
+    with _pull_lock:
+        path = Path(paths.get_local_config_dir()) / f"team_library_{kind}.lock"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a+b") as handle:
+            if handle.tell() == 0:
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(handle, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                if os.name == "nt":
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def on_update(kind: str, apply: Callable[[dict], None], read_sync: Callable[[], str]) -> None:
     """Реестр подписывается: свежие данные библиотеки кладутся в его копию."""
     _listeners[kind] = apply
+    _sync_readers[kind] = read_sync
 
 
 def _remember(kind: str, data: dict) -> None:
+    stamp = now()
     apply = _listeners.get(kind)
     if apply is not None:
-        apply(copy.deepcopy(data))
+        local = copy.deepcopy(data)
+        local["library_synced_at"] = stamp
+        apply(local)
     _pulled[kind] = time.monotonic()
-    _status[kind] = {"connected": True, "ok": True, "error": "", "synced_at": now()}
+    _status[kind] = {"connected": True, "ok": True, "error": "", "synced_at": stamp}
 
 
 def pull(kind: str, *, force: bool = False) -> dict:
     """Обновить копию на машине. Ошибка связи не бросается — она в статусе."""
     if not configured():
         return status(kind)
-    with _pull_lock:
+    with _sync_transaction(kind):
         fresh = time.monotonic() - _pulled.get(kind, -1e9) < PULL_EVERY_SECONDS
         if force or not fresh:
             try:
                 _remember(kind, fetch(kind))
-            except LibraryError as exc:
-                was = _status.get(kind, {})
+            except (LibraryError, OSError) as exc:
+                # A failed refresh is also an attempt. Otherwise each ad waits
+                # for another network timeout instead of using the read copy.
+                _pulled[kind] = time.monotonic()
+                was = status(kind)
                 _status[kind] = {"connected": True, "ok": False, "error": str(exc),
                                  "synced_at": was.get("synced_at", "")}
     return status(kind)
@@ -279,7 +436,14 @@ def pull(kind: str, *, force: bool = False) -> dict:
 def status(kind: str) -> dict:
     if not configured():
         return {"connected": False, "ok": True, "error": "", "synced_at": ""}
-    return dict(_status.get(kind) or {"connected": True, "ok": True, "error": "", "synced_at": ""})
+    if kind in _status:
+        return dict(_status[kind])
+    try:
+        stamp = _sync_readers[kind]()
+    except Exception:
+        stamp = ""
+    return {"connected": True, "ok": False, "error": "The team library has not been refreshed in this session.",
+            "synced_at": stamp if isinstance(stamp, str) else ""}
 
 
 def recently_deleted(data: dict, limit: int = 100) -> list[dict]:
