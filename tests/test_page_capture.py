@@ -285,3 +285,29 @@ def test_the_create_step_saves_its_markup_too():
     block = source[source.index('def _diag(stage: str'):]
     block = block[: block.index('_telemetry.record(')]
     assert "page_capture" in block, "у create_additional_ad снова нет снимка"
+
+
+def test_selected_block_is_saved_scrubbed_even_after_page_truncation():
+    class Page(_Page):
+        def evaluate(self, js, expression):
+            assert expression == "document.querySelector('#group')"
+            return '<div id="group"><span>someone@example.com</span><button>Close</button></div>'
+    page = Page(html="x" * (pc.MAX_HTML_BYTES + 20))
+    folder = pc.capture(page, step="targeting", run_id="block-run",
+                        blocks={"groups": "document.querySelector('#group')"})
+    saved = _read(folder, "block_groups.html")
+    assert "Close" in saved and "someone@example.com" not in saved
+    ctx = json.loads(_read(folder, "context.json"))
+    assert ctx["html_truncated"] is True
+    assert ctx["blocks"]["groups"]["found"] is True
+    assert ctx["blocks"]["groups"]["truncated"] is False
+
+
+def test_a_missing_block_is_recorded_without_discarding_the_page():
+    class Page(_Page):
+        def evaluate(self, js, expression):
+            return None
+    folder = pc.capture(Page(), step="targeting", run_id="missing-block",
+                        blocks={"groups": "document.querySelector('#missing')"})
+    assert _read(folder, "page.html")
+    assert json.loads(_read(folder, "context.json"))["blocks"]["groups"] == {"found": False}

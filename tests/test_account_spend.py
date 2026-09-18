@@ -240,12 +240,49 @@ def test_an_open_automation_profile_is_reused(monkeypatch):
     assert sp._attach_only(_Entry(), "Acc") is marker
 
 
-def test_a_hand_opened_profile_is_refused_not_restarted(monkeypatch):
+from src.fb_ads_rpa import browser as rpa_browser  # noqa: E402
+
+
+class _Provider:
+    """Двойник провайдера Publish: запоминает, как его попросили открыть профиль."""
+
+    def __init__(self, result=None, error=None):
+        self.result, self.error, self.calls = result, error, []
+
+    def open(self, entry, label, **kwargs):
+        self.calls.append(kwargs)
+        if self.error:
+            raise self.error
+        return self.result
+
+
+def test_a_hand_opened_profile_is_reopened_gently_like_publish(monkeypatch):
+    """ACL-1234: вручную открытый профиль (Doc19) мягко перезапускается через API."""
     _fake_browser(monkeypatch, attach=None, running=True)
+    marker = object()
+    provider = _Provider(result=marker)
+    monkeypatch.setattr(rpa_browser, "get_browser_provider", lambda name: provider)
+    assert sp._attach_only(_Entry(), "Acc") is marker
+    assert provider.calls == [{"allow_restart": True, "allow_kill": False}], provider.calls
+
+
+def test_a_failed_gentle_restart_is_a_readable_refusal(monkeypatch):
+    """API не смог остановить окно — отказ словами, окно не трогаем."""
+    _fake_browser(monkeypatch, attach=None, running=True)
+    provider = _Provider(error=RuntimeError("Nothing was closed."))
+    monkeypatch.setattr(rpa_browser, "get_browser_provider", lambda name: provider)
     with pytest.raises(sp.ProfileNotAttachable) as exc:
         sp._attach_only(_Entry(), "Acc")
-    assert "opened manually" in str(exc.value)
-    assert "will not be restarted" in str(exc.value)
+    assert "could not be reopened" in str(exc.value)
+    assert provider.calls[0]["allow_kill"] is False
+
+
+def test_an_already_attached_profile_is_never_restarted(monkeypatch):
+    marker = object()
+    _fake_browser(monkeypatch, attach=marker, running=True)
+    monkeypatch.setattr(rpa_browser, "get_browser_provider",
+                        lambda name: pytest.fail("перезапуск не нужен — окно уже с портом"))
+    assert sp._attach_only(_Entry(), "Acc") is marker
 
 
 def test_a_closed_profile_says_so(monkeypatch):
@@ -451,3 +488,51 @@ def test_the_currency_is_passed_through_as_meta_wrote_it(raw, written):
     page = _TotalsPage(raw)
     sp._scan_totals(page)
     assert getattr(page, "_acl_spend_currency", None) == written
+
+
+def test_an_empty_campaign_table_is_saved_for_diagnosis(monkeypatch, tmp_path):
+    """18.09 Doc19: «no-row-surfaces» без скриншота — теперь таблица сохраняется целиком."""
+    from src.fb_ads_rpa import page_capture as pc
+
+    saved = {}
+    monkeypatch.setattr(pc, "capture", lambda page, **kw: saved.update(kw) or str(tmp_path))
+
+    class _Page:
+        def evaluate(self, js, *a):
+            return "<div role='grid'><div role='columnheader'>Campaign</div></div>"
+
+    sp._snapshot_empty_table(_Page(), "campaign", "no-row-surfaces")
+    assert saved["step"] == "tree_campaign_no_rows"
+    assert "columnheader" in (tmp_path / "block_table.html").read_text(encoding="utf-8")
+
+
+# ── новая таблица Ads Manager без меток строк (FacebookDoc19, 18.09) ─────────
+
+def test_the_new_table_without_row_ids_is_read_by_name():
+    """Снимок живой таблицы: меток table_row нет, id кампаний в строках нет."""
+    import os
+    from pathlib import Path
+    from playwright.sync_api import sync_playwright
+
+    html = (Path(__file__).parent / "fixtures" / "meta" / "campaign_table_without_row_ids.html").read_text(encoding="utf-8")
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        try:
+            page = b.new_page()
+            page.set_content(html)
+            got = page.evaluate(sp._READ_TREE_JS, "campaign")
+        finally:
+            b.close()
+    assert got["how"] == "by-name"
+    rows = {r["name"]: r for r in got["rows"]}
+    assert list(rows) == ["Campaign 1", "Campaign 2", "Campaign 3", "Campaign 4", "Campaign 5"]
+    first = rows["Campaign 1"]
+    assert (first["id"], first["switch"], first["delivery"]) == ("", "on", "Active")
+    assert (first["results"], first["cost_per_result"], first["spend"]) == ("6", "$19.27", "$115.59")
+    assert rows["Campaign 3"]["switch"] == "off" and rows["Campaign 3"]["spend"] == "$0.00"
+    assert got["kinds"] == ["CAMPAIGN_GROUP"]
+
+
+def test_an_object_without_an_id_is_never_turned_off():
+    out = sp._turn_off("Acc", "campaign", "", expected_name="Campaign 1")
+    assert "without campaign ids" in out.error
