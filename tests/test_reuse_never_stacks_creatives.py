@@ -79,6 +79,7 @@ def grid(monkeypatch):
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)
     monkeypatch.setattr(md, "_roots", lambda page: [])
+    monkeypatch.setattr(md, "_library_any_tile_marked", lambda page: bool(g.selected))
     return g
 
 
@@ -158,12 +159,12 @@ def test_reuse_is_on_by_default(monkeypatch):
     assert rpa_config.get_reuse_library_media() is False
 
 
-def test_a_wrong_or_broken_file_is_rolled_back_so_upload_can_follow(grid, monkeypatch):
-    """Прикрепилось не то (или файл не обработался) — выбор снимаем.
+def test_a_wrong_or_broken_file_on_the_ad_refuses_the_step_without_upload(grid, monkeypatch):
+    """Прикрепилось не то (или файл не обработался) — это уже в объявлении.
 
-    ACL-1171/1192: иначе поверх чужой плитки ляжет загрузка, и объявление
-    уедет с двумя креативами — ровно та беда, из-за которой повторное
-    использование выключали 24.08.
+    Ревью 18.09 (ACL-1192): сетки медиатеки на экране в этот момент нет,
+    «откатывать» нечего, и загрузка поверх дала бы объявление с чужим или
+    битым креативом. Поэтому отказ шага без загрузки — REUSE_DIRTY.
     """
     class _Dialog:
         def is_visible(self, timeout: int = 0) -> bool:
@@ -206,6 +207,17 @@ def test_a_wrong_or_broken_file_is_rolled_back_so_upload_can_follow(grid, monkey
 
     out = md._try_reuse_library_media(_P(), "2012.mp4")
 
-    assert out == md.REUSE_ABSENT, "после отката загрузка должна быть разрешена"
-    assert grid.selected == set(), "чужая плитка обязана быть снята"
+    assert out == md.REUSE_DIRTY, "чужой файл уже в объявлении — загружать поверх нельзя"
     assert [s["note"] for s in said if s["step"] == "ad_creative_reuse"] == ["other_file_attached"]
+
+
+def test_a_zero_counter_with_a_tile_still_marked_is_not_a_clean_grid(grid, monkeypatch):
+    """Счётчик «0 selected» отстал от сетки — загрузку поверх это не разрешает."""
+    monkeypatch.setattr(md, "_library_any_tile_marked", lambda page: True)
+    out = md._try_reuse_library_media(object(), "x.mp4")
+    assert out == md.REUSE_DIRTY
+
+
+def test_an_unreadable_grid_is_not_a_clean_grid(grid, monkeypatch):
+    monkeypatch.setattr(md, "_library_any_tile_marked", lambda page: None)
+    assert md._try_reuse_library_media(object(), "x.mp4") == md.REUSE_DIRTY

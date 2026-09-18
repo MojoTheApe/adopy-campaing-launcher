@@ -5271,6 +5271,71 @@ def _library_sight(page: Page, filename: str) -> dict:
     return sight
 
 
+_LIBRARY_DIALOG_JS = (
+    "(() => { const d = [...document.querySelectorAll('[role=dialog]')].filter(e =>"
+    " e.getBoundingClientRect().width > 0); return d[d.length - 1] || null; })()"
+)
+"""Верхний открытый диалог — сетка медиатеки, для снимка целиком."""
+
+_AD_MEDIA_BLOCK_JS = (
+    "(() => { const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();"
+    " const mark = [...document.querySelectorAll('*')].find(e => e.children.length === 0"
+    " && /^(Edit media|Change selections|Uploaded media|Customize media|Media)$/.test(norm(e.textContent))"
+    " && e.getBoundingClientRect().width > 0); if (!mark) return null; let el = mark;"
+    " for (let i = 0; i < 6 && el.parentElement; i++) el = el.parentElement; return el; })()"
+)
+"""Блок «Media» объявления, для снимка целиком."""
+
+_MEDIA_FINGERPRINT_JS = r"""
+  (root) => {
+    // Отпечаток медиа: адреса картинок/видео и числовые идентификаторы в
+    // data-атрибутах. Какой из них стабилен у Meta — решим по живым снимкам;
+    // пока собираем и сравниваем, но не отказываем по нему (ревью ACL-1171).
+    const out = new Set();
+    const add = (v) => { if (!v) return; const m = String(v).match(/[0-9]{8,}|[A-Za-z0-9_-]{20,}(?=\.(jpg|png|mp4|webp))/g);
+      (m || []).forEach(x => out.add(x)); };
+    const nodes = [root, ...root.querySelectorAll('img, video, source, [style*="background-image"], [data-id], [data-video-id], [data-asset-id]')];
+    for (const n of nodes) {
+      add(n.getAttribute && n.getAttribute('src'));
+      add(n.getAttribute && n.getAttribute('poster'));
+      add(n.style && n.style.backgroundImage);
+      for (const a of (n.attributes ? [...n.attributes] : [])) if (a.name.startsWith('data-')) add(a.value);
+    }
+    return [...out].slice(0, 40);
+  }
+"""
+
+
+def _tile_fingerprint(tile) -> list[str]:
+    try:
+        return list(tile.evaluate(_MEDIA_FINGERPRINT_JS) or [])
+    except Exception:
+        return []
+
+
+def _ad_media_fingerprint(page: Page) -> list[str]:
+    try:
+        return list(page.evaluate(
+            "(fp) => { const el = " + _AD_MEDIA_BLOCK_JS + "; if (!el) return [];"
+            " return (new Function('return (' + fp + ')'))()(el); }",
+            _MEDIA_FINGERPRINT_JS,
+        ) or [])
+    except Exception:
+        return []
+
+
+def _library_any_tile_marked(page: Page) -> bool | None:
+    """Осталась ли в сетке хоть одна отмеченная плитка (None — сетку не прочесть)."""
+    try:
+        return bool(page.evaluate(
+            "() => { const d = " + _LIBRARY_DIALOG_JS + "; if (!d) return null;"
+            " return !!d.querySelector('[data-test-decoration=\"selected\"],"
+            " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked'); }"
+        ))
+    except Exception:
+        return None
+
+
 def _library_undo_selection(page: Page, tiles, clicked: list[int], before: int) -> bool:
     """Undo while the grid is observable. A count cannot restore item identity."""
     if before != 0:
@@ -5301,7 +5366,13 @@ def _library_undo_selection(page: Page, tiles, clicked: list[int], before: int) 
                 return False
             if count == 0:
                 break
-    return _library_selected_count(page) == 0
+    if _library_selected_count(page) != 0:
+        return False
+    # Счётчик «0 selected» мог отстать от сетки: ревью 18.09 просит
+    # подтверждать исходное состояние, а не одно число. Ни одной отмеченной
+    # плитки — вот это состояние, при котором загрузка поверх безопасна.
+    marked = _library_any_tile_marked(page)
+    return marked is False
 
 
 def _library_tile_shape(page: Page, filename: str) -> dict:
@@ -5521,6 +5592,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     # Копия может быть уже выбрана до нас: «1 selected» и плитка нужного файла
     # с отметкой. 16.09 23:28 (S15) шаг щёлкал по ней — клик снимал выбор, —
     # и потом решал, что копии нет. Уже выбранная плитка — это наш выбор.
+    picked_fingerprint: list[str] = []
     for i in range(min(available, _LIBRARY_MAX_PICKS)):
         try:
             if _library_tile_selected(tiles.nth(i)):
@@ -5563,11 +5635,14 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             pass
         log.append(note)
         if picked:
+            picked_fingerprint = _tile_fingerprint(tile)
             try:
                 from src.fb_ads_rpa import page_capture as _pages
 
                 _pages.capture(page, step="library_pick_selected",
-                               diag={"tile": i, "file": filename, "picks": log})
+                               diag={"tile": i, "file": filename, "picks": log,
+                                     "fingerprint": _tile_fingerprint(tile)},
+                               blocks={"library": _LIBRARY_DIALOG_JS})
             except Exception:
                 pass
             break
@@ -5642,23 +5717,32 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         _sleep_h(0.5)
         if "/ads/edit/" in page.url and _verify_ad_media_present(page):
             right, detail = _verify_ad_media_is_the_file(page, filename)
+            media_fp = _ad_media_fingerprint(page)
+            detail["identity"] = {
+                "tile": picked_fingerprint[:10], "ad": media_fp[:10],
+                "overlap": sorted(set(picked_fingerprint) & set(media_fp))[:10],
+            }
             if not right:
-                # Не тот файл или файл не обработался: откатываемся так, чтобы
-                # поверх можно было загрузить файл обычным путём.
+                # Не тот файл или файл не обработался — и он уже стоит в
+                # объявлении, а сетки медиатеки на экране нет. «Откатывать» тут
+                # нечего: загрузка поверх дала бы объявление с чужим или битым
+                # креативом. Отказ шага, без загрузки (ревью ACL-1192).
                 try:
                     from src.fb_ads_rpa import page_capture as _pages
 
                     detail["page"] = _pages.capture(
-                        page, step="ad_media_" + str(detail.get("why")), diag=detail)
+                        page, step="ad_media_" + str(detail.get("why")), diag=detail,
+                        blocks={"media": _AD_MEDIA_BLOCK_JS})
                 except Exception:
                     pass
                 _telemetry.record("ad_creative_reuse", False,
                                   note=str(detail.get("why")), diag=detail)
-                return _retreat(page, tiles, clicked, before)
+                return REUSE_DIRTY
             try:
                 from src.fb_ads_rpa import page_capture as _pages
 
-                _pages.capture(page, step="ad_media_ready", diag=detail)
+                _pages.capture(page, step="ad_media_ready", diag=detail,
+                               blocks={"media": _AD_MEDIA_BLOCK_JS})
             except Exception:
                 pass
             return REUSE_ATTACHED

@@ -201,6 +201,7 @@ def _wire(monkeypatch, grid):
     monkeypatch.setattr(md, "_library_tiles", lambda page, name: grid)
     monkeypatch.setattr(md, "_library_search", lambda page, name: True)
     monkeypatch.setattr(md, "_library_selected_count", count)
+    monkeypatch.setattr(md, "_library_any_tile_marked", lambda page: bool(grid.selected))
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     monkeypatch.setattr(md._telemetry, "record",
                         lambda step, ok, **kw: said.append({"step": step, "ok": ok, **kw}))
