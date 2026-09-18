@@ -102,8 +102,40 @@ def test_processing_that_never_ends_is_a_failure(page, monkeypatch):
     assert ok is False and detail["why"] == "still_processing"
 
 
-def test_an_unnamed_tile_is_not_called_wrong(page):
-    """Meta подписывает не каждую плитку — само по себе это не отказ."""
+def test_an_unnamed_tile_cannot_confirm_the_intended_file(page):
+    """Missing identity is unverified, even when generic media is present."""
     page.set_content("<div><div>Uploaded media</div><div>Change selections</div></div>")
     ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
-    assert ok is True and detail["why"] == "name_not_shown"
+    assert ok is False and detail["why"] == "media_identity_unavailable"
+
+
+@pytest.mark.parametrize("other", ["2012_story.mp4", "2012.jpg", "prefix2012.mp4"])
+def test_a_similar_name_is_not_the_requested_file(page, other):
+    page.set_content("<section><div>Uploaded media</div><div>" + other + "</div></section>")
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    assert ok is False
+    assert detail["why"] == "other_file_attached"
+
+
+def test_a_matching_label_cannot_override_conflicting_media(page):
+    page.set_content("<nav>2012.mp4</nav><section><div>Uploaded media</div><div>wrong.mp4</div></section>")
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    assert ok is False
+    assert detail["why"] == "other_file_attached"
+
+
+def test_unreadable_media_cannot_confirm_identity():
+    class Unreadable:
+        def evaluate(self, *args):
+            raise RuntimeError("synthetic unavailable DOM")
+    ok, detail = md._verify_ad_media_is_the_file(Unreadable(), "2012.mp4")
+    assert ok is False
+    assert detail["why"] == "media_state_unavailable"
+
+
+@pytest.mark.parametrize("state", [None, {}, [], {"named": ["2012.mp4"]}])
+def test_incomplete_media_state_is_not_positive_evidence(monkeypatch, state):
+    monkeypatch.setattr(md, "_ad_media_state", lambda *args: state)
+    ok, detail = md._verify_ad_media_is_the_file(None, "2012.mp4")
+    assert ok is False
+    assert detail["why"] == "media_state_unavailable"

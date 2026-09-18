@@ -137,6 +137,9 @@ def _wire(monkeypatch, grid):
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)
     monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: True)
+    # These grid tests isolate selection; attachment identity has its own
+    # browser tests and must be explicitly confirmed by this fixture.
+    monkeypatch.setattr(md, "_verify_ad_media_is_the_file", lambda page, filename: (True, {}))
     monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
 
     class _Next:
@@ -229,3 +232,13 @@ def test_media_already_on_the_ad_is_recognised_by_todays_labels():
         p.set_content("<div>Media</div><div>Please specify the media to run with this ad.</div>")
         assert md._media_block_filled_now(p) is False
         b.close()
+
+
+def test_unreadable_attachment_after_selection_stays_dirty(monkeypatch):
+    verify = md._verify_ad_media_is_the_file
+    grid = _Grid()
+    page = _wire(monkeypatch, grid)
+    monkeypatch.setattr(md, "_verify_ad_media_is_the_file", verify)
+    # This page double has no DOM reader. A selected tile and generic media
+    # presence cannot make that missing identity safe for upload fallback.
+    assert md._try_reuse_library_media(page, "2012.mp4") == md.REUSE_DIRTY

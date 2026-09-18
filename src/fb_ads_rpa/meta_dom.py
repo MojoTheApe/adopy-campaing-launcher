@@ -6965,23 +6965,23 @@ def _media_block_filled_now(page: Page) -> bool:
 
 
 _AD_MEDIA_STATE_JS = r"""
-  (stem) => {
+  (filename) => {
     const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
     const visible = [...document.querySelectorAll('*')]
       .filter(e => e.offsetParent !== null && e.children.length === 0)
       .map(e => norm(e.textContent))
       .filter(Boolean);
     const low = visible.map(t => t.toLowerCase());
-    const want = (stem || '').toLowerCase();
-    // Имя файла Meta показывает по-разному: «2012.mp4», «2012», иногда с
-    // суффиксом копии. Совпадением считаем вхождение основы имени.
-    const named = want ? low.filter(t => t.includes(want)) : [];
+    const want = norm(filename).toLowerCase();
+    // A filename prefix, another extension or a copy suffix is not identity.
+    // Scoping to the actual attached asset still needs recorded DOM evidence.
+    const named = want ? low.filter(t => t === want) : [];
     const processing = low.some(t => t.includes('processing') || t.includes('being processed'));
     const failed = low.some(t => t.includes("couldn't be processed") || t.includes('could not be processed')
       || t.includes('failed to process') || t.includes('processing failed')
       || t.includes("media couldn't") || t.includes('upload failed'));
     // Имена ДРУГИХ файлов рядом с медиа: нашего нет, а чужой есть — взяли не то.
-    const others = low.filter(t => /\.(mp4|mov|jpg|jpeg|png|gif|webm)\b/.test(t) && (!want || !t.includes(want)));
+    const others = low.filter(t => /\.(mp4|mov|jpg|jpeg|png|gif|webm)\b/.test(t) && (!want || t !== want));
     return { named: named.slice(0, 5), others: others.slice(0, 5),
              processing: processing, failed: failed };
   }
@@ -6990,9 +6990,9 @@ _AD_MEDIA_STATE_JS = r"""
 
 
 def _ad_media_state(page: Page, filename: str) -> dict:
-    stem = Path(filename or "").stem.lower()
+    name = Path(filename or "").name.lower()
     try:
-        return page.evaluate(_AD_MEDIA_STATE_JS, stem) or {}
+        return page.evaluate(_AD_MEDIA_STATE_JS, name) or {}
     except Exception as exc:
         return {"error": str(exc)[:80]}
 
@@ -7011,6 +7011,12 @@ def _verify_ad_media_is_the_file(page: Page, filename: str) -> tuple[bool, dict]
     state: dict = {}
     while True:
         state = _ad_media_state(page, filename)
+        if (not isinstance(state, dict) or state.get("error")
+                or not isinstance(state.get("named"), list)
+                or not isinstance(state.get("others"), list)
+                or type(state.get("processing")) is not bool
+                or type(state.get("failed")) is not bool):
+            return False, {"state": state, "why": "media_state_unavailable"}
         if state.get("failed"):
             return False, {"state": state, "why": "processing_failed"}
         if not state.get("processing"):
@@ -7018,13 +7024,12 @@ def _verify_ad_media_is_the_file(page: Page, filename: str) -> tuple[bool, dict]
         if time.time() >= deadline:
             return False, {"state": state, "why": "still_processing"}
         _sleep_h(2.0)
-    if state.get("named"):
-        return True, {"state": state}
     if state.get("others"):
         return False, {"state": state, "why": "other_file_attached"}
-    # Имя видно не всегда — Meta подписывает не каждую плитку. Само наличие
-    # медиа уже проверено отдельно, поэтому это не отказ.
-    return True, {"state": state, "why": "name_not_shown"}
+    if state.get("named"):
+        return True, {"state": state}
+    # Generic media presence cannot establish which asset was attached.
+    return False, {"state": state, "why": "media_identity_unavailable"}
 
 
 def _verify_ad_media_present(page: Page) -> bool:
