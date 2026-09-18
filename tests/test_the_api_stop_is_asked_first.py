@@ -212,3 +212,23 @@ def test_the_log_tells_the_stop_from_the_kill(attach_provider, caplog):
         attach_provider["provider"]._start_via_mlx_api(_Entry(), "DQ501", PROFILE, r"C:\mlx\p")
     assert any("stopped through the MLX API" in r.getMessage() for r in caplog.records)
     assert not any("killing Mimic" in r.getMessage() for r in caplog.records)
+
+
+def test_a_read_never_kills_when_the_api_stop_fails(attach_provider):
+    fake = _Launcher(stop_ok=False)
+    attach_provider["holder"]["launcher"] = fake
+    with pytest.raises(RuntimeError, match="Nothing was closed"):
+        attach_provider["provider"]._start_via_mlx_api(
+            _Entry(), "Example", PROFILE, r"C:\mlx\p", allow_kill=False)
+    assert fake.stops == 1 and fake.starts == 1
+    assert attach_provider["kills"] == []
+
+
+def test_a_read_can_restart_gracefully_without_kill_permission(attach_provider):
+    fake = _Launcher(stop_ok=True)
+    attach_provider["holder"]["launcher"] = fake
+    started = attach_provider["provider"]._start_via_mlx_api(
+        _Entry(), "Example", PROFILE, r"C:\mlx\p", allow_kill=False)
+    assert started.port == "58906"
+    assert fake.stops == 1 and fake.starts == 2
+    assert attach_provider["kills"] == []

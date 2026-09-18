@@ -163,12 +163,21 @@ def test_the_long_spelling_is_still_enough_on_its_own(wired):
     assert provider.tried == [LONG], "лишний обход процессов после успеха"
 
 
-def test_a_window_without_a_debug_port_still_says_what_to_do(wired):
-    """Настоящий «открыт вручную» никуда не девается — только он и остаётся."""
+def test_a_window_without_a_debug_port_is_reopened_only_after_both_spellings(wired, monkeypatch):
+    """Настоящий «открыт вручную»: сначала пробуем прицепиться по обоим именам
+    папки, и только потом — мягкий перезапуск, как у Publish (ACL-1234)."""
     provider = wired(_Provider(knows="ни то ни другое"))
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    class _Publish:
+        def open(self, entry, label, **kwargs):
+            assert kwargs == {"allow_restart": True, "allow_kill": False}
+            raise RuntimeError("Multilogin could not stop it. Nothing was closed.")
+
+    monkeypatch.setattr(rpa_browser, "get_browser_provider", lambda name: _Publish())
     with pytest.raises(sp.ProfileNotAttachable) as exc:
         sp._attach_only(_Entry(), "KLD_BFL_X84")
-    assert "opened manually" in str(exc.value)
+    assert "open in MLX Desktop" in str(exc.value)
     assert provider.tried == [LONG, SHORT]
 
 

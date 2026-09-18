@@ -6059,7 +6059,9 @@ function amapTreeLine(o, adCount) {
      `adset`, а у объявлений в родителях — id ad set'а. Выключение такую
      строку не примет, и кнопка на ней обещала бы работу, которой не будет.
      Перечитать аккаунт — и всё встанет на место. */
-  var canAct = o.switch === 'on'
+  /* Без id (новая таблица Ads Manager, Doc19 18.09) выключать нечем: turn_off
+     откажет. Кнопку не рисуем, а в подсказке говорим почему. */
+  var canAct = o.switch === 'on' && !!o.id
     && (o.level === 'campaign' || (o.level === 'ad' && o.parent_id));
   var live = canAct;
   var sw = document.createElement(live ? 'button' : 'span');
@@ -6070,6 +6072,8 @@ function amapTreeLine(o, adCount) {
      остановленным то, что тратит деньги. */
   sw.title = o.switch === 'unknown'
     ? 'No switch found in this row — not the same as switched off'
+    : !o.id && o.switch === 'on'
+      ? 'Read by name: this account’s Ads Manager table shows no ids, so it cannot be turned off from here yet.'
     : live
       ? 'Turn off. It cannot be turned back on from here — that is done in Ads Manager.'
       : (o.switch_label || 'On/off');
