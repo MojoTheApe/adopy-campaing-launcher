@@ -5176,27 +5176,26 @@ def _creative_modal_open(page: Page) -> bool:
         return False
 
 
-def _library_selected_count(page: Page) -> int:
-    """Sum of the media library's own "N selected" counters."""
+def _library_selected_count(page: Page) -> int | None:
+    """The visible library counter, or None when its state is unavailable."""
     try:
-        return int(
-            page.evaluate(
-                """
-                () => {
-                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                  let total = 0;
-                  for (const el of document.querySelectorAll('*')) {
-                    if (!el.offsetParent || el.children.length !== 0) continue;
-                    const m = norm(el.textContent).match(/^(\\d+) selected$/);
-                    if (m) total += parseInt(m[1], 10);
-                  }
-                  return total;
-                }
-                """
-            )
+        value = page.evaluate(
+            r"""() => {
+              let total = 0, found = false;
+              for (const el of document.querySelectorAll('*')) {
+                const r = el.getBoundingClientRect();
+                const style = getComputedStyle(el);
+                if (!r.width || !r.height || el.children.length ||
+                    style.visibility === 'hidden' || el.closest('[hidden],[inert],[aria-hidden="true"]')) continue;
+                const m = (el.textContent || '').trim().match(/^(\d+) selected$/);
+                if (m) { found = true; total += Number(m[1]); }
+              }
+              return found ? total : null;
+            }"""
         )
+        return int(value) if value is not None else None
     except Exception:
-        return 0
+        return None
 
 
 def _library_tiles(page: Page, filename: str):
@@ -5273,48 +5272,36 @@ def _library_sight(page: Page, filename: str) -> dict:
 
 
 def _library_undo_selection(page: Page, tiles, clicked: list[int], before: int) -> bool:
-    """Снять то, что мы навыбирали, и подтвердить это счётчиком сетки.
-
-    Без этого повторное использование медиатеки опаснее, чем отсутствие
-    повторного использования, и 24.08 его именно поэтому и выключили: шаг
-    отказывался УЖЕ выбрав плитки, вызывающий честно уходил грузить файл, и
-    объявление выходило с 3-6 креативами вместо одного (прогоны 5bff134ea745,
-    770bd7e5fb7b: «3 of 10 selected», «6 of 10 selected»). Meta делает из
-    лишних отдельные вариации, то есть публикуется не то объявление, которое
-    собрал оператор, — и заметить это можно только глазами в кабинете.
-
-    Возвращает, удалось ли вернуть сетку ровно в то состояние, в котором мы её
-    застали. Ответ «нет» — не мелочь: он означает, что выбор остался
-    применённым, и загружать поверх нельзя.
-    """
-    # Сначала дать счётчику проснуться.
-    #
-    # Мы попали сюда, потому что он не двигался, пока мы ждали. Но «не
-    # двигался» — это то, что мы видели, а не то, что произошло: клик
-    # регистрируется с опозданием (замер 24.08). Если сразу спросить и
-    # поверить нулю, снятие выйдет не сняв ничего и доложит «чисто» — а
-    # выбор на экране останется, и загрузка ляжет поверх него. Ровно та
-    # поломка, ради которой эта функция и написана.
-    #
-    # Кликать вслепую нельзя: если клик действительно не прошёл, второй его
-    # ВЫБЕРЕТ. Поэтому не гадаем, а ждём и смотрим.
-    for _ in range(10):  # ~3с
-        if _library_selected_count(page) > before:
+    """Undo while the grid is observable. A count cannot restore item identity."""
+    if before != 0:
+        # An exclusive replacement can keep count=1 while changing the item.
+        # Without the original item identity, do not authorize a fresh upload.
+        return False
+    for _ in range(10):
+        count = _library_selected_count(page)
+        if count is None:
+            return False
+        if count > 0:
             break
         _sleep_h(0.3)
-
     for i in reversed(clicked):
-        if _library_selected_count(page) <= before:
+        count = _library_selected_count(page)
+        if count is None:
+            return False
+        if count == 0:
             break
         try:
             tiles.nth(i).click(timeout=3000)
         except Exception:
-            continue
-        for _ in range(6):  # ~1.8s: счётчик догоняет клик не мгновенно
+            return False
+        for _ in range(10):
             _sleep_h(0.3)
-            if _library_selected_count(page) <= before:
+            count = _library_selected_count(page)
+            if count is None:
+                return False
+            if count == 0:
                 break
-    return _library_selected_count(page) <= before
+    return _library_selected_count(page) == 0
 
 
 def _library_tile_shape(page: Page, filename: str) -> dict:
@@ -5485,6 +5472,9 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
       selection applied rather than discarding it.
     """
     before = _library_selected_count(page)
+    if before is None:
+        _telemetry.record("ad_creative_reuse", False, note="selection_state_unavailable")
+        return REUSE_DIRTY
     _library_search(page, filename)
 
     # Свежезагруженный файл появляется в сетке не мгновенно. 15.09 на живом
@@ -5511,7 +5501,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Без этого следующая попытка починки снова будет догадкой.
         _telemetry.record("ad_creative_reuse", None, note="not_in_library",
                           diag=_library_sight(page, filename))
-        return REUSE_ABSENT
+        return REUSE_ABSENT if before == 0 else REUSE_DIRTY
 
     # Poll the counter for seconds, not milliseconds, before giving up on a
     # click. The old 0.5s check raced Meta's own render: the click HAD
@@ -5558,7 +5548,8 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             # every one of them), and a choice is exclusive — it cannot
             # grow. So the tile's own word counts too: a tile that reports
             # itself selected after our click is our pick.
-            if _library_selected_count(page) > before or _library_tile_selected(tile):
+            count = _library_selected_count(page)
+            if (count is not None and count > before) or _library_tile_selected(tile):
                 picked = True
                 break
         note["after"] = _library_selected_count(page)
@@ -5572,6 +5563,13 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             pass
         log.append(note)
         if picked:
+            try:
+                from src.fb_ads_rpa import page_capture as _pages
+
+                _pages.capture(page, step="library_pick_selected",
+                               diag={"tile": i, "file": filename, "picks": log})
+            except Exception:
+                pass
             break
     if not picked:
         # Разметка медиатеки — до отката, пока сетка такая, какой её видел
@@ -5588,7 +5586,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Кликали, но счётчик не двинулся. «Не двинулся» — это то, что мы
         # видим, а не то, что произошло: клик мог и зарегистрироваться, просто
         # позже. Поэтому не уходим молча, а снимаем за собой.
-        clean = not clicked or _library_undo_selection(page, tiles, clicked, before)
+        clean = (before == 0 and _library_selected_count(page) == 0) if not clicked else _library_undo_selection(page, tiles, clicked, before)
         sight = _library_sight(page, filename)
         if saved_page:
             sight["page"] = saved_page
@@ -5609,13 +5607,19 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     # multi-media ad Meta then spins into extra variations, which is not the
     # campaign the operator built on the dashboard.
     for i in reversed(clicked[:-1]):
-        if _library_selected_count(page) <= before + 1:
+        count = _library_selected_count(page)
+        if count is None:
+            return REUSE_DIRTY
+        if count <= 1:
             break
         try:
             tiles.nth(i).click(timeout=3000)
         except Exception:
             continue
         _sleep_h(0.8)
+
+    if _library_selected_count(page) != 1:
+        return REUSE_DIRTY
 
     # Дальше сетка уже изменена. Любой отказ здесь — либо чистое отступление
     # (мы сняли выбор и сетка как была), либо `dirty`. Третьего не дано, и
@@ -5637,6 +5641,26 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         _close_creative_setup_modal(page)
         _sleep_h(0.5)
         if "/ads/edit/" in page.url and _verify_ad_media_present(page):
+            right, detail = _verify_ad_media_is_the_file(page, filename)
+            if not right:
+                # Не тот файл или файл не обработался: откатываемся так, чтобы
+                # поверх можно было загрузить файл обычным путём.
+                try:
+                    from src.fb_ads_rpa import page_capture as _pages
+
+                    detail["page"] = _pages.capture(
+                        page, step="ad_media_" + str(detail.get("why")), diag=detail)
+                except Exception:
+                    pass
+                _telemetry.record("ad_creative_reuse", False,
+                                  note=str(detail.get("why")), diag=detail)
+                return _retreat(page, tiles, clicked, before)
+            try:
+                from src.fb_ads_rpa import page_capture as _pages
+
+                _pages.capture(page, step="ad_media_ready", diag=detail)
+            except Exception:
+                pass
             return REUSE_ATTACHED
         # Мастер продвинулся, а медиа на объявлении нет. Выбор при этом
         # где-то остался, и снять его отсюда уже нечем: сетки на экране нет.
@@ -5652,13 +5676,14 @@ def _retreat(page: Page, tiles, clicked: list[int], before: int) -> str:
     написать `return False` — ровно та ошибка, которая стоила отключения всей
     возможности 24.08.
     """
+    clean = (before == 0 and _library_selected_count(page) == 0) if not clicked else _library_undo_selection(page, tiles, clicked, before)
+    if not clean:
+        return REUSE_DIRTY
     try:
         _close_creative_setup_modal(page)
     except Exception:
-        pass
-    if not clicked:
-        return REUSE_ABSENT
-    return REUSE_ABSENT if _library_undo_selection(page, tiles, clicked, before) else REUSE_DIRTY
+        return REUSE_DIRTY
+    return REUSE_ABSENT
 
 
 def reuse_before_upload(page: Page, creative_path: str) -> bool | None:
@@ -6935,6 +6960,69 @@ def _media_block_filled_now(page: Page) -> bool:
         ))
     except Exception:
         return False
+
+
+_AD_MEDIA_STATE_JS = r"""
+  (stem) => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const visible = [...document.querySelectorAll('*')]
+      .filter(e => e.offsetParent !== null && e.children.length === 0)
+      .map(e => norm(e.textContent))
+      .filter(Boolean);
+    const low = visible.map(t => t.toLowerCase());
+    const want = (stem || '').toLowerCase();
+    // Имя файла Meta показывает по-разному: «2012.mp4», «2012», иногда с
+    // суффиксом копии. Совпадением считаем вхождение основы имени.
+    const named = want ? low.filter(t => t.includes(want)) : [];
+    const processing = low.some(t => t.includes('processing') || t.includes('being processed'));
+    const failed = low.some(t => t.includes("couldn't be processed") || t.includes('could not be processed')
+      || t.includes('failed to process') || t.includes('processing failed')
+      || t.includes("media couldn't") || t.includes('upload failed'));
+    // Имена ДРУГИХ файлов рядом с медиа: нашего нет, а чужой есть — взяли не то.
+    const others = low.filter(t => /\.(mp4|mov|jpg|jpeg|png|gif|webm)\b/.test(t) && (!want || !t.includes(want)));
+    return { named: named.slice(0, 5), others: others.slice(0, 5),
+             processing: processing, failed: failed };
+  }
+"""
+"""Что сейчас в медиа-блоке объявления: наше имя, чужие имена, обработка, ошибка."""
+
+
+def _ad_media_state(page: Page, filename: str) -> dict:
+    stem = Path(filename or "").stem.lower()
+    try:
+        return page.evaluate(_AD_MEDIA_STATE_JS, stem) or {}
+    except Exception as exc:
+        return {"error": str(exc)[:80]}
+
+
+_MEDIA_PROCESSING_MAX_S = 180
+
+
+def _verify_ad_media_is_the_file(page: Page, filename: str) -> tuple[bool, dict]:
+    """Прикрепился ли ИМЕННО наш файл и пригоден ли он (ACL-1171/1192).
+
+    Проверка «медиа есть» пропускает две беды: прикрепилась чужая плитка
+    (в медиатеке несколько похожих имён) и файл, который Meta не смогла
+    обработать — объявление с таким медиа не опубликуется.
+    """
+    deadline = time.time() + _MEDIA_PROCESSING_MAX_S
+    state: dict = {}
+    while True:
+        state = _ad_media_state(page, filename)
+        if state.get("failed"):
+            return False, {"state": state, "why": "processing_failed"}
+        if not state.get("processing"):
+            break
+        if time.time() >= deadline:
+            return False, {"state": state, "why": "still_processing"}
+        _sleep_h(2.0)
+    if state.get("named"):
+        return True, {"state": state}
+    if state.get("others"):
+        return False, {"state": state, "why": "other_file_attached"}
+    # Имя видно не всегда — Meta подписывает не каждую плитку. Само наличие
+    # медиа уже проверено отдельно, поэтому это не отказ.
+    return True, {"state": state, "why": "name_not_shown"}
 
 
 def _verify_ad_media_present(page: Page) -> bool:
