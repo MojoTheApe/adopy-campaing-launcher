@@ -58,19 +58,23 @@ The same installer is distributed to every campaign manager. No personal
 configuration package is required. On first launch, the setup wizard asks the
 user to:
 
-1. enter their name as it appears in the Stats workbook;
-2. paste the company Accounts Google Sheet link;
-3. choose the company Google access JSON supplied by support;
-4. choose the Stats workbook, Upload FB workbook, and Creatives folder;
-5. complete read-only Google authorization;
-6. paste and test their Multilogin automation token.
+1. enter their name as it appears in the CM column of the Stats workbook;
+2. choose the Stats workbook and the Creatives folder (default
+   `Documents\ACL\Creatives`, created if missing);
+3. paste and test their Multilogin automation token.
 
-The wizard derives the manager's account labels from the Stats workbook and
-fills available ad-account IDs from the Upload FB workbook. It writes the
-machine-local configuration transactionally under `%LOCALAPPDATA%\ACL` and
-fixes the production safety mode. After the dashboard opens, the user connects
-each account to an open Multilogin profile through the existing Accounts UI;
-they never edit `.env`, CSV, JSON, or profile UUIDs.
+No Google Sheet link, Google access file or Upload FB workbook is asked for
+(ACL-1239): targets and ad texts come from the team library (ACL-1241), the
+account list from the Stats workbook, and ad-account IDs from each Multilogin
+profile when the user connects it on the Accounts screen. The wizard writes the
+machine-local configuration transactionally under `%LOCALAPPDATA%\ACL` and fixes
+the production safety mode; the user never edits `.env`, CSV, JSON, or profile
+UUIDs. The Stats workbook and Creatives folder can be changed later in the
+dashboard (Accounts → This computer).
+
+A promoted `acl-release-*` tag is published as a GitHub Release by
+`.github/workflows/release.yml`: the installer, its `.sha256` and `release.json`
+(`scripts/acl_release_manifest.py`).
 
 ## Support diagnostics
 
