@@ -63,6 +63,7 @@ def test_upload_waits_for_the_actual_compressed_filename(browser, tmp_path, monk
             result = meta_dom.upload_ad_creative(page, 'video', str(original))
         if reuse.startswith('dirty_'):
             assert result is False
+            assert meta_dom.last_upload_diag()['reuse_unverified'] is True
             assert page.evaluate('window.uploadFilter === undefined')
             assert page.locator('#editor').inner_text() == ''
             return
