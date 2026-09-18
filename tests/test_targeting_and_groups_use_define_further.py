@@ -212,3 +212,38 @@ def test_a_filled_second_group_is_confirmed_in_its_own_box(page, monkeypatch):
     assert page.evaluate(
         "[...document.querySelectorAll('.group')].map(g => g.querySelector('.chips').textContent)"
     ) == ["Investment bankingAsset managementInvestment banking", "Business jetYacht club"]
+
+
+@pytest.mark.parametrize("kind", ["input", "option", "hidden"])
+def test_unselected_term_does_not_fill_the_second_group(page, monkeypatch, kind):
+    monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
+    page.set_content(_CHIPS_PAGE)
+    page.evaluate("window.dropTerms = true")
+    page.evaluate("""kind => document.addEventListener('paste', e => {
+      if (e.target.dataset.group !== '2') return;
+      const term = e.clipboardData.getData('text/plain');
+      if (kind === 'input') e.target.value = term;
+      else {
+        const el = document.createElement('div');
+        el.textContent = term;
+        if (kind === 'option') el.setAttribute('role', 'option');
+        else el.hidden = true;
+        e.target.parentElement.appendChild(el);
+      }
+    })""", kind)
+    page.focus("input[data-group='1']")
+    assert md.paste_targeting_groups(page, "Investment banking [AND] Investment banking") is False
+    assert page.locator('.group').nth(1).locator('.chips').inner_text() == ''
+
+
+def test_an_unreadable_group_is_not_accepted(page, monkeypatch):
+    monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
+    page.set_content(_CHIPS_PAGE)
+    page.focus("input[data-group='1']")
+    monkeypatch.setattr(md, "_group_has_terms", lambda *a: {"found": False, "why": "synthetic unavailable DOM"})
+    assert md.paste_targeting_groups(page, "Investment banking [AND] Business jet") is False
+
+
+def test_typing_without_a_selected_suggestion_does_not_fill_a_group(page, monkeypatch):
+    monkeypatch.setattr(md, 'pick_first_suggestion', lambda p: False)
+    assert _player(page)._run_targeting('Banking [AND] Travel') is False

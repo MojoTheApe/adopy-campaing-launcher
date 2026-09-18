@@ -9216,9 +9216,20 @@ _TARGETING_GROUP_JS = r"""
       chosen = box;
     }
     if (!chosen) return { found: false, why: 'нет коробки группы' };
-    // Живая Meta кладёт интересы отдельными плашками (текст), синтетическая
-    // страница тестов — значением поля. Считаем и то, и другое.
-    const text = norm(chosen.textContent + ' ' + (last.value || ''));
+    // Search values, suggestions and hidden text never prove selection.
+    // This only filters negative evidence; the group/chip identity still
+    // requires verification against recorded Ads Manager markup.
+    const excluded = 'input,textarea,script,style,noscript,[role="option"],[role="listbox"],[role="menu"],[role="alert"],[role="status"],[aria-hidden="true"],[hidden]';
+    const words = [];
+    const walker = document.createTreeWalker(chosen, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const parent = node.parentElement;
+      if (!parent || parent.closest(excluded) || !parent.getClientRects().length) continue;
+      const style = getComputedStyle(parent);
+      if (style.visibility === 'hidden' || style.visibility === 'collapse') continue;
+      words.push(node.textContent || '');
+    }
+    const text = norm(words.join(' '));
     const hits = terms.filter(t => text.includes(norm(t)));
     return { found: true, hits: hits, text: text.slice(0, 400) };
   }
@@ -9269,14 +9280,15 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
         # всей странице, и интерес первой группы подтверждал вторую (ACL-1219).
         terms = [t.strip() for t in group.split(",") if t.strip()]
         own = _group_has_terms(page, terms)
-        if own.get("found") and not own.get("hits"):
-            _telemetry.record("targeting", False, note="group_empty",
+        if not own.get("found") or not own.get("hits"):
+            reason = "group_empty" if own.get("found") else "group_unverified"
+            _telemetry.record("targeting", False, note=reason,
                               diag={"group": index + 1, "groups": len(groups),
                                     "terms": terms[:5], "box": own.get("text", "")[:200]})
             try:
                 from src.fb_ads_rpa import page_capture as _pc
 
-                _pc.capture(page, step=f"targeting_group{index + 1}_empty")
+                _pc.capture(page, step=f"targeting_group{index + 1}_{reason}")
             except Exception:
                 pass
             return False
