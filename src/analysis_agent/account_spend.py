@@ -586,11 +586,26 @@ def _attach_only(entry, account_label: str):
     except Exception:
         pass
     if running:
-        raise ProfileNotAttachable(
-            f"{account_label}: the profile was opened manually in MLX Desktop, so its window has no "
-            "debugging port to attach to. It will not be restarted, because a restart logged x01 out. "
-            "Close the profile and open it through automation; later reads will attach to that window."
-        )
+        # Как у Publish: вручную открытое окно (без отладочного порта) мягко
+        # останавливаем через API Multilogin — куки и вход сохраняются, другие
+        # профили не трогаются — и поднимаем заново с автоматизацией. Убивать
+        # окно чтению нельзя: жёсткий перезапуск однажды разлогинил x01, поэтому
+        # allow_kill=False, и при отказе API окно остаётся как было (ACL-1234).
+        try:
+            conn = rpa_browser.get_browser_provider("multilogin_attach").open(
+                entry, account_label, allow_restart=True, allow_kill=False)
+        except Exception as exc:  # noqa: BLE001
+            raise ProfileNotAttachable(
+                f"{account_label}: the profile is open in MLX Desktop and could not be reopened "
+                f"with automation: {exc}"
+            ) from exc
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+
+            _rt.record("spend_profile_restarted", True, diag={"account": account_label})
+        except Exception:
+            pass
+        return conn
     raise ProfileNotAttachable(
         f"{account_label}: the profile is not open. Open it through automation and leave the window open; "
         "the read will attach to it without restarting anything."
@@ -1530,6 +1545,40 @@ _TOTALS_ROW_ID = "-1"
 #: id тоже брался не оттуда: искалось любое число в 15-18 цифр в атрибутах, и
 #: первыми находились `<path d="M 25.19238815542512 ...">` — в путях SVG таких
 #: цепочек сколько угодно. Здесь id берётся из одного определённого места.
+_TOP_TABLE_JS = r"""
+() => {
+  const t = Array.from(document.querySelectorAll('[role="table"], [role="grid"]'))
+    .filter(el => el.getClientRects().length && !el.parentElement.closest('[role="table"], [role="grid"]'));
+  return t.length ? t[0].outerHTML : null;
+}
+"""
+
+
+def _snapshot_empty_table(page, level: str, how: str) -> None:
+    """Таблица нашлась, а строк в ней нет — сохранить, что было на экране.
+
+    18.09 11:24 (FacebookDoc19): спенд прочитался ($228.85), а дерево — «campaign
+    table has no rows (no-row-surfaces)», и скриншота не было. Гадать, фильтр ли
+    это, недорисованные строки или новая разметка, по пустому отчёту нельзя.
+    Страница Ads Manager больше 4 МБ и обрезается, поэтому саму таблицу кладём
+    рядом отдельным файлом целиком.
+    """
+    try:
+        from src.fb_ads_rpa import page_capture as _pc
+
+        folder = _pc.capture(page, step=f"tree_{level}_no_rows", diag={"level": level, "how": how})
+        if not folder:
+            return
+        table = page.evaluate(_TOP_TABLE_JS)
+        if table:
+            body, _cut = _pc.scrub_html(table)
+            from pathlib import Path as _P
+
+            (_P(folder) / "block_table.html").write_text(body, encoding="utf-8")
+    except Exception:
+        pass
+
+
 _READ_TREE_JS = r"""
 (level) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
@@ -1555,7 +1604,55 @@ _READ_TREE_JS = r"""
     return refuse('table-loading');
 
   const marked = t.querySelectorAll('[data-surface*="table_row:"]');
-  if (!marked.length) return {rows: [], how: 'no-row-surfaces', kinds: []};
+  if (!marked.length) {
+    // Новая таблица (FacebookDoc19, 18.09): меток table_row нет вовсе, ссылка
+    // на имени ведёт в «#», id кампании в строке нет. Имя — в подсказке у
+    // ссылки, переключатель — role=switch, а правые ячейки идут в том же
+    // порядке, что заголовки после toggle и name. Читаем по имени и честно
+    // говорим, что id нет (how: by-name).
+    const heads = Array.from(t.querySelectorAll('[data-surface*="table_column_header:"]'))
+      .filter(visible)
+      .map(h => (h.getAttribute('data-surface') || '').split(':').pop());
+    const dataCols = heads.filter(c => c !== 'toggle' && c !== 'name');
+    const nameEls = Array.from(t.querySelectorAll('[data-tooltip-content]'))
+      .filter(e => visible(e) && e.querySelector('a') && norm(e.getAttribute('data-tooltip-content')));
+    if (!nameEls.length) return {rows: [], how: 'no-row-surfaces', kinds: []};
+    const firstLeaf = (c) => {
+      const leaf = Array.from(c.querySelectorAll('*')).find(e => visible(e) && !e.children.length && norm(e.textContent));
+      return leaf ? norm(leaf.textContent) : norm(c.innerText);
+    };
+    const rows = [];
+    for (const n of nameEls) {
+      // The recorded layout wraps each virtualized row in presentation.
+      // Counting names while walking upwards escapes the row when there is
+      // only one campaign, and then reads the table headings as its values.
+      const row = n.closest('[role="presentation"]');
+      if (!row || !t.contains(row) ||
+          nameEls.filter(e => row.contains(e)).length !== 1)
+        return refuse('unrecognized-name-row');
+      let wide = row;
+      const q = [row];
+      while (q.length) { const x = q.shift(); if (x.children.length > wide.children.length) wide = x; q.push(...x.children); }
+      const cells = Array.from(wide.children);
+      const val = (col) => { const i = dataCols.indexOf(col); return i >= 0 && i < cells.length ? firstLeaf(cells[i]) : ''; };
+      const sw = row.querySelector('[role="switch"]');
+      const aria = sw ? sw.getAttribute('aria-checked') : null;
+      rows.push({
+        id: '', id_from: 'none', name: norm(n.getAttribute('data-tooltip-content')),
+        switch: aria === 'true' ? 'on' : aria === 'false' ? 'off' : 'unknown',
+        switch_label: sw ? norm(sw.getAttribute('aria-label')) : '',
+        delivery: val('delivery'), results: val('results'),
+        cost_per_result: val('cost_per_result'), spend: val('spend'), kinds: [],
+      });
+    }
+    // Уровень — из меток подсказок Meta: /am/table/hc(type=recs,level=CAMPAIGN_GROUP,id=…).
+    const lk = new Set();
+    Array.from(t.querySelectorAll('[data-surface*="level="]')).filter(visible).forEach(e => {
+      const m = (e.getAttribute('data-surface') || '').match(/level=([A-Z_]+)/);
+      if (m) lk.add(m[1]);
+    });
+    return {rows, how: 'by-name', kinds: Array.from(lk)};
+  }
 
   const rows = new Map();
   const kinds = new Set();
@@ -1689,14 +1786,22 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         return [], how, f"{level} table: {got['error']}"
     rows = got.get("rows") or []
     want = _LEVEL_KIND[level]
+    by_name = str(got.get("how") or "") == "by-name"
+    if by_name:
+        # Новая таблица без id: принимаем строку, если у неё есть имя. Выключать
+        # такие объекты по id нельзя — turn_off это знает.
+        if not isinstance(rows, list) or any(
+            not isinstance(r, dict) or not str(r.get("name") or "").strip() for r in rows
+        ):
+            return [], how, f"{level} table: a row has no name"
     # Every accepted object must identify itself, not borrow another row's kind.
-    if not isinstance(rows, list) or any(
+    if not by_name and (not isinstance(rows, list) or any(
         not isinstance(r, dict)
         or not re.fullmatch(r"[0-9]+", str(r.get("id") or ""))
         or not str(r.get("name") or "").strip()
         or set(r.get("kinds") or []) != {want}
         for r in rows
-    ):
+    )):
         return [], how, f"{level} table: a row did not confirm its id, name or object type ({want})"
     objects = [
         AdObject(
@@ -1715,6 +1820,7 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         if isinstance(r, dict)
     ]
     if not objects:
+        _snapshot_empty_table(page, level, how)
         return [], how, f"{level} table has no rows ({how})"
 
     # Уровень сверяется по тому, что Meta написала о самих строках, а не по
@@ -1731,6 +1837,8 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         )
     if not kinds:
         return [], how, f"{level} level: the page did not say what these objects are"
+    if by_name:
+        return objects, how, f"read by name: this account's table has no {level} ids"
     warning = (
         "read the rendered rows; the list scrolls, so completeness is not confirmed"
         if got.get("partial") else ""
@@ -2182,6 +2290,10 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         return out
     if not expected_name.strip():
         out.error = "row name is required — read the account again"
+        return out
+    if not str(object_id).strip():
+        out.error = ("This account shows the new Ads Manager table without campaign ids. "
+                     "Turning off by name is not available yet; turn it off in Ads Manager.")
         return out
     if not str(object_id).isdigit():
         out.error = "object id must contain only digits"
