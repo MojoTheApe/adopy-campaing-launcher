@@ -8542,7 +8542,9 @@ def targeting_input_count(page: Page) -> int:
             """
             () => [...document.querySelectorAll('input, textarea')].filter((inp) => {
               const r = inp.getBoundingClientRect();
-              if (r.width <= 2 || r.height <= 2) return false;
+              if (r.width <= 2 || r.height <= 2 ||
+                  getComputedStyle(inp).visibility === 'hidden' ||
+                  inp.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
               const blob = ((inp.getAttribute('placeholder') || '') + ' ' +
                             (inp.getAttribute('aria-label') || '')).toLowerCase();
               if (['existing audience', 'audiencia existente', 'saved audience'].some(b => blob.includes(b))) return false;
@@ -8589,7 +8591,9 @@ def fill_targeting_interest(page: Page, text: str, *, last: bool = False) -> boo
       const visible = (el) => {
         if (!el || el.offsetParent === null) return false;
         const r = el.getBoundingClientRect();
-        return r.width > 2 && r.height > 2;
+        return r.width > 2 && r.height > 2 &&
+          getComputedStyle(el).visibility !== 'hidden' &&
+          !el.closest('[hidden], [inert], [aria-hidden="true"]');
       };
       const bad = ['existing audience', 'audiencia existente', 'saved audience'];
       const good = [
@@ -8660,7 +8664,9 @@ def _focus_last_targeting_input(page: Page) -> bool:
             () => {
               const inputs = [...document.querySelectorAll('input, textarea')].filter((inp) => {
                 const r = inp.getBoundingClientRect();
-                if (r.width <= 2 || r.height <= 2) return false;
+                if (r.width <= 2 || r.height <= 2 ||
+                  getComputedStyle(inp).visibility === 'hidden' ||
+                  inp.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
                 const blob = ((inp.getAttribute('placeholder') || '') + ' ' +
                               (inp.getAttribute('aria-label') || '')).toLowerCase();
                 if (['existing audience', 'audiencia existente', 'saved audience'].some(b => blob.includes(b))) return false;

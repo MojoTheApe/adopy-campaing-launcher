@@ -301,3 +301,17 @@ def test_missing_group_evidence_fails_the_live_paste_path(page, monkeypatch):
 def test_failed_recipe_suggestion_is_not_a_selected_interest(page, monkeypatch):
     monkeypatch.setattr(md, "pick_first_suggestion", lambda *a: False)
     assert _player(page)._run_targeting("Business jet") is False
+
+
+def test_an_aria_hidden_group_does_not_count_as_define_further_success(page):
+    page.evaluate("""() => document.getElementById('define').onclick = () => {
+      addGroup(); document.querySelector('.group:last-child').setAttribute('aria-hidden', 'true');
+    }""")
+    assert md.click_define_further(page) is False
+    assert md.targeting_input_count(page) == 1
+
+
+def test_a_single_group_does_not_borrow_a_chip_from_elsewhere(page):
+    page.set_content("""<aside><ul><li>Business jet<button>Close</button></li></ul></aside>
+      <div role="presentation"><input placeholder="Add demographics, interests or behaviours"></div>""")
+    assert md._group_has_terms(page, ["Business jet"])["hits"] == []
