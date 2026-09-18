@@ -1545,6 +1545,40 @@ _TOTALS_ROW_ID = "-1"
 #: id тоже брался не оттуда: искалось любое число в 15-18 цифр в атрибутах, и
 #: первыми находились `<path d="M 25.19238815542512 ...">` — в путях SVG таких
 #: цепочек сколько угодно. Здесь id берётся из одного определённого места.
+_TOP_TABLE_JS = r"""
+() => {
+  const t = Array.from(document.querySelectorAll('[role="table"], [role="grid"]'))
+    .filter(el => el.getClientRects().length && !el.parentElement.closest('[role="table"], [role="grid"]'));
+  return t.length ? t[0].outerHTML : null;
+}
+"""
+
+
+def _snapshot_empty_table(page, level: str, how: str) -> None:
+    """Таблица нашлась, а строк в ней нет — сохранить, что было на экране.
+
+    18.09 11:24 (FacebookDoc19): спенд прочитался ($228.85), а дерево — «campaign
+    table has no rows (no-row-surfaces)», и скриншота не было. Гадать, фильтр ли
+    это, недорисованные строки или новая разметка, по пустому отчёту нельзя.
+    Страница Ads Manager больше 4 МБ и обрезается, поэтому саму таблицу кладём
+    рядом отдельным файлом целиком.
+    """
+    try:
+        from src.fb_ads_rpa import page_capture as _pc
+
+        folder = _pc.capture(page, step=f"tree_{level}_no_rows", diag={"level": level, "how": how})
+        if not folder:
+            return
+        table = page.evaluate(_TOP_TABLE_JS)
+        if table:
+            body, _cut = _pc.scrub_html(table)
+            from pathlib import Path as _P
+
+            (_P(folder) / "block_table.html").write_text(body, encoding="utf-8")
+    except Exception:
+        pass
+
+
 _READ_TREE_JS = r"""
 (level) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
@@ -1730,6 +1764,7 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         if isinstance(r, dict)
     ]
     if not objects:
+        _snapshot_empty_table(page, level, how)
         return [], how, f"{level} table has no rows ({how})"
 
     # Уровень сверяется по тому, что Meta написала о самих строках, а не по
