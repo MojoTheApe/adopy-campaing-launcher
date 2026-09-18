@@ -504,3 +504,35 @@ def test_an_empty_campaign_table_is_saved_for_diagnosis(monkeypatch, tmp_path):
     sp._snapshot_empty_table(_Page(), "campaign", "no-row-surfaces")
     assert saved["step"] == "tree_campaign_no_rows"
     assert "columnheader" in (tmp_path / "block_table.html").read_text(encoding="utf-8")
+
+
+# ── новая таблица Ads Manager без меток строк (FacebookDoc19, 18.09) ─────────
+
+def test_the_new_table_without_row_ids_is_read_by_name():
+    """Снимок живой таблицы: меток table_row нет, id кампаний в строках нет."""
+    import os
+    from pathlib import Path
+    from playwright.sync_api import sync_playwright
+
+    html = (Path(__file__).parent / "fixtures" / "meta" / "campaign_table_without_row_ids.html").read_text(encoding="utf-8")
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        try:
+            page = b.new_page()
+            page.set_content(html)
+            got = page.evaluate(sp._READ_TREE_JS, "campaign")
+        finally:
+            b.close()
+    assert got["how"] == "by-name"
+    rows = {r["name"]: r for r in got["rows"]}
+    assert list(rows) == ["Campaign 1", "Campaign 2", "Campaign 3", "Campaign 4", "Campaign 5"]
+    first = rows["Campaign 1"]
+    assert (first["id"], first["switch"], first["delivery"]) == ("", "on", "Active")
+    assert (first["results"], first["cost_per_result"], first["spend"]) == ("6", "$19.27", "$115.59")
+    assert rows["Campaign 3"]["switch"] == "off" and rows["Campaign 3"]["spend"] == "$0.00"
+    assert got["kinds"] == ["CAMPAIGN_GROUP"]
+
+
+def test_an_object_without_an_id_is_never_turned_off():
+    out = sp._turn_off("Acc", "campaign", "", expected_name="Campaign 1")
+    assert "without campaign ids" in out.error
