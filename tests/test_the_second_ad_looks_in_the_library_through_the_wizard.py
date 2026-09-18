@@ -133,13 +133,15 @@ class _Grid:
 def _wire(monkeypatch, grid):
     monkeypatch.setattr(md, "_library_tiles", lambda page, filename: grid)
     monkeypatch.setattr(md, "_library_search", lambda page, filename: True)
+    monkeypatch.setattr(md, "_library_tile_ready", lambda tile: True)
+    monkeypatch.setattr(md, "_tile_thumb_ids", lambda tile: ["111111_2222222222_3333333333_n"])
     monkeypatch.setattr(md, "_library_selected_count", lambda page: 1)   # всегда 1: эксклюзивно
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)
     monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: True)
     # These grid tests isolate selection; attachment identity has its own
     # browser tests and must be explicitly confirmed by this fixture.
-    monkeypatch.setattr(md, "_verify_ad_media_is_the_file", lambda page, filename: (True, {}))
+    monkeypatch.setattr(md, "_verify_ad_media_is_the_file", lambda page, filename, picked=None: (True, {}))
     monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
 
     class _Next:

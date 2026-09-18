@@ -6,8 +6,8 @@
 файл, который Meta не смогла обработать — объявление с таким медиа не
 опубликуется, а шаг отчитается успехом.
 
-Состояния сняты с живого редактора: выбранный файл, готовый файл, обработка,
-ошибка обработки.
+Готовый Media-блок записан с живой страницы. Имена и состояния ошибки/обработки
+ниже — синтетические мутации для регрессионных проверок.
 """
 from __future__ import annotations
 
@@ -39,25 +39,25 @@ def page(browser, monkeypatch):
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     ctx = browser.new_context(viewport={"width": 1280, "height": 800})
     p = ctx.new_page()
+    p.route("**/*", lambda route: route.abort())
     try:
         yield p
     finally:
         ctx.close()
 
 
-_READY = ("<div><div>Uploaded media</div><div>1 selected</div>"
-          "<div>2012.mp4</div><div>Change selections</div></div>")
-_OTHER = ("<div><div>Uploaded media</div><div>1 selected</div>"
-          "<div>9_ar_2221_story.mp4</div><div>Change selections</div></div>")
-_PROCESSING = ("<div><div>Uploaded media</div><div>2012.mp4</div>"
-               "<div>Processing your video</div></div>")
-_FAILED = ("<div><div>Uploaded media</div><div>2012.mp4</div>"
-           "<div>This media couldn't be processed. Try another file.</div></div>")
+IDENTITY = "813948786_38351125907864671_2841079256059848182_n"
+_RECORDED = (Path(__file__).parent / "fixtures/meta/ad_media_attached.html").read_text()
+# Captured ready structure with explicit synthetic filename/error states.
+_READY = _RECORDED.replace('>', '><div>2012.mp4</div>', 1)
+_OTHER = _READY.replace('2012.mp4', '9_ar_2221_story.mp4')
+_PROCESSING = _READY.replace('>', '><div>Processing your video</div>', 1)
+_FAILED = _READY.replace('>', "><div>This media couldn't be processed.</div>", 1)
 
 
 def test_our_file_on_the_ad_is_confirmed(page):
     page.set_content(_READY)
-    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4", [IDENTITY])
     assert ok is True
     assert detail["state"]["named"] == ["2012.mp4"]
 
@@ -65,7 +65,7 @@ def test_our_file_on_the_ad_is_confirmed(page):
 def test_someone_elses_file_is_not_our_creative(page):
     """Взяли соседнюю плитку — это отказ, а не «медиа есть»."""
     page.set_content(_OTHER)
-    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4", [IDENTITY])
     assert ok is False
     assert detail["why"] == "other_file_attached"
     assert detail["state"]["others"] == ["9_ar_2221_story.mp4"]
@@ -73,7 +73,7 @@ def test_someone_elses_file_is_not_our_creative(page):
 
 def test_a_file_meta_could_not_process_is_a_failure(page):
     page.set_content(_FAILED)
-    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4", [IDENTITY])
     assert ok is False
     assert detail["why"] == "processing_failed"
 
@@ -91,35 +91,35 @@ def test_processing_is_waited_out_and_then_confirmed(page, monkeypatch):
         return real(pg, filename)
 
     monkeypatch.setattr(md, "_ad_media_state", staged)
-    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4", [IDENTITY])
     assert ok is True and seen["n"] >= 2
 
 
 def test_processing_that_never_ends_is_a_failure(page, monkeypatch):
     page.set_content(_PROCESSING)
     monkeypatch.setattr(md, "_MEDIA_PROCESSING_MAX_S", 0)
-    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4", [IDENTITY])
     assert ok is False and detail["why"] == "still_processing"
 
 
 def test_an_unnamed_tile_cannot_confirm_the_intended_file(page):
     """Missing identity is unverified, even when generic media is present."""
-    page.set_content("<div><div>Uploaded media</div><div>Change selections</div></div>")
+    page.set_content(_RECORDED)
     ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
     assert ok is False and detail["why"] == "media_identity_unavailable"
 
 
 @pytest.mark.parametrize("other", ["2012_story.mp4", "2012.jpg", "prefix2012.mp4"])
 def test_a_similar_name_is_not_the_requested_file(page, other):
-    page.set_content("<section><div>Uploaded media</div><div>" + other + "</div></section>")
-    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    page.set_content(_READY.replace("2012.mp4", other))
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4", [IDENTITY])
     assert ok is False
     assert detail["why"] == "other_file_attached"
 
 
 def test_a_matching_label_cannot_override_conflicting_media(page):
-    page.set_content("<nav>2012.mp4</nav><section><div>Uploaded media</div><div>wrong.mp4</div></section>")
-    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    page.set_content("<nav>2012.mp4</nav>" + _READY.replace("2012.mp4", "wrong.mp4"))
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4", [IDENTITY])
     assert ok is False
     assert detail["why"] == "other_file_attached"
 

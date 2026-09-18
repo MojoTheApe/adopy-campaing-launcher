@@ -75,6 +75,7 @@ def grid(monkeypatch):
     g = _Grid()
     monkeypatch.setattr(md, "_library_tiles", lambda page, filename: g)
     monkeypatch.setattr(md, "_library_search", lambda page, filename: True)
+    monkeypatch.setattr(md, "_library_tile_ready", lambda tile: True)
     monkeypatch.setattr(md, "_library_selected_count", lambda page: len(g.selected))
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)
@@ -198,7 +199,7 @@ def test_a_wrong_or_broken_file_on_the_ad_refuses_the_step_without_upload(grid, 
     monkeypatch.setattr(md, "_roots", lambda page: [_Root()])
     monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: True)
     monkeypatch.setattr(md, "_verify_ad_media_is_the_file",
-                        lambda page, filename: (False, {"why": "other_file_attached"}))
+                        lambda page, filename, picked=None: (False, {"why": "other_file_attached"}))
     monkeypatch.setattr(md._telemetry, "record",
                         lambda step, ok, **kw: said.append({"step": step, "ok": ok, **kw}))
 
@@ -253,8 +254,10 @@ def _advancing_dialog(monkeypatch):
 
     monkeypatch.setattr(md, "_roots", lambda page: [_Root()])
     monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: True)
-    monkeypatch.setattr(md, "_verify_ad_media_is_the_file",
-                        lambda page, filename: (True, {"why": "name_not_shown"}))
+    monkeypatch.setattr(md, "_ad_media_state", lambda page, filename: {
+        "named": [], "others": [], "processing": False, "failed": False,
+        "ready": True, "thumbs": md._ad_media_thumb_ids(page),
+    })
     monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
 
     class _P:
