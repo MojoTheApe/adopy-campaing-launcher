@@ -1846,6 +1846,51 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
     return objects, how, warning
 
 
+_CLICK_CAMPAIGN_NAME_JS = r"""
+  (name) => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const el = [...document.querySelectorAll('[data-tooltip-content]')]
+      .find(e => norm(e.getAttribute('data-tooltip-content')) === name && e.querySelector('a'));
+    const a = el && el.querySelector('a');
+    if (!a) return false;
+    a.scrollIntoView({block: 'center'});
+    a.click();
+    return true;
+  }
+"""
+
+
+def _probe_byname_drill(page, parents: list, errors: list[str]) -> None:
+    """Таблица без id (Doc19): как открыть объявления кампании — пока неизвестно.
+
+    19.09: пользователю нужно раскрывать кампании в объявления, чтобы их
+    выключать. Номеров в строках нет — адрес с фильтром не собрать. Нажимаем
+    на имя первой кампании со спендом (только чтение: имя ведёт на её группы
+    и объявления), сохраняем снимок того, что открылось, и возвращаемся.
+    """
+    target = next((o for o in parents if not o.id and (o.spend or "").strip() not in ("", "—", "$0.00")), None)
+    if target is None:
+        return
+    before = page.url
+    try:
+        if not page.evaluate(_CLICK_CAMPAIGN_NAME_JS, target.name):
+            errors.append("by-name drill probe: the campaign name link was not found")
+            return
+        page.wait_for_timeout(4000)
+        _wait_for_grid(page)
+        from src.fb_ads_rpa import page_capture as _pc
+        _pc.capture(page, step="tree_byname_drill_probe",
+                    diag={"campaign": target.name, "url_before": before[:200], "url_after": page.url[:300]},
+                    blocks={"table": _TOP_TABLE_JS})
+    except Exception as exc:
+        errors.append(f"by-name drill probe failed: {str(exc)[:80]}")
+    finally:
+        try:
+            page.go_back(timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        except Exception:
+            pass
+
+
 def _read_settled_ads(page, *, timeout_s: float = 10.0) -> tuple[list[AdObject], str, str]:
     """Прочитать объявления одной кампании, когда список перестал меняться.
 
@@ -1931,6 +1976,9 @@ def _read_tree(
         objects.extend(o.to_dict() for o in parents)
 
         wanted = [p for p in parents if p.id]
+        if not wanted and parents:
+            # Таблица без id: разведка способа раскрыть кампанию (снимок).
+            _probe_byname_drill(page, parents, errors)
         if len(wanted) > TREE_MAX_PARENTS:
             # Молчаливое усечение читается как «это всё». Говорим вслух.
             errors.append(
