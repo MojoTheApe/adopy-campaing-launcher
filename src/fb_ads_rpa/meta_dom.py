@@ -10173,6 +10173,18 @@ def _only_wanted_in_summary(page: Page, keep_text: str) -> bool:
 
 _LOCATIONS_EDIT_JS = r"""
   () => {
+    // 20.09 00:16 SA_arc GMBL: «All languages» стояла под нижней панелью
+    // редактора, клик по её координатам попал в Close — редактор закрылся.
+    // Сначала прокрутить к цели, потом убедиться, что в точке — она сама.
+    const at = (t) => {
+      t.scrollIntoView({block: 'center'});
+      const r = t.getBoundingClientRect();
+      const x = r.x + r.width / 2, y = r.y + r.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      const nm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+      if (!hit || !(t.contains(hit) || (hit.contains(t) && nm(hit.textContent).length < 200))) return null;
+      return { x, y };
+    };
     const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
     const label = [...document.querySelectorAll('*')].find(e =>
       e.children.length === 0 && /^(Locations|Ubicaciones)$/i.test(norm(e.textContent))
@@ -10187,8 +10199,7 @@ _LOCATIONS_EDIT_JS = r"""
         return /edit|editar|pencil/.test(name) || (!norm(b.textContent) && r.width <= 48);
       });
       if (btns.length) {
-        const r = btns[btns.length - 1].getBoundingClientRect();
-        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        return at(btns[btns.length - 1]);
       }
     }
     return null;
@@ -10199,6 +10210,18 @@ _LOCATIONS_EDIT_JS = r"""
 
 _SUMMARY_ROW_JS = r"""
   ([label, valueHint]) => {
+    // 20.09 00:16 SA_arc GMBL: «All languages» стояла под нижней панелью
+    // редактора, клик по её координатам попал в Close — редактор закрылся.
+    // Сначала прокрутить к цели, потом убедиться, что в точке — она сама.
+    const at = (t) => {
+      t.scrollIntoView({block: 'center'});
+      const r = t.getBoundingClientRect();
+      const x = r.x + r.width / 2, y = r.y + r.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      const nm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+      if (!hit || !(t.contains(hit) || (hit.contains(t) && nm(hit.textContent).length < 200))) return null;
+      return { x, y };
+    };
     const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
     const leaves = [...document.querySelectorAll('*')]
       .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0);
@@ -10209,8 +10232,9 @@ _SUMMARY_ROW_JS = r"""
     const hit = leaves.find(e => re.test(norm(e.textContent))
       && Math.abs(e.getBoundingClientRect().top - head.getBoundingClientRect().top) < 80);
     const el = hit || head;
-    const r = el.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2, text: norm(el.textContent).slice(0, 60) };
+    const pt = at(el);
+    if (!pt) return null;
+    return { x: pt.x, y: pt.y, text: norm(el.textContent).slice(0, 60) };
   }
 """
 """Координаты значения свёрнутой строки — по ним и надо жать."""
@@ -10237,11 +10261,31 @@ def _click_summary_row(page: Page, label: str, value_hint: str) -> bool:
 
 _ROW_EXPANDER_JS = r"""
   (labelRe) => {
+    // 20.09 00:16 SA_arc GMBL: «All languages» стояла под нижней панелью
+    // редактора, клик по её координатам попал в Close — редактор закрылся.
+    // Сначала прокрутить к цели, потом убедиться, что в точке — она сама.
+    const at = (t) => {
+      t.scrollIntoView({block: 'center'});
+      const r = t.getBoundingClientRect();
+      const x = r.x + r.width / 2, y = r.y + r.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      const nm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+      if (!hit || !(t.contains(hit) || (hit.contains(t) && nm(hit.textContent).length < 200))) return null;
+      return { x, y };
+    };
     const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
     const re = new RegExp('^(' + labelRe + ')$', 'i');
     const label = [...document.querySelectorAll('*')].find(e =>
       e.children.length === 0 && re.test(norm(e.textContent)) && e.getBoundingClientRect().width > 0);
     if (!label) return null;
+    // 19.09 18:25 / 20.09 00:16 SA_arc: раскрывается вся строка — role=button
+    // aria-expanded=false на 10 уровней выше подписи. Только строка, не
+    // целый раздел (короткий текст).
+    const own = label.closest('[role="button"][aria-expanded="false"]');
+    if (own && norm(own.textContent).length < 200) {
+      own.scrollIntoView({block: 'center'});
+      return at(label);
+    }
     let row = label.parentElement;
     for (let i = 0; i < 6 && row; i++, row = row.parentElement) {
       const exp = [...row.querySelectorAll('[aria-expanded="false"]')].filter(b => {
@@ -10250,8 +10294,7 @@ _ROW_EXPANDER_JS = r"""
           (label.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
       });
       if (exp.length) {
-        const r = exp[0].getBoundingClientRect();
-        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        return at(exp[0]);
       }
     }
     return null;
@@ -11760,6 +11803,18 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
 
 _LANG_EDIT_JS = r"""
   () => {
+    // 20.09 00:16 SA_arc GMBL: «All languages» стояла под нижней панелью
+    // редактора, клик по её координатам попал в Close — редактор закрылся.
+    // Сначала прокрутить к цели, потом убедиться, что в точке — она сама.
+    const at = (t) => {
+      t.scrollIntoView({block: 'center'});
+      const r = t.getBoundingClientRect();
+      const x = r.x + r.width / 2, y = r.y + r.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      const nm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+      if (!hit || !(t.contains(hit) || (hit.contains(t) && nm(hit.textContent).length < 200))) return null;
+      return { x, y };
+    };
     const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
     const label = [...document.querySelectorAll('*')].find(e =>
       e.children.length === 0 && /^(Languages|Idiomas)$/i.test(norm(e.textContent))
@@ -11774,8 +11829,7 @@ _LANG_EDIT_JS = r"""
         return /edit|изменить|editar|pencil/.test(name) || (!norm(b.textContent) && r.width <= 48);
       });
       if (btns.length) {
-        const r = btns[btns.length - 1].getBoundingClientRect();
-        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        return at(btns[btns.length - 1]);
       }
     }
     return null;

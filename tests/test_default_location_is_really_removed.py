@@ -233,3 +233,39 @@ def test_a_summary_row_with_only_an_expander_is_opened_by_it(page, monkeypatch):
                             "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
     assert md._click_locations_edit(page) is True
     assert clicked["at"] == "arrow", clicked
+
+
+def _record_clicks(page, monkeypatch):
+    clicked = {}
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: clicked.update(at=pg.evaluate(
+                            "([x,y]) => { const e = document.elementFromPoint(x,y); "
+                            "return e && (e.closest('[id]') || {}).id; }", [x, y])))
+    return clicked
+
+
+def test_a_whole_row_button_deep_above_the_label_is_opened_after_scrolling(page, monkeypatch):
+    """20.09 00:16 SA_arc GMBL: вся строка — role=button aria-expanded=false
+    на 10 уровней выше подписи, и строка ниже края окна."""
+    deep = "<div>" * 9 + "<span>Locations</span><span>​</span>" + "</div>" * 9
+    page.set_content(
+        "<div style='height:2500px'></div>"
+        "<div role='button' aria-expanded='false' id='row'>" + deep
+        + "<div>Inclusion: Saudi Arabia, United States</div></div>"
+        "<div style='height:2500px'></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_locations_edit(page) is True
+    assert clicked["at"] == "row", clicked
+
+
+def test_a_row_hidden_under_the_editor_footer_is_never_clicked_through(page, monkeypatch):
+    """20.09 00:16 SA_arc GMBL: «All languages» под нижней панелью с Close —
+    клик по координатам закрыл редактор. Такую точку не жмём."""
+    page.set_content(
+        "<div style='position:fixed;left:0;right:0;top:0;bottom:0;z-index:5;background:#fff'>"
+        "<button id='close'>Close</button></div>"
+        "<div><div>Languages</div><div id='val'>All languages</div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_languages_edit(page) is False
+    assert "at" not in clicked, clicked
