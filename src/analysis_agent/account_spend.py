@@ -1857,10 +1857,13 @@ def _read_settled_ads(page, *, timeout_s: float = 10.0) -> tuple[list[AdObject],
     """
     import time as _time
 
-    deadline = _time.monotonic() + timeout_s
     got, how, err = read_level(page, "ad")
+    pause = getattr(page, "wait_for_timeout", None)
+    if pause is None:  # не браузер (подставная страница) — ждать нечего
+        return got, how, err
+    deadline = _time.monotonic() + timeout_s
     while _time.monotonic() < deadline:
-        page.wait_for_timeout(1500)
+        pause(1500)
         again, how2, err2 = read_level(page, "ad")
         if [o.id for o in again] == [o.id for o in got]:
             return again, how2, err2
