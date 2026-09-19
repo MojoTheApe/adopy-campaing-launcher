@@ -10480,11 +10480,32 @@ def _click_locations_edit(page: Page) -> bool:
     try:
         pt = page.evaluate(_LOCATIONS_EDIT_JS)
     except Exception:
+        pt = None
+    how = "pencil"
+    if pt:
+        _cdp_mouse_click(page, pt["x"], pt["y"])
+    elif _click_row_expander(page, "Locations|Ubicaciones"):
+        how = "expander"
+    elif _click_summary_row(page, "Locations|Ubicaciones", "^(Inclusion|Inclusi\u00f3n)\\s*:"):
+        how = "summary"
+    else:
+        _telemetry.record("locations_open", False, note="nothing_to_click")
         return False
-    if not pt:
-        return _click_row_expander(page, "Locations|Ubicaciones") or _click_summary_row(page, "Locations|Ubicaciones", "^(Inclusion|Inclusión)\\s*:")
-    _cdp_mouse_click(page, pt["x"], pt["y"])
-    _sleep_h(0.8)
+    # 20.09 02:35 (SA_arc Trading): строки читали через 0.8 с после клика — при
+    # сегодняшней медленной Meta карточка ещё не успевала раскрыться, и шаг
+    # падал с location_rows_not_read. Ждём её собственное поле поиска до 8 с.
+    opened = False
+    for _ in range(16):
+        try:
+            opened = bool(page.evaluate(
+                """() => [...document.querySelectorAll('input')].some(i =>
+                  /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''))"""))
+        except Exception:
+            opened = False
+        if opened:
+            break
+        _sleep_h(0.5)
+    _telemetry.record("locations_open", opened, note=how)
     return True
 
 
