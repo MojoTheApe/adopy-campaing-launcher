@@ -41,7 +41,9 @@ shortcuts, and keeps all user configuration under `%LOCALAPPDATA%\ACL`.
 
 CI builds the actual combined runtime, exercises packaged identity and local
 targeting, starts the backend twice, and tests installation, repair and removal
-with configuration-preservation sentinels. Automatic updates remain disabled.
+with configuration-preservation sentinels. Nothing updates on its own: the
+dashboard offers a new release and installs it only when the user clicks
+Update (see *Updates* below).
 No release tag or public installer release is created by a code merge. The owner
 has deferred the manual Windows/Multilogin pilot until after integration; CI is
 not evidence of a successful live campaign run. See [integration review](INTEGRATION-2026-09-08.md).
@@ -75,6 +77,32 @@ dashboard (Accounts → This computer).
 A promoted `acl-release-*` tag is published as a GitHub Release by
 `.github/workflows/release.yml`: the installer, its `.sha256` and `release.json`
 (`scripts/acl_release_manifest.py`).
+
+## Updates (ACL-1240)
+
+The installed dashboard reads `release.json` of the latest GitHub Release at most
+once a day (`src/web/release_updates.py`). The releases repository and a
+read-only token are baked into the build as `acl-update-channel.json` from the
+release workflow's `ACL_RELEASES_REPO` / `ACL_UPDATE_TOKEN`; builds without them
+simply offer no updates. The token never appears in the UI, logs or diagnostics.
+
+When the user clicks **Update to X**, the dashboard downloads the installer,
+keeps it only if size and SHA-256 match `release.json`, starts
+`ACL.exe --apply-update` (`packaging/windows/updater.py`) and exits. The helper
+runs from the old version's folder, installs silently into
+`versions\<new version>`, starts it and waits for `/health` to report the new
+version. If the installer fails or the new version does not answer, it starts
+the previous version again and restores the shortcuts and `current.json`. The
+outcome goes to `%LOCALAPPDATA%\ACL\updates\last_update.json`, and the dashboard
+shows a failed attempt once. An unsuccessful recovery is reported separately;
+an installer that cannot be stopped requires support before ACL is restarted.
+Updates refuse active/queued publishing and active browser reads, reserve the
+idle runtime before handoff, and reject a second concurrent Update request.
+
+Release publication verifies the annotated tag, current master SHA and the
+referenced successful full master CI run through GitHub. Assets are uploaded
+to a draft before it becomes visible; an existing release tag is never replaced.
+Shared-library access and company Google sign-in remain separate setup work.
 
 ## Support diagnostics
 

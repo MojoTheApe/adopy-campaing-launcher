@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import re
 import subprocess
@@ -67,11 +68,28 @@ def build_current_payload(build: dict[str, object]) -> dict[str, object]:
     }
 
 
+def build_update_channel(env: dict[str, str] | None = None) -> dict[str, object]:
+    """Where the installed build looks for updates (ACL-1240).
+
+    Filled from the release workflow's ACL_RELEASES_REPO / ACL_UPDATE_TOKEN; a
+    build without them (pull-request CI, local builds) simply has no channel and
+    the dashboard says updates are not configured. The token is read-only and,
+    by design, scoped to the releases repository only.
+    """
+    env = os.environ if env is None else env
+    repo = (env.get("ACL_RELEASES_REPO") or "").strip()
+    token = (env.get("ACL_UPDATE_TOKEN") or "").strip()
+    if bool(repo) != bool(token):
+        raise ValueError("ACL_RELEASES_REPO and ACL_UPDATE_TOKEN must be set together")
+    return {"schema": 1, "repo": repo, "token": token}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--current-output", type=Path)
+    parser.add_argument("--channel-output", type=Path)
     args = parser.parse_args()
 
     payload = build_payload(args.version)
@@ -88,6 +106,11 @@ def main() -> int:
             encoding="utf-8",
         )
         print(f"Wrote current version pointer: {args.current_output}")
+    if args.channel_output:
+        channel = build_update_channel()
+        args.channel_output.parent.mkdir(parents=True, exist_ok=True)
+        args.channel_output.write_text(json.dumps(channel, indent=2) + "\n", encoding="utf-8")
+        print("Update channel: " + (str(channel["repo"]) if channel["repo"] else "not configured"))
     return 0
 
 

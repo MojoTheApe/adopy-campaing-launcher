@@ -1263,8 +1263,11 @@ def mlx_instance_labels() -> dict[str, str]:
 
 @app.get("/health", include_in_schema=False)
 async def health() -> JSONResponse:
-    """Fast identity check for the Windows launcher; never loads workbooks."""
-    return JSONResponse({"app": "ACL", "ok": True})
+    """Fast identity check for the Windows launcher; never loads workbooks.
+
+    `version` lets the update helper tell the new release from the old one.
+    """
+    return JSONResponse({"app": "ACL", "ok": True, "version": _installed_release().get("tag", "")})
 
 
 @app.get("/acl/update/check")
@@ -1274,10 +1277,16 @@ async def acl_update_check(request: Request) -> JSONResponse:
     Reached on every page load, so it must never raise and never block for long:
     a machine with no network still has a dashboard to run.
     """
+    from starlette.concurrency import run_in_threadpool
     from src.web import acl_update
 
     skip_fetch = (request.query_params.get("fetch") or "1").strip().lower() in {"0", "false", "no"}
     try:
+        if getattr(sys, "frozen", False):
+            # Установленный ACL.exe: выпуски GitHub, не git (ACL-1240).
+            from src.web import release_updates
+            force = (request.query_params.get("force") or "").strip().lower() in {"1", "true", "yes"}
+            return JSONResponse(await run_in_threadpool(release_updates.check, force=force))
         return JSONResponse(acl_update.check(fetch=not skip_fetch))
     except Exception as exc:  # pragma: no cover - defensive
         return JSONResponse(
@@ -1295,6 +1304,9 @@ async def acl_update_apply() -> JSONResponse:
     """
     from src.web import acl_update
     from src.web.publish_jobs import active_job_count
+
+    if getattr(sys, "frozen", False):
+        return await _apply_release_update(active_job_count)
 
     if not acl_update.is_supervised():
         return JSONResponse(
@@ -1331,6 +1343,42 @@ async def acl_update_apply() -> JSONResponse:
     acl_update.request_restart(target=target)
     acl_update.schedule_exit()
     return JSONResponse({"ok": True, "target": target})
+
+
+async def _apply_release_update(active_jobs) -> JSONResponse:
+    """Serialize the download and reserve an idle runtime before restarting."""
+    from starlette.concurrency import run_in_threadpool
+    from src.web import acl_update, release_updates, publish_jobs
+    from src.fb_ads_rpa.operations import browser_operation
+
+    if not release_updates.apply_lock.acquire(blocking=False):
+        return JSONResponse({"ok": False, "error": "An update is already in progress."}, status_code=409)
+    restarting = reserved = browser_held = False
+    try:
+        if active_jobs():
+            return JSONResponse({"ok": False, "error": "Wait for campaign jobs to finish before updating."}, status_code=409)
+        setup, manifest = await run_in_threadpool(release_updates.download)
+        if active_jobs() or not publish_jobs.reserve_update():
+            return JSONResponse({"ok": False, "error": "Campaign jobs started during the download; try again when they finish."}, status_code=409)
+        reserved = True
+        browser_held = browser_operation.acquire(blocking=False)
+        if not browser_held:
+            return JSONResponse({"ok": False, "error": "Wait for browser reading to finish before updating."}, status_code=409)
+        release_updates.start_helper(setup, manifest)
+        acl_update.schedule_exit()
+        restarting = True
+        return JSONResponse({"ok": True, "target": manifest["version"]})
+    except (release_updates.UpdateError, OSError, ValueError, TypeError, KeyError) as exc:
+        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACL is still running."
+        return JSONResponse({"ok": False, "error": message}, status_code=400)
+    finally:
+        # A successful handoff deliberately keeps the reservations until exit.
+        if not restarting:
+            if browser_held:
+                browser_operation.release()
+            if reserved:
+                publish_jobs.release_update()
+            release_updates.apply_lock.release()
 
 
 def _enrich_country_overview(report: Dict[str, Any]) -> None:

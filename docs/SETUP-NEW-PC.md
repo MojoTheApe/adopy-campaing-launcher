@@ -15,8 +15,9 @@ account, no Python or Git to install.
 Get the token through the password manager, never by chat or email.
 
 You no longer need `Upload FB.xlsx`, a Google Sheet link, `oauth_client.json`,
-or a GitHub account. Targets and ad texts come from the team library inside the
-dashboard.
+or a GitHub account. Shared targets and ad texts require support to configure
+the team's private library on this computer. Until that is done, the library
+is local to this computer; finishing this wizard does not enable sharing.
 
 ---
 
@@ -80,13 +81,23 @@ Connect. ACL reads the ad account from the profile, so you type no IDs.
 
 ## Keeping ACL up to date
 
-When Evgeni sends a new installer, stop ACL first. Go to **Start → Adopy Campaign
-Launcher → Stop Campaign Launcher**; closing the browser tab alone does not stop
-it. Then run the new file. Your name, files, accounts, profiles and tokens stay
-as they are. They live in `%LOCALAPPDATA%\ACL`, outside the program folder.
+When a new version is out, the dashboard header shows **Update to <version>**.
+Hover over it or click it to see what changed. Click **Update** and confirm.
 
-An **Update** button in the dashboard, which will install new versions without a
-file from Evgeni, is coming next (ACL-1240).
+- Wait for a campaign run to finish first. While a run is in progress, ACL
+  refuses to update.
+- ACL downloads the new version, checks that the file is exactly the published
+  one, installs it and restarts. The page reloads by itself after a few minutes.
+- If the new version does not start, ACL tries to restore the previous version
+  and tells you the result. If recovery also fails, contact support; the error
+  does not claim that the old version was restored.
+
+Nothing updates on its own, and your name, files, accounts, profiles and tokens
+are never touched. They live in `%LOCALAPPDATA%\ACL`, outside the program folder.
+
+If Evgeni sends you an installer file instead, stop ACL first. Go to **Start →
+Adopy Campaign Launcher → Stop Campaign Launcher**; closing the browser tab alone
+does not stop it. Then run the new file.
 
 ---
 

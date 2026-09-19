@@ -378,6 +378,10 @@ def main() -> int:
         else:
             _show_message("Adopy Campaign Launcher diagnostics", f"Sanitized diagnostic bundle created:\n\n{output}")
         return 0
+    if "--apply-update" in args:
+        from updater import main as update_main
+
+        return update_main(args, _local_acl_dir())
     if "--stop-server" in args:
         return _stop_server()
     if "--settings" in args:

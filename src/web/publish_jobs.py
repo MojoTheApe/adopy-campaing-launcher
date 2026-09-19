@@ -28,6 +28,7 @@ from src.web.keep_awake import keep_display_awake
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
+_update_reserved = False
 # Serialises publishing PER PROFILE — see _run_job. Two accounts on two
 # profiles run at once; two jobs on one profile still queue (acl-1210).
 _publish_serial = publish_lease
@@ -72,6 +73,8 @@ def create_job(
     hand_off = True
     job_id = str(uuid.uuid4())
     with _jobs_lock:
+        if _update_reserved:
+            raise RuntimeError("ACL is restarting for an update. Wait until it returns before starting a campaign.")
         _jobs[job_id] = {
             "job_id": job_id,
             "account_label": account_label,
@@ -128,8 +131,25 @@ def active_job_count() -> int:
     with _jobs_lock:
         return sum(
             1 for job in _jobs.values()
-            if job.get("status") in {"pending", "running", "cancelling"}
+            if job.get("status") in {"pending", "queued", "running", "cancelling"}
         )
+
+
+def reserve_update() -> bool:
+    """Atomically refuse active jobs and block new jobs until restart."""
+    global _update_reserved
+    with _jobs_lock:
+        if _update_reserved or any(job.get("status") in {"pending", "queued", "running", "cancelling"}
+                                   for job in _jobs.values()):
+            return False
+        _update_reserved = True
+        return True
+
+
+def release_update() -> None:
+    global _update_reserved
+    with _jobs_lock:
+        _update_reserved = False
 
 
 def _is_cancelled(job_id: str) -> bool:
