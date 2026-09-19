@@ -104,7 +104,7 @@ def test_a_targeting_missing_from_the_library_is_named_not_substituted(enrich, m
     строку под превью.
     """
     monkeypatch.setattr(
-        "src.analysis_agent.gsheet_targeting.lookup_targeting_interests",
+        "src.analysis_agent.targeting_registry.resolve_interests",
         lambda name: "",
     )
     ref = {"interests": {"Day": '["Swing trading"]'}}
@@ -116,7 +116,7 @@ def test_a_targeting_missing_from_the_library_is_named_not_substituted(enrich, m
 
 def test_a_targeting_found_in_the_library_is_used(enrich, monkeypatch):
     monkeypatch.setattr(
-        "src.analysis_agent.gsheet_targeting.lookup_targeting_interests",
+        "src.analysis_agent.targeting_registry.resolve_interests",
         lambda name: "Investment, Trading",
     )
     d = enrich(_draft(ad_sets=[AdSetDraft("Set", targeting_label="FX")]))
@@ -176,10 +176,6 @@ def test_the_ad_text_comes_from_the_library(enrich, monkeypatch, tmp_path):
 
     monkeypatch.setattr(ar.paths, "get_local_config_dir", lambda: str(tmp_path))
     ar.add("AR Text 1", "للمزيد", "كم لديك من المال اليوم", "★★★★")
-    monkeypatch.setattr(
-        "src.analysis_agent.gsheet_ad_texts.load_ad_text_rows",
-        lambda name: pytest.fail("пошли в таблицу при полной библиотеке"),
-    )
     d = enrich(_draft(ad_sets=[AdSetDraft("Set", ads=[AdDraft(copy_name="AR Text 1")])]))
     ad = d.ad_sets[0].ads[0]
     assert ad.ad_title == "للمزيد"

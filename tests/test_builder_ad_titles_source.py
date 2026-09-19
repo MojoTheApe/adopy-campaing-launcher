@@ -29,24 +29,7 @@ def store(tmp_path, monkeypatch):
     return tmp_path
 
 
-@pytest.fixture
-def sheet(monkeypatch):
-    """Таблица, о которой мы знаем, звали её или нет."""
-    calls = {"n": 0, "rows": {}}
-
-    def load_rows(**kwargs):
-        calls["n"] += 1
-        return [[name, *(entry.get(field, "") for field in ("headline", "body", "description", "asset", "language"))]
-                for name, entry in calls["rows"].items()]
-
-    from src.analysis_agent import gsheet_ad_texts as gs
-
-    monkeypatch.setattr(gs, "load_ad_text_rows", load_rows)
-    monkeypatch.setattr(gs, "last_error", "")
-    return calls
-
-
-def test_the_library_is_what_the_builder_offers(sheet):
+def test_the_library_is_what_the_builder_offers():
     ar.add("ES how much", "¿Cómo funciona?", "Cuánto dinero tienes hoy", "★★★★", "", "es")
     rows = web._ad_copy_rows()
     assert [r["ad_title"] for r in rows] == ["ES how much"]
@@ -54,38 +37,15 @@ def test_the_library_is_what_the_builder_offers(sheet):
     assert rows[0]["language"] == "ES"
 
 
-def test_the_sheet_is_not_touched_when_the_library_has_texts(sheet):
-    """Билдер открывают десятки раз за день — ходить в чужую таблицу незачем.
-
-    А главное: таблица однажды уже ответила `403`, и тогда поле опустело бы,
-    хотя тексты на машине есть.
-    """
-    ar.add("Текст", "Заголовок", "Тело")
-    web._ad_copy_rows()
-    assert sheet["n"] == 0, "сходили в таблицу при полной библиотеке"
-
-
-def test_a_fresh_machine_still_gets_something_from_the_sheet(sheet):
-    """Реестр пуст только до первого открытия раздела Ad titles."""
-    sheet["rows"] = {"Из таблицы": {"headline": "H", "body": "B", "description": "",
-                                    "asset": "", "language": "AR"}}
-    rows = web._ad_copy_rows()
-    assert [r["ad_title"] for r in rows] == ["Из таблицы"]
-    assert sheet["n"] == 1
-
-
-def test_an_unreadable_registry_reports_an_error_and_preserves_the_file(sheet, store):
+def test_an_unreadable_registry_reports_an_error_and_preserves_the_file(store):
     """Повреждение не должно молча заменять локальную правку старым текстом."""
     store.joinpath("ad_text_registry.json").write_text("{ не json", encoding="utf-8")
-    sheet["rows"] = {"Запасной": {"headline": "H", "body": "B", "description": "",
-                                  "asset": "", "language": ""}}
     with pytest.raises(ar.AdTextError):
         web._ad_copy_rows()
-    assert sheet["n"] == 0
     assert store.joinpath("ad_text_registry.json").read_text(encoding="utf-8") == "{ не json"
 
 
-def test_every_field_the_builder_reads_is_present(sheet):
+def test_every_field_the_builder_reads_is_present():
     """Поля названы так, как их читает разметка билдера.
 
     Разойдясь в одном имени, поле молча окажется пустым в превью объявления —
@@ -96,7 +56,7 @@ def test_every_field_the_builder_reads_is_present(sheet):
     assert set(row) == {"ad_title", "headline", "body", "description", "asset", "language"}
 
 
-def test_the_route_itself_answers_with_the_library(sheet):
+def test_the_route_itself_answers_with_the_library():
     """Маршрут, а не только сборщик строк: между ними легко разойтись.
 
     Через `TestClient` не идём: в этой сборке `httpx` с ним не совместим
