@@ -5021,6 +5021,11 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
           // Row rect for y: prefer the walked-up row, but if that ancestor
           // is tall it is a container rather than a row — use the bare text
           // leaf then, whose box is always the row's own line.
+          // 19.09 15:12 (CR_ait IPO, 302c/…): панель дерева была прокручена,
+          // строка ad set'а стояла у самого верха (y=23) под липкой шапкой —
+          // клик попадал в шапку, меню не открывалось, ad 2 не создавался.
+          // Для ad 3 та же строка стояла ниже (y=84) и всё сработало.
+          try { rows[1].scrollIntoView({block: 'center'}); } catch (e) {}
           let rowRect = rows[1].getBoundingClientRect();
           if (rowRect.height > 80) rowRect = candidates[1].getBoundingClientRect();
 
