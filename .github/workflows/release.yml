@@ -16,12 +16,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing acl-release-* tag to (re)publish"
+        description: "Existing acl-release-* tag to publish"
         required: true
 
 permissions:
   contents: write
   pull-requests: read
+  actions: read
 
 concurrency:
   group: acl-release-${{ github.event.inputs.tag || github.ref_name }}
@@ -45,12 +46,13 @@ jobs:
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
 
-      - name: Refuse anything that is not an acl-release tag on master
+      - name: Verify promoted tag and its successful master CI
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if ($env:RELEASE_TAG -notmatch '^acl-release-[0-9A-Za-z][0-9A-Za-z._-]{0,62}$') { throw "Not a release tag: $env:RELEASE_TAG" }
-          git merge-base --is-ancestor "$env:RELEASE_TAG" origin/master
-          if ($LASTEXITCODE -ne 0) { throw "$env:RELEASE_TAG is not on master." }
+          python scripts/acl_publish_release.py --tag "$env:RELEASE_TAG" --source-repo "${{ github.repository }}"
+          if ($LASTEXITCODE -ne 0) { throw "Release promotion was not verified." }
           "ACL_PACKAGE_VERSION=$($env:RELEASE_TAG.Substring('acl-release-'.Length))" | Out-File -Append $env:GITHUB_ENV
 
       - name: Set up Python 3.13
@@ -97,20 +99,23 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "release.json could not be written." }
           Copy-Item $installer.FullName packaging/windows/.artifacts/release/
 
+      - name: Recheck promotion before publication
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch origin master
+          if ($LASTEXITCODE -ne 0) { throw "Cannot refresh master." }
+          python scripts/acl_publish_release.py --tag "$env:RELEASE_TAG" --source-repo "${{ github.repository }}"
+          if ($LASTEXITCODE -ne 0) { throw "Release promotion is no longer valid." }
+
       - name: Publish the GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.ACL_RELEASES_TOKEN || github.token }}
         run: |
-          $dir = "packaging/windows/.artifacts/release"
-          $assets = Get-ChildItem $dir -File | Where-Object { $_.Name -ne 'release-notes.md' } | ForEach-Object { $_.FullName }
-          gh release view "$env:RELEASE_TAG" -R "$env:RELEASES_REPO" *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload "$env:RELEASE_TAG" @assets -R "$env:RELEASES_REPO" --clobber
-          } else {
-            gh release create "$env:RELEASE_TAG" @assets -R "$env:RELEASES_REPO" `
-              --title "Adopy Campaign Launcher $env:ACL_PACKAGE_VERSION" --notes-file "$dir/release-notes.md" --latest
-          }
+          python scripts/acl_publish_release.py --tag "$env:RELEASE_TAG" --repo "$env:RELEASES_REPO" `
+            --directory packaging/windows/.artifacts/release
           if ($LASTEXITCODE -ne 0) { throw "Publishing the release failed." }
 
       - name: Keep test logs

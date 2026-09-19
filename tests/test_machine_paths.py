@@ -23,7 +23,7 @@ def machine(tmp_path, monkeypatch):
 def test_both_paths_are_saved_to_the_machine_env_and_applied_at_once(machine):
     root, env = machine
     book = root / "stats.xlsx"
-    book.write_bytes(b"x")
+    _valid_book(book)
     result = mp.save(f'"{book}"', str(root / "Docs" / "Creatives"))
     assert result["stats_workbook"] == str(book.resolve()) and result["stats_workbook_found"]
     assert result["creatives_created"] and (root / "Docs" / "Creatives").is_dir()
@@ -49,6 +49,25 @@ def test_a_file_is_not_accepted_as_the_creatives_folder(machine):
         mp.save(creatives_folder=str(root / "not-a-folder"))
 
 
+@pytest.mark.parametrize("kind", ["corrupt", "wrong_headers"])
+def test_invalid_excel_preserves_existing_settings(machine, kind):
+    from openpyxl import Workbook
+    root, env = machine
+    book = root / "bad.xlsx"
+    if kind == "corrupt":
+        book.write_bytes(b"not an Excel workbook")
+    else:
+        wb = Workbook()
+        wb.active.append(["Unrelated", "Data"])
+        wb.save(book)
+        wb.close()
+    before = env.read_bytes()
+    with pytest.raises(mp.MachinePathError):
+        mp.save(str(book), str(root / "new-creatives"))
+    assert env.read_bytes() == before
+    assert not (root / "new-creatives").exists()
+
+
 def test_the_route_saves_and_explains_errors(machine, monkeypatch):
     from src.web import app as web
 
@@ -64,7 +83,7 @@ def test_the_route_saves_and_explains_errors(machine, monkeypatch):
     assert bad.status_code == 400 and "no file" in json.loads(bad.body)["error"]
     assert asyncio.run(web.api_save_machine_paths(Req({"stats_workbook": 5}))).status_code == 400
     book = root / "stats.xlsx"
-    book.write_bytes(b"x")
+    _valid_book(book)
     ok = json.loads(asyncio.run(web.api_save_machine_paths(Req({"stats_workbook": str(book)}))).body)
     assert ok["ok"] and ok["stats_changed"] and cleared == [{}]
     ok = json.loads(asyncio.run(web.api_save_machine_paths(Req({"creatives_folder": str(root / "C")}))).body)
@@ -78,3 +97,12 @@ def test_the_accounts_view_offers_both_fields():
     html = (Path(__file__).resolve().parents[1] / "src/web/templates/report.html").read_text(encoding="utf-8")
     panel = html[html.index('id="view-accounts"'):html.index('id="view-targets"')]
     assert 'id="mp-stats"' in panel and 'id="mp-creatives"' in panel and 'id="mp-save"' in panel
+
+
+def _valid_book(path):
+    from openpyxl import Workbook
+    from src.analysis_agent.stats_workbook import STATS_COLUMNS
+    wb = Workbook()
+    wb.active.append(sorted(STATS_COLUMNS))
+    wb.save(path)
+    wb.close()

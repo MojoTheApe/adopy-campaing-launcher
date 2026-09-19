@@ -1822,7 +1822,8 @@ async def api_save_machine_paths(request: Request) -> JSONResponse:
             k in data and not isinstance(data[k], str) for k in ("stats_workbook", "creatives_folder")):
         return JSONResponse({"ok": False, "error": "Expected text paths"}, status_code=400)
     try:
-        result = machine_paths.save(data.get("stats_workbook"), data.get("creatives_folder"))
+        from starlette.concurrency import run_in_threadpool
+        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"), data.get("creatives_folder"))
     except machine_paths.MachinePathError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     if result["stats_changed"]:

@@ -10,6 +10,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from src.analysis_agent.stats_workbook import StatsWorkbookError, validate_stats_workbook
+
 from config.paths import get_creatives_root, get_excel_path, update_machine_env
 
 
@@ -40,7 +42,10 @@ def check_stats_workbook(raw: str) -> str:
         raise MachinePathError("The Stats workbook must be an .xlsx or .xlsm file.")
     if not path.is_file():
         raise MachinePathError(f"There is no file at {path}. Check the path and try again.")
-    return str(path.resolve())
+    try:
+        return validate_stats_workbook(str(path))
+    except StatsWorkbookError as exc:
+        raise MachinePathError(str(exc)) from exc
 
 
 def check_creatives_folder(raw: str) -> tuple[str, bool]:
@@ -71,6 +76,9 @@ def save(stats_workbook: str | None = None, creatives_folder: str | None = None)
     if creatives_folder is not None:
         values["FB_CREATIVES_ROOT"], created = check_creatives_folder(creatives_folder)
     if values:
-        update_machine_env(values)
+        try:
+            update_machine_env(values)
+        except OSError as exc:
+            raise MachinePathError("The settings could not be saved. Check access to the ACL data folder.") from exc
     return {**current(), "creatives_created": created,
             "stats_changed": "FB_STATS_EXCEL" in values}
