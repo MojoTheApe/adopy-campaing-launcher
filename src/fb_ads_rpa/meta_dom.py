@@ -2348,7 +2348,7 @@ def _all_edits_saved(page: Page) -> bool:
         return False
 
 
-def recover_stuck_page(page: Page, where: str, *, editor: bool) -> bool:
+def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = False) -> bool:
     """Перезагрузить вкладку, если она зависла (ACL-1233). True — перезагрузили.
 
     * Страница ошибки Chrome (ERR_SSL_PROTOCOL_ERROR, 19.09 CO_bnc Mix) —
@@ -2361,6 +2361,10 @@ def recover_stuck_page(page: Page, where: str, *, editor: bool) -> bool:
     reason = ""
     if err:
         reason = f"error_page:{err}"
+    elif force and not editor:
+        # Список кампаний: окно цели не открылось, а видимого «Loading…» нет
+        # (19.09 CO_bnc Mix, 18:12). Терять на списке нечего — перезагружаем.
+        reason = "no_objective_dialog"
     elif _loading_visible(page):
         deadline = time.time() + LOADING_STUCK_S
         while time.time() < deadline and _loading_visible(page):
@@ -2380,7 +2384,7 @@ def recover_stuck_page(page: Page, where: str, *, editor: bool) -> bool:
     except Exception as exc:
         ok = False
         reason += f" ({str(exc)[:60]})"
-    _telemetry.record("loading_modal_reload" if reason == "loading_modal" else "error_page_reload",
+    _telemetry.record("error_page_reload" if reason.startswith("error_page") else "loading_modal_reload",
                       ok, note=reason, diag={"where": where, "url": (page.url or "")[:160]})
     return ok
 
@@ -2590,7 +2594,7 @@ def run_recorded_campaign_flow(
     try:
         page.get_by_role("radio", name="Leads").first.wait_for(state="visible", timeout=25000)
     except Exception:
-        if recover_stuck_page(page, "objective", editor=False):
+        if recover_stuck_page(page, "objective", editor=False, force=True):
             _click(page.get_by_role("button", name="Create", exact=True))
             _shot("after_create_retry")
 

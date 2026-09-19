@@ -77,3 +77,16 @@ def test_a_healthy_page_is_not_touched(env):
     page = Page()
     assert md.recover_stuck_page(page, "ad3_before", editor=True) is False
     assert page.reloads == 0 and env["events"] == []
+
+
+def test_no_objective_dialog_on_the_list_is_reloaded_even_without_loading_text(env):
+    """19.09 18:12 CO_bnc Mix: окна цели нет, надписи «Loading…» тоже нет."""
+    page = Page("https://adsmanager.facebook.com/adsmanager/manage/campaigns")
+    assert md.recover_stuck_page(page, "objective", editor=False, force=True) is True
+    assert page.reloads == 1 and env["events"][-1] == ("loading_modal_reload", True, "no_objective_dialog")
+
+
+def test_force_never_reloads_an_editor(env):
+    page = Page()
+    assert md.recover_stuck_page(page, "ad2_create", editor=True, force=True) is False
+    assert page.reloads == 0
