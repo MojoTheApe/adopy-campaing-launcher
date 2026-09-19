@@ -3111,7 +3111,14 @@ def run_recorded_campaign_flow(
     # (no-op); only "iOS" needs an explicit switch.
     if (os_val or "All").strip().lower() == "ios":
         try:
-            if not select_devices_ios_only(page):
+            ok_ios = select_devices_ios_only(page)
+            if not ok_ios and recover_stuck_page(page, "devices_ios", editor=True):
+                # 20.09 01:37 CO_bnc Mix: раздел устройств не загрузился и за
+                # 25 с. Перезагрузка (при «All edits saved») и второй заход —
+                # так же, как с панелью плейсментов.
+                fill_placements(page, {})
+                ok_ios = select_devices_ios_only(page)
+            if not ok_ios:
                 _shot("fail_devices_ios")
                 soft_fails.append("devices_ios")
             else:
