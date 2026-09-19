@@ -349,3 +349,22 @@ def test_an_empty_group_still_fails_after_the_wait(page):
                      "<input placeholder='Add demographics, interests or behaviours'></div>")
     res = md._await_group_terms(page, ["Initial Public Offering"], timeout_s=1)
     assert res["found"] is True and res["hits"] == []
+
+
+# ── живое дерево: два поля интересов, плашки у первого (19.09 14:09) ──────────
+
+def test_chips_next_to_another_targeting_field_are_found_by_the_fallback(page):
+    page.set_content(
+        "<div role='presentation'><ul><li><span>Initial public offering</span><button>Close</button></li></ul>"
+        "<input placeholder='Add demographics, interests or behaviours'></div>"
+        "<div role='presentation'><input placeholder='Add demographics, interests or behaviours'></div>")
+    res = md._group_has_terms(page, ["Initial Public Offering"])
+    assert res["hits"] == ["Initial Public Offering"] and res["by"].startswith("fallback_222"), res
+
+
+def test_typed_text_is_not_rescued_by_the_fallback(page):
+    page.set_content(
+        "<div role='presentation'><div>Initial public offering</div>"
+        "<input placeholder='Add demographics, interests or behaviours'></div>"
+        "<div role='presentation'><input placeholder='Add demographics, interests or behaviours'></div>")
+    assert md._group_has_terms(page, ["Initial Public Offering"])["hits"] == []

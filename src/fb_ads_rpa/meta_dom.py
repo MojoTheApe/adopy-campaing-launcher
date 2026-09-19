@@ -9487,11 +9487,95 @@ _GROUPS_BLOCK_JS = (
 )
 
 
+_TARGETING_GROUP_JS_222 = r"""
+  (terms) => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const isTargetingInput = (inp) => {
+      const blob = ((inp.getAttribute('placeholder') || '') + ' ' +
+                    (inp.getAttribute('aria-label') || '')).toLowerCase();
+      if (['existing audience', 'audiencia existente', 'saved audience'].some(b => blob.includes(b))) return false;
+      return ['add interests', 'interests, behaviors', 'interests or behaviours',
+              'interests or behaviors', 'añadir intereses', 'demographics', 'demografía']
+        .some(g => blob.includes(g));
+    };
+    const inputs = [...document.querySelectorAll('input, textarea')].filter(inp => {
+      const r = inp.getBoundingClientRect();
+      return r.width > 2 && r.height > 2 && isTargetingInput(inp);
+    });
+    const last = inputs[inputs.length - 1];
+    if (!last) return { found: false, why: 'нет поля интересов' };
+    // Коробка своей группы: поднимаемся, пока внутри не окажется чужое поле
+    // интересов — тогда это уже общий контейнер обеих групп.
+    let box = last.parentElement, chosen = null;
+    for (let i = 0; i < 12 && box; i++, box = box.parentElement) {
+      const inside = [...box.querySelectorAll('input, textarea')].filter(isTargetingInput);
+      if (inside.length > 1) break;
+      chosen = box;
+    }
+    if (!chosen) return { found: false, why: 'нет коробки группы' };
+    // Только выбранные интересы. Ревью 18.09: набранный в поле поиска текст
+    // и подсказки под ним — это ещё не выбор, а засчитывались как выбор.
+    // Берём видимый текст группы, минуя поля ввода, открытые списки
+    // подсказок, диалоги и скрытые от экранных читалок узлы.
+    const skip = (el) => !!el.closest(
+      'input, textarea, [role=listbox], [role=option], [role=dialog], [aria-hidden=true]');
+    const walker = document.createTreeWalker(chosen, NodeFilter.SHOW_TEXT);
+    const parts = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const el = n.parentElement;
+      if (!el || skip(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) continue;
+      parts.push(n.textContent);
+    }
+    // Реальная разметка (снимок 991d22be57ef, CR_ait Mix, 18.09): выбранный
+    // интерес — это <li> с текстом и кнопкой «Close». Плашки и считаем; текст
+    // группы остаётся запасным путём на случай другой отрисовки.
+    const isClose = (b) => /^(close|remove|quitar|eliminar)$/i.test(norm(b.textContent))
+      || /close|remove/i.test(b.getAttribute('aria-label') || '');
+    const chips = [...chosen.querySelectorAll('li')]
+      .filter(li => !skip(li) && [...li.querySelectorAll('button')].some(isClose))
+      .map(li => {
+        const clone = li.cloneNode(true);
+        clone.querySelectorAll('button').forEach(b => b.remove());
+        return norm(clone.textContent);
+      })
+      .filter(Boolean);
+    const pool = chips.length ? chips : [norm(parts.join(' '))];
+    const has = (t) => pool.some(c => c.includes(norm(t)));
+    const hits = terms.filter(has);
+    const missing = terms.filter(t => !has(t));
+    return { found: true, hits: hits, missing: missing, selected: chips.slice(0, 40),
+             by: chips.length ? 'chips' : 'text', text: norm(parts.join(' ')).slice(0, 400) };
+  }
+"""
+
+
 def _group_has_terms(page: Page, terms: list[str]) -> dict:
     try:
-        return page.evaluate(_TARGETING_GROUP_JS, terms) or {"found": False}
+        res = page.evaluate(_TARGETING_GROUP_JS, terms) or {"found": False}
     except Exception as exc:
-        return {"found": False, "why": str(exc)[:80]}
+        res = {"found": False, "why": str(exc)[:80]}
+    if res.get("found") and res.get("hits"):
+        return res
+    # Живое дерево: проверка master берёт ПОСЛЕДНЕЕ поле интересов и ищет плашки
+    # рядом с ним. 19.09 14:09 (302c6ab20986) полей на странице два, плашки у
+    # другого — «пусто» при пяти стоящих интересах. Проверка #222 (6/6 прогонов
+    # 18.09) видит их; её ответ берём, но пишем, что понадобился запасной путь.
+    try:
+        old = page.evaluate(_TARGETING_GROUP_JS_222, terms) or {}
+    except Exception:
+        old = {}
+    # Только плашки: текстовый режим #222 засчитывал набранное в поле (ревью).
+    if old.get("found") and old.get("hits") and old.get("by") == "chips":
+        try:
+            _telemetry.record("targeting", None, note="group_check_fallback",
+                              diag={"master": {k: res.get(k) for k in ("found", "why", "text")},
+                                    "hits": old.get("hits", [])[:10], "by": old.get("by")})
+        except Exception:
+            pass
+        return {**old, "by": "fallback_222:" + str(old.get("by", ""))}
+    return res
 
 
 _SCROLL_TARGETING_INPUT_JS = r"""
