@@ -715,6 +715,37 @@ def put_window_back(page) -> None:
         log.debug("put_window_back failed: %s", exc)
 
 
+def wake_page(page) -> dict:
+    """Разбудить зависшую вкладку профиля перед перезагрузкой (19.09).
+
+    19.09 вечером на всех четырёх профилях Meta после Create часами висела
+    в «Loading creation», и простая перезагрузка не помогала. Окна профилей
+    пользователь держит свёрнутыми, а наша вкладка — фоновая: Chrome
+    придерживает таймеры и сеть таких страниц. Поэтому перед перезагрузкой:
+    свёрнутое окно — в обычное состояние за краем экрана (как на границе
+    раздела), вкладка — вперёд в своём окне, троттлинг снимается заново
+    (после перезагрузки страницы Chrome мог его вернуть). В конце кампании
+    окно, как и раньше, сворачивается обратно (`put_window_back`).
+    """
+    out = {"minimized": None, "restored": False, "front": False}
+    context = page.context
+    try:
+        session = context.new_cdp_session(page)
+        bounds = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+        out["minimized"] = bounds.get("windowState") == "minimized"
+        if out["minimized"]:
+            out["restored"] = _restore_offscreen(context, page)
+    except Exception as exc:
+        log.debug("wake_page window: %s", exc)
+    try:
+        page.bring_to_front()
+        out["front"] = True
+    except Exception as exc:
+        log.debug("wake_page front: %s", exc)
+    _disable_background_throttling(context, page)
+    return out
+
+
 def ensure_editor_window(page, section: str) -> bool:
     """Check at section boundaries; recover once, then stop without replaying drafts."""
     from src.fb_ads_rpa import run_telemetry as rt

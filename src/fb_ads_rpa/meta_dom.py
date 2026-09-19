@@ -2377,15 +2377,29 @@ def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = Fa
         reason = "loading_modal"
     else:
         return False
+    # Сначала разбудить: свёрнутое окно — из свёрнутого, вкладку — вперёд,
+    # троттлинг Chrome — снять заново (19.09 вечер: перезагрузка без этого
+    # снова упиралась в «Loading creation»).
+    woke = {}
+    try:
+        from src.fb_ads_rpa.browser import wake_page
+        woke = wake_page(page)
+    except Exception as exc:
+        woke = {"error": str(exc)[:80]}
     try:
         page.reload(timeout=60000, wait_until="domcontentloaded")
         _sleep_h(4.0, 0.2)
+        try:
+            from src.fb_ads_rpa.browser import _disable_background_throttling
+            _disable_background_throttling(page.context, page)
+        except Exception:
+            pass
         ok = not _chrome_error_page(page)
     except Exception as exc:
         ok = False
         reason += f" ({str(exc)[:60]})"
     _telemetry.record("error_page_reload" if reason.startswith("error_page") else "loading_modal_reload",
-                      ok, note=reason, diag={"where": where, "url": (page.url or "")[:160]})
+                      ok, note=reason, diag={"where": where, "url": (page.url or "")[:160], "woke": woke})
     return ok
 
 
@@ -2591,10 +2605,20 @@ def run_recorded_campaign_flow(
     # ACL-1233: окно выбора цели не появилось, а страница висит в «Loading…»
     # или стала страницей ошибки Chrome — перезагрузить список и нажать Create
     # ещё раз, вместо минут ожидания в каждой попытке клика (19.09: 10–12 мин).
-    try:
-        page.get_by_role("radio", name="Leads").first.wait_for(state="visible", timeout=25000)
-    except Exception:
-        if recover_stuck_page(page, "objective", editor=False, force=True):
+    # 19.09 вечер: одного раунда мало — Meta отвечала со второго-третьего
+    # раза. До двух раундов «разбудить → перезагрузить → Create».
+    for attempt in range(2):
+        try:
+            page.get_by_role("radio", name="Leads").first.wait_for(state="visible", timeout=25000)
+            break
+        except Exception:
+            if not recover_stuck_page(page, "objective", editor=False, force=True):
+                break
+            try:
+                page.get_by_role("button", name="Create", exact=True).first.wait_for(
+                    state="visible", timeout=30000)
+            except Exception:
+                pass
             _click(page.get_by_role("button", name="Create", exact=True))
             _shot("after_create_retry")
 

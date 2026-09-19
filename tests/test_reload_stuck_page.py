@@ -90,3 +90,28 @@ def test_force_never_reloads_an_editor(env):
     page = Page()
     assert md.recover_stuck_page(page, "ad2_create", editor=True, force=True) is False
     assert page.reloads == 0
+
+
+def test_the_page_is_woken_before_it_is_reloaded(env, monkeypatch):
+    # 19.09 вечер: свёрнутое окно и фоновая вкладка — перезагрузка без
+    # «разбудить» снова упиралась в «Loading creation».
+    from src.fb_ads_rpa import browser
+    order = []
+    page = Page("https://adsmanager.facebook.com/adsmanager/manage/campaigns")
+    monkeypatch.setattr(browser, "wake_page", lambda p: order.append("wake") or {"minimized": True, "restored": True})
+    real_reload = page.reload
+    page.reload = lambda **kw: (order.append("reload"), real_reload(**kw))
+    assert md.recover_stuck_page(page, "objective", editor=False, force=True) is True
+    assert order == ["wake", "reload"]
+
+
+def test_a_failing_wake_does_not_block_the_reload(env, monkeypatch):
+    from src.fb_ads_rpa import browser
+
+    def broken(p):
+        raise RuntimeError("no cdp")
+
+    monkeypatch.setattr(browser, "wake_page", broken)
+    page = Page("chrome-error://chromewebdata/")
+    assert md.recover_stuck_page(page, "ad2_before", editor=True) is True
+    assert page.reloads == 1
