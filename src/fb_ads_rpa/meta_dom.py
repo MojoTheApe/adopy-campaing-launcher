@@ -9547,6 +9547,62 @@ def _await_group_terms(page: Page, terms: list[str], *, timeout_s: float = 20.0)
     return own
 
 
+_COMBINED_NOTICE_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+    const visible = (el) => !!el && el.getClientRects().length > 0;
+    const notice = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && visible(e)
+      && /^Some detailed targeting options have been combined$/i.test(norm(e.textContent)));
+    if (!notice) return { notice: false };
+    const buttons = [...document.querySelectorAll('[role="button"], button')].filter(b =>
+      visible(b) && /^Remove all$/i.test(norm(b.textContent)));
+    const b = buttons[0];
+    if (!b) return { notice: true, remove_all: false };
+    b.scrollIntoView({ block: 'center' });
+    const r = b.getBoundingClientRect();
+    return { notice: true, remove_all: true, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }
+"""
+
+
+def _remove_combined_targeting(page: Page) -> dict:
+    """Убрать объединённые Meta варианты детального таргетинга.
+
+    19.09 CR_ait Mix2 (c63db6f44f10): «Some detailed targeting options have been
+    combined — Before you can publish this ad set you need to update…». Без
+    этого ad set не опубликовать. Решение пользователя: такие варианты просто
+    убирать — кнопкой «Remove all» внизу уведомления.
+    """
+    try:
+        state = page.evaluate(_COMBINED_NOTICE_JS) or {}
+    except Exception as exc:
+        return {"notice": None, "error": str(exc)[:80]}
+    if not state.get("notice"):
+        return {"notice": False}
+    if not state.get("remove_all"):
+        try:
+            from src.fb_ads_rpa import page_capture as _pc
+
+            _pc.capture(page, step="targeting_combined_no_remove_all")
+        except Exception:
+            pass
+        _telemetry.record("targeting_combined", False, note="remove_all_not_found")
+        return state
+    _cdp_mouse_click(page, state["x"], state["y"])
+    gone = False
+    for _ in range(10):
+        _sleep_h(0.5)
+        try:
+            gone = not (page.evaluate(_COMBINED_NOTICE_JS) or {}).get("notice")
+        except Exception:
+            gone = False
+        if gone:
+            break
+    _telemetry.record("targeting_combined", gone, note="removed" if gone else "notice_still_shown")
+    return {**state, "cleared": gone}
+
+
 def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
     """Paste each AND group into its own field, pressing "Define further"
     between them. True only when every group went in.
@@ -9612,6 +9668,10 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
                         blocks={"groups": _GROUPS_BLOCK_JS})
         except Exception:
             pass
+    # Объединённые Meta интересы блокируют публикацию — убираем их.
+    combined = _remove_combined_targeting(page)
+    if combined.get("notice") and not combined.get("cleared"):
+        return False
     return not unconfirmed
 
 

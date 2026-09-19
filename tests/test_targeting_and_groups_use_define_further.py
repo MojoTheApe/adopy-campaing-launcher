@@ -363,3 +363,27 @@ def test_an_unconfirmed_group_does_not_cost_the_next_group(monkeypatch):
     monkeypatch.setattr(pc, "capture", lambda *a, **k: None)
     assert md.paste_targeting_groups(object(), "Investment banking [AND] Business jet") is False
     assert pasted == ["Investment banking", "Business jet"]
+
+
+# ── «Some detailed targeting options have been combined» (19.09 CR_ait Mix2) ──
+
+def test_combined_options_are_removed_with_remove_all(page, monkeypatch):
+    page.set_content(
+        "<div id='n'><span>Some detailed targeting options have been combined</span>"
+        "<span>Before you can publish this ad set you need to update the detailed targeting options.</span>"
+        "<div role='button' id='rm' onclick=\"document.getElementById('n').remove()\">Remove all</div></div>")
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click", lambda pg, x, y: pg.evaluate(
+        "([x, y]) => document.elementFromPoint(x, y).click()", [x, y]))
+    res = md._remove_combined_targeting(page)
+    assert res["cleared"] is True
+    assert page.evaluate("!document.getElementById('n')")
+
+
+def test_no_notice_means_nothing_is_clicked(page, monkeypatch):
+    page.set_content("<div><span>Detailed targeting</span><div role='button'>Remove all</div></div>")
+    clicks = []
+    monkeypatch.setattr(md, "_cdp_mouse_click", lambda *a: clicks.append(a))
+    assert md._remove_combined_targeting(page) == {"notice": False}
+    assert clicks == []
