@@ -10054,6 +10054,48 @@ def _click_summary_row(page: Page, label: str, value_hint: str) -> bool:
     return True
 
 
+_ROW_EXPANDER_JS = r"""
+  (labelRe) => {
+    const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+    const re = new RegExp('^(' + labelRe + ')$', 'i');
+    const label = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && re.test(norm(e.textContent)) && e.getBoundingClientRect().width > 0);
+    if (!label) return null;
+    let row = label.parentElement;
+    for (let i = 0; i < 6 && row; i++, row = row.parentElement) {
+      const exp = [...row.querySelectorAll('[aria-expanded="false"]')].filter(b => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && !b.contains(label) &&
+          (label.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      });
+      if (exp.length) {
+        const r = exp[0].getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+    }
+    return null;
+  }
+"""
+
+
+def _click_row_expander(page: Page, label_re: str) -> bool:
+    """Раскрыть свёрнутую строку аудитории её стрелкой.
+
+    19.09 15:00 (SA_arc GMBL, прогон 15479dc0955b): «Locations — Inclusion:
+    Saudi Arabia, United States», карандаша нет, клик по значению строку не
+    раскрывает; справа у строки — безымянная кнопка `aria-expanded="false"`.
+    """
+    try:
+        pt = page.evaluate(_ROW_EXPANDER_JS, label_re)
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.8)
+    return True
+
+
 def _click_locations_edit(page: Page) -> bool:
     """Раскрыть карточку локаций её собственной кнопкой правки.
 
@@ -10067,7 +10109,7 @@ def _click_locations_edit(page: Page) -> bool:
     except Exception:
         return False
     if not pt:
-        return _click_summary_row(page, "Locations|Ubicaciones", "^(Inclusion|Inclusión)\\s*:")
+        return _click_row_expander(page, "Locations|Ubicaciones") or _click_summary_row(page, "Locations|Ubicaciones", "^(Inclusion|Inclusión)\\s*:")
     _cdp_mouse_click(page, pt["x"], pt["y"])
     _sleep_h(0.8)
     return True
@@ -11573,7 +11615,7 @@ def _click_languages_edit(page: Page) -> bool:
     except Exception:
         return False
     if not pt:
-        return _click_summary_row(page, "Languages|Idiomas", "^(All languages|Todos los idiomas)")
+        return _click_row_expander(page, "Languages|Idiomas") or _click_summary_row(page, "Languages|Idiomas", "^(All languages|Todos los idiomas)")
     _cdp_mouse_click(page, pt["x"], pt["y"])
     _sleep_h(0.6)
     return True

@@ -216,3 +216,20 @@ def test_the_value_click_is_not_used_when_a_pencil_exists(page, monkeypatch):
                             "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
     assert md._click_locations_edit(page) is True
     assert clicked["at"] == "pen", clicked
+
+
+def test_a_summary_row_with_only_an_expander_is_opened_by_it(page, monkeypatch):
+    """19.09 15:00 SA_arc GMBL: «Inclusion: Saudi Arabia, United States», ни
+    карандаша, клик по значению не раскрывает — справа безымянная стрелка."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0;width:600px'>"
+        "<div><span>Locations</span><span>​</span>"
+        "<div><span>Inclusion:</span><span id='val'>Saudi Arabia, United States</span></div>"
+        "<div role='button' aria-expanded='false' id='arrow' style='width:24px;height:24px'></div></div></div>")
+    clicked = {}
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: clicked.update(at=pg.evaluate(
+                            "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
+    assert md._click_locations_edit(page) is True
+    assert clicked["at"] == "arrow", clicked
