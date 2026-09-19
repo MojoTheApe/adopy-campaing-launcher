@@ -2419,8 +2419,19 @@ def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = Fa
             pass
         ok = not _chrome_error_page(page)
     except Exception as exc:
-        ok = False
+        # 20.09 00:55 (CO_bnc GMB, дважды): сам `reload` не уложился в минуту
+        # — Meta на этом профиле еле отвечает. Пробуем так, как это делает
+        # человек клавишей F5: изнутри страницы, не дожидаясь её загрузки.
         reason += f" ({str(exc)[:60]})"
+        ok = False
+        try:
+            page.evaluate("() => { location.reload(); }")
+            _sleep_h(6.0, 0.2)
+            page.wait_for_selector("[role=button]", timeout=30000)
+            ok = not _chrome_error_page(page)
+            reason += " js_reload" + ("" if ok else "_failed")
+        except Exception as exc2:
+            reason += f" js_reload_failed ({str(exc2)[:40]})"
     _telemetry.record("error_page_reload" if reason.startswith("error_page") else "loading_modal_reload",
                       ok, note=reason, diag={"where": where, "url": (page.url or "")[:160], "woke": woke})
     return ok

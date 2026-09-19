@@ -133,3 +133,27 @@ def test_a_failed_component_keeps_unsaved_edits(env, monkeypatch):
     page = Page()
     assert md.recover_stuck_page(page, "placements", editor=True) is False
     assert page.reloads == 0 and env["events"] == [("loading_modal_reload", False, "unsaved_edits")]
+
+
+def test_a_reload_that_times_out_falls_back_to_reloading_from_inside(env, monkeypatch):
+    """20.09 00:55 CO_bnc GMB: `page.reload` не уложился в минуту дважды подряд."""
+    env.update(loading=True, saved=True)
+    calls = []
+
+    class SlowPage(Page):
+        def reload(self, **kw):
+            calls.append("reload")
+            raise RuntimeError("Page.reload: Timeout 60000ms exceeded.")
+
+        def evaluate(self, script, *a):
+            calls.append("js")
+            return None
+
+        def wait_for_selector(self, sel, **kw):
+            calls.append("wait")
+            return None
+
+    page = SlowPage()
+    assert md.recover_stuck_page(page, "ad2_create", editor=True) is True
+    assert calls == ["reload", "js", "wait"], calls
+    assert "js_reload" in env["events"][-1][2]
