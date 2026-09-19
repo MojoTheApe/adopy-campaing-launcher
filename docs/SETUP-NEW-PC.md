@@ -15,8 +15,9 @@ account, no Python or Git to install.
 Get the token through the password manager, never by chat or email.
 
 You no longer need `Upload FB.xlsx`, a Google Sheet link, `oauth_client.json`,
-or a GitHub account. Targets and ad texts come from the team library inside the
-dashboard.
+or a GitHub account. Shared targets and ad texts require support to configure
+the team's private library on this computer. Until that is done, the library
+is local to this computer; finishing this wizard does not enable sharing.
 
 ---
 
@@ -87,8 +88,9 @@ Hover over it or click it to see what changed. Click **Update** and confirm.
   refuses to update.
 - ACL downloads the new version, checks that the file is exactly the published
   one, installs it and restarts. The page reloads by itself after a few minutes.
-- If the new version does not start, ACL puts the previous one back by itself
-  and tells you so once. You are never left without a working dashboard.
+- If the new version does not start, ACL tries to restore the previous version
+  and tells you the result. If recovery also fails, contact support; the error
+  does not claim that the old version was restored.
 
 Nothing updates on its own, and your name, files, accounts, profiles and tokens
 are never touched. They live in `%LOCALAPPDATA%\ACL`, outside the program folder.

@@ -94,7 +94,15 @@ runs from the old version's folder, installs silently into
 version. If the installer fails or the new version does not answer, it starts
 the previous version again and restores the shortcuts and `current.json`. The
 outcome goes to `%LOCALAPPDATA%\ACL\updates\last_update.json`, and the dashboard
-shows a failed attempt once.
+shows a failed attempt once. An unsuccessful recovery is reported separately;
+an installer that cannot be stopped requires support before ACL is restarted.
+Updates refuse active/queued publishing and active browser reads, reserve the
+idle runtime before handoff, and reject a second concurrent Update request.
+
+Release publication verifies the annotated tag, current master SHA and the
+referenced successful full master CI run through GitHub. Assets are uploaded
+to a draft before it becomes visible; an existing release tag is never replaced.
+Shared-library access and company Google sign-in remain separate setup work.
 
 ## Support diagnostics
 
