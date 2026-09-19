@@ -9980,6 +9980,258 @@ def _location_rows(page: Page) -> list[dict]:
         return []
 
 
+# ── Свёрнутые Locations / Languages и чтение возраста (из #222, ACL-1225/1226) ──
+
+
+_LOCATION_SUMMARY_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const leaves = [...document.querySelectorAll('*')]
+      .filter(e => e.offsetParent !== null && e.children.length === 0)
+      .map(e => norm(e.textContent));
+    const line = leaves.find(t => /^(Inclusion|Inclusion|Incluir)\s*:/i.test(t));
+    if (!line) return null;
+    return line.split(':').slice(1).join(':').split(',').map(x => norm(x)).filter(Boolean);
+  }
+"""
+
+
+def _location_summary_countries(page: Page) -> list[str] | None:
+    try:
+        return page.evaluate(_LOCATION_SUMMARY_JS)
+    except Exception:
+        return None
+
+
+def _only_wanted_in_summary(page: Page, keep_text: str) -> bool:
+    """В сводке ровно наша страна и никого больше.
+
+    18.09 06:32 (CO_bnc GMBL): строки карточки не прочитались
+    (`location_rows_not_read`), и шаг отказал, хотя страна была одна. Когда
+    строки не читаются, вопрос «сколько там стран» ещё можно задать сводке.
+    """
+    got = _location_summary_countries(page)
+    if not got:
+        return False
+    keep = (keep_text or "").strip().lower()
+    return len(got) == 1 and keep in got[0].lower()
+
+
+_LOCATIONS_EDIT_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const label = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && /^(Locations|Ubicaciones)$/i.test(norm(e.textContent))
+      && e.getBoundingClientRect().width > 0);
+    if (!label) return null;
+    let row = label.parentElement;
+    for (let i = 0; i < 4 && row; i++, row = row.parentElement) {
+      const btns = [...row.querySelectorAll('[role=button], button, [aria-label]')].filter(b => {
+        const r = b.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0 || r.width > 80) return false;
+        const name = (norm(b.getAttribute('aria-label')) + ' ' + norm(b.textContent)).toLowerCase();
+        return /edit|editar|pencil/.test(name) || (!norm(b.textContent) && r.width <= 48);
+      });
+      if (btns.length) {
+        const r = btns[btns.length - 1].getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+    }
+    return null;
+  }
+"""
+
+
+_SUMMARY_ROW_JS = r"""
+  ([label, valueHint]) => {
+    const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+    const leaves = [...document.querySelectorAll('*')]
+      .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0);
+    const head = leaves.find(e => new RegExp('^(' + label + ')$', 'i').test(norm(e.textContent)));
+    if (!head) return null;
+    const re = new RegExp(valueHint, 'i');
+    // Значение строки: ближайший к подписи текст, похожий на сводку.
+    const hit = leaves.find(e => re.test(norm(e.textContent))
+      && Math.abs(e.getBoundingClientRect().top - head.getBoundingClientRect().top) < 80);
+    const el = hit || head;
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2, text: norm(el.textContent).slice(0, 60) };
+  }
+"""
+
+
+def _click_summary_row(page: Page, label: str, value_hint: str) -> bool:
+    """Открыть свёрнутую строку кликом по её значению.
+
+    18.09 08:23 (CL_ml Trading, CR_ait Day): у Meta два вида свёрнутого блока
+    аудитории. В одном у строки есть карандаш, в другом — ни одной кнопки,
+    только текст «Inclusion: Chile, United States» / «All languages», и
+    строка раскрывается кликом по самому тексту.
+    """
+    try:
+        pt = page.evaluate(_SUMMARY_ROW_JS, [label, value_hint])
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.8)
+    return True
+
+
+def _click_locations_edit(page: Page) -> bool:
+    """Раскрыть карточку локаций её собственной кнопкой правки.
+
+    18.09 07:07 (CL_ml Day) и 07:09 (CO_bnc GMBL): в сводке стояло
+    «Inclusion: Chile, United States» — нужная страна добавлена, лишняя
+    осталась, а снять её нечем: у свёрнутой строки нет крестиков. Разметку
+    строк (`_location_rows`) в таком виде тоже не прочитать.
+    """
+    try:
+        pt = page.evaluate(_LOCATIONS_EDIT_JS)
+    except Exception:
+        return False
+    if not pt:
+        return _click_summary_row(page, "Locations|Ubicaciones", "^(Inclusion|Inclusión)\\s*:")
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.8)
+    return True
+
+
+_LOCATIONS_COLLAPSE_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const label = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && /^(Locations|Ubicaciones)$/i.test(norm(e.textContent))
+      && e.getBoundingClientRect().width > 0);
+    if (!label) return null;
+    let row = label.parentElement;
+    for (let i = 0; i < 5 && row; i++, row = row.parentElement) {
+      const open = [...row.querySelectorAll('[aria-expanded="true"]')].filter(b => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.width <= 80;
+      });
+      if (open.length) {
+        const r = open[open.length - 1].getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+    }
+    return null;
+  }
+"""
+
+
+def _collapse_locations_card(page: Page) -> bool:
+    """Свернуть карточку локаций обратно.
+
+    18.09 07:42 (CL_ml Day, CO_bnc GMBL): после карандаша карточка осталась
+    раскрытой — с картой и полем поиска, — страница уехала, и следующие шаги
+    (языки, открытие детального таргетинга) своих полей уже не нашли. Страну
+    поставили правильно, а соседние шаги сломали.
+    """
+    try:
+        pt = page.evaluate(_LOCATIONS_COLLAPSE_JS)
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.6)
+    return True
+
+
+def _done(page: Page, opened_by_us: bool, result):
+    """Вернуть ответ шага, свернув карточку, если раскрывали её мы."""
+    if opened_by_us:
+        _collapse_locations_card(page)
+    return result
+
+
+def _uncheck_age_suggestion(page: Page) -> None:
+    """Снять «Use as a suggestion» — иначе Meta расширяет возраст сама.
+
+    Галочка живёт прямо под границами и по умолчанию включена, а с ней возраст
+    становится пожеланием: итог «Your suggestion 35–65+».
+    """
+    try:
+        page.evaluate(
+            """() => {
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              const row = [...document.querySelectorAll('*')].find(e =>
+                norm(e.textContent).startsWith('Use as a suggestion') && e.offsetParent !== null);
+              if (!row) return;
+              let box = row;
+              for (let i = 0; i < 6 && box; i++) {
+                const cb = box.querySelector('input[type=checkbox]');
+                if (cb) {
+                  const aria = cb.getAttribute('aria-checked');
+                  const on = aria === 'true' ? true : aria === 'false' ? false : cb.checked;
+                  if (on) cb.click();
+                  return;
+                }
+                box = box.parentElement;
+              }
+            }"""
+        )
+        _sleep_h(0.3)
+    except Exception:
+        pass
+
+
+def _age_shows_value(page: Page, value: str) -> bool:
+    """Стоит ли граница возраста на `value` — по той же разметке, что и клик.
+
+    18.09 06:15 (CL_ml Trading): на экране «35 – 65+», а `_age_boundary_shows`
+    отвечал «нет» на обе границы (подъём на шесть уровней от подписи «Age» не
+    доходит до значений), поэтому шаг не снял «Use as a suggestion» и отказал
+    при верном возрасте. `_mark_age_trigger` те же значения находит.
+    """
+    return _mark_age_trigger(page, value) or _age_boundary_shows(page, value)
+
+
+_LANG_EDIT_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const label = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && /^(Languages|Idiomas)$/i.test(norm(e.textContent))
+      && e.getBoundingClientRect().width > 0);
+    if (!label) return null;
+    let row = label.parentElement;
+    for (let i = 0; i < 4 && row; i++, row = row.parentElement) {
+      const btns = [...row.querySelectorAll('[role=button], button, [aria-label]')].filter(b => {
+        const r = b.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0 || r.width > 80) return false;
+        const name = (norm(b.getAttribute('aria-label')) + ' ' + norm(b.textContent)).toLowerCase();
+        return /edit|изменить|editar|pencil/.test(name) || (!norm(b.textContent) && r.width <= 48);
+      });
+      if (btns.length) {
+        const r = btns[btns.length - 1].getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+    }
+    return null;
+  }
+"""
+
+
+def _click_languages_edit(page: Page) -> bool:
+    """Раскрыть строку языков её собственной кнопкой правки.
+
+    17.09 23:04 (CR_ait Day): блок аудитории показан сводкой — «Languages: All
+    languages», поля поиска нет вовсе, а клик по центру строки его не открывал.
+    Справа у строки живёт карандаш — жать надо его.
+    """
+    try:
+        pt = page.evaluate(_LANG_EDIT_JS)
+    except Exception:
+        return False
+    if not pt:
+        return _click_summary_row(page, "Languages|Idiomas", "^(All languages|Todos los idiomas)")
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.6)
+    return True
+
+
 def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     """Remove every included location that is not `keep_text`; return the
     names still left afterwards (empty list = clean, None = unreadable).
@@ -9989,7 +10241,19 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     run whose draft still targeted United States next to Guatemala.
     """
     keep = (keep_text or "").strip().lower()
+    opened_by_us = False
     seen = _location_rows(page)
+    if not seen and _click_locations_edit(page):
+        # Свёрнутая карточка: строк нет, пока её не раскрыли карандашом.
+        opened_by_us = True
+        seen = _location_rows(page)
+    if not seen and _only_wanted_in_summary(page, keep_text):
+        # 18.09 06:32 (CO_bnc GMBL): карточку прочитать не удалось, а страна
+        # была одна — это видно по свёрнутой строке «Inclusion: …».
+        _telemetry.record("audience_location", None, note="rows_unread_summary_clean",
+                          diag={"keep": keep_text,
+                                "summary": _location_summary_countries(page)})
+        return _done(page, opened_by_us, [])
     if not seen:
         # Not even the target's own row was read: the card's shape is not
         # the one this knows. Say so rather than pass silently, and keep the
@@ -10002,24 +10266,26 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
             _pc.capture(page, step="locations_unread")
         except Exception:
             pass
-        return None
+        return _done(page, opened_by_us, None)
     for _ in range(6):
         rows = _location_rows(page)
         if not rows:
-            return None
+            return _done(page, opened_by_us,
+                         [] if _only_wanted_in_summary(page, keep_text) else None)
         if not any(keep in r["name"].lower() for r in rows):
             # Do not delete the old country before the target is confirmed.
-            return [r["name"] for r in rows]
+            return _done(page, opened_by_us, [r["name"] for r in rows])
         others = [r for r in rows if keep not in r["name"].lower()]
         if not others:
-            return []
+            return _done(page, opened_by_us, [])
         target = others[0]
         _cdp_mouse_click(page, target["x"], target["y"])
         _sleep_h(0.9)
     rows = _location_rows(page)
     if not rows:
-        return None
-    return [r["name"] for r in rows if keep not in r["name"].lower()]
+        return _done(page, opened_by_us,
+                     [] if _only_wanted_in_summary(page, keep_text) else None)
+    return _done(page, opened_by_us, [r["name"] for r in rows if keep not in r["name"].lower()])
 
 
 def _pick_country_and_clear_defaults(root, page: Page, search_term: str) -> bool:
@@ -10679,10 +10945,21 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     wanted = [str(age_min), str(age_max) if age_max < 65 else "65+"]
     seen = _age_triggers_read(page)
     if seen != wanted:
+        # 18.09 06:32: на CL_ml, CO_bnc и CR_ait `_age_triggers_read` вернул
+        # пусто на всех трёх кампаниях, хотя на экране стояло «35 – 65+»: его
+        # подъём от подписи «Age» не доходит до значений этой разметки.
+        # Спрашиваем тем же поиском, которым по границе кликаем.
+        by_label = [v for v in wanted if _age_shows_value(page, v)]
+        if len(by_label) == len(wanted):
+            _telemetry.record("audience_age", None, note="read_back_by_label",
+                              diag={"wanted": wanted, "seen": seen})
+            _uncheck_age_suggestion(page)
+            return True
         _telemetry.record("audience_age", False,
                           note="read_back_mismatch" if seen else "read_back_unavailable",
                           diag={"wanted": wanted, "seen": seen})
         return False
+    _uncheck_age_suggestion(page)
     return True
 
 
@@ -10757,7 +11034,7 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
         # independently and only report success if BOTH are confirmed.
         boundary_results = []
         for default_text, target_val in (("18", age_min_str), ("65+", age_max_str)):
-            if target_val == default_text and _age_boundary_shows(page, default_text):
+            if target_val == default_text and _age_shows_value(page, default_text):
                 # Граница уже стоит как надо — открывать выпадашку незачем.
                 # 17.09 13:19 (CL_ml): клик по «65+» упал на прокрутке
                 # (TimeoutError), граница записалась как проваленная, и шаг
@@ -10986,7 +11263,21 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
                     pass
                 boundary_results.append(False)
                 continue
-        if len(boundary_results) == 2 and all(boundary_results):
+        # 17.09 22:12 (CR_ait FX_Y): на экране стояло ровно «35 – 65+», но
+        # одна из границ отчиталась провалом, и из-за этого не сняли галочку
+        # «Use as a suggestion» — шаг отказал при верном возрасте. Верим
+        # итоговому виду поля, а не отчёту по каждой границе.
+        read_back = False
+        if not (len(boundary_results) == 2 and all(boundary_results)):
+            read_back = _age_shows_value(page, age_min_str) and _age_shows_value(page, age_max_str)
+            if read_back:
+                try:
+                    _telemetry.record("audience_age", None, note="read_back_ok",
+                                      diag={"boundaries": boundary_results,
+                                            "shows": [age_min_str, age_max_str]})
+                except Exception:
+                    pass
+        if (len(boundary_results) == 2 and all(boundary_results)) or read_back:
             # "Use as a suggestion" appears right below the Age boundaries
             # once both are set to non-default values — confirmed live
             # 2026-07-27 it's checked by default ("We'll also reach people
@@ -11345,6 +11636,12 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
         return None, None
 
     root, inp = _find_lang_input()
+    if inp is None and _click_languages_edit(page):
+        for _ in range(10):
+            _sleep_h(0.2)
+            root, inp = _find_lang_input()
+            if inp is not None:
+                break
     if inp is None:
         for root in _roots(page):
             try:
