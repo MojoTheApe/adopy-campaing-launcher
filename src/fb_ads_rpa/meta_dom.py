@@ -10394,6 +10394,48 @@ def _click_row_expander(page: Page, label_re: str) -> bool:
     return True
 
 
+_ROW_CENTRE_JS = r"""
+  (labelRe) => {
+    const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+    const re = new RegExp('^(' + labelRe + ')$', 'i');
+    const label = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && re.test(norm(e.textContent)) && e.getBoundingClientRect().width > 0);
+    if (!label) return null;
+    let row = label.closest('[role="button"]');
+    if (!row) {
+      row = label;
+      for (let i = 0; i < 10 && row.parentElement; i++) {
+        row = row.parentElement;
+        if (row.getBoundingClientRect().width > 300) break;
+      }
+    }
+    row.scrollIntoView({block: 'center'});
+    const r = row.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }
+"""
+"""Середина строки — туда наводят курсор, чтобы проявился её карандаш."""
+
+
+def _hover_row(page: Page, label_re: str) -> bool:
+    """Навести курсор на строку аудитории.
+
+    20.09 01:30 (SA_arc GMBL): карандаш правки у строки Locations Meta
+    рисует только под курсором — на скриншоте он есть (мышь стояла на
+    строке), а в разметке снимка его нет. Без наведения строку нечем
+    раскрыть, и страна остаётся неубранной.
+    """
+    try:
+        pt = page.evaluate(_ROW_CENTRE_JS, label_re)
+        if not pt:
+            return False
+        page.mouse.move(pt["x"], pt["y"])
+        _sleep_h(0.5)
+        return True
+    except Exception:
+        return False
+
+
 def _click_locations_edit(page: Page) -> bool:
     """Раскрыть карточку локаций её собственной кнопкой правки.
 
@@ -10402,6 +10444,7 @@ def _click_locations_edit(page: Page) -> bool:
     осталась, а снять её нечем: у свёрнутой строки нет крестиков. Разметку
     строк (`_location_rows`) в таком виде тоже не прочитать.
     """
+    _hover_row(page, "Locations|Ubicaciones")
     try:
         pt = page.evaluate(_LOCATIONS_EDIT_JS)
     except Exception:
@@ -11919,6 +11962,7 @@ def _click_languages_edit(page: Page) -> bool:
     languages», поля поиска нет вовсе, а клик по центру строки его не открывал.
     Справа у строки живёт карандаш — жать надо его.
     """
+    _hover_row(page, "Languages|Idiomas")
     try:
         pt = page.evaluate(_LANG_EDIT_JS)
     except Exception:

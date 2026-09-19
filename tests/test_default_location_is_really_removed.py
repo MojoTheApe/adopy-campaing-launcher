@@ -269,3 +269,16 @@ def test_a_row_hidden_under_the_editor_footer_is_never_clicked_through(page, mon
     clicked = _record_clicks(page, monkeypatch)
     assert md._click_languages_edit(page) is False
     assert "at" not in clicked, clicked
+
+
+def test_the_pencil_that_only_exists_under_the_cursor_is_found(page, monkeypatch):
+    """20.09 01:30 SA_arc GMBL: карандаш строки Meta рисует только под курсором."""
+    page.set_content(
+        "<style>#pen{display:none;width:24px;height:24px}"
+        "#row:hover #pen{display:block}</style>"
+        "<div id='row' style='width:600px'><div>Locations</div>"
+        "<div>Inclusion: Saudi Arabia, United States</div>"
+        "<div role='button' aria-label='Edit' id='pen'></div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_locations_edit(page) is True
+    assert clicked["at"] == "pen", clicked
