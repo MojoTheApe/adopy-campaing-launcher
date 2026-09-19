@@ -1846,6 +1846,28 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
     return objects, how, warning
 
 
+def _read_settled_ads(page, *, timeout_s: float = 10.0) -> tuple[list[AdObject], str, str]:
+    """Прочитать объявления одной кампании, когда список перестал меняться.
+
+    19.09 Doc20: все десять кампаний вернули один и тот же набор объявлений,
+    хотя 17–18.09 при пяти кампаниях тот же путь давал верную разбивку. Meta
+    сперва рисует таблицу без фильтра по кампании и сужает её чуть позже;
+    чтение сразу по появлению таблицы брало общий список. Читаем, пока два
+    чтения подряд не совпадут.
+    """
+    import time as _time
+
+    deadline = _time.monotonic() + timeout_s
+    got, how, err = read_level(page, "ad")
+    while _time.monotonic() < deadline:
+        page.wait_for_timeout(1500)
+        again, how2, err2 = read_level(page, "ad")
+        if [o.id for o in again] == [o.id for o in got]:
+            return again, how2, err2
+        got, how, err = again, how2, err2
+    return got, how, err
+
+
 def _read_tree(
     page, act: str, expected_act: str, date_from: str, date_to: str = "",
 ) -> tuple[list[dict], str, str]:
@@ -1921,7 +1943,7 @@ def _read_tree(
                             parent_level=top, parent_id=parent.id)
             if not _open(url, what, parent.id):
                 continue
-            got, how, err = read_level(page, "ad")
+            got, how, err = _read_settled_ads(page)
             if not _context_matches(what, parent.id):
                 continue
             if how:
@@ -1942,6 +1964,15 @@ def _read_tree(
             owners.setdefault(obj["id"], set()).add(obj["parent_id"])
     ambiguous = {oid for oid, parents in owners.items() if len(parents) > 1}
     if ambiguous:
+        # Снимок страницы объявлений: что Meta показывает при фильтре по
+        # кампании, если фильтр не сработал (Doc20, 19.09).
+        try:
+            from src.fb_ads_rpa import page_capture as _pc
+            _pc.capture(page, step="tree_ad_ambiguous_parents",
+                        diag={"ambiguous": len(ambiguous), "url_params": page.url.split("?", 1)[-1][:300]},
+                        blocks={"table": _TOP_TABLE_JS})
+        except Exception:
+            pass
         objects = [o for o in objects if not (o["level"] == "ad" and o["id"] in ambiguous)]
         errors.append("the same ads came back under different campaigns; ambiguous links skipped")
     return objects, " ".join(hows), "; ".join(errors)
