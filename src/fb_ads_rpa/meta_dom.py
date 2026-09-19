@@ -2322,12 +2322,34 @@ def pick_website_conversion_option(page: Page) -> bool:
 LOADING_STUCK_S = 20.0
 
 
+_ERROR_PAGE_JS = r"""
+  () => {
+    // 20.09 02:00 (скриншот пользователя, профиль KLD_BFL_S15): в адресной
+    // строке остался обычный адрес Meta, а во вкладке — «This site can't
+    // provide a secure connection / ERR_SSL_PROTOCOL_ERROR». По адресу такую
+    // страницу не узнать, узнаём по самой разметке Chrome.
+    if (!document.body) return '';
+    const shell = document.querySelector('#main-frame-error, .neterror, #error-information-popup-container');
+    const txt = document.body.innerText || '';
+    const code = txt.match(/ERR_[A-Z0-9_]+/);
+    if (code) return code[0];
+    if (shell || /can.t provide a secure connection|site can.t be reached|ERR_/i.test(txt.slice(0, 600))) {
+      return 'ERR_UNKNOWN';
+    }
+    return '';
+  }
+"""
+"""Страница ошибки Chrome вместо Ads Manager — её собственная разметка."""
+
+
 def _chrome_error_page(page: Page) -> str:
     """Код ошибки, если во вкладке вместо Ads Manager — страница ошибки Chrome."""
     try:
         if (page.url or "").startswith("chrome-error://"):
             got = page.evaluate("() => (document.body && document.body.innerText || '').match(/ERR_[A-Z_]+/)")
             return (got or ["ERR_UNKNOWN"])[0] if isinstance(got, list) else "ERR_UNKNOWN"
+        # Адрес может остаться прежним (SSL-ошибка) — смотрим саму страницу.
+        return page.evaluate(_ERROR_PAGE_JS) or ""
     except Exception:
         pass
     return ""

@@ -175,3 +175,20 @@ def test_the_pending_drafts_counter_is_read_from_the_button(env):
     assert md._pending_drafts(Btn("Review and publish (11)")) == 11
     assert md._pending_drafts(Btn("Review and publish")) == 0
     assert md._pending_drafts(Btn("")) is None
+
+
+def test_an_ssl_error_page_that_kept_the_meta_url_is_recognised(monkeypatch):
+    """20.09 02:00 (профиль KLD_BFL_S15): «This site can't provide a secure
+    connection / ERR_SSL_PROTOCOL_ERROR», а в адресной строке — адрес Meta."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        b = pw.chromium.launch()
+        try:
+            pg = b.new_page()
+            pg.set_content("<div id='main-frame-error'>This site can&#8217;t provide a secure "
+                           "connection<div>ERR_SSL_PROTOCOL_ERROR</div></div>")
+            assert md._chrome_error_page(pg) == "ERR_SSL_PROTOCOL_ERROR"
+            pg.set_content("<div>Ads Manager</div>")
+            assert md._chrome_error_page(pg) == ""
+        finally:
+            b.close()
