@@ -2687,9 +2687,12 @@ def run_recorded_campaign_flow(
     # ещё раз, вместо минут ожидания в каждой попытке клика (19.09: 10–12 мин).
     # 19.09 вечер: одного раунда мало — Meta отвечала со второго-третьего
     # раза. До двух раундов «разбудить → перезагрузить → Create».
+    # 20.09 02:05, замер по 80 удачным переходам за сутки: медиана 19 с, но
+    # 31 из 80 — дольше 25 с (до 151 с). Прежние 25 с обрывали нормальное
+    # ожидание в 40% случаев, и перезагрузка начинала отсчёт заново.
     for attempt in range(2):
         try:
-            page.get_by_role("radio", name="Leads").first.wait_for(state="visible", timeout=25000)
+            page.get_by_role("radio", name="Leads").first.wait_for(state="visible", timeout=75000)
             break
         except Exception:
             if not recover_stuck_page(page, "objective", editor=False, force=True):
