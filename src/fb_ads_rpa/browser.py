@@ -671,6 +671,12 @@ def ensure_editor_window(page, section: str) -> bool:
 
     def readable(state: dict) -> bool:
         inner = state.get("inner")
+        # 19.09 (SA_arc, CL_ml, CR_ait): свёрнутое окно по-прежнему сообщает
+        # прежнюю ширину страницы (1707), и проверка считала его годным. А
+        # клики по координатам в свёрнутое окно не попадают: не выбиралась
+        # цель, не раскрывались локации, не добавлялась страна.
+        if state.get("minimized"):
+            return False
         return (
             isinstance(inner, (list, tuple)) and len(inner) == 2
             and all(type(v) in (int, float) and v > 0 for v in inner)

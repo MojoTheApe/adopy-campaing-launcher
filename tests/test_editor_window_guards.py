@@ -30,6 +30,17 @@ def test_guard_requires_measured_viewport(monkeypatch, before, after, expected, 
     assert any(c.args[0] == 'window_too_small' for c in record.call_args_list) is not expected
 
 
+def test_a_minimized_window_is_restored_even_if_it_reports_a_wide_page(monkeypatch):
+    """19.09: свёрнутое окно сообщало 1707 px, и проверка его не разворачивала."""
+    readings = iter([{'inner': [1707, 887], 'minimized': True}, {'inner': [1707, 887], 'minimized': False}])
+    monkeypatch.setattr(rt, 'window_state', lambda _: next(readings))
+    recovery = MagicMock()
+    monkeypatch.setattr(br, '_ensure_wide_window', recovery)
+    monkeypatch.setattr(rt, 'record', lambda *a, **kw: None)
+    assert br.ensure_editor_window(MagicMock(), 'adset') is True
+    assert recovery.call_count == 1
+
+
 def test_recovery_exception_does_not_turn_unknown_geometry_into_success(monkeypatch):
     monkeypatch.setattr(rt, 'window_state', lambda _: {})
     monkeypatch.setattr(rt, 'record', lambda *a, **kw: None)
