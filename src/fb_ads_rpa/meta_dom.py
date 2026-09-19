@@ -9494,7 +9494,20 @@ def _group_has_terms(page: Page, terms: list[str]) -> dict:
         return {"found": False, "why": str(exc)[:80]}
 
 
-def _await_group_terms(page: Page, terms: list[str], *, timeout_s: float = 8.0) -> dict:
+_SCROLL_TARGETING_INPUT_JS = r"""
+  () => {
+    const inputs = [...document.querySelectorAll('input, textarea')].filter(inp => {
+      const blob = ((inp.getAttribute('placeholder') || '') + ' ' + (inp.getAttribute('aria-label') || '')).toLowerCase();
+      return /add interests|interests, behaviors|interests or behaviou?rs|demographics|añadir intereses|demografía/.test(blob);
+    });
+    const last = inputs[inputs.length - 1];
+    if (last) last.scrollIntoView({block: 'center'});
+    return !!last;
+  }
+"""
+
+
+def _await_group_terms(page: Page, terms: list[str], *, timeout_s: float = 20.0) -> dict:
     """Read the group until the pasted interests have been drawn.
 
     Meta draws a pasted list in two passes: first the category header
@@ -9505,11 +9518,20 @@ def _await_group_terms(page: Page, terms: list[str], *, timeout_s: float = 8.0) 
     """
     import time as _time
 
+    # 19.09 13:02 (прогон 52a7a75ca5af): через 8 с плашек ещё не было, через 11 с
+    # — все пять. Ждём дольше и держим поле в кадре: список рисуется лениво.
+    def read() -> dict:
+        try:
+            page.evaluate(_SCROLL_TARGETING_INPUT_JS)
+        except Exception:
+            pass
+        return _group_has_terms(page, terms)
+
     deadline = _time.monotonic() + timeout_s
-    own = _group_has_terms(page, terms)
+    own = read()
     while (not own.get("found") or not own.get("hits")) and _time.monotonic() < deadline:
-        page.wait_for_timeout(500)
-        own = _group_has_terms(page, terms)
+        page.wait_for_timeout(700)
+        own = read()
     if own.get("hits") and own.get("missing"):
         # Interests arrive one by one; give the rest one more beat before
         # reporting them as unrecognised.
