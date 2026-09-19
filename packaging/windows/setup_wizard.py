@@ -21,18 +21,9 @@ from machine_config import (
 )
 
 
-STATS_COLUMNS = {
-    "Country",
-    "Account Alias",
-    "Adset Name",
-    "Ad Title",
-    "# Leads",
-    "# FTDs",
-    "$ Spend",
-    "CM",
-    "Ad Asset",
-    "$ Net",
-}
+from src.analysis_agent.stats_workbook import (
+    STATS_COLUMNS, StatsWorkbookError, validate_stats_workbook as _validate_stats_workbook,
+)
 
 
 class WizardValidationError(ValueError):
@@ -65,24 +56,10 @@ def setup_is_complete(config_directory: str | Path) -> bool:
 
 
 def validate_stats_workbook(path: str) -> str:
-    workbook_path = Path(path)
-    if not workbook_path.is_file():
-        raise WizardValidationError("Stats workbook does not exist.")
-    if workbook_path.suffix.casefold() not in {".xlsx", ".xlsm"}:
-        raise WizardValidationError("Stats workbook must be an .xlsx or .xlsm file.")
     try:
-        from openpyxl import load_workbook
-
-        workbook = load_workbook(workbook_path, read_only=True, data_only=True)
-        sheet = workbook[workbook.sheetnames[0]]
-        headers = {str(cell.value).strip() for cell in next(sheet.iter_rows(max_row=1)) if cell.value}
-        workbook.close()
-    except Exception as exc:
-        raise WizardValidationError(f"Stats workbook cannot be opened: {exc}") from exc
-    missing = sorted(STATS_COLUMNS - headers)
-    if missing:
-        raise WizardValidationError("Stats workbook is missing columns: " + ", ".join(missing))
-    return str(workbook_path.resolve())
+        return _validate_stats_workbook(path)
+    except StatsWorkbookError as exc:
+        raise WizardValidationError(str(exc)) from exc
 
 
 def default_creatives_directory() -> Path:

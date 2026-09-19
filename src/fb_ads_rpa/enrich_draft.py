@@ -16,7 +16,7 @@ from src.upload_agent.build_upload_excel import (
     lookup_creative_file,
     lookup_interest,
 )
-from src.web.ad_copy_gsheet import lookup_ad_copy_by_title
+from src.web.ad_copy import lookup_ad_copy_by_title
 
 
 def _interest_names_from_targeting(ref: dict, targeting_name: str) -> str:
@@ -124,7 +124,21 @@ def enrich_campaign_drafts(
     entry = resolve_account_entry(account_map, account_label)
     account_info = get_account_info(ref, account_label, account_map=account_map)
 
+    # A publish must see changes made since the builder opened, even inside
+    # the per-ad read throttle. Refresh each needed registry once per batch.
+    from src.analysis_agent import targeting_registry, ad_text_registry
+    library_states = []
+    if any(getattr(a, "targeting_label", "") for d in drafts for a in d.ad_sets):
+        library_states.append(("Targeting", targeting_registry.pull(force=True)))
+    if any(ad.copy_name for d in drafts for a in d.ad_sets for ad in a.ads):
+        library_states.append(("Ad texts", ad_text_registry.pull(force=True)))
+
     for draft in drafts:
+        for label, state in library_states:
+            if state.get("connected") and not state.get("ok"):
+                stamp = state.get("synced_at") or "unknown time"
+                draft.warnings.append(f"{label}: team library unavailable; using the saved copy from {stamp}. "
+                                      + state.get("error", ""))
         draft.ad_account_id = entry.ad_account_id if entry else None
         draft.page_id = (entry.page_id if entry else None)
         # Что набрано в билдере, то и берём. Раньше строка ниже перетирала
@@ -182,9 +196,9 @@ def enrich_campaign_drafts(
                 # поднимается, просто без детального таргетинга.
                 resolved = ""
                 try:
-                    from src.analysis_agent.gsheet_targeting import lookup_targeting_interests
+                    from src.analysis_agent.targeting_registry import resolve_interests
 
-                    resolved = lookup_targeting_interests(ad_set.targeting_label)
+                    resolved = resolve_interests(ad_set.targeting_label)
                 except Exception as exc:
                     draft.errors.append(f"Targeting library could not resolve {ad_set.targeting_label!r}: {exc}")
                     continue

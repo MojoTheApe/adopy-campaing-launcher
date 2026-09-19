@@ -93,7 +93,7 @@ def test_the_library_resolves_a_code_and_not_an_interest_string(monkeypatch, tmp
     from src.analysis_agent import targeting_registry as tr
 
     monkeypatch.setattr(tr, "_store", lambda: tmp_path / "targeting.json")
-    monkeypatch.setattr(tr, "refresh", lambda **kwargs: {})
+    monkeypatch.setattr(tr, "pull", lambda **kwargs: {})
     target = tr.add("PF", "Foreign exchange market, Investor")
     assert tr.resolve_interests(target.name) == target.rpa_interests()
     assert tr.resolve_interests(target.rpa_interests()) == ""

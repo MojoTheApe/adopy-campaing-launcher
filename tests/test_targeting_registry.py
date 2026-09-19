@@ -74,7 +74,7 @@ def test_a_taken_name_is_refused_separately():
     tr.add("A", "один, два")
     with pytest.raises(tr.TargetingError) as e:
         tr.add("A", "три, четыре")
-    assert "занято" in str(e.value).lower()
+    assert "already taken" in str(e.value).lower()
 
 
 def test_a_target_is_not_its_own_duplicate_when_edited():
@@ -113,30 +113,6 @@ def test_an_empty_target_is_refused():
         tr.add("A", "   ")
 
 
-def test_sharing_reports_failure_instead_of_swallowing_it(monkeypatch):
-    """«Сохранено здесь» и «увидят все» — разные вещи.
-
-    Молчаливый отказ общей таблицы выглядел бы как успех, и таргет, которого
-    не увидит никто, кроме автора, считался бы розданным.
-    """
-    t = tr.Target(name="A", interests="один, два")
-
-    import src.analysis_agent.gsheet_targeting as g
-
-    def boom(*a, **k):
-        raise RuntimeError("Google отказал")
-
-    monkeypatch.setattr(g, "add_targeting_profile", boom)
-    assert "Google отказал" in tr.share(t)
-
-
-def test_sharing_says_nothing_when_it_worked(monkeypatch):
-    import src.analysis_agent.gsheet_targeting as g
-
-    monkeypatch.setattr(g, "add_targeting_profile", lambda *a, **k: None)
-    assert tr.share(tr.Target(name="A", interests="один")) == ""
-
-
 @pytest.mark.parametrize("name", ["Investment Plus", "Main 1", "Well - being"])
 def test_saved_names_round_trip_through_campaign_analytics(name):
     from src.analysis_agent.creative_verdicts import parse_adset
@@ -161,7 +137,7 @@ def test_names_differing_only_by_spacing_collide():
     tr.add("Main 1", "один")
     with pytest.raises(tr.TargetingError) as e:
         tr.add(" Main  1 ", "два, три")
-    assert "занято" in str(e.value).lower()
+    assert "already taken" in str(e.value).lower()
 
 
 def test_the_registry_reports_a_repeated_name():

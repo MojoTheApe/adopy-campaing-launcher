@@ -3225,12 +3225,12 @@ async function dashRefresh(ev) {
 </div>
 
 <div id="view-targets" class="view-panel">
-  <h2 class="view-title">Targeting <span class="hint">shared profiles and local changes</span></h2>
+  <h2 class="view-title">Targeting <span class="hint">the team library</span></h2>
   <p style="color:var(--muted);max-width:70ch">
-    New profiles are saved here and sent to the shared library. Other machines
-    receive them on refresh. Edit and Remove apply only to this machine.
-    Saved local profiles remain available when Google Sheets is unavailable.
+    One library for the whole team. Add, Edit, Remove and Restore are saved to the team
+    library straight away, and every manager sees them the next time the list or the builder opens.
   </p>
+  <div id="tg-status" style="font-size:0.85rem;max-width:70ch"></div>
 
   <div id="tg-add-box" style="margin:1rem 0;padding:0.9rem 1rem;border:1px solid var(--border);border-radius:6px;max-width:70ch">
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:flex-end">
@@ -3248,19 +3248,13 @@ async function dashRefresh(ev) {
       </label>
       <button type="button" id="tg-add-btn" class="btn">Add</button>
       <button type="button" id="tg-cancel-btn" class="btn" hidden>Cancel edit</button>
-      <button type="button" id="tg-refresh-btn" class="btn">Refresh shared library</button>
+      <button type="button" id="tg-refresh-btn" class="btn">Refresh</button>
     </div>
     <div id="tg-msg" style="margin-top:0.6rem;font-size:0.85rem"></div>
   </div>
 
   <div id="tg-list">Loading…</div>
-  <details style="margin-top:1rem;max-width:70ch">
-    <summary>Export this machine's library to Google Sheets</summary>
-    <p>This replaces every profile in the shared sheet with the saved profiles on this machine,
-      including local edits and removals. A backup of the previous sheet is required.
-      Other editors should pause changes during export. Existing local copies on other machines are not deleted.</p>
-    <button type="button" id="tg-export-btn" class="btn">Replace shared sheet…</button>
-  </details>
+  <div id="tg-deleted"></div>
 </div>
 
 {# ── Ad titles: библиотека рекламных текстов ─────────────────────────────
@@ -3275,10 +3269,10 @@ async function dashRefresh(ev) {
 <div id="view-ad-texts" class="view-panel">
   <h2 class="view-title">Ad titles <span class="hint">headline, body and description</span></h2>
   <p style="color:var(--muted);max-width:70ch">
-    Тексты объявлений живут здесь, на машине. Вкладка «ad texts» общей таблицы
-    осталась источником наполнения: «Load from the sheet» дочитывает её, но
-    ничего туда не пишет. Правка и удаление действуют на этой машине.
+    One library for the whole team. Add, Edit, Remove and Restore are saved to the team
+    library straight away, and every manager sees them the next time the list or the builder opens.
   </p>
+  <div id="at-status" style="font-size:0.85rem;max-width:70ch"></div>
 
   <div id="at-form" style="margin:1rem 0;padding:0.9rem 1rem;border:1px solid var(--border);border-radius:6px;max-width:80ch;background:var(--bg-elev)">
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem">
@@ -3312,7 +3306,7 @@ async function dashRefresh(ev) {
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-top:0.6rem">
       <button type="button" id="at-add-btn" class="btn">Add</button>
       <button type="button" id="at-cancel-btn" class="btn" hidden>Cancel edit</button>
-      <button type="button" id="at-refresh-btn" class="btn">Load from the sheet</button>
+      <button type="button" id="at-refresh-btn" class="btn">Refresh</button>
       <span id="at-msg" style="font-size:0.85rem"></span>
     </div>
   </div>
@@ -3324,6 +3318,7 @@ async function dashRefresh(ev) {
   </div>
 
   <div id="at-list">Loading…</div>
+  <div id="at-deleted"></div>
 </div>
 
 <div id="view-home" class="view-panel active">
@@ -11449,7 +11444,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
 // ── Таргеты: общая библиотека ────────────────────────────────────────────
 // Targeting library UI. Keep selected records as data, never in CSS selectors.
 (function () {
-  var profiles = [], editing = '', pending = false, libraryLoaded = false;
+  var profiles = [], editing = '', pending = false;
   function el(id) { return document.getElementById(id); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function say(text, error) { el('tg-msg').textContent = text || ''; el('tg-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
@@ -11457,31 +11452,50 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     pending = value;
     document.querySelectorAll('#view-targets button, #view-targets input').forEach(function (b) { b.disabled = value; });
   }
+  // Где сейчас библиотека: общая и свежая, общая, но недоступная, или только на машине.
+  function libraryState(lib) {
+    lib = lib || {};
+    if (!lib.connected) return ['The team library is not connected on this machine. Changes stay on this computer.', true];
+    if (!lib.ok) return ['The team library is unreachable: ' + (lib.error || 'unknown error')
+      + (lib.synced_at ? ' Showing the copy from ' + lib.synced_at + '.' : '')
+      + ' Changes cannot be saved until it is back.', true];
+    return ['Team library' + (lib.synced_at ? ' · refreshed ' + lib.synced_at : ''), false];
+  }
+  function who(by, at) { return esc(by || '—') + (at ? '<br><span style="color:var(--muted)">' + esc(at) + '</span>' : ''); }
   function render(data) {
     profiles = data.profiles || [];
-    libraryLoaded = true;
-    var error = (data.sheet || {}).error;
-    var html = error ? '<p style="color:var(--danger)">Shared library could not be refreshed: ' + esc(error) + '. Showing saved local profiles.</p>' : '';
+    var state = libraryState(data.library);
+    el('tg-status').textContent = state[0];
+    el('tg-status').style.color = state[1] ? 'var(--danger)' : 'var(--muted)';
+    var html = '';
     var duplicates = data.duplicates || {};
     if ((duplicates.names || []).length) html += '<p style="color:var(--danger)">Same name twice: ' + esc(duplicates.names.join(', ')) + '</p>';
     (duplicates.sets || []).forEach(function (names) {
       html += '<p style="color:var(--danger)">Same set of interests: ' + esc(names.join(' = ')) + '</p>';
     });
-    html += '<p>Total: ' + profiles.length + '</p><table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th><th>Status</th><th></th></tr></thead><tbody>';
+    html += '<p>Total: ' + profiles.length + '</p><table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th><th>Added</th><th>Last change</th><th></th></tr></thead><tbody>';
     profiles.forEach(function (p) {
       html += '<tr><td><b>' + esc(p.name) + '</b></td><td>' + esc(p.interests) + '</td><td>' + esc(p.narrow || '—') + '</td>'
-        + '<td>' + (p.shared ? 'Shared copy' : 'Local only') + (p.shared_error ? '<br>' + esc(p.shared_error) : '') + '</td><td>'
-        + '<button type="button" data-tg-edit="' + esc(p.name) + '">Edit locally</button> '
-        + '<button type="button" data-tg-del="' + esc(p.name) + '">Remove locally</button> '
-        + (p.shared ? '' : '<button type="button" data-tg-share="' + esc(p.name) + '">Share / retry</button>') + '</td></tr>';
+        + '<td>' + who(p.added_by, p.added_at) + '</td><td>' + (p.updated_by ? who(p.updated_by, p.updated_at) : '—') + '</td><td>'
+        + '<button type="button" data-tg-edit="' + esc(p.name) + '">Edit</button> '
+        + '<button type="button" data-tg-del="' + esc(p.name) + '">Remove</button></td></tr>';
     });
     el('tg-list').innerHTML = html + '</tbody></table>';
+    var deleted = data.deleted || [];
+    el('tg-deleted').innerHTML = !deleted.length ? '' : '<details style="margin-top:1rem"><summary>Recently deleted (' + deleted.length + ')</summary>'
+      + '<table><thead><tr><th>Name</th><th>Interests</th><th>Narrowing</th><th>Removed</th><th></th></tr></thead><tbody>'
+      + deleted.map(function (d) {
+        var item = d.item || {};
+        return '<tr><td><b>' + esc(d.name) + '</b></td><td>' + esc(item.interests) + '</td><td>' + esc(item.narrow || '—') + '</td>'
+          + '<td>' + who(d.deleted_by, d.deleted_at) + '</td>'
+          + '<td><button type="button" data-tg-restore="' + esc(d.name) + '">Restore</button></td></tr>';
+      }).join('') + '</tbody></table></details>';
   }
-  async function load(force) {
+  async function load() {
     if (pending) return;
     busy(true);
     try {
-      var r = await fetch('/api/targeting-profiles' + (force ? '?force=true' : ''));
+      var r = await fetch('/api/targeting-profiles');
       var d = await r.json();
       if (!r.ok || !d.ok) throw new Error(d.error || 'Could not load');
       render(d);
@@ -11503,46 +11517,37 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
       var d = await r.json();
       if (!r.ok || !d.ok) throw new Error(d.error || 'Could not save');
       saved = true;
-      if (body.action === 'delete') say('Removed from this machine: ' + body.name);
-      else if (body.action === 'update') say('Updated on this machine. The shared profile is unchanged.');
-      else if (body.action === 'export') say('Exported ' + d.exported + ' profiles. Previous sheet backup: ' + d.backup);
-      else say(d.shared ? 'Saved in the shared library. Other machines receive it on refresh.' : 'Saved locally. Sharing failed; use Share / retry. ' + (d.shared_error || ''), !d.shared);
-      if (body.action !== 'share' && body.action !== 'export') clearForm();
-    } catch (e) { say(String(e), true); }
+      if (body.action === 'delete') say('Removed: ' + body.name + '. It is in Recently deleted if you need it back.');
+      else if (body.action === 'restore') say('Restored: ' + body.name + '.');
+      else if (body.action === 'update') say(d.scope === 'local' ? 'Saved on this computer only.' : 'Saved. Everyone gets the change.');
+      else say(d.scope === 'local' ? 'Added on this computer only.' : 'Added. Everyone gets it.');
+      if (body.action === 'add' || body.action === 'update') clearForm();
+    } catch (e) { say(e.message || String(e), true); }
     finally { busy(false); }
-    if (saved) await load(false);
+    if (saved) await load();
   }
   function startEdit(name) {
     var p = profiles.find(function (p) { return p.name === name; });
     if (!p) return;
     el('tg-name').value = p.name; el('tg-interests').value = p.interests; el('tg-narrow').value = p.narrow || '';
-    editing = name; el('tg-add-btn').textContent = 'Save locally'; el('tg-cancel-btn').hidden = false;
-    say('Editing on this machine: ' + name + '. Use Cancel edit to add a new profile.');
+    editing = name; el('tg-add-btn').textContent = 'Save'; el('tg-cancel-btn').hidden = false;
+    say('Editing ' + name + '. Use Cancel edit to add a new profile instead.');
   }
   document.addEventListener('click', function (ev) {
     var t = ev.target;
     if (!t || !t.getAttribute || pending) return;
     if (t.id === 'tg-add-btn') { send({action:editing ? 'update' : 'add', was:editing, name:el('tg-name').value, interests:el('tg-interests').value, narrow:el('tg-narrow').value}); return; }
     if (t.id === 'tg-cancel-btn') { clearForm(); say(''); return; }
-    if (t.id === 'tg-refresh-btn') { load(true); return; }
-    if (t.id === 'tg-export-btn') {
-      if (!libraryLoaded) { say('Load the library successfully before exporting.', true); return; }
-      if (confirm('Replace EVERY profile in the shared Google sheet with the ' + profiles.length
-          + ' saved profiles on this machine? Profiles absent here will be removed from the sheet. '
-          + 'A backup will be saved first. Other editors should pause changes during export.')) {
-        send({action:'export', confirmation:'replace_shared_library'});
-      }
-      return;
-    }
+    if (t.id === 'tg-refresh-btn') { load(); return; }
     var name = t.getAttribute('data-tg-edit');
     if (name) { startEdit(name); return; }
     name = t.getAttribute('data-tg-del');
-    if (name) { if (confirm('Remove «' + name + '» from this machine? The shared profile remains available to others.')) send({action:'delete', name:name}); return; }
-    name = t.getAttribute('data-tg-share');
-    if (name) { send({action:'share', name:name}); return; }
-    if (t.getAttribute('data-view') === 'targets') load(false);
+    if (name) { if (confirm('Remove «' + name + '» for the whole team? It stays in Recently deleted and can be restored.')) send({action:'delete', name:name}); return; }
+    name = t.getAttribute('data-tg-restore');
+    if (name) { send({action:'restore', name:name}); return; }
+    if (t.getAttribute('data-view') === 'targets') load();
   });
-  if ((location.hash || '').indexOf('targets') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
+  if ((location.hash || '').indexOf('targets') !== -1) document.addEventListener('DOMContentLoaded', function () { load(); });
 })();
 </script>
 
@@ -11598,7 +11603,6 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
       groups[lang].forEach(function (t) {
         html += '<div class="at-card">'
           + '<div class="at-name">' + esc(t.name)
-          + (t.source === 'sheet' ? '' : '<span class="at-badge at-local">local</span>')
           + (t.asset ? '<span class="at-badge">' + esc(t.asset) + '</span>' : '')
           + '</div>'
           + '<div class="at-actions">'
@@ -11625,19 +11629,28 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     if (seen[was]) el('at-lang-filter').value = was;
   }
 
-  function report(sheet) {
-    if (!sheet) return '';
-    var parts = [];
-    if (sheet.error) return 'Sheet could not be read: ' + sheet.error + '. Showing the saved library.';
-    if (sheet.added) parts.push('added ' + sheet.added);
-    if (sheet.updated) parts.push('updated ' + sheet.updated);
-    // Пропущенное называется поимённо: молчаливый перенос оставил бы
-    // уверенность, что доехало всё. Но повторять этот список при каждом
-    // открытии раздела незачем — он относится к переносу, а не к библиотеке.
-    if ((sheet.skipped || []).length) parts.push('skipped ' + sheet.skipped.length + ': ' + sheet.skipped.slice(0, 3).join('; ')
-      + (sheet.skipped.length > 3 ? ' …' : ''));
-    if ((sheet.renamed || []).length) parts.push((sheet.renamed || []).length + ' rows had no title and were named by row number');
-    return parts.join(' · ');
+  // Где сейчас библиотека — та же строка состояния, что у таргетов.
+  function libraryState(lib) {
+    lib = lib || {};
+    if (!lib.connected) return ['The team library is not connected on this machine. Changes stay on this computer.', true];
+    if (!lib.ok) return ['The team library is unreachable: ' + (lib.error || 'unknown error')
+      + (lib.synced_at ? ' Showing the copy from ' + lib.synced_at + '.' : '')
+      + ' Changes cannot be saved until it is back.', true];
+    return ['Team library' + (lib.synced_at ? ' · refreshed ' + lib.synced_at : ''), false];
+  }
+
+  function renderDeleted(deleted) {
+    deleted = deleted || [];
+    el('at-deleted').innerHTML = !deleted.length ? '' : '<details style="margin-top:1rem"><summary>Recently deleted (' + deleted.length + ')</summary>'
+      + deleted.map(function (d) {
+        var item = d.item || {};
+        return '<div class="at-card"><div class="at-name">' + esc(d.name)
+          + '<span class="at-badge">removed by ' + esc(d.deleted_by || '—') + (d.deleted_at ? ', ' + esc(d.deleted_at) : '') + '</span></div>'
+          + '<div class="at-actions"><button type="button" class="btn" data-at-restore="' + esc(d.name) + '">Restore</button></div>'
+          + (item.headline ? '<div class="at-headline">' + esc(item.headline) + '</div>' : '')
+          + (item.body ? '<div class="at-body">' + esc(item.body) + '</div>' : '')
+          + '</div>';
+      }).join('') + '</details>';
   }
 
   /* `keepMessage` — перечитывание после сохранения. Без него отчёт о переносе
@@ -11647,9 +11660,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
   async function load(force, keepMessage) {
     if (pending) return;
     busy(true);
-    if (force) say('Reading the sheet…');
     try {
-      var r = await fetch('/api/ad-texts' + (force ? '?force=true' : ''));
+      var r = await fetch('/api/ad-texts');
       var d = await r.json();
       if (!r.ok || !d.ok) throw new Error(d.error || 'Could not load');
       texts = d.texts || [];
@@ -11657,15 +11669,17 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
       document.dispatchEvent(new CustomEvent('acl:adtextschange', {detail:{texts:texts}}));
       fillLanguages();
       render();
+      renderDeleted(d.deleted);
+      var state = libraryState(d.library);
+      el('at-status').textContent = state[0];
+      el('at-status').style.color = state[1] ? 'var(--danger)' : 'var(--muted)';
       var duplicates = d.duplicates || {};
       var warning = '';
       if ((duplicates.names || []).length) warning += 'Same title twice: ' + duplicates.names.join(', ') + '. ';
       (duplicates.texts || []).forEach(function (names) { warning += 'Same text: ' + names.join(' = ') + '. '; });
-      var note = report(d.sheet);
-      if (warning) { say(warning + note, true); }
+      if (warning) { say(warning, true); }
       else if (keepMessage) { /* сообщение о сохранении остаётся на месте */ }
-      else if (note) { say(note, !!(d.sheet || {}).error); }
-      else if (force) { say('The sheet added nothing new.'); }
+      else if (force) { say(''); }
     } catch (e) { say(e.message || String(e), true); el('at-list').textContent = ''; }
     finally { busy(false); }
   }
@@ -11687,10 +11701,11 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
       if (!r.ok || !d.ok) throw new Error(d.error || 'Could not save');
       saved = true;
       document.dispatchEvent(new CustomEvent('acl:adtextschange'));
-      if (body.action === 'delete') say('Removed from this machine: ' + body.name);
-      else if (body.action === 'update') say('Saved on this machine.');
-      else say('Added.');
-      if (body.action !== 'delete') clearForm();
+      if (body.action === 'delete') say('Removed: ' + body.name + '. It is in Recently deleted if you need it back.');
+      else if (body.action === 'restore') say('Restored: ' + body.name + '.');
+      else if (body.action === 'update') say(d.scope === 'local' ? 'Saved on this computer only.' : 'Saved. Everyone gets the change.');
+      else say(d.scope === 'local' ? 'Added on this computer only.' : 'Added. Everyone gets it.');
+      if (body.action === 'add' || body.action === 'update') clearForm();
     } catch (e) { say(e.message || String(e), true); }
     finally { busy(false); }
     if (saved) await load(false, true);
@@ -11725,8 +11740,10 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     var name = t.getAttribute('data-at-edit');
     if (name) { startEdit(name); return; }
     name = t.getAttribute('data-at-del');
-    if (name) { if (confirm('Remove «' + name + '» from this machine?')) send({action:'delete', name:name}); return; }
-    if (t.getAttribute('data-view') === 'ad-texts' && !loaded) load(false);
+    if (name) { if (confirm('Remove «' + name + '» for the whole team? It stays in Recently deleted and can be restored.')) send({action:'delete', name:name}); return; }
+    name = t.getAttribute('data-at-restore');
+    if (name) { send({action:'restore', name:name}); return; }
+    if (t.getAttribute('data-view') === 'ad-texts') load(false);
   });
   ['at-search', 'at-lang-filter'].forEach(function (id) {
     document.addEventListener('input', function (ev) { if (ev.target && ev.target.id === id) render(); });
@@ -11734,7 +11751,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
   });
   if ((location.hash || '').indexOf('ad-texts') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
   document.addEventListener('acl:viewchange', function(e) {
-    if (e.detail && e.detail.view === 'ad-texts' && !loaded) load(false);
+    if (e.detail && e.detail.view === 'ad-texts') load(false);
   });
 })();
 </script>
