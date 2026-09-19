@@ -5591,6 +5591,24 @@ function amapCalendar(btn) {
   box.style.left = Math.max(8, Math.min(r.left - 260, innerWidth - 700)) + 'px';
   box.style.top = (r.bottom + window.scrollY + 6) + 'px';
 
+  /* Клик мимо окна закрывает его, как Cancel; Esc — тоже (19.09, просьба
+     пользователя). mousedown, а не click: окно перерисовывается на каждый
+     клик по дате, и к моменту click цель уже вынута из разметки. */
+  function amapCalOutside(e) {
+    if (!document.body.contains(box)) { amapCalStop(); return; }
+    if (box.contains(e.target) || btn.contains(e.target)) return;
+    box.remove(); amapCalStop();
+  }
+  function amapCalEsc(e) {
+    if (e.key === 'Escape' && document.body.contains(box)) { box.remove(); amapCalStop(); }
+  }
+  function amapCalStop() {
+    document.removeEventListener('mousedown', amapCalOutside, true);
+    document.removeEventListener('keydown', amapCalEsc, true);
+  }
+  document.addEventListener('mousedown', amapCalOutside, true);
+  document.addEventListener('keydown', amapCalEsc, true);
+
   function hasData(p) {
     if (p.key === 'all') return true;
     for (var i = 0; i < have.length; i++) if (have[i] >= p.from && have[i] <= p.to) return true;
