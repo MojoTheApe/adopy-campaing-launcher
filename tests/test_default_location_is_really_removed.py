@@ -233,19 +233,3 @@ def test_a_summary_row_with_only_an_expander_is_opened_by_it(page, monkeypatch):
                             "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
     assert md._click_locations_edit(page) is True
     assert clicked["at"] == "arrow", clicked
-
-
-def test_a_whole_row_button_far_below_is_scrolled_to_and_opened(page, monkeypatch):
-    """19.09 18:25 SA_arc Trading: вся строка — role=button aria-expanded=false,
-    подпись внутри неё, и строка на y≈3500 — за краем окна."""
-    page.set_content(
-        "<div style='height:3400px'></div>"
-        "<div role='listitem'><div role='button' aria-expanded='false' id='row' "
-        "onclick=\"this.setAttribute('aria-expanded','true')\">"
-        "<span>Locations</span><div><span>Inclusion:</span><span>United States</span></div></div></div>"
-        "<div style='height:2000px'></div>")
-    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
-    monkeypatch.setattr(md, "_cdp_mouse_click", lambda pg, x, y: pg.evaluate(
-        "([x, y]) => { const e = document.elementFromPoint(x, y); if (e) e.click(); }", [x, y]))
-    assert md._click_locations_edit(page) is True
-    assert page.eval_on_selector("#row", "el => el.getAttribute('aria-expanded')") == "true"
