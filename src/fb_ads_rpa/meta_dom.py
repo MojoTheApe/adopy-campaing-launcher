@@ -9556,6 +9556,7 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
     groups = targeting_groups(targeting_label)
     if not groups:
         return False
+    unconfirmed: list[int] = []
     for index, group in enumerate(groups):
         if index > 0:
             if not click_define_further(page):
@@ -9590,7 +9591,13 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
                             blocks={"groups": _GROUPS_BLOCK_JS})
             except Exception:
                 pass
-            return False
+            # Живое дерево, 19.09: проверка группы на живой странице ошибается
+            # («пусто» при стоящих интересах — снимки 199fa985d531, 302c6ab20986),
+            # и отказ здесь стоил черновику всей следующей AND-группы. Вставка
+            # сама сверила, что термины на странице; группы добавляем дальше,
+            # а итог шага остаётся честным — неуспех.
+            unconfirmed.append(index + 1)
+            continue
     if len(groups) > 1:
         # Снимок заполненных AND-групп: по нему пишутся тесты разметки.
         try:
@@ -9600,7 +9607,7 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
                         blocks={"groups": _GROUPS_BLOCK_JS})
         except Exception:
             pass
-    return True
+    return not unconfirmed
 
 
 def paste_targeting_interests(page: Page, targeting_label: str) -> bool:

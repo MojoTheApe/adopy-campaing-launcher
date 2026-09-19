@@ -349,3 +349,17 @@ def test_an_empty_group_still_fails_after_the_wait(page):
                      "<input placeholder='Add demographics, interests or behaviours'></div>")
     res = md._await_group_terms(page, ["Initial Public Offering"], timeout_s=1)
     assert res["found"] is True and res["hits"] == []
+
+
+def test_an_unconfirmed_group_does_not_cost_the_next_group(monkeypatch):
+    """19.09: ложное «пусто» у группы 1 теряло всю группу 2 в черновике."""
+    pasted, checks = [], iter([{"found": True, "hits": []}, {"found": True, "hits": ["Business jet"], "missing": []}])
+    monkeypatch.setattr(md, "click_define_further", lambda page: True)
+    monkeypatch.setattr(md, "_focus_last_targeting_input", lambda page: True)
+    monkeypatch.setattr(md, "paste_targeting_interests", lambda page, g: pasted.append(g) or True)
+    monkeypatch.setattr(md, "_await_group_terms", lambda page, terms: next(checks))
+    monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
+    import src.fb_ads_rpa.page_capture as pc
+    monkeypatch.setattr(pc, "capture", lambda *a, **k: None)
+    assert md.paste_targeting_groups(object(), "Investment banking [AND] Business jet") is False
+    assert pasted == ["Investment banking", "Business jet"]
