@@ -665,6 +665,56 @@ def _ensure_wide_window(context, page) -> None:
 MIN_EDITOR_WIDTH = 1168
 
 
+#: Окна, которые робот вывел из свёрнутого состояния за край экрана:
+#: id контекста → (windowId, прежние left/top). Возвращаются в конце кампании.
+_OFFSCREEN: dict[int, dict] = {}
+
+
+def _restore_offscreen(context, page) -> bool:
+    """Свёрнутое окно — в обычное состояние, но за левым краем экрана.
+
+    19.09, решение пользователя: окна профилей держат свёрнутыми, и
+    выскакивать на экран они не должны. А в свёрнутое окно клики по
+    координатам не попадают (цель, локации, тексты). Поэтому окно «живёт»
+    за краем экрана, пока идёт кампания, и сворачивается обратно в конце
+    (`put_window_back`).
+    """
+    session = context.new_cdp_session(page)
+    info = session.send("Browser.getWindowForTarget") or {}
+    window_id = info.get("windowId")
+    bounds = info.get("bounds") or {}
+    if window_id is None or bounds.get("windowState") != "minimized":
+        return False
+    session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": {"windowState": "normal"}})
+    time.sleep(0.6)
+    normal = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+    width = max(int(normal.get("width") or 0), MIN_EDITOR_WIDTH + 200)
+    height = max(int(normal.get("height") or 0), 900)
+    _OFFSCREEN[id(page.context)] = {"window_id": window_id,
+                                    "left": normal.get("left"), "top": normal.get("top")}
+    session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": {
+        "left": -(width + 400), "top": 0, "width": width, "height": height}})
+    time.sleep(1.0)
+    return True
+
+
+def put_window_back(page) -> None:
+    """Вернуть окно, выведенное за край экрана, на место и свернуть."""
+    saved = _OFFSCREEN.pop(id(page.context), None)
+    if not saved:
+        return
+    try:
+        session = page.context.new_cdp_session(page)
+        bounds = {k: saved[k] for k in ("left", "top") if isinstance(saved.get(k), int)}
+        if bounds:
+            session.send("Browser.setWindowBounds", {"windowId": saved["window_id"], "bounds": bounds})
+            time.sleep(0.3)
+        session.send("Browser.setWindowBounds",
+                     {"windowId": saved["window_id"], "bounds": {"windowState": "minimized"}})
+    except Exception as exc:
+        log.debug("put_window_back failed: %s", exc)
+
+
 def ensure_editor_window(page, section: str) -> bool:
     """Check at section boundaries; recover once, then stop without replaying drafts."""
     from src.fb_ads_rpa import run_telemetry as rt
@@ -686,10 +736,17 @@ def ensure_editor_window(page, section: str) -> bool:
     before = rt.window_state(page)
     after = before
     if not readable(before):
-        try:
-            _ensure_wide_window(page.context, page)
-        except Exception as exc:
-            log.debug("editor window recovery failed: %s", exc)
+        moved = False
+        if before.get("minimized"):
+            try:
+                moved = _restore_offscreen(page.context, page)
+            except Exception as exc:
+                log.debug("offscreen restore failed: %s", exc)
+        if not moved:
+            try:
+                _ensure_wide_window(page.context, page)
+            except Exception as exc:
+                log.debug("editor window recovery failed: %s", exc)
         after = rt.window_state(page)
     ok = readable(after)
     diag = {"section": section, "minimum_width": MIN_EDITOR_WIDTH,

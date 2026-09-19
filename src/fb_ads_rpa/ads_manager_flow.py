@@ -2198,26 +2198,33 @@ class AdsManagerFlow:
                 # would otherwise be reported against the draft that replaced it.
                 ad_soft_fails.clear()
                 self._goto_campaigns(draft, result)
-                fail_step = run_recorded_campaign_flow(
-                    self.page,
-                    campaign_name=draft.name,
-                    budget=str(ad_set.daily_budget or ""),
-                    adset_name=ad_set.name,
-                    country=draft.country,
-                    age_min=ad_set.age_min,
-                    age_max=ad_set.age_max,
-                    targeting_label=ad_set.targeting_label,
-                    language_names=[draft.language] if draft.language else None,
-                    ad_name=ad.ad_name(),
-                    creative_type=ad.creative_type,
-                    creative_path=ad.creative_path or "",
-                    ad_title=ad.ad_title,
-                    ad_body=ad.ad_body,
-                    destination_url=draft.link,
-                    os_val=ad_set.os,
-                    additional_ads=additional_ads,
-                    soft_fails_out=ad_soft_fails,
-                )
+                try:
+                    fail_step = run_recorded_campaign_flow(
+                        self.page,
+                        campaign_name=draft.name,
+                        budget=str(ad_set.daily_budget or ""),
+                        adset_name=ad_set.name,
+                        country=draft.country,
+                        age_min=ad_set.age_min,
+                        age_max=ad_set.age_max,
+                        targeting_label=ad_set.targeting_label,
+                        language_names=[draft.language] if draft.language else None,
+                        ad_name=ad.ad_name(),
+                        creative_type=ad.creative_type,
+                        creative_path=ad.creative_path or "",
+                        ad_title=ad.ad_title,
+                        ad_body=ad.ad_body,
+                        destination_url=draft.link,
+                        os_val=ad_set.os,
+                        additional_ads=additional_ads,
+                        soft_fails_out=ad_soft_fails,
+                    )
+                finally:
+                    try:
+                        from src.fb_ads_rpa.browser import put_window_back
+                        put_window_back(self.page)
+                    except Exception:
+                        pass
                 if not fail_step:
                     break
                 decision = retry_policy.disposition(fail_step)

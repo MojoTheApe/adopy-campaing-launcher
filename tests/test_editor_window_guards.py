@@ -121,3 +121,37 @@ def test_attach_records_measured_bounds_after_resizing(monkeypatch):
                                    diag={'section': 'attach', 'after': {'inner': [1280, 700]}})
     # Avoid leaving the synthetic object as the current thread's Playwright.
     br._pw_tls.playwright = None
+
+
+def test_a_minimized_window_is_moved_offscreen_and_put_back(monkeypatch):
+    """19.09: окна держат свёрнутыми — робот выводит окно за край экрана, а в
+    конце кампании возвращает на место и сворачивает."""
+    calls = []
+
+    class Session:
+        def __init__(self): self.state = "minimized"
+        def send(self, method, params=None):
+            calls.append((method, params))
+            if method == "Browser.getWindowForTarget":
+                return {"windowId": 7, "bounds": {"windowState": self.state, "left": 100, "top": 50,
+                                                  "width": 1400, "height": 900}}
+            if method == "Browser.setWindowBounds" and "windowState" in params["bounds"]:
+                self.state = params["bounds"]["windowState"]
+            return {}
+
+    session = Session()
+    page = MagicMock()
+    page.context.new_cdp_session.return_value = session
+    monkeypatch.setattr(br.time, "sleep", lambda *_: None)
+    readings = iter([{'inner': [1707, 887], 'minimized': True}, {'inner': [1707, 887], 'minimized': False}])
+    monkeypatch.setattr(rt, 'window_state', lambda _: next(readings))
+    monkeypatch.setattr(rt, 'record', lambda *a, **kw: None)
+    wide = MagicMock()
+    monkeypatch.setattr(br, '_ensure_wide_window', wide)
+    assert br.ensure_editor_window(page, 'campaign') is True
+    wide.assert_not_called()
+    moved = [p["bounds"] for m, p in calls if m == "Browser.setWindowBounds" and "left" in p["bounds"]]
+    assert moved and moved[0]["left"] < 0, calls
+    br.put_window_back(page)
+    tail = [p["bounds"] for m, p in calls if m == "Browser.setWindowBounds"][-2:]
+    assert tail == [{"left": 100, "top": 50}, {"windowState": "minimized"}]
