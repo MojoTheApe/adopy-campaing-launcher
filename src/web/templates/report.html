@@ -2933,7 +2933,7 @@ async function dashRefresh(ev) {
       .then(function (s) {
         if (!s) return;
         aclLastAttempt(s.last_attempt);
-        if (!s.available || !s.supervised) return;
+        if (!s.available || !s.supervised) { btn.hidden = true; return; }
         // Выпуски GitHub (установленный ACL.exe) называют версию, git — тег.
         var name = (s.candidate && (s.candidate.version || s.candidate.tag || s.candidate.short)) || '';
         var fixed = (s.fixed || []).map(function (f) {
@@ -2991,7 +2991,9 @@ async function dashRefresh(ev) {
     if (!a || !a.finished_at || !a.result || a.result === 'updated') return;
     var key = 'acl-update-seen:' + a.finished_at;
     try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { /* без памяти — покажем снова */ }
-    alert(a.result === 'rolled_back'
+    alert(a.result === 'rollback_failed'
+      ? 'The update failed and ACL could not fully restore the previous version. Open the previous installer or contact support.\n\n' + (a.reason || '')
+      : a.result === 'rolled_back'
       ? 'The update to ' + (a.to || 'the new version') + ' did not work, so ACL went back to '
         + (a.from || 'the previous version') + '.\n\n' + (a.reason || '')
         + '\n\nNothing else changed. Use Report a problem so it gets fixed.'
@@ -3022,7 +3024,7 @@ async function dashRefresh(ev) {
           // Only reload once the server has actually gone away and returned.
           // Without this the first poll finds the old process still shutting
           // down and reloads straight back onto the version we are replacing.
-          if (h && h.ok && wentDown) { location.reload(); return; }
+          if (h && h.app === 'ACL' && h.ok && (wentDown || (btn.dataset.target && h.version === btn.dataset.target))) { location.reload(); return; }
           setTimeout(poll, 2000);
         })
         .catch(function () { wentDown = true; setTimeout(poll, 2000); });

@@ -19,6 +19,19 @@ from src.web import release_updates as ru
 INSTALLER = b"MZ" + b"\x00" * 4096
 
 
+@pytest.fixture(autouse=True)
+def reset_update_reservations(monkeypatch):
+    from src.web import publish_jobs as jobs
+    from src.fb_ads_rpa.operations import browser_operation
+    monkeypatch.setattr(jobs, "_update_reserved", False)
+    monkeypatch.setattr(jobs, "_jobs", {})
+    yield
+    browser_operation.release()
+    jobs.release_update()
+    if ru.apply_lock.locked():
+        ru.apply_lock.release()
+
+
 class FakeGitHub:
     def __init__(self):
         self.version = "2026-09-20"
@@ -192,3 +205,117 @@ def test_health_names_the_running_version(monkeypatch):
     monkeypatch.setattr(web, "_installed_release", lambda: {"tag": "2026-09-20"})
     body = json.loads(asyncio.run(web.health()).body)
     assert body == {"app": "ACL", "ok": True, "version": "2026-09-20"}
+
+
+def test_an_older_latest_release_is_not_an_update(github):
+    github.version = "2026-09-01"
+    assert not ru.check(force=True)["available"]
+    with pytest.raises(ru.UpdateError):
+        ru.download()
+
+
+@pytest.mark.parametrize("payload", [[], None, {"schema": 1, "version": "v", "installer": []}])
+def test_non_object_manifests_fail_cleanly(payload):
+    with pytest.raises(ru.UpdateError):
+        ru.parse_release(json.dumps(payload).encode())
+
+
+def test_queued_publish_is_still_busy(monkeypatch):
+    from src.web import publish_jobs as jobs
+    monkeypatch.setattr(jobs, "_jobs", {"one": {"status": "queued"}})
+    assert jobs.active_job_count() == 1
+
+
+def test_update_reservation_blocks_new_jobs(monkeypatch):
+    from src.web import publish_jobs as jobs
+    monkeypatch.setattr(jobs, "use_rpa_publish", lambda: True)
+    assert jobs.reserve_update()
+    with pytest.raises(RuntimeError, match="restarting"):
+        jobs.create_job("account", "country", [])
+    jobs.release_update()
+    assert jobs.create_job("account", "country", [])
+
+
+def test_duplicate_update_does_not_launch_another_helper(github, monkeypatch):
+    from src.web import app as web, acl_update
+    monkeypatch.setattr(web.sys, "frozen", True, raising=False)
+    started = []
+    monkeypatch.setattr(ru, "start_helper", lambda *args: started.append(1))
+    monkeypatch.setattr(acl_update, "schedule_exit", lambda: None)
+    assert asyncio.run(web.acl_update_apply()).status_code == 200
+    assert asyncio.run(web.acl_update_apply()).status_code == 409
+    assert started == [1]
+
+
+def test_failed_helper_releases_reservations(github, monkeypatch):
+    from src.web import app as web, publish_jobs as jobs
+    monkeypatch.setattr(web.sys, "frozen", True, raising=False)
+    def fail(*args): raise ru.UpdateError("helper did not start")
+    monkeypatch.setattr(ru, "start_helper", fail)
+    assert asyncio.run(web.acl_update_apply()).status_code == 400
+    assert not ru.apply_lock.locked()
+    assert jobs.reserve_update()
+
+
+def test_browser_read_is_not_interrupted(github, monkeypatch):
+    from src.web import app as web
+    from src.fb_ads_rpa.operations import browser_operation
+    monkeypatch.setattr(web.sys, "frozen", True, raising=False)
+    ready, finish = threading.Event(), threading.Event()
+    def reader():
+        with browser_operation.reading():
+            ready.set()
+            finish.wait(15)
+    thread = threading.Thread(target=reader)
+    thread.start()
+    try:
+        assert ready.wait(5)
+        assert asyncio.run(web.acl_update_apply()).status_code == 409
+    finally:
+        finish.set()
+        thread.join(5)
+
+
+def test_channel_cache_is_not_reused_for_another_repository(github, monkeypatch):
+    assert ru.check(force=True)["available"]
+    monkeypatch.setenv("ACL_RELEASES_REPO", "adopy/other-releases")
+    assert not ru.check()["available"]
+
+
+def test_token_is_never_sent_to_an_asset_url_on_another_host(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ru.urllib.request, "build_opener", lambda *a: calls.append(a))
+    with pytest.raises(ru.UpdateError):
+        ru._request("https://example.invalid/asset", ru.Channel("owner/repo", "secret"), accept="application/octet-stream")
+    assert not calls
+
+
+@pytest.mark.parametrize("name", ["drive:Setup.exe", "CON.exe", "bad?name.exe"])
+def test_windows_unsafe_installer_names_are_rejected(github, name):
+    manifest = json.loads(github.release_json())
+    manifest["installer"]["name"] = name
+    with pytest.raises(ru.UpdateError):
+        ru.parse_release(json.dumps(manifest).encode())
+
+
+def test_update_interface_uses_runtime_results():
+    from pathlib import Path
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for the dashboard behavior harness")
+    subprocess.run([node, str(Path(__file__).with_name("release_updates_ui_harness.cjs"))], check=True, timeout=20)
+
+
+def test_helper_launch_failure_leaves_the_dashboard_running(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(ru.sys, "frozen", True, raising=False)
+    def fail(*args, **kwargs):
+        assert kwargs["env"]["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
+        assert (ru.updates_dir() / "pending.json").exists()
+        raise OSError("launch failed")
+    monkeypatch.setattr(ru.subprocess, "Popen", fail)
+    with pytest.raises(ru.UpdateError, match="still running"):
+        ru.start_helper(tmp_path / "Setup.exe", {"version": "2026-09-20"})
+    assert not (ru.updates_dir() / "pending.json").exists()

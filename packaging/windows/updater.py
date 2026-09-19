@@ -22,6 +22,7 @@ import os
 import subprocess
 import sys
 import time
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -33,6 +34,10 @@ PORT = 9090
 STOP_TIMEOUT_S = 90
 INSTALL_TIMEOUT_S = 15 * 60
 START_TIMEOUT_S = 180
+
+
+class InstallationStillRunning(RuntimeError):
+    """Do not launch another version while an installer may still be writing."""
 
 
 def _now() -> str:
@@ -55,9 +60,10 @@ class Environment:
     programs_dir: Path
     updates_dir: Path
     health: Callable[[], dict | None] = health
-    run: Callable[..., int] = lambda cmd, timeout: subprocess.run(cmd, timeout=timeout).returncode
+    run: Callable[..., int] = lambda cmd, timeout: run_command(cmd, timeout)
     start: Callable[[list[str]], object] = lambda cmd: subprocess.Popen(
-        cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
+        env={**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"})
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
     shortcuts: Callable[[Path], None] = lambda exe: repoint_shortcuts(exe)
@@ -98,17 +104,25 @@ def apply_update(env: Environment, setup: Path, expect_version: str, previous_ex
 
     def roll_back(reason: str) -> dict:
         env.log.append(f"rolling back: {reason}")
-        if saved_current is not None:
-            current_json.write_bytes(saved_current)
+        restored = True
         try:
+            if saved_current is not None:
+                current_json.write_bytes(saved_current)
+            else:
+                current_json.unlink(missing_ok=True)
             env.shortcuts(previous_exe)
-        except Exception as exc:  # ярлыки — не повод оставить человека без дешборда
-            env.log.append(f"shortcuts not restored: {exc}")
-        if not _is_acl(env):
-            env.start([str(previous_exe), "--launcher-test"])
-        back = _wait(env, lambda: _is_acl(env), START_TIMEOUT_S)
-        return _record(env, {**base, "result": "rolled_back", "reason": reason,
-                             "previous_running": back})
+        except Exception as exc:
+            env.log.append(f"version pointer or shortcuts not restored: {exc}")
+            restored = False
+        try:
+            if not _is_acl(env, previous_version) and env.health() is None:
+                env.start([str(previous_exe), "--launcher-test"])
+            back = _wait(env, lambda: _is_acl(env, previous_version), START_TIMEOUT_S)
+        except Exception as exc:
+            env.log.append(f"previous version could not start: {exc}")
+            back = False
+        return _record(env, {**base, "result": "rolled_back" if back and restored else "rollback_failed",
+                             "reason": reason, "previous_running": back})
 
     env.log.append("waiting for the dashboard to stop")
     if not _wait(env, lambda: env.health() is None, STOP_TIMEOUT_S):
@@ -120,6 +134,9 @@ def apply_update(env: Environment, setup: Path, expect_version: str, previous_ex
     env.log.append(f"installing {setup.name}")
     try:
         code = env.run(command, timeout=INSTALL_TIMEOUT_S)
+    except InstallationStillRunning:
+        return _record(env, {**base, "result": "rollback_failed", "previous_running": False,
+                             "reason": "The installer could not be stopped. Contact support before starting ACL again."})
     except Exception as exc:
         return roll_back(f"The installer could not run: {exc}")
     if code != 0:
@@ -129,7 +146,10 @@ def apply_update(env: Environment, setup: Path, expect_version: str, previous_ex
     if not new_exe.is_file():
         return roll_back(f"The installer finished but {new_exe.name} of {expect_version} is missing.")
     env.log.append(f"starting {expect_version}")
-    env.start([str(new_exe), "--launcher-test"])
+    try:
+        env.start([str(new_exe), "--launcher-test"])
+    except Exception as exc:
+        return roll_back(f"The new version could not start: {exc}")
     if not _wait(env, lambda: _is_acl(env, expect_version), START_TIMEOUT_S):
         stop = [str(new_exe), "--stop-server"]
         try:
@@ -145,16 +165,54 @@ def repoint_shortcuts(exe: Path) -> None:
     """Point the desktop and Start Menu "Open" shortcuts at ``exe`` (Windows only)."""
     if sys.platform != "win32":
         return
-    appdata = Path(os.environ.get("APPDATA", ""))
-    desktop = Path(os.environ.get("USERPROFILE", "")) / "Desktop"
-    links = [desktop / "Adopy Campaign Launcher.lnk",
-             appdata / "Microsoft/Windows/Start Menu/Programs/Adopy Campaign Launcher/Open Campaign Launcher.lnk"]
-    script = "; ".join(
-        f"if (Test-Path -LiteralPath '{link}') {{ $s = (New-Object -ComObject WScript.Shell).CreateShortcut('{link}'); "
-        f"$s.TargetPath = '{exe}'; $s.Save() }}"
-        for link in links)
-    subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
-                   timeout=60, check=False, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    # Windows known folders include redirected / OneDrive desktops. All ACL
+    # launch shortcuts must return to the old executable, not only "Open".
+    def quote(value):
+        return "'" + str(value).replace("'", "''") + "'"
+    script = (
+        "$menu = Join-Path ([Environment]::GetFolderPath('Programs')) 'Adopy Campaign Launcher'; "
+        "$desktop = Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Adopy Campaign Launcher.lnk'; "
+        "$links = @($desktop); if (Test-Path -LiteralPath $menu) { "
+        "$links += @(Get-ChildItem -LiteralPath $menu -Filter '*.lnk' | ForEach-Object { $_.FullName }) }; "
+        "foreach ($link in $links) { if (Test-Path -LiteralPath $link) { "
+        "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($link); "
+        "if ([IO.Path]::GetFileName($s.TargetPath) -eq 'ACL.exe') { "
+        f"$s.TargetPath = {quote(exe)}; $s.Save() " + "} } }")
+    code = run_command(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script], 60)
+    if code:
+        raise OSError("Windows could not restore the ACL shortcuts")
+
+
+def run_command(command: list[str], timeout: float) -> int:
+    """Run outside the frozen bundle; stop the installer tree on timeout."""
+    import psutil
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.kernel32.SetDllDirectoryW(None)
+    try:
+        process = psutil.Popen(command, env={**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"},
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        try:
+            return process.wait(timeout=timeout)
+        except psutil.TimeoutExpired:
+            try:
+                children = process.children(recursive=True)
+                for child in reversed(children):
+                    try:
+                        child.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+                process.kill()
+                process.wait(timeout=15)
+                _, alive = psutil.wait_procs(children, timeout=15)
+                if alive:
+                    raise InstallationStillRunning()
+            except Exception as exc:
+                raise InstallationStillRunning() from exc
+            raise TimeoutError("The installer exceeded its time limit and was stopped")
+    finally:
+        if sys.platform == "win32" and getattr(sys, "_MEIPASS", None):
+            ctypes.windll.kernel32.SetDllDirectoryW(str(sys._MEIPASS))
 
 
 def main(args: list[str], local_acl_dir: Path) -> int:
@@ -163,6 +221,11 @@ def main(args: list[str], local_acl_dir: Path) -> int:
         expect = args[args.index("--expect-version") + 1]
         previous = Path(args[args.index("--previous-exe") + 1])
     except (ValueError, IndexError):
+        return 2
+    if (not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._-]{0,63}", expect)
+            or previous.resolve() != Path(sys.executable).resolve()
+            or setup.resolve().parent != (local_acl_dir / "updates").resolve()
+            or not setup.is_file()):
         return 2
     programs = previous.parent.parent.parent  # …\Programs\ACL\versions\<v>\ACL.exe
     env = Environment(programs_dir=programs, updates_dir=local_acl_dir / "updates")

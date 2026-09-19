@@ -120,6 +120,45 @@ class UpdaterTests(unittest.TestCase):
     def test_bad_arguments_do_nothing(self):
         self.assertEqual(updater.main(["--apply-update"], self.root), 2)
 
+    def test_starting_new_executable_can_fail_without_losing_old_version(self):
+        m = Machine(self.root)
+        env = m.env(self.updates)
+        def start(cmd):
+            if "2026-09-20" in cmd[0]:
+                raise OSError("executable is blocked")
+            return m.start(cmd)
+        env.start = start
+        result = updater.apply_update(env, self.setup, "2026-09-20", m.old_exe)
+        self.assertEqual(result["result"], "rolled_back")
+        self.assertEqual(m.running, "2026-09-03e")
+
+    def test_failed_rollback_is_not_reported_as_restored(self):
+        m = Machine(self.root, setup_code=5)
+        env = m.env(self.updates)
+        env.start = lambda cmd: None
+        result = updater.apply_update(env, self.setup, "2026-09-20", m.old_exe)
+        self.assertEqual(result["result"], "rollback_failed")
+        self.assertFalse(result["previous_running"])
+
+    def test_uncertain_installer_shutdown_does_not_launch_another_version(self):
+        m = Machine(self.root)
+        env = m.env(self.updates)
+        def run(*args, **kwargs):
+            raise updater.InstallationStillRunning()
+        env.run = run
+        result = updater.apply_update(env, self.setup, "2026-09-20", m.old_exe)
+        self.assertEqual(result["result"], "rollback_failed")
+        self.assertEqual(m.commands, [])
+
+    def test_failed_shortcut_restore_is_not_a_successful_rollback(self):
+        m = Machine(self.root, setup_code=5)
+        env = m.env(self.updates)
+        def fail(exe): raise OSError("shortcut is locked")
+        env.shortcuts = fail
+        result = updater.apply_update(env, self.setup, "2026-09-20", m.old_exe)
+        self.assertEqual(result["result"], "rollback_failed")
+        self.assertTrue(result["previous_running"])
+
 
 class UpdateChannelTests(unittest.TestCase):
     def test_channel_is_all_or_nothing(self):

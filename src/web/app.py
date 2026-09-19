@@ -1346,31 +1346,39 @@ async def acl_update_apply() -> JSONResponse:
 
 
 async def _apply_release_update(active_jobs) -> JSONResponse:
-    """Installed ACL.exe: download, verify, hand over to the helper, then exit."""
+    """Serialize the download and reserve an idle runtime before restarting."""
     from starlette.concurrency import run_in_threadpool
-    from src.web import acl_update, release_updates
+    from src.web import acl_update, release_updates, publish_jobs
+    from src.fb_ads_rpa.operations import browser_operation
 
-    def refuse_if_busy() -> JSONResponse | None:
-        busy = active_jobs()
-        if busy:
-            return JSONResponse({"ok": False, "error": f"{busy} campaign job(s) still running. Updating restarts "
-                                                       "ACL, which would abandon them half-built."}, status_code=409)
-        return None
-
-    if (refused := refuse_if_busy()) is not None:
-        return refused
+    if not release_updates.apply_lock.acquire(blocking=False):
+        return JSONResponse({"ok": False, "error": "An update is already in progress."}, status_code=409)
+    restarting = reserved = browser_held = False
     try:
+        if active_jobs():
+            return JSONResponse({"ok": False, "error": "Wait for campaign jobs to finish before updating."}, status_code=409)
         setup, manifest = await run_in_threadpool(release_updates.download)
-        if manifest["version"] == release_updates.installed_version():
-            return JSONResponse({"ok": False, "error": "ACL is already on the latest version."}, status_code=400)
-        # Скачивание идёт минуты — за это время могли запустить публикацию.
-        if (refused := refuse_if_busy()) is not None:
-            return refused
+        if active_jobs() or not publish_jobs.reserve_update():
+            return JSONResponse({"ok": False, "error": "Campaign jobs started during the download; try again when they finish."}, status_code=409)
+        reserved = True
+        browser_held = browser_operation.acquire(blocking=False)
+        if not browser_held:
+            return JSONResponse({"ok": False, "error": "Wait for browser reading to finish before updating."}, status_code=409)
         release_updates.start_helper(setup, manifest)
-    except release_updates.UpdateError as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-    acl_update.schedule_exit()
-    return JSONResponse({"ok": True, "target": manifest["version"]})
+        acl_update.schedule_exit()
+        restarting = True
+        return JSONResponse({"ok": True, "target": manifest["version"]})
+    except (release_updates.UpdateError, OSError, ValueError, TypeError, KeyError) as exc:
+        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACL is still running."
+        return JSONResponse({"ok": False, "error": message}, status_code=400)
+    finally:
+        # A successful handoff deliberately keeps the reservations until exit.
+        if not restarting:
+            if browser_held:
+                browser_operation.release()
+            if reserved:
+                publish_jobs.release_update()
+            release_updates.apply_lock.release()
 
 
 def _enrich_country_overview(report: Dict[str, Any]) -> None:
