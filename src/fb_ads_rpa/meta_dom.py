@@ -7853,6 +7853,30 @@ def _copy_matches(seen: str, expected: str) -> bool:
     return squash(seen) == squash(expected)
 
 
+def _await_creative_settled(page: Page, timeout_s: float = 20.0) -> bool:
+    """Дождаться, пока блок креатива перестанет перерисовываться.
+
+    20.09 02:45, разбор 16 отказов ввода текста за сутки: печатаем — поле
+    читается пустым, затем на заголовке число полей на странице падает с 5
+    до 1 и поле исчезает (`locator_count_zero`). Meta в этот момент
+    перерисовывает блок (обычно когда дообработалось видео) и стирает
+    набранное. Ждём двух одинаковых замеров подряд.
+    """
+    last = None
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            now = page.evaluate(
+                "() => document.querySelectorAll('[placeholder], [role=textbox]').length")
+        except Exception:
+            return False
+        if last is not None and now == last and now > 0:
+            return True
+        last = now
+        _sleep_h(1.0)
+    return False
+
+
 def fill_ad_copy(
     page: Page, ad_title: str, ad_body: str, report: dict | None = None
 ) -> bool:
@@ -7877,6 +7901,8 @@ def fill_ad_copy(
     report.setdefault("attempts", [])
     if not _reveal_ad_copy_fields(page):
         return False
+    settled = _await_creative_settled(page)
+    report["settled"] = settled
 
     def _click_via_cdp_handle(locator):
         return _focus_via_cdp_click(page, locator)
