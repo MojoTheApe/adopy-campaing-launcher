@@ -1,0 +1,130 @@
+name: Publish release
+
+# A promoted release (`acl-release-*` tag) becomes a GitHub Release that managers'
+# machines can install and update from (ACL-1239 / ACL-1240): the per-user
+# installer, its SHA-256 and release.json with the tracker issues it fixes.
+#
+# Where it is published: this repository by default. To keep the managers'
+# read-only token away from the code, set the repository variable
+# ACL_RELEASES_REPO to a releases-only repository and the secret
+# ACL_RELEASES_TOKEN to a token that can write releases there.
+
+on:
+  push:
+    tags:
+      - "acl-release-*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing acl-release-* tag to publish"
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: acl-release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build, test and publish the installer
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      ACL_NO_TELEMETRY: "1"
+      PYTHONIOENCODING: utf-8
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      RELEASES_REPO: ${{ vars.ACL_RELEASES_REPO || github.repository }}
+
+    steps:
+      - name: Check out the tagged commit with history and tags
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Verify promoted tag and its successful master CI
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/acl_publish_release.py --tag "$env:RELEASE_TAG" --source-repo "${{ github.repository }}"
+          if ($LASTEXITCODE -ne 0) { throw "Release promotion was not verified." }
+          "ACL_PACKAGE_VERSION=$($env:RELEASE_TAG.Substring('acl-release-'.Length))" | Out-File -Append $env:GITHUB_ENV
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install runtime and packager
+        run: python -m pip install -r requirements.txt PyInstaller==6.22.2
+
+      - name: Scan release inputs for secrets and account identifiers
+        run: python scripts/acl_scan_secrets.py
+
+      - name: Test setup
+        run: python -m unittest discover -s packaging/windows/tests -p "test_*.py" -v
+
+      - name: Build onedir bundle
+        shell: pwsh
+        run: ./packaging/windows/build.ps1 -Version "$env:ACL_PACKAGE_VERSION"
+
+      - name: Test the packaged executable
+        shell: pwsh
+        run: ./packaging/windows/test_bundle.ps1
+
+      - name: Build per-user Windows installer
+        shell: pwsh
+        run: ./packaging/windows/build_installer.ps1 -Version "$env:ACL_PACKAGE_VERSION"
+
+      - name: Test install, launch, repair, and uninstall
+        shell: pwsh
+        run: ./packaging/windows/test_installer.ps1 -Version "$env:ACL_PACKAGE_VERSION"
+
+      - name: Describe the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $installer = Get-ChildItem packaging/windows/.artifacts/installer/Adopy-Campaign-Launcher-Setup-*.exe | Select-Object -First 1
+          if (-not $installer) { throw "The installer was not built." }
+          python scripts/acl_release_manifest.py --tag "$env:RELEASE_TAG" --installer $installer.FullName `
+            --repo "$env:RELEASES_REPO" --source-repo "${{ github.repository }}" --out packaging/windows/.artifacts/release
+          if ($LASTEXITCODE -ne 0) { throw "release.json could not be written." }
+          Copy-Item $installer.FullName packaging/windows/.artifacts/release/
+
+      - name: Recheck promotion before publication
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch origin master
+          if ($LASTEXITCODE -ne 0) { throw "Cannot refresh master." }
+          python scripts/acl_publish_release.py --tag "$env:RELEASE_TAG" --source-repo "${{ github.repository }}"
+          if ($LASTEXITCODE -ne 0) { throw "Release promotion is no longer valid." }
+
+      - name: Publish the GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.ACL_RELEASES_TOKEN || github.token }}
+        run: |
+          python scripts/acl_publish_release.py --tag "$env:RELEASE_TAG" --repo "$env:RELEASES_REPO" `
+            --directory packaging/windows/.artifacts/release
+          if ($LASTEXITCODE -ne 0) { throw "Publishing the release failed." }
+
+      - name: Keep test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acl-release-logs-${{ github.run_number }}
+          path: |
+            packaging/windows/.artifacts/test-logs/
+            packaging/windows/.artifacts/installer-test-logs/
+            packaging/windows/.artifacts/release/release.json
+          if-no-files-found: ignore

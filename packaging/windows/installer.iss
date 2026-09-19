@@ -47,7 +47,7 @@ AppMutex=Local\ACL-Campaign-Launcher-Server-v1
 SetupLogging=yes
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"
 
 [Dirs]
 Name: "{localappdata}\ACL"; Flags: uninsneveruninstall

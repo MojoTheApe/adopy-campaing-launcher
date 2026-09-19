@@ -1,0 +1,78 @@
+"""Publish only a promoted, CI-verified master commit; never replace a release."""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+from pathlib import Path
+
+
+def _git(*args: str) -> str:
+    return subprocess.check_output(["git", *args], text=True).strip()
+
+
+def _gh(*args: str) -> str:
+    return subprocess.check_output(["gh", *args], text=True).strip()
+
+
+def verify_promotion(tag: str, source_repo: str) -> str:
+    if not re.fullmatch(r"acl-release-[0-9A-Za-z][0-9A-Za-z._-]{0,63}", tag):
+        raise ValueError("Expected an acl-release-* tag")
+    ref = f"refs/tags/{tag}"
+    if _git("cat-file", "-t", ref) != "tag":
+        raise ValueError("A release requires an annotated tag")
+    sha = _git("rev-parse", f"{ref}^{{commit}}")
+    if sha != _git("rev-parse", "origin/master") or sha != _git("rev-parse", "HEAD"):
+        raise ValueError("The tag, checkout and current origin/master must name the same commit")
+    annotation = _git("cat-file", "-p", ref)
+    if not re.search(r"\bsuccess\b", annotation, re.I):
+        raise ValueError("Tag annotation must record successful CI")
+    match = re.search(r"https://github\.com/" + re.escape(source_repo) + r"/actions/runs/(\d+)\b", annotation)
+    if not match:
+        raise ValueError("Tag annotation must link to this repository's successful CI run")
+    run = json.loads(_gh("api", f"repos/{source_repo}/actions/runs/{match[1]}"))
+    if not (run.get("head_sha") == sha and run.get("status") == "completed"
+            and run.get("conclusion") == "success" and run.get("path") == ".github/workflows/ci.yml"
+            and run.get("head_branch") == "master" and run.get("event") in {"push", "workflow_dispatch"}):
+        raise ValueError("Recorded CI must be a successful full master run on the exact release commit")
+    return sha
+
+
+def publish(tag: str, repo: str, directory: Path) -> None:
+    # An API failure is not evidence that a release is absent. Inspect the list
+    # successfully before creating anything, and fail if this tag already exists.
+    existing = json.loads(_gh("release", "list", "--repo", repo, "--limit", "1000", "--json", "tagName"))
+    if any(item["tagName"] == tag for item in existing):
+        raise ValueError("This release tag already exists; never overwrite it. Resolve an unfinished draft or promote a new tag.")
+    manifest = json.loads((directory / "release.json").read_text(encoding="utf-8"))
+    if manifest["tag"] != tag:
+        raise ValueError("Manifest belongs to a different release tag")
+    assets = [directory / manifest["installer"]["name"],
+              directory / (manifest["installer"]["name"] + ".sha256"), directory / "release.json"]
+    if not all(p.is_file() for p in assets):
+        raise ValueError("Release assets are incomplete")
+    # Upload first to a draft. /releases/latest cannot expose a half upload.
+    _gh("release", "create", tag, *(str(p) for p in assets), "--repo", repo, "--draft",
+        "--title", f"Adopy Campaign Launcher {manifest['version']}",
+        "--notes-file", str(directory / "release-notes.md"))
+    _gh("release", "edit", tag, "--repo", repo, "--draft=false", "--latest")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--tag", required=True)
+    parser.add_argument("--source-repo")
+    parser.add_argument("--repo")
+    parser.add_argument("--directory", type=Path)
+    args = parser.parse_args()
+    if args.source_repo:
+        verify_promotion(args.tag, args.source_repo)
+    elif args.repo and args.directory:
+        publish(args.tag, args.repo, args.directory)
+    else:
+        parser.error("Provide --source-repo to verify, or --repo and --directory to publish")
+
+
+if __name__ == "__main__":
+    main()

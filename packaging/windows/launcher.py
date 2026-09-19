@@ -363,7 +363,7 @@ def main() -> int:
         return smoke_main()
     if "--wizard-smoke-check" in args:
         import tkinter  # noqa: F401
-        from machine_config import validate_oauth_client  # noqa: F401
+        from machine_config import apply_machine_configuration  # noqa: F401
         from setup_wizard import setup_is_complete  # noqa: F401
 
         if sys.stdout is not None:

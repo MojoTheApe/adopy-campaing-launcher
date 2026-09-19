@@ -1,166 +1,100 @@
 # ACL — Setup on a New Computer
 
-Windows 10/11. About 15 minutes. No coding, no terminal.
-
-**Which version gets installed:** the promoted release — the one tagged on the
-production head with a green build. You do not pick it, and this page does not
-name it: a number written here goes stale the moment the next release is
-promoted, and a stale number is worse than none.
-
-If the installer stops with *"Production has no verified annotated ACL release
-tag"*, nothing is broken on your computer. It means master has been integrated
-but not yet promoted to a release, and the installer refuses to put an untagged
-branch on a working machine. Ask Evgeni to promote a release, then run the file
-again.
+Windows 10/11 (64-bit). About 10 minutes. No coding, no terminal, no GitHub
+account, no Python or Git to install.
 
 ---
 
-## Step 0 — Ask Evgeni for these first
+## Step 0 — Have these ready
 
-You cannot finish without them. They are deliberately not in GitHub.
+- [ ] **The installer file** `Adopy-Campaign-Launcher-Setup-<version>.exe`, which you get from Evgeni.
+- [ ] **Your name exactly as it is written in the CM column of the Stats workbook**
+- [ ] **The Stats workbook** (Excel), saved somewhere on this computer
+- [ ] **Multilogin Desktop**, installed and signed in, and your **Multilogin automation token**
 
-- [ ] GitHub access to `MojoTheApe/adopy-campaing-launcher`
-- [ ] **Your CM name** — exact spelling from the stats workbook
-- [ ] **`oauth_client.json`** file
-- [ ] **Multilogin** login, your profile names, and the automation token
-- [ ] The three work files: `cursor example.xlsx`, `Upluad FB.xlsx`, `Creatives` folder
+Get the token through the password manager, never by chat or email.
 
-Get the token and the OAuth file through the password manager — never by chat or email.
-
----
-
-## Step 1 — Run one file
-
-Ask Evgeni for **`Install ACL.bat`** and double-click it.
-
-It does everything that used to be four separate steps: installs Python and Git
-if they are missing, downloads ACL, installs it, makes a desktop shortcut, checks
-the machine, and opens the dashboard.
-
-**The file never reopens itself.** One window, start to finish. If you see a
-second black window appear, and then a third, you are running an **old copy** of
-`Install ACL.bat` — one from before 2026-09-08, which reopened itself to pick up
-a newly installed Python and could end up doing it over and over. Close all the
-windows, ask Evgeni for the current file, and start again. (To check a copy
-yourself: open it in Notepad and search for `NEEDRESTART`. The current file does
-not contain that word.)
-
-If a repair with `install_acl.bat` says the previous release was restored,
-press a key to close that installer window, then run `install_acl.bat` again. Recovery replaces the installer
-too, so repair stops before using the restored files. It does not open another
-window automatically.
-
-**A GitHub sign-in window may open.** Use the company GitHub account you were
-given access with.
-
-It is safe to run again at any time: an existing installation is updated, never
-re-downloaded, and your settings are never touched.
-
-<details>
-<summary>If winget is not available on this PC</summary>
-
-The file will say so and stop without changing anything. Update **App Installer**
-from the Microsoft Store and run it again, or install these two by hand and then
-re-run it:
-
-* Python 3.11+ — https://www.python.org/downloads/ (tick **Add python.exe to PATH**)
-* Git — https://git-scm.com/download/win
-
-</details>
+You no longer need `Upload FB.xlsx`, a Google Sheet link, `oauth_client.json`,
+or a GitHub account. Targets and ad texts come from the team library inside the
+dashboard.
 
 ---
 
-## Step 2 — Put your files and your name in
+## Step 1 — Run the installer
 
-**A. Put these three on your Desktop, with exactly these names:**
+Double-click `Adopy-Campaign-Launcher-Setup-<version>.exe`.
 
-```
-cursor example.xlsx
-Upluad FB.xlsx
-Creatives          (the folder)
-```
+- It installs for your Windows user only, so it does not need administrator rights.
+- Leave **Create a desktop shortcut** ticked.
+- Windows may show *"Windows protected your PC"*. Click **More info → Run anyway**.
+  This happens only because the installer is not code-signed yet.
 
-ACL looks there by itself. Nothing to configure — as long as the names match.
-
-**B. Copy `oauth_client.json`** (the file from Evgeni) into the machine folder:
-
-```powershell
-explorer $env:LOCALAPPDATA\ACL
-```
-
-**C. Open `.env` in that same folder** and set one line:
-
-```
-MY_CM_NAME=Your Name Exactly As In The Workbook
-```
-
-Save it as `.env`, not `.env.txt`.
-
-> The **Multilogin token** is not typed into this file — you paste it into the
-> dashboard in Step 5, in the Multilogin panel.
+When it finishes, leave **Open Adopy Campaign Launcher** ticked and click **Finish**.
 
 ---
 
-## Step 3 — Check the machine (only if something looks wrong)
+## Step 2 — First-run setup
 
-Step 1 already ran this check and showed the result. Run it again whenever
-you change a file or a setting:
+The setup window opens by itself the first time. It has these steps:
 
-```powershell
-cd $env:USERPROFILE\Documents\ACL
-.\.venv\Scripts\python.exe .\scripts\acl_doctor.py
-```
+1. **System check.** ACL checks Windows, free disk space and port 9090 for you.
+2. **Your name.** Type it exactly as in the CM column. ACL finds your ad accounts
+   in the workbook by this name.
+3. **Local files.**
+   - **Stats workbook:** pick your Excel file with **Browse…**.
+   - **Creatives folder:** it is already filled in as `Documents\ACL\Creatives`,
+     and ACL creates the folder. Keep it, or pick another folder.
+4. **Multilogin.** Make sure Multilogin Desktop is open and signed in. Paste your
+   automation token, then click **Test Multilogin connection**.
+5. **Readiness → Finish.** Every line must show a ✓.
 
-It must end with:
+Nothing is published during setup, and no campaign is touched.
 
-```
-All required items present.
-```
-
-A `[warn] Telemetry upload` line is fine. A `[FAIL]` line is not — it tells you exactly what is missing and where. Fix that one thing and run the command again.
-
----
-
-## Step 4 — Start the dashboard
-
-Double-click **`start_dashboard.bat`**.
-
-Keep the black window open — closing it stops ACL. The browser opens `http://127.0.0.1:9090`. The first load takes a minute or two while it reads the workbooks.
-
-Google will ask you to sign in once. Use your company account and approve read-only access to Sheets.
+You can run setup again at any time from **Start → Adopy Campaign Launcher →
+Setup Campaign Launcher**. It keeps your accounts and connected profiles.
 
 ---
 
-## Step 5 — Connect your accounts
+## Step 3 — Put your creatives in
 
-In the dashboard, open the **Accounts** section and pick your open Multilogin profile for each account. That is all — you do **not** need to edit any spreadsheet.
+Copy your videos and images into the Creatives folder. By default that is
+`Documents\ACL\Creatives`. ACL searches it and all its subfolders by file name.
+
+To use a different folder, or to point ACL at a different Stats workbook later,
+go to the dashboard → **Accounts** → **This computer**, paste the path, and click
+**Save**. To copy a path: in Explorer, hold Shift, right-click the file or folder,
+and choose **Copy as path**.
+
+---
+
+## Step 4 — Connect your accounts
+
+The dashboard opens in your browser at `http://127.0.0.1:9090`. Next time, open it
+with the **Adopy Campaign Launcher** shortcut on the desktop.
+
+Open **Accounts** and connect each of your accounts to its Multilogin profile:
+find the profile by the last letters of its name, open it if needed, and click
+Connect. ACL reads the ad account from the profile, so you type no IDs.
 
 ---
 
 ## Keeping ACL up to date
 
-When a new verified release exists, an **Update** button appears in the
-dashboard header, next to Refresh. Press it and confirm. ACL restarts itself and
-the page reloads on its own — usually under a minute. Do not close the black
-window while it works.
+When Evgeni sends a new installer, stop ACL first. Go to **Start → Adopy Campaign
+Launcher → Stop Campaign Launcher**; closing the browser tab alone does not stop
+it. Then run the new file. Your name, files, accounts, profiles and tokens stay
+as they are. They live in `%LOCALAPPDATA%\ACL`, outside the program folder.
 
-If the new version does not start, ACL puts the old one back by itself and says
-so in the black window. You are never left without a working dashboard.
-
-The button is absent when there is nothing to install, and it refuses while a
-campaign run is in progress — a restart mid-run would leave a half-built
-campaign in Ads Manager.
-
-Nothing updates on its own. Nothing you configured is touched: your name, files,
-accounts and tokens live outside the ACL folder.
+An **Update** button in the dashboard, which will install new versions without a
+file from Evgeni, is coming next (ACL-1240).
 
 ---
 
 ## Rules while setting up
 
 - **Do not publish anything.** Setup ends when the dashboard opens and shows your data. The first campaign run happens with Evgeni watching.
-- **Never use ordinary Chrome** for these accounts. If ACL refuses to continue, that is a protection — ask Evgeni instead of working around it.
-- **Never send** `.env`, `oauth_client.json`, tokens, or account IDs. If you need help, send the ACL Doctor output.
+- **Never use ordinary Chrome** for these accounts. If ACL refuses to continue, that is a protection. Ask Evgeni instead of working around it.
+- **Never send** tokens, account IDs or anything from `%LOCALAPPDATA%\ACL`. If you need help, use **Start → Adopy Campaign Launcher → Create diagnostic bundle** and send the ZIP it makes. Tokens and account identifiers are removed from it.
 
 ---
 
@@ -168,17 +102,16 @@ accounts and tokens live outside the ACL folder.
 
 | Problem | Fix |
 |---|---|
-| `python is not recognized` | Close and reopen PowerShell. Still missing — restart Windows. |
-| GitHub asks for a password | Sign in with the company GitHub account Evgeni gave access to |
-| Doctor says a file is missing | Check the name on your Desktop matches exactly, including the space in `cursor example.xlsx` |
-| Doctor says Multilogin profiles missing | Open each of your profiles once in Multilogin Desktop |
-| Port 9090 is busy | Close the other ACL window |
-| Dashboard closes immediately | Run `start_dashboard.bat` again, photograph the last line, send it to Evgeni |
+| "No accounts were found for this campaign manager" | Your name does not match the CM column. Copy it from the workbook exactly. |
+| "Stats workbook is missing columns" | You picked a different Excel file. Pick the Stats workbook. |
+| "Cannot reach Multilogin Launcher" | Open Multilogin Desktop, sign in, and test again. |
+| "Multilogin rejected token" | The token is wrong or expired. Get a new one through the password manager. |
+| Port 9090 is busy | ACL is already running. Open the shortcut, or use **Stop Campaign Launcher** first. |
+| The dashboard does not open | Run **Diagnostics** from the Start menu, then send Evgeni the diagnostic bundle. |
 
 ---
 
 ## When you are done, send Evgeni
 
-- A screenshot of the ACL Doctor result
-- Confirmation the dashboard opened and showed your accounts
-- Any error text, and which step number it happened on
+- A screenshot of the dashboard showing your accounts
+- Any error text, and which step it happened in

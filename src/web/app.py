@@ -1803,6 +1803,34 @@ def _wants_json(request: Request) -> bool:
     return (request.query_params.get("format") or "").lower() == "json"
 
 
+@app.get("/api/machine-paths")
+def api_machine_paths() -> JSONResponse:
+    """Where this computer keeps the Stats workbook and the Creatives folder."""
+    from src.web import machine_paths
+    return JSONResponse({"ok": True, **machine_paths.current()})
+
+
+@app.post("/api/machine-paths")
+async def api_save_machine_paths(request: Request) -> JSONResponse:
+    """Change the Stats workbook or the Creatives folder without editing .env."""
+    from src.web import machine_paths
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    if not isinstance(data, dict) or any(
+            k in data and not isinstance(data[k], str) for k in ("stats_workbook", "creatives_folder")):
+        return JSONResponse({"ok": False, "error": "Expected text paths"}, status_code=400)
+    try:
+        from starlette.concurrency import run_in_threadpool
+        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"), data.get("creatives_folder"))
+    except machine_paths.MachinePathError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    if result["stats_changed"]:
+        cache_clear()  # отчёт строился по прежней книге
+    return JSONResponse({"ok": True, **result})
+
+
 @app.post("/refresh")
 async def refresh(request: Request) -> Response:
     """Rebuild report now (reuse Excel DF if mtime unchanged), then redirect or JSON.

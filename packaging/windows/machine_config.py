@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 
-SHEET_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{20,200}\Z")
 SAFETY_ENV = {
     "FB_PUBLISH_BACKEND": "rpa",
     "FB_RPA_ENGINE": "recorded_flow",
@@ -50,38 +49,12 @@ class AccountAssignment:
 
 @dataclass(frozen=True)
 class MachineConfiguration:
+    """What setup writes. No Google Sheets and no Upload FB workbook (ACL-1239):
+    targets and ad texts come from the team library, accounts from the Stats
+    workbook, ad-account IDs from each Multilogin profile in the dashboard."""
+
     campaign_manager_name: str
-    accounts_sheet_id: str
     accounts: tuple[AccountAssignment, ...]
-    oauth_client: bytes
-
-
-def extract_sheet_id(value: str) -> str:
-    value = (value or "").strip()
-    match = re.search(r"docs\.google\.com/spreadsheets/d/([A-Za-z0-9_-]+)", value)
-    sheet_id = match.group(1) if match else value
-    if not SHEET_ID_PATTERN.fullmatch(sheet_id):
-        raise MachineConfigError("Enter a valid company Google Sheet link.")
-    if any(marker in sheet_id.casefold() for marker in ("example", "replace_with")):
-        raise MachineConfigError("Replace the example Google Sheet link with the company link.")
-    return sheet_id
-
-
-def validate_oauth_client(raw: bytes) -> None:
-    try:
-        document = json.loads(raw.decode("utf-8"))
-    except Exception as exc:
-        raise MachineConfigError(f"Google access file is not valid JSON: {exc}") from exc
-    if not isinstance(document, dict):
-        raise MachineConfigError("Google access file must contain a JSON object")
-    credential = document.get("installed") or document.get("web")
-    if not isinstance(credential, dict):
-        raise MachineConfigError("Google access file must contain installed or web credentials")
-    for key in ("client_id", "auth_uri", "token_uri"):
-        if not isinstance(credential.get(key), str) or not credential[key].strip():
-            raise MachineConfigError(f"Google access file is missing {key}")
-    if "token" in document or "refresh_token" in document:
-        raise MachineConfigError("Google access file must not contain a user token")
 
 
 def _dotenv_value(value: str) -> str:
@@ -185,32 +158,17 @@ def apply_machine_configuration(
     config_directory: str | Path,
     *,
     stats_workbook: str,
-    upload_workbook: str,
     creatives_directory: str,
     multilogin_tokens: dict[str, str] | None = None,
-    google_token: bytes | None = None,
 ) -> None:
-    validate_oauth_client(configuration.oauth_client)
-    extract_sheet_id(configuration.accounts_sheet_id)
     config_dir = Path(config_directory)
-    client_path = config_dir / "oauth_client.json"
-    if client_path.exists() and (config_dir / "token_telemetry.json").exists():
-        old = json.loads(client_path.read_text(encoding="utf-8"))
-        new = json.loads(configuration.oauth_client)
-        old_id = (old.get("installed") or old.get("web") or {}).get("client_id")
-        new_id = (new.get("installed") or new.get("web") or {}).get("client_id")
-        if old_id != new_id:
-            raise MachineConfigError("Use the existing Google access client while shared-write access is configured. Contact support to migrate credentials.")
     map_path = config_dir / "ad_account_map.csv"
     existing_map = map_path.read_bytes() if map_path.exists() else b""
     env_path = config_dir / ".env"
     existing_env = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
     env_values = {
         "MY_CM_NAME": configuration.campaign_manager_name,
-        "GSHEET_ACCOUNTS_ID": configuration.accounts_sheet_id,
-        "GSHEET_ACCOUNTS_SHEET": "auto_last",
         "FB_STATS_EXCEL": str(Path(stats_workbook)),
-        "UPLOAD_FB_EXCEL": str(Path(upload_workbook)),
         "FB_CREATIVES_ROOT": str(Path(creatives_directory)),
         **SAFETY_ENV,
     }
@@ -220,11 +178,7 @@ def apply_machine_configuration(
             raise MachineConfigError(f"unsupported Multilogin instance: {instance}")
         if token.strip():
             env_values[f"MULTILOGIN_AUTOMATION_TOKEN_{normalized}"] = token.strip()
-    outputs = {
+    _replace_transaction({
         env_path: merge_env(existing_env, env_values).encode("utf-8"),
         map_path: _account_map_bytes(configuration, existing_map),
-        client_path: configuration.oauth_client,
-    }
-    if google_token is not None:
-        outputs[config_dir / "token_accounts.json"] = google_token
-    _replace_transaction(outputs)
+    })
