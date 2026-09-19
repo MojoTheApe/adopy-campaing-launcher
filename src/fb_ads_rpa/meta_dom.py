@@ -2363,6 +2363,26 @@ def _component_failed(page: Page) -> bool:
         return False
 
 
+_PENDING_DRAFTS_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const el = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && /^Review and publish( \(\d+\))?$/.test(norm(e.textContent)));
+    if (!el) return null;
+    const m = norm(el.textContent).match(/\((\d+)\)/);
+    return m ? Number(m[1]) : 0;
+  }
+"""
+"""Сколько черновиков ждёт публикации — число в кнопке «Review and publish»."""
+
+
+def _pending_drafts(page: Page) -> int | None:
+    try:
+        return page.evaluate(_PENDING_DRAFTS_JS)
+    except Exception:
+        return None
+
+
 def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = False) -> bool:
     """Перезагрузить вкладку, если она зависла (ACL-1233). True — перезагрузили.
 
@@ -2630,6 +2650,10 @@ def run_recorded_campaign_flow(
     for _ in range(3):
         _dismiss_floating_banners(page)
         _sleep_h(0.4)
+    # 20.09 01:20: «Loading creation» без конца шло на аккаунтах, где
+    # накопились черновики (CO_bnc 11, CR_ait 10). Пишем их число до Create,
+    # чтобы связь была видна сразу, а не по снимкам.
+    _telemetry.record("drafts_pending", None, diag={"count": _pending_drafts(page)})
     if not _click(page.get_by_role("button", name="Create", exact=True)):
         if not (recover_stuck_page(page, "create", editor=False)
                 and _click(page.get_by_role("button", name="Create", exact=True))):

@@ -157,3 +157,21 @@ def test_a_reload_that_times_out_falls_back_to_reloading_from_inside(env, monkey
     assert md.recover_stuck_page(page, "ad2_create", editor=True) is True
     assert calls == ["reload", "js", "wait"], calls
     assert "js_reload" in env["events"][-1][2]
+
+
+def test_the_pending_drafts_counter_is_read_from_the_button(env):
+    """20.09 01:20: «Loading creation» держалось на аккаунтах с 10-11 черновиками."""
+
+    class Btn(Page):
+        def __init__(self, text):
+            super().__init__()
+            self.text = text
+
+        def evaluate(self, script, *a):
+            import re as _re
+            m = _re.search(r"\((\d+)\)", self.text)
+            return int(m.group(1)) if m else (0 if "Review and publish" in self.text else None)
+
+    assert md._pending_drafts(Btn("Review and publish (11)")) == 11
+    assert md._pending_drafts(Btn("Review and publish")) == 0
+    assert md._pending_drafts(Btn("")) is None
