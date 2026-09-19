@@ -2348,6 +2348,21 @@ def _all_edits_saved(page: Page) -> bool:
         return False
 
 
+def _component_failed(page: Page) -> bool:
+    """Блок редактора, который Meta не смогла загрузить.
+
+    20.09 00:35 (CO_bnc Mix): на месте панели плейсментов стояло «Error:
+    component failed to load — Something went wrong, please try reloading the
+    page», и подряд отказали placements и devices_ios. Meta сама просит
+    перезагрузить — это тот же случай, что и ACL-1233.
+    """
+    try:
+        return page.get_by_text(
+            re.compile(r"component failed to load", re.I)).first.is_visible(timeout=500)
+    except Exception:
+        return False
+
+
 def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = False) -> bool:
     """Перезагрузить вкладку, если она зависла (ACL-1233). True — перезагрузили.
 
@@ -2361,6 +2376,14 @@ def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = Fa
     reason = ""
     if err:
         reason = f"error_page:{err}"
+    elif _component_failed(page):
+        # Блок не загрузился: перезагружаем, но в редакторе — только когда
+        # всё сохранено, иначе потеряются уже заполненные поля.
+        if editor and not _all_edits_saved(page):
+            _telemetry.record("loading_modal_reload", False, note="unsaved_edits",
+                              diag={"where": where, "reason": "component_error"})
+            return False
+        reason = "component_error"
     elif force and not editor:
         # Список кампаний: окно цели не открылось, а видимого «Loading…» нет
         # (19.09 CO_bnc Mix, 18:12). Терять на списке нечего — перезагружаем.
@@ -3023,7 +3046,13 @@ def run_recorded_campaign_flow(
     # "don't stop the test" contract.
     try:
         placements_report: dict = {}
-        if not fill_placements(page, placements_report):
+        ok_placements = fill_placements(page, placements_report)
+        if not ok_placements and recover_stuck_page(page, "placements", editor=True):
+            # 20.09 00:35 CO_bnc Mix: панель плейсментов не загрузилась, и
+            # следом отказал iOS. После перезагрузки шаг делается заново.
+            placements_report = {}
+            ok_placements = fill_placements(page, placements_report)
+        if not ok_placements:
             # Отчёт кладётся рядом с отказом: пустое «placements ✗» стоило
             # пяти прогонов вслепую — шаг падал, а что именно не нашлось,
             # приходилось выяснять заново каждый раз.

@@ -115,3 +115,21 @@ def test_a_failing_wake_does_not_block_the_reload(env, monkeypatch):
     page = Page("chrome-error://chromewebdata/")
     assert md.recover_stuck_page(page, "ad2_before", editor=True) is True
     assert page.reloads == 1
+
+
+def test_a_component_that_failed_to_load_is_reloaded(env, monkeypatch):
+    """20.09 00:35 CO_bnc Mix: «Error: component failed to load» на месте
+    панели плейсментов — следом отказали placements и devices_ios."""
+    env.update(saved=True)
+    monkeypatch.setattr(md, "_component_failed", lambda page: True)
+    page = Page()
+    assert md.recover_stuck_page(page, "placements", editor=True) is True
+    assert page.reloads == 1 and env["events"][-1][:2] == ("loading_modal_reload", True)
+
+
+def test_a_failed_component_keeps_unsaved_edits(env, monkeypatch):
+    env.update(saved=False)
+    monkeypatch.setattr(md, "_component_failed", lambda page: True)
+    page = Page()
+    assert md.recover_stuck_page(page, "placements", editor=True) is False
+    assert page.reloads == 0 and env["events"] == [("loading_modal_reload", False, "unsaved_edits")]
