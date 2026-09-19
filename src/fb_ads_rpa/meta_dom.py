@@ -2716,8 +2716,14 @@ def run_recorded_campaign_flow(
     _shot("after_onboarding_modal")
 
     if not _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name):
-        _shot("fail_campaign_name")
-        return "campaign_name"
+        # 20.09 01:12 (CL_ml TRDEZ, третий раз за сутки): после Continue
+        # редактор не отрисовался — пустой экран с «Loading…», и поля имени
+        # на странице нет вовсе. Вводить ещё нечего, поэтому перезагружаем
+        # без оглядки на «All edits saved» и пробуем снова.
+        if not (recover_stuck_page(page, "campaign_name", editor=False, force=True)
+                and _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name)):
+            _shot("fail_campaign_name")
+            return "campaign_name"
     # Confirmed live 2026-07-28: _fill() returning True only means the type
     # succeeded, not that Meta's async autosave actually persisted it — a
     # campaign was seen to silently revert to the default "New Leads
