@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "active": {
-    "issue": 239,
-    "started_at": "2026-09-19T07:49:17+00:00"
-  },
+  "active": null,
   "run": null,
   "todo_order": [],
   "todo_added": {
