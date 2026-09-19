@@ -2318,6 +2318,73 @@ def pick_website_conversion_option(page: Page) -> bool:
     return _pick_website_from_open_menu(page)
 
 
+#: Сколько «Loading…» может висеть, прежде чем считать страницу зависшей (ACL-1233).
+LOADING_STUCK_S = 20.0
+
+
+def _chrome_error_page(page: Page) -> str:
+    """Код ошибки, если во вкладке вместо Ads Manager — страница ошибки Chrome."""
+    try:
+        if (page.url or "").startswith("chrome-error://"):
+            got = page.evaluate("() => (document.body && document.body.innerText || '').match(/ERR_[A-Z_]+/)")
+            return (got or ["ERR_UNKNOWN"])[0] if isinstance(got, list) else "ERR_UNKNOWN"
+    except Exception:
+        pass
+    return ""
+
+
+def _loading_visible(page: Page) -> bool:
+    try:
+        overlay = page.get_by_text(_LOADING_TEXT).first
+        return bool(overlay.count()) and overlay.is_visible(timeout=200)
+    except Exception:
+        return False
+
+
+def _all_edits_saved(page: Page) -> bool:
+    try:
+        return page.get_by_text(re.compile(r"^All edits saved$", re.I)).first.is_visible(timeout=500)
+    except Exception:
+        return False
+
+
+def recover_stuck_page(page: Page, where: str, *, editor: bool) -> bool:
+    """Перезагрузить вкладку, если она зависла (ACL-1233). True — перезагрузили.
+
+    * Страница ошибки Chrome (ERR_SSL_PROTOCOL_ERROR, 19.09 CO_bnc Mix) —
+      перезагружаем всегда: живого редактора в ней уже нет.
+    * «Loading…», висящий дольше LOADING_STUCK_S: в редакторе — только при
+      «All edits saved», иначе потеряются несохранённые поля; на списке
+      кампаний (`editor=False`, шаг выбора цели) сохранять нечего.
+    """
+    err = _chrome_error_page(page)
+    reason = ""
+    if err:
+        reason = f"error_page:{err}"
+    elif _loading_visible(page):
+        deadline = time.time() + LOADING_STUCK_S
+        while time.time() < deadline and _loading_visible(page):
+            _sleep_h(1.0, 0.1)
+        if not _loading_visible(page):
+            return False
+        if editor and not _all_edits_saved(page):
+            _telemetry.record("loading_modal_reload", False, note="unsaved_edits", diag={"where": where})
+            return False
+        reason = "loading_modal"
+    else:
+        return False
+    try:
+        page.reload(timeout=60000, wait_until="domcontentloaded")
+        _sleep_h(4.0, 0.2)
+        ok = not _chrome_error_page(page)
+    except Exception as exc:
+        ok = False
+        reason += f" ({str(exc)[:60]})"
+    _telemetry.record("loading_modal_reload" if reason == "loading_modal" else "error_page_reload",
+                      ok, note=reason, diag={"where": where, "url": (page.url or "")[:160]})
+    return ok
+
+
 def run_recorded_campaign_flow(
     page: Page,
     *,
@@ -2512,8 +2579,20 @@ def run_recorded_campaign_flow(
         _dismiss_floating_banners(page)
         _sleep_h(0.4)
     if not _click(page.get_by_role("button", name="Create", exact=True)):
-        return "create"
+        if not (recover_stuck_page(page, "create", editor=False)
+                and _click(page.get_by_role("button", name="Create", exact=True))):
+            return "create"
     _shot("after_create")
+
+    # ACL-1233: окно выбора цели не появилось, а страница висит в «Loading…»
+    # или стала страницей ошибки Chrome — перезагрузить список и нажать Create
+    # ещё раз, вместо минут ожидания в каждой попытке клика (19.09: 10–12 мин).
+    try:
+        page.get_by_role("radio", name="Leads").first.wait_for(state="visible", timeout=25000)
+    except Exception:
+        if recover_stuck_page(page, "objective", editor=False):
+            _click(page.get_by_role("button", name="Create", exact=True))
+            _shot("after_create_retry")
 
     # New Meta UI sometimes shows a Guided/Manual choice before the objective
     # picker enables Campaign name — click Manual if present, best-effort
@@ -3039,9 +3118,15 @@ def run_recorded_campaign_flow(
         if reached_ad_level and additional_ads:
             for i, extra in enumerate(additional_ads, start=2):
                 tag = f"ad{i}"
+                # ACL-1233: зависшая загрузка или страница ошибки Chrome перед
+                # объявлением — перезагрузить (в редакторе — только при «All
+                # edits saved»), иначе все следующие объявления падают подряд.
+                recover_stuck_page(page, f"{tag}_before", editor=True)
                 shells_before = _tree_new_ad_shells(page)
                 try:
                     created = create_additional_ad(page, adset_name)
+                    if not created and recover_stuck_page(page, f"{tag}_create", editor=True):
+                        created = create_additional_ad(page, adset_name)
                     if not created:
                         # A reported failure does not mean no ad was born:
                         # Meta names every fresh ad "New Leads Ad", so if
@@ -3134,6 +3219,9 @@ def run_recorded_campaign_flow(
         # fill time, yet the post-run live verification found the
         # lead_gen_form_id error banner on it. Re-visit each ad once the
         # whole campaign is filled and re-fix anything that reverted.
+        if reached_ad_level:
+            # ACL-1233: обход должен пройти и после зависшей страницы.
+            recover_stuck_page(page, "destination_sweep", editor=True)
         if reached_ad_level and destination_url:
             sweep_names = [ad_name or f"{campaign_name} Ad"]
             for i, extra in enumerate(additional_ads or [], start=2):
