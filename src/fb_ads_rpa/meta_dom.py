@@ -10163,6 +10163,7 @@ _LOCATIONS_EDIT_JS = r"""
         return /edit|editar|pencil/.test(name) || (!norm(b.textContent) && r.width <= 48);
       });
       if (btns.length) {
+        btns[btns.length - 1].scrollIntoView({block: 'center'});
         const r = btns[btns.length - 1].getBoundingClientRect();
         return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
       }
@@ -10185,6 +10186,7 @@ _SUMMARY_ROW_JS = r"""
     const hit = leaves.find(e => re.test(norm(e.textContent))
       && Math.abs(e.getBoundingClientRect().top - head.getBoundingClientRect().top) < 80);
     const el = hit || head;
+    el.scrollIntoView({block: 'center'});
     const r = el.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2, text: norm(el.textContent).slice(0, 60) };
   }
@@ -10218,6 +10220,14 @@ _ROW_EXPANDER_JS = r"""
     const label = [...document.querySelectorAll('*')].find(e =>
       e.children.length === 0 && re.test(norm(e.textContent)) && e.getBoundingClientRect().width > 0);
     if (!label) return null;
+    // 19.09 18:25 SA_arc: раскрывается вся строка — role=button
+    // aria-expanded=false, а подпись лежит внутри неё.
+    const own = label.closest('[role="button"][aria-expanded="false"]');
+    if (own) {
+      own.scrollIntoView({block: 'center'});
+      const r0 = label.getBoundingClientRect();
+      return { x: r0.x + r0.width / 2, y: r0.y + r0.height / 2 };
+    }
     let row = label.parentElement;
     for (let i = 0; i < 6 && row; i++, row = row.parentElement) {
       const exp = [...row.querySelectorAll('[aria-expanded="false"]')].filter(b => {
@@ -10226,6 +10236,7 @@ _ROW_EXPANDER_JS = r"""
           (label.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
       });
       if (exp.length) {
+        exp[0].scrollIntoView({block: 'center'});
         const r = exp[0].getBoundingClientRect();
         return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
       }
@@ -11750,6 +11761,7 @@ _LANG_EDIT_JS = r"""
         return /edit|изменить|editar|pencil/.test(name) || (!norm(b.textContent) && r.width <= 48);
       });
       if (btns.length) {
+        btns[btns.length - 1].scrollIntoView({block: 'center'});
         const r = btns[btns.length - 1].getBoundingClientRect();
         return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
       }
