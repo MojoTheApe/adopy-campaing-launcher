@@ -315,3 +315,37 @@ def test_a_single_group_does_not_borrow_a_chip_from_elsewhere(page):
     page.set_content("""<aside><ul><li>Business jet<button>Close</button></li></ul></aside>
       <div role="presentation"><input placeholder="Add demographics, interests or behaviours"></div>""")
     assert md._group_has_terms(page, ["Business jet"])["hits"] == []
+
+
+# ── реальная разметка после вставки: снимок 199fa985d531, CR_ait IPO, 19.09 ──
+_IPO = ["Initial Public Offering", "Venture Capital", "Angel Investor",
+        "Investment Banking", "Private Equity fund"]
+_AFTER_PASTE = (Path(__file__).parent / "fixtures" / "meta" / "targeting_group_after_paste.html")
+
+
+def test_all_pasted_interests_are_seen_on_the_real_markup(page):
+    """Категория — тоже li с Close, но она не интерес; все пять интересов на месте."""
+    page.set_content(_AFTER_PASTE.read_text(encoding="utf-8"))
+    res = md._group_has_terms(page, _IPO)
+    assert res["found"] is True
+    assert sorted(res["hits"]) == sorted(_IPO) and res["missing"] == [], res
+
+
+def test_the_check_waits_for_meta_to_draw_the_interests(page):
+    """19.09: сразу после вставки есть только заголовок категории — не «пусто»."""
+    page.set_content(
+        "<div role='presentation'><ul><li><span>Interests &gt; Additional interests</span>"
+        "<button>Close</button></li><li><ul id='items'></ul></li></ul>"
+        "<input placeholder='Add demographics, interests or behaviours'></div>"
+        "<script>setTimeout(() => { document.getElementById('items').innerHTML ="
+        " '<li><span>Initial public offering</span><button>Close</button></li>'; }, 1200);</script>")
+    assert md._group_has_terms(page, ["Initial Public Offering"])["hits"] == []
+    res = md._await_group_terms(page, ["Initial Public Offering"], timeout_s=5)
+    assert res["hits"] == ["Initial Public Offering"], res
+
+
+def test_an_empty_group_still_fails_after_the_wait(page):
+    page.set_content("<div role='presentation'><ul></ul>"
+                     "<input placeholder='Add demographics, interests or behaviours'></div>")
+    res = md._await_group_terms(page, ["Initial Public Offering"], timeout_s=1)
+    assert res["found"] is True and res["hits"] == []

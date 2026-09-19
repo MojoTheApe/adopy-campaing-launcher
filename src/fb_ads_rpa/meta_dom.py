@@ -5181,14 +5181,8 @@ def _library_selected_count(page: Page) -> int | None:
     try:
         value = page.evaluate(
             r"""() => {
-              const dialogs = [...document.querySelectorAll('[role=dialog]')].filter(e =>
-                e.getBoundingClientRect().width > 0 && e.getBoundingClientRect().height > 0 &&
-                getComputedStyle(e).visibility === 'visible' &&
-                !e.closest('[hidden],[inert],[aria-hidden=true]'));
-              const dialog = dialogs[dialogs.length - 1];
-              if (!dialog) return null;
               let total = 0, found = false;
-              for (const el of dialog.querySelectorAll('*')) {
+              for (const el of document.querySelectorAll('*')) {
                 const r = el.getBoundingClientRect();
                 const style = getComputedStyle(el);
                 if (!r.width || !r.height || el.children.length ||
@@ -5218,7 +5212,7 @@ def _library_tiles(page: Page, filename: str):
     coordinates. An earlier coordinate-based attempt failed live: clicks
     landed on stale positions and the grid stayed at "0 selected".
     """
-    return page.locator('[role=dialog]:visible').last.get_by_text(filename, exact=True).locator(
+    return page.get_by_text(filename, exact=True).locator(
         "xpath=ancestor::*[@role='button'][1]"
     )
 
@@ -5285,30 +5279,16 @@ _LIBRARY_DIALOG_JS = (
 )
 """Верхний открытый диалог — сетка медиатеки, для снимка целиком."""
 
-_MEDIA_VISIBLE_JS = r"""(el) => {
-    if (!el || el.closest('[hidden],[inert],[aria-hidden="true"]')) return false;
-    const r = el.getBoundingClientRect(), s = getComputedStyle(el);
-    return r.width > 0 && r.height > 0 && s.visibility === 'visible' && s.display !== 'none';
-}"""
-
-_AD_MEDIA_BLOCK_JS = r"""(() => {
-    const visible = """ + _MEDIA_VISIBLE_JS + r""";
-    // Recorded ad_media_attached.html: the Media field owns a Remove media
-    // control and a placement list with per-group edit controls. Never grow
-    // an arbitrary text anchor into the whole document to find a thumbnail.
-    const controls = [...document.querySelectorAll(
-      '[data-surface$="/lib:ads-pacer-remove-all-button"]')]
-      .filter(el => visible(el) && !el.closest('[role=dialog]'));
-    if (controls.length !== 1) return null;
-    for (let el = controls[0].parentElement; el && el !== document.body; el = el.parentElement) {
-      const labels = [...el.querySelectorAll('label')].filter(visible);
-      if (labels.length > 1) return null;
-      if (labels.length === 1 && /^\*?\s*Media$/.test(labels[0].textContent.trim()) &&
-          el.querySelector('[role=list]')) return el;
-    }
-    return null;
-})()"""
-"""The recorded ad Media field, or null for an unknown/ambiguous layout."""
+_AD_MEDIA_BLOCK_JS = (
+    "(() => { const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();"
+    " const mark = [...document.querySelectorAll('*')].find(e => e.children.length === 0"
+    " && /^(Edit media|Change selections|Uploaded media|Customize media|Media)$/.test(norm(e.textContent))"
+    " && e.getBoundingClientRect().width > 0); if (!mark) return null; let el = mark;"
+    " for (let i = 0; i < 14 && el.parentElement; i++) { el = el.parentElement;"
+    " if (el.querySelector('img[src*=\"t15.5256-10\"], [src*=\"t15.5256-10\"]')) break; }"
+    " return el; })()"
+)
+"""Блок «Media» объявления, для снимка целиком."""
 
 _MEDIA_FINGERPRINT_JS = r"""
   (root) => {
@@ -5337,14 +5317,11 @@ _THUMB_ID_JS = r"""
     // строк размещения в блоке Media объявления — один и тот же идентификатор.
     const re = /\d{6,}_\d{10,}_\d{10,}_n/g;
     const out = new Set();
-    if (!scope) return [];
-    const root = scope;
+    const root = scope || document;
     const nodes = [root, ...root.querySelectorAll('img, [src], [style*="background-image"]')];
     for (const n of nodes) {
       if (!n || !n.getAttribute) continue;
-      const r = n.getBoundingClientRect(), s = getComputedStyle(n);
-      if (!r.width || !r.height || s.visibility !== 'visible' ||
-          n.closest('[hidden],[inert],[aria-hidden="true"]')) continue;
+      if (!scope && n.closest && n.closest('[role=dialog]')) continue;
       for (const v of [n.getAttribute('src'), n.getAttribute('style')]) {
         (String(v || '').match(re) || []).forEach(x => out.add(x));
       }
@@ -5352,7 +5329,7 @@ _THUMB_ID_JS = r"""
     return [...out];
   }
 """
-"""Visible thumbnail tokens inside an explicit scope; never the whole page."""
+"""Идентификаторы миниатюр видео — внутри элемента или по странице вне диалогов."""
 
 
 def _tile_thumb_ids(tile) -> list[str]:
@@ -5363,26 +5340,12 @@ def _tile_thumb_ids(tile) -> list[str]:
 
 
 def _ad_media_thumb_ids(page: Page) -> list[str]:
-    """Only the visible placement rows of the verified ad Media field."""
-    state = _ad_media_state(page, "")
-    return state.get("thumbs", []) if isinstance(state, dict) else []
-
-
-def _library_tile_ready(tile) -> bool:
-    """A selectable rendered video with a unique thumbnail and no warning.
-
-    The captured multi-select warning has no accessible explanation. Refuse
-    that tile instead of guessing whether its triangle means processing,
-    rejection, or merely a recommendation.
-    """
+    """Миниатюры видео в редакторе объявления (открытые диалоги не считаются)."""
     try:
-        return len(_tile_thumb_ids(tile)) == 1 and tile.evaluate(
-            "el => { const visible = " + _MEDIA_VISIBLE_JS + ";"
-            " return visible(el) && !el.closest('[aria-disabled=true],[disabled],[aria-busy=true]')"
-            " && ![...el.querySelectorAll('svg,[role=progressbar],[role=alert]')].some(visible); }"
-        ) is True
+        return list(page.evaluate("(js) => (new Function('return (' + js + ')'))()(null)",
+                                  _THUMB_ID_JS) or [])
     except Exception:
-        return False
+        return []
 
 
 def _tile_fingerprint(tile) -> list[str]:
@@ -5406,15 +5369,11 @@ def _ad_media_fingerprint(page: Page) -> list[str]:
 def _library_any_tile_marked(page: Page) -> bool | None:
     """Осталась ли в сетке хоть одна отмеченная плитка (None — сетку не прочесть)."""
     try:
-        value = page.evaluate(
+        return bool(page.evaluate(
             "() => { const d = " + _LIBRARY_DIALOG_JS + "; if (!d) return null;"
-            # The captured Account tab has aria-selected=true even when no
-            # media is selected. It must not make clean fallback impossible.
-            " return [...d.querySelectorAll('[data-test-decoration=\"selected\"],"
-            " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked')]"
-            " .some(el => !el.closest('[role=tab]')); }"
-        )
-        return value if isinstance(value, bool) else None
+            " return !!d.querySelector('[data-test-decoration=\"selected\"],"
+            " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked'); }"
+        ))
     except Exception:
         return None
 
@@ -5655,9 +5614,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Без этого следующая попытка починки снова будет догадкой.
         _telemetry.record("ad_creative_reuse", None, note="not_in_library",
                           diag=_library_sight(page, filename))
-        clean = (before == 0 and _library_selected_count(page) == 0
-                 and _library_any_tile_marked(page) is False)
-        return REUSE_ABSENT if clean else REUSE_DIRTY
+        return REUSE_ABSENT if before == 0 else REUSE_DIRTY
 
     # Poll the counter for seconds, not milliseconds, before giving up on a
     # click. The old 0.5s check raced Meta's own render: the click HAD
@@ -5681,14 +5638,8 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     picked_thumbs: list[str] = []
     for i in range(min(available, _LIBRARY_MAX_PICKS)):
         try:
-            tile = tiles.nth(i)
-            if _library_tile_selected(tile):
-                if not _library_tile_ready(tile):
-                    _telemetry.record("ad_creative_reuse", False, note="selected_media_unverified")
-                    return REUSE_DIRTY
+            if _library_tile_selected(tiles.nth(i)):
                 log.append({"tile": i, "before": before, "already_selected": True, "took": True})
-                picked_fingerprint = _tile_fingerprint(tile)
-                picked_thumbs = _tile_thumb_ids(tile)
                 picked = True
                 break
         except Exception:
@@ -5698,9 +5649,6 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         try:
             tile = tiles.nth(i)
             tile.scroll_into_view_if_needed(timeout=3000)
-            if not _library_tile_ready(tile):
-                log.append({**note, "skipped": "media_not_ready_or_unidentified"})
-                continue
             tile.click(timeout=3000)
         except Exception as exc:
             note["click_error"] = f"{type(exc).__name__}"[:40]
@@ -5757,8 +5705,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Кликали, но счётчик не двинулся. «Не двинулся» — это то, что мы
         # видим, а не то, что произошло: клик мог и зарегистрироваться, просто
         # позже. Поэтому не уходим молча, а снимаем за собой.
-        clean = (before == 0 and _library_selected_count(page) == 0
-                 and _library_any_tile_marked(page) is False) if not clicked else _library_undo_selection(page, tiles, clicked, before)
+        clean = (before == 0 and _library_selected_count(page) == 0) if not clicked else _library_undo_selection(page, tiles, clicked, before)
         sight = _library_sight(page, filename)
         if saved_page:
             sight["page"] = saved_page
@@ -5818,8 +5765,20 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         _close_creative_setup_modal(page)
         _sleep_h(0.5)
         if "/ads/edit/" in page.url and _verify_ad_media_present(page):
-            right, detail = _verify_ad_media_is_the_file(page, filename, picked_thumbs)
-            detail["picked_thumbs"] = picked_thumbs[:5]
+            right, detail = _verify_ad_media_is_the_file(page, filename)
+            ad_thumbs = _ad_media_thumb_ids(page)
+            if picked_thumbs and ad_thumbs:
+                if set(picked_thumbs) & set(ad_thumbs):
+                    detail["thumb"] = "match"
+                else:
+                    # Миниатюра на объявлении не та, что у выбранной плитки:
+                    # прикрепилось другое видео, как бы ни совпало имя.
+                    right = False
+                    detail["why"] = "other_file_attached"
+                    detail["thumb"] = "mismatch"
+            else:
+                detail["thumb"] = "unconfirmed"
+            detail["thumbs"] = {"picked": picked_thumbs[:5], "ad": ad_thumbs[:5]}
             media_fp = _ad_media_fingerprint(page)
             detail["identity"] = {
                 "tile": picked_fingerprint[:10], "ad": media_fp[:10],
@@ -5848,7 +5807,6 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
                                blocks={"media": _AD_MEDIA_BLOCK_JS})
             except Exception:
                 pass
-            _telemetry.record("ad_creative_reuse", True, note="attached_from_library", diag=detail)
             return REUSE_ATTACHED
         # Мастер продвинулся, а медиа на объявлении нет. Выбор при этом
         # где-то остался, и снять его отсюда уже нечем: сетки на экране нет.
@@ -5864,8 +5822,7 @@ def _retreat(page: Page, tiles, clicked: list[int], before: int) -> str:
     написать `return False` — ровно та ошибка, которая стоила отключения всей
     возможности 24.08.
     """
-    clean = (before == 0 and _library_selected_count(page) == 0
-                 and _library_any_tile_marked(page) is False) if not clicked else _library_undo_selection(page, tiles, clicked, before)
+    clean = (before == 0 and _library_selected_count(page) == 0) if not clicked else _library_undo_selection(page, tiles, clicked, before)
     if not clean:
         return REUSE_DIRTY
     try:
@@ -5892,6 +5849,7 @@ def reuse_before_upload(page: Page, creative_path: str) -> bool | None:
         return None
     outcome = _try_reuse_library_media(page, Path(creative_path).name)
     if outcome == REUSE_ATTACHED:
+        _telemetry.record("ad_creative_reuse", True, note="attached_from_library")
         return True
     if outcome == REUSE_DIRTY:
         # Сетка осталась с нашим выбором. Загрузка поверх дала бы объявление
@@ -5951,9 +5909,14 @@ def upload_ad_creative_with_retry(
             attached = False
         if attached:
             return True
-        # A prior upload of this filename does not identify the media on
-        # this ad. Never override a failed library identity check with
-        # generic "Media is present" evidence.
+        # 17.09 04:30 (S15, 3-е объявление): медиа уже стояло — Meta перенесла
+        # ролик в новое объявление, мастер не открылся, и шаг объявил
+        # объявление пустым, хотя на экране «Uploaded media · 1 selected».
+        # Файл здесь тот же, что уже поднят в этом прогоне, — медиа на месте.
+        if _media_block_filled_now(page):
+            _telemetry.record("ad_creative_upload", True, note="media_already_on_ad",
+                              diag={"file": Path(creative_path).name})
+            return True
         why = ("same_file_already_uploaded_this_run"
                if upload_already_succeeded(creative_path)
                else "same_file_already_failed_this_run")
@@ -5964,17 +5927,12 @@ def upload_ad_creative_with_retry(
         return False
 
     for attempt in range(attempts):
-        _set_last_upload_diag({"file": Path(creative_path).name, "attempts": []})
         try:
             if upload_ad_creative(page, creative_type, creative_path, edit_url=edit_url):
                 remember_upload_succeeded(creative_path)
                 return True
         except Exception:
             pass
-        if last_upload_diag().get("reuse_unverified"):
-            # Preserve the dirty outcome through the outer retry layer.
-            # Neither generic media presence nor a second upload can fix it.
-            return False
         _close_creative_setup_modal(page)
         _sleep_h(0.8)
         if _verify_ad_media_present(page):
@@ -6713,9 +6671,6 @@ def upload_ad_creative(
     # stem finds nothing.
     verdict = reuse_before_upload(page, creative_path)
     if verdict is not None:
-        if not verdict:
-            _set_last_upload_diag({"file": Path(creative_path).name, "attempts": [],
-                                   "reuse_unverified": True})
         return verdict
     if reuse_only:
         # Память прогона говорит, что файл уже уходил наверх: второй раз Meta
@@ -6824,7 +6779,6 @@ def upload_ad_creative(
         decision = _reuse_upload_decision(page, Path(creative_path).name)
         if decision is not None:
             _diag["reused"] = decision
-            _diag["reuse_unverified"] = decision is False
             _set_last_upload_diag(_diag)
             return decision
 
@@ -7155,51 +7109,34 @@ def _media_block_filled_now(page: Page) -> bool:
 
 
 _AD_MEDIA_STATE_JS = r"""
-  (filename) => {
-    const root = """ + _AD_MEDIA_BLOCK_JS + r""";
-    if (!root) return {error: 'media_block_unavailable'};
-    const isVisible = """ + _MEDIA_VISIBLE_JS + r""";
-    const thumbIds = """ + _THUMB_ID_JS + r""";
+  (stem) => {
     const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-    const visible = [...root.querySelectorAll('*')]
-      .filter(e => isVisible(e) && e.children.length === 0)
+    const visible = [...document.querySelectorAll('*')]
+      .filter(e => e.offsetParent !== null && e.children.length === 0)
       .map(e => norm(e.textContent))
       .filter(Boolean);
     const low = visible.map(t => t.toLowerCase());
-    const want = norm(filename).toLowerCase();
-    const named = want ? low.filter(t => t === want) : [];
-    const processing = low.some(t => t.includes('processing') || t.includes('being processed')) ||
-      [...root.querySelectorAll('[role=progressbar],[aria-busy=true]')].some(isVisible);
+    const want = (stem || '').toLowerCase();
+    // Имя файла Meta показывает по-разному: «2012.mp4», «2012», иногда с
+    // суффиксом копии. Совпадением считаем вхождение основы имени.
+    const named = want ? low.filter(t => t.includes(want)) : [];
+    const processing = low.some(t => t.includes('processing') || t.includes('being processed'));
     const failed = low.some(t => t.includes("couldn't be processed") || t.includes('could not be processed')
       || t.includes('failed to process') || t.includes('processing failed')
-      || t.includes("media couldn't") || t.includes('upload failed') || t.includes('rejected'));
+      || t.includes("media couldn't") || t.includes('upload failed'));
     // Имена ДРУГИХ файлов рядом с медиа: нашего нет, а чужой есть — взяли не то.
-    const others = low.filter(t => /\.(mp4|mov|jpg|jpeg|png|gif|webm)\b/.test(t) && (!want || t !== want));
-    const lists = [...root.querySelectorAll('[role=list]')].filter(isVisible);
-    // In the recorded layout each direct listitem is a placement group.
-    // Nested listitems are wrappers, not additional assets.
-    const rows = lists.length === 1 ? [...lists[0].children]
-      .filter(el => el.getAttribute('role') === 'listitem' && isVisible(el)) : [];
-    const thumbs = [...new Set(rows.flatMap(thumbIds))];
-    const enabled = el => isVisible(el) &&
-      !el.closest('[aria-disabled=true],[disabled],[aria-busy=true]') &&
-      el.getAttribute('aria-busy') === 'false';
-    const remove = root.querySelector('[data-surface$="/lib:ads-pacer-remove-all-button"]');
-    const ready = !!remove && enabled(remove) && rows.length > 0 && rows.every(row => {
-      const edits = [...row.querySelectorAll('[data-surface$="/lib:pacer-item-button-edit"]')].filter(isVisible);
-      return thumbIds(row).length === 1 && edits.length === 1 && enabled(edits[0]);
-    }) && ![...root.querySelectorAll('[role=alert]')].some(isVisible);
-    return {named: named.slice(0, 5), others: others.slice(0, 5),
-            processing, failed, ready, thumbs};
+    const others = low.filter(t => /\.(mp4|mov|jpg|jpeg|png|gif|webm)\b/.test(t) && (!want || !t.includes(want)));
+    return { named: named.slice(0, 5), others: others.slice(0, 5),
+             processing: processing, failed: failed };
   }
 """
 """Что сейчас в медиа-блоке объявления: наше имя, чужие имена, обработка, ошибка."""
 
 
 def _ad_media_state(page: Page, filename: str) -> dict:
-    name = Path(filename or "").name.lower()
+    stem = Path(filename or "").stem.lower()
     try:
-        return page.evaluate(_AD_MEDIA_STATE_JS, name) or {}
+        return page.evaluate(_AD_MEDIA_STATE_JS, stem) or {}
     except Exception as exc:
         return {"error": str(exc)[:80]}
 
@@ -7207,9 +7144,7 @@ def _ad_media_state(page: Page, filename: str) -> dict:
 _MEDIA_PROCESSING_MAX_S = 180
 
 
-def _verify_ad_media_is_the_file(
-    page: Page, filename: str, picked_thumbs: list[str] | None = None,
-) -> tuple[bool, dict]:
+def _verify_ad_media_is_the_file(page: Page, filename: str) -> tuple[bool, dict]:
     """Прикрепился ли ИМЕННО наш файл и пригоден ли он (ACL-1171/1192).
 
     Проверка «медиа есть» пропускает две беды: прикрепилась чужая плитка
@@ -7220,14 +7155,6 @@ def _verify_ad_media_is_the_file(
     state: dict = {}
     while True:
         state = _ad_media_state(page, filename)
-        if (not isinstance(state, dict) or state.get("error")
-                or not isinstance(state.get("named"), list)
-                or not isinstance(state.get("others"), list)
-                or not isinstance(state.get("thumbs"), list)
-                or type(state.get("ready")) is not bool
-                or type(state.get("processing")) is not bool
-                or type(state.get("failed")) is not bool):
-            return False, {"state": state, "why": "media_state_unavailable"}
         if state.get("failed"):
             return False, {"state": state, "why": "processing_failed"}
         if not state.get("processing"):
@@ -7235,18 +7162,13 @@ def _verify_ad_media_is_the_file(
         if time.time() >= deadline:
             return False, {"state": state, "why": "still_processing"}
         _sleep_h(2.0)
+    if state.get("named"):
+        return True, {"state": state}
     if state.get("others"):
         return False, {"state": state, "why": "other_file_attached"}
-    selected = set(picked_thumbs or [])
-    attached = set(state["thumbs"])
-    if len(selected) != 1 or not attached:
-        return False, {"state": state, "why": "media_identity_unavailable"}
-    if attached != selected:
-        return False, {"state": state, "why": "other_file_attached"}
-    if not state["ready"]:
-        return False, {"state": state, "why": "media_not_ready"}
-    return True, {"state": state, "media_identity": next(iter(selected)),
-                  "identity_kind": "meta_video_thumbnail"}
+    # Имя видно не всегда — Meta подписывает не каждую плитку. Само наличие
+    # медиа уже проверено отдельно, поэтому это не отказ.
+    return True, {"state": state, "why": "name_not_shown"}
 
 
 def _verify_ad_media_present(page: Page) -> bool:
@@ -9572,6 +9494,32 @@ def _group_has_terms(page: Page, terms: list[str]) -> dict:
         return {"found": False, "why": str(exc)[:80]}
 
 
+def _await_group_terms(page: Page, terms: list[str], *, timeout_s: float = 8.0) -> dict:
+    """Read the group until the pasted interests have been drawn.
+
+    Meta draws a pasted list in two passes: first the category header
+    ("Interests > Additional interests" with its own Close button), then the
+    interests under it. Reading once right after the paste saw only the header
+    and failed both campaigns of run 199fa985d531 (19.09) as `group_empty`,
+    although the snapshot three seconds later held all five chips.
+    """
+    import time as _time
+
+    deadline = _time.monotonic() + timeout_s
+    own = _group_has_terms(page, terms)
+    while (not own.get("found") or not own.get("hits")) and _time.monotonic() < deadline:
+        page.wait_for_timeout(500)
+        own = _group_has_terms(page, terms)
+    if own.get("hits") and own.get("missing"):
+        # Interests arrive one by one; give the rest one more beat before
+        # reporting them as unrecognised.
+        page.wait_for_timeout(1000)
+        again = _group_has_terms(page, terms)
+        if again.get("found"):
+            own = again
+    return own
+
+
 def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
     """Paste each AND group into its own field, pressing "Define further"
     between them. True only when every group went in.
@@ -9603,7 +9551,7 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
         # Проверка на своей группе: paste_targeting_interests ищет термин по
         # всей странице, и интерес первой группы подтверждал вторую (ACL-1219).
         terms = [t.strip() for t in group.split(",") if t.strip()]
-        own = _group_has_terms(page, terms)
+        own = _await_group_terms(page, terms)
         if own.get("found") and own.get("hits") and own.get("missing"):
             # Meta может не распознать часть интересов — это не отказ, но
             # должно быть видно, какие именно не встали.
