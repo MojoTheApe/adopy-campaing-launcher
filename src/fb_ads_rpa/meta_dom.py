@@ -4961,15 +4961,19 @@ def select_devices_ios_only(page: Page) -> bool:
     if not expanded:
         return False
 
-    for _ in range(15):
+    # 20.09 00:50 (CO_bnc GMB): раздел раскрыт, а внутри ещё крутилась
+    # загрузка — пустая рамка. Прежние три секунды ожидания её не
+    # перекрывали, и iOS молча не вставал. Ждём до 25 с.
+    for _ in range(60):
         present = page.evaluate(
             """() => [...document.querySelectorAll('[role=button]')].some(e =>
               e.offsetParent !== null && (e.textContent || '').trim() === 'All mobile devices')"""
         )
         if present:
             break
-        _sleep_h(0.2)
+        _sleep_h(0.4)
     else:
+        _telemetry.record("devices_ios", False, note="devices_panel_not_loaded")
         return False
 
     clicked = page.evaluate(
