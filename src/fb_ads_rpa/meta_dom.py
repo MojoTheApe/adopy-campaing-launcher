@@ -10680,6 +10680,14 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
         if not others:
             return _done(page, opened_by_us, [])
         target = others[0]
+        # 20.09 05:57 (CR_ait FX): карточка раскрылась, строки прочитались, но
+        # United States не уходила — шесть нажатий подряд. Крестик у строки,
+        # как и карандаш, живёт под курсором: сначала наводим, потом жмём.
+        try:
+            page.mouse.move(target["x"], target["y"])
+            _sleep_h(0.4)
+        except Exception:
+            pass
         _cdp_mouse_click(page, target["x"], target["y"])
         _sleep_h(0.9)
     rows = _location_rows(page)
