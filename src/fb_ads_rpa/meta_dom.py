@@ -3146,10 +3146,25 @@ def run_recorded_campaign_flow(
                     terms = [t.strip() for t in (groups[-1] if groups else targeting_label).split(",") if t.strip()]
                     late = _await_group_terms(page, terms, timeout_s=40.0)
                     any_added = bool(late.get("hits"))
+                    probe = {}
+                    if not any_added:
+                        # 20.09 13:24: снимок, снятый за 48 с до этого чтения,
+                        # держал все пять интересов, а чтение видит пустую
+                        # группу. Замеряем, что именно видно живьём.
+                        try:
+                            probe = page.evaluate(_TARGETING_PROBE_JS) or {}
+                        except Exception as exc:
+                            probe = {"error": str(exc)[:80]}
+                        try:
+                            from src.fb_ads_rpa import page_capture as _pc
+                            _pc.capture(page, step="targeting_recheck_empty", diag=probe)
+                        except Exception:
+                            pass
                     _telemetry.record("targeting_recheck", any_added,
                                       note="late_hits" if any_added else "still_empty",
                                       diag={"hits": (late.get("hits") or [])[:5],
-                                            "selected": (late.get("selected") or [])[:8]})
+                                            "selected": (late.get("selected") or [])[:8],
+                                            "why": late.get("why", ""), "probe": probe})
                 _shot("after_targeting" if any_added else "fail_targeting_none_added")
                 if not any_added:
                     soft_fails.append("targeting_none_added")
@@ -9750,6 +9765,31 @@ def targeting_groups(targeting_label: str) -> list[str]:
         if terms:
             groups.append(", ".join(terms))
     return groups
+
+
+_TARGETING_PROBE_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const isT = (i) => {
+      const b = norm((i.getAttribute('placeholder') || '') + ' ' + (i.getAttribute('aria-label') || '')).toLowerCase();
+      return ['add interests', 'interests, behaviors', 'interests or behaviours',
+              'interests or behaviors', 'demographics'].some(g => b.includes(g));
+    };
+    const vis = (e) => e.getClientRects().length > 0;
+    const ins = [...document.querySelectorAll('input, textarea')].filter(isT);
+    const out = ins.map((i) => {
+      const w = i.closest('[role="presentation"]');
+      const lis = w ? [...w.querySelectorAll('li')].filter(li => !li.querySelector('li')) : [];
+      return {visible: vis(i), wrapper: !!w, li: lis.length,
+              liVisible: lis.filter(vis).length,
+              sample: lis.slice(0, 4).map(li => norm(li.textContent).slice(0, 40))};
+    });
+    const body = norm(document.body.innerText || '').toLowerCase();
+    return {inputs: out, hasAdditional: body.includes('additional interests'),
+            hasCombined: body.includes('have been combined')};
+  }
+"""
+"""Что видно на месте детального таргетинга прямо сейчас."""
 
 
 _TARGETING_GROUP_JS = r"""
