@@ -7655,8 +7655,14 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
         """
         return mark_ad_copy_field(page, "message_field", _AD_COPY_FIELDS["message_field"], "probe")
 
-    if _primary_text_visible():
-        return True
+    # 20.09 20:30 (SA_arc, CL_ml, CO_bnc подряд): после ускорения мы доходим
+    # до объявления раньше, чем Meta его дорисовывает, и поля текста «ещё не
+    # раскрыты» — за ними падали и текст, и назначение. Даём блоку успокоиться
+    # и ждём поле до 12 с, прежде чем трогать разметку.
+    for _ in range(24):
+        if _primary_text_visible():
+            return True
+        _sleep_h(0.5)
 
     # Mount the section before trying to un-hide it. Every fallback below
     # assumes #creativeEditorComponent is in the DOM and merely painted
