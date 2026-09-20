@@ -2479,6 +2479,48 @@ def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = Fa
     return ok
 
 
+_NAME_SUGGESTIONS_JS = r"""
+  () => {
+    const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 40 && r.height > 20; };
+    const open = [...document.querySelectorAll('[role="listbox"], [role="option"]')].filter(vis);
+    if (!open.length) return null;
+    const r = open[0].getBoundingClientRect();
+    return { count: open.length, x: r.x, y: r.y, w: r.width, h: r.height };
+  }
+"""
+"""Открытая подсказка истории имён — она накрывает блок под полем."""
+
+
+def _dismiss_name_suggestions(page: Page) -> bool:
+    """Закрыть подсказку истории имён под полем имени.
+
+    20.09 07:53, все три аккаунта разом: после ввода имени ad set'а Meta
+    показала список прежних ad set'ов с тем же именем, он накрыл «Conversion
+    location», и шаг падал. Клик по заголовку «Ad set name» её не убирал.
+    Escape здесь нельзя — он закрывает весь мастер. Поэтому кликаем заведомо
+    пустое место панели правее списка и проверяем, что подсказка ушла.
+    """
+    for _ in range(4):
+        try:
+            box = page.evaluate(_NAME_SUGGESTIONS_JS)
+        except Exception:
+            return True
+        if not box:
+            return True
+        try:
+            _cdp_mouse_click(page, box["x"] + box["w"] + 60, max(box["y"] - 30, 10))
+        except Exception:
+            pass
+        _sleep_h(0.6)
+    ok = False
+    try:
+        ok = not page.evaluate(_NAME_SUGGESTIONS_JS)
+    except Exception:
+        ok = True
+    _telemetry.record("name_suggestions", ok, note="dismissed" if ok else "still_open")
+    return ok
+
+
 def run_recorded_campaign_flow(
     page: Page,
     *,
@@ -2841,6 +2883,9 @@ def run_recorded_campaign_flow(
         page.get_by_text("Ad set name", exact=True).first.click(timeout=2000)
     except Exception:
         pass
+    # 20.09 07:53: клика по заголовку не хватило — список остался висеть и
+    # накрыл «Conversion location» на всех трёх аккаунтах разом.
+    _dismiss_name_suggestions(page)
     _shot("after_adset_name")
 
     if not click_conversion_location_dropdown(page):
