@@ -3220,7 +3220,12 @@ def run_recorded_campaign_flow(
         if reached_ad_level and creative_uploaded and (ad_title or ad_body):
             try:
                 copy_report: dict = {}
-                if not fill_ad_copy(page, ad_title, ad_body, copy_report):
+                ok_copy = fill_ad_copy(page, ad_title, ad_body, copy_report)
+                if not ok_copy:
+                    _await_creative_settled(page)
+                    copy_report = {"retry": True}
+                    ok_copy = fill_ad_copy(page, ad_title, ad_body, copy_report)
+                if not ok_copy:
                     _shot("fail_ad_copy", copy_report)
                     ad_level_fails.append("ad_copy")
                 else:
@@ -3322,7 +3327,12 @@ def run_recorded_campaign_flow(
                 if extra_title or extra_body:
                     try:
                         copy_report = {}
-                        if not fill_ad_copy(page, extra_title, extra_body, copy_report):
+                        ok_copy = fill_ad_copy(page, extra_title, extra_body, copy_report)
+                        if not ok_copy:
+                            _await_creative_settled(page)
+                            copy_report = {"retry": True}
+                            ok_copy = fill_ad_copy(page, extra_title, extra_body, copy_report)
+                        if not ok_copy:
                             _shot(f"fail_{tag}_copy", copy_report)
                             ad_level_fails.append(f"{tag}_copy")
                         else:
