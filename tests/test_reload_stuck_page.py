@@ -192,3 +192,44 @@ def test_an_ssl_error_page_that_kept_the_meta_url_is_recognised(monkeypatch):
             assert md._chrome_error_page(pg) == ""
         finally:
             b.close()
+
+
+def test_long_text_is_inserted_after_a_few_real_keystrokes(monkeypatch):
+    """20.09, решение пользователя: посимвольный набор стоил ~45 минут на круге.
+    Начало строки печатаем нажатиями, длинный остаток вставляем целиком."""
+    typed, inserted = [], []
+
+    class Keyboard:
+        def type(self, text, delay=None):
+            typed.append(text)
+
+        def insert_text(self, text):
+            inserted.append(text)
+
+    class Pg:
+        keyboard = Keyboard()
+
+    monkeypatch.delenv("FB_RPA_HUMAN_TYPING", raising=False)
+    monkeypatch.setattr(md.time, "sleep", lambda *_: None)
+    md._type_human(Pg(), "Invest like a pro with Banco General today")
+    assert "".join(typed) == "Invest l", typed
+    assert inserted == ["ike a pro with Banco General today"], inserted
+
+
+def test_the_old_per_character_typing_can_be_switched_back_on(monkeypatch):
+    typed, inserted = [], []
+
+    class Keyboard:
+        def type(self, text, delay=None):
+            typed.append(text)
+
+        def insert_text(self, text):
+            inserted.append(text)
+
+    class Pg:
+        keyboard = Keyboard()
+
+    monkeypatch.setenv("FB_RPA_HUMAN_TYPING", "1")
+    monkeypatch.setattr(md.time, "sleep", lambda *_: None)
+    md._type_human(Pg(), "Invest like a pro")
+    assert typed == ["Invest like a pro"] and inserted == []

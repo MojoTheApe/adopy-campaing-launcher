@@ -1670,6 +1670,22 @@ def _type_human(page: Page, text: str) -> None:
 
     if not text:
         return
+    # 20.09, решение пользователя: набор по символу стоил ~45 минут на круге
+    # из восьми кампаний. Живые нажатия оставляем в начале строки — событий
+    # keydown достаточно, чтобы ввод не выглядел мгновенной вставкой, — а
+    # длинный остаток вставляем целиком. Прежнее поведение возвращает
+    # FB_RPA_HUMAN_TYPING=1.
+    lead = int(os.environ.get("FB_RPA_TYPING_LEAD", "8") or 8)
+    if os.environ.get("FB_RPA_HUMAN_TYPING", "").strip() not in ("1", "true", "yes") and len(text) > lead:
+        head, tail = text[:lead], text[lead:]
+        for ch in head:
+            if ch.isascii():
+                page.keyboard.type(ch, delay=random.uniform(25, 70))
+            else:
+                page.keyboard.insert_text(ch)
+        time.sleep(_human_jitter(0.08, 0.4))
+        page.keyboard.insert_text(tail)
+        return
     chunk = ""
     for ch in text:
         if ch.isascii():
@@ -3455,7 +3471,19 @@ def run_recorded_campaign_flow(
         if reached_ad_level:
             # ACL-1233: обход должен пройти и после зависшей страницы.
             recover_stuck_page(page, "destination_sweep", editor=True)
-        if reached_ad_level and destination_url:
+        # 20.09, решение пользователя: обход открывает каждое объявление
+        # заново и стоит около минуты на кампанию. Если назначение каждого
+        # объявления подтвердилось на своём шаге, обход пропускаем. Вернуть
+        # его целиком: FB_RPA_ALWAYS_SWEEP=1.
+        skip_sweep = (
+            reached_ad_level and destination_url
+            and not any("destination" in f for f in ad_level_fails)
+            and os.environ.get("FB_RPA_ALWAYS_SWEEP", "").strip() not in ("1", "true", "yes")
+        )
+        if skip_sweep:
+            _telemetry.record("destination_sweep_skipped", None,
+                              note="all_destinations_confirmed_in_flow")
+        if reached_ad_level and destination_url and not skip_sweep:
             sweep_names = [ad_name or f"{campaign_name} Ad"]
             for i, extra in enumerate(additional_ads or [], start=2):
                 sweep_names.append(extra.get("ad_name") or f"{campaign_name} Ad {i}")
@@ -10842,9 +10870,29 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     return _done(page, opened_by_us, [r["name"] for r in rows if keep not in r["name"].lower()])
 
 
+_LOCATION_SEARCH_JS = r"""
+  () => !![...document.querySelectorAll('input')].find(i =>
+    /search locations?|add locations?|buscar ubicaci|agregar ubicaci/i.test(i.getAttribute('placeholder') || ''))
+"""
+"""Поле поиска локаций на странице — значит, карточка раскрыта."""
+
+
 def _pick_country_and_clear_defaults(root, page: Page, search_term: str) -> bool:
     if not _pick_country_suggestion(root, page, search_term):
-        return False
+        # 20.09 15:04 (SA_arc GMBL): страна не добавилась, в карточке осталась
+        # одна United States — а её крестик Meta держит отключённым, пока
+        # страна единственная, так что убрать её нечем. Карточку к этому
+        # моменту уже раскрыли (Enter), поле поиска на месте: вводим страну
+        # ещё раз в него.
+        opened = _click_locations_edit(page)
+        try:
+            has_input = bool(page.evaluate(_LOCATION_SEARCH_JS))
+        except Exception:
+            has_input = False
+        if not (opened and has_input and _pick_country_suggestion(root, page, search_term)):
+            return False
+        _telemetry.record("audience_location", None, note="added_after_reopen",
+                          diag={"keep": search_term})
     # The old remover above can report success on the wrong ✕; this is the
     # check that decides. A default country left beside the target means the
     # campaign spends in two markets, so it fails the step instead of passing.
