@@ -3136,6 +3136,20 @@ def run_recorded_campaign_flow(
                 soft_fails.append("targeting_open")
             else:
                 any_added = paste_targeting_groups(page, targeting_label)
+                if not any_added:
+                    # 20.09 13:03: интересы вставлены и на снимке стоят, но Meta
+                    # рисует их дольше нашего ожидания, и шаг падал зря. Вместо
+                    # всё более длинных пауз перечитываем группы ещё раз позже —
+                    # к этому времени время уже прошло само.
+                    _sleep_h(6.0)
+                    groups = [g for g in re.split(r"\s+and\s+", targeting_label, flags=re.I) if g.strip()]
+                    terms = [t.strip() for t in (groups[-1] if groups else targeting_label).split(",") if t.strip()]
+                    late = _await_group_terms(page, terms, timeout_s=40.0)
+                    any_added = bool(late.get("hits"))
+                    _telemetry.record("targeting_recheck", any_added,
+                                      note="late_hits" if any_added else "still_empty",
+                                      diag={"hits": (late.get("hits") or [])[:5],
+                                            "selected": (late.get("selected") or [])[:8]})
                 _shot("after_targeting" if any_added else "fail_targeting_none_added")
                 if not any_added:
                     soft_fails.append("targeting_none_added")
