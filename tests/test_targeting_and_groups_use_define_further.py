@@ -387,3 +387,26 @@ def test_no_notice_means_nothing_is_clicked(page, monkeypatch):
     monkeypatch.setattr(md, "_cdp_mouse_click", lambda *a: clicks.append(a))
     assert md._remove_combined_targeting(page) == {"notice": False}
     assert clicks == []
+
+
+def test_an_open_suggestion_list_does_not_hide_the_group(page):
+    """20.09 12:30: пока открыт список подсказок Meta, в нём живёт свой ввод с
+    тем же placeholder. Из-за него группа 45 с читалась «недоступной», хотя на
+    снимке секундой позже стояли все пять интересов."""
+    page.set_content(_AFTER_PASTE.read_text(encoding="utf-8"))
+    page.evaluate(
+        """() => {
+          const inp = [...document.querySelectorAll('input, textarea')].find(i =>
+            /add demographics|interests/i.test(i.getAttribute('placeholder') || ''));
+          const wrap = inp.closest('[role="presentation"]') || inp.parentElement;
+          const pop = document.createElement('div');
+          pop.setAttribute('role', 'listbox');
+          const extra = document.createElement('input');
+          extra.setAttribute('placeholder', 'Add demographics, interests or behaviors');
+          pop.appendChild(extra);
+          wrap.appendChild(pop);
+        }"""
+    )
+    res = md._group_has_terms(page, _IPO)
+    assert res["found"] is True, res
+    assert sorted(res["hits"]) == sorted(_IPO), res

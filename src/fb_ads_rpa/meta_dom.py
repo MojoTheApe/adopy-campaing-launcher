@@ -9752,15 +9752,22 @@ _TARGETING_GROUP_JS = r"""
               'interests or behaviors', 'añadir intereses', 'demographics', 'demografía']
         .some(g => blob.includes(g));
     };
+    // 20.09 12:30: пока открыт список подсказок Meta, в нём живёт свой ввод с
+    // тем же placeholder. Он и сбивал выбор группы: обёртка «своего» ввода
+    // содержала два поля, проверка 45 с возвращала «группа недоступна», а на
+    // снимке секундой позже стояли все пять интересов.
+    const inPopup = el => !!el.closest('[role=listbox], [role=dialog], [role=menu]');
     const inputs = [...document.querySelectorAll('input, textarea')]
-      .filter(inp => visible(inp) && isTargetingInput(inp));
+      .filter(inp => visible(inp) && isTargetingInput(inp) && !inPopup(inp));
     const last = inputs[inputs.length - 1];
     if (!last) return {found: false, why: 'targeting input unavailable'};
     // The recorded Meta block gives each group its own presentation wrapper.
     // An ancestor walk based only on input count can reach the entire page.
     const chosen = last.closest('[role="presentation"]');
-    if (!chosen || [...chosen.querySelectorAll('input, textarea')].filter(isTargetingInput).length !== 1)
-      return {found: false, why: 'targeting group unavailable'};
+    const ownInputs = chosen ? [...chosen.querySelectorAll('input, textarea')]
+      .filter(inp => isTargetingInput(inp) && !inPopup(inp)) : [];
+    if (!chosen || ownInputs.length !== 1)
+      return {found: false, why: 'targeting group unavailable', inputs: ownInputs.length};
     const skip = el => !visible(el) || !!el.closest(
       '[role=listbox], [role=option], [role=menu], [role=menuitem]');
     const isClose = b => visible(b) &&
@@ -9951,7 +9958,9 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
         if not own.get("found") or not own.get("hits"):
             _telemetry.record("targeting", False, note="group_empty",
                               diag={"group": index + 1, "groups": len(groups),
-                                    "terms": terms[:5], "box": own.get("text", "")[:200]})
+                                    "terms": terms[:5], "box": own.get("text", "")[:200],
+                                    "why": own.get("why", ""), "found": own.get("found"),
+                                    "selected": (own.get("selected") or [])[:8]})
             try:
                 from src.fb_ads_rpa import page_capture as _pc
 
