@@ -3346,6 +3346,17 @@ def run_recorded_campaign_flow(
             try:
                 copy_report: dict = {}
                 ok_copy = fill_ad_copy(page, ad_title, ad_body, copy_report)
+                if not ok_copy and _review_errors_visible(page):
+                    # 20.09 20:48 (CR_ait FX): на объявлении висела ошибка Meta
+                    # про Lead Gen форму, правая панель бесконечно грузилась, и
+                    # редактор креатива не отрисовывался — полей текста на
+                    # странице не было вовсе. Сначала чиним назначение, потом
+                    # возвращаемся к тексту.
+                    _telemetry.record("ad_copy_blocked", False, note="review_error")
+                    try:
+                        verify_and_fix_ad_destinations(page, [ad_name or f"{campaign_name} Ad"], destination_url)
+                    except Exception as exc:
+                        _telemetry.record("ad_copy_blocked", False, note=f"fix_failed:{str(exc)[:40]}")
                 if not ok_copy:
                     _await_creative_settled(page)
                     copy_report = {"retry": True}
