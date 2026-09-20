@@ -10494,6 +10494,42 @@ def _hover_row(page: Page, label_re: str) -> bool:
         return False
 
 
+_FOCUS_ROW_BUTTON_JS = r"""
+  (labelRe) => {
+    const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+    const re = new RegExp('^(' + labelRe + ')$', 'i');
+    const label = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && re.test(norm(e.textContent)) && e.getBoundingClientRect().width > 0);
+    if (!label) return false;
+    const row = label.closest('[role="button"]');
+    if (!row) return false;
+    row.scrollIntoView({block: 'center'});
+    if (!row.hasAttribute('tabindex')) row.setAttribute('tabindex', '-1');
+    row.focus();
+    return document.activeElement === row;
+  }
+"""
+"""Фокус на строке-кнопке — её раскрывают с клавиатуры."""
+
+
+def _open_row_with_keyboard(page: Page, label_re: str) -> bool:
+    """Раскрыть строку аудитории клавишей.
+
+    20.09 05:39 (SA_arc GMBL, телеметрия locations_open=False/summary):
+    карандаш не показывается даже под курсором, клик по тексту строки её не
+    раскрывает. Но строка — настоящая кнопка (role=button), а кнопку можно
+    нажать с клавиатуры, минуя и наведение, и координаты.
+    """
+    try:
+        if not page.evaluate(_FOCUS_ROW_BUTTON_JS, label_re):
+            return False
+        page.keyboard.press("Enter")
+        _sleep_h(0.8)
+        return True
+    except Exception:
+        return False
+
+
 def _click_locations_edit(page: Page) -> bool:
     """Раскрыть карточку локаций её собственной кнопкой правки.
 
@@ -10531,6 +10567,18 @@ def _click_locations_edit(page: Page) -> bool:
         if opened:
             break
         _sleep_h(0.5)
+    if not opened and _open_row_with_keyboard(page, "Locations|Ubicaciones"):
+        how += "+enter"
+        for _ in range(12):
+            try:
+                opened = bool(page.evaluate(
+                    """() => [...document.querySelectorAll('input')].some(i =>
+                      /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''))"""))
+            except Exception:
+                opened = False
+            if opened:
+                break
+            _sleep_h(0.5)
     _telemetry.record("locations_open", opened, note=how)
     return True
 
