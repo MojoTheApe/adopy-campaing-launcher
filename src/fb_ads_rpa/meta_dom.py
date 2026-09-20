@@ -9770,8 +9770,12 @@ _SCROLL_TARGETING_INPUT_JS = r"""
 """
 
 
-def _await_group_terms(page: Page, terms: list[str], *, timeout_s: float = 20.0) -> dict:
+def _await_group_terms(page: Page, terms: list[str], *, timeout_s: float = 45.0) -> dict:
     """Read the group until the pasted interests have been drawn.
+
+    20.09 07:00: 20 с хватало не всегда — на медленной Meta обе группы
+    CO_bnc и группа CR_ait читались пустыми (group_empty), хотя интересы
+    потом появлялись. Ждём 45 с.
 
     Meta draws a pasted list in two passes: first the category header
     ("Interests > Additional interests" with its own Close button), then the
