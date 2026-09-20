@@ -1154,7 +1154,23 @@ class AdsManagerFlow:
             "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act_id}"
         )
         url = url_tpl.format(act_id=act)
-        self.page.goto(url, wait_until="domcontentloaded", timeout=self.nav_timeout)
+        # 20.09 06:50 (KLD_BFL_S15): самый первый переход падал с
+        # ERR_SSL_PROTOCOL_ERROR, и кампания не начиналась вовсе — обрыв
+        # соединения профиля лечится повтором, а не отказом всего задания.
+        last_exc = None
+        for attempt in range(3):
+            try:
+                self.page.goto(url, wait_until="domcontentloaded", timeout=self.nav_timeout)
+                last_exc = None
+                break
+            except Exception as exc:
+                last_exc = exc
+                if "ERR_" not in str(exc):
+                    raise
+                log.warning("campaigns goto failed (%s/3): %s", attempt + 1, str(exc)[:80])
+                time.sleep(8.0)
+        if last_exc is not None:
+            raise last_exc
         pause_after_navigation()
         result.steps_completed.append("open_campaigns")
         self._shot("01_campaigns", result)
