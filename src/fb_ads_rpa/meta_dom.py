@@ -2962,7 +2962,23 @@ def run_recorded_campaign_flow(
     try:
         scroll_to_section(page, "Audience")
         opened = False
-        for _ in range(5):
+
+        def _reach_dialog_open() -> bool:
+            """Окно «Reach your preferred audiences» уже открыто?
+
+            20.09 14:48 (SA_arc GMBL, пятый такой отказ за сутки): окно было
+            открыто, а шаг падал. Та же фраза есть и на странице за окном, и
+            клик уходил в перекрытую ссылку под ним — пять попыток подряд.
+            """
+            try:
+                return page.get_by_text(
+                    re.compile(r"Reach your preferred audiences", re.I)).first.is_visible(timeout=800)
+            except Exception:
+                return False
+
+        if _reach_dialog_open():
+            opened = True
+        for _ in range(0 if opened else 5):
             try:
                 el = page.get_by_text(
                     re.compile(r"further limit the reach of your ads", re.I)
@@ -2975,6 +2991,9 @@ def run_recorded_campaign_flow(
             except Exception:
                 # Not rendered/visible yet — nudge the page down and retry
                 # rather than assuming the text is simply absent.
+                if _reach_dialog_open():
+                    opened = True
+                    break
                 try:
                     page.mouse.wheel(0, 400)
                 except Exception:
