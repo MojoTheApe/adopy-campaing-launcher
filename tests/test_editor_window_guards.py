@@ -155,3 +155,20 @@ def test_a_minimized_window_is_moved_offscreen_and_put_back(monkeypatch):
     br.put_window_back(page)
     tail = [p["bounds"] for m, p in calls if m == "Browser.setWindowBounds"][-2:]
     assert tail == [{"left": 100, "top": 50}, {"windowState": "minimized"}]
+
+
+def test_the_window_can_be_parked_on_a_chosen_screen(monkeypatch):
+    """20.09: свёрнутое окно больше не тормозит прогон, поэтому место окна —
+    вопрос удобства. FB_RPA_WINDOW_LEFT/TOP ставят его, например, на второй
+    монитор, и в конце кампании оно там и остаётся."""
+    from src.fb_ads_rpa import browser
+
+    monkeypatch.setenv("FB_RPA_WINDOW_LEFT", "1920")
+    monkeypatch.setenv("FB_RPA_WINDOW_TOP", "0")
+    assert browser.window_home() == (1920, 0)
+
+    monkeypatch.delenv("FB_RPA_WINDOW_LEFT", raising=False)
+    assert browser.window_home() == (None, None)
+
+    monkeypatch.setenv("FB_RPA_WINDOW_LEFT", "не число")
+    assert browser.window_home() == (None, None)
