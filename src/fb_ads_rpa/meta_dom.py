@@ -9824,7 +9824,11 @@ _TARGETING_GROUP_JS = r"""
       return {found: false, why: 'targeting group unavailable', inputs: ownInputs.length};
     const skip = el => !visible(el) || !!el.closest(
       '[role=listbox], [role=option], [role=menu], [role=menuitem]');
-    const isClose = b => visible(b) &&
+    // 20.09 13:45: крестик у интереса Meta рисует только под курсором, и
+    // требование «кнопка видима» обнуляло список: замер в ту же секунду
+    // видел 19 интересов, проверка — ни одного. Наличия кнопки достаточно,
+    // видимость самой строки проверяется отдельно.
+    const isClose = b =>
       /^(close|remove|quitar|eliminar)$/i.test(norm(b.getAttribute('aria-label') || b.textContent));
     // Only leaf list items with their own removal control are selected chips.
     // Outer li elements also contain category headings and other chips.

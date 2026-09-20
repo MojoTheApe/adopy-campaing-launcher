@@ -410,3 +410,14 @@ def test_an_open_suggestion_list_does_not_hide_the_group(page):
     res = md._group_has_terms(page, _IPO)
     assert res["found"] is True, res
     assert sorted(res["hits"]) == sorted(_IPO), res
+
+
+def test_interests_are_counted_when_meta_hides_their_close_buttons(page):
+    """20.09 13:45: крестик у интереса Meta рисует только под курсором. Замер в
+    ту же секунду видел 19 интересов, проверка — ни одного, и весь таргетинг
+    кампании помечался как не добавленный."""
+    page.set_content(_AFTER_PASTE.read_text(encoding="utf-8"))
+    page.evaluate("() => { document.querySelectorAll('li button').forEach(b => b.style.display = 'none'); }")
+    res = md._group_has_terms(page, _IPO)
+    assert res["found"] is True, res
+    assert sorted(res["hits"]) == sorted(_IPO), res
