@@ -2537,6 +2537,22 @@ def _dismiss_name_suggestions(page: Page) -> bool:
     return ok
 
 
+def _review_errors_visible(page: Page) -> bool:
+    """Meta показывает ошибку проверки на уровне объявления.
+
+    20.09 19:29 (CO_bnc Mix): пропуск обхода назначений оставил объявление с
+    «Param call_to_action[value][lead_gen_form_id] must be a valid Lead Gen
+    Data id» — ровно то, что обход и чинил. Если такая ошибка висит, обход
+    делаем, сколько бы времени он ни стоил.
+    """
+    try:
+        return page.get_by_text(
+            re.compile(r"Review \d+ error|must be a valid Lead Gen Data id", re.I)
+        ).first.is_visible(timeout=800)
+    except Exception:
+        return False
+
+
 def run_recorded_campaign_flow(
     page: Page,
     *,
@@ -3479,6 +3495,7 @@ def run_recorded_campaign_flow(
             reached_ad_level and destination_url
             and not any("destination" in f for f in ad_level_fails)
             and os.environ.get("FB_RPA_ALWAYS_SWEEP", "").strip() not in ("1", "true", "yes")
+            and not _review_errors_visible(page)
         )
         if skip_sweep:
             _telemetry.record("destination_sweep_skipped", None,
@@ -8031,6 +8048,10 @@ def fill_ad_copy(
     report = report if report is not None else {}
     report.setdefault("attempts", [])
     if not _reveal_ad_copy_fields(page):
+        # 20.09 19:29 (CO_bnc Mix): в предпросмотре объявления текст стоял, а
+        # шаг отказал с пустым списком попыток — поля просто не раскрылись.
+        report["why"] = "copy_fields_not_revealed"
+        _telemetry.record("ad_copy_fields", False, note="not_revealed")
         return False
     settled = _await_creative_settled(page)
     report["settled"] = settled
