@@ -151,6 +151,18 @@
         ],
         "recorded_at": "2026-09-21T13:22:20+00:00"
       }
+    },
+    "stage": {
+      "pr": 253,
+      "issues": [
+        248
+      ],
+      "tree_sha": "ec74bece10c91ba4a6ef9c737522b2f794655003",
+      "source_sha": "5a4b077e830c22f8b294522df30190f8cdb21704",
+      "main_tree": "21ef1a66e804d006c0fc43bcc31892909f5f5ef1",
+      "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+      "state": "testing",
+      "recorded_at": "2026-09-21T13:34:43+00:00"
     }
   }
 }
