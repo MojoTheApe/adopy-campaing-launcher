@@ -8194,6 +8194,23 @@ def fill_ad_copy(
         отдельных нажатий), поэтому она — запасной путь, когда нажатия
         потерялись.
         """
+        # 21.09 15:10 (скриншот пользователя): в поле лежал наш текст,
+        # повторённый подряд много раз, со склейкой посреди слова — каждая
+        # попытка ДОПИСЫВАЛА его к прежнему. Поле всегда чистим до ввода.
+        try:
+            handle.focus()
+            page.keyboard.press("ControlOrMeta+A")
+            page.keyboard.press("Backspace")
+            _sleep_h(0.25)
+            left = _handle_text(handle)
+            if left.strip():
+                # Select-all не сработал (поле отдало фокус) — чистим начисто.
+                handle.evaluate(
+                    "el => { if ('value' in el) { el.value = ''; } else { el.textContent = ''; }"
+                    " el.dispatchEvent(new Event('input', {bubbles: true})); }")
+                _sleep_h(0.25)
+        except Exception:
+            pass
         _type_human(page, text)
         _sleep_h(0.4)
         if _handle_shows(handle, text):

@@ -122,3 +122,15 @@ def test_meta_text_variations_are_switched_off_before_typing(browser, monkeypatc
         assert md.disable_text_variations(page) is None
     finally:
         ctx.close()
+
+
+def test_a_second_attempt_replaces_the_text_instead_of_appending(page, monkeypatch):
+    """21.09, скриншот пользователя: в поле лежал наш текст, повторённый
+    подряд много раз, со склейкой посреди слова — каждая попытка дописывала
+    его к прежнему вместо замены."""
+    monkeypatch.setattr(md, "_type_human", lambda p, t: p.keyboard.insert_text(t))
+    page.evaluate("() => { document.getElementById('body').textContent = 'СТАРЫЙ ТЕКСТ'; }")
+    assert md.fill_ad_copy(page, "Заголовок", "Новый текст") is True
+    body = page.inner_text("#body").strip()
+    assert body == "Новый текст", body
+    assert "СТАРЫЙ" not in body
