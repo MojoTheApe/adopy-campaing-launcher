@@ -3373,6 +3373,18 @@ def run_recorded_campaign_flow(
                             checked = _browser_addon_none_checked(page)
                         _telemetry.record("browser_addon_repair", bool(fixed) and checked is True,
                                           diag={"none_checked": checked})
+                        # 21.09 11:01 (CR_ait FX): «None» починился, но полей
+                        # текста всё равно не было — после перезагрузки мы
+                        # стоим на уровне ad set'а, а объявление закрыто.
+                        # Открываем его заново тем же обходом, что чинит
+                        # назначения: он находит объявление по имени.
+                        try:
+                            verify_and_fix_ad_destinations(
+                                page, [ad_name or f"{campaign_name} Ad"], destination_url)
+                            _sleep_h(2.0)
+                        except Exception as exc:
+                            _telemetry.record("ad_copy_blocked", False,
+                                              note=f"reopen_failed:{str(exc)[:40]}")
                     except Exception as exc:
                         _telemetry.record("browser_addon_repair", False, note=str(exc)[:60])
                 if not ok_copy:
