@@ -282,3 +282,24 @@ def test_the_pencil_that_only_exists_under_the_cursor_is_found(page, monkeypatch
     clicked = _record_clicks(page, monkeypatch)
     assert md._click_locations_edit(page) is True
     assert clicked["at"] == "pen", clicked
+
+
+def test_a_row_far_below_the_window_is_scrolled_to_before_the_click(page, monkeypatch):
+    """21.09 18:44 CR_ait IPO: строка стояла на y=3811 — клик по её координатам
+    уходил в пустоту, и United States оставалась рядом с нужной страной.
+    Имя при этом читалось как «United StatesClose»."""
+    page.set_content(
+        "<div style='height:3600px'></div>"
+        "<div id='loc'><div>Locations</div>"
+        "<div class='grp' data-c='United States'><div>United States"
+        "<div role='button' style='display:inline-block;width:20px;height:20px'"
+        " onclick=\"window.clicked.push('us')\"><span>Close</span></div></div></div>"
+        "<div><div role='combobox'><input placeholder='Search locations'></div></div></div>"
+        "<script>window.clicked = [];</script>"
+    )
+    rows = md._location_rows(page)
+    assert [r["name"] for r in rows] == ["United States"], rows
+    assert rows[0]["y"] > 900, "строка должна лежать за окном"
+
+    fresh = md._scroll_location_row_into_view(page, "United States")
+    assert fresh and 0 < fresh["y"] < 900, fresh

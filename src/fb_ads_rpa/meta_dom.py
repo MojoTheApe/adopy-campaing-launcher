@@ -10600,7 +10600,12 @@ def _location_rows(page: Page) -> list[dict]:
               for (const b of controls) {
                 let row = b.parentElement, name = '';
                 for (let i = 0; i < 5 && row && row !== card; i++, row = row.parentElement) {
-                  const t = norm(row.textContent).replace(/\b(Close|Remove)\b/gi, '').trim();
+                  // 21.09 18:44 (CR_ait IPO): имя читалось как «United StatesClose» —
+                  // слово прилипает без пробела, и чистка по границе слова его не
+                  // убирала, поэтому строка не совпадала ни с одной страной.
+                  const t = norm(row.textContent)
+                    .replace(/\b(Close|Remove|Quitar|Eliminar)\b/gi, '')
+                    .replace(/(Close|Remove|Quitar|Eliminar)\s*$/i, '').trim();
                   if (t && t.length <= 80) { name = t; break; }
                 }
                 if (!name) continue;
@@ -10980,6 +10985,44 @@ def _done(page: Page, opened_by_us: bool, result):
     return result
 
 
+_SCROLL_LOCATION_ROW_JS = r"""
+  (name) => {
+    const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+    const clean = (s) => norm(s)
+      .replace(/\b(Close|Remove|Quitar|Eliminar)\b/gi, '')
+      .replace(/(Close|Remove|Quitar|Eliminar)\s*$/i, '').trim();
+    const wanted = clean(name).toLowerCase();
+    const ctrls = [...document.querySelectorAll('[role=button], button, [aria-label]')].filter(b => {
+      const label = norm(b.getAttribute('aria-label') || '') + ' ' + norm(b.textContent);
+      return /(close|remove|quitar|eliminar)/i.test(label);
+    });
+    for (const b of ctrls) {
+      let row = b.parentElement;
+      for (let i = 0; i < 5 && row; i++, row = row.parentElement) {
+        const t = clean(row.textContent);
+        if (t && t.length <= 80) {
+          if (t.toLowerCase() !== wanted) break;
+          b.scrollIntoView({block: 'center'});
+          const r = b.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0) return null;
+          return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+        }
+      }
+    }
+    return null;
+  }
+"""
+"""Прокрутить строку страны в окно и вернуть свежие координаты её крестика."""
+
+
+def _scroll_location_row_into_view(page: Page, name: str) -> dict | None:
+    """Строка может стоять далеко за окном — клик по старым координатам мимо."""
+    try:
+        return page.evaluate(_SCROLL_LOCATION_ROW_JS, name)
+    except Exception:
+        return None
+
+
 def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     """Remove every included location that is not `keep_text`; return the
     names still left afterwards (empty list = clean, None = unreadable).
@@ -11027,9 +11070,13 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
         if not others:
             return _done(page, opened_by_us, [])
         target = others[0]
-        # 20.09 05:57 (CR_ait FX): карточка раскрылась, строки прочитались, но
-        # United States не уходила — шесть нажатий подряд. Крестик у строки,
-        # как и карандаш, живёт под курсором: сначала наводим, потом жмём.
+        # 21.09 18:44 (CR_ait IPO): строка стояла на y=3811 — далеко за окном, и
+        # клик по её координатам уходил в пустоту. Прокручиваем к ней, берём
+        # свежие координаты, затем наводим курсор: крестик, как и карандаш,
+        # рисуется только под ним.
+        fresh = _scroll_location_row_into_view(page, target["name"])
+        if fresh:
+            target = {**target, **fresh}
         try:
             page.mouse.move(target["x"], target["y"])
             _sleep_h(0.4)
