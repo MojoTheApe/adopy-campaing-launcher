@@ -8215,6 +8215,22 @@ def fill_ad_copy(
         _sleep_h(0.4)
         if _handle_shows(handle, text):
             return True
+        # 21.09 18:30 (CR_ait FX, ad3): в поле легло 262 символа из 299 —
+        # вставка потеряла хвост, а не ошиблась целиком. Дописываем недостающее
+        # в конец, вместо того чтобы стирать и набирать всё заново.
+        seen = _handle_text(handle)
+        if seen and text.startswith(seen.rstrip()) and len(seen) < len(text):
+            try:
+                handle.focus()
+                page.keyboard.press("ControlOrMeta+End")
+                page.keyboard.insert_text(text[len(seen.rstrip()):])
+                _sleep_h(0.4)
+                if _handle_shows(handle, text):
+                    report["attempts"].append({"stage": "tail_completed",
+                                               "added": len(text) - len(seen.rstrip())})
+                    return True
+            except Exception:
+                pass
         # 21.09 11:33 (CL_ml): «видим» выглядело правильным текстом, но шаг
         # считал его несовпавшим — по обрезанной записи не понять, где
         # разошлось. Пишем оба текста и их длины.

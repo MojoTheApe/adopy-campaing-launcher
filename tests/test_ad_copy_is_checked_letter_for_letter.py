@@ -134,3 +134,18 @@ def test_a_second_attempt_replaces_the_text_instead_of_appending(page, monkeypat
     body = page.inner_text("#body").strip()
     assert body == "Новый текст", body
     assert "СТАРЫЙ" not in body
+
+
+def test_a_truncated_paste_is_completed_instead_of_retyped(page, monkeypatch):
+    """21.09 18:30 CR_ait ad3: в поле легло 262 символа из 299 — вставка
+    потеряла хвост. Дописываем недостающее, а не набираем всё заново."""
+    full = "Invest like a pro with Banco General and other profitable companies today"
+
+    def lose_tail(p, t):
+        p.keyboard.insert_text(t[:-12] if t == full else t)
+
+    monkeypatch.setattr(md, "_type_human", lose_tail)
+    report: dict = {}
+    assert md.fill_ad_copy(page, "Заголовок", full, report) is True
+    assert page.inner_text("#body").strip() == full
+    assert any(a.get("stage") == "tail_completed" for a in report["attempts"]), report
