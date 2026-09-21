@@ -3360,8 +3360,19 @@ def run_recorded_campaign_flow(
                     try:
                         fixed = _select_browser_addon_none(page)
                         _sleep_h(1.5)
-                        _telemetry.record("browser_addon_repair", fixed,
-                                          diag={"none_checked": _browser_addon_none_checked(page)})
+                        checked = _browser_addon_none_checked(page)
+                        if not fixed or checked is not True:
+                            # 21.09 06:11 (CR_ait FX): блока Browser add-ons на
+                            # странице не оказалось вовсе (none_checked=null) —
+                            # редактор висел на «Verifying your changes».
+                            # Снимаем зависание перезагрузкой и чиним снова.
+                            recover_stuck_page(page, "ad_copy_blocked", editor=True, force=True)
+                            _sleep_h(3.0)
+                            fixed = _select_browser_addon_none(page)
+                            _sleep_h(1.5)
+                            checked = _browser_addon_none_checked(page)
+                        _telemetry.record("browser_addon_repair", bool(fixed) and checked is True,
+                                          diag={"none_checked": checked})
                     except Exception as exc:
                         _telemetry.record("browser_addon_repair", False, note=str(exc)[:60])
                 if not ok_copy:
