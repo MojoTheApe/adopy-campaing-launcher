@@ -139,6 +139,7 @@ def main():
               "run_id": os.environ.get("GITHUB_RUN_ID"), "checks": [],
               "test_packages": {v: {"sha256": digest(p), "size": p.stat().st_size} for v, p in installers.items()},
               "scope": "Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof."}
+    cleanup_safe = True
 
     def preserved_data():
         if any(digest(config / name) != value for name, value in preserved.items()):
@@ -151,6 +152,7 @@ def main():
         wait_version(version)
 
     def apply(previous, installer, expected_version, expected_code):
+        nonlocal cleanup_safe
         updates = config / "updates"
         updates.mkdir(exist_ok=True)
         setup = updates / "Setup.exe"
@@ -168,8 +170,29 @@ def main():
                 raise RuntimeError("Actual update helper returned an unexpected result")
         finally:
             if helper.poll() is None:
-                helper.kill()
+                # An Inno child may outlive its waiting helper. Never start an
+                # uninstaller while that child can still be changing files.
+                cleanup_safe = False
+                import psutil
+
+                parent = psutil.Process(helper.pid)
+                parent.suspend()
+                children = parent.children(recursive=True)
+                for child in children:
+                    try:
+                        child.suspend()
+                    except psutil.NoSuchProcess:
+                        pass
+                for process in [*reversed(children), parent]:
+                    try:
+                        process.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+                _, alive = psutil.wait_procs([*children, parent], timeout=15)
                 helper.wait(timeout=15)
+                if alive:
+                    raise RuntimeError("Update descendants still exist; automatic cleanup is unsafe")
+                cleanup_safe = True
         result = json.loads(receipt.read_text())
         if (updates / "pending.json").exists():
             raise RuntimeError("Update reservation was not cleared")
@@ -205,8 +228,15 @@ def main():
         # frozen helper must restore the previous working installation itself.
         missing = "missing-test-version"
         result = apply(new_exe, installers[args.old_version], missing, 1)
-        if result.get("result") != "rolled_back" or result.get("previous_running") is not True:
-            raise RuntimeError("The real helper did not restore the working version")
+        expected_reason = f"The installer finished but ACL.exe of {missing} is missing."
+        if (result.get("result") != "rolled_back" or result.get("previous_running") is not True
+                or result.get("from") != args.version or result.get("to") != missing
+                or result.get("reason") != expected_reason):
+            raise RuntimeError("Recovery did not follow a successful real installer with a missing expected version")
+        setup_log = config / "updates" / f"setup-{missing}.log"
+        if not setup_log.is_file() or not setup_log.stat().st_size:
+            raise RuntimeError("No real installer execution log for the recovery scenario")
+        report["recovery_installer_log_sha256"] = digest(setup_log)
         wait_version(args.version)
         if current.read_bytes() != saved_pointer or shortcuts() != saved_shortcuts:
             raise RuntimeError("Recovery did not restore the exact pointer and shortcut arguments/targets")
@@ -222,6 +252,8 @@ def main():
         raise
     finally:
         try:
+            if not cleanup_safe:
+                raise RuntimeError("Installer process termination is unverified; leaving the isolated runner for inspection")
             value = health()
             if value:
                 if value.get("app") != "ACL" or value.get("version") not in installers:
