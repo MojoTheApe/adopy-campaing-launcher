@@ -3342,6 +3342,22 @@ def run_recorded_campaign_flow(
                 _shot("fail_ad_creative_upload")
                 ad_level_fails.append(f"ad_creative_upload:{str(exc)[:60]}")
 
+        # 21.09 11:17: порядок был имя → креатив → текст → назначение, и
+        # редактор креатива блокировался ошибкой «lead_gen_form_id» ещё до
+        # текста: Meta ставит в Browser add-ons «Instant form», а формы нет.
+        # Назначение (внутри него и выбор «None») теперь идёт ДО текста, и
+        # блокировке взяться неоткуда.
+        if reached_ad_level and destination_url:
+            try:
+                if not set_ad_destination_website(page, destination_url):
+                    _shot("fail_ad_destination")
+                    ad_level_fails.append("ad_destination")
+                else:
+                    _shot("after_ad_destination")
+            except Exception as exc:
+                _shot("fail_ad_destination")
+                ad_level_fails.append(f"ad_destination:{str(exc)[:60]}")
+
         if reached_ad_level and creative_uploaded and (ad_title or ad_body):
             try:
                 copy_report: dict = {}
@@ -3399,17 +3415,6 @@ def run_recorded_campaign_flow(
             except Exception as exc:
                 _shot("fail_ad_copy")
                 ad_level_fails.append(f"ad_copy:{str(exc)[:60]}")
-
-        if reached_ad_level and destination_url:
-            try:
-                if not set_ad_destination_website(page, destination_url):
-                    _shot("fail_ad_destination")
-                    ad_level_fails.append("ad_destination")
-                else:
-                    _shot("after_ad_destination")
-            except Exception as exc:
-                _shot("fail_ad_destination")
-                ad_level_fails.append(f"ad_destination:{str(exc)[:60]}")
 
         # Additional ads (2nd, 3rd, ...) in the same ad set — each one is a
         # fresh "Create ad" (create_additional_ad()) followed by the exact
@@ -3490,6 +3495,17 @@ def run_recorded_campaign_flow(
 
                 extra_title = extra.get("ad_title") or ""
                 extra_body = extra.get("ad_body") or ""
+                if destination_url:
+                    try:
+                        if not set_ad_destination_website(page, destination_url):
+                            _shot(f"fail_{tag}_destination")
+                            ad_level_fails.append(f"{tag}_destination")
+                        else:
+                            _shot(f"after_{tag}_destination")
+                    except Exception as exc:
+                        _shot(f"fail_{tag}_destination")
+                        ad_level_fails.append(f"{tag}_destination:{str(exc)[:60]}")
+
                 if extra_title or extra_body:
                     try:
                         copy_report = {}
@@ -3506,17 +3522,6 @@ def run_recorded_campaign_flow(
                     except Exception as exc:
                         _shot(f"fail_{tag}_copy")
                         ad_level_fails.append(f"{tag}_copy:{str(exc)[:60]}")
-
-                if destination_url:
-                    try:
-                        if not set_ad_destination_website(page, destination_url):
-                            _shot(f"fail_{tag}_destination")
-                            ad_level_fails.append(f"{tag}_destination")
-                        else:
-                            _shot(f"after_{tag}_destination")
-                    except Exception as exc:
-                        _shot(f"fail_{tag}_destination")
-                        ad_level_fails.append(f"{tag}_destination:{str(exc)[:60]}")
 
         # Final destination sweep over every ad of this campaign.
         # Confirmed live 2026-07-29 (Test143): an ad's Browser add-ons
