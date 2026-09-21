@@ -8080,6 +8080,59 @@ def _await_creative_settled(page: Page, timeout_s: float = 20.0) -> bool:
     return False
 
 
+_TEXT_VARIATIONS_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+    const vis = (e) => e.getClientRects().length > 0;
+    const boxes = [...document.querySelectorAll('[role=checkbox], input[type=checkbox]')];
+    const on = boxes.filter(b => {
+      const state = b.getAttribute('aria-checked') || String(b.checked);
+      if (state !== 'true') return false;
+      let ctx = b.parentElement, txt = '';
+      for (let i = 0; i < 5 && ctx; i++, ctx = ctx.parentElement) {
+        const x = norm(ctx.textContent);
+        if (x.length > 8) { txt = x; break; }
+      }
+      return /check all text variations|text variations/i.test(txt);
+    });
+    const b = on.find(vis);
+    if (!b) return {found: boxes.length > 0, on: on.length, point: null};
+    b.scrollIntoView({block: 'center'});
+    const r = b.getBoundingClientRect();
+    return {found: true, on: on.length,
+            point: {x: r.x + r.width / 2, y: r.y + r.height / 2}};
+  }
+"""
+"""Галочка «Check all text variations» — сочинённые Meta варианты текста."""
+
+
+def disable_text_variations(page: Page) -> bool | None:
+    """Снять отметку со сгенерированных Meta вариантов текста.
+
+    21.09, решение пользователя: в объявлении включён Advantage+ creative, и
+    Meta подставляет собственные варианты основного текста рядом с нашим.
+    Снимаем «Check all text variations», чтобы в показ шёл только
+    утверждённый текст. None — галочки на странице нет (ничего и не надо).
+    """
+    try:
+        state = page.evaluate(_TEXT_VARIATIONS_JS) or {}
+    except Exception as exc:
+        _telemetry.record("text_variations_off", False, note=str(exc)[:60])
+        return False
+    if not state.get("point"):
+        return None
+    _cdp_mouse_click(page, state["point"]["x"], state["point"]["y"])
+    _sleep_h(0.8)
+    try:
+        after = page.evaluate(_TEXT_VARIATIONS_JS) or {}
+    except Exception:
+        after = {}
+    ok = not after.get("point")
+    _telemetry.record("text_variations_off", ok,
+                      diag={"was_on": state.get("on"), "still_on": after.get("on")})
+    return ok
+
+
 def fill_ad_copy(
     page: Page, ad_title: str, ad_body: str, report: dict | None = None
 ) -> bool:
@@ -8110,6 +8163,9 @@ def fill_ad_copy(
         return False
     settled = _await_creative_settled(page)
     report["settled"] = settled
+    # Сначала убираем варианты Meta, потом вводим свой текст: иначе наш текст
+    # соседствует с сочинёнными и в показ идёт что попало.
+    report["variations_off"] = disable_text_variations(page)
 
     def _click_via_cdp_handle(locator):
         return _focus_via_cdp_click(page, locator)
