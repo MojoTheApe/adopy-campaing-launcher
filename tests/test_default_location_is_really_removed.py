@@ -303,3 +303,20 @@ def test_a_row_far_below_the_window_is_scrolled_to_before_the_click(page, monkey
 
     fresh = md._scroll_location_row_into_view(page, "United States")
     assert fresh and 0 < fresh["y"] < 900, fresh
+
+
+def test_the_card_is_found_by_its_rows_when_no_locations_heading_exists(page):
+    """21.09 20:31 SA_arc GMBL: блока, чей текст начинается словом «Locations»,
+    в разметке нет вовсе — поиск упирался в двенадцатый уровень, а строки стран
+    оставались в стороне, и список выходил пустым."""
+    page.set_content(
+        "<div id='outer'>"
+        "<div class='grp'><div>Saudi Arabia<div role='button'"
+        " style='display:inline-block;width:20px;height:20px'><span>Close</span></div></div></div>"
+        "<div class='grp'><div>United States<div role='button'"
+        " style='display:inline-block;width:20px;height:20px'><span>Close</span></div></div></div>"
+        "<div><div><div><div role='combobox'><input placeholder='Search locations'></div></div></div></div>"
+        "</div>"
+    )
+    names = [r["name"] for r in md._location_rows(page)]
+    assert names == ["Saudi Arabia", "United States"], names

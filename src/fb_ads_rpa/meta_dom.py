@@ -10584,10 +10584,25 @@ def _location_rows(page: Page) -> list[dict]:
               for (let i = 0; i < 12 && card; i++, card = card.parentElement) {
                 if (/^Locations/i.test(norm(card.textContent)) || /Ubicaciones/i.test(norm(card.textContent).slice(0, 40))) break;
               }
+              // 21.09 20:31 (SA_arc GMBL): блока, чей текст начинается словом
+              // «Locations», в этой разметке нет вовсе — поиск упирался в
+              // двенадцатый уровень, строки стран оставались в стороне, и
+              // список выходил пустым. Тогда ищем блок по самим строкам.
+              const hasRemove = (el) => !!el && [...el.querySelectorAll('[role=button], button, [aria-label]')].some(b => {
+                const label = norm(b.getAttribute('aria-label') || '') + ' ' + norm(b.textContent);
+                return /(close|remove|quitar|eliminar)/i.test(label);
+              });
+              if (!hasRemove(card)) {
+                let alt = search;
+                for (let i = 0; i < 20 && alt.parentElement; i++) {
+                  alt = alt.parentElement;
+                  if (hasRemove(alt)) { card = alt; break; }
+                }
+              }
               if (!card) return [];
               const searchBox = search.closest('[role=combobox]') || search.parentElement;
               const rows = [];
-              const controls = [...card.querySelectorAll('[role=button], button')].filter(b => {
+              const controls = [...card.querySelectorAll('[role=button], button, [aria-label]')].filter(b => {
                 if (searchBox && searchBox.contains(b)) return false;
                 const r = b.getBoundingClientRect();
                 if (r.width <= 0 || r.height <= 0 || r.width > 60 || r.height > 60) return false;
