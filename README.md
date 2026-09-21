@@ -1,6 +1,10 @@
 # ACL repository adoption
 
-ACL-1248 prepares the Master Repo layout and main/stage process. Until the [cutover](docs/repository/ADOPTION.md), the live branch remains master; the source-install commands in this candidate target the future main channel. Start with [AGENTS.md](AGENTS.md) and the [current system](docs/system/PROJECT.md).
+ACL uses the Master Repo layout and main/stage process. Read the verified
+[cutover and activation gate](docs/repository/ADOPTION.md): main is the integration
+branch, stage is permanent, and master is retained only for old source installations.
+Normal admissions wait for ACL-1248's verified promotion and Tracker handoff.
+Start with [AGENTS.md](AGENTS.md) and the [current system](docs/system/PROJECT.md).
 
 # fb_agents
 

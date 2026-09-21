@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "state": "prepared",
+  "state": "active",
   "issue": 248,
   "source_base": "79caea74d4f88c559d79caf6fc86ef9b7b43f9e8",
   "source_branch": "master",
@@ -11,5 +11,13 @@
     222,
     247
   ],
-  "evidence": {}
+  "evidence": {
+    "open_prs": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/248 \u2014 original PR #180 and #222 closed with residual tasks retained; #247 merged at 79caea74d4f88c559d79caf6fc86ef9b7b43f9e8.",
+    "historical_completion": "docs/repository/HISTORICAL_COMPLETION.md; exact owner-approved 74-task manifest preserved and verified on the published board, ACL-1248.",
+    "branch_transition": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/248 \u2014 prepared PR #249 merged at 09eb8af3542d1eb64649ece179f79ad343efd563, default main, permanent stage, compatibility master retained at 79caea74d4f88c559d79caf6fc86ef9b7b43f9e8.",
+    "registry": "https://github.com/MojoTheApe/task-tracker/issues/63 \u2014 PR #64 deployed as 0dadc889e18b027c8ca98b888407d492848f2f19; six snapshots and preserved access controls verified 2026-09-21.",
+    "stage": "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/35603056536 \u2014 initial stage 09eb8af3542d1eb64649ece179f79ad343efd563 passed actual package update/restart/recovery; changed activation PR #253 requires its own exact-tree stage receipt before promotion.",
+    "ci": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/253 \u2014 required current activation checks; initial stage Windows run35603056418 and installer35603056536 passed and are separately recorded in ACL-1248.",
+    "independent_review": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/253 \u2014 separate non-implementing activation review must match its current head/base/tree and be recorded before admission; full initial source approval is preserved in PR #249."
+  }
 }
