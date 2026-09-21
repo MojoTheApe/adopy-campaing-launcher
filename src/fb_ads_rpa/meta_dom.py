@@ -3352,11 +3352,18 @@ def run_recorded_campaign_flow(
                     # редактор креатива не отрисовывался — полей текста на
                     # странице не было вовсе. Сначала чиним назначение, потом
                     # возвращаемся к тексту.
+                    # 20.09 21:52 (CR_ait FX): в блоке Browser add-ons вместо
+                    # «None» стоял «Instant form» — Meta требует выбрать форму и
+                    # принять условия Lead Ads, показывает ошибку и не рисует
+                    # редактор креатива. Чиним ровно это.
                     _telemetry.record("ad_copy_blocked", False, note="review_error")
                     try:
-                        verify_and_fix_ad_destinations(page, [ad_name or f"{campaign_name} Ad"], destination_url)
+                        fixed = _select_browser_addon_none(page)
+                        _sleep_h(1.5)
+                        _telemetry.record("browser_addon_repair", fixed,
+                                          diag={"none_checked": _browser_addon_none_checked(page)})
                     except Exception as exc:
-                        _telemetry.record("ad_copy_blocked", False, note=f"fix_failed:{str(exc)[:40]}")
+                        _telemetry.record("browser_addon_repair", False, note=str(exc)[:60])
                 if not ok_copy:
                     _await_creative_settled(page)
                     copy_report = {"retry": True}
@@ -3507,6 +3514,9 @@ def run_recorded_campaign_flow(
             and not any("destination" in f for f in ad_level_fails)
             and os.environ.get("FB_RPA_ALWAYS_SWEEP", "").strip() not in ("1", "true", "yes")
             and not _review_errors_visible(page)
+            # 20.09 21:52: «Instant form» возвращался в Browser add-ons уже
+            # после успешной проверки шага — именно это обход и ловил.
+            and _browser_addon_none_checked(page) is not False
         )
         if skip_sweep:
             _telemetry.record("destination_sweep_skipped", None,
