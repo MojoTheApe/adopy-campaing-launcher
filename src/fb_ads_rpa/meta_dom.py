@@ -8142,7 +8142,16 @@ def fill_ad_copy(
         _sleep_h(0.4)
         if _handle_shows(handle, text):
             return True
-        report["attempts"].append({"stage": "typed_text_mismatch", "seen": _handle_text(handle)[:80]})
+        # 21.09 11:33 (CL_ml): «видим» выглядело правильным текстом, но шаг
+        # считал его несовпавшим — по обрезанной записи не понять, где
+        # разошлось. Пишем оба текста и их длины.
+        seen_now = _handle_text(handle)
+        report["attempts"].append({
+            "stage": "typed_text_mismatch",
+            "seen": seen_now[:120], "seen_len": len(seen_now),
+            "want": text[:120], "want_len": len(text),
+            "tail_seen": seen_now[-40:], "tail_want": text[-40:],
+        })
         try:
             handle.focus()
             page.keyboard.press("ControlOrMeta+A")
