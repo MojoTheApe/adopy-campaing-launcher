@@ -9980,6 +9980,202 @@ def _location_rows(page: Page) -> list[dict]:
         return []
 
 
+# Shared DOM boundaries for collapsed audience fields and age readback. Never
+# broaden a field into the page merely because a matching number/button exists.
+_AUDIENCE_FIELD_DOM = r"""
+  const norm = s => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+  const visible = e => {
+    const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+    return r.width > 0 && r.height > 0 && s.visibility !== 'hidden'
+      && s.visibility !== 'collapse' && !e.closest('[role=dialog], [role=listbox]');
+  };
+  const leaves = root => [...root.querySelectorAll('*')]
+    .filter(e => e.children.length === 0 && visible(e));
+  const fieldLabels = /^(Age|Edad|Locations|Ubicaciones|Languages|Idiomas|Gender|Género|Detailed targeting|Segmentación detallada|Placements|Ubicaciones de anuncios|Daily budget|Lifetime budget|Budget|Presupuesto|Start time|End time)$/i;
+  const fieldBoxes = pattern => {
+    const labels = leaves(document).filter(e => pattern.test(norm(e.textContent)));
+    if (labels.length !== 1) return [];
+    const label = labels[0], boxes = [];
+    for (let box = label.parentElement, depth = 0;
+         box && box !== document.body && box !== document.documentElement && depth < 16;
+         box = box.parentElement, depth++) {
+      if (leaves(box).some(e => e !== label && fieldLabels.test(norm(e.textContent)))) break;
+      if ([...box.querySelectorAll('[role=heading],h1,h2,h3,h4,label')]
+          .some(e => visible(e) && !e.contains(label) && !label.contains(e)
+                     && !pattern.test(norm(e.textContent)))) break;
+      boxes.push(box);
+    }
+    return boxes;
+  };
+  const summaryField = (label, value) => {
+    let field = null;
+    for (const box of fieldBoxes(label)) {
+      const summaries = leaves(box).filter(e => value.test(norm(e.textContent)));
+      if (summaries.length > 1) break;
+      if (summaries.length === 1) {
+        if (!field) field = {box, summary: summaries[0], boxes: []};
+        if (field.summary !== summaries[0]) break;
+        field.boxes.push(box);
+      }
+    }
+    return field;
+  };
+  const point = e => {
+    const r = e.getBoundingClientRect();
+    const x = r.x + r.width / 2, y = r.y + r.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    return hit && e.contains(hit) ? {x, y} : null;
+  };
+"""
+
+_LOCATION_SUMMARY_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
+  const field = summaryField(/^(Locations|Ubicaciones)$/i, /^(Inclusion|Inclusión|Incluir)\s*:/i);
+  if (!field) return null;
+  return norm(field.summary.textContent).split(':').slice(1).join(':')
+    .split(',').map(norm).filter(Boolean);
+}
+"""
+
+
+def _location_summary_countries(page: Page) -> list[str] | None:
+    try:
+        return page.evaluate(_LOCATION_SUMMARY_JS)
+    except Exception:
+        return None
+
+
+def _only_wanted_in_summary(page: Page, keep_text: str) -> bool:
+    """В сводке ровно наша страна и никого больше.
+
+    18.09 06:32 (CO_bnc GMBL): строки карточки не прочитались
+    (`location_rows_not_read`), и шаг отказал, хотя страна была одна. Когда
+    строки не читаются, вопрос «сколько там стран» ещё можно задать сводке.
+    """
+    got = _location_summary_countries(page)
+    if not got:
+        return False
+    keep = (keep_text or "").strip().lower()
+    return len(got) == 1 and keep == got[0].strip().lower()
+
+
+_AUDIENCE_EDIT_JS = "([label, value]) => {" + _AUDIENCE_FIELD_DOM + r"""
+  const field = summaryField(new RegExp('^(' + label + ')$', 'i'), new RegExp(value, 'i'));
+  if (!field) return null;
+  for (const box of field.boxes) {
+    const buttons = [...box.querySelectorAll('button, [role=button]')].filter(b => {
+      if (!visible(b)) return false;
+      const name = norm(b.getAttribute('aria-label') || b.textContent);
+      // Empty text does not make an explicitly named Remove control a pencil.
+      return /^(edit|editar|изменить|pencil)(\b|$)/i.test(name);
+    });
+    if (buttons.length > 1) return null;
+    if (buttons.some(b => b.disabled || b.getAttribute('aria-disabled') === 'true')) return null;
+    if (buttons.length === 1) return point(buttons[0]);
+  }
+  return point(field.summary);
+}
+"""
+
+
+def _click_summary_row(page: Page, label: str, value_hint: str) -> bool:
+    """Open one identified field using its own edit button or summary value."""
+    try:
+        pt = page.evaluate(_AUDIENCE_EDIT_JS, [label, value_hint])
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.8)
+    return True
+
+
+def _click_locations_edit(page: Page) -> bool:
+    return _click_summary_row(page, "Locations|Ubicaciones", r"^(Inclusion|Inclusión|Incluir)\s*:")
+
+
+_LOCATIONS_COLLAPSE_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
+  const field = summaryField(/^(Locations|Ubicaciones)$/i, /^(Inclusion|Inclusión|Incluir)\s*:/i);
+  if (!field) return null;
+  for (const box of field.boxes) {
+    const buttons = [...box.querySelectorAll('button[aria-expanded=true], [role=button][aria-expanded=true]')]
+      .filter(b => visible(b) && !b.disabled && b.getAttribute('aria-disabled') !== 'true'
+        && /^(edit|editar|collapse|contraer|свернуть)(\b|$)/i.test(
+          norm(b.getAttribute('aria-label') || b.textContent)));
+    if (buttons.length > 1) return null;
+    if (buttons.length === 1) return point(buttons[0]);
+  }
+  return null;
+}
+"""
+
+
+def _collapse_locations_card(page: Page) -> bool:
+    """Свернуть карточку локаций обратно.
+
+    18.09 07:42 (CL_ml Day, CO_bnc GMBL): после карандаша карточка осталась
+    раскрытой — с картой и полем поиска, — страница уехала, и следующие шаги
+    (языки, открытие детального таргетинга) своих полей уже не нашли. Страну
+    поставили правильно, а соседние шаги сломали.
+    """
+    try:
+        pt = page.evaluate(_LOCATIONS_COLLAPSE_JS)
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.6)
+    return True
+
+
+def _done(page: Page, opened_by_us: bool, result):
+    """Вернуть ответ шага, свернув карточку, если раскрывали её мы."""
+    if opened_by_us:
+        _collapse_locations_card(page)
+    return result
+
+
+def _uncheck_age_suggestion(page: Page) -> None:
+    """Снять «Use as a suggestion» — иначе Meta расширяет возраст сама.
+
+    Галочка живёт прямо под границами и по умолчанию включена, а с ней возраст
+    становится пожеланием: итог «Your suggestion 35–65+».
+    """
+    try:
+        page.evaluate(
+            """() => {
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              const row = [...document.querySelectorAll('*')].find(e =>
+                norm(e.textContent).startsWith('Use as a suggestion') && e.offsetParent !== null);
+              if (!row) return;
+              let box = row;
+              for (let i = 0; i < 6 && box; i++) {
+                const cb = box.querySelector('input[type=checkbox]');
+                if (cb) {
+                  const aria = cb.getAttribute('aria-checked');
+                  const on = aria === 'true' ? true : aria === 'false' ? false : cb.checked;
+                  if (on) cb.click();
+                  return;
+                }
+                box = box.parentElement;
+              }
+            }"""
+        )
+        _sleep_h(0.3)
+    except Exception:
+        pass
+
+
+def _age_shows_value(page: Page, value: str) -> bool:
+    """Confirm a boundary only within a readable, complete Age field."""
+    return value in _age_triggers_read(page)
+
+
+def _click_languages_edit(page: Page) -> bool:
+    return _click_summary_row(page, "Languages|Idiomas", "^(All languages|Todos los idiomas)$")
+
+
 def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     """Remove every included location that is not `keep_text`; return the
     names still left afterwards (empty list = clean, None = unreadable).
@@ -9989,7 +10185,19 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     run whose draft still targeted United States next to Guatemala.
     """
     keep = (keep_text or "").strip().lower()
+    opened_by_us = False
     seen = _location_rows(page)
+    if not seen and _click_locations_edit(page):
+        # Свёрнутая карточка: строк нет, пока её не раскрыли карандашом.
+        opened_by_us = True
+        seen = _location_rows(page)
+    if not seen and _only_wanted_in_summary(page, keep_text):
+        # 18.09 06:32 (CO_bnc GMBL): карточку прочитать не удалось, а страна
+        # была одна — это видно по свёрнутой строке «Inclusion: …».
+        _telemetry.record("audience_location", None, note="rows_unread_summary_clean",
+                          diag={"keep": keep_text,
+                                "summary": _location_summary_countries(page)})
+        return _done(page, opened_by_us, [])
     if not seen:
         # Not even the target's own row was read: the card's shape is not
         # the one this knows. Say so rather than pass silently, and keep the
@@ -10002,24 +10210,26 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
             _pc.capture(page, step="locations_unread")
         except Exception:
             pass
-        return None
+        return _done(page, opened_by_us, None)
     for _ in range(6):
         rows = _location_rows(page)
         if not rows:
-            return None
+            return _done(page, opened_by_us,
+                         [] if _only_wanted_in_summary(page, keep_text) else None)
         if not any(keep in r["name"].lower() for r in rows):
             # Do not delete the old country before the target is confirmed.
-            return [r["name"] for r in rows]
+            return _done(page, opened_by_us, [r["name"] for r in rows])
         others = [r for r in rows if keep not in r["name"].lower()]
         if not others:
-            return []
+            return _done(page, opened_by_us, [])
         target = others[0]
         _cdp_mouse_click(page, target["x"], target["y"])
         _sleep_h(0.9)
     rows = _location_rows(page)
     if not rows:
-        return None
-    return [r["name"] for r in rows if keep not in r["name"].lower()]
+        return _done(page, opened_by_us,
+                     [] if _only_wanted_in_summary(page, keep_text) else None)
+    return _done(page, opened_by_us, [r["name"] for r in rows if keep not in r["name"].lower()])
 
 
 def _pick_country_and_clear_defaults(root, page: Page, search_term: str) -> bool:
@@ -10540,39 +10750,26 @@ _AGE_VALUE_RE = re.compile(r"^\d{2}\+?$")
 
 
 def _age_triggers_read(page: Page) -> list[str]:
-    """What the two closed age dropdowns show right now, e.g. ['18', '65+'].
-
-    Visible leaves that look like an age value, inside the Age row (the
-    nearest ancestor of the "Age" label that holds two of them), and not
-    inside an open listbox. Empty when the row cannot be found.
-    """
-    js = r"""
-    () => {
-      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-      const isAge = (t) => /^\d{2}\+?$/.test(t);
-      const leaves = [...document.querySelectorAll('*')]
-        .filter(e => e.offsetParent !== null && e.children.length === 0);
-      const label = leaves.find(e => /^(Age|Edad)$/i.test(norm(e.textContent)));
-      if (!label) return [];
-      let node = label;
-      for (let i = 0; i < 8 && node; i++, node = node.parentElement) {
-        const vals = [...node.querySelectorAll('*')]
-          .filter(e => e.offsetParent !== null && e.children.length === 0
-                    && !e.closest('[role=listbox]') && isAge(norm(e.textContent)))
-          .map(e => norm(e.textContent));
-        if (vals.length >= 2) return vals.slice(0, 2);
+    """Read both ordered boundaries from one Age field, outside option lists."""
+    js = "() => {" + _AUDIENCE_FIELD_DOM + r"""
+      for (const box of fieldBoxes(/^(Age|Edad)$/i)) {
+        const values = leaves(box).map(e => norm(e.textContent))
+          .filter(t => /^(?:1[3-9]|[2-5][0-9]|6[0-5])\+?$/.test(t));
+        if (values.length >= 2) return values.length === 2 ? values : [];
       }
       return [];
     }
     """
+    readings = []
     for root in _roots(page):
         try:
             got = root.evaluate(js)
         except Exception:
             continue
         if got:
-            return [str(v) for v in got]
-    return []
+            readings.append([str(v) for v in got])
+    # Duplicate fields/frames are not evidence of the selected editor's range.
+    return readings[0] if len(readings) == 1 else []
 
 
 def _age_boundary_shows(page: Page, value: str) -> bool:
@@ -10683,6 +10880,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                           note="read_back_mismatch" if seen else "read_back_unavailable",
                           diag={"wanted": wanted, "seen": seen})
         return False
+    _uncheck_age_suggestion(page)
     return True
 
 
@@ -10757,7 +10955,7 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
         # independently and only report success if BOTH are confirmed.
         boundary_results = []
         for default_text, target_val in (("18", age_min_str), ("65+", age_max_str)):
-            if target_val == default_text and _age_boundary_shows(page, default_text):
+            if target_val == default_text and _age_shows_value(page, default_text):
                 # Граница уже стоит как надо — открывать выпадашку незачем.
                 # 17.09 13:19 (CL_ml): клик по «65+» упал на прокрутке
                 # (TimeoutError), граница записалась как проваленная, и шаг
@@ -10986,7 +11184,21 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
                     pass
                 boundary_results.append(False)
                 continue
-        if len(boundary_results) == 2 and all(boundary_results):
+        # 17.09 22:12 (CR_ait FX_Y): на экране стояло ровно «35 – 65+», но
+        # одна из границ отчиталась провалом, и из-за этого не сняли галочку
+        # «Use as a suggestion» — шаг отказал при верном возрасте. Верим
+        # итоговому виду поля, а не отчёту по каждой границе.
+        read_back = False
+        if not (len(boundary_results) == 2 and all(boundary_results)):
+            read_back = _age_triggers_read(page) == [age_min_str, age_max_str]
+            if read_back:
+                try:
+                    _telemetry.record("audience_age", None, note="read_back_ok",
+                                      diag={"boundaries": boundary_results,
+                                            "shows": [age_min_str, age_max_str]})
+                except Exception:
+                    pass
+        if (len(boundary_results) == 2 and all(boundary_results)) or read_back:
             # "Use as a suggestion" appears right below the Age boundaries
             # once both are set to non-default values — confirmed live
             # 2026-07-27 it's checked by default ("We'll also reach people
@@ -11345,6 +11557,12 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
         return None, None
 
     root, inp = _find_lang_input()
+    if inp is None and _click_languages_edit(page):
+        for _ in range(10):
+            _sleep_h(0.2)
+            root, inp = _find_lang_input()
+            if inp is not None:
+                break
     if inp is None:
         for root in _roots(page):
             try:

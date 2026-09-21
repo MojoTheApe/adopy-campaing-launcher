@@ -330,3 +330,49 @@ def test_clock_18_is_untouched_by_the_integrated_age_setter(page, monkeypatch):
     assert meta_dom._age_triggers_read(page) == ['35', '65+']
     assert page.evaluate('window.clockClicked === undefined')
     assert page.evaluate('window.maximumClicked === undefined')
+
+
+def test_the_age_step_believes_the_field_over_its_own_boundary_report(page, monkeypatch):
+    """17.09 22:12 CR_ait FX_Y: на экране «35 – 65+», а шаг отказал и не снял галочку."""
+    monkeypatch.setattr(meta_dom, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(meta_dom, "_mark_age_trigger", lambda *a, **k: False)
+    page.set_content(
+        "<div><div>Age</div><div><div>35</div><div>65+</div></div>"
+        "<div><span>Use as a suggestion</span><input id='sug' type='checkbox' checked></div></div>"
+    )
+    assert meta_dom.fill_audience_age(page, 35, 65) is True
+    assert page.eval_on_selector("#sug", "el => el.checked") is False
+
+def test_the_age_field_is_read_the_same_way_the_click_finds_it(page, monkeypatch):
+    """18.09 CL_ml Trading: «35 – 65+» на экране, а старое чтение отвечало «нет»."""
+    monkeypatch.setattr(meta_dom, "_sleep_h", lambda *a, **k: None)
+    # Живая страница (дамп 9b73f875e3b4): значения видно, а прежняя проверка
+    # отвечала «нет» на обе границы.
+    page.set_content(
+        "<div><div>Age</div>"
+        "<div><div><div><div><div><div><div><div>35</div><div>65+</div>"
+        "</div></div></div></div></div></div></div>"
+    )
+    assert meta_dom._age_shows_value(page, "35") is True
+    assert meta_dom._age_shows_value(page, "65+") is True
+
+
+def test_wrong_age_is_not_confirmed_by_an_unrelated_budget(page, monkeypatch):
+    page.set_content('<section><div>Age</div><span>18</span><span>65+</span></section>'
+                     '<section><div>Daily budget</div><span>35</span></section>')
+    monkeypatch.setattr(meta_dom, '_ensure_manual_audience', lambda p: False)
+    monkeypatch.setattr(meta_dom, '_fill_audience_age_controls', lambda *a: True)
+    assert meta_dom.fill_audience_age(page, 35, 65) is False
+
+
+def test_age_reader_does_not_combine_incomplete_age_with_budget(page):
+    page.set_content('<section><div><div>Age</div><span>35</span></div>'
+                     '<div><div>Daily budget</div><span>65</span></div></section>')
+    assert meta_dom._age_triggers_read(page) == []
+
+
+def test_deep_age_label_and_fixed_field_still_read_the_two_boundaries(page):
+    page.set_content('<section style="position:fixed;top:0"><div>' * 1
+                     + '<div>' * 10 + '<span>Age</span>' + '</div>' * 10
+                     + '<span>35</span><span>65+</span></div></section>')
+    assert meta_dom._age_triggers_read(page) == ['35', '65+']
