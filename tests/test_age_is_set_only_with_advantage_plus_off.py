@@ -355,3 +355,24 @@ def test_the_age_field_is_read_the_same_way_the_click_finds_it(page, monkeypatch
     )
     assert meta_dom._age_shows_value(page, "35") is True
     assert meta_dom._age_shows_value(page, "65+") is True
+
+
+def test_wrong_age_is_not_confirmed_by_an_unrelated_budget(page, monkeypatch):
+    page.set_content('<section><div>Age</div><span>18</span><span>65+</span></section>'
+                     '<section><div>Daily budget</div><span>35</span></section>')
+    monkeypatch.setattr(meta_dom, '_ensure_manual_audience', lambda p: False)
+    monkeypatch.setattr(meta_dom, '_fill_audience_age_controls', lambda *a: True)
+    assert meta_dom.fill_audience_age(page, 35, 65) is False
+
+
+def test_age_reader_does_not_combine_incomplete_age_with_budget(page):
+    page.set_content('<section><div><div>Age</div><span>35</span></div>'
+                     '<div><div>Daily budget</div><span>65</span></div></section>')
+    assert meta_dom._age_triggers_read(page) == []
+
+
+def test_deep_age_label_and_fixed_field_still_read_the_two_boundaries(page):
+    page.set_content('<section style="position:fixed;top:0"><div>' * 1
+                     + '<div>' * 10 + '<span>Age</span>' + '</div>' * 10
+                     + '<span>35</span><span>65+</span></div></section>')
+    assert meta_dom._age_triggers_read(page) == ['35', '65+']

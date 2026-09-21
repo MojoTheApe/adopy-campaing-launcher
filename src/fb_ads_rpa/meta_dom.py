@@ -9980,19 +9980,55 @@ def _location_rows(page: Page) -> list[dict]:
         return []
 
 
-# ── Свёрнутые Locations / Languages и чтение возраста (из #222, ACL-1225/1226) ──
+# Shared DOM boundaries for collapsed audience fields and age readback. Never
+# broaden a field into the page merely because a matching number/button exists.
+_AUDIENCE_FIELD_DOM = r"""
+  const norm = s => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+  const visible = e => {
+    const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+    return r.width > 0 && r.height > 0 && s.visibility !== 'hidden'
+      && s.visibility !== 'collapse' && !e.closest('[role=dialog], [role=listbox]');
+  };
+  const leaves = root => [...root.querySelectorAll('*')]
+    .filter(e => e.children.length === 0 && visible(e));
+  const fieldLabels = /^(Age|Edad|Locations|Ubicaciones|Languages|Idiomas|Gender|Género|Detailed targeting|Segmentación detallada|Placements|Ubicaciones de anuncios|Daily budget|Lifetime budget|Budget|Presupuesto|Start time|End time)$/i;
+  const fieldBoxes = pattern => {
+    const labels = leaves(document).filter(e => pattern.test(norm(e.textContent)));
+    if (labels.length !== 1) return [];
+    const label = labels[0], boxes = [];
+    for (let box = label.parentElement, depth = 0;
+         box && box !== document.body && box !== document.documentElement && depth < 16;
+         box = box.parentElement, depth++) {
+      if (leaves(box).some(e => e !== label && fieldLabels.test(norm(e.textContent)))) break;
+      if ([...box.querySelectorAll('[role=heading],h1,h2,h3,h4,label')]
+          .some(e => visible(e) && !e.contains(label) && !label.contains(e)
+                     && !pattern.test(norm(e.textContent)))) break;
+      boxes.push(box);
+    }
+    return boxes;
+  };
+  const summaryField = (label, value) => {
+    for (const box of fieldBoxes(label)) {
+      const summaries = leaves(box).filter(e => value.test(norm(e.textContent)));
+      if (summaries.length > 1) return null;
+      if (summaries.length === 1) return {box, summary: summaries[0]};
+    }
+    return null;
+  };
+  const point = e => {
+    const r = e.getBoundingClientRect();
+    const x = r.x + r.width / 2, y = r.y + r.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    return hit && e.contains(hit) ? {x, y} : null;
+  };
+"""
 
-
-_LOCATION_SUMMARY_JS = r"""
-  () => {
-    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-    const leaves = [...document.querySelectorAll('*')]
-      .filter(e => e.offsetParent !== null && e.children.length === 0)
-      .map(e => norm(e.textContent));
-    const line = leaves.find(t => /^(Inclusion|Inclusion|Incluir)\s*:/i.test(t));
-    if (!line) return null;
-    return line.split(':').slice(1).join(':').split(',').map(x => norm(x)).filter(Boolean);
-  }
+_LOCATION_SUMMARY_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
+  const field = summaryField(/^(Locations|Ubicaciones)$/i, /^(Inclusion|Inclusión|Incluir)\s*:/i);
+  if (!field) return null;
+  return norm(field.summary.textContent).split(':').slice(1).join(':')
+    .split(',').map(norm).filter(Boolean);
+}
 """
 
 
@@ -10014,62 +10050,29 @@ def _only_wanted_in_summary(page: Page, keep_text: str) -> bool:
     if not got:
         return False
     keep = (keep_text or "").strip().lower()
-    return len(got) == 1 and keep in got[0].lower()
+    return len(got) == 1 and keep == got[0].strip().lower()
 
 
-_LOCATIONS_EDIT_JS = r"""
-  () => {
-    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-    const label = [...document.querySelectorAll('*')].find(e =>
-      e.children.length === 0 && /^(Locations|Ubicaciones)$/i.test(norm(e.textContent))
-      && e.getBoundingClientRect().width > 0);
-    if (!label) return null;
-    let row = label.parentElement;
-    for (let i = 0; i < 4 && row; i++, row = row.parentElement) {
-      const btns = [...row.querySelectorAll('[role=button], button, [aria-label]')].filter(b => {
-        const r = b.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0 || r.width > 80) return false;
-        const name = (norm(b.getAttribute('aria-label')) + ' ' + norm(b.textContent)).toLowerCase();
-        return /edit|editar|pencil/.test(name) || (!norm(b.textContent) && r.width <= 48);
-      });
-      if (btns.length) {
-        const r = btns[btns.length - 1].getBoundingClientRect();
-        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-      }
-    }
-    return null;
-  }
-"""
-
-
-_SUMMARY_ROW_JS = r"""
-  ([label, valueHint]) => {
-    const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
-    const leaves = [...document.querySelectorAll('*')]
-      .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0);
-    const head = leaves.find(e => new RegExp('^(' + label + ')$', 'i').test(norm(e.textContent)));
-    if (!head) return null;
-    const re = new RegExp(valueHint, 'i');
-    // Значение строки: ближайший к подписи текст, похожий на сводку.
-    const hit = leaves.find(e => re.test(norm(e.textContent))
-      && Math.abs(e.getBoundingClientRect().top - head.getBoundingClientRect().top) < 80);
-    const el = hit || head;
-    const r = el.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2, text: norm(el.textContent).slice(0, 60) };
-  }
+_AUDIENCE_EDIT_JS = "([label, value]) => {" + _AUDIENCE_FIELD_DOM + r"""
+  const field = summaryField(new RegExp('^(' + label + ')$', 'i'), new RegExp(value, 'i'));
+  if (!field) return null;
+  const buttons = [...field.box.querySelectorAll('button, [role=button]')].filter(b => {
+    if (!visible(b)) return false;
+    const name = norm(b.getAttribute('aria-label') || b.textContent);
+    // Empty text does not make an explicitly named Remove control a pencil.
+    return /^(edit|editar|изменить|pencil)(\b|$)/i.test(name);
+  });
+  if (buttons.length > 1) return null;
+  if (buttons.some(b => b.disabled || b.getAttribute('aria-disabled') === 'true')) return null;
+  return point(buttons[0] || field.summary);
+}
 """
 
 
 def _click_summary_row(page: Page, label: str, value_hint: str) -> bool:
-    """Открыть свёрнутую строку кликом по её значению.
-
-    18.09 08:23 (CL_ml Trading, CR_ait Day): у Meta два вида свёрнутого блока
-    аудитории. В одном у строки есть карандаш, в другом — ни одной кнопки,
-    только текст «Inclusion: Chile, United States» / «All languages», и
-    строка раскрывается кликом по самому тексту.
-    """
+    """Open one identified field using its own edit button or summary value."""
     try:
-        pt = page.evaluate(_SUMMARY_ROW_JS, [label, value_hint])
+        pt = page.evaluate(_AUDIENCE_EDIT_JS, [label, value_hint])
     except Exception:
         return False
     if not pt:
@@ -10080,44 +10083,17 @@ def _click_summary_row(page: Page, label: str, value_hint: str) -> bool:
 
 
 def _click_locations_edit(page: Page) -> bool:
-    """Раскрыть карточку локаций её собственной кнопкой правки.
-
-    18.09 07:07 (CL_ml Day) и 07:09 (CO_bnc GMBL): в сводке стояло
-    «Inclusion: Chile, United States» — нужная страна добавлена, лишняя
-    осталась, а снять её нечем: у свёрнутой строки нет крестиков. Разметку
-    строк (`_location_rows`) в таком виде тоже не прочитать.
-    """
-    try:
-        pt = page.evaluate(_LOCATIONS_EDIT_JS)
-    except Exception:
-        return False
-    if not pt:
-        return _click_summary_row(page, "Locations|Ubicaciones", "^(Inclusion|Inclusión)\\s*:")
-    _cdp_mouse_click(page, pt["x"], pt["y"])
-    _sleep_h(0.8)
-    return True
+    return _click_summary_row(page, "Locations|Ubicaciones", r"^(Inclusion|Inclusión|Incluir)\s*:")
 
 
-_LOCATIONS_COLLAPSE_JS = r"""
-  () => {
-    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-    const label = [...document.querySelectorAll('*')].find(e =>
-      e.children.length === 0 && /^(Locations|Ubicaciones)$/i.test(norm(e.textContent))
-      && e.getBoundingClientRect().width > 0);
-    if (!label) return null;
-    let row = label.parentElement;
-    for (let i = 0; i < 5 && row; i++, row = row.parentElement) {
-      const open = [...row.querySelectorAll('[aria-expanded="true"]')].filter(b => {
-        const r = b.getBoundingClientRect();
-        return r.width > 0 && r.height > 0 && r.width <= 80;
-      });
-      if (open.length) {
-        const r = open[open.length - 1].getBoundingClientRect();
-        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-      }
-    }
-    return null;
-  }
+_LOCATIONS_COLLAPSE_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
+  const field = summaryField(/^(Locations|Ubicaciones)$/i, /^(Inclusion|Inclusión|Incluir)\s*:/i);
+  if (!field) return null;
+  const buttons = [...field.box.querySelectorAll('button[aria-expanded=true], [role=button][aria-expanded=true]')]
+    .filter(b => visible(b) && !/remove|delete|close|quitar|eliminar/i.test(
+      norm(b.getAttribute('aria-label') || b.textContent)));
+  return buttons.length === 1 ? point(buttons[0]) : null;
+}
 """
 
 
@@ -10179,57 +10155,12 @@ def _uncheck_age_suggestion(page: Page) -> None:
 
 
 def _age_shows_value(page: Page, value: str) -> bool:
-    """Стоит ли граница возраста на `value` — по той же разметке, что и клик.
-
-    18.09 06:15 (CL_ml Trading): на экране «35 – 65+», а `_age_boundary_shows`
-    отвечал «нет» на обе границы (подъём на шесть уровней от подписи «Age» не
-    доходит до значений), поэтому шаг не снял «Use as a suggestion» и отказал
-    при верном возрасте. `_mark_age_trigger` те же значения находит.
-    """
-    return _mark_age_trigger(page, value) or _age_boundary_shows(page, value)
-
-
-_LANG_EDIT_JS = r"""
-  () => {
-    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-    const label = [...document.querySelectorAll('*')].find(e =>
-      e.children.length === 0 && /^(Languages|Idiomas)$/i.test(norm(e.textContent))
-      && e.getBoundingClientRect().width > 0);
-    if (!label) return null;
-    let row = label.parentElement;
-    for (let i = 0; i < 4 && row; i++, row = row.parentElement) {
-      const btns = [...row.querySelectorAll('[role=button], button, [aria-label]')].filter(b => {
-        const r = b.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0 || r.width > 80) return false;
-        const name = (norm(b.getAttribute('aria-label')) + ' ' + norm(b.textContent)).toLowerCase();
-        return /edit|изменить|editar|pencil/.test(name) || (!norm(b.textContent) && r.width <= 48);
-      });
-      if (btns.length) {
-        const r = btns[btns.length - 1].getBoundingClientRect();
-        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-      }
-    }
-    return null;
-  }
-"""
+    """Confirm a boundary only within a readable, complete Age field."""
+    return value in _age_triggers_read(page)
 
 
 def _click_languages_edit(page: Page) -> bool:
-    """Раскрыть строку языков её собственной кнопкой правки.
-
-    17.09 23:04 (CR_ait Day): блок аудитории показан сводкой — «Languages: All
-    languages», поля поиска нет вовсе, а клик по центру строки его не открывал.
-    Справа у строки живёт карандаш — жать надо его.
-    """
-    try:
-        pt = page.evaluate(_LANG_EDIT_JS)
-    except Exception:
-        return False
-    if not pt:
-        return _click_summary_row(page, "Languages|Idiomas", "^(All languages|Todos los idiomas)")
-    _cdp_mouse_click(page, pt["x"], pt["y"])
-    _sleep_h(0.6)
-    return True
+    return _click_summary_row(page, "Languages|Idiomas", "^(All languages|Todos los idiomas)$")
 
 
 def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
@@ -10806,39 +10737,26 @@ _AGE_VALUE_RE = re.compile(r"^\d{2}\+?$")
 
 
 def _age_triggers_read(page: Page) -> list[str]:
-    """What the two closed age dropdowns show right now, e.g. ['18', '65+'].
-
-    Visible leaves that look like an age value, inside the Age row (the
-    nearest ancestor of the "Age" label that holds two of them), and not
-    inside an open listbox. Empty when the row cannot be found.
-    """
-    js = r"""
-    () => {
-      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-      const isAge = (t) => /^\d{2}\+?$/.test(t);
-      const leaves = [...document.querySelectorAll('*')]
-        .filter(e => e.offsetParent !== null && e.children.length === 0);
-      const label = leaves.find(e => /^(Age|Edad)$/i.test(norm(e.textContent)));
-      if (!label) return [];
-      let node = label;
-      for (let i = 0; i < 8 && node; i++, node = node.parentElement) {
-        const vals = [...node.querySelectorAll('*')]
-          .filter(e => e.offsetParent !== null && e.children.length === 0
-                    && !e.closest('[role=listbox]') && isAge(norm(e.textContent)))
-          .map(e => norm(e.textContent));
-        if (vals.length >= 2) return vals.slice(0, 2);
+    """Read both ordered boundaries from one Age field, outside option lists."""
+    js = "() => {" + _AUDIENCE_FIELD_DOM + r"""
+      for (const box of fieldBoxes(/^(Age|Edad)$/i)) {
+        const values = leaves(box).map(e => norm(e.textContent))
+          .filter(t => /^(?:1[3-9]|[2-5][0-9]|6[0-5])\+?$/.test(t));
+        if (values.length >= 2) return values.length === 2 ? values : [];
       }
       return [];
     }
     """
+    readings = []
     for root in _roots(page):
         try:
             got = root.evaluate(js)
         except Exception:
             continue
         if got:
-            return [str(v) for v in got]
-    return []
+            readings.append([str(v) for v in got])
+    # Duplicate fields/frames are not evidence of the selected editor's range.
+    return readings[0] if len(readings) == 1 else []
 
 
 def _age_boundary_shows(page: Page, value: str) -> bool:
@@ -10945,16 +10863,6 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     wanted = [str(age_min), str(age_max) if age_max < 65 else "65+"]
     seen = _age_triggers_read(page)
     if seen != wanted:
-        # 18.09 06:32: на CL_ml, CO_bnc и CR_ait `_age_triggers_read` вернул
-        # пусто на всех трёх кампаниях, хотя на экране стояло «35 – 65+»: его
-        # подъём от подписи «Age» не доходит до значений этой разметки.
-        # Спрашиваем тем же поиском, которым по границе кликаем.
-        by_label = [v for v in wanted if _age_shows_value(page, v)]
-        if len(by_label) == len(wanted):
-            _telemetry.record("audience_age", None, note="read_back_by_label",
-                              diag={"wanted": wanted, "seen": seen})
-            _uncheck_age_suggestion(page)
-            return True
         _telemetry.record("audience_age", False,
                           note="read_back_mismatch" if seen else "read_back_unavailable",
                           diag={"wanted": wanted, "seen": seen})
@@ -11269,7 +11177,7 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
         # итоговому виду поля, а не отчёту по каждой границе.
         read_back = False
         if not (len(boundary_results) == 2 and all(boundary_results)):
-            read_back = _age_shows_value(page, age_min_str) and _age_shows_value(page, age_max_str)
+            read_back = _age_triggers_read(page) == [age_min_str, age_max_str]
             if read_back:
                 try:
                     _telemetry.record("audience_age", None, note="read_back_ok",

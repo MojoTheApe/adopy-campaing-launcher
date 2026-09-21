@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import os
 import pytest
 from playwright.sync_api import sync_playwright
 
@@ -15,7 +16,7 @@ from src.fb_ads_rpa import meta_dom as md
 @pytest.fixture(scope="module")
 def browser():
     with sync_playwright() as p:
-        b = p.chromium.launch()
+        b = p.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
         yield b
         b.close()
 
@@ -51,3 +52,31 @@ def test_a_languages_row_without_buttons_is_opened_by_its_value(page):
 def test_nothing_to_open_is_reported_honestly(page):
     page.set_content("<div>Audience</div>")
     assert md._click_languages_edit(page) is False
+
+
+def test_language_value_does_not_select_adjacent_remove_button(page):
+    page.set_content('<section><div id="country">Chile<button aria-label="Remove Chile" '
+                     'style="width:24px;height:24px" id="remove" '
+                     'onclick="document.getElementById(\'country\').remove()"></button></div>'
+                     '<div><span>Languages</span><div id="value">All languages</div></div></section>')
+    assert md._click_languages_edit(page) is True
+    assert page.evaluate('window.clicked') == 'value'
+    assert page.locator('#country').count() == 1
+
+
+def test_a_named_remove_button_inside_the_row_is_not_an_edit_button(page):
+    page.set_content('<section><span>Languages</span><span id="value">All languages</span>'
+                     '<button aria-label="Remove language" id="remove" '
+                     'style="width:24px;height:24px"></button></section>')
+    assert md._click_languages_edit(page) is True
+    assert page.evaluate('window.clicked') == 'value'
+
+
+def test_covered_or_disabled_edit_control_is_not_clicked(page):
+    page.set_content('<section><span>Languages</span><span>All languages</span>'
+                     '<button disabled aria-label="Edit">Edit</button></section>')
+    assert md._click_languages_edit(page) is False
+    page.locator('button').evaluate('el => el.disabled = false')
+    page.evaluate("document.body.insertAdjacentHTML('beforeend', '<div style=\"position:fixed;inset:0;z-index:10\">Cover</div>')")
+    assert md._click_languages_edit(page) is False
+    assert page.evaluate('window.clicked === undefined')

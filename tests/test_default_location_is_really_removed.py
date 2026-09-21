@@ -213,3 +213,46 @@ def test_the_value_click_is_not_used_when_a_pencil_exists(page, monkeypatch):
                             "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
     assert md._click_locations_edit(page) is True
     assert clicked["at"] == "pen", clicked
+
+
+def test_unrelated_summary_cannot_hide_an_extra_country(page, monkeypatch):
+    page.set_content('<aside><div>Saved audience</div><div>Inclusion: Chile</div></aside>'
+                     '<section><div>Locations</div><div>Inclusion: Chile, United States</div></section>')
+    monkeypatch.setattr(md, '_pick_country_suggestion', lambda *a: True)
+    monkeypatch.setattr(md._telemetry, 'record', lambda *a, **k: None)
+    import src.fb_ads_rpa.page_capture as pc
+    monkeypatch.setattr(pc, 'capture', lambda *a, **k: None)
+    assert md._pick_country_and_clear_defaults(page, page, 'Chile') is False
+
+
+def test_only_the_exact_country_in_a_unique_locations_field_is_clean(page):
+    page.set_content('<section><div>Locations</div><div>Inclusion: Chile</div></section>')
+    assert md._only_wanted_in_summary(page, 'Chile') is True
+    assert md._only_wanted_in_summary(page, 'Chi') is False
+    page.set_content('<section><div>Locations</div><div>Inclusion: Chile</div></section>' * 2)
+    assert md._only_wanted_in_summary(page, 'Chile') is False
+
+
+def test_opening_locations_does_not_click_adjacent_language_control(page):
+    page.set_content('<section><div><div>Locations</div><div id="location-value" '
+                     'onclick="window.clicked=\'locations\'">Inclusion: Chile</div></div>'
+                     '<div><div>Languages</div><button aria-label="Edit" '
+                     'onclick="window.clicked=\'languages\'">Edit</button></div></section>')
+    assert md._click_locations_edit(page) is True
+    assert page.evaluate('window.clicked') == 'locations'
+
+
+def test_collapsing_locations_does_not_touch_another_expanded_field(page):
+    page.set_content('<section><div><div>Locations</div><div>Inclusion: Chile</div></div>'
+                     '<div><div>Languages</div><button aria-expanded="true" '
+                     'onclick="window.clicked=true">Edit</button></div></section>')
+    assert md._collapse_locations_card(page) is False
+    assert page.evaluate('window.clicked === undefined')
+
+
+def test_own_locations_toggle_can_be_collapsed(page):
+    page.set_content('<section><div>Locations</div><div>Inclusion: Chile</div>'
+                     '<button aria-label="Collapse locations" aria-expanded="true" '
+                     'onclick="this.setAttribute(\'aria-expanded\', \'false\')">Collapse</button></section>')
+    assert md._collapse_locations_card(page) is True
+    assert page.locator('button').get_attribute('aria-expanded') == 'false'

@@ -24,14 +24,28 @@ if (-not (Test-Path $Executable -PathType Leaf)) {
 }
 
 $SavedConfigDirectory = $env:ACL_CONFIG_DIR
+$SavedReleaseRepository = $env:ACL_RELEASES_REPO
+$SavedUpdateToken = $env:ACL_UPDATE_TOKEN
+$Process = $null
+try {
+# Keep smoke checks offline, including release builds with an embedded channel.
+# Whitespace overrides the embedded values and normalizes to an empty channel.
+$env:ACL_RELEASES_REPO = " "
+$env:ACL_UPDATE_TOKEN = " "
 $env:ACL_CONFIG_DIR = Join-Path $PSScriptRoot ".artifacts/bundle-test-config"
 $env:ACL_NO_TELEMETRY = "1"
 New-Item -ItemType Directory -Force -Path $env:ACL_CONFIG_DIR | Out-Null
 $TargetFixture = '{"Local synthetic":{"name":"Local synthetic","interests":"Finance","narrow":"Owners"}}'
 Set-Content -Path (Join-Path $env:ACL_CONFIG_DIR "targeting_registry.json") -Value $TargetFixture -Encoding utf8
 Write-Host "Checking embedded version metadata..."
-& $Executable --acl-version
+$VersionOutput = (& $Executable --acl-version) -join "`n"
 Assert-LastExitCode "Version check"
+$Manifest = Get-Content (Join-Path $BundleDirectory "_internal/acl-build-manifest.json") -Raw | ConvertFrom-Json
+if ($VersionOutput -notmatch [regex]::Escape("runtime source: $($Manifest.runtime_source_sha)") -or
+    $VersionOutput -notmatch [regex]::Escape("installer source: $($Manifest.installer_source_sha)")) {
+    throw "Packaged source identity differs from its embedded manifest."
+}
+Write-Host $VersionOutput
 
 Write-Host "Checking packaged imports..."
 & $Executable --smoke-check
@@ -58,8 +72,6 @@ Assert-LastExitCode "Packaged diagnostic export check"
 New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
 Remove-Item $StdoutLog, $StderrLog -Force -ErrorAction SilentlyContinue
 
-$Process = $null
-try {
     Write-Host "Starting packaged dashboard on port $Port..."
     $Process = Start-Process `
         -FilePath $Executable `
@@ -90,8 +102,9 @@ try {
         throw "ACL health endpoint did not become ready within 60 seconds."
     }
     $Identity = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/acl/update/check" -TimeoutSec 10
-    $Manifest = Get-Content (Join-Path $BundleDirectory "_internal/acl-build-manifest.json") -Raw | ConvertFrom-Json
-    if ($Identity.current.sha -ne $Manifest.runtime_source_sha -or $Identity.available -or $Identity.supervised) {
+    if ($Response.version -ne $Manifest.version -or $Identity.current.version -ne $Manifest.version -or
+        $Identity.ok -ne $true -or $Identity.channel -ne "release" -or
+        $Identity.available -ne $false -or $Identity.supervised -ne $true -or $null -ne $Identity.candidate) {
         throw "Packaged dashboard identity/update policy is wrong."
     }
     $Targets = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/targeting-profiles" -TimeoutSec 20
@@ -110,6 +123,8 @@ catch {
 }
 finally {
     $env:ACL_CONFIG_DIR = $SavedConfigDirectory
+    $env:ACL_RELEASES_REPO = $SavedReleaseRepository
+    $env:ACL_UPDATE_TOKEN = $SavedUpdateToken
     if ($Process -and -not $Process.HasExited) {
         Stop-Process -Id $Process.Id -Force
         $Process.WaitForExit()

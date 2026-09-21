@@ -90,8 +90,8 @@ jobs:
 
       - name: Test setup with runtime dependencies
         run: |
-          python packaging/windows/tests/test_machine_config.py
-          python packaging/windows/tests/test_setup_wizard.py
+          python -m unittest discover -s packaging/windows/tests -p "test_machine_config.py" -v
+          python -m unittest discover -s packaging/windows/tests -p "test_setup_wizard.py" -v
 
       - name: Build onedir bundle
         shell: pwsh
