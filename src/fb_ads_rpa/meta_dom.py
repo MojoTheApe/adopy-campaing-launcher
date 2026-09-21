@@ -2537,6 +2537,24 @@ def _dismiss_name_suggestions(page: Page) -> bool:
     return ok
 
 
+def _lead_terms_not_accepted(page: Page) -> bool:
+    """Страница Facebook не приняла условия Lead Generation.
+
+    21.09 (CO_bnc, страница The Financial Observer India): Meta пишет «Terms of
+    Service Not Accepted — You can't run lead ads until your Facebook Page
+    accepts Facebook's Lead Generation Terms of Service». Редактор креатива при
+    этом не отрисовывается, и полей текста на странице нет вовсе. Починить это
+    роботом нельзя: условия принимает человек в Meta. Пишем отдельной меткой,
+    чтобы не искать причину заново по снимкам.
+    """
+    try:
+        return page.get_by_text(
+            re.compile(r"Terms of Service Not Accepted|Lead Generation Terms of Service", re.I)
+        ).first.is_visible(timeout=800)
+    except Exception:
+        return False
+
+
 def _review_errors_visible(page: Page) -> bool:
     """Meta показывает ошибку проверки на уровне объявления.
 
@@ -3372,6 +3390,10 @@ def run_recorded_campaign_flow(
                     # «None» стоял «Instant form» — Meta требует выбрать форму и
                     # принять условия Lead Ads, показывает ошибку и не рисует
                     # редактор креатива. Чиним ровно это.
+                    if _lead_terms_not_accepted(page):
+                        # Чинить нечего: условия принимает человек в Meta.
+                        _telemetry.record("lead_terms_not_accepted", False,
+                                          note="page_must_accept_lead_terms")
                     _telemetry.record("ad_copy_blocked", False, note="review_error")
                     try:
                         fixed = _select_browser_addon_none(page)
