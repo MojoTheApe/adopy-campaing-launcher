@@ -161,7 +161,7 @@
       "source_sha": "5a4b077e830c22f8b294522df30190f8cdb21704",
       "main_tree": "21ef1a66e804d006c0fc43bcc31892909f5f5ef1",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-09-21T13:34:43+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -182,6 +182,53 @@
         "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/254 \u2014 Actual stage verification report for5a4b077, preserved in PR body; runs35606435981/35606436129."
       },
       "verified_at": "2026-09-21T13:47:56+00:00"
+    },
+    "tasks": {
+      "248": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 254,
+            "merge_sha": "a0a48b96eb43f7fdcd919396f8eed155092fd2b9",
+            "tree_sha": "ec74bece10c91ba4a6ef9c737522b2f794655003"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-09-21T13:52:27+00:00"
+      }
+    },
+    "promotions": {
+      "254": {
+        "pr": 253,
+        "issues": [
+          248
+        ],
+        "tree_sha": "ec74bece10c91ba4a6ef9c737522b2f794655003",
+        "source_sha": "5a4b077e830c22f8b294522df30190f8cdb21704",
+        "main_tree": "21ef1a66e804d006c0fc43bcc31892909f5f5ef1",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-09-21T13:34:43+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "5a4b077e830c22f8b294522df30190f8cdb21704",
+          "tree_sha": "ec74bece10c91ba4a6ef9c737522b2f794655003",
+          "checks": [
+            "Full Windows Python3.11 and3.13 suites passed in exact-stage CI35606435981; descriptor passed.",
+            "Exact-stage installer35606436129 passed build/install/launch/repair/uninstall.",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+            "Recovered application restarts and synthetic data remains byte-identical",
+            "Downloaded report source/tree and both installer hashes verified; isolated runner, synthetic data, no production credentials or employee installation."
+          ],
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/254 \u2014 Actual stage verification report for5a4b077, preserved in PR body; runs35606435981/35606436129."
+        },
+        "verified_at": "2026-09-21T13:47:56+00:00"
+      }
     }
   }
 }
