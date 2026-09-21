@@ -118,6 +118,10 @@
       "title": "Read spend restarts a manually opened profile the way Publish does",
       "state": "created",
       "issue": 234
+    },
+    "a575e9b8e66afcbea941e638da72c0a1dc98e38858df14239a011cedaac6acac": {
+      "title": "Adopt Master Repo workflow with staging and packaged delivery",
+      "state": "creating"
     }
   }
 }
