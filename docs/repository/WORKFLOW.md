@@ -4,9 +4,11 @@
 
 The owner selected an installed Windows application with automatic updates, not
 manual Git delivery. Target profile: `package`, with permanent `stage` and `main`.
-Until [ADOPTION.md](ADOPTION.md) is completed, live operations use the original
-`master` checkout and pinned client. Source preparation does not switch a board,
-rename a branch, publish an installer or override a pending requirement.
+The source and Tracker cutover is recorded in [ADOPTION.md](ADOPTION.md).
+Use the pinned shared client and the stage/main route below. The one-time
+activation keeps ordinary admissions paused until its verified promotion and
+normal Tracker `merged` handoff. Retired master clients are historical only;
+package publication and employee updates retain their separate release rules.
 
 ## Tasks, branches and review
 
@@ -31,7 +33,7 @@ who edits code becomes an implementer; a different agent must give final approva
 Changed code, base, task scope or policy invalidates earlier approval. Record the
 actual report with the pinned Tracker; do not fabricate reviewer identities.
 
-After activation, run `check-pr N` and `check-merge N` immediately before merging.
+Run `check-pr N` and `check-merge N` immediately before merging.
 The latter checks current review, CI and stage evidence. These agent commands are
 not GitHub branch protection. Verify actual GitHub controls; the private repository
 currently reports a plan restriction for branch protection/rulesets. Never present

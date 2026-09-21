@@ -2,6 +2,7 @@
 import base64
 import copy
 import json
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -22,6 +23,10 @@ def prepared(tmp_path):
     (tmp_path / 'tracker').mkdir()
     for name in ['.workflow/adoption.json', '.workflow/legacy/tracker-config.json', 'tracker/config.json']:
         (tmp_path / name).write_text((ROOT / name).read_text())
+    path = tmp_path / '.workflow/adoption.json'
+    state = json.loads(path.read_text())
+    state.update(state='prepared', evidence={})
+    path.write_text(json.dumps(state))
     return tmp_path
 
 
@@ -41,8 +46,12 @@ def test_active_flag_without_cutover_evidence_is_not_enough(prepared):
 
 
 @pytest.mark.parametrize('client', ['scripts/task_tracker.py', '.workflow/tools/task_tracker.py'])
-def test_both_client_entrypoints_stop_before_loading_engine(client):
-    result = subprocess.run([sys.executable, str(ROOT / client), 'set', 'ACL-1248', '--status', 'merged'],
+def test_both_client_entrypoints_stop_before_loading_engine(client, prepared):
+    for name in ('scripts/task_tracker.py', 'scripts/acl_adoption.py', '.workflow/tools/task_tracker.py'):
+        target = prepared / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / name, target)
+    result = subprocess.run([sys.executable, str(prepared / client), 'set', 'ACL-1248', '--status', 'merged'],
                             cwd=ROOT, capture_output=True, text=True)
     assert result.returncode != 0
     assert 'not active' in result.stderr
@@ -141,3 +150,22 @@ def test_ci_admission_runs_fail_closed(workflow, success_fields):
     for env, allowed in cases:
         result = subprocess.run(['bash', '-e', '-c', script], env=dict(os.environ, **env), capture_output=True)
         assert (result.returncode == 0) == allowed, env
+
+
+def test_active_audit_reads_main_not_frozen_compatibility_master(prepared):
+    path = prepared / '.workflow/adoption.json'
+    state = json.loads(path.read_text())
+    state.update(state='active', evidence={k: 'reviewed report' for k in acl_adoption.ACTIVATION_EVIDENCE})
+    path.write_text(json.dumps(state))
+    def request(path):
+        if '/pulls/' in path: return {'state': 'closed'}
+        if '/branches/' in path:
+            assert path.endswith('/branches/main')
+            return {'commit': {'sha': 'b' * 40}}
+        assert '/actions/runs?' in path
+        return {'workflow_runs': [
+            {'id': i, 'path': f'.github/workflows/{name}.yml', 'head_branch': 'main',
+             'event': 'push', 'head_sha': 'b' * 40, 'status': 'completed', 'conclusion': 'success'}
+            for i, name in enumerate(('ci', 'windows-installer'))]}
+    assert acl_adoption.remote_blockers(request, prepared) == []
+    acl_adoption.guard_tracker(['work', 'ACL-1248'], prepared)

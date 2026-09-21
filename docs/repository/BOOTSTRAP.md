@@ -1,7 +1,8 @@
 # One-time ACL-1248 bootstrap
 
-This is the preparation plan for the first adoption, not evidence that
-it ran and not independent authority to deploy. Ordinary work stays frozen during
+This retains the reviewed procedure for the first adoption, not independent
+authority to deploy. Actual completed steps are recorded in ADOPTION.md and ACL-1248;
+do not repeat them from this runbook. Ordinary work stays frozen during
 the short coordinated cutover. Existing manual Multilogin pilot deferrals remain
 recorded in ACL-1215; they are not a successful stage or package-update report.
 

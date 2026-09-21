@@ -33,18 +33,23 @@ part of the ACL runtime; preserve the tested distribution boundary.
 ## Delivery state at adoption
 
 PR #245 (installer) and #246 (updater) are merged at the recorded source baseline.
-The source install path still exists alongside the packaged path. There is no
-published GitHub Release or verified real Windows upgrade/restart/rollback at this
-checkpoint. Hosted Windows tests and the real build/install/repair/uninstall
-harness now pass; the isolated update/restart/recovery acceptance is still pending.
-These automated results do not claim a live Multilogin pilot or employee update. Company Google sign-in remains ACL-1242 and part of ACL-1239's scope;
+The source install path still exists alongside the packaged path. No stable GitHub
+Release or employee rollout is claimed by adoption. Hosted Windows tests and real
+build/install/repair/uninstall now pass, as does actual isolated package update,
+restart and compatible recovery using two test versions built from the same source.
+Initial stage `09eb8af` passed CI 35603056418 and installer 35603056536; its report
+verifies the exact source/tree, actual installed executable, all shortcuts and
+unchanged synthetic data. Changed activation content requires its own stage report.
+These results do not verify the published release/download channel or the deferred
+live Multilogin pilot. Company Google sign-in remains ACL-1242 and part of ACL-1239's scope;
 shared-library provisioning remains ACL-1241. Do not mark either parent complete
 because its code exists. Media reuse remains governed by its explicit feature flags
 and outstanding acceptance, not by adoption.
 
 The owner selected a test version on stage and stable installed releases from main.
-Those branches/configuration are prepared by ACL-1248 and not activated at this
-checkpoint. This change organizes engineering; it does not change campaign behavior,
+Those branches and the matching shared Tracker registry now exist; ACL-1248
+activates ordinary use through its separately reviewed stage/main promotion and
+normal Tracker handoff. See the current repository adoption record. This change organizes engineering; it does not change campaign behavior,
 credentials, library setup or employee installations.
 
 ## Maintaining this document

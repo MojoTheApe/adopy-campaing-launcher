@@ -1,6 +1,8 @@
 # ACL delivery contract
 
-Prepared candidate only: read [ADOPTION.md](ADOPTION.md) before any live operation.
+Read [ADOPTION.md](ADOPTION.md) for actual cutover evidence and the one-time
+activation gate before any live operation. Main/stage and the shared board exist;
+the descriptor remains draft because the pinned standard has no published release.
 
 `delivery.json` is the project-specific delivery description. `tracker/config.json`
 is the matching Tracker configuration. The standard and engine use exact commit
