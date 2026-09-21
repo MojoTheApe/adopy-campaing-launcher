@@ -26,9 +26,13 @@ retained legacy Tracker package is deleted just to fit the template.
   Preserve any additional changes still in other working copies. Do not merge #222
   wholesale over newer reviewed corrections. Old green CI on a conflicting PR is
   not verification against current master.
-- Restore hosted Actions: current runs end `startup_failure` with zero jobs. The
-  cause is not established. Installer #245 and updater #246 were merged with an
-  owner-approved exception limited to those exact candidates. It is not reused here.
+- Pass hosted Actions on the final candidate. The intake runs ended `startup_failure`
+  before jobs started; on 2026-09-21, run 35587298320 executed real Windows jobs.
+  Each Python version passed 2344 tests but failed the bootstrap fixture, which still
+  created origin/master while the candidate installer reads origin/main. This fixture
+  is corrected; the new exact-candidate Windows and installer results remain required.
+  Installer #245 and updater #246 were merged with an owner-approved exception limited
+  to those exact candidates. It is not reused here.
 - Complete the historical reconciliation below, registry companion review and real
   authenticated board verification. Do not create a second ACL registration.
 - Establish an isolated Windows stage installation, its data/configuration boundaries,

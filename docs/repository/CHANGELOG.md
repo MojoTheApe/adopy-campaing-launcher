@@ -12,3 +12,11 @@ Why: the owner wants one shared engineering process while retaining the Windows
 installer and automatic updates. Existing open PRs, unavailable hosted checks and
 unverified package/stage operation are explicit blockers to activation, not discarded
 requirements. See ADOPTION.md for current evidence and the registry companion.
+
+## Hosted verification resumed — 2026-09-21 / ACL-1248
+
+Hosted Actions now executes jobs. Its first real Windows run exposed an old
+origin/master reference in the isolated bootstrap test repository. Align that
+fixture with the candidate's main release channel so Windows exercises the actual
+annotated-tag and ancestry gates. Keep the production compatibility bridge and
+remaining activation criteria unchanged; local macOS skips did not prove this test.
