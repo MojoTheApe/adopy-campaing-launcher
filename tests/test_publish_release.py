@@ -7,14 +7,14 @@ from scripts import acl_publish_release as pub
 
 @pytest.fixture
 def promotion(monkeypatch):
-    state = {"type": "tag", "head": "a" * 40, "master": "a" * 40,
+    state = {"type": "tag", "head": "a" * 40, "main": "a" * 40,
              "note": "success https://github.com/test/source/actions/runs/42",
              "run": {"head_sha": "a" * 40, "status": "completed", "conclusion": "success",
-                     "path": ".github/workflows/ci.yml", "head_branch": "master", "event": "push"}}
+                     "path": ".github/workflows/ci.yml", "head_branch": "main", "event": "push"}}
     def git(*args):
         if args[:2] == ("cat-file", "-t"): return state["type"]
         if args[:2] == ("cat-file", "-p"): return state["note"]
-        if args == ("rev-parse", "origin/master"): return state["master"]
+        if args == ("rev-parse", "origin/main"): return state["main"]
         if args == ("rev-parse", "HEAD"): return state["head"]
         return "a" * 40
     monkeypatch.setattr(pub, "_git", git)
@@ -22,11 +22,18 @@ def promotion(monkeypatch):
     return state
 
 
-def test_verified_master_promotion(promotion):
+def test_verified_main_promotion(promotion):
     assert pub.verify_promotion("acl-release-2026-09-19", "test/source") == "a" * 40
 
 
-@pytest.mark.parametrize("key,value", [("type", "commit"), ("master", "b" * 40),
+@pytest.mark.parametrize('branch', ['master', 'stage'])
+def test_other_branch_success_cannot_publish_main_release(promotion, branch):
+    promotion['run']['head_branch'] = branch
+    with pytest.raises(ValueError, match='full main run'):
+        pub.verify_promotion('acl-release-2026-09-19', 'test/source')
+
+
+@pytest.mark.parametrize("key,value", [("type", "commit"), ("main", "b" * 40),
     ("head", "b" * 40), ("note", "success https://github.com/other/repo/actions/runs/42")])
 def test_invalid_promotion_is_refused(promotion, key, value):
     promotion[key] = value

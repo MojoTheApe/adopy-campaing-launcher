@@ -1,0 +1,16 @@
+name: Delivery setup (draft adoption)
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  descriptor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: MojoTheApe/master-repo@546e6718d350410597876053a4fe0115fbbc1d6e
+        with:
+          allow-draft: 'true'

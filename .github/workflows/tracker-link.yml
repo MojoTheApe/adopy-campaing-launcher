@@ -14,9 +14,9 @@ jobs:
       issues: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Verify the tracked task
-        run: python3 scripts/tracker_pr_check.py --pr "$PR_NUMBER"
+        run: python3 scripts/acl_pr_check.py --pr "$PR_NUMBER"
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

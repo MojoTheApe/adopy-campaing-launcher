@@ -1,18 +1,4 @@
-# Ветки, ревью и релизы
+# Branches
 
-Общие правила перенесены в [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md).
-И Claude (`CLAUDE.md`), и Codex (`AGENTS.md`) используют этот документ.
-
-Он определяет production-ветку `master`, изоляцию рабочих копий, передачу
-изменений между автором и ревьюером, проверки и продвижение релиза.
-
-Технические механизмы:
-
-- [История и состав релизов](RELEASES.md).
-- [Распространение ACL](DISTRIBUTION.md).
-- `scripts/acl_update_gate.py` — проверка кандидата для обновления.
-- `scripts/acl_release_check.py` — сверка продвинутых релизов с манифестом.
-
-При интегрированном, но ещё не продвинутом `master` release check сообщает
-об отсутствии релиза на вершине. Это не равнозначно провалу тестов кода:
-продвижение и массовое обновление должны иметь явно указанный статус.
+Read [workflow](repository/WORKFLOW.md) and the [master-to-main cutover](repository/ADOPTION.md).
+The live branch remains master until that cutover is completed.

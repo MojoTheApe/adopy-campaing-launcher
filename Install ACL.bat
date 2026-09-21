@@ -117,9 +117,9 @@ function Invoke-AclGit([string]$Git, [string]$Target, [string[]]$GitArgs) {
 }
 
 function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
-    # Same gate as scripts/acl_update_gate.py: exact promoted master head,
+    # Same gate as scripts/acl_update_gate.py: exact promoted main head,
     # fast-forward, annotated release tag, success + Actions URL in annotation.
-    $sha = Invoke-AclGit $Git $Target @('rev-parse', 'origin/master^{commit}')
+    $sha = Invoke-AclGit $Git $Target @('rev-parse', 'origin/main^{commit}')
     if ($sha -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve the production release.' }
     if (!$FreshInstall) {
         $dirty = Invoke-AclGit $Git $Target @('status', '--porcelain', '--untracked-files=no')
@@ -155,7 +155,7 @@ function Install-Acl {
     try {
         if ($fresh) {
             # Start from production even though GitHub's default is a feature.
-            & $tools.Git clone --quiet --no-checkout --branch master $repo $checkout
+            & $tools.Git clone --quiet --no-checkout --branch main $repo $checkout
             if ($LASTEXITCODE -ne 0) { throw 'Download failed. Check GitHub access and connection.' }
         } else {
             $remote = Invoke-AclGit $tools.Git $checkout @('remote', 'get-url', 'origin')
@@ -164,7 +164,7 @@ function Install-Acl {
                 throw 'This folder has a different Git origin; refusing to update it.'
             }
         }
-        Invoke-AclGit $tools.Git $checkout @('fetch', '--quiet', 'origin', 'master:refs/remotes/origin/master', '--tags') | Out-Null
+        Invoke-AclGit $tools.Git $checkout @('fetch', '--quiet', 'origin', 'main:refs/remotes/origin/main', '--tags') | Out-Null
         $release = Get-AclRelease $tools.Git $checkout $fresh
         Assert-AclStopped
         Write-Host "Installing release $($release.Tag) ($($release.Sha))"

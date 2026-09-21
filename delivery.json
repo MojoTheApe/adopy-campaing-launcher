@@ -1,0 +1,74 @@
+{
+  "schema_version": 2,
+  "project": {
+    "name": "Adopy Campaign Launcher",
+    "repository": "https://github.com/MojoTheApe/adopy-campaing-launcher"
+  },
+  "standard": {
+    "repository": "https://github.com/MojoTheApe/master-repo",
+    "revision": "546e6718d350410597876053a4fe0115fbbc1d6e",
+    "version": "1.0.0"
+  },
+  "profile": "package",
+  "adoption": "draft",
+  "workflow": {
+    "staging": true,
+    "main_branch": "main",
+    "stage_branch": "stage",
+    "required_checks": [
+      "descriptor",
+      "tracker-link",
+      "ACL verification",
+      "Installer verification"
+    ]
+  },
+  "tracker": {
+    "repository": "MojoTheApe/task-tracker",
+    "revision": "ea969826398a808925bbd907ca8719445177ab59",
+    "workspace_id": "acl",
+    "registration": "pending",
+    "verification": "Existing acl registry and board retain their identity; main/stage cutover and fresh authenticated board verification are pending. See docs/repository/ADOPTION.md."
+  },
+  "checks": [
+    "python scripts/acl_scan_secrets.py",
+    "python scripts/acl_smoke.py",
+    "python -m pytest tests/ -q",
+    "python -m unittest discover -s packaging/windows/tests -p test_*.py -v",
+    "Windows CI on Python 3.11 and 3.13 plus packaged install/repair/uninstall; docs/runtime/STAGING.md",
+    "Pinned Master Repo scripts/standard.py validate --root . --allow-draft; scripts/acl_adoption.py audit"
+  ],
+  "environments": {
+    "stage": {
+      "target": "ACL isolated Windows stage installation",
+      "verify": "docs/runtime/STAGING.md; verify the exact stage tree in isolated Windows CI and the agreed pilot before recording Stage verification."
+    },
+    "production": {
+      "target": "ACL stable Windows installer and update channel",
+      "verify": "docs/runtime/DELIVERY.md; published immutable release plus verified Windows installation/update and recovery, before record-delivery."
+    }
+  },
+  "delivery": {
+    "procedure": "docs/runtime/DELIVERY.md; existing annotated acl-release tag, validated release manifest and Windows installer/updater. No automatic production or employee rollout during adoption.",
+    "authorization": "Authorized source work includes review and merge after gates. Preserve separately scoped release and live-pilot authorization; previous CI exceptions cover only their recorded candidates.",
+    "rollback": "Existing Windows updater restores the previous installed version and shortcuts on verified failure. Preserve machine configuration and newer data; docs/runtime/DELIVERY.md.",
+    "backup": "Preserve %LOCALAPPDATA%/ACL and user workbooks/creatives; isolated stage uses its own directories. Retain compatible recovery material before authorized runtime changes."
+  },
+  "completion": "verified-stable-package",
+  "exceptions": [
+    {
+      "scope": "Unreleased standard and prepared adoption",
+      "reason": "The selected reviewed source VERSION 1.0.0 has no published release. Draft validation is structural only. Master remains active until the audited cutover; candidate controls are not operational proof.",
+      "reference": "docs/repository/ADOPTION.md"
+    },
+    {
+      "scope": "ACL public task identities",
+      "reason": "Preserve 71 historical aliases and the +1000 Issue-number offset; never regenerate existing IDs from the generic template.",
+      "reference": "tracker/config.json"
+    },
+    {
+      "scope": "Legacy master update channel",
+      "reason": "Existing source installations still fetch master. Retain it only as the guarded compatibility channel described in the cutover runbook; main is the development integration branch after activation.",
+      "reference": "docs/repository/ADOPTION.md"
+    }
+  ]
+}

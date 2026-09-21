@@ -1,4 +1,4 @@
-"""Publish only a promoted, CI-verified master commit; never replace a release."""
+"""Publish only a promoted, CI-verified main commit; never replace a release."""
 from __future__ import annotations
 
 import argparse
@@ -23,8 +23,8 @@ def verify_promotion(tag: str, source_repo: str) -> str:
     if _git("cat-file", "-t", ref) != "tag":
         raise ValueError("A release requires an annotated tag")
     sha = _git("rev-parse", f"{ref}^{{commit}}")
-    if sha != _git("rev-parse", "origin/master") or sha != _git("rev-parse", "HEAD"):
-        raise ValueError("The tag, checkout and current origin/master must name the same commit")
+    if sha != _git("rev-parse", "origin/main") or sha != _git("rev-parse", "HEAD"):
+        raise ValueError("The tag, checkout and current origin/main must name the same commit")
     annotation = _git("cat-file", "-p", ref)
     if not re.search(r"\bsuccess\b", annotation, re.I):
         raise ValueError("Tag annotation must record successful CI")
@@ -34,8 +34,8 @@ def verify_promotion(tag: str, source_repo: str) -> str:
     run = json.loads(_gh("api", f"repos/{source_repo}/actions/runs/{match[1]}"))
     if not (run.get("head_sha") == sha and run.get("status") == "completed"
             and run.get("conclusion") == "success" and run.get("path") == ".github/workflows/ci.yml"
-            and run.get("head_branch") == "master" and run.get("event") in {"push", "workflow_dispatch"}):
-        raise ValueError("Recorded CI must be a successful full master run on the exact release commit")
+            and run.get("head_branch") == "main" and run.get("event") in {"push", "workflow_dispatch"}):
+        raise ValueError("Recorded CI must be a successful full main run on the exact release commit")
     return sha
 
 

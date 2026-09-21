@@ -1,19 +1,18 @@
-# ACL: инструкции для агентов
+# ACL project instructions
 
-Перед изменениями прочитайте [общие правила совместной разработки](docs/AI_COLLABORATION.md)
-и [процесс ACL](docs/DEVELOPMENT_WORKFLOW.md). Эти документы одинаковы
-для Codex, Claude и других участников; отдельные копии правил не нужны.
+**ACL-1248 is prepared, not activated.** Read [adoption](docs/repository/ADOPTION.md)
+first. The live repository still uses `master` and its original pinned Tracker;
+the descriptor in this candidate describes the intended `stage` / `main` contract.
+Do not rename branches, migrate historical evidence or release a package merely
+because this branch contains the new files. Candidate Tracker writes are guarded.
 
-Production — `master` в `MojoTheApe/adopy-campaing-launcher`; явно указывайте
-базу PR. Работайте в отдельной рабочей папке своей задачи. Проверяйте актуальное
-владение файлами и сохраняйте чужие изменения и машинную конфигурацию.
+- [Repository workflow](docs/repository/WORKFLOW.md), [delivery](docs/repository/DELIVERY.md),
+  [Tracker](docs/repository/TRACKER.md) and [file ownership](docs/repository/LAYOUT.md).
+- [Current system](docs/system/PROJECT.md) and [engineering context](docs/system/AGENT_CONTEXT.md).
+- [Installation/release/recovery](docs/runtime/DELIVERY.md) and [isolated staging](docs/runtime/STAGING.md).
+- Machine-readable settings: `delivery.json`, `tracker/config.json`, `.workflow/adoption.json`.
 
-Технический контекст: [распространение](docs/DISTRIBUTION.md),
-[история релизов](docs/RELEASES.md). Конкретные указания пользователя и
-согласованные исключения имеют приоритет над общими правилами процесса.
-
-## Task tracker — mandatory
-
-Read [the tracker workflow](docs/TRACKER_AGENT_WORKFLOW.md), `tracker/config.json`, and the pinned guide (`python scripts/task_tracker.py guide`) before every task, including in resumed chats. Every development request, including “fix this now”, requires a real Issue before code. Use `python scripts/task_tracker.py work ID` or `work --title ... --body-file task.md --module ... --type ...` to find/create it and verify In Progress. Choose Module and Type yourself; default priority is Medium. Planning requests create classified tasks without starting them. Release is one explicit `--release` flag. Use the shared execution slot and preserve Archive. Before merge, include one `Tracker issues: ID` line and run `python scripts/task_tracker.py check-pr PR_NUMBER`. After all work is reviewed, merged and verified, perform the protected merged transition and verify the shared UI. Follow all existing project review, CI and operational rules; an earlier CI exception does not authorize another PR.
-
-Every new Issue uses an agent-written plain-English Description for people and Specifications for the full verified working context: behavior, scope, constraints, criteria, checks and current handoff. Read both sections and relevant linked context, even though the UI collapses Specifications. Write them from the request and project context; the owner need not dictate them. Use `--body-file` and `tracker/task-template.md`; new tasks require both sections. Maintain Specifications as decisions and progress change, preserve original requirements/history, and review a sample before bulk retrospective edits.
+Preserve employee data, existing installers and draft-only advertising controls.
+Implementation requires a real Issue and the project's execution slot. Use a
+separate non-implementing agent for final review. The full shared skill is installed
+once per agent environment from Master Repo; do not replace ACL's product skills.

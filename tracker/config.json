@@ -1,9 +1,9 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "project": {
     "name": "ACL",
     "repository": "MojoTheApe/adopy-campaing-launcher",
-    "base_branch": "master",
+    "base_branch": "main",
     "id_prefix": "ACL",
     "id_offset": 1000,
     "legacy_task_ids": {
@@ -87,6 +87,7 @@
     "todo",
     "in_progress",
     "review",
+    "stage",
     "merged"
   ],
   "priorities": [
@@ -154,5 +155,21 @@
       ]
     }
   ],
-  "release_mode": "single"
+  "release_mode": "single",
+  "delivery_policy": {
+    "schema_version": 1,
+    "staging": {
+      "enabled": true,
+      "branch": "stage",
+      "target": "ACL isolated Windows stage installation"
+    },
+    "completion": "verified-stable-package",
+    "delivery_target": "ACL stable Windows installer and update channel",
+    "required_checks": [
+      "descriptor",
+      "tracker-link",
+      "ACL verification",
+      "Installer verification"
+    ]
+  }
 }

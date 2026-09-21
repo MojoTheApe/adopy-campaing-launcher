@@ -39,7 +39,7 @@ def _install_fake_git(monkeypatch, *, head="a" * 40, candidate="b" * 40, dirty="
 def test_promoted_annotated_fast_forward_is_accepted(monkeypatch) -> None:
     _install_fake_git(monkeypatch)
 
-    ok, detail = gate.validate_candidate("origin/master")
+    ok, detail = gate.validate_candidate("origin/main")
 
     assert ok is True
     assert "acl-release-" in detail
@@ -51,13 +51,13 @@ def test_arbitrary_branch_is_rejected_before_git(monkeypatch) -> None:
     ok, detail = gate.validate_candidate("origin/feature/experiment")
 
     assert ok is False
-    assert "origin/master" in detail
+    assert "origin/main" in detail
 
 
 def test_lightweight_tag_is_not_a_release(monkeypatch) -> None:
     _install_fake_git(monkeypatch, tag_type="commit")
 
-    ok, detail = gate.validate_candidate("origin/master")
+    ok, detail = gate.validate_candidate("origin/main")
 
     assert ok is False
     assert "lightweight" in detail
@@ -71,7 +71,7 @@ def test_tag_without_successful_ci_url_is_rejected(monkeypatch) -> None:
         annotation=f"object {candidate}\ntype commit\ntag acl-release-bad\n\nLooks good\n",
     )
 
-    ok, detail = gate.validate_candidate("origin/master")
+    ok, detail = gate.validate_candidate("origin/main")
 
     assert ok is False
     assert "CI" in detail
@@ -80,7 +80,7 @@ def test_tag_without_successful_ci_url_is_rejected(monkeypatch) -> None:
 def test_non_fast_forward_is_rejected(monkeypatch) -> None:
     _install_fake_git(monkeypatch, ancestor_rc=1)
 
-    ok, detail = gate.validate_candidate("origin/master")
+    ok, detail = gate.validate_candidate("origin/main")
 
     assert ok is False
     assert "not a fast-forward" in detail
@@ -89,7 +89,7 @@ def test_non_fast_forward_is_rejected(monkeypatch) -> None:
 def test_enrollment_requires_exact_stable_commit(monkeypatch) -> None:
     _install_fake_git(monkeypatch)
 
-    ok, detail = gate.validate_candidate("origin/master", enrolling=True)
+    ok, detail = gate.validate_candidate("origin/main", enrolling=True)
 
     assert ok is False
-    assert "equal origin/master" in detail
+    assert "equal origin/main" in detail

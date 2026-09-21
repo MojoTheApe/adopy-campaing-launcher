@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - master
+      - main
+      - stage
   pull_request:
   workflow_dispatch:
 
@@ -129,3 +131,26 @@ jobs:
             packaging/windows/.artifacts/installer-test-logs/
           if-no-files-found: error
           retention-days: 14
+
+  admission:
+    name: Installer verification
+    if: ${{ always() }}
+    needs: [scope, phase-1-isolation, phase-2-packaging-spike]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every applicable packaging check
+        env:
+          SCOPE: ${{ needs.scope.result }}
+          WINDOWS: ${{ needs.scope.outputs.windows }}
+          INPUTS: ${{ needs.phase-1-isolation.result }}
+          INSTALLER: ${{ needs.phase-2-packaging-spike.result }}
+        run: |
+          test "$SCOPE" = success
+          if test "$WINDOWS" = false; then
+            test "$INPUTS" = skipped
+            test "$INSTALLER" = skipped
+          else
+            test "$WINDOWS" = true
+            test "$INPUTS" = success
+            test "$INSTALLER" = success
+          fi

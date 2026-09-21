@@ -239,16 +239,16 @@ for /f "delims=" %%h in ('git rev-parse HEAD 2^>nul') do set "HEAD_BEFORE=%%h"
 
 REM fetch, not pull: this downloads without touching the working tree, which is
 REM what makes "check before activating" possible at all.
-git fetch --quiet origin master --tags
+git fetch --quiet origin main --tags
 if errorlevel 1 (
     echo   could not reach GitHub - continuing with the installed version.
     exit /b 0
 )
 
-set "STABLE_REF=origin/master"
+set "STABLE_REF=origin/main"
 for /f "delims=" %%h in ('git rev-parse %STABLE_REF% 2^>nul') do set "HEAD_AFTER=%%h"
 if not defined HEAD_AFTER (
-    echo   promoted channel origin/master is unavailable - skipping update.
+    echo   promoted channel origin/main is unavailable - skipping update.
     exit /b 0
 )
 if "%HEAD_BEFORE%"=="%HEAD_AFTER%" (
@@ -256,7 +256,7 @@ if "%HEAD_BEFORE%"=="%HEAD_AFTER%" (
     exit /b 0
 )
 
-"%PY%" scripts\acl_update_gate.py --candidate origin/master
+"%PY%" scripts\acl_update_gate.py --candidate origin/main
 if errorlevel 1 (
     echo   candidate is not a promoted release - continuing with the installed version.
     exit /b 0

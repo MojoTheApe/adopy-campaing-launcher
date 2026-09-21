@@ -19,6 +19,8 @@ def main(argv=None):
     parser.add_argument("--allow-empty", action="store_true")
     args = parser.parse_args(argv)
     try:
+        if (Path(__file__).resolve().parents[1] / '.workflow/adoption.json').exists():
+            raise ValueError('Legacy board publishing is retired. Use the shared Task Tracker registration; read docs/repository/ADOPTION.md.')
         config = load_config(args.config)
         if args.repository: config["project"]["repository"] = args.repository
         command = json.loads(args.gh_command_json)
