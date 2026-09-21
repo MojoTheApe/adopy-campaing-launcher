@@ -83,8 +83,10 @@ After matching main/stage/config and Tracker publication exist, the procedure us
 the exact clean pinned shared engine for a narrowly scoped ACL-1248 evidence flow.
 Its normal review, current-check, stage and unchanged-content admission still apply.
 No active flag or historical receipt is used to authorize unverified work. The
-activation candidate then follows stage -> main; only after actual evidence is
-recorded do normal project-client operations resume. Keep the descriptor draft while
+activation candidate then follows stage -> main. Ordinary admissions resume only
+after all applicable acceptance is met and the normal `merged` operation records
+the promotion and frees the stage slot. A source merge alone is insufficient;
+unresolved acceptance keeps the coordinated operation paused. Keep the descriptor draft while
 the selected standard remains unpublished, and keep ACL-1248 unfinished until its
 remaining actual acceptance is met. Runtime authorization is separate from this plan.
 

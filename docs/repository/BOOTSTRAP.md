@@ -1,6 +1,6 @@
 # One-time ACL-1248 bootstrap
 
-This is the reviewed implementation plan for the first adoption, not evidence that
+This is the preparation plan for the first adoption, not evidence that
 it ran and not independent authority to deploy. Ordinary work stays frozen during
 the short coordinated cutover. Existing manual Multilogin pilot deferrals remain
 recorded in ACL-1215; they are not a successful stage or package-update report.
@@ -81,12 +81,30 @@ engine still validates actual task links, route, head/base/tree, checks and rece
    Failed/missing verification stops promotion; the installed main client stays guarded.
 5. Promote stage to main with the same task set and unchanged verified content, normal
    independent review/checks and check-merge. Verify the actual merge tree and parents,
-   then the fresh live board. Only now do ordinary active-client operations resume.
-   Do not delete stage, main or the working branch while corrections may be needed.
+   then the fresh live board. Keep ordinary admissions paused: a Git merge alone
+   does not release the Tracker's stage slot.
+6. Review every remaining ACL-1248 acceptance criterion against actual results.
+   Only after all selected task work is reviewed and complete, preview and apply
+   the canonical `merged ACL-1248 --pr PROMOTION --reviewed-complete --apply`
+   operation for the real promotion PR. Verify its recorded promotion, stage state
+   `promoted`, task integration status and released execution slot. This is the
+   required handoff before ordinary admissions resume; never edit stage state by
+   hand or tick an unfinished criterion to obtain it. Keep stage, main and the
+   working branch while corrections may be needed.
+
+If any ACL-1248 acceptance remains unresolved, stop with admissions still paused.
+Do not start the coordinated operation expecting to complete those criteria by
+running an unrelated next task through an occupied stage. An owner-agreed task
+split would need its own reviewed task/branch/PR linkage and completion route
+before cutover; this document does not grant such a split or a completion waiver.
 
 These commands record operations; they do not perform a deployment or spawn a review.
 Do not mark ACL-1248 complete merely because client activation works. Its package/
-end-to-end acceptance and any unresolved criterion remain explicit. A stable release,
+end-to-end acceptance and any unresolved criterion remain explicit. The normal
+`merged` operation records source integration and frees stage; the configured
+package policy still keeps delivery pending until genuine verified stable-package
+evidence exists. That distinction does not waive any Issue acceptance criterion.
+A stable release,
 secrets provisioning or employee installation still needs its own actual scope and
 verification. No old or new task receives a fabricated installation receipt.
 
