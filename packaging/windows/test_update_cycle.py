@@ -162,6 +162,7 @@ def main():
         receipt = updates / "last_update.json"
         receipt.unlink(missing_ok=True)
         (updates / "pending.json").write_text("{}", encoding="utf-8")
+        cleanup_safe = False
         helper = subprocess.Popen([str(previous), "--apply-update", str(setup),
                                    "--expect-version", expected_version, "--previous-exe", str(previous)], env=env)
         try:
@@ -194,14 +195,19 @@ def main():
                     raise RuntimeError("Update descendants still exist; automatic cleanup is unsafe")
                 cleanup_safe = True
         result = json.loads(receipt.read_text())
+        # In particular rollback_failed can mean a still-running installer;
+        # helper exit alone is not sufficient permission to run an uninstaller.
+        cleanup_safe = result.get("result") in {"updated", "rolled_back", "not_started"}
         if (updates / "pending.json").exists():
             raise RuntimeError("Update reservation was not cleared")
         preserved_data()
         return result
 
     try:
+        cleanup_safe = False
         run([installers[args.old_version], "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
              "/TASKS=desktopicon", f"/LOG={logs / 'install-old.log'}"], env=env)
+        cleanup_safe = True
         start(old_exe, args.old_version)
         assert_shortcuts(old_exe)
         preserved_data()
