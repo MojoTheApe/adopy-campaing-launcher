@@ -20,3 +20,16 @@ origin/master reference in the isolated bootstrap test repository. Align that
 fixture with the candidate's main release channel so Windows exercises the actual
 annotated-tag and ancestry gates. Keep the production compatibility bridge and
 remaining activation criteria unchanged; local macOS skips did not prove this test.
+
+## Preserve accepted history and verify current packaging — 2026-09-21 / ACL-1248
+
+The owner chose to retain 74 completed tasks during adoption. Pin reviewed TT-61
+and Master MR-9, record that exact audited scope, and prepare the matching registry
+configuration. Fresh projection preserves completion/dependency/release counts while
+marking history separately from verified delivery. The pristine template baseline
+is re-rendered from the new pin without inserting ACL's local history exemption.
+
+Hosted installer checks found two older test mismatches: direct-file imports lacked
+the repository root, and the bundle smoke test expected the updater contract from
+before ACL-1240. Correct those checks and retain source/version assertions with an
+offline process. No product updater, employee installation or release is changed.

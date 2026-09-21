@@ -2,8 +2,10 @@
 
 This patch updates the existing ACL registration from master to main and its
 fallback configuration to the preserved ACL IDs/modules plus Stage/package policy.
-It was prepared against ea969826398a808925bbd907ca8719445177ab59 (same tree as
-the reviewed Tracker main merge c8b5b5642bc5add250fcad3f728de6381424a41f).
+It was prepared against reviewed TT-61 / PR #62 at
+5f211d3095a392a16c2c01a65eb02ff8719a7243. It also carries the identical, owner-approved
+74-task historical-completion manifest from ACL's candidate config. No delivery
+receipts are invented; see docs/repository/HISTORICAL_COMPLETION.md.
 
 It is not applied to the live Tracker. Before activation, create/link its real
 Tracker task and reviewed PR, refresh the source and run registry/model tests.

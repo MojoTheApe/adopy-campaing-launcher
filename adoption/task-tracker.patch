@@ -31,7 +31,7 @@
      "merged"
    ],
    "priorities": [
-@@ -154,5 +155,21 @@
+@@ -154,5 +155,329 @@
        ]
      }
    ],
@@ -52,5 +52,313 @@
 +      "ACL verification",
 +      "Installer verification"
 +    ]
++  },
++  "historical_completion": {
++    "schema_version": 1,
++    "repository": "MojoTheApe/adopy-campaing-launcher",
++    "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
++    "audited_at": "2026-09-21T10:55:31.841147+00:00",
++    "approved_by": "Owner explicitly approved preserving the 74 audited completed tasks on 2026-09-21; recorded in ACL-1248 adoption PR.",
++    "report": "docs/repository/HISTORICAL_COMPLETION.md at the reviewed ACL-1248 adoption revision",
++    "source_revision": "6e871edd425afe1c74b955d7ba7b9793e06a7022",
++    "source_config_sha256": "0c19cf33cae0555059eb6af9ab2d0a344a65b4916572de934c9b685404b61d18",
++    "tasks": {
++      "12": {
++        "id": "ACL-102",
++        "issue_sha256": "b3b6f3f3dec4318a47c2e18724c392d83079fb0c8b1ea908eec4f95e6be80cbf"
++      },
++      "14": {
++        "id": "ACL-105",
++        "issue_sha256": "b25436f0c5e837cf07ac86fbe1e93d96f58c754989ad3ad96eba84ac1dc870bb"
++      },
++      "16": {
++        "id": "ACL-108",
++        "issue_sha256": "9eac58c7f8e9239c6fa05eb78f4f45bab5c9416591cbd889557e7e5eb29bc292"
++      },
++      "23": {
++        "id": "ACL-113",
++        "issue_sha256": "e5346a797e734de5890596f25fc79d1a28b4f0e2ea3d0259218c7ea83f4941e1"
++      },
++      "25": {
++        "id": "ACL-117",
++        "issue_sha256": "280bb110192887c7da20a8d68cd7df953003657d1af5f92584699f208ba6a196"
++      },
++      "40": {
++        "id": "ACL-348",
++        "issue_sha256": "055a334600677c51fb3d634d6aeb4360c15a43a08361b130ea3b5544669e0aeb"
++      },
++      "41": {
++        "id": "ACL-347",
++        "issue_sha256": "e03b4b93977998a2f7e9e1a6e9f285b2a4f008c274258a870cf2c12a40dda2b7"
++      },
++      "42": {
++        "id": "ACL-342",
++        "issue_sha256": "9bf533a0cae52fc6c9e11101aade15115868a46763adcc43ba5097df2601b8c3"
++      },
++      "43": {
++        "id": "ACL-343",
++        "issue_sha256": "d9006c34d7c53c37d9dec74a3e0edf0721b123159f5b546bf76f280649bdd0d6"
++      },
++      "44": {
++        "id": "ACL-344",
++        "issue_sha256": "2ddc145342eb5be7304f714b108b7b6cc8832e9e93ec3f7c3aa628fd799ae317"
++      },
++      "50": {
++        "id": "ACL-334",
++        "issue_sha256": "990d63fc22860d2e65d2801d31765b0dc2902f8f36390ff222362d2adf09244a"
++      },
++      "52": {
++        "id": "ACL-336",
++        "issue_sha256": "afdab462cd9b4ed14b394ad902ec23536dab51c148c264e1546fb3707f957c06"
++      },
++      "61": {
++        "id": "ACL-304",
++        "issue_sha256": "541876758f5b63f5b7b3398816d11a22af3878a94fe54a64aca1862027638388"
++      },
++      "63": {
++        "id": "ACL-312",
++        "issue_sha256": "6e7307820dfd60cd8ecbadffcdf5bd0db42db33ff2ae19634dac1979e8713c79"
++      },
++      "65": {
++        "id": "ACL-650",
++        "issue_sha256": "eeb70c2debe62556e978ebdb805fa62c2e4e24134d0e7f519c191ed289a6c4ff"
++      },
++      "66": {
++        "id": "ACL-653",
++        "issue_sha256": "95395803c131f1c7f02d79cdc5ef79c37ecbecb38a6fb397fa8740eed49e55d9"
++      },
++      "67": {
++        "id": "ACL-654",
++        "issue_sha256": "b48752816c8968beb802b1ecb20f608c26d96b2180e2e05f3336412ea9bb5b45"
++      },
++      "68": {
++        "id": "ACL-655",
++        "issue_sha256": "79dea5d5485bbf2835a3419221661ce0681d0577b60f81adc25dae71ecec4a79"
++      },
++      "74": {
++        "id": "ACL-145",
++        "issue_sha256": "32aef09b272091c01e2f60e6616fefbe5c0526d47bafd326b5f465c8e939e158"
++      },
++      "76": {
++        "id": "ACL-703",
++        "issue_sha256": "83a0d8c659871b69a8a07d156e0d3740bbf0eb3d62f4c72968f07dd5110dade2"
++      },
++      "86": {
++        "id": "ACL-704",
++        "issue_sha256": "545c8e51196f940103b146d4ef17047354ff88d4b1bd5b2107a6d17a30e178fe"
++      },
++      "93": {
++        "id": "ACL-353",
++        "issue_sha256": "a105b6c2c572b6a8a1789933b7ac7a11483d5c5c8b896a23ec6e0f9e9a430142"
++      },
++      "94": {
++        "id": "ACL-354",
++        "issue_sha256": "063801d21044f4c8ad86060d3f89e5d24c43079b40fe133d26aeaeac65905aaf"
++      },
++      "95": {
++        "id": "ACL-1095",
++        "issue_sha256": "15336cd368496ac26e1908638e50dc9c5d19078929c99efdcea03a0d7a3b00b5"
++      },
++      "98": {
++        "id": "ACL-705",
++        "issue_sha256": "0e28e70f081a9776d734f90e7639584bd415a8584e557829d5d01cd3c59b0ec3"
++      },
++      "99": {
++        "id": "ACL-1099",
++        "issue_sha256": "154e1f824a1f14a162c5dbfe673e6e45d0e6d45ec8b131800e17686ddad2dbf2"
++      },
++      "102": {
++        "id": "ACL-1102",
++        "issue_sha256": "e44b2b0794855d3a868863282cdf26d8058117373b2fc06985e567d7f28aa0a7"
++      },
++      "104": {
++        "id": "ACL-1104",
++        "issue_sha256": "6748064c475585a4a39c415347f5d5f1623bd2181684e54fd1a339fd30232b48"
++      },
++      "108": {
++        "id": "ACL-1108",
++        "issue_sha256": "7561b55c0dfa8f646047e2f42875b1ff008bd9efb30f7303c3df882549e85c2b"
++      },
++      "110": {
++        "id": "ACL-1110",
++        "issue_sha256": "a21f1ef960c8013e0f5a9f835c61b29868dacc95d4157d2b967082bd693cbdcb"
++      },
++      "113": {
++        "id": "ACL-1113",
++        "issue_sha256": "3122de886da22ae1815ec2ad34d2e1ed7401e439ec8c5940dec4c1e01531108e"
++      },
++      "115": {
++        "id": "ACL-1115",
++        "issue_sha256": "98269ba3c2a85cc0b4cf1bfffe736e3d7893f271307d2ce68a07316717cffa7c"
++      },
++      "117": {
++        "id": "ACL-1117",
++        "issue_sha256": "e34972cf2435ef161a2c3a619a9538d0b845f11f07fc4d095aed8c5e973f7706"
++      },
++      "119": {
++        "id": "ACL-1119",
++        "issue_sha256": "f76d24f2683c003e1eb8d694731687b3b3eb75b6de779a016a1fb60ea692d2c0"
++      },
++      "124": {
++        "id": "ACL-1124",
++        "issue_sha256": "ed488c9fa6c2d53cef1dd73dc1d3420564ff23d41250d3c2b065bc79399a0e2c"
++      },
++      "126": {
++        "id": "ACL-1126",
++        "issue_sha256": "a36993b9f100a722dc6ac0b19d96764408dc35b53d17f0b88da473bb64cd4826"
++      },
++      "128": {
++        "id": "ACL-1128",
++        "issue_sha256": "828c0b549132c33fb99b5443523aa59f401394b907a5de5499617d430a0f8ae1"
++      },
++      "130": {
++        "id": "ACL-1130",
++        "issue_sha256": "2230a6ac95abb240c1518fd50d28e7c04ec44c1be306c93d370931d146addfac"
++      },
++      "134": {
++        "id": "ACL-1134",
++        "issue_sha256": "295f183d71ad1568100212b0680d17d0fc3a84049381a184347b60aa840594a2"
++      },
++      "135": {
++        "id": "ACL-1135",
++        "issue_sha256": "51e4bf10c58afc689da583f793b957f136f81e832168f4b039df7f2d07773a47"
++      },
++      "140": {
++        "id": "ACL-1140",
++        "issue_sha256": "f31f5df5d5afcf50c2a30cac3517429434e68b1d281ce07e58e3ff8f36fad225"
++      },
++      "141": {
++        "id": "ACL-1141",
++        "issue_sha256": "b9dd42f3b6ce941f0ecfde9fdd53e2c6e09ab6a65aaf4dbfda99d2212e355fe7"
++      },
++      "146": {
++        "id": "ACL-1146",
++        "issue_sha256": "e8cdeba55573de62c2e9ffc6cc15bb27131d8dc699240b5106cd5c6c45597ce4"
++      },
++      "150": {
++        "id": "ACL-1150",
++        "issue_sha256": "ece8715a6378b1f7dbbc5c4c4c8d31209a0ef3fce296aaf7a70fc07dbfe27b75"
++      },
++      "155": {
++        "id": "ACL-1155",
++        "issue_sha256": "837c58d7426c04cd2b36b877a1edcf9196b1f5d54230e086fbfe1756fd5a1efa"
++      },
++      "156": {
++        "id": "ACL-1156",
++        "issue_sha256": "b6bd6752560343b5f753a17089944f18859a5f35462d67f83e3b1474b3c478d4"
++      },
++      "158": {
++        "id": "ACL-1158",
++        "issue_sha256": "f4bedebb169114c2124a4e9cf5265dad22e97e5f5e74c1ee5a4ff70fcad4f93a"
++      },
++      "160": {
++        "id": "ACL-1160",
++        "issue_sha256": "d795b71690a25818a21743a8eb71dd3646b82510559e791d8d88f9cfca289293"
++      },
++      "161": {
++        "id": "ACL-1161",
++        "issue_sha256": "4fb636045f5b07b25847b90bdae27840dd972ef0efa4b5996349ac6f8fe205ad"
++      },
++      "162": {
++        "id": "ACL-1162",
++        "issue_sha256": "730ffcd1c3527541548d6dca71c1d26abf48a2cc1327cb7d0e73fcb765bca37d"
++      },
++      "164": {
++        "id": "ACL-1164",
++        "issue_sha256": "d96ed1ba51f571644f0075bff18c56c87733963299131e6b9895720e3ab23f24"
++      },
++      "166": {
++        "id": "ACL-1166",
++        "issue_sha256": "4dda0da5d03bc417c9fdddc3cffd7cdbff59414c582a29dbb6cd00fdf1bfafdd"
++      },
++      "171": {
++        "id": "ACL-1171",
++        "issue_sha256": "0a4153c008687674896ed458e35c8a16e4e9eb5c70267fb6f7f57b4b7d41654a"
++      },
++      "173": {
++        "id": "ACL-1173",
++        "issue_sha256": "c0ecd6a5ebb8ba02ed855a8678eb834112ba058448967f00c6f479f6cceb1db6"
++      },
++      "189": {
++        "id": "ACL-1189",
++        "issue_sha256": "24e7543797e35b463c072319178ddd9ddedac242d67019801a0cc30d4d66da2b"
++      },
++      "192": {
++        "id": "ACL-1192",
++        "issue_sha256": "daec29da680a99f37242030317f5bc8d5e0a7156deb52d84a59b8f8d90d8d5dd"
++      },
++      "196": {
++        "id": "ACL-1196",
++        "issue_sha256": "385cf6e8d2f506e29f0cf2e18fda581c885bdfd1cc67d681dc0045c878f20b28"
++      },
++      "198": {
++        "id": "ACL-1198",
++        "issue_sha256": "3b0160d3e36d3e7e56bd9ad668e2519d8c2db86c5c33f5e1136bc42fc507e2f9"
++      },
++      "200": {
++        "id": "ACL-1200",
++        "issue_sha256": "28df639b79b4560137292175f99a74cc682adc095c060234dc1e92fad736103b"
++      },
++      "203": {
++        "id": "ACL-1203",
++        "issue_sha256": "c4d00164e3445cd5e774e906d11fd89aa9c51b2dd3804ec734cc78a421b3f2e8"
++      },
++      "205": {
++        "id": "ACL-1205",
++        "issue_sha256": "650cc0bea476c570d80bbe0a4f5656066ae33231e49b47646ffb6a210a33697a"
++      },
++      "207": {
++        "id": "ACL-1207",
++        "issue_sha256": "14bf2d00d784fd535344db6fb6c7c74c6c4eac974485945e52f235d0a51010e0"
++      },
++      "208": {
++        "id": "ACL-1208",
++        "issue_sha256": "d7d2de53d19e9a856141adf787f9e39dad88e163eb724af30a63766a500487b5"
++      },
++      "210": {
++        "id": "ACL-1210",
++        "issue_sha256": "87da5c6c0f34bacae1c9122271de4dcbb881641803444edc8b0c9778c269f6c6"
++      },
++      "214": {
++        "id": "ACL-1214",
++        "issue_sha256": "c0e460a037da3cbfc4032ecdbc3bc011649859471ecd556f01addf2173e82edb"
++      },
++      "216": {
++        "id": "ACL-1216",
++        "issue_sha256": "fad1b12d4c93282ba30261319f95325d99668daf683cead3f974327ab1e2b335"
++      },
++      "219": {
++        "id": "ACL-1219",
++        "issue_sha256": "050728ec956e6773c325c68746ca8c763d2f16073473dab5fdab1d6e69b059ee"
++      },
++      "220": {
++        "id": "ACL-1220",
++        "issue_sha256": "ca6bd105549a1f9a7b69c51474a205f828bd9a4719f12246b5ed3e15817f4452"
++      },
++      "221": {
++        "id": "ACL-1221",
++        "issue_sha256": "a44250b9ee8773996b766ef2062f646add19cb4a182a4152350cb77696105f11"
++      },
++      "223": {
++        "id": "ACL-1223",
++        "issue_sha256": "a98643a946b160a32c0f25fcb065d56f8c59627fc44830e7ecfd6b7d5a27ce71"
++      },
++      "225": {
++        "id": "ACL-1225",
++        "issue_sha256": "7e2807174e3f6348a594a7ae77a943c9f589b52682f379921ec171172abf7369"
++      },
++      "226": {
++        "id": "ACL-1226",
++        "issue_sha256": "0dadcd521b0637f0917183d6e0b63e215b2f42b22ffc6ffd7e7dd421b6626042"
++      },
++      "234": {
++        "id": "ACL-1234",
++        "issue_sha256": "1c16376c6207f06ca9927ab366e7ee3889f10fc66eb6ed1a635a90d8e754fde0"
++      },
++      "240": {
++        "id": "ACL-1240",
++        "issue_sha256": "430ad30bb76e6d1b548da791c7af3d4a25914afa8c6d3c515d68169ac382399c"
++      }
++    }
 +  }
  }

@@ -5,9 +5,9 @@ Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/248
 ## Current facts and target
 
 Prepared from `master` at `6e871edd425afe1c74b955d7ba7b9793e06a7022`.
-Master Repo source `546e6718d350410597876053a4fe0115fbbc1d6e` is proposed 1.0.0,
+Master Repo source `e1473c428872757519355af1a7753cf3a0ce0f12` is proposed 1.0.0,
 not a published release. Its compatible Tracker is
-`ea969826398a808925bbd907ca8719445177ab59`.
+`5f211d3095a392a16c2c01a65eb02ff8719a7243` (TT-61 / PR #62).
 The active old engine is `adb2ce04fff017d1059031f4298effc020d0e2e5`.
 No `main` or `stage` exists at intake. Registry identity stays `acl`.
 Target: package delivery, stage enabled, existing installer/updater preserved.
@@ -30,7 +30,11 @@ retained legacy Tracker package is deleted just to fit the template.
   before jobs started; on 2026-09-21, run 35587298320 executed real Windows jobs.
   Each Python version passed 2344 tests but failed the bootstrap fixture, which still
   created origin/master while the candidate installer reads origin/main. This fixture
-  is corrected; the new exact-candidate Windows and installer results remain required.
+  is corrected. Subsequent installer runs exposed direct-file test imports and an
+  obsolete smoke assertion from before the release updater was integrated. Tests
+  now run with repository imports and verify embedded source/version plus the actual
+  release-channel contract in an isolated offline process. The new exact-candidate
+  Windows and installer results remain required.
   Installer #245 and updater #246 were merged with an owner-approved exception limited
   to those exact candidates. It is not reused here.
 - Complete the historical reconciliation below, registry companion review and real
@@ -57,12 +61,17 @@ For each old completed item link the original merge proof and distinguish accept
 code completion from actual package delivery. ACL-1240 is accepted as code merged;
 no verified release is implied. ACL-1239 retains its company-sign-in requirement in
 ACL-1242 and must remain unfinished. ACL-1241's shared-library setup remains separate.
-Agree and review the disposition of historical completion before enabling policy:
-record legitimate evidence for qualifying merged work, or explicitly retain delivery
-pending where no verified package exists. Never invent old stage tests, reviewer
-approval or non-code completion to keep a count green. Preserve the original accepted
-record even where the new package-readiness view is pending. This is a cutover blocker,
-not an implicit bulk relabel operation. No receipts are synthesized by this PR.
+The owner explicitly chose to preserve 74 historically completed tasks and apply the
+new rules to new work. [The reviewed audit](HISTORICAL_COMPLETION.md) lists that exact
+set. The candidate config contains the compatible Tracker's bounded manifest; the
+registry patch contains the identical block. Fresh projection preserves 74 of 157
+completed tasks and 7 of 10 release tasks, without a delivery receipt. The UI says
+Completed before adoption; old installations have not been verified. Changed scope
+or restarted work loses this exception. Unfinished tasks remain unfinished.
+
+Before cutover verify the exact reviewed list against fresh Issues; do not regenerate
+or extend it automatically. Finish compatible Tracker publication and compare the
+live board after switching. No Issue relabelling or synthetic receipts are needed.
 
 ## Coordinated cutover (after blockers are resolved)
 
@@ -114,8 +123,8 @@ do not reset other agents' work or claim a failed cutover succeeded.
 
 ## Ownership and impact
 
-Master Repo needs no contract change: package/stage and historical IDs are supported.
-Task Tracker needs the existing ACL registry/fallback update and completion evidence
-review, not an engine redesign. The companion patch is prepared under `adoption/`.
+Master Repo MR-9 selects the compatible audited-history extension from Task Tracker
+TT-61 / PR #62. Package/stage and historical IDs retain their existing semantics.
+The separate ACL registry/fallback cutover patch is prepared under `adoption/`.
 It is not read by the live server or applied automatically. Existing source/layout
 history is preserved in `history/PRE_ADOPTION_*`; current rules are authoritative here.
