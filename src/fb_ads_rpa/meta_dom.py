@@ -10008,12 +10008,17 @@ _AUDIENCE_FIELD_DOM = r"""
     return boxes;
   };
   const summaryField = (label, value) => {
+    let field = null;
     for (const box of fieldBoxes(label)) {
       const summaries = leaves(box).filter(e => value.test(norm(e.textContent)));
-      if (summaries.length > 1) return null;
-      if (summaries.length === 1) return {box, summary: summaries[0]};
+      if (summaries.length > 1) break;
+      if (summaries.length === 1) {
+        if (!field) field = {box, summary: summaries[0], boxes: []};
+        if (field.summary !== summaries[0]) break;
+        field.boxes.push(box);
+      }
     }
-    return null;
+    return field;
   };
   const point = e => {
     const r = e.getBoundingClientRect();
@@ -10056,15 +10061,18 @@ def _only_wanted_in_summary(page: Page, keep_text: str) -> bool:
 _AUDIENCE_EDIT_JS = "([label, value]) => {" + _AUDIENCE_FIELD_DOM + r"""
   const field = summaryField(new RegExp('^(' + label + ')$', 'i'), new RegExp(value, 'i'));
   if (!field) return null;
-  const buttons = [...field.box.querySelectorAll('button, [role=button]')].filter(b => {
-    if (!visible(b)) return false;
-    const name = norm(b.getAttribute('aria-label') || b.textContent);
-    // Empty text does not make an explicitly named Remove control a pencil.
-    return /^(edit|editar|изменить|pencil)(\b|$)/i.test(name);
-  });
-  if (buttons.length > 1) return null;
-  if (buttons.some(b => b.disabled || b.getAttribute('aria-disabled') === 'true')) return null;
-  return point(buttons[0] || field.summary);
+  for (const box of field.boxes) {
+    const buttons = [...box.querySelectorAll('button, [role=button]')].filter(b => {
+      if (!visible(b)) return false;
+      const name = norm(b.getAttribute('aria-label') || b.textContent);
+      // Empty text does not make an explicitly named Remove control a pencil.
+      return /^(edit|editar|изменить|pencil)(\b|$)/i.test(name);
+    });
+    if (buttons.length > 1) return null;
+    if (buttons.some(b => b.disabled || b.getAttribute('aria-disabled') === 'true')) return null;
+    if (buttons.length === 1) return point(buttons[0]);
+  }
+  return point(field.summary);
 }
 """
 
@@ -10089,10 +10097,15 @@ def _click_locations_edit(page: Page) -> bool:
 _LOCATIONS_COLLAPSE_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
   const field = summaryField(/^(Locations|Ubicaciones)$/i, /^(Inclusion|Inclusión|Incluir)\s*:/i);
   if (!field) return null;
-  const buttons = [...field.box.querySelectorAll('button[aria-expanded=true], [role=button][aria-expanded=true]')]
-    .filter(b => visible(b) && !/remove|delete|close|quitar|eliminar/i.test(
-      norm(b.getAttribute('aria-label') || b.textContent)));
-  return buttons.length === 1 ? point(buttons[0]) : null;
+  for (const box of field.boxes) {
+    const buttons = [...box.querySelectorAll('button[aria-expanded=true], [role=button][aria-expanded=true]')]
+      .filter(b => visible(b) && !b.disabled && b.getAttribute('aria-disabled') !== 'true'
+        && /^(edit|editar|collapse|contraer|свернуть)(\b|$)/i.test(
+          norm(b.getAttribute('aria-label') || b.textContent)));
+    if (buttons.length > 1) return null;
+    if (buttons.length === 1) return point(buttons[0]);
+  }
+  return null;
 }
 """
 

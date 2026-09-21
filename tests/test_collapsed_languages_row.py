@@ -80,3 +80,12 @@ def test_covered_or_disabled_edit_control_is_not_clicked(page):
     page.evaluate("document.body.insertAdjacentHTML('beforeend', '<div style=\"position:fixed;inset:0;z-index:10\">Cover</div>')")
     assert md._click_languages_edit(page) is False
     assert page.evaluate('window.clicked === undefined')
+
+
+def test_pencil_outside_the_inner_text_wrapper_opens_the_same_field(page):
+    page.set_content('<section style="display:flex"><div><div>Languages</div>'
+                     '<div>All languages</div></div><button aria-label="Edit" id="pen" '
+                     'onclick="window.opened=true">Edit</button></section>')
+    assert md._click_languages_edit(page) is True
+    assert page.evaluate('window.clicked') == 'pen'
+    assert page.evaluate('window.opened') is True

@@ -256,3 +256,14 @@ def test_own_locations_toggle_can_be_collapsed(page):
                      'onclick="this.setAttribute(\'aria-expanded\', \'false\')">Collapse</button></section>')
     assert md._collapse_locations_card(page) is True
     assert page.locator('button').get_attribute('aria-expanded') == 'false'
+
+
+def test_nested_locations_text_keeps_its_own_edit_and_collapse_control(page):
+    page.set_content('<section style="display:flex"><div><div>Locations</div>'
+                     '<div>Inclusion: Chile</div></div><button aria-label="Edit locations" '
+                     'aria-expanded="false" onclick="this.setAttribute(\'aria-expanded\', '
+                     'this.getAttribute(\'aria-expanded\')===\'true\'?\'false\':\'true\')">Edit</button></section>')
+    assert md._click_locations_edit(page) is True
+    assert page.locator('button').get_attribute('aria-expanded') == 'true'
+    assert md._collapse_locations_card(page) is True
+    assert page.locator('button').get_attribute('aria-expanded') == 'false'
