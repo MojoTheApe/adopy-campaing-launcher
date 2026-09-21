@@ -1,10 +1,11 @@
 # ACL project instructions
 
-**ACL-1248 is prepared, not activated.** Read [adoption](docs/repository/ADOPTION.md)
-first. The live repository still uses `master` and its original pinned Tracker;
-the descriptor in this candidate describes the intended `stage` / `main` contract.
-Do not rename branches, migrate historical evidence or release a package merely
-because this branch contains the new files. Candidate Tracker writes are guarded.
+**Use the shared workflow on `main` and permanent `stage`.** Read
+[adoption](docs/repository/ADOPTION.md) for the verified cutover and remaining
+release boundaries. `master` is a frozen compatibility channel for old source
+installations. The project client loads the exact pinned shared Tracker. During
+the activation PR, ordinary admissions remain paused until its stage verification,
+main promotion and normal `merged` handoff have actually completed.
 
 - [Repository workflow](docs/repository/WORKFLOW.md), [delivery](docs/repository/DELIVERY.md),
   [Tracker](docs/repository/TRACKER.md) and [file ownership](docs/repository/LAYOUT.md).

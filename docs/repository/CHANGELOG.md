@@ -43,3 +43,18 @@ shortcut and unchanged synthetic machine/workspace/creative files. This closes
 the gap between unit fixtures/install-repair checks and an actual updater cycle
 on an isolated runner. Reports identify source/tree and installer hashes. They do
 not claim a published release/download channel or the deferred live account pilot.
+
+## Coordinated workflow activation — 2026-09-21 / ACL-1248
+
+Integrate the reviewed migration, create main/stage and retain the old master
+compatibility ref. Publish the matching Tracker registry through its guarded
+installer; verify six snapshots, 160 ACL identities, seven columns and all 74
+historical completions with existing authentication intact. Record these actual
+facts in the descriptor and adoption record, then activate through normal independent
+review, stage package acceptance and unchanged-content main promotion. Preserve the
+unpublished standard's draft status and separate stable-package delivery requirement.
+
+Guard regressions now use an explicit prepared fixture, so activating the real
+repository cannot accidentally turn a test into a live Tracker command. The read-only
+adoption audit follows current main after activation, retaining original master as
+provenance rather than testing its frozen compatibility channel as current source.

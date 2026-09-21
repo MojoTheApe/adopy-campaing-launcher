@@ -50,14 +50,15 @@ def remote_blockers(request=github, root=ROOT):
         pr = request(repo + f'/pulls/{number}')
         if pr['state'] == 'open':
             problems.append(f'Pre-adoption PR #{number} is still open')
-    source = request(repo + '/branches/' + state['source_branch'])['commit']['sha']
+    branch = state['target_branch'] if state['state'] == 'active' else state['source_branch']
+    source = request(repo + '/branches/' + branch)['commit']['sha']
     runs = request(repo + '/actions/runs?head_sha=' + source + '&per_page=100')['workflow_runs']
     for path in ('.github/workflows/ci.yml', '.github/workflows/windows-installer.yml'):
-        relevant = [r for r in runs if r.get('path') == path and r.get('head_branch') == state['source_branch']
+        relevant = [r for r in runs if r.get('path') == path and r.get('head_branch') == branch
                     and r.get('event') in ('push', 'workflow_dispatch') and r.get('head_sha') == source]
         latest = max(relevant, key=lambda r: (r['id'], r.get('run_attempt', 1)), default={})
         if latest.get('status') != 'completed' or latest.get('conclusion') != 'success':
-            problems.append('No successful latest full run on current ' + state['source_branch'] + ': ' + path)
+            problems.append('No successful latest full run on current ' + branch + ': ' + path)
     return problems
 
 

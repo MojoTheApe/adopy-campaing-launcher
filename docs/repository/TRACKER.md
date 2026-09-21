@@ -6,12 +6,13 @@ at https://tracker.team7.cloud/projects/acl/. Keep the six established modules,
 
 The candidate pins Task Tracker 5f211d3095a392a16c2c01a65eb02ff8719a7243. Run
 `python scripts/task_tracker.py guide` for that guide; helpers live in .workflow/tools
-and existing scripts paths remain wrappers. During prepared adoption write commands
-are blocked: use the original master checkout's pinned client for ongoing tasks and
-migration handoff. `.workflow/legacy` retains the original configs for audit and
-bootstrap PR linkage; it is not another live tracker or a second Issue store.
+and existing scripts paths remain wrappers. The active client uses that exact
+clean shared engine. `.workflow/legacy` retains the original configs for audit and
+bootstrap PR history; it is not another live tracker or a second Issue store.
+Do not return to the retired master client. While activation is being promoted,
+only ACL-1248 evidence/acceptance commands may use the bounded BOOTSTRAP route.
 
-After activation follow WORKFLOW.md and the pinned command guide: work -> Review ->
+Follow WORKFLOW.md and the pinned command guide: work -> Review ->
 record-review -> check-merge -> stage -> verify-stage -> promotion -> merged -> verified
 package delivery. Keep one execution slot, explicit Release membership and Archive
 semantics. Description explains the human outcome; Specifications retains full verified
