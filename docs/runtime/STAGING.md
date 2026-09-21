@@ -18,6 +18,14 @@ The target is not provisioned or verified by this migration's draft descriptor.
    using authorized isolated resources. Unit fixtures do not replace a required real
    Windows scenario. Record unperformed portions; do not set stage verified until the
    agreed acceptance is satisfied.
+   The Windows installer workflow runs `packaging/windows/test_update_cycle.py`
+   on a fresh GitHub-hosted runner: two actual packages of the candidate source,
+   frozen update helper, update/restart, and recovery after a deliberately mismatched
+   installer/expected-version pair. It verifies actual health, current.json, all
+   application shortcuts and preservation of synthetic machine/workspace/creative
+   files. Its `ACL-update-recovery-*` report identifies source/tree and installer
+   hashes. This supplies isolated package-mechanism evidence, not a published GitHub
+   release/download-channel check or the separately deferred live Multilogin pilot.
 5. Record `stage` and `verify-stage` evidence with the pinned Tracker for the actual
    target/tree and report. Promote the same tasks/content into main only after success.
    Changed main/content invalidates the evidence and requires reconciliation/recheck.

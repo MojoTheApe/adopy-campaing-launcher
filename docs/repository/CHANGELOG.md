@@ -33,3 +33,13 @@ Hosted installer checks found two older test mismatches: direct-file imports lac
 the repository root, and the bundle smoke test expected the updater contract from
 before ACL-1240. Correct those checks and retain source/version assertions with an
 offline process. No product updater, employee installation or release is changed.
+
+## Actual package update/recovery acceptance — 2026-09-21 / ACL-1248
+
+Extend Windows CI with two real test installers built from the candidate source.
+The installed frozen helper performs an update, restart and controlled recovery;
+the harness checks actual version health, current pointer, every application
+shortcut and unchanged synthetic machine/workspace/creative files. This closes
+the gap between unit fixtures/install-repair checks and an actual updater cycle
+on an isolated runner. Reports identify source/tree and installer hashes. They do
+not claim a published release/download channel or the deferred live account pilot.
