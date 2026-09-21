@@ -149,3 +149,20 @@ def test_a_truncated_paste_is_completed_instead_of_retyped(page, monkeypatch):
     assert md.fill_ad_copy(page, "Заголовок", full, report) is True
     assert page.inner_text("#body").strip() == full
     assert any(a.get("stage") == "tail_completed" for a in report["attempts"]), report
+
+
+def test_the_completed_tail_lands_at_the_end_not_at_the_start(page, monkeypatch):
+    """22.09 00:52 CR_ait IPO ad2: Ctrl+End в поле Meta курсор не двигает, и
+    дописанный хвост вставлялся ПЕРЕД текстом — последняя строка оказывалась
+    первой («Empieza hoy.» в начале)."""
+    full = "Primera linea del anuncio. Segunda linea. Empieza hoy."
+
+    def lose_tail(p, t):
+        p.keyboard.insert_text(t[:-12] if t == full else t)
+
+    monkeypatch.setattr(md, "_type_human", lose_tail)
+    report: dict = {}
+    assert md.fill_ad_copy(page, "Заголовок", full, report) is True
+    body = page.inner_text("#body").strip()
+    assert body == full, body
+    assert body.startswith("Primera linea"), "хвост не должен оказаться в начале"
