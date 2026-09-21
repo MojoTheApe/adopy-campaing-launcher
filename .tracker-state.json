@@ -132,5 +132,25 @@
       "state": "created",
       "issue": 250
     }
+  },
+  "delivery_workflow": {
+    "reviews": {
+      "253": {
+        "kind": "independent-review",
+        "implementer": "/root",
+        "reviewer": "/root/acl_adoption_review",
+        "verdict": "approved",
+        "head_sha": "e0054f043463b8656478f895fe3a08f7d37b8fe8",
+        "base_sha": "09eb8af3542d1eb64649ece179f79ad343efd563",
+        "tree_sha": "ec74bece10c91ba4a6ef9c737522b2f794655003",
+        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/253 \u2014 Independent review of final activation candidate; complete approved report preserved in PR body.",
+        "main_sha": "09eb8af3542d1eb64649ece179f79ad343efd563",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          248
+        ],
+        "recorded_at": "2026-09-21T13:22:20+00:00"
+      }
+    }
   }
 }
