@@ -46,7 +46,7 @@ jobs:
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
 
-      - name: Verify promoted tag and its successful master CI
+      - name: Verify promoted tag and its successful main CI
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -111,8 +111,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch origin master
-          if ($LASTEXITCODE -ne 0) { throw "Cannot refresh master." }
+          git fetch origin main
+          if ($LASTEXITCODE -ne 0) { throw "Cannot refresh main." }
           python scripts/acl_publish_release.py --tag "$env:RELEASE_TAG" --source-repo "${{ github.repository }}"
           if ($LASTEXITCODE -ne 0) { throw "Release promotion is no longer valid." }
 

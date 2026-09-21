@@ -1,6 +1,6 @@
 # ACL Windows installer workstream
 
-The installer is now integrated with production `master`. A bundle includes the
+The installer is now integrated with production `main`. A bundle includes the
 current reviewed source commit, identified in its embedded manifest, dashboard
 header and RPA telemetry. `baseline.json` records the integration ancestor and
 selects `runtime_policy: integrated`; it no longer claims that today's runtime
@@ -99,8 +99,8 @@ an installer that cannot be stopped requires support before ACL is restarted.
 Updates refuse active/queued publishing and active browser reads, reserve the
 idle runtime before handoff, and reject a second concurrent Update request.
 
-Release publication verifies the annotated tag, current master SHA and the
-referenced successful full master CI run through GitHub. Assets are uploaded
+Release publication verifies the annotated tag, current main SHA and the
+referenced successful full main CI run through GitHub. Assets are uploaded
 to a draft before it becomes visible; an existing release tag is never replaced.
 Shared-library access and company Google sign-in remain separate setup work.
 

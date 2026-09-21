@@ -162,13 +162,13 @@ def _check_uncached(*, fetch: bool) -> dict[str, Any]:
 
     if fetch:
         try:
-            fetched = _git("fetch", "--quiet", "origin", "master", "--tags", timeout=120)
+            fetched = _git("fetch", "--quiet", "origin", "main", "--tags", timeout=120)
         except (OSError, subprocess.SubprocessError):
             return _no_update(current, "Could not reach GitHub — staying on the installed version.")
         if fetched.returncode != 0:
             return _no_update(current, "Could not reach GitHub — staying on the installed version.")
 
-    candidate_sha = _git_out("rev-parse", "origin/master^{commit}").lower()
+    candidate_sha = _git_out("rev-parse", "origin/main^{commit}").lower()
     if not candidate_sha:
         return _no_update(current, "The release channel is unavailable on this machine.")
     if candidate_sha == head:
@@ -176,7 +176,7 @@ def _check_uncached(*, fetch: bool) -> dict[str, Any]:
 
     from scripts.acl_update_gate import validate_candidate
 
-    allowed, detail = validate_candidate("origin/master")
+    allowed, detail = validate_candidate("origin/main")
     if not allowed:
         return _no_update(current, f"A newer commit exists but is not a promoted release ({detail}).")
 

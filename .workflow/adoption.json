@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "state": "prepared",
+  "issue": 248,
+  "source_base": "79caea74d4f88c559d79caf6fc86ef9b7b43f9e8",
+  "source_branch": "master",
+  "target_branch": "main",
+  "stage_branch": "stage",
+  "pre_adoption_prs": [
+    180,
+    222,
+    247
+  ],
+  "evidence": {}
+}

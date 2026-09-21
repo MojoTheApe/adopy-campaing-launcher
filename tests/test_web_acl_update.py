@@ -165,16 +165,16 @@ def test_check_never_breaks_the_page_when_git_is_unusable(monkeypatch):
 
 
 def test_check_offers_nothing_for_a_commit_that_is_not_a_release(monkeypatch):
-    """A newer commit on master is not the same thing as a promoted release."""
+    """A newer commit on main is not the same thing as a promoted release."""
     monkeypatch.setattr(
         acl_update,
         "_git_out",
-        lambda *a, **k: "b" * 40 if a[:2] == ("rev-parse", "origin/master^{commit}") else "a" * 40,
+        lambda *a, **k: "b" * 40 if a[:2] == ("rev-parse", "origin/main^{commit}") else "a" * 40,
     )
     monkeypatch.setattr(acl_update, "_git", lambda *a, **k: pytest.fail("must not fetch"))
     monkeypatch.setattr(
         "scripts.acl_update_gate.validate_candidate",
-        lambda *a, **k: (False, "origin/master is not the exact target of an ACL release tag"),
+        lambda *a, **k: (False, "origin/main is not the exact target of an ACL release tag"),
     )
 
     result = acl_update.check(fetch=False, use_cache=False)

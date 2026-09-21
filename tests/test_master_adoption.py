@@ -1,0 +1,143 @@
+"""Adoption must not mutate live tasks or authorize a partial/failed CI result."""
+import base64
+import copy
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+import pytest
+import yaml
+
+from scripts import acl_adoption
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from scripts import acl_pr_check
+
+
+@pytest.fixture
+def prepared(tmp_path):
+    (tmp_path / '.workflow/legacy').mkdir(parents=True)
+    (tmp_path / 'tracker').mkdir()
+    for name in ['.workflow/adoption.json', '.workflow/legacy/tracker-config.json', 'tracker/config.json']:
+        (tmp_path / name).write_text((ROOT / name).read_text())
+    return tmp_path
+
+
+@pytest.mark.parametrize('args', [['work', 'ACL-1248'], ['set', 'ACL-1248', '--status', 'merged'],
+                                ['record-review'], ['stage'], ['merged', 'ACL-1248'], ['init']])
+def test_prepared_contract_cannot_mutate_live_tracker(prepared, args):
+    with pytest.raises(ValueError, match='not active'):
+        acl_adoption.guard_tracker(args, prepared)
+
+
+def test_active_flag_without_cutover_evidence_is_not_enough(prepared):
+    path = prepared / '.workflow/adoption.json'
+    state = json.loads(path.read_text()); state['state'] = 'active'
+    path.write_text(json.dumps(state))
+    with pytest.raises(ValueError, match='evidence'):
+        acl_adoption.guard_tracker(['work', 'ACL-1248'], prepared)
+
+
+@pytest.mark.parametrize('client', ['scripts/task_tracker.py', '.workflow/tools/task_tracker.py'])
+def test_both_client_entrypoints_stop_before_loading_engine(client):
+    result = subprocess.run([sys.executable, str(ROOT / client), 'set', 'ACL-1248', '--status', 'merged'],
+                            cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert 'not active' in result.stderr
+
+
+@pytest.mark.parametrize('arguments', [
+    ['-m', 'tracker', 'set', '248', '--status', 'review'],
+    ['scripts/acl_mark_merged.py', '248', '--pr', '999', '--apply', '--reviewed-complete'],
+    ['scripts/acl_tracker.py', '--output', 'output/legacy-test']])
+def test_retained_legacy_commands_cannot_bypass_new_policy(arguments):
+    result = subprocess.run([sys.executable, *arguments], cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert 'historical only' in result.stderr or 'retired' in result.stderr
+
+
+@pytest.fixture
+def bootstrap(prepared):
+    legacy = json.loads((prepared / '.workflow/legacy/tracker-config.json').read_text())
+    pr = {'number': 999, 'state': 'open', 'draft': True, 'title': '[ACL-1248] Adopt workflow',
+          'body': 'Tracker issues: ACL-1248',
+          'base': {'ref': 'master', 'sha': 'a' * 40, 'repo': {'full_name': acl_adoption.REPOSITORY}},
+          'head': {'ref': 'codex/acl-1248-master-adoption', 'repo': {'full_name': acl_adoption.REPOSITORY}}}
+    calls = []
+
+    def request(path):
+        calls.append(path)
+        if '/pulls/' in path: return pr
+        if '/contents/' in path:
+            assert path.endswith('?ref=' + 'a' * 40)
+            return {'content': base64.b64encode(json.dumps(legacy).encode()).decode()}
+        if path.endswith('/issues/248'):
+            return {'number': 248, 'state': 'open', 'labels': [{'name': x} for x in
+                    ['status:in_progress', 'module:platform', 'priority:medium', 'type:improvement']]}
+        raise AssertionError(path)
+
+    return pr, legacy, request, calls
+
+
+def test_bootstrap_checks_real_base_policy_without_claiming_admission(prepared, bootstrap):
+    _, _, request, _ = bootstrap
+    result = acl_pr_check.check(request, 999, prepared)
+    assert result['issues'] == [248]
+    assert 'linkage only' in result['policy']
+    assert 'admission' not in result
+
+
+@pytest.mark.parametrize('change', ['different-task', 'foreign-head', 'stage-base', 'changed-config'])
+def test_bootstrap_exception_cannot_authorize_other_work(prepared, bootstrap, change):
+    pr, legacy, request, _ = bootstrap
+    if change == 'different-task': pr['body'] = 'Tracker issues: ACL-1240'
+    if change == 'foreign-head': pr['head']['repo']['full_name'] = 'other/repo'
+    if change == 'stage-base': pr['base']['ref'] = 'stage'
+    if change == 'changed-config': legacy['project']['base_branch'] = 'unexpected'
+    with pytest.raises(ValueError): acl_pr_check.check(request, 999, prepared)
+
+
+def test_newest_failed_ci_is_not_hidden_by_older_success(prepared):
+    def request(path):
+        if '/pulls/' in path: return {'state': 'closed'}
+        if '/branches/' in path: return {'commit': {'sha': 'b' * 40}}
+        assert '/actions/runs?' in path
+        rows = []
+        for name in ['ci', 'windows-installer']:
+            base = {'id': 1, 'path': f'.github/workflows/{name}.yml', 'head_branch': 'master',
+                    'event': 'push', 'head_sha': 'b' * 40, 'status': 'completed', 'conclusion': 'success'}
+            rows.append(base)
+            if name == 'ci': rows.append(dict(base, id=2, conclusion='failure'))
+        return {'workflow_runs': rows}
+    problems = acl_adoption.remote_blockers(request, prepared)
+    assert len(problems) == 1
+    assert 'ci.yml' in problems[0]
+
+
+def test_existing_ids_and_modules_are_preserved():
+    old = json.loads((ROOT / '.workflow/legacy/tracker-config.json').read_text())
+    new = json.loads((ROOT / 'tracker/config.json').read_text())
+    assert new['project'] == dict(old['project'], base_branch='main')
+    assert new['modules'] == old['modules']
+    assert new['workflow'] == old['workflow'][:-1] + ['stage', 'merged']
+
+
+@pytest.mark.parametrize('workflow,success_fields', [
+    ('ci.yml', ['TESTS']), ('windows-installer.yml', ['INPUTS', 'INSTALLER'])])
+@pytest.mark.skipif(sys.platform == 'win32', reason='Ubuntu job shell contract is tested in the Ubuntu tooling job')
+def test_ci_admission_runs_fail_closed(workflow, success_fields):
+    import os
+    data = yaml.safe_load((ROOT / '.github/workflows' / workflow).read_text())
+    script = data['jobs']['admission']['steps'][0]['run']
+    success = {'SCOPE': 'success', 'WINDOWS': 'true', **{k: 'success' for k in success_fields}}
+    metadata = {'SCOPE': 'success', 'WINDOWS': 'false', **{k: 'skipped' for k in success_fields}}
+    cases = [(success, True), (metadata, True), (dict(success, SCOPE='failure'), False),
+             (dict(success, WINDOWS=''), False)]
+    for field in success_fields:
+        for failed in ['failure', 'cancelled', 'skipped']:
+            cases.append((dict(success, **{field: failed}), False))
+    for env, allowed in cases:
+        result = subprocess.run(['bash', '-e', '-c', script], env=dict(os.environ, **env), capture_output=True)
+        assert (result.returncode == 0) == allowed, env

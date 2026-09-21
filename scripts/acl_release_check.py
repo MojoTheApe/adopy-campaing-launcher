@@ -11,7 +11,7 @@ Checks three things, all locally:
 
   1. every release named in docs/RELEASES.md points at a commit that exists;
   2. the tag of that name resolves to exactly that commit;
-  3. the current `master` is a release recorded in the manifest.
+  3. the current `main` is a release recorded in the manifest.
 
 With a GitHub token reachable (the one git already uses on this machine), it
 also asks whether the recorded run really is green — so the manifest cannot
@@ -156,15 +156,15 @@ def main() -> int:
         mark = "[FAIL]" if tag in bad_tags else "[ ok ]"
         print(f"  {mark} {line} — {sha[:7]}{note}" + (" (заменён)" if r["superseded"] else ""))
 
-    # Что реально раздаётся: вершина master.
-    master = _git("rev-list", "-n", "1", "master")
-    current = [r for r in releases if master.startswith(r["sha"]) and r["sha"]]
+    # Что реально раздаётся: вершина main.
+    main = _git("rev-list", "-n", "1", "main")
+    current = [r for r in releases if main.startswith(r["sha"]) and r["sha"]]
     print()
     if current:
-        print(f"  master = {master[:7]} — это релиз {current[0]['tag']}")
+        print(f"  main = {main[:7]} — это релиз {current[0]['tag']}")
     else:
-        problems.append(f"master ({master[:7]}) не записан в манифесте как релиз")
-        print(f"  [FAIL] master = {master[:7]} — такого релиза в манифесте нет")
+        problems.append(f"main ({main[:7]}) не записан в манифесте как релиз")
+        print(f"  [FAIL] main = {main[:7]} — такого релиза в манифесте нет")
 
     if problems:
         print("\nРасхождения:")

@@ -1,3 +1,7 @@
+# ACL repository adoption
+
+ACL-1248 prepares the Master Repo layout and main/stage process. Until the [cutover](docs/repository/ADOPTION.md), the live branch remains master; the source-install commands in this candidate target the future main channel. Start with [AGENTS.md](AGENTS.md) and the [current system](docs/system/PROJECT.md).
+
 # fb_agents
 
 Анализ статистики Facebook-кампаний: отчёты по странам, кампайн-менеджерам (CM) и офферам.
@@ -42,7 +46,7 @@ python scripts/acl_doctor.py
 
 Автообновление после установки выключено. Его включает отдельно
 `enable_stable_updates.bat`, и только когда checkout совпадает с защищённым
-`origin/master` и точным annotated `acl-release-*` tag с успешным CI. Каждый
+`origin/main` и точным annotated `acl-release-*` tag с успешным CI. Каждый
 release получает отдельное Python-окружение по SHA; неуспешный запуск
 возвращает предыдущий release и помещает broken SHA в quarantine.
 

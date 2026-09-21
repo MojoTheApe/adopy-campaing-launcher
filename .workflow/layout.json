@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "repository": "docs/repository/",
+  "system": "docs/system/",
+  "runtime": "docs/runtime/",
+  "tools": ".workflow/tools/"
+}

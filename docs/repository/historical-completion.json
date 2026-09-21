@@ -1,0 +1,1076 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-21",
+  "source_base": "6e871edd425afe1c74b955d7ba7b9793e06a7022",
+  "purpose": "Read-only original status inventory. Not review, stage or delivered-package evidence. No labels or receipts are changed.",
+  "tasks": [
+    {
+      "issue": 12,
+      "id": "ACL-102",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/12",
+      "state": "OPEN",
+      "labels": [
+        "module:accounts",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:36:00Z"
+    },
+    {
+      "issue": 14,
+      "id": "ACL-105",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/14",
+      "state": "OPEN",
+      "labels": [
+        "module:data",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:36:08Z"
+    },
+    {
+      "issue": 16,
+      "id": "ACL-108",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/16",
+      "state": "CLOSED",
+      "labels": [
+        "module:data",
+        "priority:medium",
+        "release-critical",
+        "status:merged",
+        "track:rpa",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-11T12:59:44Z"
+    },
+    {
+      "issue": 23,
+      "id": "ACL-113",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/23",
+      "state": "CLOSED",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "release:included",
+        "status:merged",
+        "track:rpa",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-15T15:49:08Z"
+    },
+    {
+      "issue": 25,
+      "id": "ACL-117",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/25",
+      "state": "CLOSED",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "release-critical",
+        "release:included",
+        "status:merged",
+        "track:dashboard",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-14T13:36:52Z"
+    },
+    {
+      "issue": 40,
+      "id": "ACL-348",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/40",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:37:18Z"
+    },
+    {
+      "issue": 41,
+      "id": "ACL-347",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/41",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:37:21Z"
+    },
+    {
+      "issue": 42,
+      "id": "ACL-342",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/42",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:37:23Z"
+    },
+    {
+      "issue": 43,
+      "id": "ACL-343",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/43",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "track:rpa",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:37:26Z"
+    },
+    {
+      "issue": 44,
+      "id": "ACL-344",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/44",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "track:rpa",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:37:28Z"
+    },
+    {
+      "issue": 45,
+      "id": "ACL-340",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/45",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:in_progress",
+        "track:rpa",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-15T11:48:17Z"
+    },
+    {
+      "issue": 50,
+      "id": "ACL-334",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/50",
+      "state": "OPEN",
+      "labels": [
+        "module:creatives",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-11T08:37:46Z"
+    },
+    {
+      "issue": 52,
+      "id": "ACL-336",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/52",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-11T08:37:51Z"
+    },
+    {
+      "issue": 61,
+      "id": "ACL-304",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/61",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "track:ops",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:38:16Z"
+    },
+    {
+      "issue": 63,
+      "id": "ACL-312",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/63",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "track:ops",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:38:22Z"
+    },
+    {
+      "issue": 65,
+      "id": "ACL-650",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/65",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:38:27Z"
+    },
+    {
+      "issue": 66,
+      "id": "ACL-653",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/66",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:38:30Z"
+    },
+    {
+      "issue": 67,
+      "id": "ACL-654",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/67",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:38:33Z"
+    },
+    {
+      "issue": 68,
+      "id": "ACL-655",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/68",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:38:35Z"
+    },
+    {
+      "issue": 74,
+      "id": "ACL-145",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/74",
+      "state": "OPEN",
+      "labels": [
+        "module:accounts",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-11T08:38:51Z"
+    },
+    {
+      "issue": 76,
+      "id": "ACL-703",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/76",
+      "state": "OPEN",
+      "labels": [
+        "facet:design",
+        "module:accounts",
+        "priority:medium",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:38:56Z"
+    },
+    {
+      "issue": 86,
+      "id": "ACL-704",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/86",
+      "state": "CLOSED",
+      "labels": [
+        "facet:design",
+        "module:campaigns",
+        "priority:high",
+        "release-critical",
+        "release:included",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:39:00Z"
+    },
+    {
+      "issue": 93,
+      "id": "ACL-353",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/93",
+      "state": "CLOSED",
+      "labels": [
+        "module:accounts",
+        "priority:high",
+        "release-critical",
+        "release:included",
+        "status:merged",
+        "track:dashboard",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-11T08:39:08Z"
+    },
+    {
+      "issue": 94,
+      "id": "ACL-354",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/94",
+      "state": "CLOSED",
+      "labels": [
+        "module:platform",
+        "priority:high",
+        "release-critical",
+        "release:included",
+        "status:merged",
+        "track:dashboard",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-17T19:41:52Z"
+    },
+    {
+      "issue": 95,
+      "id": "ACL-1095",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/95",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "type:operations"
+      ],
+      "updated_at": "2026-09-11T08:39:14Z"
+    },
+    {
+      "issue": 98,
+      "id": "ACL-705",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/98",
+      "state": "CLOSED",
+      "labels": [
+        "facet:design",
+        "module:campaigns",
+        "priority:high",
+        "release-critical",
+        "release:included",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:42:21Z"
+    },
+    {
+      "issue": 99,
+      "id": "ACL-1099",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/99",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "type:operations"
+      ],
+      "updated_at": "2026-09-11T08:39:22Z"
+    },
+    {
+      "issue": 102,
+      "id": "ACL-1102",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/102",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:39:26Z"
+    },
+    {
+      "issue": 104,
+      "id": "ACL-1104",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/104",
+      "state": "CLOSED",
+      "labels": [
+        "facet:design",
+        "module:campaigns",
+        "priority:high",
+        "release-critical",
+        "release:required",
+        "status:merged",
+        "track:dashboard",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:39:30Z"
+    },
+    {
+      "issue": 108,
+      "id": "ACL-1108",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/108",
+      "state": "CLOSED",
+      "labels": [
+        "module:platform",
+        "priority:high",
+        "resolution:non_code",
+        "status:merged",
+        "track:ops",
+        "type:operations"
+      ],
+      "updated_at": "2026-09-11T12:06:50Z"
+    },
+    {
+      "issue": 110,
+      "id": "ACL-1110",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/110",
+      "state": "CLOSED",
+      "labels": [
+        "module:accounts",
+        "priority:high",
+        "status:merged",
+        "track:dashboard",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-11T08:39:35Z"
+    },
+    {
+      "issue": 113,
+      "id": "ACL-1113",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/113",
+      "state": "CLOSED",
+      "labels": [
+        "module:accounts",
+        "priority:high",
+        "release-critical",
+        "release:required",
+        "status:merged",
+        "track:rpa",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-15T15:49:18Z"
+    },
+    {
+      "issue": 115,
+      "id": "ACL-1115",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/115",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:39:39Z"
+    },
+    {
+      "issue": 117,
+      "id": "ACL-1117",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/117",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-11T08:01:22Z"
+    },
+    {
+      "issue": 119,
+      "id": "ACL-1119",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/119",
+      "state": "CLOSED",
+      "labels": [
+        "module:data",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-13T17:52:29Z"
+    },
+    {
+      "issue": 124,
+      "id": "ACL-1124",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/124",
+      "state": "CLOSED",
+      "labels": [
+        "module:data",
+        "priority:high",
+        "release:included",
+        "status:merged",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-12T15:04:06Z"
+    },
+    {
+      "issue": 126,
+      "id": "ACL-1126",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/126",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-15T12:42:24Z"
+    },
+    {
+      "issue": 128,
+      "id": "ACL-1128",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/128",
+      "state": "CLOSED",
+      "labels": [
+        "module:data",
+        "priority:medium",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-12T19:36:12Z"
+    },
+    {
+      "issue": 130,
+      "id": "ACL-1130",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/130",
+      "state": "CLOSED",
+      "labels": [
+        "module:accounts",
+        "priority:medium",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-12T22:53:35Z"
+    },
+    {
+      "issue": 134,
+      "id": "ACL-1134",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/134",
+      "state": "CLOSED",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-12T23:23:26Z"
+    },
+    {
+      "issue": 135,
+      "id": "ACL-1135",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/135",
+      "state": "CLOSED",
+      "labels": [
+        "facet:design",
+        "module:campaigns",
+        "priority:high",
+        "status:merged",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-13T19:20:34Z"
+    },
+    {
+      "issue": 140,
+      "id": "ACL-1140",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/140",
+      "state": "CLOSED",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-13T18:55:37Z"
+    },
+    {
+      "issue": 141,
+      "id": "ACL-1141",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/141",
+      "state": "CLOSED",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-13T18:55:39Z"
+    },
+    {
+      "issue": 146,
+      "id": "ACL-1146",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/146",
+      "state": "CLOSED",
+      "labels": [
+        "module:platform",
+        "priority:high",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-13T19:17:06Z"
+    },
+    {
+      "issue": 150,
+      "id": "ACL-1150",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/150",
+      "state": "CLOSED",
+      "labels": [
+        "module:accounts",
+        "priority:high",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-14T08:01:17Z"
+    },
+    {
+      "issue": 155,
+      "id": "ACL-1155",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/155",
+      "state": "CLOSED",
+      "labels": [
+        "module:accounts",
+        "priority:high",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-14T08:00:06Z"
+    },
+    {
+      "issue": 156,
+      "id": "ACL-1156",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/156",
+      "state": "CLOSED",
+      "labels": [
+        "module:platform",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-14T13:56:27Z"
+    },
+    {
+      "issue": 158,
+      "id": "ACL-1158",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/158",
+      "state": "CLOSED",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-14T13:40:31Z"
+    },
+    {
+      "issue": 160,
+      "id": "ACL-1160",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/160",
+      "state": "CLOSED",
+      "labels": [
+        "module:accounts",
+        "priority:high",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-15T14:41:51Z"
+    },
+    {
+      "issue": 161,
+      "id": "ACL-1161",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/161",
+      "state": "CLOSED",
+      "labels": [
+        "module:accounts",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-15T14:41:53Z"
+    },
+    {
+      "issue": 162,
+      "id": "ACL-1162",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/162",
+      "state": "CLOSED",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-15T15:49:13Z"
+    },
+    {
+      "issue": 164,
+      "id": "ACL-1164",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/164",
+      "state": "CLOSED",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-15T14:41:55Z"
+    },
+    {
+      "issue": 166,
+      "id": "ACL-1166",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/166",
+      "state": "CLOSED",
+      "labels": [
+        "module:creatives",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-15T15:49:15Z"
+    },
+    {
+      "issue": 171,
+      "id": "ACL-1171",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/171",
+      "state": "OPEN",
+      "labels": [
+        "module:creatives",
+        "priority:high",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-18T13:54:36Z"
+    },
+    {
+      "issue": 173,
+      "id": "ACL-1173",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/173",
+      "state": "CLOSED",
+      "labels": [
+        "module:platform",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-15T15:49:11Z"
+    },
+    {
+      "issue": 189,
+      "id": "ACL-1189",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/189",
+      "state": "OPEN",
+      "labels": [
+        "module:creatives",
+        "priority:high",
+        "status:merged",
+        "track:rpa",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-17T17:15:26Z"
+    },
+    {
+      "issue": 192,
+      "id": "ACL-1192",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/192",
+      "state": "OPEN",
+      "labels": [
+        "module:creatives",
+        "priority:high",
+        "status:merged",
+        "track:rpa",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-18T13:54:39Z"
+    },
+    {
+      "issue": 196,
+      "id": "ACL-1196",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/196",
+      "state": "OPEN",
+      "labels": [
+        "module:accounts",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-17T16:37:17Z"
+    },
+    {
+      "issue": 198,
+      "id": "ACL-1198",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/198",
+      "state": "OPEN",
+      "labels": [
+        "module:accounts",
+        "priority:high",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-16T09:33:22Z"
+    },
+    {
+      "issue": 200,
+      "id": "ACL-1200",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/200",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-16T12:35:31Z"
+    },
+    {
+      "issue": 203,
+      "id": "ACL-1203",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/203",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-16T12:35:28Z"
+    },
+    {
+      "issue": 205,
+      "id": "ACL-1205",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/205",
+      "state": "OPEN",
+      "labels": [
+        "module:accounts",
+        "priority:low",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-16T10:14:05Z"
+    },
+    {
+      "issue": 207,
+      "id": "ACL-1207",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/207",
+      "state": "CLOSED",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-17T18:18:07Z"
+    },
+    {
+      "issue": 208,
+      "id": "ACL-1208",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/208",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-17T16:56:34Z"
+    },
+    {
+      "issue": 210,
+      "id": "ACL-1210",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/210",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "status:merged",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-17T17:14:10Z"
+    },
+    {
+      "issue": 214,
+      "id": "ACL-1214",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/214",
+      "state": "CLOSED",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-17T18:09:14Z"
+    },
+    {
+      "issue": 216,
+      "id": "ACL-1216",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/216",
+      "state": "OPEN",
+      "labels": [
+        "module:accounts",
+        "priority:low",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-17T16:05:01Z"
+    },
+    {
+      "issue": 219,
+      "id": "ACL-1219",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/219",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-18T12:52:16Z"
+    },
+    {
+      "issue": 220,
+      "id": "ACL-1220",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/220",
+      "state": "CLOSED",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-17T18:45:22Z"
+    },
+    {
+      "issue": 221,
+      "id": "ACL-1221",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/221",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:medium",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-17T17:44:38Z"
+    },
+    {
+      "issue": 223,
+      "id": "ACL-1223",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/223",
+      "state": "OPEN",
+      "labels": [
+        "module:data",
+        "priority:medium",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-17T16:21:24Z"
+    },
+    {
+      "issue": 225,
+      "id": "ACL-1225",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/225",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-17T17:44:41Z"
+    },
+    {
+      "issue": 226,
+      "id": "ACL-1226",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/226",
+      "state": "OPEN",
+      "labels": [
+        "module:campaigns",
+        "priority:high",
+        "status:merged",
+        "type:bug"
+      ],
+      "updated_at": "2026-09-17T17:44:43Z"
+    },
+    {
+      "issue": 234,
+      "id": "ACL-1234",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/234",
+      "state": "OPEN",
+      "labels": [
+        "module:accounts",
+        "priority:high",
+        "status:merged",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-18T12:46:10Z"
+    },
+    {
+      "issue": 239,
+      "id": "ACL-1239",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/239",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:high",
+        "status:review",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-19T08:37:40Z"
+    },
+    {
+      "issue": 240,
+      "id": "ACL-1240",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/240",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:high",
+        "status:merged",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-19T08:39:17Z"
+    },
+    {
+      "issue": 241,
+      "id": "ACL-1241",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/241",
+      "state": "OPEN",
+      "labels": [
+        "module:data",
+        "priority:high",
+        "status:review",
+        "type:feature"
+      ],
+      "updated_at": "2026-09-20T15:03:01Z"
+    },
+    {
+      "issue": 248,
+      "id": "ACL-1248",
+      "url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/248",
+      "state": "OPEN",
+      "labels": [
+        "module:platform",
+        "priority:medium",
+        "status:in_progress",
+        "type:improvement"
+      ],
+      "updated_at": "2026-09-21T08:19:59Z"
+    }
+  ]
+}

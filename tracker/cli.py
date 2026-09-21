@@ -135,6 +135,8 @@ def execute(args, config, api):
 def main(argv=None):
     p=parser();args=p.parse_args(argv)
     try:
+        if (Path(__file__).resolve().parents[1] / '.workflow/adoption.json').exists():
+            raise ValueError('This retained Tracker is historical only. Use scripts/task_tracker.py and docs/repository/ADOPTION.md.')
         config=load_config(args.config)
         command=json.loads(args.gh_command_json)
         if not isinstance(command,list) or not command or any(not isinstance(x,str) or not x for x in command): raise ValueError("Expected a nonempty array of command strings")

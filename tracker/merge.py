@@ -11,6 +11,7 @@ import json
 import re
 import subprocess
 import sys
+from pathlib import Path
 from urllib.parse import quote
 
 from .model import load_config
@@ -151,6 +152,8 @@ def main(argv=None) -> int:
         parser.error("Issue and PR numbers must be positive")
     api = GitHub()
     try:
+        if (Path(__file__).resolve().parents[1] / '.workflow/adoption.json').exists():
+            raise ValueError('Legacy merge recording is retired. Use scripts/task_tracker.py and docs/repository/ADOPTION.md.')
         plan = prepare(api, args.repo, args.issues, args.pr, args.base)
         for row in plan:
             print(f"#{row['number']}: {row['title']} | PRs {row['prs']} | " +

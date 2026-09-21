@@ -15,7 +15,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, main, stage]
   pull_request:
   workflow_dispatch:
 
@@ -42,12 +42,12 @@ jobs:
       - name: Scan all tracked inputs
         run: python3 scripts/acl_scan_secrets.py
       - name: Install lightweight test dependencies
-        run: python3 -m pip install 'pytest>=8,<10'
+        run: python3 -m pip install 'pytest>=8,<10' 'PyYAML>=6,<7'
       - name: Verify project tooling and tracker metadata
         run: |
           python3 -m json.tool tracker/config.json > /dev/null
           python3 -m json.tool tracker/engine.json > /dev/null
-          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_tracker.py tests/test_tracker_v2.py -q
+          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py -q
   test:
     needs: scope
     if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.windows != 'false') }}
@@ -101,3 +101,23 @@ jobs:
 
       - name: Tests
         run: python -m pytest tests/ -q
+
+  admission:
+    name: ACL verification
+    if: ${{ always() }}
+    needs: [scope, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every applicable check
+        env:
+          SCOPE: ${{ needs.scope.result }}
+          WINDOWS: ${{ needs.scope.outputs.windows }}
+          TESTS: ${{ needs.test.result }}
+        run: |
+          test "$SCOPE" = success
+          if test "$WINDOWS" = false; then
+            test "$TESTS" = skipped
+          else
+            test "$WINDOWS" = true
+            test "$TESTS" = success
+          fi

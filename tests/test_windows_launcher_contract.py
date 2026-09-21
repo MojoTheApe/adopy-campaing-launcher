@@ -28,8 +28,8 @@ def test_launcher_never_kills_an_unknown_port_owner() -> None:
 def test_auto_update_uses_only_the_promoted_channel_and_gate() -> None:
     launcher = _text("start_dashboard.bat")
 
-    assert "git fetch --quiet origin master --tags" in launcher
-    assert "scripts\\acl_update_gate.py --candidate origin/master" in launcher
+    assert "git fetch --quiet origin main --tags" in launcher
+    assert "scripts\\acl_update_gate.py --candidate origin/main" in launcher
     assert "@{u}" not in launcher
     assert "git pull" not in launcher
     assert "git reset --hard" not in launcher
@@ -113,7 +113,7 @@ def test_the_dashboard_never_moves_its_own_working_tree() -> None:
 def test_stable_enrollment_requires_exact_promoted_release() -> None:
     enrollment = _text("enable_stable_updates.bat")
 
-    assert "--candidate origin/master --enroll" in enrollment
+    assert "--candidate origin/main --enroll" in enrollment
     assert "auto_update" in enrollment
 
 

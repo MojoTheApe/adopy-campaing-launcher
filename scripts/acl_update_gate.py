@@ -1,6 +1,6 @@
 """Allow an ACL auto-update only from the promoted release channel.
 
-The launcher fetches ``origin/master`` but does not trust "a newer commit" as
+The launcher fetches ``origin/main`` but does not trust "a newer commit" as
 synonymous with "a release".  The candidate must be a fast-forward, must be
 the exact target of an annotated ``acl-release-*`` tag, and the tag annotation
 must record a successful GitHub Actions run.  Branch protection and the pilot
@@ -23,7 +23,7 @@ from scripts._console import use_utf8  # noqa: E402
 
 use_utf8()
 
-STABLE_REF = "origin/master"
+STABLE_REF = "origin/main"
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
@@ -55,7 +55,7 @@ def validate_candidate(candidate: str, *, enrolling: bool = False) -> tuple[bool
         return False, "tracked local changes present; update must not overwrite them"
 
     if enrolling and candidate_sha != head_sha:
-        return False, "enrollment requires the installed commit to equal origin/master"
+        return False, "enrollment requires the installed commit to equal origin/main"
 
     if candidate_sha != head_sha:
         ancestor = _run("merge-base", "--is-ancestor", head_sha, candidate_sha)
@@ -64,7 +64,7 @@ def validate_candidate(candidate: str, *, enrolling: bool = False) -> tuple[bool
 
     tags = _out("tag", "--points-at", candidate_sha, "--list", "acl-release-*").splitlines()
     if not tags:
-        return False, "origin/master is not the exact target of an ACL release tag"
+        return False, "origin/main is not the exact target of an ACL release tag"
 
     problems: list[str] = []
     for tag in tags:

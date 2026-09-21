@@ -76,7 +76,7 @@ try {
     & $git -C $temp init --quiet
     & $git -C $temp -c user.name=Test -c user.email=test@example.invalid commit --allow-empty --quiet -m fixture
     $sha = (& $git -C $temp rev-parse HEAD).Trim()
-    & $git -C $temp update-ref refs/remotes/origin/master $sha
+    & $git -C $temp update-ref refs/remotes/origin/main $sha
     Expect-Failure { Get-AclRelease $git $temp $true } 'no verified annotated'
     & $git -C $temp tag acl-release-test
     Expect-Failure { Get-AclRelease $git $temp $true } 'no verified annotated'

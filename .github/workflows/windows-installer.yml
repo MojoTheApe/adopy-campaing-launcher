@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - master
+      - main
+      - stage
   pull_request:
   workflow_dispatch:
 
@@ -71,6 +73,7 @@ jobs:
       ACL_NO_TELEMETRY: "1"
       PYTHONIOENCODING: utf-8
       ACL_PACKAGE_VERSION: 0.1.0-alpha.${{ github.run_number }}
+      ACL_TEST_PREVIOUS_VERSION: 0.0.0-ci.${{ github.run_number }}
 
     steps:
       - name: Check out full history
@@ -93,6 +96,12 @@ jobs:
           python -m unittest discover -s packaging/windows/tests -p "test_machine_config.py" -v
           python -m unittest discover -s packaging/windows/tests -p "test_setup_wizard.py" -v
 
+      - name: Build previous isolated test package from the candidate source
+        shell: pwsh
+        run: |
+          ./packaging/windows/build.ps1 -Version "$env:ACL_TEST_PREVIOUS_VERSION"
+          ./packaging/windows/build_installer.ps1 -Version "$env:ACL_TEST_PREVIOUS_VERSION"
+
       - name: Build onedir bundle
         shell: pwsh
         run: ./packaging/windows/build.ps1 -Version "$env:ACL_PACKAGE_VERSION"
@@ -108,6 +117,21 @@ jobs:
       - name: Test install, launch, repair, and uninstall
         shell: pwsh
         run: ./packaging/windows/test_installer.ps1 -Version "$env:ACL_PACKAGE_VERSION"
+
+      - name: Test real package update, restart, and recovery
+        shell: pwsh
+        run: |
+          python packaging/windows/test_update_cycle.py --old-version "$env:ACL_TEST_PREVIOUS_VERSION" --version "$env:ACL_PACKAGE_VERSION"
+          if ($LASTEXITCODE -ne 0) { throw "Real package update/recovery acceptance failed." }
+
+      - name: Keep update and recovery evidence even after failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ACL-update-recovery-${{ github.run_number }}
+          path: packaging/windows/.artifacts/update-cycle-logs/
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Create downloadable archive
         shell: pwsh
@@ -129,3 +153,26 @@ jobs:
             packaging/windows/.artifacts/installer-test-logs/
           if-no-files-found: error
           retention-days: 14
+
+  admission:
+    name: Installer verification
+    if: ${{ always() }}
+    needs: [scope, phase-1-isolation, phase-2-packaging-spike]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every applicable packaging check
+        env:
+          SCOPE: ${{ needs.scope.result }}
+          WINDOWS: ${{ needs.scope.outputs.windows }}
+          INPUTS: ${{ needs.phase-1-isolation.result }}
+          INSTALLER: ${{ needs.phase-2-packaging-spike.result }}
+        run: |
+          test "$SCOPE" = success
+          if test "$WINDOWS" = false; then
+            test "$INPUTS" = skipped
+            test "$INSTALLER" = skipped
+          else
+            test "$WINDOWS" = true
+            test "$INPUTS" = success
+            test "$INSTALLER" = success
+          fi

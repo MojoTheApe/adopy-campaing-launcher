@@ -10,6 +10,11 @@ PRIORITIES = ("high", "medium", "low")
 TYPES = ("bug", "feature", "improvement", "research", "operations")
 LABELS = {"idea": "Idea", "backlog": "Backlog", "todo": "Todo", "in_progress": "In progress", "review": "Review", "merged": "In master"}
 DEFAULT_CONFIG = Path(__file__).with_name("config.json")
+# Retained historical implementation: its six-stage model must never consume the
+# new live delivery policy. New operations use scripts/task_tracker.py instead.
+_LEGACY_CONFIG = Path(__file__).resolve().parents[1] / '.workflow/legacy/tracker-config.json'
+if _LEGACY_CONFIG.is_file():
+    DEFAULT_CONFIG = _LEGACY_CONFIG
 
 
 def load_config(path=DEFAULT_CONFIG):

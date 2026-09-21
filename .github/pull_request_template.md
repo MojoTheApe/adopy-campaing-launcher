@@ -1,7 +1,18 @@
-Describe the concrete problem and resulting behavior.
+Tracker issues: ACL-1248
 
-Tracker issues: #ISSUE
+## Result
 
-Validation: commands, results, environment, and outstanding checks.
+Describe the problem and resulting behavior. Title: `[ACL-1248] Summary` (list all
+related IDs for a shared task set). Link this PR back from each Issue.
 
-Every implementation needs a task, including immediate fixes. Before code, use `python scripts/task_tracker.py work ID` or `work --title ... --module ... --type ...` and verify In Progress. Set Review when implementation is ready. Run `python scripts/task_tracker.py check-pr PR_NUMBER` before merge. After all work is reviewed, merged and verified, use the merged dry run and apply with `--reviewed-complete`; verify the UI. Partial work never completes a parent task.
+## Verification
+
+Self-checks and results. Independent reviewer/report and exact reviewed version.
+For stage promotion: source PR, same task set, verified tree and environment proof.
+
+## Documentation and related processes
+
+Current system/history updated, or no impact with reason.
+Master Repo / Task Tracker impact: linked matching change, or no impact with reason.
+Local exceptions and deployment controls preserved. Completion and delivery still
+pending, where applicable. No automatic closing keywords.
