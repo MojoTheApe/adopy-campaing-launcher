@@ -1,5 +1,12 @@
 # ACL-1248: audited historical completion
 
+Current cutover verification preserved this exact 74-task manifest in the published
+board; see [ADOPTION.md](ADOPTION.md). The audit below is a retained historical
+snapshot, not a current unpublished-state notice. No task list or accepted-scope
+hash was changed at publication.
+
+## Historical preparation snapshot
+
 Read-only preview captured on 2026-09-21. No live Issue labels, completion records or board configuration have been changed.
 
 Source: current ACL Issues, original tracker/config.json from master 6e871edd425afe1c74b955d7ba7b9793e06a7022, prepared config from PR #249, and compatible Tracker ea969826398a808925bbd907ca8719445177ab59. The current execution-state snapshot contains no delivery_tasks evidence. The same compatible engine renders both configurations, isolating the effect of the policy change.
@@ -21,7 +28,8 @@ The reviewed Task Tracker extension is TT-61 / PR #62, commit 5f211d3095a392a16c
 
 A fresh read of all 157 tasks verifies: 74 complete before and after adoption; current release 7 of 10 complete; the same unresolved dependency #175 -> #170; release remains not ready. IDs, statuses and classifications remain preserved. A historical task is labelled Completed before adoption, never Delivery verified. New/incomplete tasks stay subject to review, staging and stable-package requirements. Changed scope or restarted work cannot borrow historical acceptance; release membership changes do not erase it.
 
-This is reviewed candidate configuration only. It becomes active after the compatible Tracker is published and ACL's coordinated cutover prerequisites are fulfilled. Before cutover, compare fresh Issues with this frozen list and report differences; do not regenerate it automatically or force old counts green.
+At the preparation checkpoint this was reviewed candidate configuration only. The
+recorded plan was: it becomes active after the compatible Tracker is published and ACL's coordinated cutover prerequisites are fulfilled. Before cutover, compare fresh Issues with this frozen list and report differences; do not regenerate it automatically or force old counts green.
 
 ## Later work remains outside the frozen list
 

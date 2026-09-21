@@ -33,6 +33,12 @@ retained legacy Tracker package is deleted just to fit the template.
 - GitHub default is now `main`; permanent `stage` was created at that exact commit.
   `master` remains at pre-migration `79caea74d4f88c559d79caf6fc86ef9b7b43f9e8`.
   Automatic branch deletion is disabled. Existing clones and stable tags were preserved.
+- Initial stage `09eb8af` passed full Windows CI
+  [35603056418](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/35603056418)
+  and real package update/restart/recovery
+  [35603056536](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/35603056536).
+  Downloaded report source/tree match that exact stage commit. This is initial
+  prepared content; PR #253 still requires its own changed-tree stage verification.
 - Tracker PR #64 merged and was deployed as `0dadc889e18b027c8ca98b888407d492848f2f19`
   using the maintained guarded installer on the existing server. Fresh snapshots
   preserve all 160 ACL task identities, six modules, 74 historical completions,
