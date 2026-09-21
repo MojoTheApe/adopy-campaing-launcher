@@ -12,7 +12,10 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
-  profile identity, draft preparation, queues and browser lifecycle.
+  profile identity, draft preparation, queues and browser lifecycle. ACL-1250/#247
+  confirms audience age/country values within their own field and opens the correct
+  collapsed Locations/Languages control, preserving adjacent fields. Later hover-only
+  controls remain ACL-1251; the deferred real pilot remains ACL-1215.
 - `src/creative_agent`, `src/knowledge_agent`: creative analysis and domain references.
 - `src/analysis_agent/team_library.py` and related library modules: shared targets/ad texts in
   the separately provisioned private team library; PR #244 replaced Google Sheets
@@ -32,8 +35,9 @@ part of the ACL runtime; preserve the tested distribution boundary.
 PR #245 (installer) and #246 (updater) are merged at the recorded source baseline.
 The source install path still exists alongside the packaged path. There is no
 published GitHub Release or verified real Windows upgrade/restart/rollback at this
-checkpoint. Hosted Windows checks are unavailable; local test reports do not prove
-live operation. Company Google sign-in remains ACL-1242 and part of ACL-1239's scope;
+checkpoint. Hosted Windows tests and the real build/install/repair/uninstall
+harness now pass; the isolated update/restart/recovery acceptance is still pending.
+These automated results do not claim a live Multilogin pilot or employee update. Company Google sign-in remains ACL-1242 and part of ACL-1239's scope;
 shared-library provisioning remains ACL-1241. Do not mark either parent complete
 because its code exists. Media reuse remains governed by its explicit feature flags
 and outstanding acceptance, not by adoption.

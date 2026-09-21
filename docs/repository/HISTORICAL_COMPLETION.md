@@ -23,6 +23,16 @@ A fresh read of all 157 tasks verifies: 74 complete before and after adoption; c
 
 This is reviewed candidate configuration only. It becomes active after the compatible Tracker is published and ACL's coordinated cutover prerequisites are fulfilled. Before cutover, compare fresh Issues with this frozen list and report differences; do not regenerate it automatically or force old counts green.
 
+## Later work remains outside the frozen list
+
+After old-PR reconciliation the inventory contains 160 tasks. ACL-1250 is the new
+source-integration follow-up merged through #247; ACL-1251 and ACL-1252 preserve
+separate unfinished work. None was added to this manifest. The original 74 accepted
+records remain fixed. Under legacy rules ACL-1250 counts as source-complete; under
+the adopted package policy its Merged label alone is delivery-pending. This is an
+expected new-task distinction, not lost historical completion. Release membership
+is unchanged. Fresh comparison must report any other drift before cutover.
+
 ## Tasks whose completed count changes
 
 | Task | Accepted status | Included in current release | Title |

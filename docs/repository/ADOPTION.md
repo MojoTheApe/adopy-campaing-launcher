@@ -4,7 +4,8 @@ Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/248
 
 ## Current facts and target
 
-Prepared from `master` at `6e871edd425afe1c74b955d7ba7b9793e06a7022`.
+Prepared from `master` at `79caea74d4f88c559d79caf6fc86ef9b7b43f9e8`.
+The frozen historical audit retains its original source `6e871edd425afe1c74b955d7ba7b9793e06a7022`.
 Master Repo source `e1473c428872757519355af1a7753cf3a0ce0f12` is proposed 1.0.0,
 not a published release. Its compatible Tracker is
 `5f211d3095a392a16c2c01a65eb02ff8719a7243` (TT-61 / PR #62).
@@ -21,22 +22,18 @@ retained legacy Tracker package is deleted just to fit the template.
 
 ## What remains before activation
 
-- Resolve pre-adoption PRs #180, #222 and #247 under their original rules. #247 is
-  proposed to replace the remaining #222 work; verify this before closing #222.
-  Preserve any additional changes still in other working copies. Do not merge #222
-  wholesale over newer reviewed corrections. Old green CI on a conflicting PR is
-  not verification against current master.
-- Pass hosted Actions on the final candidate. The intake runs ended `startup_failure`
-  before jobs started; on 2026-09-21, run 35587298320 executed real Windows jobs.
-  Each Python version passed 2344 tests but failed the bootstrap fixture, which still
-  created origin/master while the candidate installer reads origin/main. This fixture
-  is corrected. Subsequent installer runs exposed direct-file test imports and an
-  obsolete smoke assertion from before the release updater was integrated. Tests
-  now run with repository imports and verify embedded source/version plus the actual
-  release-channel contract in an isolated offline process. The new exact-candidate
-  Windows and installer results remain required.
-  Installer #245 and updater #246 were merged with an owner-approved exception limited
-  to those exact candidates. It is not reused here.
+- The original PR gate is resolved: #180 is closed, with its safe remaining
+  optimization retained in ACL-1174; its loading/boxless-row fixes already exist.
+  #247 passed independent review and full Windows/installer checks, then merged at
+  `79caea74d4f88c559d79caf6fc86ef9b7b43f9e8`. #222 is closed as superseded; its residual
+  keyboard discrepancy remains ACL-1252. The author's separate hover/Enter work is
+  ACL-1251 and its live checkout was preserved. Do not reopen historical completions
+  or import the old combined source. Reports are preserved in the original PRs.
+- Refresh this migration's own final-head checks and independent review after the
+  base update. Earlier head `34d2096` passed all required Windows and installer
+  checks. #247 passed 2346 tests on each Windows version (35595745155) and the full
+  installer cycle (35595745062); those runs verify its source, not a changed migration
+  head. Installer verification corrections are now in master. No CI waiver applies.
 - Complete the historical reconciliation below, registry companion review and real
   authenticated board verification. Do not create a second ACL registration.
 - Establish an isolated Windows stage installation, its data/configuration boundaries,
@@ -75,30 +72,21 @@ live board after switching. No Issue relabelling or synthetic receipts are neede
 
 ## Coordinated cutover (after blockers are resolved)
 
-1. Freeze source/PR admission briefly, refresh master and rebase/review this candidate
-   if its base changed. Account for all live worktrees and original PR dispositions.
-   Complete the companion Task Tracker registry/fallback review, but do not publish
-   its main/stage config while the source repository still uses master.
-2. Record original master SHA, settings, registry version and state-branch SHA for
-   recovery. Agree the exact first integration route for this migration in the Issue;
-   it has not itself passed a pre-existing stage. Never fabricate a stage receipt.
-3. Coordinate the source branch rename to main and explicitly verify the migration
-   PR's base and branch settings. Preserve original master history. Establish stage
-   from the current main content, merge the reviewed source through the agreed
-   bootstrap route, and verify actual resulting trees/checks. No force push or
-   arbitrary stage reset. Keep all new feature PRs paused until config/state agree.
-4. Publish the existing ACL registry's main base and reconciled configuration through
-   Task Tracker's maintained reviewed procedure; initialize the Stage label. Confirm
-   a fresh authenticated board shows the original IDs/modules and intended columns.
-   Existing registration is an update, not a second onboarding.
-5. Record genuine evidence references in `.workflow/adoption.json`, set its state to
-   active in a reviewed commit and run validation/checks. Update the temporary warning
-   in AGENTS.md and the migration guard instructions. Keep `delivery.json` draft until
-   published-standard and operational readiness requirements are actually fulfilled;
-   the active/draft distinction must stay explicit. Remove allow-draft CI only then.
-6. Verify a complete new task through stage/main and a real package install/update.
-   Follow the existing release/backup/recovery safeguards; no release occurs merely
-   from branch rename. Do not mark ACL-1248 complete until its full criteria are met.
+Use the bounded [bootstrap procedure](BOOTSTRAP.md). The first reviewed migration
+must integrate into **master before renaming it**: the prepared PR checker verifies
+that exact original route and the preserved legacy config. Renaming first would
+make its real linkage check fail. Do not change source_branch or weaken the checker
+to hide that failure.
+
+The bootstrap keeps ordinary project-client writes blocked until genuine activation.
+After matching main/stage/config and Tracker publication exist, the procedure uses
+the exact clean pinned shared engine for a narrowly scoped ACL-1248 evidence flow.
+Its normal review, current-check, stage and unchanged-content admission still apply.
+No active flag or historical receipt is used to authorize unverified work. The
+activation candidate then follows stage -> main; only after actual evidence is
+recorded do normal project-client operations resume. Keep the descriptor draft while
+the selected standard remains unpublished, and keep ACL-1248 unfinished until its
+remaining actual acceptance is met. Runtime authorization is separate from this plan.
 
 ## Existing source installations and rollback
 
@@ -125,6 +113,7 @@ do not reset other agents' work or claim a failed cutover succeeded.
 
 Master Repo MR-9 selects the compatible audited-history extension from Task Tracker
 TT-61 / PR #62. Package/stage and historical IDs retain their existing semantics.
-The separate ACL registry/fallback cutover patch is prepared under `adoption/`.
-It is not read by the live server or applied automatically. Existing source/layout
+The ACL registry/fallback companion is reviewed in Task Tracker TT-63 / draft
+PR #64 (`7a7975011b564a09bdfe325dd8efeb228e454f2e`), matching the patch under
+`adoption/`. It remains unmerged and is not read by the live server automatically. Existing source/layout
 history is preserved in `history/PRE_ADOPTION_*`; current rules are authoritative here.
