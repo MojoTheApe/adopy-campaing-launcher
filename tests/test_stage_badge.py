@@ -37,7 +37,7 @@ def repo(tmp_path, monkeypatch):
     _run(tmp_path, "remote", "add", "work", "https://github.com/" + u.PROJECT_REPO + ".git")
     _run(tmp_path, "update-ref", "refs/remotes/work/stage", "HEAD")
     monkeypatch.setattr(u, "_ROOT", tmp_path)
-    monkeypatch.setattr(u, "_stage_state", {"checked": 0.0, "fetching": False, "last": None})
+    monkeypatch.setattr(u, "_stage_state", {"checked": None, "fetching": False, "last": None})
     return tmp_path
 
 
@@ -125,3 +125,38 @@ def test_a_release_header_is_unchanged():
     title, meta = _header({"channel": "release"})
     assert "<title>Adopy Campaigns Launcher" in title and "STAGE" not in title
     assert 'id="acl-stage"' not in meta
+
+
+def test_a_fetch_timeout_keeps_the_known_count(repo, monkeypatch):
+    """Ревью: таймаут fetch заменял известное число на «stage unknown»."""
+    _commit(repo, "b.txt", "one\n")
+    real = u._git
+
+    def slow(*args, **kw):
+        if args and args[0] == "fetch":
+            raise subprocess.TimeoutExpired(cmd="git fetch", timeout=60)
+        return real(*args, **kw)
+
+    monkeypatch.setattr(u, "_git", slow)
+    u._stage_refresh()
+    assert u._stage_state["last"] == {"known": True, "ahead": 1, "ref": "work/stage", "why": ""}
+    assert u._stage_state["fetching"] is False
+
+
+def test_the_first_call_after_start_fetches_at_once(repo, monkeypatch):
+    """Ревью: с checked=0 первая сверка ждала 10 минут от загрузки машины."""
+    started = []
+    monkeypatch.setattr(u, "_stage_refresh", lambda: started.append(1))
+    monkeypatch.setattr(u.time, "monotonic", lambda: 5.0)
+    u.stage_status()
+    time.sleep(0.2)
+    assert started == [1]
+
+
+@pytest.mark.parametrize("url", [
+    "git@github.com:MojoTheApe/adopy-campaing-launcher.git",
+    "https://github.com/mojotheape/Adopy-Campaing-Launcher/",
+])
+def test_the_remote_is_found_in_other_url_forms(repo, url):
+    _run(repo, "remote", "set-url", "work", url)
+    assert u._project_remote() == "work"

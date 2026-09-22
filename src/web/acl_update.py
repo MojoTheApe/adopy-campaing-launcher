@@ -123,7 +123,9 @@ STAGE_BRANCH = "stage"
 STAGE_REFRESH_S = 600
 
 _stage_lock = threading.Lock()
-_stage_state: dict[str, Any] = {"checked": 0.0, "fetching": False, "last": None}
+# `checked` = None — ещё ни разу: monotonic() на Windows считает от загрузки
+# машины, и с нулём первая сверка откладывалась на 10 минут после старта.
+_stage_state: dict[str, Any] = {"checked": None, "fetching": False, "last": None}
 
 
 def _project_remote() -> str:
@@ -154,12 +156,18 @@ def _stage_count() -> dict[str, Any]:
 
 
 def _stage_refresh() -> None:
+    # Неудачный fetch (сеть, таймаут) не отменяет счёт по уже скачанной ветке:
+    # число остаётся, только не свежее. Иначе таймаут менял известное число
+    # на «stage unknown».
     try:
         remote = _project_remote()
         if remote:
             _git("fetch", "--quiet", remote, STAGE_BRANCH, timeout=60)
+    except Exception:  # noqa: BLE001 — сеть и git не должны ронять шапку
+        pass
+    try:
         result = _stage_count()
-    except Exception as exc:  # pragma: no cover - сеть и git не должны ронять шапку
+    except Exception as exc:  # pragma: no cover - defensive
         result = {"known": False, "ahead": None, "ref": "", "why": str(exc)[:120]}
     with _stage_lock:
         _stage_state["last"] = result
@@ -178,7 +186,8 @@ def stage_status() -> dict[str, Any]:
         return {"channel": "release"}
     with _stage_lock:
         last = _stage_state["last"]
-        stale = time.monotonic() - _stage_state["checked"] > STAGE_REFRESH_S
+        checked = _stage_state["checked"]
+        stale = checked is None or time.monotonic() - checked > STAGE_REFRESH_S
         start = stale and not _stage_state["fetching"]
         if start:
             _stage_state["fetching"] = True

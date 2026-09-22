@@ -41,4 +41,6 @@ the number of its commits that are not on the project's `stage` branch (fetched 
 the background from the remote whose URL is the project repository). Packaged builds
 installed from a release show no badge. The badge tells the owner which version they
 are looking at; it is not stage verification and does not replace the isolated
-Windows check above.
+Windows check above. The count leaves out commits that reached stage as the same
+patch; a commit brought to stage with conflict resolution or squashed keeps being
+counted, so treat the number as a guide, not an exact audit.
