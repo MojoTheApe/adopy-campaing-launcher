@@ -269,6 +269,7 @@ def test_connection_borrows_the_existing_country_form(ui):
     env.filters['fmt_usd'] = str
     country = {'country':'Saudi Arabia', 'key':'SA', 'rows':[], 'virtual':False, 'spend':0, 'deposits':0, 'leads':0}
     env.filters['fmt_currency'] = lambda v,c: str(v)
+    env.filters['fmt_summary_amount'] = lambda v,c: str(v)
     markup = env.get_template('_account_map.html').render(mc=country,
         amap={'countries':[country],'available':[],'all_accounts':[],'live':{},'dates':[],'date_from':'','date_to':'','span':''}, mlx={'A':'Inhouse','B':'Agency'})
     p.evaluate("html => {const host=document.createElement('div');host.id='offline-map';host.innerHTML=html;document.body.appendChild(host);window.originalConnect=host.querySelector('details.amap-country .amap-add');}", markup)
