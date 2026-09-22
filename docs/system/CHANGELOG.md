@@ -1,5 +1,12 @@
 # System history
 
+## Country-attributed read part without noise labels — ACL-1264
+
+The same cell's `in <country>: …` part (spend the accounts attribute to the
+country, acl-357) now follows ACL-1258: amounts via `fmt_summary_amount`, no
+`currency unknown`, no account names. Sign-only amounts from different accounts
+are still not added up; the reason stays in the value's tooltip.
+
 ## Country read summary without noise labels — ACL-1258
 
 The collapsed country row showed read totals without a currency code as
