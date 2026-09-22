@@ -1622,8 +1622,18 @@ _READ_TREE_JS = r"""
       .filter(visible)
       .map(h => (h.getAttribute('data-surface') || '').split(':').pop());
     const dataCols = heads.filter(c => c !== 'toggle' && c !== 'name');
-    const nameEls = Array.from(t.querySelectorAll('[data-tooltip-content]'))
-      .filter(e => visible(e) && e.querySelector('a') && norm(e.getAttribute('data-tooltip-content')));
+    const tips = Array.from(t.querySelectorAll('[data-tooltip-content]'))
+      .filter(e => visible(e) && norm(e.getAttribute('data-tooltip-content')));
+    let nameEls = tips.filter(e => e.querySelector('a'));
+    if (!nameEls.length) {
+      // 22.09 (Doc19, список объявлений): имя объявления — не ссылка, а
+      // просто текст с подсказкой. Имя строки тогда — подсказка внутри строки
+      // с переключателем; у заголовка колонки («Ad») ни строки, ни тумблера нет.
+      nameEls = tips.filter(e => {
+        const row = e.closest('[role="presentation"]');
+        return row && t.contains(row) && row.querySelector('[role="switch"]');
+      });
+    }
     if (!nameEls.length) return {rows: [], how: 'no-row-surfaces', kinds: []};
     const firstLeaf = (c) => {
       const leaf = Array.from(c.querySelectorAll('*')).find(e => visible(e) && !e.children.length && norm(e.textContent));
@@ -1659,6 +1669,16 @@ _READ_TREE_JS = r"""
       const m = (e.getAttribute('data-surface') || '').match(/level=([A-Z_]+)/);
       if (m) lk.add(m[1]);
     });
+    // 22.09 (Doc19, список объявлений): подсказок с level= на этой странице
+    // нет вовсе. Уровень тогда называет заголовок колонки имени — «Ad»,
+    // «Ad set», «Campaign». Незнакомое слово (другой язык) — уровня нет, и
+    // разбор откажет, как отказывал.
+    if (!lk.size) {
+      const head = t.querySelector('[data-surface*="table_column_header:name"]');
+      const word = head ? norm(head.textContent) : '';
+      const byWord = {'Campaign': 'CAMPAIGN_GROUP', 'Ad set': 'CAMPAIGN', 'Ad': 'ADGROUP'};
+      if (byWord[word]) lk.add(byWord[word]);
+    }
     return {rows, how: 'by-name', kinds: Array.from(lk)};
   }
 

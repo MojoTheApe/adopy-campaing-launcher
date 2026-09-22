@@ -12,6 +12,13 @@ ad name belongs to that campaign's structure. The recovered id is stored as
 `data_id`, never as `id`, so turn-off stays unavailable for such rows. Accounts with
 ids are unchanged. Read only: no clicks, no editor.
 
+Live check on 2026-09-22 found the ads list of such an account still unread: the
+campaign ids were recovered, but ad names in that table are plain text (not links)
+and the page carries no `level=` hints. The id-less parser now takes a row's name
+from the tooltip inside a row with a switch when no name links exist, and, without
+`level=` hints, takes the level from the name column heading (`Campaign`, `Ad set`,
+`Ad`). An unknown heading still refuses the list.
+
 ## Audience field confirmation — ACL-1250 / PR #247
 
 Merged into master on 2026-09-21 after independent review, full Windows tests and
