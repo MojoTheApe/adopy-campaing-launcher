@@ -4,8 +4,9 @@
 
 Account managers read the map's "Read" buttons as "connect the account". On the
 owner's decision the buttons now name the action: "Read spend", "Read all spend",
-"Read all spend in <country>"; the busy states say "reading spend…" / "Reading
-spend N of M…", and the country counter reads "N/M spend read" both from the
+"Read all spend in <country>"; Read all while busy says "Reading spend N of M…"
+(the per-account busy label stays the short "reading…" so three buttons still fit
+the actions cell at 1280–1366px), and the country counter reads "N/M spend read" both from the
 server and after a read in the page. "Connect" was rejected on purpose: the
 button reads spend for the dates on screen, and "connected" already means the
 account/profile link. Labels only; behaviour unchanged.

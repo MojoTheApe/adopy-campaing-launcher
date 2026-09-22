@@ -1733,6 +1733,10 @@
        15…»), и на 1280–1366px кнопка в шапке ломалась на две строки. Она
        не сжимается и не переносится; даты тоже не рвутся (nowrap на note). */
     .amap-head .amap-read-all { flex-shrink: 0; white-space: nowrap; }
+    /* Status и Setup отдали кнопкам по проценту; с прежними полями 0.85rem
+       «needs setup» и «no warning» на 1280–1366px уходили в многоточие.
+       Узкие поля возвращают им место; строка не растёт. */
+    .amap table.amap-grid td.amap-status, .amap table.amap-grid td.amap-setup { padding-left: 0.3rem; padding-right: 0.3rem; }
     .amap .amap-x {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
