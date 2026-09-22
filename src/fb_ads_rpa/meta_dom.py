@@ -8155,6 +8155,85 @@ def disable_text_variations(page: Page) -> bool | None:
     return ok
 
 
+_TEXT_GENERATION_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+    const vis = (e) => e.getClientRects().length > 0;
+    const leaf = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && /creative text generation/i.test(norm(e.textContent)));
+    if (!leaf) return {found: false};
+    // Раздел бывает свёрнут: сначала раскрываем его собственной створкой.
+    let box = leaf, collapsed = null;
+    for (let i = 0; i < 7 && box.parentElement; i++) {
+      box = box.parentElement;
+      const shut = [...box.querySelectorAll('[aria-expanded="false"]')].filter(vis);
+      if (shut.length) { collapsed = shut[0]; break; }
+    }
+    if (collapsed) {
+      collapsed.scrollIntoView({block: 'center'});
+      const r = collapsed.getBoundingClientRect();
+      return {found: true, expand: {x: r.x + r.width / 2, y: r.y + r.height / 2}};
+    }
+    // Раскрыт: ищем включённый переключатель внутри раздела.
+    let holder = leaf;
+    for (let i = 0; i < 7 && holder.parentElement; i++) {
+      holder = holder.parentElement;
+      const on = [...holder.querySelectorAll('[role=switch], input[type=checkbox], [role=checkbox]')]
+        .filter(e => vis(e) && (e.getAttribute('aria-checked') || String(e.checked)) === 'true');
+      if (on.length) {
+        const b = on[0];
+        b.scrollIntoView({block: 'center'});
+        const r = b.getBoundingClientRect();
+        return {found: true, on: on.length,
+                point: {x: r.x + r.width / 2, y: r.y + r.height / 2}};
+      }
+    }
+    return {found: true, on: 0, point: null};
+  }
+"""
+"""Раздел «Advantage+ creative text generation» и его переключатель."""
+
+
+def disable_text_generation(page: Page) -> bool | None:
+    """Выключить генерацию текста Meta в объявлении.
+
+    22.09, решение пользователя: рядом с нашим текстом Meta держит свои
+    варианты («Primary text (1 of 5)»), а снизу — раздел Advantage+ creative
+    text generation. Снятой галочки «Check all text variations» мало: сам
+    раздел остаётся включённым. Раскрываем его и выключаем. None — раздела на
+    странице нет, выключать нечего.
+    """
+    state = {}
+    for _ in range(3):
+        try:
+            state = page.evaluate(_TEXT_GENERATION_JS) or {}
+        except Exception as exc:
+            _telemetry.record("text_generation_off", False, note=str(exc)[:60])
+            return False
+        if not state.get("found"):
+            return None
+        if state.get("expand"):
+            _cdp_mouse_click(page, state["expand"]["x"], state["expand"]["y"])
+            _sleep_h(0.8)
+            continue
+        break
+    if not state.get("point"):
+        # Раздел есть, включённого переключателя не нашли — записываем как есть.
+        _telemetry.record("text_generation_off", None,
+                          note="no_switch", diag={"state": state})
+        return None
+    _cdp_mouse_click(page, state["point"]["x"], state["point"]["y"])
+    _sleep_h(0.9)
+    try:
+        after = page.evaluate(_TEXT_GENERATION_JS) or {}
+    except Exception:
+        after = {}
+    ok = not after.get("point")
+    _telemetry.record("text_generation_off", ok,
+                      diag={"was_on": state.get("on"), "still_on": after.get("on")})
+    return ok
+
+
 def fill_ad_copy(
     page: Page, ad_title: str, ad_body: str, report: dict | None = None
 ) -> bool:
@@ -8188,6 +8267,7 @@ def fill_ad_copy(
     # Сначала убираем варианты Meta, потом вводим свой текст: иначе наш текст
     # соседствует с сочинёнными и в показ идёт что попало.
     report["variations_off"] = disable_text_variations(page)
+    report["generation_off"] = disable_text_generation(page)
 
     def _click_via_cdp_handle(locator):
         return _focus_via_cdp_click(page, locator)
