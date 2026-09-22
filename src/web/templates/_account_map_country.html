@@ -22,10 +22,10 @@
             Status и Setup несут короткие подписи. Числа не тронуты: ради них
             таблицу и читают. -#}
         <colgroup>
-          <col style="width:17%"><col style="width:8%"><col style="width:9%">
+          <col style="width:19%"><col style="width:8%"><col style="width:9%">
           <col style="width:5%"><col style="width:5%"><col style="width:5%">
-          <col style="width:5%"><col style="width:5%"><col style="width:9%">
-          <col style="width:10%"><col style="width:22%">
+          <col style="width:5%"><col style="width:5%"><col style="width:8%">
+          <col style="width:8%"><col style="width:23%">
         </colgroup>
         {#- Два спенда стоят рядом и подписаны источником: один из книги
             статистики, другой прочитан с самого кабинета. Порознь их легко
@@ -139,7 +139,7 @@
               {%- if amap.span == 'all' or not amap.date_from -%}
                 <button type="button" class="amap-btn amap-read" disabled title="Select dates to read account spend; Maximum is not supported">Select dates</button>
               {%- elif sr and sr.state == 'running' -%}
-                <button type="button" class="amap-btn amap-read" onclick="amapReadSpend(this)" disabled>reading spend…</button>
+                <button type="button" class="amap-btn amap-read" onclick="amapReadSpend(this)" disabled>reading…</button>
               {%- elif sr and sr.state == 'failed' -%}
                 <button type="button" class="amap-btn amap-read amap-live-bad" title="{{ sr.error }}"
                         onclick="amapReadSpend(this)">failed · retry</button>

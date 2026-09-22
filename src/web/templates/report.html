@@ -1577,7 +1577,7 @@
       margin-bottom: var(--space-sm);
     }
     .amap-head h3 { margin: 0; }
-    .amap-head .amap-note { font-size: 0.78rem; color: var(--muted); }
+    .amap-head .amap-note { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
     .amap-country {
       border: 1px solid var(--border); border-radius: var(--radius-md);
       background: var(--bg-elev); margin-bottom: var(--space-md);
@@ -1724,11 +1724,14 @@
          161px кнопок не влезали в колонку из-за 27px отступов, и строка
          разъезжалась на две. */
       padding-left: 0.3rem;
+      /* ACL-1266: «Read spend» на 4 буквы шире, и на 1280px три кнопки снова
+         переносились. Правое поле у крайней правой колонки — пустое место. */
+      padding-right: 0;
     }
     .amap table.amap-grid td.amap-actions > button { margin: 0.05rem 0 0.05rem 0.2rem; }
     /* ACL-1266: подпись стала длиннее («Read all spend», «Reading spend 12 of
        15…»), и на 1280–1366px кнопка в шапке ломалась на две строки. Она
-       не сжимается и не переносится; место уступает заголовок. */
+       не сжимается и не переносится; даты тоже не рвутся (nowrap на note). */
     .amap-head .amap-read-all { flex-shrink: 0; white-space: nowrap; }
     .amap .amap-x {
       background: none; border: 1px solid var(--border-strong);
@@ -5895,7 +5898,7 @@ function amapReadSpend(btn) {
   if (extra) extra.remove();
   btn.disabled = true;
   btn.className = 'amap-btn amap-read';
-  btn.textContent = 'reading spend…';
+  btn.textContent = 'reading…';
   /* Период берём тот же, что показан в шапке: число за другой отрезок
      выглядело бы расхождением источников, а было бы ответом на другой
      вопрос. */
@@ -6098,7 +6101,7 @@ function amapApplyReading(account, s) {
       label.title = (s.status_text || (s.status === 'clear' ? 'No warning on the page; not a verified active status' : s.status)) + ' · read ' + (s.finished_at || '');
     }
     if (s.state === 'running') {
-      btn.disabled = true; btn.textContent = 'reading spend…'; return;
+      btn.disabled = true; btn.textContent = 'reading…'; return;
     }
     if (s.state !== 'ok') { amapSpendFailed(btn, cell, s.error || 'failed', s.shot, s.how); return; }
     cell.innerHTML = '<span class="amap-live-ok"></span>';
