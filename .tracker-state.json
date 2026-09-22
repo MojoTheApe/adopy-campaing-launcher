@@ -201,8 +201,26 @@
       "source_sha": "b9a43c96f48ee97b05158bf9b8f023f71884e8d6",
       "main_tree": "da7a9778d0ca51421a05e7ffe0313e429dd016d5",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
-      "recorded_at": "2026-09-22T08:41:55+00:00"
+      "state": "passed",
+      "recorded_at": "2026-09-22T08:41:55+00:00",
+      "verification": {
+        "kind": "stage-verification",
+        "result": "passed",
+        "target": "ACL isolated Windows stage installation",
+        "source_sha": "b9a43c96f48ee97b05158bf9b8f023f71884e8d6",
+        "tree_sha": "348cfe8946c555af9c9c7d2fae3d0a6d5ed4aafd",
+        "checks": [
+          "Stage push CI run 35706205043 on b9a43c9: ACL verification, Windows Python 3.11 and 3.13 suites passed.",
+          "Exact-stage installer run 35706204962 passed build/install/launch/repair/uninstall.",
+          "Previous actual package installs and starts with isolated data",
+          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+          "Updated installed application restarts with preserved machine/workspace/creative data",
+          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+          "Recovered application restarts and synthetic data remains byte-identical"
+        ],
+        "report": "Artifact ACL-update-recovery-262 of run 35706204962 (report.json: result passed, source b9a43c96f48ee97b05158bf9b8f023f71884e8d6, tree 348cfe8946c555af9c9c7d2fae3d0a6d5ed4aafd; packages 0.0.0-ci.262 sha256 1a7cf0ad8bb875be0d1ea19c849ee112fc3adc0be00bada4153459ef556a231b, 0.1.0-alpha.262 sha256 3fe7eff69929a6198f29a3ffdf5aea8cbf95c917f6864884c2e04594fcf3b46b). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof. Live Doc19 read check follows promotion on the owner's live dashboard."
+      },
+      "verified_at": "2026-09-22T08:56:24+00:00"
     },
     "tasks": {
       "248": {
