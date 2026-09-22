@@ -706,6 +706,7 @@ def test_a_scrollable_snapshot_does_not_claim_a_complete_tree(page):
 # id каждой кампании и имена её объявлений.
 
 import json as _json
+from collections import Counter as _Counter
 
 
 def _structure_script(*campaigns) -> str:
@@ -725,11 +726,17 @@ def _structure_script(*campaigns) -> str:
 
 
 def test_campaign_ids_are_found_in_the_page_data(page):
-    page.set_content(_structure_script(("123", "SA camp", ["ad one", "ad two"]),
+    page.set_content(_structure_script(("123", "SA camp", ["ad one", "ad one", "ad two"]),
                                        ("456", "Warmup", ["Warmup"])))
     got = sp._campaigns_from_page_data(page)
-    assert got == {"SA camp": {"id": "123", "ads": {"ad one", "ad two"}},
-                   "Warmup": {"id": "456", "ads": {"Warmup"}}}
+    assert got == {"SA camp": {"id": "123", "ads": {"ad one": 2, "ad two": 1}},
+                   "Warmup": {"id": "456", "ads": {"Warmup": 1}}}
+
+
+def test_names_are_cleaned_like_the_table_cleans_them(page):
+    """Таблица схлопывает пробелы; данные страницы — нет. Сравнивать надо одинаково."""
+    page.set_content(_structure_script(("123", "  SA\u00a0 camp ", ["ad  one"])))
+    assert sp._campaigns_from_page_data(page) == {"SA camp": {"id": "123", "ads": {"ad one": 1}}}
 
 
 def test_two_campaigns_with_one_name_get_no_id(page):
@@ -748,14 +755,14 @@ def test_a_page_without_the_data_gives_nothing(page):
 @pytest.fixture
 def nameless(flow):
     """Таблица без id: кампании и объявления пришли по имени, без id."""
-    state = {"structure": {"camp A": {"id": "111", "ads": {"ad A1", "ad A2"}},
-                           "camp B": {"id": "222", "ads": {"ad B1"}}},
+    state = {"structure": {"camp A": {"id": "111", "ads": _Counter(["ad A1", "ad A2"])},
+                           "camp B": {"id": "222", "ads": _Counter(["ad B1"])}},
+             "campaigns": ["camp A", "camp B"],
              "ads": {"111": ["ad A1", "ad A2"], "222": ["ad B1"]}}
 
     def _level(page, level):
         if level == "campaign":
-            return ([sp.AdObject(level="campaign", name="camp A"),
-                     sp.AdObject(level="campaign", name="camp B")],
+            return ([sp.AdObject(level="campaign", name=n) for n in state["campaigns"]],
                     "by-name", "read by name: this account's table has no campaign ids")
         cid = page.url.split("selected_campaign_ids=")[1].split("&")[0]
         return ([sp.AdObject(level="ad", name=n) for n in state["ads"][cid]],
@@ -818,3 +825,59 @@ def test_an_id_table_does_not_look_at_the_page_data(flow):
     flow.setattr(sp, "_campaigns_from_page_data", lambda page: called.append(1) or {})
     sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
     assert called == []
+
+
+def test_a_name_twice_in_the_table_gets_no_borrowed_id(nameless):
+    """В данных страницы «camp A» одна, а в таблице две. Второй строке достался
+    бы чужой id и чужие объявления."""
+    nameless["campaigns"] = ["camp A", "camp A", "camp B"]
+    page = _Page()
+    objects, _, err = sp._read_tree(page, "act_123", "act_123", "2026-09-01")
+    assert len(page.visited) == 2, "за объявлениями «camp A» ходить нельзя"
+    assert [c["data_id"] for c in objects if c["level"] == "campaign"] == ["", "", "222"]
+    assert "share a name" in err
+    assert "did not give their ids" not in err
+
+
+def test_an_ignored_filter_is_caught_even_for_clones(nameless):
+    """Клоны: одинаковые имена объявлений. Meta проигнорировала фильтр и
+    отдала все объявления аккаунта — каждое имя «знакомо», но их больше."""
+    nameless["structure"] = {"camp A": {"id": "111", "ads": _Counter(["clone ad"])},
+                             "camp B": {"id": "222", "ads": _Counter(["clone ad"])}}
+    nameless["ads"] = {"111": ["clone ad", "clone ad"], "222": ["clone ad", "clone ad"]}
+    objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert [o for o in objects if o["level"] == "ad"] == []
+    assert err.count("did not match this campaign") == 2
+
+
+def test_clones_with_a_working_filter_are_kept(nameless):
+    nameless["structure"] = {"camp A": {"id": "111", "ads": _Counter(["clone ad"])},
+                             "camp B": {"id": "222", "ads": _Counter(["clone ad"])}}
+    nameless["ads"] = {"111": ["clone ad"], "222": ["clone ad"]}
+    objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert sorted(o["parent_id"] for o in objects if o["level"] == "ad") == ["111", "222"]
+    assert "did not match" not in err
+
+
+def test_a_campaign_whose_page_data_lists_no_ads_takes_none(nameless):
+    nameless["structure"]["camp B"] = {"id": "222", "ads": _Counter()}
+    objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert {o["parent_id"] for o in objects if o["level"] == "ad"} == {"111"}
+    assert "did not match this campaign" in err
+
+
+def test_an_id_table_with_nameless_ads_behaves_as_before(flow):
+    """Кампании с id, объявления без id: прежнее правило неоднозначности на
+    месте, и пометка «по имени» остаётся при своей кампании."""
+    def _level(page, level):
+        if level == "campaign":
+            return ([sp.AdObject(level="campaign", id="11" * 8, name="camp A"),
+                     sp.AdObject(level="campaign", id="22" * 8, name="camp B")], "data-surface", "")
+        return ([sp.AdObject(level="ad", name="an ad")], "by-name",
+                "read by name: this account's table has no ad ids")
+
+    flow.setattr(sp, "read_level", _level)
+    objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert all(o["level"] == "campaign" for o in objects)
+    assert "different campaigns" in err
+    assert err.count("has no ad ids") == 2
