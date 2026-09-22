@@ -1920,6 +1920,8 @@
        чтобы его не приняли за период на экране. */
     .amap-live-old { font-variant-numeric: tabular-nums; color: var(--muted); font-style: italic; }
     .amap-live-old small { display: block; font-size: 0.66rem; font-style: normal; }
+    /* Под неудачей — своей строкой, иначе «profile is closed$1,044.82». */
+    .amap-live-bad + .amap-live-old { display: block; margin-top: 0.1rem; }
     .amap-tree-head.old { color: var(--warn); }
     .amap-live-run { color: var(--muted); font-size: 0.78rem; }
     .amap-live-bad { color: var(--danger); border-color: var(--danger); }
