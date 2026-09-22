@@ -293,8 +293,26 @@
       "source_sha": "b2a297470842df3c9548fa279f95947302933994",
       "main_tree": "76591c70347bb58992b7fd07cc88f98d58ea04f6",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
-      "recorded_at": "2026-09-22T13:21:28+00:00"
+      "state": "passed",
+      "recorded_at": "2026-09-22T13:21:28+00:00",
+      "verification": {
+        "kind": "stage-verification",
+        "result": "passed",
+        "target": "ACL isolated Windows stage installation",
+        "source_sha": "b2a297470842df3c9548fa279f95947302933994",
+        "tree_sha": "d8c35aaab1f54399c77ac495c4f145058f8aa3a1",
+        "checks": [
+          "Stage push CI run 35732914095 on b2a2974: ACL verification, Windows Python 3.11 and 3.13 suites passed.",
+          "Exact-stage installer run 35732914180 passed build/install/launch/repair/uninstall.",
+          "Previous actual package installs and starts with isolated data",
+          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+          "Updated installed application restarts with preserved machine/workspace/creative data",
+          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+          "Recovered application restarts and synthetic data remains byte-identical"
+        ],
+        "report": "Artifact ACL-update-recovery-283 of run 35732914180 (report.json: result passed, source b2a297470842df3c9548fa279f95947302933994, tree d8c35aaab1f54399c77ac495c4f145058f8aa3a1; packages 0.0.0-ci.283 sha256 5d1a3707c275aeed8b751b1158e1e18dc1b202fd6bf5c7adeadb4dfbc133ddbe, 0.1.0-alpha.283 sha256 2b169ca77cb267234624e4c78a87f50402f9a9cc53b9bc8d92d357c2442fb94f). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof."
+      },
+      "verified_at": "2026-09-22T13:39:04+00:00"
     },
     "tasks": {
       "248": {
