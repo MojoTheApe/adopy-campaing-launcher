@@ -93,10 +93,13 @@
             {#- ACL-1271: за эти даты чтения нет — последнее удачное за другие.
                 Помечено своими датами и в итог страны не входит: состояние
                 ячейки «fallback», а сумма страны берёт только «ok». -#}
-            {%- set fb = none if sr else (amap.fallback or {}).get(r.account) -%}
+            {%- set fb = (amap.fallback or {}).get(r.account) if (not sr or sr.state == 'failed') else none -%}
+            {%- if fb -%}
+            {%- set fb_html -%}<span class="amap-live-old" title="Read for {% if fb.date_from == fb.date_to %}{{ fb.date_from }}{% else %}{{ fb.date_from }}…{{ fb.date_to }}{% endif %} on {{ fb.finished_at }} — not the dates on screen, and not counted in the country total. Read spend to get these dates.">{{ fb.spend | fmt_currency(fb.currency) }}<small>{% if fb.date_from == fb.date_to %}{{ fb.date_from[5:] }}{% else %}{{ fb.date_from[5:] }}…{{ fb.date_to[5:] }}{% endif %}</small></span>{%- endset -%}
+            {%- else -%}{%- set fb_html = '' -%}{%- endif -%}
             <td class="num amap-live" data-account="{{ r.account | e }}" data-running="{{ 1 if sr and sr.state == 'running' else 0 }}" data-read-state="{{ sr.state if sr else ('fallback' if fb else '') }}" data-read-spend="{{ sr.spend if sr and sr.spend is not none else '' }}" data-read-currency="{{ sr.currency if sr else '' }}"{% if fb %} data-fb-from="{{ fb.date_from }}" data-fb-to="{{ fb.date_to }}"{% endif %}>
-              {%- if fb -%}
-                <span class="amap-live-old" title="Read for {% if fb.date_from == fb.date_to %}{{ fb.date_from }}{% else %}{{ fb.date_from }}…{{ fb.date_to }}{% endif %} on {{ fb.finished_at }} — not the dates on screen, and not counted in the country total. Read spend to get these dates.">{{ fb.spend | fmt_currency(fb.currency) }}<small>{% if fb.date_from == fb.date_to %}{{ fb.date_from[5:] }}{% else %}{{ fb.date_from[5:] }}…{{ fb.date_to[5:] }}{% endif %}</small></span>
+              {%- if fb and not sr -%}
+                {{ fb_html }}
               {%- elif sr and sr.state == 'ok' -%}
                 <span class="amap-live-ok" title="{% if sr.date_from == sr.date_to %}{{ sr.date_from }}{% else %}{{ sr.date_from }}…{{ sr.date_to }}{% endif %} · read {{ sr.finished_at }} · {{ sr.how }}">{{ sr.spend | fmt_currency(sr.currency) }}</span>
               {%- elif sr and sr.state == 'failed' -%}
@@ -108,6 +111,7 @@
                     ничего не изменилось. -#}
                 <span class="amap-live-bad" title="{{ sr.error }}{% if sr.how %} · {{ sr.how }}{% endif %}{% if sr.shot %}
 снимок: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}</span>
+                {%- if fb %}{{ fb_html }}{% endif -%}
               {%- else -%}<span class="nodata">—</span>{%- endif -%}
             </td>
             <td class="num">{% if r.has_data %}{{ r.leads }}{% else %}<span class="nodata">—</span>{% endif %}</td>

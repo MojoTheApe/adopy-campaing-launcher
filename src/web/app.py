@@ -788,8 +788,10 @@ def _live_spend(date_from: str = "", date_to: str = "") -> dict[str, dict]:
 def _fallback_spend(live: dict) -> dict[str, dict]:
     """Последнее удачное чтение тех, у кого за период на экране его нет (ACL-1271).
 
-    Только при полном отсутствии чтения за эти даты: идущее или неудачное
-    чтение за них — это ответ про эти даты, и подменять его старым нельзя.
+    Нет чтения за эти даты — показывается запасное. Неудачное за эти даты —
+    решение владельца 22.09: показывать оба, неудачу («failed · retry») и под
+    ней запасное, иначе одна неудачная попытка прятала и число, и дерево.
+    Идущее чтение — ответ в пути, его не подменяем ничем.
     """
     try:
         from src.analysis_agent import account_spend
@@ -797,7 +799,7 @@ def _fallback_spend(live: dict) -> dict[str, dict]:
         return {
             a: r.to_dict()
             for a, r in account_spend.latest_readings().items()
-            if a not in live
+            if a not in live or (live[a] or {}).get("state") == "failed"
         }
     except Exception:  # pragma: no cover - показания не должны ронять страницу
         return {}
