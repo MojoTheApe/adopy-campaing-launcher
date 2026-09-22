@@ -385,7 +385,9 @@ def test_the_listeners_are_the_arrows_and_the_off_button():
     # Пятый (ACL-1256) — смена размера окна: пересчитывает ширины колонок
     # дерева и ничего не нажимает.
     assert block.count("window.addEventListener('resize'") == 1, "окно слушается не только на размер"
-    assert block.count("addEventListener") == 5, "появился шестой обработчик"
+    # Шестой — раскрытие блока страны (`toggle`): тоже только пересчёт ширин.
+    assert block.count("document.addEventListener('toggle'") == 1, "раскрытие слушается не одно"
+    assert block.count("addEventListener") == 6, "появился седьмой обработчик"
 
 
 # ── покрывают ли строки спенд аккаунта ────────────────────────────────────
@@ -1039,3 +1041,108 @@ def test_tree_numbers_stand_under_the_account_columns(page):
     assert len(got) == COLUMNS, "в строке дерева не столько колонок, сколько у аккаунта"
     for i, (tree_x, acc_x) in enumerate(got):
         assert abs(tree_x - acc_x) <= 1, f"колонка {i}: дерево {tree_x}, аккаунт {acc_x}"
+
+
+
+def _tree_css():
+    src = REPORT.read_text(encoding="utf-8")
+    return src[src.index("    .amap-tree > td {"): src.index("    .amap-tree-err {")]
+
+
+def _real_widths(page, table_px=1200):
+    """Доли колонок, как у настоящей карты (colgroup), на таблице 1200px."""
+    page.set_viewport_size({"width": 1400, "height": 800})
+    page.add_style_tag(content=_tree_css())
+    page.evaluate("""(px) => {
+      const shares = [19, 7, 9, 6, 5, 6, 6, 6, 11, 10, 15];
+      const t = document.querySelector('table');
+      t.style.tableLayout = 'fixed'; t.style.width = px + 'px';
+      Array.from(document.getElementById('acc').children)
+        .forEach((c, i) => { c.style.width = shares[i] + '%'; });
+    }""", table_px)
+
+
+def test_names_stay_readable_in_the_narrow_first_column(page):
+    """Ревью ACL-1256: в колонке шириной с имя аккаунта имя кампании получало
+    32px, объявления — 10px. По имени решают, что выключать, — оно обязано
+    читаться целиком, пусть и в две строки."""
+    _real_widths(page)
+    long_camp = dict(ADSET, name="KW_trl_All_Video_Mix_35_17.09")
+    ad = dict(AD, parent_id=ADSET["id"], name="2221 - AR KW Trolley For citizens")
+    _paint(page, [long_camp, ad])
+    _open(page)
+    page.evaluate("() => document.querySelector('.amap-tree-caret').click()")
+    got = page.evaluate("""() => Array.from(document.querySelectorAll('.amap-tree-name')).map(n => ({
+      w: n.getBoundingClientRect().width, full: n.scrollWidth <= n.clientWidth + 1,
+      cellRight: n.closest('.amap-tree-who').getBoundingClientRect().right,
+      right: n.getBoundingClientRect().right}))""")
+    for g in got:
+        assert g["w"] >= 110, f"имени досталось {g['w']:.0f}px"
+        assert g["full"], "имя обрезано, а не перенесено"
+        assert g["right"] <= g["cellRight"] + 1, "имя залезло в соседнюю колонку"
+
+
+def test_the_manage_tab_copy_asks_for_its_country_too(page):
+    """Ревью ACL-1256: на вкладке страны таблица аккаунтов стоит без блока
+    `details.amap-country`, и числа не запрашивались вовсе. Страна теперь
+    записана на самой таблице."""
+    page.evaluate("""() => {
+      document.querySelector('table').dataset.countryName = 'Kuwait';
+      window._asked = [];
+      window.fetch = (url, opts) => { window._asked.push([url, opts]);
+        return Promise.resolve({json: () => Promise.resolve({ok: true, has_data: true,
+          campaigns: {'SA_ARM_iOS_IMG_Reading_30_6.9': {spend: '$1', leads: 2, deposits: 0,
+            cpl: '$0.50', cpa: null, cr: null}}, ads: {}})}); };
+    }""")
+    _paint(page, [ADSET])
+    page.wait_for_function("() => document.querySelector('.amap-tree-num.attr').textContent !== ''")
+    asked = page.evaluate("() => window._asked")
+    assert len(asked) == 1
+    url, opts = asked[0]
+    assert url.startswith("/account-attribution?account=KLD_BFL_X84&country=Kuwait&date_from=2026-09-01&date_to=2026-09-12")
+    assert not opts, "чтение чисел ушло не GET-ом"
+    assert _attr(page)["leads"] == "2"
+
+
+def test_an_answer_for_a_replaced_tree_is_dropped(page):
+    """Перечитали аккаунт, пока шёл запрос: старый ответ не пишет в новое дерево."""
+    page.evaluate("""() => {
+      document.querySelector('table').dataset.countryName = 'Kuwait';
+      window._release = null;
+      window.fetch = () => new Promise(res => { window._release = () => res({json: () =>
+        Promise.resolve({ok: true, campaigns: {'SA_ARM_iOS_IMG_Reading_30_6.9': {spend: '$999',
+          leads: 99, deposits: 9, cpl: null, cpa: null, cr: null}}, ads: {}})}); });
+    }""")
+    _paint(page, [ADSET])
+    first = page.evaluate("() => window._release")
+    page.evaluate("() => { window._first = window._release; }")
+    page.evaluate("() => { window.fetch = () => new Promise(() => {}); }")
+    _paint(page, [ADSET])
+    page.evaluate("() => window._first()")
+    page.wait_for_timeout(50)
+    assert _attr(page)["leads"] == "", "ответ для снятого дерева попал в новое"
+
+
+def test_two_campaigns_with_one_name_get_dashes(page):
+    twin = dict(ADSET, id="120250178859040704")
+    _paint(page, [ADSET, twin])
+    _fill(page, [ADSET, twin], ATTR)
+    assert set(_attr(page, 0).values()) == {"—"} and set(_attr(page, 1).values()) == {"—"}
+    assert "Two campaigns share this name" in page.evaluate(
+        "() => document.querySelector('.amap-tree-num.attr').title")
+
+
+def test_a_campaign_called_like_an_object_method_is_not_found_by_accident(page):
+    odd = dict(ADSET, name="constructor")
+    _paint(page, [odd])
+    _fill(page, [odd], ATTR)
+    assert set(_attr(page).values()) == {"—"}
+    assert "No rows" in page.evaluate("() => document.querySelector('.amap-tree-num.attr').title")
+
+
+def test_headings_and_journal_keep_their_own_spacing(page):
+    page.add_style_tag(content=_tree_css())
+    _paint(page, [ADSET])
+    _open(page)
+    mb = page.evaluate("() => getComputedStyle(document.querySelector('.amap-tree-head')).marginBottom")
+    assert mb not in ("0px", ""), "заголовок дерева прилип к первой строке"

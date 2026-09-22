@@ -1029,8 +1029,16 @@ def build_account_performance_summary(
 
 
 def _tree_name(value: Any) -> str:
-    """Имя для сопоставления с деревом: пробелы схлопнуты, как у разбора таблицы."""
-    return " ".join(str(value or "").split())
+    """Имя для сопоставления с деревом: пробелы схлопнуты, как у разбора таблицы.
+
+    Пустая ячейка книги (NaN, NA) — пустое имя, а не строка «nan».
+    """
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return " ".join(str(value).split())
 
 
 def build_tree_attribution(
@@ -1069,16 +1077,16 @@ def build_tree_attribution(
             "cr": deposits / leads * 100.0 if leads else None,
         }
 
-    names = df_c["Adset Name"].map(_tree_name)
-    titles = df_c["Ad Title"].map(_tree_name) if "Ad Title" in df_c.columns else None
-    for name, part in df_c.groupby(names, sort=False):
+    work = df_c.assign(
+        _camp=df_c["Adset Name"].map(_tree_name),
+        _ad=df_c["Ad Title"].map(_tree_name) if "Ad Title" in df_c.columns else "",
+    )
+    for name, part in work.groupby("_camp", sort=False):
         if not name:
             continue
         campaigns[name] = _metrics(part)
-        if titles is None:
-            continue
         per_ad: Dict[str, Dict[str, Any]] = {}
-        for title, sub in part.groupby(titles.loc[part.index], sort=False):
+        for title, sub in part.groupby("_ad", sort=False):
             if title:
                 per_ad[title] = _metrics(sub)
         ads[name] = per_ad
