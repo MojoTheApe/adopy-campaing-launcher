@@ -3066,6 +3066,60 @@ async def account_spend_status(
     )
 
 
+@app.get("/account-attribution")
+def account_attribution(
+    account: str = "", country: str = "", date_from: str = "", date_to: str = "", span: str = ""
+) -> JSONResponse:
+    """Числа книги по кампаниям и объявлениям одного аккаунта (ACL-1256).
+
+    Та же выборка, что у строки аккаунта на карте: страна, имя из книги
+    (`workbook_alias_for`) и период — пустой период значит «месяц по текущее
+    число», как у карты. Значения отформатированы здесь, тем же `fmt_usd`, что
+    и строка аккаунта: одна сумма не должна выглядеть по-разному в двух
+    строках одной таблицы.
+    """
+    from src.analysis_agent.morning_report import build_tree_attribution
+
+    account, country = account.strip(), country.strip()
+    if not account or not country:
+        return JSONResponse({"ok": False, "error": "account and country are required"}, status_code=400)
+    try:
+        _report, df, _warnings = get_cached_report()
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"Could not read the workbook: {exc}"}, status_code=503)
+    if df is None:
+        return JSONResponse({"ok": True, "has_data": False, "campaigns": {}, "ads": {}})
+    date_from, date_to, span = date_from.strip(), date_to.strip(), span.strip()
+    if not date_from and not date_to and span != "all":
+        date_from, date_to = _month_to_date(_workbook_dates(df))
+    frame = _filter_by_period(df, date_from, date_to) if (date_from or date_to) else df
+    alias = workbook_alias_for(df, country, account)
+    try:
+        got = build_tree_attribution(frame, country, alias)
+    except Exception as exc:  # pragma: no cover - кривая книга не должна ронять дерево
+        return JSONResponse({"ok": False, "error": f"Workbook numbers failed: {exc}"}, status_code=500)
+
+    def _shown(m: dict) -> dict:
+        return {
+            "spend": fmt_usd(m["spend"]),
+            "leads": m["leads"],
+            "deposits": m["deposits"],
+            "cpl": fmt_usd(m["cpl"]) if m["cpl"] else None,
+            "cpa": fmt_usd(m["cpa"]) if m["cpa"] else None,
+            "cr": f"{m['cr']:.1f}%" if m["cr"] else None,
+        }
+
+    return JSONResponse({
+        "ok": True,
+        "has_data": got["has_data"],
+        "date_from": date_from,
+        "date_to": date_to,
+        "alias": alias,
+        "campaigns": {k: _shown(v) for k, v in got["campaigns"].items()},
+        "ads": {c: {a: _shown(v) for a, v in per.items()} for c, per in got["ads"].items()},
+    })
+
+
 @app.get("/account-map")
 async def account_map_fragment(
     request: Request, date_from: str = "", date_to: str = "", span: str = ""
