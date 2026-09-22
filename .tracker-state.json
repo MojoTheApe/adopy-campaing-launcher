@@ -131,7 +131,8 @@
     },
     "ab4bd9dceb6c31e692573222128943ac2e6ee7402b4263d79150e3fdb31d1bca": {
       "title": "Read ads under campaigns when the account table has no ids (Doc19)",
-      "state": "creating"
+      "state": "created",
+      "issue": 255
     }
   },
   "delivery_workflow": {
