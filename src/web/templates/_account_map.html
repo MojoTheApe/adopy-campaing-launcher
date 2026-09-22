@@ -83,8 +83,10 @@
              title="Spend the accounts themselves attribute to {{ mc.country | e }} for these dates, read from Ads Reporting">
             in {{ mc.country }}:
             {%- for r in mc.country_read %}
-            <b>{{ r.spend | fmt_currency(r.currency) }}</b>{% if not r.summed %}<span
-              title="One account: the currency is written as a sign, and a sign does not say which currency it is, so amounts from different accounts are not added up">({{ r.accounts | join(', ') }})</span>{% endif %}{% if not loop.last %} · {% endif %}
+            {#- ACL-1264: как сводка рядом (ACL-1258) — без «currency unknown» и
+                имён кабинетов. Суммы под знаком по-прежнему не складываются и
+                стоят порознь; почему — в подсказке. -#}
+            <b{% if not r.summed %} title="One account: the currency is written as a sign, and a sign does not say which currency it is, so amounts from different accounts are not added up"{% endif %}>{{ r.spend | fmt_summary_amount(r.currency) }}</b>{% if not loop.last %} · {% endif %}
             {%- endfor %}
           </i>
           {%- endif %}
