@@ -1911,7 +1911,7 @@
        иначе колонки уехали бы вправо на его ширину; текстовые блоки дерева
        (заголовок, оговорки, журнал) держат прежний отступ сами. */
     .amap-tree-inner { padding: 0.5rem 0 0.6rem; }
-    .amap-tree-inner > :not(.amap-tree-line):not(.amap-tree-kids) { margin: 0 0.75rem 0 2.2rem; }
+    .amap-tree-inner > :not(.amap-tree-line):not(.amap-tree-kids) { margin-left: 2.2rem; margin-right: 0.75rem; }
     .amap-tree-head {
       font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase;
       color: var(--muted); margin-bottom: 0.35rem;
@@ -1924,11 +1924,21 @@
     }
     .amap-tree-line > * { padding: 0 var(--amap-cell-pad, 0.6rem); min-width: 0; }
     .amap-tree-line:last-child { border-bottom: none; }
+    /* Первая колонка узкая (это колонка имени аккаунта), а в ней стрелка,
+       уровень, тумблер и имя. Имя важнее всего остального: по нему решают,
+       что выключать. Поэтому оно переносится на вторую строку, а не
+       обрезается, и отступы с пометкой уровня — самые скромные. */
     .amap-tree-who {
-      display: flex; align-items: baseline; gap: 0.5rem;
-      padding-left: 2.2rem !important; overflow: hidden;
+      display: flex; align-items: baseline; gap: 0.35rem;
+      padding-left: 0.6rem !important;
     }
-    .amap-tree-line.ad .amap-tree-who { padding-left: 3.6rem !important; }
+    .amap-tree-line.ad .amap-tree-who { padding-left: 1.6rem !important; }
+    .amap-tree-who .amap-tree-sw { flex: 0 0 auto; }
+    .amap-tree-namebox { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+    .amap-tree-namebox .amap-tree-kind { flex: 0 0 auto; font-size: 0.6rem; line-height: 1.1; }
+    .amap-tree-namebox .amap-tree-name {
+      white-space: normal; overflow-wrap: anywhere; line-height: 1.25;
+    }
     .amap-tree-kind {
       flex: 0 0 4.6rem; color: var(--muted); font-size: 0.7rem;
       text-transform: uppercase; letter-spacing: 0.04em;
@@ -6202,7 +6212,12 @@ function amapTreeLine(o, adCount) {
   res.textContent = o.results || '';
   res.title = o.cost_per_result || '';
 
-  who.appendChild(kind); who.appendChild(sw); who.appendChild(name);
+  /* Уровень — мелкой строкой над именем, а не рядом: колонка узкая, и
+     рядом с ним имя сжималось до пары букв (ревью ACL-1256). */
+  var nameBox = document.createElement('span');
+  nameBox.className = 'amap-tree-namebox';
+  nameBox.appendChild(kind); nameBox.appendChild(name);
+  who.appendChild(sw); who.appendChild(nameBox);
   line.appendChild(who);
   /* Под колонками аккаунта: Spend (книга) · Account spend (Meta) · Leads ·
      FTD · CPL · CPA · CR (книга) · Status (доставка Meta) · Setup (результат
@@ -6240,6 +6255,10 @@ function amapAttrCell(field) {
    строк в книге — прочерк, а не ноль: «не нашли» и «ноль» — разные ответы. */
 function amapTreeName(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
 
+function amapOwn(obj, key) {
+  return obj && Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null;
+}
+
 function amapTreeKeys(objects) {
   var campName = {}, campCount = {}, adCount = {};
   objects.forEach(function (o) {
@@ -6272,12 +6291,12 @@ function amapFillAttribution(box, objects, data) {
       if (!camp) why = 'The campaign of this ad is not known';
       else if (keys.campCount[camp] > 1) why = 'Two campaigns share this name — the workbook cannot tell them apart';
       else if (keys.adCount[camp + '\u0001' + n] > 1) why = 'Several ads in this campaign share this name — the workbook cannot tell them apart';
-      else got = ((data.ads || {})[camp] || {})[n] || null;
+      else got = amapOwn(amapOwn(data.ads, camp), n);
       if (!got && !why) why = 'No rows for this ad in the stats workbook for these dates';
     } else {
       var cn = amapTreeName(o.name);
       if (keys.campCount[cn] > 1) why = 'Two campaigns share this name — the workbook cannot tell them apart';
-      else got = (data.campaigns || {})[cn] || null;
+      else got = amapOwn(data.campaigns, cn);
       if (!got && !why) why = 'No rows for this campaign in the stats workbook for these dates';
     }
     line.querySelectorAll('.amap-tree-num.attr').forEach(function (cell) {
@@ -6292,7 +6311,7 @@ function amapFillAttribution(box, objects, data) {
 
 function amapLoadAttribution(row, box, objects) {
   if (typeof fetch !== 'function' || !row.closest) return;
-  var block = row.closest('details.amap-country');
+  var block = row.closest('[data-country-name]');
   var cell = row.querySelector('.amap-live');
   var country = block && block.dataset.countryName;
   var account = cell && cell.dataset.account;
@@ -6328,12 +6347,26 @@ function amapTreeColumns(row, tr) {
   if (pad) tr.style.setProperty('--amap-cell-pad', pad);
 }
 
-if (typeof window !== 'undefined') {
-  window.addEventListener('resize', function () {
-    document.querySelectorAll('tr.amap-tree').forEach(function (tr) {
+/* Раз в кадр, а не на каждое событие: при протягивании окна их десятки, и
+   каждое заставляло бы пересчитать раскладку всех деревьев. */
+var amapTreeColumnsQueued = false;
+function amapTreeColumnsAll() {
+  if (amapTreeColumnsQueued) return;
+  amapTreeColumnsQueued = true;
+  (window.requestAnimationFrame || function (f) { return setTimeout(f, 16); })(function () {
+    amapTreeColumnsQueued = false;
+    document.querySelectorAll('tr.amap-tree:not([hidden])').forEach(function (tr) {
       amapTreeColumns(tr.previousElementSibling, tr);
     });
   });
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', amapTreeColumnsAll);
+  /* Дерево, нарисованное в свёрнутом блоке страны, мерить было не по чему —
+     ширины снимаются, когда блок раскрывают. `toggle` не всплывает, поэтому
+     слушаем на погружении. */
+  document.addEventListener('toggle', amapTreeColumnsAll, true);
 }
 
 /* ── Покрывают ли строки спенд аккаунта ────────────────────────────────

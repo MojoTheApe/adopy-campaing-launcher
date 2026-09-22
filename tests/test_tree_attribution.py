@@ -130,3 +130,24 @@ def test_the_period_is_the_period_on_screen(monkeypatch):
 def test_account_and_country_are_required(monkeypatch):
     r = _ask(monkeypatch, account="FacebookX")
     assert r.status_code == 400
+
+
+def test_an_empty_period_is_month_to_date_like_the_map(monkeypatch):
+    from src.web import app as web
+
+    monkeypatch.setattr(web, "_month_to_date", lambda dates: ("2026-09-03", "2026-09-03"))
+    data = _ask(monkeypatch, account="FacebookX", country="Kuwait").json()
+    assert (data["date_from"], data["date_to"]) == ("2026-09-03", "2026-09-03")
+    assert data["campaigns"]["KW_camp_A"]["leads"] == 5
+
+
+def test_all_dates_is_asked_for_not_assumed(monkeypatch):
+    data = _ask(monkeypatch, account="FacebookX", country="Kuwait", span="all").json()
+    assert data["campaigns"]["KW_camp_A"]["leads"] == 10
+
+
+def test_an_empty_workbook_cell_is_not_a_campaign_called_nan():
+    df = _book()
+    df.loc[len(df)] = ["Kuwait", "FacebookX", float("nan"), "ad x", 1, 0, 5.0, "2026-09-05"]
+    got = build_tree_attribution(df, "Kuwait", "FacebookX")
+    assert "nan" not in got["campaigns"]

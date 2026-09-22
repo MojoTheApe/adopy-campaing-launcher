@@ -3067,7 +3067,7 @@ async def account_spend_status(
 
 
 @app.get("/account-attribution")
-async def account_attribution(
+def account_attribution(
     account: str = "", country: str = "", date_from: str = "", date_to: str = "", span: str = ""
 ) -> JSONResponse:
     """Числа книги по кампаниям и объявлениям одного аккаунта (ACL-1256).
