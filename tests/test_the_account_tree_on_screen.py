@@ -184,11 +184,15 @@ def test_the_numbers_say_why_to_touch_it(page):
     got = page.evaluate("""() => {
       const l = document.querySelector('.amap-tree-line');
       const spend = l.querySelector('.amap-tree-num.spend'), res = l.querySelector('.amap-tree-num.res');
-      return {spend: spend.textContent, results: res.textContent, cpr: res.title};
+      return {spend: spend.textContent, results: res.lastChild.textContent.trim(),
+              src: res.querySelector('.amap-tree-src').textContent, cpr: res.title};
     }""")
     assert got["spend"] == "$412.02"
     assert got["results"] == "18 Leads (Form)"
-    assert got["cpr"] == "$22.89 Per Lead (Form)", "цена результата негде посмотреть"
+    assert "$22.89 Per Lead (Form)" in got["cpr"], "цена результата негде посмотреть"
+    # ACL-1275: под заголовком Setup у аккаунта стоит готовность, а у строк
+    # дерева — результат Meta. Источник подписан, чтобы их не путали.
+    assert got["src"] == "Meta" and "Meta's own result" in got["cpr"]
 
 
 def test_a_row_without_numbers_stays_blank(page):
@@ -1049,23 +1053,37 @@ def _tree_css():
     return src[src.index("    .amap-tree > td {"): src.index("    .amap-tree-err {")]
 
 
-def _real_widths(page, table_px=1200):
-    """Доли колонок, как у настоящей карты (colgroup), на таблице 1200px."""
+def _colgroup_shares():
+    """Доли колонок берём из самого шаблона: фикстура молча разъезжалась с ним."""
+    import re
+
+    src = (TPL / "_account_map_country.html").read_text(encoding="utf-8")
+    shares = [int(x) for x in re.findall(r"width:(\d+)%", src)]
+    assert len(shares) == COLUMNS and sum(shares) == 100, shares
+    return shares
+
+
+def _real_widths(page, table_px=982):
+    """Доли колонок из шаблона на настоящей ширине таблицы.
+
+    982px — ширина таблицы на ноутбуке 1280px (окно минус боковая колонка и
+    поля). Мерить на 1200px было самообманом: такой ширины на экранах, ради
+    которых написаны ACL-1275 и ACL-1277, не бывает.
+    """
     page.set_viewport_size({"width": 1400, "height": 800})
     page.add_style_tag(content=_tree_css())
-    page.evaluate("""(px) => {
-      const shares = [19, 7, 9, 6, 5, 6, 6, 6, 11, 10, 15];
+    page.evaluate("""([px, shares]) => {
       const t = document.querySelector('table');
       t.style.tableLayout = 'fixed'; t.style.width = px + 'px';
       Array.from(document.getElementById('acc').children)
         .forEach((c, i) => { c.style.width = shares[i] + '%'; });
-    }""", table_px)
+    }""", [table_px, _colgroup_shares()])
 
 
 def test_names_stay_readable_in_the_narrow_first_column(page):
-    """Ревью ACL-1256: в колонке шириной с имя аккаунта имя кампании получало
-    32px, объявления — 10px. По имени решают, что выключать, — оно обязано
-    читаться целиком, пусть и в две строки."""
+    """Ревью ACL-1256: имя кампании получало 32px, объявления — 10px. По имени
+    решают, что выключать. ACL-1275/1277: имя стоит одной строкой с
+    многоточием, а колонка расширена за счёт пустой колонки кнопок."""
     _real_widths(page)
     long_camp = dict(ADSET, name="KW_trl_All_Video_Mix_35_17.09")
     ad = dict(AD, parent_id=ADSET["id"], name="2221 - AR KW Trolley For citizens")
@@ -1073,12 +1091,13 @@ def test_names_stay_readable_in_the_narrow_first_column(page):
     _open(page)
     page.evaluate("() => document.querySelector('.amap-tree-caret').click()")
     got = page.evaluate("""() => Array.from(document.querySelectorAll('.amap-tree-name')).map(n => ({
-      w: n.getBoundingClientRect().width, full: n.scrollWidth <= n.clientWidth + 1,
+      w: n.getBoundingClientRect().width,
+      lines: Math.round(n.getBoundingClientRect().height / parseFloat(getComputedStyle(n).lineHeight)),
       cellRight: n.closest('.amap-tree-who').getBoundingClientRect().right,
       right: n.getBoundingClientRect().right}))""")
     for g in got:
         assert g["w"] >= 110, f"имени досталось {g['w']:.0f}px"
-        assert g["full"], "имя обрезано, а не перенесено"
+        assert g["lines"] == 1, "имя перенеслось на вторую строку вместо многоточия"
         assert g["right"] <= g["cellRight"] + 1, "имя залезло в соседнюю колонку"
 
 
@@ -1166,3 +1185,64 @@ def test_a_tree_for_the_dates_on_screen_says_nothing_extra(page):
     page.evaluate("""(o) => amapPaintTree(document.getElementById('acc'),
       {objects: [o], date_from: '2026-09-01', date_to: '2026-09-12', finished_at: '2026-09-12 23:00:00'})""", ADSET)
     assert "Meta numbers for" not in _head(page)
+
+
+
+def test_a_row_without_a_meta_result_has_no_source_label(page):
+    """Нет результата — нет и подписи: пустая ячейка не притворяется данными."""
+    _paint(page, [dict(ADSET, results="", cost_per_result="")])
+    assert page.evaluate("() => document.querySelector('.amap-tree-num.res').textContent") == ""
+
+
+def test_the_tree_row_has_no_dead_button_column(page):
+    """ACL-1277: колонка кнопок у строк дерева всегда пуста и раньше была самой
+    широкой (23% против 19% у имени). Теперь имя шире неё. Ужать её сильнее
+    мешают три кнопки строки аккаунта; остаток освободит ACL-1282, где Read
+    spend и Countries станут одной кнопкой."""
+    _real_widths(page)
+    _paint(page, [ADSET])
+    _open(page)
+    got = page.evaluate("""() => {
+      const cells = Array.from(document.querySelector('.amap-tree-line').children);
+      return {name: cells[0].getBoundingClientRect().width,
+              tail: cells[cells.length - 1].getBoundingClientRect().width};
+    }""")
+    assert got["name"] > got["tail"], f"имя {got['name']:.0f}px против пустой {got['tail']:.0f}px"
+
+
+
+def test_the_remove_control_keeps_its_action_and_its_name():
+    """ACL-1277: «Remove» стал значком «×». Действие и подпись для экранного
+    диктора остаются: кнопка убирает аккаунт из страны, а не удаляет его."""
+    src = (TPL / "_account_map_country.html").read_text(encoding="utf-8")
+    start = src.index('class="amap-x"')
+    cell = src[start: src.index("</td>", start)]
+    assert ">×</button>" in cell
+    assert "amapUnlink(" in cell and "'country'" in cell
+    assert "aria-label=" in cell and "out of {{ mc.country }}" in cell
+    assert "keeps its Multilogin profile" in cell
+
+
+def test_with_the_builder_open_the_source_label_yields_to_the_number(page):
+    """С открытым билдером таблице остаётся мало места: подпись «Meta» прячется,
+    чтобы само число Meta было видно. Источник остаётся в подсказке."""
+    page.add_style_tag(content=_tree_css())
+    _paint(page, [ADSET])
+    page.evaluate("() => document.body.classList.add('cbd-open')")
+    assert page.evaluate(
+        "() => getComputedStyle(document.querySelector('.amap-tree-src')).display") == "none"
+    assert "Meta's own result" in page.evaluate(
+        "() => document.querySelector('.amap-tree-num.res').title")
+
+
+def test_the_meta_label_does_not_glue_itself_to_the_number(page):
+    """Без пробела копирование и экранный диктор дают «Meta18 Leads (Form)»."""
+    _paint(page, [ADSET])
+    assert page.evaluate(
+        "() => document.querySelector('.amap-tree-num.res').textContent") == "Meta 18 Leads (Form)"
+
+
+def test_a_price_without_a_result_still_has_its_tooltip(page):
+    _paint(page, [dict(ADSET, results="", cost_per_result="$22.89 Per Lead (Form)")])
+    assert page.evaluate(
+        "() => document.querySelector('.amap-tree-num.res').title") == "$22.89 Per Lead (Form)"

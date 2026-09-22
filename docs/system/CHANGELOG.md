@@ -1,5 +1,32 @@
 # System history
 
+## Account tree reads cleanly: name, Meta result, column widths — ACL-1275 / ACL-1277
+
+Three display problems in the tree the owner reported on 2026-09-22. Long campaign
+and ad names wrapped onto a second line; they now stay on one line and end with an
+ellipsis, with the full name in the tooltip. The "Setup" column means "is this
+account ready" on the account row but carries Meta's own result on tree rows; the
+tree value is now labelled "Meta" and its tooltip says whose number it is, so the
+two are not read as the same thing. The trailing button column, which tree rows
+never use, was the widest column (23%) while the name had 19%; widths are now name
+22%, Setup 9%, buttons 19%, and "Remove" is the "×" control; no numeric column was
+narrowed. Measured at 1280, 1366 and 1920 with the real fragment and the Builder
+drawer closed: rows and the three buttons stay on one line, and the name column
+gains 29px at 1280 and 49px at 1920.
+
+With the Builder drawer docked open (400px) the table is 582px at 1280 and 668px at
+1366; the name then shows about 7-10 characters, and the account row's buttons wrap
+to a second line exactly as they did before this change. Eleven columns do not fit
+that width; the case is not solved here. ACL-1282 (Read spend and Countries merged
+into one button) frees the next chunk, and a tree grid of its own is the fallback if
+that is not enough. With the drawer open the "Meta" source label hides itself so the
+number it labels stays visible; the source remains in the tooltip.
+
+Two ads under one campaign showing the same name is real account data, not a read
+bug: Meta's own embedded structure for FacebookDoc19 lists distinct ad ids with
+identical names (2 in GMBL, 3 in Day). The existing "—" with "several ads share
+this name" stays as designed.
+
 ## Latest read shown, marked, when the dates on screen have none — ACL-1271
 
 The account map showed a Read result only for exactly the period on screen: open
