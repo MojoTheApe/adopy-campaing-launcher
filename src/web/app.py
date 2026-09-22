@@ -1246,6 +1246,16 @@ def _installed_release() -> dict[str, str]:
         return {"sha": "", "short": "", "tag": ""}
 
 
+def _stage_status() -> dict:
+    """STAGE-значок шапки (ACL-1267). Шапка не должна ломать отчёт."""
+    try:
+        from src.web import acl_update
+
+        return acl_update.stage_status()
+    except Exception:  # pragma: no cover - defensive
+        return {"channel": "stage", "known": False, "ahead": None, "why": "status unavailable"}
+
+
 def mlx_instance_labels() -> dict[str, str]:
     """Human names for the two Multilogin accounts.
 
@@ -1483,6 +1493,7 @@ def _render_report(
             "draft_status": draft_status,
             "mlx_labels": mlx_instance_labels(),
             "installed_release": _installed_release(),
+            "stage_status": _stage_status(),
             "account_map": _account_map_view,
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},

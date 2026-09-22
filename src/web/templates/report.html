@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <link rel="icon" href="/favicon.ico?v=acl" sizes="32x32">
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
-  <title>Adopy Campaigns Launcher — {{ report.date }}</title>
+  {#- ACL-1267: вкладку версии владельца не спутать со сборкой менеджеров. #}
+  <title>{% if (stage_status or {}).channel == 'stage' %}STAGE · {% endif %}Adopy Campaigns Launcher — {{ report.date }}</title>
   <script>
     // Apply before paint. Only a click pins the theme; otherwise follow the OS.
     (function () {
@@ -449,6 +450,16 @@
       font-variant-numeric: tabular-nums;
     }
     .brand-meta dd:last-child { margin-right: 0; }
+    /* ACL-1267: версия владельца (запуск из исходников) — STAGE и сколько
+       правок в ней ещё нет в ветке stage. У сборки менеджеров значка нет. */
+    .brand-meta dd.acl-stage {
+      display: inline-flex; align-items: baseline; gap: 0.35rem;
+      padding: 0.05rem 0.45rem; border-radius: 4px;
+      border: 1px solid var(--warn); color: var(--warn);
+      font-weight: 700; letter-spacing: 0.06em; font-size: 0.72rem;
+    }
+    .brand-meta dd.acl-stage .acl-stage-gap { font-weight: 500; letter-spacing: 0; }
+    .brand-meta dd.acl-stage.unknown { border-style: dashed; }
 
     /* Правый угол шапки: период, под кем смотрим, место под тему. Отделён от
        названия автоматическим отступом, а не пустотой на глаз. */
@@ -2797,6 +2808,12 @@
         <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd>
         <dt>Version:</dt>
         <dd id="acl-version" title="Installed ACL release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd>
+        {%- set st = stage_status or {} %}
+        {%- if st.channel == 'stage' %}
+        <dd id="acl-stage" class="acl-stage{% if not st.known %} unknown{% endif %}"
+            title="{% if st.known %}This is the stage version you work on, run from source. {{ st.ahead }} change(s) here are not on {{ st.ref }} yet. Campaign managers get updates only from a release.{% else %}This is the stage version you work on, run from source. How far it is from stage is unknown: {{ st.why }}.{% endif %}">STAGE
+          <span class="acl-stage-gap">{% if st.known %}+{{ st.ahead }} not on stage{% else %}stage unknown{% endif %}</span></dd>
+        {%- endif %}
       </dl>
     </div>
   </div>
