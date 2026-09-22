@@ -1920,6 +1920,7 @@
        чтобы его не приняли за период на экране. */
     .amap-live-old { font-variant-numeric: tabular-nums; color: var(--muted); font-style: italic; }
     .amap-live-old small { display: block; font-size: 0.66rem; font-style: normal; }
+    .amap-tree-head.old { color: var(--warn); }
     .amap-live-run { color: var(--muted); font-size: 0.78rem; }
     .amap-live-bad { color: var(--danger); border-color: var(--danger); }
 
@@ -6514,8 +6515,11 @@ function amapPaintTree(row, s) {
   var onScreen = typeof amapPeriod === 'function' ? amapPeriod() : null;
   if (onScreen && onScreen.from && s.date_from
       && (s.date_from !== onScreen.from || (s.date_to || s.date_from) !== onScreen.to)) {
-    head.textContent += ' for ' + s.date_from + (s.date_to && s.date_to !== s.date_from ? '…' + s.date_to : '')
-      + ' — not the dates on screen';
+    /* Колонки Meta в дереве — за даты чтения, колонки книги (ACL-1256) — за
+       даты на экране; говорим это прямо, иначе рядом стоят числа за разное. */
+    head.textContent += ' · Meta numbers for ' + s.date_from
+      + (s.date_to && s.date_to !== s.date_from ? '…' + s.date_to : '')
+      + ', workbook numbers for the dates on screen';
     head.classList.add('old');
   }
   box.appendChild(head);

@@ -101,3 +101,60 @@ def test_all_dates_asks_for_no_fallback(store):
     store("A", "2026-09-01", "2026-09-21", 1044.82, "2026-09-22 08:52:04")
     view = app._build_account_map_view({"countries": []}, span="all")
     assert view["fallback"] == {}
+
+
+
+def test_an_old_format_record_does_not_hide_every_fallback(store):
+    """Ревью: запись `account|day` без date_from/date_to ронила разбор, и
+    запасного чтения не получал ни один аккаунт — так было на живом хранилище."""
+    store("A", "2026-09-01", "2026-09-21", 1044.82, "2026-09-22 08:52:04")
+    data = sp._load_all()
+    data["KLD_BFL_X84|2026-09-06"] = {"account": "KLD_BFL_X84", "day": "2026-09-06",
+                                      "state": "ok", "spend": 259.48, "currency": "$",
+                                      "finished_at": "2026-09-07 10:00:00"}
+    sp._save_all(data)
+    got = sp.latest_readings()
+    assert set(got) == {"A"} and got["A"].spend == 1044.82
+
+
+def test_no_dates_on_screen_means_no_fallback(store, monkeypatch):
+    """Без дат кнопка — «Select dates»; «not the dates on screen» там неправда."""
+    links.link("A", "country", "KW")
+    store("A", "2026-09-01", "2026-09-21", 1044.82, "2026-09-22 08:52:04")
+    monkeypatch.setattr(app, "_month_to_date", lambda dates: ("", ""))
+    view = app._build_account_map_view({"countries": []})
+    assert view["date_from"] == "" and view["fallback"] == {}
+
+
+# ── страница: итог страны и дерево из запасного чтения ────────────────────
+
+def _page_with_fallback(browser_page, html):
+    src = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
+    start = src.index("function amapMoney(")
+    end = src.index("function amapApplyReading(")
+    browser_page.set_content(html)
+    browser_page.add_script_tag(content=src[start:end])
+
+
+@pytest.fixture
+def page():
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        b = pw.chromium.launch()
+        p = b.new_page()
+        yield p
+        b.close()
+
+
+def test_the_country_total_leaves_the_fallback_out(page):
+    _page_with_fallback(page, """
+      <details class="amap-country" data-country="KW"><summary>
+        <span class="amap-live-summary"><span class="amap-live-summary-values"></span>
+        <i class="amap-live-summary-count"></i></span></summary>
+        <table><tr><td class="amap-live" data-account="A" data-read-state="ok" data-read-spend="10" data-read-currency="USD"></td></tr>
+        <tr><td class="amap-live" data-account="B" data-read-state="fallback" data-read-spend="" data-read-currency=""
+            data-fb-from="2026-09-01" data-fb-to="2026-09-21"></td></tr></table></details>""")
+    page.evaluate("() => amapUpdateCountrySummaries()")
+    got = page.evaluate("() => document.querySelector('.amap-live-summary').textContent.replace(/\\s+/g, ' ').trim()")
+    assert got == "USD 10.00 1/2 spend read"
