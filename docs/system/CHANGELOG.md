@@ -1,5 +1,22 @@
 # System history
 
+## Workbook numbers per campaign and ad in the account tree — ACL-1256
+
+The account row shows spend, leads, FTD, CPL, CPA and CR from the stats workbook;
+the tree under it (campaigns and ads read from Ads Manager) showed only Meta's own
+spend and results, pushed to the right edge. Now every tree row stands under the
+account columns: Spend (workbook), Account spend (Meta), Leads, FTD, CPL, CPA, CR
+(workbook), Status (Meta delivery), Setup (Meta result). Column widths are taken
+from the account row itself and follow window resizes.
+
+Numbers come from `/account-attribution`: the same selection as the account row
+(country, workbook alias, period) and the same formula, so campaigns add up to the
+account row (verified on Doc20, Doc19 and Doc21). A campaign is the workbook's
+`Adset Name`, an ad its `Ad Title`; names are matched with whitespace collapsed.
+Rows the workbook does not know, or that share a name with another row (e.g.
+several ads with one name in a Doc19 campaign), show a dash with the reason in
+the tooltip, never guessed numbers.
+
 ## Country-attributed read part without noise labels — ACL-1264
 
 The same cell's `in <country>: …` part (spend the accounts attribute to the
