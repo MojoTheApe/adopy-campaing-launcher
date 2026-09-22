@@ -3379,59 +3379,17 @@ def run_recorded_campaign_flow(
         if reached_ad_level and creative_uploaded and (ad_title or ad_body):
             try:
                 copy_report: dict = {}
-                ok_copy = fill_ad_copy(page, ad_title, ad_body, copy_report)
-                if not ok_copy and _review_errors_visible(page):
-                    # 20.09 20:48 (CR_ait FX): на объявлении висела ошибка Meta
-                    # про Lead Gen форму, правая панель бесконечно грузилась, и
-                    # редактор креатива не отрисовывался — полей текста на
-                    # странице не было вовсе. Сначала чиним назначение, потом
-                    # возвращаемся к тексту.
-                    # 20.09 21:52 (CR_ait FX): в блоке Browser add-ons вместо
-                    # «None» стоял «Instant form» — Meta требует выбрать форму и
-                    # принять условия Lead Ads, показывает ошибку и не рисует
-                    # редактор креатива. Чиним ровно это.
-                    if _lead_terms_not_accepted(page):
-                        # Чинить нечего: условия принимает человек в Meta.
-                        _telemetry.record("lead_terms_not_accepted", False,
-                                          note="page_must_accept_lead_terms")
-                    _telemetry.record("ad_copy_blocked", False, note="review_error")
-                    try:
-                        fixed = _select_browser_addon_none(page)
-                        _sleep_h(1.5)
-                        checked = _browser_addon_none_checked(page)
-                        if not fixed or checked is not True:
-                            # 21.09 06:11 (CR_ait FX): блока Browser add-ons на
-                            # странице не оказалось вовсе (none_checked=null) —
-                            # редактор висел на «Verifying your changes».
-                            # Снимаем зависание перезагрузкой и чиним снова.
-                            recover_stuck_page(page, "ad_copy_blocked", editor=True, force=True)
-                            _sleep_h(3.0)
-                            fixed = _select_browser_addon_none(page)
-                            _sleep_h(1.5)
-                            checked = _browser_addon_none_checked(page)
-                        _telemetry.record("browser_addon_repair", bool(fixed) and checked is True,
-                                          diag={"none_checked": checked})
-                        # 21.09 11:01 (CR_ait FX): «None» починился, но полей
-                        # текста всё равно не было — после перезагрузки мы
-                        # стоим на уровне ad set'а, а объявление закрыто.
-                        # Открываем его заново тем же обходом, что чинит
-                        # назначения: он находит объявление по имени.
-                        try:
-                            verify_and_fix_ad_destinations(
-                                page, [ad_name or f"{campaign_name} Ad"], destination_url)
-                            _sleep_h(2.0)
-                        except Exception as exc:
-                            _telemetry.record("ad_copy_blocked", False,
-                                              note=f"reopen_failed:{str(exc)[:40]}")
-                    except Exception as exc:
-                        _telemetry.record("browser_addon_repair", False, note=str(exc)[:60])
-                if not ok_copy:
-                    _await_creative_settled(page)
-                    copy_report = {"retry": True}
-                    ok_copy = fill_ad_copy(page, ad_title, ad_body, copy_report)
+                ok_copy = write_ad_copy(
+                    page, ad_title, ad_body,
+                    ad_name=ad_name or f"{campaign_name} Ad",
+                    destination_url=destination_url, report=copy_report)
                 if not ok_copy:
                     _shot("fail_ad_copy", copy_report)
-                    ad_level_fails.append("ad_copy")
+                    # Объявление без текста называем прямо: по этой строке
+                    # человек решает, публиковать ли кампанию.
+                    ad_level_fails.append(
+                        f"ad_copy:{ad_name or 'ad 1'} has no text"
+                        + (f" ({copy_report['why']})" if copy_report.get("why") else ""))
                 else:
                     _shot("after_ad_copy")
             except Exception as exc:
@@ -3531,14 +3489,14 @@ def run_recorded_campaign_flow(
                 if extra_title or extra_body:
                     try:
                         copy_report = {}
-                        ok_copy = fill_ad_copy(page, extra_title, extra_body, copy_report)
-                        if not ok_copy:
-                            _await_creative_settled(page)
-                            copy_report = {"retry": True}
-                            ok_copy = fill_ad_copy(page, extra_title, extra_body, copy_report)
+                        ok_copy = write_ad_copy(
+                            page, extra_title, extra_body, ad_name=extra_name,
+                            destination_url=destination_url, report=copy_report)
                         if not ok_copy:
                             _shot(f"fail_{tag}_copy", copy_report)
-                            ad_level_fails.append(f"{tag}_copy")
+                            ad_level_fails.append(
+                                f"{tag}_copy:{extra_name or tag} has no text"
+                                + (f" ({copy_report['why']})" if copy_report.get("why") else ""))
                         else:
                             _shot(f"after_{tag}_copy")
                     except Exception as exc:
@@ -7730,9 +7688,16 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
     # до объявления раньше, чем Meta его дорисовывает, и поля текста «ещё не
     # раскрыты» — за ними падали и текст, и назначение. Даём блоку успокоиться
     # и ждём поле до 12 с, прежде чем трогать разметку.
-    for _ in range(24):
+    # ACL-1281: заблокированный редактор ждать бессмысленно — полей текста на
+    # странице нет вовсе, пока висит ошибка Meta. Раньше мы честно отстаивали
+    # здесь 12 секунд, потом разворачивали блок, и только после этого шаг
+    # сообщал о неудаче: 22.09 на четырёх объявлениях так ушло 6–13 минут.
+    for i in range(24):
         if _primary_text_visible():
             return True
+        if i == 2 and _review_errors_visible(page):
+            _telemetry.record("ad_copy_fields", False, note="blocked_by_review_error")
+            return False
         _sleep_h(0.5)
 
     # Mount the section before trying to un-hide it. Every fallback below
@@ -8232,6 +8197,91 @@ def disable_text_generation(page: Page) -> bool | None:
     _telemetry.record("text_generation_off", ok,
                       diag={"was_on": state.get("on"), "still_on": after.get("on")})
     return ok
+
+
+def _repair_blocked_copy_editor(page: Page, ad_name: str, destination_url: str) -> bool:
+    """Снять блокировку редактора креатива. Один раз, без второго круга.
+
+    Meta подставляет в Browser add-ons «Instant form (suggested)»: объявление
+    получает ошибку про Lead Gen форму, правая панель грузится бесконечно, а
+    редактор креатива не рисуется — полей текста на странице нет. Лечение:
+    поставить «None», убедиться, что встало, и открыть объявление заново.
+
+    Возвращает True, если после лечения поля текста появились. Дальше звать
+    нечего: 22.09 повторные круги давали те же 6–13 минут и тот же отказ.
+    """
+    if _lead_terms_not_accepted(page):
+        # Чинить нечего: условия Lead Generation принимает человек в Meta.
+        _telemetry.record("lead_terms_not_accepted", False,
+                          note="page_must_accept_lead_terms")
+        return False
+    try:
+        fixed = _select_browser_addon_none(page)
+        _sleep_h(1.5)
+        checked = _browser_addon_none_checked(page)
+        if not fixed or checked is not True:
+            # Блока Browser add-ons на странице может не оказаться вовсе:
+            # редактор висит на «Verifying your changes». Снимаем зависание
+            # перезагрузкой и чиним ещё раз — это часть одного лечения.
+            recover_stuck_page(page, "ad_copy_blocked", editor=True, force=True)
+            _sleep_h(3.0)
+            fixed = _select_browser_addon_none(page)
+            _sleep_h(1.5)
+            checked = _browser_addon_none_checked(page)
+        _telemetry.record("browser_addon_repair", bool(fixed) and checked is True,
+                          diag={"none_checked": checked})
+        if ad_name:
+            # После перезагрузки мы стоим на уровне ad set'а, а объявление
+            # закрыто: открываем его тем же обходом, что чинит назначения.
+            try:
+                verify_and_fix_ad_destinations(page, [ad_name], destination_url)
+                _sleep_h(2.0)
+            except Exception as exc:
+                _telemetry.record("ad_copy_blocked", False,
+                                  note=f"reopen_failed:{str(exc)[:40]}")
+                return False
+    except Exception as exc:
+        _telemetry.record("browser_addon_repair", False, note=str(exc)[:60])
+        return False
+    return not _review_errors_visible(page)
+
+
+def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
+                  destination_url: str = "", report: dict | None = None) -> bool:
+    """Написать текст объявления: лечим блокировку заранее, чиним один раз.
+
+    ACL-1281 (решение владельца 22.09). Прежний порядок — «пробуем, ждём поля,
+    разворачиваем блок, обнаруживаем ошибку Meta, чиним, пробуем всё заново» —
+    стоил 6–13 минут на объявление и всё равно часто кончался без текста.
+    Теперь блокировка проверяется до первой попытки, лечение одно, а если
+    текст всё равно не встал — шаг отказывает сразу и называет объявление.
+    """
+    report = report if report is not None else {}
+    if _review_errors_visible(page):
+        _telemetry.record("ad_copy_blocked", False, note="before_first_try")
+        report["blocked_before"] = True
+        if not _repair_blocked_copy_editor(page, ad_name, destination_url):
+            report["why"] = "editor_blocked"
+            return False
+    if fill_ad_copy(page, title, body, report):
+        return True
+    if not _review_errors_visible(page):
+        # Не блокировка — обычная осечка ввода: одна честная вторая попытка.
+        _await_creative_settled(page)
+        report["retry"] = True
+        return fill_ad_copy(page, title, body, report)
+    if report.get("blocked_before"):
+        # Уже лечили в этом объявлении — второй круг тех же минут не стоит.
+        _telemetry.record("ad_copy_blocked", False, note="still_blocked_after_repair")
+        report["why"] = "editor_blocked_after_repair"
+        return False
+    _telemetry.record("ad_copy_blocked", False, note="review_error")
+    report["blocked_before"] = True
+    if not _repair_blocked_copy_editor(page, ad_name, destination_url):
+        report["why"] = "editor_blocked"
+        return False
+    report["retry"] = True
+    return fill_ad_copy(page, title, body, report)
 
 
 def fill_ad_copy(
