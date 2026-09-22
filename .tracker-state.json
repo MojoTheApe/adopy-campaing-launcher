@@ -136,6 +136,10 @@
       "title": "Read ads under campaigns when the account table has no ids (Doc19)",
       "state": "created",
       "issue": 255
+    },
+    "f845171e005cea37b93de63d56a0958caa6a9ca2fda0ffc056e830acacff8f9e": {
+      "title": "Remove 'currency unknown' and account names from the country-attributed read part",
+      "state": "creating"
     }
   },
   "delivery_workflow": {
