@@ -78,6 +78,21 @@ class CountrySplit:
     entered: str = ""
     error: str = ""
     shot: str = ""
+    #: Когда чтение началось и когда закончилось (ACL-1282).
+    started_at: str = ""
+    finished_at: str = ""
+    #: Какой спенд эта разбивка объясняет: время того показания и сами числа.
+    #: Первая версия ACL-1282 сравнивала часы — «разбивка старше спенда» — и
+    #: не успокаивалась никогда: нажатие без разбивки всё равно обновляло
+    #: время спенда, и следующее нажатие объявляло разбивку устаревшей.
+    #: Отчёт в кабинете строился через раз на ровном месте (ревью 23.09,
+    #: замер: 3 отчёта на 6 нажатий). Устаревание — это про числа: пока
+    #: сумма та же, ответ «куда она ушла» тот же, сколько бы раз спенд ни
+    #: перечитывали. Записи, снятые до ACL-1282, спенда не помнят — они
+    #: считаются устаревшими, а не свежими, и перечитываются один раз.
+    spend_at: str = ""
+    spend: float | None = None
+    spend_currency: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -85,6 +100,44 @@ class CountrySplit:
 
 # ── Хранилище: своя копилка, тот же принцип, что у показаний спенда ────
 _LOCK = threading.RLock()
+
+
+def _now() -> str:
+    """То же время и тем же видом, что у показаний спенда.
+
+    Один формат — условие сравнения: ACL-1282 спрашивает, не старше ли
+    разбивка спенда за те же даты, и сравнивает эти строки как строки.
+    """
+    from datetime import datetime
+
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _spend_now(account: str, date_from: str, date_to: str) -> dict:
+    """Показание спенда за эти даты — временем и числами, без падений."""
+    try:
+        from src.analysis_agent import account_spend
+
+        reading = account_spend.get_reading(account, date_from, date_to)
+        if getattr(reading, "state", "") != "ok":
+            return {}
+        return {"spend_at": reading.finished_at or "",
+                "spend": reading.spend,
+                "spend_currency": reading.currency or ""}
+    except Exception:  # pragma: no cover - запись не должна ронять чтение
+        return {}
+
+
+def _as_split(stored: dict) -> "CountrySplit":
+    """Запись с диска — в объект, не спотыкаясь о чужие поля.
+
+    В хранилище лежат записи, снятые прежними версиями: у них нет новых
+    полей, а когда-нибудь может не остаться старого. `CountrySplit(**stored)`
+    падает и на том, и на другом, а падать здесь — значит потерять чтение,
+    которое уже состоялось.
+    """
+    known = {f for f in CountrySplit.__dataclass_fields__}
+    return CountrySplit(**{k: v for k, v in stored.items() if k in known})
 
 
 def _store_path() -> Path:
@@ -141,10 +194,15 @@ def start_split(
     with _LOCK:
         if key in _RUNNING:
             stored = get_split(account, date_from, date_to)
-            return CountrySplit(**stored) if stored else CountrySplit(
+            return _as_split(stored) if stored else CountrySplit(
                 account=account, date_from=date_from, date_to=date_to, state="running")
+        # Спенд, который эта разбивка объясняет, снимается в начале чтения:
+        # к концу его уже могли перечитать, и записанное «объясняю вот это»
+        # относилось бы к числу, которого мы не видели.
+        spend = _spend_now(account, date_from, date_to)
         started = CountrySplit(account=account, date_from=date_from,
-                               date_to=date_to, state="running")
+                               date_to=date_to, state="running",
+                               started_at=_now(), **spend)
         _RUNNING.add(key)
         try:
             save_split(started)
@@ -160,6 +218,11 @@ def start_split(
         except Exception as exc:  # падение чтения не должно ронять сервер
             done = CountrySplit(account=account, date_from=date_from, date_to=date_to,
                                 state="failed", error=f"{type(exc).__name__}: {exc}")
+        done.started_at = started.started_at
+        done.finished_at = _now()
+        done.spend_at = started.spend_at
+        done.spend = started.spend
+        done.spend_currency = started.spend_currency
         with _LOCK:
             try:
                 save_split(done)
@@ -264,7 +327,7 @@ def totals_by_country(date_from: str, date_to: str = "") -> list[dict]:
 
 
 #: Что показывать вместо «running», за которым никого нет.
-_ORPHANED = "чтение прервалось и не досказало результат"
+_ORPHANED = "the reading stopped before it said anything"
 
 
 def _honest(key: str, value: dict | None) -> dict | None:
@@ -293,6 +356,64 @@ def _honest(key: str, value: dict | None) -> dict | None:
     orphan["state"] = "failed"
     orphan["error"] = orphan.get("error") or _ORPHANED
     return orphan
+
+
+def why_split_is_needed(
+    *, countries: int, split: dict | None,
+    spend_finished_at: str = "", spend: float | None = None, currency: str = "",
+) -> str:
+    """Зачем читать разбивку по странам сейчас — или пусто, если незачем.
+
+    Правило владельца (ACL-1282). До этой правки разбивка читалась отдельной
+    кнопкой, то есть ровно тогда, когда человек её нажал. Кнопка теперь одна,
+    и цену чтения — отчёт, созданный внутри кабинета, — нельзя платить каждый
+    раз, когда нужна одна цифра спенда.
+
+    Разбивка отвечает на вопрос «куда ушли вот эти деньги». Значит она
+    устаревает вместе с числом, которое объясняет, а не сама по себе:
+
+    * разбивки за эти даты нет, она не удалась или ещё идёт;
+    * разбивка не помнит, какой спенд объясняла (записи до ACL-1282);
+    * спенд за эти даты изменился с тех пор — деньги куда-то двинулись.
+
+    Сумма та же — ответ тот же, и перечитывать нечего, сколько бы раз спенд
+    ни снимали заново. Первая версия сравнивала время («разбивка старше
+    спенда») и строила отчёт через раз: чтение спенда само обновляло время,
+    с которым сравнивали. Это ровно та цена, ради которой задача и затевалась.
+
+    Число стран решает, что делать, когда сравнить не с чем. Аккаунт в одной
+    стране без прочитанного спенда подождёт; у аккаунта в нескольких странах
+    общая сумма не говорит ничего, и разбивку берут сразу.
+
+    Возвращает причину словами (её показывают человеку) или пустую строку.
+    Причина — не украшение: «ничего не произошло» и «мы решили не читать»
+    выглядят на экране одинаково, и отличить их можно только текстом.
+    """
+    state = (split or {}).get("state")
+    if state not in ("ok", "empty"):
+        return "no country split for these dates"
+    if not str((split or {}).get("spend_at") or ""):
+        return "the stored country split does not say which spend it explains"
+    if not spend_finished_at:
+        # Спенда за эти даты нет (или он не удался): сравнивать не с чем.
+        return ("more than one country is linked to this account"
+                if countries > 1 else "")
+    same = (_same_money((split or {}).get("spend"), spend)
+            and str((split or {}).get("spend_currency") or "").strip().upper()
+            == str(currency or "").strip().upper())
+    if not same:
+        return "the spend has changed since the country split was read"
+    return ""
+
+
+def _same_money(a, b) -> bool:
+    """Две суммы — одно и то же число? Пустое равно только пустому."""
+    if a is None or b is None:
+        return a is None and b is None
+    try:
+        return abs(float(a) - float(b)) < 0.005
+    except (TypeError, ValueError):
+        return False
 
 
 def get_split(account: str, date_from: str, date_to: str) -> dict | None:
