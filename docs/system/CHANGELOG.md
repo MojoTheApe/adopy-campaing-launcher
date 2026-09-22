@@ -1,5 +1,17 @@
 # System history
 
+## Ads under campaigns of an id-less account table — ACL-1255
+
+Some ad accounts (FacebookDoc19, Saudi Arabia, since 2026-09-18) show the new Ads
+Manager table without object ids. The account tree read their campaigns by name but
+no ads, because ads are requested per campaign id. The campaign list page embeds
+Meta's own `campaign_structure_tree` data with each campaign's id and ad names; the
+tree now takes the id from there (only for names that map to exactly one id), reads
+that campaign's ads through the usual filtered list, and keeps them only when every
+ad name belongs to that campaign's structure. The recovered id is stored as
+`data_id`, never as `id`, so turn-off stays unavailable for such rows. Accounts with
+ids are unchanged. Read only: no clicks, no editor.
+
 ## Audience field confirmation — ACL-1250 / PR #247
 
 Merged into master on 2026-09-21 after independent review, full Windows tests and
