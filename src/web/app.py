@@ -563,6 +563,11 @@ def _build_account_map_view(
     # Показания Read нужны и построчно (в таблице), и суммой в свёрнутой
     # строке страны — снимаются один раз до цикла.
     live = {} if span == "all" else _live_spend(date_from, date_to)
+    # ACL-1271: у кого за эти даты чтения нет вовсе — последнее удачное чтение
+    # за другие даты. Показывается помеченным и в итоги страны не входит.
+    # Без дат читать нечего (кнопка «Select dates»), и «not the dates on
+    # screen» там неправда — запасное чтение только при выбранном периоде.
+    fallback = _fallback_spend(live) if (date_from and span != "all") else {}
 
     countries: list[dict] = []
     for stored in account_links.all_values("country"):
@@ -756,6 +761,7 @@ def _build_account_map_view(
         "all_accounts": all_known,
         "dates": dates,
         "live": live,
+        "fallback": fallback,
         "date_from": date_from,
         "date_to": date_to,
         "span": span,
@@ -777,6 +783,26 @@ def _live_spend(date_from: str = "", date_to: str = "") -> dict[str, dict]:
     except Exception:  # pragma: no cover - показания не должны ронять страницу
         return {}
 
+
+
+def _fallback_spend(live: dict) -> dict[str, dict]:
+    """Последнее удачное чтение тех, у кого за период на экране его нет (ACL-1271).
+
+    Нет чтения за эти даты — показывается запасное. Неудачное за эти даты —
+    решение владельца 22.09: показывать оба, неудачу («failed · retry») и под
+    ней запасное, иначе одна неудачная попытка прятала и число, и дерево.
+    Идущее чтение — ответ в пути, его не подменяем ничем.
+    """
+    try:
+        from src.analysis_agent import account_spend
+
+        return {
+            a: r.to_dict()
+            for a, r in account_spend.latest_readings().items()
+            if a not in live or (live[a] or {}).get("state") == "failed"
+        }
+    except Exception:  # pragma: no cover - показания не должны ронять страницу
+        return {}
 
 
 def _sidebar_countries(report: dict, amap: dict) -> list[dict]:
