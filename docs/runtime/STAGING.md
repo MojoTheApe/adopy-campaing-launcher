@@ -33,3 +33,14 @@ The target is not provisioned or verified by this migration's draft descriptor.
 CI artifacts from stage are test candidates and are not published as the latest stable
 release. Promotion to main still needs successful exact-main release CI and the stable
 release procedure; stage evidence cannot masquerade as installed-package delivery.
+
+## Which version is on screen
+
+A dashboard run from source shows a STAGE badge in its header and "+N not on stage":
+the number of its commits that are not on the project's `stage` branch (fetched in
+the background from the remote whose URL is the project repository). Packaged builds
+installed from a release show no badge. The badge tells the owner which version they
+are looking at; it is not stage verification and does not replace the isolated
+Windows check above. The count leaves out commits that reached stage as the same
+patch; a commit brought to stage with conflict resolution or squashed keeps being
+counted, so treat the number as a guide, not an exact audit.

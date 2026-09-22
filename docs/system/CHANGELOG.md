@@ -1,5 +1,18 @@
 # System history
 
+## STAGE badge and "not on stage" count in the header — ACL-1267
+
+Owner's decision (2026-09-22): the process stays as it is — working branch -> stage
+-> main, and campaign managers get updates only from a release tag on main. The
+dashboard run from source is the version the owner works on, so its header shows a
+STAGE badge with how many changes in it are not on the project's `stage` branch yet
+("+119 not on stage"), and the browser tab title starts with "STAGE ·". Commits are
+counted without merges and without copies already on stage by the same patch; the
+project remote is found by its URL, and the count is refreshed by a background
+fetch every 10 minutes, so rendering never waits for the network. If the count
+cannot be determined the badge says "stage unknown" with the reason in its tooltip.
+Packaged builds (what campaign managers run) show no badge.
+
 ## Read buttons say what they read — ACL-1266
 
 Account managers read the map's "Read" buttons as "connect the account". On the
