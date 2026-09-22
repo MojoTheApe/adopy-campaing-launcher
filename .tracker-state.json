@@ -1,7 +1,24 @@
 {
   "schema_version": 1,
   "active": null,
-  "run": null,
+  "run": {
+    "id": "6dfd73e647a9483eb2f6264828251971",
+    "state": "running",
+    "issues": [
+      256,
+      266,
+      163,
+      167,
+      168,
+      170,
+      175,
+      184,
+      193,
+      195,
+      267
+    ],
+    "started_at": "2026-09-22T11:11:08+00:00"
+  },
   "todo_order": [
     256,
     266
