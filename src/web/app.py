@@ -563,6 +563,10 @@ def _build_account_map_view(
     # Показания Read нужны и построчно (в таблице), и суммой в свёрнутой
     # строке страны — снимаются один раз до цикла.
     live = {} if span == "all" else _live_spend(date_from, date_to)
+    # ACL-1282: у разбивки больше нет своей кнопки, на которой была видна её
+    # неудача. Отказ показывается в той же клетке, что и спенд, и должен
+    # пережить перезагрузку страницы — значит приходит с сервера.
+    splits = {} if span == "all" else _live_splits(date_from, date_to)
     # ACL-1271: у кого за эти даты чтения нет вовсе — последнее удачное чтение
     # за другие даты. Показывается помеченным и в итоги страны не входит.
     # Без дат читать нечего (кнопка «Select dates»), и «not the dates on
@@ -761,6 +765,7 @@ def _build_account_map_view(
         "all_accounts": all_known,
         "dates": dates,
         "live": live,
+        "splits": splits,
         "fallback": fallback,
         "date_from": date_from,
         "date_to": date_to,
@@ -783,6 +788,18 @@ def _live_spend(date_from: str = "", date_to: str = "") -> dict[str, dict]:
     except Exception:  # pragma: no cover - показания не должны ронять страницу
         return {}
 
+
+
+def _live_splits(date_from: str = "", date_to: str = "") -> dict[str, dict]:
+    """Пострановые чтения за тот же период, что на экране: аккаунт → чтение."""
+    try:
+        from src.analysis_agent import country_split
+
+        if not date_from:
+            return {}
+        return country_split.all_splits(date_from, date_to or date_from)
+    except Exception:  # pragma: no cover - показания не должны ронять страницу
+        return {}
 
 
 def _fallback_spend(live: dict) -> dict[str, dict]:
@@ -2736,6 +2753,43 @@ def _spend_period(date_from: str, date_to: str, span: str = "") -> tuple[str, st
     return start.isoformat(), end.isoformat()
 
 
+def _split_plan(account: str, date_from: str, date_to: str) -> dict:
+    """Нужна ли пострановая разбивка этому аккаунту за эти даты (ACL-1282).
+
+    Считается **до** запуска чтения спенда: `start_read` кладёт на место
+    прошлого показания запись «читаю», и времени, с которым сравнивают
+    разбивку, после этого уже нет.
+
+    Вопрос без ответа — не повод не читать: любая поломка здесь отвечает
+    «нужна». Лишний отчёт в кабинете дороже, но молча потерянная разбивка
+    выглядит как «страны не читаются вовсе», а это неправда, которую с
+    экрана не отличить.
+    """
+    from src.analysis_agent import account_spend, country_split
+    from src.web import account_links
+
+    try:
+        # Страны считаем так же, как их показывает карта: «KW» и «Kuwait» —
+        # одна страна. Разными их считало бы только это место, и аккаунт
+        # навсегда оказался бы «в нескольких странах».
+        countries = len({
+            str(v).strip().casefold()
+            for v in account_links.values_for(account, "country") if str(v).strip()
+        })
+        split = country_split.get_split(account, date_from, date_to)
+        reading = account_spend.get_reading(account, date_from, date_to)
+        ok = getattr(reading, "state", "") == "ok"
+        why = country_split.why_split_is_needed(
+            countries=countries, split=split,
+            spend_finished_at=str(getattr(reading, "finished_at", "") or "") if ok else "",
+            spend=getattr(reading, "spend", None) if ok else None,
+            currency=str(getattr(reading, "currency", "") or "") if ok else "",
+        )
+    except Exception:  # pragma: no cover - решение не должно ронять чтение
+        return {"needed": True, "why": "could not tell whether the split is fresh"}
+    return {"needed": bool(why), "why": why}
+
+
 @app.post("/account-spend/read")
 async def account_spend_read(request: Request) -> JSONResponse:
     """Прочитать спенд с аккаунта. Только по нажатию человека.
@@ -2756,11 +2810,15 @@ async def account_spend_read(request: Request) -> JSONResponse:
         date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""), str(form.get("span") or ""))
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    # ACL-1282: одна кнопка на строке. Отвечаем не только «чтение пошло», но
+    # и нужно ли после него спрашивать кабинет про страны — иначе это решение
+    # пришлось бы принимать на клиенте, где нет ни привязок, ни хранилища.
+    plan = _split_plan(account, date_from, date_to)
     try:
         reading = account_spend.start_read(account, date_from, date_to)
     except Exception:
         return JSONResponse({"ok": False, "error": "Could not start or save the reading. Check disk space and retry."}, status_code=503)
-    return JSONResponse({"ok": True, "reading": reading.to_dict()})
+    return JSONResponse({"ok": True, "reading": reading.to_dict(), "split": plan})
 
 
 @app.post("/account-spend/read-countries")

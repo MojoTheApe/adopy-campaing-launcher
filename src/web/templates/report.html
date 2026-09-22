@@ -1925,6 +1925,10 @@
     .amap-tree-head.old { color: var(--warn); }
     .amap-live-run { color: var(--muted); font-size: 0.78rem; }
     .amap-live-bad { color: var(--danger); border-color: var(--danger); }
+    /* ACL-1282: разбивка по странам падает не так, как спенд, и после
+       слияния кнопок ей негде было об этом сказать. Своей строкой под
+       числом: спенд прочитан, страны — нет, и одно не отменяет другого. */
+    .amap-split-bad { display: block; color: var(--danger); font-size: 0.66rem; font-style: normal; }
 
     /* ── Что в аккаунте на самом деле (acl-113) ───────────────────────────
        Строки приходят из кабинета, не из книги: у книжных нет ни id, ни
@@ -5934,81 +5938,119 @@ function amapReadSpend(btn) {
     .then(function (r) { return r.json(); })
     .then(function (j) {
       if (!j.ok) throw new Error(j.error || 'refused');
-      amapPollSpend(account, cell, btn, 0, per);
+      /* Нужна ли после спенда разбивка по странам, решает сервер: у него
+         привязки и оба хранилища (ACL-1282). Ответ приходит вместе с
+         запуском чтения, потому что решать это надо до него — `start_read`
+         кладёт на место прошлого показания «читаю». */
+      amapPollSpend(account, cell, btn, 0, per, j.split);
     })
     .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
 }
 
-/* ── Разбивка по странам (acl-357) ─────────────────────────────────────
-   Кнопка в строке аккаунта: спросить сам кабинет, каким странам он относит
-   свои деньги. Чтение дорогое — оно создаёт в кабинете отчёт, — поэтому
-   идёт в фоне и опрашивается тем же маршрутом, что и спенд: оба показания
-   живут в одной клетке и снимаются за один период. */
+/* ── Разбивка по странам (acl-357, слита с чтением спенда в ACL-1282) ──
+   Спросить сам кабинет, каким странам он относит свои деньги. Своей кнопки
+   больше нет: «Read spend» и «Countries» спрашивали одно и то же у одного
+   аккаунта и открывали его по отдельности. Разбивка идёт следом за спендом,
+   в той же сессии профиля, и только когда сервер сказал, что она нужна.
 
-function amapReadCountries(btn) {
-  if (amapReadAllBusy) return;
-  var cell = amapSpendCell(btn);
-  var account = cell && cell.dataset.account;
-  if (!account) return;
-  var per = amapPeriod();
-  if (!per.from || per.span === 'all') return;
+   Чтение дорогое — оно создаёт в кабинете отчёт, — поэтому идёт в фоне и
+   опрашивается тем же маршрутом, что и спенд: оба показания живут в одной
+   клетке и снимаются за один период. */
+
+function amapSplitMark(account, why) {
+  /* Неудача разбивки — в клетке, а не на кнопке: кнопка теперь общая, и
+     «failed · retry» на ней читалось бы как «спенд не прочитан».
+
+     Помечаются все строки этого аккаунта: аккаунт в двух странах стоит в
+     двух блоках, сервер при перезагрузке пометит обе, и разойтись они не
+     должны — иначе экран меняется под человеком. */
+  document.querySelectorAll('.amap-live').forEach(function (cell) {
+    if (cell.dataset.account !== account) return;
+    var old = cell.querySelector('.amap-split-bad');
+    if (old) old.remove();
+    if (!why) return;
+    var mark = document.createElement('small');
+    mark.className = 'amap-split-bad';
+    mark.textContent = 'countries failed';
+    mark.title = why + '. The spend reading is unaffected; read again to retry the countries.';
+    cell.appendChild(mark);
+  });
+}
+
+function amapSplitBusy(btn) {
+  if (!btn) return;
   btn.disabled = true;
-  btn.className = 'amap-btn amap-countries';
+  btn.className = 'amap-btn amap-read';
   btn.textContent = 'countries…';
+  btn.title = 'Reading which countries this account attributes its spend to';
+}
+
+function amapSplitDone(btn) {
+  if (!btn) return;
+  btn.disabled = !!amapReadAllBusy;
+  btn.className = 'amap-btn amap-read';
+  btn.textContent = 'Read spend';
+  btn.title = 'Read spend again';
+}
+
+function amapRunSplit(account, btn, per) {
+  /* Возвращает обещание с 'ok' или 'failed'. Обещание нужно очереди
+     Read all: аккаунты идут друг за другом, и следующий профиль нельзя
+     открывать, пока в этом ещё строится отчёт (правило «один профиль
+     одновременно», acl-108a). */
+  amapSplitMark(account, '');
+  amapSplitBusy(btn);
   var body = new FormData();
   body.append('account', account);
   body.append('date_from', per.from);
   body.append('date_to', per.to);
-  body.append('span', per.span);
-  fetch('/account-spend/read-countries', { method: 'POST', body: body, credentials: 'same-origin' })
+  body.append('span', per.span || '');
+  return fetch('/account-spend/read-countries', { method: 'POST', body: body, credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (j) {
       if (!j.ok) throw new Error(j.error || 'refused');
-      amapPollCountries(account, btn, 0, per);
+      return amapAwaitSplit(account, per, 0);
     })
-    .catch(function (e) { amapCountriesFailed(btn, String(e && e.message || e)); });
+    .then(function (s) {
+      amapSplitDone(btn);
+      var bad = s.state === 'failed' ? (s.error || 'refused')
+              : (s.state === 'ok' || s.state === 'empty') ? '' : 'Unknown country reading state';
+      amapSplitMark(account, bad);
+      /* Итоги страны перечитываем и после отказа. Прошлое чтение за эти даты
+         больше не действует, и оставить его на экране значило бы показать
+         число, которого уже нет, рядом с сообщением о неудаче. */
+      return amapRefreshCountryLines(per).then(function () { return bad ? 'failed' : 'ok'; }, function () {
+        amapSplitMark(account, (bad ? bad + '. ' : '') + 'The country totals could not be refreshed; reload the page');
+        return bad ? 'failed' : 'ok';
+      });
+    })
+    .catch(function (e) {
+      amapSplitDone(btn);
+      amapSplitMark(account, String(e && e.message || e));
+      return 'failed';
+    });
 }
 
-function amapCountriesFailed(btn, why) {
-  btn.disabled = false;
-  btn.className = 'amap-btn amap-countries amap-live-bad';
-  btn.textContent = 'failed · retry';
-  btn.title = why || 'Could not read the country split';
-}
-
-function amapCountriesDone(btn) {
-  btn.disabled = false;
-  btn.className = 'amap-btn amap-countries';
-  btn.textContent = 'Countries';
-  btn.title = 'Read again';
-}
-
-function amapPollCountries(account, btn, tries, per) {
+function amapAwaitSplit(account, per, tries) {
   /* Тот же предел, что у спенда: пострановое чтение дольше, но человек не
      должен гадать, идёт ли ещё что-то. Шесть минут молчания — это отказ. */
-  if (tries > 120) {
-    amapCountriesFailed(btn, 'no answer after six minutes — check the launcher window');
-    return;
-  }
-  setTimeout(function () {
-    fetch('/account-spend/status?account=' + encodeURIComponent(account)
-          + '&date_from=' + encodeURIComponent(per.from)
-          + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        if (!j.ok) throw new Error(j.error || 'Could not read status');
-        var s = j.split;
-        if (!s) { amapCountriesFailed(btn, 'the reading disappeared before it finished'); return; }
-        if (s.state === 'running') { amapPollCountries(account, btn, tries + 1, per); return; }
-        if (s.state === 'failed') amapCountriesFailed(btn, s.error || 'refused');
-        else if (s.state === 'ok' || s.state === 'empty') amapCountriesDone(btn);
-        else { amapCountriesFailed(btn, 'Unknown country reading state'); return; }
-        return amapRefreshCountryLines(per).catch(function () {
-          amapCountriesFailed(btn, (s.error ? s.error + '. ' : '') + 'Could not refresh the country totals; reload the page.');
-        });
-      })
-      .catch(function (e) { amapCountriesFailed(btn, String(e && e.message || e)); });
-  }, 3000);
+  return new Promise(function (resolve, reject) {
+    setTimeout(function () {
+      fetch('/account-spend/status?account=' + encodeURIComponent(account)
+            + '&date_from=' + encodeURIComponent(per.from)
+            + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j.ok) throw new Error(j.error || 'Could not read status');
+          var s = j.split;
+          if (!s) throw new Error('the reading disappeared before it finished');
+          if (s.state !== 'running') { resolve(s); return; }
+          if (tries > 120) throw new Error('no answer after six minutes — check the launcher window');
+          resolve(amapAwaitSplit(account, per, tries + 1));
+        })
+        .catch(reject);
+    }, 3000);
+  });
 }
 
 function amapRefreshCountryLines(per) {
@@ -6903,7 +6945,7 @@ document.addEventListener('click', function (e) {
   amapTurnOffDisarm();
 });
 
-function amapPollSpend(account, cell, btn, tries, per) {
+function amapPollSpend(account, cell, btn, tries, per, plan) {
   per = per || amapPeriod();
   if (!per.from || per.span === 'all') return;
   if (tries > 120) {
@@ -6919,7 +6961,11 @@ function amapPollSpend(account, cell, btn, tries, per) {
         if (!j.ok) throw new Error(j.error || 'Could not read status');
         var s = j.reading || {};
         amapApplyReading(account, s);
-        if (s.state === 'running') amapPollSpend(account, cell, btn, tries + 1, per);
+        if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1, per, plan); return; }
+        /* Разбивку спрашиваем только после удачного спенда и в той же сессии
+           профиля. Упавший спенд значит, что кабинет не открылся, — отчёту
+           там взяться неоткуда. */
+        if (s.state === 'ok' && plan && plan.needed) amapRunSplit(account, btn, per);
       })
       .catch(function (e) { amapApplyReading(account, {state: 'failed', error: String(e && e.message || e)}); });
   }, 3000);
@@ -7074,8 +7120,18 @@ async function amapQueueRead(job, per) {
     body.append('date_to', per.to);
     body.append('span', per.span || '');
     // The server joins an existing read for this account and exact period.
-    await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
-    return await amapAwaitReading(job.account, per, 0);
+    var j = await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
+    var state = await amapAwaitReading(job.account, per, 0);
+    /* ACL-1282: то же правило, что и у одной строки. Разбивка идёт внутри
+       очереди, а не после неё: аккаунт открыт сейчас, и второй заход в него
+       был бы вторым касанием живого кабинета. Её неудача остаётся в клетке
+       и не превращает прочитанный спенд в неудачу всей строки. */
+    if (state === 'ok' && j.split && j.split.needed) {
+      // Ответ разбивки нарочно не возвращается: упавшая разбивка не делает
+      // прочитанный спенд неудачей и не портит счёт «N read, M failed».
+      await amapRunSplit(job.account, job.btn, per);
+    }
+    return state;
   } catch (e) {
     var message = e && e.name === 'AbortError' ? 'Read request timed out — check the launcher window' : String(e && e.message || e);
     amapApplyReading(job.account, {state: 'failed', error: message});
@@ -7110,8 +7166,12 @@ function amapSpendFailed(btn, cell, why, shot, how) {
     /* ACL-1271, решение владельца: при неудаче за эти даты запасное число за
        другие даты остаётся под ней — одна неудачная попытка не прячет его. */
     var old = cell.querySelector('.amap-live-old');
+    /* ACL-1282: отказ разбивки относится к этим же датам и переживает
+       неудачу спенда — она его не опровергает. */
+    var split = cell.querySelector('.amap-split-bad');
     cell.innerHTML = '<span class="amap-live-bad"></span>';
     if (old) cell.appendChild(old);
+    if (split) cell.appendChild(split);
     var bad = cell.firstChild;
     bad.textContent = why.length > 40 ? why.slice(0, 39) + '…' : why;
     bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'снимок: ' + shot : '');

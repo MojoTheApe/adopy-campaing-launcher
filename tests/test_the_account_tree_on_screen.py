@@ -1196,9 +1196,9 @@ def test_a_row_without_a_meta_result_has_no_source_label(page):
 
 def test_the_tree_row_has_no_dead_button_column(page):
     """ACL-1277: колонка кнопок у строк дерева всегда пуста и раньше была самой
-    широкой (23% против 19% у имени). Теперь имя шире неё. Ужать её сильнее
-    мешают три кнопки строки аккаунта; остаток освободит ACL-1282, где Read
-    spend и Countries станут одной кнопкой."""
+    широкой (23% против 19% у имени). ACL-1282 свёл Read spend и Countries в
+    одну кнопку, и колонка ужалась до 13% — имя получило 28%. Сама пустая
+    колонка в строках дерева остаётся: её ширину доберёт ACL-1277."""
     _real_widths(page)
     _paint(page, [ADSET])
     _open(page)
@@ -1246,3 +1246,31 @@ def test_a_price_without_a_result_still_has_its_tooltip(page):
     _paint(page, [dict(ADSET, results="", cost_per_result="$22.89 Per Lead (Form)")])
     assert page.evaluate(
         "() => document.querySelector('.amap-tree-num.res').title") == "$22.89 Per Lead (Form)"
+
+
+def test_the_two_buttons_fit_the_narrowest_real_width(page):
+    """ACL-1282: кнопок две, и они обязаны помещаться в свою колонку.
+
+    582px — ширина таблицы на ноутбуке 1280px с открытым билдером; уже этого
+    таблица на рабочем экране не бывает. Прежняя тройка кнопок в такой
+    колонке не помещалась и выталкивала «Remove» за край: он оставался в
+    разметке и в тестах, а нажать его было нельзя (acl-357).
+    """
+    _real_widths(page, table_px=582)
+    page.evaluate("""() => {
+      const row = document.querySelector('tbody tr') || document.querySelector('tr');
+      const cell = row.children[10];
+      cell.innerHTML = '<button type="button" class="amap-btn amap-read">Read spend</button>'
+                     + '<button type="button" class="amap-x">\u00d7</button>';
+    }""")
+    got = page.evaluate("""() => {
+      const cell = (document.querySelector('tbody tr') || document.querySelector('tr')).children[10];
+      const btns = Array.from(cell.querySelectorAll('button'));
+      return {right: Math.max(...btns.map(b => b.getBoundingClientRect().right)),
+              cellRight: cell.getBoundingClientRect().right,
+              widths: btns.map(b => Math.round(b.getBoundingClientRect().width))};
+    }""")
+    assert got["right"] <= got["cellRight"] + 1, (
+        f"кнопки вышли за край колонки на {got['right'] - got['cellRight']:.0f}px"
+    )
+    assert min(got["widths"]) > 0, "кнопка сжалась в ничто"

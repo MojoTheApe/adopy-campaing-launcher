@@ -2,10 +2,15 @@
 
 ## Tests no longer reach the team's real library — ACL-1289
 
-On a machine with the launcher installed, the full suite failed about 43 tests in
-`tests/test_targeting_registry.py`, `tests/test_team_library.py` and
-`tests/test_upload_without_workbook.py`, while each of those files passed on its
-own. `src/analysis_agent/gsheet_accounts.py` calls `load_env()` at import time and
+On a machine with the launcher installed, the full suite failed 48 tests across nine
+files — `test_targeting_registry.py` (19), `test_ad_text_registry.py` (13),
+`test_team_library.py`, `test_september_review.py` and
+`test_builder_ad_titles_source.py` (4 each), and one each in
+`test_upload_without_workbook.py`, `test_targeting_reaches_the_campaign.py`,
+`test_targeting_integration.py` and `test_builder_review_browser.py` — while each of
+those files passed on its own.
+
+`src/analysis_agent/gsheet_accounts.py` calls `load_env()` at import time and
 `src.web.app` pulls it in, so the first test that imported the dashboard loaded this
 machine's `%LOCALAPPDATA%\ACL\.env` — including `ACL_LIBRARY_REPO` and
 `ACL_LIBRARY_TOKEN` — into the environment for the rest of the session. From that
@@ -36,6 +41,66 @@ Not fixed here: earlier local runs did write test entries into the shared librar
 read on 2026-09-23 found `0-0`…`2-7` (24 entries) plus `A`, `Fin`, `Invest`,
 `Investing`, `Investment Plus`, `Main 1`, `Well_-_being` and `Первый` among 79 active
 targets. Removing them edits real team data and needs its own approved step.
+
+## One button reads the account: spend always, countries when needed — ACL-1282
+
+The account row had "Read spend" and "Countries". Both asked the same account about
+the same period and each one opened it separately. They are now one button. It reads
+the spend, and then, in the same profile session, the country split only when the
+split would answer something the spend does not: the account is linked to more than
+one country, there is no split for these dates, or the stored split is older than the
+spend reading. Otherwise nothing else is touched — the split builds a report inside
+Ads Manager, and that price must not be paid for every single spend number.
+
+The decision is made on the server (`country_split.why_split_is_needed`, called from
+`_split_plan`) and travels back with the reading, because the page has neither the
+account links nor the two stores. It is taken *before* the spend read starts:
+`start_read` replaces the stored reading with a "running" record that carries no
+amount, so a decision taken after it has nothing to compare and would skip the split
+exactly when the money moved.
+
+Staleness is about the numbers, not the clock. Each split records which spend reading
+it explains (`spend_at`, `spend`, `spend_currency`), and it is re-read only when that
+amount or currency has changed. The first version of this change compared timestamps
+— "the split is older than the spend reading" — and never settled: a press that read
+only the spend still stamped a new time on the reading, so the next press called the
+split stale and built a report. Measured by review: three Ads Reporting reports per
+six presses on a single-country account with nothing changing. Re-reading the same
+amount now changes nothing; a changed amount brings the split back, including an
+"empty" split once money appears. Splits stored before this change do not say which
+spend they explain and count as stale — read once, then settled.
+
+The account's country count no longer decides on its own. It decides where there is
+nothing to compare: with no successful spend reading for these dates, an account under
+more than one country takes the split straight away, because its total says nothing
+about where the money went. With a matching spend reading it is left alone — the same
+report would give the same answer. (The issue's wording said "more than one country"
+always needs a split; kept literally, one "Read all spend" run would build a report
+for every multi-country account, every run, forever — five of fourteen accounts sit
+under two countries.) Countries are counted the way the map displays them, so "KW" and
+"Kuwait" are one country and not a permanent multi-country verdict.
+
+"Read all spend" follows the same rule per account, inside the same queue: the
+account is open now, and a second pass would be a second touch of a live account.
+
+A failed split no longer discards a good spend reading: the shared button returns to
+"Read spend" and the failure appears in the reading cell as "countries failed" with
+the reason in its tooltip. It is rendered from the server too, so it survives a page
+reload, and the country totals are refreshed even after a failure — a stale total
+next to a failure message would be a number that no longer exists.
+
+With two buttons instead of three the actions column drops from 19% to 13% and the
+name column gains those 6%: 28%. In tree rows at 1280 with the Builder drawer docked
+open the campaign name box goes from about 65px to 91px (the ad's from 49px to 75px);
+at 1366 it is 115px. At that narrowest width the two buttons still wrap onto a second
+line, exactly as the three did before. That is better, not solved — ACL-1277 keeps the
+rest, and the next step there is a tree grid that drops the trailing button column,
+which tree rows never use, in favour of the name.
+
+A failed split shows the reader whatever the reading wrote, and several of those
+sentences are still Russian (they pre-date this change, which is what first puts them
+in the account row). Only the orphaned-reading text is translated here; the rest is
+ACL-1287.
 
 ## Account tree reads cleanly: name, Meta result, column widths — ACL-1275 / ACL-1277
 
