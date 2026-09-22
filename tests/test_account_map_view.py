@@ -190,6 +190,8 @@ def test_the_country_attributed_part_shows_only_amounts(splits):
     links.link("FacebookX", "country", "Kuwait")
     links.link("FacebookY", "country", "Kuwait")
     links.link("FacebookZ", "country", "Kuwait")
+    links.link("FacebookW", "country", "Kuwait")
+    _split(splits, "FacebookW", [{"country": "Kuwait", "spend": 3.0, "currency": ""}])
     _split(splits, "FacebookX", [{"country": "Kuwait", "spend": 10.5, "currency": "$"}])
     _split(splits, "FacebookY", [{"country": "Kuwait", "spend": 20.25, "currency": "$"}])
     _split(splits, "FacebookZ", [{"country": "Kuwait", "spend": 7.0, "currency": "KWD"}])
@@ -202,4 +204,11 @@ def test_the_country_attributed_part_shows_only_amounts(splits):
     assert "$10.50" in part and "$20.25" in part, "суммы под знаком — порознь, не сложены"
     assert "$30.75" not in part
     assert "currency unknown" not in part
+    assert ">3.00</b>" in part, "без валюты — голое число"
     assert "FacebookX" not in part and "FacebookY" not in part and "FacebookZ" not in part
+    assert "FacebookW" not in part
+    import re
+    text = re.sub(r"<[^>]+>", "", part.split(">", 1)[1])
+    assert re.search(r"in Kuwait: \S", " ".join(text.split())), f"сумма прилипла к двоеточию: {text!r}"
+    assert "Meta did not write a currency" in part, "подсказка для суммы без валюты — своя"
+
