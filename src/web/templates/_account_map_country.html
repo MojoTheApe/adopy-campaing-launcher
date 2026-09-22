@@ -22,10 +22,13 @@
             Status и Setup несут короткие подписи. Числа не тронуты: ради них
             таблицу и читают. -#}
         <colgroup>
-          <col style="width:19%"><col style="width:8%"><col style="width:9%">
+          {#- ACL-1277: колонка кнопок (была 23%) в строках дерева всегда пуста,
+              а имени кампании не хватало. Кнопкам 19%, имени 22%, результату
+              Meta (Setup) 10%: цифры при этом остаются под своими заголовками. -#}
+          <col style="width:22%"><col style="width:7%"><col style="width:9%">
           <col style="width:5%"><col style="width:5%"><col style="width:5%">
           <col style="width:5%"><col style="width:5%"><col style="width:8%">
-          <col style="width:8%"><col style="width:23%">
+          <col style="width:10%"><col style="width:19%">
         </colgroup>
         {#- Два спенда стоят рядом и подписаны источником: один из книги
             статистики, другой прочитан с самого кабинета. Порознь их легко
@@ -184,7 +187,8 @@
               {%- endif -%}
               <button type="button" class="amap-x"
                       title="Take {{ r.account }} out of {{ mc.country }}. The country stays; the account keeps its Multilogin profile, its proxy and its history, and moves to Available accounts."
-                      onclick="amapUnlink({{ r.account | tojson | forceescape }},'country',{{ mc.key | tojson | forceescape }})">Remove</button>
+                      aria-label="Take {{ r.account }} out of {{ mc.country }}"
+                      onclick="amapUnlink({{ r.account | tojson | forceescape }},'country',{{ mc.key | tojson | forceescape }})">×</button>
             </td>
           </tr>
         {% endfor %}
