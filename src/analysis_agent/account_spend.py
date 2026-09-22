@@ -292,9 +292,17 @@ def latest_readings() -> dict[str, SpendReading]:
         for key, raw in items:
             if key.startswith(_STATUS_PREFIX) or not isinstance(raw, dict):
                 continue
+            # Ключ чтения — `account|from|to`. В хранилищах остались записи
+            # старого формата `account|day` без date_from/date_to: одна такая
+            # ронила разбор, и запасного чтения не получал ни один аккаунт.
+            if key.count("|") < 2 or not raw.get("date_from"):
+                continue
             if raw.get("state") != "ok" or raw.get("spend") is None:
                 continue
-            reading = _restore_reading(key, raw)
+            try:
+                reading = _restore_reading(key, raw)
+            except (TypeError, ValueError):
+                continue  # одна кривая запись не прячет остальные
             best = out.get(reading.account)
             if best is None or (reading.finished_at or "") > (best.finished_at or ""):
                 out[reading.account] = reading

@@ -565,7 +565,9 @@ def _build_account_map_view(
     live = {} if span == "all" else _live_spend(date_from, date_to)
     # ACL-1271: у кого за эти даты чтения нет вовсе — последнее удачное чтение
     # за другие даты. Показывается помеченным и в итоги страны не входит.
-    fallback = {} if span == "all" else _fallback_spend(live)
+    # Без дат читать нечего (кнопка «Select dates»), и «not the dates on
+    # screen» там неправда — запасное чтение только при выбранном периоде.
+    fallback = _fallback_spend(live) if (date_from and span != "all") else {}
 
     countries: list[dict] = []
     for stored in account_links.all_values("country"):

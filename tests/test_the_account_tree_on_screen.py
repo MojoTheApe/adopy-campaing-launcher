@@ -1159,10 +1159,10 @@ def test_a_tree_from_other_dates_says_so(page):
     """Период на экране 2026-09-01…12, а дерево из чтения за 09-01…09-21."""
     page.evaluate("""(o) => amapPaintTree(document.getElementById('acc'),
       {objects: [o], date_from: '2026-09-01', date_to: '2026-09-21', finished_at: '2026-09-22 08:52:04'})""", ADSET)
-    assert "for 2026-09-01…2026-09-21 — not the dates on screen" in _head(page)
+    assert "Meta numbers for 2026-09-01…2026-09-21, workbook numbers for the dates on screen" in _head(page)
 
 
 def test_a_tree_for_the_dates_on_screen_says_nothing_extra(page):
     page.evaluate("""(o) => amapPaintTree(document.getElementById('acc'),
       {objects: [o], date_from: '2026-09-01', date_to: '2026-09-12', finished_at: '2026-09-12 23:00:00'})""", ADSET)
-    assert "not the dates on screen" not in _head(page)
+    assert "Meta numbers for" not in _head(page)
