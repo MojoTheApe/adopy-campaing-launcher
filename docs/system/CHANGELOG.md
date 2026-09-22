@@ -1,5 +1,25 @@
 # System history
 
+## Account tree reads cleanly: name, Meta result, column widths — ACL-1275 / ACL-1277
+
+Three display problems in the tree the owner reported on 2026-09-22. Long campaign
+and ad names wrapped onto a second line; they now stay on one line and end with an
+ellipsis, with the full name in the tooltip. The "Setup" column means "is this
+account ready" on the account row but carries Meta's own result on tree rows; the
+tree value is now labelled "Meta" and its tooltip says whose number it is, so the
+two are not read as the same thing. The trailing button column, which tree rows
+never use, was the widest column (23%) while the name had 19%; widths are now name
+22%, Setup 10%, buttons 19%, and "Remove" is the "×" control. Measured at 1280,
+1366 and 1920 with the real fragment: every account row stays on one line, the three
+buttons stay on one line, and the name column gains 29px at 1280 and 49px at 1920.
+The rest of that column can only be reclaimed once ACL-1282 merges Read spend and
+Countries into one button.
+
+Two ads under one campaign showing the same name is real account data, not a read
+bug: Meta's own embedded structure for FacebookDoc19 lists distinct ad ids with
+identical names (2 in GMBL, 3 in Day). The existing "—" with "several ads share
+this name" stays as designed.
+
 ## Latest read shown, marked, when the dates on screen have none — ACL-1271
 
 The account map showed a Read result only for exactly the period on screen: open

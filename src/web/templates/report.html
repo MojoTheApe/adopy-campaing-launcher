@@ -1965,8 +1965,11 @@
     .amap-tree-who .amap-tree-sw { flex: 0 0 auto; }
     .amap-tree-namebox { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
     .amap-tree-namebox .amap-tree-kind { flex: 0 0 auto; font-size: 0.6rem; line-height: 1.1; }
+    /* ACL-1275: имя — одной строкой с многоточием, как просил владелец:
+       перенос на две строки растягивал каждую строку дерева вдвое. Целиком
+       имя видно в подсказке, а колонка стала шире (ACL-1277). */
     .amap-tree-namebox .amap-tree-name {
-      white-space: normal; overflow-wrap: anywhere; line-height: 1.25;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25;
     }
     .amap-tree-kind {
       flex: 0 0 4.6rem; color: var(--muted); font-size: 0.7rem;
@@ -2007,7 +2010,14 @@
     .amap-tree-num.spend { color: inherit; }
     /* Числа книги — те же, что в строке аккаунта, и тем же цветом. */
     .amap-tree-num.attr { color: inherit; }
+    /* Колонка Setup у строки аккаунта говорит «готов ли аккаунт», а у строк
+       дерева в ней стоит результат Meta. Под одним заголовком — две разные
+       вещи (ACL-1275), поэтому результат подписан источником. */
     .amap-tree-num.res { text-align: left; }
+    .amap-tree-num.res .amap-tree-src {
+      color: var(--muted); font-size: 0.62rem; text-transform: uppercase;
+      letter-spacing: 0.04em; margin-right: 0.25rem;
+    }
     .amap-tree-err { color: var(--danger); font-size: 0.75rem; padding-top: 0.3rem; }
     /* Включённая строка — кнопка: её можно выключить. Выключенная и
        «непонятно» остаются надписями, нажимать там нечего. */
@@ -6226,8 +6236,16 @@ function amapTreeLine(o, adCount) {
 
   var res = document.createElement('span');
   res.className = 'amap-tree-num res';
-  res.textContent = o.results || '';
-  res.title = o.cost_per_result || '';
+  if (o.results) {
+    var src = document.createElement('small');
+    src.className = 'amap-tree-src';
+    src.textContent = 'Meta';
+    res.appendChild(src);
+    res.appendChild(document.createTextNode(o.results));
+  }
+  /* Подсказка называет и источник, и цену результата: колонка узкая, текст
+     Meta в неё целиком не помещается. */
+  res.title = (o.results ? "Meta's own result for this row" + (o.cost_per_result ? ' · ' + o.cost_per_result : '') : '');
 
   /* Уровень — мелкой строкой над именем, а не рядом: колонка узкая, и
      рядом с ним имя сжималось до пары букв (ревью ACL-1256). */
