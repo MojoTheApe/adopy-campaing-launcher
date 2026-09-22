@@ -364,7 +364,7 @@
       "source_sha": "174f4c24bcd3882ba7efcfc7d7ee7710ac3e6968",
       "main_tree": "6dc1051fd9d82df308936c0452dc37eaba89e407",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-09-22T22:12:17+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -494,6 +494,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-09-22T20:40:43+00:00"
+      },
+      "282": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 290,
+            "merge_sha": "565fbcdad4d5fa298685d381f641abc4224400c0",
+            "tree_sha": "f24d843d99344981da0e295932f2a296da90e537"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-09-22T22:43:49+00:00"
       }
     },
     "promotions": {
@@ -768,6 +780,37 @@
           "report": "Artifact ACL-update-recovery-301 of run 35777410710 (report.json: result passed, source 6f64f98a76587cf62791f68bad25dc1179ed7e76, tree 6dc1051fd9d82df308936c0452dc37eaba89e407; packages 0.0.0-ci.301 sha256 7c590e684a5031cf11b29f70bba97a19cdc920c9daadaad60468078f04bccd60, 0.1.0-alpha.301 sha256 20cd01914332a40a24bbf79d968bd66fec010f4f2264d6d218c5a9fc6928889f). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof."
         },
         "verified_at": "2026-09-22T20:26:02+00:00"
+      },
+      "290": {
+        "pr": 286,
+        "issues": [
+          282
+        ],
+        "tree_sha": "f24d843d99344981da0e295932f2a296da90e537",
+        "source_sha": "174f4c24bcd3882ba7efcfc7d7ee7710ac3e6968",
+        "main_tree": "6dc1051fd9d82df308936c0452dc37eaba89e407",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-09-22T22:12:17+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "174f4c24bcd3882ba7efcfc7d7ee7710ac3e6968",
+          "tree_sha": "f24d843d99344981da0e295932f2a296da90e537",
+          "checks": [
+            "Stage push CI run 35789762812 on 174f4c2: ACL verification, Windows Python 3.11 and 3.13 suites passed, first attempt, no reruns.",
+            "Exact-stage installer run 35789762929 passed build/install/launch/repair/uninstall.",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+            "Recovered application restarts and synthetic data remains byte-identical",
+            "Independent review of PR #286 head fa1dc5d: approve with nits, after a request-changes round on 549687c. Its blocker (the freshness rule never settled and built an Ads Reporting report every second press) was re-verified as fixed by the reviewer counting reports himself: one report per six presses, was three. Remaining nits are filed as ACL-1288 and ACL-1287."
+          ],
+          "report": "Artifact ACL-update-recovery-306 of run 35789762929 (report.json: result passed, source 174f4c24bcd3882ba7efcfc7d7ee7710ac3e6968, tree f24d843d99344981da0e295932f2a296da90e537; packages 0.0.0-ci.306 sha256 ab9ed9e36f51c3ef9281a8dde48c98c1b30e36dc305baa7385ecab466e158f43, 0.1.0-alpha.306 sha256 564700c111247f4f63c4015f1197c4398437a2b2bd4d9c3a7a251051fbb75c9e). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof. The country split itself was not exercised against a live Meta ad account in this verification."
+        },
+        "verified_at": "2026-09-22T22:14:14+00:00"
       }
     }
   }
