@@ -1,5 +1,42 @@
 # System history
 
+## Tests no longer reach the team's real library — ACL-1289
+
+On a machine with the launcher installed, the full suite failed about 43 tests in
+`tests/test_targeting_registry.py`, `tests/test_team_library.py` and
+`tests/test_upload_without_workbook.py`, while each of those files passed on its
+own. `src/analysis_agent/gsheet_accounts.py` calls `load_env()` at import time and
+`src.web.app` pulls it in, so the first test that imported the dashboard loaded this
+machine's `%LOCALAPPDATA%\ACL\.env` — including `ACL_LIBRARY_REPO` and
+`ACL_LIBRARY_TOKEN` — into the environment for the rest of the session. From that
+point `team_library.configured()` was true for every later test, and
+`targeting_registry.add()` wrote through `team_library.transact(...)` instead of the
+machine store those tests had isolated. The tests then read the team's real targets
+and failed on duplicate-name and duplicate-set checks.
+
+Linux CI has no such `.env`, so CI stayed green while the local suite was red for
+everyone with the launcher installed — the combination that teaches a team to ignore
+local failures.
+
+`tests/conftest.py` now has an autouse `isolated_machine` fixture: every test gets
+its own `ACL_CONFIG_DIR` under a temporary directory (which also takes the registries,
+the lock files and the machine `.env` path with it, so a `load_env()` during a test
+reads nothing), `ACL_LIBRARY_REPO` / `ACL_LIBRARY_TOKEN` / `ACL_LIBRARY_BRANCH` are
+removed, and `team_library`'s session-wide state (`_backend_override`, `_pulled`,
+`_status`) is reset between tests. If those variables ever come back mid-test,
+`team_library.backend()` refuses to build a real `GitHubBackend` and the test fails
+with an explicit message instead of writing to the team's library. Tests that
+configure the library for themselves keep working: the fixture's `monkeypatch` is
+undone after theirs.
+
+The isolation sits in `conftest.py` rather than in each file because the dependency is
+invisible from the file that suffers it — it arrives through another test's import.
+
+Not fixed here: earlier local runs did write test entries into the shared library. A
+read on 2026-09-23 found `0-0`…`2-7` (24 entries) plus `A`, `Fin`, `Invest`,
+`Investing`, `Investment Plus`, `Main 1`, `Well_-_being` and `Первый` among 79 active
+targets. Removing them edits real team data and needs its own approved step.
+
 ## Account tree reads cleanly: name, Meta result, column widths — ACL-1275 / ACL-1277
 
 Three display problems in the tree the owner reported on 2026-09-22. Long campaign

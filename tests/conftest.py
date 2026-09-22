@@ -39,6 +39,69 @@ if str(_PROJ_ROOT) not in sys.path:
 os.environ["ACL_SENTRY_DSN"] = ""
 
 
+# Тесты не ходят в общую библиотеку команды (ACL-1289).
+#
+# `src/analysis_agent/gsheet_accounts.py` зовёт `load_env()` на импорте, а его
+# тянет за собой `src.web.app`. Значит любой тест, который импортирует дешборд,
+# кладёт `%LOCALAPPDATA%\ACL\.env` этой машины в `os.environ` на весь прогон —
+# вместе с `ACL_LIBRARY_REPO` и `ACL_LIBRARY_TOKEN`. После этого
+# `team_library.configured()` истинно для всех следующих тестов, и
+# `targeting_registry.add()` пишет не в подменённый `_store`, а в настоящий
+# репозиторий библиотеки.
+#
+# Так и получалось: файл поодиночке проходил, в полном прогоне падал, а в
+# библиотеке команды заводились тестовые таргеты. На Linux в CI такого .env
+# нет, поэтому CI оставался зелёным — худшее сочетание: оно приучает не верить
+# локальному прогону.
+#
+# Изоляция здесь, а не в каждом файле, потому что зависимость скрытая: она
+# приходит от чужого импорта, и следующий такой файл о ней не догадается.
+_LIBRARY_ENV = ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH")
+
+
+@pytest.fixture(autouse=True)
+def isolated_machine(tmp_path_factory, monkeypatch):
+    """Каждому тесту — своя машина и отключённая общая библиотека.
+
+    `ACL_CONFIG_DIR` во временной папке уводит туда и реестры, и файлы
+    блокировок, и `.env` машины: повторный `load_env()` внутри теста уже
+    ничего не прочитает. Папка своя, а не `tmp_path` теста, чтобы реестры не
+    мешались с файлами самой проверки.
+    """
+    from src.analysis_agent import team_library
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path_factory.mktemp("acl-machine")))
+    for name in _LIBRARY_ENV:
+        monkeypatch.delenv(name, raising=False)
+
+    # Состояние модуля тоже общее на весь прогон: подменённое хранилище,
+    # отметки о последнем чтении и статус синхронизации иначе переезжают из
+    # одного теста в другой. monkeypatch вернёт их и после упавшего теста.
+    monkeypatch.setattr(team_library, "_backend_override", None)
+    monkeypatch.setattr(team_library, "_pulled", {})
+    monkeypatch.setattr(team_library, "_status", {})
+
+    # Последний рубеж. Снятых переменных хватает, пока их никто не вернёт; если
+    # вернёт — тест должен упасть с понятным текстом, а не отправить правку в
+    # библиотеку команды. Тесты, которые сами собирают `GitHubBackend` с
+    # подменённым `_call`, идут мимо `backend()` и этого не замечают.
+    real_backend = team_library.backend
+
+    def refuse_the_real_library():
+        made = real_backend()
+        if isinstance(made, team_library.GitHubBackend):
+            raise AssertionError(
+                "A test tried to reach the real team library repository. The "
+                "isolated_machine fixture in tests/conftest.py clears "
+                "ACL_LIBRARY_REPO/ACL_LIBRARY_TOKEN; something restored them "
+                "mid-test. Use team_library.use_backend(MemoryBackend()) instead."
+            )
+        return made
+
+    monkeypatch.setattr(team_library, "backend", refuse_the_real_library)
+    yield
+
+
 @pytest.fixture
 def enriched_df() -> pd.DataFrame:
     """Return an enriched DataFrame as if compute_metrics + enrich_structure ran.
