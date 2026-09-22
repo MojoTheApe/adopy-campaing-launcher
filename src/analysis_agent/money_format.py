@@ -56,3 +56,17 @@ def fmt_currency(value: Any, currency: str = "") -> str:
     code = written.upper()
     label = code if len(code) == 3 and code.isascii() and code.isalpha() else "currency unknown"
     return f"{label} {number:,.2f}"
+
+
+def fmt_summary_amount(value: Any, currency: str = "") -> str:
+    """Сумма в свёрнутой строке страны: как `fmt_currency`, но без пометки.
+
+    22.09, решение владельца (ACL-1258): в сводке страны «currency unknown» и
+    имя кабинета в скобках — шум. Код и знак остаются («KWD 7.00», «$44.17»);
+    если Meta не написала ничего — голое число. Складывать такие суммы между
+    собой по-прежнему нельзя: они стоят отдельными значениями через « · ».
+    В ячейке самого кабинета пометка остаётся — там `fmt_currency`.
+    """
+    shown = fmt_currency(value, currency)
+    prefix = "currency unknown "
+    return shown[len(prefix):] if shown.startswith(prefix) else shown
