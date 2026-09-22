@@ -1955,8 +1955,8 @@
     .amap-tree-line:last-child { border-bottom: none; }
     /* Первая колонка узкая (это колонка имени аккаунта), а в ней стрелка,
        уровень, тумблер и имя. Имя важнее всего остального: по нему решают,
-       что выключать. Поэтому оно переносится на вторую строку, а не
-       обрезается, и отступы с пометкой уровня — самые скромные. */
+       что выключать, поэтому отступы и пометка уровня — самые скромные.
+       Само имя стоит одной строкой с многоточием (ACL-1275). */
     .amap-tree-who {
       display: flex; align-items: baseline; gap: 0.35rem;
       padding-left: 0.6rem !important;
@@ -2016,8 +2016,11 @@
     .amap-tree-num.res { text-align: left; }
     .amap-tree-num.res .amap-tree-src {
       color: var(--muted); font-size: 0.62rem; text-transform: uppercase;
-      letter-spacing: 0.04em; margin-right: 0.25rem;
+      letter-spacing: 0.04em;
     }
+    /* С открытым билдером таблице остаётся мало места, и подпись съедала само
+       число (ревью 22.09). Тогда источник остаётся только в подсказке. */
+    body.cbd-open .amap-tree-num.res .amap-tree-src { display: none; }
     .amap-tree-err { color: var(--danger); font-size: 0.75rem; padding-top: 0.3rem; }
     /* Включённая строка — кнопка: её можно выключить. Выключенная и
        «непонятно» остаются надписями, нажимать там нечего. */
@@ -6259,11 +6262,14 @@ function amapTreeLine(o, adCount) {
     src.className = 'amap-tree-src';
     src.textContent = 'Meta';
     res.appendChild(src);
-    res.appendChild(document.createTextNode(o.results));
+    // Пробел настоящим узлом: без него копирование и экранный диктор дают
+    // «Meta18 Leads (Form)» (ревью 22.09).
+    res.appendChild(document.createTextNode(' ' + o.results));
   }
   /* Подсказка называет и источник, и цену результата: колонка узкая, текст
      Meta в неё целиком не помещается. */
-  res.title = (o.results ? "Meta's own result for this row" + (o.cost_per_result ? ' · ' + o.cost_per_result : '') : '');
+  res.title = [o.results ? "Meta's own result for this row" : '', o.cost_per_result || '']
+    .filter(Boolean).join(' · ');
 
   /* Уровень — мелкой строкой над именем, а не рядом: колонка узкая, и
      рядом с ним имя сжималось до пары букв (ревью ACL-1256). */
