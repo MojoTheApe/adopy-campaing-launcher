@@ -1930,8 +1930,11 @@ def _campaigns_from_page_data(page) -> dict[str, dict]:
         ads.setdefault(name, Counter()).update(
             _name_key(a) for a in (item.get("ads") or []) if _name_key(a)
         )
-    return {name: {"id": next(iter(found)), "ads": ads.get(name, Counter())}
-            for name, found in ids.items() if len(found) == 1}
+    # Имя с двумя id отдаём без id: его не различить, но и «данных нет» про
+    # него сказать нельзя — сообщения должны различаться.
+    return {name: {"id": next(iter(found)) if len(found) == 1 else "",
+                   "ads": ads.get(name, Counter()) if len(found) == 1 else Counter()}
+            for name, found in ids.items()}
 
 
 def _read_tree(
@@ -2008,7 +2011,7 @@ def _read_tree(
             shared = missing = 0
             for p in nameless:
                 hit = structure.get(_name_key(p.name))
-                if in_table[_name_key(p.name)] > 1:
+                if in_table[_name_key(p.name)] > 1 or (hit and not hit["id"]):
                     shared += 1
                 elif hit:
                     p.data_id = hit["id"]
@@ -2079,9 +2082,35 @@ def _read_tree(
 
     # A stale/ignored filter may return the same ad under different parents.
     # Its ownership is then ambiguous: keep neither association.
-    # Объявления без id под кампанией с id из данных страницы сверены выше,
-    # по её структуре, — и по пустому id их сравнивать нельзя: совпали бы все.
-    # Остальные сверяются как прежде.
+    # Объявления без id под кампаниями из данных страницы: сверка по структуре
+    # выше ловит проигнорированный фильтр, но не устаревший — у клонов имена
+    # одинаковы, и строка кампании A, оставшаяся на экране при заходе в B,
+    # проходит сверку B. Такую строку выдаёт то, что она та же самая: те же
+    # имя, деньги, результаты, доставка. Одна и та же строка с деньгами под
+    # двумя кампаниями — родитель неизвестен, не берём ни одну. Строки без
+    # спенда и результатов не сравниваем: у клонов, которые не крутились, они
+    # законно одинаковы, а денег чужих на них нет.
+    def _print(o: dict) -> tuple:
+        return (_name_key(o.get("name")), o.get("spend"), o.get("results"),
+                o.get("cost_per_result"), o.get("delivery"), o.get("switch"))
+
+    def _has_money(o: dict) -> bool:
+        return bool(re.search(r"[1-9]", str(o.get("spend") or "") + str(o.get("results") or "")))
+
+    seen_under: dict[tuple, set[str]] = {}
+    for obj in objects:
+        if obj["level"] == "ad" and not obj["id"] and obj["parent_id"] in data_keys \
+                and _has_money(obj):
+            seen_under.setdefault(_print(obj), set()).add(obj["parent_id"])
+    doubled = {fp for fp, parents in seen_under.items() if len(parents) > 1}
+    if doubled:
+        objects = [o for o in objects if not (
+            o["level"] == "ad" and not o["id"] and o["parent_id"] in data_keys
+            and _print(o) in doubled)]
+        errors.append("the same ads came back under different campaigns; ambiguous links skipped")
+
+    # По пустому id объявления сравнивать нельзя — совпали бы все; такие
+    # сверены выше. Остальные — как прежде.
     owners: dict[str, set[str]] = {}
     for obj in objects:
         if obj["level"] == "ad" and (obj["id"] or obj["parent_id"] not in data_keys):

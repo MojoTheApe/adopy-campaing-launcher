@@ -743,7 +743,9 @@ def test_two_campaigns_with_one_name_get_no_id(page):
     """По имени их не различить — угадывать нельзя."""
     page.set_content(_structure_script(("123", "Twin", ["a"]), ("456", "Twin", ["b"]),
                                        ("789", "Single", ["c"])))
-    assert set(sp._campaigns_from_page_data(page)) == {"Single"}
+    got = sp._campaigns_from_page_data(page)
+    assert got["Single"]["id"] == "789"
+    assert got["Twin"] == {"id": "", "ads": {}}
 
 
 def test_a_page_without_the_data_gives_nothing(page):
@@ -765,7 +767,8 @@ def nameless(flow):
             return ([sp.AdObject(level="campaign", name=n) for n in state["campaigns"]],
                     "by-name", "read by name: this account's table has no campaign ids")
         cid = page.url.split("selected_campaign_ids=")[1].split("&")[0]
-        return ([sp.AdObject(level="ad", name=n) for n in state["ads"][cid]],
+        return ([sp.AdObject(level="ad", name=n, spend=state.get("spend", {}).get(cid, "$1.00"))
+                 for n in state["ads"][cid]],
                 "by-name", "read by name: this account's table has no ad ids")
 
     flow.setattr(sp, "read_level", _level)
@@ -854,6 +857,8 @@ def test_clones_with_a_working_filter_are_kept(nameless):
     nameless["structure"] = {"camp A": {"id": "111", "ads": _Counter(["clone ad"])},
                              "camp B": {"id": "222", "ads": _Counter(["clone ad"])}}
     nameless["ads"] = {"111": ["clone ad"], "222": ["clone ad"]}
+    # Разные деньги — разные строки: фильтр сработал, каждая под своей кампанией.
+    nameless["spend"] = {"111": "$10.00", "222": "$20.00"}
     objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
     assert sorted(o["parent_id"] for o in objects if o["level"] == "ad") == ["111", "222"]
     assert "did not match" not in err
@@ -881,3 +886,32 @@ def test_an_id_table_with_nameless_ads_behaves_as_before(flow):
     assert all(o["level"] == "campaign" for o in objects)
     assert "different campaigns" in err
     assert err.count("has no ad ids") == 2
+
+
+def test_a_twin_in_the_page_data_is_not_called_missing(nameless):
+    """Два id под одним именем в данных страницы — «не различить», а не «нет данных»."""
+    nameless["structure"]["camp B"] = {"id": "", "ads": _Counter()}
+    _, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert "share a name" in err and "did not give their ids" not in err
+
+
+def test_a_stale_selection_between_clones_is_not_attributed(nameless):
+    """При заходе в B на экране осталась строка A: то же имя, те же деньги.
+    Сверку по структуре она проходит — ловит её то, что строка одна и та же."""
+    nameless["structure"] = {"camp A": {"id": "111", "ads": _Counter(["clone ad"])},
+                             "camp B": {"id": "222", "ads": _Counter(["clone ad"])}}
+    nameless["ads"] = {"111": ["clone ad"], "222": ["clone ad"]}
+    nameless["spend"] = {"111": "$42.00", "222": "$42.00"}
+    objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert [o for o in objects if o["level"] == "ad"] == []
+    assert "different campaigns" in err
+
+
+def test_clones_that_never_spent_are_kept(nameless):
+    nameless["structure"] = {"camp A": {"id": "111", "ads": _Counter(["clone ad"])},
+                             "camp B": {"id": "222", "ads": _Counter(["clone ad"])}}
+    nameless["ads"] = {"111": ["clone ad"], "222": ["clone ad"]}
+    nameless["spend"] = {"111": "$0.00", "222": "$0.00"}
+    objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert len([o for o in objects if o["level"] == "ad"]) == 2
+    assert "different campaigns" not in err
