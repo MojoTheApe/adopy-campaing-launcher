@@ -16,7 +16,7 @@
           одному за раз — правило «один профиль одновременно» никуда не
           девается, поэтому это очередь, а не параллельный прогон. -#}
       <button type="button" class="amap-btn amap-read-all" onclick="amapReadAll(this)"
-              title="Read every connected account for the period on screen — one at a time, top to bottom">Read all</button>
+              title="Read every connected account for the period on screen — one at a time, top to bottom">Read all spend</button>
       <span class="amap-add" style="padding:0;margin-left:auto">
         <input type="text" id="amap-new-country" placeholder="new country…" size="14">
         <select id="amap-new-country-acc">
@@ -72,7 +72,7 @@
           {%- if mc.live_sums %}
           {%- for s in mc.live_sums %}<b>{{ s.spend | fmt_summary_amount(s.currency) }}</b>{% if not loop.last %} · {% endif %}{% endfor %}
           {%- else %}<b>—</b>{% endif %}</span>
-          <i class="amap-live-summary-count">{{ mc.live_read or 0 }}/{{ mc.rows | length }} read</i>
+          <i class="amap-live-summary-count">{{ mc.live_read or 0 }}/{{ mc.rows | length }} spend read</i>
           {#- acl-357: спенд, привязанный к стране самим кабинетом. Стоит в
               той же ячейке, что и общий: порознь их путают, а разница между
               ними — весь смысл разбивки. Сумма без пометки `summed` — это

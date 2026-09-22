@@ -1577,7 +1577,7 @@
       margin-bottom: var(--space-sm);
     }
     .amap-head h3 { margin: 0; }
-    .amap-head .amap-note { font-size: 0.78rem; color: var(--muted); }
+    .amap-head .amap-note { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
     .amap-country {
       border: 1px solid var(--border); border-radius: var(--radius-md);
       background: var(--bg-elev); margin-bottom: var(--space-md);
@@ -1724,8 +1724,19 @@
          161px кнопок не влезали в колонку из-за 27px отступов, и строка
          разъезжалась на две. */
       padding-left: 0.3rem;
+      /* ACL-1266: «Read spend» на 4 буквы шире, и на 1280px три кнопки снова
+         переносились. Правое поле у крайней правой колонки — пустое место. */
+      padding-right: 0;
     }
     .amap table.amap-grid td.amap-actions > button { margin: 0.05rem 0 0.05rem 0.2rem; }
+    /* ACL-1266: подпись стала длиннее («Read all spend», «Reading spend 12 of
+       15…»), и на 1280–1366px кнопка в шапке ломалась на две строки. Она
+       не сжимается и не переносится; даты тоже не рвутся (nowrap на note). */
+    .amap-head .amap-read-all { flex-shrink: 0; white-space: nowrap; }
+    /* Status и Setup отдали кнопкам по проценту; с прежними полями 0.85rem
+       «needs setup» и «no warning» на 1280–1366px уходили в многоточие.
+       Узкие поля возвращают им место; строка не растёт. */
+    .amap table.amap-grid td.amap-status, .amap table.amap-grid td.amap-setup { padding-left: 0.3rem; padding-right: 0.3rem; }
     .amap .amap-x {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -6054,7 +6065,7 @@ function amapUpdateCountrySummaries() {
       bold.textContent = value;
       target.appendChild(bold);
     });
-    summary.querySelector('.amap-live-summary-count').textContent = read + '/' + seen.size + ' read';
+    summary.querySelector('.amap-live-summary-count').textContent = read + '/' + seen.size + ' spend read';
   });
 }
 
@@ -6082,7 +6093,7 @@ function amapApplyReading(account, s) {
     cell.innerHTML = '<span class="amap-live-ok"></span>';
     cell.firstChild.textContent = amapMoney(s.spend, s.currency);
     cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how;
-    btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read'; btn.title = 'Read again';
+    btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read spend'; btn.title = 'Read spend again';
     amapPaintTree(row, s);
   });
   amapUpdateCountrySummaries();
@@ -6941,11 +6952,11 @@ async function amapReadAll(btn) {
   var okCount = 0, failCount = 0;
   try {
     for (var i = 0; i < jobs.length; i++) {
-      btn.textContent = 'Reading ' + (i + 1) + ' of ' + jobs.length + '…';
+      btn.textContent = 'Reading spend ' + (i + 1) + ' of ' + jobs.length + '…';
       var state = await amapQueueRead(jobs[i], per);
       if (state === 'ok') okCount++; else failCount++;
     }
-    btn.title = okCount + ' read, ' + failCount + ' failed';
+    btn.title = okCount + ' read, ' + failCount + ' failed (spend)';
   } finally {
     amapReadAllBusy = false;
     amapReadAllControls(false);
@@ -7045,7 +7056,7 @@ function amapOpenProfile(btn) {
         if (read) {
           read.disabled = false;
           read.className = 'amap-btn amap-read';
-          read.textContent = 'Read';
+          read.textContent = 'Read spend';
           read.title = j.message || '';
         }
       } else {

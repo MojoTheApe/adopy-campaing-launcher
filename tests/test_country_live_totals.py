@@ -41,7 +41,7 @@ def test_sums_use_only_successful_finite_readings_and_do_not_mix_units(monkeypat
         {'currency':'$','spend':1044.82,'account':'J'},
     ]
     html=app.templates.env.get_template('_account_map.html').render(amap=view,mlx={'A':'A','B':'B'})
-    assert '6/10 read' in html
+    assert '6/10 spend read' in html
     assert 'KWD 7.00' in html and 'USD 10.25' in html
     # ACL-1258: в сводке страны без «currency unknown» и без имени кабинета;
     # суммы без кода стоят отдельно, знак Meta ($) сохраняется.
@@ -61,7 +61,7 @@ def test_maximum_does_not_include_dated_readings(monkeypatch, setup_map):
     country=view['countries'][0]
     assert country['live_read']==0 and country['live_sums']==[]
     html=app.templates.env.get_template('_account_map.html').render(amap=view,mlx={'A':'A','B':'B'})
-    assert '0/1 read' in html
+    assert '0/1 spend read' in html
     assert '<b>—</b>' in html
     read.assert_not_called()
 
@@ -87,3 +87,26 @@ def test_the_summary_twin_in_the_page_matches_the_server(tmp_path):
     import json
     assert json.loads(out.stdout) == [fmt_summary_amount(v, c) for v, c in cases]
     assert json.loads(out.stdout) == ["2.00", "3.00", "$1,044.82", "KWD 7.00", "USD 10.25"]
+
+
+def test_the_read_labels_say_spend_everywhere():
+    """ACL-1266 (решение владельца): кнопки читают спенд и называют это словом —
+    «Read spend», не «Connect». Счётчик на сервере и на странице — одними словами."""
+    from pathlib import Path
+
+    tpl = Path(__file__).resolve().parents[1] / "src/web/templates"
+    amap = (tpl / "_account_map.html").read_text(encoding="utf-8")
+    country = (tpl / "_account_map_country.html").read_text(encoding="utf-8")
+    page = (tpl / "report.html").read_text(encoding="utf-8")
+    assert ">Read all spend</button>" in amap and "}} spend read</i>" in amap
+    assert ">Read all spend in {{ mc.country }}</button>" in country
+    assert ">Read spend</button>" in country
+    assert ">reading…</button>" in country, "сервер при перезагрузке во время чтения"
+    assert "by the Read spend button" in country
+    assert "' spend read'" in page and "'Read spend'" in page
+    # Занятость — короткое «reading…» и на сервере, и на странице (кнопка при
+    # нажатии, при опросе; третье — загрузка журнала): длинная подпись не
+    # влезала в колонку кнопок на 1280–1366px.
+    assert page.count("'reading…'") == 3 and "'reading spend…'" not in page
+    for stale in (">Read</button>", ">Read all</button>", "' read';", "'Read';", "'Reading ' +", "by the Read button"):
+        assert stale not in amap + country + page, stale

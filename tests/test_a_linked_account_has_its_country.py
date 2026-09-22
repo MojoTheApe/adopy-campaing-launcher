@@ -198,4 +198,4 @@ def test_linked_local_account_has_country_spend_cell_and_read_control(overview):
     assert "FacebookReviewA" in rendered
     assert "Account spend" in rendered
     assert 'onclick="amapReadSpend(this)"' in rendered
-    assert '>Read</button>' in rendered
+    assert '>Read spend</button>' in rendered
