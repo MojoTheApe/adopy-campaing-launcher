@@ -336,6 +336,22 @@
           277
         ],
         "recorded_at": "2026-09-22T18:54:28+00:00"
+      },
+      "286": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "claude-subagent-review-pr286 (independent, did not write or edit code; two rounds: request-changes at 549687c, approve-with-nits at fa1dc5d)",
+        "implementer": "claude implementer session",
+        "head_sha": "fa1dc5df9c4ba03d1de3dd523d5c18530a00b154",
+        "base_sha": "6f64f98a76587cf62791f68bad25dc1179ed7e76",
+        "tree_sha": "f24d843d99344981da0e295932f2a296da90e537",
+        "main_sha": "5b49e8ec20c505f1c11a78e10fe5dc36e16bfaa7",
+        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/286 (review record comment)",
+        "issues": [
+          282
+        ],
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "recorded_at": "2026-09-22T21:53:02+00:00"
       }
     },
     "stage": {
