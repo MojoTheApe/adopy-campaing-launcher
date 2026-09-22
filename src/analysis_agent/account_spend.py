@@ -1473,6 +1473,14 @@ class AdObject:
     #: заголовках, а ячейки у неё в разметке не нашлось.
     parent_id: str = ""
 
+    #: Id, взятый не из строки таблицы, а из данных, которые Meta вшивает в
+    #: страницу (`campaign_structure_tree`). Бывает только у кампаний аккаунта,
+    #: чья таблица id не показывает (Doc19, 18.09). Нужен, чтобы спросить
+    #: объявления этой кампании и разложить их под ней, — и только для этого.
+    #: В `id` его не кладём намеренно: `id` — это то, что можно найти в строке
+    #: и выключить, а в такой таблице строки с этим id нет.
+    data_id: str = ""
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -1846,6 +1854,89 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
     return objects, how, warning
 
 
+#: Данные дерева, которые Meta вшивает в страницу списка кампаний.
+#:
+#: 22.09 (Doc19, таблица без id): в разметке строк id нет, но в
+#: `<script type="application/json">` страницы лежит `campaign_structure_tree`
+#: каждой кампании — её id, имя, ad set'ы и объявления с их id и именами.
+#: Это собственный предзагруженный ответ Meta для той же страницы, не догадка.
+_PAGE_STRUCTURE_JS = r"""
+() => {
+  const out = [];
+  const walk = (v, depth) => {
+    if (!v || typeof v !== 'object' || depth > 60) return;
+    if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
+    const t = v.campaign_structure_tree;
+    if (t && typeof t === 'object' && /^[0-9]+$/.test(String(t.campaign_id || ''))) {
+      const ads = [];
+      for (const set of (t.children || [])) {
+        for (const ad of ((set && set.children) || [])) {
+          if (ad && typeof ad.name === 'string') ads.push(ad.name);
+        }
+      }
+      out.push({id: String(t.campaign_id), name: String(t.name || ''), ads: ads});
+    }
+    for (const k in v) walk(v[k], depth + 1);
+  };
+  for (const s of document.querySelectorAll('script[type="application/json"]')) {
+    const text = s.textContent || '';
+    if (text.indexOf('campaign_structure_tree') === -1) continue;
+    try { walk(JSON.parse(text), 0); } catch (e) { /* чужой формат — пропускаем */ }
+  }
+  return out;
+}
+"""
+
+
+def _name_key(name: Any) -> str:
+    """Имя для сравнения — как его чистит разбор таблицы: пробелы схлопнуты.
+
+    Таблица схлопывает любые пробелы (и неразрывные) в один, а данные страницы
+    отдают имя как есть. Без общей чистки имя с двойным пробелом не совпало бы
+    никогда — безопасно, но молча.
+    """
+    return " ".join(str(name or "").split())
+
+
+def _campaigns_from_page_data(page) -> dict[str, dict]:
+    """Кампании из вшитых данных страницы: `{имя: {"id", "ads"}}`.
+
+    `ads` — `Counter` имён объявлений: у клонов имена повторяются, и сколько
+    раз имя есть в кампании, так же важно, как само имя.
+
+    Берём только имена, встретившиеся **с одним id**: две кампании с одним
+    именем по имени не различить, и приписать объявления одной из них значило
+    бы угадать. Ошибка страницы — пустой ответ, а не падение: без этих данных
+    дерево просто остаётся без объявлений, как было до них.
+    """
+    try:
+        got = page.evaluate(_PAGE_STRUCTURE_JS)
+    except Exception:
+        return {}
+    from collections import Counter
+
+    ids: dict[str, set[str]] = {}
+    ads: dict[str, Counter] = {}
+    for item in got if isinstance(got, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = _name_key(item.get("name"))
+        cid = str(item.get("id") or "")
+        if not name or not cid.isdigit():
+            continue
+        if cid in ids.get(name, set()):
+            continue  # тот же узел, встреченный в ответе ещё раз
+        ids.setdefault(name, set()).add(cid)
+        ads.setdefault(name, Counter()).update(
+            _name_key(a) for a in (item.get("ads") or []) if _name_key(a)
+        )
+    # Имя с двумя id отдаём без id: его не различить, но и «данных нет» про
+    # него сказать нельзя — сообщения должны различаться.
+    return {name: {"id": next(iter(found)) if len(found) == 1 else "",
+                   "ads": ads.get(name, Counter()) if len(found) == 1 else Counter()}
+            for name, found in ids.items()}
+
+
 def _read_tree(
     page, act: str, expected_act: str, date_from: str, date_to: str = "",
 ) -> tuple[list[dict], str, str]:
@@ -1864,6 +1955,7 @@ def _read_tree(
     objects: list[dict] = []
     hows: list[str] = []
     errors: list[str] = []
+    data_keys: set[str] = set()  # кампании, чьи объявления сверены по данным страницы
 
     def _context_matches(what: str, parent_id: str = "") -> bool:
         from urllib.parse import parse_qs, urlsplit
@@ -1903,9 +1995,41 @@ def _read_tree(
             hows.append(f"{top}:{how}")
         if err:
             errors.append(err)
+
+        # Таблица без id (Doc19): id кампаний берём из данных самой страницы,
+        # пока она ещё открыта. Кому не нашлось — остаются без объявлений, и
+        # это говорится вслух.
+        nameless = [p for p in parents if not p.id]
+        structure: dict[str, dict] = {}
+        if nameless:
+            from collections import Counter
+
+            structure = _campaigns_from_page_data(page)
+            # Имя, дважды стоящее в таблице, по имени не различить — даже если в
+            # данных страницы оно одно: второй строке достался бы чужой id.
+            in_table = Counter(_name_key(p.name) for p in nameless)
+            shared = missing = 0
+            for p in nameless:
+                hit = structure.get(_name_key(p.name))
+                if in_table[_name_key(p.name)] > 1 or (hit and not hit["id"]):
+                    shared += 1
+                elif hit:
+                    p.data_id = hit["id"]
+                else:
+                    missing += 1
+            if shared:
+                errors.append(
+                    f"ads were not read for {shared} campaigns that share a name "
+                    "with another one: without ids they cannot be told apart"
+                )
+            if missing:
+                errors.append(
+                    f"ads were not read for {missing} of {len(nameless)} campaigns "
+                    "read by name: the page did not give their ids"
+                )
         objects.extend(o.to_dict() for o in parents)
 
-        wanted = [p for p in parents if p.id]
+        wanted = [p for p in parents if p.id or p.data_id]
         if len(wanted) > TREE_MAX_PARENTS:
             # Молчаливое усечение читается как «это всё». Говорим вслух.
             errors.append(
@@ -1915,30 +2039,81 @@ def _read_tree(
             wanted = wanted[:TREE_MAX_PARENTS]
 
         ads_how: set[str] = set()
+        ads_by_name = False
         for parent in wanted:
-            what = f"{top} {parent.id}"
+            key = parent.id or parent.data_id
+            what = f"{top} {key}"
             url = _tree_url(act, "ad", date_from, date_to,
-                            parent_level=top, parent_id=parent.id)
-            if not _open(url, what, parent.id):
+                            parent_level=top, parent_id=key)
+            if not _open(url, what, key):
                 continue
             got, how, err = read_level(page, "ad")
-            if not _context_matches(what, parent.id):
+            if not _context_matches(what, key):
                 continue
             if how:
                 ads_how.add(how)
+            if not parent.id and err.startswith("read by name"):
+                # Одна и та же пометка на каждую кампанию — шум; скажем один раз.
+                ads_by_name, err = True, ""
             if err:
                 errors.append(f"{what}: {err}")
+            if not parent.id:
+                # Родитель найден по данным страницы, а не по строке — сверяем,
+                # что пришли именно его объявления: каждое имя должно быть в
+                # его структуре, и не чаще, чем там. Адрес с фильтром ещё не
+                # значит, что Meta его применила: проигнорированный фильтр
+                # вернул бы все объявления аккаунта, а у клонов имена одни и те
+                # же — одной проверки «имя знакомо» тут мало.
+                from collections import Counter
+
+                known = structure.get(_name_key(parent.name), {}).get("ads", Counter())
+                seen = Counter(_name_key(o.name) for o in got)
+                if any(n > known.get(name, 0) for name, n in seen.items()):
+                    errors.append(f"{what}: the ads did not match this campaign; skipped")
+                    continue
+                data_keys.add(key)
             for o in got:
-                o.parent_id = parent.id
+                o.parent_id = key
                 objects.append(o.to_dict())
+        if ads_by_name:
+            errors.append("read by name: this account's table has no ad ids")
         if ads_how:
             hows.append("ad:" + "/".join(sorted(ads_how)))
 
     # A stale/ignored filter may return the same ad under different parents.
     # Its ownership is then ambiguous: keep neither association.
+    # Объявления без id под кампаниями из данных страницы: сверка по структуре
+    # выше ловит проигнорированный фильтр, но не устаревший — у клонов имена
+    # одинаковы, и строка кампании A, оставшаяся на экране при заходе в B,
+    # проходит сверку B. Такую строку выдаёт то, что она та же самая: те же
+    # имя, деньги, результаты, доставка. Одна и та же строка с деньгами под
+    # двумя кампаниями — родитель неизвестен, не берём ни одну. Строки без
+    # спенда и результатов не сравниваем: у клонов, которые не крутились, они
+    # законно одинаковы, а денег чужих на них нет.
+    def _print(o: dict) -> tuple:
+        return (_name_key(o.get("name")), o.get("spend"), o.get("results"),
+                o.get("cost_per_result"), o.get("delivery"), o.get("switch"))
+
+    def _has_money(o: dict) -> bool:
+        return bool(re.search(r"[1-9]", str(o.get("spend") or "") + str(o.get("results") or "")))
+
+    seen_under: dict[tuple, set[str]] = {}
+    for obj in objects:
+        if obj["level"] == "ad" and not obj["id"] and obj["parent_id"] in data_keys \
+                and _has_money(obj):
+            seen_under.setdefault(_print(obj), set()).add(obj["parent_id"])
+    doubled = {fp for fp, parents in seen_under.items() if len(parents) > 1}
+    if doubled:
+        objects = [o for o in objects if not (
+            o["level"] == "ad" and not o["id"] and o["parent_id"] in data_keys
+            and _print(o) in doubled)]
+        errors.append("the same ads came back under different campaigns; ambiguous links skipped")
+
+    # По пустому id объявления сравнивать нельзя — совпали бы все; такие
+    # сверены выше. Остальные — как прежде.
     owners: dict[str, set[str]] = {}
     for obj in objects:
-        if obj["level"] == "ad":
+        if obj["level"] == "ad" and (obj["id"] or obj["parent_id"] not in data_keys):
             owners.setdefault(obj["id"], set()).add(obj["parent_id"])
     ambiguous = {oid for oid, parents in owners.items() if len(parents) > 1}
     if ambiguous:
