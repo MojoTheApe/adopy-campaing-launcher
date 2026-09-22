@@ -180,3 +180,15 @@ def test_a_live_failure_keeps_the_old_amount_in_the_cell(page):
                         document.querySelector('.amap-live'), 'profile is closed', '', '')""")
     got = page.evaluate("() => document.querySelector('.amap-live').innerText.replace(/\\s+/g, ' ').trim()")
     assert got.startswith("profile is closed") and "$1,044.82" in got
+
+
+
+def test_the_old_amount_stands_on_its_own_line_under_a_failure(page):
+    src = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
+    css = src[src.index("    .amap-live-ok {"): src.index("    .amap-tree-head.old {")]
+    page.set_content('<style>' + css + '</style><table><tr><td class="amap-live" style="width:200px">'
+                     '<span class="amap-live-bad">profile is closed</span>'
+                     '<span class="amap-live-old">$1,044.82<small>09-01…09-21</small></span></td></tr></table>')
+    bad = page.evaluate("() => document.querySelector('.amap-live-bad').getBoundingClientRect().bottom")
+    old = page.evaluate("() => document.querySelector('.amap-live-old').getBoundingClientRect().top")
+    assert old >= bad - 1, "старое число прилипло к тексту неудачи"
