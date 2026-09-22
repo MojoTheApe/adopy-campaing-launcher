@@ -285,34 +285,16 @@
       }
     },
     "stage": {
-      "pr": 269,
+      "pr": 272,
       "issues": [
-        256
+        266
       ],
-      "tree_sha": "76591c70347bb58992b7fd07cc88f98d58ea04f6",
-      "source_sha": "f9cc52122ca1a16bd9114251c7f63d908b0f07fb",
-      "main_tree": "37dcf8e57171422b646629d5241a7210d90f2070",
+      "tree_sha": "d8c35aaab1f54399c77ac495c4f145058f8aa3a1",
+      "source_sha": "b2a297470842df3c9548fa279f95947302933994",
+      "main_tree": "76591c70347bb58992b7fd07cc88f98d58ea04f6",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-09-22T11:49:23+00:00",
-      "verification": {
-        "kind": "stage-verification",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "source_sha": "f9cc52122ca1a16bd9114251c7f63d908b0f07fb",
-        "tree_sha": "76591c70347bb58992b7fd07cc88f98d58ea04f6",
-        "checks": [
-          "Stage push CI run 35723588931 on f9cc521: ACL verification, Windows Python 3.11 and 3.13 suites passed.",
-          "Exact-stage installer run 35723588861 passed build/install/launch/repair/uninstall.",
-          "Previous actual package installs and starts with isolated data",
-          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
-          "Updated installed application restarts with preserved machine/workspace/creative data",
-          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
-          "Recovered application restarts and synthetic data remains byte-identical"
-        ],
-        "report": "Artifact ACL-update-recovery-276 of run 35723588861 (report.json: result passed, source f9cc52122ca1a16bd9114251c7f63d908b0f07fb, tree 76591c70347bb58992b7fd07cc88f98d58ea04f6; packages 0.0.0-ci.276 sha256 f0395ae9a79141a7015cfbcc39bf54dacea421d7e6c9aaa56feb4c634dbb26cd, 0.1.0-alpha.276 sha256 5e3e506d37542a43055c9cab8f05d24be976710e6ec2191914e54cb9609fc27a). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof."
-      },
-      "verified_at": "2026-09-22T12:03:42+00:00"
+      "state": "testing",
+      "recorded_at": "2026-09-22T13:21:28+00:00"
     },
     "tasks": {
       "248": {
