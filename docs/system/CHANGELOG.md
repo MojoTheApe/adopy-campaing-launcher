@@ -1,5 +1,18 @@
 # System history
 
+## Latest read shown, marked, when the dates on screen have none — ACL-1271
+
+The account map showed a Read result only for exactly the period on screen: open
+1–22 September after reading 1–21 and the row said "—", "0/1 spend read", with no
+tree. Now, when an account has no reading at all for the dates on screen, the row
+shows its latest successful reading for other dates: muted and italic, with those
+dates under the amount and in the tooltip ("not the dates on screen"), and the
+campaign/ad tree is painted from it with the same note in its heading. Such amounts
+are not added to the country total and not counted in "N/M spend read". A failed
+reading for the dates on screen keeps its "failed · retry" and shows the marked
+fallback under it (owner's decision: one failed attempt must not hide the numbers and
+the tree); a running reading is shown as before. Read spend / Read all spend read these accounts for the dates on screen as usual.
+
 ## STAGE badge and "not on stage" count in the header — ACL-1267
 
 Owner's decision (2026-09-22): the process stays as it is — working branch -> stage
