@@ -78,6 +78,13 @@ class CountrySplit:
     entered: str = ""
     error: str = ""
     shot: str = ""
+    #: Когда чтение началось и когда закончилось. Появились в ACL-1282: одна
+    #: кнопка читает спенд и, если нужно, разбивку, а «нужно» — это в том
+    #: числе «разбивка старше спенда за те же даты». Сравнивать нечем, если
+    #: разбивка не помнит своего времени. Записи, снятые до ACL-1282, времени
+    #: не имеют — они считаются устаревшими, а не свежими.
+    started_at: str = ""
+    finished_at: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -85,6 +92,29 @@ class CountrySplit:
 
 # ── Хранилище: своя копилка, тот же принцип, что у показаний спенда ────
 _LOCK = threading.RLock()
+
+
+def _now() -> str:
+    """То же время и тем же видом, что у показаний спенда.
+
+    Один формат — условие сравнения: ACL-1282 спрашивает, не старше ли
+    разбивка спенда за те же даты, и сравнивает эти строки как строки.
+    """
+    from datetime import datetime
+
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _as_split(stored: dict) -> "CountrySplit":
+    """Запись с диска — в объект, не спотыкаясь о чужие поля.
+
+    В хранилище лежат записи, снятые прежними версиями: у них нет новых
+    полей, а когда-нибудь может не остаться старого. `CountrySplit(**stored)`
+    падает и на том, и на другом, а падать здесь — значит потерять чтение,
+    которое уже состоялось.
+    """
+    known = {f for f in CountrySplit.__dataclass_fields__}
+    return CountrySplit(**{k: v for k, v in stored.items() if k in known})
 
 
 def _store_path() -> Path:
@@ -141,10 +171,11 @@ def start_split(
     with _LOCK:
         if key in _RUNNING:
             stored = get_split(account, date_from, date_to)
-            return CountrySplit(**stored) if stored else CountrySplit(
+            return _as_split(stored) if stored else CountrySplit(
                 account=account, date_from=date_from, date_to=date_to, state="running")
         started = CountrySplit(account=account, date_from=date_from,
-                               date_to=date_to, state="running")
+                               date_to=date_to, state="running",
+                               started_at=_now())
         _RUNNING.add(key)
         try:
             save_split(started)
@@ -160,6 +191,8 @@ def start_split(
         except Exception as exc:  # падение чтения не должно ронять сервер
             done = CountrySplit(account=account, date_from=date_from, date_to=date_to,
                                 state="failed", error=f"{type(exc).__name__}: {exc}")
+        done.started_at = started.started_at
+        done.finished_at = _now()
         with _LOCK:
             try:
                 save_split(done)
@@ -293,6 +326,39 @@ def _honest(key: str, value: dict | None) -> dict | None:
     orphan["state"] = "failed"
     orphan["error"] = orphan.get("error") or _ORPHANED
     return orphan
+
+
+def why_split_is_needed(
+    *, countries: int, split: dict | None, spend_finished_at: str = ""
+) -> str:
+    """Зачем читать разбивку по странам сейчас — или пусто, если незачем.
+
+    Правило владельца (ACL-1282). До этой правки разбивка читалась отдельной
+    кнопкой, то есть ровно тогда, когда человек её нажал. Кнопка теперь одна,
+    и цену чтения — отчёт, созданный внутри кабинета, — нельзя платить каждый
+    раз, когда нужна одна цифра спенда. Поэтому разбивка читается только
+    когда она отвечает на вопрос, которого нет в спенде:
+
+    * аккаунт привязан больше чем к одной стране — тогда общая сумма не
+      говорит, куда ушли деньги;
+    * разбивки за эти даты нет вовсе;
+    * разбивка старше спенда за эти даты — значит её снимали с других чисел.
+
+    Возвращает причину словами (её показывают человеку) или пустую строку.
+    Причина — не украшение: «ничего не произошло» и «мы решили не читать»
+    выглядят на экране одинаково, и отличить их можно только текстом.
+    """
+    if countries > 1:
+        return "more than one country is linked to this account"
+    state = (split or {}).get("state")
+    if state not in ("ok", "empty"):
+        return "no country split for these dates"
+    at = str((split or {}).get("finished_at") or "")
+    if not at:
+        return "the stored country split does not say when it was read"
+    if spend_finished_at and at < spend_finished_at:
+        return "the country split is older than the spend reading"
+    return ""
 
 
 def get_split(account: str, date_from: str, date_to: str) -> dict | None:

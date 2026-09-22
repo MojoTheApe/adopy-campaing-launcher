@@ -1,5 +1,41 @@
 # System history
 
+## One button reads the account: spend always, countries when needed — ACL-1282
+
+The account row had "Read spend" and "Countries". Both asked the same account about
+the same period and each one opened it separately. They are now one button. It reads
+the spend, and then, in the same profile session, the country split only when the
+split would answer something the spend does not: the account is linked to more than
+one country, there is no split for these dates, or the stored split is older than the
+spend reading. Otherwise nothing else is touched — the split builds a report inside
+Ads Manager, and that price must not be paid for every single spend number.
+
+The decision is made on the server (`country_split.why_split_is_needed`, called from
+`_split_plan`) and travels back with the reading, because the page has neither the
+account links nor the two stores. It is taken *before* the spend read starts:
+`start_read` replaces the stored reading with a "running" record that has no time,
+and a decision taken after it would always read "the split is fresh" and the
+countries would never be read again. The combined reading settles by itself: the
+split finishes after the spend, so the next click on the same dates sees a fresh
+split and leaves the account alone. Splits stored before this change have no time of
+their own and count as stale — read once, then settled.
+
+"Read all spend" follows the same rule per account, inside the same queue: the
+account is open now, and a second pass would be a second touch of a live account.
+
+A failed split no longer discards a good spend reading: the shared button returns to
+"Read spend" and the failure appears in the reading cell as "countries failed" with
+the reason in its tooltip. It is rendered from the server too, so it survives a page
+reload, and the country totals are refreshed even after a failure — a stale total
+next to a failure message would be a number that no longer exists.
+
+With two buttons instead of three the actions column drops from 19% to 13% and the
+name column gains those 6%: 28%. In tree rows at 1280 with the Builder drawer docked
+open the campaign name box goes from about 65px to 91px (the ad's from 49px to 75px);
+at 1366 it is 115px. That is better, not solved — ACL-1277 keeps the rest, and the
+next step there is a tree grid that drops the trailing button column, which tree rows
+never use, in favour of the name.
+
 ## Account tree reads cleanly: name, Meta result, column widths — ACL-1275 / ACL-1277
 
 Three display problems in the tree the owner reported on 2026-09-22. Long campaign

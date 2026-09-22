@@ -15,21 +15,20 @@
         {#- Колонок и долей поровну, в сумме ровно 100%. Когда-то доль было на
             одну меньше: ширины сложились без последней, и колонка с кнопками
             уехала за правый край. Теперь счёт держит тест, а не память. -#}
-        {#- acl-357: кнопок в строке стало три (Read, Countries, Remove), и в
-            прежние 13% они не влезали — Remove оказывался за краем ячейки,
-            видимый в разметке и недоступный мышке. Доли взяты у самых
-            «рыхлых» колонок: имя аккаунта и так обрезается многоточием,
-            Status и Setup несут короткие подписи. Числа не тронуты: ради них
-            таблицу и читают. -#}
+        {#- Доли взяты у самых «рыхлых» колонок: имя аккаунта и так обрезается
+            многоточием, Status и Setup несут короткие подписи. Числа не
+            тронуты: ради них таблицу и читают. -#}
         <colgroup>
-          {#- ACL-1277: колонка кнопок (была 23%) в строках дерева всегда пуста,
-              а имени кампании не хватало. Кнопкам 19%, имени 22%: цифры остаются под своими
-              заголовками, и ни одна числовая колонка не сузилась — «$1,044.82»
-              в колонке Spend должен помещаться целиком (ревью 22.09). -#}
-          <col style="width:22%"><col style="width:8%"><col style="width:9%">
+          {#- ACL-1282: кнопок снова две — «Read spend» и «×». Прежние три
+              (acl-357) требовали 19%; две помещаются в 13%, и шесть
+              освободившихся процентов уходят имени: в строках дерева эта
+              колонка пуста всегда, а имени кампании не хватало (ACL-1277).
+              Ни одна числовая колонка не сузилась — «$1,044.82» в колонке
+              Spend должен помещаться целиком (ревью 22.09). -#}
+          <col style="width:28%"><col style="width:8%"><col style="width:9%">
           <col style="width:5%"><col style="width:5%"><col style="width:5%">
           <col style="width:5%"><col style="width:5%"><col style="width:8%">
-          <col style="width:9%"><col style="width:19%">
+          <col style="width:9%"><col style="width:13%">
         </colgroup>
         {#- Два спенда стоят рядом и подписаны источником: один из книги
             статистики, другой прочитан с самого кабинета. Порознь их легко
@@ -98,6 +97,12 @@
                 Помечено своими датами и в итог страны не входит: состояние
                 ячейки «fallback», а сумма страны берёт только «ok». -#}
             {%- set fb = (amap.fallback or {}).get(r.account) if (not sr or sr.state == 'failed') else none -%}
+            {#- ACL-1282: у пострановой разбивки больше нет своей кнопки, на
+                которой была видна её неудача. Показываем её здесь же, под
+                спендом: спенд прочитан, а страны — нет, и это разные ответы.
+                Неудача переживает перезагрузку, потому что приходит с
+                сервера, а не рисуется живым обработчиком. -#}
+            {%- set sp = (amap.splits or {}).get(r.account) -%}
             {%- if fb -%}
             {%- set fb_html -%}<span class="amap-live-old" title="Read for {% if fb.date_from == fb.date_to %}{{ fb.date_from }}{% else %}{{ fb.date_from }}…{{ fb.date_to }}{% endif %} on {{ fb.finished_at }} — not the dates on screen, and not counted in the country total. Read spend to get these dates.">{{ fb.spend | fmt_currency(fb.currency) }}<small>{% if fb.date_from == fb.date_to %}{{ fb.date_from[5:] }}{% else %}{{ fb.date_from[5:] }}…{{ fb.date_to[5:] }}{% endif %}</small></span>{%- endset -%}
             {%- else -%}{%- set fb_html = '' -%}{%- endif -%}
@@ -117,6 +122,7 @@
 снимок: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}</span>
                 {%- if fb %}{{ fb_html }}{% endif -%}
               {%- else -%}<span class="nodata">—</span>{%- endif -%}
+              {%- if sp and sp.state == 'failed' %}<small class="amap-split-bad" title="The country split failed: {{ sp.error }}{% if sp.entered %} · {{ sp.entered }}{% endif %}. The spend above is unaffected; read again to retry the countries.">countries failed</small>{% endif -%}
             </td>
             <td class="num">{% if r.has_data %}{{ r.leads }}{% else %}<span class="nodata">—</span>{% endif %}</td>
             <td class="num">{% if r.has_data %}{{ r.deposits }}{% else %}<span class="nodata">—</span>{% endif %}</td>
@@ -166,26 +172,16 @@
                         onclick="amapOpenProfile(this)">open profile</button>
                 {%- endif %}
               {%- else -%}
-                <button type="button" class="amap-btn amap-read" title="Read spend for the selected dates in this account's Multilogin profile"
+                <button type="button" class="amap-btn amap-read" title="Read spend for the selected dates in this account's Multilogin profile, and the country split when it is needed"
                         onclick="amapReadSpend(this)">Read spend</button>
               {%- endif -%}
-              {#- acl-357: разбивка по странам. Отдельная кнопка, а не часть
-                  Read, потому что это другое чтение и стоит дороже: оно
-                  создаёт в кабинете отчёт и выставляет в нём период и
-                  разрезы. Привязать его к Read значило бы платить эту цену
-                  каждый раз, когда человеку нужна одна цифра спенда.
-
-                  Состояние строится на клиенте: на сервере пострановое
-                  чтение сведено по стране, а не по аккаунту, и тащить сюда
-                  вторую раскладку ради надписи на кнопке — лишняя связь. -#}
-              {%- if amap.span == 'all' or not amap.date_from -%}
-                <button type="button" class="amap-btn amap-countries" disabled
-                        title="Select dates to read the country split">Countries</button>
-              {%- else -%}
-                <button type="button" class="amap-btn amap-countries"
-                        title="Read which countries this account attributes its spend to, for the selected dates"
-                        onclick="amapReadCountries(this)">Countries</button>
-              {%- endif -%}
+              {#- acl-357 завёл вторую кнопку, ACL-1282 её убрал: «Read spend» и
+                  «Countries» спрашивали одно и то же у одного аккаунта и
+                  открывали его по отдельности. Разбивка читается тем же
+                  нажатием — но только когда отвечает на вопрос, которого нет
+                  в спенде (`country_split.why_split_is_needed`). Цена у неё
+                  своя: она создаёт в кабинете отчёт, поэтому платить её
+                  каждый раз ради одной цифры спенда нельзя. -#}
               <button type="button" class="amap-x"
                       title="Take {{ r.account }} out of {{ mc.country }}. The country stays; the account keeps its Multilogin profile, its proxy and its history, and moves to Available accounts."
                       aria-label="Take {{ r.account }} out of {{ mc.country }}"
