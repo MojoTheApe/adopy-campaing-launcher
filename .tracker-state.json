@@ -193,34 +193,16 @@
       }
     },
     "stage": {
-      "pr": 257,
+      "pr": 260,
       "issues": [
         255
       ],
-      "tree_sha": "da7a9778d0ca51421a05e7ffe0313e429dd016d5",
-      "source_sha": "730a7a9cff8734e825ea0615d903ffabbc71e502",
-      "main_tree": "ec74bece10c91ba4a6ef9c737522b2f794655003",
+      "tree_sha": "348cfe8946c555af9c9c7d2fae3d0a6d5ed4aafd",
+      "source_sha": "b9a43c96f48ee97b05158bf9b8f023f71884e8d6",
+      "main_tree": "da7a9778d0ca51421a05e7ffe0313e429dd016d5",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
-      "recorded_at": "2026-09-22T06:50:01+00:00",
-      "verification": {
-        "kind": "stage-verification",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "source_sha": "730a7a9cff8734e825ea0615d903ffabbc71e502",
-        "tree_sha": "da7a9778d0ca51421a05e7ffe0313e429dd016d5",
-        "checks": [
-          "Stage push CI run 35696610575 on 730a7a9: ACL verification, Windows Python 3.11 and 3.13 suites passed.",
-          "Exact-stage installer run 35696610686 passed build/install/launch/repair/uninstall.",
-          "Previous actual package installs and starts with isolated data",
-          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
-          "Updated installed application restarts with preserved machine/workspace/creative data",
-          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
-          "Recovered application restarts and synthetic data remains byte-identical"
-        ],
-        "report": "Artifact ACL-update-recovery-258 of run 35696610686 (report.json: result passed, source 730a7a9cff8734e825ea0615d903ffabbc71e502, tree da7a9778d0ca51421a05e7ffe0313e429dd016d5; packages 0.0.0-ci.258 sha256 d1e8093c5f5ad8830aa9d973f490b1138b3436afb94fdea98eaa48103b637eda, 0.1.0-alpha.258 sha256 a9d9f60271521e18c92da2c3e923e43843472c4fbda94ebabe7ce525f3577b34). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof. Live Doc19 read check is performed after promotion on the owner's live dashboard."
-      },
-      "verified_at": "2026-09-22T07:09:25+00:00"
+      "state": "testing",
+      "recorded_at": "2026-09-22T08:41:55+00:00"
     },
     "tasks": {
       "248": {
