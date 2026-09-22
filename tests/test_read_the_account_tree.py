@@ -441,20 +441,10 @@ def _source(*names: str) -> str:
 
 
 def test_reading_the_tree_clicks_nothing():
-    """Это чтение. Единственное, что здесь делают со страницей, — спрашивают.
-
-    Одно явное исключение (19.09, решение пользователя — раскрывать кампании
-    таблицы без id в объявления): клик по ссылке ИМЕНИ кампании. Это переход
-    на её страницу, не тумблер; вырезаем его и проверяем всё остальное.
-    """
-    import src.analysis_agent.account_spend as sp
-    js = sp._CLICK_CAMPAIGN_NAME_JS
-    assert "[data-tooltip-content]" in js and "querySelector('a')" in js
-    assert "switch" not in js.lower() and "toggle" not in js.lower()
-    block = _source("read_level", "_read_tree").replace(js, "")
+    """Это чтение. Единственное, что здесь делают со страницей, — спрашивают."""
+    block = _source("read_level", "_read_tree")
     for forbidden in (".click(", ".fill(", ".press(", ".check(", ".select_option("):
         assert forbidden not in block, f"чтение дерева трогает страницу: {forbidden}"
-
 
 def test_no_ad_editor_is_ever_opened():
     """Проверено на DQ204 02.08: Meta портит Leads-объявление одним открытием
