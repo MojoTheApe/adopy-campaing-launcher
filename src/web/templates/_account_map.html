@@ -81,12 +81,12 @@
           {%- if mc.country_read %}
           <i class="amap-country-read"
              title="Spend the accounts themselves attribute to {{ mc.country | e }} for these dates, read from Ads Reporting">
-            in {{ mc.country }}:
-            {%- for r in mc.country_read %}
             {#- ACL-1264: как сводка рядом (ACL-1258) — без «currency unknown» и
-                имён кабинетов. Суммы под знаком по-прежнему не складываются и
-                стоят порознь; почему — в подсказке. -#}
-            <b{% if not r.summed %} title="One account: the currency is written as a sign, and a sign does not say which currency it is, so amounts from different accounts are not added up"{% endif %}>{{ r.spend | fmt_summary_amount(r.currency) }}</b>{% if not loop.last %} · {% endif %}
+                имён кабинетов. Суммы без кода по-прежнему не складываются и
+                стоят порознь; почему — в подсказке. Пробел после двоеточия
+                стоит явно: `{%- for` съедает перевод строки. #}
+            in {{ mc.country }}: {% for r in mc.country_read %}
+            {%- if r.summed %}<b>{% elif r.currency %}<b title="One account: the currency is written as a sign, and a sign does not say which currency it is, so amounts from different accounts are not added up">{% else %}<b title="One account: Meta did not write a currency, so amounts from different accounts are not added up">{% endif %}{{ r.spend | fmt_summary_amount(r.currency) }}</b>{% if not loop.last %} · {% endif %}
             {%- endfor %}
           </i>
           {%- endif %}
