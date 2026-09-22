@@ -217,7 +217,7 @@
       "source_sha": "b1571a9c5fdda94ff4e423323c909d205c3f4dd2",
       "main_tree": "348cfe8946c555af9c9c7d2fae3d0a6d5ed4aafd",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-09-22T09:41:10+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -262,6 +262,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-09-22T09:22:49+00:00"
+      },
+      "258": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 263,
+            "merge_sha": "2a6390bf30a6efff8ad7b3de127dc47f28362b84",
+            "tree_sha": "f7347d24afa9c66f3057e9abf069fb42926c0c90"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-09-22T10:10:45+00:00"
       }
     },
     "promotions": {
@@ -325,6 +337,36 @@
           "report": "Artifact ACL-update-recovery-262 of run 35706204962 (report.json: result passed, source b9a43c96f48ee97b05158bf9b8f023f71884e8d6, tree 348cfe8946c555af9c9c7d2fae3d0a6d5ed4aafd; packages 0.0.0-ci.262 sha256 1a7cf0ad8bb875be0d1ea19c849ee112fc3adc0be00bada4153459ef556a231b, 0.1.0-alpha.262 sha256 3fe7eff69929a6198f29a3ffdf5aea8cbf95c917f6864884c2e04594fcf3b46b). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof. Live Doc19 read check follows promotion on the owner's live dashboard."
         },
         "verified_at": "2026-09-22T08:56:24+00:00"
+      },
+      "263": {
+        "pr": 262,
+        "issues": [
+          258
+        ],
+        "tree_sha": "f7347d24afa9c66f3057e9abf069fb42926c0c90",
+        "source_sha": "b1571a9c5fdda94ff4e423323c909d205c3f4dd2",
+        "main_tree": "348cfe8946c555af9c9c7d2fae3d0a6d5ed4aafd",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-09-22T09:41:10+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "b1571a9c5fdda94ff4e423323c909d205c3f4dd2",
+          "tree_sha": "f7347d24afa9c66f3057e9abf069fb42926c0c90",
+          "checks": [
+            "Stage push CI run 35711767153 on b1571a9: ACL verification, Windows Python 3.11 and 3.13 suites passed.",
+            "Exact-stage installer run 35711767097 passed build/install/launch/repair/uninstall.",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+            "Recovered application restarts and synthetic data remains byte-identical"
+          ],
+          "report": "Artifact ACL-update-recovery-266 of run 35711767097 (report.json: result passed, source b1571a9c5fdda94ff4e423323c909d205c3f4dd2, tree f7347d24afa9c66f3057e9abf069fb42926c0c90; packages 0.0.0-ci.266 sha256 2990c71f571ca2da104cf784ecf298b7b68165e72bc2817311568f9f0c2c0b8b, 0.1.0-alpha.266 sha256 e9b64b8b6ed0f4d908a81b230bbcaae4b8c7788991e26c19b150c62974aa51ba). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof."
+        },
+        "verified_at": "2026-09-22T09:55:10+00:00"
       }
     }
   }
