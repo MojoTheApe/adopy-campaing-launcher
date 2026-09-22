@@ -9,7 +9,7 @@
           страны: amapReadAll сама понимает, откуда её нажали. -#}
       <div class="amap-toolbar">
         <button type="button" class="amap-btn amap-read-all" onclick="amapReadAll(this)"
-                title="Read every connected account in {{ mc.country }} for the period on screen — one at a time">Read all in {{ mc.country }}</button>
+                title="Read every connected account in {{ mc.country }} for the period on screen — one at a time">Read all spend in {{ mc.country }}</button>
       </div>
       <table class="amap-grid" data-country-name="{{ mc.country | e }}">
         {#- Колонок и долей поровну, в сумме ровно 100%. Когда-то доль было на
@@ -24,8 +24,8 @@
         <colgroup>
           <col style="width:19%"><col style="width:8%"><col style="width:9%">
           <col style="width:5%"><col style="width:5%"><col style="width:5%">
-          <col style="width:5%"><col style="width:5%"><col style="width:9%">
-          <col style="width:10%"><col style="width:20%">
+          <col style="width:5%"><col style="width:5%"><col style="width:8%">
+          <col style="width:8%"><col style="width:23%">
         </colgroup>
         {#- Два спенда стоят рядом и подписаны источником: один из книги
             статистики, другой прочитан с самого кабинета. Порознь их легко
@@ -37,7 +37,7 @@
         <thead><tr>
           <th>Account</th>
           <th class="num" title="Spend from the stats workbook for the chosen period">Spend</th>
-          <th class="num" title="Spend read from the ad account itself, by the Read button">Account spend</th>
+          <th class="num" title="Spend read from the ad account itself, by the Read spend button">Account spend</th>
           <th class="num">Leads</th>
           <th class="num">FTD</th>
           <th class="num">CPL</th>
@@ -153,7 +153,7 @@
                 {%- endif %}
               {%- else -%}
                 <button type="button" class="amap-btn amap-read" title="Read spend for the selected dates in this account's Multilogin profile"
-                        onclick="amapReadSpend(this)">Read</button>
+                        onclick="amapReadSpend(this)">Read spend</button>
               {%- endif -%}
               {#- acl-357: разбивка по странам. Отдельная кнопка, а не часть
                   Read, потому что это другое чтение и стоит дороже: оно
