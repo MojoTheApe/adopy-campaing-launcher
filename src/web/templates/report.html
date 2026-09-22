@@ -1726,6 +1726,10 @@
       padding-left: 0.3rem;
     }
     .amap table.amap-grid td.amap-actions > button { margin: 0.05rem 0 0.05rem 0.2rem; }
+    /* ACL-1266: подпись стала длиннее («Read all spend», «Reading spend 12 of
+       15…»), и на 1280–1366px кнопка в шапке ломалась на две строки. Она
+       не сжимается и не переносится; место уступает заголовок. */
+    .amap-head .amap-read-all { flex-shrink: 0; white-space: nowrap; }
     .amap .amap-x {
       background: none; border: 1px solid var(--border-strong);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -6963,7 +6967,7 @@ async function amapReadAll(btn) {
       var state = await amapQueueRead(jobs[i], per);
       if (state === 'ok') okCount++; else failCount++;
     }
-    btn.title = okCount + ' spend read, ' + failCount + ' failed';
+    btn.title = okCount + ' read, ' + failCount + ' failed (spend)';
   } finally {
     amapReadAllBusy = false;
     amapReadAllControls(false);
