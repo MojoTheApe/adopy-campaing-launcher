@@ -183,8 +183,8 @@ def test_the_numbers_say_why_to_touch_it(page):
     _paint(page, [ADSET])
     got = page.evaluate("""() => {
       const l = document.querySelector('.amap-tree-line');
-      const n = l.querySelectorAll('.amap-tree-num');
-      return {spend: n[0].textContent, results: n[1].textContent, cpr: n[1].title};
+      const spend = l.querySelector('.amap-tree-num.spend'), res = l.querySelector('.amap-tree-num.res');
+      return {spend: spend.textContent, results: res.textContent, cpr: res.title};
     }""")
     assert got["spend"] == "$412.02"
     assert got["results"] == "18 Leads (Form)"
@@ -195,7 +195,7 @@ def test_a_row_without_numbers_stays_blank(page):
     """У черновика спенда ещё не бывает. «$0» — утверждение, которого нет."""
     _paint(page, [dict(ADSET, spend="", results="", cost_per_result="", delivery="In draft")])
     got = page.evaluate(
-        "() => Array.from(document.querySelectorAll('.amap-tree-num')).map(n => n.textContent)"
+        "() => Array.from(document.querySelectorAll('.amap-tree-num:not(.attr)')).map(n => n.textContent)"
     )
     assert got == ["", ""]
 
@@ -343,9 +343,14 @@ def test_nothing_here_can_turn_anything_on():
     for forbidden in ("turn-on", "turn_on", "/account-spend/read"):
         assert forbidden not in block, f"в показе есть {forbidden}"
 
-    # Запросов наружу ровно два, и оба названы поимённо. Счёт остаётся
-    # жёстким: он и нужен затем, чтобы третий нельзя было добавить молча.
-    assert block.count("fetch(") == 2, "третий запрос наружу — какой?"
+    # Запросов наружу ровно три, и все названы поимённо. Счёт остаётся
+    # жёстким: он и нужен затем, чтобы четвёртый нельзя было добавить молча.
+    # Третий (ACL-1256) — числа книги по кампаниям и объявлениям, и он тоже
+    # только читает: без `method`, то есть GET.
+    assert block.count("fetch(") == 3, "четвёртый запрос наружу — какой?"
+    attr = block[block.index("fetch('/account-attribution?"):]
+    attr = attr[: attr.index(".then(")]
+    assert "method" not in attr, "числа книги перестали быть чтением"
     assert "/account-spend/turn-off-history?account=" in block, "журнал не читается"
 
     # Второй — журнал, и он обязан быть читающим. Без `method` fetch делает
@@ -377,7 +382,10 @@ def test_the_listeners_are_the_arrows_and_the_off_button():
     # Четвёртый — заголовок журнала: он только сворачивает и разворачивает
     # свой же блок. Назван здесь поимённо, чтобы пятый снова стал заметен.
     assert block.count("head.addEventListener('click'") == 1, "журнал слушает не одно нажатие"
-    assert block.count("addEventListener") == 4, "появился пятый обработчик"
+    # Пятый (ACL-1256) — смена размера окна: пересчитывает ширины колонок
+    # дерева и ничего не нажимает.
+    assert block.count("window.addEventListener('resize'") == 1, "окно слушается не только на размер"
+    assert block.count("addEventListener") == 5, "появился шестой обработчик"
 
 
 # ── покрывают ли строки спенд аккаунта ────────────────────────────────────
@@ -937,3 +945,97 @@ def test_a_nameless_table_puts_ads_under_their_campaign(page):
     assert got["kids"] == [2, 1]
     assert not any("whose campaign is not in this answer" in h for h in got["heads"])
     assert got["buttons"] == 0, "без id выключать нечем — кнопки быть не должно"
+
+
+# ── числа книги под колонками аккаунта (ACL-1256) ─────────────────────────
+
+ATTR = {
+    "ok": True, "has_data": True,
+    "campaigns": {"SA_ARM_iOS_IMG_Reading_30_6.9": {
+        "spend": "$338", "leads": 7, "deposits": 1, "cpl": "$48", "cpa": "$338", "cr": "14.3%"}},
+    "ads": {"SA_ARM_iOS_IMG_Reading_30_6.9": {"1962_12- Officialy": {
+        "spend": "$120", "leads": 3, "deposits": 0, "cpl": "$40", "cpa": None, "cr": None}}},
+}
+
+
+def _fill(page, objects, data):
+    page.evaluate("""([objects, data]) => {
+      amapFillAttribution(document.querySelector('.amap-tree-inner'), objects, data);
+    }""", [objects, data])
+
+
+def _attr(page, n=0):
+    return page.evaluate("""(n) => {
+      const line = document.querySelectorAll('.amap-tree-line')[n];
+      const out = {};
+      line.querySelectorAll('.amap-tree-num.attr').forEach(c => { out[c.dataset.attr] = c.textContent; });
+      return out;
+    }""", n)
+
+
+def test_workbook_numbers_land_in_the_campaign_and_ad_rows(page):
+    ad = dict(AD, parent_id=ADSET["id"])
+    _paint(page, [ADSET, ad])
+    _fill(page, [ADSET, ad], ATTR)
+    assert _attr(page, 0) == {"spend": "$338", "leads": "7", "deposits": "1",
+                              "cpl": "$48", "cpa": "$338", "cr": "14.3%"}
+    assert _attr(page, 1) == {"spend": "$120", "leads": "3", "deposits": "0",
+                              "cpl": "$40", "cpa": "—", "cr": "—"}, "нет FTD — прочерк, не ноль"
+
+
+def test_a_row_the_workbook_does_not_know_gets_dashes(page):
+    other = dict(ADSET, id="999", name="MaxWarmup Engagement")
+    _paint(page, [other])
+    _fill(page, [other], ATTR)
+    assert set(_attr(page).values()) == {"—"}
+    assert "No rows" in page.evaluate("() => document.querySelector('.amap-tree-num.attr').title")
+
+
+def test_two_ads_with_one_name_are_not_given_guessed_numbers(page):
+    """Doc19: несколько объявлений «1962 - Ar Aramco Officially» в одной
+    кампании. Книга отдаёт одно число на всех — делить его нечем."""
+    a1 = dict(AD, parent_id=ADSET["id"])
+    a2 = dict(AD, id="120250178850950704", parent_id=ADSET["id"])
+    _paint(page, [ADSET, a1, a2])
+    _fill(page, [ADSET, a1, a2], ATTR)
+    assert _attr(page, 0)["leads"] == "7", "кампания при этом своё число получает"
+    assert set(_attr(page, 1).values()) == {"—"} and set(_attr(page, 2).values()) == {"—"}
+    assert "share this name" in page.evaluate(
+        "() => document.querySelectorAll('.amap-tree-line')[1].querySelector('.amap-tree-num.attr').title")
+
+
+def test_a_failed_workbook_answer_is_said_not_zeroed(page):
+    _paint(page, [ADSET])
+    _fill(page, [ADSET], {"ok": False, "error": "Could not read the workbook: busy"})
+    assert set(_attr(page).values()) == {"—"}
+    assert "busy" in page.evaluate("() => document.querySelector('.amap-tree-num.attr').title")
+
+
+def test_tree_numbers_stand_under_the_account_columns(page):
+    """Владелец: «цифры выровнялись, но не под наименованиями». Каждая колонка
+    строки дерева начинается там же, где колонка строки аккаунта."""
+    page.set_viewport_size({"width": 1400, "height": 800})
+    page.evaluate("""() => {
+      const cells = document.getElementById('acc').children;
+      const widths = [220, 70, 110, 60, 50, 60, 60, 60, 110, 100, 180];
+      document.querySelector('table').style.tableLayout = 'fixed';
+      document.querySelector('table').style.width = widths.reduce((a, b) => a + b) + 'px';
+      Array.from(cells).forEach((c, i) => { c.style.width = widths[i] + 'px'; });
+    }""")
+    # Раскладку делают стили дерева — берём их из шаблона, как и скрипт.
+    src = REPORT.read_text(encoding="utf-8")
+    css = src[src.index("    .amap-tree > td {"): src.index("    .amap-tree-err {")]
+    page.add_style_tag(content=css)
+    ad = dict(AD, parent_id=ADSET["id"])
+    _paint(page, [ADSET, ad])
+    _open(page)
+    got = page.evaluate("""() => {
+      const row = document.getElementById('acc');
+      const line = document.querySelector('.amap-tree-line');
+      const cells = Array.from(line.children);
+      return cells.map((c, i) => [Math.round(c.getBoundingClientRect().left),
+                                  Math.round(row.children[i].getBoundingClientRect().left)]);
+    }""")
+    assert len(got) == COLUMNS, "в строке дерева не столько колонок, сколько у аккаунта"
+    for i, (tree_x, acc_x) in enumerate(got):
+        assert abs(tree_x - acc_x) <= 1, f"колонка {i}: дерево {tree_x}, аккаунт {acc_x}"

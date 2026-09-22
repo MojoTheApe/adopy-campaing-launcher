@@ -1028,6 +1028,63 @@ def build_account_performance_summary(
     }
 
 
+def _tree_name(value: Any) -> str:
+    """Имя для сопоставления с деревом: пробелы схлопнуты, как у разбора таблицы."""
+    return " ".join(str(value or "").split())
+
+
+def build_tree_attribution(
+    df: pd.DataFrame,
+    country: str,
+    account_alias: str,
+) -> Dict[str, Any]:
+    """Числа аккаунта из книги, разложенные по кампаниям и объявлениям.
+
+    ACL-1256: та же выборка, что у :func:`build_account_performance_summary`
+    (страна + аккаунт), и та же формула — сумма по кампаниям равна строке
+    аккаунта. Кампания в дереве — это ``Adset Name`` книги (у наших кампаний
+    имя ad set'а совпадает с именем кампании), объявление — ``Ad Title`` под
+    ним. Имена схлопнуты по пробелам. Совпадёт или нет — решает страница:
+    здесь только суммы по тому, что есть в книге.
+    """
+    df_c = df[
+        (df["Country Final"] == country)
+        & alias_matches(df["Account Alias"], account_alias)
+    ]
+    campaigns: Dict[str, Dict[str, Any]] = {}
+    ads: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    if df_c.empty:
+        return {"has_data": False, "campaigns": campaigns, "ads": ads}
+
+    def _metrics(part: pd.DataFrame) -> Dict[str, Any]:
+        leads = _safe_int(part["# Leads"].sum())
+        deposits = _safe_int(part["# FTDs"].sum())
+        spend = _safe_float(part["$ Spend"].sum())
+        return {
+            "spend": spend,
+            "leads": leads,
+            "deposits": deposits,
+            "cpl": spend / leads if leads else None,
+            "cpa": spend / deposits if deposits else None,
+            "cr": deposits / leads * 100.0 if leads else None,
+        }
+
+    names = df_c["Adset Name"].map(_tree_name)
+    titles = df_c["Ad Title"].map(_tree_name) if "Ad Title" in df_c.columns else None
+    for name, part in df_c.groupby(names, sort=False):
+        if not name:
+            continue
+        campaigns[name] = _metrics(part)
+        if titles is None:
+            continue
+        per_ad: Dict[str, Dict[str, Any]] = {}
+        for title, sub in part.groupby(titles.loc[part.index], sort=False):
+            if title:
+                per_ad[title] = _metrics(sub)
+        ads[name] = per_ad
+    return {"has_data": True, "campaigns": campaigns, "ads": ads}
+
+
 def aggregate_adsets_merged_for_account(
     df_c: pd.DataFrame,
 ) -> pd.DataFrame:
