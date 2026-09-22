@@ -1914,8 +1914,21 @@ _PAGE_STRUCTURE_JS = r"""
 """
 
 
+def _name_key(name: Any) -> str:
+    """Имя для сравнения — как его чистит разбор таблицы: пробелы схлопнуты.
+
+    Таблица схлопывает любые пробелы (и неразрывные) в один, а данные страницы
+    отдают имя как есть. Без общей чистки имя с двойным пробелом не совпало бы
+    никогда — безопасно, но молча.
+    """
+    return " ".join(str(name or "").split())
+
+
 def _campaigns_from_page_data(page) -> dict[str, dict]:
     """Кампании из вшитых данных страницы: `{имя: {"id", "ads"}}`.
+
+    `ads` — `Counter` имён объявлений: у клонов имена повторяются, и сколько
+    раз имя есть в кампании, так же важно, как само имя.
 
     Берём только имена, встретившиеся **с одним id**: две кампании с одним
     именем по имени не различить, и приписать объявления одной из них значило
@@ -1926,20 +1939,24 @@ def _campaigns_from_page_data(page) -> dict[str, dict]:
         got = page.evaluate(_PAGE_STRUCTURE_JS)
     except Exception:
         return {}
+    from collections import Counter
+
     ids: dict[str, set[str]] = {}
-    ads: dict[str, set[str]] = {}
+    ads: dict[str, Counter] = {}
     for item in got if isinstance(got, list) else []:
         if not isinstance(item, dict):
             continue
-        name = str(item.get("name") or "").strip()
+        name = _name_key(item.get("name"))
         cid = str(item.get("id") or "")
         if not name or not cid.isdigit():
             continue
+        if cid in ids.get(name, set()):
+            continue  # тот же узел, встреченный в ответе ещё раз
         ids.setdefault(name, set()).add(cid)
-        ads.setdefault(name, set()).update(
-            str(a).strip() for a in (item.get("ads") or []) if str(a).strip()
+        ads.setdefault(name, Counter()).update(
+            _name_key(a) for a in (item.get("ads") or []) if _name_key(a)
         )
-    return {name: {"id": next(iter(found)), "ads": ads.get(name, set())}
+    return {name: {"id": next(iter(found)), "ads": ads.get(name, Counter())}
             for name, found in ids.items() if len(found) == 1}
 
 
@@ -1961,6 +1978,7 @@ def _read_tree(
     objects: list[dict] = []
     hows: list[str] = []
     errors: list[str] = []
+    data_keys: set[str] = set()  # кампании, чьи объявления сверены по данным страницы
 
     def _context_matches(what: str, parent_id: str = "") -> bool:
         from urllib.parse import parse_qs, urlsplit
@@ -2007,17 +2025,29 @@ def _read_tree(
         nameless = [p for p in parents if not p.id]
         structure: dict[str, dict] = {}
         if nameless:
+            from collections import Counter
+
             structure = _campaigns_from_page_data(page)
-            unmatched = 0
+            # Имя, дважды стоящее в таблице, по имени не различить — даже если в
+            # данных страницы оно одно: второй строке достался бы чужой id.
+            in_table = Counter(_name_key(p.name) for p in nameless)
+            shared = missing = 0
             for p in nameless:
-                hit = structure.get(p.name.strip())
-                if hit:
+                hit = structure.get(_name_key(p.name))
+                if in_table[_name_key(p.name)] > 1:
+                    shared += 1
+                elif hit:
                     p.data_id = hit["id"]
                 else:
-                    unmatched += 1
-            if unmatched:
+                    missing += 1
+            if shared:
                 errors.append(
-                    f"ads were not read for {unmatched} of {len(nameless)} campaigns "
+                    f"ads were not read for {shared} campaigns that share a name "
+                    "with another one: without ids they cannot be told apart"
+                )
+            if missing:
+                errors.append(
+                    f"ads were not read for {missing} of {len(nameless)} campaigns "
                     "read by name: the page did not give their ids"
                 )
         objects.extend(o.to_dict() for o in parents)
@@ -2045,7 +2075,7 @@ def _read_tree(
                 continue
             if how:
                 ads_how.add(how)
-            if err.startswith("read by name"):
+            if not parent.id and err.startswith("read by name"):
                 # Одна и та же пометка на каждую кампанию — шум; скажем один раз.
                 ads_by_name, err = True, ""
             if err:
@@ -2053,11 +2083,18 @@ def _read_tree(
             if not parent.id:
                 # Родитель найден по данным страницы, а не по строке — сверяем,
                 # что пришли именно его объявления: каждое имя должно быть в
-                # его структуре. Иначе фильтр не сработал, и приписывать нельзя.
-                known = structure.get(parent.name.strip(), {}).get("ads", set())
-                if any(o.name.strip() not in known for o in got):
+                # его структуре, и не чаще, чем там. Адрес с фильтром ещё не
+                # значит, что Meta его применила: проигнорированный фильтр
+                # вернул бы все объявления аккаунта, а у клонов имена одни и те
+                # же — одной проверки «имя знакомо» тут мало.
+                from collections import Counter
+
+                known = structure.get(_name_key(parent.name), {}).get("ads", Counter())
+                seen = Counter(_name_key(o.name) for o in got)
+                if any(n > known.get(name, 0) for name, n in seen.items()):
                     errors.append(f"{what}: the ads did not match this campaign; skipped")
                     continue
+                data_keys.add(key)
             for o in got:
                 o.parent_id = key
                 objects.append(o.to_dict())
@@ -2068,11 +2105,12 @@ def _read_tree(
 
     # A stale/ignored filter may return the same ad under different parents.
     # Its ownership is then ambiguous: keep neither association.
-    # Без id объявления (таблица без id) владельца по id не сверить — у них
-    # сверка своя, по структуре страницы выше.
+    # Объявления без id под кампанией с id из данных страницы сверены выше,
+    # по её структуре, — и по пустому id их сравнивать нельзя: совпали бы все.
+    # Остальные сверяются как прежде.
     owners: dict[str, set[str]] = {}
     for obj in objects:
-        if obj["level"] == "ad" and obj["id"]:
+        if obj["level"] == "ad" and (obj["id"] or obj["parent_id"] not in data_keys):
             owners.setdefault(obj["id"], set()).add(obj["parent_id"])
     ambiguous = {oid for oid, parents in owners.items() if len(parents) > 1}
     if ambiguous:
