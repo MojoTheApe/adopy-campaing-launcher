@@ -28,6 +28,10 @@ def _page(browser, *, alive=False, token_saved=True):
     shared = report[report.index('<template id="amap-ml-signin-template">'):report.index('</body>')]
     env = Environment(loader=FileSystemLoader(str(TPL)), autoescape=True)
     env.filters['fmt_usd'] = str
+    # ACL-1271: ячейка чтения собирает запасное число блоком `set`, и Jinja
+    # проверяет его фильтр сразу, а не только когда ветка выполняется.
+    from src.analysis_agent.money_format import fmt_currency
+    env.filters['fmt_currency'] = fmt_currency
     countries = [{'country': c, 'key': k, 'rows': [], 'virtual': False} for c,k in [('Mexico','MX'),('Spain','ES')]]
     blocks = ''.join(env.get_template('_account_map_country.html').render(
         mc=c, amap={'countries':countries, 'available':[], 'all_accounts':[], 'live':{}, 'dates':[], 'date_from':'','date_to':'','span':''},
