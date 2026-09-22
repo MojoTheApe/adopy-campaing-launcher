@@ -1,5 +1,15 @@
 # System history
 
+## Country read summary without noise labels — ACL-1258
+
+The collapsed country row showed read totals without a currency code as
+`currency unknown 1,044.82 (FacebookDoc20 - Mios Darwiti)`. On the owner's request
+the country summary now shows only the amount: a 3-letter code or Meta's own sign
+stays (`KWD 7.00`, `$1,044.82`), otherwise a bare number. Such amounts are still
+never added together and stay separate values. The per-account cell keeps its
+`currency unknown` label. Server (`fmt_summary_amount`) and page script
+(`amapSummaryMoney`) format the same way.
+
 ## Ads under campaigns of an id-less account table — ACL-1255
 
 Some ad accounts (FacebookDoc19, Saudi Arabia, since 2026-09-18) show the new Ads

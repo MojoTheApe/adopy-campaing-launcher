@@ -84,11 +84,12 @@ def _render(virtual: bool):
     # Фильтры берём настоящие, а не свои похожие: карта форматирует суммы
     # по валютам, и окружение, знающее меньше фильтров, чем приложение,
     # падает на шаблоне, который на экране работает.
-    from src.analysis_agent.money_format import fmt_usd, fmt_currency
+    from src.analysis_agent.money_format import fmt_usd, fmt_currency, fmt_summary_amount
 
     env = Environment(loader=FileSystemLoader(str(TPL)), autoescape=True)
     env.filters["fmt_usd"] = fmt_usd
     env.filters["fmt_currency"] = fmt_currency
+    env.filters["fmt_summary_amount"] = fmt_summary_amount
     country = {
         "country": "Guatemala", "key": "" if virtual else "GT", "virtual": virtual,
         "rows": [], "spend": 1894, "deposits": 4, "leads": 82,

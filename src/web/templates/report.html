@@ -5998,6 +5998,12 @@ function amapMoney(spend, currency) {
   return (/^[A-Z]{3}$/.test(code) ? code : 'currency unknown') + ' ' + amount;
 }
 
+// Двойник `money_format.fmt_summary_amount` (ACL-1258): в сводке страны
+// без «currency unknown»; код и знак остаются.
+function amapSummaryMoney(spend, currency) {
+  return amapMoney(spend, currency).replace(/^currency unknown /, '');
+}
+
 function amapUpdateCountrySummaries() {
   document.querySelectorAll('details.amap-country[data-country]').forEach(function(block) {
     var summary = block.querySelector('.amap-live-summary');
@@ -6013,7 +6019,7 @@ function amapUpdateCountrySummaries() {
       read++;
       var currency = (cell.dataset.readCurrency || '').toUpperCase();
       if (/^[A-Z]{3}$/.test(currency)) sums.set(currency, (sums.get(currency) || 0) + amount);
-      else unknown.push(amapMoney(amount, '') + ' (' + account + ')');
+      else unknown.push(amapSummaryMoney(amount, cell.dataset.readCurrency || ''));
     });
     var values = Array.from(sums.keys()).sort().map(function(cur) { return amapMoney(sums.get(cur), cur); }).concat(unknown);
     var target = summary.querySelector('.amap-live-summary-values');

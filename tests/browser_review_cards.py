@@ -265,8 +265,10 @@ with tempfile.TemporaryDirectory(dir=OUT) as config:
         page.evaluate("amapApplyReading('First',{state:'ok',spend:0,currency:'EUR'})")
         assert beta.locator('b').count()==1 and 'EUR 12.34' in beta.text_content()
         page.evaluate("amapApplyReading('First',{state:'ok',spend:2,currency:''});amapApplyReading('toString',{state:'ok',spend:3,currency:''})")
-        assert 'currency unknown 2.00 (First)' in beta.text_content()
-        assert 'currency unknown 3.00 (toString)' in beta.text_content()
+        # ACL-1258: без «currency unknown» и имени кабинета, суммы — порознь.
+        assert '2.00' in beta.text_content() and '3.00' in beta.text_content()
+        assert 'currency unknown' not in beta.text_content()
+        assert '(First)' not in beta.text_content() and '(toString)' not in beta.text_content()
         page.set_viewport_size({'width':1100,'height':900})
         for summary in page.locator('#view-home details[data-country] > summary').all():
             assert summary.evaluate('e=>e.scrollWidth<=e.clientWidth+1'), summary.text_content()

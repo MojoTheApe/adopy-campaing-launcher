@@ -70,7 +70,7 @@
               title="Full spend of the linked accounts across all countries for the selected dates; not country-attributed spend. Currencies are kept separate.">
           <span class="amap-live-summary-values">
           {%- if mc.live_sums %}
-          {%- for s in mc.live_sums %}<b>{{ s.spend | fmt_currency(s.currency) }}{% if s.account %} ({{ s.account }}){% endif %}</b>{% if not loop.last %} · {% endif %}{% endfor %}
+          {%- for s in mc.live_sums %}<b>{{ s.spend | fmt_summary_amount(s.currency) }}</b>{% if not loop.last %} · {% endif %}{% endfor %}
           {%- else %}<b>—</b>{% endif %}</span>
           <i class="amap-live-summary-count">{{ mc.live_read or 0 }}/{{ mc.rows | length }} read</i>
           {#- acl-357: спенд, привязанный к стране самим кабинетом. Стоит в
