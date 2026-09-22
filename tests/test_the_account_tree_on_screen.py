@@ -1146,3 +1146,23 @@ def test_headings_and_journal_keep_their_own_spacing(page):
     _open(page)
     mb = page.evaluate("() => getComputedStyle(document.querySelector('.amap-tree-head')).marginBottom")
     assert mb not in ("0px", ""), "заголовок дерева прилип к первой строке"
+
+
+
+# ── дерево из чтения за другие даты (ACL-1271) ────────────────────────────
+
+def _head(page):
+    return page.evaluate("() => document.querySelector('.amap-tree-head').textContent")
+
+
+def test_a_tree_from_other_dates_says_so(page):
+    """Период на экране 2026-09-01…12, а дерево из чтения за 09-01…09-21."""
+    page.evaluate("""(o) => amapPaintTree(document.getElementById('acc'),
+      {objects: [o], date_from: '2026-09-01', date_to: '2026-09-21', finished_at: '2026-09-22 08:52:04'})""", ADSET)
+    assert "for 2026-09-01…2026-09-21 — not the dates on screen" in _head(page)
+
+
+def test_a_tree_for_the_dates_on_screen_says_nothing_extra(page):
+    page.evaluate("""(o) => amapPaintTree(document.getElementById('acc'),
+      {objects: [o], date_from: '2026-09-01', date_to: '2026-09-12', finished_at: '2026-09-12 23:00:00'})""", ADSET)
+    assert "not the dates on screen" not in _head(page)
