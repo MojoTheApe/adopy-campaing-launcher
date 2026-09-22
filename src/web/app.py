@@ -563,6 +563,9 @@ def _build_account_map_view(
     # Показания Read нужны и построчно (в таблице), и суммой в свёрнутой
     # строке страны — снимаются один раз до цикла.
     live = {} if span == "all" else _live_spend(date_from, date_to)
+    # ACL-1271: у кого за эти даты чтения нет вовсе — последнее удачное чтение
+    # за другие даты. Показывается помеченным и в итоги страны не входит.
+    fallback = {} if span == "all" else _fallback_spend(live)
 
     countries: list[dict] = []
     for stored in account_links.all_values("country"):
@@ -756,6 +759,7 @@ def _build_account_map_view(
         "all_accounts": all_known,
         "dates": dates,
         "live": live,
+        "fallback": fallback,
         "date_from": date_from,
         "date_to": date_to,
         "span": span,
@@ -777,6 +781,24 @@ def _live_spend(date_from: str = "", date_to: str = "") -> dict[str, dict]:
     except Exception:  # pragma: no cover - показания не должны ронять страницу
         return {}
 
+
+
+def _fallback_spend(live: dict) -> dict[str, dict]:
+    """Последнее удачное чтение тех, у кого за период на экране его нет (ACL-1271).
+
+    Только при полном отсутствии чтения за эти даты: идущее или неудачное
+    чтение за них — это ответ про эти даты, и подменять его старым нельзя.
+    """
+    try:
+        from src.analysis_agent import account_spend
+
+        return {
+            a: r.to_dict()
+            for a, r in account_spend.latest_readings().items()
+            if a not in live
+        }
+    except Exception:  # pragma: no cover - показания не должны ронять страницу
+        return {}
 
 
 def _sidebar_countries(report: dict, amap: dict) -> list[dict]:

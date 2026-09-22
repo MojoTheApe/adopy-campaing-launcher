@@ -278,6 +278,29 @@ def all_readings(date_from: str, date_to: str) -> dict[str, SpendReading]:
         return out
 
 
+def latest_readings() -> dict[str, SpendReading]:
+    """Последнее удачное чтение каждого аккаунта — за любой период (ACL-1271).
+
+    Карта показывает чтение только за период на экране. Открыл 1–22 сентября,
+    а читали 1–21 — строка пустела, хотя вчерашнее чтение есть. Это чтение
+    показывается запасным: с его собственными датами и не в итогах страны.
+    Состояния кабинета (`status|…`), идущие и неудачные чтения не берутся.
+    """
+    with _STORE_LOCK:
+        out: dict[str, SpendReading] = {}
+        items = list(_load_all().items()) + [(k, r.to_dict()) for k, r in _UNSAVED.items()]
+        for key, raw in items:
+            if key.startswith(_STATUS_PREFIX) or not isinstance(raw, dict):
+                continue
+            if raw.get("state") != "ok" or raw.get("spend") is None:
+                continue
+            reading = _restore_reading(key, raw)
+            best = out.get(reading.account)
+            if best is None or (reading.finished_at or "") > (best.finished_at or ""):
+                out[reading.account] = reading
+        return out
+
+
 #: Состояние кабинета хранится отдельно от показаний спенда и без периода.
 #: Спенд отвечает на вопрос «сколько за эти дни», состояние — «что с ним
 #: сейчас». Сложи их в один ключ — и колонка статуса пустела бы при каждом

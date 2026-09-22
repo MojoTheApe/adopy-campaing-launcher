@@ -1916,6 +1916,10 @@
       color: var(--text); padding: 0.2rem 0.4rem; font-size: 0.75rem; font-family: inherit;
     }
     .amap-live-ok { font-variant-numeric: tabular-nums; font-weight: 600; }
+    /* ACL-1271: чтение за другие даты — приглушено и подписано своими датами,
+       чтобы его не приняли за период на экране. */
+    .amap-live-old { font-variant-numeric: tabular-nums; color: var(--muted); font-style: italic; }
+    .amap-live-old small { display: block; font-size: 0.66rem; font-style: normal; }
     .amap-live-run { color: var(--muted); font-size: 0.78rem; }
     .amap-live-bad { color: var(--danger); border-color: var(--danger); }
 
@@ -6505,6 +6509,15 @@ function amapPaintTree(row, s) {
   var sets = objects.filter(function (o) { return o.level !== 'ad'; }).length;
   var ads = objects.length - sets;
   head.textContent = 'in the account · ' + sets + ' campaigns · ' + ads + ' ads · read ' + (s.finished_at || '');
+  /* ACL-1271: дерево из чтения за другие даты говорит об этом сразу — его
+     числа Meta за те даты, не за период на экране. */
+  var onScreen = typeof amapPeriod === 'function' ? amapPeriod() : null;
+  if (onScreen && onScreen.from && s.date_from
+      && (s.date_from !== onScreen.from || (s.date_to || s.date_from) !== onScreen.to)) {
+    head.textContent += ' for ' + s.date_from + (s.date_to && s.date_to !== s.date_from ? '…' + s.date_to : '')
+      + ' — not the dates on screen';
+    head.classList.add('old');
+  }
   box.appendChild(head);
 
   /* Объявления встают под свою кампанию, а не общим списком следом. Порядок
@@ -6902,6 +6915,22 @@ function amapPollSpend(account, cell, btn, tries, per) {
 
 
 
+function amapResumeTree(account, from, to) {
+  if (!from) return;
+  fetch('/account-spend/status?account=' + encodeURIComponent(account)
+        + '&date_from=' + encodeURIComponent(from)
+        + '&date_to=' + encodeURIComponent(to || from), { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      var s = (j && j.ok && j.reading) || null;
+      if (!s || s.state !== 'ok') return;
+      document.querySelectorAll('.amap-live').forEach(function (c) {
+        if (c.dataset.account === account) amapPaintTree(c.closest('tr'), s);
+      });
+    })
+    .catch(function () { /* дерево — не то, ради чего стоит рушить страницу */ });
+}
+
 function amapResumeReadings() {
   var seen = {};
   document.querySelectorAll('.amap-live[data-running="1"]').forEach(function (cell) {
@@ -6924,6 +6953,15 @@ function amapResumeReadings() {
   var done = {};
   var per = amapPeriod();
   if (!per.from || per.span === 'all') return;
+
+  /* ACL-1271: у кого за эти даты чтения нет, сервер положил последнее за
+     другие даты. Дерево рисуем из него же — его собственными датами. */
+  document.querySelectorAll('.amap-live[data-read-state="fallback"]').forEach(function (cell) {
+    var account = cell.dataset.account;
+    if (done[account] || seen[account]) return;
+    done[account] = true;
+    amapResumeTree(account, cell.dataset.fbFrom || '', cell.dataset.fbTo || '');
+  });
   document.querySelectorAll('.amap-live[data-read-state="ok"]').forEach(function (cell) {
     var account = cell.dataset.account;
     if (done[account] || seen[account]) return;
