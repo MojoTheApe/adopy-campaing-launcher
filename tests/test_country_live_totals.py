@@ -101,9 +101,12 @@ def test_the_read_labels_say_spend_everywhere():
     assert ">Read all spend</button>" in amap and "}} spend read</i>" in amap
     assert ">Read all spend in {{ mc.country }}</button>" in country
     assert ">Read spend</button>" in country
-    assert ">reading spend…</button>" in country, "сервер при перезагрузке во время чтения"
+    assert ">reading…</button>" in country, "сервер при перезагрузке во время чтения"
     assert "by the Read spend button" in country
-    assert "' spend read'" in page and "'Read spend'" in page and "'reading spend…'" in page
-    assert page.count("'reading spend…'") == 2, "кнопка Read при нажатии и при опросе"
-    for stale in (">Read</button>", ">Read all</button>", ">reading…</button>", "' read';", "'Read';", "'Reading ' +", "by the Read button"):
+    assert "' spend read'" in page and "'Read spend'" in page
+    # Занятость — короткое «reading…» и на сервере, и на странице (кнопка при
+    # нажатии, при опросе; третье — загрузка журнала): длинная подпись не
+    # влезала в колонку кнопок на 1280–1366px.
+    assert page.count("'reading…'") == 3 and "'reading spend…'" not in page
+    for stale in (">Read</button>", ">Read all</button>", "' read';", "'Read';", "'Reading ' +", "by the Read button"):
         assert stale not in amap + country + page, stale
