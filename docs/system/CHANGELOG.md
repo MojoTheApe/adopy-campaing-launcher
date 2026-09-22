@@ -13,12 +13,30 @@ Ads Manager, and that price must not be paid for every single spend number.
 The decision is made on the server (`country_split.why_split_is_needed`, called from
 `_split_plan`) and travels back with the reading, because the page has neither the
 account links nor the two stores. It is taken *before* the spend read starts:
-`start_read` replaces the stored reading with a "running" record that has no time,
-and a decision taken after it would always read "the split is fresh" and the
-countries would never be read again. The combined reading settles by itself: the
-split finishes after the spend, so the next click on the same dates sees a fresh
-split and leaves the account alone. Splits stored before this change have no time of
-their own and count as stale — read once, then settled.
+`start_read` replaces the stored reading with a "running" record that carries no
+amount, so a decision taken after it has nothing to compare and would skip the split
+exactly when the money moved.
+
+Staleness is about the numbers, not the clock. Each split records which spend reading
+it explains (`spend_at`, `spend`, `spend_currency`), and it is re-read only when that
+amount or currency has changed. The first version of this change compared timestamps
+— "the split is older than the spend reading" — and never settled: a press that read
+only the spend still stamped a new time on the reading, so the next press called the
+split stale and built a report. Measured by review: three Ads Reporting reports per
+six presses on a single-country account with nothing changing. Re-reading the same
+amount now changes nothing; a changed amount brings the split back, including an
+"empty" split once money appears. Splits stored before this change do not say which
+spend they explain and count as stale — read once, then settled.
+
+The account's country count no longer decides on its own. It decides where there is
+nothing to compare: with no successful spend reading for these dates, an account under
+more than one country takes the split straight away, because its total says nothing
+about where the money went. With a matching spend reading it is left alone — the same
+report would give the same answer. (The issue's wording said "more than one country"
+always needs a split; kept literally, one "Read all spend" run would build a report
+for every multi-country account, every run, forever — five of fourteen accounts sit
+under two countries.) Countries are counted the way the map displays them, so "KW" and
+"Kuwait" are one country and not a permanent multi-country verdict.
 
 "Read all spend" follows the same rule per account, inside the same queue: the
 account is open now, and a second pass would be a second touch of a live account.
@@ -32,9 +50,15 @@ next to a failure message would be a number that no longer exists.
 With two buttons instead of three the actions column drops from 19% to 13% and the
 name column gains those 6%: 28%. In tree rows at 1280 with the Builder drawer docked
 open the campaign name box goes from about 65px to 91px (the ad's from 49px to 75px);
-at 1366 it is 115px. That is better, not solved — ACL-1277 keeps the rest, and the
-next step there is a tree grid that drops the trailing button column, which tree rows
-never use, in favour of the name.
+at 1366 it is 115px. At that narrowest width the two buttons still wrap onto a second
+line, exactly as the three did before. That is better, not solved — ACL-1277 keeps the
+rest, and the next step there is a tree grid that drops the trailing button column,
+which tree rows never use, in favour of the name.
+
+A failed split shows the reader whatever the reading wrote, and several of those
+sentences are still Russian (they pre-date this change, which is what first puts them
+in the account row). Only the orphaned-reading text is translated here; the rest is
+ACL-1287.
 
 ## Account tree reads cleanly: name, Meta result, column widths — ACL-1275 / ACL-1277
 

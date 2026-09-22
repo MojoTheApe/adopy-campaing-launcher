@@ -5957,18 +5957,24 @@ function amapReadSpend(btn) {
    опрашивается тем же маршрутом, что и спенд: оба показания живут в одной
    клетке и снимаются за один период. */
 
-function amapSplitMark(cell, why) {
+function amapSplitMark(account, why) {
   /* Неудача разбивки — в клетке, а не на кнопке: кнопка теперь общая, и
-     «failed · retry» на ней читалось бы как «спенд не прочитан». */
-  if (!cell) return;
-  var old = cell.querySelector('.amap-split-bad');
-  if (old) old.remove();
-  if (!why) return;
-  var mark = document.createElement('small');
-  mark.className = 'amap-split-bad';
-  mark.textContent = 'countries failed';
-  mark.title = why + '. The spend above is unaffected; read again to retry the countries.';
-  cell.appendChild(mark);
+     «failed · retry» на ней читалось бы как «спенд не прочитан».
+
+     Помечаются все строки этого аккаунта: аккаунт в двух странах стоит в
+     двух блоках, сервер при перезагрузке пометит обе, и разойтись они не
+     должны — иначе экран меняется под человеком. */
+  document.querySelectorAll('.amap-live').forEach(function (cell) {
+    if (cell.dataset.account !== account) return;
+    var old = cell.querySelector('.amap-split-bad');
+    if (old) old.remove();
+    if (!why) return;
+    var mark = document.createElement('small');
+    mark.className = 'amap-split-bad';
+    mark.textContent = 'countries failed';
+    mark.title = why + '. The spend reading is unaffected; read again to retry the countries.';
+    cell.appendChild(mark);
+  });
 }
 
 function amapSplitBusy(btn) {
@@ -5987,12 +5993,12 @@ function amapSplitDone(btn) {
   btn.title = 'Read spend again';
 }
 
-function amapRunSplit(account, btn, cell, per) {
+function amapRunSplit(account, btn, per) {
   /* Возвращает обещание с 'ok' или 'failed'. Обещание нужно очереди
      Read all: аккаунты идут друг за другом, и следующий профиль нельзя
      открывать, пока в этом ещё строится отчёт (правило «один профиль
      одновременно», acl-108a). */
-  amapSplitMark(cell, '');
+  amapSplitMark(account, '');
   amapSplitBusy(btn);
   var body = new FormData();
   body.append('account', account);
@@ -6009,18 +6015,18 @@ function amapRunSplit(account, btn, cell, per) {
       amapSplitDone(btn);
       var bad = s.state === 'failed' ? (s.error || 'refused')
               : (s.state === 'ok' || s.state === 'empty') ? '' : 'Unknown country reading state';
-      amapSplitMark(cell, bad);
+      amapSplitMark(account, bad);
       /* Итоги страны перечитываем и после отказа. Прошлое чтение за эти даты
          больше не действует, и оставить его на экране значило бы показать
          число, которого уже нет, рядом с сообщением о неудаче. */
       return amapRefreshCountryLines(per).then(function () { return bad ? 'failed' : 'ok'; }, function () {
-        amapSplitMark(cell, (bad ? bad + '. ' : '') + 'The country totals could not be refreshed; reload the page');
+        amapSplitMark(account, (bad ? bad + '. ' : '') + 'The country totals could not be refreshed; reload the page');
         return bad ? 'failed' : 'ok';
       });
     })
     .catch(function (e) {
       amapSplitDone(btn);
-      amapSplitMark(cell, String(e && e.message || e));
+      amapSplitMark(account, String(e && e.message || e));
       return 'failed';
     });
 }
@@ -6959,7 +6965,7 @@ function amapPollSpend(account, cell, btn, tries, per, plan) {
         /* Разбивку спрашиваем только после удачного спенда и в той же сессии
            профиля. Упавший спенд значит, что кабинет не открылся, — отчёту
            там взяться неоткуда. */
-        if (s.state === 'ok' && plan && plan.needed) amapRunSplit(account, btn, cell, per);
+        if (s.state === 'ok' && plan && plan.needed) amapRunSplit(account, btn, per);
       })
       .catch(function (e) { amapApplyReading(account, {state: 'failed', error: String(e && e.message || e)}); });
   }, 3000);
@@ -7121,7 +7127,9 @@ async function amapQueueRead(job, per) {
        был бы вторым касанием живого кабинета. Её неудача остаётся в клетке
        и не превращает прочитанный спенд в неудачу всей строки. */
     if (state === 'ok' && j.split && j.split.needed) {
-      await amapRunSplit(job.account, job.btn, job.cell, per);
+      // Ответ разбивки нарочно не возвращается: упавшая разбивка не делает
+      // прочитанный спенд неудачей и не портит счёт «N read, M failed».
+      await amapRunSplit(job.account, job.btn, per);
     }
     return state;
   } catch (e) {
@@ -7158,8 +7166,12 @@ function amapSpendFailed(btn, cell, why, shot, how) {
     /* ACL-1271, решение владельца: при неудаче за эти даты запасное число за
        другие даты остаётся под ней — одна неудачная попытка не прячет его. */
     var old = cell.querySelector('.amap-live-old');
+    /* ACL-1282: отказ разбивки относится к этим же датам и переживает
+       неудачу спенда — она его не опровергает. */
+    var split = cell.querySelector('.amap-split-bad');
     cell.innerHTML = '<span class="amap-live-bad"></span>';
     if (old) cell.appendChild(old);
+    if (split) cell.appendChild(split);
     var bad = cell.firstChild;
     bad.textContent = why.length > 40 ? why.slice(0, 39) + '…' : why;
     bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'снимок: ' + shot : '');

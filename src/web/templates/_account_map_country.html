@@ -122,7 +122,7 @@
 снимок: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}</span>
                 {%- if fb %}{{ fb_html }}{% endif -%}
               {%- else -%}<span class="nodata">—</span>{%- endif -%}
-              {%- if sp and sp.state == 'failed' %}<small class="amap-split-bad" title="The country split failed: {{ sp.error }}{% if sp.entered %} · {{ sp.entered }}{% endif %}. The spend above is unaffected; read again to retry the countries.">countries failed</small>{% endif -%}
+              {%- if sp and sp.state == 'failed' %}<small class="amap-split-bad" title="The country split failed: {{ sp.error }}{% if sp.entered %} · {{ sp.entered }}{% endif %}. The spend reading is unaffected; read again to retry the countries.">countries failed</small>{% endif -%}
             </td>
             <td class="num">{% if r.has_data %}{{ r.leads }}{% else %}<span class="nodata">—</span>{% endif %}</td>
             <td class="num">{% if r.has_data %}{{ r.deposits }}{% else %}<span class="nodata">—</span>{% endif %}</td>
