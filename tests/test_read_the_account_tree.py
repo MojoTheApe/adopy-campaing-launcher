@@ -705,3 +705,125 @@ def test_a_scrollable_snapshot_does_not_claim_a_complete_tree(page):
     ]) + '</div>')
     objects, _, err = sp.read_level(page, "campaign")
     assert objects and "completeness is not confirmed" in err
+
+
+# ── таблица без id: id кампаний из данных самой страницы (ACL-1255) ───────
+#
+# Doc19 с 18.09 показывает таблицу без id: кампании читались по имени, а
+# объявления не читались вовсе — их спрашивают по id кампании. 22.09 в
+# сохранённой странице нашёлся `campaign_structure_tree`: Meta вшивает в неё
+# id каждой кампании и имена её объявлений.
+
+import json as _json
+
+
+def _structure_script(*campaigns) -> str:
+    """Вшитый ответ Meta в той же вложенности, что на живой странице Doc19."""
+    nodes = [{"__typename": "AdCampaignGroup", "campaign_structure_tree": {
+        "campaign_id": cid, "name": name, "status": "ACTIVE",
+        "children": [{"adset_id": "7" + cid, "name": name,
+                      "children": [{"adgroup_id": "8" + cid, "name": a} for a in ads]}],
+    }} for cid, name, ads in campaigns]
+    payload = {"require": [["ScheduledServerJS", "handle", None, [{"__bbox": {"require": [
+        ["RelayPrefetchedStreamCache", "next", [], ["adp_q", {"__bbox": {"result": {"data": {
+            "campaign_groups_dynamic_tier_1_query_context": {"campaign_groups": {"nodes": nodes}},
+        }}}}]],
+    ]}}]]]}
+    return ('<script type="application/json" data-sjs="">'
+            + _json.dumps(payload) + '</script>')
+
+
+def test_campaign_ids_are_found_in_the_page_data(page):
+    page.set_content(_structure_script(("123", "SA camp", ["ad one", "ad two"]),
+                                       ("456", "Warmup", ["Warmup"])))
+    got = sp._campaigns_from_page_data(page)
+    assert got == {"SA camp": {"id": "123", "ads": {"ad one", "ad two"}},
+                   "Warmup": {"id": "456", "ads": {"Warmup"}}}
+
+
+def test_two_campaigns_with_one_name_get_no_id(page):
+    """По имени их не различить — угадывать нельзя."""
+    page.set_content(_structure_script(("123", "Twin", ["a"]), ("456", "Twin", ["b"]),
+                                       ("789", "Single", ["c"])))
+    assert set(sp._campaigns_from_page_data(page)) == {"Single"}
+
+
+def test_a_page_without_the_data_gives_nothing(page):
+    page.set_content('<script type="application/json">{"campaign_structure_tree": 1}</script>'
+                     '<script type="application/json">not json campaign_structure_tree</script>')
+    assert sp._campaigns_from_page_data(page) == {}
+
+
+@pytest.fixture
+def nameless(flow):
+    """Таблица без id: кампании и объявления пришли по имени, без id."""
+    state = {"structure": {"camp A": {"id": "111", "ads": {"ad A1", "ad A2"}},
+                           "camp B": {"id": "222", "ads": {"ad B1"}}},
+             "ads": {"111": ["ad A1", "ad A2"], "222": ["ad B1"]}}
+
+    def _level(page, level):
+        if level == "campaign":
+            return ([sp.AdObject(level="campaign", name="camp A"),
+                     sp.AdObject(level="campaign", name="camp B")],
+                    "by-name", "read by name: this account's table has no campaign ids")
+        cid = page.url.split("selected_campaign_ids=")[1].split("&")[0]
+        return ([sp.AdObject(level="ad", name=n) for n in state["ads"][cid]],
+                "by-name", "read by name: this account's table has no ad ids")
+
+    flow.setattr(sp, "read_level", _level)
+    flow.setattr(sp, "_campaigns_from_page_data", lambda page: state["structure"])
+    return state
+
+
+def test_ads_of_a_nameless_table_are_read_under_their_campaigns(nameless):
+    page = _Page()
+    objects, _, err = sp._read_tree(page, "act_123", "act_123", "2026-09-01")
+    assert len(page.visited) == 3
+    assert "selected_campaign_ids=111" in page.visited[1]
+    assert "selected_campaign_ids=222" in page.visited[2]
+    camps = [o for o in objects if o["level"] == "campaign"]
+    ads = [o for o in objects if o["level"] == "ad"]
+    assert [(c["name"], c["id"], c["data_id"]) for c in camps] == [
+        ("camp A", "", "111"), ("camp B", "", "222")]
+    assert sorted((a["name"], a["parent_id"]) for a in ads) == [
+        ("ad A1", "111"), ("ad A2", "111"), ("ad B1", "222")]
+    assert err.count("has no ad ids") == 1, "пометка по разу на кампанию — шум"
+
+
+def test_the_page_id_is_not_a_switchable_id(nameless):
+    """Id из данных страницы в строке таблицы не найти — выключать по нему нечего."""
+    objects, _, _ = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert all(o["id"] == "" for o in objects)
+
+
+def test_ads_that_are_not_in_the_campaign_structure_are_not_attributed(nameless):
+    """Фильтр не сработал — пришли чужие объявления. Приписывать их нельзя."""
+    nameless["ads"]["111"] = ["someone else's ad"]
+    objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    ads = [o for o in objects if o["level"] == "ad"]
+    assert [a["name"] for a in ads] == ["ad B1"]
+    assert "did not match this campaign" in err
+
+
+def test_a_campaign_missing_from_the_page_data_is_said_out_loud(nameless):
+    del nameless["structure"]["camp B"]
+    page = _Page()
+    objects, _, err = sp._read_tree(page, "act_123", "act_123", "2026-09-01")
+    assert len(page.visited) == 2, "за объявлениями без id не ходят"
+    assert "ads were not read for 1 of 2 campaigns" in err
+    assert {o["parent_id"] for o in objects if o["level"] == "ad"} == {"111"}
+
+
+def test_nameless_ads_are_not_mistaken_for_one_ad_under_many_campaigns(nameless):
+    """Пустой id у всех объявлений — не «одно объявление под разными кампаниями»."""
+    objects, _, err = sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert len([o for o in objects if o["level"] == "ad"]) == 3
+    assert "different campaigns" not in err
+
+
+def test_an_id_table_does_not_look_at_the_page_data(flow):
+    """Аккаунты с id работают как раньше: данные страницы им не нужны."""
+    called = []
+    flow.setattr(sp, "_campaigns_from_page_data", lambda page: called.append(1) or {})
+    sp._read_tree(_Page(), "act_123", "act_123", "2026-09-01")
+    assert called == []

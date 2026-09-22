@@ -915,3 +915,25 @@ def test_only_a_confirmed_outcome_touches_the_tree():
     body = src[start: src.index("def _turn_off(account: str", start)]
     assert 'if out.state in ("off", "already_off"):' in body
     assert "_mark_object_off" in body
+
+
+# ── таблица без id (Doc19, ACL-1255) ──────────────────────────────────────
+
+def test_a_nameless_table_puts_ads_under_their_campaign(page):
+    """У кампании нет `id`, есть `data_id` из данных страницы; у объявлений
+    `id` пустой. Все они должны встать под свою кампанию, а не «сиротами»."""
+    camp = dict(ADSET, id="", data_id="111")
+    other = dict(ADSET, id="", data_id="222", name="other camp")
+    ads = [dict(AD, id="", parent_id="111", name="ad one"),
+           dict(AD, id="", parent_id="111", name="ad two"),
+           dict(AD, id="", parent_id="222", name="ad three")]
+    _paint(page, [camp, other] + ads)
+    got = page.evaluate("""() => ({
+      kids: Array.from(document.querySelectorAll('.amap-tree-kids'))
+        .map(k => k.querySelectorAll('.amap-tree-line').length),
+      heads: Array.from(document.querySelectorAll('.amap-tree-head')).map(h => h.textContent),
+      buttons: document.querySelectorAll('button.amap-tree-sw').length,
+    })""")
+    assert got["kids"] == [2, 1]
+    assert not any("whose campaign is not in this answer" in h for h in got["heads"])
+    assert got["buttons"] == 0, "без id выключать нечем — кнопки быть не должно"

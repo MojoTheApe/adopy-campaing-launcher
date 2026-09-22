@@ -6302,7 +6302,6 @@ function amapPaintTree(row, s) {
      этим строкам решают, что останавливать. */
   var sets = objects.filter(function (o) { return o.level !== 'ad'; });  // кампании
   var ads = objects.filter(function (o) { return o.level === 'ad'; });
-  var placed = {};
 
   /* Объявления свёрнуты под своей кампанией. У DQ438 их 99 на десять
      кампаний: раскрытые разом, они уезжали на километр и прятали всё, что ниже
@@ -6310,16 +6309,22 @@ function amapPaintTree(row, s) {
      иначе после каждого Read пришлось бы открывать заново. */
   var openSets = (row.dataset.openSets || '').split(',').filter(Boolean);
 
+  /* Ключ кампании — её id, а у таблицы без id (Doc19) — id из данных самой
+     страницы (`data_id`). Помечаем разложенные сами объекты, а не их id:
+     у объявлений такой таблицы id пустой, и по нему «разложенным» считалось
+     бы всё сразу. */
+  var placed = [];
   sets.forEach(function (s) {
-    var mine = ads.filter(function (a) { return a.parent_id && a.parent_id === s.id; });
+    var sKey = s.id || s.data_id || '';
+    var mine = ads.filter(function (a) { return a.parent_id && a.parent_id === sKey; });
     var line = amapTreeLine(s, mine.length);
     box.appendChild(line);
     if (!mine.length) return;
 
     var kids = document.createElement('div');
     kids.className = 'amap-tree-kids';
-    kids.hidden = openSets.indexOf(s.id) === -1;
-    mine.forEach(function (a) { placed[a.id] = 1; kids.appendChild(amapTreeLine(a)); });
+    kids.hidden = openSets.indexOf(sKey) === -1;
+    mine.forEach(function (a) { placed.push(a); kids.appendChild(amapTreeLine(a)); });
     box.appendChild(kids);
 
     var caret = line.querySelector('.amap-tree-caret');
@@ -6328,12 +6333,12 @@ function amapPaintTree(row, s) {
       kids.hidden = !kids.hidden;
       caret.classList.toggle('open', !kids.hidden);
       var now = (row.dataset.openSets || '').split(',').filter(Boolean)
-        .filter(function (id) { return id !== s.id; });
-      if (!kids.hidden) now.push(s.id);
+        .filter(function (id) { return id !== sKey; });
+      if (!kids.hidden) now.push(sKey);
       row.dataset.openSets = now.join(',');
     });
   });
-  var orphans = ads.filter(function (a) { return !placed[a.id]; });
+  var orphans = ads.filter(function (a) { return placed.indexOf(a) === -1; });
   if (orphans.length) {
     var lost = document.createElement('div');
     lost.className = 'amap-tree-head';

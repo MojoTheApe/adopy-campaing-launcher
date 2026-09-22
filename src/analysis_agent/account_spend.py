@@ -1473,6 +1473,14 @@ class AdObject:
     #: заголовках, а ячейки у неё в разметке не нашлось.
     parent_id: str = ""
 
+    #: Id, взятый не из строки таблицы, а из данных, которые Meta вшивает в
+    #: страницу (`campaign_structure_tree`). Бывает только у кампаний аккаунта,
+    #: чья таблица id не показывает (Doc19, 18.09). Нужен, чтобы спросить
+    #: объявления этой кампании и разложить их под ней, — и только для этого.
+    #: В `id` его не кладём намеренно: `id` — это то, что можно найти в строке
+    #: и выключить, а в такой таблице строки с этим id нет.
+    data_id: str = ""
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -1846,51 +1854,6 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
     return objects, how, warning
 
 
-_CLICK_CAMPAIGN_NAME_JS = r"""
-  (name) => {
-    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-    const el = [...document.querySelectorAll('[data-tooltip-content]')]
-      .find(e => norm(e.getAttribute('data-tooltip-content')) === name && e.querySelector('a'));
-    const a = el && el.querySelector('a');
-    if (!a) return false;
-    a.scrollIntoView({block: 'center'});
-    a.click();
-    return true;
-  }
-"""
-
-
-def _probe_byname_drill(page, parents: list, errors: list[str]) -> None:
-    """Таблица без id (Doc19): как открыть объявления кампании — пока неизвестно.
-
-    19.09: пользователю нужно раскрывать кампании в объявления, чтобы их
-    выключать. Номеров в строках нет — адрес с фильтром не собрать. Нажимаем
-    на имя первой кампании со спендом (только чтение: имя ведёт на её группы
-    и объявления), сохраняем снимок того, что открылось, и возвращаемся.
-    """
-    target = next((o for o in parents if not o.id and (o.spend or "").strip() not in ("", "—", "$0.00")), None)
-    if target is None:
-        return
-    before = page.url
-    try:
-        if not page.evaluate(_CLICK_CAMPAIGN_NAME_JS, target.name):
-            errors.append("by-name drill probe: the campaign name link was not found")
-            return
-        page.wait_for_timeout(4000)
-        _wait_for_grid(page)
-        from src.fb_ads_rpa import page_capture as _pc
-        _pc.capture(page, step="tree_byname_drill_probe",
-                    diag={"campaign": target.name, "url_before": before[:200], "url_after": page.url[:300]},
-                    blocks={"table": _TOP_TABLE_JS})
-    except Exception as exc:
-        errors.append(f"by-name drill probe failed: {str(exc)[:80]}")
-    finally:
-        try:
-            page.go_back(timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
-        except Exception:
-            pass
-
-
 def _read_settled_ads(page, *, timeout_s: float = 10.0) -> tuple[list[AdObject], str, str]:
     """Прочитать объявления одной кампании, когда список перестал меняться.
 
@@ -1910,10 +1873,74 @@ def _read_settled_ads(page, *, timeout_s: float = 10.0) -> tuple[list[AdObject],
     while _time.monotonic() < deadline:
         pause(1500)
         again, how2, err2 = read_level(page, "ad")
-        if [o.id for o in again] == [o.id for o in got]:
+        # У таблицы без id (Doc19) id пустые — сравниваем и по имени.
+        if [(o.id, o.name) for o in again] == [(o.id, o.name) for o in got]:
             return again, how2, err2
         got, how, err = again, how2, err2
     return got, how, err
+
+
+#: Данные дерева, которые Meta вшивает в страницу списка кампаний.
+#:
+#: 22.09 (Doc19, таблица без id): в разметке строк id нет, но в
+#: `<script type="application/json">` страницы лежит `campaign_structure_tree`
+#: каждой кампании — её id, имя, ad set'ы и объявления с их id и именами.
+#: Это собственный предзагруженный ответ Meta для той же страницы, не догадка.
+_PAGE_STRUCTURE_JS = r"""
+() => {
+  const out = [];
+  const walk = (v, depth) => {
+    if (!v || typeof v !== 'object' || depth > 60) return;
+    if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
+    const t = v.campaign_structure_tree;
+    if (t && typeof t === 'object' && /^[0-9]+$/.test(String(t.campaign_id || ''))) {
+      const ads = [];
+      for (const set of (t.children || [])) {
+        for (const ad of ((set && set.children) || [])) {
+          if (ad && typeof ad.name === 'string') ads.push(ad.name);
+        }
+      }
+      out.push({id: String(t.campaign_id), name: String(t.name || ''), ads: ads});
+    }
+    for (const k in v) walk(v[k], depth + 1);
+  };
+  for (const s of document.querySelectorAll('script[type="application/json"]')) {
+    const text = s.textContent || '';
+    if (text.indexOf('campaign_structure_tree') === -1) continue;
+    try { walk(JSON.parse(text), 0); } catch (e) { /* чужой формат — пропускаем */ }
+  }
+  return out;
+}
+"""
+
+
+def _campaigns_from_page_data(page) -> dict[str, dict]:
+    """Кампании из вшитых данных страницы: `{имя: {"id", "ads"}}`.
+
+    Берём только имена, встретившиеся **с одним id**: две кампании с одним
+    именем по имени не различить, и приписать объявления одной из них значило
+    бы угадать. Ошибка страницы — пустой ответ, а не падение: без этих данных
+    дерево просто остаётся без объявлений, как было до них.
+    """
+    try:
+        got = page.evaluate(_PAGE_STRUCTURE_JS)
+    except Exception:
+        return {}
+    ids: dict[str, set[str]] = {}
+    ads: dict[str, set[str]] = {}
+    for item in got if isinstance(got, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        cid = str(item.get("id") or "")
+        if not name or not cid.isdigit():
+            continue
+        ids.setdefault(name, set()).add(cid)
+        ads.setdefault(name, set()).update(
+            str(a).strip() for a in (item.get("ads") or []) if str(a).strip()
+        )
+    return {name: {"id": next(iter(found)), "ads": ads.get(name, set())}
+            for name, found in ids.items() if len(found) == 1}
 
 
 def _read_tree(
@@ -1973,12 +2000,29 @@ def _read_tree(
             hows.append(f"{top}:{how}")
         if err:
             errors.append(err)
+
+        # Таблица без id (Doc19): id кампаний берём из данных самой страницы,
+        # пока она ещё открыта. Кому не нашлось — остаются без объявлений, и
+        # это говорится вслух.
+        nameless = [p for p in parents if not p.id]
+        structure: dict[str, dict] = {}
+        if nameless:
+            structure = _campaigns_from_page_data(page)
+            unmatched = 0
+            for p in nameless:
+                hit = structure.get(p.name.strip())
+                if hit:
+                    p.data_id = hit["id"]
+                else:
+                    unmatched += 1
+            if unmatched:
+                errors.append(
+                    f"ads were not read for {unmatched} of {len(nameless)} campaigns "
+                    "read by name: the page did not give their ids"
+                )
         objects.extend(o.to_dict() for o in parents)
 
-        wanted = [p for p in parents if p.id]
-        if not wanted and parents:
-            # Таблица без id: разведка способа раскрыть кампанию (снимок).
-            _probe_byname_drill(page, parents, errors)
+        wanted = [p for p in parents if p.id or p.data_id]
         if len(wanted) > TREE_MAX_PARENTS:
             # Молчаливое усечение читается как «это всё». Говорим вслух.
             errors.append(
@@ -1988,30 +2032,47 @@ def _read_tree(
             wanted = wanted[:TREE_MAX_PARENTS]
 
         ads_how: set[str] = set()
+        ads_by_name = False
         for parent in wanted:
-            what = f"{top} {parent.id}"
+            key = parent.id or parent.data_id
+            what = f"{top} {key}"
             url = _tree_url(act, "ad", date_from, date_to,
-                            parent_level=top, parent_id=parent.id)
-            if not _open(url, what, parent.id):
+                            parent_level=top, parent_id=key)
+            if not _open(url, what, key):
                 continue
             got, how, err = _read_settled_ads(page)
-            if not _context_matches(what, parent.id):
+            if not _context_matches(what, key):
                 continue
             if how:
                 ads_how.add(how)
+            if err.startswith("read by name"):
+                # Одна и та же пометка на каждую кампанию — шум; скажем один раз.
+                ads_by_name, err = True, ""
             if err:
                 errors.append(f"{what}: {err}")
+            if not parent.id:
+                # Родитель найден по данным страницы, а не по строке — сверяем,
+                # что пришли именно его объявления: каждое имя должно быть в
+                # его структуре. Иначе фильтр не сработал, и приписывать нельзя.
+                known = structure.get(parent.name.strip(), {}).get("ads", set())
+                if any(o.name.strip() not in known for o in got):
+                    errors.append(f"{what}: the ads did not match this campaign; skipped")
+                    continue
             for o in got:
-                o.parent_id = parent.id
+                o.parent_id = key
                 objects.append(o.to_dict())
+        if ads_by_name:
+            errors.append("read by name: this account's table has no ad ids")
         if ads_how:
             hows.append("ad:" + "/".join(sorted(ads_how)))
 
     # A stale/ignored filter may return the same ad under different parents.
     # Its ownership is then ambiguous: keep neither association.
+    # Без id объявления (таблица без id) владельца по id не сверить — у них
+    # сверка своя, по структуре страницы выше.
     owners: dict[str, set[str]] = {}
     for obj in objects:
-        if obj["level"] == "ad":
+        if obj["level"] == "ad" and obj["id"]:
             owners.setdefault(obj["id"], set()).add(obj["parent_id"])
     ambiguous = {oid for oid, parents in owners.items() if len(parents) > 1}
     if ambiguous:
