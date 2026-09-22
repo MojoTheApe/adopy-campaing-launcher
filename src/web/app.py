@@ -43,7 +43,7 @@ from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.web.publish_jobs import get_job, start_job, cancel_job
 from src.web.cache import cache_built_at, cache_clear, get_cached_report
-from src.analysis_agent.money_format import fmt_usd, fmt_currency
+from src.analysis_agent.money_format import fmt_usd, fmt_currency, fmt_summary_amount
 from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
 from src.creative_agent.audience_builder import build_audience_profile
 from src.creative_agent.stats_correlator import correlate
@@ -648,8 +648,11 @@ def _build_account_map_view(
             if re.fullmatch(r"[A-Z]{3}", cur):
                 live_sums[cur] = live_sums.get(cur, 0.0) + amount
             else:
-                # Unknown units cannot be added to one another.
-                unknown_sums.append({"currency": "", "spend": amount, "account": r["account"]})
+                # Unknown units cannot be added to one another. The sign Meta
+                # wrote ("$") is kept for display; it still does not say
+                # dollars or pesos, so these stay separate values.
+                unknown_sums.append({"currency": str(lr.get("currency") or "").strip(),
+                                     "spend": amount, "account": r["account"]})
 
         countries.append({
             # `country` is what the reader sees, `key` is what the store knows.
@@ -1022,6 +1025,7 @@ templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
 templates.env.filters["fmt_usd"] = fmt_usd
 templates.env.filters["fmt_currency"] = fmt_currency
+templates.env.filters["fmt_summary_amount"] = fmt_summary_amount
 templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")
 templates.env.filters["creative_type"] = lambda name: parse_creative_from_ad_title(name)[0]
 templates.env.filters["creative_id"] = lambda name: parse_creative_from_ad_title(name)[1]
