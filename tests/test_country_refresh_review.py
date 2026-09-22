@@ -16,7 +16,7 @@ def page():
         context.route('**/*', lambda route: route.fulfill(content_type='text/html', body=''))
         pg = context.new_page()
         pg.goto('http://acl.test/')
-        pg.set_content('''<div id="amap-slot"><div class="amap"><div class="amap-head"><span class="amap-note">1 country</span><input id="amap-new-country" value="unsaved setup"></div><details class="amap-country" data-country="Peru" open><summary><span class="amap-live-summary"><i class="amap-country-read">old reading</i></span></summary><input id="account-setup" value="pending profile"></details><details class="amap-available"></details></div></div><table><tr><td class="amap-live" id="cell"><span class="amap-live-ok">$10.00</span></td></tr></table><button id="read" class="amap-btn amap-read">Read spend</button>''')
+        pg.set_content('''<div id="amap-slot"><div class="amap"><div class="amap-head"><span class="amap-note">1 country</span><input id="amap-new-country" value="unsaved setup"></div><details class="amap-country" data-country="Peru" open><summary><span class="amap-live-summary"><i class="amap-country-read">old reading</i></span></summary><input id="account-setup" value="pending profile"></details><details class="amap-available"></details></div></div><table><tr><td class="amap-live" id="cell" data-account="Demo"><span class="amap-live-ok">$10.00</span></td></tr></table><button id="read" class="amap-btn amap-read">Read spend</button>''')
         pg.add_script_tag(content="var amapReadAllBusy=false; var period={from:'2026-09-01',to:'2026-09-15',span:''}; function amapPeriod(){return period;}\n"+script)
         pg.evaluate('window.savedInput=document.querySelector("#account-setup")')
         yield pg
@@ -45,7 +45,7 @@ def test_failed_retry_removes_the_previous_country_total(page):
     page.route('**/account-spend/read-countries', lambda route: route.fulfill(content_type='application/json', body=json.dumps({'ok': True})))
     page.route('**/account-spend/status?*', lambda route: route.fulfill(content_type='application/json', body=json.dumps({'ok':True,'split':{'state':'failed','error':'synthetic read failure'}})))
     page.route('**/account-map?*', lambda route: route.fulfill(content_type='text/html', body='<div class="amap"><details class="amap-country" data-country="Peru"><summary><span class="amap-live-summary"></span></summary></details></div>'))
-    page.evaluate('window.splitState = amapRunSplit("Demo", document.querySelector("#read"), document.querySelector("#cell"), period)')
+    page.evaluate('window.splitState = amapRunSplit("Demo", document.querySelector("#read"), period)')
     expect(page.locator('#cell .amap-split-bad')).to_have_text('countries failed', timeout=10000)
     assert 'synthetic read failure' in page.locator('#cell .amap-split-bad').get_attribute('title')
     expect(page.locator('#read')).to_have_text('Read spend')
@@ -57,11 +57,11 @@ def test_failed_retry_removes_the_previous_country_total(page):
 def test_a_second_attempt_clears_the_previous_country_failure(page):
     """Пометка об отказе — про текущее чтение, а не вечная надпись в клетке."""
     from playwright.sync_api import expect
-    page.evaluate('amapSplitMark(document.querySelector("#cell"), "first failure")')
+    page.evaluate('amapSplitMark("Demo", "first failure")')
     assert page.locator('#cell .amap-split-bad').count() == 1
     page.route('**/account-spend/read-countries', lambda route: route.fulfill(content_type='application/json', body=json.dumps({'ok': True})))
     page.route('**/account-spend/status?*', lambda route: route.fulfill(content_type='application/json', body=json.dumps({'ok':True,'split':{'state':'ok','rows':[]}})))
     page.route('**/account-map?*', lambda route: route.fulfill(content_type='text/html', body='<div class="amap"><details class="amap-country" data-country="Peru"><summary><span class="amap-live-summary"><i class="amap-country-read">Peru $12.00</i></span></summary></details></div>'))
-    page.evaluate('amapRunSplit("Demo", document.querySelector("#read"), document.querySelector("#cell"), period)')
+    page.evaluate('amapRunSplit("Demo", document.querySelector("#read"), period)')
     expect(page.locator('#cell .amap-split-bad')).to_have_count(0, timeout=10000)
     expect(page.locator('#read')).to_have_text('Read spend')

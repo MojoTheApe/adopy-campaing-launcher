@@ -96,6 +96,22 @@ def test_a_failed_reading_returns_the_button_to_the_person():
     )
 
 
+def test_the_failed_split_marks_every_row_of_the_account():
+    """Аккаунт в двух странах стоит в двух блоках, и сервер при перезагрузке
+    пометит обе. Пометить одну значило бы менять экран под человеком."""
+    block = PAGE.split("function amapSplitMark(", 1)[1][:900]
+    assert "querySelectorAll('.amap-live')" in block and "dataset.account" in block
+
+
+def test_a_stored_split_failure_survives_a_failed_spend_reading():
+    """Отказ разбивки относится к тем же датам: неудача спенда его не
+    опровергает, а `amapSpendFailed` пересобирает клетку целиком."""
+    block = PAGE.split("function amapSpendFailed(", 1)[1][:1400]
+    assert "amap-split-bad" in block, (
+        "пометка об упавших странах исчезает при неудаче спенда до перезагрузки"
+    )
+
+
 def test_a_failed_split_does_not_look_like_a_failed_spend():
     """Кнопка общая, значит «failed · retry» на ней читалось бы как «нет числа».
 
@@ -137,12 +153,23 @@ def test_read_all_follows_the_same_rule():
     """
     block = PAGE.split("async function amapQueueRead(", 1)
     assert len(block) == 2, "очередь Read all не найдена"
-    body = block[1][:1800]
+    # Тело функции целиком, а не первые N символов: последняя строка тела —
+    # часть проверки, и срез «сколько-нибудь» её бы не поймал.
+    body = block[1][:block[1].index(chr(10) + "}" + chr(10))]
     assert "j.split && j.split.needed" in body, (
         "очередь не спрашивает сервер, нужна ли разбивка"
     )
     assert "await amapRunSplit(" in body, (
         "разбивка должна идти внутри очереди: аккаунт открыт сейчас"
+    )
+    assert "return await amapRunSplit(" not in body, (
+        "ответ разбивки стал ответом строки: упавшие страны превратили бы "
+        "прочитанный спенд в неудачу и испортили счёт «N read, M failed»"
+    )
+    tail = body[body.index("await amapRunSplit("):]
+    tail = tail[:tail.index("} catch")]
+    assert "return state;" in tail and "return " not in tail.split("return state;")[0], (
+        "строка обязана вернуть состояние спенда, а не разбивки"
     )
 
 

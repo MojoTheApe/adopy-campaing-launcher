@@ -2769,12 +2769,21 @@ def _split_plan(account: str, date_from: str, date_to: str) -> dict:
     from src.web import account_links
 
     try:
-        countries = len(account_links.values_for(account, "country"))
+        # Страны считаем так же, как их показывает карта: «KW» и «Kuwait» —
+        # одна страна. Разными их считало бы только это место, и аккаунт
+        # навсегда оказался бы «в нескольких странах».
+        countries = len({
+            str(v).strip().casefold()
+            for v in account_links.values_for(account, "country") if str(v).strip()
+        })
         split = country_split.get_split(account, date_from, date_to)
         reading = account_spend.get_reading(account, date_from, date_to)
+        ok = getattr(reading, "state", "") == "ok"
         why = country_split.why_split_is_needed(
             countries=countries, split=split,
-            spend_finished_at=str(getattr(reading, "finished_at", "") or ""),
+            spend_finished_at=str(getattr(reading, "finished_at", "") or "") if ok else "",
+            spend=getattr(reading, "spend", None) if ok else None,
+            currency=str(getattr(reading, "currency", "") or "") if ok else "",
         )
     except Exception:  # pragma: no cover - решение не должно ронять чтение
         return {"needed": True, "why": "could not tell whether the split is fresh"}

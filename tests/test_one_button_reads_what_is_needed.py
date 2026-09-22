@@ -20,52 +20,94 @@ ROOT = Path(__file__).resolve().parents[1]
 
 from src.analysis_agent.country_split import why_split_is_needed
 
-OK = {"state": "ok", "finished_at": "2026-09-22 12:00:00"}
+#: Разбивка, снятая с показания спенда «$10.00, прочитано в 12:00».
+OK = {"state": "ok", "finished_at": "2026-09-22 12:04:00",
+      "spend_at": "2026-09-22 12:00:00", "spend": 10.0, "spend_currency": "$"}
+SPEND = {"spend_finished_at": "2026-09-22 12:00:00", "spend": 10.0, "currency": "$"}
 
 
 def test_one_country_and_a_fresh_split_asks_the_account_for_nothing():
     """Главный случай: аккаунт в одной стране, разбивка свежая — отчёта нет."""
-    assert why_split_is_needed(
-        countries=1, split=OK, spend_finished_at="2026-09-22 11:00:00") == ""
+    assert why_split_is_needed(countries=1, split=OK, **SPEND) == ""
 
 
-def test_more_than_one_country_always_needs_the_split():
-    """Сумма по аккаунту не говорит, куда ушли деньги, — даже свежая."""
-    why = why_split_is_needed(
-        countries=2, split=OK, spend_finished_at="2026-09-22 11:00:00")
-    assert why and "more than one country" in why
+def test_more_than_one_country_matters_when_there_is_nothing_to_compare():
+    """Спенда за эти даты нет: сумма ничего не говорит, страны берём сразу.
+
+    Ревью 23.09: «в нескольких странах — значит читать всегда» выглядело
+    безобидно и означало отчёт в кабинете при каждом нажатии «Read all»,
+    вечно. Разбивка устаревает вместе с числом, которое объясняет, а не сама
+    по себе; число стран решает там, где сравнить не с чем.
+    """
+    assert "more than one country" in why_split_is_needed(
+        countries=2, split=OK, spend_finished_at="")
+    assert why_split_is_needed(countries=1, split=OK, spend_finished_at="") == ""
+
+
+def test_the_same_spend_is_not_read_twice_even_in_several_countries():
+    """Сумма та же — ответ «куда она ушла» тот же, и отчёт строить незачем."""
+    assert why_split_is_needed(countries=3, split=OK, **SPEND) == ""
+
+
+def test_a_changed_spend_is_read_again():
+    """Деньги двинулись — старая разбивка объясняет другое число."""
+    why = why_split_is_needed(countries=1, split=OK,
+                              spend_finished_at="2026-09-22 18:00:00",
+                              spend=41.5, currency="$")
+    assert "spend has changed" in why
+
+
+def test_the_same_number_in_another_currency_is_another_number():
+    assert "spend has changed" in why_split_is_needed(
+        countries=1, split=OK, spend_finished_at="2026-09-22 18:00:00",
+        spend=10.0, currency="KWD")
 
 
 def test_never_read_means_read_now():
     assert "no country split" in why_split_is_needed(
-        countries=1, split=None, spend_finished_at="2026-09-22 11:00:00")
+        countries=1, split=None, **SPEND)
 
 
 def test_a_failed_split_is_not_a_split():
     """Отказ — это «не знаем», а не ответ, который можно считать свежим."""
     assert why_split_is_needed(
         countries=1, split={"state": "failed", "error": "profile is closed",
-                            "finished_at": "2026-09-22 13:00:00"},
-        spend_finished_at="2026-09-22 11:00:00")
+                            "finished_at": "2026-09-22 13:00:00"}, **SPEND)
 
 
 def test_a_running_split_is_not_a_split():
-    assert why_split_is_needed(
-        countries=1, split={"state": "running"}, spend_finished_at="")
+    assert why_split_is_needed(countries=1, split={"state": "running"}, **SPEND)
 
 
 def test_an_empty_report_is_an_answer():
     """«За период ничего не крутилось» — это прочитано, а не пусто."""
     assert why_split_is_needed(
         countries=1, split={"state": "empty", "rows": [],
-                            "finished_at": "2026-09-22 12:00:00"},
-        spend_finished_at="2026-09-22 11:00:00") == ""
+                            "finished_at": "2026-09-22 12:04:00",
+                            "spend_at": "2026-09-22 12:00:00", "spend": 10.0,
+                            "spend_currency": "$"}, **SPEND) == ""
 
 
-def test_a_split_older_than_the_spend_is_read_again():
-    """Разбивку снимали с других чисел — значит она отвечает про другое."""
-    assert "older than the spend" in why_split_is_needed(
-        countries=1, split=OK, spend_finished_at="2026-09-22 18:00:00")
+def test_an_empty_report_is_read_again_once_the_money_appears():
+    """«Ничего не крутилось» перестаёт быть ответом, как только появилась сумма."""
+    empty = {"state": "empty", "rows": [], "finished_at": "2026-09-22 09:00:00",
+             "spend_at": "2026-09-22 08:00:00", "spend": 0.0, "spend_currency": "$"}
+    assert "spend has changed" in why_split_is_needed(
+        countries=1, split=empty, **SPEND)
+
+
+def test_re_reading_the_same_spend_does_not_stale_the_split():
+    """Главная поломка первой версии ACL-1282 (ревью 23.09).
+
+    Сравнение по часам не успокаивалось никогда: нажатие, которое разбивку не
+    читало, всё равно обновляло время спенда, и следующее объявляло разбивку
+    устаревшей. Отчёт в кабинете строился через раз — ровно та цена, ради
+    которой задача и затевалась. Перечитанный спенд с той же суммой ничего
+    не меняет.
+    """
+    assert why_split_is_needed(
+        countries=1, split=OK, spend_finished_at="2026-09-22 23:59:00",
+        spend=10.0, currency="$") == ""
 
 
 def test_a_split_without_a_time_of_its_own_is_read_again():
@@ -75,30 +117,17 @@ def test_a_split_without_a_time_of_its_own_is_read_again():
     показывал бы разбивку недельной давности рядом со свежим спендом и
     выглядел бы согласованным.
     """
-    assert "does not say when" in why_split_is_needed(
-        countries=1, split={"state": "ok", "rows": []},
-        spend_finished_at="2026-09-22 11:00:00")
+    assert "does not say which spend" in why_split_is_needed(
+        countries=1, split={"state": "ok", "rows": [],
+                            "finished_at": "2026-09-22 12:04:00"}, **SPEND)
 
 
-def test_a_never_read_account_does_not_need_a_reason_from_the_spend():
-    """Спенда за эти даты ещё нет — сравнивать не с чем, и это не повод
-    объявлять разбивку устаревшей: она просто есть."""
-    assert why_split_is_needed(countries=1, split=OK, spend_finished_at="") == ""
+def test_the_split_remembers_which_spend_it_explains():
+    """Без этого разбивку не с чем сравнивать, кроме часов, — а часы врут."""
+    from src.analysis_agent.country_split import CountrySplit
 
-
-def test_the_combined_reading_settles_instead_of_repeating_itself():
-    """Свойство, ради которого разбивка идёт второй, а не первой.
-
-    Одна кнопка читает спенд, потом страны — значит время разбивки всегда
-    новее. Следующее нажатие по тем же датам видит свежую разбивку и
-    аккаунт вторым отчётом не беспокоит. Иначе правило «старше спенда»
-    заводило бы отчёт при каждом нажатии.
-    """
-    spend_at = "2026-09-22 12:00:00"
-    split_at = "2026-09-22 12:04:00"  # разбивка сняла своё время позже
-    assert why_split_is_needed(
-        countries=1, split={"state": "ok", "finished_at": split_at},
-        spend_finished_at=spend_at) == ""
+    for field in ("spend_at", "spend", "spend_currency"):
+        assert field in CountrySplit.__dataclass_fields__
 
 
 def test_the_split_remembers_when_it_was_read():
@@ -143,13 +172,15 @@ def stores(monkeypatch, tmp_path):
     monkeypatch.setattr(links, "get_local_config_dir", lambda: str(tmp_path))
     monkeypatch.setattr(links, "get_ad_account_map_path", lambda: str(tmp_path / "missing.csv"))
 
-    def put_spend(account, finished, state="ok"):
-        sp._put(sp.SpendReading(account=account, date_from=DAY, date_to=DAY, spend=10.0,
+    def put_spend(account, finished, state="ok", spend=10.0):
+        sp._put(sp.SpendReading(account=account, date_from=DAY, date_to=DAY, spend=spend,
                                 currency="$", state=state, finished_at=finished))
 
     def put_split(account, finished, state="ok"):
+        """Разбивка запоминает спенд ровно так же, как это делает start_split."""
         cs.save_split(cs.CountrySplit(account=account, date_from=DAY, date_to=DAY,
-                                      state=state, rows=[], finished_at=finished))
+                                      state=state, rows=[], finished_at=finished,
+                                      **cs._spend_now(account, DAY, DAY)))
     return put_spend, put_split
 
 
@@ -161,12 +192,12 @@ def test_a_single_country_account_with_a_fresh_split_is_not_asked_again(stores):
     assert app._split_plan("Doc19", DAY, DAY) == {"needed": False, "why": ""}
 
 
-def test_an_account_in_two_countries_is_always_asked(stores):
+def test_an_account_in_two_countries_is_asked_before_its_first_spend(stores):
+    """Сравнить не с чем — и общая сумма всё равно не сказала бы, куда ушло."""
     put_spend, put_split = stores
     links.link("Doc19", "country", "Saudi Arabia")
     links.link("Doc19", "country", "Kuwait")
-    put_spend("Doc19", "2026-09-22 12:00:00")
-    put_split("Doc19", "2026-09-22 12:04:00")
+    put_split("Doc19", "2026-09-22 12:04:00")   # спенда за эти даты ещё нет
     assert app._split_plan("Doc19", DAY, DAY)["needed"] is True
 
 
@@ -182,22 +213,23 @@ def test_the_decision_is_made_before_the_spend_reading_replaces_the_old_one(stor
     """Порядок здесь и есть правило.
 
     `start_read` кладёт на место прошлого показания запись «читаю» — без
-    времени. Спросить после запуска значит спросить у записи, которая ещё
-    ничего не знает: разбивка навсегда останется «свежей», и страны не
-    прочитаются больше никогда. Поэтому решение принимают до запуска, и
+    суммы. Спросить после запуска значит спросить у записи, которая ещё
+    ничего не знает: сравнивать не с чем, разбивка останется «свежей», и
+    изменившиеся деньги никто не разложит по странам. Поэтому решение принимают до запуска, и
     порядок этих двух строк в маршруте — не стиль.
     """
     put_spend, put_split = stores
     links.link("Doc19", "country", "Saudi Arabia")
-    put_spend("Doc19", "2026-09-22 18:00:00")
-    put_split("Doc19", "2026-09-21 09:00:00")   # разбивка старше спенда
+    put_spend("Doc19", "2026-09-22 12:00:00", spend=10.0)
+    put_split("Doc19", "2026-09-22 12:04:00")   # разбивка объясняет $10.00
+    put_spend("Doc19", "2026-09-22 18:00:00", spend=41.5)   # деньги двинулись
     assert app._split_plan("Doc19", DAY, DAY)["needed"] is True
 
     # Ровно то, что делает start_read в первой же строке.
     sp._put(sp.SpendReading(account="Doc19", date_from=DAY, date_to=DAY,
                             state="running", started_at="2026-09-22 19:00:00"))
     assert app._split_plan("Doc19", DAY, DAY)["needed"] is False, (
-        "спрошенное после запуска решение видит запись без времени — "
+        "спрошенное после запуска решение видит запись без чисел — "
         "именно поэтому его принимают до"
     )
 
@@ -215,3 +247,64 @@ def test_a_question_without_an_answer_reads_rather_than_stays_silent(monkeypatch
     monkeypatch.setattr(links, "values_for", lambda *a, **k: (_ for _ in ()).throw(OSError("store is gone")))
     plan = app._split_plan("Doc19", DAY, DAY)
     assert plan["needed"] is True and plan["why"]
+
+
+def test_pressing_the_button_again_and_again_builds_one_report(stores):
+    """Свойство целиком, на настоящих хранилищах: шесть нажатий — один отчёт.
+
+    Ревьюер воспроизвёл здесь три отчёта на шесть нажатий: чтение спенда само
+    обновляло время, с которым сравнивали разбивку. Считаем нажатия так же,
+    как их делает маршрут: решение — до чтения, разбивка — после него.
+    """
+    put_spend, put_split = stores
+    links.link("Doc19", "country", "Saudi Arabia")
+    reports = 0
+    for press in range(6):
+        plan = app._split_plan("Doc19", DAY, DAY)
+        # Спенд читается всегда и каждый раз обновляет своё время.
+        put_spend("Doc19", f"2026-09-22 1{press}:00:00")
+        if plan["needed"]:
+            reports += 1
+            put_split("Doc19", f"2026-09-22 1{press}:04:00")
+    assert reports == 1, f"кабинет построил {reports} отчётов вместо одного"
+
+
+def test_a_multi_country_account_is_not_asked_again_for_the_same_money(stores):
+    """Тот же счёт для аккаунта в двух странах: «Read all» не строит отчёт
+    каждый прогон. Ревью 23.09: пять из четырнадцати аккаунтов стоят под
+    двумя странами, и это было бы пять отчётов при каждом нажатии."""
+    put_spend, put_split = stores
+    links.link("Doc19", "country", "Saudi Arabia")
+    links.link("Doc19", "country", "Kuwait")
+    reports = 0
+    for press in range(4):
+        plan = app._split_plan("Doc19", DAY, DAY)
+        put_spend("Doc19", f"2026-09-22 1{press}:00:00")
+        if plan["needed"]:
+            reports += 1
+            put_split("Doc19", f"2026-09-22 1{press}:04:00")
+    assert reports == 1, f"кабинет построил {reports} отчётов вместо одного"
+
+
+def test_money_that_moved_brings_the_report_back(stores):
+    """Обратная сторона: пока сумма меняется, страны перечитываются."""
+    put_spend, put_split = stores
+    links.link("Doc19", "country", "Saudi Arabia")
+    put_spend("Doc19", "2026-09-22 12:00:00")
+    put_split("Doc19", "2026-09-22 12:04:00")
+    assert app._split_plan("Doc19", DAY, DAY)["needed"] is False
+    put_spend("Doc19", "2026-09-22 13:00:00", spend=41.5)
+    plan = app._split_plan("Doc19", DAY, DAY)
+    assert plan["needed"] is True and "spend has changed" in plan["why"]
+
+
+def test_two_spellings_of_one_country_are_one_country(stores):
+    """«KW» и «Kuwait» карта показывает одной страной. Считать их двумя
+    значило бы навсегда записать аккаунт в многострановые — и строить отчёт
+    при каждом нажатии."""
+    put_spend, put_split = stores
+    links.link("Doc19", "country", "Kuwait")
+    links.link("Doc19", "country", "kuwait")
+    put_spend("Doc19", "2026-09-22 12:00:00")
+    put_split("Doc19", "2026-09-22 12:04:00")
+    assert app._split_plan("Doc19", DAY, DAY)["needed"] is False
