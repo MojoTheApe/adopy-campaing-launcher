@@ -234,7 +234,7 @@ with tempfile.TemporaryDirectory(dir=OUT) as config:
         page.evaluate("holdFirst=false;releaseFirst()")
         page.wait_for_function('amapReadAllBusy===false')
         assert page.evaluate('readRequests')==[[a,'2026-09-01','2026-09-09'] for a in ['First','Broken','toString']]
-        assert page.locator('#view-home .amap-read-all').first.get_attribute('title')=='2 read, 1 failed'
+        assert page.locator('#view-home .amap-read-all').first.get_attribute('title')=='2 read, 1 failed (spend)'
         assert page.locator('#view-home .amap-live[data-account="First"]').count()==2
         for cell in page.locator('#view-home .amap-live[data-account="First"]').all():
             assert 'EUR 12.34' in cell.text_content(), cell.text_content()
@@ -253,7 +253,7 @@ with tempfile.TemporaryDirectory(dir=OUT) as config:
         }""")
         page.wait_for_function('amapReadAllBusy===false')
         assert [r[0] for r in page.evaluate('readRequests')]==['toString']
-        assert page.locator('#view-home details[data-country="Beta"] .amap-read-all').get_attribute('title')=='1 spend read, 1 failed'
+        assert page.locator('#view-home details[data-country="Beta"] .amap-read-all').get_attribute('title')=='1 read, 1 failed (spend)'
         assert not page.locator('#view-home .amap-read-all').first.is_disabled()
         beta=page.locator('#view-home details[data-country="Beta"] .amap-live-summary')
         assert 'EUR 12.34' in beta.text_content() and '1/2 spend read' in beta.text_content()
