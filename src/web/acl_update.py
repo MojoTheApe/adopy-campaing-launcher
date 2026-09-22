@@ -104,6 +104,94 @@ def installed() -> dict[str, str]:
     return dict(_installed)
 
 
+# ── STAGE-значок в шапке (ACL-1267) ────────────────────────────────────
+#
+# Решение владельца 22.09: процесс остаётся как есть (ветка → stage → main,
+# релиз менеджерам — метка на main). Дешборд, запущенный из исходников, — это
+# версия, на которой владелец работает, и в шапке он хочет видеть STAGE и
+# сколько правок в ней ещё не залито в stage. Упакованная сборка — это то, что
+# стоит у менеджеров: значка у неё нет.
+#
+# Считаем коммиты, которых нет в ветке stage проекта, без слияний и без копий,
+# уже перенесённых в stage тем же патчем (`--cherry-pick`). Ветку ищем у того
+# remote, который смотрит в репозиторий проекта: у владельца это `work`, на
+# свежем клоне — `origin`. Свежесть — фоновым fetch раз в STAGE_REFRESH_S, чтобы
+# отрисовка страницы никогда не ждала сеть.
+
+PROJECT_REPO = "MojoTheApe/adopy-campaing-launcher"
+STAGE_BRANCH = "stage"
+STAGE_REFRESH_S = 600
+
+_stage_lock = threading.Lock()
+_stage_state: dict[str, Any] = {"checked": 0.0, "fetching": False, "last": None}
+
+
+def _project_remote() -> str:
+    """Remote, который смотрит в репозиторий проекта, или ""."""
+    for line in _git_out("remote", "-v").splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[2] == "(fetch)":
+            url = parts[1].lower().rstrip("/")
+            if url.endswith(PROJECT_REPO.lower()) or url.endswith(PROJECT_REPO.lower() + ".git"):
+                return parts[0]
+    return ""
+
+
+def _stage_count() -> dict[str, Any]:
+    """Сколько коммитов этой версии нет в stage — по уже скачанной ветке."""
+    remote = _project_remote()
+    if not remote:
+        return {"known": False, "ahead": None, "ref": "",
+                "why": f"no git remote points at {PROJECT_REPO}"}
+    ref = f"{remote}/{STAGE_BRANCH}"
+    if not _git_out("rev-parse", "--verify", "--quiet", ref):
+        return {"known": False, "ahead": None, "ref": ref, "why": f"{ref} has not been fetched"}
+    count = _git_out("rev-list", "--count", "--no-merges", "--cherry-pick", "--right-only",
+                     f"{ref}...HEAD")
+    if not count.isdigit():
+        return {"known": False, "ahead": None, "ref": ref, "why": f"could not compare with {ref}"}
+    return {"known": True, "ahead": int(count), "ref": ref, "why": ""}
+
+
+def _stage_refresh() -> None:
+    try:
+        remote = _project_remote()
+        if remote:
+            _git("fetch", "--quiet", remote, STAGE_BRANCH, timeout=60)
+        result = _stage_count()
+    except Exception as exc:  # pragma: no cover - сеть и git не должны ронять шапку
+        result = {"known": False, "ahead": None, "ref": "", "why": str(exc)[:120]}
+    with _stage_lock:
+        _stage_state["last"] = result
+        _stage_state["checked"] = time.monotonic()
+        _stage_state["fetching"] = False
+
+
+def stage_status() -> dict[str, Any]:
+    """Что показать в шапке: STAGE или ничего, и насколько версия ушла от stage.
+
+    `channel` — "stage" для запуска из исходников, "release" для упакованной
+    сборки (у менеджеров). Никогда не ждёт сеть: отдаёт последнее известное, а
+    обновление запускает в фоне.
+    """
+    if getattr(sys, "frozen", False):
+        return {"channel": "release"}
+    with _stage_lock:
+        last = _stage_state["last"]
+        stale = time.monotonic() - _stage_state["checked"] > STAGE_REFRESH_S
+        start = stale and not _stage_state["fetching"]
+        if start:
+            _stage_state["fetching"] = True
+    if last is None:
+        last = _stage_count()  # локально и быстро — без сети
+        with _stage_lock:
+            if _stage_state["last"] is None:
+                _stage_state["last"] = last
+    if start:
+        threading.Thread(target=_stage_refresh, name="acl-stage-gap", daemon=True).start()
+    return {"channel": "stage", **last}
+
+
 def is_supervised() -> bool:
     return not getattr(sys, "frozen", False) and (os.environ.get(SUPERVISED_ENV) or "").strip() == "1"
 
