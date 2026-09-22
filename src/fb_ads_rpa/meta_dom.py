@@ -8237,40 +8237,11 @@ def fill_ad_copy(
         _sleep_h(0.4)
         if _handle_shows(handle, text):
             return True
-        # 21.09 18:30 (CR_ait FX, ad3): в поле легло 262 символа из 299 —
-        # вставка потеряла хвост, а не ошиблась целиком. Дописываем недостающее
-        # в конец, вместо того чтобы стирать и набирать всё заново.
-        seen = _handle_text(handle)
-        if seen and text.startswith(seen.rstrip()) and len(seen) < len(text):
-            try:
-                handle.focus()
-                # 22.09 00:52 (CR_ait IPO ad2): Ctrl+End в этом поле курсор не
-                # двигает, и дописанный хвост вставлялся ПЕРЕД текстом —
-                # последняя строка оказывалась первой. Ставим курсор в конец
-                # средствами самой страницы.
-                handle.evaluate(
-                    "el => {"
-                    " el.focus();"
-                    " if ('setSelectionRange' in el && typeof el.value === 'string') {"
-                    "   el.setSelectionRange(el.value.length, el.value.length); return; }"
-                    " const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);"
-                    " const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); }"
-                )
-                # Склейка без лишнего пробела: если поле сохранило хвостовой
-                # пробел, дописываем ровно остаток, а не остаток с пробелом.
-                prefix = seen if text.startswith(seen) else seen.rstrip()
-                missing = text[len(prefix):]
-                if seen != seen.rstrip() and missing[:1].isspace():
-                    # В поле уже остался хвостовой пробел — иначе склеим двойной.
-                    missing = missing.lstrip()
-                page.keyboard.insert_text(missing)
-                _sleep_h(0.4)
-                if _handle_shows(handle, text):
-                    report["attempts"].append({"stage": "tail_completed",
-                                               "added": len(missing)})
-                    return True
-            except Exception:
-                pass
+        # 22.09 01:05 (скриншот пользователя, CR_ait IPO): дописывание
+        # потерянного хвоста задвоило текст — поле ещё дорисовывало вставку,
+        # чтение увидело только первую строку, и остаток дописался поверх уже
+        # пришедшего. Задвоенный текст хуже неполного, поэтому дописывания
+        # больше нет: ниже поле стирается и набирается заново целиком.
         # 21.09 11:33 (CL_ml): «видим» выглядело правильным текстом, но шаг
         # считал его несовпавшим — по обрезанной записи не понять, где
         # разошлось. Пишем оба текста и их длины.

@@ -136,33 +136,19 @@ def test_a_second_attempt_replaces_the_text_instead_of_appending(page, monkeypat
     assert "СТАРЫЙ" not in body
 
 
-def test_a_truncated_paste_is_completed_instead_of_retyped(page, monkeypatch):
-    """21.09 18:30 CR_ait ad3: в поле легло 262 символа из 299 — вставка
-    потеряла хвост. Дописываем недостающее, а не набираем всё заново."""
-    full = "Invest like a pro with Banco General and other profitable companies today"
-
-    def lose_tail(p, t):
-        p.keyboard.insert_text(t[:-12] if t == full else t)
-
-    monkeypatch.setattr(md, "_type_human", lose_tail)
-    report: dict = {}
-    assert md.fill_ad_copy(page, "Заголовок", full, report) is True
-    assert page.inner_text("#body").strip() == full
-    assert any(a.get("stage") == "tail_completed" for a in report["attempts"]), report
-
-
-def test_the_completed_tail_lands_at_the_end_not_at_the_start(page, monkeypatch):
-    """22.09 00:52 CR_ait IPO ad2: Ctrl+End в поле Meta курсор не двигает, и
-    дописанный хвост вставлялся ПЕРЕД текстом — последняя строка оказывалась
-    первой («Empieza hoy.» в начале)."""
+def test_a_truncated_paste_is_retyped_whole_without_doubling(page, monkeypatch):
+    """22.09 01:05 (скриншот пользователя, CR_ait IPO): дописывание хвоста
+    задвоило текст — поле ещё дорисовывало вставку. Теперь поле стирается и
+    набирается заново, а задвоения быть не должно."""
     full = "Primera linea del anuncio. Segunda linea. Empieza hoy."
+    tries = {"n": 0}
 
-    def lose_tail(p, t):
-        p.keyboard.insert_text(t[:-12] if t == full else t)
+    def lose_tail_once(p, t):
+        tries["n"] += 1
+        p.keyboard.insert_text(t[:-12] if (t == full and tries["n"] == 1) else t)
 
-    monkeypatch.setattr(md, "_type_human", lose_tail)
-    report: dict = {}
-    assert md.fill_ad_copy(page, "Заголовок", full, report) is True
+    monkeypatch.setattr(md, "_type_human", lose_tail_once)
+    assert md.fill_ad_copy(page, "Заголовок", full) is True
     body = page.inner_text("#body").strip()
     assert body == full, body
-    assert body.startswith("Primera linea"), "хвост не должен оказаться в начале"
+    assert body.count("Empieza hoy.") == 1, "текст не должен задваиваться"
