@@ -5873,7 +5873,7 @@ function amapReadSpend(btn) {
   if (extra) extra.remove();
   btn.disabled = true;
   btn.className = 'amap-btn amap-read';
-  btn.textContent = 'reading…';
+  btn.textContent = 'reading spend…';
   /* Период берём тот же, что показан в шапке: число за другой отрезок
      выглядело бы расхождением источников, а было бы ответом на другой
      вопрос. */
@@ -6054,7 +6054,7 @@ function amapUpdateCountrySummaries() {
       bold.textContent = value;
       target.appendChild(bold);
     });
-    summary.querySelector('.amap-live-summary-count').textContent = read + '/' + seen.size + ' read';
+    summary.querySelector('.amap-live-summary-count').textContent = read + '/' + seen.size + ' spend read';
   });
 }
 
@@ -6076,13 +6076,13 @@ function amapApplyReading(account, s) {
       label.title = (s.status_text || (s.status === 'clear' ? 'No warning on the page; not a verified active status' : s.status)) + ' · read ' + (s.finished_at || '');
     }
     if (s.state === 'running') {
-      btn.disabled = true; btn.textContent = 'reading…'; return;
+      btn.disabled = true; btn.textContent = 'reading spend…'; return;
     }
     if (s.state !== 'ok') { amapSpendFailed(btn, cell, s.error || 'failed', s.shot, s.how); return; }
     cell.innerHTML = '<span class="amap-live-ok"></span>';
     cell.firstChild.textContent = amapMoney(s.spend, s.currency);
     cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how;
-    btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read'; btn.title = 'Read again';
+    btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read spend'; btn.title = 'Read spend again';
     amapPaintTree(row, s);
   });
   amapUpdateCountrySummaries();
@@ -6941,11 +6941,11 @@ async function amapReadAll(btn) {
   var okCount = 0, failCount = 0;
   try {
     for (var i = 0; i < jobs.length; i++) {
-      btn.textContent = 'Reading ' + (i + 1) + ' of ' + jobs.length + '…';
+      btn.textContent = 'Reading spend ' + (i + 1) + ' of ' + jobs.length + '…';
       var state = await amapQueueRead(jobs[i], per);
       if (state === 'ok') okCount++; else failCount++;
     }
-    btn.title = okCount + ' read, ' + failCount + ' failed';
+    btn.title = okCount + ' spend read, ' + failCount + ' failed';
   } finally {
     amapReadAllBusy = false;
     amapReadAllControls(false);
@@ -7045,7 +7045,7 @@ function amapOpenProfile(btn) {
         if (read) {
           read.disabled = false;
           read.className = 'amap-btn amap-read';
-          read.textContent = 'Read';
+          read.textContent = 'Read spend';
           read.title = j.message || '';
         }
       } else {
