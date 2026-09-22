@@ -6960,7 +6960,7 @@ function amapResumeReadings() {
 
   /* ACL-1271: у кого за эти даты чтения нет, сервер положил последнее за
      другие даты. Дерево рисуем из него же — его собственными датами. */
-  document.querySelectorAll('.amap-live[data-read-state="fallback"]').forEach(function (cell) {
+  document.querySelectorAll('.amap-live[data-fb-from]').forEach(function (cell) {
     var account = cell.dataset.account;
     if (done[account] || seen[account]) return;
     done[account] = true;
@@ -7099,7 +7099,11 @@ function amapSpendFailed(btn, cell, why, shot, how) {
      сохранённый снимок экрана узнать было неоткуда вовсе. Неудача должна
      выглядеть неудачей с первого взгляда. */
   if (cell) {
+    /* ACL-1271, решение владельца: при неудаче за эти даты запасное число за
+       другие даты остаётся под ней — одна неудачная попытка не прячет его. */
+    var old = cell.querySelector('.amap-live-old');
     cell.innerHTML = '<span class="amap-live-bad"></span>';
+    if (old) cell.appendChild(old);
     var bad = cell.firstChild;
     bad.textContent = why.length > 40 ? why.slice(0, 39) + '…' : why;
     bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'снимок: ' + shot : '');

@@ -79,15 +79,6 @@ def test_an_exact_reading_wins_and_is_counted(store):
     assert _country(view)["live_read"] == 1
 
 
-def test_a_failed_reading_for_these_dates_is_not_replaced_by_an_old_one(store):
-    """Неудача за эти даты — ответ про эти даты; её «повторить», а не прятать."""
-    links.link("A", "country", "KW")
-    store("A", "2026-09-01", "2026-09-21", 1044.82, "2026-09-22 08:52:04")
-    store("A", "2026-09-01", "2026-09-22", None, "2026-09-22 09:00:00", state="failed")
-    view = app._build_account_map_view({"countries": []}, date_from="2026-09-01", date_to="2026-09-22")
-    assert "A" not in view["fallback"]
-
-
 def test_never_read_stays_a_dash(store):
     links.link("A", "country", "KW")
     view = app._build_account_map_view({"countries": []}, date_from="2026-09-01", date_to="2026-09-22")
@@ -130,10 +121,14 @@ def test_no_dates_on_screen_means_no_fallback(store, monkeypatch):
 
 def _page_with_fallback(browser_page, html):
     src = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
-    start = src.index("function amapMoney(")
-    end = src.index("function amapApplyReading(")
+
+    def fn(name):
+        start = src.index("function " + name + "(")
+        return src[start: src.index("\nfunction ", start + 10)]
+
     browser_page.set_content(html)
-    browser_page.add_script_tag(content=src[start:end])
+    browser_page.add_script_tag(content="var amapReadAllBusy = false;\n" + "\n".join(
+        fn(n) for n in ("amapMoney", "amapSummaryMoney", "amapUpdateCountrySummaries", "amapSpendFailed")))
 
 
 @pytest.fixture
@@ -158,3 +153,30 @@ def test_the_country_total_leaves_the_fallback_out(page):
     page.evaluate("() => amapUpdateCountrySummaries()")
     got = page.evaluate("() => document.querySelector('.amap-live-summary').textContent.replace(/\\s+/g, ' ').trim()")
     assert got == "USD 10.00 1/2 spend read"
+
+
+
+def test_a_failed_reading_shows_the_old_one_too(store):
+    """Решение владельца 22.09: при неудаче за эти даты — оба, неудача и
+    запасное чтение под ней; в итог страны по-прежнему не входит."""
+    links.link("A", "country", "KW")
+    store("A", "2026-09-01", "2026-09-21", 1044.82, "2026-09-22 08:52:04")
+    store("A", "2026-09-01", "2026-09-22", None, "2026-09-22 09:00:00", state="failed")
+    view = app._build_account_map_view({"countries": []}, date_from="2026-09-01", date_to="2026-09-22")
+    assert view["fallback"]["A"]["spend"] == 1044.82
+    assert _country(view)["live_read"] == 0
+    html = app.templates.env.get_template("_account_map.html").render(amap=view, mlx={})
+    cell = html.split('class="num amap-live"', 1)[1].split("</td>", 1)[0]
+    assert 'data-read-state="failed"' in cell and 'data-fb-from="2026-09-01"' in cell
+    assert "amap-live-bad" in cell and "amap-live-old" in cell and "$1,044.82" in cell
+    assert "failed · retry" in html
+
+
+def test_a_live_failure_keeps_the_old_amount_in_the_cell(page):
+    _page_with_fallback(page, """<table><tr><td class="amap-live" data-account="B" data-read-state="fallback"
+        data-fb-from="2026-09-01" data-fb-to="2026-09-21"><span class="amap-live-old">$1,044.82<small>09-01…09-21</small></span></td>
+        <td><button class="amap-read">Read spend</button></td></tr></table>""")
+    page.evaluate("""() => amapSpendFailed(document.querySelector('.amap-read'),
+                        document.querySelector('.amap-live'), 'profile is closed', '', '')""")
+    got = page.evaluate("() => document.querySelector('.amap-live').innerText.replace(/\\s+/g, ' ').trim()")
+    assert got.startswith("profile is closed") and "$1,044.82" in got
