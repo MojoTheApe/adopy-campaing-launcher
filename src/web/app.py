@@ -2753,7 +2753,14 @@ def _spend_period(date_from: str, date_to: str, span: str = "") -> tuple[str, st
     return start.isoformat(), end.isoformat()
 
 
-def _split_plan(account: str, date_from: str, date_to: str, *, reading=None, split=None) -> dict:
+#: «Не передали» и «передали пустое» — разные вещи: у аккаунта, который
+#: ещё ни разу не читали по странам, разбивка равна None, и принять это за
+#: «возьми из хранилища» значило бы лишний раз читать диск на каждом опросе.
+_NOT_GIVEN = object()
+
+
+def _split_plan(account: str, date_from: str, date_to: str, *,
+                reading=_NOT_GIVEN, split=_NOT_GIVEN) -> dict:
     """Нужна ли пострановая разбивка этому аккаунту за эти даты (ACL-1282).
 
     Считается по **дочитанному** показанию спенда — то есть после того, как
@@ -2786,9 +2793,9 @@ def _split_plan(account: str, date_from: str, date_to: str, *, reading=None, spl
         # Перечитать хранилище значило бы решать про другое чтение, чем то,
         # что уедет на экран: между двумя чтениями успевает начаться новое, и
         # решение приняли бы по записи «читаю» — без суммы (ревью 23.09).
-        if split is None:
+        if split is _NOT_GIVEN:
             split = country_split.get_split(account, date_from, date_to)
-        if reading is None:
+        if reading is _NOT_GIVEN:
             reading = account_spend.get_reading(account, date_from, date_to)
         ok = getattr(reading, "state", "") == "ok"
         why = country_split.why_split_is_needed(
