@@ -1,5 +1,26 @@
 # System history
 
+## The country split no longer lags one press behind the money — ACL-1288
+
+ACL-1282 decided whether to read the country split at the moment the spend read
+started, which meant comparing against the *previous* amount. The press on which the
+money actually changed read the new spend and left the split alone; only the next press
+noticed. On finished dates nobody sees it — the first read takes both — but on today's
+dates the screen showed a fresh spend beside a breakdown explaining the old one, and
+looked perfectly consistent doing it.
+
+The decision now travels with the finished reading: `/account-spend/status` returns
+`plan` when the reading is `ok`, and both the row and the "Read all spend" queue use
+that instead of an answer from the POST that started the read. `/account-spend/read`
+no longer answers about the split at all — there is nothing to compare at that moment,
+because the record it writes says "reading" and carries no amount. While a read is in
+flight no decision is made, which is the same rule stated once instead of twice.
+
+Measured over five presses on a single-country account with the money changing on the
+fourth: the split is read on press 0 (there is none yet) and on press 3 (the amount
+differs), and on no other press. Before this change it was read on press 0 and press 4
+— one press after the money moved.
+
 ## The tree name gets its own line where eleven columns do not fit — ACL-1277
 
 The remaining half of ACL-1277: on a laptop with the Builder drawer docked open the

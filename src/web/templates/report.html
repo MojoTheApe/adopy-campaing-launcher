@@ -5986,10 +5986,10 @@ function amapReadSpend(btn) {
     .then(function (j) {
       if (!j.ok) throw new Error(j.error || 'refused');
       /* Нужна ли после спенда разбивка по странам, решает сервер: у него
-         привязки и оба хранилища (ACL-1282). Ответ приходит вместе с
-         запуском чтения, потому что решать это надо до него — `start_read`
-         кладёт на место прошлого показания «читаю». */
-      amapPollSpend(account, cell, btn, 0, per, j.split);
+         привязки и оба хранилища (ACL-1282). Ответ приходит не отсюда, а
+         вместе с дочитанным спендом: решение сравнивает суммы, а на запуске
+         новой суммы ещё нет (ACL-1288). */
+      amapPollSpend(account, cell, btn, 0, per);
     })
     .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
 }
@@ -7038,7 +7038,7 @@ document.addEventListener('click', function (e) {
   amapTurnOffDisarm();
 });
 
-function amapPollSpend(account, cell, btn, tries, per, plan) {
+function amapPollSpend(account, cell, btn, tries, per) {
   per = per || amapPeriod();
   if (!per.from || per.span === 'all') return;
   if (tries > 120) {
@@ -7054,11 +7054,12 @@ function amapPollSpend(account, cell, btn, tries, per, plan) {
         if (!j.ok) throw new Error(j.error || 'Could not read status');
         var s = j.reading || {};
         amapApplyReading(account, s);
-        if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1, per, plan); return; }
+        if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1, per); return; }
         /* Разбивку спрашиваем только после удачного спенда и в той же сессии
            профиля. Упавший спенд значит, что кабинет не открылся, — отчёту
-           там взяться неоткуда. */
-        if (s.state === 'ok' && plan && plan.needed) amapRunSplit(account, btn, per);
+           там взяться неоткуда. Решение приехало в этом же ответе: оно
+           сравнивает ту сумму, которую человек сейчас видит (ACL-1288). */
+        if (s.state === 'ok' && j.plan && j.plan.needed) amapRunSplit(account, btn, per);
       })
       .catch(function (e) { amapApplyReading(account, {state: 'failed', error: String(e && e.message || e)}); });
   }, 3000);
@@ -7213,18 +7214,19 @@ async function amapQueueRead(job, per) {
     body.append('date_to', per.to);
     body.append('span', per.span || '');
     // The server joins an existing read for this account and exact period.
-    var j = await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
-    var state = await amapAwaitReading(job.account, per, 0);
+    await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
+    var done = await amapAwaitReading(job.account, per, 0);
     /* ACL-1282: то же правило, что и у одной строки. Разбивка идёт внутри
        очереди, а не после неё: аккаунт открыт сейчас, и второй заход в него
        был бы вторым касанием живого кабинета. Её неудача остаётся в клетке
-       и не превращает прочитанный спенд в неудачу всей строки. */
-    if (state === 'ok' && j.split && j.split.needed) {
+       и не превращает прочитанный спенд в неудачу всей строки. Решение —
+       из того же ответа, что и готовое чтение (ACL-1288). */
+    if (done.state === 'ok' && done.plan && done.plan.needed) {
       // Ответ разбивки нарочно не возвращается: упавшая разбивка не делает
       // прочитанный спенд неудачей и не портит счёт «N read, M failed».
       await amapRunSplit(job.account, job.btn, per);
     }
-    return state;
+    return done.state;
   } catch (e) {
     var message = e && e.name === 'AbortError' ? 'Read request timed out — check the launcher window' : String(e && e.message || e);
     amapApplyReading(job.account, {state: 'failed', error: message});
@@ -7233,6 +7235,9 @@ async function amapQueueRead(job, per) {
 }
 
 async function amapAwaitReading(account, per, tries) {
+  /* Возвращает состояние чтения И решение о странах: они приезжают одним
+     ответом, и разносить их значило бы спросить сервер второй раз о том же
+     аккаунте — уже с другой суммой в хранилище (ACL-1288). */
   while (tries++ <= 120) {
     await new Promise(function(resolve) { setTimeout(resolve, 3000); });
     var j = await amapReadJson('/account-spend/status?account=' + encodeURIComponent(account)
@@ -7240,7 +7245,9 @@ async function amapAwaitReading(account, per, tries) {
       + '&date_to=' + encodeURIComponent(per.to), {credentials: 'same-origin'});
     var s = j.reading || {};
     amapApplyReading(account, s);
-    if (s.state !== 'running') return s.state === 'ok' ? 'ok' : 'failed';
+    if (s.state !== 'running') {
+      return {state: s.state === 'ok' ? 'ok' : 'failed', plan: j.plan || null};
+    }
   }
   throw new Error('no answer after six minutes — check the launcher window');
 }
