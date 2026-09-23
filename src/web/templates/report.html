@@ -1968,9 +1968,28 @@
        Вторая строка начинается со второй колонки, потому что первая занята
        именем сверху: без этого числа уехали бы на колонку влево и встали
        под чужими заголовками — молча и правдоподобно. */
-    .amap-stacked .amap-tree-line { row-gap: 0.05rem; padding-bottom: 0.3rem; }
-    .amap-stacked .amap-tree-who { grid-column: 1 / -1; }
-    .amap-stacked .amap-tree-line > :nth-child(2) { grid-column-start: 2; }
+    .amap-stacked .amap-tree-line {
+      display: flex; flex-wrap: wrap; align-items: baseline;
+      column-gap: 0.75rem; row-gap: 0.1rem; padding-bottom: 0.35rem;
+    }
+    .amap-stacked .amap-tree-who { flex: 1 0 100%; }
+    /* Колонки на этой ширине не помогают: и сами заголовки таблицы сжаты до
+       «S… A… L… F…». Поэтому числа идут подряд, каждое со своей подписью —
+       решение владельца 23.09, когда он увидел замер с настоящими отступами.
+       Подпись берётся из `data-label` и ставится CSS: в разметку она не
+       попадает, и в однострочной раскладке её нет вовсе. */
+    .amap-stacked .amap-tree-line > :not(.amap-tree-who) {
+      flex: 0 0 auto; padding: 0; text-align: left;
+    }
+    .amap-stacked .amap-tree-line > [data-label]:not(:empty)::before {
+      content: attr(data-label) " "; color: var(--muted);
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    /* Пустую ячейку не показываем вовсе: «CPL» без числа — это обещание
+       числа, которого нет. */
+    .amap-stacked .amap-tree-line > :not(.amap-tree-who):empty { display: none; }
+    .amap-stacked .amap-tree-line .amap-tree-src { display: none; }
+    .amap-stacked .amap-tree-namebox { flex-direction: row; align-items: baseline; gap: 0.35rem; }
     /* Первая колонка узкая (это колонка имени аккаунта), а в ней стрелка,
        уровень, тумблер и имя. Имя важнее всего остального: по нему решают,
        что выключать, поэтому отступы и пометка уровня — самые скромные.
@@ -6280,6 +6299,7 @@ function amapTreeLine(o, adCount) {
   var del = document.createElement('span');
   var stopped = /off|review|reject|not deliver|error/i.test(o.delivery || '');
   del.className = 'amap-tree-del' + (stopped ? ' stopped' : '');
+  del.dataset.label = 'Delivery';
   del.textContent = o.delivery || '';
 
   /* Числа — теми же словами, какими их написала Meta. Имя и состояние говорят,
@@ -6291,10 +6311,12 @@ function amapTreeLine(o, adCount) {
      утверждением, которого страница не делала. */
   var spend = document.createElement('span');
   spend.className = 'amap-tree-num spend';
+  spend.dataset.label = 'Meta spend';
   spend.textContent = o.spend || '';
 
   var res = document.createElement('span');
   res.className = 'amap-tree-num res';
+  res.dataset.label = 'Meta';
   if (o.results) {
     var src = document.createElement('small');
     src.className = 'amap-tree-src';
@@ -6332,10 +6354,16 @@ function amapTreeLine(o, adCount) {
    Spend, (Account spend — это спенд Meta), Leads, FTD, CPL, CPA, CR. */
 var AMAP_ATTR_COLS = ['spend', 'leads', 'deposits', 'cpl', 'cpa', 'cr'];
 
+/* Подписи для узкой раскладки — теми же словами, что в шапке таблицы
+   (ACL-1277). В обычной раскладке они не видны: там слово стоит в шапке. */
+var AMAP_ATTR_LABELS = {spend: 'Spend', leads: 'Leads', deposits: 'FTD',
+                        cpl: 'CPL', cpa: 'CPA', cr: 'CR'};
+
 function amapAttrCell(field) {
   var c = document.createElement('span');
   c.className = 'amap-tree-num attr';
   c.dataset.attr = field;
+  c.dataset.label = AMAP_ATTR_LABELS[field] || field;
   c.textContent = '';
   return c;
 }
@@ -6473,6 +6501,11 @@ if (typeof window !== 'undefined') {
      ширины снимаются, когда блок раскрывают. `toggle` не всплывает, поэтому
      слушаем на погружении. */
   document.addEventListener('toggle', amapTreeColumnsAll, true);
+  /* Билдер раздвигает страницу своим `padding-right`, и события `resize` при
+     этом нет: дерево оставалось с ширинами, снятыми до его открытия, и числа
+     уезжали за правый край таблицы — стоять под заголовками переставали
+     совсем. Ровно тот случай, ради которого написан ACL-1277 (ревью 23.09). */
+  document.addEventListener('acl:builder-drawer', amapTreeColumnsAll);
 }
 
 /* ── Покрывают ли строки спенд аккаунта ────────────────────────────────

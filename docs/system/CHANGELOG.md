@@ -10,25 +10,45 @@ redistribute — the table does not fit its own contents, and the account row is
 squeezed whatever the tree does.
 
 Owner's decision (2026-09-23), choosing between hiding the derived columns and moving
-the name: hide nothing. Where the name column is narrower than 210px — which leaves
-the name under 130px once the caret, the level mark and the on/off switch have taken
+the name: hide nothing. Where the name column is narrower than 210px — which leaves the
+name under about 134px once the caret, the level mark and the on/off switch have taken
 their share — the tree row puts the name on its own full-width line and the numbers on
-the line below, in the same columns with the same widths. Nothing is hidden and
-nothing is re-sized; only the wrap moves. The second line starts at the second column,
-because the first is taken by the name above it: without that the numbers would shift
-one column left and stand under the wrong headers, silently and plausibly.
+the line below.
+
+The numbers on that line do not keep the columns. The first attempt did, and review
+caught what that means with honest cell padding: every numeric cell had about 2px of
+text room and rendered as "$…", "1..", "6..". Which header such a number stands under
+does not matter, because at that width the header row itself reads "S… A… L… F…". So
+the second line lists the numbers in order, each with its own label — SPEND, META
+SPEND, LEADS, FTD, CPL, CPA, CR, DELIVERY, META — and a cell with no value is not
+shown at all, because "CPL" alone promises a number that does not exist. The labels
+come from `data-label` through CSS and never exist in the single-line layout, where the
+word is already in the table head.
 
 The switch is made from the measured column, not from the window width: the width is
 eaten by the sidebar, the docked drawer and the country block's own padding, none of
-which the window knows about. The class goes on the whole tree, so ads drawn later —
-when a campaign is expanded — get the same layout. Above that width the row stays a
-single line: the extra height is not free.
+which the window knows about. The Builder drawer is now listened to as well
+(`acl:builder-drawer`): it widens the page with its own padding and fires no `resize`,
+so the tree kept the widths measured before it opened and its numbers ran past the
+right edge of the table — the exact case this ticket is about. The class goes on the
+whole tree, so ads drawn later — when a campaign is expanded — get the same layout.
+Above that width the row stays a single line, columns and all: the extra height is not
+free.
 
-Measured after the change at 582px: the campaign name box goes from 91px to 546px and
-the ad's from 75px to 530px; tree cells stay within 1.5px of the account row's columns;
-at 982px the layout is untouched. Four new tests in
-tests/test_the_account_tree_on_screen.py cover the switch, the column alignment on the
-second line, the untouched wide layout, and ads expanded after the layout was chosen.
+The test fixture was measuring a table that was not the product's: it put widths on the
+cells and left them the browser's 1px padding, while the page gives every cell
+0.42rem/0.85rem and the tree copies that padding to both sides of its own cells. Every
+width in this 93-test file was therefore 26px per cell too generous — which is how the
+"numbers keep their columns" version looked acceptable. The fixture now builds the
+template's `<colgroup>` and applies the page's own cell padding.
+
+Measured after the change at 582px (honest padding): the campaign name box goes from
+91px to 506px and the ad's from 75px to about 490px, and every number is readable in
+full. At 982px the layout is untouched, columns aligned as before. Six tests in
+tests/test_the_account_tree_on_screen.py cover the switch, that every number says what
+it is and that empty ones vanish, that the labels are the table head's own words, that
+they stay invisible in the wide layout, the untouched wide layout itself, and ads
+expanded after the layout was chosen.
 
 ## One button reads the account: spend always, countries when needed — ACL-1282
 
