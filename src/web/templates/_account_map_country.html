@@ -116,7 +116,7 @@
                     вместе с числом, которое объясняет: «в стране столько-то»
                     рядом с другой суммой — это две правды про разные деньги,
                     и различить их можно только здесь. -#}
-                <span class="amap-live-ok" title="{% if sr.date_from == sr.date_to %}{{ sr.date_from }}{% else %}{{ sr.date_from }}…{{ sr.date_to }}{% endif %} · read {{ sr.finished_at }} · {{ sr.how }}{% if sp and sp.state in ('ok', 'empty') %} · countries {% if sp.spend is not none %}read for {{ sp.spend | fmt_currency(sp.spend_currency) }}{% if sp.spend != sr.spend or (sp.spend_currency or '') != (sr.currency or '') %}, not the {{ sr.spend | fmt_currency(sr.currency) }} above{% endif %}{% else %}read before this spend was known{% endif %}{% endif %}">{{ sr.spend | fmt_currency(sr.currency) }}</span>
+                <span class="amap-live-ok" title="{% if sr.date_from == sr.date_to %}{{ sr.date_from }}{% else %}{{ sr.date_from }}…{{ sr.date_to }}{% endif %} · read {{ sr.finished_at }} · {{ sr.how }}{% if sp and sp.state in ('ok', 'empty') %} · countries {% if sp.spend is not none %}{% set split_txt = sp.spend | fmt_currency(sp.spend_currency) %}{% set spend_txt = sr.spend | fmt_currency(sr.currency) %}read for {{ split_txt }}{% if split_txt != spend_txt %}, not the {{ spend_txt }} above{% endif %}{% else %}read before this spend was known{% endif %}{% endif %}">{{ sr.spend | fmt_currency(sr.currency) }}</span>
               {%- elif sr and sr.state == 'failed' -%}
                 {#- Причина отказа в самой ячейке, а не только в подсказке к
                     кнопке. После перезагрузки страницы живой обработчик её уже

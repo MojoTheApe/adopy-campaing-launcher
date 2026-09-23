@@ -30,7 +30,11 @@ the same "decided against a different reading than the one on screen" fault this
 exists to remove.
 
 The account row's reading tooltip now says which spend its country split explains, and
-says so plainly when that is not the amount above it.
+says so plainly when that is not the amount above it — from the server on page load and
+from the same poll afterwards, because the live repaint rebuilds that cell and would
+otherwise wipe the only notice on screen. Both halves compare the amounts as they are
+written, which is the rule that decides whether to re-read them (to half a cent), so the
+screen cannot accuse itself of a lag the rule ignores.
 
 Measured over five presses on a single-country account with the money changing on the
 fourth: the split is read on press 0 (there is none yet) and on press 3 (the amount
