@@ -6093,9 +6093,7 @@ function amapRefreshSplitNote(account, per) {
       document.querySelectorAll('.amap-live').forEach(function (cell) {
         if (cell.dataset.account !== account) return;
         var value = cell.querySelector('.amap-live-ok');
-        if (!value) return;
-        var base = String(value.title || '').split(' · countries ')[0];
-        value.title = base + amapSplitNote(j.reading, j.split);
+        if (value) value.title = amapReadTitle(j.reading, j.split);
       });
     })
     .catch(function () { /* подпись — не то, ради чего стоит рушить чтение */ });
@@ -6237,6 +6235,15 @@ function amapSplitNote(s, split) {
   return ' · countries read for ' + theirs + (theirs === ours ? '' : ', not the ' + ours + ' above');
 }
 
+function amapReadTitle(s, split) {
+  /* Вся подсказка прочитанной клетки, одним местом. Пересобирать её из
+     самой себя — разрезая по « · countries » — значило привязать обновление
+     к разделителю, который пишет шаблон: поменяй одно, и они разойдутся
+     молча (ревью 23.09). Данные для неё есть целиком в ответе опроса. */
+  return s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how
+       + amapSplitNote(s, split);
+}
+
 function amapApplyReading(account, s, split) {
   document.querySelectorAll('.amap-live').forEach(function (cell) {
     if (cell.dataset.account !== account) return;
@@ -6260,8 +6267,7 @@ function amapApplyReading(account, s, split) {
     if (s.state !== 'ok') { amapSpendFailed(btn, cell, s.error || 'failed', s.shot, s.how); return; }
     cell.innerHTML = '<span class="amap-live-ok"></span>';
     cell.firstChild.textContent = amapMoney(s.spend, s.currency);
-    cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how
-      + amapSplitNote(s, split);
+    cell.firstChild.title = amapReadTitle(s, split);
     btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read spend'; btn.title = 'Read spend again';
     amapPaintTree(row, s);
   });
