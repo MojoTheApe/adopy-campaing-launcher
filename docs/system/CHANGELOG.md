@@ -21,7 +21,13 @@ text room and rendered as "$…", "1..", "6..". Which header such a number stand
 does not matter, because at that width the header row itself reads "S… A… L… F…". So
 the second line lists the numbers in order, each with its own label — SPEND, META
 SPEND, LEADS, FTD, CPL, CPA, CR, DELIVERY, META — and a cell with no value is not
-shown at all, because "CPL" alone promises a number that does not exist. The labels
+shown at all, because "CPL" alone promises a number that does not exist. The workbook's
+"—" counts as no value here: an ad usually has no workbook row of its own, and the line
+would otherwise read "SPEND — LEADS — FTD — CPL — CPA — CR —". In the single-line
+layout the "—" stays, because there it sits in its own column and costs nothing while
+saying "we looked and found nothing". The indent belongs to the whole row, so an ad's
+numbers sit to the right of its campaign's: it is the only thing that says which row a
+numbers line belongs to. The labels
 come from `data-label` through CSS and never exist in the single-line layout, where the
 word is already in the table head.
 

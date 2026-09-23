@@ -1971,8 +1971,13 @@
     .amap-stacked .amap-tree-line {
       display: flex; flex-wrap: wrap; align-items: baseline;
       column-gap: 0.75rem; row-gap: 0.1rem; padding-bottom: 0.35rem;
+      padding-left: 0.6rem;
     }
-    .amap-stacked .amap-tree-who { flex: 1 0 100%; }
+    /* Уступ объявления держит вся строка, а не одна ячейка имени: иначе
+       числа объявления начинаются левее имени его же кампании, и по строке
+       чисел не видно, чья она (ревью 23.09). */
+    .amap-stacked .amap-tree-line.ad { padding-left: 1.6rem; }
+    .amap-stacked .amap-tree-who { flex: 1 0 100%; padding-left: 0 !important; }
     /* Колонки на этой ширине не помогают: и сами заголовки таблицы сжаты до
        «S… A… L… F…». Поэтому числа идут подряд, каждое со своей подписью —
        решение владельца 23.09, когда он увидел замер с настоящими отступами.
@@ -1986,8 +1991,13 @@
       font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
     }
     /* Пустую ячейку не показываем вовсе: «CPL» без числа — это обещание
-       числа, которого нет. */
-    .amap-stacked .amap-tree-line > :not(.amap-tree-who):empty { display: none; }
+       числа, которого нет. Прочерк книги — тот же случай: у объявления строк
+       в книге обычно нет вовсе, и строка читалась бы как «SPEND — LEADS —
+       FTD — CPL — CPA — CR —» (ревью 23.09). В широкой раскладке прочерк
+       остаётся: там он стоит в своей колонке и говорит «смотрели, не
+       нашли», ничего не занимая. */
+    .amap-stacked .amap-tree-line > :not(.amap-tree-who):empty,
+    .amap-stacked .amap-tree-line > .attr.nodata { display: none; }
     .amap-stacked .amap-tree-line .amap-tree-src { display: none; }
     .amap-stacked .amap-tree-namebox { flex-direction: row; align-items: baseline; gap: 0.35rem; }
     /* Первая колонка узкая (это колонка имени аккаунта), а в ней стрелка,
@@ -6300,7 +6310,10 @@ function amapTreeLine(o, adCount) {
   var stopped = /off|review|reject|not deliver|error/i.test(o.delivery || '');
   del.className = 'amap-tree-del' + (stopped ? ' stopped' : '');
   del.dataset.label = 'Delivery';
-  del.textContent = o.delivery || '';
+  /* Обрезаем: строка из пробелов пустой не считается, и в узкой раскладке
+     осталась бы подпись без числа. Сейчас читатель такого не отдаёт — но
+     это одно изменение в разборе страницы (ревью 23.09). */
+  del.textContent = (o.delivery || '').trim();
 
   /* Числа — теми же словами, какими их написала Meta. Имя и состояние говорят,
      ЧТО это; спенд и результаты — зачем это трогать. Пять одинаково включённых
@@ -6312,7 +6325,7 @@ function amapTreeLine(o, adCount) {
   var spend = document.createElement('span');
   spend.className = 'amap-tree-num spend';
   spend.dataset.label = 'Meta spend';
-  spend.textContent = o.spend || '';
+  spend.textContent = (o.spend || '').trim();
 
   var res = document.createElement('span');
   res.className = 'amap-tree-num res';

@@ -1086,6 +1086,16 @@ def _cell_padding():
     return re.search(r"padding:\s*([^;]+);", rule).group(1).strip()
 
 
+def _table_heads():
+    """Заголовки колонок — из самого шаблона, а не списком в тесте."""
+    import re
+
+    src = (TPL / "_account_map_country.html").read_text(encoding="utf-8")
+    head = src[src.index("<thead>"): src.index("</thead>")]
+    return [re.sub(r"<[^>]+>", "", h).strip()
+            for h in re.findall(r"<th[^>]*>(.*?)</th>", head, re.S)]
+
+
 def _real_widths(page, table_px=982):
     """Доли колонок из шаблона на настоящей ширине таблицы.
 
@@ -1381,15 +1391,32 @@ def test_every_number_says_what_it_is_when_the_columns_are_gone(page):
 
 
 def test_the_labels_are_the_words_from_the_table_head(page):
-    """Подпись должна называть то же, что заголовок колонки, иначе одно и то
-    же число на широком и узком экране называется по-разному."""
+    """Подпись называет то же, что заголовок колонки, — иначе одно и то же
+    число на широком и узком экране называется по-разному.
+
+    Три подписи нарочно не совпадают с шапкой, и каждая — решение, а не
+    оплошность:
+
+    * «Account spend» → «Meta spend». В строке аккаунта это прочитанный
+      спенд кабинета; в строке кампании — спенд самой кампании словами Meta.
+    * «Status» → «Delivery». Status строки аккаунта — предупреждение
+      кабинета; здесь стоит доставка Meta.
+    * «Setup» → «Meta». Setup аккаунта — готовность к работе, а в дереве
+      эта колонка несёт результат Meta (ACL-1275).
+
+    Остальные читаются из шаблона: переименуют заголовок — тест это заметит.
+    """
+    heads = _table_heads()
     _real_widths(page, table_px=582)
     _paint(page, [ADSET])
     _open(page)
     labels = page.evaluate("""() => Array.from(
       document.querySelectorAll('.amap-tree-line > [data-label]')).map(c => c.dataset.label)""")
-    assert labels[:8] == ['Spend', 'Meta spend', 'Leads', 'FTD', 'CPL', 'CPA', 'CR', 'Delivery'], labels
-    assert 'Meta' in labels
+    assert labels[1] == 'Meta spend' and heads[2] == 'Account spend', (heads[2], labels[1])
+    assert labels[7] == 'Delivery' and heads[8] == 'Status', (heads[8], labels[7])
+    assert labels[8] == 'Meta' and heads[9] == 'Setup', (heads[9], labels[8])
+    # Книжные числа названы ровно так, как их зовёт шапка.
+    assert [labels[0]] + labels[2:7] == [heads[1]] + heads[3:8], (labels, heads)
 
 
 def test_the_labels_do_not_show_up_in_the_wide_layout(page):
@@ -1428,7 +1455,13 @@ def test_a_wide_table_keeps_the_single_line(page):
 
 
 def test_ads_opened_later_get_the_same_layout(page):
-    """Объявления дорисовываются после того, как раскладку уже выбрали."""
+    """Строка объявления скрыта, когда раскладку выбирают, и обязана встать
+    правильно, когда её показали.
+
+    Дорисовкой это не назвать: `amapPaintTree` строит строки объявлений сразу,
+    а стрелка только снимает `hidden` (ревью 23.09). Проверяется именно
+    «скрытую строку разложило правильно».
+    """
     _real_widths(page, table_px=582)
     ad = dict(AD, parent_id=ADSET["id"])
     _paint(page, [ADSET, ad])
@@ -1444,3 +1477,49 @@ def test_ads_opened_later_get_the_same_layout(page):
         assert g["who"] > g["line"] * 0.9, (
             f"строке объявления досталось {g['who']}px из {g['line']}px"
         )
+
+
+def test_the_workbook_dash_does_not_become_a_label_without_a_number(page):
+    """У объявления строк в книге обычно нет вовсе, и узкая раскладка читалась
+    бы как «SPEND — LEADS — FTD — CPL — CPA — CR —»: шесть подписей, за
+    которыми ничего. В широкой раскладке прочерк остаётся — там он стоит в
+    своей колонке и говорит «смотрели, не нашли»."""
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""() => {
+      document.querySelectorAll('.amap-tree-line [data-attr]').forEach(c => {
+        c.textContent = '—'; c.classList.add('nodata');
+      });
+    }""")
+    shown = page.evaluate("""() => Array.from(
+      document.querySelectorAll('.amap-tree-line [data-attr]'))
+      .filter(c => c.getBoundingClientRect().width > 0).length""")
+    assert shown == 0, f"{shown} подписей без числа осталось на экране"
+
+
+def test_the_numbers_line_keeps_the_tree_indent(page):
+    """Уступ — единственное, чем строка чисел показывает, чья она. Без него
+    числа объявления начинаются левее имени его же кампании."""
+    _real_widths(page, table_px=582)
+    ad = dict(AD, parent_id=ADSET["id"])
+    _paint(page, [ADSET, ad])
+    _open(page)
+    page.evaluate("() => document.querySelector('.amap-tree-caret').click()")
+    got = page.evaluate("""() => {
+      const pick = sel => {
+        const line = document.querySelector(sel);
+        return {num: line.querySelector('.amap-tree-num.spend').getBoundingClientRect().left,
+                line: line.getBoundingClientRect().left,
+                name: line.querySelector('.amap-tree-name').getBoundingClientRect().left};
+      };
+      return {camp: pick('.amap-tree-line:not(.ad)'), ad: pick('.amap-tree-line.ad')};
+    }""")
+    step = got["ad"]["num"] - got["camp"]["num"]
+    assert step > 8, (
+        f"числа объявления сдвинуты относительно кампании на {step:.0f}px — "
+        "по строке чисел не видно, чья она"
+    )
+    # Уступ держит строка целиком, а не одна ячейка имени: иначе числа
+    # встали бы у левого края, одинаково у кампании и у объявления.
+    assert (got["ad"]["num"] - got["ad"]["line"])         > (got["camp"]["num"] - got["camp"]["line"]) + 8
