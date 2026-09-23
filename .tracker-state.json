@@ -380,7 +380,7 @@
       "source_sha": "ab82c7b5e7d542d6dc7b1bcd48a1db0cc84fc401",
       "main_tree": "f24d843d99344981da0e295932f2a296da90e537",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-09-23T14:56:24+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -523,6 +523,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-09-22T22:43:49+00:00"
+      },
+      "277": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 294,
+            "merge_sha": "493d19b19ce78915a1ec3c592c5f3fe009c82aa0",
+            "tree_sha": "2b55d34aba8c28972ecbf1673f5a8b62ef76e0bc"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-09-23T15:15:00+00:00"
       }
     },
     "promotions": {
@@ -828,6 +840,38 @@
           "report": "Artifact ACL-update-recovery-306 of run 35789762929 (report.json: result passed, source 174f4c24bcd3882ba7efcfc7d7ee7710ac3e6968, tree f24d843d99344981da0e295932f2a296da90e537; packages 0.0.0-ci.306 sha256 ab9ed9e36f51c3ef9281a8dde48c98c1b30e36dc305baa7385ecab466e158f43, 0.1.0-alpha.306 sha256 564700c111247f4f63c4015f1197c4398437a2b2bd4d9c3a7a251051fbb75c9e). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof. The country split itself was not exercised against a live Meta ad account in this verification."
         },
         "verified_at": "2026-09-22T22:14:14+00:00"
+      },
+      "294": {
+        "pr": 293,
+        "issues": [
+          277
+        ],
+        "tree_sha": "2b55d34aba8c28972ecbf1673f5a8b62ef76e0bc",
+        "source_sha": "ab82c7b5e7d542d6dc7b1bcd48a1db0cc84fc401",
+        "main_tree": "f24d843d99344981da0e295932f2a296da90e537",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-09-23T14:56:24+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "ab82c7b5e7d542d6dc7b1bcd48a1db0cc84fc401",
+          "tree_sha": "2b55d34aba8c28972ecbf1673f5a8b62ef76e0bc",
+          "checks": [
+            "Stage push CI run 35876085377 on ab82c7b: ACL verification, Windows Python 3.11 and 3.13 suites passed, first attempt, no reruns.",
+            "Exact-stage installer run 35876085386 passed build/install/launch/repair/uninstall.",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+            "Recovered application restarts and synthetic data remains byte-identical",
+            "PR #293 checks on head 1e8a77a: all eleven passed, first attempt.",
+            "Independent review across three rounds ended in approve at 1e8a77a. Round 1 found the Builder drawer never re-measured the tree and that the test fixture was 26px per cell too generous, which had made an unreadable layout look acceptable; both were fixed and re-verified by the reviewer's own measurements (every cell scrollWidth <= clientWidth at 582 and 668)."
+          ],
+          "report": "Artifact ACL-update-recovery-315 of run 35876085386 (report.json: result passed, source ab82c7b5e7d542d6dc7b1bcd48a1db0cc84fc401, tree 2b55d34aba8c28972ecbf1673f5a8b62ef76e0bc; packages 0.0.0-ci.315 sha256 ce11be5962dc10accb63dd6c44c7804306bace5028882442ff20ac1354623c4e, 0.1.0-alpha.315 sha256 efb35d79e380a99c4f943ba837488d1f48ddb805b43416007bc5dd182306c9db). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof. The change is display-only in the account tree; it was verified in a browser harness, not on a manager's machine."
+        },
+        "verified_at": "2026-09-23T14:57:16+00:00"
       }
     }
   }
