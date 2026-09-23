@@ -244,10 +244,53 @@ def test_the_decision_uses_the_reading_it_was_given():
     """Перечитать хранилище значит решать про другое чтение, чем то, что
     уедет на экран: между двумя чтениями успевает начаться новое, и решение
     приняли бы по записи «читаю» — без суммы (ревью 23.09)."""
-    assert "def _split_plan(account: str, date_from: str, date_to: str, *, reading=None, split=None)" in APP
+    assert "def _split_plan(" in APP and "reading=_NOT_GIVEN, split=_NOT_GIVEN" in APP
     status = APP[APP.index('@app.get("/account-spend/status")'):]
     status = status[:status.index("@app.", 10)]
     assert "reading=reading" in status and "split=answer[\"split\"]" in status, (
         "опрос состояния решает по перечитанному хранилищу, а не по тому, "
         "что сам же отдаёт"
+    )
+
+
+def test_the_note_about_the_split_survives_the_live_repaint():
+    """Подсказку про разбивку рисует и сервер, и клиент.
+
+    `amapApplyReading` собирает клетку заново на каждом ответе опроса, и без
+    своей половины подписи первый же удачный опрос стирал бы её. А стереть —
+    значит вернуть ровно ту беду, ради которой писана ACL-1288: свежая сумма
+    рядом с разбивкой от старой, и на экране это выглядит согласованным.
+    """
+    assert "function amapSplitNote(" in PAGE
+    apply = PAGE.split("function amapApplyReading(", 1)[1]
+    apply = apply[:apply.index(chr(10) + "}" + chr(10))]
+    assert "amapSplitNote(s, split)" in apply, (
+        "перерисовка клетки теряет подпись про разбивку"
+    )
+    for caller in ("function amapPollSpend(", "async function amapAwaitReading("):
+        body = PAGE.split(caller, 1)[1]
+        body = body[:body.index(chr(10) + "}" + chr(10))]
+        assert "amapApplyReading(account, s, j.split)" in body, (
+            f"{caller.strip()} не передаёт разбивку, хотя получил её тем же ответом"
+        )
+
+
+def test_a_fresh_split_renames_the_sum_it_explains():
+    """Разбивку только что сняли — подсказка обязана говорить про новую сумму."""
+    body = PAGE.split("function amapRunSplit(", 1)[1]
+    body = body[:body.index(chr(10) + "}" + chr(10))]
+    assert "amapRefreshSplitNote(account, per)" in body
+    assert "function amapRefreshSplitNote(" in PAGE
+
+
+def test_both_halves_measure_the_same_money():
+    """Правило перечитывания считает 10.001 и 10.00 одними деньгами (до
+    половины копейки). Подсказка сравнивает нарисованные строки — иначе
+    экран обвинял бы себя в отставании, которого правило не видит."""
+    note = PAGE.split("function amapSplitNote(", 1)[1][:1200]
+    assert "theirs === ours" in note, "подсказка сравнивает числа, а не строки"
+    cell = ROW[ROW.index('class="amap-live-ok"'):]
+    cell = cell[:cell.index("</span>")]
+    assert "split_txt != spend_txt" in cell, (
+        "серверная половина сравнивает числа, а не то, что видно на экране"
     )
