@@ -16,6 +16,22 @@ no longer answers about the split at all — there is nothing to compare at that
 because the record it writes says "reading" and carries no amount. While a read is in
 flight no decision is made, which is the same rule stated once instead of twice.
 
+Moving the decision to the status route made a reload capable of building a report on
+its own: `amapResumeReadings` resumes a read that was in flight, through the same poll,
+and would have acted on the plan it now receives. Reports inside a live ad account are
+something a person asks for, so the poll carries a `pressed` flag and only a press
+starts the split; a resumed poll shows what was read and stops there.
+
+The decision is also computed from the reading and split the route already has in hand
+instead of reading both stores a second time. That removes a doubled read on a poll
+that runs every three seconds, and a real race: between the two reads a new press could
+land, and the plan would then be computed against a "reading" record with no amount —
+the same "decided against a different reading than the one on screen" fault this change
+exists to remove.
+
+The account row's reading tooltip now says which spend its country split explains, and
+says so plainly when that is not the amount above it.
+
 Measured over five presses on a single-country account with the money changing on the
 fourth: the split is read on press 0 (there is none yet) and on press 3 (the amount
 differs), and on no other press. Before this change it was read on press 0 and press 4

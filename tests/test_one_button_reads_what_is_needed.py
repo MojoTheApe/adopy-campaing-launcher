@@ -154,6 +154,8 @@ def test_a_stored_split_from_an_older_version_still_loads():
 # это правило на странице значило бы держать его в двух местах: строка и
 # «Read all» спрашивают одно и то же и обязаны получать один ответ.
 
+import time  # noqa: E402
+
 import pytest  # noqa: E402
 
 from src.analysis_agent import account_spend as sp  # noqa: E402
@@ -345,3 +347,92 @@ def test_a_reading_that_failed_does_not_decide_anything(stores):
     put_split("Doc19", "2026-09-22 12:04:00")
     put_spend("Doc19", "2026-09-22 13:00:00", spend=None, state="failed")
     assert app._split_plan("Doc19", DAY, DAY)["needed"] is False
+
+
+# ── Через сами маршруты, а не мимо них ────────────────────────────────────
+#
+# Ревью 23.09: тест выше пишет показание и тут же зовёт `_split_plan` сам,
+# поэтому он останется зелёным, даже если решение вернуть обратно в момент
+# запуска чтения — то есть ровно к той ошибке, ради которой он написан.
+# Здесь нажатие проходит теми же двумя маршрутами, что и с экрана.
+
+import asyncio  # noqa: E402
+
+import httpx  # noqa: E402
+
+
+def _press(reader):
+    """Нажатие «Read spend»: запуск чтения и опрос, как их делает страница."""
+    async def run():
+        transport = httpx.ASGITransport(app=app.app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            started = await client.post("/account-spend/read", data={
+                "account": "Doc19", "date_from": DAY, "date_to": DAY, "span": ""})
+            # Экран опрашивает состояние, пока чтение не кончится; здесь то же
+            # самое, только без трёхсекундных пауз.
+            for _ in range(500):
+                status = await client.get("/account-spend/status", params={
+                    "account": "Doc19", "date_from": DAY, "date_to": DAY})
+                if (status.json().get("reading") or {}).get("state") != "running":
+                    break
+                time.sleep(0.01)
+            return started.json(), status.json()
+
+    sp._RUNNING.clear()
+    with_reader = sp.start_read
+    try:
+        sp.start_read = lambda a, f, t: with_reader(a, f, t, reader=reader)
+        return asyncio.run(run())
+    finally:
+        sp.start_read = with_reader
+
+
+def _reads(amount):
+    def reader(account, date_from, date_to):
+        return sp.SpendReading(account=account, date_from=date_from, date_to=date_to,
+                               state="ok", spend=amount, currency="$")
+    return reader
+
+
+def test_the_routes_decide_about_countries_only_when_the_reading_is_done(stores):
+    """Запуск чтения про страны не отвечает: сравнивать ещё не с чем."""
+    put_spend, put_split = stores
+    links.link("Doc19", "country", "Saudi Arabia")
+    started, _ = _press(_reads(10.0))
+    assert started["ok"] and "split" not in started and "plan" not in started, (
+        "решение вернулось в маршрут запуска — значит снова сравнивает "
+        "прошлую сумму, а не ту, что увидит человек"
+    )
+
+
+def test_the_status_route_asks_for_countries_on_the_press_that_changed_the_money(stores):
+    """То же отставание, но целиком через маршруты (ACL-1288)."""
+    put_spend, put_split = stores
+    links.link("Doc19", "country", "Saudi Arabia")
+
+    def press(amount):
+        _started, status = _press(_reads(amount))
+        plan = status.get("plan") or {}
+        if plan.get("needed"):
+            put_split("Doc19", sp._now())
+        return bool(plan.get("needed"))
+
+    asked = [press(a) for a in (10.0, 10.0, 41.5, 41.5)]
+    assert asked == [True, False, True, False], (
+        f"страны спрошены на {asked}: первое чтение и то, где сумма другая"
+    )
+
+
+def test_the_row_says_which_spend_its_country_split_explains():
+    """Критерий из тикета: по экрану должно быть видно, к какому числу
+    относится пострановая разбивка. «В стране столько-то» рядом с другой
+    суммой — две правды про разные деньги."""
+    row = (ROOT / "src" / "web" / "templates" / "_account_map_country.html").read_text(encoding="utf-8")
+    cell = row[row.index('class="amap-live-ok"'):]
+    cell = cell[:cell.index("</span>")]
+    assert "countries" in cell and "sp.spend" in cell, (
+        "подсказка не говорит, какую сумму объясняет разбивка"
+    )
+    assert "not the" in cell, (
+        "расхождение разбивки со спендом ничем не отмечено"
+    )
