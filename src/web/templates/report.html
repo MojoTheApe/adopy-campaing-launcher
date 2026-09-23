@@ -1978,6 +1978,10 @@
        чисел не видно, чья она (ревью 23.09). */
     .amap-stacked .amap-tree-line.ad { padding-left: 1.6rem; }
     .amap-stacked .amap-tree-who { flex: 1 0 100%; padding-left: 0 !important; }
+    /* У объявления уступ сильнее (0,3,0) и стоит ниже — без своего правила
+       он оставался на ячейке имени, и имя объявления уезжало на уровень
+       глубже собственной строки чисел (ревью 23.09). */
+    .amap-stacked .amap-tree-line.ad .amap-tree-who { padding-left: 0 !important; }
     /* Колонки на этой ширине не помогают: и сами заголовки таблицы сжаты до
        «S… A… L… F…». Поэтому числа идут подряд, каждое со своей подписью —
        решение владельца 23.09, когда он увидел замер с настоящими отступами.
@@ -6439,12 +6443,28 @@ function amapFillAttribution(box, objects, data) {
     }
     line.querySelectorAll('.amap-tree-num.attr').forEach(function (cell) {
       var v = got ? got[cell.dataset.attr] : null;
-      var has = v !== null && v !== undefined && v !== '';
-      cell.textContent = has ? String(v) : '—';
+      // Пробел значением не считается: в узкой раскладке он оставил бы
+      // подпись без числа (ревью 23.09).
+      var text = v === null || v === undefined ? '' : String(v).trim();
+      var has = text !== '';
+      cell.textContent = has ? text : '—';
       cell.classList.toggle('nodata', !has);
       cell.title = got ? 'From the stats workbook' : why;
     });
   });
+  /* Прочерки в узкой раскладке спрятаны, и «книга не прочиталась» выглядело
+     бы там ровно как «в книге нет строк» — то есть никак. Поломку говорим
+     словами, одной строкой на всё дерево, а не шестью клетками на строку. */
+  var broken = box.querySelector('.amap-tree-attr-err');
+  if (broken) broken.remove();
+  if (!data || !data.ok) {
+    var note = document.createElement('div');
+    note.className = 'amap-tree-note amap-tree-attr-err';
+    note.textContent = (data && data.error) || 'Workbook numbers could not be loaded';
+    note.title = 'The numbers from the stats workbook are missing because they could '
+               + 'not be read — not because this account has none.';
+    box.appendChild(note);
+  }
 }
 
 function amapLoadAttribution(row, box, objects) {

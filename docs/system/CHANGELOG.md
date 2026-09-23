@@ -31,6 +31,13 @@ numbers line belongs to. The labels
 come from `data-label` through CSS and never exist in the single-line layout, where the
 word is already in the table head.
 
+A workbook that could not be read now says so in words, once per tree, instead of six
+dashes per row: with the dashes hidden, a broken pipe looked exactly like "this row has
+no workbook numbers", and the reason lived only in the tooltip of a cell that is no
+longer there. The stacked row is variable-height by design — about 28px with nothing to
+show, 40px with Meta's numbers and about 55px once the workbook numbers arrive, against
+34px in the single-line layout — so an open tree reflows a beat after a reading lands.
+
 The switch is made from the measured column, not from the window width: the width is
 eaten by the sidebar, the docked drawer and the country block's own padding, none of
 which the window knows about. The Builder drawer is now listened to as well

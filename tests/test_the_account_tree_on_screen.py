@@ -1511,10 +1511,17 @@ def test_the_numbers_line_keeps_the_tree_indent(page):
         const line = document.querySelector(sel);
         return {num: line.querySelector('.amap-tree-num.spend').getBoundingClientRect().left,
                 line: line.getBoundingClientRect().left,
+                who: line.querySelector('.amap-tree-who').getBoundingClientRect().left,
                 name: line.querySelector('.amap-tree-name').getBoundingClientRect().left};
       };
       return {camp: pick('.amap-tree-line:not(.ad)'), ad: pick('.amap-tree-line.ad')};
     }""")
+    # Имя объявления стоит там же, где начинается его строка чисел: уступ
+    # считается один раз, а не дважды (строкой и её же ячейкой имени).
+    assert abs(got["ad"]["who"] - got["ad"]["num"]) < 1.5, (
+        f"имя объявления на {got['ad']['who'] - got['ad']['num']:.0f}px правее "
+        "собственной строки чисел — уступ посчитан дважды"
+    )
     step = got["ad"]["num"] - got["camp"]["num"]
     assert step > 8, (
         f"числа объявления сдвинуты относительно кампании на {step:.0f}px — "
@@ -1523,3 +1530,55 @@ def test_the_numbers_line_keeps_the_tree_indent(page):
     # Уступ держит строка целиком, а не одна ячейка имени: иначе числа
     # встали бы у левого края, одинаково у кампании и у объявления.
     assert (got["ad"]["num"] - got["ad"]["line"])         > (got["camp"]["num"] - got["camp"]["line"]) + 8
+
+
+def test_a_workbook_that_could_not_be_read_says_so(page):
+    """«Книга не прочиталась» и «в книге нет строк» — разные вещи.
+
+    В узкой раскладке прочерки спрятаны, и поломка выглядела бы там ровно
+    как отсутствие строк, то есть никак: причина жила только в подсказке к
+    клетке, которой больше нет.
+    """
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""() => {
+      const box = document.querySelector('.amap-tree-inner');
+      amapFillAttribution(box, [], {ok: false, error: 'Workbook numbers could not be loaded'});
+    }""")
+    got = page.evaluate("""() => {
+      const n = document.querySelector('.amap-tree-attr-err');
+      return n ? {text: n.textContent, shown: n.getBoundingClientRect().width > 0} : null;
+    }""")
+    assert got and got["shown"], "поломка книги не сказана словами"
+    assert "could not be loaded" in got["text"]
+
+
+def test_the_note_goes_away_when_the_workbook_answers(page):
+    """Иначе одна неудача осталась бы на экране навсегда."""
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""() => {
+      const box = document.querySelector('.amap-tree-inner');
+      amapFillAttribution(box, [], {ok: false, error: 'nope'});
+      amapFillAttribution(box, [], {ok: true, campaigns: {}, ads: {}});
+    }""")
+    assert page.evaluate("() => document.querySelectorAll('.amap-tree-attr-err').length") == 0
+
+
+def test_a_blank_workbook_value_is_not_a_value(page):
+    """Пробел из книги не должен оставлять подпись без числа."""
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""(name) => {
+      const box = document.querySelector('.amap-tree-inner');
+      amapFillAttribution(box, [], {ok: true, ads: {},
+        campaigns: {[name]: {spend: ' ', leads: '181'}}});
+    }""", ADSET["name"])
+    shown = page.evaluate("""() => Array.from(
+      document.querySelectorAll('.amap-tree-line [data-attr]'))
+      .filter(c => c.getBoundingClientRect().width > 0)
+      .map(c => c.dataset.attr + '=' + c.textContent.trim())""")
+    assert shown == ['leads=181'], shown
