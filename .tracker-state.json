@@ -369,6 +369,22 @@
         ],
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "recorded_at": "2026-09-23T14:41:32+00:00"
+      },
+      "295": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "claude-subagent-review-pr295 (independent, did not write or edit code; three rounds: approve-with-nits at e364c3b, request-changes at 14041b5, approve at 7716b51)",
+        "implementer": "claude implementer session",
+        "head_sha": "7716b51032702f77150ef977f39fa16864dc93ff",
+        "base_sha": "ab82c7b5e7d542d6dc7b1bcd48a1db0cc84fc401",
+        "tree_sha": "01f20c7c0ba89c075d29bfb6ae18dfa7e2ed3687",
+        "main_sha": "493d19b19ce78915a1ec3c592c5f3fe009c82aa0",
+        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/295 (review record comment)",
+        "issues": [
+          288
+        ],
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "recorded_at": "2026-09-23T16:49:08+00:00"
       }
     },
     "stage": {
