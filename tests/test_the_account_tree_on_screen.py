@@ -1582,3 +1582,44 @@ def test_a_blank_workbook_value_is_not_a_value(page):
       .filter(c => c.getBoundingClientRect().width > 0)
       .map(c => c.dataset.attr + '=' + c.textContent.trim())""")
     assert shown == ['leads=181'], shown
+
+
+def test_the_workbook_failure_is_said_in_both_layouts(page):
+    """Решение осознанное, а не побочное: в широкой раскладке прочерки с
+    подсказками остаются, но причина, живущая только в подсказке, — это
+    причина, которую никто не читает. Строка стоит в обеих раскладках."""
+    _real_widths(page, table_px=982)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""() => amapFillAttribution(
+      document.querySelector('.amap-tree-inner'), [], {ok: false, error: 'no workbook'})""")
+    got = page.evaluate("""() => {
+      const n = document.querySelector('.amap-tree-attr-err');
+      const dash = document.querySelector('.amap-tree-num.attr');
+      return {shown: !!n && n.getBoundingClientRect().width > 0,
+              dash: dash.textContent.trim(), tip: dash.title,
+              stacked: !!document.querySelector('.amap-stacked')};
+    }""")
+    assert not got["stacked"], "широкая раскладка неожиданно разложилась"
+    assert got["shown"], "в широкой раскладке поломка книги молчит"
+    assert got["dash"] == "—" and got["tip"], "прочерк и его подсказка пропали"
+
+
+def test_the_failure_line_stands_with_the_numbers_not_under_the_log(page):
+    """Остальные оговорки дерева стоят до журнала; эта приходит позже, и без
+    вставки на место падала под свёрнутый «What was changed here»."""
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""() => amapFillAttribution(
+      document.querySelector('.amap-tree-inner'), [], {ok: false, error: 'no workbook'})""")
+    order = page.evaluate("""() => {
+      const box = document.querySelector('.amap-tree-inner');
+      const kids = Array.from(box.children);
+      const log = box.querySelector('.amap-tree-log');
+      return {note: kids.indexOf(box.querySelector('.amap-tree-attr-err')),
+              log: log ? kids.indexOf(log) : -1};
+    }""")
+    assert order["note"] >= 0
+    if order["log"] >= 0:
+        assert order["note"] < order["log"], "оговорка встала под журналом"

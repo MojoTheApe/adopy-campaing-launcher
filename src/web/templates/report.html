@@ -6481,7 +6481,11 @@ function amapFillAttribution(box, objects, data) {
     note.textContent = (data && data.error) || 'Workbook numbers could not be loaded';
     note.title = 'The numbers from the stats workbook are missing because they could '
                + 'not be read — not because this account has none.';
-    box.appendChild(note);
+    /* Рядом с числами, к которым относится, а не под свёрнутым журналом:
+       остальные оговорки дерева встают до него, а эта приходит позже, когда
+       блок уже собран. `insertBefore(node, null)` — это append, поэтому
+       отдельной ветки не нужно (ревью 23.09). */
+    box.insertBefore(note, box.querySelector('.amap-tree-log') || null);
   }
 }
 
