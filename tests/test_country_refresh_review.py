@@ -21,6 +21,9 @@ var amapReadAllBusy = false;
 var period = {from: '2026-09-01', to: '2026-09-15', span: ''};
 function amapPeriod() { return period; }
 function amapPaintTree() {}
+// Заглушка на будущее: ни один тест здесь не доводит чтение до отказа. Если
+// такой появится, настоящая функция ещё и перевешивает пометку об упавших
+// странах — заглушка этого не делает, и проверять придётся по-настоящему.
 function amapSpendFailed(btn, cell, why) { window._failed = [btn, cell, why]; }
 """
 
@@ -125,6 +128,12 @@ def test_a_second_attempt_clears_the_previous_country_failure(page):
     page.evaluate('amapRunSplit("Demo", document.querySelector("#read"), period)')
     expect(page.locator('#cell .amap-split-bad')).to_have_count(0, timeout=10000)
     expect(page.locator('#read')).to_have_text('Read spend')
+    # И подпись про объяснённую сумму — весь путь целиком, от чтения до
+    # клетки. Ревью 23.09: без этого можно выкинуть вызов обновления, и
+    # подсказка объясняла бы прежние деньги вечно, ничем себя не выдав.
+    expect(page.locator('#cell .amap-live-ok')).to_have_attribute(
+        'title', '2026-09-01…2026-09-15 · read 2026-09-22 18:00:00 · rpa'
+                 ' · countries read for $41.50', timeout=10000)
 
 
 # ── Какую сумму объясняет разбивка (ACL-1288, проверено исполнением) ──────
@@ -214,8 +223,53 @@ def test_a_reading_that_is_running_leaves_the_note_alone(page):
     before = _title(page)
     _status(page, dict(OK_READING, state='running', spend=None), None)
     page.evaluate('amapRefreshSplitNote("Demo", period)')
-    page.wait_for_timeout(300)
     assert _title(page) == before
+    # Молчание обязано быть решением, а не падением: `amapRefreshSplitNote`
+    # глотает свои ошибки, и «ничего не изменилось» выглядит одинаково у
+    # правильного пропуска и у сломанного кода (ревью 23.09). Тот же вызов
+    # на дочитанном показании обязан подпись переписать.
+    _status(page, OK_READING, {'state': 'ok', 'spend': 41.5, 'spend_currency': '$',
+                               'spend_at': '2026-09-22 18:00:00'})
+    page.evaluate('amapRefreshSplitNote("Demo", period)')
+    assert _title(page) != before and 'countries read for $41.50' in _title(page)
+
+
+def test_the_refresh_writes_every_row_of_this_account_and_no_other(page):
+    """Аккаунт в двух странах стоит в двух блоках, а соседний — чужой.
+
+    Перебор строк в `amapRefreshSplitNote` проверяется отдельно от
+    `amapApplyReading`: это разные переборы, и сломать их можно порознь.
+    """
+    page.evaluate("""() => {
+      const row = document.querySelector('#row');
+      const mine = document.querySelector('#cell').cloneNode(true);
+      mine.id = 'mine2';
+      const other = document.querySelector('#cell').cloneNode(true);
+      other.id = 'other';
+      other.dataset.account = 'Someone else';
+      other.querySelector('.amap-live-ok').title = 'do not touch';
+      row.appendChild(mine); row.appendChild(other);
+    }""")
+    _status(page, OK_READING, {'state': 'ok', 'spend': 41.5, 'spend_currency': '$',
+                               'spend_at': '2026-09-22 18:00:00'})
+    page.evaluate('amapRefreshSplitNote("Demo", period)')
+    got = page.evaluate("""() => ({
+      mine: document.querySelector('#cell .amap-live-ok').title,
+      mine2: document.querySelector('#mine2 .amap-live-ok').title,
+      other: document.querySelector('#other .amap-live-ok').title})""")
+    assert 'countries read for $41.50' in got['mine']
+    assert got['mine2'] == got['mine'], "вторая строка того же аккаунта осталась прежней"
+    assert got['other'] == 'do not touch', "переписали чужую строку"
+
+
+def test_a_one_day_reading_keeps_the_way_the_server_writes_it(page):
+    """Сервер пишет один день одним днём. Клиент собирает подсказку заново и
+    не имеет права превращать её в «2026-09-01…2026-09-01»: человек видит,
+    как подсказка меняется на чтении тех же дат."""
+    one_day = dict(OK_READING, date_from='2026-09-01', date_to='2026-09-01')
+    page.evaluate("""(s) => amapApplyReading('Demo', s.reading, s.split)""",
+                  {'reading': one_day, 'split': None})
+    assert _title(page).startswith('2026-09-01 · read '), _title(page)
 
 
 def test_the_note_is_written_on_every_row_of_the_account(page):
@@ -234,3 +288,13 @@ def test_the_note_is_written_on_every_row_of_the_account(page):
       document.querySelectorAll('.amap-live .amap-live-ok')).map(n => n.title)""")
     assert len(titles) == 2 and titles[0] == titles[1], titles
     assert 'not the $41.50 above' in titles[1]
+
+
+def test_an_empty_report_is_an_answer_and_explains_its_spend(page):
+    """«За период ничего не крутилось» — прочитано, а не пусто: `amapRunSplit`
+    считает `empty` успехом, и подпись обязана говорить про ту же сумму."""
+    page.evaluate("""(s) => amapApplyReading('Demo', s.reading, s.split)""", {
+        'reading': OK_READING,
+        'split': {'state': 'empty', 'rows': [], 'spend': 41.5, 'spend_currency': '$',
+                  'spend_at': '2026-09-22 18:00:00'}})
+    assert 'countries read for $41.50' in _title(page)

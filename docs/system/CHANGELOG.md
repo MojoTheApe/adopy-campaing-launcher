@@ -22,6 +22,21 @@ is still running leaving it alone, and both rows of a two-country account carryi
 same note. Breaking the repaint on purpose turns five of them red; the source greps it
 replaced stayed green through the same break.
 
+Review then mutation-tested the result and found four properties that no check could
+fail on: that a finished split refreshes the note at all (breaking the call left the
+tooltip explaining the old money forever — the ACL-1288 symptom, silently restored),
+that the two pollers hand on the split they received, that the server half compares the
+amounts as written rather than as numbers (with numbers, an account at 41.502 against
+41.50 is accused of a lag the rule deliberately ignores), and that the refresh walks
+every row of its account and no other. Each is now pinned, and each mutation turns
+exactly one test red.
+
+Fixing that surfaced a real drift: the server writes a single-day reading as one date,
+while the rebuilt title always wrote `from…to`. The old implementation preserved it by
+accident, because it kept the existing text and only replaced the tail. Building from
+data made the tooltip change under the reader on a reading of the same dates, so
+`amapReadTitle` now writes one day as one day.
+
 `amapRefreshSplitNote` also stopped rebuilding the cell's title by splitting the live
 one on `' · countries '` and now builds it from the reading it already holds, through a
 shared `amapReadTitle`. Splitting on a separator the template writes couples the two
