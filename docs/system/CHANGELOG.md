@@ -1,5 +1,35 @@
 # System history
 
+## The tree name gets its own line where eleven columns do not fit — ACL-1277
+
+The remaining half of ACL-1277: on a laptop with the Builder drawer docked open the
+campaign name in the tree had about 91px at 1280 and 115px at 1366. Measured with the
+real fragment: the ten columns other than the name need 660px by their content alone,
+while the table gets 582px at 1280 and 668px at 1366. There is no width to
+redistribute — the table does not fit its own contents, and the account row is
+squeezed whatever the tree does.
+
+Owner's decision (2026-09-23), choosing between hiding the derived columns and moving
+the name: hide nothing. Where the name column is narrower than 210px — which leaves
+the name under 130px once the caret, the level mark and the on/off switch have taken
+their share — the tree row puts the name on its own full-width line and the numbers on
+the line below, in the same columns with the same widths. Nothing is hidden and
+nothing is re-sized; only the wrap moves. The second line starts at the second column,
+because the first is taken by the name above it: without that the numbers would shift
+one column left and stand under the wrong headers, silently and plausibly.
+
+The switch is made from the measured column, not from the window width: the width is
+eaten by the sidebar, the docked drawer and the country block's own padding, none of
+which the window knows about. The class goes on the whole tree, so ads drawn later —
+when a campaign is expanded — get the same layout. Above that width the row stays a
+single line: the extra height is not free.
+
+Measured after the change at 582px: the campaign name box goes from 91px to 546px and
+the ad's from 75px to 530px; tree cells stay within 1.5px of the account row's columns;
+at 982px the layout is untouched. Four new tests in
+tests/test_the_account_tree_on_screen.py cover the switch, the column alignment on the
+second line, the untouched wide layout, and ads expanded after the layout was chosen.
+
 ## One button reads the account: spend always, countries when needed — ACL-1282
 
 The account row had "Read spend" and "Countries". Both asked the same account about

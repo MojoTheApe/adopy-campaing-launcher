@@ -156,7 +156,8 @@ def test_the_tree_lands_under_its_own_account(page):
       return {cls: tr.className, span: tr.firstElementChild.colSpan,
               lines: tr.querySelectorAll('.amap-tree-line').length};
     }""")
-    assert got["cls"] == "amap-tree"
+    # ACL-1277 дописывает сюда `amap-stacked`, когда колонке имени тесно.
+    assert got["cls"].split()[0] == "amap-tree"
     assert got["span"] == COLUMNS, "блок не на всю ширину — таблица разъедется"
     assert got["lines"] == 2
 
@@ -284,7 +285,7 @@ def test_the_next_account_row_is_not_disturbed(page):
     _paint(page, [ADSET, AD])
     assert page.evaluate(
         "() => document.getElementById('after').previousElementSibling.className"
-    ) == "amap-tree"
+    ).split()[0] == "amap-tree"
 
 
 # ── когда показывать нечего ───────────────────────────────────────────────
@@ -1274,3 +1275,93 @@ def test_the_two_buttons_fit_the_narrowest_real_width(page):
         f"кнопки вышли за край колонки на {got['right'] - got['cellRight']:.0f}px"
     )
     assert min(got["widths"]) > 0, "кнопка сжалась в ничто"
+
+
+# ── Узкий экран: имя своей строкой (ACL-1277) ─────────────────────────────
+#
+# Замер 23.09, настоящий фрагмент карты: десяти колонкам кроме имени нужно по
+# содержимому 660px. С открытым билдером таблица получает 582px на ноутбуке
+# 1280 и 668px на 1366 — имени не остаётся ничего, и перераспределением долей
+# это не чинится. Владелец выбрал не прятать числа: имя уходит на свою строку.
+
+
+def test_a_narrow_table_puts_the_name_on_its_own_line(page):
+    """Имя получает всю ширину таблицы, а не 91px из колонки."""
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    got = page.evaluate("""() => {
+      const line = document.querySelector('.amap-tree-line');
+      const who = line.querySelector('.amap-tree-who');
+      const name = line.querySelector('.amap-tree-name');
+      const first = line.children[1];
+      return {stacked: !!line.closest('.amap-stacked'),
+              who: Math.round(who.getBoundingClientRect().width),
+              name: Math.round(name.getBoundingClientRect().width),
+              line: Math.round(line.getBoundingClientRect().width),
+              nameTop: Math.round(name.getBoundingClientRect().top),
+              numTop: Math.round(first.getBoundingClientRect().top)};
+    }""")
+    assert got["stacked"], "узкая таблица осталась в одну строку"
+    assert got["who"] > got["line"] * 0.9, (
+        f"имя заняло {got['who']}px из {got['line']}px — это не своя строка"
+    )
+    assert got["name"] >= 400, f"имени досталось {got['name']}px"
+    assert got["numTop"] > got["nameTop"], "числа остались на строке имени"
+
+
+def test_the_numbers_keep_their_own_headers_when_the_name_moves_up(page):
+    """Главная опасность переноса: числа уезжают на колонку влево и встают
+    под чужими заголовками — молча и правдоподобно."""
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    same = page.evaluate("""() => {
+      const acc = Array.from(document.getElementById('acc').children);
+      const cells = Array.from(document.querySelector('.amap-tree-line').children);
+      // Ячейки дерева, кроме имени, стоят под колонками аккаунта 2..11.
+      return cells.slice(1).map((c, i) => Math.abs(
+        c.getBoundingClientRect().left - acc[i + 1].getBoundingClientRect().left));
+    }""")
+    assert max(same) < 1.5, f"колонки разъехались: {[round(x, 1) for x in same]}"
+
+
+def test_a_wide_table_keeps_the_single_line(page):
+    """На своём экране строка остаётся одной: лишняя высота даром никому."""
+    _real_widths(page, table_px=982)
+    _paint(page, [ADSET])
+    _open(page)
+    got = page.evaluate("""() => {
+      const line = document.querySelector('.amap-tree-line');
+      const who = line.querySelector('.amap-tree-who');
+      const first = line.children[1];
+      return {stacked: !!line.closest('.amap-stacked'),
+              who: Math.round(who.getBoundingClientRect().width),
+              line: Math.round(line.getBoundingClientRect().width),
+              lineH: Math.round(line.getBoundingClientRect().height),
+              sameRow: first.getBoundingClientRect().top
+                       < who.getBoundingClientRect().bottom};
+    }""")
+    assert not got["stacked"], "широкая таблица зря разложилась на две строки"
+    assert got["who"] < got["line"] * 0.4, "имя заняло строку целиком без нужды"
+    assert got["sameRow"], "числа уехали под строку имени"
+    assert got["lineH"] < 40, f"строка выросла до {got['lineH']}px"
+
+
+def test_ads_opened_later_get_the_same_layout(page):
+    """Объявления дорисовываются после того, как раскладку уже выбрали."""
+    _real_widths(page, table_px=582)
+    ad = dict(AD, parent_id=ADSET["id"])
+    _paint(page, [ADSET, ad])
+    _open(page)
+    page.evaluate("() => document.querySelector('.amap-tree-caret').click()")
+    got = page.evaluate("""() => Array.from(document.querySelectorAll('.amap-tree-line.ad')).map(l => {
+      const who = l.querySelector('.amap-tree-who');
+      return {who: Math.round(who.getBoundingClientRect().width),
+              line: Math.round(l.getBoundingClientRect().width)};
+    })""")
+    assert got, "объявления не раскрылись"
+    for g in got:
+        assert g["who"] > g["line"] * 0.9, (
+            f"строке объявления досталось {g['who']}px из {g['line']}px"
+        )
