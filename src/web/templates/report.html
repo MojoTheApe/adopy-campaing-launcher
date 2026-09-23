@@ -6007,7 +6007,7 @@ function amapReadSpend(btn) {
          привязки и оба хранилища (ACL-1282). Ответ приходит не отсюда, а
          вместе с дочитанным спендом: решение сравнивает суммы, а на запуске
          новой суммы ещё нет (ACL-1288). */
-      amapPollSpend(account, cell, btn, 0, per);
+      amapPollSpend(account, cell, btn, 0, per, true);
     })
     .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
 }
@@ -7056,7 +7056,13 @@ document.addEventListener('click', function (e) {
   amapTurnOffDisarm();
 });
 
-function amapPollSpend(account, cell, btn, tries, per) {
+function amapPollSpend(account, cell, btn, tries, per, pressed) {
+  /* `pressed` — человек нажал кнопку в этот раз. Без него дочитанный спенд
+     не тянет за собой пострановое чтение: оно создаёт в кабинете отчёт, а
+     отчёт по расписанию или по перезагрузке страницы — это касание живого
+     аккаунта, которого никто не просил (ревью 23.09; правило с acl-108a).
+     Восстановление после перезагрузки зовёт этот же опрос — и должно
+     показывать уже прочитанное, а не читать заново. */
   per = per || amapPeriod();
   if (!per.from || per.span === 'all') return;
   if (tries > 120) {
@@ -7072,12 +7078,12 @@ function amapPollSpend(account, cell, btn, tries, per) {
         if (!j.ok) throw new Error(j.error || 'Could not read status');
         var s = j.reading || {};
         amapApplyReading(account, s);
-        if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1, per); return; }
+        if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1, per, pressed); return; }
         /* Разбивку спрашиваем только после удачного спенда и в той же сессии
            профиля. Упавший спенд значит, что кабинет не открылся, — отчёту
            там взяться неоткуда. Решение приехало в этом же ответе: оно
            сравнивает ту сумму, которую человек сейчас видит (ACL-1288). */
-        if (s.state === 'ok' && j.plan && j.plan.needed) amapRunSplit(account, btn, per);
+        if (pressed && s.state === 'ok' && j.plan && j.plan.needed) amapRunSplit(account, btn, per);
       })
       .catch(function (e) { amapApplyReading(account, {state: 'failed', error: String(e && e.message || e)}); });
   }, 3000);

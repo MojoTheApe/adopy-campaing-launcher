@@ -63,6 +63,10 @@ def test_the_spend_reading_leads_to_the_split_when_it_is_needed():
     assert "j.plan && j.plan.needed" in body and "amapRunSplit(" in body, (
         "после удачного спенда разбивка больше не запускается"
     )
+    assert "pressed && s.state === 'ok'" in body, (
+        "разбивка пошла бы не только от нажатия — отчёт в живом кабинете "
+        "строится по восстановлению страницы"
+    )
     assert "s.state === 'ok'" in body, (
         "разбивку спрашивают и после неудачного спенда — кабинет не открылся"
     )
@@ -210,3 +214,40 @@ def test_the_wrap_rule_is_written_strongly_enough_to_win():
         r"\.amap table\.amap-grid td\.amap-actions\s*\{[^}]*\}", PAGE, re.S)
     assert rule, "правило переноса для ячейки с кнопками потеряло силу селектора"
     assert "white-space: normal" in rule.group(0)
+
+
+def test_only_a_press_builds_a_report_in_the_account():
+    """Правило живых кабинетов: трогаем их, когда человек нажал (acl-108a).
+
+    Пострановое чтение создаёт внутри кабинета отчёт. Опрос состояния зовут
+    и при восстановлении страницы — `amapResumeReadings` для чтения, которое
+    шло, когда страницу перезагрузили. Без отдельного признака «нажали» такое
+    восстановление само построило бы отчёт: решение о странах приезжает с
+    сервера, а опрос — общий для обоих случаев (ревью 23.09).
+    """
+    poll = PAGE.split("function amapPollSpend(", 1)[1]
+    assert poll.startswith("account, cell, btn, tries, per, pressed)"), (
+        "у опроса нет признака «нажали»"
+    )
+    press = PAGE.split("function amapReadSpend(", 1)[1][:2500]
+    assert "amapPollSpend(account, cell, btn, 0, per, true)" in press, (
+        "нажатие больше не отмечено как нажатие"
+    )
+    resume = PAGE.split("function amapResumeReadings(", 1)[1][:700]
+    assert "amapPollSpend(account, cell, btn, 0, amapPeriod())" in resume, (
+        "восстановление страницы помечено как нажатие"
+    )
+    assert "true" not in resume.split("amapPollSpend(")[1].split(")")[0]
+
+
+def test_the_decision_uses_the_reading_it_was_given():
+    """Перечитать хранилище значит решать про другое чтение, чем то, что
+    уедет на экран: между двумя чтениями успевает начаться новое, и решение
+    приняли бы по записи «читаю» — без суммы (ревью 23.09)."""
+    assert "def _split_plan(account: str, date_from: str, date_to: str, *, reading=None, split=None)" in APP
+    status = APP[APP.index('@app.get("/account-spend/status")'):]
+    status = status[:status.index("@app.", 10)]
+    assert "reading=reading" in status and "split=answer[\"split\"]" in status, (
+        "опрос состояния решает по перечитанному хранилищу, а не по тому, "
+        "что сам же отдаёт"
+    )
