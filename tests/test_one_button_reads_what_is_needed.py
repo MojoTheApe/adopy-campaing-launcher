@@ -436,3 +436,25 @@ def test_the_row_says_which_spend_its_country_split_explains():
     assert "not the" in cell, (
         "расхождение разбивки со спендом ничем не отмечено"
     )
+
+
+def test_a_never_split_account_is_not_read_from_disk_twice(stores):
+    """«Не передали» и «передали пустое» — разные вещи.
+
+    У аккаунта, которого по странам ещё не читали, разбивка равна None.
+    Принять это за «возьми из хранилища» значит читать диск лишний раз на
+    каждом опросе состояния — а он ходит каждые три секунды всё то время,
+    пока в кабинете строится отчёт.
+    """
+    put_spend, _put_split = stores
+    links.link("Doc19", "country", "Saudi Arabia")
+    put_spend("Doc19", "2026-09-22 12:00:00")
+    reads = []
+    real = cs.get_split
+    try:
+        cs.get_split = lambda *a, **k: (reads.append(a), real(*a, **k))[1]
+        plan = app._split_plan("Doc19", DAY, DAY,
+                               reading=sp.get_reading("Doc19", DAY, DAY), split=None)
+    finally:
+        cs.get_split = real
+    assert plan["needed"] is True and not reads, "хранилище перечитали зря"
