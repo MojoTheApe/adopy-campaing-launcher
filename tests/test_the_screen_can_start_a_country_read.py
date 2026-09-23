@@ -267,10 +267,26 @@ def test_the_decision_uses_the_reading_it_was_given():
 # половины подписи вообще есть — серверная в шаблоне, клиентская на странице.
 
 
-def test_both_halves_of_the_note_exist():
-    """Сервер рисует подпись при загрузке, клиент — при каждой перерисовке.
-    Потерять любую половину значит показать свежую сумму рядом с разбивкой от
-    старой и ничем не выдать этого (ACL-1288)."""
-    assert "function amapSplitNote(" in PAGE and "amapReadTitle(s, split)" in PAGE
-    cell = ROW[ROW.index('class="amap-live-ok"'):]
-    assert "countries" in cell[:cell.index("</span>")]
+def test_the_pollers_hand_over_the_split_they_received():
+    """Единственное, чего браузерная проверка отсюда не видит.
+
+    `amapPollSpend` и `amapAwaitReading` лежат за срезом, которым собрана
+    страница в tests/test_country_refresh_review.py, а разбивку в клетку
+    доносят именно они. Потерять этот аргумент — значит стирать подпись на
+    каждом опросе, то есть вернуть ACL-1288 целиком (ревью 23.09).
+    """
+    for caller in ("function amapPollSpend(", "async function amapAwaitReading("):
+        body = PAGE.split(caller, 1)[1]
+        body = body[:body.index(chr(10) + "}" + chr(10))]
+        assert "amapApplyReading(account, s, j.split)" in body, (
+            f"{caller.strip()} не передаёт разбивку, хотя получил её тем же ответом"
+        )
+
+
+def test_the_repaint_builds_the_whole_title_in_one_place():
+    """Подпись собирается одним `amapReadTitle` — проверка внутри тела
+    перерисовки, а не по всему файлу: определение функции содержит те же
+    слова и зеленило бы проверку само по себе (ревью 23.09)."""
+    apply = PAGE.split("function amapApplyReading(", 1)[1]
+    apply = apply[:apply.index(chr(10) + "}" + chr(10))]
+    assert "amapReadTitle(s, split)" in apply

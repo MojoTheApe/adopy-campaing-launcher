@@ -6258,8 +6258,12 @@ function amapReadTitle(s, split) {
      самой себя — разрезая по « · countries » — значило привязать обновление
      к разделителю, который пишет шаблон: поменяй одно, и они разойдутся
      молча (ревью 23.09). Данные для неё есть целиком в ответе опроса. */
-  return s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how
-       + amapSplitNote(s, split);
+  /* Один день пишется одним днём, как его пишет сервер: прежняя версия
+     подписи пересобирала её из живой строки и этот вид сохраняла, а сборка
+     из данных превращала «2026-09-01» в «2026-09-01…2026-09-01» — подсказка
+     менялась под человеком на чтении тех же дат (ревью 23.09). */
+  var when = s.date_from === s.date_to ? s.date_from : s.date_from + '…' + s.date_to;
+  return when + ' · read ' + s.finished_at + ' · ' + s.how + amapSplitNote(s, split);
 }
 
 function amapApplyReading(account, s, split) {
