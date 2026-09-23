@@ -507,14 +507,37 @@ def test_the_server_says_when_the_split_explains_other_money():
     assert "countries read for $10.00, not the $41.50 above" in html
 
 
+def test_the_server_says_when_the_split_does_not_remember_its_spend():
+    """Записи до ACL-1282 суммы не помнят, и молчать о них — значит выдать их
+    за свежие. Эту ветку шаблона не проверял никто (ревью 23.09)."""
+    assert "countries read before this spend was known" in _render_row(
+        spend=41.50, split_spend=None)
+
+
+def test_the_server_calls_another_currency_another_number():
+    html = _render_row(spend=41.50, split_spend=41.50, split_currency="EUR")
+    assert "countries read for EUR 41.50, not the $41.50 above" in html
+
+
+def test_the_server_writes_one_day_as_one_day():
+    """Клиент прибит к этому виду; сервер обязан держаться того же, иначе
+    подсказка мигает при первой же перерисовке — только зеркально."""
+    html = _render_row(spend=41.50, split_spend=41.50,
+                       date_from="2026-09-01", date_to="2026-09-01")
+    assert "2026-09-01 · read" in html and "2026-09-01…2026-09-01" not in html
+
+
 def test_the_server_and_the_client_write_the_same_sentence():
     """Две половины одной подписи: разойдутся — человек увидит, как текст
-    меняется сам собой при первом же опросе."""
+    меняется сам собой при первом же опросе. Каждая фраза проверяется на
+    обеих сторонах, без исключений: исключение прятало ровно ту ветку,
+    которую никто не проверял (ревью 23.09)."""
     page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
     note = page[page.index("function amapSplitNote("):]
-    note = note[:note.index("\n}\n")]
+    note = note[:note.index(chr(10) + "}" + chr(10))]
+    rendered = (_render_row(spend=41.50, split_spend=10.0)
+                + _render_row(spend=41.50, split_spend=None))
     for phrase in ("countries read for ", ", not the ", " above",
                    "countries read before this spend was known"):
         assert phrase in note, f"клиент не пишет «{phrase}»"
-        assert phrase in _render_row(spend=41.50, split_spend=10.0) or phrase == \
-            "countries read before this spend was known", f"сервер не пишет «{phrase}»"
+        assert phrase in rendered, f"сервер не пишет «{phrase}»"
