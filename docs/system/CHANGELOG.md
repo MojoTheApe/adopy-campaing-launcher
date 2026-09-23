@@ -1,5 +1,68 @@
 # System history
 
+## The tree name gets its own line where eleven columns do not fit — ACL-1277
+
+The remaining half of ACL-1277: on a laptop with the Builder drawer docked open the
+campaign name in the tree had about 91px at 1280 and 115px at 1366. Measured with the
+real fragment: the ten columns other than the name need 660px by their content alone,
+while the table gets 582px at 1280 and 668px at 1366. There is no width to
+redistribute — the table does not fit its own contents, and the account row is
+squeezed whatever the tree does.
+
+Owner's decision (2026-09-23), choosing between hiding the derived columns and moving
+the name: hide nothing. Where the name column is narrower than 210px — which leaves the
+name under about 134px once the caret, the level mark and the on/off switch have taken
+their share — the tree row puts the name on its own full-width line and the numbers on
+the line below.
+
+The numbers on that line do not keep the columns. The first attempt did, and review
+caught what that means with honest cell padding: every numeric cell had about 2px of
+text room and rendered as "$…", "1..", "6..". Which header such a number stands under
+does not matter, because at that width the header row itself reads "S… A… L… F…". So
+the second line lists the numbers in order, each with its own label — SPEND, META
+SPEND, LEADS, FTD, CPL, CPA, CR, DELIVERY, META — and a cell with no value is not
+shown at all, because "CPL" alone promises a number that does not exist. The workbook's
+"—" counts as no value here: an ad usually has no workbook row of its own, and the line
+would otherwise read "SPEND — LEADS — FTD — CPL — CPA — CR —". In the single-line
+layout the "—" stays, because there it sits in its own column and costs nothing while
+saying "we looked and found nothing". The indent belongs to the whole row, so an ad's
+numbers sit to the right of its campaign's: it is the only thing that says which row a
+numbers line belongs to. The labels
+come from `data-label` through CSS and never exist in the single-line layout, where the
+word is already in the table head.
+
+A workbook that could not be read now says so in words, once per tree, instead of six
+dashes per row: with the dashes hidden, a broken pipe looked exactly like "this row has
+no workbook numbers", and the reason lived only in the tooltip of a cell that is no
+longer there. The stacked row is variable-height by design — about 28px with nothing to
+show, 40px with Meta's numbers and about 55px once the workbook numbers arrive, against
+34px in the single-line layout — so an open tree reflows a beat after a reading lands.
+
+The switch is made from the measured column, not from the window width: the width is
+eaten by the sidebar, the docked drawer and the country block's own padding, none of
+which the window knows about. The Builder drawer is now listened to as well
+(`acl:builder-drawer`): it widens the page with its own padding and fires no `resize`,
+so the tree kept the widths measured before it opened and its numbers ran past the
+right edge of the table — the exact case this ticket is about. The class goes on the
+whole tree, so ads drawn later — when a campaign is expanded — get the same layout.
+Above that width the row stays a single line, columns and all: the extra height is not
+free.
+
+The test fixture was measuring a table that was not the product's: it put widths on the
+cells and left them the browser's 1px padding, while the page gives every cell
+0.42rem/0.85rem and the tree copies that padding to both sides of its own cells. Every
+width in this 93-test file was therefore 26px per cell too generous — which is how the
+"numbers keep their columns" version looked acceptable. The fixture now builds the
+template's `<colgroup>` and applies the page's own cell padding.
+
+Measured after the change at 582px (honest padding): the campaign name box goes from
+91px to 506px and the ad's from 75px to about 490px, and every number is readable in
+full. At 982px the layout is untouched, columns aligned as before. Six tests in
+tests/test_the_account_tree_on_screen.py cover the switch, that every number says what
+it is and that empty ones vanish, that the labels are the table head's own words, that
+they stay invisible in the wide layout, the untouched wide layout itself, and ads
+expanded after the layout was chosen.
+
 ## One button reads the account: spend always, countries when needed — ACL-1282
 
 The account row had "Read spend" and "Countries". Both asked the same account about

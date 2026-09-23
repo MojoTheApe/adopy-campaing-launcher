@@ -1957,6 +1957,53 @@
     }
     .amap-tree-line > * { padding: 0 var(--amap-cell-pad, 0.6rem); min-width: 0; }
     .amap-tree-line:last-child { border-bottom: none; }
+    /* ACL-1277: на ноутбуке с открытым билдером таблице достаётся 582px на
+       1280 и 668px на 1366, а десяти колонкам кроме имени нужно по
+       содержимому 660px — имени не остаётся ничего. Перераспределением
+       ширины это не решается, и прятать числа владелец не захотел
+       (решение 23.09). Тогда имя занимает свою строку во всю ширину, а
+       числа встают строкой ниже под своими заголовками: столбцы те же, с
+       теми же ширинами, сдвинут только перенос.
+
+       Вторая строка начинается со второй колонки, потому что первая занята
+       именем сверху: без этого числа уехали бы на колонку влево и встали
+       под чужими заголовками — молча и правдоподобно. */
+    .amap-stacked .amap-tree-line {
+      display: flex; flex-wrap: wrap; align-items: baseline;
+      column-gap: 0.75rem; row-gap: 0.1rem; padding-bottom: 0.35rem;
+      padding-left: 0.6rem;
+    }
+    /* Уступ объявления держит вся строка, а не одна ячейка имени: иначе
+       числа объявления начинаются левее имени его же кампании, и по строке
+       чисел не видно, чья она (ревью 23.09). */
+    .amap-stacked .amap-tree-line.ad { padding-left: 1.6rem; }
+    .amap-stacked .amap-tree-who { flex: 1 0 100%; padding-left: 0 !important; }
+    /* У объявления уступ сильнее (0,3,0) и стоит ниже — без своего правила
+       он оставался на ячейке имени, и имя объявления уезжало на уровень
+       глубже собственной строки чисел (ревью 23.09). */
+    .amap-stacked .amap-tree-line.ad .amap-tree-who { padding-left: 0 !important; }
+    /* Колонки на этой ширине не помогают: и сами заголовки таблицы сжаты до
+       «S… A… L… F…». Поэтому числа идут подряд, каждое со своей подписью —
+       решение владельца 23.09, когда он увидел замер с настоящими отступами.
+       Подпись берётся из `data-label` и ставится CSS: в разметку она не
+       попадает, и в однострочной раскладке её нет вовсе. */
+    .amap-stacked .amap-tree-line > :not(.amap-tree-who) {
+      flex: 0 0 auto; padding: 0; text-align: left;
+    }
+    .amap-stacked .amap-tree-line > [data-label]:not(:empty)::before {
+      content: attr(data-label) " "; color: var(--muted);
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    /* Пустую ячейку не показываем вовсе: «CPL» без числа — это обещание
+       числа, которого нет. Прочерк книги — тот же случай: у объявления строк
+       в книге обычно нет вовсе, и строка читалась бы как «SPEND — LEADS —
+       FTD — CPL — CPA — CR —» (ревью 23.09). В широкой раскладке прочерк
+       остаётся: там он стоит в своей колонке и говорит «смотрели, не
+       нашли», ничего не занимая. */
+    .amap-stacked .amap-tree-line > :not(.amap-tree-who):empty,
+    .amap-stacked .amap-tree-line > .attr.nodata { display: none; }
+    .amap-stacked .amap-tree-line .amap-tree-src { display: none; }
+    .amap-stacked .amap-tree-namebox { flex-direction: row; align-items: baseline; gap: 0.35rem; }
     /* Первая колонка узкая (это колонка имени аккаунта), а в ней стрелка,
        уровень, тумблер и имя. Имя важнее всего остального: по нему решают,
        что выключать, поэтому отступы и пометка уровня — самые скромные.
@@ -6266,7 +6313,11 @@ function amapTreeLine(o, adCount) {
   var del = document.createElement('span');
   var stopped = /off|review|reject|not deliver|error/i.test(o.delivery || '');
   del.className = 'amap-tree-del' + (stopped ? ' stopped' : '');
-  del.textContent = o.delivery || '';
+  del.dataset.label = 'Delivery';
+  /* Обрезаем: строка из пробелов пустой не считается, и в узкой раскладке
+     осталась бы подпись без числа. Сейчас читатель такого не отдаёт — но
+     это одно изменение в разборе страницы (ревью 23.09). */
+  del.textContent = (o.delivery || '').trim();
 
   /* Числа — теми же словами, какими их написала Meta. Имя и состояние говорят,
      ЧТО это; спенд и результаты — зачем это трогать. Пять одинаково включённых
@@ -6277,10 +6328,12 @@ function amapTreeLine(o, adCount) {
      утверждением, которого страница не делала. */
   var spend = document.createElement('span');
   spend.className = 'amap-tree-num spend';
-  spend.textContent = o.spend || '';
+  spend.dataset.label = 'Meta spend';
+  spend.textContent = (o.spend || '').trim();
 
   var res = document.createElement('span');
   res.className = 'amap-tree-num res';
+  res.dataset.label = 'Meta';
   if (o.results) {
     var src = document.createElement('small');
     src.className = 'amap-tree-src';
@@ -6318,10 +6371,16 @@ function amapTreeLine(o, adCount) {
    Spend, (Account spend — это спенд Meta), Leads, FTD, CPL, CPA, CR. */
 var AMAP_ATTR_COLS = ['spend', 'leads', 'deposits', 'cpl', 'cpa', 'cr'];
 
+/* Подписи для узкой раскладки — теми же словами, что в шапке таблицы
+   (ACL-1277). В обычной раскладке они не видны: там слово стоит в шапке. */
+var AMAP_ATTR_LABELS = {spend: 'Spend', leads: 'Leads', deposits: 'FTD',
+                        cpl: 'CPL', cpa: 'CPA', cr: 'CR'};
+
 function amapAttrCell(field) {
   var c = document.createElement('span');
   c.className = 'amap-tree-num attr';
   c.dataset.attr = field;
+  c.dataset.label = AMAP_ATTR_LABELS[field] || field;
   c.textContent = '';
   return c;
 }
@@ -6384,12 +6443,32 @@ function amapFillAttribution(box, objects, data) {
     }
     line.querySelectorAll('.amap-tree-num.attr').forEach(function (cell) {
       var v = got ? got[cell.dataset.attr] : null;
-      var has = v !== null && v !== undefined && v !== '';
-      cell.textContent = has ? String(v) : '—';
+      // Пробел значением не считается: в узкой раскладке он оставил бы
+      // подпись без числа (ревью 23.09).
+      var text = v === null || v === undefined ? '' : String(v).trim();
+      var has = text !== '';
+      cell.textContent = has ? text : '—';
       cell.classList.toggle('nodata', !has);
       cell.title = got ? 'From the stats workbook' : why;
     });
   });
+  /* Прочерки в узкой раскладке спрятаны, и «книга не прочиталась» выглядело
+     бы там ровно как «в книге нет строк» — то есть никак. Поломку говорим
+     словами, одной строкой на всё дерево, а не шестью клетками на строку. */
+  var broken = box.querySelector('.amap-tree-attr-err');
+  if (broken) broken.remove();
+  if (!data || !data.ok) {
+    var note = document.createElement('div');
+    note.className = 'amap-tree-note amap-tree-attr-err';
+    note.textContent = (data && data.error) || 'Workbook numbers could not be loaded';
+    note.title = 'The numbers from the stats workbook are missing because they could '
+               + 'not be read — not because this account has none.';
+    /* Рядом с числами, к которым относится, а не под свёрнутым журналом:
+       остальные оговорки дерева встают до него, а эта приходит позже, когда
+       блок уже собран. `insertBefore(node, null)` — это append, поэтому
+       отдельной ветки не нужно (ревью 23.09). */
+    box.insertBefore(note, box.querySelector('.amap-tree-log') || null);
+  }
 }
 
 function amapLoadAttribution(row, box, objects) {
@@ -6428,6 +6507,15 @@ function amapTreeColumns(row, tr) {
   tr.style.setProperty('--amap-cols', widths.map(function (w) { return w.toFixed(2) + 'px'; }).join(' '));
   var pad = window.getComputedStyle ? getComputedStyle(row.children[1]).paddingRight : '';
   if (pad) tr.style.setProperty('--amap-cell-pad', pad);
+  /* ACL-1277: мерим саму колонку, а не окно. Ширину съедает не только экран:
+     боковая колонка, открытый билдер и сама страна с её отступами — окно об
+     этом не знает, а левый край соседней ячейки знает. В колонке имени, кроме
+     имени, стоят стрелка, пометка уровня и тумблер — им нужно около 80px,
+     поэтому 210px здесь означают «имени осталось меньше 130px».
+
+     Класс ставится на всё дерево, а не на строки: объявления дорисовываются
+     позже, когда раскрывают кампанию, и им достанется та же раскладка. */
+  tr.classList.toggle('amap-stacked', widths[0] < 210);
 }
 
 /* Раз в кадр, а не на каждое событие: при протягивании окна их десятки, и
@@ -6450,6 +6538,11 @@ if (typeof window !== 'undefined') {
      ширины снимаются, когда блок раскрывают. `toggle` не всплывает, поэтому
      слушаем на погружении. */
   document.addEventListener('toggle', amapTreeColumnsAll, true);
+  /* Билдер раздвигает страницу своим `padding-right`, и события `resize` при
+     этом нет: дерево оставалось с ширинами, снятыми до его открытия, и числа
+     уезжали за правый край таблицы — стоять под заголовками переставали
+     совсем. Ровно тот случай, ради которого написан ACL-1277 (ревью 23.09). */
+  document.addEventListener('acl:builder-drawer', amapTreeColumnsAll);
 }
 
 /* ── Покрывают ли строки спенд аккаунта ────────────────────────────────
