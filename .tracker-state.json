@@ -396,8 +396,28 @@
       "source_sha": "3db4e0f11fdf2b38d4dbda02f2d292076dba28d8",
       "main_tree": "2b55d34aba8c28972ecbf1673f5a8b62ef76e0bc",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
-      "recorded_at": "2026-09-23T17:15:13+00:00"
+      "state": "passed",
+      "recorded_at": "2026-09-23T17:15:13+00:00",
+      "verification": {
+        "kind": "stage-verification",
+        "result": "passed",
+        "target": "ACL isolated Windows stage installation",
+        "source_sha": "3db4e0f11fdf2b38d4dbda02f2d292076dba28d8",
+        "tree_sha": "01f20c7c0ba89c075d29bfb6ae18dfa7e2ed3687",
+        "checks": [
+          "Stage push CI run 35892696248 on 3db4e0f: ACL verification, Windows Python 3.11 and 3.13 suites passed, first attempt, no reruns.",
+          "Exact-stage installer run 35892696378 passed build/install/launch/repair/uninstall.",
+          "Previous actual package installs and starts with isolated data",
+          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+          "Updated installed application restarts with preserved machine/workspace/creative data",
+          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+          "Recovered application restarts and synthetic data remains byte-identical",
+          "PR #295 checks on head 7716b51: all eleven passed.",
+          "Independent review across three rounds ended in approve at 7716b51. Round 1 found that moving the decision to the status route let a page reload build an Ads Reporting report with nobody pressing anything, and that the plan re-read both stores (+6.8 ms per poll plus a race against a 'running' record); round 2 caught a red head (a whole-line source grep for the old signature) and a tooltip that the live repaint erased. The reviewer re-measured the fix himself: splits on presses [0, 3] with the money moving on the fourth (was [0, 4]), one report per six unchanged presses, and eight browser checks of the tooltip including the press-then-reload sequence."
+        ],
+        "report": "Artifact ACL-update-recovery-322 of run 35892696378 (report.json: result passed, source 3db4e0f11fdf2b38d4dbda02f2d292076dba28d8, tree 01f20c7c0ba89c075d29bfb6ae18dfa7e2ed3687; packages 0.0.0-ci.322 and 0.1.0-alpha.322). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof. The country split itself was not exercised against a live Meta ad account in this verification."
+      },
+      "verified_at": "2026-09-23T17:15:39+00:00"
     },
     "tasks": {
       "248": {
