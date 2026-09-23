@@ -60,8 +60,12 @@ def test_the_spend_reading_leads_to_the_split_when_it_is_needed():
     poll = PAGE.split("function amapPollSpend(", 1)
     assert len(poll) == 2, "опрос чтения спенда не найден"
     body = poll[1][:1800]
-    assert "plan && plan.needed" in body and "amapRunSplit(" in body, (
+    assert "j.plan && j.plan.needed" in body and "amapRunSplit(" in body, (
         "после удачного спенда разбивка больше не запускается"
+    )
+    assert "pressed && s.state === 'ok'" in body, (
+        "разбивка пошла бы не только от нажатия — отчёт в живом кабинете "
+        "строится по восстановлению страницы"
     )
     assert "s.state === 'ok'" in body, (
         "разбивку спрашивают и после неудачного спенда — кабинет не открылся"
@@ -69,10 +73,14 @@ def test_the_spend_reading_leads_to_the_split_when_it_is_needed():
 
 
 def test_the_server_says_whether_the_split_is_needed():
-    """Решение принимает сервер: у клиента нет ни привязок, ни хранилища."""
+    """Решение принимает сервер: у клиента нет ни привязок, ни хранилища.
+
+    И приезжает оно вместе с дочитанным спендом, а не с его запуском
+    (ACL-1288): решение сравнивает суммы, а на запуске новой суммы ещё нет.
+    """
     assert "def _split_plan(" in APP
-    assert '"split": plan' in APP, (
-        "маршрут чтения спенда не отдаёт решение о странах"
+    assert 'answer["plan"] = _split_plan(' in APP, (
+        "опрос состояния не отдаёт решение о странах"
     )
     assert "why_split_is_needed" in APP
 
@@ -156,7 +164,7 @@ def test_read_all_follows_the_same_rule():
     # Тело функции целиком, а не первые N символов: последняя строка тела —
     # часть проверки, и срез «сколько-нибудь» её бы не поймал.
     body = block[1][:block[1].index(chr(10) + "}" + chr(10))]
-    assert "j.split && j.split.needed" in body, (
+    assert "done.plan && done.plan.needed" in body, (
         "очередь не спрашивает сервер, нужна ли разбивка"
     )
     assert "await amapRunSplit(" in body, (
@@ -168,7 +176,7 @@ def test_read_all_follows_the_same_rule():
     )
     tail = body[body.index("await amapRunSplit("):]
     tail = tail[:tail.index("} catch")]
-    assert "return state;" in tail and "return " not in tail.split("return state;")[0], (
+    assert "return done.state;" in tail and "return " not in tail.split("return done.state;")[0], (
         "строка обязана вернуть состояние спенда, а не разбивки"
     )
 
@@ -206,3 +214,83 @@ def test_the_wrap_rule_is_written_strongly_enough_to_win():
         r"\.amap table\.amap-grid td\.amap-actions\s*\{[^}]*\}", PAGE, re.S)
     assert rule, "правило переноса для ячейки с кнопками потеряло силу селектора"
     assert "white-space: normal" in rule.group(0)
+
+
+def test_only_a_press_builds_a_report_in_the_account():
+    """Правило живых кабинетов: трогаем их, когда человек нажал (acl-108a).
+
+    Пострановое чтение создаёт внутри кабинета отчёт. Опрос состояния зовут
+    и при восстановлении страницы — `amapResumeReadings` для чтения, которое
+    шло, когда страницу перезагрузили. Без отдельного признака «нажали» такое
+    восстановление само построило бы отчёт: решение о странах приезжает с
+    сервера, а опрос — общий для обоих случаев (ревью 23.09).
+    """
+    poll = PAGE.split("function amapPollSpend(", 1)[1]
+    assert poll.startswith("account, cell, btn, tries, per, pressed)"), (
+        "у опроса нет признака «нажали»"
+    )
+    press = PAGE.split("function amapReadSpend(", 1)[1][:2500]
+    assert "amapPollSpend(account, cell, btn, 0, per, true)" in press, (
+        "нажатие больше не отмечено как нажатие"
+    )
+    resume = PAGE.split("function amapResumeReadings(", 1)[1][:700]
+    assert "amapPollSpend(account, cell, btn, 0, amapPeriod())" in resume, (
+        "восстановление страницы помечено как нажатие"
+    )
+    assert "true" not in resume.split("amapPollSpend(")[1].split(")")[0]
+
+
+def test_the_decision_uses_the_reading_it_was_given():
+    """Перечитать хранилище значит решать про другое чтение, чем то, что
+    уедет на экран: между двумя чтениями успевает начаться новое, и решение
+    приняли бы по записи «читаю» — без суммы (ревью 23.09)."""
+    assert "def _split_plan(" in APP and "reading=_NOT_GIVEN, split=_NOT_GIVEN" in APP
+    status = APP[APP.index('@app.get("/account-spend/status")'):]
+    status = status[:status.index("@app.", 10)]
+    assert "reading=reading" in status and "split=answer[\"split\"]" in status, (
+        "опрос состояния решает по перечитанному хранилищу, а не по тому, "
+        "что сам же отдаёт"
+    )
+
+
+def test_the_note_about_the_split_survives_the_live_repaint():
+    """Подсказку про разбивку рисует и сервер, и клиент.
+
+    `amapApplyReading` собирает клетку заново на каждом ответе опроса, и без
+    своей половины подписи первый же удачный опрос стирал бы её. А стереть —
+    значит вернуть ровно ту беду, ради которой писана ACL-1288: свежая сумма
+    рядом с разбивкой от старой, и на экране это выглядит согласованным.
+    """
+    assert "function amapSplitNote(" in PAGE
+    apply = PAGE.split("function amapApplyReading(", 1)[1]
+    apply = apply[:apply.index(chr(10) + "}" + chr(10))]
+    assert "amapSplitNote(s, split)" in apply, (
+        "перерисовка клетки теряет подпись про разбивку"
+    )
+    for caller in ("function amapPollSpend(", "async function amapAwaitReading("):
+        body = PAGE.split(caller, 1)[1]
+        body = body[:body.index(chr(10) + "}" + chr(10))]
+        assert "amapApplyReading(account, s, j.split)" in body, (
+            f"{caller.strip()} не передаёт разбивку, хотя получил её тем же ответом"
+        )
+
+
+def test_a_fresh_split_renames_the_sum_it_explains():
+    """Разбивку только что сняли — подсказка обязана говорить про новую сумму."""
+    body = PAGE.split("function amapRunSplit(", 1)[1]
+    body = body[:body.index(chr(10) + "}" + chr(10))]
+    assert "amapRefreshSplitNote(account, per)" in body
+    assert "function amapRefreshSplitNote(" in PAGE
+
+
+def test_both_halves_measure_the_same_money():
+    """Правило перечитывания считает 10.001 и 10.00 одними деньгами (до
+    половины копейки). Подсказка сравнивает нарисованные строки — иначе
+    экран обвинял бы себя в отставании, которого правило не видит."""
+    note = PAGE.split("function amapSplitNote(", 1)[1][:1200]
+    assert "theirs === ours" in note, "подсказка сравнивает числа, а не строки"
+    cell = ROW[ROW.index('class="amap-live-ok"'):]
+    cell = cell[:cell.index("</span>")]
+    assert "split_txt != spend_txt" in cell, (
+        "серверная половина сравнивает числа, а не то, что видно на экране"
+    )

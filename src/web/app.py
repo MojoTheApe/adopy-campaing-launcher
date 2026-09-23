@@ -2753,12 +2753,25 @@ def _spend_period(date_from: str, date_to: str, span: str = "") -> tuple[str, st
     return start.isoformat(), end.isoformat()
 
 
-def _split_plan(account: str, date_from: str, date_to: str) -> dict:
+#: «Не передали» и «передали пустое» — разные вещи: у аккаунта, который
+#: ещё ни разу не читали по странам, разбивка равна None, и принять это за
+#: «возьми из хранилища» значило бы лишний раз читать диск на каждом опросе.
+_NOT_GIVEN = object()
+
+
+def _split_plan(account: str, date_from: str, date_to: str, *,
+                reading=_NOT_GIVEN, split=_NOT_GIVEN) -> dict:
     """Нужна ли пострановая разбивка этому аккаунту за эти даты (ACL-1282).
 
-    Считается **до** запуска чтения спенда: `start_read` кладёт на место
-    прошлого показания запись «читаю», и времени, с которым сравнивают
-    разбивку, после этого уже нет.
+    Считается по **дочитанному** показанию спенда — то есть после того, как
+    чтение закончилось, а не до него (ACL-1288). До правки решение принимали
+    в момент запуска, и сравнивали с прошлой суммой: нажатие, на котором
+    деньги как раз изменились, разбивку не перечитывало, это делало только
+    следующее. На закрытых датах незаметно, на сегодняшних экран показывал
+    свежий спенд рядом с разбивкой от старого — и выглядел согласованным.
+
+    Пока чтение идёт, сравнивать не с чем: запись «читаю» суммы не несёт.
+    Поэтому решение и спрашивают там же, где узнают, что чтение кончилось.
 
     Вопрос без ответа — не повод не читать: любая поломка здесь отвечает
     «нужна». Лишний отчёт в кабинете дороже, но молча потерянная разбивка
@@ -2776,8 +2789,14 @@ def _split_plan(account: str, date_from: str, date_to: str) -> dict:
             str(v).strip().casefold()
             for v in account_links.values_for(account, "country") if str(v).strip()
         })
-        split = country_split.get_split(account, date_from, date_to)
-        reading = account_spend.get_reading(account, date_from, date_to)
+        # Показание и разбивку берём те самые, которые уже прочитаны рядом.
+        # Перечитать хранилище значило бы решать про другое чтение, чем то,
+        # что уедет на экран: между двумя чтениями успевает начаться новое, и
+        # решение приняли бы по записи «читаю» — без суммы (ревью 23.09).
+        if split is _NOT_GIVEN:
+            split = country_split.get_split(account, date_from, date_to)
+        if reading is _NOT_GIVEN:
+            reading = account_spend.get_reading(account, date_from, date_to)
         ok = getattr(reading, "state", "") == "ok"
         why = country_split.why_split_is_needed(
             countries=countries, split=split,
@@ -2810,15 +2829,13 @@ async def account_spend_read(request: Request) -> JSONResponse:
         date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""), str(form.get("span") or ""))
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-    # ACL-1282: одна кнопка на строке. Отвечаем не только «чтение пошло», но
-    # и нужно ли после него спрашивать кабинет про страны — иначе это решение
-    # пришлось бы принимать на клиенте, где нет ни привязок, ни хранилища.
-    plan = _split_plan(account, date_from, date_to)
     try:
         reading = account_spend.start_read(account, date_from, date_to)
     except Exception:
         return JSONResponse({"ok": False, "error": "Could not start or save the reading. Check disk space and retry."}, status_code=503)
-    return JSONResponse({"ok": True, "reading": reading.to_dict(), "split": plan})
+    # Нужно ли после этого спрашивать кабинет про страны, отвечает опрос
+    # состояния: там видно дочитанную сумму (ACL-1288).
+    return JSONResponse({"ok": True, "reading": reading.to_dict()})
 
 
 @app.post("/account-spend/read-countries")
@@ -3142,11 +3159,19 @@ async def account_spend_status(
         # же период; второй опрос ходил бы за тем же аккаунтом в те же
         # секунды и удваивал бы запросы ради разделения, которого на экране
         # нет. `split` отсутствует, пока страны у этого аккаунта не читали.
-        return JSONResponse({
+        reading = account_spend.get_reading(account.strip(), date_from, date_to)
+        answer = {
             "ok": True,
-            "reading": account_spend.get_reading(account.strip(), date_from, date_to).to_dict(),
+            "reading": reading.to_dict(),
             "split": country_split.get_split(account.strip(), date_from, date_to),
-        })
+        }
+        # ACL-1288: решение о странах едет вместе с готовым чтением — по нему
+        # его и принимают. Пока чтение идёт, решать не по чему: у записи
+        # «читаю» нет суммы, с которой сравнивают разбивку.
+        if reading.state == "ok":
+            answer["plan"] = _split_plan(account.strip(), date_from, date_to,
+                                         reading=reading, split=answer["split"])
+        return JSONResponse(answer)
     return JSONResponse(
         {
             "ok": True,

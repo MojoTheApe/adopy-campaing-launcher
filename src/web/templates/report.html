@@ -5986,10 +5986,10 @@ function amapReadSpend(btn) {
     .then(function (j) {
       if (!j.ok) throw new Error(j.error || 'refused');
       /* Нужна ли после спенда разбивка по странам, решает сервер: у него
-         привязки и оба хранилища (ACL-1282). Ответ приходит вместе с
-         запуском чтения, потому что решать это надо до него — `start_read`
-         кладёт на место прошлого показания «читаю». */
-      amapPollSpend(account, cell, btn, 0, per, j.split);
+         привязки и оба хранилища (ACL-1282). Ответ приходит не отсюда, а
+         вместе с дочитанным спендом: решение сравнивает суммы, а на запуске
+         новой суммы ещё нет (ACL-1288). */
+      amapPollSpend(account, cell, btn, 0, per, true);
     })
     .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
 }
@@ -6063,6 +6063,9 @@ function amapRunSplit(account, btn, per) {
       var bad = s.state === 'failed' ? (s.error || 'refused')
               : (s.state === 'ok' || s.state === 'empty') ? '' : 'Unknown country reading state';
       amapSplitMark(account, bad);
+      /* Клетка называет сумму, которую объясняет разбивка: её только что
+         сняли, и подсказка обязана говорить про новую, а не про прежнюю. */
+      if (!bad) amapRefreshSplitNote(account, per);
       /* Итоги страны перечитываем и после отказа. Прошлое чтение за эти даты
          больше не действует, и оставить его на экране значило бы показать
          число, которого уже нет, рядом с сообщением о неудаче. */
@@ -6076,6 +6079,26 @@ function amapRunSplit(account, btn, per) {
       amapSplitMark(account, String(e && e.message || e));
       return 'failed';
     });
+}
+
+function amapRefreshSplitNote(account, per) {
+  /* Один запрос состояния: он отдаёт и показание, и разбивку — ровно то, из
+     чего собрана подсказка. */
+  return fetch('/account-spend/status?account=' + encodeURIComponent(account)
+        + '&date_from=' + encodeURIComponent(per.from)
+        + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j || !j.ok || !j.reading || j.reading.state !== 'ok') return;
+      document.querySelectorAll('.amap-live').forEach(function (cell) {
+        if (cell.dataset.account !== account) return;
+        var value = cell.querySelector('.amap-live-ok');
+        if (!value) return;
+        var base = String(value.title || '').split(' · countries ')[0];
+        value.title = base + amapSplitNote(j.reading, j.split);
+      });
+    })
+    .catch(function () { /* подпись — не то, ради чего стоит рушить чтение */ });
 }
 
 function amapAwaitSplit(account, per, tries) {
@@ -6195,7 +6218,26 @@ function amapUpdateCountrySummaries() {
   });
 }
 
-function amapApplyReading(account, s) {
+function amapSplitNote(s, split) {
+  /* Двойник того, что пишет сервер в подсказку клетки (ACL-1288). Без него
+     первый же опрос после чтения стирал её: `amapApplyReading` собирает
+     клетку заново. А стереть её — значит вернуть ровно ту беду, из-за
+     которой задача и написана: свежая сумма рядом с разбивкой от старой, и
+     на экране это выглядит согласованным.
+
+     Сравниваем нарисованные строки, а не числа: тем же правилом, что решает
+     перечитывать ли страны (`_same_money`, до половины копейки). Иначе
+     экран обвинял бы себя в отставании, которого правило не видит. */
+  if (!split || (split.state !== 'ok' && split.state !== 'empty')) return '';
+  if (split.spend === null || split.spend === undefined) {
+    return ' · countries read before this spend was known';
+  }
+  var theirs = amapMoney(split.spend, split.spend_currency);
+  var ours = amapMoney(s.spend, s.currency);
+  return ' · countries read for ' + theirs + (theirs === ours ? '' : ', not the ' + ours + ' above');
+}
+
+function amapApplyReading(account, s, split) {
   document.querySelectorAll('.amap-live').forEach(function (cell) {
     if (cell.dataset.account !== account) return;
     var row = cell.closest('tr');
@@ -6218,7 +6260,8 @@ function amapApplyReading(account, s) {
     if (s.state !== 'ok') { amapSpendFailed(btn, cell, s.error || 'failed', s.shot, s.how); return; }
     cell.innerHTML = '<span class="amap-live-ok"></span>';
     cell.firstChild.textContent = amapMoney(s.spend, s.currency);
-    cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how;
+    cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how
+      + amapSplitNote(s, split);
     btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read spend'; btn.title = 'Read spend again';
     amapPaintTree(row, s);
   });
@@ -7038,7 +7081,13 @@ document.addEventListener('click', function (e) {
   amapTurnOffDisarm();
 });
 
-function amapPollSpend(account, cell, btn, tries, per, plan) {
+function amapPollSpend(account, cell, btn, tries, per, pressed) {
+  /* `pressed` — человек нажал кнопку в этот раз. Без него дочитанный спенд
+     не тянет за собой пострановое чтение: оно создаёт в кабинете отчёт, а
+     отчёт по расписанию или по перезагрузке страницы — это касание живого
+     аккаунта, которого никто не просил (ревью 23.09; правило с acl-108a).
+     Восстановление после перезагрузки зовёт этот же опрос — и должно
+     показывать уже прочитанное, а не читать заново. */
   per = per || amapPeriod();
   if (!per.from || per.span === 'all') return;
   if (tries > 120) {
@@ -7053,12 +7102,13 @@ function amapPollSpend(account, cell, btn, tries, per, plan) {
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || 'Could not read status');
         var s = j.reading || {};
-        amapApplyReading(account, s);
-        if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1, per, plan); return; }
+        amapApplyReading(account, s, j.split);
+        if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1, per, pressed); return; }
         /* Разбивку спрашиваем только после удачного спенда и в той же сессии
            профиля. Упавший спенд значит, что кабинет не открылся, — отчёту
-           там взяться неоткуда. */
-        if (s.state === 'ok' && plan && plan.needed) amapRunSplit(account, btn, per);
+           там взяться неоткуда. Решение приехало в этом же ответе: оно
+           сравнивает ту сумму, которую человек сейчас видит (ACL-1288). */
+        if (pressed && s.state === 'ok' && j.plan && j.plan.needed) amapRunSplit(account, btn, per);
       })
       .catch(function (e) { amapApplyReading(account, {state: 'failed', error: String(e && e.message || e)}); });
   }, 3000);
@@ -7213,18 +7263,19 @@ async function amapQueueRead(job, per) {
     body.append('date_to', per.to);
     body.append('span', per.span || '');
     // The server joins an existing read for this account and exact period.
-    var j = await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
-    var state = await amapAwaitReading(job.account, per, 0);
+    await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
+    var done = await amapAwaitReading(job.account, per, 0);
     /* ACL-1282: то же правило, что и у одной строки. Разбивка идёт внутри
        очереди, а не после неё: аккаунт открыт сейчас, и второй заход в него
        был бы вторым касанием живого кабинета. Её неудача остаётся в клетке
-       и не превращает прочитанный спенд в неудачу всей строки. */
-    if (state === 'ok' && j.split && j.split.needed) {
+       и не превращает прочитанный спенд в неудачу всей строки. Решение —
+       из того же ответа, что и готовое чтение (ACL-1288). */
+    if (done.state === 'ok' && done.plan && done.plan.needed) {
       // Ответ разбивки нарочно не возвращается: упавшая разбивка не делает
       // прочитанный спенд неудачей и не портит счёт «N read, M failed».
       await amapRunSplit(job.account, job.btn, per);
     }
-    return state;
+    return done.state;
   } catch (e) {
     var message = e && e.name === 'AbortError' ? 'Read request timed out — check the launcher window' : String(e && e.message || e);
     amapApplyReading(job.account, {state: 'failed', error: message});
@@ -7233,14 +7284,19 @@ async function amapQueueRead(job, per) {
 }
 
 async function amapAwaitReading(account, per, tries) {
+  /* Возвращает состояние чтения И решение о странах: они приезжают одним
+     ответом, и разносить их значило бы спросить сервер второй раз о том же
+     аккаунте — уже с другой суммой в хранилище (ACL-1288). */
   while (tries++ <= 120) {
     await new Promise(function(resolve) { setTimeout(resolve, 3000); });
     var j = await amapReadJson('/account-spend/status?account=' + encodeURIComponent(account)
       + '&date_from=' + encodeURIComponent(per.from)
       + '&date_to=' + encodeURIComponent(per.to), {credentials: 'same-origin'});
     var s = j.reading || {};
-    amapApplyReading(account, s);
-    if (s.state !== 'running') return s.state === 'ok' ? 'ok' : 'failed';
+    amapApplyReading(account, s, j.split);
+    if (s.state !== 'running') {
+      return {state: s.state === 'ok' ? 'ok' : 'failed', plan: j.plan || null};
+    }
   }
   throw new Error('no answer after six minutes — check the launcher window');
 }

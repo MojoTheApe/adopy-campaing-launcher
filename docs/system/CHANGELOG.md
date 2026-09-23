@@ -1,5 +1,46 @@
 # System history
 
+## The country split no longer lags one press behind the money — ACL-1288
+
+ACL-1282 decided whether to read the country split at the moment the spend read
+started, which meant comparing against the *previous* amount. The press on which the
+money actually changed read the new spend and left the split alone; only the next press
+noticed. On finished dates nobody sees it — the first read takes both — but on today's
+dates the screen showed a fresh spend beside a breakdown explaining the old one, and
+looked perfectly consistent doing it.
+
+The decision now travels with the finished reading: `/account-spend/status` returns
+`plan` when the reading is `ok`, and both the row and the "Read all spend" queue use
+that instead of an answer from the POST that started the read. `/account-spend/read`
+no longer answers about the split at all — there is nothing to compare at that moment,
+because the record it writes says "reading" and carries no amount. While a read is in
+flight no decision is made, which is the same rule stated once instead of twice.
+
+Moving the decision to the status route made a reload capable of building a report on
+its own: `amapResumeReadings` resumes a read that was in flight, through the same poll,
+and would have acted on the plan it now receives. Reports inside a live ad account are
+something a person asks for, so the poll carries a `pressed` flag and only a press
+starts the split; a resumed poll shows what was read and stops there.
+
+The decision is also computed from the reading and split the route already has in hand
+instead of reading both stores a second time. That removes a doubled read on a poll
+that runs every three seconds, and a real race: between the two reads a new press could
+land, and the plan would then be computed against a "reading" record with no amount —
+the same "decided against a different reading than the one on screen" fault this change
+exists to remove.
+
+The account row's reading tooltip now says which spend its country split explains, and
+says so plainly when that is not the amount above it — from the server on page load and
+from the same poll afterwards, because the live repaint rebuilds that cell and would
+otherwise wipe the only notice on screen. Both halves compare the amounts as they are
+written, which is the rule that decides whether to re-read them (to half a cent), so the
+screen cannot accuse itself of a lag the rule ignores.
+
+Measured over five presses on a single-country account with the money changing on the
+fourth: the split is read on press 0 (there is none yet) and on press 3 (the amount
+differs), and on no other press. Before this change it was read on press 0 and press 4
+— one press after the money moved.
+
 ## The tree name gets its own line where eleven columns do not fit — ACL-1277
 
 The remaining half of ACL-1277: on a laptop with the Builder drawer docked open the
