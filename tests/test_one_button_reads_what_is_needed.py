@@ -209,35 +209,39 @@ def test_a_split_older_than_the_spend_is_asked_again(stores):
     assert app._split_plan("Doc19", DAY, DAY)["needed"] is True
 
 
-def test_the_decision_is_made_before_the_spend_reading_replaces_the_old_one(stores):
-    """Порядок здесь и есть правило.
+def test_the_decision_waits_for_the_reading_to_finish(stores):
+    """ACL-1288. Решение сравнивает суммы, и спрашивать его надо у
+    дочитанного показания.
 
-    `start_read` кладёт на место прошлого показания запись «читаю» — без
-    суммы. Спросить после запуска значит спросить у записи, которая ещё
-    ничего не знает: сравнивать не с чем, разбивка останется «свежей», и
-    изменившиеся деньги никто не разложит по странам. Поэтому решение принимают до запуска, и
-    порядок этих двух строк в маршруте — не стиль.
+    Прежняя версия спрашивала на запуске чтения и сравнивала с прошлой
+    суммой: нажатие, на котором деньги как раз изменились, страны не
+    перечитывало — это делало только следующее. На закрытых датах незаметно,
+    на сегодняшних экран показывал свежий спенд рядом с разбивкой от
+    старого и выглядел согласованным.
+
+    Пока чтение идёт, решать не по чему: у записи «читаю» суммы нет.
     """
     put_spend, put_split = stores
     links.link("Doc19", "country", "Saudi Arabia")
     put_spend("Doc19", "2026-09-22 12:00:00", spend=10.0)
     put_split("Doc19", "2026-09-22 12:04:00")   # разбивка объясняет $10.00
-    put_spend("Doc19", "2026-09-22 18:00:00", spend=41.5)   # деньги двинулись
-    assert app._split_plan("Doc19", DAY, DAY)["needed"] is True
 
-    # Ровно то, что делает start_read в первой же строке.
+    # Чтение идёт: суммы нет, сравнивать не с чем.
     sp._put(sp.SpendReading(account="Doc19", date_from=DAY, date_to=DAY,
-                            state="running", started_at="2026-09-22 19:00:00"))
-    assert app._split_plan("Doc19", DAY, DAY)["needed"] is False, (
-        "спрошенное после запуска решение видит запись без чисел — "
-        "именно поэтому его принимают до"
-    )
+                            state="running", started_at="2026-09-22 18:00:00"))
+    assert app._split_plan("Doc19", DAY, DAY)["needed"] is False
+
+    # Чтение закончилось, и денег стало больше — вот теперь страны нужны.
+    put_spend("Doc19", "2026-09-22 18:02:00", spend=41.5)
+    plan = app._split_plan("Doc19", DAY, DAY)
+    assert plan["needed"] is True and "spend has changed" in plan["why"]
 
     route = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
-    body = route[route.index("async def account_spend_read("):]
-    body = body[:body.index("@app.post")]
-    assert body.index("plan = _split_plan(") < body.index("account_spend.start_read("), (
-        "решение о странах считается после запуска чтения — тогда оно всегда «не нужно»"
+    status = route[route.index('@app.get("/account-spend/status")'):]
+    status = status[:status.index("@app.get", 10)]
+    assert 'if reading.state == "ok":' in status and '_split_plan(' in status, (
+        "опрос состояния не решает про страны — значит решение принимают "
+        "где-то ещё, до того как сумма известна"
     )
 
 
@@ -307,4 +311,37 @@ def test_two_spellings_of_one_country_are_one_country(stores):
     links.link("Doc19", "country", "kuwait")
     put_spend("Doc19", "2026-09-22 12:00:00")
     put_split("Doc19", "2026-09-22 12:04:00")
+    assert app._split_plan("Doc19", DAY, DAY)["needed"] is False
+
+
+def test_the_press_that_changes_the_money_reads_the_countries(stores):
+    """Само отставание, целиком, на настоящих хранилищах (ACL-1288).
+
+    Считаем нажатия так же, как их делает дешборд: чтение спенда, затем —
+    по его результату — решение о странах. Пока деньги не менялись, отчётов
+    нет; как только сумма другая, страны читаются **на этом же** нажатии, а
+    не через одно.
+    """
+    put_spend, put_split = stores
+    links.link("Doc19", "country", "Saudi Arabia")
+    money = [10.0, 10.0, 10.0, 41.5, 41.5]
+    read_on = []
+    for press, amount in enumerate(money):
+        put_spend("Doc19", f"2026-09-22 1{press}:00:00", spend=amount)
+        if app._split_plan("Doc19", DAY, DAY)["needed"]:
+            read_on.append(press)
+            put_split("Doc19", f"2026-09-22 1{press}:04:00")
+    assert read_on == [0, 3], (
+        f"страны прочитаны на нажатиях {read_on}: 0 — первое чтение, "
+        "3 — то, на котором деньги изменились"
+    )
+
+
+def test_a_reading_that_failed_does_not_decide_anything(stores):
+    """У неудачи суммы нет, и «разбивка свежая» из неё не следует."""
+    put_spend, put_split = stores
+    links.link("Doc19", "country", "Saudi Arabia")
+    put_spend("Doc19", "2026-09-22 12:00:00", spend=10.0)
+    put_split("Doc19", "2026-09-22 12:04:00")
+    put_spend("Doc19", "2026-09-22 13:00:00", spend=None, state="failed")
     assert app._split_plan("Doc19", DAY, DAY)["needed"] is False

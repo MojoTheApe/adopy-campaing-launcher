@@ -60,7 +60,7 @@ def test_the_spend_reading_leads_to_the_split_when_it_is_needed():
     poll = PAGE.split("function amapPollSpend(", 1)
     assert len(poll) == 2, "опрос чтения спенда не найден"
     body = poll[1][:1800]
-    assert "plan && plan.needed" in body and "amapRunSplit(" in body, (
+    assert "j.plan && j.plan.needed" in body and "amapRunSplit(" in body, (
         "после удачного спенда разбивка больше не запускается"
     )
     assert "s.state === 'ok'" in body, (
@@ -69,10 +69,14 @@ def test_the_spend_reading_leads_to_the_split_when_it_is_needed():
 
 
 def test_the_server_says_whether_the_split_is_needed():
-    """Решение принимает сервер: у клиента нет ни привязок, ни хранилища."""
+    """Решение принимает сервер: у клиента нет ни привязок, ни хранилища.
+
+    И приезжает оно вместе с дочитанным спендом, а не с его запуском
+    (ACL-1288): решение сравнивает суммы, а на запуске новой суммы ещё нет.
+    """
     assert "def _split_plan(" in APP
-    assert '"split": plan' in APP, (
-        "маршрут чтения спенда не отдаёт решение о странах"
+    assert 'answer["plan"] = _split_plan(' in APP, (
+        "опрос состояния не отдаёт решение о странах"
     )
     assert "why_split_is_needed" in APP
 
@@ -156,7 +160,7 @@ def test_read_all_follows_the_same_rule():
     # Тело функции целиком, а не первые N символов: последняя строка тела —
     # часть проверки, и срез «сколько-нибудь» её бы не поймал.
     body = block[1][:block[1].index(chr(10) + "}" + chr(10))]
-    assert "j.split && j.split.needed" in body, (
+    assert "done.plan && done.plan.needed" in body, (
         "очередь не спрашивает сервер, нужна ли разбивка"
     )
     assert "await amapRunSplit(" in body, (
@@ -168,7 +172,7 @@ def test_read_all_follows_the_same_rule():
     )
     tail = body[body.index("await amapRunSplit("):]
     tail = tail[:tail.index("} catch")]
-    assert "return state;" in tail and "return " not in tail.split("return state;")[0], (
+    assert "return done.state;" in tail and "return " not in tail.split("return done.state;")[0], (
         "строка обязана вернуть состояние спенда, а не разбивки"
     )
 
