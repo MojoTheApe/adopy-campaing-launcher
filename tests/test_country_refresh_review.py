@@ -41,6 +41,10 @@ ROW = ('<table><tr id="row">'
        '<td><button id="read" class="amap-btn amap-read">Read spend</button></td>'
        '</tr></table>')
 
+#: Узлы сводки нужны, чтобы `amapUpdateCountrySummaries` не падал на них, —
+#: и только. Строка аккаунта здесь лежит СНАРУЖИ `details.amap-country`, не
+#: как в продукте, поэтому сводка перебирает ноль клеток: проверять её
+#: поведение в этом файле нельзя, оно будет проходить само собой.
 SLOT = ('<div id="amap-slot"><div class="amap"><div class="amap-head">'
         '<span class="amap-note">1 country</span>'
         '<input id="amap-new-country" value="unsaved setup"></div>'
@@ -167,6 +171,17 @@ def test_the_same_money_is_not_called_a_difference(page):
     assert 'countries read for $41.50' in title and 'not the' not in title, title
 
 
+def test_the_same_number_in_another_currency_is_another_number(page):
+    """41.50 в евро и 41.50 в долларах — разные деньги. Взять валюту у
+    спенда вместо разбивки значит молча объявить их одним."""
+    page.evaluate("""(s) => amapApplyReading('Demo', s.reading, s.split)""", {
+        'reading': OK_READING,
+        'split': {'state': 'ok', 'spend': 41.5, 'spend_currency': 'EUR',
+                  'spend_at': '2026-09-22 18:00:00'}})
+    title = _title(page)
+    assert 'countries read for EUR 41.50, not the $41.50 above' in title, title
+
+
 def test_half_a_cent_is_not_a_difference_either(page):
     """`_same_money` считает 41.502 и 41.50 одними деньгами и страны не
     перечитывает. Подсказка обязана молчать о том же."""
@@ -262,6 +277,31 @@ def test_the_refresh_writes_every_row_of_this_account_and_no_other(page):
     assert got['other'] == 'do not touch', "переписали чужую строку"
 
 
+def test_the_refresh_rebuilds_the_title_instead_of_patching_the_old_one(page):
+    """Ровно то, что меняет этот PR, и ровно то, что нельзя увидеть иначе.
+
+    Прежняя версия отрезала у живой подсказки хвост по разделителю и
+    приписывала новый — то есть сохраняла всё, что стояло до него, каким бы
+    устаревшим оно ни было. Настоящая последовательность, где это видно:
+    в одном нажатии спенд перечитали заново (другое время и другой способ),
+    а следом прочитали страны. Собранная из ответа подсказка покажет свежее
+    чтение; починенная по экрану — оставит старое и соврёт.
+    """
+    _status(page, dict(OK_READING, finished_at='2026-09-22 18:00:00', how='rpa'),
+            {'state': 'ok', 'spend': 41.5, 'spend_currency': '$',
+             'spend_at': '2026-09-22 18:00:00'})
+    page.evaluate("""() => {
+      document.querySelector('#cell .amap-live-ok').title =
+        '2026-09-01…2026-09-15 · read 2026-09-22 12:00:00 · book';
+    }""")
+    page.evaluate('amapRefreshSplitNote("Demo", period)')
+    title = _title(page)
+    assert 'read 2026-09-22 18:00:00 · rpa' in title, (
+        f"подсказку починили по экрану, а не собрали из ответа: {title}"
+    )
+    assert '12:00:00' not in title and 'book' not in title
+
+
 def test_a_one_day_reading_keeps_the_way_the_server_writes_it(page):
     """Сервер пишет один день одним днём. Клиент собирает подсказку заново и
     не имеет права превращать её в «2026-09-01…2026-09-01»: человек видит,
@@ -276,18 +316,25 @@ def test_the_note_is_written_on_every_row_of_the_account(page):
     """Аккаунт в двух странах стоит в двух блоках: сервер при перезагрузке
     подпишет обе, и расходиться они не должны."""
     page.evaluate("""() => {
+      const row = document.querySelector('#row');
       const copy = document.querySelector('#cell').cloneNode(true);
       copy.id = 'cell2';
-      document.querySelector('#row').appendChild(copy);
+      const other = document.querySelector('#cell').cloneNode(true);
+      other.id = 'other';
+      other.dataset.account = 'Someone else';
+      other.querySelector('.amap-live-ok').title = 'do not touch';
+      row.appendChild(copy); row.appendChild(other);
     }""")
     page.evaluate("""(s) => amapApplyReading('Demo', s.reading, s.split)""", {
         'reading': OK_READING,
         'split': {'state': 'ok', 'spend': 10.0, 'spend_currency': '$',
                   'spend_at': '2026-09-22 12:00:00'}})
-    titles = page.evaluate("""() => Array.from(
-      document.querySelectorAll('.amap-live .amap-live-ok')).map(n => n.title)""")
-    assert len(titles) == 2 and titles[0] == titles[1], titles
-    assert 'not the $41.50 above' in titles[1]
+    got = page.evaluate("""() => ({
+      mine: document.querySelector('#cell .amap-live-ok').title,
+      mine2: document.querySelector('#cell2 .amap-live-ok').title,
+      other: document.querySelector('#other .amap-live-ok').title})""")
+    assert got['mine'] == got['mine2'] and 'not the $41.50 above' in got['mine2']
+    assert got['other'] == 'do not touch', "перерисовка переписала чужую строку"
 
 
 def test_an_empty_report_is_an_answer_and_explains_its_spend(page):
