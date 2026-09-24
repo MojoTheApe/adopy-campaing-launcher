@@ -35,6 +35,18 @@ failed the step.
   minute; `FB_RPA_SLOW_PACING=1` restores the old pace without a code change, and a
   test now holds both the new ranges and that switch.
 
+Review asked the tests the only question worth asking of a slice like this — can they
+fail? — by planting mutations. Four of the checks could not: the tests swap
+`_loading_visible`, `_all_edits_saved` and `_component_failed` for stubs, which is right
+for testing the branching around them but left nothing looking at the words those
+predicates read off the page; and the pending-drafts test supplied its own `evaluate`
+that ignored the shipped script and re-implemented the parse in Python. Meta could have
+renamed any of those strings and every test would have stayed green — the exact failure
+this slice exists for. Each now has a Playwright test against real markup, with the
+near-misses ("Verifying your edits...", "Saving edits") pinned as not-the-same-thing.
+The retry around the first hop into Ads Manager had no test at all, though it reaches a
+live account up to three times; it now has four.
+
 What is not here: the recovery, and the count of pending drafts that goes with it,
 are used by the steps that arrive in the next slices. Both land with their tests
 first so each slice stays readable; until then main calls neither from anywhere.
