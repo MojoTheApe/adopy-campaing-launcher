@@ -63,8 +63,14 @@ class SetupWizardTests(unittest.TestCase):
         with self.assertRaisesRegex(WizardValidationError, "does not exist"):
             validate_stats_workbook("missing.xlsx")
 
-    def test_multilogin_check_requires_a_token(self):
-        with self.assertRaisesRegex(WizardValidationError, "access code"):
+    def test_multilogin_check_points_at_the_sign_in(self):
+        """ACL-1303: раньше здесь советовали «вставьте код, выданный
+        поддержкой». Кода нет — Multilogin выдаёт его тому, кто вошёл, — и
+        новому человеку взять его негде. Сообщение обязано вести туда, где
+        он действительно может что-то сделать."""
+        with self.assertRaisesRegex(WizardValidationError, "Sign in to Multilogin"):
+            check_multilogin_access({"A": "", "B": ""})
+        with self.assertRaisesRegex(WizardValidationError, "paste an automation token"):
             check_multilogin_access({"A": "", "B": ""})
 
     @mock.patch("urllib.request.urlopen")
