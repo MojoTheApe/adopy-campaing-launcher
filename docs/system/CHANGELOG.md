@@ -17,6 +17,17 @@ password is used for one request and is cleared from the field as soon as the to
 arrives; nothing writes it to the machine settings, and `machine_config.py` has no
 notion of a password at all.
 
+Three things the owner found while walking the built installer, all on the same screen.
+The two accounts are named the way the dashboard names them — Inhouse and KLD, from
+`mlx_instance_labels()` and overridable through `ACL_MLX_LABEL_A`/`_B` — rather than
+carrying a second set of names ("Main", "Second") for the same two things. The
+paste-a-token fields are hidden behind "I was given an access code instead": minting a
+token requires being the workspace owner, so pasting one is the rare case, and showing
+the fields to everyone made the step taller than the window. And the window's Next and
+Back buttons were packed after the page body, so on a laptop they were squeezed off the
+bottom and the person was stuck with no way forward; the footer is now reserved first
+and the default window is taller.
+
 Signing in lives in one place now (`src/web/multilogin_auth.py`) instead of two: the
 wizard runs before the dashboard exists, so it cannot call the route, and a second copy
 of the same logic is a thing that gets fixed once and forgotten once. The MD5 the

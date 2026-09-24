@@ -178,7 +178,18 @@ def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[
 #: Слоты Multilogin — это два разных аккаунта, а не «основной и запасной».
 #: Подписи «Multilogin access code» и «… (optional)» не говорили об этом
 #: ничего, и человек с двумя аккаунтами не знал, куда что класть (ACL-1303).
-MULTILOGIN_SLOTS = (("A", "Main Multilogin account"), ("B", "Second Multilogin account"))
+#:
+#: Имена берутся оттуда же, откуда их берёт дешборд (`app.mlx_labels`):
+#: Inhouse и KLD, с подменой через ACL_MLX_LABEL_A/B. Свои названия тем же
+#: самым аккаунтам («Main», «Second») — это второе имя одной вещи, и человек
+#: на экране установки не узнаёт то, что видит потом каждый день.
+def multilogin_slots() -> tuple[tuple[str, str], ...]:
+    # Импорт внутри функции: мастер не должен тащить веб-приложение только
+    # ради двух подписей, если до него дело не дошло.
+    from src.web.app import mlx_instance_labels
+
+    labels = mlx_instance_labels()
+    return tuple((slot, labels.get(slot) or slot) for slot in ("A", "B"))
 
 
 def sign_in_to_multilogin(email: str, password: str) -> tuple[str, str]:
@@ -315,11 +326,17 @@ class SetupWizard:
         self.mlx_email = tk.StringVar(value="")
         self.mlx_password = tk.StringVar(value="")
         self.mlx_slot = tk.StringVar(value="A")
+        #: Поля для вставки готового токена показываются по требованию.
+        #: Сами значения живут всегда — их подставляет машинная настройка.
+        self.paste_mode = tk.BooleanVar(value=False)
         self.status = tk.StringVar()
 
         root.title("Adopy Campaign Launcher Setup")
-        root.geometry("780x590")
-        root.minsize(720, 540)
+        # Шаг Multilogin подрос (почта, пароль, выбор аккаунта), и в прежние
+        # 590 точек он перестал помещаться: низ обрезался вместе с кнопкой
+        # «Next», и человек оказывался в тупике на ровном месте (24.09).
+        root.geometry("820x680")
+        root.minsize(760, 560)
         root.protocol("WM_DELETE_WINDOW", self._close)
         self.header = tk.Frame(root, bg="#172036", padx=24, pady=18)
         self.header.pack(fill="x")
@@ -332,10 +349,14 @@ class SetupWizard:
         self.heading.pack(anchor="w")
         self.progress = tk.Label(self.header, fg="#a9bbdf", bg="#172036", font=("Segoe UI", 10))
         self.progress.pack(anchor="w", pady=(4, 0))
+        # Подвал кладётся ДО тела и прижимается к низу: при нехватке высоты
+        # пакер вытесняет то, что уложено последним, — то есть ровно кнопки
+        # «Next» и «Back». Теперь место под них отводится первым, и содержимое
+        # шага ужимается само, но выйти со страницы можно всегда.
+        self.footer = tk.Frame(root, padx=24, pady=16)
+        self.footer.pack(side="bottom", fill="x")
         self.body = tk.Frame(root, padx=28, pady=24)
         self.body.pack(fill="both", expand=True)
-        self.footer = tk.Frame(root, padx=24, pady=16)
-        self.footer.pack(fill="x")
         self.status_label = tk.Label(
             self.footer,
             textvariable=self.status,
@@ -465,7 +486,7 @@ class SetupWizard:
         self.tk.Label(self.body, text="Multilogin password", anchor="w").pack(fill="x")
         self.tk.Entry(self.body, textvariable=self.mlx_password, show="•").pack(fill="x", pady=(2, 8))
         self.tk.Label(self.body, text="Which account", anchor="w").pack(fill="x")
-        for instance, title in MULTILOGIN_SLOTS:
+        for instance, title in multilogin_slots():
             self.tk.Radiobutton(self.body, text=title, value=instance,
                                 variable=self.mlx_slot).pack(anchor="w")
         self.tk.Button(
@@ -474,13 +495,20 @@ class SetupWizard:
             command=self._start_multilogin_signin,
             state="disabled" if self.busy else "normal",
         ).pack(anchor="w", pady=(6, 10))
-        # Вставка токена остаётся — кому-то его выдали на руки, — но вторым
-        # вариантом: первым стоит то, что у человека есть (ACL-1303).
-        self._text("Already have an access code? Paste it instead:")
-        for instance, title in MULTILOGIN_SLOTS:
-            variable = self.token_a if instance == "A" else self.token_b
-            self.tk.Label(self.body, text=f"{title} — access code", anchor="w").pack(fill="x")
-            self.tk.Entry(self.body, textvariable=variable, show="•").pack(fill="x", pady=(2, 10))
+        # Вставка токена нужна ровно одному человеку из десяти: выдать
+        # automation token может только владелец рабочего пространства, и
+        # участнику команды его передают на руки. Показывать это поле всем —
+        # значит растить экран и предлагать то, чего у большинства нет
+        # (замечание владельца 24.09). Прячем под галочку.
+        self.tk.Checkbutton(
+            self.body, text="I was given an access code instead",
+            variable=self.paste_mode, command=self._render, anchor="w",
+        ).pack(fill="x", pady=(4, 0))
+        if self.paste_mode.get():
+            for instance, title in multilogin_slots():
+                variable = self.token_a if instance == "A" else self.token_b
+                self.tk.Label(self.body, text=f"{title} — access code", anchor="w").pack(fill="x")
+                self.tk.Entry(self.body, textvariable=variable, show="•").pack(fill="x", pady=(2, 10))
         if self.multilogin_ok:
             self._text("✓ Multilogin connection verified", bold=True, color="#17663a")
         self.tk.Button(
@@ -488,7 +516,7 @@ class SetupWizard:
             text="Test Multilogin connection",
             command=self._start_multilogin_check,
             state="disabled" if self.busy else "normal",
-        ).pack(anchor="w", pady=10)
+        ).pack(anchor="w", pady=(8, 4))
 
     def _readiness(self) -> None:
         checks = [

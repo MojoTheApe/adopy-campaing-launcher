@@ -111,19 +111,63 @@ def test_the_wizard_asks_for_an_email_and_a_password_not_a_token():
     step = step[:step.index("\n    def _readiness")]
     assert "Multilogin email" in step and "Multilogin password" in step
     assert "Sign in to Multilogin" in step
-    assert step.index("Multilogin email") < step.index("Already have an access code"), (
+    assert step.index("Multilogin email") < step.index("I was given an access code"), (
         "поле токена стоит раньше входа — человек снова упрётся в то, чего у него нет"
     )
 
 
-def test_the_two_slots_say_which_account_they_are():
+def test_the_two_slots_are_named_the_way_the_dashboard_names_them():
     """«Multilogin access code» и «… (optional)» не говорили ничего: человек
-    с двумя аккаунтами не знал, куда что класть."""
+    с двумя аккаунтами не знал, куда что класть.
+
+    А назвать их по-своему («Main», «Second») — тоже мимо: у этих аккаунтов
+    уже есть имена, Inhouse и KLD, и человек видит их каждый день на
+    дешборде. Второе имя одной вещи — это то, что придётся однажды
+    переименовывать в двух местах (замечание владельца 24.09).
+    """
+    import setup_wizard as wizard
+
+    from src.web.app import mlx_instance_labels
+
+    assert dict(wizard.multilogin_slots()) == mlx_instance_labels()
     source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
-    assert 'MULTILOGIN_SLOTS = (("A", "Main Multilogin account"), ("B", "Second Multilogin account"))' in source
+    assert "Main Multilogin account" not in source and "Second Multilogin account" not in source
     step = source[source.index("def _multilogin(self)"):]
-    step = step[:step.index("\n    def _readiness")]
+    step = step[:step.index(chr(10) + "    def _readiness")]
     assert "(optional)" not in step
+
+
+def test_renaming_an_account_changes_the_installer_too(monkeypatch):
+    """Подмена через ACL_MLX_LABEL_A/B работает и в мастере — иначе имена
+    разъедутся ровно в тот день, когда аккаунт переименуют."""
+    import setup_wizard as wizard
+
+    monkeypatch.setenv("ACL_MLX_LABEL_B", "Agency")
+    assert dict(wizard.multilogin_slots())["B"] == "Agency"
+
+
+def test_the_paste_field_is_hidden_until_it_is_asked_for():
+    """Выдать automation token может только владелец рабочего пространства,
+    поэтому вставка нужна одному человеку из десяти. Показывать поле всем —
+    растить экран и предлагать то, чего у большинства нет; на ноутбуке из-за
+    этого за край уходила кнопка «Next» (замечание владельца 24.09)."""
+    source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
+    step = source[source.index("def _multilogin(self)"):]
+    step = step[:step.index(chr(10) + "    def _readiness")]
+    assert "I was given an access code instead" in step
+    assert "if self.paste_mode.get():" in step, "поля токенов показываются всегда"
+    assert step.index("Multilogin email") < step.index("I was given an access code")
+
+
+def test_the_way_out_of_the_page_is_never_squeezed_off_the_screen():
+    """Пакер вытесняет то, что уложено последним. Кнопки «Next» и «Back»
+    лежали после тела страницы — и на невысоком экране уходили за край
+    вместе с ним, оставляя человека в тупике (24.09)."""
+    source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
+    assert 'self.footer.pack(side="bottom", fill="x")' in source
+    assert source.index("self.footer = tk.Frame") < source.index("self.body = tk.Frame"), (
+        "подвал снова укладывается после тела"
+    )
 
 
 def test_the_wizard_keeps_the_token_and_forgets_the_password():
