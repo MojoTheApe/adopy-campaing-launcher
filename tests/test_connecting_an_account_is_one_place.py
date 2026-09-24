@@ -272,3 +272,60 @@ def test_the_expiry_is_a_date_not_a_timestamp(browser):
         assert 'T09:30' not in line
     finally:
         ctx.close()
+
+
+def test_the_team_lead_copies_the_token_of_the_selected_account(browser):
+    """Ревью 24.09: подмена слота на «A» проходила. В жизни — тимлид выбрал KLD
+    и разослал команде токен Inhouse."""
+    ctx, p, s, errors = _page(browser, alive=True, team_admin=True)
+    try:
+        s['alive']['B'] = True
+        p.evaluate("""() => {
+          window.__copied = null;
+          document.execCommand = function (cmd) {
+            if (cmd === 'copy') window.__copied = document.activeElement && document.activeElement.value;
+            return true;
+          };
+        }""")
+        p.locator('.amap-inst').first.select_option('B')
+        p.wait_for_function("AMAP_ML_STATE['B'] && AMAP_ML_STATE['B'].alive")
+        p.locator('.amap-ml-copy').first.click()
+        p.wait_for_function("window.__copied !== null")
+        assert p.evaluate("window.__copied") == 'team-token-B'
+        assert ('/multilogin-team-token', {'instance': 'B'}) in s['calls']
+    finally:
+        ctx.close()
+
+
+def test_the_team_lead_is_not_offered_to_copy_a_dead_token(browser):
+    ctx, p, s, errors = _page(browser, alive=False, team_admin=True, status_extra={
+        'has_token': True, 'reason': 'revoked', 'next_step': 'Sign in again.'})
+    try:
+        assert p.locator('.amap-ml-copy:visible').count() == 0, 'предложено разослать мёртвый токен'
+    finally:
+        ctx.close()
+
+
+def test_a_refused_clipboard_is_not_reported_as_copied(browser):
+    ctx, p, s, errors = _page(browser, alive=True, team_admin=True)
+    try:
+        p.evaluate("() => { document.execCommand = function () { return false; }; }")
+        p.locator('.amap-ml-copy').first.click()
+        p.wait_for_function("document.querySelector('.amap-msg').textContent.length > 0")
+        msg = p.locator('.amap-msg').first.inner_text()
+        assert 'copied' not in msg.lower(), 'отказ буфера показан как успех'
+        assert 'clipboard' in msg.lower()
+    finally:
+        ctx.close()
+
+
+def test_an_expired_token_tells_a_buyer_what_to_do(browser):
+    ctx, p, s, errors = _page(browser, alive=False, team_admin=False, status_extra={
+        'has_token': True, 'reason': 'expired',
+        'next_step': 'Ask your team lead for the current team token and paste it here.'})
+    try:
+        line = p.locator('.amap-ml-line').first.inner_text()
+        assert 'team token expired' in line and 'Ask your team lead' in line
+    finally:
+        ctx.close()
+
