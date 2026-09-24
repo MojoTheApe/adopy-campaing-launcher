@@ -234,7 +234,7 @@ def test_multilogin_access(tokens: dict[str, str]) -> str:
             status = exc.code
         except (OSError, urllib.error.URLError) as exc:
             raise WizardValidationError(
-                "Cannot reach Multilogin Launcher. Make sure Multilogin is installed, running, and signed in."
+                "Could not reach Multilogin (api.multilogin.com). Check the network connection and try again."
             ) from exc
         if status == 401:
             raise WizardValidationError(f"Multilogin rejected token {instance}.")
@@ -299,6 +299,8 @@ class SetupWizard:
         self.step = 0
         self.configuration: MachineConfiguration | None = None
         self._verified_tokens = None
+        #: Что сказать человеку после перерисовки — см. `_worker_done`.
+        self._after_render = ""
         self.multilogin_ok = False
         self.completed = False
         self.busy = False
@@ -545,10 +547,16 @@ class SetupWizard:
         self._render()
         self.status.set(message)
 
-    def _worker_done(self, message: str, done: Callable[[str], None]) -> None:
+    def _worker_done(self, message, done: Callable[[Any], None]) -> None:
         self.busy = False
+        self._after_render = ""
         done(message)
         self._render()
+        # `_render` начинается с очистки строки состояния, поэтому сообщение,
+        # поставленное в `done`, стиралось в том же такте и человек не видел
+        # ничего (ревью 24.09). Отказ это уже обходил — теперь и успех.
+        if self._after_render:
+            self.status.set(self._after_render)
 
     def _tokens(self) -> dict[str, str]:
         return {"A": self.token_a.get().strip(), "B": self.token_b.get().strip()}
@@ -559,18 +567,23 @@ class SetupWizard:
         password = self.mlx_password.get()
         slot = (self.mlx_slot.get() or "A").strip().upper()
 
-        def work() -> str:
+        def work() -> tuple[str, str, str]:
             token, message = sign_in_to_multilogin(email, password)
-            return f"{slot}\t{token}\t{message}"
+            return slot, token, message
 
-        def done(answer: str) -> None:
-            slot_name, token, message = answer.split("\t", 2)
+        def done(answer: tuple[str, str, str]) -> None:
+            slot_name, token, message = answer
             (self.token_a if slot_name == "A" else self.token_b).set(token)
             # Пароль больше не нужен: токен получен и сохранится сам.
             self.mlx_password.set("")
-            self._verified_tokens = self._tokens()
-            self.multilogin_ok = True
-            self.status.set(message)
+            # Проверенным считается ТОЛЬКО тот слот, который сейчас вошёл.
+            # Записать сюда оба значило бы благословить вторым заходом чужую
+            # строку: у владельца два аккаунта (Inhouse и Agency), и опечатка
+            # в поле второго уехала бы в настройку как рабочий токен, а
+            # мастер сказал бы «verified» (ревью 24.09).
+            self._verified_tokens = {"A": "", "B": "", slot_name: token}
+            self.multilogin_ok = self._verified_tokens == self._tokens()
+            self._after_render = message
 
         self._run_worker(work, done)
 

@@ -22,6 +22,15 @@ wizard runs before the dashboard exists, so it cannot call the route, and a seco
 of the same logic is a thing that gets fixed once and forgotten once. The MD5 the
 Multilogin API requires, and the address of that API, are stated once.
 
+Review found one real defect in the first version of this fix, on the very machine being
+set up: signing in to one account marked **both** slots verified. A typo sitting in the
+second account's box would then have been written to the machine settings as a working
+token, under a green "verified". Only the slot that just signed in counts now; the other
+still has to be tested. Two more branches — a refused sign-in, and a sign-in that yields
+no automation token — had no test behind them, and deleting either left the whole suite
+green while the wizard finished "ready" with no token at all and the first Publish died
+on "TOKEN_A is not set". Both are pinned now, in the wizard and in the dashboard route.
+
 Two more things the same screen was getting wrong. Slot A and slot B are two different
 Multilogin accounts — here Inhouse and Agency — and both fields read "Multilogin access
 code", the second distinguished only by "(optional)"; they are now named. And signing in

@@ -157,3 +157,118 @@ def test_a_person_with_no_token_and_no_sign_in_is_told_what_to_do():
         wizard.test_multilogin_access({"A": "", "B": ""})
     assert "Sign in to Multilogin" in str(exc.value)
     assert "supplied by support" not in str(exc.value)
+
+
+# ── Ветки, которые пропускали человека дальше без токена ──────────────────
+#
+# Ревью 24.09 удалило по одной строке и получило зелёный набор. А без них
+# мастер доходит до конца, пишет «готово», не сохраняет ни одного токена — и
+# первая же публикация у байера падает на «TOKEN_A is not set». Это ровно тот
+# молчаливый успех, ради устранения которого задача и заведена.
+
+def _wizard():
+    import setup_wizard
+    return setup_wizard
+
+
+def test_signing_in_without_a_token_is_not_a_success(monkeypatch):
+    """Вошёл, но токен автоматизации не выдали — право на это есть только у
+    владельца рабочего пространства. Робот без токена не откроет ни один
+    профиль, значит это отказ."""
+    wizard = _wizard()
+    monkeypatch.setattr(
+        multilogin_auth, "sign_in",
+        lambda *a, **k: multilogin_auth.SignIn(
+            ok=True, bearer="b", automation_token="",
+            token_error="not the workspace owner"),
+    )
+    with pytest.raises(wizard.WizardValidationError) as exc:
+        wizard.sign_in_to_multilogin("member@adopy.com", "pw")
+    assert "not the workspace owner" in str(exc.value)
+    assert "Ask the owner" in str(exc.value), "человеку не сказали, к кому идти"
+
+
+def test_a_refused_sign_in_is_told_apart_from_a_missing_token(monkeypatch):
+    """Неверный пароль и «нет прав выдать токен» — разные беды, и советы к
+    ним разные. Пока ветку отказа не проверяли, ошибка пароля отвечала бы
+    «попросите владельца войти сюда»."""
+    wizard = _wizard()
+    monkeypatch.setattr(
+        multilogin_auth, "sign_in",
+        lambda *a, **k: multilogin_auth.SignIn(ok=False, error="Sign-in failed [401]: wrong credentials"),
+    )
+    with pytest.raises(wizard.WizardValidationError) as exc:
+        wizard.sign_in_to_multilogin("buyer@adopy.com", "nope")
+    assert "wrong credentials" in str(exc.value)
+    assert "Ask the owner" not in str(exc.value)
+
+
+def test_signing_in_to_one_account_does_not_bless_the_other(monkeypatch):
+    """У владельца два аккаунта Multilogin. Вход в первый засчитывал и
+    второй, не проверив его: опечатка в его поле уехала бы в настройку как
+    рабочий токен, а мастер написал бы «verified» (ревью 24.09)."""
+    wizard = _wizard()
+
+    class Var:
+        def __init__(self, value=""):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    app = wizard.SetupWizard.__new__(wizard.SetupWizard)
+    app.token_a, app.token_b = Var(""), Var("typo-from-the-other-account")
+    app.mlx_email, app.mlx_password, app.mlx_slot = Var("o@adopy.com"), Var("pw"), Var("A")
+    app.busy = False
+    app._verified_tokens = None
+    app.multilogin_ok = False
+    app._after_render = ""
+    app.status = Var("")
+    captured = {}
+    app._run_worker = lambda work, done: captured.update(work=work, done=done)
+
+    monkeypatch.setattr(wizard, "sign_in_to_multilogin", lambda e, p: ("fresh-token-A", "Signed in"))
+    app._start_multilogin_signin()
+    captured["done"](captured["work"]())
+
+    assert app.token_a.get() == "fresh-token-A"
+    assert app.token_b.get() == "typo-from-the-other-account", "чужое поле затёрли"
+    assert app.multilogin_ok is False, (
+        "второй аккаунт объявлен проверенным, хотя его никто не проверял"
+    )
+    assert app.mlx_password.get() == "", "пароль остался в поле"
+
+
+def test_signing_in_with_the_other_slot_empty_is_enough(monkeypatch):
+    """Обратная сторона: если второго аккаунта нет, вход в первый должен
+    засчитываться — иначе мастер не пройти вовсе."""
+    wizard = _wizard()
+
+    class Var:
+        def __init__(self, value=""):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    app = wizard.SetupWizard.__new__(wizard.SetupWizard)
+    app.token_a, app.token_b = Var(""), Var("")
+    app.mlx_email, app.mlx_password, app.mlx_slot = Var("o@adopy.com"), Var("pw"), Var("A")
+    app.busy = False
+    app._verified_tokens = None
+    app.multilogin_ok = False
+    app._after_render = ""
+    app.status = Var("")
+    captured = {}
+    app._run_worker = lambda work, done: captured.update(work=work, done=done)
+
+    monkeypatch.setattr(wizard, "sign_in_to_multilogin", lambda e, p: ("fresh-token-A", "Signed in"))
+    app._start_multilogin_signin()
+    captured["done"](captured["work"]())
+    assert app.multilogin_ok is True
