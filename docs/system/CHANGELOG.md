@@ -15,10 +15,14 @@ failed the step.
   with unsaved fields loses them; on the campaign list there is nothing to lose.
 - A block Meta failed to load ("component failed to load", seen on 2026-09-20 when
   placements and iOS devices failed in a row) is reloaded on the same rule.
-- Typing long text no longer costs a keystroke per character: the first eight
-  characters are real keystrokes, the rest is inserted at once. The owner measured the
+- Typing long text no longer costs a keystroke per character: the text starts with
+  about eight real keystrokes and the rest is inserted at once. The owner measured the
   old behaviour at about 45 minutes per round of eight campaigns; `FB_RPA_HUMAN_TYPING=1`
-  brings it back, and `FB_RPA_TYPING_LEAD` changes the eight.
+  brings it back, and `FB_RPA_TYPING_LEAD` changes the eight. The lead counts
+  **keystrokes, not characters**: Playwright can only type ASCII, so counting characters
+  gave an Arabic ad — which is most of ours — exactly zero keystrokes, the instant
+  keydown-free insertion this whole function exists to avoid. A cap keeps a text with no
+  Latin letters at all from falling back to character-by-character entry.
 - Browser and pacing changes that go with it: guards and placement for the editor
   window (`FB_RPA_WINDOW_LEFT` / `FB_RPA_WINDOW_TOP`), and shorter waits between
   actions — the owner's decision of 2026-09-21, roughly halving the large pauses
