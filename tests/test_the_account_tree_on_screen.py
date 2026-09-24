@@ -156,7 +156,8 @@ def test_the_tree_lands_under_its_own_account(page):
       return {cls: tr.className, span: tr.firstElementChild.colSpan,
               lines: tr.querySelectorAll('.amap-tree-line').length};
     }""")
-    assert got["cls"] == "amap-tree"
+    # ACL-1277 дописывает сюда `amap-stacked`, когда колонке имени тесно.
+    assert got["cls"].split()[0] == "amap-tree"
     assert got["span"] == COLUMNS, "блок не на всю ширину — таблица разъедется"
     assert got["lines"] == 2
 
@@ -284,7 +285,7 @@ def test_the_next_account_row_is_not_disturbed(page):
     _paint(page, [ADSET, AD])
     assert page.evaluate(
         "() => document.getElementById('after').previousElementSibling.className"
-    ) == "amap-tree"
+    ).split()[0] == "amap-tree"
 
 
 # ── когда показывать нечего ───────────────────────────────────────────────
@@ -391,7 +392,13 @@ def test_the_listeners_are_the_arrows_and_the_off_button():
     assert block.count("window.addEventListener('resize'") == 1, "окно слушается не только на размер"
     # Шестой — раскрытие блока страны (`toggle`): тоже только пересчёт ширин.
     assert block.count("document.addEventListener('toggle'") == 1, "раскрытие слушается не одно"
-    assert block.count("addEventListener") == 6, "появился седьмой обработчик"
+    # Седьмой (ACL-1277) — открытие и закрытие билдера: он раздвигает страницу
+    # своим отступом, а `resize` при этом не приходит, и дерево оставалось с
+    # ширинами, снятыми до него. Тоже только пересчёт ширин.
+    assert block.count("document.addEventListener('acl:builder-drawer'") == 1, (
+        "билдер слушается не один раз"
+    )
+    assert block.count("addEventListener") == 7, "появился восьмой обработчик"
 
 
 # ── покрывают ли строки спенд аккаунта ────────────────────────────────────
@@ -1063,20 +1070,55 @@ def _colgroup_shares():
     return shares
 
 
+def _cell_padding():
+    """Отступы ячейки — из самой страницы, а не на глаз.
+
+    Ревью 23.09: фикстура ставила ширины прямо на ячейки и оставляла им
+    браузерный отступ в 1px. Дерево берёт отступ у соседней ячейки аккаунта
+    (`--amap-cell-pad`), поэтому все замеры ширины в этом файле выходили на
+    26px на ячейку щедрее правды — и «числа стоят под заголовками» означало
+    «стоят, но текста в них помещается два пикселя».
+    """
+    import re
+
+    src = REPORT.read_text(encoding="utf-8")
+    rule = re.search(r"\.amap td \{([^}]*)\}", src).group(1)
+    return re.search(r"padding:\s*([^;]+);", rule).group(1).strip()
+
+
+def _table_heads():
+    """Заголовки колонок — из самого шаблона, а не списком в тесте."""
+    import re
+
+    src = (TPL / "_account_map_country.html").read_text(encoding="utf-8")
+    head = src[src.index("<thead>"): src.index("</thead>")]
+    return [re.sub(r"<[^>]+>", "", h).strip()
+            for h in re.findall(r"<th[^>]*>(.*?)</th>", head, re.S)]
+
+
 def _real_widths(page, table_px=982):
     """Доли колонок из шаблона на настоящей ширине таблицы.
 
     982px — ширина таблицы на ноутбуке 1280px (окно минус боковая колонка и
     поля). Мерить на 1200px было самообманом: такой ширины на экранах, ради
     которых написаны ACL-1275 и ACL-1277, не бывает.
+
+    Колонки задаются `<colgroup>`, как в шаблоне, и ячейки получают отступ
+    страницы: иначе таблица под тестом шире настоящей на 26px в каждой
+    ячейке, и тест меряет не то, что видит человек.
     """
     page.set_viewport_size({"width": 1400, "height": 800})
     page.add_style_tag(content=_tree_css())
+    page.add_style_tag(content="table td { padding: %s; }" % _cell_padding())
     page.evaluate("""([px, shares]) => {
       const t = document.querySelector('table');
       t.style.tableLayout = 'fixed'; t.style.width = px + 'px';
-      Array.from(document.getElementById('acc').children)
-        .forEach((c, i) => { c.style.width = shares[i] + '%'; });
+      const old = t.querySelector('colgroup');
+      if (old) old.remove();
+      const cg = document.createElement('colgroup');
+      shares.forEach(w => { const c = document.createElement('col');
+                            c.style.width = w + '%'; cg.appendChild(c); });
+      t.insertBefore(cg, t.firstChild);
     }""", [table_px, _colgroup_shares()])
 
 
@@ -1274,3 +1316,310 @@ def test_the_two_buttons_fit_the_narrowest_real_width(page):
         f"кнопки вышли за край колонки на {got['right'] - got['cellRight']:.0f}px"
     )
     assert min(got["widths"]) > 0, "кнопка сжалась в ничто"
+
+
+# ── Узкий экран: имя своей строкой (ACL-1277) ─────────────────────────────
+#
+# Замер 23.09, настоящий фрагмент карты: десяти колонкам кроме имени нужно по
+# содержимому 660px. С открытым билдером таблица получает 582px на ноутбуке
+# 1280 и 668px на 1366 — имени не остаётся ничего, и перераспределением долей
+# это не чинится. Владелец выбрал не прятать числа: имя уходит на свою строку.
+
+
+def test_a_narrow_table_puts_the_name_on_its_own_line(page):
+    """Имя получает всю ширину таблицы, а не 91px из колонки."""
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    got = page.evaluate("""() => {
+      const line = document.querySelector('.amap-tree-line');
+      const who = line.querySelector('.amap-tree-who');
+      const name = line.querySelector('.amap-tree-name');
+      // Пустые клетки в узкой раскладке скрыты — берём первое настоящее число.
+      const first = line.querySelector('.amap-tree-num.spend');
+      return {stacked: !!line.closest('.amap-stacked'),
+              who: Math.round(who.getBoundingClientRect().width),
+              name: Math.round(name.getBoundingClientRect().width),
+              line: Math.round(line.getBoundingClientRect().width),
+              nameTop: Math.round(name.getBoundingClientRect().top),
+              numTop: Math.round(first.getBoundingClientRect().top)};
+    }""")
+    assert got["stacked"], "узкая таблица осталась в одну строку"
+    assert got["who"] > got["line"] * 0.9, (
+        f"имя заняло {got['who']}px из {got['line']}px — это не своя строка"
+    )
+    assert got["name"] >= 400, f"имени досталось {got['name']}px"
+    assert got["numTop"] > got["nameTop"], "числа остались на строке имени"
+
+
+def test_every_number_says_what_it_is_when_the_columns_are_gone(page):
+    """Решение владельца 23.09, принятое по честному замеру.
+
+    Сначала числа во второй строке оставили в колонках — и они получили по
+    2px текста: «$…», «1..», «6..». Под какими заголовками они при этом
+    стояли, значения не имело: на этой ширине сама шапка читается как
+    «S… A… L… F…». Поэтому колонок во второй строке нет, а у каждого числа
+    своя подпись.
+    """
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""() => {
+      // Книжная атрибуция приходит отдельным запросом — здесь ставим сами.
+      const vals = {spend: '$1,044.82', leads: '181', deposits: '12',
+                    cpl: '$5.77', cpa: '$87.07', cr: '6.6%'};
+      document.querySelectorAll('.amap-tree-line [data-attr]').forEach(c => {
+        c.textContent = vals[c.dataset.attr] || '';
+      });
+    }""")
+    got = page.evaluate("""() => {
+      const line = document.querySelector('.amap-tree-line');
+      return Array.from(line.children).filter(c => !c.classList.contains('amap-tree-who'))
+        .map(c => ({label: c.dataset.label || '', text: c.textContent.trim(),
+                    shown: c.getBoundingClientRect().width > 0,
+                    full: c.scrollWidth <= c.clientWidth + 1}));
+    }""")
+    filled = [g for g in got if g["text"]]
+    assert len(filled) >= 8, f"чисел в строке всего {len(filled)}"
+    for g in filled:
+        assert g["label"], f"число «{g['text']}» не говорит, что оно такое"
+        assert g["shown"] and g["full"], f"«{g['label']} {g['text']}» обрезано"
+    # Пустая ячейка исчезает целиком: «CPL» без числа обещает число, которого нет.
+    for g in got:
+        if not g["text"]:
+            assert not g["shown"], f"пустая клетка «{g['label']}» показана"
+
+
+def test_the_labels_are_the_words_from_the_table_head(page):
+    """Подпись называет то же, что заголовок колонки, — иначе одно и то же
+    число на широком и узком экране называется по-разному.
+
+    Три подписи нарочно не совпадают с шапкой, и каждая — решение, а не
+    оплошность:
+
+    * «Account spend» → «Meta spend». В строке аккаунта это прочитанный
+      спенд кабинета; в строке кампании — спенд самой кампании словами Meta.
+    * «Status» → «Delivery». Status строки аккаунта — предупреждение
+      кабинета; здесь стоит доставка Meta.
+    * «Setup» → «Meta». Setup аккаунта — готовность к работе, а в дереве
+      эта колонка несёт результат Meta (ACL-1275).
+
+    Остальные читаются из шаблона: переименуют заголовок — тест это заметит.
+    """
+    heads = _table_heads()
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    labels = page.evaluate("""() => Array.from(
+      document.querySelectorAll('.amap-tree-line > [data-label]')).map(c => c.dataset.label)""")
+    assert labels[1] == 'Meta spend' and heads[2] == 'Account spend', (heads[2], labels[1])
+    assert labels[7] == 'Delivery' and heads[8] == 'Status', (heads[8], labels[7])
+    assert labels[8] == 'Meta' and heads[9] == 'Setup', (heads[9], labels[8])
+    # Книжные числа названы ровно так, как их зовёт шапка.
+    assert [labels[0]] + labels[2:7] == [heads[1]] + heads[3:8], (labels, heads)
+
+
+def test_the_labels_do_not_show_up_in_the_wide_layout(page):
+    """В широкой раскладке слово стоит в шапке таблицы; второе рядом с
+    числом — это шум и лишняя ширина."""
+    _real_widths(page, table_px=982)
+    _paint(page, [ADSET])
+    _open(page)
+    shown = page.evaluate("""() => {
+      const c = document.querySelector('.amap-tree-line > [data-label]');
+      return getComputedStyle(c, '::before').content;
+    }""")
+    assert shown in ('none', 'normal', '""'), f"подпись видна и в широкой раскладке: {shown}"
+
+
+def test_a_wide_table_keeps_the_single_line(page):
+    """На своём экране строка остаётся одной: лишняя высота даром никому."""
+    _real_widths(page, table_px=982)
+    _paint(page, [ADSET])
+    _open(page)
+    got = page.evaluate("""() => {
+      const line = document.querySelector('.amap-tree-line');
+      const who = line.querySelector('.amap-tree-who');
+      const first = line.children[1];
+      return {stacked: !!line.closest('.amap-stacked'),
+              who: Math.round(who.getBoundingClientRect().width),
+              line: Math.round(line.getBoundingClientRect().width),
+              lineH: Math.round(line.getBoundingClientRect().height),
+              sameRow: first.getBoundingClientRect().top
+                       < who.getBoundingClientRect().bottom};
+    }""")
+    assert not got["stacked"], "широкая таблица зря разложилась на две строки"
+    assert got["who"] < got["line"] * 0.4, "имя заняло строку целиком без нужды"
+    assert got["sameRow"], "числа уехали под строку имени"
+    assert got["lineH"] < 40, f"строка выросла до {got['lineH']}px"
+
+
+def test_ads_opened_later_get_the_same_layout(page):
+    """Строка объявления скрыта, когда раскладку выбирают, и обязана встать
+    правильно, когда её показали.
+
+    Дорисовкой это не назвать: `amapPaintTree` строит строки объявлений сразу,
+    а стрелка только снимает `hidden` (ревью 23.09). Проверяется именно
+    «скрытую строку разложило правильно».
+    """
+    _real_widths(page, table_px=582)
+    ad = dict(AD, parent_id=ADSET["id"])
+    _paint(page, [ADSET, ad])
+    _open(page)
+    page.evaluate("() => document.querySelector('.amap-tree-caret').click()")
+    got = page.evaluate("""() => Array.from(document.querySelectorAll('.amap-tree-line.ad')).map(l => {
+      const who = l.querySelector('.amap-tree-who');
+      return {who: Math.round(who.getBoundingClientRect().width),
+              line: Math.round(l.getBoundingClientRect().width)};
+    })""")
+    assert got, "объявления не раскрылись"
+    for g in got:
+        assert g["who"] > g["line"] * 0.9, (
+            f"строке объявления досталось {g['who']}px из {g['line']}px"
+        )
+
+
+def test_the_workbook_dash_does_not_become_a_label_without_a_number(page):
+    """У объявления строк в книге обычно нет вовсе, и узкая раскладка читалась
+    бы как «SPEND — LEADS — FTD — CPL — CPA — CR —»: шесть подписей, за
+    которыми ничего. В широкой раскладке прочерк остаётся — там он стоит в
+    своей колонке и говорит «смотрели, не нашли»."""
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""() => {
+      document.querySelectorAll('.amap-tree-line [data-attr]').forEach(c => {
+        c.textContent = '—'; c.classList.add('nodata');
+      });
+    }""")
+    shown = page.evaluate("""() => Array.from(
+      document.querySelectorAll('.amap-tree-line [data-attr]'))
+      .filter(c => c.getBoundingClientRect().width > 0).length""")
+    assert shown == 0, f"{shown} подписей без числа осталось на экране"
+
+
+def test_the_numbers_line_keeps_the_tree_indent(page):
+    """Уступ — единственное, чем строка чисел показывает, чья она. Без него
+    числа объявления начинаются левее имени его же кампании."""
+    _real_widths(page, table_px=582)
+    ad = dict(AD, parent_id=ADSET["id"])
+    _paint(page, [ADSET, ad])
+    _open(page)
+    page.evaluate("() => document.querySelector('.amap-tree-caret').click()")
+    got = page.evaluate("""() => {
+      const pick = sel => {
+        const line = document.querySelector(sel);
+        return {num: line.querySelector('.amap-tree-num.spend').getBoundingClientRect().left,
+                line: line.getBoundingClientRect().left,
+                who: line.querySelector('.amap-tree-who').getBoundingClientRect().left,
+                name: line.querySelector('.amap-tree-name').getBoundingClientRect().left};
+      };
+      return {camp: pick('.amap-tree-line:not(.ad)'), ad: pick('.amap-tree-line.ad')};
+    }""")
+    # Имя объявления стоит там же, где начинается его строка чисел: уступ
+    # считается один раз, а не дважды (строкой и её же ячейкой имени).
+    assert abs(got["ad"]["who"] - got["ad"]["num"]) < 1.5, (
+        f"имя объявления на {got['ad']['who'] - got['ad']['num']:.0f}px правее "
+        "собственной строки чисел — уступ посчитан дважды"
+    )
+    step = got["ad"]["num"] - got["camp"]["num"]
+    assert step > 8, (
+        f"числа объявления сдвинуты относительно кампании на {step:.0f}px — "
+        "по строке чисел не видно, чья она"
+    )
+    # Уступ держит строка целиком, а не одна ячейка имени: иначе числа
+    # встали бы у левого края, одинаково у кампании и у объявления.
+    assert (got["ad"]["num"] - got["ad"]["line"])         > (got["camp"]["num"] - got["camp"]["line"]) + 8
+
+
+def test_a_workbook_that_could_not_be_read_says_so(page):
+    """«Книга не прочиталась» и «в книге нет строк» — разные вещи.
+
+    В узкой раскладке прочерки спрятаны, и поломка выглядела бы там ровно
+    как отсутствие строк, то есть никак: причина жила только в подсказке к
+    клетке, которой больше нет.
+    """
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""() => {
+      const box = document.querySelector('.amap-tree-inner');
+      amapFillAttribution(box, [], {ok: false, error: 'Workbook numbers could not be loaded'});
+    }""")
+    got = page.evaluate("""() => {
+      const n = document.querySelector('.amap-tree-attr-err');
+      return n ? {text: n.textContent, shown: n.getBoundingClientRect().width > 0} : null;
+    }""")
+    assert got and got["shown"], "поломка книги не сказана словами"
+    assert "could not be loaded" in got["text"]
+
+
+def test_the_note_goes_away_when_the_workbook_answers(page):
+    """Иначе одна неудача осталась бы на экране навсегда."""
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""() => {
+      const box = document.querySelector('.amap-tree-inner');
+      amapFillAttribution(box, [], {ok: false, error: 'nope'});
+      amapFillAttribution(box, [], {ok: true, campaigns: {}, ads: {}});
+    }""")
+    assert page.evaluate("() => document.querySelectorAll('.amap-tree-attr-err').length") == 0
+
+
+def test_a_blank_workbook_value_is_not_a_value(page):
+    """Пробел из книги не должен оставлять подпись без числа."""
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""(name) => {
+      const box = document.querySelector('.amap-tree-inner');
+      amapFillAttribution(box, [], {ok: true, ads: {},
+        campaigns: {[name]: {spend: ' ', leads: '181'}}});
+    }""", ADSET["name"])
+    shown = page.evaluate("""() => Array.from(
+      document.querySelectorAll('.amap-tree-line [data-attr]'))
+      .filter(c => c.getBoundingClientRect().width > 0)
+      .map(c => c.dataset.attr + '=' + c.textContent.trim())""")
+    assert shown == ['leads=181'], shown
+
+
+def test_the_workbook_failure_is_said_in_both_layouts(page):
+    """Решение осознанное, а не побочное: в широкой раскладке прочерки с
+    подсказками остаются, но причина, живущая только в подсказке, — это
+    причина, которую никто не читает. Строка стоит в обеих раскладках."""
+    _real_widths(page, table_px=982)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""() => amapFillAttribution(
+      document.querySelector('.amap-tree-inner'), [], {ok: false, error: 'no workbook'})""")
+    got = page.evaluate("""() => {
+      const n = document.querySelector('.amap-tree-attr-err');
+      const dash = document.querySelector('.amap-tree-num.attr');
+      return {shown: !!n && n.getBoundingClientRect().width > 0,
+              dash: dash.textContent.trim(), tip: dash.title,
+              stacked: !!document.querySelector('.amap-stacked')};
+    }""")
+    assert not got["stacked"], "широкая раскладка неожиданно разложилась"
+    assert got["shown"], "в широкой раскладке поломка книги молчит"
+    assert got["dash"] == "—" and got["tip"], "прочерк и его подсказка пропали"
+
+
+def test_the_failure_line_stands_with_the_numbers_not_under_the_log(page):
+    """Остальные оговорки дерева стоят до журнала; эта приходит позже, и без
+    вставки на место падала под свёрнутый «What was changed here»."""
+    _real_widths(page, table_px=582)
+    _paint(page, [ADSET])
+    _open(page)
+    page.evaluate("""() => amapFillAttribution(
+      document.querySelector('.amap-tree-inner'), [], {ok: false, error: 'no workbook'})""")
+    order = page.evaluate("""() => {
+      const box = document.querySelector('.amap-tree-inner');
+      const kids = Array.from(box.children);
+      const log = box.querySelector('.amap-tree-log');
+      return {note: kids.indexOf(box.querySelector('.amap-tree-attr-err')),
+              log: log ? kids.indexOf(log) : -1};
+    }""")
+    assert order["note"] >= 0
+    if order["log"] >= 0:
+        assert order["note"] < order["log"], "оговорка встала под журналом"

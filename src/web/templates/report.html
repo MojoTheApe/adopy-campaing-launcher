@@ -1957,6 +1957,53 @@
     }
     .amap-tree-line > * { padding: 0 var(--amap-cell-pad, 0.6rem); min-width: 0; }
     .amap-tree-line:last-child { border-bottom: none; }
+    /* ACL-1277: на ноутбуке с открытым билдером таблице достаётся 582px на
+       1280 и 668px на 1366, а десяти колонкам кроме имени нужно по
+       содержимому 660px — имени не остаётся ничего. Перераспределением
+       ширины это не решается, и прятать числа владелец не захотел
+       (решение 23.09). Тогда имя занимает свою строку во всю ширину, а
+       числа встают строкой ниже под своими заголовками: столбцы те же, с
+       теми же ширинами, сдвинут только перенос.
+
+       Вторая строка начинается со второй колонки, потому что первая занята
+       именем сверху: без этого числа уехали бы на колонку влево и встали
+       под чужими заголовками — молча и правдоподобно. */
+    .amap-stacked .amap-tree-line {
+      display: flex; flex-wrap: wrap; align-items: baseline;
+      column-gap: 0.75rem; row-gap: 0.1rem; padding-bottom: 0.35rem;
+      padding-left: 0.6rem;
+    }
+    /* Уступ объявления держит вся строка, а не одна ячейка имени: иначе
+       числа объявления начинаются левее имени его же кампании, и по строке
+       чисел не видно, чья она (ревью 23.09). */
+    .amap-stacked .amap-tree-line.ad { padding-left: 1.6rem; }
+    .amap-stacked .amap-tree-who { flex: 1 0 100%; padding-left: 0 !important; }
+    /* У объявления уступ сильнее (0,3,0) и стоит ниже — без своего правила
+       он оставался на ячейке имени, и имя объявления уезжало на уровень
+       глубже собственной строки чисел (ревью 23.09). */
+    .amap-stacked .amap-tree-line.ad .amap-tree-who { padding-left: 0 !important; }
+    /* Колонки на этой ширине не помогают: и сами заголовки таблицы сжаты до
+       «S… A… L… F…». Поэтому числа идут подряд, каждое со своей подписью —
+       решение владельца 23.09, когда он увидел замер с настоящими отступами.
+       Подпись берётся из `data-label` и ставится CSS: в разметку она не
+       попадает, и в однострочной раскладке её нет вовсе. */
+    .amap-stacked .amap-tree-line > :not(.amap-tree-who) {
+      flex: 0 0 auto; padding: 0; text-align: left;
+    }
+    .amap-stacked .amap-tree-line > [data-label]:not(:empty)::before {
+      content: attr(data-label) " "; color: var(--muted);
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    /* Пустую ячейку не показываем вовсе: «CPL» без числа — это обещание
+       числа, которого нет. Прочерк книги — тот же случай: у объявления строк
+       в книге обычно нет вовсе, и строка читалась бы как «SPEND — LEADS —
+       FTD — CPL — CPA — CR —» (ревью 23.09). В широкой раскладке прочерк
+       остаётся: там он стоит в своей колонке и говорит «смотрели, не
+       нашли», ничего не занимая. */
+    .amap-stacked .amap-tree-line > :not(.amap-tree-who):empty,
+    .amap-stacked .amap-tree-line > .attr.nodata { display: none; }
+    .amap-stacked .amap-tree-line .amap-tree-src { display: none; }
+    .amap-stacked .amap-tree-namebox { flex-direction: row; align-items: baseline; gap: 0.35rem; }
     /* Первая колонка узкая (это колонка имени аккаунта), а в ней стрелка,
        уровень, тумблер и имя. Имя важнее всего остального: по нему решают,
        что выключать, поэтому отступы и пометка уровня — самые скромные.
@@ -5939,10 +5986,10 @@ function amapReadSpend(btn) {
     .then(function (j) {
       if (!j.ok) throw new Error(j.error || 'refused');
       /* Нужна ли после спенда разбивка по странам, решает сервер: у него
-         привязки и оба хранилища (ACL-1282). Ответ приходит вместе с
-         запуском чтения, потому что решать это надо до него — `start_read`
-         кладёт на место прошлого показания «читаю». */
-      amapPollSpend(account, cell, btn, 0, per, j.split);
+         привязки и оба хранилища (ACL-1282). Ответ приходит не отсюда, а
+         вместе с дочитанным спендом: решение сравнивает суммы, а на запуске
+         новой суммы ещё нет (ACL-1288). */
+      amapPollSpend(account, cell, btn, 0, per, true);
     })
     .catch(function (e) { amapSpendFailed(btn, cell, String(e && e.message || e)); });
 }
@@ -6016,6 +6063,9 @@ function amapRunSplit(account, btn, per) {
       var bad = s.state === 'failed' ? (s.error || 'refused')
               : (s.state === 'ok' || s.state === 'empty') ? '' : 'Unknown country reading state';
       amapSplitMark(account, bad);
+      /* Клетка называет сумму, которую объясняет разбивка: её только что
+         сняли, и подсказка обязана говорить про новую, а не про прежнюю. */
+      if (!bad) amapRefreshSplitNote(account, per);
       /* Итоги страны перечитываем и после отказа. Прошлое чтение за эти даты
          больше не действует, и оставить его на экране значило бы показать
          число, которого уже нет, рядом с сообщением о неудаче. */
@@ -6029,6 +6079,24 @@ function amapRunSplit(account, btn, per) {
       amapSplitMark(account, String(e && e.message || e));
       return 'failed';
     });
+}
+
+function amapRefreshSplitNote(account, per) {
+  /* Один запрос состояния: он отдаёт и показание, и разбивку — ровно то, из
+     чего собрана подсказка. */
+  return fetch('/account-spend/status?account=' + encodeURIComponent(account)
+        + '&date_from=' + encodeURIComponent(per.from)
+        + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j || !j.ok || !j.reading || j.reading.state !== 'ok') return;
+      document.querySelectorAll('.amap-live').forEach(function (cell) {
+        if (cell.dataset.account !== account) return;
+        var value = cell.querySelector('.amap-live-ok');
+        if (value) value.title = amapReadTitle(j.reading, j.split);
+      });
+    })
+    .catch(function () { /* подпись — не то, ради чего стоит рушить чтение */ });
 }
 
 function amapAwaitSplit(account, per, tries) {
@@ -6148,7 +6216,39 @@ function amapUpdateCountrySummaries() {
   });
 }
 
-function amapApplyReading(account, s) {
+function amapSplitNote(s, split) {
+  /* Двойник того, что пишет сервер в подсказку клетки (ACL-1288). Без него
+     первый же опрос после чтения стирал её: `amapApplyReading` собирает
+     клетку заново. А стереть её — значит вернуть ровно ту беду, из-за
+     которой задача и написана: свежая сумма рядом с разбивкой от старой, и
+     на экране это выглядит согласованным.
+
+     Сравниваем нарисованные строки, а не числа: тем же правилом, что решает
+     перечитывать ли страны (`_same_money`, до половины копейки). Иначе
+     экран обвинял бы себя в отставании, которого правило не видит. */
+  if (!split || (split.state !== 'ok' && split.state !== 'empty')) return '';
+  if (split.spend === null || split.spend === undefined) {
+    return ' · countries read before this spend was known';
+  }
+  var theirs = amapMoney(split.spend, split.spend_currency);
+  var ours = amapMoney(s.spend, s.currency);
+  return ' · countries read for ' + theirs + (theirs === ours ? '' : ', not the ' + ours + ' above');
+}
+
+function amapReadTitle(s, split) {
+  /* Вся подсказка прочитанной клетки, одним местом. Пересобирать её из
+     самой себя — разрезая по « · countries » — значило привязать обновление
+     к разделителю, который пишет шаблон: поменяй одно, и они разойдутся
+     молча (ревью 23.09). Данные для неё есть целиком в ответе опроса. */
+  /* Один день пишется одним днём, как его пишет сервер: прежняя версия
+     подписи пересобирала её из живой строки и этот вид сохраняла, а сборка
+     из данных превращала «2026-09-01» в «2026-09-01…2026-09-01» — подсказка
+     менялась под человеком на чтении тех же дат (ревью 23.09). */
+  var when = s.date_from === s.date_to ? s.date_from : s.date_from + '…' + s.date_to;
+  return when + ' · read ' + s.finished_at + ' · ' + s.how + amapSplitNote(s, split);
+}
+
+function amapApplyReading(account, s, split) {
   document.querySelectorAll('.amap-live').forEach(function (cell) {
     if (cell.dataset.account !== account) return;
     var row = cell.closest('tr');
@@ -6171,7 +6271,7 @@ function amapApplyReading(account, s) {
     if (s.state !== 'ok') { amapSpendFailed(btn, cell, s.error || 'failed', s.shot, s.how); return; }
     cell.innerHTML = '<span class="amap-live-ok"></span>';
     cell.firstChild.textContent = amapMoney(s.spend, s.currency);
-    cell.firstChild.title = s.date_from + '…' + s.date_to + ' · read ' + s.finished_at + ' · ' + s.how;
+    cell.firstChild.title = amapReadTitle(s, split);
     btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read spend'; btn.title = 'Read spend again';
     amapPaintTree(row, s);
   });
@@ -6266,7 +6366,11 @@ function amapTreeLine(o, adCount) {
   var del = document.createElement('span');
   var stopped = /off|review|reject|not deliver|error/i.test(o.delivery || '');
   del.className = 'amap-tree-del' + (stopped ? ' stopped' : '');
-  del.textContent = o.delivery || '';
+  del.dataset.label = 'Delivery';
+  /* Обрезаем: строка из пробелов пустой не считается, и в узкой раскладке
+     осталась бы подпись без числа. Сейчас читатель такого не отдаёт — но
+     это одно изменение в разборе страницы (ревью 23.09). */
+  del.textContent = (o.delivery || '').trim();
 
   /* Числа — теми же словами, какими их написала Meta. Имя и состояние говорят,
      ЧТО это; спенд и результаты — зачем это трогать. Пять одинаково включённых
@@ -6277,10 +6381,12 @@ function amapTreeLine(o, adCount) {
      утверждением, которого страница не делала. */
   var spend = document.createElement('span');
   spend.className = 'amap-tree-num spend';
-  spend.textContent = o.spend || '';
+  spend.dataset.label = 'Meta spend';
+  spend.textContent = (o.spend || '').trim();
 
   var res = document.createElement('span');
   res.className = 'amap-tree-num res';
+  res.dataset.label = 'Meta';
   if (o.results) {
     var src = document.createElement('small');
     src.className = 'amap-tree-src';
@@ -6318,10 +6424,16 @@ function amapTreeLine(o, adCount) {
    Spend, (Account spend — это спенд Meta), Leads, FTD, CPL, CPA, CR. */
 var AMAP_ATTR_COLS = ['spend', 'leads', 'deposits', 'cpl', 'cpa', 'cr'];
 
+/* Подписи для узкой раскладки — теми же словами, что в шапке таблицы
+   (ACL-1277). В обычной раскладке они не видны: там слово стоит в шапке. */
+var AMAP_ATTR_LABELS = {spend: 'Spend', leads: 'Leads', deposits: 'FTD',
+                        cpl: 'CPL', cpa: 'CPA', cr: 'CR'};
+
 function amapAttrCell(field) {
   var c = document.createElement('span');
   c.className = 'amap-tree-num attr';
   c.dataset.attr = field;
+  c.dataset.label = AMAP_ATTR_LABELS[field] || field;
   c.textContent = '';
   return c;
 }
@@ -6384,12 +6496,32 @@ function amapFillAttribution(box, objects, data) {
     }
     line.querySelectorAll('.amap-tree-num.attr').forEach(function (cell) {
       var v = got ? got[cell.dataset.attr] : null;
-      var has = v !== null && v !== undefined && v !== '';
-      cell.textContent = has ? String(v) : '—';
+      // Пробел значением не считается: в узкой раскладке он оставил бы
+      // подпись без числа (ревью 23.09).
+      var text = v === null || v === undefined ? '' : String(v).trim();
+      var has = text !== '';
+      cell.textContent = has ? text : '—';
       cell.classList.toggle('nodata', !has);
       cell.title = got ? 'From the stats workbook' : why;
     });
   });
+  /* Прочерки в узкой раскладке спрятаны, и «книга не прочиталась» выглядело
+     бы там ровно как «в книге нет строк» — то есть никак. Поломку говорим
+     словами, одной строкой на всё дерево, а не шестью клетками на строку. */
+  var broken = box.querySelector('.amap-tree-attr-err');
+  if (broken) broken.remove();
+  if (!data || !data.ok) {
+    var note = document.createElement('div');
+    note.className = 'amap-tree-note amap-tree-attr-err';
+    note.textContent = (data && data.error) || 'Workbook numbers could not be loaded';
+    note.title = 'The numbers from the stats workbook are missing because they could '
+               + 'not be read — not because this account has none.';
+    /* Рядом с числами, к которым относится, а не под свёрнутым журналом:
+       остальные оговорки дерева встают до него, а эта приходит позже, когда
+       блок уже собран. `insertBefore(node, null)` — это append, поэтому
+       отдельной ветки не нужно (ревью 23.09). */
+    box.insertBefore(note, box.querySelector('.amap-tree-log') || null);
+  }
 }
 
 function amapLoadAttribution(row, box, objects) {
@@ -6428,6 +6560,15 @@ function amapTreeColumns(row, tr) {
   tr.style.setProperty('--amap-cols', widths.map(function (w) { return w.toFixed(2) + 'px'; }).join(' '));
   var pad = window.getComputedStyle ? getComputedStyle(row.children[1]).paddingRight : '';
   if (pad) tr.style.setProperty('--amap-cell-pad', pad);
+  /* ACL-1277: мерим саму колонку, а не окно. Ширину съедает не только экран:
+     боковая колонка, открытый билдер и сама страна с её отступами — окно об
+     этом не знает, а левый край соседней ячейки знает. В колонке имени, кроме
+     имени, стоят стрелка, пометка уровня и тумблер — им нужно около 80px,
+     поэтому 210px здесь означают «имени осталось меньше 130px».
+
+     Класс ставится на всё дерево, а не на строки: объявления дорисовываются
+     позже, когда раскрывают кампанию, и им достанется та же раскладка. */
+  tr.classList.toggle('amap-stacked', widths[0] < 210);
 }
 
 /* Раз в кадр, а не на каждое событие: при протягивании окна их десятки, и
@@ -6450,6 +6591,11 @@ if (typeof window !== 'undefined') {
      ширины снимаются, когда блок раскрывают. `toggle` не всплывает, поэтому
      слушаем на погружении. */
   document.addEventListener('toggle', amapTreeColumnsAll, true);
+  /* Билдер раздвигает страницу своим `padding-right`, и события `resize` при
+     этом нет: дерево оставалось с ширинами, снятыми до его открытия, и числа
+     уезжали за правый край таблицы — стоять под заголовками переставали
+     совсем. Ровно тот случай, ради которого написан ACL-1277 (ревью 23.09). */
+  document.addEventListener('acl:builder-drawer', amapTreeColumnsAll);
 }
 
 /* ── Покрывают ли строки спенд аккаунта ────────────────────────────────
@@ -6945,7 +7091,13 @@ document.addEventListener('click', function (e) {
   amapTurnOffDisarm();
 });
 
-function amapPollSpend(account, cell, btn, tries, per, plan) {
+function amapPollSpend(account, cell, btn, tries, per, pressed) {
+  /* `pressed` — человек нажал кнопку в этот раз. Без него дочитанный спенд
+     не тянет за собой пострановое чтение: оно создаёт в кабинете отчёт, а
+     отчёт по расписанию или по перезагрузке страницы — это касание живого
+     аккаунта, которого никто не просил (ревью 23.09; правило с acl-108a).
+     Восстановление после перезагрузки зовёт этот же опрос — и должно
+     показывать уже прочитанное, а не читать заново. */
   per = per || amapPeriod();
   if (!per.from || per.span === 'all') return;
   if (tries > 120) {
@@ -6960,12 +7112,13 @@ function amapPollSpend(account, cell, btn, tries, per, plan) {
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || 'Could not read status');
         var s = j.reading || {};
-        amapApplyReading(account, s);
-        if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1, per, plan); return; }
+        amapApplyReading(account, s, j.split);
+        if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1, per, pressed); return; }
         /* Разбивку спрашиваем только после удачного спенда и в той же сессии
            профиля. Упавший спенд значит, что кабинет не открылся, — отчёту
-           там взяться неоткуда. */
-        if (s.state === 'ok' && plan && plan.needed) amapRunSplit(account, btn, per);
+           там взяться неоткуда. Решение приехало в этом же ответе: оно
+           сравнивает ту сумму, которую человек сейчас видит (ACL-1288). */
+        if (pressed && s.state === 'ok' && j.plan && j.plan.needed) amapRunSplit(account, btn, per);
       })
       .catch(function (e) { amapApplyReading(account, {state: 'failed', error: String(e && e.message || e)}); });
   }, 3000);
@@ -7120,18 +7273,19 @@ async function amapQueueRead(job, per) {
     body.append('date_to', per.to);
     body.append('span', per.span || '');
     // The server joins an existing read for this account and exact period.
-    var j = await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
-    var state = await amapAwaitReading(job.account, per, 0);
+    await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
+    var done = await amapAwaitReading(job.account, per, 0);
     /* ACL-1282: то же правило, что и у одной строки. Разбивка идёт внутри
        очереди, а не после неё: аккаунт открыт сейчас, и второй заход в него
        был бы вторым касанием живого кабинета. Её неудача остаётся в клетке
-       и не превращает прочитанный спенд в неудачу всей строки. */
-    if (state === 'ok' && j.split && j.split.needed) {
+       и не превращает прочитанный спенд в неудачу всей строки. Решение —
+       из того же ответа, что и готовое чтение (ACL-1288). */
+    if (done.state === 'ok' && done.plan && done.plan.needed) {
       // Ответ разбивки нарочно не возвращается: упавшая разбивка не делает
       // прочитанный спенд неудачей и не портит счёт «N read, M failed».
       await amapRunSplit(job.account, job.btn, per);
     }
-    return state;
+    return done.state;
   } catch (e) {
     var message = e && e.name === 'AbortError' ? 'Read request timed out — check the launcher window' : String(e && e.message || e);
     amapApplyReading(job.account, {state: 'failed', error: message});
@@ -7140,14 +7294,19 @@ async function amapQueueRead(job, per) {
 }
 
 async function amapAwaitReading(account, per, tries) {
+  /* Возвращает состояние чтения И решение о странах: они приезжают одним
+     ответом, и разносить их значило бы спросить сервер второй раз о том же
+     аккаунте — уже с другой суммой в хранилище (ACL-1288). */
   while (tries++ <= 120) {
     await new Promise(function(resolve) { setTimeout(resolve, 3000); });
     var j = await amapReadJson('/account-spend/status?account=' + encodeURIComponent(account)
       + '&date_from=' + encodeURIComponent(per.from)
       + '&date_to=' + encodeURIComponent(per.to), {credentials: 'same-origin'});
     var s = j.reading || {};
-    amapApplyReading(account, s);
-    if (s.state !== 'running') return s.state === 'ok' ? 'ok' : 'failed';
+    amapApplyReading(account, s, j.split);
+    if (s.state !== 'running') {
+      return {state: s.state === 'ok' ? 'ok' : 'failed', plan: j.plan || null};
+    }
   }
   throw new Error('no answer after six minutes — check the launcher window');
 }

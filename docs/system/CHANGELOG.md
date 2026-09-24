@@ -42,6 +42,152 @@ read on 2026-09-23 found `0-0`…`2-7` (24 entries) plus `A`, `Fin`, `Invest`,
 `Investing`, `Investment Plus`, `Main 1`, `Well_-_being` and `Первый` among 79 active
 targets. Removing them edits real team data and needs its own approved step.
 
+## A browser test that passed while the code it covered threw — ACL-1296
+
+The Playwright fixture in tests/test_country_refresh_review.py built its page from a
+slice of report.html that ended at `amapMoney`, so `amapSplitNote` and
+`amapApplyReading` were never in it. When a test drove a successful country split,
+`amapRefreshSplitNote` threw `ReferenceError: amapSplitNote is not defined`, its own
+`.catch` swallowed it, and the test stayed green — the path it existed to cover never
+ran once. On the real page the function is defined, so nothing was broken for anyone
+using the dashboard; what was broken was our evidence that it works.
+
+The slice now ends at `amapPaintTree` and the fixture stubs the two functions beyond it
+(`amapPaintTree`, `amapSpendFailed`), which this file does not test. Ten checks that
+used to search the source text for phrases — "does the function body contain
+`theirs === ours`" — now execute the code instead: the note after a resumed read
+("countries read for $10.00, not the $41.50 above"), equal amounts producing no
+accusation, half a cent counting as no difference the way the re-read rule counts it, a
+never-read / running / failed split saying nothing, a split that does not remember its
+spend saying exactly that, the refresh rewriting the note exactly once, a reading that
+is still running leaving it alone, and both rows of a two-country account carrying the
+same note. Breaking the repaint on purpose turns five of them red; the source greps it
+replaced stayed green through the same break.
+
+Review then mutation-tested the result and found four properties that no check could
+fail on: that a finished split refreshes the note at all (breaking the call left the
+tooltip explaining the old money forever — the ACL-1288 symptom, silently restored),
+that the two pollers hand on the split they received, that the server half compares the
+amounts as written rather than as numbers (with numbers, an account at 41.502 against
+41.50 is accused of a lag the rule deliberately ignores), and that the refresh walks
+every row of its account and no other. Each is now pinned, and each mutation turns
+exactly one test red.
+
+Fixing that surfaced a real drift: the server writes a single-day reading as one date,
+while the rebuilt title always wrote `from…to`. The old implementation preserved it by
+accident, because it kept the existing text and only replaced the tail. Building from
+data made the tooltip change under the reader on a reading of the same dates, so
+`amapReadTitle` now writes one day as one day.
+
+`amapRefreshSplitNote` also stopped rebuilding the cell's title by splitting the live
+one on `' · countries '` and now builds it from the reading it already holds, through a
+shared `amapReadTitle`. Splitting on a separator the template writes couples the two
+across a change either one can make alone.
+
+## The country split no longer lags one press behind the money — ACL-1288
+
+ACL-1282 decided whether to read the country split at the moment the spend read
+started, which meant comparing against the *previous* amount. The press on which the
+money actually changed read the new spend and left the split alone; only the next press
+noticed. On finished dates nobody sees it — the first read takes both — but on today's
+dates the screen showed a fresh spend beside a breakdown explaining the old one, and
+looked perfectly consistent doing it.
+
+The decision now travels with the finished reading: `/account-spend/status` returns
+`plan` when the reading is `ok`, and both the row and the "Read all spend" queue use
+that instead of an answer from the POST that started the read. `/account-spend/read`
+no longer answers about the split at all — there is nothing to compare at that moment,
+because the record it writes says "reading" and carries no amount. While a read is in
+flight no decision is made, which is the same rule stated once instead of twice.
+
+Moving the decision to the status route made a reload capable of building a report on
+its own: `amapResumeReadings` resumes a read that was in flight, through the same poll,
+and would have acted on the plan it now receives. Reports inside a live ad account are
+something a person asks for, so the poll carries a `pressed` flag and only a press
+starts the split; a resumed poll shows what was read and stops there.
+
+The decision is also computed from the reading and split the route already has in hand
+instead of reading both stores a second time. That removes a doubled read on a poll
+that runs every three seconds, and a real race: between the two reads a new press could
+land, and the plan would then be computed against a "reading" record with no amount —
+the same "decided against a different reading than the one on screen" fault this change
+exists to remove.
+
+The account row's reading tooltip now says which spend its country split explains, and
+says so plainly when that is not the amount above it — from the server on page load and
+from the same poll afterwards, because the live repaint rebuilds that cell and would
+otherwise wipe the only notice on screen. Both halves compare the amounts as they are
+written, which is the rule that decides whether to re-read them (to half a cent), so the
+screen cannot accuse itself of a lag the rule ignores.
+
+Measured over five presses on a single-country account with the money changing on the
+fourth: the split is read on press 0 (there is none yet) and on press 3 (the amount
+differs), and on no other press. Before this change it was read on press 0 and press 4
+— one press after the money moved.
+
+## The tree name gets its own line where eleven columns do not fit — ACL-1277
+
+The remaining half of ACL-1277: on a laptop with the Builder drawer docked open the
+campaign name in the tree had about 91px at 1280 and 115px at 1366. Measured with the
+real fragment: the ten columns other than the name need 660px by their content alone,
+while the table gets 582px at 1280 and 668px at 1366. There is no width to
+redistribute — the table does not fit its own contents, and the account row is
+squeezed whatever the tree does.
+
+Owner's decision (2026-09-23), choosing between hiding the derived columns and moving
+the name: hide nothing. Where the name column is narrower than 210px — which leaves the
+name under about 134px once the caret, the level mark and the on/off switch have taken
+their share — the tree row puts the name on its own full-width line and the numbers on
+the line below.
+
+The numbers on that line do not keep the columns. The first attempt did, and review
+caught what that means with honest cell padding: every numeric cell had about 2px of
+text room and rendered as "$…", "1..", "6..". Which header such a number stands under
+does not matter, because at that width the header row itself reads "S… A… L… F…". So
+the second line lists the numbers in order, each with its own label — SPEND, META
+SPEND, LEADS, FTD, CPL, CPA, CR, DELIVERY, META — and a cell with no value is not
+shown at all, because "CPL" alone promises a number that does not exist. The workbook's
+"—" counts as no value here: an ad usually has no workbook row of its own, and the line
+would otherwise read "SPEND — LEADS — FTD — CPL — CPA — CR —". In the single-line
+layout the "—" stays, because there it sits in its own column and costs nothing while
+saying "we looked and found nothing". The indent belongs to the whole row, so an ad's
+numbers sit to the right of its campaign's: it is the only thing that says which row a
+numbers line belongs to. The labels
+come from `data-label` through CSS and never exist in the single-line layout, where the
+word is already in the table head.
+
+A workbook that could not be read now says so in words, once per tree, instead of six
+dashes per row: with the dashes hidden, a broken pipe looked exactly like "this row has
+no workbook numbers", and the reason lived only in the tooltip of a cell that is no
+longer there. The stacked row is variable-height by design — about 28px with nothing to
+show, 40px with Meta's numbers and about 55px once the workbook numbers arrive, against
+34px in the single-line layout — so an open tree reflows a beat after a reading lands.
+
+The switch is made from the measured column, not from the window width: the width is
+eaten by the sidebar, the docked drawer and the country block's own padding, none of
+which the window knows about. The Builder drawer is now listened to as well
+(`acl:builder-drawer`): it widens the page with its own padding and fires no `resize`,
+so the tree kept the widths measured before it opened and its numbers ran past the
+right edge of the table — the exact case this ticket is about. The class goes on the
+whole tree, so ads drawn later — when a campaign is expanded — get the same layout.
+Above that width the row stays a single line, columns and all: the extra height is not
+free.
+
+The test fixture was measuring a table that was not the product's: it put widths on the
+cells and left them the browser's 1px padding, while the page gives every cell
+0.42rem/0.85rem and the tree copies that padding to both sides of its own cells. Every
+width in this 93-test file was therefore 26px per cell too generous — which is how the
+"numbers keep their columns" version looked acceptable. The fixture now builds the
+template's `<colgroup>` and applies the page's own cell padding.
+
+Measured after the change at 582px (honest padding): the campaign name box goes from
+91px to 506px and the ad's from 75px to about 490px, and every number is readable in
+full. At 982px the layout is untouched, columns aligned as before. Six tests in
+tests/test_the_account_tree_on_screen.py cover the switch, that every number says what
+it is and that empty ones vanish, that the labels are the table head's own words, that
+they stay invisible in the wide layout, the untouched wide layout itself, and ads
+expanded after the layout was chosen.
+
 ## One button reads the account: spend always, countries when needed — ACL-1282
 
 The account row had "Read spend" and "Countries". Both asked the same account about
