@@ -665,12 +665,129 @@ def _ensure_wide_window(context, page) -> None:
 MIN_EDITOR_WIDTH = 1168
 
 
+#: Окна, которые робот вывел из свёрнутого состояния за край экрана:
+#: id контекста → (windowId, прежние left/top). Возвращаются в конце кампании.
+_OFFSCREEN: dict[int, dict] = {}
+
+
+def window_home() -> tuple[int | None, int | None]:
+    """Куда ставить окно профиля на время кампании.
+
+    20.09: замер по 3288 шагам показал, что свёрнутое окно больше не
+    тормозит прогон (медиана шага 11.8 с против 12.6 с на развёрнутом) —
+    обходы торможения делают своё дело. Поэтому место окна теперь вопрос
+    удобства, а не скорости: по умолчанию оно уезжает за край экрана, но
+    `FB_RPA_WINDOW_LEFT` / `FB_RPA_WINDOW_TOP` ставят его куда угодно,
+    например на второй монитор. Сворачивание прогон не останавливает:
+    робот сам поднимает окно на границе следующего раздела.
+    """
+    raw_left = os.environ.get("FB_RPA_WINDOW_LEFT", "").strip()
+    raw_top = os.environ.get("FB_RPA_WINDOW_TOP", "").strip()
+    if not raw_left:
+        return None, None
+    try:
+        return int(raw_left), int(raw_top or 0)
+    except ValueError:
+        log.warning("FB_RPA_WINDOW_LEFT/TOP: ожидались числа, получено %r/%r", raw_left, raw_top)
+        return None, None
+
+
+def _restore_offscreen(context, page) -> bool:
+    """Свёрнутое окно — в обычное состояние, но за левым краем экрана.
+
+    19.09, решение пользователя: окна профилей держат свёрнутыми, и
+    выскакивать на экран они не должны. А в свёрнутое окно клики по
+    координатам не попадают (цель, локации, тексты). Поэтому окно «живёт»
+    за краем экрана, пока идёт кампания, и сворачивается обратно в конце
+    (`put_window_back`).
+    """
+    session = context.new_cdp_session(page)
+    info = session.send("Browser.getWindowForTarget") or {}
+    window_id = info.get("windowId")
+    bounds = info.get("bounds") or {}
+    if window_id is None or bounds.get("windowState") != "minimized":
+        return False
+    session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": {"windowState": "normal"}})
+    time.sleep(0.6)
+    normal = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+    width = max(int(normal.get("width") or 0), MIN_EDITOR_WIDTH + 200)
+    height = max(int(normal.get("height") or 0), 900)
+    _OFFSCREEN[id(page.context)] = {"window_id": window_id,
+                                    "left": normal.get("left"), "top": normal.get("top")}
+    left, top = window_home()
+    if left is None:
+        # По умолчанию окно уезжает за левый край: пользователь держит профили
+        # свёрнутыми и не хочет, чтобы они выскакивали поверх его работы.
+        left, top = -(width + 400), 0
+    session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": {
+        "left": left, "top": top, "width": width, "height": height}})
+    time.sleep(1.0)
+    return True
+
+
+def put_window_back(page) -> None:
+    """Вернуть окно, выведенное за край экрана, на место и свернуть."""
+    saved = _OFFSCREEN.pop(id(page.context), None)
+    if not saved:
+        return
+    if window_home()[0] is not None:
+        # Окно стоит там, где его попросили держать — не трогаем и не сворачиваем.
+        return
+    try:
+        session = page.context.new_cdp_session(page)
+        bounds = {k: saved[k] for k in ("left", "top") if isinstance(saved.get(k), int)}
+        if bounds:
+            session.send("Browser.setWindowBounds", {"windowId": saved["window_id"], "bounds": bounds})
+            time.sleep(0.3)
+        session.send("Browser.setWindowBounds",
+                     {"windowId": saved["window_id"], "bounds": {"windowState": "minimized"}})
+    except Exception as exc:
+        log.debug("put_window_back failed: %s", exc)
+
+
+def wake_page(page) -> dict:
+    """Разбудить зависшую вкладку профиля перед перезагрузкой (19.09).
+
+    19.09 вечером на всех четырёх профилях Meta после Create часами висела
+    в «Loading creation», и простая перезагрузка не помогала. Окна профилей
+    пользователь держит свёрнутыми, а наша вкладка — фоновая: Chrome
+    придерживает таймеры и сеть таких страниц. Поэтому перед перезагрузкой:
+    свёрнутое окно — в обычное состояние за краем экрана (как на границе
+    раздела), вкладка — вперёд в своём окне, троттлинг снимается заново
+    (после перезагрузки страницы Chrome мог его вернуть). В конце кампании
+    окно, как и раньше, сворачивается обратно (`put_window_back`).
+    """
+    out = {"minimized": None, "restored": False, "front": False}
+    context = page.context
+    try:
+        session = context.new_cdp_session(page)
+        bounds = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+        out["minimized"] = bounds.get("windowState") == "minimized"
+        if out["minimized"]:
+            out["restored"] = _restore_offscreen(context, page)
+    except Exception as exc:
+        log.debug("wake_page window: %s", exc)
+    try:
+        page.bring_to_front()
+        out["front"] = True
+    except Exception as exc:
+        log.debug("wake_page front: %s", exc)
+    _disable_background_throttling(context, page)
+    return out
+
+
 def ensure_editor_window(page, section: str) -> bool:
     """Check at section boundaries; recover once, then stop without replaying drafts."""
     from src.fb_ads_rpa import run_telemetry as rt
 
     def readable(state: dict) -> bool:
         inner = state.get("inner")
+        # 19.09 (SA_arc, CL_ml, CR_ait): свёрнутое окно по-прежнему сообщает
+        # прежнюю ширину страницы (1707), и проверка считала его годным. А
+        # клики по координатам в свёрнутое окно не попадают: не выбиралась
+        # цель, не раскрывались локации, не добавлялась страна.
+        if state.get("minimized"):
+            return False
         return (
             isinstance(inner, (list, tuple)) and len(inner) == 2
             and all(type(v) in (int, float) and v > 0 for v in inner)
@@ -680,10 +797,17 @@ def ensure_editor_window(page, section: str) -> bool:
     before = rt.window_state(page)
     after = before
     if not readable(before):
-        try:
-            _ensure_wide_window(page.context, page)
-        except Exception as exc:
-            log.debug("editor window recovery failed: %s", exc)
+        moved = False
+        if before.get("minimized"):
+            try:
+                moved = _restore_offscreen(page.context, page)
+            except Exception as exc:
+                log.debug("offscreen restore failed: %s", exc)
+        if not moved:
+            try:
+                _ensure_wide_window(page.context, page)
+            except Exception as exc:
+                log.debug("editor window recovery failed: %s", exc)
         after = rt.window_state(page)
     ok = readable(after)
     diag = {"section": section, "minimum_width": MIN_EDITOR_WIDTH,

@@ -1,5 +1,30 @@
 # System history
 
+## The robot waits out Meta's slow pages and recovers a stuck one — ACL-1284 (1 of 4)
+
+First slice of the week of robot fixes that existed only on the owner's machine. An
+installer built before this shipped a robot that, when Meta's editor stalled, simply
+failed the step.
+
+- A tab that is no longer Ads Manager is recognised and reloaded: Chrome's own error
+  page, and the case where the address stays a normal Meta URL while the tab shows
+  "ERR_SSL_PROTOCOL_ERROR" (seen live on 2026-09-19, profile KLD_BFL_S15). There the
+  URL says nothing, so the page itself is read.
+- A "Loading…" overlay that hangs longer than 20 seconds is treated as stuck. Inside
+  the editor it is reloaded only when Meta says "All edits saved", because a reload
+  with unsaved fields loses them; on the campaign list there is nothing to lose.
+- A block Meta failed to load ("component failed to load", seen on 2026-09-20 when
+  placements and iOS devices failed in a row) is reloaded on the same rule.
+- Typing long text no longer costs a keystroke per character: the first eight
+  characters are real keystrokes, the rest is inserted at once. The owner measured the
+  old behaviour at about 45 minutes per round of eight campaigns; `FB_RPA_HUMAN_TYPING=1`
+  brings it back, and `FB_RPA_TYPING_LEAD` changes the eight.
+- Browser and pacing changes that go with it: window placement and guards around the
+  editor window, and the waits the steps take between actions.
+
+What is not here: the recovery is used by the steps that arrive in the next slices.
+The mechanism and its tests land first so each slice stays readable.
+
 ## The country split no longer lags one press behind the money — ACL-1288
 
 ACL-1282 decided whether to read the country split at the moment the spend read

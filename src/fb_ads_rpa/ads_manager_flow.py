@@ -1154,7 +1154,23 @@ class AdsManagerFlow:
             "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act_id}"
         )
         url = url_tpl.format(act_id=act)
-        self.page.goto(url, wait_until="domcontentloaded", timeout=self.nav_timeout)
+        # 20.09 06:50 (KLD_BFL_S15): самый первый переход падал с
+        # ERR_SSL_PROTOCOL_ERROR, и кампания не начиналась вовсе — обрыв
+        # соединения профиля лечится повтором, а не отказом всего задания.
+        last_exc = None
+        for attempt in range(3):
+            try:
+                self.page.goto(url, wait_until="domcontentloaded", timeout=self.nav_timeout)
+                last_exc = None
+                break
+            except Exception as exc:
+                last_exc = exc
+                if "ERR_" not in str(exc):
+                    raise
+                log.warning("campaigns goto failed (%s/3): %s", attempt + 1, str(exc)[:80])
+                time.sleep(8.0)
+        if last_exc is not None:
+            raise last_exc
         pause_after_navigation()
         result.steps_completed.append("open_campaigns")
         self._shot("01_campaigns", result)
@@ -2198,26 +2214,33 @@ class AdsManagerFlow:
                 # would otherwise be reported against the draft that replaced it.
                 ad_soft_fails.clear()
                 self._goto_campaigns(draft, result)
-                fail_step = run_recorded_campaign_flow(
-                    self.page,
-                    campaign_name=draft.name,
-                    budget=str(ad_set.daily_budget or ""),
-                    adset_name=ad_set.name,
-                    country=draft.country,
-                    age_min=ad_set.age_min,
-                    age_max=ad_set.age_max,
-                    targeting_label=ad_set.targeting_label,
-                    language_names=[draft.language] if draft.language else None,
-                    ad_name=ad.ad_name(),
-                    creative_type=ad.creative_type,
-                    creative_path=ad.creative_path or "",
-                    ad_title=ad.ad_title,
-                    ad_body=ad.ad_body,
-                    destination_url=draft.link,
-                    os_val=ad_set.os,
-                    additional_ads=additional_ads,
-                    soft_fails_out=ad_soft_fails,
-                )
+                try:
+                    fail_step = run_recorded_campaign_flow(
+                        self.page,
+                        campaign_name=draft.name,
+                        budget=str(ad_set.daily_budget or ""),
+                        adset_name=ad_set.name,
+                        country=draft.country,
+                        age_min=ad_set.age_min,
+                        age_max=ad_set.age_max,
+                        targeting_label=ad_set.targeting_label,
+                        language_names=[draft.language] if draft.language else None,
+                        ad_name=ad.ad_name(),
+                        creative_type=ad.creative_type,
+                        creative_path=ad.creative_path or "",
+                        ad_title=ad.ad_title,
+                        ad_body=ad.ad_body,
+                        destination_url=draft.link,
+                        os_val=ad_set.os,
+                        additional_ads=additional_ads,
+                        soft_fails_out=ad_soft_fails,
+                    )
+                finally:
+                    try:
+                        from src.fb_ads_rpa.browser import put_window_back
+                        put_window_back(self.page)
+                    except Exception:
+                        pass
                 if not fail_step:
                     break
                 decision = retry_policy.disposition(fail_step)

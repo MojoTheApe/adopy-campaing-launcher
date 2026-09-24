@@ -1,6 +1,7 @@
 """Human-like delays between RPA steps + human takeover detection."""
 from __future__ import annotations
 
+import os
 import random
 import time
 from typing import TYPE_CHECKING
@@ -167,25 +168,33 @@ def wait_for_human_release(page: "Page | None" = None, *, max_wait_s: float = 30
     return False
 
 
+# 21.09, решение пользователя: паузы между действиями были заметно длиннее
+# нужного — «All edits saved» уже на экране, а робот всё ещё выжидает. Живость
+# ввода держится на разбросе и на ритме набора, а не на длине пауз, поэтому
+# крупные паузы укорочены примерно вдвое. Прежние вернёт FB_RPA_SLOW_PACING=1.
+def _slow() -> bool:
+    return os.environ.get("FB_RPA_SLOW_PACING", "").strip() in ("1", "true", "yes")
+
+
 def pause_short(page: "Page | None" = None) -> None:
     if check_human_takeover(page):
         wait_for_human_release(page)
-    time.sleep(random.uniform(0.4, 0.9))
+    time.sleep(random.uniform(0.4, 0.9) if _slow() else random.uniform(0.25, 0.6))
 
 
 def pause_medium(page: "Page | None" = None) -> None:
     if check_human_takeover(page):
         wait_for_human_release(page)
-    time.sleep(random.uniform(1.0, 2.2))
+    time.sleep(random.uniform(1.0, 2.2) if _slow() else random.uniform(0.6, 1.3))
 
 
 def pause_long(page: "Page | None" = None) -> None:
     if check_human_takeover(page):
         wait_for_human_release(page)
-    time.sleep(random.uniform(2.5, 4.5))
+    time.sleep(random.uniform(2.5, 4.5) if _slow() else random.uniform(1.0, 1.8))
 
 
 def pause_after_navigation(page: "Page | None" = None) -> None:
     if check_human_takeover(page):
         wait_for_human_release(page)
-    time.sleep(random.uniform(2.0, 3.5))
+    time.sleep(random.uniform(2.0, 3.5) if _slow() else random.uniform(1.0, 1.7))

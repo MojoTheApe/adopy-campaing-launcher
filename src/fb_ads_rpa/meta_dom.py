@@ -1670,6 +1670,22 @@ def _type_human(page: Page, text: str) -> None:
 
     if not text:
         return
+    # 20.09, решение пользователя: набор по символу стоил ~45 минут на круге
+    # из восьми кампаний. Живые нажатия оставляем в начале строки — событий
+    # keydown достаточно, чтобы ввод не выглядел мгновенной вставкой, — а
+    # длинный остаток вставляем целиком. Прежнее поведение возвращает
+    # FB_RPA_HUMAN_TYPING=1.
+    lead = int(os.environ.get("FB_RPA_TYPING_LEAD", "8") or 8)
+    if os.environ.get("FB_RPA_HUMAN_TYPING", "").strip() not in ("1", "true", "yes") and len(text) > lead:
+        head, tail = text[:lead], text[lead:]
+        for ch in head:
+            if ch.isascii():
+                page.keyboard.type(ch, delay=random.uniform(25, 70))
+            else:
+                page.keyboard.insert_text(ch)
+        time.sleep(_human_jitter(0.08, 0.4))
+        page.keyboard.insert_text(tail)
+        return
     chunk = ""
     for ch in text:
         if ch.isascii():
@@ -2317,6 +2333,166 @@ def pick_website_conversion_option(page: Page) -> bool:
     """Pick Website from an already-open Conversion location menu."""
     return _pick_website_from_open_menu(page)
 
+
+#: Сколько «Loading…» может висеть, прежде чем считать страницу зависшей (ACL-1233).
+LOADING_STUCK_S = 20.0
+
+
+_ERROR_PAGE_JS = r"""
+  () => {
+    // 20.09 02:00 (скриншот пользователя, профиль KLD_BFL_S15): в адресной
+    // строке остался обычный адрес Meta, а во вкладке — «This site can't
+    // provide a secure connection / ERR_SSL_PROTOCOL_ERROR». По адресу такую
+    // страницу не узнать, узнаём по самой разметке Chrome.
+    if (!document.body) return '';
+    const shell = document.querySelector('#main-frame-error, .neterror, #error-information-popup-container');
+    const txt = document.body.innerText || '';
+    const code = txt.match(/ERR_[A-Z0-9_]+/);
+    if (code) return code[0];
+    if (shell || /can.t provide a secure connection|site can.t be reached|ERR_/i.test(txt.slice(0, 600))) {
+      return 'ERR_UNKNOWN';
+    }
+    return '';
+  }
+"""
+"""Страница ошибки Chrome вместо Ads Manager — её собственная разметка."""
+
+
+def _chrome_error_page(page: Page) -> str:
+    """Код ошибки, если во вкладке вместо Ads Manager — страница ошибки Chrome."""
+    try:
+        if (page.url or "").startswith("chrome-error://"):
+            got = page.evaluate("() => (document.body && document.body.innerText || '').match(/ERR_[A-Z_]+/)")
+            return (got or ["ERR_UNKNOWN"])[0] if isinstance(got, list) else "ERR_UNKNOWN"
+        # Адрес может остаться прежним (SSL-ошибка) — смотрим саму страницу.
+        return page.evaluate(_ERROR_PAGE_JS) or ""
+    except Exception:
+        pass
+    return ""
+
+
+def _loading_visible(page: Page) -> bool:
+    try:
+        overlay = page.get_by_text(_LOADING_TEXT).first
+        return bool(overlay.count()) and overlay.is_visible(timeout=200)
+    except Exception:
+        return False
+
+
+def _all_edits_saved(page: Page) -> bool:
+    try:
+        return page.get_by_text(re.compile(r"^All edits saved$", re.I)).first.is_visible(timeout=500)
+    except Exception:
+        return False
+
+
+def _component_failed(page: Page) -> bool:
+    """Блок редактора, который Meta не смогла загрузить.
+
+    20.09 00:35 (CO_bnc Mix): на месте панели плейсментов стояло «Error:
+    component failed to load — Something went wrong, please try reloading the
+    page», и подряд отказали placements и devices_ios. Meta сама просит
+    перезагрузить — это тот же случай, что и ACL-1233.
+    """
+    try:
+        return page.get_by_text(
+            re.compile(r"component failed to load", re.I)).first.is_visible(timeout=500)
+    except Exception:
+        return False
+
+
+_PENDING_DRAFTS_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const el = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && /^Review and publish( \(\d+\))?$/.test(norm(e.textContent)));
+    if (!el) return null;
+    const m = norm(el.textContent).match(/\((\d+)\)/);
+    return m ? Number(m[1]) : 0;
+  }
+"""
+"""Сколько черновиков ждёт публикации — число в кнопке «Review and publish»."""
+
+
+def _pending_drafts(page: Page) -> int | None:
+    try:
+        return page.evaluate(_PENDING_DRAFTS_JS)
+    except Exception:
+        return None
+
+
+def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = False) -> bool:
+    """Перезагрузить вкладку, если она зависла (ACL-1233). True — перезагрузили.
+
+    * Страница ошибки Chrome (ERR_SSL_PROTOCOL_ERROR, 19.09 CO_bnc Mix) —
+      перезагружаем всегда: живого редактора в ней уже нет.
+    * «Loading…», висящий дольше LOADING_STUCK_S: в редакторе — только при
+      «All edits saved», иначе потеряются несохранённые поля; на списке
+      кампаний (`editor=False`, шаг выбора цели) сохранять нечего.
+    """
+    err = _chrome_error_page(page)
+    reason = ""
+    if err:
+        reason = f"error_page:{err}"
+    elif _component_failed(page):
+        # Блок не загрузился: перезагружаем, но в редакторе — только когда
+        # всё сохранено, иначе потеряются уже заполненные поля.
+        if editor and not _all_edits_saved(page):
+            _telemetry.record("loading_modal_reload", False, note="unsaved_edits",
+                              diag={"where": where, "reason": "component_error"})
+            return False
+        reason = "component_error"
+    elif force and not editor:
+        # Список кампаний: окно цели не открылось, а видимого «Loading…» нет
+        # (19.09 CO_bnc Mix, 18:12). Терять на списке нечего — перезагружаем.
+        reason = "no_objective_dialog"
+    elif _loading_visible(page):
+        deadline = time.time() + LOADING_STUCK_S
+        while time.time() < deadline and _loading_visible(page):
+            _sleep_h(1.0, 0.1)
+        if not _loading_visible(page):
+            return False
+        if editor and not _all_edits_saved(page):
+            _telemetry.record("loading_modal_reload", False, note="unsaved_edits", diag={"where": where})
+            return False
+        reason = "loading_modal"
+    else:
+        return False
+    # Сначала разбудить: свёрнутое окно — из свёрнутого, вкладку — вперёд,
+    # троттлинг Chrome — снять заново (19.09 вечер: перезагрузка без этого
+    # снова упиралась в «Loading creation»).
+    woke = {}
+    try:
+        from src.fb_ads_rpa.browser import wake_page
+        woke = wake_page(page)
+    except Exception as exc:
+        woke = {"error": str(exc)[:80]}
+    try:
+        page.reload(timeout=60000, wait_until="domcontentloaded")
+        _sleep_h(4.0, 0.2)
+        try:
+            from src.fb_ads_rpa.browser import _disable_background_throttling
+            _disable_background_throttling(page.context, page)
+        except Exception:
+            pass
+        ok = not _chrome_error_page(page)
+    except Exception as exc:
+        # 20.09 00:55 (CO_bnc GMB, дважды): сам `reload` не уложился в минуту
+        # — Meta на этом профиле еле отвечает. Пробуем так, как это делает
+        # человек клавишей F5: изнутри страницы, не дожидаясь её загрузки.
+        reason += f" ({str(exc)[:60]})"
+        ok = False
+        try:
+            page.evaluate("() => { location.reload(); }")
+            _sleep_h(6.0, 0.2)
+            page.wait_for_selector("[role=button]", timeout=30000)
+            ok = not _chrome_error_page(page)
+            reason += " js_reload" + ("" if ok else "_failed")
+        except Exception as exc2:
+            reason += f" js_reload_failed ({str(exc2)[:40]})"
+    _telemetry.record("error_page_reload" if reason.startswith("error_page") else "loading_modal_reload",
+                      ok, note=reason, diag={"where": where, "url": (page.url or "")[:160], "woke": woke})
+    return ok
 
 def run_recorded_campaign_flow(
     page: Page,
