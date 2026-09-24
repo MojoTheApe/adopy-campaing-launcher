@@ -460,36 +460,16 @@
       }
     },
     "stage": {
-      "pr": 304,
+      "pr": 307,
       "issues": [
         303
       ],
-      "tree_sha": "d96e75f09e7d833c916c674b9efea66b4bd654d6",
-      "source_sha": "b4a6ca477929eb492aa042169a7af916d943374d",
-      "main_tree": "e82146f89a8b130d1a4c8b1ce049f9713a905903",
+      "tree_sha": "6024920ae9a7bc5f76728c2ccb012d03420585ed",
+      "source_sha": "723652e7ebe1631b2cc6f829a68b2e2b5270551e",
+      "main_tree": "d96e75f09e7d833c916c674b9efea66b4bd654d6",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
-      "recorded_at": "2026-09-24T09:37:55+00:00",
-      "verification": {
-        "kind": "stage-verification",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "source_sha": "b4a6ca477929eb492aa042169a7af916d943374d",
-        "tree_sha": "d96e75f09e7d833c916c674b9efea66b4bd654d6",
-        "checks": [
-          "Stage push CI run on b4a6ca4: ACL verification, Windows Python 3.11 and 3.13 suites passed, first attempt.",
-          "Exact-stage installer run 35976534392 passed build/install/launch/repair/uninstall on a rerun: the first attempt hung on the install step for 40 minutes and its step was cancelled by the runner, with no output in the log. Nothing in the code changed between the two attempts.",
-          "Previous actual package installs and starts with isolated data",
-          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
-          "Updated installed application restarts with preserved machine/workspace/creative data",
-          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
-          "Recovered application restarts and synthetic data remains byte-identical",
-          "PR #304 checks on head 4b6eeec: all eleven passed.",
-          "Independent review across three rounds ended in approve. It weighed credential handling first and found no path by which the password reaches disk, a log, an exception message or telemetry; it found one real defect (signing in to one Multilogin slot marked both verified, which on this owner's machine would have written a typo to the settings as a working token) and two guards with no test behind them, each of which let the wizard finish 'ready' with no token at all."
-        ],
-        "report": "Artifact ACL-update-recovery of run 35976534392 (report.json: result passed, source b4a6ca477929eb492aa042169a7af916d943374d, tree d96e75f09e7d833c916c674b9efea66b4bd654d6). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof. The new sign-in step was not exercised against the real Multilogin API in CI; the implementer will click it once in the built installer before it goes to the team."
-      },
-      "verified_at": "2026-09-24T09:38:32+00:00"
+      "state": "testing",
+      "recorded_at": "2026-09-24T12:00:52+00:00"
     },
     "tasks": {
       "248": {
