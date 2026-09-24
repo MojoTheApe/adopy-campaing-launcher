@@ -7737,6 +7737,7 @@ function amapMlPaint(block) {
   mark.textContent = !state ? 'checking…' : alive ? 'connected' :
     state.reason === 'revoked' ? 'team token was replaced' :
     state.reason === 'expired' ? 'team token expired' :
+    state.reason === 'invalid' ? 'team token was not accepted' :
     state.has_token ? 'token could not be verified' : 'not connected';
   line.appendChild(mark);
   if (alive && state.email) line.appendChild(document.createTextNode(' · ' + state.email));
@@ -7860,10 +7861,9 @@ function amapMlDate(iso) {
   function two(n) { return (n < 10 ? '0' : '') + n; }
   return two(d.getDate()) + '.' + two(d.getMonth() + 1) + '.' + d.getFullYear();
 }
-function amapMlClipboard(text) {
-  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
-  /* Запасной путь для браузера без Clipboard API: поле живёт одно мгновение
-     и удаляется сразу, чтобы токен не остался в разметке. */
+function amapMlCopyByField(text) {
+  /* Запасной путь для браузера без Clipboard API или с запретом на него: поле
+     живёт одно мгновение и удаляется сразу, чтобы токен не остался в разметке. */
   var ta = document.createElement('textarea');
   ta.value = text; ta.setAttribute('readonly', '');
   ta.style.position = 'fixed'; ta.style.opacity = '0';
@@ -7871,6 +7871,12 @@ function amapMlClipboard(text) {
   var ok = false;
   try { ok = document.execCommand('copy'); } finally { ta.remove(); }
   return ok ? Promise.resolve() : Promise.reject(new Error('The browser blocked the clipboard. Try again.'));
+}
+function amapMlClipboard(text) {
+  if (!(navigator.clipboard && window.isSecureContext)) return amapMlCopyByField(text);
+  /* Clipboard API может отказать (запрет браузера) — тогда пробуем поле, а не
+     показываем человеку сырое «Write permission denied» (ревью 24.09). */
+  return navigator.clipboard.writeText(text).catch(function () { return amapMlCopyByField(text); });
 }
 async function amapMlCopy(btn) {
   var block = amapMlBlock(btn), inst = amapMlInstance(block);

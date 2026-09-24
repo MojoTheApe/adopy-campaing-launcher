@@ -82,7 +82,8 @@ def _as_team_lead(monkeypatch, yes: bool = True):
 
 # ── Кто тимлид ────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("value, admin", [("1", True), ("true", True), ("", False), ("0", False)])
+@pytest.mark.parametrize("value, admin", [("1", True), ("true", True), ("TRUE", True), ("Yes", True),
+                                          ("", False), ("0", False), ("on", False)])
 def test_the_status_says_whose_machine_this_is(multilogin, monkeypatch, value, admin):
     """Роль нужна странице даже без токена: от неё зависит, что предложить."""
     monkeypatch.setenv("ACL_MLX_TEAM_ADMIN", value)
@@ -113,6 +114,28 @@ def test_a_token_past_its_expiry_is_expired_without_asking_multilogin(multilogin
     state = _call("GET", "/multilogin-token-status?instance=A").json()
     assert state["reason"] == "expired"
     assert calls == [], "за ответом о просроченном токене сходили в Multilogin"
+    assert "team lead" in state["next_step"], "байеру с истёкшим токеном не сказано, что делать"
+
+
+def test_the_expiry_margin_is_one_minute(multilogin, monkeypatch):
+    """Токен, которому осталось полминуты, считается истёкшим — иначе он умрёт
+    посреди первого же действия. С полутора минутами ещё живой."""
+    calls, _ = multilogin
+    monkeypatch.setenv("MULTILOGIN_AUTOMATION_TOKEN_A", _jwt(time.time() + 30))
+    assert _call("GET", "/multilogin-token-status?instance=A").json()["reason"] == "expired"
+    monkeypatch.setenv("MULTILOGIN_AUTOMATION_TOKEN_A", _jwt(time.time() + 90))
+    assert _call("GET", "/multilogin-token-status?instance=A").json()["alive"] is True
+
+
+def test_something_that_is_not_a_token_is_not_accepted_rather_than_expired(multilogin, monkeypatch):
+    """Обрезанная вставка или чужая строка: срока в ней нет, Multilogin отвечает
+    401. Сказать «истёк» — значит отправить человека не туда."""
+    _, answer = multilogin
+    answer["folders"] = 401
+    monkeypatch.setenv("MULTILOGIN_AUTOMATION_TOKEN_A", "half-of-a-token")
+    state = _call("GET", "/multilogin-token-status?instance=A").json()
+    assert state["reason"] == "invalid"
+    assert "team lead" in state["next_step"]
 
 
 def test_the_team_lead_is_told_to_sign_in_again_and_a_buyer_to_ask(multilogin, monkeypatch):
