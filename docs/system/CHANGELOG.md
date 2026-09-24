@@ -22,7 +22,11 @@ failed the step.
   **keystrokes, not characters**: Playwright can only type ASCII, so counting characters
   gave an Arabic ad — which is most of ours — exactly zero keystrokes, the instant
   keydown-free insertion this whole function exists to avoid. A cap keeps a text with no
-  Latin letters at all from falling back to character-by-character entry.
+  Latin letters at all from falling back to character-by-character entry. Said plainly,
+  because "eight keystrokes" reads as more than it is on the market's normal ad: on
+  Arabic copy those keystrokes are the spaces, digits and Latin brand names, about five
+  of them on a full ad text. That is what Playwright can type at all, and it is still
+  better than none.
 - Browser and pacing changes that go with it: guards and placement for the editor
   window (`FB_RPA_WINDOW_LEFT` / `FB_RPA_WINDOW_TOP`), and shorter waits between
   actions — the owner's decision of 2026-09-21, roughly halving the large pauses

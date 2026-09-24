@@ -275,7 +275,11 @@ def test_the_lead_counts_keystrokes_and_not_characters(monkeypatch):
             "بعده مع ضمان "
             "كامل للمبلغ")
     md._type_human(page, text)
-    assert typed, "арабский текст ушёл в поле без единого нажатия"
+    # Считаем нажатия, а не «есть ли хоть одно»: прежнее правило давало на
+    # этой строке ровно одно (пробел на восьмом символе), и проверка «typed
+    # не пуст» не отличала починку от поломки — ревью 24.09 это показало,
+    # вернув ошибку и получив зелёный тест.
+    assert len(typed) >= 3, f"нажатий всего {len(typed)}: {typed}"
     assert len(inserted[-1]) > 10, "хвост ушёл не одной вставкой"
     assert len(inserted) < len(text) / 2, "текст ушёл почти посимвольно"
 
@@ -288,3 +292,19 @@ def test_a_text_without_a_single_latin_letter_is_not_typed_letter_by_letter(monk
     md._type_human(page, text)
     assert len(inserted) < len(text) / 2, "текст ушёл посимвольно"
     assert inserted[-1] == text[-len(inserted[-1]):]
+
+
+def test_a_short_text_without_latin_letters_does_not_run_off_the_end(monkeypatch):
+    """Предел головы упирается в длину строки, а не только в множитель.
+
+    Ревью 24.09: убери из предела `len(text) - 1` — и короткая строка без
+    латиницы роняет набор `IndexError`, потому что счётчик нажатий до
+    восьми не доходит никогда, а цикл идёт дальше конца текста. Оба других
+    теста берут длинные строки, где предел упирается в множитель, и этой
+    половины не трогают вовсе.
+    """
+    page, typed, inserted = _keyboard_probe(monkeypatch)
+    text = "مضمون" * 2
+    md._type_human(page, text)
+    assert inserted and inserted[-1], "хвост пустой — цикл съел строку целиком"
+    assert "".join(typed) + "".join(inserted) == text
