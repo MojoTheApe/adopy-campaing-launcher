@@ -180,6 +180,10 @@
       "title": "Each person gets their own dashboard, not whoever holds port 9090",
       "state": "created",
       "issue": 309
+    },
+    "af5b62222f68b3db6b715121db2aeccf250514152b7098d430a34f5aa9aae1d6": {
+      "title": "Team access: buyers paste the team's Multilogin token instead of signing in",
+      "state": "creating"
     }
   },
   "delivery_workflow": {
