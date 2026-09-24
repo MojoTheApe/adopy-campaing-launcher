@@ -183,6 +183,56 @@ def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[
 #: Inhouse и KLD, с подменой через ACL_MLX_LABEL_A/B. Свои названия тем же
 #: самым аккаунтам («Main», «Second») — это второе имя одной вещи, и человек
 #: на экране установки не узнаёт то, что видит потом каждый день.
+#: Физические клавиши Windows: A, C, V, X. Смотреть надо именно на них.
+#: Tk вешает вставку на латинскую «v», а при русской раскладке в событии
+#: приходит «м» — правило не срабатывает, и Ctrl+V молча ничего не делает.
+#: У команды раскладка русская, так что это не мелочь: поле почты нечем
+#: заполнить, кроме как набрать руками (24.09).
+CLIPBOARD_KEYCODES = {65: "<<SelectAll>>", 67: "<<Copy>>", 86: "<<Paste>>", 88: "<<Cut>>"}
+
+
+def clipboard_event(keycode: int, state: int) -> str:
+    """Какое действие с буфером просит это нажатие. Пусто — никакое.
+
+    `state` — маска модификаторов Tk; бит 0x4 означает Control.
+    """
+    if not state & 0x4:
+        return ""
+    return CLIPBOARD_KEYCODES.get(keycode, "")
+
+
+def enable_clipboard_shortcuts(widget, tk_module) -> None:
+    """Вставка и копирование при любой раскладке, плюс меню правой кнопки."""
+
+    def on_key(event):
+        action = clipboard_event(getattr(event, "keycode", 0), getattr(event, "state", 0))
+        if not action or not getattr(event, "widget", None):
+            return None
+        try:
+            event.widget.event_generate(action)
+        except Exception:
+            return None
+        return "break"
+
+    widget.bind_all("<Control-KeyPress>", on_key, add="+")
+
+    menu = tk_module.Menu(widget, tearoff=0)
+    for label, action in (("Cut", "<<Cut>>"), ("Copy", "<<Copy>>"), ("Paste", "<<Paste>>")):
+        menu.add_command(
+            label=label,
+            command=lambda a=action: menu.focus_get() and menu.focus_get().event_generate(a),
+        )
+
+    def on_right_click(event):
+        try:
+            event.widget.focus_set()
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    widget.bind_all("<Button-3>", on_right_click, add="+")
+
+
 def multilogin_slots() -> tuple[tuple[str, str], ...]:
     # Импорт внутри функции: мастер не должен тащить веб-приложение только
     # ради двух подписей, если до него дело не дошло.
@@ -338,6 +388,7 @@ class SetupWizard:
         root.geometry("820x680")
         root.minsize(760, 560)
         root.protocol("WM_DELETE_WINDOW", self._close)
+        enable_clipboard_shortcuts(root, tk)
         self.header = tk.Frame(root, bg="#172036", padx=24, pady=18)
         self.header.pack(fill="x")
         self.heading = tk.Label(

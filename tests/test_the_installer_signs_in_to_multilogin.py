@@ -374,3 +374,40 @@ def test_the_success_line_does_not_promise_what_has_not_happened():
     source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
     assert "The access code is saved when you finish setup." in source
     assert "automation token saved for this computer" not in source
+
+
+# ── Вставка в поля мастера (24.09) ────────────────────────────────────────
+#
+# Владелец не смог вставить почту в поле: Tkinter вешает вставку на латинскую
+# «v», а при русской раскладке в событии приходит «м» — правило не
+# срабатывает. У команды раскладка русская, так что заполнить поле можно было
+# только руками. Смотрим на физическую клавишу, а не на букву.
+
+def test_paste_works_in_any_keyboard_layout():
+    import setup_wizard as wizard
+
+    # 86 — физическая клавиша V; при русской раскладке она же даёт «м».
+    assert wizard.clipboard_event(86, 0x4) == "<<Paste>>"
+    assert wizard.clipboard_event(67, 0x4) == "<<Copy>>"
+    assert wizard.clipboard_event(88, 0x4) == "<<Cut>>"
+    assert wizard.clipboard_event(65, 0x4) == "<<SelectAll>>"
+
+
+def test_a_letter_without_control_is_just_a_letter():
+    """Иначе буква «v» в имени кампании вставляла бы буфер обмена."""
+    import setup_wizard as wizard
+
+    assert wizard.clipboard_event(86, 0) == ""
+    assert wizard.clipboard_event(999, 0x4) == ""
+
+
+def test_the_wizard_turns_the_shortcuts_on_and_offers_a_right_click_menu():
+    """Правая кнопка нужна не меньше: человеку, у которого Ctrl+V не сработал,
+    больше нечем вставить вовсе."""
+    source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
+    assert "enable_clipboard_shortcuts(root, tk)" in source
+    body = source[source.index("def enable_clipboard_shortcuts"):]
+    body = body[:body.index(chr(10) + "def ")]
+    assert '<Control-KeyPress>' in body and '<Button-3>' in body
+    for label in ("Cut", "Copy", "Paste"):
+        assert f'"{label}"' in body

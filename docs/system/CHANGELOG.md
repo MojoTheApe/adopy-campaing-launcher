@@ -17,6 +17,13 @@ password is used for one request and is cleared from the field as soon as the to
 arrives; nothing writes it to the machine settings, and `machine_config.py` has no
 notion of a password at all.
 
+Pasting did not work in the wizard's fields. Tkinter binds paste to the Latin letter
+"v", so with a Russian keyboard layout the event carries "м" and the binding never
+matches — and there was no right-click menu either, leaving nothing but typing the
+address by hand. The whole team types in Russian. The shortcuts now key off the
+physical key (Windows keycodes for A, C, V, X) rather than the letter, and a right-click
+menu offers Cut, Copy and Paste.
+
 Three things the owner found while walking the built installer, all on the same screen.
 The two accounts are named the way the dashboard names them — Inhouse and KLD, from
 `mlx_instance_labels()` and overridable through `ACL_MLX_LABEL_A`/`_B` — rather than
