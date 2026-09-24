@@ -7,11 +7,10 @@ import platform
 import shutil
 import socket
 import tempfile
-import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Any
+from typing import Callable
 
 from machine_config import (
     AccountAssignment,
@@ -175,14 +174,6 @@ def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[
     return checks
 
 
-#: Слоты Multilogin — это два разных аккаунта, а не «основной и запасной».
-#: Подписи «Multilogin access code» и «… (optional)» не говорили об этом
-#: ничего, и человек с двумя аккаунтами не знал, куда что класть (ACL-1303).
-#:
-#: Имена берутся оттуда же, откуда их берёт дешборд (`app.mlx_labels`):
-#: Inhouse и KLD, с подменой через ACL_MLX_LABEL_A/B. Свои названия тем же
-#: самым аккаунтам («Main», «Second») — это второе имя одной вещи, и человек
-#: на экране установки не узнаёт то, что видит потом каждый день.
 #: Физические клавиши Windows: A, C, V, X. Смотреть надо именно на них.
 #: Tk вешает вставку на латинскую «v», а при русской раскладке в событии
 #: приходит «м» — правило не срабатывает, и Ctrl+V молча ничего не делает.
@@ -233,78 +224,6 @@ def enable_clipboard_shortcuts(widget, tk_module) -> None:
     widget.bind_all("<Button-3>", on_right_click, add="+")
 
 
-def multilogin_slots() -> tuple[tuple[str, str], ...]:
-    # Импорт внутри функции: мастер не должен тащить веб-приложение только
-    # ради двух подписей, если до него дело не дошло.
-    from src.web.app import mlx_instance_labels
-
-    labels = mlx_instance_labels()
-    return tuple((slot, labels.get(slot) or slot) for slot in ("A", "B"))
-
-
-def sign_in_to_multilogin(email: str, password: str) -> tuple[str, str]:
-    """Почта и пароль -> (токен автоматизации, что сказать человеку).
-
-    Токены Multilogin никому не выдают: их получает сам, кто входит. Мастер
-    просил вставить то, чего у человека нет, — а дешборд рядом умел войти и
-    получить токен. Теперь это одно место на обоих (`src/web/multilogin_auth`).
-
-    Пароль уходит в один запрос и нигде не сохраняется.
-    """
-    from src.web.multilogin_auth import sign_in
-
-    result = sign_in(email, password)
-    if not result.ok:
-        raise WizardValidationError(result.error or "Multilogin sign-in failed.")
-    if not result.automation_token:
-        # Вошли, но токена не дали: право выдавать его есть только у владельца
-        # рабочего пространства. Без него робот не откроет ни один профиль,
-        # поэтому это отказ, а не мелкая подробность.
-        raise WizardValidationError(
-            (result.token_error or "Multilogin issued no automation token.")
-            + " Ask the owner of your Multilogin workspace to sign in here,"
-              " or paste an automation token below."
-        )
-    return result.automation_token, "Signed in. The access code is saved when you finish setup."
-
-
-def test_multilogin_access(tokens: dict[str, str]) -> str:
-    """Validate at least one Multilogin automation token.
-
-    Individual ad-account/profile connections are completed in ACL's Accounts
-    screen after setup, where the user can choose an open profile by name.
-    """
-    import urllib.error
-    import urllib.request
-
-    provided = {instance: token.strip() for instance, token in tokens.items() if token.strip()}
-    if not provided:
-        raise WizardValidationError(
-            "Sign in to Multilogin above, or paste an automation token if you were given one."
-        )
-    verified = []
-    for instance, token in sorted(provided.items()):
-        try:
-            request = urllib.request.Request(
-                "https://api.multilogin.com/workspace/folders",
-                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-            )
-            with urllib.request.urlopen(request, timeout=30) as response:
-                status = int(getattr(response, "status", 200))
-        except urllib.error.HTTPError as exc:
-            status = exc.code
-        except (OSError, urllib.error.URLError) as exc:
-            raise WizardValidationError(
-                "Could not reach Multilogin (api.multilogin.com). Check the network connection and try again."
-            ) from exc
-        if status == 401:
-            raise WizardValidationError(f"Multilogin rejected token {instance}.")
-        if status >= 400:
-            raise WizardValidationError(f"Multilogin returned HTTP {status}.")
-        verified.append(instance)
-    return f"Multilogin connection verified ({', '.join(verified)})."
-
-
 def write_ready_state(config_directory: str | Path, version: str) -> None:
     path = setup_state_path(config_directory)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -344,7 +263,6 @@ class SetupWizard:
         "System check",
         "Your name",
         "Local files",
-        "Multilogin",
         "Readiness",
         "Finish",
     )
@@ -359,32 +277,17 @@ class SetupWizard:
         self.version_text = version_text
         self.step = 0
         self.configuration: MachineConfiguration | None = None
-        self._verified_tokens = None
-        #: Что сказать человеку после перерисовки — см. `_worker_done`.
-        self._after_render = ""
-        self.multilogin_ok = False
         self.completed = False
-        self.busy = False
         self.campaign_manager_name = tk.StringVar(value=self._existing_env_value("MY_CM_NAME"))
         self.stats_path = tk.StringVar(value=self._existing_env_value("FB_STATS_EXCEL"))
         self.creatives_path = tk.StringVar(
             value=self._existing_env_value("FB_CREATIVES_ROOT") or str(default_creatives_directory()))
-        self.token_a = tk.StringVar(value=self._existing_env_value("MULTILOGIN_AUTOMATION_TOKEN_A"))
-        self.token_b = tk.StringVar(value=self._existing_env_value("MULTILOGIN_AUTOMATION_TOKEN_B"))
-        # Пароль живёт только в этом поле и только до входа: ни в настройку,
-        # ни в журнал он не попадает (ACL-1303).
-        self.mlx_email = tk.StringVar(value="")
-        self.mlx_password = tk.StringVar(value="")
-        self.mlx_slot = tk.StringVar(value="A")
-        #: Поля для вставки готового токена показываются по требованию.
-        #: Сами значения живут всегда — их подставляет машинная настройка.
-        self.paste_mode = tk.BooleanVar(value=False)
         self.status = tk.StringVar()
 
         root.title("Adopy Campaign Launcher Setup")
-        # Шаг Multilogin подрос (почта, пароль, выбор аккаунта), и в прежние
-        # 590 точек он перестал помещаться: низ обрезался вместе с кнопкой
-        # «Next», и человек оказывался в тупике на ровном месте (24.09).
+        # 590 точек в высоту резали низ окна вместе с кнопкой «Next», и
+        # человек оказывался в тупике на ровном месте (24.09). Запас оставлен
+        # с тем же умыслом: шаг «Local files» ещё подрастёт (ACL-1305).
         root.geometry("820x680")
         root.minsize(760, 560)
         root.protocol("WM_DELETE_WINDOW", self._close)
@@ -421,12 +324,7 @@ class SetupWizard:
         self.back_button.pack(side="right", padx=(8, 0))
         self.next_button = tk.Button(self.footer, text="Next", width=12, command=self._next)
         self.next_button.pack(side="right")
-        for variable in (self.token_a, self.token_b):
-            variable.trace_add("write", self._invalidate_multilogin)
         self._render()
-
-    def _invalidate_multilogin(self, *_args) -> None:
-        self.multilogin_ok = False
 
     def _existing_env_value(self, key: str) -> str:
         path = self.config_directory / ".env"
@@ -463,22 +361,11 @@ class SetupWizard:
             self._system,
             self._identity,
             self._files,
-            self._multilogin,
             self._readiness,
             self._finish,
         )
         renderers[self.step]()
-        self.next_button.config(state="disabled" if self.busy else "normal")
-        if self.busy:
-            self.back_button.config(state="disabled")
-            def disable(widget):
-                for child in widget.winfo_children():
-                    try:
-                        child.configure(state="disabled")
-                    except self.tk.TclError:
-                        pass
-                    disable(child)
-            disable(self.body)
+        self.next_button.config(state="normal")
 
     def _welcome(self) -> None:
         self._text("Set up Adopy Campaign Launcher on this computer", bold=True)
@@ -529,52 +416,11 @@ class SetupWizard:
         self._text("Put your videos and images into the Creatives folder. ACL creates it if it does not exist yet. "
                    "Both paths can be changed later in the dashboard.")
 
-    def _multilogin(self) -> None:
-        self._text("Sign in with your Multilogin email and password. ACL gets the access code itself "
-                   "and keeps only that code on this computer; the password is not saved anywhere.")
-        self.tk.Label(self.body, text="Multilogin email", anchor="w").pack(fill="x")
-        self.tk.Entry(self.body, textvariable=self.mlx_email).pack(fill="x", pady=(2, 8))
-        self.tk.Label(self.body, text="Multilogin password", anchor="w").pack(fill="x")
-        self.tk.Entry(self.body, textvariable=self.mlx_password, show="•").pack(fill="x", pady=(2, 8))
-        self.tk.Label(self.body, text="Which account", anchor="w").pack(fill="x")
-        for instance, title in multilogin_slots():
-            self.tk.Radiobutton(self.body, text=title, value=instance,
-                                variable=self.mlx_slot).pack(anchor="w")
-        self.tk.Button(
-            self.body,
-            text="Sign in to Multilogin",
-            command=self._start_multilogin_signin,
-            state="disabled" if self.busy else "normal",
-        ).pack(anchor="w", pady=(6, 10))
-        # Вставка токена нужна ровно одному человеку из десяти: выдать
-        # automation token может только владелец рабочего пространства, и
-        # участнику команды его передают на руки. Показывать это поле всем —
-        # значит растить экран и предлагать то, чего у большинства нет
-        # (замечание владельца 24.09). Прячем под галочку.
-        self.tk.Checkbutton(
-            self.body, text="I was given an access code instead",
-            variable=self.paste_mode, command=self._render, anchor="w",
-        ).pack(fill="x", pady=(4, 0))
-        if self.paste_mode.get():
-            for instance, title in multilogin_slots():
-                variable = self.token_a if instance == "A" else self.token_b
-                self.tk.Label(self.body, text=f"{title} — access code", anchor="w").pack(fill="x")
-                self.tk.Entry(self.body, textvariable=variable, show="•").pack(fill="x", pady=(2, 10))
-        if self.multilogin_ok:
-            self._text("✓ Multilogin connection verified", bold=True, color="#17663a")
-        self.tk.Button(
-            self.body,
-            text="Test Multilogin connection",
-            command=self._start_multilogin_check,
-            state="disabled" if self.busy else "normal",
-        ).pack(anchor="w", pady=(8, 4))
-
     def _readiness(self) -> None:
         checks = [
             ("Runtime", all(check.ok for check in getattr(self, "system_checks", []))),
             ("Your accounts", self.configuration is not None),
             ("Local files", bool(self.stats_path.get() and self.creatives_path.get())),
-            ("Multilogin", self.multilogin_ok),
             ("Safety mode", True),
         ]
         self._text("The launcher will open only when every required group is ready.")
@@ -584,11 +430,14 @@ class SetupWizard:
         if self.configuration:
             self._text(f"Found {len(self.configuration.accounts)} account(s) for this campaign manager.")
             self._text("After the launcher opens, connect each account to its Multilogin profile on the Accounts screen.")
+        self._text("Multilogin is connected in the dashboard, not here — Accounts → Connect, "
+                   "with your Multilogin email and password.")
 
     def _finish(self) -> None:
         self._text("Adopy Campaign Launcher is ready on this computer.", bold=True, color="#17663a")
         self._text("No campaign action was performed. The first campaign run must remain supervised.")
-        self._text("Click Close to open the dashboard. Open Accounts to connect your Multilogin profiles.")
+        self._text("Click Close to open the dashboard. Then open Accounts and press Connect to sign in "
+                   "to Multilogin — until that is done the robot cannot open a profile.")
         self.tk.Button(
             self.body,
             text="Copy sanitized setup summary",
@@ -603,84 +452,7 @@ class SetupWizard:
         self.root.clipboard_append(sanitized_setup_summary(self.configuration, version))
         self.status.set("Sanitized setup summary copied.")
 
-    def _run_worker(self, work: Callable[[], Any], done: Callable[[Any], None]) -> None:
-        if self.busy:
-            return
-        self.busy = True
-        self._render()
-        self.status.set("Working…")
-
-        def target() -> None:
-            try:
-                result = work()
-            except Exception as exc:
-                self.root.after(0, lambda message=str(exc): self._worker_failed(message))
-            else:
-                self.root.after(0, lambda: self._worker_done(result, done))
-
-        threading.Thread(target=target, daemon=True).start()
-
-    def _worker_failed(self, message: str) -> None:
-        self.busy = False
-        self.status.set(message)
-        self._render()
-        self.status.set(message)
-
-    def _worker_done(self, message, done: Callable[[Any], None]) -> None:
-        self.busy = False
-        self._after_render = ""
-        done(message)
-        self._render()
-        # `_render` начинается с очистки строки состояния, поэтому сообщение,
-        # поставленное в `done`, стиралось в том же такте и человек не видел
-        # ничего (ревью 24.09). Отказ это уже обходил — теперь и успех.
-        if self._after_render:
-            self.status.set(self._after_render)
-
-    def _tokens(self) -> dict[str, str]:
-        return {"A": self.token_a.get().strip(), "B": self.token_b.get().strip()}
-
-    def _start_multilogin_signin(self) -> None:
-        """Войти и положить полученный токен в поле выбранного аккаунта."""
-        email = self.mlx_email.get().strip()
-        password = self.mlx_password.get()
-        slot = (self.mlx_slot.get() or "A").strip().upper()
-
-        def work() -> tuple[str, str, str]:
-            token, message = sign_in_to_multilogin(email, password)
-            return slot, token, message
-
-        def done(answer: tuple[str, str, str]) -> None:
-            slot_name, token, message = answer
-            (self.token_a if slot_name == "A" else self.token_b).set(token)
-            # Пароль больше не нужен: токен получен и сохранится сам.
-            self.mlx_password.set("")
-            # Проверенным становится тот слот, который сейчас вошёл, —
-            # и остаётся тот, что проверили раньше. Записать сюда оба
-            # текущих значения значило бы благословить чужую строку: у
-            # владельца два аккаунта (Inhouse и Agency), и опечатка в поле
-            # второго уехала бы в настройку как рабочий токен под зелёной
-            # надписью «verified». А заменять целиком — терять проверку
-            # первого аккаунта при входе во второй (ревью 24.09).
-            kept = dict(self._verified_tokens or {"A": "", "B": ""})
-            kept[slot_name] = token
-            self._verified_tokens = kept
-            self.multilogin_ok = self._verified_tokens == self._tokens()
-            self._after_render = message
-
-        self._run_worker(work, done)
-
-    def _start_multilogin_check(self) -> None:
-        tokens = self._tokens()  # Read Tk variables on the UI thread.
-        self.multilogin_ok = False
-        def done(_message: str) -> None:
-            self._verified_tokens = tokens
-            self.multilogin_ok = self._tokens() == tokens
-        self._run_worker(lambda: test_multilogin_access(tokens), done)
-
     def _validate_step(self) -> None:
-        if self.busy:
-            raise WizardValidationError("Wait for the current check to finish.")
         if self.step == 1:
             failed = [check.label for check in self.system_checks if not check.ok]
             if failed:
@@ -694,26 +466,14 @@ class SetupWizard:
                 campaign_manager_name=self.campaign_manager_name.get(),
                 stats_workbook=self.stats_path.get(),
             )
-        elif self.step == 4 and (not self.multilogin_ok
-                                 or self._verified_tokens != self._tokens()
-                                 or not any(self._tokens().values())):
-            raise WizardValidationError("Test the Multilogin connection before continuing.")
-        elif self.step == 5:
+        elif self.step == 4:
             if not self.configuration:
                 raise WizardValidationError("Go back and confirm your name and the Stats workbook.")
-            if (not self.multilogin_ok or self._verified_tokens != self._tokens()
-                    or not any(self._tokens().values())):
-                # «Готово» обязано значить, что токен есть. Без этой проверки
-                # условие держалось на одной строке в `sign_in_to_multilogin`:
-                # два пустых словаря равны друг другу, и калитка пропускала
-                # бы машину вовсе без токена (ревью 24.09).
-                raise WizardValidationError("Verify the current Multilogin access codes before finishing.")
             apply_machine_configuration(
                 self.configuration,
                 self.config_directory,
                 stats_workbook=self.stats_path.get(),
                 creatives_directory=self.creatives_path.get(),
-                multilogin_tokens=self._tokens(),
             )
             version = self.version_text.splitlines()[0].rsplit(" ", 1)[-1]
             write_ready_state(self.config_directory, version)
@@ -732,14 +492,11 @@ class SetupWizard:
         self._render()
 
     def _back(self) -> None:
-        if self.step > 0 and not self.busy:
+        if self.step > 0:
             self.step -= 1
             self._render()
 
     def _close(self) -> None:
-        if self.busy:
-            self.status.set("Wait for the current check to finish before closing.")
-            return
         self.root.destroy()
 
 

@@ -159,7 +159,6 @@ def apply_machine_configuration(
     *,
     stats_workbook: str,
     creatives_directory: str,
-    multilogin_tokens: dict[str, str] | None = None,
 ) -> None:
     config_dir = Path(config_directory)
     map_path = config_dir / "ad_account_map.csv"
@@ -172,12 +171,6 @@ def apply_machine_configuration(
         "FB_CREATIVES_ROOT": str(Path(creatives_directory)),
         **SAFETY_ENV,
     }
-    for instance, token in (multilogin_tokens or {}).items():
-        normalized = instance.strip().upper()
-        if normalized not in {"A", "B"}:
-            raise MachineConfigError(f"unsupported Multilogin instance: {instance}")
-        if token.strip():
-            env_values[f"MULTILOGIN_AUTOMATION_TOKEN_{normalized}"] = token.strip()
     _replace_transaction({
         env_path: merge_env(existing_env, env_values).encode("utf-8"),
         map_path: _account_map_bytes(configuration, existing_map),

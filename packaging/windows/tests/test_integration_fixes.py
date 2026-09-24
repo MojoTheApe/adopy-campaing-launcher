@@ -76,38 +76,28 @@ class ConfigurationTests(unittest.TestCase):
 
 
 class WizardTests(unittest.TestCase):
-    def test_delayed_exception_callback_keeps_its_message(self):
+    def test_finish_needs_a_name_and_a_workbook_and_nothing_else(self):
+        """Без разобранной книги статистики «Готово» писать нечего: мастер
+        обязан отправить человека назад, а не создать полупустую настройку."""
         w=wizard.SetupWizard.__new__(wizard.SetupWizard)
-        w.busy=False;w.status=mock.MagicMock();w._render=mock.MagicMock();w._worker_failed=mock.MagicMock()
-        callbacks=[]
-        w.root=SimpleNamespace(after=lambda delay,fn:callbacks.append(fn))
-        class Thread:
-            def __init__(self,target,**kw): self.target=target
-            def start(self): self.target()
-        def fail(): raise RuntimeError('read denied')
-        with mock.patch.object(wizard.threading,'Thread',Thread):
-            w._run_worker(fail,lambda r:None)
-        callbacks[0]()
-        w._worker_failed.assert_called_once_with('read denied')
-
-    def test_edited_tokens_cannot_reuse_a_previous_success(self):
-        w=wizard.SetupWizard.__new__(wizard.SetupWizard)
-        w.busy=False;w.step=4;w.multilogin_ok=True;w._verified_tokens={'A':'old'};w._tokens=lambda:{'A':'changed'}
-        with self.assertRaises(wizard.WizardValidationError): w._validate_step()
-        w.step=5;w.configuration=configuration()
+        w.step=4;w.configuration=None
         with mock.patch.object(wizard,'apply_machine_configuration') as apply_mock:
             with self.assertRaises(wizard.WizardValidationError): w._validate_step()
             apply_mock.assert_not_called()
 
-    def test_finish_writes_configuration_once_tokens_are_verified(self):
+    def test_finish_writes_configuration_without_any_multilogin_token(self):
+        """ACL-1303: установка заканчивается без единого токена — подключение
+        к Multilogin живёт в дешборде. Если сюда снова приедет калитка «нет
+        токена — нет готовности», человек упрётся в неё на установке, а
+        починить это там будет нечем: токены Multilogin выдаёт только тому,
+        кто вошёл, и гасит предыдущий при следующем входе (24.09)."""
         w=wizard.SetupWizard.__new__(wizard.SetupWizard)
-        w.busy=False;w.step=5;w.configuration=configuration();w.multilogin_ok=True
-        w._verified_tokens={'A':'ok'};w._tokens=lambda:{'A':'ok'}
+        w.step=4;w.configuration=configuration()
         w.stats_path=SimpleNamespace(get=lambda:'stats.xlsx');w.creatives_path=SimpleNamespace(get=lambda:'creatives')
         w.config_directory=Path('cfg');w.version_text='ACL 1.2.3'
         with mock.patch.object(wizard,'apply_machine_configuration') as apply_mock, mock.patch.object(wizard,'write_ready_state') as ready:
             w._validate_step()
-        apply_mock.assert_called_once_with(w.configuration,Path('cfg'),stats_workbook='stats.xlsx',creatives_directory='creatives',multilogin_tokens={'A':'ok'})
+        apply_mock.assert_called_once_with(w.configuration,Path('cfg'),stats_workbook='stats.xlsx',creatives_directory='creatives')
         ready.assert_called_once_with(Path('cfg'),'1.2.3')
         self.assertTrue(w.completed)
 

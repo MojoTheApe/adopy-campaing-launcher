@@ -23,9 +23,6 @@ from setup_wizard import (
     validate_stats_workbook,
     write_ready_state,
 )
-# Продуктовая функция мастера называется test_*; под своим именем pytest
-# собирал бы её как тест, поэтому импортируем под псевдонимом.
-from setup_wizard import test_multilogin_access as check_multilogin_access
 from machine_config import AccountAssignment, MachineConfiguration
 
 
@@ -62,23 +59,6 @@ class SetupWizardTests(unittest.TestCase):
     def test_missing_stats_workbook_is_actionable(self):
         with self.assertRaisesRegex(WizardValidationError, "does not exist"):
             validate_stats_workbook("missing.xlsx")
-
-    def test_multilogin_check_points_at_the_sign_in(self):
-        """ACL-1303: раньше здесь советовали «вставьте код, выданный
-        поддержкой». Кода нет — Multilogin выдаёт его тому, кто вошёл, — и
-        новому человеку взять его негде. Сообщение обязано вести туда, где
-        он действительно может что-то сделать."""
-        with self.assertRaisesRegex(WizardValidationError, "Sign in to Multilogin"):
-            check_multilogin_access({"A": "", "B": ""})
-        with self.assertRaisesRegex(WizardValidationError, "paste an automation token"):
-            check_multilogin_access({"A": "", "B": ""})
-
-    @mock.patch("urllib.request.urlopen")
-    def test_multilogin_check_accepts_a_working_token(self, urlopen):
-        urlopen.return_value.__enter__.return_value.status = 200
-        result = check_multilogin_access({"A": "working-token"})
-        self.assertEqual(result, "Multilogin connection verified (A).")
-        self.assertNotIn("working-token", result)
 
     def test_campaign_manager_name_rejects_example_and_accepts_real_name(self):
         with self.assertRaises(WizardValidationError):

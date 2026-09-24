@@ -1,6 +1,33 @@
 # System history
 
-## The installer asks for a Multilogin sign-in, not a token nobody has — ACL-1303
+## Multilogin is connected in the dashboard, not in the installer — ACL-1303
+
+The wizard no longer mentions Multilogin at all. Setup is six steps instead of seven,
+finishes without a token, and never writes one; the person connects in the dashboard,
+on the Accounts screen, when they sit down to work. The Readiness and Finish screens
+say so, because without that connection the robot cannot open a profile and the first
+Publish dies on "TOKEN_A is not set".
+
+What sent the step back out of the installer was its own verification. On the owner's
+machine, with a token the robot had been using all week, it answered "Multilogin
+returned HTTP 403". That turned out not to be Multilogin: the wizard checked through
+`urllib` with no `User-Agent`, and Cloudflare refused the request before it arrived
+(error 1010). With an ordinary header the same call returns 401 — meaning both stored
+tokens are dead, although the token itself says it is good for another two weeks.
+
+So Multilogin appears to invalidate an automation token when the same workspace signs
+in again, and the team shares one login. Ten installs in a row would have left exactly
+one person — the last — with a working robot, and the other nine would have found out
+days later, on their first campaign. A dashboard that connects on demand survives that:
+whoever was knocked out signs in again, sees the result on the spot, and knocks out
+whoever connected before them, which is no worse than the account allows.
+
+The rest of this section is how the step got here before it was removed; the machinery
+it describes is gone from the wizard, and the sign-in itself lives on in
+`src/web/multilogin_auth.py`, where the dashboard uses it.
+
+### Before that: the installer asked for a Multilogin sign-in, not a token nobody has
+
 
 Walking a clean install from a published release on 2026-09-24 stopped at step 5 of 7:
 the wizard asked for a "Multilogin access code". Those are not handed out — whoever
