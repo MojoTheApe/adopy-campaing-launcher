@@ -253,20 +253,28 @@ def test_the_decision_uses_the_reading_it_was_given():
     )
 
 
-def test_the_note_about_the_split_survives_the_live_repaint():
-    """Подсказку про разбивку рисует и сервер, и клиент.
+# ── Подпись про разбивку проверяется исполнением ──────────────────────────
+#
+# Три проверки отсюда переехали в tests/test_country_refresh_review.py
+# (ACL-1296): они искали слова в исходнике — «есть ли в тексте функции
+# `theirs === ours`» — и зеленели от правильно написанного кода, ничего не
+# говоря о том, что он делает. В этом же PR такие проверки трижды краснели на
+# здоровых правках. Там те же свойства выполняются в браузере: подпись после
+# восстановленного чтения, равные суммы, полкопейки, нечитанная и идущая
+# разбивка, перезапись после свежего чтения, обе строки аккаунта.
+#
+# Здесь остаётся то, чего браузер не видит: что маршрут существует и что обе
+# половины подписи вообще есть — серверная в шаблоне, клиентская на странице.
 
-    `amapApplyReading` собирает клетку заново на каждом ответе опроса, и без
-    своей половины подписи первый же удачный опрос стирал бы её. А стереть —
-    значит вернуть ровно ту беду, ради которой писана ACL-1288: свежая сумма
-    рядом с разбивкой от старой, и на экране это выглядит согласованным.
+
+def test_the_pollers_hand_over_the_split_they_received():
+    """Единственное, чего браузерная проверка отсюда не видит.
+
+    `amapPollSpend` и `amapAwaitReading` лежат за срезом, которым собрана
+    страница в tests/test_country_refresh_review.py, а разбивку в клетку
+    доносят именно они. Потерять этот аргумент — значит стирать подпись на
+    каждом опросе, то есть вернуть ACL-1288 целиком (ревью 23.09).
     """
-    assert "function amapSplitNote(" in PAGE
-    apply = PAGE.split("function amapApplyReading(", 1)[1]
-    apply = apply[:apply.index(chr(10) + "}" + chr(10))]
-    assert "amapSplitNote(s, split)" in apply, (
-        "перерисовка клетки теряет подпись про разбивку"
-    )
     for caller in ("function amapPollSpend(", "async function amapAwaitReading("):
         body = PAGE.split(caller, 1)[1]
         body = body[:body.index(chr(10) + "}" + chr(10))]
@@ -275,22 +283,10 @@ def test_the_note_about_the_split_survives_the_live_repaint():
         )
 
 
-def test_a_fresh_split_renames_the_sum_it_explains():
-    """Разбивку только что сняли — подсказка обязана говорить про новую сумму."""
-    body = PAGE.split("function amapRunSplit(", 1)[1]
-    body = body[:body.index(chr(10) + "}" + chr(10))]
-    assert "amapRefreshSplitNote(account, per)" in body
-    assert "function amapRefreshSplitNote(" in PAGE
-
-
-def test_both_halves_measure_the_same_money():
-    """Правило перечитывания считает 10.001 и 10.00 одними деньгами (до
-    половины копейки). Подсказка сравнивает нарисованные строки — иначе
-    экран обвинял бы себя в отставании, которого правило не видит."""
-    note = PAGE.split("function amapSplitNote(", 1)[1][:1200]
-    assert "theirs === ours" in note, "подсказка сравнивает числа, а не строки"
-    cell = ROW[ROW.index('class="amap-live-ok"'):]
-    cell = cell[:cell.index("</span>")]
-    assert "split_txt != spend_txt" in cell, (
-        "серверная половина сравнивает числа, а не то, что видно на экране"
-    )
+def test_the_repaint_builds_the_whole_title_in_one_place():
+    """Подпись собирается одним `amapReadTitle` — проверка внутри тела
+    перерисовки, а не по всему файлу: определение функции содержит те же
+    слова и зеленило бы проверку само по себе (ревью 23.09)."""
+    apply = PAGE.split("function amapApplyReading(", 1)[1]
+    apply = apply[:apply.index(chr(10) + "}" + chr(10))]
+    assert "amapReadTitle(s, split)" in apply
