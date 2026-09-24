@@ -467,6 +467,23 @@
           303
         ],
         "recorded_at": "2026-09-24T11:38:33+00:00"
+      },
+      "312": {
+        "kind": "independent-review",
+        "pr": 312,
+        "verdict": "approved",
+        "implementer": "claude-opus-5-5 (main session, ACL-1311)",
+        "reviewer": "claude-opus-5-5 review subagent a696f08f (separate context, no edit rights on the implementation)",
+        "head_sha": "e95ef60f164a7ece2fc14a5632e5f1cddd6cfef5",
+        "base_sha": "723652e7ebe1631b2cc6f829a68b2e2b5270551e",
+        "tree_sha": "e282abe2473e03be76c63b3dc15aa9710b53ab11",
+        "report": "Independent review of PR #312 (ACL-1311 Team access), three rounds; the reviewer ran in a separate context and never edited the implementation. Head e95ef60, base stage 723652e.\n\nROUND 1 (9505d6e). Approved, no blocking findings. Security of the token route verified through ASGI: GET/HEAD/OPTIONS 405, Origin null 403, cross-site Referer 403, Origin localhost other port + Sec-Fetch-Site cross-site 403, foreign Host (evil.example, localhost.evil.example, 127.0.0.1.nip.io) 400 \u2014 none return the token. A local process without Origin gets it, which is not new: it can read the machine .env anyway. No token in logs at DEBUG, Sentry has send_default_pii=False, token never lands in markup or DOM, including the real Clipboard API branch checked on http://127.0.0.1. sign_in is called only from /multilogin-signin; the leftover builder panel is dead code and hits the server refusal. A dead token never shows as connected. Findings: the setup wizard still told buyers to sign in with email and password; 11 of 32 mutations survived, the real gaps being copy from the wrong slot, next_step for expired, Copy on a dead token, false 'copied' when execCommand fails, flag case, the +60 s margin, 401 without exp called expired; a refused Clipboard API showed a raw browser error; deployment notes missing (restart after setting the flag, flag absent from .env.example).\n\nROUND 2 (a5ee726). All seven author mutations red, none passing by coincidence; the clipboard fallback on 127.0.0.1 works after a refused writeText with and without permissions; packaging/windows/tests 45 OK. Four remaining non-blocking gaps: the fallback after a refused Clipboard API was not exercised because the test page ran on http://acl.test (no secure context); the 'not accepted' label untested; a dead 'expired if readable' branch; the Readiness wizard text untested.\n\nROUND 3 (e95ef60). All four closed. The new test runs the page on http://127.0.0.1:9 (isSecureContext true) with a refused writeText; removing the fallback or replacing it with an empty catch turns it red. 8 of 9 delta mutations red; the survivor (always copying through the field) is not a gap, copying still works. Runs: 56 passed on the Team access files and the wizard test, packaging/windows/tests 45 OK, all with ACL_LIBRARY_* empty so the suite cannot reach the live team library.\n\nVerdict: e95ef60 may be merged into stage.",
+        "main_sha": "cfd8388f6ff25f8ccbbae3c56b09dfb34d22c504",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          311
+        ],
+        "recorded_at": "2026-09-24T18:52:01+00:00"
       }
     },
     "stage": {
