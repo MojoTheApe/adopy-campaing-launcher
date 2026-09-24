@@ -204,7 +204,7 @@ def sign_in_to_multilogin(email: str, password: str) -> tuple[str, str]:
             + " Ask the owner of your Multilogin workspace to sign in here,"
               " or paste an automation token below."
         )
-    return result.automation_token, "Signed in; automation token saved for this computer."
+    return result.automation_token, "Signed in. The access code is saved when you finish setup."
 
 
 def test_multilogin_access(tokens: dict[str, str]) -> str:
@@ -576,12 +576,16 @@ class SetupWizard:
             (self.token_a if slot_name == "A" else self.token_b).set(token)
             # Пароль больше не нужен: токен получен и сохранится сам.
             self.mlx_password.set("")
-            # Проверенным считается ТОЛЬКО тот слот, который сейчас вошёл.
-            # Записать сюда оба значило бы благословить вторым заходом чужую
-            # строку: у владельца два аккаунта (Inhouse и Agency), и опечатка
-            # в поле второго уехала бы в настройку как рабочий токен, а
-            # мастер сказал бы «verified» (ревью 24.09).
-            self._verified_tokens = {"A": "", "B": "", slot_name: token}
+            # Проверенным становится тот слот, который сейчас вошёл, —
+            # и остаётся тот, что проверили раньше. Записать сюда оба
+            # текущих значения значило бы благословить чужую строку: у
+            # владельца два аккаунта (Inhouse и Agency), и опечатка в поле
+            # второго уехала бы в настройку как рабочий токен под зелёной
+            # надписью «verified». А заменять целиком — терять проверку
+            # первого аккаунта при входе во второй (ревью 24.09).
+            kept = dict(self._verified_tokens or {"A": "", "B": ""})
+            kept[slot_name] = token
+            self._verified_tokens = kept
             self.multilogin_ok = self._verified_tokens == self._tokens()
             self._after_render = message
 
@@ -611,12 +615,19 @@ class SetupWizard:
                 campaign_manager_name=self.campaign_manager_name.get(),
                 stats_workbook=self.stats_path.get(),
             )
-        elif self.step == 4 and (not self.multilogin_ok or self._verified_tokens != self._tokens()):
+        elif self.step == 4 and (not self.multilogin_ok
+                                 or self._verified_tokens != self._tokens()
+                                 or not any(self._tokens().values())):
             raise WizardValidationError("Test the Multilogin connection before continuing.")
         elif self.step == 5:
             if not self.configuration:
                 raise WizardValidationError("Go back and confirm your name and the Stats workbook.")
-            if not self.multilogin_ok or self._verified_tokens != self._tokens():
+            if (not self.multilogin_ok or self._verified_tokens != self._tokens()
+                    or not any(self._tokens().values())):
+                # «Готово» обязано значить, что токен есть. Без этой проверки
+                # условие держалось на одной строке в `sign_in_to_multilogin`:
+                # два пустых словаря равны друг другу, и калитка пропускала
+                # бы машину вовсе без токена (ревью 24.09).
                 raise WizardValidationError("Verify the current Multilogin access codes before finishing.")
             apply_machine_configuration(
                 self.configuration,

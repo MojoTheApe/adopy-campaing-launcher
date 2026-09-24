@@ -272,3 +272,61 @@ def test_signing_in_with_the_other_slot_empty_is_enough(monkeypatch):
     app._start_multilogin_signin()
     captured["done"](captured["work"]())
     assert app.multilogin_ok is True
+
+
+def test_signing_in_to_both_accounts_keeps_both_verified(monkeypatch):
+    """У владельца два аккаунта Multilogin, и он войдёт в оба подряд. Вход во
+    второй не должен сбрасывать проверку первого: иначе мастер говорит
+    «сохранено», галочка пропадает, а Next отказывается (ревью 24.09)."""
+    wizard = _wizard()
+
+    class Var:
+        def __init__(self, value=""):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    app = wizard.SetupWizard.__new__(wizard.SetupWizard)
+    app.token_a, app.token_b = Var(""), Var("")
+    app.mlx_email, app.mlx_password, app.mlx_slot = Var("o@adopy.com"), Var("pw"), Var("A")
+    app.busy = False
+    app._verified_tokens = None
+    app.multilogin_ok = False
+    app._after_render = ""
+    app.status = Var("")
+    captured = {}
+    app._run_worker = lambda work, done: captured.update(work=work, done=done)
+
+    for slot, token in (("A", "token-inhouse"), ("B", "token-agency")):
+        app.mlx_slot.set(slot)
+        app.mlx_password.set("pw")
+        monkeypatch.setattr(wizard, "sign_in_to_multilogin", lambda e, p, t=token: (t, "Signed in"))
+        app._start_multilogin_signin()
+        captured["done"](captured["work"]())
+
+    assert app.token_a.get() == "token-inhouse" and app.token_b.get() == "token-agency"
+    assert app.multilogin_ok is True, "вход во второй аккаунт сбросил проверку первого"
+
+
+def test_ready_cannot_mean_no_token_at_all(monkeypatch):
+    """Два пустых словаря равны друг другу, поэтому «проверено» могло
+    означать «проверено, что токенов нет». Калитка обязана это ловить сама,
+    а не полагаться на одну строку выше по течению (ревью 24.09)."""
+    source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
+    gate = source[source.index("elif self.step == 4"):]
+    gate = gate[:gate.index("def ", gate.index("elif self.step == 4"))] if "def " in gate else gate
+    assert gate.count("not any(self._tokens().values())") >= 2, (
+        "калитка пропускает машину без единого токена"
+    )
+
+
+def test_the_success_line_does_not_promise_what_has_not_happened():
+    """Сохранение происходит на Finish. Пока сообщение стиралось в том же
+    такте, неточность никого не трогала; теперь она видна."""
+    source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
+    assert "The access code is saved when you finish setup." in source
+    assert "automation token saved for this computer" not in source
