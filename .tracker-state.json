@@ -412,7 +412,7 @@
       "source_sha": "7b80e6b9b2673b33e30a3c2e9d678774f8e0b595",
       "main_tree": "01f20c7c0ba89c075d29bfb6ae18dfa7e2ed3687",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-09-24T06:11:43+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -579,6 +579,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-09-23T17:31:58+00:00"
+      },
+      "296": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 300,
+            "merge_sha": "78bf6313691309a08b073dbf39e0eefde68d51a8",
+            "tree_sha": "e82146f89a8b130d1a4c8b1ce049f9713a905903"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-09-24T06:30:41+00:00"
       }
     },
     "promotions": {
@@ -948,6 +960,38 @@
           "report": "Artifact ACL-update-recovery-322 of run 35892696378 (report.json: result passed, source 3db4e0f11fdf2b38d4dbda02f2d292076dba28d8, tree 01f20c7c0ba89c075d29bfb6ae18dfa7e2ed3687; packages 0.0.0-ci.322 and 0.1.0-alpha.322). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof. The country split itself was not exercised against a live Meta ad account in this verification."
         },
         "verified_at": "2026-09-23T17:15:39+00:00"
+      },
+      "300": {
+        "pr": 298,
+        "issues": [
+          296
+        ],
+        "tree_sha": "e82146f89a8b130d1a4c8b1ce049f9713a905903",
+        "source_sha": "7b80e6b9b2673b33e30a3c2e9d678774f8e0b595",
+        "main_tree": "01f20c7c0ba89c075d29bfb6ae18dfa7e2ed3687",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-09-24T06:11:43+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "7b80e6b9b2673b33e30a3c2e9d678774f8e0b595",
+          "tree_sha": "e82146f89a8b130d1a4c8b1ce049f9713a905903",
+          "checks": [
+            "Stage push CI run 35962208368 on 7b80e6b: ACL verification, Windows Python 3.11 and 3.13 suites passed, first attempt.",
+            "Exact-stage installer run 35962208359 passed build/install/launch/repair/uninstall.",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+            "Recovered application restarts and synthetic data remains byte-identical",
+            "PR #298 checks on head 31f7ac7: all eleven passed after one rerun of tests/test_drawer_review_browser.py::test_lost_or_cancelled_job_closes_the_queue_and_marks_it[missing], which is flaky on CI and passes locally.",
+            "Independent review across three rounds ended in approve at 31f7ac7. Because this is a test-quality task, the reviewer judged it by planting mutations rather than by reading: he found that three properties the deleted source greps had pinned were covered by nothing, one of which silently restored the ACL-1288 bug, then that the PR's own product change was itself unpinned. At the final head every mutation he planted turns exactly one test red, and he confirmed the new checks cannot be satisfied without the behaviour."
+          ],
+          "report": "Artifact ACL-update-recovery-328 of run 35962208359 (report.json: result passed, source 7b80e6b9b2673b33e30a3c2e9d678774f8e0b595, tree e82146f89a8b130d1a4c8b1ce049f9713a905903; packages 0.0.0-ci.328 and 0.1.0-alpha.328). Scope: Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof. This change is test-harness work plus one JS helper; nothing in it was exercised against a live Meta account."
+        },
+        "verified_at": "2026-09-24T06:12:19+00:00"
       }
     }
   }
