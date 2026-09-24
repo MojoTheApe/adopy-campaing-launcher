@@ -191,6 +191,7 @@ def test_the_last_screens_say_where_multilogin_is_connected():
     которые больше взяться неоткуда, — и в нарисованном экране, а не в файле.
     """
     for screen, phrase in (("_readiness", "Multilogin is connected in the dashboard"),
+                           ("_readiness", "Paste team token"),
                            ("_finish", "press Paste team token")):
         shown = " ".join(text for text, _ in _draw(screen))
         assert phrase in shown, f"{screen}: не сказано, где подключается Multilogin"
