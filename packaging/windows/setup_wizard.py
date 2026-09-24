@@ -426,18 +426,19 @@ class SetupWizard:
         self._text("The launcher will open only when every required group is ready.")
         for label, ok in checks:
             self._text(f"{'✓' if ok else '✕'}  {label}", color="#17663a" if ok else "#9b1c1c")
+        self._text("•  Multilogin — connected in the dashboard, after setup", color="#8a6d1f")
         self._text("Safety: RPA / recorded_flow / Multilogin attach-only", color="#17663a")
         if self.configuration:
             self._text(f"Found {len(self.configuration.accounts)} account(s) for this campaign manager.")
             self._text("After the launcher opens, connect each account to its Multilogin profile on the Accounts screen.")
-        self._text("Multilogin is connected in the dashboard, not here — Accounts → Connect, "
-                   "with your Multilogin email and password.")
+        self._text("Multilogin is connected in the dashboard, not here: open Accounts and press "
+                   "“Connect Multilogin”, then sign in with your Multilogin email and password.")
 
     def _finish(self) -> None:
         self._text("Adopy Campaign Launcher is ready on this computer.", bold=True, color="#17663a")
         self._text("No campaign action was performed. The first campaign run must remain supervised.")
-        self._text("Click Close to open the dashboard. Then open Accounts and press Connect to sign in "
-                   "to Multilogin — until that is done the robot cannot open a profile.")
+        self._text("Click Close to open the dashboard. Then open Accounts and press Connect Multilogin "
+                   "to sign in — until that is done the robot cannot open a profile.")
         self.tk.Button(
             self.body,
             text="Copy sanitized setup summary",

@@ -126,16 +126,24 @@ def test_the_wizard_never_asks_about_multilogin():
 
 
 def test_setup_is_six_steps_and_the_screens_match_them():
-    """Список шагов и список рисовальщиков — две половины одного; разъехавшись
-    на один, они показывают человеку не тот экран, и молча."""
+    """Список шагов и список рисовальщиков — две половины одного; разъехавшись,
+    они показывают человеку не тот экран, и молча.
+
+    Считать их поштучно мало: при перестановке двух соседних счёт сходится, а
+    заголовок «Your name» встаёт над выбором файлов, и `_validate_step` разбирает
+    книгу статистики на чужом шаге (ревью 24.09). Сверяем поимённо и по порядку.
+    """
+    import re
+
     import setup_wizard as wizard
 
-    assert len(wizard.SetupWizard.STEPS) == 6
-    assert "Multilogin" not in wizard.SetupWizard.STEPS
+    assert wizard.SetupWizard.STEPS == (
+        "Welcome", "System check", "Your name", "Local files", "Readiness", "Finish")
     source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
     block = source[source.index("renderers: tuple["):]
     block = block[:block.index(")\n")]
-    assert block.count("self._") == len(wizard.SetupWizard.STEPS)
+    assert re.findall(r"self\.(_\w+),", block) == [
+        "_welcome", "_system", "_identity", "_files", "_readiness", "_finish"]
 
 
 def test_the_installer_never_writes_a_multilogin_token():
@@ -159,10 +167,25 @@ def test_the_last_screens_say_where_multilogin_is_connected():
     """
     source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
     for screen, phrase in (("def _readiness", "Multilogin is connected in the dashboard"),
-                           ("def _finish", "press Connect to sign in")):
+                           ("def _finish", "press Connect Multilogin")):
         block = source[source.index(screen):]
         block = block[:block.index(chr(10) + "    def ", 10)]
         assert phrase in block, f"{screen}: не сказано, где подключается Multilogin"
+
+
+def test_readiness_does_not_read_as_all_done():
+    """Список на Readiness — четыре зелёных галочки, и глазами это читается
+    «готово», а абзац под ним — как совет. Multilogin стоит в том же списке,
+    но помечен как «ещё впереди»: не провал (на установке его и не должно
+    быть), но и не то, о чём можно не знать (ревью 24.09)."""
+    source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
+    block = source[source.index("def _readiness"):]
+    block = block[:block.index(chr(10) + "    def ", 10)]
+    row = "•  Multilogin — connected in the dashboard, after setup"
+    assert row in block, "Multilogin пропал из списка на экране готовности"
+    assert block.index(row) > block.index("for label, ok in checks:"), (
+        "строка стоит выше списка и не читается как его часть"
+    )
 
 
 def test_the_way_out_of_the_page_is_never_squeezed_off_the_screen():
