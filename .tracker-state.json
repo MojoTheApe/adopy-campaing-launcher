@@ -170,6 +170,10 @@
       "title": "Remove 'currency unknown' and account names from the country-attributed read part",
       "state": "created",
       "issue": 264
+    },
+    "0b04bc484810bbf21b2a4b2374b04a842e5f5e0f983fce4cc954083a375fa27c": {
+      "title": "The installer asks for a Multilogin token nobody has",
+      "state": "creating"
     }
   },
   "delivery_workflow": {
