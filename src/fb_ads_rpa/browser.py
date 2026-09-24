@@ -688,7 +688,7 @@ def window_home() -> tuple[int | None, int | None]:
     try:
         return int(raw_left), int(raw_top or 0)
     except ValueError:
-        log.warning("FB_RPA_WINDOW_LEFT/TOP: ожидались числа, получено %r/%r", raw_left, raw_top)
+        log.warning("FB_RPA_WINDOW_LEFT/TOP: expected numbers, got %r/%r", raw_left, raw_top)
         return None, None
 
 

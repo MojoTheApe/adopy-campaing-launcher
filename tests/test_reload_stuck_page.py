@@ -210,6 +210,9 @@ def test_long_text_is_inserted_after_a_few_real_keystrokes(monkeypatch):
         keyboard = Keyboard()
 
     monkeypatch.delenv("FB_RPA_HUMAN_TYPING", raising=False)
+    # И эту тоже: оператор, выставивший её у себя, красил бы этот тест
+    # ровно тем, что тест проверяет (ревью 24.09).
+    monkeypatch.delenv("FB_RPA_TYPING_LEAD", raising=False)
     monkeypatch.setattr(md.time, "sleep", lambda *_: None)
     md._type_human(Pg(), "Invest like a pro with Banco General today")
     assert "".join(typed) == "Invest l", typed

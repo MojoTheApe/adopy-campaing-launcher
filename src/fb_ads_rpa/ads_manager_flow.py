@@ -1168,7 +1168,10 @@ class AdsManagerFlow:
                 if "ERR_" not in str(exc):
                     raise
                 log.warning("campaigns goto failed (%s/3): %s", attempt + 1, str(exc)[:80])
-                time.sleep(8.0)
+                # Спать перед выходом незачем: третья попытка последняя, и
+                # восемь секунд уходили в пустоту (ревью 24.09).
+                if attempt < 2:
+                    time.sleep(8.0)
         if last_exc is not None:
             raise last_exc
         pause_after_navigation()

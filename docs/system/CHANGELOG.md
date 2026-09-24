@@ -19,11 +19,17 @@ failed the step.
   characters are real keystrokes, the rest is inserted at once. The owner measured the
   old behaviour at about 45 minutes per round of eight campaigns; `FB_RPA_HUMAN_TYPING=1`
   brings it back, and `FB_RPA_TYPING_LEAD` changes the eight.
-- Browser and pacing changes that go with it: window placement and guards around the
-  editor window, and the waits the steps take between actions.
+- Browser and pacing changes that go with it: guards and placement for the editor
+  window (`FB_RPA_WINDOW_LEFT` / `FB_RPA_WINDOW_TOP`), and shorter waits between
+  actions — the owner's decision of 2026-09-21, roughly halving the large pauses
+  (`pause_long` 2.5-4.5 s to 1.0-1.8 s, `pause_after_navigation` 2.0-3.5 s to
+  1.0-1.7 s). That means the robot reaches a live account about twice as often per
+  minute; `FB_RPA_SLOW_PACING=1` restores the old pace without a code change, and a
+  test now holds both the new ranges and that switch.
 
-What is not here: the recovery is used by the steps that arrive in the next slices.
-The mechanism and its tests land first so each slice stays readable.
+What is not here: the recovery, and the count of pending drafts that goes with it,
+are used by the steps that arrive in the next slices. Both land with their tests
+first so each slice stays readable; until then main calls neither from anywhere.
 
 ## The country split no longer lags one press behind the money — ACL-1288
 

@@ -1656,7 +1656,11 @@ def _first_visible(page: Page, locators, *, budget_s: float = 4.0, poll_s: float
 
 
 def _type_human(page: Page, text: str) -> None:
-    """Type text as keystrokes, not as one instant insertion.
+    """Type the start of the text as keystrokes, then insert the rest.
+
+    The lead of real keystrokes is the point: it is what the measurement
+    below says an instant insertion lacks. `FB_RPA_HUMAN_TYPING=1` types
+    every character, as this function did before 2026-09-20.
 
     Measured 2026-07-31: `insert_text` puts the whole string in with ZERO
     keydown events — the probe's key array stayed empty. That reads as a
@@ -1675,7 +1679,17 @@ def _type_human(page: Page, text: str) -> None:
     # keydown достаточно, чтобы ввод не выглядел мгновенной вставкой, — а
     # длинный остаток вставляем целиком. Прежнее поведение возвращает
     # FB_RPA_HUMAN_TYPING=1.
-    lead = int(os.environ.get("FB_RPA_TYPING_LEAD", "8") or 8)
+    # Мусор в переменной не должен обрывать кампанию: раньше «abc» здесь
+    # поднимал ValueError прямо из набора текста, а обёртки вокруг него нет —
+    # шаг падал посреди живого аккаунта. Ноль и отрицательное тоже не имеют
+    # смысла: без живых нажатий вставка выглядит мгновенной, ради чего эта
+    # функция и существует (ревью 24.09).
+    raw_lead = os.environ.get("FB_RPA_TYPING_LEAD", "8") or "8"
+    try:
+        lead = max(1, int(raw_lead))
+    except ValueError:
+        _telemetry.record("typing_lead_bad", False, note=str(raw_lead)[:40])
+        lead = 8
     if os.environ.get("FB_RPA_HUMAN_TYPING", "").strip() not in ("1", "true", "yes") and len(text) > lead:
         head, tail = text[:lead], text[lead:]
         for ch in head:
