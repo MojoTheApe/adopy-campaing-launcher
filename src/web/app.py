@@ -1323,8 +1323,13 @@ async def health() -> JSONResponse:
     """Fast identity check for the Windows launcher; never loads workbooks.
 
     `version` lets the update helper tell the new release from the old one.
+    `config` says whose dashboard this is: the launcher attaches only to its
+    own, and anything else on the port means it takes another (ACL-1309).
     """
-    return JSONResponse({"app": "ACL", "ok": True, "version": _installed_release().get("tag", "")})
+    from config.paths import config_identity
+
+    return JSONResponse({"app": "ACL", "ok": True, "version": _installed_release().get("tag", ""),
+                         "config": config_identity()})
 
 
 @app.get("/acl/update/check")
