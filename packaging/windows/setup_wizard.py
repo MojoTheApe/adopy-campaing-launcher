@@ -426,8 +426,8 @@ class SetupWizard:
         self._text("The launcher will open only when every required group is ready.")
         for label, ok in checks:
             self._text(f"{'✓' if ok else '✕'}  {label}", color="#17663a" if ok else "#9b1c1c")
-        self._text("•  Multilogin — connected in the dashboard, after setup", color="#8a6d1f")
         self._text("Safety: RPA / recorded_flow / Multilogin attach-only", color="#17663a")
+        self._text("•  Multilogin — connected in the dashboard, after setup", color="#8a6d1f")
         if self.configuration:
             self._text(f"Found {len(self.configuration.accounts)} account(s) for this campaign manager.")
             self._text("After the launcher opens, connect each account to its Multilogin profile on the Accounts screen.")

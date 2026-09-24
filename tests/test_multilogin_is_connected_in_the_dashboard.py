@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -155,6 +156,30 @@ def test_the_installer_never_writes_a_multilogin_token():
     assert "multilogin_tokens" not in config
 
 
+def _draw(screen: str) -> list[tuple[str, str]]:
+    """Нарисовать экран мастера и вернуть, что человек увидит: (текст, цвет).
+
+    Читать вместо этого исходник как текст — соблазнительно и бесполезно:
+    закомментированная строка в файле остаётся, и тест зеленеет над пустым
+    экраном (ревью 24.09). Tk для этих двух экранов не нужен — им хватает
+    четырёх полей и подменённого `_text`.
+    """
+    import setup_wizard as wizard
+
+    w = wizard.SetupWizard.__new__(wizard.SetupWizard)
+    w.system_checks = [SimpleNamespace(ok=True, label="Runtime", detail="ok")]
+    w.configuration = SimpleNamespace(accounts=("one",))
+    w.stats_path = SimpleNamespace(get=lambda: "stats.xlsx")
+    w.creatives_path = SimpleNamespace(get=lambda: "creatives")
+    w.version_text = "Adopy Campaign Launcher 1.2.3"
+    w.body = object()
+    drawn: list[tuple[str, str]] = []
+    w._text = lambda value, *, bold=False, color="#273248": drawn.append((value, color))
+    w.tk = SimpleNamespace(Button=lambda *a, **k: SimpleNamespace(pack=lambda *a, **k: None))
+    getattr(w, screen)()
+    return drawn
+
+
 def test_the_last_screens_say_where_multilogin_is_connected():
     """Человек, закрывший мастер, обязан знать, что осталось сделать: без
     подключения робот не откроет ни одного профиля, и первая публикация
@@ -163,28 +188,36 @@ def test_the_last_screens_say_where_multilogin_is_connected():
     Слова «Multilogin» и «Accounts» на этих экранах были и раньше (в строке
     про безопасный режим и в совете привязать профили), так что искать их
     бессмысленно: мимо пройдёт как раз то, что мы добавили. Ищем фразы,
-    которые больше взяться неоткуда.
+    которые больше взяться неоткуда, — и в нарисованном экране, а не в файле.
     """
-    source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
-    for screen, phrase in (("def _readiness", "Multilogin is connected in the dashboard"),
-                           ("def _finish", "press Connect Multilogin")):
-        block = source[source.index(screen):]
-        block = block[:block.index(chr(10) + "    def ", 10)]
-        assert phrase in block, f"{screen}: не сказано, где подключается Multilogin"
+    for screen, phrase in (("_readiness", "Multilogin is connected in the dashboard"),
+                           ("_finish", "press Connect Multilogin")):
+        shown = " ".join(text for text, _ in _draw(screen))
+        assert phrase in shown, f"{screen}: не сказано, где подключается Multilogin"
 
 
 def test_readiness_does_not_read_as_all_done():
     """Список на Readiness — четыре зелёных галочки, и глазами это читается
     «готово», а абзац под ним — как совет. Multilogin стоит в том же списке,
     но помечен как «ещё впереди»: не провал (на установке его и не должно
-    быть), но и не то, о чём можно не знать (ревью 24.09)."""
-    source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
-    block = source[source.index("def _readiness"):]
-    block = block[:block.index(chr(10) + "    def ", 10)]
-    row = "•  Multilogin — connected in the dashboard, after setup"
-    assert row in block, "Multilogin пропал из списка на экране готовности"
-    assert block.index(row) > block.index("for label, ok in checks:"), (
-        "строка стоит выше списка и не читается как его часть"
+    быть), но и не то, о чём можно не знать (ревью 24.09).
+
+    Цвет здесь — часть смысла, а не оформление: позеленев, строка скажет
+    ровно обратное тому, ради чего поставлена.
+    """
+    drawn = _draw("_readiness")
+    rows = [(text, color) for text, color in drawn if "Multilogin" in text]
+    row = next((r for r in rows if r[0].startswith("•")), None)
+    assert row is not None, "Multilogin пропал из списка на экране готовности"
+    text, color = row
+    assert "connected in the dashboard" in text and "after setup" in text
+    green = [c for t, c in drawn if t.startswith("✓")]
+    assert color not in green, "строка позеленела и читается как «уже готово»"
+    checks = [i for i, (t, _) in enumerate(drawn) if t.startswith(("✓", "✕"))]
+    assert drawn.index(row) > max(checks), "строка стоит выше списка проверок"
+    assert drawn.index(row) == len(drawn) - 1 or "Safety:" not in drawn[drawn.index(row) + 1][0], (
+        "под жёлтой строкой идёт зелёная про безопасный режим — глаз склеит их "
+        "и прочитает нижнюю как подтверждение верхней (ревью 24.09)"
     )
 
 
