@@ -1,5 +1,41 @@
 # System history
 
+## Team access: buyers paste the team's Multilogin token instead of signing in — ACL-1311
+
+The team shares one Multilogin login for Inhouse and one for KLD. Signing in from the
+dashboard issues a new automation token, and on 2026-09-24 both tokens saved on the
+owner's machine answered 401 while their own expiry was still two weeks away. So every
+buyer who pressed Connect could disconnect everyone else working under the same login.
+Multilogin documents one cause — "Active automation tokens expire after the password is
+changed" — and does not document whether a new token revokes the old ones; either way,
+the fix is that buyers stop issuing tokens.
+
+The team lead's machine carries `ACL_MLX_TEAM_ADMIN=1` in its machine `.env`. There, the
+Multilogin panel keeps the sign-in and adds, for a connected account, **Copy team token**:
+the token goes to the clipboard and the panel says until when it works. Everywhere else
+the panel offers only **Paste team token** — no email or password fields at all — and
+`/multilogin-signin` refuses on the server before Multilogin hears a password, so an old
+open page or the leftover builder panel cannot issue a token either.
+
+The token is read through a new `POST /multilogin-team-token`, answered only on the team
+lead's machine. POST rather than GET, because the dashboard boundary checks Origin and
+`Sec-Fetch-Site` only on requests that change something; a cross-site request and a plain
+link both get nothing. The token never appears in the page markup: the clipboard fallback
+puts it in a field that exists for one moment.
+
+A token the API refuses while its own expiry is still ahead now reads **"team token was
+replaced"**, not "expired" — the first means someone signed in or changed the password,
+the second means a month went by. Both tell a buyer to ask the team lead for the current
+token and tell the team lead to sign in again. The expiry shows as a date, not an ISO
+timestamp. Product text names no one: "your team lead".
+
+Tests drive the real routes through ASGI with Multilogin stubbed, and the real panel in a
+browser in both roles. Eleven of twelve deliberate breakages turn the suite red; the
+twelfth — dropping `Cache-Control: no-store` from the token route — is harmless because
+the dashboard boundary sets it on every response. One of the eleven first slipped past:
+the copy field holds the token in its `value` property, which page markup does not show,
+so the test now looks at live fields.
+
 ## Multilogin is connected in the dashboard, not in the installer — ACL-1303
 
 The wizard no longer mentions Multilogin at all. Setup is six steps instead of seven,

@@ -68,6 +68,9 @@
   <div class="amap-ml" data-ml-state="unknown">
     <span class="amap-ml-line">Multilogin: <i>checking…</i></span>
     <button type="button" class="amap-btn amap-ml-open" hidden onclick="amapMlOpen(this)">Connect Multilogin</button>
+    {#- ACL-1311: только на машине тимлида и только при живом токене.
+        Сам токен в разметку не попадает — его отдаёт POST по нажатию. -#}
+    <button type="button" class="amap-btn amap-ml-copy" hidden onclick="amapMlCopy(this)">Copy team token</button>
     <button type="button" class="amap-btn" onclick="document.getElementById('amap-rpa-help').showModal()">RPA help</button>
   </div>
 </div>
