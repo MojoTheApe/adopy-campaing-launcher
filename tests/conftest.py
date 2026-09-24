@@ -61,6 +61,19 @@ os.environ["ACL_SENTRY_DSN"] = ""
 # Изоляция здесь, а не в каждом файле, потому что зависимость скрытая: она
 # приходит от чужого импорта, и следующий такой файл о ней не догадается.
 _LIBRARY_ENV = ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH")
+#: Без этой пары `backend()` не соберёт `GitHubBackend`. Отдельно от списка
+#: выше, чтобы сторож не поехал, если тот когда-нибудь переставят местами.
+_LIBRARY_REQUIRED = ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN")
+
+# Пустая строка, а не удаление, и на уровне модуля — как выключатель Sentry
+# выше и по той же причине. Удалять здесь бесполезно: `load_env()` случится
+# позже, при импорте тестовых модулей, и вернёт переменные обратно. А вот
+# перебить уже выставленное значение он не может — `load_dotenv` по умолчанию
+# идёт с `override=False`. Так закрывается единственное окно, до которого
+# фикстурам не дотянуться: сбор тестов. `backend()` и `configured()` зовут
+# `.strip()`, поэтому пустая строка для них то же самое, что отсутствие.
+for _name in _LIBRARY_ENV:
+    os.environ[_name] = ""
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -85,11 +98,16 @@ def library_disconnected():
     # отказ должен случиться раньше, чем соберётся настоящий `GitHubBackend`.
     # Тесты, которые сами собирают его с подменённым `_call`, идут мимо
     # `backend()` и этого не замечают.
+    #
+    # Ставится один раз на прогон, а не на каждый тест. Размен: тест, который
+    # присвоит `team_library.backend` напрямую, минуя monkeypatch, снимет
+    # сторожа до конца прогона. Сейчас таких нет, и сессионная область важнее:
+    # без неё фикстуры уровня модуля работают вообще без защиты.
     real_backend = team_library.backend
 
     def refuse_the_real_library():
         if team_library._backend_override is None and all(
-            (os.environ.get(name) or "").strip() for name in _LIBRARY_ENV[:2]
+            (os.environ.get(name) or "").strip() for name in _LIBRARY_REQUIRED
         ):
             raise AssertionError(
                 "A test tried to reach the real team library repository. The "
@@ -117,7 +135,9 @@ def isolated_machine_config(_machine_dirs, monkeypatch):
     """
     from src.analysis_agent import team_library
 
-    monkeypatch.setenv("ACL_CONFIG_DIR", str(next(_machine_dirs)))
+    made = next(_machine_dirs)
+    made.mkdir()
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(made))
     for name in _LIBRARY_ENV:
         monkeypatch.delenv(name, raising=False)
 
@@ -136,16 +156,13 @@ def _machine_dirs(tmp_path_factory):
     `tmp_path_factory.mktemp` на каждый тест обходится дорого: он пересчитывает
     весь корень, чтобы найти следующий номер, и на двух с половиной тысячах
     тестов это десятки секунд на пустом месте. Корень берётся один раз.
+
+    Каталог создаёт вызывающий, а не генератор: упавший внутри `mkdir` закрыл
+    бы его насовсем, и одна ошибка диска превратилась бы в `StopIteration` на
+    всех оставшихся тестах.
     """
     root = tmp_path_factory.mktemp("acl-machines")
-
-    def dirs():
-        for n in itertools.count():
-            made = root / str(n)
-            made.mkdir()
-            yield made
-
-    return dirs()
+    return (root / str(n) for n in itertools.count())
 
 
 @pytest.fixture

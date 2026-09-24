@@ -27,8 +27,16 @@ everyone with the launcher installed — the combination that teaches a team to 
 local failures. The same Windows with a launcher on it would have failed in CI exactly
 as it failed locally.
 
-`tests/conftest.py` now carries the isolation in two autouse fixtures.
-`library_disconnected` is session-scoped: it removes `ACL_LIBRARY_REPO` /
+`tests/conftest.py` now carries the isolation in three places. At module level it sets
+`ACL_LIBRARY_REPO` / `ACL_LIBRARY_TOKEN` / `ACL_LIBRARY_BRANCH` to empty strings — the
+same trick as the Sentry kill-switch just above it, and for the same reason. Deleting
+them there would achieve nothing, because `load_env()` happens later, while test modules
+are imported, and would put them straight back; but it cannot overwrite a value that is
+already set, since `load_dotenv` defaults to `override=False`. That closes the one window
+no fixture can reach, test collection. `backend()` and `configured()` both `.strip()`,
+so an empty string reads to them exactly like an absent variable.
+
+Then two autouse fixtures. `library_disconnected` is session-scoped: it removes `ACL_LIBRARY_REPO` /
 `ACL_LIBRARY_TOKEN` / `ACL_LIBRARY_BRANCH` before anything else runs, and wraps
 `team_library.backend()` so that it refuses to build a real `GitHubBackend` and fails
 the test with an explicit message instead of writing to the team's library. Session
