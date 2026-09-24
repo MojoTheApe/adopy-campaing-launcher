@@ -458,3 +458,86 @@ def test_a_never_split_account_is_not_read_from_disk_twice(stores):
     finally:
         cs.get_split = real
     assert plan["needed"] is True and not reads, "хранилище перечитали зря"
+
+
+# ── Серверная половина подписи: её видно только отрисовкой ────────────────
+#
+# Ревью 23.09: проверка «в шаблоне есть слова `split_txt != spend_txt`»
+# зеленела и тогда, когда сравнение возвращали к числам. А с числами аккаунт
+# с 41.502 против 41.50 получал бы при загрузке страницы «not the $41.50
+# above» — правило перечитывания и клиент считают это одними деньгами, и
+# экран обвинял бы себя в отставании, которого нет.
+
+def _render_row(*, spend, split_spend, currency="$", split_currency="$",
+                date_from="2026-09-01", date_to="2026-09-22"):
+    """Строка аккаунта, отрисованная настоящим шаблоном."""
+    from jinja2 import Environment, FileSystemLoader
+
+    from src.analysis_agent.money_format import fmt_currency
+
+    env = Environment(loader=FileSystemLoader(str(ROOT / "src" / "web" / "templates")),
+                      autoescape=True)
+    env.filters["fmt_currency"] = fmt_currency
+    env.filters["fmt_usd"] = str
+    account = "Doc19"
+    reading = {"state": "ok", "spend": spend, "currency": currency,
+               "date_from": date_from, "date_to": date_to,
+               "finished_at": "2026-09-22 18:00:00", "how": "rpa"}
+    split = {"state": "ok", "spend": split_spend, "spend_currency": split_currency}
+    country = {"country": "Saudi Arabia", "key": "SA", "virtual": False,
+               "rows": [{"account": account, "has_data": False, "ready": True,
+                         "in_workbook": True, "status": {}, "to_do": ""}]}
+    return env.get_template("_account_map_country.html").render(
+        mc=country, mlx={},
+        amap={"countries": [country], "available": [], "all_accounts": [],
+              "live": {account: reading}, "splits": {account: split},
+              "fallback": {}, "dates": [], "date_from": date_from,
+              "date_to": date_to, "span": ""})
+
+
+def test_the_server_calls_half_a_cent_the_same_money_too():
+    """Та же мера, что у правила и у клиента: до половины копейки."""
+    html = _render_row(spend=41.50, split_spend=41.502)
+    assert "countries read for $41.50" in html
+    assert "not the" not in html, "сервер обвиняет разбивку в отставании, которого нет"
+
+
+def test_the_server_says_when_the_split_explains_other_money():
+    html = _render_row(spend=41.50, split_spend=10.0)
+    assert "countries read for $10.00, not the $41.50 above" in html
+
+
+def test_the_server_says_when_the_split_does_not_remember_its_spend():
+    """Записи до ACL-1282 суммы не помнят, и молчать о них — значит выдать их
+    за свежие. Эту ветку шаблона не проверял никто (ревью 23.09)."""
+    assert "countries read before this spend was known" in _render_row(
+        spend=41.50, split_spend=None)
+
+
+def test_the_server_calls_another_currency_another_number():
+    html = _render_row(spend=41.50, split_spend=41.50, split_currency="EUR")
+    assert "countries read for EUR 41.50, not the $41.50 above" in html
+
+
+def test_the_server_writes_one_day_as_one_day():
+    """Клиент прибит к этому виду; сервер обязан держаться того же, иначе
+    подсказка мигает при первой же перерисовке — только зеркально."""
+    html = _render_row(spend=41.50, split_spend=41.50,
+                       date_from="2026-09-01", date_to="2026-09-01")
+    assert "2026-09-01 · read" in html and "2026-09-01…2026-09-01" not in html
+
+
+def test_the_server_and_the_client_write_the_same_sentence():
+    """Две половины одной подписи: разойдутся — человек увидит, как текст
+    меняется сам собой при первом же опросе. Каждая фраза проверяется на
+    обеих сторонах, без исключений: исключение прятало ровно ту ветку,
+    которую никто не проверял (ревью 23.09)."""
+    page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    note = page[page.index("function amapSplitNote("):]
+    note = note[:note.index(chr(10) + "}" + chr(10))]
+    rendered = (_render_row(spend=41.50, split_spend=10.0)
+                + _render_row(spend=41.50, split_spend=None))
+    for phrase in ("countries read for ", ", not the ", " above",
+                   "countries read before this spend was known"):
+        assert phrase in note, f"клиент не пишет «{phrase}»"
+        assert phrase in rendered, f"сервер не пишет «{phrase}»"

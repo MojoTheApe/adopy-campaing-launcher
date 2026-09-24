@@ -1,5 +1,47 @@
 # System history
 
+## A browser test that passed while the code it covered threw — ACL-1296
+
+The Playwright fixture in tests/test_country_refresh_review.py built its page from a
+slice of report.html that ended at `amapMoney`, so `amapSplitNote` and
+`amapApplyReading` were never in it. When a test drove a successful country split,
+`amapRefreshSplitNote` threw `ReferenceError: amapSplitNote is not defined`, its own
+`.catch` swallowed it, and the test stayed green — the path it existed to cover never
+ran once. On the real page the function is defined, so nothing was broken for anyone
+using the dashboard; what was broken was our evidence that it works.
+
+The slice now ends at `amapPaintTree` and the fixture stubs the two functions beyond it
+(`amapPaintTree`, `amapSpendFailed`), which this file does not test. Ten checks that
+used to search the source text for phrases — "does the function body contain
+`theirs === ours`" — now execute the code instead: the note after a resumed read
+("countries read for $10.00, not the $41.50 above"), equal amounts producing no
+accusation, half a cent counting as no difference the way the re-read rule counts it, a
+never-read / running / failed split saying nothing, a split that does not remember its
+spend saying exactly that, the refresh rewriting the note exactly once, a reading that
+is still running leaving it alone, and both rows of a two-country account carrying the
+same note. Breaking the repaint on purpose turns five of them red; the source greps it
+replaced stayed green through the same break.
+
+Review then mutation-tested the result and found four properties that no check could
+fail on: that a finished split refreshes the note at all (breaking the call left the
+tooltip explaining the old money forever — the ACL-1288 symptom, silently restored),
+that the two pollers hand on the split they received, that the server half compares the
+amounts as written rather than as numbers (with numbers, an account at 41.502 against
+41.50 is accused of a lag the rule deliberately ignores), and that the refresh walks
+every row of its account and no other. Each is now pinned, and each mutation turns
+exactly one test red.
+
+Fixing that surfaced a real drift: the server writes a single-day reading as one date,
+while the rebuilt title always wrote `from…to`. The old implementation preserved it by
+accident, because it kept the existing text and only replaced the tail. Building from
+data made the tooltip change under the reader on a reading of the same dates, so
+`amapReadTitle` now writes one day as one day.
+
+`amapRefreshSplitNote` also stopped rebuilding the cell's title by splitting the live
+one on `' · countries '` and now builds it from the reading it already holds, through a
+shared `amapReadTitle`. Splitting on a separator the template writes couples the two
+across a change either one can make alone.
+
 ## The country split no longer lags one press behind the money — ACL-1288
 
 ACL-1282 decided whether to read the country split at the moment the spend read
