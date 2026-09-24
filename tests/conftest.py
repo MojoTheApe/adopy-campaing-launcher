@@ -11,6 +11,7 @@ plus a synthetic accounts list. Designed so:
 """
 from __future__ import annotations
 
+import itertools
 import os
 import sys
 from datetime import datetime, timedelta
@@ -50,27 +51,73 @@ os.environ["ACL_SENTRY_DSN"] = ""
 # репозиторий библиотеки.
 #
 # Так и получалось: файл поодиночке проходил, в полном прогоне падал, а в
-# библиотеке команды заводились тестовые таргеты. На Linux в CI такого .env
-# нет, поэтому CI оставался зелёным — худшее сочетание: оно приучает не верить
-# локальному прогону.
+# библиотеке команды заводились тестовые таргеты. У CI машина чистая: сьют
+# идёт на windows-latest (`.github/workflows/ci.yml`), лаунчер там не
+# установлен, поэтому `%LOCALAPPDATA%\ACL\.env` не существует, а `.env`
+# чекаута не коммитится. CI оставался зелёным — худшее сочетание: оно
+# приучает не верить локальному прогону. Дело не в операционной системе:
+# на такой же Windows с установленным лаунчером CI падал бы так же.
 #
 # Изоляция здесь, а не в каждом файле, потому что зависимость скрытая: она
 # приходит от чужого импорта, и следующий такой файл о ней не догадается.
 _LIBRARY_ENV = ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH")
 
 
-@pytest.fixture(autouse=True)
-def isolated_machine(tmp_path_factory, monkeypatch):
-    """Каждому тесту — своя машина и отключённая общая библиотека.
+@pytest.fixture(scope="session", autouse=True)
+def library_disconnected():
+    """Общая библиотека отключена на весь прогон, с самого начала.
 
-    `ACL_CONFIG_DIR` во временной папке уводит туда и реестры, и файлы
-    блокировок, и `.env` машины: повторный `load_env()` внутри теста уже
-    ничего не прочитает. Папка своя, а не `tmp_path` теста, чтобы реестры не
-    мешались с файлами самой проверки.
+    Отдельно от машинной фикстуры и сессионной областью — потому что
+    фикстуры уровня модуля и сессии поднимаются раньше функциональных.
+    Иначе такая фикстура успела бы поработать по живой библиотеке до того,
+    как включится защита.
     """
     from src.analysis_agent import team_library
 
-    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path_factory.mktemp("acl-machine")))
+    patch = pytest.MonkeyPatch()
+    for name in _LIBRARY_ENV:
+        patch.delenv(name, raising=False)
+
+    # Последний рубеж. Снятых переменных хватает, пока их никто не вернёт —
+    # а вернуть может `load_env()` из чекаутного `.env`, который читается,
+    # когда машинного нет. Тогда тест должен упасть с понятным текстом, а не
+    # отправить правку в библиотеку команды. Проверяем окружение до вызова:
+    # отказ должен случиться раньше, чем соберётся настоящий `GitHubBackend`.
+    # Тесты, которые сами собирают его с подменённым `_call`, идут мимо
+    # `backend()` и этого не замечают.
+    real_backend = team_library.backend
+
+    def refuse_the_real_library():
+        if team_library._backend_override is None and all(
+            (os.environ.get(name) or "").strip() for name in _LIBRARY_ENV[:2]
+        ):
+            raise AssertionError(
+                "A test tried to reach the real team library repository. The "
+                "library_disconnected fixture in tests/conftest.py clears "
+                "ACL_LIBRARY_REPO/ACL_LIBRARY_TOKEN; something restored them "
+                "mid-test — most likely a load_env() that fell back to the "
+                "checkout .env. Use team_library.use_backend(MemoryBackend())."
+            )
+        return real_backend()
+
+    patch.setattr(team_library, "backend", refuse_the_real_library)
+    yield
+    patch.undo()
+
+
+@pytest.fixture(autouse=True)
+def isolated_machine_config(_machine_dirs, monkeypatch):
+    """Каждому тесту — свой машинный каталог и чистое состояние библиотеки.
+
+    `ACL_CONFIG_DIR` во временной папке уводит туда и реестры, и файлы
+    блокировок, и путь к `.env` машины, так что `load_env()` внутри теста
+    машинный файл уже не найдёт. Запасной `.env` чекаута он всё ещё прочитает
+    — на этот случай и стоит сторож в `library_disconnected`. Папка своя, а не
+    `tmp_path` теста, чтобы реестры не мешались с файлами самой проверки.
+    """
+    from src.analysis_agent import team_library
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(next(_machine_dirs)))
     for name in _LIBRARY_ENV:
         monkeypatch.delenv(name, raising=False)
 
@@ -81,25 +128,24 @@ def isolated_machine(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(team_library, "_pulled", {})
     monkeypatch.setattr(team_library, "_status", {})
 
-    # Последний рубеж. Снятых переменных хватает, пока их никто не вернёт; если
-    # вернёт — тест должен упасть с понятным текстом, а не отправить правку в
-    # библиотеку команды. Тесты, которые сами собирают `GitHubBackend` с
-    # подменённым `_call`, идут мимо `backend()` и этого не замечают.
-    real_backend = team_library.backend
 
-    def refuse_the_real_library():
-        made = real_backend()
-        if isinstance(made, team_library.GitHubBackend):
-            raise AssertionError(
-                "A test tried to reach the real team library repository. The "
-                "isolated_machine fixture in tests/conftest.py clears "
-                "ACL_LIBRARY_REPO/ACL_LIBRARY_TOKEN; something restored them "
-                "mid-test. Use team_library.use_backend(MemoryBackend()) instead."
-            )
-        return made
+@pytest.fixture(scope="session")
+def _machine_dirs(tmp_path_factory):
+    """Нумерованные каталоги под общим корнем, по одному на тест.
 
-    monkeypatch.setattr(team_library, "backend", refuse_the_real_library)
-    yield
+    `tmp_path_factory.mktemp` на каждый тест обходится дорого: он пересчитывает
+    весь корень, чтобы найти следующий номер, и на двух с половиной тысячах
+    тестов это десятки секунд на пустом месте. Корень берётся один раз.
+    """
+    root = tmp_path_factory.mktemp("acl-machines")
+
+    def dirs():
+        for n in itertools.count():
+            made = root / str(n)
+            made.mkdir()
+            yield made
+
+    return dirs()
 
 
 @pytest.fixture

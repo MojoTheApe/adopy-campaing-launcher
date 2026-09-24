@@ -19,23 +19,42 @@ point `team_library.configured()` was true for every later test, and
 machine store those tests had isolated. The tests then read the team's real targets
 and failed on duplicate-name and duplicate-set checks.
 
-Linux CI has no such `.env`, so CI stayed green while the local suite was red for
+CI stayed green throughout — not because it runs elsewhere. The suite runs on
+`windows-latest` (`.github/workflows/ci.yml`); a runner is simply a clean machine, with
+no launcher installed, so there is no `%LOCALAPPDATA%\ACL\.env`, and the checkout `.env`
+is not committed. The defect was invisible to CI while the local suite was red for
 everyone with the launcher installed — the combination that teaches a team to ignore
-local failures.
+local failures. The same Windows with a launcher on it would have failed in CI exactly
+as it failed locally.
 
-`tests/conftest.py` now has an autouse `isolated_machine` fixture: every test gets
-its own `ACL_CONFIG_DIR` under a temporary directory (which also takes the registries,
-the lock files and the machine `.env` path with it, so a `load_env()` during a test
-reads nothing), `ACL_LIBRARY_REPO` / `ACL_LIBRARY_TOKEN` / `ACL_LIBRARY_BRANCH` are
-removed, and `team_library`'s session-wide state (`_backend_override`, `_pulled`,
-`_status`) is reset between tests. If those variables ever come back mid-test,
-`team_library.backend()` refuses to build a real `GitHubBackend` and the test fails
-with an explicit message instead of writing to the team's library. Tests that
-configure the library for themselves keep working: the fixture's `monkeypatch` is
-undone after theirs.
+`tests/conftest.py` now carries the isolation in two autouse fixtures.
+`library_disconnected` is session-scoped: it removes `ACL_LIBRARY_REPO` /
+`ACL_LIBRARY_TOKEN` / `ACL_LIBRARY_BRANCH` before anything else runs, and wraps
+`team_library.backend()` so that it refuses to build a real `GitHubBackend` and fails
+the test with an explicit message instead of writing to the team's library. Session
+scope on purpose: module- and session-scoped fixtures are set up before function-scoped
+ones, so a function-scoped guard would let such a fixture run against the live library
+first. `isolated_machine_config` is per test: its own `ACL_CONFIG_DIR` under a temporary
+directory — which takes the registries, the lock files and the machine `.env` path with
+it, so a `load_env()` during a test no longer finds the machine file — plus a reset of
+`team_library`'s session-wide state (`_backend_override`, `_pulled`, `_status`) between
+tests.
+
+Note what the redirect does not do. `config.paths.get_env_files()` falls back to the
+checkout `.env` when the machine one is missing, so a `load_env()` inside a test can
+still read that file. It carries no `ACL_LIBRARY_*` today; the guard above is what makes
+that a failed test rather than a write to the team's library if it ever does.
+
+Tests that configure the library for themselves keep working: the autouse fixtures are
+set up first, so their `monkeypatch` entries are undone after the tests' own.
 
 The isolation sits in `conftest.py` rather than in each file because the dependency is
 invisible from the file that suffers it — it arrives through another test's import.
+
+The names are literal. This isolates the machine's config directory and the team
+library, not "the machine": the same import-time `load_env()` also puts the Google,
+Telegram, Jira, Multilogin and LLM keys into the environment for the whole session, and
+these fixtures do not touch them. That is a separate ticket.
 
 Not fixed here: earlier local runs did write test entries into the shared library. A
 read on 2026-09-23 found `0-0`…`2-7` (24 entries) plus `A`, `Fin`, `Invest`,
