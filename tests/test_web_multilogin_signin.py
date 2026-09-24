@@ -49,6 +49,8 @@ def _signin(monkeypatch, *, token_response: _Response, saved: list) -> dict:
             return token_response
         return _Response(200, {"data": {}})
 
+    # Вход по паролю — дело машины тимлида (ACL-1311); эти тесты про неё.
+    monkeypatch.setenv("ACL_MLX_TEAM_ADMIN", "1")
     monkeypatch.setattr(requests, "post", fake_post)
     monkeypatch.setattr(requests, "get", fake_get)
     monkeypatch.setattr(
@@ -184,6 +186,7 @@ def test_a_refused_sign_in_is_not_reported_as_success(monkeypatch):
             return _Response(401, {"status": {"message": "wrong credentials"}})
         return _Response(200, {"data": {"profiles": []}})
 
+    monkeypatch.setenv("ACL_MLX_TEAM_ADMIN", "1")
     monkeypatch.setattr(requests, "post", fake_post)
     monkeypatch.setattr(requests, "get", lambda url, **kw: _Response(200, {"data": {}}))
     saved: list = []

@@ -431,14 +431,16 @@ class SetupWizard:
         if self.configuration:
             self._text(f"Found {len(self.configuration.accounts)} account(s) for this campaign manager.")
             self._text("After the launcher opens, connect each account to its Multilogin profile on the Accounts screen.")
-        self._text("Multilogin is connected in the dashboard, not here: open Accounts and press "
-                   "“Connect Multilogin”, then sign in with your Multilogin email and password.")
+        # ACL-1311: логин Multilogin у команды общий, и вход байера выбил бы
+        # остальных. Байер вставляет токен тимлида; входит только тимлид.
+        self._text("Multilogin is connected in the dashboard, not here: open Accounts, press "
+                   "“Paste team token” and paste the team token from your team lead.")
 
     def _finish(self) -> None:
         self._text("Adopy Campaign Launcher is ready on this computer.", bold=True, color="#17663a")
         self._text("No campaign action was performed. The first campaign run must remain supervised.")
-        self._text("Click Close to open the dashboard. Then open Accounts and press Connect Multilogin "
-                   "to sign in — until that is done the robot cannot open a profile.")
+        self._text("Click Close to open the dashboard. Then open Accounts and press Paste team token — "
+                   "until that is done the robot cannot open a profile.")
         self.tk.Button(
             self.body,
             text="Copy sanitized setup summary",
