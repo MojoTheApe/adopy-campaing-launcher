@@ -1,5 +1,44 @@
 # System history
 
+## The installer asks for a Multilogin sign-in, not a token nobody has — ACL-1303
+
+Walking a clean install from a published release on 2026-09-24 stopped at step 5 of 7:
+the wizard asked for a "Multilogin access code". Those are not handed out — whoever
+signs in obtains one — so a new campaign manager has nothing to type there and no way
+to get it. Meanwhile the dashboard, one screen later, already knew how: sign in with a
+Multilogin email and password, receive an automation token, store only the token.
+
+The owner never hit this because his token was already in the machine settings from
+earlier work; it took walking the install as a new person to see it.
+
+The step now asks for the email and password, signs in, and keeps the token. Pasting a
+token is still there, clearly as the second option, for anyone who was handed one. The
+password is used for one request and is cleared from the field as soon as the token
+arrives; nothing writes it to the machine settings, and `machine_config.py` has no
+notion of a password at all.
+
+Signing in lives in one place now (`src/web/multilogin_auth.py`) instead of two: the
+wizard runs before the dashboard exists, so it cannot call the route, and a second copy
+of the same logic is a thing that gets fixed once and forgotten once. The MD5 the
+Multilogin API requires, and the address of that API, are stated once.
+
+Review found one real defect in the first version of this fix, on the very machine being
+set up: signing in to one account marked **both** slots verified. A typo sitting in the
+second account's box would then have been written to the machine settings as a working
+token, under a green "verified". Only the slot that just signed in counts now; the other
+still has to be tested. Two more branches — a refused sign-in, and a sign-in that yields
+no automation token — had no test behind them, and deleting either left the whole suite
+green while the wizard finished "ready" with no token at all and the first Publish died
+on "TOKEN_A is not set". Both are pinned now, in the wizard and in the dashboard route.
+
+Two more things the same screen was getting wrong. Slot A and slot B are two different
+Multilogin accounts — here Inhouse and Agency — and both fields read "Multilogin access
+code", the second distinguished only by "(optional)"; they are now named. And signing in
+is not the same permission as being allowed to mint an automation token: only the
+workspace owner has the second. A team member's correct password gets through the first
+step and no further, so the wizard now says exactly that and points at the owner,
+instead of reporting a success that leaves the robot unable to open a single profile.
+
 ## A browser test that passed while the code it covered threw — ACL-1296
 
 The Playwright fixture in tests/test_country_refresh_review.py built its page from a

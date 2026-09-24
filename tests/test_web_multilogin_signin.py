@@ -171,3 +171,36 @@ def test_the_panel_does_not_show_success_when_no_token_was_saved():
     assert "NO automation token" in branch
     # The operator has to be told where to get one, or the warning is a dead end.
     assert "Generate Token" in branch
+
+
+def test_a_refused_sign_in_is_not_reported_as_success(monkeypatch):
+    """Ревью 24.09: ветку отказа не проверял никто — убери её, и неверный
+    пароль отвечает «ok», с пустым списком профилей. Человек решит, что
+    вошёл, и пойдёт искать, почему ничего не открывается."""
+    import requests
+
+    def fake_post(url, **kwargs):
+        if url.endswith("/user/signin"):
+            return _Response(401, {"status": {"message": "wrong credentials"}})
+        return _Response(200, {"data": {"profiles": []}})
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setattr(requests, "get", lambda url, **kw: _Response(200, {"data": {}}))
+    saved: list = []
+    monkeypatch.setattr("src.web.app.update_machine_env",
+                        lambda values: saved.append(values) or "C:/fake/.env")
+
+    async def _run():
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            r = await client.post(
+                "/multilogin-signin",
+                content=json.dumps({"email": "a@b.co", "password": "wrong", "save_token": True}),
+                headers={"Content-Type": "application/json"},
+            )
+            return r.json()
+
+    body = asyncio.run(_run())
+    assert body["ok"] is False
+    assert "wrong credentials" in body["error"]
+    assert saved == [], "в настройку что-то записали после отказа входа"
