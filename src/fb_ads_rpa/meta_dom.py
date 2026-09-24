@@ -1691,14 +1691,27 @@ def _type_human(page: Page, text: str) -> None:
         _telemetry.record("typing_lead_bad", False, note=str(raw_lead)[:40])
         lead = 8
     if os.environ.get("FB_RPA_HUMAN_TYPING", "").strip() not in ("1", "true", "yes") and len(text) > lead:
-        head, tail = text[:lead], text[lead:]
-        for ch in head:
+        # Считаем НАЖАТИЯ, а не символы. Нажатие бывает только у ASCII:
+        # арабскую букву Playwright всё равно вставляет, а не набирает. Пока
+        # головой считали символы, арабское объявление — то есть почти любое
+        # наше — получало ровно ноль нажатий, то самое «мгновенно и целиком»,
+        # от которого эта функция и защищает (ревью 24.09).
+        #
+        # Предел нужен на случай текста без единой латинской буквы: иначе
+        # голова съела бы всю строку и мы вернулись бы к посимвольному вводу,
+        # ради ухода от которого правка 20.09 и делалась.
+        cap = min(len(text) - 1, max(lead * 4, 24))
+        typed = used = 0
+        while used < cap and typed < lead:
+            ch = text[used]
             if ch.isascii():
                 page.keyboard.type(ch, delay=random.uniform(25, 70))
+                typed += 1
             else:
                 page.keyboard.insert_text(ch)
+            used += 1
         time.sleep(_human_jitter(0.08, 0.4))
-        page.keyboard.insert_text(tail)
+        page.keyboard.insert_text(text[used:])
         return
     chunk = ""
     for ch in text:

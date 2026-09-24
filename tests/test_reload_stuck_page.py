@@ -236,3 +236,55 @@ def test_the_old_per_character_typing_can_be_switched_back_on(monkeypatch):
     monkeypatch.setattr(md.time, "sleep", lambda *_: None)
     md._type_human(Pg(), "Invest like a pro")
     assert typed == ["Invest like a pro"] and inserted == []
+
+
+def _keyboard_probe(monkeypatch):
+    """Клавиатура, которая только записывает: нажатия и вставки порознь."""
+    typed, inserted = [], []
+
+    class Keyboard:
+        def type(self, text, delay=None):
+            typed.append(text)
+
+        def insert_text(self, text):
+            inserted.append(text)
+
+    class Pg:
+        keyboard = Keyboard()
+
+    monkeypatch.delenv("FB_RPA_HUMAN_TYPING", raising=False)
+    monkeypatch.delenv("FB_RPA_TYPING_LEAD", raising=False)
+    monkeypatch.setattr(md.time, "sleep", lambda *_: None)
+    return Pg(), typed, inserted
+
+
+def test_the_lead_counts_keystrokes_and_not_characters(monkeypatch):
+    """Голова считает НАЖАТИЯ, а не символы (ревью 24.09).
+
+    Нажатие бывает только у ASCII: арабскую букву Playwright вставляет, а не
+    набирает. Пока голова считала символы, арабское объявление — то есть
+    почти любое наше — получало ровно ноль нажатий, то самое «мгновенно и
+    целиком», от которого эта функция и защищает.
+    """
+    page, typed, inserted = _keyboard_probe(monkeypatch)
+    # Длина как у настоящего текста объявления, иначе голова съедает строку
+    # целиком и проверять нечего.
+    text = ("استثمار مضمون "
+            "مع بنك وخنرال "
+            "اليوم وكل يوم "
+            "بعده مع ضمان "
+            "كامل للمبلغ")
+    md._type_human(page, text)
+    assert typed, "арабский текст ушёл в поле без единого нажатия"
+    assert len(inserted[-1]) > 10, "хвост ушёл не одной вставкой"
+    assert len(inserted) < len(text) / 2, "текст ушёл почти посимвольно"
+
+
+def test_a_text_without_a_single_latin_letter_is_not_typed_letter_by_letter(monkeypatch):
+    """Предел на голову: текст без ASCII не должен возвращать нас к
+    посимвольному вводу, ради ухода от которого правка 20.09 и делалась."""
+    page, typed, inserted = _keyboard_probe(monkeypatch)
+    text = "مضمون" * 30
+    md._type_human(page, text)
+    assert len(inserted) < len(text) / 2, "текст ушёл посимвольно"
+    assert inserted[-1] == text[-len(inserted[-1]):]
