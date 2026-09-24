@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "active": {
-    "issue": 284,
-    "started_at": "2026-09-24T05:32:48+00:00"
-  },
+  "active": null,
   "run": {
     "id": "6dfd73e647a9483eb2f6264828251971",
     "state": "running",
