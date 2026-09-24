@@ -175,6 +175,38 @@ def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[
     return checks
 
 
+#: Слоты Multilogin — это два разных аккаунта, а не «основной и запасной».
+#: Подписи «Multilogin access code» и «… (optional)» не говорили об этом
+#: ничего, и человек с двумя аккаунтами не знал, куда что класть (ACL-1303).
+MULTILOGIN_SLOTS = (("A", "Main Multilogin account"), ("B", "Second Multilogin account"))
+
+
+def sign_in_to_multilogin(email: str, password: str) -> tuple[str, str]:
+    """Почта и пароль -> (токен автоматизации, что сказать человеку).
+
+    Токены Multilogin никому не выдают: их получает сам, кто входит. Мастер
+    просил вставить то, чего у человека нет, — а дешборд рядом умел войти и
+    получить токен. Теперь это одно место на обоих (`src/web/multilogin_auth`).
+
+    Пароль уходит в один запрос и нигде не сохраняется.
+    """
+    from src.web.multilogin_auth import sign_in
+
+    result = sign_in(email, password)
+    if not result.ok:
+        raise WizardValidationError(result.error or "Multilogin sign-in failed.")
+    if not result.automation_token:
+        # Вошли, но токена не дали: право выдавать его есть только у владельца
+        # рабочего пространства. Без него робот не откроет ни один профиль,
+        # поэтому это отказ, а не мелкая подробность.
+        raise WizardValidationError(
+            (result.token_error or "Multilogin issued no automation token.")
+            + " Ask the owner of your Multilogin workspace to sign in here,"
+              " or paste an automation token below."
+        )
+    return result.automation_token, "Signed in; automation token saved for this computer."
+
+
 def test_multilogin_access(tokens: dict[str, str]) -> str:
     """Validate at least one Multilogin automation token.
 
@@ -186,7 +218,9 @@ def test_multilogin_access(tokens: dict[str, str]) -> str:
 
     provided = {instance: token.strip() for instance, token in tokens.items() if token.strip()}
     if not provided:
-        raise WizardValidationError("Paste the Multilogin access code supplied by support.")
+        raise WizardValidationError(
+            "Sign in to Multilogin above, or paste an automation token if you were given one."
+        )
     verified = []
     for instance, token in sorted(provided.items()):
         try:
@@ -274,6 +308,11 @@ class SetupWizard:
             value=self._existing_env_value("FB_CREATIVES_ROOT") or str(default_creatives_directory()))
         self.token_a = tk.StringVar(value=self._existing_env_value("MULTILOGIN_AUTOMATION_TOKEN_A"))
         self.token_b = tk.StringVar(value=self._existing_env_value("MULTILOGIN_AUTOMATION_TOKEN_B"))
+        # Пароль живёт только в этом поле и только до входа: ни в настройку,
+        # ни в журнал он не попадает (ACL-1303).
+        self.mlx_email = tk.StringVar(value="")
+        self.mlx_password = tk.StringVar(value="")
+        self.mlx_slot = tk.StringVar(value="A")
         self.status = tk.StringVar()
 
         root.title("Adopy Campaign Launcher Setup")
@@ -417,10 +456,28 @@ class SetupWizard:
                    "Both paths can be changed later in the dashboard.")
 
     def _multilogin(self) -> None:
-        self._text("Open Multilogin Desktop and sign in. Paste only the approved automation token; never a password.")
-        for instance, variable in (("A", self.token_a), ("B", self.token_b)):
-            suffix = "" if instance == "A" else " (optional)"
-            self.tk.Label(self.body, text=f"Multilogin access code{suffix}", anchor="w").pack(fill="x")
+        self._text("Sign in with your Multilogin email and password. ACL gets the access code itself "
+                   "and keeps only that code on this computer; the password is not saved anywhere.")
+        self.tk.Label(self.body, text="Multilogin email", anchor="w").pack(fill="x")
+        self.tk.Entry(self.body, textvariable=self.mlx_email).pack(fill="x", pady=(2, 8))
+        self.tk.Label(self.body, text="Multilogin password", anchor="w").pack(fill="x")
+        self.tk.Entry(self.body, textvariable=self.mlx_password, show="•").pack(fill="x", pady=(2, 8))
+        self.tk.Label(self.body, text="Which account", anchor="w").pack(fill="x")
+        for instance, title in MULTILOGIN_SLOTS:
+            self.tk.Radiobutton(self.body, text=title, value=instance,
+                                variable=self.mlx_slot).pack(anchor="w")
+        self.tk.Button(
+            self.body,
+            text="Sign in to Multilogin",
+            command=self._start_multilogin_signin,
+            state="disabled" if self.busy else "normal",
+        ).pack(anchor="w", pady=(6, 10))
+        # Вставка токена остаётся — кому-то его выдали на руки, — но вторым
+        # вариантом: первым стоит то, что у человека есть (ACL-1303).
+        self._text("Already have an access code? Paste it instead:")
+        for instance, title in MULTILOGIN_SLOTS:
+            variable = self.token_a if instance == "A" else self.token_b
+            self.tk.Label(self.body, text=f"{title} — access code", anchor="w").pack(fill="x")
             self.tk.Entry(self.body, textvariable=variable, show="•").pack(fill="x", pady=(2, 10))
         if self.multilogin_ok:
             self._text("✓ Multilogin connection verified", bold=True, color="#17663a")
@@ -495,6 +552,27 @@ class SetupWizard:
 
     def _tokens(self) -> dict[str, str]:
         return {"A": self.token_a.get().strip(), "B": self.token_b.get().strip()}
+
+    def _start_multilogin_signin(self) -> None:
+        """Войти и положить полученный токен в поле выбранного аккаунта."""
+        email = self.mlx_email.get().strip()
+        password = self.mlx_password.get()
+        slot = (self.mlx_slot.get() or "A").strip().upper()
+
+        def work() -> str:
+            token, message = sign_in_to_multilogin(email, password)
+            return f"{slot}\t{token}\t{message}"
+
+        def done(answer: str) -> None:
+            slot_name, token, message = answer.split("\t", 2)
+            (self.token_a if slot_name == "A" else self.token_b).set(token)
+            # Пароль больше не нужен: токен получен и сохранится сам.
+            self.mlx_password.set("")
+            self._verified_tokens = self._tokens()
+            self.multilogin_ok = True
+            self.status.set(message)
+
+        self._run_worker(work, done)
 
     def _start_multilogin_check(self) -> None:
         tokens = self._tokens()  # Read Tk variables on the UI thread.

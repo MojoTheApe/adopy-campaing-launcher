@@ -4140,59 +4140,20 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     if not email or not password:
         return JSONResponse({"ok": False, "error": "email and password are required"}, status_code=400)
 
-    import hashlib as _hashlib
     import requests as _req
 
-    # Multilogin X API requires password to be MD5 hashed (per official docs)
-    password_hash = _hashlib.md5(password.encode("utf-8")).hexdigest()
+    from src.web.multilogin_auth import MLX_API, sign_in
 
-    MLX_API = "https://api.multilogin.com"
+    # Вход живёт одним местом на дешборд и мастер установки (ACL-1303):
+    # мастер работает до того, как дешборд существует, а две копии одного
+    # входа однажды разъедутся — починят одну и забудут вторую.
+    signed = sign_in(email, password, requests_module=_req)
+    if not signed.ok:
+        return JSONResponse({"ok": False, "error": signed.error})
+    bearer = signed.bearer
+    auto_token = signed.automation_token
+    token_error = signed.token_error
     H = {"Accept": "application/json", "Content-Type": "application/json"}
-
-    # Step 1 — sign in
-    try:
-        r = _req.post(f"{MLX_API}/user/signin", headers=H, json={"email": email, "password": password_hash}, timeout=20)
-    except Exception as exc:
-        return JSONResponse({"ok": False, "error": f"Network error: {exc}"})
-
-    if r.status_code != 200:
-        body = r.json() if "application/json" in r.headers.get("content-type", "") else {}
-        msg = (body.get("status") or {}).get("message") or r.text[:300]
-        return JSONResponse({"ok": False, "error": f"Sign-in failed [{r.status_code}]: {msg}"})
-
-    bearer = ((r.json().get("data") or {}).get("token") or "").strip()
-    if not bearer:
-        return JSONResponse({"ok": False, "error": "Sign-in returned no token"})
-
-    auth_h = {**H, "Authorization": f"Bearer {bearer}"}
-
-    # Step 2 — get automation token (1 month).
-    #
-    # Signing in and being allowed to MINT an automation token are two different
-    # permissions: only the workspace owner has the second one. A team member's
-    # correct password therefore gets this far and no further. That distinction
-    # has to survive to the page — the RPA cannot start a single profile without
-    # this token, and "connected" with no token is the same as not connected.
-    auto_token = ""
-    token_error = ""
-    try:
-        r2 = _req.get(f"{MLX_API}/workspace/automation_token?expiration_period=1mo", headers=auth_h, timeout=20)
-        if r2.status_code == 200:
-            d2 = r2.json().get("data") or {}
-            auto_token = d2.get("token") or d2.get("automation_token") or ""
-            if not auto_token:
-                token_error = "Multilogin returned no automation token for this account."
-        else:
-            detail = ""
-            try:
-                detail = ((r2.json().get("status") or {}).get("message") or "").strip()
-            except Exception:
-                detail = (r2.text or "")[:200]
-            token_error = f"Multilogin refused to issue an automation token [{r2.status_code}]"
-            if detail:
-                token_error += f": {detail}"
-    except Exception as exc:
-        token_error = f"Could not reach Multilogin for the automation token: {exc}"
 
     working_token = auto_token or bearer
 
