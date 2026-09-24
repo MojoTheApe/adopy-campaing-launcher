@@ -321,70 +321,68 @@ def test_a_short_text_without_latin_letters_does_not_run_off_the_end(monkeypatch
 # часть и написана.
 
 
-def _page_with(html):
-    """Настоящая страница с разметкой Meta — без заглушек."""
+@pytest.fixture(scope="module")
+def real_page():
+    """Одна настоящая страница на весь файл.
+
+    Пять тестов поднимали по своему браузеру — десять секунд там, где всё
+    остальное в файле укладывается в сотые доли. И браузер утекал, если
+    разметка не разбиралась: `set_content` стоял до `try` (ревью 24.09).
+    """
     from playwright.sync_api import sync_playwright
-    pw = sync_playwright().start()
-    browser = pw.chromium.launch()
-    page = browser.new_page()
-    page.set_content(html)
-    return pw, browser, page
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            yield browser.new_page()
+        finally:
+            browser.close()
 
 
-def test_the_loading_overlay_is_recognised_by_its_own_words():
+def test_the_loading_overlay_is_recognised_by_its_own_words(real_page):
     """Надпись видели двумя видами: «Loading...» и «Loading creation» —
     поэтому ищется слово в начале, а не точная строка."""
-    pw, browser, page = _page_with("<div>Loading creation</div>")
-    try:
-        assert md._loading_visible(page) is True
-        page.set_content("<div>Campaign name</div>")
-        assert md._loading_visible(page) is False
-        # Скрытая накладка — не накладка: она ничего не перекрывает.
-        page.set_content("<div style='display:none'>Loading...</div>")
-        assert md._loading_visible(page) is False
-    finally:
-        browser.close(); pw.stop()
+    page = real_page
+    page.set_content("<div>Loading creation</div>")
+    assert md._loading_visible(page) is True
+    page.set_content("<div>Campaign name</div>")
+    assert md._loading_visible(page) is False
+    # Скрытая накладка — не накладка: она ничего не перекрывает.
+    page.set_content("<div style='display:none'>Loading...</div>")
+    assert md._loading_visible(page) is False
 
 
-def test_all_edits_saved_is_read_from_the_page_itself():
+def test_all_edits_saved_is_read_from_the_page_itself(real_page):
     """Эта надпись — единственное, что стоит между перезагрузкой и потерей
     заполненных полей. Проверяется на настоящей разметке, иначе её
     переименование пройдёт незамеченным."""
-    pw, browser, page = _page_with("<span>All edits saved</span>")
-    try:
-        assert md._all_edits_saved(page) is True
-        # Похожие надписи Meta показывает постоянно — они не то же самое.
-        for other in ("Verifying your edits...", "Saving edits", "All edits saved recently"):
-            page.set_content(f"<span>{other}</span>")
-            assert md._all_edits_saved(page) is False, other
-    finally:
-        browser.close(); pw.stop()
+    page = real_page
+    page.set_content("<span>All edits saved</span>")
+    assert md._all_edits_saved(page) is True
+    # Похожие надписи Meta показывает постоянно — они не то же самое.
+    for other in ("Verifying your edits...", "Saving edits", "All edits saved recently"):
+        page.set_content(f"<span>{other}</span>")
+        assert md._all_edits_saved(page) is False, other
 
 
-def test_a_component_that_failed_to_load_is_recognised_by_its_own_words():
+def test_a_component_that_failed_to_load_is_recognised_by_its_own_words(real_page):
     """20.09 00:35 (CO_bnc Mix): «Error: component failed to load — Something
     went wrong, please try reloading the page» на месте панели плейсментов."""
-    pw, browser, page = _page_with(
-        "<div>Error: component failed to load</div>"
-        "<div>Something went wrong, please try reloading the page</div>")
-    try:
-        assert md._component_failed(page) is True
-        page.set_content("<div>Placements</div>")
-        assert md._component_failed(page) is False
-    finally:
-        browser.close(); pw.stop()
+    page = real_page
+    page.set_content("<div>Error: component failed to load</div>"
+                     "<div>Something went wrong, please try reloading the page</div>")
+    assert md._component_failed(page) is True
+    page.set_content("<div>Placements</div>")
+    assert md._component_failed(page) is False
 
 
-def test_the_pending_drafts_number_is_parsed_on_a_real_page():
+def test_the_pending_drafts_number_is_parsed_on_a_real_page(real_page):
     """Прежний тест подсовывал свой `evaluate`, который игнорировал сам
     скрипт и разбирал число заново на Python: проверялась подделка, а не
     то, что поедет в кабинет (ревью 24.09)."""
-    pw, browser, page = _page_with("<div><span>Review and publish (11)</span></div>")
-    try:
-        assert md._pending_drafts(page) == 11
-        page.set_content("<div><span>Review and publish</span></div>")
-        assert md._pending_drafts(page) == 0
-        page.set_content("<div><span>Publish</span></div>")
-        assert md._pending_drafts(page) is None
-    finally:
-        browser.close(); pw.stop()
+    page = real_page
+    page.set_content("<div><span>Review and publish (11)</span></div>")
+    assert md._pending_drafts(page) == 11
+    page.set_content("<div><span>Review and publish</span></div>")
+    assert md._pending_drafts(page) == 0
+    page.set_content("<div><span>Publish</span></div>")
+    assert md._pending_drafts(page) is None
