@@ -21,7 +21,8 @@ def browser():
         b.close()
 
 
-def _page(browser, *, alive=False, token_saved=True, team_admin=True, status_extra=None):
+def _page(browser, *, alive=False, token_saved=True, team_admin=True, status_extra=None,
+          origin='http://acl.test'):
     report = (TPL / 'report.html').read_text(encoding='utf-8')
     styles = '\n'.join(re.findall(r'<style[^>]*>(.*?)</style>', report, re.S))
     script = report[report.index('var _mlxCache ='):report.index('\nfunction amapHint')]
@@ -68,7 +69,7 @@ def _page(browser, *, alive=False, token_saved=True, team_admin=True, status_ext
             r.abort(); return
         r.fulfill(body=json.dumps(body), content_type='application/json')
     ctx.route('**/*', route)
-    page.goto('http://acl.test/')
+    page.goto(origin + '/')
     page.wait_for_function("Object.keys(AMAP_ML_STATE).length === 1")
     return ctx, page, state, errors
 
@@ -326,6 +327,45 @@ def test_an_expired_token_tells_a_buyer_what_to_do(browser):
     try:
         line = p.locator('.amap-ml-line').first.inner_text()
         assert 'team token expired' in line and 'Ask your team lead' in line
+    finally:
+        ctx.close()
+
+
+def test_a_refused_clipboard_api_falls_back_on_the_real_dashboard_address(browser):
+    """На настоящем адресе дешборда (http://127.0.0.1) контекст безопасный, и
+    копирует Clipboard API. Браузер может в нём отказать — тогда обязан сработать
+    запасной путь, а не сырое «Write permission denied» и не ложное «copied»
+    (ревью 24.09: заглушка вместо запасного пути проходила незамеченной, потому
+    что прочие тесты открыты на http://acl.test и эту ветку не выполняют)."""
+    ctx, p, s, errors = _page(browser, alive=True, team_admin=True, origin='http://127.0.0.1:9')
+    try:
+        assert p.evaluate("window.isSecureContext") is True
+        p.evaluate("""() => {
+          window.__copied = null;
+          navigator.clipboard.writeText = function () { return Promise.reject(new Error('Write permission denied.')); };
+          document.execCommand = function (cmd) {
+            if (cmd === 'copy') window.__copied = document.activeElement && document.activeElement.value;
+            return true;
+          };
+        }""")
+        p.locator('.amap-ml-copy').first.click()
+        p.wait_for_function("window.__copied !== null")
+        assert p.evaluate("window.__copied") == 'team-token-A'
+        msg = p.locator('.amap-msg').first.inner_text()
+        assert 'copied' in msg.lower() and 'permission' not in msg.lower()
+        assert not p.evaluate("[...document.querySelectorAll('textarea, input')].some(e => e.value === 'team-token-A')")
+    finally:
+        ctx.close()
+
+
+def test_a_token_that_was_not_accepted_says_so(browser):
+    ctx, p, s, errors = _page(browser, alive=False, team_admin=False, status_extra={
+        'has_token': True, 'reason': 'invalid',
+        'next_step': 'Ask your team lead for the current team token and paste it here.'})
+    try:
+        line = p.locator('.amap-ml-line').first.inner_text()
+        assert 'team token was not accepted' in line
+        assert 'expired' not in line and 'could not be verified' not in line
     finally:
         ctx.close()
 

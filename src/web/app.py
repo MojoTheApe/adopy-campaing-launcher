@@ -4013,7 +4013,6 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
     expires_at: str | None = None
     email: str | None = None
     lives_on = False  # срок в самом токене ещё не вышел
-    readable = False  # это вообще похоже на токен Multilogin (JWT со сроком)
     parts = token.split(".")
     if len(parts) == 3:
         try:
@@ -4029,7 +4028,6 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
                                          "reason": "expired", "expires_at": expires_at,
                                          "next_step": _mlx_next_step()})
                 lives_on = True
-                readable = True
         except Exception:
             pass  # not a decodable JWT — let the API call decide
 
@@ -4049,9 +4047,10 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
         # человека это разное: «истёк» читается как «раз в месяц», а «заменён»
         # лечится у тимлида, а не ожиданием.
         return JSONResponse({**base, "has_token": True, "alive": False,
-                             # Без читаемого срока это не «истёк», а «не принят»:
-                             # чаще всего обрезанная или чужая вставка (ревью 24.09).
-                             "reason": "revoked" if lives_on else ("expired" if readable else "invalid"),
+                             # Истёкший срок сюда не доходит — он возвращён выше. Без
+                             # читаемого срока это «не принят»: чаще всего обрезанная
+                             # или чужая вставка (ревью 24.09).
+                             "reason": "revoked" if lives_on else "invalid",
                              "expires_at": expires_at, "next_step": _mlx_next_step()})
     return JSONResponse({**base, "has_token": True, "alive": r.status_code == 200,
                          "expires_at": expires_at, "email": email})
