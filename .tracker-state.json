@@ -183,7 +183,8 @@
     },
     "af5b62222f68b3db6b715121db2aeccf250514152b7098d430a34f5aa9aae1d6": {
       "title": "Team access: buyers paste the team's Multilogin token instead of signing in",
-      "state": "creating"
+      "state": "created",
+      "issue": 311
     }
   },
   "delivery_workflow": {
