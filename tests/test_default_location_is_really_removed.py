@@ -454,3 +454,18 @@ def test_a_disabled_x_is_read_but_never_clicked(page):
     left = md._clear_other_locations(page, "Guatemala")
     assert left == ["United States"]
     assert page.evaluate("window.clicked") == []
+
+
+def test_the_expander_is_taken_after_the_label_not_before_it(page, monkeypatch):
+    """PR #314, повторное ревью (A4): стрелка строки — после своей подписи;
+    свёрнутый контрол ПЕРЕД подписью принадлежит чему-то выше."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0;width:600px'>"
+        "<div><div role='button' aria-expanded='false' id='before' style='width:24px;height:24px'></div>"
+        "<span>Locations</span>"
+        "<div><span>Inclusion:</span><span>Chile, United States</span></div>"
+        "<div role='button' aria-expanded='false' id='after' style='width:24px;height:24px'></div>"
+        "</div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_row_expander(page, "Locations") is True
+    assert clicked["at"] == "after", clicked

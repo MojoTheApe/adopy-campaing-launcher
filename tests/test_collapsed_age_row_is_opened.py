@@ -165,3 +165,33 @@ def test_the_age_step_opens_a_collapsed_field_before_setting_it(page, monkeypatc
                         lambda pg, lo, hi: seen.append(md._age_triggers_read(pg)) or seen[-1] == ["18", "65+"])
     assert md._fill_audience_age_controls(page, 35, 65) is True
     assert seen == [["18", "65+"]]
+
+
+# ── повторное ревью PR #314 (A2/A3): открытое поле не сворачивается и с одной подписью ──
+
+def _open_one_label_blank_values(page):
+    """Открытое поле Age с ОДНОЙ подписью (заголовок строки, aria-expanded=true),
+    значения на миг не читаются — Meta перерисовывает поле (5e29e66da497)."""
+    one = re.sub(r"<label[^>]*><span><span>Age</span></span></label>", "", FRAG["open_age"])
+    page.set_content(f"<div style='width:600px'>{one}</div>")
+    page.evaluate(_META, [FRAG["open_age"], _collapsed_age()])
+    page.evaluate(r"""() => document.querySelectorAll('[role=combobox] div').forEach(d => {
+        if (d.children.length === 0 && /^(18|65\+)$/.test(d.textContent.trim())) d.textContent = ''; })""")
+
+
+def test_an_open_field_with_unreadable_values_is_not_clicked(page, monkeypatch):
+    tried = []
+    for name in ("_click_row_expander", "_click_summary_row"):
+        real = getattr(md, name)
+        monkeypatch.setattr(md, name, lambda *a, _n=name, _r=real: tried.append(_n) or _r(*a))
+    _open_one_label_blank_values(page)
+    assert md._age_triggers_read(page) == []
+    assert md._open_collapsed_age_row(page, wait_s=0.5) is False
+    assert tried == [], "открытое поле пытались «раскрыть»"
+    assert _clicked(page) == []
+
+
+def test_the_row_expander_never_presses_an_open_rows_header(page):
+    _open_one_label_blank_values(page)
+    md._click_row_expander(page, "Age|Edad")
+    assert not [c for c in _clicked(page) if c.endswith(":true")], _clicked(page)
