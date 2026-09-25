@@ -6354,13 +6354,23 @@ def _ad_media_fingerprint(page: Page) -> list[str]:
 
 
 def _library_any_tile_marked(page: Page) -> bool | None:
-    """Осталась ли в сетке хоть одна отмеченная плитка (None — сетку не прочесть)."""
+    """Осталась ли в сетке хоть одна отмеченная плитка (None — сетку не прочесть).
+
+    Порт ACL-1284: вкладки медиатеки — не плитки. Вкладка «Account» стоит
+    с `aria-selected=true` всегда, когда открыта (живая разметка 18.09,
+    fixtures/meta/library_one_picked.html; телеметрия 19–25.09 `tabs:
+    [..., "Account *"]`), и сетка «с выбором» не бывала чистой: каждый
+    откат клика отвечал `library_pick_left_selection`. Вкладки, списки
+    вкладок и переключатели (`role=switch`) не считаются.
+    """
     try:
-        return bool(page.evaluate(
+        value = page.evaluate(
             "() => { const d = " + _LIBRARY_DIALOG_JS + "; if (!d) return null;"
-            " return !!d.querySelector('[data-test-decoration=\"selected\"],"
-            " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked'); }"
-        ))
+            " return [...d.querySelectorAll('[data-test-decoration=\"selected\"],"
+            " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked')]"
+            " .some(el => !el.closest('[role=tab], [role=tablist], [role=switch]')); }"
+        )
+        return bool(value)
     except Exception:
         return None
 

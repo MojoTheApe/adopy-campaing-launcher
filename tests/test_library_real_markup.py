@@ -75,23 +75,43 @@ def test_an_unmarked_real_grid_is_clean(page):
     assert md._library_any_tile_marked(page) is False
 
 
-def test_a_file_that_is_not_in_the_real_grid_is_absent(page, monkeypatch):
-    """Файла нет в сетке, выбора нет — грузить можно.
-
-    Порт ACL-1284, вариант A: строгий #238 здесь же проверял, что вкладка
-    Account с `aria-selected=true` не считается отмеченной плиткой. Живой
-    `_library_any_tile_marked` вкладку считает (фильтр `[role=tab]` ушёл
-    вместе с откатом медиатеки к #218), поэтому та часть снята — вопрос
-    передан владельцу.
-    """
+def _unpicked_real_grid(page):
+    """Живая сетка 18.09 без выбора плитки; вкладка Account остаётся выбранной."""
     _load(page, "library_one_picked.html")
     page.locator('[data-test-decoration="selected"]').evaluate(
         "el => el.removeAttribute('data-test-decoration')")
     page.get_by_text('1 selected', exact=True).evaluate("el => el.textContent = '0 selected'")
+    assert page.get_by_role('tab', name='Account', exact=True).get_attribute('aria-selected') == 'true'
+
+
+def test_account_tab_selection_is_not_a_selected_video(page, monkeypatch):
+    """Порт ACL-1284: вкладка Account с `aria-selected=true` — не отмеченная плитка."""
+    _unpicked_real_grid(page)
     monkeypatch.setattr(md, '_sleep_h', lambda *_: None)
     monkeypatch.setattr(md, '_library_search', lambda *_: True)
     monkeypatch.setattr(md._telemetry, 'record', lambda *a, **k: None)
+    assert md._library_any_tile_marked(page) is False
     assert md._try_reuse_library_media(page, 'not-in-the-library.mp4') == md.REUSE_ABSENT
+
+
+def test_a_pick_that_did_not_take_leaves_the_real_grid_clean(page, monkeypatch):
+    """Клик не взялся, счётчик «0 selected» — откат чистый, загрузка разрешена.
+
+    Пока вкладка Account считалась отмеченной плиткой, этот откат всегда
+    отвечал «грязно» — вероятная причина `library_pick_left_selection`
+    живых прогонов 19–25.09.
+    """
+    _unpicked_real_grid(page)
+    monkeypatch.setattr(md, '_sleep_h', lambda *_: None)
+    assert md._library_undo_selection(page, None, [0], 0) is True
+
+
+def test_a_tile_still_marked_in_the_real_grid_is_not_clean(page, monkeypatch):
+    _load(page, "library_one_picked.html")
+    page.get_by_text('1 selected', exact=True).evaluate("el => el.textContent = '0 selected'")
+    monkeypatch.setattr(md, '_sleep_h', lambda *_: None)
+    assert md._library_any_tile_marked(page) is True
+    assert md._library_undo_selection(page, None, [0], 0) is False
 
 
 def test_the_picked_video_is_identified_on_the_ad_by_its_thumbnail(page):
