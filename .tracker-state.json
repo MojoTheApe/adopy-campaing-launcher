@@ -185,6 +185,10 @@
       "title": "Team access: buyers paste the team's Multilogin token instead of signing in",
       "state": "created",
       "issue": 311
+    },
+    "aac7d236573f951b76a2c9a1952a38ed2926b6c092142a5fd3717e692386a0bf": {
+      "title": "All six test campaigns come out as clean drafts",
+      "state": "creating"
     }
   },
   "delivery_workflow": {
