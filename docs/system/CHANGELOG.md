@@ -1,5 +1,28 @@
 # System history
 
+## Each campaign in the builder shows where its build is — ACL-1315
+
+While campaigns were being built, the only report was the job list at the bottom of
+the builder drawer, and after a dashboard restart it kept saying "running". Now every
+campaign sent to a publish job shows a dot in place of its readiness sign: grey and
+pulsing while it is built or waits for its turn, orange and pulsing when the build has
+been silent too long or has hit something only a person can fix (account restricted
+by Meta, Lead Generation terms not accepted, all retries used up), solid orange when
+the campaign was built with blocking errors or not built at all, green when the draft is
+ready ("Publish was not clicked"). A job the server no longer knows (404 after a restart) becomes an empty
+ring without a pulse — unknown, not running. Jobs are remembered in localStorage, so
+the dots come back after F5.
+
+The facts come from `GET /publish-jobs/{id}/progress` (`src/web/publish_progress.py`):
+the campaign's result, the robot's last step from the tail of `rpa_telemetry.jsonl`
+(512 KB read per poll) and how long the job has been silent; the page decides the
+colour. Rows count only for their own job: every telemetry row written by a job's
+thread carries the job id, rows of another job are skipped even when the campaign
+name is the same, and rows older than the job never colour a campaign. "Silent too
+long" is 3 minutes up to the audience step and 7 minutes from placements on, where a
+creative upload legitimately takes up to about six (25.09: 370, 356, 329 s). The dot
+key on the page is account + name, so same-named campaigns of two accounts do not mix.
+
 ## The live robot ships: port of the live branch and ACL-1313 — ACL-1284
 
 The robot that has been building the test campaigns since 2026-09-17 ran from a
