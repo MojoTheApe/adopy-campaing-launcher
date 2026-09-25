@@ -757,6 +757,23 @@ def window_home() -> tuple[int | None, int | None]:
         return None, None
 
 
+def _home_point(bounds: dict) -> dict:
+    """Куда вернуть окно в конце кампании: его прежние left/top.
+
+    Окно, целиком стоящее за левым или верхним краем (left + width ≤ 0,
+    top + height ≤ 0), — не дом, а наша же парковка (свёрнутое посреди
+    прогона или оставленное прошлым прогоном: 25.09 14:05 `was: {left:
+    -1776}`). Такое возвращаем в видимую точку (0, 0), иначе из панели задач
+    окно разворачивалось бы за экраном.
+    """
+    left, top = bounds.get("left"), bounds.get("top")
+    width = int(bounds.get("width") or 0)
+    height = int(bounds.get("height") or 0)
+    if isinstance(left, int) and isinstance(top, int) and (left + width <= 0 or top + height <= 0):
+        return {"left": 0, "top": 0}
+    return {"left": left, "top": top}
+
+
 def _restore_offscreen(context, page) -> bool:
     """Свёрнутое окно — в обычное состояние, но за левым краем экрана.
 
@@ -777,8 +794,11 @@ def _restore_offscreen(context, page) -> bool:
     normal = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
     width = max(int(normal.get("width") or 0), MIN_EDITOR_WIDTH + 200)
     height = max(int(normal.get("height") or 0), 900)
-    _OFFSCREEN[id(page.context)] = {"window_id": window_id,
-                                    "left": normal.get("left"), "top": normal.get("top")}
+    # Дом, сохранённый раньше (при подключении или на прошлой границе
+    # раздела), не затираем: окно, свёрнутое посреди прогона (Win+D), в
+    # обычном состоянии уже стоит за краем, и эти координаты — не дом
+    # (PR #314, повторное ревью: put_window_back ставил окно на −1800).
+    _OFFSCREEN.setdefault(id(page.context), {"window_id": window_id, **_home_point(normal)})
     left, top = window_home()
     if left is None:
         # По умолчанию окно уезжает за левый край: пользователь держит профили
@@ -942,7 +962,7 @@ def _unminimize_before_attach(browser) -> list[dict]:
                 left, top = -(width + 400), 0
             session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {
                 "left": left, "top": top, "width": width, "height": height}})
-            done.append({"window": wid, "was": {"left": normal.get("left"), "top": normal.get("top")}})
+            done.append({"window": wid, "was": _home_point(normal)})
     except Exception as exc:
         done.append({"error": f"{type(exc).__name__}: {str(exc)[:80]}"})
     finally:

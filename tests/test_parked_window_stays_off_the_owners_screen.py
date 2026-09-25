@@ -82,7 +82,8 @@ class _Page:
 
     def evaluate(self, js, *a):
         if "devicePixelRatio" in js:
-            return [1.0, int((self.context.win.width - 16) * self.context.zoom)]
+            dpr = self.context.dpr(self.context.win.width)
+            return [dpr, int((self.context.win.width - 16) * self.context.zoom)]
         return None
 
     def bring_to_front(self):
@@ -90,8 +91,9 @@ class _Page:
 
 
 class _Ctx:
-    def __init__(self, win, zoom=1.0):
+    def __init__(self, win, zoom=1.0, dpr=None):
         self.win, self.zoom = win, zoom
+        self.dpr = dpr or (lambda width: 1.0)
         self.session = _Session(win)
         self.pages = [_Page(self)]
 
@@ -99,11 +101,11 @@ class _Ctx:
         return self.session
 
 
-def _attach(monkeypatch, win, zoom=1.0):
+def _attach(monkeypatch, win, zoom=1.0, dpr=None):
     monkeypatch.setattr(br.time, "sleep", lambda *_: None)
     monkeypatch.delenv("FB_RPA_WINDOW_LEFT", raising=False)
     monkeypatch.delenv("FB_RPA_WINDOW_TOP", raising=False)
-    ctx = _Ctx(win, zoom)
+    ctx = _Ctx(win, zoom, dpr)
     browser = MagicMock()
     browser.contexts = [ctx]
     browser.new_browser_cdp_session.return_value = _Session(win)
@@ -189,3 +191,62 @@ def test_put_window_back_minimizes_when_the_place_is_refused(monkeypatch):
     finally:
         br._OFFSCREEN.clear()
     assert win.state == "minimized"
+
+
+# ── повторное ревью PR #314: дом окна не теряется ─────────────────────────
+
+def test_a_window_minimized_mid_run_goes_back_to_its_real_home(monkeypatch):
+    """Win+D посреди кампании: на границе раздела окно снова выводится за
+    край, но дом остаётся прежним — в конце окно возвращается на 100/50."""
+    win = _Window(state="minimized", left=100, top=50, width=1400)
+    conn = _attach(monkeypatch, win)
+    try:
+        win.set({"windowState": "minimized"})
+        monkeypatch.setattr(rt, "window_state", lambda p: {
+            "inner": [p.context.win.width - 16, 800], "minimized": p.context.win.state == "minimized"})
+        assert br.ensure_editor_window(conn.page, "adset") is True
+        assert win.state == "normal" and win.left < 0
+        br.put_window_back(conn.page)
+        assert win.state == "minimized" and (win.left, win.top) == (100, 50)
+    finally:
+        br._OFFSCREEN.clear()
+
+
+def test_a_home_that_is_itself_off_screen_is_replaced_by_a_visible_point(monkeypatch):
+    """25.09 14:05: `was: {left: -1776}` — окно осталось за краем от прошлого
+    прогона. Такой «дом» не запоминаем: в конце окно встаёт в видимую точку."""
+    win = _Window(state="minimized", left=-1776, top=0, width=1376)
+    conn = _attach(monkeypatch, win)
+    try:
+        br.put_window_back(conn.page)
+        assert win.state == "minimized" and (win.left, win.top) == (0, 0)
+    finally:
+        br._OFFSCREEN.clear()
+
+
+def test_a_window_parked_by_the_owners_choice_is_left_alone(monkeypatch):
+    """FB_RPA_WINDOW_LEFT/TOP: окно стоит там, где просили, — в конце его не
+    двигают и не сворачивают."""
+    monkeypatch.setattr(br.time, "sleep", lambda *_: None)
+    monkeypatch.setenv("FB_RPA_WINDOW_LEFT", "1920")
+    monkeypatch.setenv("FB_RPA_WINDOW_TOP", "0")
+    win = _Window(state="normal", left=1920, top=0)
+    ctx = _Ctx(win)
+    br._OFFSCREEN[id(ctx)] = {"window_id": 7, "left": 100, "top": 50}
+    try:
+        br.put_window_back(ctx.pages[0])
+    finally:
+        br._OFFSCREEN.clear()
+    assert [m for m, _ in ctx.session.sent if m == "Browser.setWindowBounds"] == []
+    assert win.state == "normal" and win.left == 1920
+
+
+def test_widening_is_rolled_back_when_the_mimic_scale_drops(monkeypatch):
+    """17.09 06:51 S15: больше окно — масштаб 0.9 → 0.5. Ширину возвращаем."""
+    win = _Window(state="minimized", left=100, top=50, width=1000)
+    conn = _attach(monkeypatch, win, zoom=0.8, dpr=lambda width: 0.9 if width <= 1368 else 0.5)
+    try:
+        assert "maximized" not in win.states
+        assert win.width == 1368, "ширина не откатилась после падения масштаба"
+    finally:
+        br._OFFSCREEN.clear()
