@@ -14061,6 +14061,67 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     return True
 
 
+_OPEN_LISTBOX_JS = r"""
+  () => {
+    const shown = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const boxes = [...document.querySelectorAll('[role=listbox]')].filter(shown).length;
+    // Раскрытые выпадашки-кнопки (не поля ввода: у поиска локаций свой
+    // список подсказок, и его здесь не трогаем).
+    const triggers = [...document.querySelectorAll('[role=combobox][aria-expanded="true"][aria-haspopup="listbox"]')]
+      .filter((t) => shown(t) && !/^(INPUT|TEXTAREA)$/.test(t.tagName) && !t.isContentEditable);
+    document.querySelectorAll('[data-acl-open-trigger]').forEach((e) => e.removeAttribute('data-acl-open-trigger'));
+    const points = [];
+    for (const t of triggers) {
+      t.setAttribute('data-acl-open-trigger', String(points.length));
+      const r = t.getBoundingClientRect();
+      const x = r.x + r.width / 2, y = r.y + r.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      points.push({ x, y, open: !!hit && (hit === t || t.contains(hit)) });
+    }
+    return { boxes, points };
+  }
+"""
+"""Открытые выпадающие списки: сколько видно `[role=listbox]` и где их кнопки."""
+
+
+def _open_listboxes(page: Page) -> dict:
+    try:
+        got = page.evaluate(_OPEN_LISTBOX_JS) or {}
+    except Exception:
+        return {"boxes": 0, "points": []}
+    return {"boxes": int(got.get("boxes") or 0), "points": list(got.get("points") or [])}
+
+
+def _close_open_listboxes(page: Page, where: str) -> bool:
+    """Закрыть открытый выпадающий список (возраст и т. п.); True — открытых нет.
+
+    Прогон 25c557ae0ca7 (SA Investing, 25.09): после шага возраста список
+    минимального возраста остался открытым поверх строки Locations — шаг
+    локаций не нашёл, по чему кликнуть, а позже в списке «выбралось» 30
+    вместо 35. Закрываем тем же, чем человек: повторным нажатием на саму
+    раскрытую кнопку (`aria-expanded=true`) — она сворачивает свой список,
+    ничего не выбирая. Escape нельзя: в этом редакторе он закрывает весь
+    мастер. Кнопка перекрыта — не жмём. Итог проверяется перечитыванием.
+    """
+    state = _open_listboxes(page)
+    if not state["boxes"] and not state["points"]:
+        return True
+    tried = 0
+    for _ in range(2):
+        for pt in state["points"]:
+            if pt.get("open"):
+                _cdp_mouse_click(page, pt["x"], pt["y"])
+                tried += 1
+        _sleep_h(0.4)
+        state = _open_listboxes(page)
+        if not state["boxes"] and not state["points"]:
+            break
+    closed = not state["boxes"] and not state["points"]
+    _telemetry.record("listbox_left_open", closed, note="closed" if closed else "still_open",
+                      diag={"where": where, "clicks": tried, "left": state})
+    return closed
+
+
 def _measure_age_trigger(root, value: str, tries: int = 3) -> dict | None:
     """Пометить выпадашку возраста `value` и измерить её рамку; None — нет.
 
@@ -14292,11 +14353,26 @@ def _age_boundaries_pass(page: Page, age_min_str: str, age_max_str: str) -> bool
                               matches.sort((a, b) => a.children.length - b.children.length);
                               const el = matches[0];
                               el.scrollIntoView({ block: 'center', behavior: 'instant' });
-                              el.click();
-                              return 'clicked';
+                              const r = el.getBoundingClientRect();
+                              const x = r.x + r.width / 2, y = r.y + r.height / 2;
+                              const hit = document.elementFromPoint(x, y);
+                              const row = el.closest('[role=option], [role=radio]') || el;
+                              const open = !!hit && (row === hit || row.contains(hit) || hit.contains(el));
+                              return { x, y, open };
                             }""",
                             target_val,
                         )
+                        # 25c557ae0ca7 (25.09): `el.click()` из скрипта — не
+                        # нажатие мыши. Meta показала 35, но список не закрыла,
+                        # и позже в открытом списке «выбралось» 30. Выбор —
+                        # доверенным кликом по центру пункта (он и закрывает
+                        # список), и только если центр не перекрыт.
+                        if isinstance(click_result, dict):
+                            if click_result.get("open"):
+                                _cdp_mouse_click(page, click_result["x"], click_result["y"])
+                                click_result = "clicked"
+                            else:
+                                click_result = "covered"
                         _age_dbg.append(f"click_result={click_result}")
                         _sleep_h(0.4)
                     try:
@@ -14344,19 +14420,13 @@ def _age_boundaries_pass(page: Page, age_min_str: str, age_max_str: str) -> bool
                         # a still-open list doesn't count, matching the
                         # original Test50/63 concern this code already
                         # guards against).
-                        boundary_ok = bool(
-                            page.evaluate(
-                                """(targetVal) => {
-                                  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-                                  return [...document.querySelectorAll('*')].some(e => {
-                                    if (e.offsetParent === null || e.children.length !== 0) return false;
-                                    if (norm(e.textContent) !== targetVal) return false;
-                                    return !e.closest('[role=listbox]');
-                                  });
-                                }""",
-                                target_val,
-                            )
-                        )
+                        # 25c557ae0ca7: «35 где-то на странице» — не выбор. Граница
+                        # стоит, когда её выпадашка в поле Age читает target_val и
+                        # список закрыт (закрываем, если Meta его оставила).
+                        list_closed = _close_open_listboxes(page, f"age_{default_text}")
+                        reading = _age_triggers_read(page)
+                        boundary_ok = (list_closed and len(reading) == 2
+                                       and reading[0 if default_text == "18" else 1] == target_val)
                     except Exception:
                         pass
                     boundary_results.append(boundary_ok)
