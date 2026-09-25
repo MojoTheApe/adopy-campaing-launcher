@@ -1648,6 +1648,18 @@ _LOADING_TEXT = re.compile(r"^\s*Loading\b", re.I)
 """
 
 
+def _visible_now(locator) -> bool:
+    """Виден ли элемент прямо сейчас — без ожидания (ACL-1313).
+
+    Для проверок «есть ли оно вообще» там, где страница уже отрисована:
+    `click(timeout=…)` по отсутствующему элементу стоит весь таймаут.
+    """
+    try:
+        return bool(locator.count()) and locator.first.is_visible()
+    except Exception:
+        return False
+
+
 def _first_visible(page: Page, locators, *, budget_s: float = 4.0, poll_s: float = 0.25):
     """Первый из локаторов, который стал видимым за отведённое время.
 
@@ -3062,16 +3074,24 @@ def run_recorded_campaign_flow(
     # New Meta UI sometimes shows a Guided/Manual choice before the objective
     # picker enables Campaign name — click Manual if present, best-effort
     # (the recording's session apparently started already past this choice).
-    try:
-        page.get_by_text("Manual campaign setup", exact=False).first.click(timeout=3000)
-        _shot("after_manual")
-    except Exception:
-        pass
+    # ACL-1313: сюда приходим, когда окно цели уже отрисовано (радио Leads
+    # видно) — есть ли в нём «Manual campaign setup» и заголовок «Leads»,
+    # видно сразу. Прежде клик по отсутствующему элементу ждал 3 с и 5 с на
+    # каждой кампании.
+    manual = page.get_by_text("Manual campaign setup", exact=False)
+    if _visible_now(manual):
+        try:
+            manual.first.click(timeout=3000)
+            _shot("after_manual")
+        except Exception:
+            pass
 
-    try:
-        page.get_by_role("heading", name="Leads").first.click(timeout=5000)
-    except Exception:
-        pass
+    leads_heading = page.get_by_role("heading", name="Leads")
+    if _visible_now(leads_heading):
+        try:
+            leads_heading.first.click(timeout=5000)
+        except Exception:
+            pass
     # ACL-1313: окна нет — одно ограниченное ожидание, а не пять заходов
     # `_click` по 8+8 с (~83 с) ради того же отказа.
     leads_radio = page.get_by_role("radio", name="Leads")
@@ -3114,19 +3134,27 @@ def run_recorded_campaign_flow(
     # секунд на «появись, если ты есть» достаточно — дальше идёт заполнение
     # имени со своими попытками, и если модалка всё же успела встать, оно
     # упадёт заметно, а не молча.
-    modal_btn = _first_visible(
-        page,
-        (
-            page.get_by_role("button", name="Don't show again"),
-            page.get_by_role("button", name="OK", exact=True),
-        ),
-        budget_s=4.0,
+    #
+    # ACL-1313: ждём не «модалку 4 с», а первое из двух — модалку или поле
+    # имени. Поле видно и модалки нет — идём дальше сразу, без 4 с простоя
+    # на каждой кампании. Если модалка всплывёт позже поля, ввод имени не
+    # пройдёт — тогда она закрывается и ввод повторяется до перезагрузки.
+    onboarding_btns = (
+        page.get_by_role("button", name="Don't show again"),
+        page.get_by_role("button", name="OK", exact=True),
     )
-    if modal_btn is not None:
-        _click(modal_btn, attempts=3)
+    name_field = page.get_by_placeholder("Enter your campaign name here")
+    first_seen = _first_visible(page, (*onboarding_btns, name_field), budget_s=4.0)
+    if first_seen is not None and first_seen is not name_field:
+        _click(first_seen, attempts=3)
     _shot("after_onboarding_modal")
 
-    if not _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name):
+    def _late_onboarding_modal() -> bool:
+        btn = _first_visible(page, onboarding_btns, budget_s=0.0)
+        return btn is not None and _click(btn, attempts=2)
+
+    if not (_fill(name_field, campaign_name)
+            or (_late_onboarding_modal() and _fill(name_field, campaign_name))):
         # 20.09 01:12 (CL_ml TRDEZ, третий раз за сутки): после Continue
         # редактор не отрисовался — пустой экран с «Loading…», и поля имени
         # на странице нет вовсе. Вводить ещё нечего, поэтому перезагружаем
@@ -3367,14 +3395,16 @@ def run_recorded_campaign_flow(
             # markers instead: the "Verifying your edits..." indicator, then
             # the "You've switched audience setup" toast to appear AND clear.
             wait_editor_saved(page)
-            try:
-                toast = page.get_by_text(
-                    re.compile(r"You've switched audience setup", re.I)
-                ).first
-                toast.wait_for(state="visible", timeout=3000)
-                toast.wait_for(state="hidden", timeout=8000)
-            except Exception:
-                pass
+            # ACL-1313: тост ждём уйти, только если он на экране. Прежде
+            # 3 с уходили на ожидание тоста, которого нет (applied_without_dialog
+            # и большинство прогонов 25.09): wait_editor_saved уже дождался
+            # «Verifying your edits», перерисовка к этому моменту прошла.
+            toast = page.get_by_text(re.compile(r"You've switched audience setup", re.I))
+            if _visible_now(toast):
+                try:
+                    toast.first.wait_for(state="hidden", timeout=8000)
+                except Exception:
+                    pass
             _sleep_h(0.5)
         if not continued and _audience_already_manual(page):
             # 17.09 (S15 06:53, Doc21 04:19/04:28): выбор радио применился

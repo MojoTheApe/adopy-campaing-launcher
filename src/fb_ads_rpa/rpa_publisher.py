@@ -429,7 +429,10 @@ class RpaPublisher:
             wait_until="domcontentloaded",
             timeout=30000,
         )
-        page.wait_for_timeout(3000)
+        # ACL-1313: без `wait_for_timeout(3000)`. Цель — уйти из редактора,
+        # и она достигнута, когда goto вернулся: документ редактора выгружен
+        # (domcontentloaded нового). Браузер профиля после close() остаётся
+        # открытым и догружает список сам; 3 с ожидания ничего не добавляли.
 
     def __enter__(self) -> "RpaPublisher":
         return self
