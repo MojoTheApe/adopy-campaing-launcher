@@ -150,3 +150,46 @@ def test_a_list_meta_leaves_open_after_the_pick_is_closed_before_success(page):
     assert md._age_boundaries_pass(page, "35", "65+") is True
     assert not _listbox_open(page)
     assert md._age_triggers_read(page) == ["35", "65+"]
+
+
+# ── шаг возраста целиком и начало шага локаций ─────────────────────────────
+
+def _no_manual_audience(monkeypatch):
+    monkeypatch.setattr(md, "_ensure_manual_audience", lambda p: False)
+    monkeypatch.setattr(md, "_cancel_dynamic_creative_dialog", lambda p: None)
+
+
+def test_the_age_step_closes_a_list_left_open_before_reporting_success(page, monkeypatch):
+    _no_manual_audience(monkeypatch)
+    page.evaluate("window.stubborn = true")
+    # Список открыт и после шага — как в 25c557ae0ca7: закрываем, потом успех.
+    monkeypatch.setattr(md, "_uncheck_age_suggestion",
+                        lambda p: p.locator("[role=combobox]").first.click())
+    assert md.fill_audience_age(page, 35, 65) is True
+    assert not _listbox_open(page)
+    assert md._age_triggers_read(page) == ["35", "65+"]
+
+
+def test_the_age_step_fails_while_a_list_stays_open(page, monkeypatch):
+    _no_manual_audience(monkeypatch)
+    monkeypatch.setattr(md, "_fill_audience_age_controls", lambda p, lo, hi: True)
+    page.evaluate("""() => { document.querySelectorAll('[role=combobox] div').forEach(d => {
+        if (d.children.length === 0 && d.textContent.trim() === '18') d.textContent = '35'; }); }""")
+    page.locator("[role=combobox]").first.click()
+    # Кнопку списка перекрыли — закрыть нечем: шаг не отчитывается успехом.
+    page.evaluate("""() => { const c = document.createElement('div');
+        c.style.cssText = 'position:fixed;inset:300px 0 0 0;z-index:99'; document.body.appendChild(c); }""")
+    assert md.fill_audience_age(page, 35, 65) is False
+    assert ("audience_age", False) in [r[:2] for r in page.rows]
+    assert any(r[2].get("note") == "listbox_left_open" for r in page.rows if r[0] == "audience_age")
+
+
+def test_the_locations_step_starts_with_no_list_open(monkeypatch):
+    """В потоке: перед локациями открытые списки закрываются."""
+    import ast
+    src = (ROOT / "src/fb_ads_rpa/meta_dom.py").read_text(encoding="utf-8")
+    flow = next(n for n in ast.parse(src).body
+                if isinstance(n, ast.FunctionDef) and n.name == "run_recorded_campaign_flow")
+    body = ast.get_source_segment(src, flow)
+    i = body.index('_close_open_listboxes(page, "before_audience_location")')
+    assert i < body.index("fill_audience_location(page, country)")

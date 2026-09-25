@@ -4045,6 +4045,9 @@ def run_recorded_campaign_flow(
         soft_fails.append(f"audience_age:{str(exc)[:60]}")
 
     if country:
+        # Ничей выпадающий список (возраст и т. п.) не должен накрывать
+        # строку Locations (25c557ae0ca7: `locations_open nothing_to_click`).
+        _close_open_listboxes(page, "before_audience_location")
         _shot("before_audience_location")
         try:
             all_placeholders = page.evaluate(
@@ -14058,6 +14061,13 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
                           diag={"wanted": wanted, "seen": seen})
         return False
     _uncheck_age_suggestion(page)
+    # 25c557ae0ca7 (25.09): шаг вернул True при открытом списке возраста — он
+    # накрыл строку Locations, и дальше в нём «выбралось» 30. Успех — только
+    # при закрытом списке; закрыть его — нажатием на его же выпадашку.
+    if not _close_open_listboxes(page, "after_audience_age"):
+        _telemetry.record("audience_age", False, note="listbox_left_open",
+                          diag={"wanted": wanted, "seen": _age_triggers_read(page)})
+        return False
     return True
 
 
