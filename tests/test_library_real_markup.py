@@ -75,17 +75,22 @@ def test_an_unmarked_real_grid_is_clean(page):
     assert md._library_any_tile_marked(page) is False
 
 
-def test_account_tab_selection_is_not_a_selected_video(page, monkeypatch):
+def test_a_file_that_is_not_in_the_real_grid_is_absent(page, monkeypatch):
+    """Файла нет в сетке, выбора нет — грузить можно.
+
+    Порт ACL-1284, вариант A: строгий #238 здесь же проверял, что вкладка
+    Account с `aria-selected=true` не считается отмеченной плиткой. Живой
+    `_library_any_tile_marked` вкладку считает (фильтр `[role=tab]` ушёл
+    вместе с откатом медиатеки к #218), поэтому та часть снята — вопрос
+    передан владельцу.
+    """
     _load(page, "library_one_picked.html")
     page.locator('[data-test-decoration="selected"]').evaluate(
         "el => el.removeAttribute('data-test-decoration')")
     page.get_by_text('1 selected', exact=True).evaluate("el => el.textContent = '0 selected'")
-    # Keep the actual Account tab's aria-selected=true. Only media changed.
-    assert page.get_by_role('tab', name='Account', exact=True).get_attribute('aria-selected') == 'true'
     monkeypatch.setattr(md, '_sleep_h', lambda *_: None)
     monkeypatch.setattr(md, '_library_search', lambda *_: True)
     monkeypatch.setattr(md._telemetry, 'record', lambda *a, **k: None)
-    assert md._library_any_tile_marked(page) is False
     assert md._try_reuse_library_media(page, 'not-in-the-library.mp4') == md.REUSE_ABSENT
 
 
@@ -101,10 +106,17 @@ def test_the_picked_tile_carries_the_same_thumbnail_id(page):
     assert PICKED_ID in md._tile_thumb_ids(tile)
 
 
-def test_a_missing_grid_is_unknown_even_when_an_unrelated_counter_is_zero(page, monkeypatch):
+def test_without_a_grid_only_the_counter_decides_the_retreat(page, monkeypatch):
+    """Вариант A (#218): сетки нет — «отмеченных плиток» нет, решает счётчик.
+
+    Строгий #238 отвечал здесь «неизвестно» (None) и запрещал загрузку при
+    любом счётчике. Живой код отвечает False; откат считается чистым, только
+    если счётчик на странице — «0 selected». Вопрос передан владельцу.
+    """
     page.set_content('<div>0 selected</div>')
     monkeypatch.setattr(md, "_sleep_h", lambda *_: None)
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda *_: None)
-    assert md._library_any_tile_marked(page) is None
-    assert md._retreat(page, None, [0], 0) == md.REUSE_DIRTY
+    assert md._library_any_tile_marked(page) is False
+    assert md._retreat(page, None, [], 0) == md.REUSE_ABSENT
+    page.set_content('<div>1 selected</div>')
     assert md._retreat(page, None, [], 0) == md.REUSE_DIRTY
