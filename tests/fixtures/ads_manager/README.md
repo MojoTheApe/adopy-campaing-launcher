@@ -34,3 +34,19 @@ Tests intercept network requests. Open only in a disposable offline browser. Nev
 5. Run `tests/test_ads_manager_bench.py` and `tests/test_conversion_event_is_really_set.py` in offline Chromium. Include a negative case that removes/changes a relevant selector and makes the real lookup fail. Review the fixture and product diff together.
 
 Review these fixtures whenever a live selector fails or a Meta layout changes. Unchanged historical fixtures cannot establish that today's Ads Manager still works. The original Meta build and expanded placement subcategories remain unrecorded; a separately authorized capture is needed to close those evidence gaps.
+
+## ACL-1313 banners (live runs 2026-09-24/25)
+
+`banners_2026_09_25.html` holds several fragments, each introduced by a `<!-- fragment: <name> | source: <run>/<step> -->` comment. Cut the same way as above: classes, `data-auto-logging-id`, SVG paths and help-centre links stripped; message ids in `data-surface` replaced with `0`. UI language: English. Meta build identifier and browser version: not recorded. In the live DOM the hidden `Close` text of the banner X is visually hidden by a class; without Meta's CSS it renders as plain text.
+
+| Fragment | Source | Coverage limit |
+| --- | --- | --- |
+| aymt_contact | 279ead80503a/00_objective_leads — blue top bar "Add your contact information" | One message, no stacking of several AYMT messages |
+| aymt_phone | 8814247ec92e/00_objective_leads — blue top bar "Add your phone number" | Same |
+| card_whatsapp_status, card_conversions_api | 5b223701b271/00_advantage_plus_before — ad set cards with X | Card only; the editor around it is the test's own wrapper |
+| card_instant_form_filters | 90a8987edad9/00_conversion_website | Card only |
+| card_site_links | 393bfda8b0db/02_ad_media_ready | Card only |
+| card_show_offerings_no_close | 5b223701b271/06_ad3_creative_upload — card without X ("Remind me later" opens a new tab) | Card only |
+| editor_drawer_header | 5b223701b271/00_advantage_plus_before — `data-surface="/am/editor_drawer"` header with the editor's own `aria-label="Close"` | Header only |
+
+"Updated business terms", "Act now — Verification may be required soon", the "Turn off ad blocker" modal and the "Your internet connection was lost" toast were never captured in `rpa_pages`; their markup in the tests is synthetic, modelled on the real AYMT bar / cards and on the screenshots of run 279ead80503a.

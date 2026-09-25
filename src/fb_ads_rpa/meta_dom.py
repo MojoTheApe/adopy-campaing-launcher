@@ -9621,65 +9621,198 @@ def verify_and_fix_ad_destinations(
     return failed
 
 
-_WIZARD_CLOSE_GUARD_JS = """
-  // Returns true if an element looks like the wizard's own chrome (toolbar/header Close)
-  // and should NOT be clicked by banner-dismiss logic.
-  // Wizard Close is typically in a fixed top bar or a role=dialog header with no banner text nearby.
-  function _isWizardClose(el) {
-    // Walk up to 8 levels looking for known wizard container signals
-    let node = el;
-    for (let i = 0; i < 8; i++) {
-      if (!node || node === document.body) break;
-      const role = (node.getAttribute && node.getAttribute('role') || '').toLowerCase();
-      const label = (node.getAttribute && node.getAttribute('aria-label') || '').toLowerCase();
-      const id = (node.id || '').toLowerCase();
-      // Banner / notice / toast containers are NOT the wizard chrome
-      if (role === 'alert' || role === 'alertdialog' || role === 'status') return false;
-      if (id.indexOf('banner') !== -1 || id.indexOf('toast') !== -1 || id.indexOf('notice') !== -1) return false;
-      if (label.indexOf('banner') !== -1 || label.indexOf('notice') !== -1) return false;
-      // If we hit a scrollable inner panel (the adset editor body) it's not the wizard chrome
-      if (node.scrollHeight > 600 && node.scrollWidth > 400 && node !== document.documentElement) return false;
-      node = node.parentElement;
+#: Найти крестики баннеров и пометить их `data-acl-close`; вернуть имена.
+_BANNERS_JS = r"""
+  (args) => {
+    const [titles, aymt] = args;
+    const norm = (s) => (s || '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\s+/g, ' ').trim();
+    const shown = (e) => {
+      if (!e) return false;
+      const r = e.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return false;
+      for (let n = e; n; n = n.parentElement) {
+        const s = getComputedStyle(n);
+        if (s.visibility === 'hidden' || s.display === 'none') return false;
+      }
+      return true;
+    };
+    // Крестик всего редактора: единственный aria-label="Close" в редакторе,
+    // прямо под data-surface="/am/editor_drawer". Его не трогаем никогда.
+    const drawerClose = (b) => b.getAttribute('aria-label') === 'Close' && (() => {
+      const s = b.closest('[data-surface]');
+      return !!s && s.getAttribute('data-surface') === '/am/editor_drawer';
+    })();
+    const drawerCloses = [...document.querySelectorAll('[aria-label="Close"]')].filter(drawerClose);
+    // Кнопки, которые нажимать нельзя: они не закрывают, а ведут дальше.
+    const FORBIDDEN = /^(Add\b|Learn more|Start verification|Remind me later|Apply now|Get started|View Terms|Review terms|Go to\b|Use recommended|Create a rule)/i;
+    const closers = (box) => [...box.querySelectorAll('[role=button], button')].filter((b) => {
+      if (drawerClose(b)) return false;
+      const text = norm(b.textContent);
+      if (FORBIDDEN.test(text)) return false;
+      const label = norm(b.getAttribute('aria-label'));
+      return /^(Close|Cerrar)$/.test(text) || (!text && /^(Close|Dismiss|Cerrar)$/i.test(label));
+    });
+    // Контейнер баннера: ближайший предок заголовка с СОБСТВЕННЫМ крестиком —
+    // ровно одним. Два крестика — это уже общий родитель нескольких карточек;
+    // предок, внутри которого крестик всего редактора, — это сам редактор.
+    const containerOf = (leaf) => {
+      let box = leaf;
+      for (let i = 0; i < 9 && box.parentElement; i++) {
+        box = box.parentElement;
+        if (drawerCloses.some((d) => box.contains(d))) return null;
+        const c = closers(box);
+        if (c.length === 1) return { box, btn: c[0] };
+        if (c.length > 1) return null;
+      }
+      return null;
+    };
+    const found = [];
+    const seen = new Set();
+    const take = (name, btn) => {
+      if (seen.has(btn) || !shown(btn)) return;
+      seen.add(btn);
+      btn.setAttribute('data-acl-close', String(found.length));
+      found.push(name);
+    };
+    // Заголовок — лист с текстом или элемент role=heading (у карточек
+    // редактора это div[role=heading][aria-level=4]).
+    const leaves = [...document.querySelectorAll('*')]
+      .filter((e) => (e.children.length === 0 || e.getAttribute('role') === 'heading'));
+    for (const leaf of leaves) {
+      const text = norm(leaf.textContent);
+      if (!text || text.length > 200) continue;
+      const title = titles.find((t) => text.startsWith(t));
+      if (!title || !shown(leaf)) continue;
+      const got = containerOf(leaf);
+      if (got) take(title, got.btn);
     }
-    // If the element's bounding rect puts it in the top ~60px it is likely the wizard toolbar
-    const rect = el.getBoundingClientRect();
-    if (rect && rect.top < 60 && rect.top >= 0) return true;
-    return false;
+    if (aymt) {
+      // Синяя полоса вверху: у каждого сообщения свой data-surface.
+      for (const msg of document.querySelectorAll('[data-surface*="AYMTAMGlobalBannerContainer/"]')) {
+        const c = closers(msg);
+        if (c.length !== 1) continue;
+        const first = norm(msg.textContent).slice(0, 60);
+        take('aymt:' + first, c[0]);
+      }
+    }
+    return found;
   }
 """
 
 
-def _dismiss_advantage_banner(page: Page) -> None:
-    """Dismiss the Meta Advantage+ recommendation banner that appears after selecting Website.
+#: Баннеры и карточки Meta, которые закрываются своим крестиком (ACL-1313).
+#: Совпадение — по началу текста заголовка.
+_BANNER_TITLES = (
+    "Add your contact information",
+    "Add your phone number",
+    "Updated business terms",
+    "Act now",
+    "Verification may be required",
+    "WhatsApp Status included",
+    "Use filters to verify Instant form leads",
+    "Set up the Conversions API",
+    "Add products or site links",
+    "Value rule creation is changing",
+)
 
-    The banner says 'You could get 14-24% lower cost per lead by choosing website
-    and instant forms' with an 'Apply now' button. We must NOT click 'Apply now'
-    (that switches back to website+forms). We look for a close/X button instead.
-    If no close button, we just ignore it — the banner does not block the flow.
-    Never clicks the wizard's own toolbar/header Close button.
+
+def _click_marked(page: Page, selector: str) -> bool:
+    """Нажать помеченную кнопку: доверенным кликом, если центр открыт.
+
+    Баннер бывает прикрыт модалкой «Loading…» (279ead, 25.09): тогда клик по
+    координатам попал бы в модалку, и нажатие уходит DOM-кликом прямо в
+    кнопку. Прокрутки нет — баннеры на своих местах, а прокрутка редактора
+    сбивает текущий шаг.
     """
-    script = _WIZARD_CLOSE_GUARD_JS + """
-      const closeSels = [
-        '[aria-label="Close recommendation"]',
-        '[aria-label="Close"]', '[aria-label="Cerrar"]',
-        '[aria-label="Dismiss"]', '[aria-label="Descartar"]',
-        'button[data-testid="close_button"]',
-      ];
-      for (const sel of closeSels) {
-        for (const el of document.querySelectorAll(sel)) {
-          if (el.offsetParent !== null && !_isWizardClose(el)) { el.click(); return true; }
-        }
-      }
-      return false;
-    """
-    # Wrap in IIFE
-    script = f"() => {{{script}}}"
-    for root in _roots(page):
+    try:
+        spot = page.evaluate(
+            """
+            (sel) => {
+              const b = document.querySelector(sel);
+              if (!b) return null;
+              const r = b.getBoundingClientRect();
+              const x = r.x + r.width / 2, y = r.y + r.height / 2;
+              const inView = x > 0 && y > 0 && x < innerWidth && y < innerHeight;
+              const hit = inView ? document.elementFromPoint(x, y) : null;
+              return { x, y, open: !!hit && (hit === b || b.contains(hit)) };
+            }
+            """,
+            selector,
+        )
+    except Exception:
+        return False
+    if not spot:
+        return False
+    if spot.get("open"):
         try:
-            root.evaluate(script)
+            _cdp_mouse_click(page, spot["x"], spot["y"])
+            return True
         except Exception:
             pass
+    try:
+        return bool(page.evaluate(
+            "(sel) => { const b = document.querySelector(sel); if (!b) return false; b.click(); return true; }",
+            selector))
+    except Exception:
+        return False
 
+
+def _close_banners(page: Page, titles: tuple[str, ...] = _BANNER_TITLES, *, aymt: bool = True) -> list[str]:
+    """Закрыть баннеры/карточки Meta их собственным крестиком. Что закрыли.
+
+    По образцу `_close_account_controls_toast`: заголовок → его контейнер →
+    `[role=button]` с текстом «Close» внутри этого контейнера и только там.
+    Крестик всего редактора (`aria-label="Close"` под
+    `data-surface="/am/editor_drawer"`) не нажимается никогда, как и кнопки
+    «Add…», «Learn more», «Start verification», «Remind me later», «Apply
+    now».
+    """
+    closed: list[str] = []
+    for _ in range(3):
+        try:
+            found = page.evaluate(_BANNERS_JS, [list(titles), aymt]) or []
+        except Exception:
+            break
+        if not found:
+            break
+        progress = False
+        for i, name in enumerate(found):
+            if _click_marked(page, f'[data-acl-close="{i}"]'):
+                progress = True
+                if name not in closed:
+                    closed.append(name)
+        try:
+            page.evaluate("() => document.querySelectorAll('[data-acl-close]')"
+                          ".forEach(e => e.removeAttribute('data-acl-close'))")
+        except Exception:
+            pass
+        if not progress:
+            break
+        _sleep_h(0.5)
+    return closed
+
+def _dismiss_advantage_banner(page: Page) -> list[str]:
+    """Закрыть рекомендацию Advantage+ после выбора Website — её крестиком.
+
+    Баннер «You could get 14-24% lower cost per lead by choosing website and
+    instant forms» с кнопкой «Apply now»: «Apply now» НЕ нажимаем (вернёт
+    website+forms). Раньше здесь искали `[aria-label="Close"]` по всей
+    странице — а это крестик ВСЕГО редактора (ACL-1313): у крестиков баннеров
+    такого атрибута нет. Теперь — тот же поиск «заголовок → контейнер →
+    Close», что и у прочих баннеров, плюс собственная метка рекомендации
+    «Close recommendation», если Meta её поставила.
+    """
+    closed: list[str] = []
+    try:
+        rec = page.locator('[aria-label="Close recommendation"]').first
+        if rec.count() and rec.is_visible(timeout=300):
+            rec.evaluate("el => el.setAttribute('data-acl-close', 'rec')")
+            if _click_marked(page, '[data-acl-close="rec"]'):
+                closed.append("close_recommendation")
+    except Exception:
+        pass
+    closed += _close_banners(page, ("You could get",) + _BANNER_TITLES, aymt=False)
+    return closed
 
 def dismiss_discard_drafts_dialog(page: Page) -> bool:
     """Dismiss the 'Discard drafts' confirmation — always Cancel, NEVER Discard.
@@ -9816,36 +9949,16 @@ def dismiss_publish_draft_dialog(page: Page) -> bool:
     return False
 
 
-def _dismiss_floating_banners(page: Page) -> None:
-    """Close any floating info/warning banners that may interfere with clicks.
+def _dismiss_floating_banners(page: Page) -> list[str]:
+    """Закрыть баннеры и карточки Meta, мешающие кликам. Что закрыли.
 
-    Meta sometimes shows 'Value rule creation is changing' or similar notices
-    as dismissible overlays that can obscure dropdown options.
-    Never clicks the wizard's own toolbar/header Close button.
+    До ACL-1313 здесь искали `[aria-label="Close"]` — у крестиков баннеров
+    Meta такого атрибута нет (это `div[role=button]` со спрятанным текстом
+    «Close»), зато он есть у крестика всего редактора
+    (`data-surface="/am/editor_drawer"`). Теперь — `_close_banners`:
+    заголовок → контейнер → «Close» внутри контейнера.
     """
-    script = _WIZARD_CLOSE_GUARD_JS + """
-      const closeSels = [
-        '[aria-label="Close"]', '[aria-label="Cerrar"]',
-        '[aria-label="Dismiss"]', '[aria-label="Descartar"]',
-        'button[data-testid="close_button"]',
-      ];
-      for (const sel of closeSels) {
-        for (const el of document.querySelectorAll(sel)) {
-          if (el.offsetParent !== null && !_isWizardClose(el)) {
-            el.click();
-            return true;
-          }
-        }
-      }
-      return false;
-    """
-    script = f"() => {{{script}}}"
-    for root in _roots(page):
-        try:
-            root.evaluate(script)
-        except Exception:
-            pass
-
+    return _close_banners(page)
 
 def select_conversion_location_website(page: Page, *, skip_open: bool = False) -> bool:
     """Pick 'Website' under Conversion → Conversion location on Ad Set level.
