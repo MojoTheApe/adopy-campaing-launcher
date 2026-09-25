@@ -14,7 +14,7 @@
 читает имя и состояние медиа, а личность файла по миниатюре сверяет шаг
 медиатеки (`_try_reuse_library_media`, тесты в test_media_attachment_identity
 и test_reuse_never_stacks_creatives). Остаются инварианты: чужой файл
-никогда не «наш креатив», обработка без конца и
+никогда не «наш креатив» (в том числе похожее имя), обработка без конца и
 файл, который Meta не обработала, — отказ. Иначе, чем в строгом варианте
 #238: имя, которое не показано, — не отказ (`name_not_shown`); нечитаемое
 состояние тоже не отказ (наличие медиа проверено отдельно) — тесты
@@ -122,6 +122,15 @@ def test_an_unnamed_tile_is_not_a_refusal(page):
     page.set_content(_RECORDED)
     ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
     assert ok is True and detail["why"] == "name_not_shown"
+
+
+@pytest.mark.parametrize("other", ["2012_story.mp4", "2012.jpg", "prefix2012.mp4", "12012.mp4"])
+def test_a_similar_name_is_not_the_requested_file(page, other):
+    """Порт ACL-1284: вхождение основы имени считало эти файлы нашими."""
+    page.set_content(_READY.replace("2012.mp4", other))
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    assert ok is False
+    assert detail["why"] == "other_file_attached"
 
 
 @pytest.mark.parametrize("shown", ["2012", "2012_1.mp4", "2012 (1).mp4", "Uploading video 2012.mp4"])

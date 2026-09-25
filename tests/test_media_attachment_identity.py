@@ -9,12 +9,13 @@ Media и отказывал плитке с любым значком, скры�
 * миниатюры объявления читаются по всей странице, кроме открытых диалогов;
 * плитка с жёлтым треугольником берётся;
 * имя файла, если показано, подтверждает файл; не показано — не отказ;
-* отказ медиатеки «после выбора» внешний повтор вправе исправить — см.
-  последний тест.
+* отказ по самому медиа объявления (чужой файл, обработка) внешний повтор
+  не отменяет (порт ACL-1284); прочие отказы медиатеки после выбора —
+  отменяет, как в живом коде, — см. последние тесты.
 
 Остаются инварианты владельца: чужой файл никогда не «наш креатив» (по
-имени и по миниатюре), обработка без конца — отказ, файл, который Meta не
-обработала, — отказ.
+имени и по миниатюре, в том числе у плитки, выбранной до нас), обработка без
+конца — отказ, файл, который Meta не обработала, — отказ.
 
 Мутации ниже (чужая миниатюра, значок, ошибки) — синтетические поверх
 записанной разметки, а не записи живых отказов.
@@ -143,9 +144,10 @@ def _reuse(page, monkeypatch, *, fresh=False, wrong=False, warning=False):
     return result, records, shots
 
 
-@pytest.mark.parametrize('fresh', [True])
+@pytest.mark.parametrize('fresh', [False, True])
 def test_the_picked_tile_and_the_ad_show_the_same_thumbnail(page, monkeypatch, fresh):
-    """Миниатюра щёлкнутой плитки сверяется с объявлением."""
+    """И у щёлкнутой плитки, и у выбранной до нас (порт ACL-1284: у второй
+    миниатюру раньше не брали, и сверка писала `unconfirmed`)."""
     result, records, shots = _reuse(page, monkeypatch, fresh=fresh)
     assert result == md.REUSE_ATTACHED
     ready = [diag for step, diag in shots if step == 'ad_media_ready']
@@ -153,12 +155,13 @@ def test_the_picked_tile_and_the_ad_show_the_same_thumbnail(page, monkeypatch, f
     assert ready[-1]['thumbs']['picked'] == [IDENTITY]
 
 
-@pytest.mark.parametrize('fresh', [True])
+@pytest.mark.parametrize('fresh', [False, True])
 def test_a_wrong_attachment_remains_dirty(page, monkeypatch, fresh):
     result, records, shots = _reuse(page, monkeypatch, wrong=True, fresh=fresh)
     assert result == md.REUSE_DIRTY
     assert [kw.get('note') for step, ok, kw in records if step == 'ad_creative_reuse' and ok is False] \
         == ['other_file_attached']
+    assert md.media_refused_on_ad() == 'other_file_attached'
 
 
 def test_a_tile_with_the_yellow_triangle_is_attached(page, monkeypatch):
@@ -169,6 +172,35 @@ def test_a_tile_with_the_yellow_triangle_is_attached(page, monkeypatch):
     """
     result, records, shots = _reuse(page, monkeypatch, warning=True)
     assert result == md.REUSE_ATTACHED
+
+
+@pytest.mark.parametrize('known', [False, True])
+def test_outer_retry_cannot_override_a_refusal_about_the_ads_media(monkeypatch, known):
+    """Чужой или битый файл уже на объявлении: «медиа есть» не делает его нашим.
+
+    Порт ACL-1284: живой внешний повтор после такого отказа видел медиа на
+    объявлении и объявлял успех. Флаг строгого варианта `reuse_unverified`
+    заменён `media_refused_on_ad()` — он ставится только за отказ по самому
+    медиа объявления.
+    """
+    calls = []
+    monkeypatch.setattr(md, 'upload_already_failed', lambda *_: False)
+    monkeypatch.setattr(md, 'upload_already_succeeded', lambda *_: known)
+    monkeypatch.setattr(md, '_media_block_filled_now', lambda *_: True)
+    monkeypatch.setattr(md, '_wizard_past_media', lambda *_: True)
+    monkeypatch.setattr(md, '_verify_ad_media_present', lambda *_: True)
+    monkeypatch.setattr(md, '_close_creative_setup_modal', lambda *_: True)
+    monkeypatch.setattr(md, '_remember_upload_failed', lambda *_: None)
+    monkeypatch.setattr(md._telemetry, 'record', lambda *a, **kw: None)
+
+    def upload(*a, **kw):
+        calls.append(kw)
+        md._note_media_refused('other_file_attached')
+        return False
+
+    monkeypatch.setattr(md, 'upload_ad_creative', upload)
+    assert md.upload_ad_creative_with_retry(object(), 'video', '1741_1.mp4') is False
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize('known', [False, True])

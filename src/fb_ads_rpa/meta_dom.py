@@ -174,6 +174,25 @@ _LAST_UPLOAD_DIAG: dict = {}
 _upload_diag_tls = threading.local()
 
 
+#: Отказ по медиа, которое уже стоит на объявлении (чужой файл, обработка
+#: не прошла или не кончилась), — на этот поток, до следующего
+#: `upload_ad_creative`. Порт ACL-1284: внешний повтор видел «медиа есть»
+#: (`_verify_ad_media_present` / `_media_block_filled_now`) и объявлял успех
+#: поверх такого отказа — чужой файл становился «нашим креативом». Прочие
+#: отказы медиатеки (выбор не снялся, счётчик) внешний повтор по-прежнему
+#: вправе исправить: 19–25.09 так достроились 15 объявлений.
+_media_refusal_tls = threading.local()
+
+
+def _note_media_refused(why: str | None) -> None:
+    _media_refusal_tls.why = why
+
+
+def media_refused_on_ad() -> str | None:
+    """Причина отказа по медиа на объявлении в последней попытке этого потока."""
+    return getattr(_media_refusal_tls, "why", None)
+
+
 def last_upload_diag() -> dict:
     """The upload diagnostic of THIS thread's last creative, or the global one."""
     own = getattr(_upload_diag_tls, "diag", None)
@@ -6645,6 +6664,11 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         try:
             if _library_tile_selected(tiles.nth(i)):
                 log.append({"tile": i, "before": before, "already_selected": True, "took": True})
+                # Порт ACL-1284: миниатюра уже выбранной плитки сверяется с
+                # объявлением так же, как у щёлкнутой, — иначе чужой файл на
+                # объявлении проходил «thumb: unconfirmed».
+                picked_fingerprint = _tile_fingerprint(tiles.nth(i))
+                picked_thumbs = _tile_thumb_ids(tiles.nth(i))
                 picked = True
                 break
         except Exception:
@@ -6790,6 +6814,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
                 # объявлении, а сетки медиатеки на экране нет. «Откатывать» тут
                 # нечего: загрузка поверх дала бы объявление с чужим или битым
                 # креативом. Отказ шага, без загрузки (ревью ACL-1192).
+                _note_media_refused(str(detail.get("why")))
                 try:
                     from src.fb_ads_rpa import page_capture as _pages
 
@@ -6895,6 +6920,7 @@ def upload_ad_creative_with_retry(
     # Медиатеку спрашиваем в обоих случаях и ДО отказа: копия могла появиться
     # от соседнего объявления, и тогда файл вообще никуда не поедет — это
     # единственный работающий путь для объявлений 2 и 3.
+    _note_media_refused(None)  # отказ прошлого объявления к этому не относится
     known = upload_already_failed(creative_path) or upload_already_succeeded(creative_path)
     if known:
         # Through the wizard, not straight at the library. The library lives
@@ -6910,6 +6936,10 @@ def upload_ad_creative_with_retry(
             attached = False
         if attached:
             return True
+        if media_refused_on_ad():
+            # Чужой или битый файл уже на объявлении: «медиа есть» ниже его
+            # не оправдывает (порт ACL-1284).
+            return False
         # 17.09 04:30 (S15, 3-е объявление): медиа уже стояло — Meta перенесла
         # ролик в новое объявление, мастер не открылся, и шаг объявил
         # объявление пустым, хотя на экране «Uploaded media · 1 selected».
@@ -6940,6 +6970,12 @@ def upload_ad_creative_with_retry(
                 return True
         except Exception:
             pass
+        if media_refused_on_ad():
+            # Отказ по самому медиа объявления: ни «медиа есть», ни вторая
+            # попытка его не исправят (порт ACL-1284).
+            _close_creative_setup_modal(page)
+            _remember_upload_failed(creative_path)
+            return False
         _close_creative_setup_modal(page)
         _sleep_h(0.8)
         if _verify_ad_media_present(page):
@@ -7542,6 +7578,7 @@ def upload_ad_creative(
     of guessing a re-open control.
     """
     _set_last_upload_diag({"file": Path(creative_path).name, "attempts": []})
+    _note_media_refused(None)
     is_video = (creative_type or "").strip().lower() == "video"
     option_label = "Video ad" if is_video else "Image ad"
 
@@ -8148,7 +8185,7 @@ def _wizard_past_media(page: Page) -> bool:
 
 
 _AD_MEDIA_STATE_JS = r"""
-  (stem) => {
+  ([stem, ext]) => {
     const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
     const visible = [...document.querySelectorAll('*')]
       .filter(e => e.offsetParent !== null && e.children.length === 0)
@@ -8157,14 +8194,22 @@ _AD_MEDIA_STATE_JS = r"""
     const low = visible.map(t => t.toLowerCase());
     const want = (stem || '').toLowerCase();
     // Имя файла Meta показывает по-разному: «2012.mp4», «2012», иногда с
-    // суффиксом копии. Совпадением считаем вхождение основы имени.
-    const named = want ? low.filter(t => t.includes(want)) : [];
+    // суффиксом копии («2046_1.mp4», «2046 (1).mp4»). Совпадение — основа
+    // имени целиком (порт ACL-1284): вхождение подстроки считало нашими
+    // «2012_story.mp4», «prefix2012.mp4» и «2012.jpg» при «2012.mp4», а
+    // чужой файл никогда не наш креатив (решение владельца 25.09).
+    const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const dot = ext ? '(?:\\.' + esc(ext.toLowerCase()) + ')?' : '';
+    const ours = want
+      ? new RegExp('(?:^|[^a-z0-9_])' + esc(want) + '(?:_\\d+| \\(\\d+\\))?' + dot + '(?![a-z0-9_.])')
+      : null;
+    const named = ours ? low.filter(t => ours.test(t)) : [];
     const processing = low.some(t => t.includes('processing') || t.includes('being processed'));
     const failed = low.some(t => t.includes("couldn't be processed") || t.includes('could not be processed')
       || t.includes('failed to process') || t.includes('processing failed')
       || t.includes("media couldn't") || t.includes('upload failed'));
     // Имена ДРУГИХ файлов рядом с медиа: нашего нет, а чужой есть — взяли не то.
-    const others = low.filter(t => /\.(mp4|mov|jpg|jpeg|png|gif|webm)\b/.test(t) && (!want || !t.includes(want)));
+    const others = low.filter(t => /\.(mp4|mov|jpg|jpeg|png|gif|webm)\b/.test(t) && !(ours && ours.test(t)));
     return { named: named.slice(0, 5), others: others.slice(0, 5),
              processing: processing, failed: failed };
   }
@@ -8174,8 +8219,9 @@ _AD_MEDIA_STATE_JS = r"""
 
 def _ad_media_state(page: Page, filename: str) -> dict:
     stem = Path(filename or "").stem.lower()
+    ext = Path(filename or "").suffix.lstrip(".").lower()
     try:
-        return page.evaluate(_AD_MEDIA_STATE_JS, stem) or {}
+        return page.evaluate(_AD_MEDIA_STATE_JS, [stem, ext]) or {}
     except Exception as exc:
         return {"error": str(exc)[:80]}
 
