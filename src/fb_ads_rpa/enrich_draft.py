@@ -102,6 +102,50 @@ def _get_ref(excel_path: str) -> dict:
         return ref
 
 
+#: ACL-1313: библиотеку, которую ЭТОТ ЖЕ шаг стянул меньше минуты назад, повторно
+#: не тянем. Кнопка Publish в дешборде сначала зовёт /preview-publish, и тот
+#: уже делает здесь `pull(force=True)` обоих реестров; сразу за ним то же
+#: самое делал запуск задания — два сетевых похода к GitHub на старте каждого
+#: задания. Минута — больше, чем проходит между предпросмотром и запуском, и
+#: меньше, чем нужно, чтобы кто-то успел поправить цель или текст.
+#:
+#: Считаются только наши принудительные походы, а не любое обновление копии:
+#: своя запись в библиотеку тоже обновляет её, но чужих правок после неё не
+#: приносит — после неё запуск тянет, как прежде.
+LIBRARY_FRESH_S = 60.0
+
+#: kind → time.monotonic() последнего удачного `pull(force=True)` отсюда.
+_forced_pull_at: dict[str, float] = {}
+
+
+def _pull_unless_just_pulled(kind: str, pull, info: dict) -> dict:
+    """`pull(force=True)`, если этот шаг не тянул библиотеку `kind` < минуты назад.
+
+    Когда тянул — удачно, в этом же процессе, — отдаётся статус копии без
+    похода в сеть (`team_library` — код дешборда, его не меняем).
+    """
+    import time as _time
+
+    last = _forced_pull_at.get(kind)
+    if last is not None and _time.monotonic() - last < LIBRARY_FRESH_S:
+        try:
+            from src.analysis_agent import team_library
+
+            state = team_library.status(kind)
+        except Exception:
+            state = {}
+        if state.get("ok"):
+            info.setdefault("fresh", []).append(kind)
+            return state
+    info.setdefault("pulled", []).append(kind)
+    state = pull(force=True)
+    if (state or {}).get("ok"):
+        _forced_pull_at[kind] = _time.monotonic()
+    else:
+        _forced_pull_at.pop(kind, None)
+    return state
+
+
 def enrich_campaign_drafts(
     drafts: list[Any],
     *,
@@ -127,11 +171,15 @@ def enrich_campaign_drafts(
     # A publish must see changes made since the builder opened, even inside
     # the per-ad read throttle. Refresh each needed registry once per batch.
     from src.analysis_agent import targeting_registry, ad_text_registry
+    from src.fb_ads_rpa import run_telemetry as _telemetry
     library_states = []
-    if any(getattr(a, "targeting_label", "") for d in drafts for a in d.ad_sets):
-        library_states.append(("Targeting", targeting_registry.pull(force=True)))
-    if any(ad.copy_name for d in drafts for a in d.ad_sets for ad in a.ads):
-        library_states.append(("Ad texts", ad_text_registry.pull(force=True)))
+    with _telemetry.phase("library_pull", diag={"preview": bool(preview_mode)}) as info:
+        if any(getattr(a, "targeting_label", "") for d in drafts for a in d.ad_sets):
+            library_states.append(("Targeting", _pull_unless_just_pulled(
+                "targets", targeting_registry.pull, info)))
+        if any(ad.copy_name for d in drafts for a in d.ad_sets for ad in a.ads):
+            library_states.append(("Ad texts", _pull_unless_just_pulled(
+                "ad_texts", ad_text_registry.pull, info)))
 
     for draft in drafts:
         for label, state in library_states:

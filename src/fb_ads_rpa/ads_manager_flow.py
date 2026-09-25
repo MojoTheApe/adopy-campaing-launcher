@@ -64,6 +64,7 @@ from src.fb_ads_rpa.pacing import (
     end_teach_wait,
     get_teach_state,
 )
+from src.fb_ads_rpa.run_telemetry import phase as _telemetry_phase
 from src.fb_ads_rpa.screenshots import capture
 from src.fb_ads_rpa.selectors import load_selectors
 
@@ -1158,20 +1159,24 @@ class AdsManagerFlow:
         # ERR_SSL_PROTOCOL_ERROR, и кампания не начиналась вовсе — обрыв
         # соединения профиля лечится повтором, а не отказом всего задания.
         last_exc = None
-        for attempt in range(3):
-            try:
-                self.page.goto(url, wait_until="domcontentloaded", timeout=self.nav_timeout)
-                last_exc = None
-                break
-            except Exception as exc:
-                last_exc = exc
-                if "ERR_" not in str(exc):
-                    raise
-                log.warning("campaigns goto failed (%s/3): %s", attempt + 1, str(exc)[:80])
-                time.sleep(8.0)
-        if last_exc is not None:
-            raise last_exc
-        pause_after_navigation()
+        # ACL-1313: переход на список кампаний — последний этап начала
+        # задания; его длительность — в телеметрию (`job_phase`).
+        with _telemetry_phase("open_campaigns", campaign=draft.name) as info:
+            for attempt in range(3):
+                try:
+                    self.page.goto(url, wait_until="domcontentloaded", timeout=self.nav_timeout)
+                    last_exc = None
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    if "ERR_" not in str(exc):
+                        raise
+                    log.warning("campaigns goto failed (%s/3): %s", attempt + 1, str(exc)[:80])
+                    time.sleep(8.0)
+            info["attempts"] = attempt + 1
+            if last_exc is not None:
+                raise last_exc
+            pause_after_navigation()
         result.steps_completed.append("open_campaigns")
         # ACL-1313: удачный переход — без PNG (5–7 с при трёх профилях);
         # вернуть: FB_RPA_SHOT_ALL=1.
