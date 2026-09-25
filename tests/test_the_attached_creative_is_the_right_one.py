@@ -15,10 +15,10 @@
 медиатеки (`_try_reuse_library_media`, тесты в test_media_attachment_identity
 и test_reuse_never_stacks_creatives). Остаются инварианты: чужой файл
 никогда не «наш креатив» (в том числе похожее имя), обработка без конца и
-файл, который Meta не обработала, — отказ. Иначе, чем в строгом варианте
-#238: имя, которое не показано, — не отказ (`name_not_shown`); нечитаемое
-состояние тоже не отказ (наличие медиа проверено отдельно) — тесты
-«unreadable/incomplete state» строгого варианта сняты.
+файл, который Meta не обработала или отклонила («Video rejected», решение
+владельца 25.09), — отказ. Иначе, чем в строгом варианте #238: имя, которое
+не показано, — не отказ (`name_not_shown`); нечитаемое состояние тоже не
+отказ (наличие медиа проверено отдельно).
 """
 from __future__ import annotations
 
@@ -63,6 +63,7 @@ _READY = _RECORDED.replace('>', '><div>2012.mp4</div>', 1)
 _OTHER = _READY.replace('2012.mp4', '9_ar_2221_story.mp4')
 _PROCESSING = _READY.replace('>', '><div>Processing your video</div>', 1)
 _FAILED = _READY.replace('>', "><div>This media couldn't be processed.</div>", 1)
+_REJECTED = _READY.replace('>', "><div>Video rejected</div>", 1)
 
 
 def test_our_file_on_the_ad_is_confirmed(page):
@@ -140,3 +141,29 @@ def test_the_names_meta_gives_our_file_are_ours(page, shown):
     ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
     assert ok is True, detail
     assert detail["state"]["others"] == []
+
+
+def test_a_rejected_video_is_a_failure(page):
+    """Порт ACL-1284: объявление с отклонённым видео не запустится."""
+    page.set_content(_REJECTED)
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    assert ok is False
+    assert detail["why"] == "media_rejected"
+
+
+def test_the_word_rejected_elsewhere_is_not_about_our_media(page):
+    """Статус «Rejected» у другой строки — не про медиа этого объявления."""
+    page.set_content("<div>Rejected</div><div>Ad rejected</div>" + _READY)
+    ok, detail = md._verify_ad_media_is_the_file(page, "2012.mp4")
+    assert ok is True, detail
+
+
+def test_an_unreadable_media_state_is_not_a_refusal():
+    """Вариант A: DOM не прочитался — не отказ, наличие медиа проверено отдельно."""
+    class Unreadable:
+        def evaluate(self, *args):
+            raise RuntimeError("synthetic unavailable DOM")
+    ok, detail = md._verify_ad_media_is_the_file(Unreadable(), "2012.mp4")
+    assert ok is True
+    assert detail["why"] == "name_not_shown"
+    assert "error" in detail["state"]

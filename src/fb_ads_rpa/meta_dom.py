@@ -8221,10 +8221,16 @@ _AD_MEDIA_STATE_JS = r"""
     const failed = low.some(t => t.includes("couldn't be processed") || t.includes('could not be processed')
       || t.includes('failed to process') || t.includes('processing failed')
       || t.includes("media couldn't") || t.includes('upload failed'));
+    // Порт ACL-1284 (решение владельца 25.09): «Video rejected» на медиа
+    // объявления — отказ и в варианте A: такое объявление не запустится.
+    // Жёлтый треугольник на плитке медиатеки сюда не относится. Только
+    // фраза про само медиа — слово «Rejected» в статусе чужой строки
+    // дерева отказом не является.
+    const rejected = low.some(t => /\b(video|image|media|photo)s? (was |were |has been |have been )?rejected\b/.test(t));
     // Имена ДРУГИХ файлов рядом с медиа: нашего нет, а чужой есть — взяли не то.
     const others = low.filter(t => /\.(mp4|mov|jpg|jpeg|png|gif|webm)\b/.test(t) && !(ours && ours.test(t)));
     return { named: named.slice(0, 5), others: others.slice(0, 5),
-             processing: processing, failed: failed };
+             processing: processing, failed: failed, rejected: rejected };
   }
 """
 """Что сейчас в медиа-блоке объявления: наше имя, чужие имена, обработка, ошибка."""
@@ -8255,6 +8261,8 @@ def _verify_ad_media_is_the_file(page: Page, filename: str) -> tuple[bool, dict]
         state = _ad_media_state(page, filename)
         if state.get("failed"):
             return False, {"state": state, "why": "processing_failed"}
+        if state.get("rejected"):
+            return False, {"state": state, "why": "media_rejected"}
         if not state.get("processing"):
             break
         if time.time() >= deadline:
