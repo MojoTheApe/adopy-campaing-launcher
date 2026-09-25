@@ -1,5 +1,61 @@
 # System history
 
+## The live robot ships: port of the live branch and ACL-1313 — ACL-1284
+
+The robot that has been building the test campaigns since 2026-09-17 ran from a
+separate branch (`local/live-2026-09-19`) on the owner's laptop, not from `main`.
+This port merges that branch, together with the ACL-1313 hardening
+(`codex/acl-1313-six-campaigns`), into a branch cut from `main`, so that buyers get the
+same robot the owner has been watching.
+
+What ships. The live robot's waiting and recovery: a stuck Meta load, a Chrome error
+page or an editor block that never rendered is reloaded and retried instead of
+failing the step; the objective dialog, the device section and the ad text field are
+waited for as long as Meta is visibly loading. The audience: collapsed Locations and
+Languages rows are opened by hover, their arrow, Enter on the row button or a click on
+the value, with the target scrolled into view first and never clicked through a panel
+that covers it; a country row far below the window is scrolled to before its Close is
+pressed; interest groups are re-read until Meta has drawn them. The ad level: the text
+is pasted whole, healed when the editor is blocked or loses its tail, and the
+destination is set before it; the ad-set row is found in the editor tree and Create no
+longer lands in the left menu. Pacing between actions is roughly halved
+(`FB_RPA_SLOW_PACING=1` restores it) and the profile window can live off screen or on a
+chosen monitor. ACL-1313 adds the fixes from the six test campaigns of 2026-09-24/25: a
+blocked ad account stops its campaign, banners are closed by their own X, a minimised
+profile window never hangs the run, a language Meta preselected counts, media Meta
+carried into the next ad is not "no media", and success-path screenshots are opt-in.
+The dashboard's period picker closes on Esc and on an outside click (`9c211c5`).
+
+What does not ship. ACL-1311 (Multilogin Team access, PR #312) is reverted in the port
+until the two-machine token check.
+
+Owner decisions of 2026-09-25 this follows: one PR instead of four slices (PR #299 is
+absorbed); in `meta_dom.py` the live fallbacks are kept and the ACL-1250 / ACL-1225 /
+ACL-1226 guards from `main` are applied on top of them — every fallback looks for its
+target only inside the field its label belongs to, the country summary must match
+exactly, and the age is read inside the Age field; the media library is variant A
+(videos with the yellow triangle are accepted, decision of 2026-09-24) with two
+guarantees kept as tests: a different file is never "our creative", and processing
+that never ends is a failure; tag and release once `main` is green.
+
+Two things had to be adjusted to keep those decisions true on the live pages. The Age
+reader from ACL-1250 returned nothing on the live layout (two "Age" labels, and
+"Minimum age" / "Maximum age" labels between the label and the values); the live
+robot had never read it either — all 162 ages of 2026-09-19..25 were confirmed only by
+a bypass that the guard removes. It now tries each label on its own and treats labels
+that name a part of the same field as part of it (fixture cut from the 2026-09-24
+run). And three gaps in the live media path broke the first guarantee: a similar name
+("2012_story.mp4" for "2012.mp4") counted as ours, a tile selected before the robot
+arrived was never compared by thumbnail, and the outer upload retry turned a refusal
+about the ad's own media into success. The media tests written for the strict #238
+variant were rewritten for variant A; where the live code differs by design, the test
+says so.
+
+Left for the owner: the live library code counts the Account tab's
+`aria-selected=true` as a marked tile and reads a missing grid as "nothing marked"
+(the strict variant filtered the tab and answered "unknown"); "Video rejected" and an
+unreadable Media state are not refusals in variant A.
+
 ## Multilogin is connected in the dashboard, not in the installer — ACL-1303
 
 The wizard no longer mentions Multilogin at all. Setup is six steps instead of seven,
