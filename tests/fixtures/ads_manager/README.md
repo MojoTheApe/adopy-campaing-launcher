@@ -58,3 +58,9 @@ Review these fixtures whenever a live selector fails or a Meta layout changes. U
 | editor_drawer_header | 5b223701b271/00_advantage_plus_before — `data-surface="/am/editor_drawer"` header with the editor's own `aria-label="Close"` | Header only |
 
 "Updated business terms", "Act now — Verification may be required soon", the "Turn off ad blocker" modal and the "Your internet connection was lost" toast were never captured in `rpa_pages`; their markup in the tests is synthetic, modelled on the real AYMT bar / cards and on the screenshots of run 279ead80503a.
+
+## ACL-1313 placements node (live run 2026-09-25)
+
+`placements_node_2026_09_25.html` — 10402d9c2daf/01_placements (CL_ML, step `placements` failed: "Messenger Stories"/"WhatsApp Status" — "строка не найдена"; capture truncated at 3.98 MB, the block is whole). The whole `data-rpa-placements-marker` card: "Placements" node expanded (`Included: 16`), five categories with the expander above the row (`role=button[aria-expanded]`), "In-stream ads for reels" expanded with its two real subitem rows; "Feeds" and "Stories, Status, Reels" collapsed, so their rows are not in the capture. The marker attribute, classes, `data-*`, inline styles, links, images and SVG paths were removed; Meta render ids (`js_*`) replaced with `syn_N`. No account, campaign or creative data in the block. UI language: English. Meta build identifier and browser version: not recorded.
+
+Coverage limit: no Meta JS. `tests/test_rpa_placements_category_recollapse.py` builds the collapsed categories' rows by cloning the real In-stream row and emulates the accordion, the delayed `aria-checked` and the collapse after a save.

@@ -4545,6 +4545,13 @@ _SUBITEMS_OFF = (
     "Ads on Facebook Reels",
 )
 
+#: Сколько раз за категорию её можно раскрыть заново, если Meta свернула её
+#: посреди простановки подпунктов (перерисовка после сохранения правки,
+#: ACL-1313 25.09). Дважды: одна перерисовка на заход — то, что видно в
+#: отказах; бесконечный цикл против страницы, которая сворачивает на каждый
+#: клик, — хуже честного отказа.
+_PLACEMENT_REOPENS = 2
+
 
 def _wheel_to_placements_card(page: Page, max_ticks: int = 40) -> int:
     """Прокрутить колонку редактора колесом до карточки Placements.
@@ -5740,6 +5747,9 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                 report.setdefault("subitems_failed", {})[label] = res
             else:
                 done.add(label)
+                # Встал на повторном заходе (после перераскрытия категории) —
+                # прежний отказ в отчёте больше не правда.
+                report.get("subitems_failed", {}).pop(label, None)
         return done
 
     def _pass(on_page: list[str]) -> None:
@@ -5806,6 +5816,45 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             _sleep_h(0.6)
 
         _settle_visible(here)
+
+        # ACL-1313, 25.09 09:43 (CL_ML Day, run 10402d9c2daf): «Messenger
+        # Stories» и «WhatsApp Status» были в `subitems_seen` этой же
+        # категории, а оба захода и перечитка через 2 с ответили «строка не
+        # найдена». Не разметка: в 921824496d79 (19.09) «Messenger Stories»
+        # тем же JS снялась, а отказала только следующая за ней «WhatsApp
+        # Status». Не bf02e5a: ровно этот отказ был 19.09 (921824496d79),
+        # 21.09 (ca89176131c2, af0204b30dd4) и 22.09
+        # (8587f7668f86 — хвост «Feeds» после трёх снятых галочек), до пакетного
+        # вызова. Общее у всех: отказывает хвост категории, идущий ПОСЛЕ
+        # кликов, — Meta перерисовывает раздел после сохранения правки, и
+        # раскрытая категория сворачивается (строки её подпунктов удаляются
+        # из DOM). Прежний код раскрывал категорию один раз и дальше искал
+        # строки в свёрнутой.
+        #
+        # Поэтому: пока видимые здесь подпункты не встали, проверяем, открыта
+        # ли категория. Раскрыватель жмётся только у свёрнутой (`was:
+        # "false"`); открытую повтор не трогает, и тогда перераскрытие не
+        # поможет — выходим. Не больше `_PLACEMENT_REOPENS` раз на категорию.
+        for _ in range(_PLACEMENT_REOPENS):
+            lost = [x for x in remaining_on + remaining_off if _label_on_page(x, here)]
+            if not lost:
+                break
+            again = _expand_category(name)
+            report.setdefault("reopened", {}).setdefault(name, []).append(
+                {"was": again.get("was"), "lost": lost})
+            if again.get("was") != "false":
+                break
+            _sleep_h(0.8)
+            fresh = [x for x in _subitem_labels() if not _label_on_page(x, here)]
+            here.extend(fresh)
+            report["subitems_seen"].extend(
+                x for x in fresh if not _label_on_page(x, report["subitems_seen"]))
+            for _ in range(2):
+                _pass(here)
+                if not [x for x in remaining_on + remaining_off if _label_on_page(x, here)]:
+                    break
+                _sleep_h(0.6)
+            _settle_visible(here)
 
         # Source 8e9acb2/5b16886: lower placement rows are virtualized until
         # scrolling. Aim at this card, not wherever the operator left the
