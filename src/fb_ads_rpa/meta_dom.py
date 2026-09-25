@@ -13275,69 +13275,124 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
     if inp is None:
         return False
 
+    # 25.09 (SA, 20/20 прогонов): Meta сама ставит язык страны — «Arabic» без
+    # «(All)», — а мы всё равно печатали его в поиск. Уже выбранный язык в
+    # подсказках не показывается, кликать нечего, шаг отказывал при верном
+    # поле. Поэтому сначала читаем выбранные чипы: всё уже стоит — успех без
+    # единого нажатия.
+    wanted = [n.strip() for n in language_names if n.strip()]
+    present = _languages_selected(page, wanted)
+    if wanted and all(any(_language_chip_matches(p, w) for p in present) for w in wanted):
+        _telemetry.record("languages", None, note="already_selected", diag={"selected": present})
+        return True
+
     ok_any = False
     for name in language_names:
+        if any(_language_chip_matches(p, name) for p in present):
+            continue
         try:
             inp.click(timeout=3000)
             page.keyboard.type(name, delay=40)
             _sleep_h(1.2)
-            # Prefer the "(All)" variant over a blind first-match — per live
-            # user guidance (2026-07-25) watching the real suggestion list:
-            # Meta lists per-country language variants (e.g. "Spanish
-            # (Spain)", "Spanish (Mexico)") alongside a broader "Spanish
-            # (All)" entry, and the broad one is what's wanted here, same
-            # reasoning as _pick_country_suggestion's "(Country)" preference.
-            all_re = re.compile(rf"^{re.escape(name)}\s*\(all\)", re.I)
-            picked = False
-            for sel in ("[role=option]:visible", "li[role=option]"):
+            # Сначала «<язык> (All)» (живые подсказки 25.07: у Spanish есть
+            # «Spanish (Spain)», «Spanish (Mexico)» и широкий «Spanish (All)»),
+            # затем подсказка, чей текст ровно «<язык>» (у Arabic варианта
+            # «(All)» нет). Слепого клика по первой подсказке больше нет: он
+            # мог взять региональный вариант, а это другой, узкий таргетинг.
+            picked = _click_language_option(page, name)
+            if picked:
+                ok_any = True
+            else:
+                # Набранный текст не оставляем в поиске: открытая выпадашка
+                # перекрывает соседние поля. Escape нельзя — закрывает редактор.
                 try:
-                    opt = page.locator(sel).filter(has_text=all_re).first
-                    if opt.count() and opt.is_visible():
-                        opt.click(timeout=3000)
-                        _sleep_h(0.5)
-                        ok_any = True
-                        picked = True
-                        break
+                    inp.fill("", timeout=2000)
                 except Exception:
-                    continue
-            if not picked:
-                opt = page.locator("[role=option]:visible, li[role=option]").first
-                if opt.count() and opt.is_visible():
-                    opt.click(timeout=3000)
-                    _sleep_h(0.5)
-                    ok_any = True
+                    pass
             root, inp = _find_lang_input()
             if inp is None:
                 break
         except Exception:
             continue
     if not ok_any:
-        # 17.09 06:56 (S15): «Spanish (All)» уже стоял — Meta подставляет язык
-        # по стране, выбранный язык в подсказках не показывается, кликать
-        # нечего, и шаг отказывал при верном поле. Выбранный язык — успех.
+        # 17.09 06:56 (S15): язык мог появиться за время ввода (Meta подставляет
+        # по стране). Выбранный язык — успех.
         # Без Escape: в редакторе Ads Manager он закрывает сам редактор (17.09
         # 13:19, CR_ait Day — после шага языков на экране список ad set, и все
         # следующие шаги упали). Открытая выпадашка чтению выбранных не мешает.
-        present = _languages_selected(page)
-        wanted = [n.strip().lower() for n in language_names if n.strip()]
-        if wanted and all(any(p.lower().startswith(w) for p in present) for w in wanted):
+        present = _languages_selected(page, wanted)
+        if wanted and all(any(_language_chip_matches(p, w) for p in present) for w in wanted):
             _telemetry.record("languages", None, note="already_selected", diag={"selected": present})
             return True
     return ok_any
 
 
-def _languages_selected(page: Page) -> list[str]:
+def _language_key(text: str) -> str:
+    """Имя языка без регистра, лишних пробелов и хвоста «(All)»/«(…)»."""
+    t = re.sub(r"\s+", " ", (text or "")).strip().lower()
+    return re.sub(r"\s*\([^)]*\)$", "", t).strip()
+
+
+def _language_chip_matches(chip: str, wanted: str) -> bool:
+    """Чип «Arabic», «arabic», «Spanish (All)», «Spanish (Mexico)» — это
+    язык «Arabic»/«Spanish». Сравнение по имени целиком: «Arab» не «Arabic»."""
+    w = _language_key(wanted)
+    return bool(w) and _language_key(chip) == w
+
+
+def _click_language_option(page: Page, name: str) -> bool:
+    """Кликнуть подсказку «<name> (All)», иначе подсказку ровно «<name>».
+
+    Никаких других вариантов: региональный «Arabic (Egypt)» — чужой таргетинг,
+    лучше честный отказ шага, чем тихо суженная аудитория.
+    """
+    base = re.sub(r"\s+", " ", name).strip()
+    patterns = (
+        re.compile(rf"^\s*{re.escape(base)}\s*\((all|todos)\)\s*$", re.I),
+        re.compile(rf"^\s*{re.escape(base)}\s*$", re.I),
+    )
+    for pat in patterns:
+        for sel in ("[role=option]:visible", "li[role=option]"):
+            try:
+                opts = page.locator(sel)
+                for i in range(min(opts.count(), 30)):
+                    opt = opts.nth(i)
+                    try:
+                        text = opt.inner_text(timeout=1000)
+                    except Exception:
+                        continue
+                    # Подсказка может нести вторую строку («Language») —
+                    # сравниваем первую непустую.
+                    first = next((ln for ln in text.splitlines() if ln.strip()), "")
+                    if pat.match(first) and opt.is_visible():
+                        opt.click(timeout=3000)
+                        _sleep_h(0.5)
+                        return True
+            except Exception:
+                continue
+    return False
+
+
+def _languages_selected(page: Page, wanted: list[str] | None = None) -> list[str]:
     """Подписи уже выбранных языков в блоке Languages (например «Spanish (All)»).
 
     Поднимаемся от поля поиска языков, а не от подписи «Languages»: 17.09
     (CL_ml, CR_ait) «Spanish (All)» стоял, а подъём на 6 уровней от подписи до
     него не доставал — шаг отказывал при верном поле.
+
+    25.09 (SA): Meta ставит «Arabic» по стране — без «(All)» и без скобок
+    вообще, и форма «X (…)» такой чип не видела. Поэтому считается и чип,
+    текст которого — один из ``wanted`` (без регистра и лишних пробелов, с
+    необязательным хвостом «(All)»/«(…)»).
     """
+    keys = [_language_key(w) for w in (wanted or []) if _language_key(w)]
     try:
         return page.evaluate(
-            r"""() => {
+            r"""(keys) => {
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-              const looks = (t) => /\((All|Todos)\)$/.test(t) || /^[A-Z][a-z]+ \([^)]+\)$/.test(t);
+              const key = (t) => norm(t).toLowerCase().replace(/\s*\([^)]*\)$/, '').trim();
+              const looks = (t) => /\((All|Todos)\)$/.test(t) || /^[A-Z][a-z]+ \([^)]+\)$/.test(t)
+                || (t.length < 60 && keys.includes(key(t)));
               const inputs = [...document.querySelectorAll('input[placeholder]')]
                 .filter(i => /language|idioma/i.test(i.getAttribute('placeholder') || ''));
               for (const inp of inputs) {
@@ -13346,13 +13401,16 @@ def _languages_selected(page: Page) -> list[str]:
                   box = box.parentElement;
                   const found = [...box.querySelectorAll('*')]
                     .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
+                    // Своё поле ввода и выпадашка подсказок — не чипы.
+                    .filter(e => !e.closest('[role=option],[role=listbox]'))
                     .map(e => norm(e.textContent))
                     .filter(looks);
                   if (found.length) return found;
                 }
               }
               return [];
-            }"""
+            }""",
+            keys,
         ) or []
     except Exception:
         return []

@@ -23,6 +23,14 @@ Cut from `output/rpa_pages/<run>/<step>/page.html` (and one telemetry record) of
 | audience_advantage_on_2026_09_24.html | b30c3b2b6be9/00_advantage_plus_before — Audience and Placements section-header badges, both "Advantage+ on" | Badges only, no audience controls |
 | audience_off_placements_on_2026_09_24.html | 8587f7668f86/02_languages — Audience "Advantage+ off", Placements "Advantage+ on" | Badges only |
 
+## ACL-1313 fragments (live run 2026-09-25)
+
+Same cutting rules as above. UI language: English. Meta build identifier: not recorded. Browser: Multilogin Chrome, version not recorded.
+
+| Fixture | Source / capture state | Coverage limit |
+| --- | --- | --- |
+| languages_preselected_2026_09_25.html | 79d4d978f8c7/02_languages (SA, capture truncated at 3.98 MB but the block is whole) — Audience → Languages expanded, the chip "Arabic" preselected by Meta for the country (no "(All)"), empty "Search languages" combobox. Classes, svg, sprite `<i>` and React props dumped as attributes removed; no names or ids in the block | No suggestion list; no Meta runtime |
+
 Tests intercept network requests. Open only in a disposable offline browser. Never use a real Multilogin profile for this bench.
 
 ## Refresh procedure
