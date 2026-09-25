@@ -3673,6 +3673,9 @@ def run_recorded_campaign_flow(
     # накрыл «Conversion location» на всех трёх аккаунтах разом.
     _dismiss_name_suggestions(page)
     _shot("after_adset_name")
+    # Клик по подписи «Ad set name» может открыть диалог шаблона имени
+    # (8dbafcecb31f) — он накрывает меню Conversion location.
+    _cancel_naming_template_dialog(page)
 
     if not click_conversion_location_dropdown(page):
         _shot("fail_conversion_location_open")
@@ -8016,6 +8019,54 @@ _SITE_LINKS_MODAL_JS = r"""
 """Окно «Creative setup → Extensions / Site links» (Cancel/Save): пометить Cancel."""
 
 
+_NAMING_TEMPLATE_DIALOG_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\s+/g, ' ').trim();
+    const shown = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    for (const d of document.querySelectorAll('[role=dialog]')) {
+      if (!shown(d)) continue;
+      const text = norm(d.textContent);
+      if (!/^(Ad set|Campaign|Ad) name\b/i.test(text)) continue;
+      if (!/naming convention|Choose existing template|Add component/i.test(text)) continue;
+      const cancel = [...d.querySelectorAll('[role=button], button')]
+        .find((b) => shown(b) && /^(Cancel|Cancelar)$/i.test(norm(b.textContent)));
+      if (!cancel) return '';
+      cancel.setAttribute('data-acl-close', 'naming');
+      return text.slice(0, 40);
+    }
+    return '';
+  }
+"""
+"""Диалог шаблона имени («Ad set name — Name your ad sets consistently…»): пометить Cancel."""
+
+
+def _cancel_naming_template_dialog(page: Page) -> bool:
+    """Закрыть диалог шаблона имени кнопкой Cancel. True — закрыли.
+
+    Прогон 8dbafcecb31f (GT Day, 25.09): после имени ad set поток кликает по
+    подписи «Ad set name», чтобы снять фокус с поля, — и на этой раскладке
+    клик открыл диалог «Ad set name → Template (Add component / Choose
+    existing template)». Он остался поверх редактора, и все восемь способов
+    выбрать Website видели `menu_closed`: шаг conversion_website отказал
+    жёстко. Save не жмём никогда (сохранил бы пустой шаблон) — только Cancel.
+    """
+    try:
+        found = page.evaluate(_NAMING_TEMPLATE_DIALOG_JS)
+    except Exception:
+        return False
+    if not found:
+        return False
+    clicked = _click_close_mark(page, '[data-acl-close="naming"]')
+    try:
+        page.evaluate("() => document.querySelectorAll('[data-acl-close]')"
+                      ".forEach(e => e.removeAttribute('data-acl-close'))")
+    except Exception:
+        pass
+    _sleep_h(0.5)
+    _telemetry.record("naming_template_dialog", clicked, note="cancelled", diag={"title": found})
+    return clicked
+
+
 def _cancel_site_links_modal(page: Page) -> bool:
     """Закрыть окно «Extensions / Site links» кнопкой Cancel. True — закрыли.
 
@@ -10761,6 +10812,8 @@ def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
     if how:
         closed.append(f"ad_blocker_modal:{how}")
     closed += _close_banners(page, _BANNER_TITLES + _NETWORK_TOAST_TITLES)
+    if editor and _cancel_naming_template_dialog(page):
+        closed.append("naming_template_dialog")
     if how or trouble:
         reloaded = False
         why = ""
