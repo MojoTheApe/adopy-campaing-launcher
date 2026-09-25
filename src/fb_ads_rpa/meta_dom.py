@@ -11537,19 +11537,26 @@ _AUDIENCE_FIELD_DOM = r"""
     const labels = leaves(document).filter(e => pattern.test(norm(e.textContent)));
     return labels.length === 1 ? labels[0] : null;
   };
-  const fieldBoxes = pattern => {
-    const label = fieldLabel(pattern), boxes = [];
-    if (!label) return boxes;
+  // `own` — подписи частей того же поля: у живого Age (24.09) внутри поля
+  // стоят <label> «Minimum age», «Maximum age», «Include people on WhatsApp
+  // whose age is unknown» — это не чужое поле, границу они не ставят.
+  const boxesFrom = (label, pattern, own) => {
+    const boxes = [];
     for (let box = label.parentElement, depth = 0;
          box && box !== document.body && box !== document.documentElement && depth < 16;
          box = box.parentElement, depth++) {
       if (leaves(box).some(e => e !== label && fieldLabels.test(norm(e.textContent)))) break;
       if ([...box.querySelectorAll('[role=heading],h1,h2,h3,h4,label')]
           .some(e => visible(e) && !e.contains(label) && !label.contains(e)
-                     && !pattern.test(norm(e.textContent)))) break;
+                     && !pattern.test(norm(e.textContent))
+                     && !(own && own.test(norm(e.textContent))))) break;
       boxes.push(box);
     }
     return boxes;
+  };
+  const fieldBoxes = pattern => {
+    const label = fieldLabel(pattern);
+    return label ? boxesFrom(label, pattern) : [];
   };
   const summaryField = (label, value) => {
     let field = null;
@@ -12594,14 +12601,32 @@ _AGE_VALUE_RE = re.compile(r"^\d{2}\+?$")
 
 
 def _age_triggers_read(page: Page) -> list[str]:
-    """Read both ordered boundaries from one Age field, outside option lists."""
+    """Read both ordered boundaries from one Age field, outside option lists.
+
+    Живая раскладка 24.09 (снимок d3e690189a6e/01_advantage_plus_control,
+    фикстура audience_age_open_2026_09_24.html): подписей «Age» две —
+    заголовок строки-кнопки списка и <label> самого поля, — а между подписью
+    и значениями стоят <label> «Minimum age» / «Maximum age». Прежнее чтение
+    (первая подпись, 8 уровней) на живых страницах не прочитало ни разу —
+    162 из 162 возрастов 19–25.09 подтвердил только обход read_back_by_label.
+    Поэтому каждая подпись проверяется отдельно, подписи частей поля границу
+    не ставят, а ответ есть, только если значения нашлись ровно у одной.
+    """
     js = "() => {" + _AUDIENCE_FIELD_DOM + r"""
-      for (const box of fieldBoxes(/^(Age|Edad)$/i)) {
-        const values = leaves(box).map(e => norm(e.textContent))
-          .filter(t => /^(?:1[3-9]|[2-5][0-9]|6[0-5])\+?$/.test(t));
-        if (values.length >= 2) return values.length === 2 ? values : [];
+      const re = /^(Age|Edad)$/i, own = /\b(age|edad)\b/i;
+      const readings = [];
+      for (const label of leaves(document).filter(e => re.test(norm(e.textContent)))) {
+        for (const box of boxesFrom(label, re, own)) {
+          const values = leaves(box).map(e => norm(e.textContent))
+            .filter(t => /^(?:1[3-9]|[2-5][0-9]|6[0-5])\+?$/.test(t));
+          if (values.length >= 2) {
+            if (values.length === 2) readings.push(values);
+            break;
+          }
+        }
       }
-      return [];
+      // Два поля Age с числами — неизвестно, какое наше: ответа нет.
+      return readings.length === 1 ? readings[0] : [];
     }
     """
     readings = []

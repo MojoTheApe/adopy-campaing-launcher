@@ -31,6 +31,14 @@ Same cutting rules as above. UI language: English. Meta build identifier: not re
 | --- | --- | --- |
 | languages_preselected_2026_09_25.html | 79d4d978f8c7/02_languages (SA, capture truncated at 3.98 MB but the block is whole) — Audience → Languages expanded, the chip "Arabic" preselected by Meta for the country (no "(All)"), empty "Search languages" combobox. Classes, svg, sprite `<i>` and React props dumped as attributes removed; no names or ids in the block | No suggestion list; no Meta runtime |
 
+## ACL-1284 port fragments (live run 2026-09-24)
+
+Same cutting rules as above. UI language: English. Meta build identifier: not recorded. Browser: Multilogin Chrome, version not recorded.
+
+| Fixture | Source / capture state | Coverage limit |
+| --- | --- | --- |
+| audience_age_open_2026_09_24.html | d3e690189a6e/01_advantage_plus_control (GT, capture truncated at 3.98 MB but the block is whole) — Audience → Age row expanded: the row header "Age" (`role=button`, `aria-expanded=true`) plus the field's own `<label>` "Age", `<label>` "Minimum age" / "Maximum age" and the two comboboxes showing 18 and 65+. Classes and svg paths removed; no names or ids of the account in the block | No option list; no Meta runtime; no CSS (everything renders visible) |
+
 Tests intercept network requests. Open only in a disposable offline browser. Never use a real Multilogin profile for this bench.
 
 ## Refresh procedure
