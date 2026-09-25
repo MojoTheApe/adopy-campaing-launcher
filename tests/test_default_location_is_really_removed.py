@@ -469,3 +469,21 @@ def test_the_expander_is_taken_after_the_label_not_before_it(page, monkeypatch):
     clicked = _record_clicks(page, monkeypatch)
     assert md._click_row_expander(page, "Locations") is True
     assert clicked["at"] == "after", clicked
+
+
+# ── живая карточка: поиск — <span placeholder>, страна одна (503b0c077db6) ──
+
+_SINGLE = (Path(__file__).parent / "fixtures" / "ads_manager"
+           / "locations_single_country_2026_09_25.html").read_text(encoding="utf-8")
+
+
+def test_the_live_card_with_a_span_search_field_is_read(page):
+    """25.09 20:26 GT Day: осталась одна Guatemala, её Close выключен, а поле
+    поиска — <span placeholder="Search locations">. Поиск карточки только
+    среди <input> не находил её, и шаг отказывал location_rows_not_read."""
+    page.set_content(f"<div style='width:600px'>{_SINGLE}</div>")
+    rows = md._location_rows(page)
+    assert [r["name"] for r in rows] == ["Guatemala"], rows
+    assert rows[0].get("disabled") is True
+    assert md._clear_other_locations(page, "Guatemala") == []
+    assert page.evaluate(md._LOCATION_SEARCH_JS) is True

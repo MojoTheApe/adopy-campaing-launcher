@@ -12526,8 +12526,8 @@ def _wait_location_options(root, timeout_s: float = 6.0) -> bool:
             # на всех кампаниях ждали впустую, а Enter потом добавлял страну);
             # открытый список виден по aria-expanded у поля поиска.
             if root.locator("[role=option]:visible").count() or root.locator(
-                "input[placeholder*='location' i][aria-expanded='true'],"
-                " input[placeholder*='ubicaci' i][aria-expanded='true']"
+                "[placeholder*='location' i][aria-expanded='true'],"
+                " [placeholder*='ubicaci' i][aria-expanded='true']"
             ).count():
                 return True
         except Exception:
@@ -12677,7 +12677,11 @@ def _location_rows(page: Page) -> list[dict]:
             r"""
             () => {
               const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
-              const search = [...document.querySelectorAll('input')].find(i =>
+              // 25.09 20:26 (GT Day, 503b0c077db6): поле поиска Meta — не <input>,
+              // а <span placeholder="Search locations"> (так же и в июле, DQ204
+              // Test26). Поиск только среди input не находил карточку вовсе, и
+              // одна Guatemala читалась как «строки не прочитаны».
+              const search = [...document.querySelectorAll('input, [placeholder]')].find(i =>
                 /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''));
               if (!search) return [];
               let card = search;
@@ -13074,7 +13078,7 @@ def _click_locations_edit(page: Page) -> bool:
     for _ in range(16):
         try:
             opened = bool(page.evaluate(
-                """() => [...document.querySelectorAll('input')].some(i =>
+                """() => [...document.querySelectorAll('input, [placeholder]')].some(i =>
                   /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''))"""))
         except Exception:
             opened = False
@@ -13086,7 +13090,7 @@ def _click_locations_edit(page: Page) -> bool:
         for _ in range(12):
             try:
                 opened = bool(page.evaluate(
-                    """() => [...document.querySelectorAll('input')].some(i =>
+                    """() => [...document.querySelectorAll('input, [placeholder]')].some(i =>
                       /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''))"""))
             except Exception:
                 opened = False
@@ -13252,7 +13256,7 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
 
 
 _LOCATION_SEARCH_JS = r"""
-  () => !![...document.querySelectorAll('input')].find(i =>
+  () => !![...document.querySelectorAll('input, [placeholder]')].find(i =>
     /search locations?|add locations?|buscar ubicaci|agregar ubicaci/i.test(i.getAttribute('placeholder') || ''))
 """
 """Поле поиска локаций на странице — значит, карточка раскрыта."""
