@@ -183,6 +183,21 @@ def test_a_known_file_with_the_wizard_at_text_is_a_success(page, known_file, tmp
 def test_a_known_file_with_the_wizard_at_media_is_still_a_failure(page, known_file, tmp_path):
     page.set_content(_AD_PAGE + _wizard(_MEDIA_STEP))
     assert md.upload_ad_creative_with_retry(page, "Video", "C:/media/clip.mp4") is False
-    assert known_file == []
+    # Мастер закрывают, чтобы спросить само объявление (ACL-1313, 09:55):
+    # медиа там нет — отказ остаётся отказом.
+    assert known_file == [True]
     row = _rows(tmp_path)[-1]
     assert row["ok"] is False and row["note"] == "same_file_already_uploaded_this_run"
+
+
+def test_a_wizard_on_another_step_is_closed_and_the_ad_decides(page, known_file, tmp_path, monkeypatch):
+    """SA Investing 25.09 09:55: мастер открылся на «Creative setup» с галочкой у
+    Media. Шаг Text не показан, но объявление после закрытия мастера медиа
+    показывает — это успех, а не «нет медиа»."""
+    page.set_content(_AD_PAGE + _wizard(_MEDIA_STEP))
+    monkeypatch.setattr(md, "_media_block_filled_now",
+                        lambda p: p.locator("#wizard").count() == 0)
+    assert md.upload_ad_creative_with_retry(page, "Image", "C:/media/pic.jpg") is True
+    assert known_file == [True]
+    row = _rows(tmp_path)[-1]
+    assert row["ok"] is True and row["note"] == "media_already_on_ad_after_wizard_closed"

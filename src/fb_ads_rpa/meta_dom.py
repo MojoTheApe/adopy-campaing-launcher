@@ -7248,6 +7248,20 @@ def upload_ad_creative_with_retry(
                               diag={"file": Path(creative_path).name,
                                     "page_shows_media": _media_block_filled_now(page)})
             return True
+        if _creative_wizard_open(page):
+            # ACL-1313, прогон 25.09 09:55 (SA Investing, 08ca37a0b941, ad2):
+            # мастер открылся на шаге «Creative setup» с галочкой у Media —
+            # порядок шагов у Meta плавает (утром у CL Day было «Creative
+            # setup ✓ → Media ✓ → Text»), и узнавать медиа по одному шагу
+            # ненадёжно. Решает само объявление: закрыть мастер и спросить
+            # блок Media, показывает ли он прикреплённый файл.
+            _close_creative_setup_modal(page)
+            _sleep_h(1.0)
+            if _media_block_filled_now(page):
+                _telemetry.record("ad_creative_upload", True,
+                                  note="media_already_on_ad_after_wizard_closed",
+                                  diag={"file": Path(creative_path).name})
+                return True
         why = ("same_file_already_uploaded_this_run"
                if upload_already_succeeded(creative_path)
                else "same_file_already_failed_this_run")
