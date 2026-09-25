@@ -3913,6 +3913,22 @@ async def publish_jobs_status(job_id: str) -> JSONResponse:
     return JSONResponse(job)
 
 
+@app.get("/publish-jobs/{job_id}/progress")
+async def publish_jobs_progress(job_id: str) -> JSONResponse:
+    """Где каждая кампания задания: итог, последний шаг робота, тишина (ACL-1315).
+
+    Читает хвост телеметрии — ящик билдера ставит по этому ответу точку у
+    имени кампании. 404, как и у статуса: после перезапуска дешборда задания
+    нет, и страница перестаёт показывать его идущим.
+    """
+    from src.web.publish_progress import job_progress
+
+    job = get_job(job_id)
+    if job is None:
+        return JSONResponse({"error": "Job not found."}, status_code=404)
+    return JSONResponse(job_progress(job))
+
+
 @app.post("/build-upload")
 async def build_upload(request: Request) -> Response:
     """Build Upload FB xlsx from campaign builder slots for one account."""

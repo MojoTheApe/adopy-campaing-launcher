@@ -72,6 +72,9 @@
       --bad-soft: #fef2f2;
       --warn: #d97706;
       --warn-soft: #fffbeb;
+      /* Оранжевый точки сборки (ACL-1315): --warn в тёмной теме жёлтый, а
+         владелец просил именно оранжевый. */
+      --build-orange: #ea580c;
       --space-xs: 4px;
       --space-sm: 8px;
       --space-md: 12px;
@@ -152,6 +155,7 @@
       --bad-soft: #2a1618;
       --warn: #e5b544;
       --warn-soft: #2a2113;
+      --build-orange: #fb923c;
       --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
       --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.55);
       color-scheme: dark;
@@ -2723,6 +2727,37 @@
        сдержанным: пока проверка идёт, сказать нечего. */
     .cbd-ind-wait { color: var(--muted); border-radius: 50%; border-style: dashed; }
 
+    /* Точка сборки (ACL-1315): пока кампания в задании публикации, вместо
+       значка готовности у имени стоит одна точка. Серая дышит — робот
+       собирает; оранжевая дышит — встала или ждёт человека; оранжевая
+       ровная — собрана с ошибками; зелёная — черновик готов. Пустое серое
+       кольцо — задание потеряно после перезапуска дешборда: не дышит,
+       потому что про него больше ничего не известно. */
+    .cbd-ind[class*="cbd-ind-build-"] { border: none; border-radius: 50%; transform: none; }
+    .cbd-ind[class*="cbd-ind-build-"] > span {
+      display: block; width: 0.55rem; height: 0.55rem; border-radius: 50%;
+      background: currentColor; transform: none;
+    }
+    .cbd-ind-build-run { color: var(--muted); }
+    .cbd-ind-build-attn, .cbd-ind-build-bad { color: var(--build-orange); }
+    .cbd-ind-build-ok { color: var(--good); }
+    .cbd-ind-build-lost { color: var(--muted); }
+    .cbd-ind-build-lost > span { background: transparent !important; border: 1.5px solid currentColor; }
+    .cbd-ind-build-run > span, .cbd-ind-build-attn > span {
+      animation: cbd-build-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes cbd-build-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.3; transform: scale(0.65); }
+    }
+    /* Без движения идущее отличается от законченного кольцом вокруг точки. */
+    @media (prefers-reduced-motion: reduce) {
+      .cbd-ind-build-run > span, .cbd-ind-build-attn > span {
+        animation: none;
+        box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px currentColor;
+      }
+    }
+
     .cbd-add {
       display: block; width: 100%; box-sizing: border-box;
       margin-top: var(--space-xs);
@@ -4783,6 +4818,10 @@ window.cbTree = (function () {
   // Readiness comes from the latest server check for this form snapshot.
 
   function readiness(c) {
+    /* Кампания в задании публикации показывает не готовность формы, а то,
+       как идёт её сборка (ACL-1315). Вне задания — прежний значок. */
+    var built = window.cbBuild && c.slot ? window.cbBuild.dot(c.slot, c.name) : null;
+    if (built) return built;
     var r = c.slot && c.slot._drawerResult;
     if (!r) return {state: 'wait', sign: '·', why: 'Checking campaign'};
     if (r.state === 'ok' && c.twin) return {state: 'warn', sign: '△', why: 'Same name: Publish all combines these cards into one campaign.'};
@@ -5311,6 +5350,186 @@ window.cbTree = (function () {
     open: openCampaign,
     close: closeCampaign,
     borrowed: function () { return BORROWED; }
+  };
+})();
+</script>
+
+<script>
+/* ── Точка сборки у имени кампании (ACL-1315) ────────────────────────────
+   Пока кампании собираются, единственный отчёт был списком внизу ящика, и
+   после перезапуска дешборда он врал «идёт». Теперь каждая кампания,
+   отправленная в задание, сама показывает, что с ней: точка вместо значка
+   готовности (решает `cbTree.readiness`, рисует `.cbd-ind-build-*`).
+
+   Источник — `GET /publish-jobs/{id}/progress`: итог кампании, последний
+   шаг робота из телеметрии и сколько секунд задание молчит. Цвет решается
+   здесь, по фактам сервера; часы — серверные (`idle_s`), расхождение часов
+   браузера ничего не сдвигает.
+
+   Задания помнятся в localStorage (номер, аккаунт, имена кампаний): после
+   F5 точки возвращаются и доигрывают до конца, а задание, которого сервер
+   больше не знает (404 после перезапуска), становится пустым кольцом без
+   пульса — «неизвестно», а не «идёт». */
+window.cbBuild = (function () {
+  var KEY = 'acl.builder.jobs';
+  var KEEP_MS = 12 * 3600 * 1000;   // вчерашние задания не держим
+  var POLL_MS = 3000;
+  var ACTIVE = { pending: 1, queued: 1, running: 1, cancelling: 1 };
+  var jobs = Object.create(null);   // id → {account, names, at, lost, p}
+
+  function isActive(p) { return !!(p && ACTIVE[p.status]); }
+
+  function save() {
+    var out = {};
+    Object.keys(jobs).forEach(function (id) {
+      var j = jobs[id];
+      out[id] = { account: j.account, names: j.names, at: j.at, lost: !!j.lost };
+    });
+    try { localStorage.setItem(KEY, JSON.stringify(out)); } catch (e) { /* не помним — не страшно */ }
+  }
+
+  function repaint() {
+    if (typeof cbDrawerRefreshIndicators !== 'function') return;
+    try { cbDrawerRefreshIndicators(); } catch (e) { /* точка подождёт следующего опроса */ }
+  }
+
+  function poll(id) {
+    var j = jobs[id];
+    if (!j || j.lost) return;
+    clearTimeout(j.timer);
+    // Ответ старого запроса не перекрывает свежий и не заводит второй цикл.
+    var seq = j.seq = (j.seq || 0) + 1;
+    fetch('/publish-jobs/' + encodeURIComponent(id) + '/progress')
+      .then(function (r) {
+        if (r.status === 404) return { lost: true };
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (p) {
+        if (jobs[id] !== j || j.seq !== seq) return;
+        if (!p || typeof p !== 'object') throw new Error('empty answer');
+        if (p.lost) { j.lost = true; j.p = null; save(); repaint(); return; }
+        j.p = p;
+        if (Array.isArray(p.campaigns) && p.campaigns.length) {
+          j.names = p.campaigns.map(function (c) { return String(c.name || ''); });
+        }
+        save();
+        repaint();
+        if (isActive(p)) j.timer = setTimeout(function () { poll(id); }, POLL_MS);
+      })
+      .catch(function () {
+        // Сервер перезапускается — спросим позже; 404 после старта решит.
+        if (jobs[id] === j && j.seq === seq) j.timer = setTimeout(function () { poll(id); }, POLL_MS * 2);
+      });
+  }
+
+  /* Задание отправлено: следить за ним. `names` — кампании, ушедшие в
+     задание по мнению страницы; первый ответ сервера их уточняет. */
+  function watch(id, account, names) {
+    if (!id) return;
+    jobs[id] = { account: String(account || ''), names: (names || []).map(String), at: Date.now(), lost: false, p: null };
+    save();
+    repaint();
+    poll(id);
+  }
+
+  function accountOf(slot) {
+    var form = slot && slot.closest ? slot.closest('form') : null;
+    var field = form ? form.querySelector('[name="account_label"]') : null;
+    return field ? String(field.value || '').trim() : '';
+  }
+
+  function minutes(s) {
+    return Math.max(1, Math.round((s || 0) / 60)) + ' min';
+  }
+
+  function stepText(step) { return String(step || '').replace(/_/g, ' '); }
+
+  /* Состояние точки для одной кампании задания. */
+  function classify(j, name) {
+    if (j.lost) {
+      return { state: 'build-lost', sign: '',
+               why: 'Build status unknown: the dashboard restarted during the run. Check this draft in Ads Manager.' };
+    }
+    var p = j.p;
+    if (!p) return { state: 'build-run', sign: '', why: 'Sent to the robot — starting' };
+    var c = null;
+    (p.campaigns || []).forEach(function (x) { if (x && x.name === name) c = x; });
+    var active = isActive(p);
+    if (!c) return active ? { state: 'build-run', sign: '', why: 'Waiting for its turn' } : null;
+
+    var r = c.result;
+    if (active && c.blocker) return { state: 'build-attn', sign: '', why: String(c.blocker) };
+    if (r) {
+      if (r.publishable === true) {
+        return { state: 'build-ok', sign: '', why: 'Draft ready in Ads Manager — Publish was not clicked' };
+      }
+      var fails = r.blocking_failures || [];
+      return { state: 'build-bad', sign: '',
+               why: fails.length ? 'Do not publish: ' + fails.join(', ') : (r.error || 'Finished with errors') };
+    }
+    if (!active) {
+      return { state: 'build-bad', sign: '',
+               why: p.status === 'cancelled' ? 'Stopped before this campaign was built'
+                 : ((p.errors || [])[0] || 'Not built') };
+    }
+    if (p.status === 'running' && c.name === p.current) {
+      var limit = p.stall_after_s || 180;
+      if (typeof p.idle_s === 'number' && p.idle_s >= limit) {
+        return { state: 'build-attn', sign: '',
+                 why: 'No new step for ' + minutes(p.idle_s)
+                   + (c.step ? ' (last: ' + stepText(c.step) + ')' : '')
+                   + ' — check the Multilogin window' };
+      }
+      return { state: 'build-run', sign: '',
+               why: c.step ? 'Building: ' + stepText(c.step) + (c.ok === false ? ' — failed, retrying' : '')
+                           : 'Building: starting' };
+    }
+    if (p.status === 'cancelling') return { state: 'build-run', sign: '', why: 'Stopping…' };
+    if (p.status === 'running') return { state: 'build-run', sign: '', why: 'Waiting for its turn' };
+    return { state: 'build-run', sign: '', why: 'Waiting for the Multilogin profile' };
+  }
+
+  /* Точка для строки кампании или null — тогда строка показывает прежний
+     значок. Одноимённые кампании разных аккаунтов не путаются: ключ —
+     аккаунт и имя; из нескольких заданий берётся последнее. */
+  function dot(slot, name) {
+    if (!name) return null;
+    var account = accountOf(slot);
+    var best = null;
+    Object.keys(jobs).forEach(function (id) {
+      var j = jobs[id];
+      if (j.account !== account || j.names.indexOf(name) === -1) return;
+      if (!best || j.at > best.at) best = j;
+    });
+    return best ? classify(best, name) : null;
+  }
+
+  (function restore() {
+    var raw = {};
+    try { raw = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { raw = {}; }
+    var now = Date.now();
+    Object.keys(raw).forEach(function (id) {
+      var s = raw[id];
+      if (!s || typeof s !== 'object' || !(now - (s.at || 0) < KEEP_MS)) return;
+      jobs[id] = { account: String(s.account || ''), names: Array.isArray(s.names) ? s.names.map(String) : [],
+                   at: s.at, lost: !!s.lost, p: null };
+    });
+    save();
+    function start() {
+      Object.keys(jobs).forEach(function (id) { if (!jobs[id].lost) poll(id); });
+      repaint();
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
+  })();
+
+  return {
+    watch: watch,
+    dot: dot,
+    classify: classify,
+    refresh: function () { Object.keys(jobs).forEach(poll); },   // не ждать очередного опроса
+    jobs: function () { return jobs; }
   };
 })();
 </script>
@@ -10434,6 +10653,16 @@ window.cbPublishAll = function (onProgress) {
  *
  * Первый живой запуск «Publish all» на параллельном сервере (14:01 16.09)
  * дал одно задание — сервер ждал второго, а страница второго не слала. */
+/* Имена кампаний, которые уходят на сервер, — ровно из отправляемых полей,
+ * а не из карточек: пропущенная карточка в них не попадает (ACL-1315). */
+function cbSentCampaignNames(fd) {
+  var out = [];
+  fd.forEach(function (value, key) {
+    if (/^camp_\d+_name$/.test(key) && value && out.indexOf(String(value)) === -1) out.push(String(value));
+  });
+  return out;
+}
+
 function _runPublishQueue(forms, onProgress, onlySlot) {
   // Вызывающие уже сказали человеку, почему занято (cbQueueBusy).
   if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
@@ -10509,6 +10738,9 @@ function _runPublishQueue(forms, onProgress, onlySlot) {
       fd.set('hand_off', '1');
       fd.set('user_confirmed', '1');
 
+      // Кампании, ушедшие в задание: у их строк в ящике встанет точка сборки.
+      var sentNames = cbSentCampaignNames(fd);
+
       states[i] = 'submitted';
       fetch('/publish-jobs', { method: 'POST', body: fd })
         .then(function (r) { return r.json(); })
@@ -10516,6 +10748,7 @@ function _runPublishQueue(forms, onProgress, onlySlot) {
           if (window.CB_QUEUE !== batch || states[i] === "settled") return;
           if (data.error) { settle(i, { account: label, state: 'bad', why: data.error, skipped: skipped }); return; }
           if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');
+          if (window.cbBuild) window.cbBuild.watch(data.job_id, label, sentNames);
           cbPollJob(data.job_id, statusPanel, form.querySelector('.cb-publish-btn'), function (job) {
             if (window.CB_QUEUE !== batch || states[i] === "settled") return;
             if (job.status === 'unknown' || job.status === 'cancelled') {
@@ -10969,6 +11202,10 @@ function _doCbPublish(form) {
         statusPanel.innerHTML = '<span class="cb-status-fatal">Error: ' + aclEscHtml(data.error) + '</span>';
         if (publishBtn) publishBtn.disabled = false;
         return;
+      }
+      if (window.cbBuild && data.job_id) {
+        window.cbBuild.watch(data.job_id,
+          ((form.querySelector('[name="account_label"]') || {}).value || '').trim(), cbSentCampaignNames(fd));
       }
       cbPollJob(data.job_id, statusPanel, publishBtn);
     })

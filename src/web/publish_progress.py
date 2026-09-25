@@ -1,0 +1,215 @@
+"""Где сейчас каждая кампания задания публикации (ACL-1315).
+
+Точка у имени кампании в ящике билдера спрашивает сервер: что с этой
+кампанией прямо сейчас. Ответ складывается из двух источников:
+
+* само задание (`publish_jobs`): статус и итог по кампании, когда он есть;
+* телеметрия робота (`output/rpa_telemetry.jsonl`): последний шаг кампании
+  и время, когда он записан, — по нему видно, что сборка встала.
+
+Файл телеметрии общий и растёт без конца, поэтому читается только его хвост
+(`TAIL_BYTES`), и только строки этого задания: с именем его кампании и не
+старше самого задания. Разбора сверх `json.loads` строки здесь нет — опрос
+идёт раз в несколько секунд, пока сборка работает.
+
+Решение, какого цвета точка, принимает страница: сервер отдаёт факты
+(итог, последний шаг, сколько секунд тихо, что роботу не по силам).
+"""
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+#: Сколько секунд без нового шага у идущей кампании — уже «встала».
+#: Владелец назвал три минуты; самый долгий законный шаг — ожидание окна
+#: цели у Meta — укладывается в них.
+STALL_AFTER_S = 180
+
+#: Хвост файла телеметрии, который читается за один опрос. Одна кампания
+#: пишет сотню-другую строк по ~200 байт; полмегабайта покрывают несколько
+#: кампаний параллельных заданий с запасом.
+TAIL_BYTES = 512 * 1024
+
+_ACTIVE = frozenset({"pending", "queued", "running", "cancelling"})
+
+#: Остановки, которые робот сам не снимет: нужен человек в Meta.
+_BLOCKERS = {
+    "account_blocked": "Account restricted by Meta — complete the verification in Ads Manager",
+    "lead_terms_not_accepted": "Lead Generation terms are not accepted on the Page — accept them in Meta",
+}
+
+
+def _telemetry_path() -> Path:
+    from src.fb_ads_rpa.run_telemetry import TELEMETRY_PATH
+
+    return TELEMETRY_PATH
+
+
+def _parse_ts(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        ts = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts
+
+
+def tail_rows(path: Path, max_bytes: int = TAIL_BYTES) -> list[dict[str, Any]]:
+    """Последние строки JSONL не дальше `max_bytes` от конца файла.
+
+    Первая строка хвоста почти всегда обрезана — её выбрасываем. Битые
+    строки (запись оборвалась на полуслове) пропускаются молча: телеметрия
+    не должна ронять опрос.
+    """
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            start = max(0, size - max_bytes)
+            f.seek(start)
+            chunk = f.read()
+    except OSError:
+        return []
+    lines = chunk.split(b"\n")
+    if start > 0 and lines:
+        lines = lines[1:]
+    rows: list[dict[str, Any]] = []
+    for raw in lines:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            row = json.loads(raw.decode("utf-8", errors="replace"))
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+def _base_step(step: Any) -> str:
+    return str(step or "").split(":", 1)[0].strip()
+
+
+def _result_view(result: dict[str, Any]) -> dict[str, Any]:
+    from src.web.publish_jobs import _result_is_publishable
+
+    return {
+        "success": result.get("success") is True,
+        "publishable": _result_is_publishable(result),
+        "error": str(result.get("error") or ""),
+        "blocking_failures": [str(x) for x in (result.get("blocking_failures") or [])],
+    }
+
+
+def _blocker_from_result(result: dict[str, Any]) -> str:
+    for failure in result.get("blocking_failures") or []:
+        why = _BLOCKERS.get(_base_step(failure))
+        if why:
+            return why
+    for step in result.get("steps_completed") or []:
+        text = str(step)
+        if text.startswith("recorded_flow_retry_exhausted:"):
+            failed = text.split(":")[1]
+            return f"Gave up after all retries at step '{failed}' — needs a person"
+    return ""
+
+
+def job_progress(
+    job: dict[str, Any],
+    *,
+    path: Path | None = None,
+    now: datetime | None = None,
+    max_bytes: int = TAIL_BYTES,
+) -> dict[str, Any]:
+    """Факты по каждой кампании задания для точки в ящике билдера."""
+    from src.fb_ads_rpa.retry_policy import CAMPAIGN_RETRY_STEPS, MAX_CAMPAIGN_ATTEMPTS
+
+    now = now or datetime.now(timezone.utc)
+    status = str(job.get("status") or "")
+    results = list(job.get("results") or [])
+
+    names: list[str] = []
+    for name in list(job.get("campaign_names") or []) + [r.get("campaign_name") for r in results]:
+        name = str(name or "")
+        if name and name not in names:
+            names.append(name)
+    by_result: dict[str, dict[str, Any]] = {}
+    for r in results:
+        by_result[str(r.get("campaign_name") or "")] = r
+
+    # Строки старше задания принадлежат прошлым прогонам тех же кампаний.
+    since = _parse_ts(job.get("created_at"))
+    wanted = set(names)
+    last: dict[str, dict[str, Any]] = {}
+    fails: dict[str, dict[str, int]] = {}
+    blocker: dict[str, str] = {}
+    latest: datetime | None = None
+    for row in tail_rows(path or _telemetry_path(), max_bytes) if wanted else []:
+        name = str(row.get("campaign") or "")
+        if name not in wanted:
+            continue
+        ts = _parse_ts(row.get("ts"))
+        if ts is None or (since is not None and ts < since):
+            continue
+        last[name] = row
+        if latest is None or ts > latest:
+            latest = ts
+        if row.get("ok") is False:
+            step = _base_step(row.get("step"))
+            if step in _BLOCKERS:
+                blocker[name] = _BLOCKERS[step]
+            elif step in CAMPAIGN_RETRY_STEPS:
+                n = fails.setdefault(name, {}).get(step, 0) + 1
+                fails[name][step] = n
+                if n >= MAX_CAMPAIGN_ATTEMPTS and name not in blocker:
+                    blocker[name] = f"Gave up after {n} attempts at step '{step}' — needs a person"
+
+    campaigns: list[dict[str, Any]] = []
+    current = ""
+    for name in names:
+        row = last.get(name) or {}
+        result = by_result.get(name)
+        why = blocker.get(name, "")
+        if result is not None and not why:
+            why = _blocker_from_result(result)
+        if result is None and not current and status == "running":
+            current = name   # кампании собираются по очереди, в порядке имён
+        ts = _parse_ts(row.get("ts"))
+        campaigns.append({
+            "name": name,
+            "result": _result_view(result) if result is not None else None,
+            "step": str(row.get("step") or ""),
+            "ok": row.get("ok"),
+            "note": str(row.get("note") or "")[:200],
+            "ts": row.get("ts") or "",
+            "idle_s": round((now - ts).total_seconds(), 1) if ts else None,
+            "blocker": why,
+        })
+
+    # Тишина задания: от последнего шага любой его кампании, а до первого
+    # шага — от начала работы (ожидание профиля в очереди не считается:
+    # там статус `queued`).
+    idle_s = None
+    if status == "running":
+        started = _parse_ts(job.get("started_at"))
+        mark = max([t for t in (latest, started) if t is not None], default=None)
+        if mark is not None:
+            idle_s = round((now - mark).total_seconds(), 1)
+
+    return {
+        "job_id": job.get("job_id") or "",
+        "account_label": job.get("account_label") or "",
+        "status": status,
+        "active": status in _ACTIVE,
+        "errors": [str(e) for e in (job.get("errors") or [])],
+        "stall_after_s": STALL_AFTER_S,
+        "idle_s": idle_s,
+        "current": current,
+        "campaigns": campaigns,
+    }
