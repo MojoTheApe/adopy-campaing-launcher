@@ -69,6 +69,7 @@ def flow(monkeypatch, tmp_path):
     page.goto.side_effect = goto
 
     monkeypatch.setattr(br, "ensure_editor_window", lambda p, section: True)
+    monkeypatch.setattr(dom, "_clear_blocking_overlays", MagicMock(return_value=[]))
     for name in ("_recover_from_browser_error", "_dismiss_floating_banners", "_sleep_h",
                  "wait_editor_saved", "_ensure_campaign_budget", "scroll_to_section",
                  "click_conversion_location_dropdown", "pick_website_conversion_option",
