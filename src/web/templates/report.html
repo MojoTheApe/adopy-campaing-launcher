@@ -10399,7 +10399,7 @@ function cbFormDataSkipping(form, skip, snapshot) {
 }
 
 window.cbPublishAll = function (onProgress) {
-  if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
+  if (cbQueueBusy()) return;
   var forms = [];
   document.querySelectorAll('form.open-account-form').forEach(function (form) {
     if (form.querySelectorAll('.cb-slot').length) forms.push(form);
@@ -10435,6 +10435,7 @@ window.cbPublishAll = function (onProgress) {
  * Первый живой запуск «Publish all» на параллельном сервере (14:01 16.09)
  * дал одно задание — сервер ждал второго, а страница второго не слала. */
 function _runPublishQueue(forms, onProgress, onlySlot) {
+  // Вызывающие уже сказали человеку, почему занято (cbQueueBusy).
   if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
   var batch = window.CB_QUEUE = { active:true, uncertain:false, progress:null };
   var notify = onProgress;
@@ -10868,8 +10869,22 @@ window.cbHighlightField = function(field) {
   });
 };
 
+/* ACL-1313, 25.09: пока в этой вкладке шла публикация одного аккаунта,
+ * Publish у другого молча ничего не делал — владелец решил, что кнопка
+ * сломалась. Очередь на вкладку одна (прогресс и отчёт живут в ней), а
+ * сервер разные профили ведёт параллельно — поэтому говорим, как быть. */
+function cbQueueBusy() {
+  var q = window.CB_QUEUE;
+  if (!q || !(q.active || q.uncertain)) return false;
+  var who = (q.progress && q.progress.account) ? ' (' + q.progress.account + ')' : '';
+  alert(q.uncertain
+    ? 'The status of the previous run in this tab is unknown (the dashboard may have restarted). Reload the page (F5) and press Publish again.'
+    : 'A run is already in progress in this tab' + who + '. To publish another account at the same time, open the dashboard in a second browser tab and press Publish there.');
+  return true;
+}
+
 window.cbPublish = function(form) {
-  if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
+  if (cbQueueBusy()) return;
   var onlySlot = form.classList.contains('cb-in-drawer') ? Array.from(form.querySelectorAll('.cb-slot')).find(function(s) { return !s.hidden; }) : null;
   var accLabel  = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
   var country   = ((form.querySelector('[name="country"]') || {}).value || '?').trim();
