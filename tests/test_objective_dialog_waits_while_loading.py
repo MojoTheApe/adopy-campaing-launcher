@@ -10,8 +10,9 @@ ACL-1313, прогон 24.09 (три задания параллельно): п�
 
 Проверяется на подставной странице с поддельными часами:
 `_wait_objective_dialog` ждёт, пока видна загрузка, и сдаётся по потолку;
-без загрузки — одно ожидание и отказ; `retry_policy.backoff_s` даёт 90 с на
-попытку для медленных шагов; `AdsManagerFlow` спит именно столько.
+без загрузки — не дольше `OBJECTIVE_IDLE_S` подряд (ACL-1313, 25.09: было
+75 с); `retry_policy.backoff_s` даёт 25 с на попытку для медленных шагов
+(было 90); `AdsManagerFlow` спит именно столько.
 """
 from __future__ import annotations
 
@@ -72,6 +73,9 @@ class _Page:
 @pytest.fixture
 def env(monkeypatch):
     clock = _Clock()
+    rows: list[dict] = []
+    monkeypatch.setattr(md._telemetry, "record",
+                        lambda step, ok=None, **kw: rows.append({"step": step, "ok": ok, **kw}))
     monkeypatch.setattr(md, "time", SimpleNamespace(time=clock.time, sleep=clock.sleep))
     state = {"loading_until": None, "calls": 0}
 
@@ -80,7 +84,7 @@ def env(monkeypatch):
         return state["loading_until"] is not None and clock.now < state["loading_until"]
 
     monkeypatch.setattr(md, "_loading_visible", loading)
-    return SimpleNamespace(clock=clock, state=state, start=clock.now)
+    return SimpleNamespace(clock=clock, state=state, start=clock.now, rows=rows)
 
 
 def test_the_leads_radio_arriving_while_loading_is_waited_for(env):
@@ -90,17 +94,34 @@ def test_the_leads_radio_arriving_while_loading_is_waited_for(env):
     page = _Page(radio)
     assert md._wait_objective_dialog(page) is True
     assert page.roles[0] == ("radio", "Leads")
-    assert radio.waits[0] == 75000, "первое ожидание — прежние 75 с"
-    assert len(radio.waits) > 1, "после 75 с ожидание продолжилось"
     assert env.clock.now - env.start == pytest.approx(120, abs=0.01)
+    assert env.rows[-1]["step"] == "objective_wait" and env.rows[-1]["note"] == "radio"
 
 
-def test_without_a_loading_modal_it_gives_up_after_one_wait(env):
-    """Модалки нет — ждать нечего: один отказ и дальше решает вызывающий."""
+def test_a_short_gap_after_loading_is_waited_for(env):
+    """Загрузка кончилась, окно отрисовывается через 8 с пустого экрана."""
+    env.state["loading_until"] = env.start + 40
+    radio = _Radio(env.clock, appears_at=env.start + 48)
+    assert md._wait_objective_dialog(_Page(radio)) is True
+
+
+def test_without_a_loading_modal_it_gives_up_after_the_idle_bound(env):
+    """Ни загрузки, ни окна — ждать нечего: отказ через OBJECTIVE_IDLE_S, не 75 с."""
     radio = _Radio(env.clock, appears_at=None)
     assert md._wait_objective_dialog(_Page(radio)) is False
-    assert radio.waits == [75000]
-    assert env.clock.now - env.start == pytest.approx(75, abs=0.01)
+    spent = env.clock.now - env.start
+    assert md.OBJECTIVE_IDLE_S <= spent <= md.OBJECTIVE_IDLE_S + md.OBJECTIVE_POLL_S + 0.01, spent
+    assert spent < 30
+    assert env.rows[-1]["note"] == "idle"
+
+
+def test_the_idle_bound_counts_from_the_last_loading(env):
+    """Загрузка была 60 с: пустой экран после неё отсчитывается заново."""
+    env.state["loading_until"] = env.start + 60
+    radio = _Radio(env.clock, appears_at=None)
+    assert md._wait_objective_dialog(_Page(radio), first_s=200) is False
+    spent = env.clock.now - env.start
+    assert 60 - md.OBJECTIVE_POLL_S + md.OBJECTIVE_IDLE_S <= spent <= 60 + md.OBJECTIVE_IDLE_S + md.OBJECTIVE_POLL_S + 0.01
 
 
 def test_an_endless_loading_modal_stops_at_the_ceiling(env):
@@ -121,9 +142,10 @@ def test_a_loading_modal_that_clears_without_the_dialog_ends_the_wait(env):
 
 
 def test_the_quick_path_is_unchanged(env):
+    """Медиана перехода — 19 с; даже без видимой загрузки он укладывается."""
     radio = _Radio(env.clock, appears_at=env.start + 19)
     assert md._wait_objective_dialog(_Page(radio)) is True
-    assert radio.waits == [75000]
+    assert env.clock.now - env.start == pytest.approx(19, abs=0.01)
 
 
 def test_the_recorded_flow_waits_through_the_helper_before_reloading():
@@ -142,13 +164,13 @@ def test_the_recorded_flow_waits_through_the_helper_before_reloading():
 # ── пауза перед новой попыткой кампании ───────────────────────────────────
 
 @pytest.mark.parametrize("step,attempt,expected", [
-    ("create", 1, 90.0),
-    ("create", 2, 180.0),
-    ("objective_leads", 1, 90.0),
-    ("objective_leads", 2, 180.0),
-    ("objective_leads:detail", 1, 90.0),
-    (" create :timeout", 1, 90.0),
-    ("create", 0, 90.0),
+    ("create", 1, 25.0),
+    ("create", 2, 50.0),
+    ("objective_leads", 1, 25.0),
+    ("objective_leads", 2, 50.0),
+    ("objective_leads:detail", 1, 25.0),
+    (" create :timeout", 1, 25.0),
+    ("create", 0, 25.0),
     ("campaign_name", 1, 1.5),
     ("campaign_name", 2, 1.5),
     ("objective_continue", 1, 1.5),
@@ -190,9 +212,9 @@ def _publish_with_failures(monkeypatch, fails: list[str]):
     return result, sleeps
 
 
-def test_the_campaign_retry_after_a_slow_meta_step_waits_minutes(monkeypatch):
+def test_the_campaign_retry_after_a_slow_meta_step_waits_longer(monkeypatch):
     result, sleeps = _publish_with_failures(monkeypatch, ["objective_leads", "create"])
-    assert sleeps == [90.0, 180.0]
+    assert sleeps == [25.0, 50.0]
     assert result.success is True
     assert "recorded_flow_retry_scheduled:objective_leads:attempt2" in result.steps_completed
 

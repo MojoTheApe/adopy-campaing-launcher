@@ -27,7 +27,9 @@ import logging
 import os
 import re
 import sys
+import time
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
@@ -414,6 +416,33 @@ def record(
             )
         except Exception:
             pass
+
+
+@contextmanager
+def phase(name: str, *, campaign: str = "", diag: dict[str, Any] | None = None):
+    """Строка `job_phase` с длительностью этапа задания (ACL-1313).
+
+    От нажатия в дешборде до подключения к профилю уходило ~60 с, и
+    сказать, на что, было нечем: телеметрия начиналась с первого шага в Ads
+    Manager. Этапы начала задания (сборка черновиков, библиотека, ожидание
+    профиля, подключение, первый переход) пишут себя сами. Вызывающий может
+    дополнить `diag` по ходу — он отдаётся в `with … as info`.
+
+    Исключение этапа не глотается; строка тогда с `ok=None` и типом ошибки —
+    сам отказ сообщает тот, кто его поймает.
+    """
+    started = time.monotonic()
+    info: dict[str, Any] = dict(diag or {})
+    ok: bool | None = None
+    try:
+        yield info
+        ok = True
+    except BaseException as exc:
+        info["error"] = type(exc).__name__
+        raise
+    finally:
+        record("job_phase", ok, campaign=campaign, note=name,
+               duration_s=time.monotonic() - started, diag=info or None)
 
 
 def _why_of(note: str, diag: dict[str, Any] | None) -> str:

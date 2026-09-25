@@ -713,27 +713,47 @@ def _website_only_label(text: str) -> bool:
     return n in ("website", "sitio web")
 
 
-def scroll_to_section(page: Page, *labels: str) -> bool:
-    """Scroll main panel so a section heading/label is visible."""
-    for label in labels:
-        if not label.strip():
-            continue
-        pattern = re.compile(re.escape(label), re.I)
-        for root in _roots(page):
-            for getter in (
-                lambda: root.get_by_role("heading", name=pattern).first,
-                lambda: root.get_by_text(pattern).first,
-                lambda: root.get_by_label(pattern).first,
-            ):
-                try:
-                    loc = getter()
-                    loc.wait_for(state="visible", timeout=5000)
-                    loc.scroll_into_view_if_needed(timeout=5000)
-                    _sleep_h(0.3)
-                    return True
-                except Exception:
-                    pass
-    return False
+#: Сколько всего ждать появления раздела (все подписи, все фреймы вместе).
+#: Прежний вариант ждал 5 с КАЖДЫЙ способ поиска по очереди: `role=heading`
+#: с такой подписью у Meta нет, и каждая прокрутка к «Conversion location» /
+#: «Audience» / «Conversion event» платила 5 с за заголовок, которого нет,
+#: прежде чем найти текст (ACL-1313: 10–15 с на кампанию). Найденное
+#: возвращается сразу; 10 с — не меньше, чем прежний путь давал тексту
+#: (5 с на заголовок + 5 с на текст).
+SCROLL_SECTION_BUDGET_S = 10.0
+
+
+def scroll_to_section(page: Page, *labels: str, budget_s: float = SCROLL_SECTION_BUDGET_S) -> bool:
+    """Scroll main panel so a section heading/label is visible.
+
+    Опрос без ожиданий: на каждом круге по порядку — подпись, фрейм,
+    заголовок → текст → label; первый видимый прокручивается в окно. Порядок
+    предпочтения прежний, но отсутствующий заголовок больше не стоит 5 с.
+    """
+    patterns = [re.compile(re.escape(label), re.I) for label in labels if label.strip()]
+    if not patterns:
+        return False
+    deadline = time.time() + budget_s
+    while True:
+        for pattern in patterns:
+            for root in _roots(page):
+                for getter in (
+                    lambda: root.get_by_role("heading", name=pattern).first,
+                    lambda: root.get_by_text(pattern).first,
+                    lambda: root.get_by_label(pattern).first,
+                ):
+                    try:
+                        loc = getter()
+                        if not loc.is_visible():
+                            continue
+                        loc.scroll_into_view_if_needed(timeout=5000)
+                        _sleep_h(0.3)
+                        return True
+                    except Exception:
+                        pass
+        if time.time() >= deadline:
+            return False
+        time.sleep(0.25)
 
 
 def _conversion_location_display_value(page: Page) -> str:
@@ -1628,6 +1648,18 @@ _LOADING_TEXT = re.compile(r"^\s*Loading\b", re.I)
 """
 
 
+def _visible_now(locator) -> bool:
+    """Виден ли элемент прямо сейчас — без ожидания (ACL-1313).
+
+    Для проверок «есть ли оно вообще» там, где страница уже отрисована:
+    `click(timeout=…)` по отсутствующему элементу стоит весь таймаут.
+    """
+    try:
+        return bool(locator.count()) and locator.first.is_visible()
+    except Exception:
+        return False
+
+
 def _first_visible(page: Page, locators, *, budget_s: float = 4.0, poll_s: float = 0.25):
     """Первый из локаторов, который стал видимым за отведённое время.
 
@@ -1764,6 +1796,38 @@ def _click_trusted(page: Page, selector_or_handle, *, timeout: float = 3000) -> 
         return False
 
 
+def _cdp_input_session(page: Page):
+    """CDP-сессия для ввода мышью — одна на страницу (ACL-1313).
+
+    Прежде каждый клик открывал новую `new_cdp_session` и отсоединял её:
+    при трёх профилях это 0,1–0,3 с на клик, 4–6 с на кампанию. Сессия
+    привязана к вкладке, а не к документу, и переживает переходы по
+    страницам; закрытую вкладку или отвалившуюся сессию выдаёт первая же
+    ошибка `send` — тогда кэш сбрасывается (`_drop_cdp_input_session`).
+    """
+    session = getattr(page, "_rpa_input_cdp", None)
+    if session is None:
+        session = page.context.new_cdp_session(page)
+        try:
+            page._rpa_input_cdp = session  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    return session
+
+
+def _drop_cdp_input_session(page: Page) -> None:
+    session = getattr(page, "_rpa_input_cdp", None)
+    try:
+        page._rpa_input_cdp = None  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    if session is not None:
+        try:
+            session.detach()
+        except Exception:
+            pass
+
+
 def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
     """Trusted click via Chrome DevTools Protocol Input domain.
 
@@ -1772,9 +1836,15 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
     gets a click. Raw CDP mouseMoved → mousePressed → mouseReleased is the
     community workaround used by Multilogin/CDP harnesses.
     """
-    try:
-        session = page.context.new_cdp_session(page)
+    for attempt in range(2):
+        sent = {"any": False}
         try:
+            session = _cdp_input_session(page)
+
+            def _send(params, _session=session):
+                _session.send("Input.dispatchMouseEvent", params)
+                sent["any"] = True
+
             # Approach along a curved path instead of teleporting to the
             # target. Audit 2026-07-31: our pointer produced 2-3 points
             # from anywhere to anywhere, with the press ~8ms after the last
@@ -1782,10 +1852,7 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
             # with a slight arc and human-ish gaps, then press.
             _hit_mark(page, x, y)
             for px, py in _mouse_path(page, x, y):
-                session.send(
-                    "Input.dispatchMouseEvent",
-                    {"type": "mouseMoved", "x": px, "y": py, "button": "none"},
-                )
+                _send({"type": "mouseMoved", "x": px, "y": py, "button": "none"})
                 time.sleep(_human_jitter(0.02, 0.5))
             _sleep_h(0.08)
             if _hit_changed(page, x, y):
@@ -1796,13 +1863,11 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
                 # ждём, пока меню свернётся, и подходим к цели справа.
                 away = (float(x) + 320.0, float(y))
                 for px, py in _mouse_path(page, *away):
-                    session.send("Input.dispatchMouseEvent",
-                                 {"type": "mouseMoved", "x": px, "y": py, "button": "none"})
+                    _send({"type": "mouseMoved", "x": px, "y": py, "button": "none"})
                     time.sleep(_human_jitter(0.02, 0.5))
                 _sleep_h(0.9)
                 for px, py in _mouse_path(page, x, y, start=away):
-                    session.send("Input.dispatchMouseEvent",
-                                 {"type": "mouseMoved", "x": px, "y": py, "button": "none"})
+                    _send({"type": "mouseMoved", "x": px, "y": py, "button": "none"})
                     time.sleep(_human_jitter(0.02, 0.5))
                 _sleep_h(0.08)
                 _telemetry.record("click_target_covered", not _hit_changed(page, x, y),
@@ -1812,16 +1877,17 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
                 ("mouseReleased", {"button": "left", "buttons": 0, "clickCount": 1}),
             ):
                 params = {"type": typ, "x": float(x), "y": float(y), **extra}
-                session.send("Input.dispatchMouseEvent", params)
+                _send(params)
                 time.sleep(_human_jitter(0.06, 0.4))
-        finally:
-            try:
-                session.detach()
-            except Exception:
-                pass
-        return
-    except Exception:
-        pass
+            return
+        except Exception:
+            # Сессия из кэша могла умереть (вкладка закрыта, профиль
+            # переподключён). Ничего ещё не отправлено — одна попытка со
+            # свежей сессией; иначе, как и прежде, клик через Playwright.
+            _drop_cdp_input_session(page)
+            if attempt == 0 and not sent["any"]:
+                continue
+            break
     # Fallback: Playwright mouse API
     page.mouse.move(x, y)
     _sleep_h(0.06)
@@ -2606,25 +2672,76 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
     return "nothing"
 
 
+#: ACL-1313: сколько ждать окно цели, когда на экране НЕТ ни радио Leads, ни
+#: «Loading creation». Снимки after_create 25.09 (ce8077, 570e21): модалка
+#: «Loading creation» встаёт сразу после нажатия, а `_create_took` уже
+#: убедился, что радио или загрузка появились. Значит, пустой экран — это
+#: промежуток между концом загрузки и отрисовкой окна, а не сама загрузка.
+#: Порог выше медианы ВСЕГО перехода create→leads (18.6 с по 156 удачным
+#: переходам телеметрии, с учётом ~10 с накладных шага), то есть даже
+#: целиком «пустой» нормальный переход в него укладывается. Прежде без
+#: загрузки ждали 75 с и только потом перезагружали.
+OBJECTIVE_IDLE_S = 20.0
+
+#: Шаг опроса окна цели. Короткий, чтобы замечать загрузку/её конец.
+OBJECTIVE_POLL_S = 2.5
+
+#: Последнее ожидание радио Leads после всех повторов Create. Раньше
+#: `_click` делал пять заходов по 8 с (+8 с на накладку) — ~83 с на
+#: отсутствующее окно, после чего шаг всё равно падал.
+OBJECTIVE_RADIO_LAST_WAIT_S = 10.0
+
+
 def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
-                           loading_max_s: float = OBJECTIVE_LOADING_MAX_S) -> bool:
-    """Дождаться окна выбора цели; пока видна «Loading…», ждать до потолка."""
+                           idle_s: float = OBJECTIVE_IDLE_S,
+                           loading_max_s: float = OBJECTIVE_LOADING_MAX_S,
+                           poll_s: float = OBJECTIVE_POLL_S) -> bool:
+    """Дождаться окна выбора цели.
+
+    Пока видна «Loading…» — ждём до `loading_max_s` (сеть профиля рвётся —
+    сразу сдаёмся). Пока не видно ни радио, ни загрузки — ждём не дольше
+    `idle_s` подряд и не дольше `first_s` всего. Строка телеметрии
+    `objective_wait` говорит, сколько ждали и видели ли загрузку — по ней
+    потом подбирается `OBJECTIVE_IDLE_S`.
+    """
     radio = page.get_by_role("radio", name="Leads").first
     start = time.time()
+    last_busy = start
+    loading_polls = 0
+    outcome = "idle"
+    found = False
+    while True:
+        try:
+            radio.wait_for(state="visible", timeout=int(poll_s * 1000))
+            found, outcome = True, "radio"
+            break
+        except Exception:
+            pass
+        now = time.time()
+        if _loading_visible(page):
+            loading_polls += 1
+            last_busy = now
+            if _network_trouble(page):
+                outcome = "network_trouble"
+                break
+            if now - start >= loading_max_s:
+                outcome = "loading_ceiling"
+                break
+            continue
+        if now - start >= first_s:
+            outcome = "first_s"
+            break
+        if now - last_busy >= idle_s:
+            outcome = "idle"
+            break
     try:
-        radio.wait_for(state="visible", timeout=int(first_s * 1000))
-        return True
+        _telemetry.record("objective_wait", None, note=outcome,
+                          duration_s=time.time() - start,
+                          diag={"loading_polls": loading_polls,
+                                "idle_s": round(time.time() - last_busy, 1)})
     except Exception:
         pass
-    while time.time() - start < loading_max_s and _loading_visible(page):
-        if _network_trouble(page):
-            break
-        try:
-            radio.wait_for(state="visible", timeout=5000)
-            return True
-        except Exception:
-            continue
-    return False
+    return found
 
 
 def _all_edits_saved(page: Page) -> bool:
@@ -2956,25 +3073,15 @@ def _account_blocked_text(page: Page) -> str | None:
 #: 5–7 с при трёх профилях (Playwright замораживает анимации Meta и кодирует
 #: PNG 3072×1467) — около 30 снимков, 2–3 минуты простоя на кампанию; владелец
 #: видел это как паузу после «All edits saved». Телеметрия пишется по-прежнему
-#: на каждом шаге; картинка — на отказе и на границах разделов.
+#: на каждом шаге; картинка — только на отказе. Оставленные было «границы
+#: разделов» (after_create, after_placements, …) и метки success_/before_
+#: давали ещё 12–16 снимков на кампанию — около минуты.
 #: Вернуть снимок на каждом шаге: FB_RPA_SHOT_ALL=1.
-_SHOT_KEEP = frozenset({
-    "after_create", "after_leads", "after_campaign_fields", "after_next_to_adset",
-    "after_targeting", "after_placements", "after_next_to_ad",
-    "after_ad_creative_upload", "after_ad_copy", "after_ad_level_summary",
-})
-
-
 def _shot_worth_a_picture(label: str) -> bool:
-    """Нужен ли PNG для удачного шага `label` (отказы снимаются всегда)."""
-    if os.environ.get("FB_RPA_SHOT_ALL", "").strip() in ("1", "true", "yes"):
-        return True
-    if not label.startswith("after_"):
-        return True
-    if label in _SHOT_KEEP:
-        return True
-    # Объявления 2 и 3: итог медиа и текста каждого — это граница, а не шаг.
-    return label.endswith("_creative_upload") or label.endswith("_copy")
+    """Нужен ли PNG для НЕ-отказного шага `label` (отказы снимаются всегда)."""
+    from src.fb_ads_rpa.page_capture import success_captures_enabled
+
+    return success_captures_enabled()
 
 
 def run_recorded_campaign_flow(
@@ -3256,17 +3363,33 @@ def run_recorded_campaign_flow(
     # New Meta UI sometimes shows a Guided/Manual choice before the objective
     # picker enables Campaign name — click Manual if present, best-effort
     # (the recording's session apparently started already past this choice).
-    try:
-        page.get_by_text("Manual campaign setup", exact=False).first.click(timeout=3000)
-        _shot("after_manual")
-    except Exception:
-        pass
+    # ACL-1313: сюда приходим, когда окно цели уже отрисовано (радио Leads
+    # видно) — есть ли в нём «Manual campaign setup» и заголовок «Leads»,
+    # видно сразу. Прежде клик по отсутствующему элементу ждал 3 с и 5 с на
+    # каждой кампании.
+    manual = page.get_by_text("Manual campaign setup", exact=False)
+    if _visible_now(manual):
+        try:
+            manual.first.click(timeout=3000)
+            _shot("after_manual")
+        except Exception:
+            pass
 
+    leads_heading = page.get_by_role("heading", name="Leads")
+    if _visible_now(leads_heading):
+        try:
+            leads_heading.first.click(timeout=5000)
+        except Exception:
+            pass
+    # ACL-1313: окна нет — одно ограниченное ожидание, а не пять заходов
+    # `_click` по 8+8 с (~83 с) ради того же отказа.
+    leads_radio = page.get_by_role("radio", name="Leads")
     try:
-        page.get_by_role("heading", name="Leads").first.click(timeout=5000)
+        leads_radio.first.wait_for(state="visible", timeout=int(OBJECTIVE_RADIO_LAST_WAIT_S * 1000))
+        radio_there = True
     except Exception:
-        pass
-    if not _click(page.get_by_role("radio", name="Leads")):
+        radio_there = False
+    if not radio_there or not _click(leads_radio):
         _shot("fail_objective_leads")
         return "objective_leads"
     _shot("after_leads")
@@ -3300,19 +3423,27 @@ def run_recorded_campaign_flow(
     # секунд на «появись, если ты есть» достаточно — дальше идёт заполнение
     # имени со своими попытками, и если модалка всё же успела встать, оно
     # упадёт заметно, а не молча.
-    modal_btn = _first_visible(
-        page,
-        (
-            page.get_by_role("button", name="Don't show again"),
-            page.get_by_role("button", name="OK", exact=True),
-        ),
-        budget_s=4.0,
+    #
+    # ACL-1313: ждём не «модалку 4 с», а первое из двух — модалку или поле
+    # имени. Поле видно и модалки нет — идём дальше сразу, без 4 с простоя
+    # на каждой кампании. Если модалка всплывёт позже поля, ввод имени не
+    # пройдёт — тогда она закрывается и ввод повторяется до перезагрузки.
+    onboarding_btns = (
+        page.get_by_role("button", name="Don't show again"),
+        page.get_by_role("button", name="OK", exact=True),
     )
-    if modal_btn is not None:
-        _click(modal_btn, attempts=3)
+    name_field = page.get_by_placeholder("Enter your campaign name here")
+    first_seen = _first_visible(page, (*onboarding_btns, name_field), budget_s=4.0)
+    if first_seen is not None and first_seen is not name_field:
+        _click(first_seen, attempts=3)
     _shot("after_onboarding_modal")
 
-    if not _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name):
+    def _late_onboarding_modal() -> bool:
+        btn = _first_visible(page, onboarding_btns, budget_s=0.0)
+        return btn is not None and _click(btn, attempts=2)
+
+    if not (_fill(name_field, campaign_name)
+            or (_late_onboarding_modal() and _fill(name_field, campaign_name))):
         # 20.09 01:12 (CL_ml TRDEZ, третий раз за сутки): после Continue
         # редактор не отрисовался — пустой экран с «Loading…», и поля имени
         # на странице нет вовсе. Вводить ещё нечего, поэтому перезагружаем
@@ -3553,14 +3684,16 @@ def run_recorded_campaign_flow(
             # markers instead: the "Verifying your edits..." indicator, then
             # the "You've switched audience setup" toast to appear AND clear.
             wait_editor_saved(page)
-            try:
-                toast = page.get_by_text(
-                    re.compile(r"You've switched audience setup", re.I)
-                ).first
-                toast.wait_for(state="visible", timeout=3000)
-                toast.wait_for(state="hidden", timeout=8000)
-            except Exception:
-                pass
+            # ACL-1313: тост ждём уйти, только если он на экране. Прежде
+            # 3 с уходили на ожидание тоста, которого нет (applied_without_dialog
+            # и большинство прогонов 25.09): wait_editor_saved уже дождался
+            # «Verifying your edits», перерисовка к этому моменту прошла.
+            toast = page.get_by_text(re.compile(r"You've switched audience setup", re.I))
+            if _visible_now(toast):
+                try:
+                    toast.first.wait_for(state="hidden", timeout=8000)
+                except Exception:
+                    pass
             _sleep_h(0.5)
         if not continued and _audience_already_manual(page):
             # 17.09 (S15 06:53, Doc21 04:19/04:28): выбор радио применился
@@ -4285,6 +4418,50 @@ PLACEMENTS_SUBITEM_JS = """
 требовать от неё клика бессмысленно; если нет — это честный отказ.
 """
 
+#: Пауза между подпунктами внутри одного вызова страницы (мс). Отдаёт
+#: управление React между кликами — как прежде это делал обратный путь
+#: Python↔браузер между отдельными `evaluate`, — и каждый следующий подпункт
+#: ищется заново уже по перерисованной разметке.
+PLACEMENTS_SUBITEM_PAUSE_MS = 120
+
+PLACEMENTS_SUBITEMS_BATCH_JS = (
+    "async ([items, pauseMs]) => {"
+    "  const one = " + PLACEMENTS_SUBITEM_JS.strip() + ";"
+    "  const out = [];"
+    "  for (const [label, want] of items) {"
+    "    let res;"
+    "    try { res = one([label, want]); }"
+    "    catch (e) { res = { ok: false, why: String(e).slice(0, 80) }; }"
+    "    out.push(res);"
+    "    await new Promise((r) => setTimeout(r, pauseMs));"
+    "  }"
+    "  return out;"
+    "}"
+)
+
+
+def _set_placement_subitems(page: Page, items: list[tuple[str, bool]]) -> list[dict]:
+    """Проставить подпункты одним вызовом страницы (ACL-1313).
+
+    Каждый подпункт — ровно `PLACEMENTS_SUBITEM_JS`, как прежде: найти по
+    словам и кликнуть в одном и том же JS, прочитать состояние. Прежде это
+    был отдельный `page.evaluate` на подпункт — до 18 обратных путей
+    Python↔браузер за заход, по 0,1–0,5 с каждый при трёх профилях. Ответ —
+    по одному словарю на пункт, в том же порядке.
+    """
+    if not items:
+        return []
+    try:
+        res = page.evaluate(
+            PLACEMENTS_SUBITEMS_BATCH_JS,
+            [[[label, bool(want)] for label, want in items], PLACEMENTS_SUBITEM_PAUSE_MS],
+        )
+    except Exception as exc:
+        return [{"ok": False, "why": str(exc)[:80]} for _ in items]
+    res = list(res or [])
+    res += [None] * (len(items) - len(res))
+    return [r or {"ok": False, "why": "пустой ответ"} for r in res[: len(items)]]
+
 _PLACEMENT_CATEGORIES = {
     # Пять категорий раздела Placement controls и то, чем они должны стать.
     # Порядок важен только для отчёта: снимаем и ставим по одной.
@@ -4552,7 +4729,7 @@ def ensure_account_placement_exclusions(page: Page, report: dict | None = None) 
     try:
         from src.fb_ads_rpa import page_capture as _pages
 
-        _pages.capture(page, step="account_controls_review", diag={"changed": changed})
+        _pages.capture_on_success(page, step="account_controls_review", diag={"changed": changed})
     except Exception:
         pass
     confirmed = None
@@ -5489,7 +5666,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     report["expanded"] = {}
     report["subitems_seen"] = []
 
-    def _set(label: str, want_checked: bool) -> bool:
+    def _set_many(items: list[tuple[str, bool]]) -> set[str]:
         # Найдено И нажато одним вызовом: снятие галочки перекладывает
         # строки под ней, и координата, снятая отдельным шагом, к моменту
         # клика указывает уже на соседнюю.
@@ -5503,16 +5680,27 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # Недоступная галочка — не всегда беда: «Facebook Business Explore»
         # Meta держит выключенной и не даёт трогать. Если она уже в нужном
         # состоянии, требовать от неё клика бессмысленно.
-        try:
-            res = page.evaluate(
-                PLACEMENTS_SUBITEM_JS, [label, want_checked]
-            ) or {"ok": False, "why": "пустой ответ"}
-        except Exception as exc:
-            res = {"ok": False, "why": str(exc)[:80]}
-        if not res.get("ok"):
-            _dbg.append(f"подпункт[{label}]={res}")
-            report.setdefault("subitems_failed", {})[label] = res
-        return bool(res.get("ok"))
+        #
+        # ACL-1313: все подпункты захода — одним вызовом страницы
+        # (`_set_placement_subitems`), каждый тем же JS, что и прежде.
+        # Возвращает подписи, которые встали.
+        done: set[str] = set()
+        for (label, _want), res in zip(items, _set_placement_subitems(page, items)):
+            if not res.get("ok"):
+                _dbg.append(f"подпункт[{label}]={res}")
+                report.setdefault("subitems_failed", {})[label] = res
+            else:
+                done.add(label)
+        return done
+
+    def _pass(on_page: list[str]) -> None:
+        """Один заход по видимым подпунктам: сначала «включить», потом «выключить»."""
+        items = ([(x, True) for x in remaining_on if _label_on_page(x, on_page)]
+                 + [(x, False) for x in remaining_off if _label_on_page(x, on_page)])
+        done = _set_many(items)
+        for label, want in items:
+            if label in done:
+                (remaining_on if want else remaining_off).remove(label)
 
     # Категории ведут себя как гармошка: раскрытие следующей закрывает
     # предыдущую. Проверено живым прогоном 9 сентября — код раскрыл все три
@@ -5563,12 +5751,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # «Ads on Facebook Reels» осталась единственной причиной отказа
         # шага на прогоне пользователя.
         for _ in range(2):
-            for label in list(remaining_on):
-                if _label_on_page(label, here) and _set(label, True):
-                    remaining_on.remove(label)
-            for label in list(remaining_off):
-                if _label_on_page(label, here) and _set(label, False):
-                    remaining_off.remove(label)
+            _pass(here)
             if not [x for x in remaining_on + remaining_off if _label_on_page(x, here)]:
                 break
             _sleep_h(0.6)
@@ -5593,12 +5776,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                 continue
             here.extend(more)
             report["subitems_seen"].extend(x for x in more if not _label_on_page(x, report["subitems_seen"]))
-            for label in list(remaining_on):
-                if _label_on_page(label, more) and _set(label, True):
-                    remaining_on.remove(label)
-            for label in list(remaining_off):
-                if _label_on_page(label, more) and _set(label, False):
-                    remaining_off.remove(label)
+            _pass(more)
             _settle_visible(more)
 
     report["subitems_missing"] = remaining_on + remaining_off
@@ -6686,7 +6864,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             try:
                 from src.fb_ads_rpa import page_capture as _pages
 
-                _pages.capture(page, step="library_pick_selected",
+                _pages.capture_on_success(page, step="library_pick_selected",
                                diag={"tile": i, "file": filename, "picks": log,
                                      "fingerprint": _tile_fingerprint(tile)},
                                blocks={"library": _LIBRARY_DIALOG_JS})
@@ -6804,7 +6982,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             try:
                 from src.fb_ads_rpa import page_capture as _pages
 
-                _pages.capture(page, step="ad_media_ready", diag=detail,
+                _pages.capture_on_success(page, step="ad_media_ready", diag=detail,
                                blocks={"media": _AD_MEDIA_BLOCK_JS})
             except Exception:
                 pass
@@ -7246,6 +7424,7 @@ def _clickable(page: Page, xpath: str):
 
 
 _MOUNT_FRACS = (0.4, 0.55, 0.7, 0.85, 0.3, 0.6, 1.0)
+_MOUNT_POLL_S = 0.15
 
 
 def _scroll_until_mounted(
@@ -7282,9 +7461,17 @@ def _scroll_until_mounted(
         try:
             if not page.evaluate(scroll_js, frac):
                 return False  # no scroll container — nothing to do
-            _sleep_h(settle_s)
-            if page.evaluate(present_js):
-                return True
+            # ACL-1313: не «подождать settle_s и посмотреть», а смотреть всё
+            # это время. Прокрутка — присваивание scrollTop, не событие ввода,
+            # так что человеческая пауза тут ничего не изображает; секция,
+            # смонтировавшаяся за 0,15 с, больше не ждёт остаток 0,9 с.
+            settle_until = time.time() + settle_s
+            while True:
+                time.sleep(_MOUNT_POLL_S)
+                if page.evaluate(present_js):
+                    return True
+                if time.time() >= settle_until:
+                    break
         except Exception:
             continue
     return False
@@ -7366,6 +7553,70 @@ def _creative_post_media_step(page: Page) -> bool:
 _WIZARD_ADVANCE_LABELS = ("Done", "Save", "Next", "Skip and continue", "Continue", "Skip")
 
 
+#: Кнопка «вперёд» мастера — одним вызовом страницы (ACL-1313).
+#:
+#: Было: по одному `_click_xpath` на каждую подпись из шести, и каждый —
+#: XPath `//*[...][normalize-space(.)='…']` по ВСЕМУ документу редактора
+#: (строковое значение каждого элемента). На шаге, где кнопка читается
+#: «Skip and continue», это четыре пустых прохода по DOM до нужного на
+#: каждом круге обхода. Теперь один проход: те же кандидаты
+#: (`[role=button]`, `button`, без `aria-disabled="true"`), та же нормализация
+#: пробелов, что у XPath `normalize-space`, тот же порядок подписей и та же
+#: самая маленькая видимая рамка; клик — тем же CDP-кликом.
+_WIZARD_FORWARD_JS = r"""
+(labels) => {
+  const norm = (s) => (s || '').replace(/[ \t\r\n]+/g, ' ').trim();
+  const shown = (e) => {
+    for (let n = e; n; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.display === 'none' || s.visibility === 'hidden') return false;
+    }
+    return true;
+  };
+  const cands = [...document.querySelectorAll('[role=button],button')]
+    .filter(e => e.getAttribute('aria-disabled') !== 'true');
+  for (const label of labels) {
+    let best = null, bestArea = Infinity;
+    for (const el of cands) {
+      if (norm(el.textContent) !== label || !shown(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) continue;
+      const area = r.width * r.height;
+      if (area < bestArea) { best = el; bestArea = area; }
+    }
+    if (!best) continue;
+    best.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const r = best.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) continue;
+    if (r.bottom < 0 || r.top > innerHeight) continue;
+    return { label: label, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }
+  return null;
+}
+"""
+
+#: Сколько после нажатия «вперёд» ждать следующего шага. Прежняя пауза
+#: 1,4 с сохранена как потолок; мастер, закрывшийся раньше, замечается
+#: опросом, и обход кончается сразу, а не через полторы секунды.
+_WIZARD_STEP_SETTLE_S = 1.4
+_WIZARD_CLOSE_POLL_S = 0.35
+
+
+def _press_wizard_forward(page: Page) -> str | None:
+    """Нажать кнопку «вперёд» мастера. Подпись нажатой или None."""
+    try:
+        pt = page.evaluate(_WIZARD_FORWARD_JS, list(_WIZARD_ADVANCE_LABELS))
+    except Exception:
+        return None
+    if not pt:
+        return None
+    try:
+        _cdp_mouse_click(page, pt["x"], pt["y"])
+    except Exception:
+        return None
+    return pt.get("label") or ""
+
+
 def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
     """Press the wizard forward until it closes. True when it is gone.
 
@@ -7380,23 +7631,19 @@ def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
     for _ in range(rounds):
         if not _creative_wizard_open(page):
             return True
-        advanced = False
-        for label in _WIZARD_ADVANCE_LABELS:
-            if _click_xpath(
-                page,
-                "//*[@role='button' or self::button]"
-                f"[normalize-space(.)='{label}' and not(@aria-disabled='true')]",
-            ):
-                advanced = True
-                break
-        if not advanced:
+        if _press_wizard_forward(page) is None:
             misses += 1
             if misses >= 4:
                 break
             _sleep_h(1.2)
             continue
         misses = 0
-        _sleep_h(1.4)
+        # Следующий шаг отрисовывается до 1,4 с; закрытие видно раньше.
+        settle_until = time.time() + _WIZARD_STEP_SETTLE_S
+        while time.time() < settle_until:
+            time.sleep(_WIZARD_CLOSE_POLL_S)   # опрос, не действие: без «человеческой» паузы
+            if not _creative_wizard_open(page):
+                return True
     return not _creative_wizard_open(page)
 
 
@@ -11135,7 +11382,7 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
         try:
             from src.fb_ads_rpa import page_capture as _pc
 
-            _pc.capture(page, step="targeting_and_groups",
+            _pc.capture_on_success(page, step="targeting_and_groups",
                         blocks={"groups": _GROUPS_BLOCK_JS})
         except Exception:
             pass
@@ -11425,7 +11672,7 @@ def _remove_stale_default_locations(page: Page, keep_text: str) -> None:
                     except Exception:
                         continue
             try:
-                from src.fb_ads_rpa.screenshots import capture as _capture
+                from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                 _capture(page, f"recorded_locations_remove_default_removed{removed_any}")
             except Exception:
@@ -12123,7 +12370,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                     except Exception:
                         pass
                     try:
-                        from src.fb_ads_rpa.screenshots import capture as _capture
+                        from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                         _capture(page, "recorded_locations_heading_found")
                     except Exception:
@@ -12224,7 +12471,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                         if immediate_inp is not None:
                             break
                 try:
-                    from src.fb_ads_rpa.screenshots import capture as _capture
+                    from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                     _capture(page, f"recorded_locations_click_attempt{attempt + 1}_clicked{clicked}")
                 except Exception:
@@ -12416,6 +12663,15 @@ def _ensure_manual_audience(page: Page) -> bool | None:
         )
     _sleep_h(0.8)
     after = _audience_badge_on(page)
+    if after is True:
+        # Разметка до и после клика снималась на каждом прогоне (ACL-1313 —
+        # теперь только с FB_RPA_SHOT_ALL=1); отказу снимок остаётся.
+        try:
+            from src.fb_ads_rpa import page_capture as _pc
+
+            _pc.capture(page, step="advantage_plus_still_on")
+        except Exception:
+            pass
     _telemetry.record("advantage_plus_off", after is not True,
                       note="switched" if after is not True else "still_on",
                       diag={"flipped_switch": flipped, "picked_off": picked,
@@ -12508,7 +12764,7 @@ def _pick_advantage_plus_leads_off(page: Page) -> bool:
     try:
         from src.fb_ads_rpa import page_capture as _pc
 
-        _pc.capture(page, step="advantage_plus_before")
+        _pc.capture_on_success(page, step="advantage_plus_before")
     except Exception:
         pass
     # The control is the row itself: a `role=button` (325×36) that CONTAINS
@@ -12540,7 +12796,7 @@ def _pick_advantage_plus_leads_off(page: Page) -> bool:
     _sleep_h(0.8)
     # What opened is not known offline. Keep the page so the next run says.
     try:
-        _pc.capture(page, step="advantage_plus_control")
+        _pc.capture_on_success(page, step="advantage_plus_control")
     except Exception:
         pass
     # Only a real menu item. 16.09, run e79f678f1450 (Doc21 FX): the row
@@ -12885,7 +13141,7 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
                 _cdp_mouse_click(page, trigger_x, trigger_y)
                 _sleep_h(0.5)
                 try:
-                    from src.fb_ads_rpa.screenshots import capture as _capture
+                    from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                     _capture(page, f"recorded_age_value_click_{default_text.replace('+', 'p')}")
                 except Exception:
@@ -13308,7 +13564,7 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
                 pass
             if found:
                 try:
-                    from src.fb_ads_rpa.screenshots import capture as _capture
+                    from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                     _capture(page, f"recorded_age_poll_found_tick{tick}")
                 except Exception:
@@ -13349,7 +13605,7 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
                                 el.click(timeout=3000)
                                 _sleep_h(0.3)
                                 try:
-                                    from src.fb_ads_rpa.screenshots import capture as _capture
+                                    from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                                     _capture(page, f"recorded_age_dropdown_open_idx{idx}")
                                 except Exception:

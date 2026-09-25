@@ -28,6 +28,8 @@ from src.fb_ads_rpa import meta_dom as dom  # noqa: E402
 from src.fb_ads_rpa import page_capture, screenshots  # noqa: E402
 from src.fb_ads_rpa import run_telemetry as rt  # noqa: E402
 
+_REAL_FIRST_VISIBLE = dom._first_visible
+
 LIST_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1"
 AUDIENCES = "https://adsmanager.facebook.com/adsmanager/audiences?act=1"
 
@@ -47,9 +49,13 @@ def flow(monkeypatch, tmp_path):
         getattr(loc, name).return_value = loc
     loc.get_by_role.return_value = loc
 
+    radio_absent = {"on": False, "loc": None}
+
     def by_role(role, name=None, **kw):
         if name == "Create":
             events.append(("create_button",))
+        if role == "radio" and name == "Leads" and radio_absent["on"]:
+            return radio_absent["loc"]
         return loc
 
     page.get_by_role.side_effect = by_role
@@ -110,7 +116,8 @@ def flow(monkeypatch, tmp_path):
             creative_path="a.png", ad_title="t", ad_body="b",
             destination_url="https://example.com")
 
-    return {"run": run, "events": events, "took": took, "waits": waits, "page": page}
+    return {"run": run, "events": events, "took": took, "waits": waits, "page": page,
+            "radio_absent": radio_absent}
 
 
 def _after(events, first, then):
@@ -160,3 +167,33 @@ def test_the_long_wait_returns_to_the_list_before_reloading(flow):
     assert ("recover", "objective") in ev
     assert ("goto", LIST_URL) in ev
     assert ev.index(("goto", LIST_URL)) < ev.index(("recover", "objective"))
+
+
+def test_an_absent_objective_dialog_fails_after_one_bounded_wait(flow, monkeypatch):
+    """ACL-1313: после всех повторов окна цели нет — отказ за ~10 с, а не за
+    пять заходов `_click` по 8 с (живьём ~83 с вместе с накладкой)."""
+    from types import SimpleNamespace
+
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(dom, "time", SimpleNamespace(
+        time=lambda: clock["now"], sleep=lambda s: clock.__setitem__("now", clock["now"] + s)))
+    monkeypatch.setattr(dom, "_first_visible", _REAL_FIRST_VISIBLE)
+
+    class _AbsentRadio:
+        first = property(lambda self: self)
+
+        def count(self):
+            return 0
+
+        def is_visible(self, timeout=0):
+            return False
+
+        def wait_for(self, state="visible", timeout=30000):
+            clock["now"] += timeout / 1000
+            raise TimeoutError("absent")
+
+    flow["radio_absent"].update(on=True, loc=_AbsentRadio())
+    flow["waits"][:] = [True]   # окно «пришло», но радио уже нет
+    start = clock["now"]
+    assert flow["run"]() == "objective_leads"
+    assert clock["now"] - start <= dom.OBJECTIVE_RADIO_LAST_WAIT_S + 1

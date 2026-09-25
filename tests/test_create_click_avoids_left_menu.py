@@ -287,7 +287,7 @@ def test_network_trouble_ends_the_loading_wait(monkeypatch, banner):
     monkeypatch.setattr(md, "_loading_visible", lambda p: True)
     radio = _Radio(clock)
     assert md._wait_objective_dialog(_ObjectivePage(radio, banner)) is False
-    assert radio.waits == [75000], "с разорванной сетью ждали загрузку дальше"
+    assert len(radio.waits) == 1, "с разорванной сетью ждали загрузку дальше"
 
 
 def test_without_network_trouble_the_loading_wait_goes_on(monkeypatch):
