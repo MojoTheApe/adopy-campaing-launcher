@@ -207,3 +207,18 @@ def test_a_card_without_its_own_x_is_left_alone(page):
     _page(page, FRAG["card_show_offerings_no_close"])
     assert md._dismiss_floating_banners(page) == []
     assert _clicked(page) == []
+
+
+def test_the_editor_close_is_never_a_closer_even_when_it_is_the_only_one(page):
+    """PR #314, M15: крестик редактора не становится «своим крестиком»
+    сообщения ни при каком раскладе — даже если он единственный внутри
+    сообщения полосы AYMT (там нет проверки контейнера, как у карточек)."""
+    page.set_content(
+        '<span data-surface="/am/msg:AYMTAMGlobalBannerContainer/info:msg:9" style="display: contents;">'
+        '<div><span>Something about your account</span>'
+        '<span data-surface="/am/editor_drawer"><div aria-label="Close" role="button" tabindex="0"'
+        ' style="width:20px;height:20px"><svg width="16" height="16"></svg></div></span></div></span>')
+    page.evaluate(_SPY)
+    assert md._dismiss_floating_banners(page) == []
+    assert _clicked(page) == []
+    assert not page.evaluate("window.drawerClosed || false")

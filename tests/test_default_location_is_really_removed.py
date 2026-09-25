@@ -374,3 +374,44 @@ def test_the_card_is_found_by_its_rows_when_no_locations_heading_exists(page):
     )
     names = [r["name"] for r in md._location_rows(page)]
     assert names == ["Saudi Arabia", "United States"], names
+
+
+# ── стрелка строки: только своя, не выключенная, не «Remove» (PR #314, M6) ──
+
+def test_a_section_toggle_holding_other_fields_is_not_the_rows_expander(page, monkeypatch):
+    """Свёрнутая кнопка-раздел над подписью, но в ней и чужое поле
+    (Languages): это не строка Locations — жать её нельзя."""
+    page.set_content(
+        "<div role='button' aria-expanded='false' id='section' style='width:600px'>"
+        "<div><span>Locations</span><span>Inclusion: Chile</span></div>"
+        "<div><span>Languages</span><span>All languages</span></div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_row_expander(page, "Locations") is False
+    assert "at" not in clicked, clicked
+
+
+def test_a_disabled_whole_row_button_is_not_clicked(page, monkeypatch):
+    page.set_content(
+        "<div role='button' aria-expanded='false' aria-disabled='true' id='row' style='width:600px'>"
+        "<div><span>Locations</span></div><div>Inclusion: Chile, United States</div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_row_expander(page, "Locations") is False
+    assert "at" not in clicked, clicked
+
+
+def test_the_expander_skips_remove_and_disabled_controls(page, monkeypatch):
+    """Справа у строки сначала «Remove United States» и выключенная стрелка,
+    потом настоящая стрелка: жмётся только она."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0;width:600px'>"
+        "<div><span>Locations</span>"
+        "<div><span>Inclusion:</span><span>Chile, United States</span></div>"
+        "<div role='button' aria-expanded='false' aria-label='Remove United States' id='rm'"
+        " style='width:24px;height:24px'></div>"
+        "<div role='button' aria-expanded='false' aria-disabled='true' id='off'"
+        " style='width:24px;height:24px'></div>"
+        "<div role='button' aria-expanded='false' id='arrow' style='width:24px;height:24px'></div>"
+        "</div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_row_expander(page, "Locations") is True
+    assert clicked["at"] == "arrow", clicked
