@@ -97,6 +97,11 @@ POLICY: dict[str, tuple[str, str]] = {
         "the requested manual placements were not verified; leaving Advantage+ "
         "changes where budget can be spent",
     ),
+    "advantage_plus_audience": (
+        BLOCKING,
+        "the Audience card still reads 'Advantage+ on': the age range is only a "
+        "suggestion and Meta may deliver outside it",
+    ),
     "devices_ios": (
         BLOCKING,
         "the requested iOS-only filter did not apply, so delivery can spend on "

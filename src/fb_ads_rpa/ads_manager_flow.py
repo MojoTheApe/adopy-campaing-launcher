@@ -2262,7 +2262,7 @@ class AdsManagerFlow:
                 result.steps_completed.append(
                     f"recorded_flow_retry_scheduled:{fail_step}:attempt{attempt + 1}"
                 )
-                time.sleep(1.5)
+                time.sleep(retry_policy.backoff_s(fail_step, attempt))
 
             result.steps_completed.append("recorded_flow:reached_ad" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step

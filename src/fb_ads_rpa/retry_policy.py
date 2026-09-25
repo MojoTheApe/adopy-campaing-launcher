@@ -21,6 +21,18 @@ RETRY_CAMPAIGN = "retry_campaign"
 BLOCK_AND_REVIEW = "block_and_review"
 MAX_CAMPAIGN_ATTEMPTS = 3
 
+#: ACL-1313: шаги, на которых Meta тормозит под нагрузкой (три задания
+#: параллельно, 24.09). Повтор через 1,5 с попадал в ту же нагрузку: CL FX
+#: сделала 9 Create за 23 минуты. Прочим шагам пауза не нужна.
+SLOW_META_STEPS = frozenset({"create", "objective_leads"})
+
+
+def backoff_s(step: str, attempt: int) -> float:
+    """Пауза перед новой попыткой кампании после отказа на шаге `step`."""
+    if (step or "").split(":", 1)[0].strip() in SLOW_META_STEPS:
+        return 90.0 * max(1, attempt)
+    return 1.5
+
 # Every non-empty hard-failure string currently returned by
 # meta_dom.run_recorded_campaign_flow.  A drift test reads that function's AST
 # so a new return value cannot silently lose its retry decision.
