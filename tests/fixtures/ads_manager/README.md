@@ -9,6 +9,20 @@ These are sanitized fragments captured by the original author on **2026-09-09**,
 | ad_destination_2026_09_09.html | Destination section visible | Website URL lookup |
 | conversion_event_2026_09_09.html | Dataset selected, event still empty | Dataset alone must not mean event selection succeeded |
 
+## ACL-1313 fragments (live run 2026-09-24)
+
+Cut from `output/rpa_pages/<run>/<step>/page.html` (and one telemetry record) of the 24.09 evening run. Class attributes and inline SVG paths were stripped, campaign/ad names, object ids, creative copy, media URLs and the account id in `cachekey` were replaced with synthetic values; structure, `data-surface`/`data-block`/`id` attributes and visible labels are kept. UI language: English. Meta build identifier: not recorded. Browser: Multilogin Chrome, version not recorded.
+
+| Fixture | Source / capture state | Coverage limit |
+| --- | --- | --- |
+| ad_copy_draft_split_2026_09_24.html | 7364047ef03c/04_ad_copy — Primary text field after the failed retry: one `[data-block]`, the Draft.js leaf with the whole text plus 7 orphan paragraphs Chrome cut from a multi-line `insert_text` | No Draft.js runtime; typing behaviour is emulated in the test |
+| library_tile_2026_09_24.html | telemetry `ad_creative_reuse` 20:19:29 (da86e97cbf8b), `diag.tile_shape.html` — one media-library tile | Single tile, no grid virtualisation; image removed |
+| editor_tree_adset_2026_09_24.html | d3e690189a6e/04_create_additional_ad — left tree grid: campaign, ad set (with action-menu button), ad | Hover-only menu; the "Create ad" menu is injected by the test |
+| route_placeholder_2026_09_24.html | 7364047ef03c/05_create_additional_ad — `AdsPERouteLoadPlaceholder` spinner instead of the editor | Spinner only |
+| breadcrumb_only_2026_09_24.html | 7d2ce3ab1161/05_create_additional_ad — `nav-header-*` breadcrumb and header action-items selector, no tree rows | Header only |
+| audience_advantage_on_2026_09_24.html | b30c3b2b6be9/00_advantage_plus_before — Audience and Placements section-header badges, both "Advantage+ on" | Badges only, no audience controls |
+| audience_off_placements_on_2026_09_24.html | 8587f7668f86/02_languages — Audience "Advantage+ off", Placements "Advantage+ on" | Badges only |
+
 Tests intercept network requests. Open only in a disposable offline browser. Never use a real Multilogin profile for this bench.
 
 ## Refresh procedure
