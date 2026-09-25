@@ -818,6 +818,68 @@ def ensure_editor_window(page, section: str) -> bool:
     return ok
 
 
+def _unminimize_before_attach(browser) -> list[dict]:
+    """Свёрнутые окна профиля — в обычное состояние, за край экрана.
+
+    ACL-1313, прогон 25.09 07:54–08:01 (Doc21): подключение к профилю, окно
+    которого было свёрнуто, простояло 7 минут и пошло дальше ровно в тот
+    момент, когда владелец развернул окно. Свёрнутое окно Chrome не рисует
+    кадров, а открытие вкладки и снимки ждут именно их. Команды домена
+    Browser обрабатывает сам браузер, без отрисовки, — они отвечают и
+    здесь, поэтому окно выводится из свёрнутого ими, до любой работы со
+    страницей. Место — как у `_restore_offscreen` (решение 19.09: окна не
+    должны выскакивать поверх работы человека); в конце кампании
+    `put_window_back` сворачивает окно обратно.
+    """
+    done: list[dict] = []
+    session = None
+    try:
+        session = browser.new_browser_cdp_session()
+        targets = (session.send("Target.getTargets") or {}).get("targetInfos") or []
+        seen: set = set()
+        for t in targets:
+            if t.get("type") != "page":
+                continue
+            try:
+                info = session.send("Browser.getWindowForTarget", {"targetId": t.get("targetId")}) or {}
+            except Exception:
+                continue
+            wid = info.get("windowId")
+            bounds = info.get("bounds") or {}
+            if wid is None or wid in seen:
+                continue
+            seen.add(wid)
+            if bounds.get("windowState") != "minimized":
+                continue
+            session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "normal"}})
+            time.sleep(0.5)
+            normal = (session.send("Browser.getWindowForTarget", {"targetId": t.get("targetId")}) or {}).get("bounds") or {}
+            width = max(int(normal.get("width") or 0), MIN_EDITOR_WIDTH + 200)
+            height = max(int(normal.get("height") or 0), 900)
+            left, top = window_home()
+            if left is None:
+                left, top = -(width + 400), 0
+            session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {
+                "left": left, "top": top, "width": width, "height": height}})
+            done.append({"window": wid, "was": {"left": normal.get("left"), "top": normal.get("top")}})
+    except Exception as exc:
+        done.append({"error": f"{type(exc).__name__}: {str(exc)[:80]}"})
+    finally:
+        if session is not None:
+            try:
+                session.detach()
+            except Exception:
+                pass
+    if done:
+        try:
+            from src.fb_ads_rpa import run_telemetry as rt
+
+            rt.record("window_unminimized_on_attach", not any("error" in d for d in done), diag={"windows": done})
+        except Exception:
+            pass
+    return done
+
+
 def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None, new_page: bool = False) -> BrowserConnection:
     ensure_playwright_browsers_path()
     # Prior failed attach may have left sync Playwright's loop running in-thread.
@@ -827,6 +889,7 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
     _pw_tls.playwright = pw
     try:
         browser = pw.chromium.connect_over_cdp(cdp_url)
+        restored = [d for d in _unminimize_before_attach(browser) if "window" in d]
         if browser.contexts:
             context = browser.contexts[0]
             # Чья вкладка была на экране до нас — чтобы вернуть её обратно.
@@ -839,6 +902,9 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
             context = browser.new_context()
             prior = None
             page = context.new_page()
+        if restored:
+            # В конце кампании `put_window_back` вернёт окно на место и свернёт.
+            _OFFSCREEN[id(context)] = {"window_id": restored[0]["window"], **restored[0]["was"]}
         _disable_background_throttling(context, page)
         _ensure_wide_window(context, page)
         from src.fb_ads_rpa import run_telemetry as rt

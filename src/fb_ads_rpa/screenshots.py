@@ -64,6 +64,19 @@ def _capture_via_cdp(page: Page, path: Path) -> bool:
         return False
 
 
+def _page_hidden(page: Page) -> bool:
+    """Страница скрыта (окно свёрнуто): снимок с неё не придёт никогда.
+
+    `document.visibilityState` отвечает и в свёрнутом окне — скрипты там
+    работают, не работает только отрисовка. Не смогли спросить — считаем
+    видимой: прежнее поведение.
+    """
+    try:
+        return page.evaluate("() => document.visibilityState") == "hidden"
+    except Exception:
+        return False
+
+
 def capture(page: Page, label: str, *, base_dir: str | Path = "output/rpa_screenshots") -> str:
     root = screenshot_dir(base_dir)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -84,6 +97,15 @@ def capture(page: Page, label: str, *, base_dir: str | Path = "output/rpa_screen
     # the same page in 0.2s. A debug screenshot must never be able to hang
     # the whole run, so the bounded path goes first and the unbounded one
     # only runs when the bounded one already failed.
+    # ACL-1313, прогон 25.09 07:52–08:01: после неудачной попытки робот
+    # свернул окно профиля и следующим делом снимал список кампаний.
+    # Playwright на свёрнутом окне отваливается по таймауту, а запасной
+    # CDP-снимок ждёт кадра, которого свёрнутое окно не рисует, — вечно:
+    # оба задания стояли 9 минут, пока владелец не развернул окна. Скрытую
+    # страницу не снимаем вовсе: картинка отладочная, задание — нет.
+    if _page_hidden(page):
+        log.info("Screenshot skipped for %s: the page is hidden (window minimized)", label)
+        return ""
     try:
         page.screenshot(
             path=str(path),

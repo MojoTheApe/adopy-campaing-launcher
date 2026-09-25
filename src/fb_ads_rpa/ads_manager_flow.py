@@ -1023,7 +1023,8 @@ class AdsManagerFlow:
 
     def _shot(self, label: str, result: RpaPublishResult) -> str:
         path = capture(self.page, label)
-        result.screenshot_paths.append(path)
+        if path:  # "" — окно свёрнуто, снимка нет (screenshots._page_hidden)
+            result.screenshot_paths.append(path)
         return path
 
     def _wait_ad_set_level(self, *, timeout_s: float = 12) -> bool:
@@ -2366,7 +2367,8 @@ class AdsManagerFlow:
                     )
         except (AdsManagerFlowError, PlaywrightTimeout) as exc:
             shot = capture(self.page, f"error_{draft.name[:20]}")
-            result.screenshot_paths.append(shot)
+            if shot:
+                result.screenshot_paths.append(shot)
             result.error = str(exc)
             if isinstance(exc, AdsManagerFlowError) and exc.screenshot:
                 result.screenshot_paths.append(exc.screenshot)
