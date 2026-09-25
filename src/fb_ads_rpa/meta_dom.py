@@ -9276,6 +9276,54 @@ def _verify_ad_media_present(page: Page) -> bool:
     return False
 
 
+_FB_ERROR_PAGE_JS = r"""
+  () => {
+    const t = (document.title || '') + ' ' + ((document.body && document.body.innerText) || '').slice(0, 400);
+    return /Facebook \| Error/i.test(document.title || '')
+      || /Sorry, something went wrong/i.test(t);
+  }
+"""
+"""Вместо Ads Manager — страница ошибки Facebook («Sorry, something went wrong»)."""
+
+
+def _facebook_error_page(page: Page) -> bool:
+    try:
+        return bool(page.evaluate(_FB_ERROR_PAGE_JS))
+    except Exception:
+        return False
+
+
+def _recover_facebook_error_page(page: Page, where: str) -> bool:
+    """Страница ошибки Facebook вместо редактора — вернуть редактор. True — вернули.
+
+    25.09 20:22 (SA Mix f7d1cc, ad2): последний ход `_reveal_ad_copy_fields` —
+    перезагрузка адреса `…ads/edit/standalone?…&ads_manager_write_regions=true#`
+    — открыл «Sorry, something went wrong» (title «Facebook | Error»), и
+    вторая попытка текста искала поля на странице ошибки. Сначала тот же
+    адрес без хвоста `#…`, затем шаг назад в истории.
+    """
+    if not _facebook_error_page(page):
+        return False
+    how = ""
+    try:
+        url = (page.url or "").split("#", 1)[0]
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        _sleep_h(3.0)
+        how = "goto"
+    except Exception:
+        pass
+    if _facebook_error_page(page):
+        try:
+            page.go_back(wait_until="domcontentloaded", timeout=30000)
+            _sleep_h(3.0)
+            how = "back"
+        except Exception:
+            pass
+    ok = not _facebook_error_page(page)
+    _telemetry.record("facebook_error_page", ok, note=how or "no_move", diag={"where": where})
+    return ok
+
+
 def _reveal_ad_copy_fields(page: Page) -> bool:
     """Make the Primary text/Headline inputs visible.
 
@@ -9405,6 +9453,7 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
         _sleep_h(2.0)
     except Exception:
         time.sleep(5.0)
+    _recover_facebook_error_page(page, "ad_copy_reveal_reload")
 
     # ACL-1313: перезагрузка возвращает в Browser add-ons «Instant form», а с
     # ней — ошибку Lead Gen и баннер условий, которые потом читались как
@@ -10171,39 +10220,54 @@ def fill_ad_copy(
             return page.locator(f'[data-rpa-field="{mark}"]').first
         return None
 
+    def _acquire(key: str, mark: str, tries: int = 3):
+        """Пометить поле и взять его узел с фокусом: (handle, count, tries).
+
+        25.09 (SA Investing 3199b2 12:40, SA Mix f7d1cc 20:19; оба — второе
+        объявление): поле заголовка находилось (`count` 1), но узел пропадал
+        между пометкой и захватом — Meta перерисовывает блок текста после
+        ввода основного текста, помеченный узел заменяется новым без метки
+        (`click_via_cdp_failed` в обеих попытках). Помечаем заново и берём
+        снова, до `tries` раз с паузой, — как `_measure_age_trigger`.
+        """
+        count = 0
+        for i in range(tries):
+            box = _locate(key, mark)
+            count = box.count() if box is not None else 0
+            if count:
+                handle = _click_via_cdp_handle(box)
+                if handle is not None:
+                    return handle, count, i + 1
+            _sleep_h(0.8)
+        return None, count, tries
+
     def _fill_body() -> bool:
         try:
-            primary_box = _locate("message_field", "body")
-            count = primary_box.count() if primary_box is not None else 0
-            if count:
-                handle = _click_via_cdp_handle(primary_box)
-                if handle is not None:
-                    if _type_and_confirm(handle, ad_body):
-                        return True
-                    _dump_stage("primary_text", "content_check_failed_after_insert", {"count": count})
-                else:
-                    _dump_stage("primary_text", "click_via_cdp_failed", {"count": count})
+            handle, count, tries = _acquire("message_field", "body")
+            if handle is not None:
+                if _type_and_confirm(handle, ad_body):
+                    return True
+                _dump_stage("primary_text", "content_check_failed_after_insert", {"count": count, "tries": tries})
+            elif count:
+                _dump_stage("primary_text", "click_via_cdp_failed", {"count": count, "tries": tries})
             else:
-                _dump_stage("primary_text", "locator_count_zero", {"count": count})
+                _dump_stage("primary_text", "locator_count_zero", {"count": count, "tries": tries})
         except Exception as exc:
             _dump_stage("primary_text", f"exception:{str(exc)[:80]}")
         return False
 
     def _fill_title() -> bool:
         try:
-            headline_box = _locate("headline_field", "title")
-            count = headline_box.count() if headline_box is not None else 0
-            if count:
-                handle = _click_via_cdp_handle(headline_box)
-                if handle is not None:
-                    page.keyboard.press("ControlOrMeta+A")
-                    if _type_and_confirm(handle, ad_title):
-                        return True
-                    _dump_stage("headline", "content_check_failed_after_insert", {"count": count})
-                else:
-                    _dump_stage("headline", "click_via_cdp_failed", {"count": count})
+            handle, count, tries = _acquire("headline_field", "title")
+            if handle is not None:
+                page.keyboard.press("ControlOrMeta+A")
+                if _type_and_confirm(handle, ad_title):
+                    return True
+                _dump_stage("headline", "content_check_failed_after_insert", {"count": count, "tries": tries})
+            elif count:
+                _dump_stage("headline", "click_via_cdp_failed", {"count": count, "tries": tries})
             else:
-                _dump_stage("headline", "locator_count_zero", {"count": count})
+                _dump_stage("headline", "locator_count_zero", {"count": count, "tries": tries})
         except Exception as exc:
             _dump_stage("headline", f"exception:{str(exc)[:80]}")
         return False
