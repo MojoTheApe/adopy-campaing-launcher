@@ -51,10 +51,14 @@ about the ad's own media into success. The media tests written for the strict #2
 variant were rewritten for variant A; where the live code differs by design, the test
 says so.
 
-Left for the owner: the live library code counts the Account tab's
-`aria-selected=true` as a marked tile and reads a missing grid as "nothing marked"
-(the strict variant filtered the tab and answered "unknown"); "Video rejected" and an
-unreadable Media state are not refusals in variant A.
+Approved by the owner on 2026-09-25 and fixed in the port as well: the library's
+Account tab (`aria-selected=true` whenever it is open) no longer counts as a selected
+tile — it made every undo after a pick that did not take look dirty, the likely cause
+of the live `library_pick_left_selection` refusals; a library grid that is not on
+screen reads as "unknown", so an undo after a click without a visible grid never
+allows an upload on top; and "Video rejected" on the ad's media is a failure
+(`media_rejected`). An unreadable Media state stays non-failing, since media presence
+is checked separately.
 
 ## Multilogin is connected in the dashboard, not in the installer — ACL-1303
 
