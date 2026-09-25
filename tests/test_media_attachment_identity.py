@@ -142,6 +142,9 @@ def _reuse(page, monkeypatch, *, fresh=False, wrong=False, warning=False):
     records = []
     monkeypatch.setattr(md._telemetry, 'record', lambda step, ok=None, **kw: records.append((step, ok, kw)))
     shots = []
+    # Снимок удачного шага с 25.09 только по FB_RPA_SHOT_ALL=1 (ACL-1313); здесь
+    # он — способ прочитать diag сверки миниатюр.
+    monkeypatch.setenv('FB_RPA_SHOT_ALL', '1')
     monkeypatch.setattr(page_capture, 'capture', lambda pg, step, diag=None, **kw: shots.append((step, diag)))
     result = md._try_reuse_library_media(page, '1741_1.mp4')
     return result, records, shots

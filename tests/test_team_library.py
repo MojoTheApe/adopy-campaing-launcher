@@ -521,6 +521,9 @@ def test_publish_refreshes_recent_builder_data_and_reports_offline_copy(team, mo
     from src.fb_ads_rpa import enrich_draft as en
     from src.fb_ads_rpa.draft import CampaignDraft, AdSetDraft
     backend, on = team
+    # Память «стянуто меньше минуты назад» — на процесс: другой тест мог
+    # стянуть targets только что, и тогда первый запуск здесь не тянет.
+    monkeypatch.setattr(en, "_forced_pull_at", {})
     on("Anna")
     tr.add("Keep", "Old interests")
     data = tl.fetch("targets")
