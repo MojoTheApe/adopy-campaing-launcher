@@ -7155,8 +7155,11 @@ def _creative_wizard_open(page: Page) -> bool:
                 .filter(e => e.offsetParent !== null && e.children.length === 0)
                 .map(e => norm(e.textContent));
               if (vis.includes('Set up your creative')) return true;  // legacy shape
-              const steps = ['Creative setup', 'Media', 'Text',
-                             'Image generation', 'Enhancements', 'Translation'];
+              // «Creative generation» — новое имя шага «Image generation»
+              // (строка шагов 25.09: Creative setup · Media · Text ·
+              // Creative generation · Enhancements · Translation).
+              const steps = ['Creative setup', 'Media', 'Text', 'Image generation',
+                             'Creative generation', 'Enhancements', 'Translation'];
               const hits = steps.filter(t => vis.includes(t)).length;
               const nav = ['Next', 'Cancel', 'Skip and continue', 'Continue', 'Done', 'Save'];
               const hasNav = [...document.querySelectorAll('[role=button],button')]
@@ -7285,6 +7288,62 @@ def _click_modal_corner_icon(page: Page, anchor_text: str) -> bool:
     return True
 
 
+_SITE_LINKS_MODAL_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\s+/g, ' ').trim();
+    const shown = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const drawerClose = (b) => b.getAttribute('aria-label') === 'Close' && (() => {
+      const s = b.closest('[data-surface]');
+      return !!s && s.getAttribute('data-surface') === '/am/editor_drawer';
+    })();
+    const anchor = [...document.querySelectorAll('*')].find((e) =>
+      e.children.length === 0 && /^(Site links|Extensions)$/.test(norm(e.textContent)) && shown(e));
+    if (!anchor) return '';
+    const btn = (box, label) => [...box.querySelectorAll('[role=button], button')]
+      .find((b) => shown(b) && norm(b.textContent) === label);
+    let box = anchor;
+    for (let i = 0; i < 12 && box.parentElement; i++) {
+      box = box.parentElement;
+      if ([...box.querySelectorAll('[aria-label="Close"]')].some(drawerClose)) return '';
+      const cancel = btn(box, 'Cancel');
+      if (cancel && btn(box, 'Save')) {
+        // Мастер креатива со своими Next/Done — это не то окно.
+        if (btn(box, 'Next') || btn(box, 'Done')) return '';
+        cancel.setAttribute('data-acl-close', 'sitelinks');
+        return 'cancel';
+      }
+    }
+    return '';
+  }
+"""
+"""Окно «Creative setup → Extensions / Site links» (Cancel/Save): пометить Cancel."""
+
+
+def _cancel_site_links_modal(page: Page) -> bool:
+    """Закрыть окно «Extensions / Site links» кнопкой Cancel. True — закрыли.
+
+    21.09, ad2_copy: поверх объявления стояло окно «Creative setup» на
+    разделе Extensions / Site links с кнопками Cancel и Save; мастер его не
+    узнавал, и шаг текста упирался в модалку. Save не жмём никогда — он
+    сохранил бы пустые ссылки в объявление.
+    """
+    try:
+        found = page.evaluate(_SITE_LINKS_MODAL_JS)
+    except Exception:
+        return False
+    if found != "cancel":
+        return False
+    clicked = _click_marked(page, '[data-acl-close="sitelinks"]')
+    try:
+        page.evaluate("() => document.querySelectorAll('[data-acl-close]')"
+                      ".forEach(e => e.removeAttribute('data-acl-close'))")
+    except Exception:
+        pass
+    _sleep_h(0.6)
+    _telemetry.record("creative_setup_modal", clicked, note="site_links_cancelled")
+    return clicked
+
+
 def _close_creative_setup_modal(page: Page) -> bool:
     """Force-close the creative wizard, whichever shape and step it is on.
 
@@ -7323,6 +7382,11 @@ def _close_creative_setup_modal(page: Page) -> bool:
         legacy = False
     if legacy:
         return _click_modal_corner_icon(page, "Set up your creative")
+
+    # Окно Extensions / Site links: только Cancel, до обхода мастера — обход
+    # жал бы в нём Save.
+    if _cancel_site_links_modal(page):
+        return True
 
     if not _creative_wizard_open(page):
         return False
@@ -8913,6 +8977,25 @@ def _back_on_the_ad(page: Page, ad_name: str, report: dict) -> None:
         _telemetry.record("ad_copy_reopen_ad", opened, diag={"ad": ad_name[:60]})
 
 
+def _heal_failed_component(page: Page, ad_name: str, report: dict, where: str) -> bool:
+    """«Error: component failed to load» на объявлении: перезагрузить и вернуться.
+
+    d3e690189a6e/07_ad2_copy: блок редактора не загрузился, и попытка текста
+    шла в пустоту. Перезагрузка — `recover_stuck_page` в режиме редактора
+    (только при «All edits saved»); после неё Meta может открыть уровень ad
+    set — объявление открываем снова (`_back_on_the_ad`). True — перезагрузили.
+    """
+    if not _component_failed(page):
+        return False
+    reloaded = recover_stuck_page(page, where, editor=True)
+    report["component_failed"] = {"where": where, "reloaded": reloaded}
+    _telemetry.record("ad_copy_component_failed", reloaded,
+                      note="reloaded" if reloaded else "not_reloaded", diag={"where": where})
+    if reloaded:
+        _back_on_the_ad(page, ad_name, report)
+    return reloaded
+
+
 def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
                   destination_url: str = "", report: dict | None = None) -> bool:
     """Написать текст объявления: лечим блокировку заранее, чиним один раз.
@@ -8933,6 +9016,7 @@ def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
         ensure_editor_window(page, "ad_copy")
     except Exception:
         pass
+    _heal_failed_component(page, ad_name, report, "ad_copy_before")
     if _review_errors_visible(page):
         _telemetry.record("ad_copy_blocked", False, note="before_first_try")
         report["blocked_before"] = True
@@ -8943,7 +9027,10 @@ def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
         return True
     if not _review_errors_visible(page):
         # Не блокировка — обычная осечка ввода: одна честная вторая попытка.
-        if report.get("why") == "copy_fields_not_revealed":
+        # Блок, который Meta не смогла загрузить, лечится перезагрузкой — до
+        # повтора, иначе повтор идёт в тот же пустой блок.
+        healed = _heal_failed_component(page, ad_name, report, "ad_copy_retry")
+        if not healed and report.get("why") == "copy_fields_not_revealed":
             _back_on_the_ad(page, ad_name, report)
         _await_creative_settled(page)
         report["retry"] = True
