@@ -151,6 +151,8 @@ console.log('ok');
 // последнюю в любом порядке. Первый живой «Publish all» на параллельном
 // сервере дал одно задание — второй замок был здесь.
 const queueCode = cut('window.cbPublishAll = function', '// ── Диагностика превью');
+// ACL-1313: занятая очередь теперь объясняет себя — берём настоящую проверку.
+const busyCode = cut('function cbQueueBusy() {', '\nwindow.cbPublish = function');
 
 function runQueue(accounts, opts = {}) {
   const events = [];
@@ -184,7 +186,7 @@ function runQueue(accounts, opts = {}) {
   sandbox.window.cbPreview = sandbox.cbPreview;
   sandbox.window.alert = sandbox.alert;
   vm.runInNewContext(
-    'window.cbSkipByName = cbSkipByName; window.cbFormDataSkipping = cbFormDataSkipping;\n' + queueCode,
+    'window.cbSkipByName = cbSkipByName; window.cbFormDataSkipping = cbFormDataSkipping;\n' + busyCode + '\n' + queueCode,
     sandbox);
   sandbox.window.cbPublishAll(() => {});
   return { events, pending, sandbox };
@@ -236,8 +238,12 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   await flush();
   q.pending[0]({ status: 'cancelled' });
   assert.ok(q.sandbox.window.CB_QUEUE.active, 'cancelling A released running B and C');
+  const alertsBefore = q.events.filter((e) => e === 'alert').length;
   q.sandbox.window.cbPublishAll(() => {});
   assert.equal(posts(q), 3, 'a duplicate batch was submitted');
+  // ACL-1313: занятая вкладка говорит, почему кнопка не сработала, а не молчит.
+  assert.equal(q.events.filter((e) => e === 'alert').length, alertsBefore + 1,
+    'a busy tab ignored Publish all silently');
   q.pending[1]({ results: [{ publishable: true }] });
   assert.ok(q.sandbox.window.CB_QUEUE.active);
   q.pending[2]({ results: [{ publishable: true }] });
