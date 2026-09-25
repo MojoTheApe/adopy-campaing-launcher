@@ -2803,20 +2803,153 @@ def _lead_terms_not_accepted(page: Page) -> bool:
         return False
 
 
+#: Ошибки проверки, которые чинит обход назначений / выбор «None» в Browser
+#: add-ons: объявление ссылается на лид-форму, которой нет.
+_LEAD_FORM_ERROR_RE = re.compile(r"must be a valid Lead Gen Data id|lead_gen_form", re.I)
+
+#: Уже записанные «прочие» ошибки проверки — одна строка телеметрии на текст.
+_OTHER_REVIEW_ERRORS_SEEN: set[str] = set()
+
+
 def _review_errors_visible(page: Page) -> bool:
-    """Meta показывает ошибку проверки на уровне объявления.
+    """Meta показывает ошибку проверки про лид-форму / назначение объявления.
 
     20.09 19:29 (CO_bnc Mix): пропуск обхода назначений оставил объявление с
     «Param call_to_action[value][lead_gen_form_id] must be a valid Lead Gen
     Data id» — ровно то, что обход и чинил. Если такая ошибка висит, обход
     делаем, сколько бы времени он ни стоил.
+
+    ACL-1313 (25.09): только ошибки лид-формы. Раньше True давало любое
+    «Review N error» — и «Review 1 error — Start authentication» (аккаунт
+    требует проверки, прогон ecce52f330b8 22.09) запускал бесполезную
+    починку Browser add-ons. Прочие ошибки проверки записываются отдельной
+    строкой `review_error_other` (`_report_other_review_errors`), а
+    блокировку аккаунта ловит `_account_blocked_text`.
     """
     try:
-        return page.get_by_text(
-            re.compile(r"Review \d+ error|must be a valid Lead Gen Data id", re.I)
-        ).first.is_visible(timeout=800)
+        if page.get_by_text(_LEAD_FORM_ERROR_RE).first.is_visible(timeout=800):
+            return True
     except Exception:
-        return False
+        pass
+    _report_other_review_errors(page)
+    return False
+
+
+_REVIEW_ERRORS_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const shown = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    };
+    const out = [];
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.children.length > 3) continue;
+      const t = norm(el.textContent);
+      if (!/^Review \d+ errors?\b/i.test(t) || t.length > 300 || !shown(el)) continue;
+      // Текст ошибки часто лежит рядом с заголовком «Review N error» —
+      // берём контейнер на пару уровней выше, но не больше 300 знаков.
+      let box = el, text = t;
+      for (let k = 0; k < 3 && box.parentElement; k++) {
+        const up = norm(box.parentElement.textContent);
+        if (up.length > 300) break;
+        box = box.parentElement; text = up;
+      }
+      if (!out.includes(text)) out.push(text);
+    }
+    return out;
+  }
+"""
+
+
+def _report_other_review_errors(page: Page) -> list[str]:
+    """Видимые «Review N error…», не относящиеся к лид-форме — в телеметрию.
+
+    Одна строка `review_error_other` на каждый новый текст: это не повод
+    для починки назначений, но человеку и разбору прогона их надо видеть.
+    """
+    found: list[str] = []
+    for root in _roots(page):
+        try:
+            found.extend(root.evaluate(_REVIEW_ERRORS_JS) or [])
+        except Exception:
+            continue
+    others = [t for t in found if not _LEAD_FORM_ERROR_RE.search(t)]
+    for text in others:
+        if text in _OTHER_REVIEW_ERRORS_SEEN:
+            continue
+        _OTHER_REVIEW_ERRORS_SEEN.add(text)
+        try:
+            _telemetry.record("review_error_other", None, note=text[:160],
+                              diag={"account_blocked": _account_blocked_match(text)})
+        except Exception:
+            pass
+    return others
+
+
+#: Признаки аккаунта, в котором Meta не даёт создавать рекламу. Ни повтор,
+#: ни починка тут не помогут — нужен человек в Meta.
+_ACCOUNT_BLOCKED_PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
+    ("verification_required", re.compile(r"Verification required to advertise", re.I)),
+    ("account_disabled", re.compile(r"Your ad account is disabled", re.I)),
+    ("account_disabled", re.compile(r"^(?:Ad )?account disabled$", re.I)),
+    ("start_authentication", re.compile(r"\bStart authentication\b", re.I)),
+    ("authentication_error", re.compile(r"#3858385\b")),
+)
+
+
+def _account_blocked_match(text: str) -> str | None:
+    """Вид блокировки по тексту или None."""
+    t = re.sub(r"\s+", " ", text or "").strip()
+    for kind, pat in _ACCOUNT_BLOCKED_PATTERNS:
+        if pat.search(t):
+            return kind
+    return None
+
+
+_ACCOUNT_BLOCKED_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const shown = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    };
+    const out = [];
+    for (const el of document.querySelectorAll('body *')) {
+      // Листья и мелкие узлы: подпись баннера, статус в колонке Delivery,
+      // кнопка «Start authentication», текст ошибки с кодом (#3858385).
+      if (el.children.length > 2) continue;
+      const t = norm(el.textContent);
+      if (!t || t.length > 300) continue;
+      if (!/verification required to advertise|account (is )?disabled|start authentication|3858385/i.test(t)) continue;
+      if (!shown(el)) continue;
+      out.push(t);
+    }
+    return out;
+  }
+"""
+
+
+def _account_blocked_text(page: Page) -> str | None:
+    """Видимый текст, по которому ясно: аккаунт заблокирован Meta.
+
+    Прогон ecce52f330b8 (22.09): красный баннер «Verification required to
+    advertise — Complete verification to remove restrictions…», у кампании в
+    колонке Delivery «Account disabled», кнопка Create серая. Прогон трижды
+    нажимал Create, дважды перезагружал страницу и через 5 минут упал на
+    `objective_leads`, а повтор кампании начал бы всё заново. В редакторе
+    объявления та же блокировка выглядит как «Review 1 error — Start
+    authentication» с кодом (#3858385).
+    """
+    for root in _roots(page):
+        try:
+            texts = root.evaluate(_ACCOUNT_BLOCKED_JS) or []
+        except Exception:
+            continue
+        for t in texts:
+            if _account_blocked_match(t):
+                return t
+    return None
 
 
 #: ACL-1313, прогон 25.09: снимок экрана после каждого удачного шага стоил
@@ -2958,7 +3091,7 @@ def run_recorded_campaign_flow(
     _telemetry.set_current_run(run_id, campaign_name)
     _shot_clock = {"t": time.time()}
 
-    def _shot(label: str, diag: dict | None = None) -> None:
+    def _shot(label: str, diag: dict | None = None, note: str | None = None) -> None:
         now = time.time()
         step, ok = _telemetry.normalise_step(label)
         # Причина отказа собирается здесь, в единственной точке, а не в сорока
@@ -2990,6 +3123,7 @@ def run_recorded_campaign_flow(
             campaign=campaign_name,
             duration_s=now - _shot_clock["t"],
             diag=diag,
+            note=note or "",
         )
         _shot_clock["t"] = now
         if ok is not False and not _shot_worth_a_picture(label):
@@ -3000,6 +3134,21 @@ def run_recorded_campaign_flow(
             _capture(page, f"recorded_{label}")
         except Exception:
             pass
+
+    def _stop_if_account_blocked(where: str) -> bool:
+        """Аккаунт заблокирован Meta — остановить кампанию (`account_blocked`).
+
+        Не повторяется (retry_policy.NON_RETRYABLE_FLOW_STEPS): повтор
+        кампании в заблокированном аккаунте снова упрётся в тот же баннер.
+        В телеметрии — найденный текст (note) и место проверки.
+        """
+        matched = _account_blocked_text(page)
+        if not matched:
+            return False
+        _shot("fail_account_blocked",
+              {"where": where, "kind": _account_blocked_match(matched), "matched": matched[:300]},
+              note=matched[:160])
+        return True
 
     # Dismiss any dismissible top banner (e.g. "We're evolving how we measure
     # results") before the very first click — confirmed live 2026-07-24 on a
@@ -3043,6 +3192,9 @@ def run_recorded_campaign_flow(
     # накопились черновики (CO_bnc 11, CR_ait 10). Пишем их число до Create,
     # чтобы связь была видна сразу, а не по снимкам.
     _telemetry.record("drafts_pending", None, diag={"count": _pending_drafts(page)})
+    # ACL-1313: заблокированный аккаунт (ecce52f330b8, 22.09) — не жать Create.
+    if _stop_if_account_blocked("campaigns_list"):
+        return "account_blocked"
     list_url = page.url
     if not _click(page.get_by_role("button", name="Create", exact=True)):
         if not (recover_stuck_page(page, "create", editor=False)
@@ -3650,6 +3802,8 @@ def run_recorded_campaign_flow(
         _shot("after_next_to_ad")
         if not ensure_editor_window(page, "ad"):
             return "window_too_small"
+        if _stop_if_account_blocked("ad_editor"):
+            return "account_blocked"
 
         if reached_ad_level:
             final_ad_name = ad_name or f"{campaign_name} Ad"
@@ -3700,6 +3854,8 @@ def run_recorded_campaign_flow(
                     ad_name=ad_name or f"{campaign_name} Ad",
                     destination_url=destination_url, report=copy_report)
                 if not ok_copy:
+                    if _stop_if_account_blocked("ad_copy"):
+                        return "account_blocked"
                     _shot("fail_ad_copy", copy_report)
                     # Объявление без текста называем прямо: по этой строке
                     # человек решает, публиковать ли кампанию.
@@ -3724,6 +3880,8 @@ def run_recorded_campaign_flow(
                 # объявлением — перезагрузить (в редакторе — только при «All
                 # edits saved»), иначе все следующие объявления падают подряд.
                 recover_stuck_page(page, f"{tag}_before", editor=True)
+                if _stop_if_account_blocked(f"{tag}_before"):
+                    return "account_blocked"
                 shells_before = _tree_new_ad_shells(page)
                 try:
                     created = create_additional_ad(page, adset_name)

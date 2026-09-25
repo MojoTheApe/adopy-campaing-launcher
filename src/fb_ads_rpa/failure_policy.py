@@ -40,6 +40,12 @@ WARNING = "warning"
 # Names are the base part, before any ":detail" suffix. Add a new step here in
 # the same commit that starts producing it, otherwise it blocks by default.
 POLICY: dict[str, tuple[str, str]] = {
+    "account_blocked": (
+        BLOCKING,
+        "Meta has restricted this ad account (\"Verification required to advertise\", "
+        "\"Account disabled\" or \"Start authentication\"); the campaign was stopped and "
+        "will not be retried - complete the verification in Meta, then run it again",
+    ),
     "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
                          "restore a desktop-sized window before continuing the draft"),
     # ── Ad level ────────────────────────────────────────────────────────────
