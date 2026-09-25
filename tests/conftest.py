@@ -39,6 +39,29 @@ if str(_PROJ_ROOT) not in sys.path:
 os.environ["ACL_SENTRY_DSN"] = ""
 
 
+# Тесты не пишут в живой журнал телеметрии (PR #314, ревью).
+#
+# `run_telemetry.TELEMETRY_PATH` смотрит в `output/rpa_telemetry.jsonl` рабочей
+# папки — тот же файл, который читают разбор прогонов и дешборд. Десятки
+# тестов зовут `record()` (часто с `ok=False`, ради отказов), и без этой
+# фикстуры выдуманные отказы оседали в настоящем журнале. Замок журнала
+# (`<путь>.lock`, `acl_log.append_line`) идёт следом за путём. Тест, который
+# ставит свой путь сам (`monkeypatch.setattr(rt, "TELEMETRY_PATH", ...)`),
+# делает это позже этой фикстуры — его путь и действует. Папка своя у
+# каждого теста и не совпадает с `tmp_path`: тесты, которые считают файлы в
+# `tmp_path`, лишнего не увидят.
+@pytest.fixture(autouse=True)
+def _telemetry_off_the_live_journal(tmp_path_factory, monkeypatch):
+    try:
+        from src.fb_ads_rpa import run_telemetry
+    except Exception:
+        yield
+        return
+    monkeypatch.setattr(run_telemetry, "TELEMETRY_PATH",
+                        tmp_path_factory.mktemp("telemetry") / "rpa_telemetry.jsonl")
+    yield
+
+
 @pytest.fixture
 def enriched_df() -> pd.DataFrame:
     """Return an enriched DataFrame as if compute_metrics + enrich_structure ran.
