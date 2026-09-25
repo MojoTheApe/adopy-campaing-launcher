@@ -4125,7 +4125,15 @@ def run_recorded_campaign_flow(
 
                 if not ensure_editor_window(page, tag):
                     return "window_too_small"
-                _clear_blocking_overlays(page, tag)
+                # PR #314, ревью: перезагрузка здесь (окно ad blocker) может
+                # открыть первое объявление — и имя второго легло бы в него.
+                # Свежая заготовка ещё зовётся «New Leads Ad»: после
+                # перезагрузки открываем её снова, не вышло — это объявление
+                # пропускаем с отказом шага имени, чужое не трогаем.
+                if "reopened_ad:failed" in (_clear_blocking_overlays(page, tag, ad_name="New Leads Ad") or []):
+                    _shot(f"fail_{tag}_name")
+                    ad_level_fails.append(f"{tag}_name:not_the_new_ad_after_reload")
+                    continue
 
                 extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
                 if not _fill(page.get_by_placeholder("Enter your ad name here..."), extra_name):
@@ -10630,7 +10638,39 @@ def _close_ad_blocker_modal(page: Page) -> str:
 _NETWORK_TOAST_TITLES = ("Your internet connection was lost",)
 
 
-def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True) -> list[str]:
+def _open_ad_name(page: Page) -> str | None:
+    """Имя объявления, открытого в редакторе (поле «Ad name»); None — не прочитать."""
+    try:
+        return page.get_by_placeholder("Enter your ad name here...").first.input_value(timeout=1500)
+    except Exception:
+        return None
+
+
+def _reopen_ad_after_reload(page: Page, ad_name: str) -> bool:
+    """После перезагрузки редактора — снова на нужном объявлении? True — да.
+
+    PR #314, ревью: перезагрузка на уровне второго/третьего объявления
+    открывает то, что Meta сочтёт нужным, — первое объявление или уровень
+    ad set. Следом шаг имени вписал бы имя второго объявления в первое.
+    Открыто ли нужное — по полю имени; нет — открываем его в дереве по
+    имени (`_open_tree_ad`, как `_back_on_the_ad`) и проверяем ещё раз.
+    """
+    want = (ad_name or "").strip().lower()
+    got = _open_ad_name(page)
+    if got is not None and got.strip().lower() == want:
+        return True
+    try:
+        _open_tree_ad(page, ad_name)
+        _sleep_h(1.0)
+        _close_creative_setup_modal(page)
+    except Exception:
+        pass
+    got = _open_ad_name(page)
+    return got is not None and got.strip().lower() == want
+
+
+def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
+                             ad_name: str = "") -> list[str]:
     """Убрать всё, что перекрывает клики: окно ad blocker, тост сети, баннеры.
 
     Зовётся в начале каждого раздела (кампания, ad set, объявления) и перед
@@ -10641,6 +10681,10 @@ def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True) -> 
     всегда, в редакторе только при «All edits saved». В телеметрию —
     `overlays_cleared` с пометкой `network_trouble`: это сигнал о сети или
     прокси профиля, а не о разметке Meta.
+
+    `ad_name` — какое объявление должно быть открыто (второе и дальше): после
+    перезагрузки его открываем снова (`_reopen_ad_after_reload`), итог —
+    `reopened_ad:ok` / `reopened_ad:failed` в возвращаемом списке.
     """
     closed: list[str] = []
     trouble = _network_trouble(page)
@@ -10658,9 +10702,13 @@ def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True) -> 
                 _reload_editor(page)
                 reloaded = True
         closed.append("network_trouble:" + ("reloaded" if reloaded else (why or "not_reloaded")))
+        reopened = None
+        if reloaded and ad_name:
+            reopened = _reopen_ad_after_reload(page, ad_name)
+            closed.append("reopened_ad:" + ("ok" if reopened else "failed"))
         _telemetry.record("overlays_cleared", None, note="network_trouble",
                           diag={"where": where, "closed": closed, "reloaded": reloaded,
-                                "url": (page.url or "")[:160]})
+                                "reopened": reopened, "url": (page.url or "")[:160]})
     elif closed:
         _telemetry.record("overlays_cleared", None, note="closed",
                           diag={"where": where, "closed": closed})
