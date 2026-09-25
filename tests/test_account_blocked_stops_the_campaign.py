@@ -128,6 +128,44 @@ def test_start_authentication_in_the_ad_editor_is_a_blocked_account(page):
     assert got and md._account_blocked_match(got) in ("start_authentication", "authentication_error")
 
 
+_EDITOR_AUTH_NO_CODE = """
+<div id="review">
+  <div role="button"><span>Review 1 error</span></div>
+  <div><span>Your ad account needs to be authenticated before you can publish.</span></div>
+  <div role="button"><span>Start authentication</span></div>
+</div>
+<div><span>Primary text</span></div>
+"""
+
+_UNRELATED_AUTH = """
+<div><span>Campaigns</span></div>
+<div id="security"><div><span>Two-factor authentication</span></div>
+  <div><span>Protect your account with a second step.</span></div>
+  <div role="button"><span>Start authentication</span></div></div>
+<div><span>Review 2 errors in other campaigns</span></div>
+""" + "<div>" + "filler text " * 60 + "</div>"
+
+
+def test_review_error_with_start_authentication_is_a_blocked_account_without_the_code(page):
+    """PR #314, M20: «Review 1 error — Start authentication» без кода #3858385."""
+    page.set_content(_EDITOR_AUTH_NO_CODE)
+    got = md._account_blocked_text(page)
+    assert got and md._account_blocked_match(got) == "start_authentication"
+
+
+def test_start_authentication_elsewhere_on_the_page_is_not_a_blocked_account(page):
+    """PR #314, находка 9: кнопка «Start authentication» вне ошибки проверки
+    кампанию не останавливает."""
+    page.set_content(_UNRELATED_AUTH)
+    assert md._account_blocked_text(page) is None
+
+
+def test_start_authentication_text_needs_a_review_error_next_to_it():
+    assert md._account_blocked_match("Review 1 error Start authentication") == "start_authentication"
+    assert md._account_blocked_match("Start authentication") is None
+    assert md._account_blocked_match("Start authentication (#3858385)") == "authentication_error"
+
+
 def test_a_healthy_account_is_not_blocked(page):
     """Статусы Off/Active и справка «Why is my ad account disabled?» — не блокировка."""
     page.set_content(_list(banner=False, delivery="Active", disabled="false"))

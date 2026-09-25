@@ -3057,7 +3057,12 @@ _ACCOUNT_BLOCKED_PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
     ("verification_required", re.compile(r"Verification required to advertise", re.I)),
     ("account_disabled", re.compile(r"Your ad account is disabled", re.I)),
     ("account_disabled", re.compile(r"^(?:Ad )?account disabled$", re.I)),
-    ("start_authentication", re.compile(r"\bStart authentication\b", re.I)),
+    # PR #314, ревью (находка 9): «Start authentication» само по себе — не
+    # блокировка (так может называться любая кнопка входа/2FA на странице);
+    # только рядом с «Review N error» — ошибкой проверки объявления.
+    ("start_authentication", re.compile(
+        r"\bReview \d+ errors?\b.*\bStart authentication\b"
+        r"|\bStart authentication\b.*\bReview \d+ errors?\b", re.I | re.S)),
     ("authentication_error", re.compile(r"#3858385\b")),
 )
 
@@ -3087,6 +3092,21 @@ _ACCOUNT_BLOCKED_JS = r"""
       if (!t || t.length > 300) continue;
       if (!/verification required to advertise|account (is )?disabled|start authentication|3858385/i.test(t)) continue;
       if (!shown(el)) continue;
+      // «Start authentication» без кода и без «Review N error» в том же узле:
+      // поднимаемся до ближайшего небольшого контейнера (до 4 уровней,
+      // ≤ 400 знаков) и берём его, только если в нём есть «Review N error»
+      // или код #3858385 (PR #314, ревью, находка 9).
+      if (/start authentication/i.test(t) && !/3858385|review \d+ errors?/i.test(t)) {
+        let box = el, ctx = '';
+        for (let k = 0; k < 4 && box.parentElement; k++) {
+          const up = norm(box.parentElement.textContent);
+          if (up.length > 400) break;
+          box = box.parentElement;
+          if (/review \d+ errors?|3858385/i.test(up)) { ctx = up; break; }
+        }
+        if (ctx && !out.includes(ctx)) out.push(ctx);
+        continue;
+      }
       out.push(t);
     }
     return out;
