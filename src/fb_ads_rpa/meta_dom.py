@@ -6470,6 +6470,8 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     for i in reversed(clicked[:-1]):
         count = _library_selected_count(page)
         if count is None:
+            _telemetry.record("ad_creative_reuse", False, note="count_unreadable_after_pick",
+                              diag={"picks": log[-3:]})
             return REUSE_DIRTY
         if count <= 1:
             break
@@ -6501,7 +6503,14 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
                 advanced = True
             break
         if not advanced:
+            if _wizard_past_media(page):
+                return _attached_at_text(page, filename, log, "no_next_but_at_text")
+            _telemetry.record("ad_creative_reuse", None, note="next_not_pressed",
+                              diag={"picks": log[-3:]})
             return _retreat(page, tiles, clicked, before)
+        # Next после нашего выбора перевёл мастер на Text — значит, Meta
+        # приняла медиа: без него шаг Text не открывается.
+        at_text = _wizard_past_media(page)
         _close_creative_setup_modal(page)
         _sleep_h(0.5)
         if "/ads/edit/" in page.url and _verify_ad_media_present(page):
@@ -6548,11 +6557,41 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             except Exception:
                 pass
             return REUSE_ATTACHED
+        if at_text:
+            # Мастер дошёл до Text после НАШЕГО выбора, а страница объявления
+            # медиа (ещё) не показывает — превью у Meta догружается позже.
+            # Отступать некуда и незачем: выбор принят.
+            return _attached_at_text(page, filename, log, "next_to_text")
         # Мастер продвинулся, а медиа на объявлении нет. Выбор при этом
         # где-то остался, и снять его отсюда уже нечем: сетки на экране нет.
+        _telemetry.record("ad_creative_reuse", False, note="dirty_after_advance",
+                          diag={"picks": log[-3:], "url_is_ad": "/ads/edit/" in (page.url or "")})
         return REUSE_DIRTY
-    except Exception:
+    except Exception as exc:
+        # Next перерисовал диалог прямо под кликом — частый случай, когда
+        # мастер ушёл на Text. Тогда медиа уже принято, откатывать нечего.
+        if _wizard_past_media(page):
+            return _attached_at_text(page, filename, log, "exception_but_at_text")
+        _telemetry.record("ad_creative_reuse", None, note="exception:" + type(exc).__name__,
+                          diag={"error": str(exc)[:300], "picks": log[-3:]})
         return _retreat(page, tiles, clicked, before)
+
+
+def _attached_at_text(page: Page, filename: str, log: list[dict], how: str) -> str:
+    """Мастер на шаге Text после нашего выбора: медиа прикреплено.
+
+    ACL-1313: раньше в этом состоянии поток «отступал» — пытался снять выбор
+    в сетке, которой на экране уже нет, и получал `dirty`, то есть отказ
+    шага при медиа, стоящем в объявлении.
+    """
+    try:
+        _close_creative_setup_modal(page)
+    except Exception:
+        pass
+    _telemetry.record("ad_creative_reuse", True, note="wizard_at_text_after_pick",
+                      diag={"file": filename, "via": how, "picks": log[-3:],
+                            "page_shows_media": _media_block_filled_now(page)})
+    return REUSE_ATTACHED
 
 
 def _retreat(page: Page, tiles, clicked: list[int], before: int) -> str:
@@ -6564,10 +6603,14 @@ def _retreat(page: Page, tiles, clicked: list[int], before: int) -> str:
     """
     clean = (before == 0 and _library_selected_count(page) == 0) if not clicked else _library_undo_selection(page, tiles, clicked, before)
     if not clean:
+        _telemetry.record("ad_creative_reuse", False, note="retreat_left_selection",
+                          diag={"clicked": clicked, "before": before})
         return REUSE_DIRTY
     try:
         _close_creative_setup_modal(page)
-    except Exception:
+    except Exception as exc:
+        _telemetry.record("ad_creative_reuse", False, note="retreat_close_failed:" + type(exc).__name__,
+                          diag={"error": str(exc)[:300]})
         return REUSE_DIRTY
     return REUSE_ABSENT
 
@@ -6645,7 +6688,12 @@ def upload_ad_creative_with_retry(
             attached = upload_ad_creative(
                 page, creative_type, creative_path, edit_url=edit_url, reuse_only=True
             )
-        except Exception:
+        except Exception as exc:
+            # Молча глотать нельзя: 25.09 GT FX ad3 отказал за 15 с, а в
+            # телеметрии осталась одна строка «уже загружали» — без причины.
+            _telemetry.record("ad_creative_upload", False, note="exception:" + type(exc).__name__,
+                              diag={"file": Path(creative_path).name, "error": str(exc)[:300],
+                                    "path": "known_file_reuse"})
             attached = False
         if attached:
             return True
@@ -7239,6 +7287,136 @@ def _close_creative_setup_modal(page: Page) -> bool:
     return False
 
 
+def _scroll_xpath_into_view(page: Page, xpath: str) -> dict | None:
+    """Прокрутить к самому маленькому видимому совпадению `xpath`.
+
+    Возвращает, что увидели: доступна ли кнопка и попала ли она в окно, —
+    или None, если совпадения нет (секция редактора размонтирована).
+    """
+    try:
+        return page.evaluate(
+            """
+            (xp) => {
+              const it = document.evaluate(xp, document, null,
+                XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+              let best = null, bestArea = Infinity;
+              for (let i = 0; i < it.snapshotLength; i++) {
+                const el = it.snapshotItem(i);
+                const r = el.getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0) continue;
+                if (r.width * r.height < bestArea) { best = el; bestArea = r.width * r.height; }
+              }
+              if (!best) return null;
+              best.scrollIntoView({ block: 'center', behavior: 'instant' });
+              const r = best.getBoundingClientRect();
+              return {
+                enabled: best.getAttribute('aria-disabled') !== 'true' && !best.disabled,
+                in_view: r.bottom > 0 && r.top < innerHeight,
+              };
+            }
+            """,
+            xpath,
+        )
+    except Exception:
+        return None
+
+
+_SET_UP_CREATIVE_PRESENT_JS = r"""
+() => [...document.querySelectorAll('[role=button],button')]
+  .some(e => e.offsetParent !== null
+        && /Set up creative/i.test((e.textContent || '').replace(/\s+/g, ' ').trim()))
+"""
+
+
+def _open_creative_wizard(page: Page, trigger_xpath: str, item_xpath: str, *,
+                          attempts: int = 4) -> tuple[bool, list[dict]]:
+    """Открыть мастер креатива: «Set up creative» → «Video ad»/«Image ad».
+
+    ACL-1313, 25.09 GT FX (5b223701b271, ad3): кнопка была на месте и
+    доступна, а мастер за четыре попытки (~15 с) так и не открылся. На
+    экране в тот момент висел «Verifying your edits…», превью крутилось:
+    редактор ещё сохранял предыдущий шаг, и клики по кнопке уходили в
+    перерисовку. Поэтому:
+
+    * до первой попытки ждём автосейв (`wait_editor_saved`);
+    * перед каждой попыткой прокручиваем к кнопке — секции виртуальные, и
+      кнопка могла уехать или размонтироваться;
+    * между попытками ждём, пока погаснет занятый футер;
+    * если клик по координатам из XPath меню не открыл — второй клик через
+      CDP по рамке самого элемента (`_clickable` + `_click_trusted`).
+
+    Возвращает (открыт ли мастер, дневник попыток) — дневник уходит в
+    телеметрию, если открыть не вышло.
+    """
+    log: list[dict] = []
+    remounted = False
+    try:
+        wait_editor_saved(page, timeout_s=15)
+    except Exception:
+        pass
+    for attempt in range(attempts):
+        if _creative_wizard_open(page):
+            return True, log
+        note: dict = {"try": attempt}
+        if attempt:
+            try:
+                wait_editor_saved(page, timeout_s=10, appear_s=0)
+            except Exception:
+                pass
+        note["busy"] = _editor_is_busy_saving(page)
+        seen = _scroll_xpath_into_view(page, trigger_xpath)
+        if seen is None and not remounted:
+            # Прокрутка по долям — дорогая (до ~6 с), поэтому один раз.
+            remounted = True
+            _scroll_until_mounted(page, _SET_UP_CREATIVE_PRESENT_JS)
+            seen = _scroll_xpath_into_view(page, trigger_xpath)
+        note["button"] = seen
+        if not seen:
+            log.append(note)
+            if _media_block_filled_now(page):
+                # Кнопки нет, потому что медиа уже стоит (Meta перенесла его
+                # сама, 17.09) — долбить дальше незачем.
+                note["media_on_ad"] = True
+                break
+            _sleep_h(0.8)
+            continue
+        _sleep_h(0.3)
+        menu = False
+        for how in ("xpath", "cdp_handle"):
+            if how == "xpath":
+                sent = _click_xpath(page, trigger_xpath)
+            else:
+                sent = _click_trusted(page, _clickable(page, trigger_xpath))
+            note[how] = sent
+            if not sent:
+                continue
+            for _ in range(8):  # ~2.4s на отрисовку меню
+                if page.query_selector("xpath=" + item_xpath) is not None:
+                    menu = True
+                    break
+                if _creative_wizard_open(page):
+                    note["opened_by"] = how
+                    log.append(note)
+                    return True, log
+                _sleep_h(0.3)
+            if menu:
+                note["menu_by"] = how
+                break
+        if not menu:
+            log.append(note)
+            continue
+        _click_xpath(page, item_xpath)
+        for _ in range(10):  # ~3s на монтирование мастера
+            if _creative_wizard_open(page):
+                note["opened_by"] = note.get("menu_by")
+                log.append(note)
+                return True, log
+            _sleep_h(0.3)
+        note["wizard"] = False
+        log.append(note)
+    return _creative_wizard_open(page), log
+
+
 def _reuse_upload_decision(page: Page, filename: str) -> bool | None:
     """Normalize the old boolean and pending explicit media-reuse contract.
 
@@ -7326,35 +7504,14 @@ def upload_ad_creative(
         f"[contains(normalize-space(.), '{option_label}')]"
     )
 
-    def _wizard_open() -> bool:
-        return _creative_wizard_open(page)
-
-    opened = False
-    for _attempt in range(4):
-        if _wizard_open():
-            opened = True
-            break
-        if not _click_xpath(page, trigger_xpath):
-            _sleep_h(0.8)
-            continue
-        # menu painted?
-        item = None
-        for _ in range(8):  # ~2.4s
-            if page.query_selector("xpath=" + item_xpath) is not None:
-                item = True
-                break
-            _sleep_h(0.3)
-        if not item:
-            continue  # menu never came up (or toggled shut) — retrigger
-        _click_xpath(page, item_xpath)
-        for _ in range(10):  # ~3s for the wizard panel to mount
-            if _wizard_open():
-                opened = True
-                break
-            _sleep_h(0.3)
-        if opened:
-            break
+    opened, tries = _open_creative_wizard(page, trigger_xpath, item_xpath)
     if not opened:
+        # Раньше — молчаливое `return False`: 25.09 GT FX (5b223701b271, ad3)
+        # четыре попытки за 15 с, и в телеметрии ни слова, почему. Теперь
+        # видно, была ли кнопка, чем по ней били и не висел ли автосейв.
+        _telemetry.record("ad_creative_upload", False, note="wizard_not_opened",
+                          diag={"file": Path(creative_path).name, "tries": tries,
+                                "busy": _editor_is_busy_saving(page)})
         return False
     _sleep_h(0.7)
 
@@ -7397,8 +7554,12 @@ def upload_ad_creative(
         try:
             upload_btn.first.wait_for(state="attached", timeout=8000)
         except Exception:
-            return False
+            pass
     if upload_btn.count() < 1:
+        # Мастер открыт, а шага Media с кнопкой Upload нет. Тоже было молча.
+        _telemetry.record("ad_creative_upload", False, note="upload_button_missing",
+                          diag={"file": Path(creative_path).name,
+                                "past_media": _wizard_past_media(page)})
         return False
 
     # Media-reuse: confirmed live (2026-07-29) that the Media step's own
