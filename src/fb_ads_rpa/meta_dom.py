@@ -3075,8 +3075,12 @@ def run_recorded_campaign_flow(
     # ACL-1313: окна нет — одно ограниченное ожидание, а не пять заходов
     # `_click` по 8+8 с (~83 с) ради того же отказа.
     leads_radio = page.get_by_role("radio", name="Leads")
-    if (_first_visible(page, (leads_radio,), budget_s=OBJECTIVE_RADIO_LAST_WAIT_S) is None
-            or not _click(leads_radio)):
+    try:
+        leads_radio.first.wait_for(state="visible", timeout=int(OBJECTIVE_RADIO_LAST_WAIT_S * 1000))
+        radio_there = True
+    except Exception:
+        radio_there = False
+    if not radio_there or not _click(leads_radio):
         _shot("fail_objective_leads")
         return "objective_leads"
     _shot("after_leads")
