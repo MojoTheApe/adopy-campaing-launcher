@@ -13284,6 +13284,25 @@ def _scroll_location_row_into_view(page: Page, name: str) -> dict | None:
         return None
 
 
+def _location_rows_settled(page: Page, tries: int = 3, pause_s: float = 0.8) -> list[dict]:
+    """Строки карточки локаций, перечитанные, если карточка на миг пуста.
+
+    25.09 (GT FX 63710223de4c 12:02, GT Day 503b0c077db6 20:26): после
+    нажатия ✕ у лишней страны Meta перерисовывает карточку, и одно чтение в
+    этот миг видит ноль строк — шаг отвечал «строки не прочитаны», хотя
+    через секунду в карточке стояла одна нужная страна (снимок 503b0c/01:
+    Guatemala с выключенным Close, `_location_rows` её читает). Пустой ответ
+    перечитываем `tries` раз с паузой, прежде чем ему верить.
+    """
+    rows = _location_rows(page)
+    for _ in range(tries - 1):
+        if rows:
+            break
+        _sleep_h(pause_s)
+        rows = _location_rows(page)
+    return rows
+
+
 def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     """Remove every included location that is not `keep_text`; return the
     names still left afterwards (empty list = clean, None = unreadable).
@@ -13298,7 +13317,7 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     if not seen and _click_locations_edit(page):
         # Свёрнутая карточка: строк нет, пока её не раскрыли карандашом.
         opened_by_us = True
-        seen = _location_rows(page)
+        seen = _location_rows_settled(page)
     if not seen and _only_wanted_in_summary(page, keep_text):
         # 18.09 06:32 (CO_bnc GMBL): карточку прочитать не удалось, а страна
         # была одна — это видно по свёрнутой строке «Inclusion: …».
@@ -13320,7 +13339,7 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
             pass
         return _done(page, opened_by_us, None)
     for _ in range(6):
-        rows = _location_rows(page)
+        rows = _location_rows_settled(page)
         if not rows:
             return _done(page, opened_by_us,
                          [] if _only_wanted_in_summary(page, keep_text) else None)
@@ -13351,7 +13370,7 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
             pass
         _cdp_mouse_click(page, target["x"], target["y"])
         _sleep_h(0.9)
-    rows = _location_rows(page)
+    rows = _location_rows_settled(page)
     if not rows:
         return _done(page, opened_by_us,
                      [] if _only_wanted_in_summary(page, keep_text) else None)

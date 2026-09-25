@@ -469,3 +469,42 @@ def test_the_expander_is_taken_after_the_label_not_before_it(page, monkeypatch):
     clicked = _record_clicks(page, monkeypatch)
     assert md._click_row_expander(page, "Locations") is True
     assert clicked["at"] == "after", clicked
+
+
+# ── карточка на миг пуста после ✕ (GT FX 63710223de4c, GT Day 503b0c077db6) ──
+
+_SINGLE = (Path(__file__).parent / "fixtures" / "ads_manager"
+           / "locations_single_country_2026_09_25.html").read_text(encoding="utf-8")
+
+
+def test_the_live_card_with_one_country_and_a_disabled_close_is_clean(page):
+    """Живая карточка 503b0c/01: одна Guatemala, Close выключен, Remove aria-disabled."""
+    page.set_content(f"<div style='width:600px'>{_SINGLE}</div>")
+    rows = md._location_rows(page)
+    assert [r["name"] for r in rows] == ["Guatemala"] and rows[0].get("disabled") is True
+    assert md._clear_other_locations(page, "Guatemala") == []
+
+
+def test_a_card_blank_for_a_moment_after_the_x_is_read_again(page, monkeypatch):
+    """После ✕ у United States карточка на полторы секунды пуста (Meta её
+    перерисовывает), потом в ней одна Guatemala с выключенным Close.
+    Одно чтение в пустой миг давало «строки не прочитаны» (None)."""
+    import time as _t
+
+    monkeypatch.setattr(md, "_sleep_h", lambda s, *a, **k: _t.sleep(s))
+    page.set_content(_CARD % {"us_click": "onclick=\"redraw()\""})
+    page.evaluate("""() => {
+      window.redraw = () => {
+        window.clicked.push('United States');
+        const loc = document.getElementById('loc'); const html = loc.innerHTML;
+        loc.innerHTML = '';
+        setTimeout(() => {
+          loc.innerHTML = html;
+          loc.querySelector('.grp[data-c="United States"]').remove();
+          loc.querySelector('.grp[data-c="Guatemala"] [role=button]').outerHTML =
+            '<button disabled style="display:none"><span>Close</span></button>';
+        }, 1250);
+      };
+    }""")
+    assert md._clear_other_locations(page, "Guatemala") == []
+    assert page.evaluate("window.clicked") == ["United States"]
