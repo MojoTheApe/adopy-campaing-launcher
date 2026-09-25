@@ -3151,6 +3151,62 @@ def _shot_worth_a_picture(label: str) -> bool:
     return success_captures_enabled()
 
 
+_FURTHER_LIMIT_CHECKED_JS = r"""
+  (d) => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const radios = (el) => el.querySelectorAll('[role=radio], input[type=radio]').length;
+    return [...d.querySelectorAll('[role=radio], input[type=radio]')].some(r => {
+      if (!(r.getAttribute('aria-checked') === 'true' || r.checked === true)) return false;
+      // Подпись варианта — самый большой предок, в котором ещё один переключатель.
+      let box = r;
+      while (box.parentElement && box.parentElement !== d && radios(box.parentElement) <= 1) box = box.parentElement;
+      return /further limit the reach of your ads/i.test(norm(box.textContent));
+    });
+  }
+"""
+"""Внутри диалога выбран именно вариант «Further limit the reach of your ads»."""
+
+
+def _pick_further_limit_radio(page: Page) -> bool:
+    """Выбрать в диалоге «Reach your preferred audiences» вариант
+    «Further limit the reach of your ads». True — он выбран.
+
+    Прогон 40b560c02036 (25.09): диалог открылся уже с выбранным «Further
+    limit…», но клик по подписи бросил исключение (что-то перекрыло её), оно
+    проглатывалось, и шаг отказал жёстко при верном выборе на экране. Теперь
+    после неудачного клика проверяем сам переключатель
+    (`[role=radio][aria-checked=true]` / `input:checked`) — выбран нужный
+    вариант, значит успех; текст исключения — в телеметрию.
+    """
+    for root in _roots(page):
+        try:
+            dialog = root.get_by_role("dialog").first
+            if not dialog.is_visible(timeout=1500):
+                continue
+        except Exception:
+            continue
+        error = ""
+        try:
+            option = dialog.get_by_text(
+                re.compile(r"further limit the reach of your ads", re.I)
+            ).first
+            option.scroll_into_view_if_needed(timeout=3000)
+            option.click(timeout=4000)
+            return True
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {str(exc).splitlines()[0][:160] if str(exc) else ''}"
+        try:
+            checked = bool(dialog.evaluate(_FURTHER_LIMIT_CHECKED_JS))
+        except Exception:
+            checked = False
+        _telemetry.record("pick_further_limit_radio", True if checked else None,
+                          note="already_selected" if checked else "click_failed",
+                          diag={"error": error})
+        if checked:
+            return True
+    return False
+
+
 def run_recorded_campaign_flow(
     page: Page,
     *,
@@ -3732,21 +3788,7 @@ def run_recorded_campaign_flow(
         # ads" radio specifically (matches the same phrase as the link that
         # opened this modal, but scoped to the dialog so we don't re-match
         # the now-hidden link behind it), then Continue.
-        picked_radio = False
-        for root in _roots(page):
-            try:
-                dialog = root.get_by_role("dialog").first
-                if not dialog.is_visible(timeout=1500):
-                    continue
-                option = dialog.get_by_text(
-                    re.compile(r"further limit the reach of your ads", re.I)
-                ).first
-                option.scroll_into_view_if_needed(timeout=3000)
-                option.click(timeout=4000)
-                picked_radio = True
-                break
-            except Exception:
-                continue
+        picked_radio = _pick_further_limit_radio(page)
         _shot("after_pick_further_limit_radio" if picked_radio else "fail_pick_further_limit_radio")
         if not picked_radio:
             return "further_limit_reach_radio"
