@@ -1,0 +1,165 @@
+"""Что из отказов робота уходит в Sentry (ACL-1318).
+
+До ACL-1318 в Sentry уезжала каждая строка телеметрии с `ok=False`. 25.09
+список нерешённых тикетов состоял из диагностики, а не из поломок кампаний:
+`advantage_plus_off: still-on` (36 событий — это предварительная проверка
+значка до возраста, настоящая — `advantage_plus_audience` после него),
+`click_target_covered: silent`, `create_took`, `conversion_website_pick`,
+`locations_open`, строки попыток, которые потом удались, и общий
+`ad_level_summary: silent`. Настоящий отказ `ad2_copy: copy-fields-not-revealed`
+среди них терялся.
+
+Теперь событие — только то, что портит кампанию:
+
+* **остановка попытки** (`report_campaign_stop`) — `run_recorded_campaign_flow`
+  вернул имя шага, на котором попытка кончилась. По событию на каждую
+  кончившуюся попытку: три отказа `campaign_name` подряд — три события, и
+  это правда о трёх попытках;
+* **блокирующий отказ в итоге кампании** (`report_blocking_failures`) — то,
+  из-за чего черновик помечен «DO NOT PUBLISH AS IS»
+  (`failure_policy.split(...)[0]`). По событию на отказ, один раз на кампанию.
+
+Исключения уходят как прежде — через интеграции `sentry_sdk`, этот модуль их
+не касается. Всё остальное с `ok=False` остаётся в локальной телеметрии.
+
+Отправка никогда не роняет прогон: любые ошибки здесь глотаются.
+"""
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from src.fb_ads_rpa import failure_policy
+from src.fb_ads_rpa import run_telemetry as _telemetry
+
+CAMPAIGN_STOP = "campaign_stop"
+BLOCKING = "blocking"
+
+#: `ad2_copy`, `ad3_copy` → `ad_copy` для отпечатка: номер объявления —
+#: номер, а номера в ключ группировки не едут.
+_AD_INDEX_RE = re.compile(r"^ad\d+_")
+
+
+#: Шаг, который отказывает молча, и строка, где причину пишет его помощник.
+#: Реплей 25.09: `conversion_website` останавливал попытку без причины, а
+#: строкой раньше `conversion_website_pick` писал `not_selected`;
+#: `ad3_create` молчал, а `create_additional_ad` — `ad_name_field_not_visible`.
+#: Таблица явная: чужую причину берём только у названного здесь помощника.
+_RELATED: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
+    (re.compile(r"^conversion_website$"), ("conversion_website_pick",)),
+    (re.compile(r"^further_limit_reach_radio$"), ("pick_further_limit_radio",)),
+    (re.compile(r"^ad\d*_create$"), ("create_additional_ad",)),
+)
+
+
+def _seen(step: str, run_id: str) -> dict[str, Any]:
+    """Причина и снимок последней строки шага; молчит сам — спросить помощника."""
+    own = _telemetry.last_failure(step, run_id) or {}
+    if own.get("why"):
+        return own
+    for pattern, helpers in _RELATED:
+        if not pattern.match(step):
+            continue
+        for helper in helpers:
+            found = _telemetry.last_failure(helper, run_id) or {}
+            if found.get("why"):
+                diag = dict(own.get("diag") or found.get("diag") or {})
+                diag["reason_from_step"] = helper
+                return {"why": found["why"], "diag": diag}
+    return own
+
+
+def group_step(step: str) -> str:
+    """Шаг без номера объявления — то, по чему складываются одинаковые отказы."""
+    return _AD_INDEX_RE.sub("ad_", step or "")
+
+
+def _send(
+    failure: str,
+    *,
+    kind: str,
+    campaign: str,
+    account: str,
+    run_id: str,
+    attempt: int | None = None,
+) -> str:
+    from src import acl_sentry
+
+    step = failure_policy.base_name(failure)
+    seen = _seen(step, run_id)
+    why = seen.get("why") or ""
+    reason = acl_sentry.failure_reason(failure, why)
+    diag: dict[str, Any] = {}
+    if seen.get("diag"):
+        diag.update(seen["diag"])
+    if failure != step:
+        # Полный текст отказа из итога — в контексте, не в отпечатке: в нём
+        # бывают имена объявлений и номера.
+        diag["failure"] = failure
+    if kind == BLOCKING:
+        diag["policy"] = failure_policy.reason(failure)
+    return acl_sentry.report_step_failure(
+        step,
+        why or failure,
+        run_id=run_id,
+        campaign=campaign,
+        account=account,
+        diag=diag or None,
+        reason=reason,
+        job=_telemetry.current_job_id(),
+        kind=kind,
+        group_step=group_step(step),
+        attempt=attempt,
+    ) or ""
+
+
+def report_campaign_stop(
+    fail_step: str,
+    *,
+    campaign: str = "",
+    account: str = "",
+    run_id: str = "",
+    attempt: int | None = None,
+) -> str:
+    """Попытка кампании кончилась на шаге `fail_step` — одно событие."""
+    if not fail_step:
+        return ""
+    try:
+        return _send(
+            fail_step,
+            kind=CAMPAIGN_STOP,
+            campaign=campaign or _telemetry.current_campaign(),
+            account=account,
+            run_id=run_id or _telemetry.current_run_id(),
+            attempt=attempt,
+        )
+    except Exception:
+        return ""
+
+
+def report_blocking_failures(
+    failures: list[str],
+    *,
+    campaign: str = "",
+    account: str = "",
+    run_id: str = "",
+) -> list[str]:
+    """По событию на каждый блокирующий отказ итога кампании.
+
+    Предупреждения (`failure_policy` → warning) не уходят: черновик с ними
+    публикуем. Список зовут один раз на кампанию — по итогу выжившей попытки.
+    """
+    sent: list[str] = []
+    try:
+        blocking, _warnings = failure_policy.split(list(failures or []))
+    except Exception:
+        return sent
+    run_id = run_id or _telemetry.current_run_id()
+    campaign = campaign or _telemetry.current_campaign()
+    for failure in blocking:
+        try:
+            sent.append(_send(failure, kind=BLOCKING, campaign=campaign,
+                              account=account, run_id=run_id))
+        except Exception:
+            sent.append("")
+    return sent

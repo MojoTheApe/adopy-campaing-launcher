@@ -12,7 +12,7 @@ RPA_FLOW_VERSION = "v96"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
-from src.fb_ads_rpa import failure_policy, retry_policy
+from src.fb_ads_rpa import failure_policy, retry_policy, sentry_signal
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.page_diagnostics import diagnose_and_recover
 from src.fb_ads_rpa.meta_dom import (
@@ -2255,6 +2255,14 @@ class AdsManagerFlow:
                         pass
                 if not fail_step:
                     break
+                # ACL-1318: попытка кончилась — это настоящий отказ кампании, и
+                # в Sentry он уходит здесь, по событию на попытку. Прогон
+                # попытки назван внутри `run_recorded_campaign_flow`, так что
+                # номер и контекст шага берутся из текущего потока.
+                sentry_signal.report_campaign_stop(
+                    fail_step, campaign=draft.name,
+                    account=draft.account_label or "", attempt=attempt,
+                )
                 decision = retry_policy.disposition(fail_step)
                 if decision.action != retry_policy.RETRY_CAMPAIGN:
                     result.steps_completed.append(
@@ -2295,6 +2303,12 @@ class AdsManagerFlow:
             # invite a re-run that builds a duplicate), but say plainly that
             # this one must not go out untouched.
             apply_step_failures(result, ad_soft_fails)
+            # ACL-1318: блокирующие отказы итога — по событию на каждый, один
+            # раз на кампанию (по выжившей попытке). Остальные `ok=False` из
+            # телеметрии в Sentry не уходят — см. `sentry_signal`.
+            sentry_signal.report_blocking_failures(
+                ad_soft_fails, campaign=draft.name, account=draft.account_label or "",
+            )
             return result
 
         # LLM agent (opt-in, FB_RPA_ENGINE=llm_agent): live Claude-driven loop —

@@ -1,5 +1,26 @@
 # System history
 
+## Sentry receives only real campaign failures — ACL-1318 (phase 1)
+
+Every telemetry row with `ok=False` used to become a Sentry event, so the list of
+issues was dominated by diagnostics that are not failures of a campaign
+(`advantage_plus_off: still-on`, `click_target_covered: silent`, `create_took`,
+`conversion_website_pick`, `locations_open`, per-attempt rows, `ad_level_summary:
+silent`) and real ones such as `ad2_copy: copy-fields-not-revealed` were buried. Now
+`src/fb_ads_rpa/sentry_signal.py` sends an event only for (a) a hard failure that ends
+a campaign attempt (one per attempt, `failure_kind=campaign_stop`) and (b) each
+blocking failure of a campaign's final result (`failure_policy.split`, one per failure,
+once per campaign, `failure_kind=blocking`). Exceptions are reported as before. Each
+event is titled `step: reason`; the reason is the machine token inside the result text
+(`(copy_fields_not_revealed)`, `…:row_not_found`), else a known kind, else the reason
+the step's telemetry rows gave, or that of an explicitly listed helper step
+(`conversion_website` ← `conversion_website_pick`, `adN_create` ←
+`create_additional_ad`). The fingerprint is step without the ad number + reason, so
+campaign names and numbers never split an issue. The event carries campaign, account
+label, run id, job id, attempt and the scrubbed diag of the step's last telemetry row.
+Everything else stays in local telemetry. Replaying the 25.09 telemetry: 77 events
+become 18.
+
 ## Each campaign in the builder shows where its build is — ACL-1315
 
 While campaigns were being built, the only report was the job list at the bottom of
