@@ -1796,6 +1796,38 @@ def _click_trusted(page: Page, selector_or_handle, *, timeout: float = 3000) -> 
         return False
 
 
+def _cdp_input_session(page: Page):
+    """CDP-сессия для ввода мышью — одна на страницу (ACL-1313).
+
+    Прежде каждый клик открывал новую `new_cdp_session` и отсоединял её:
+    при трёх профилях это 0,1–0,3 с на клик, 4–6 с на кампанию. Сессия
+    привязана к вкладке, а не к документу, и переживает переходы по
+    страницам; закрытую вкладку или отвалившуюся сессию выдаёт первая же
+    ошибка `send` — тогда кэш сбрасывается (`_drop_cdp_input_session`).
+    """
+    session = getattr(page, "_rpa_input_cdp", None)
+    if session is None:
+        session = page.context.new_cdp_session(page)
+        try:
+            page._rpa_input_cdp = session  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    return session
+
+
+def _drop_cdp_input_session(page: Page) -> None:
+    session = getattr(page, "_rpa_input_cdp", None)
+    try:
+        page._rpa_input_cdp = None  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    if session is not None:
+        try:
+            session.detach()
+        except Exception:
+            pass
+
+
 def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
     """Trusted click via Chrome DevTools Protocol Input domain.
 
@@ -1804,9 +1836,15 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
     gets a click. Raw CDP mouseMoved → mousePressed → mouseReleased is the
     community workaround used by Multilogin/CDP harnesses.
     """
-    try:
-        session = page.context.new_cdp_session(page)
+    for attempt in range(2):
+        sent = {"any": False}
         try:
+            session = _cdp_input_session(page)
+
+            def _send(params, _session=session):
+                _session.send("Input.dispatchMouseEvent", params)
+                sent["any"] = True
+
             # Approach along a curved path instead of teleporting to the
             # target. Audit 2026-07-31: our pointer produced 2-3 points
             # from anywhere to anywhere, with the press ~8ms after the last
@@ -1814,10 +1852,7 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
             # with a slight arc and human-ish gaps, then press.
             _hit_mark(page, x, y)
             for px, py in _mouse_path(page, x, y):
-                session.send(
-                    "Input.dispatchMouseEvent",
-                    {"type": "mouseMoved", "x": px, "y": py, "button": "none"},
-                )
+                _send({"type": "mouseMoved", "x": px, "y": py, "button": "none"})
                 time.sleep(_human_jitter(0.02, 0.5))
             _sleep_h(0.08)
             if _hit_changed(page, x, y):
@@ -1828,13 +1863,11 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
                 # ждём, пока меню свернётся, и подходим к цели справа.
                 away = (float(x) + 320.0, float(y))
                 for px, py in _mouse_path(page, *away):
-                    session.send("Input.dispatchMouseEvent",
-                                 {"type": "mouseMoved", "x": px, "y": py, "button": "none"})
+                    _send({"type": "mouseMoved", "x": px, "y": py, "button": "none"})
                     time.sleep(_human_jitter(0.02, 0.5))
                 _sleep_h(0.9)
                 for px, py in _mouse_path(page, x, y, start=away):
-                    session.send("Input.dispatchMouseEvent",
-                                 {"type": "mouseMoved", "x": px, "y": py, "button": "none"})
+                    _send({"type": "mouseMoved", "x": px, "y": py, "button": "none"})
                     time.sleep(_human_jitter(0.02, 0.5))
                 _sleep_h(0.08)
                 _telemetry.record("click_target_covered", not _hit_changed(page, x, y),
@@ -1844,16 +1877,17 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
                 ("mouseReleased", {"button": "left", "buttons": 0, "clickCount": 1}),
             ):
                 params = {"type": typ, "x": float(x), "y": float(y), **extra}
-                session.send("Input.dispatchMouseEvent", params)
+                _send(params)
                 time.sleep(_human_jitter(0.06, 0.4))
-        finally:
-            try:
-                session.detach()
-            except Exception:
-                pass
-        return
-    except Exception:
-        pass
+            return
+        except Exception:
+            # Сессия из кэша могла умереть (вкладка закрыта, профиль
+            # переподключён). Ничего ещё не отправлено — одна попытка со
+            # свежей сессией; иначе, как и прежде, клик через Playwright.
+            _drop_cdp_input_session(page)
+            if attempt == 0 and not sent["any"]:
+                continue
+            break
     # Fallback: Playwright mouse API
     page.mouse.move(x, y)
     _sleep_h(0.06)
