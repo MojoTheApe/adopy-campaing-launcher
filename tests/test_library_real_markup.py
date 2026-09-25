@@ -126,17 +126,19 @@ def test_the_picked_tile_carries_the_same_thumbnail_id(page):
     assert PICKED_ID in md._tile_thumb_ids(tile)
 
 
-def test_without_a_grid_only_the_counter_decides_the_retreat(page, monkeypatch):
-    """Вариант A (#218): сетки нет — «отмеченных плиток» нет, решает счётчик.
+def test_a_missing_grid_is_unknown_even_when_an_unrelated_counter_is_zero(page, monkeypatch):
+    """Сетки на экране нет — «неизвестно», и откат после клика не чистый.
 
-    Строгий #238 отвечал здесь «неизвестно» (None) и запрещал загрузку при
-    любом счётчике. Живой код отвечает False; откат считается чистым, только
-    если счётчик на странице — «0 selected». Вопрос передан владельцу.
+    Порт ACL-1284: живой код отвечал здесь False («ничего не отмечено»), и
+    откат после клика по плитке без видимой сетки разрешал загрузку поверх.
+    Без клика решает счётчик, как в живом коде: мы ничего не трогали.
     """
     page.set_content('<div>0 selected</div>')
     monkeypatch.setattr(md, "_sleep_h", lambda *_: None)
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda *_: None)
-    assert md._library_any_tile_marked(page) is False
+    assert md._library_any_tile_marked(page) is None
+    assert md._library_undo_selection(page, None, [0], 0) is False
+    assert md._retreat(page, None, [0], 0) == md.REUSE_DIRTY
     assert md._retreat(page, None, [], 0) == md.REUSE_ABSENT
     page.set_content('<div>1 selected</div>')
     assert md._retreat(page, None, [], 0) == md.REUSE_DIRTY

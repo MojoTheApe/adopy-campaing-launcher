@@ -6370,7 +6370,10 @@ def _library_any_tile_marked(page: Page) -> bool | None:
             " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked')]"
             " .some(el => !el.closest('[role=tab], [role=tablist], [role=switch]')); }"
         )
-        return bool(value)
+        # Сетки на экране нет — «неизвестно», а не «ничего не отмечено»:
+        # `bool(None)` давал False, и откат после клика без сетки считался
+        # чистым, разрешая загрузку поверх (порт ACL-1284).
+        return value if isinstance(value, bool) else None
     except Exception:
         return None
 
