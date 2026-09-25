@@ -8,6 +8,13 @@
 берётся. В трёх других прогонах дня возраст ставился: дело не в селекторах,
 а в том, что переключатель оказался включён к моменту шага.
 
+ACL-1313 (25.09): `_ensure_manual_audience` читает состояние по бейджу
+карточки Audience (`#advantage-state-audience-section-header`) и без него
+ничего не кликает, поэтому бейдж синтетических страниц `_PAGE` и
+`_MENU_PAGE` обёрнут в этот заголовок, как в живой раскладке 09.2026. Сами
+утверждения о выключении не менялись: при бейдже «on» выключение по-прежнему
+кликается и пишется.
+
 Проверяется на синтетической странице в офлайн-Chrome: детектор видит оба
 признака Advantage+ и различает «выключено» и «не нашёл»; выключение
 переключает и пишет телеметрию; чтение показывает, что стоит в выпадашках;
@@ -33,7 +40,7 @@ _PAGE = """
 <!doctype html><html><body>
 <div id="card">
   <div>Audience</div>
-  <span id="badge" %(badge_style)s>Advantage+ %(badge)s</span>
+  <div id="advantage-state-audience-section-header"><span id="badge" %(badge_style)s>Advantage+ %(badge)s</span></div>
   <div>
     <div>Advantage+ leads campaign</div>
     <div id="sw" role="switch" aria-checked="%(checked)s" onclick="flip()">toggle</div>
@@ -138,7 +145,7 @@ _MENU_PAGE = """
 <!doctype html><html><body>
 <div id="card">
   <div>Audience</div>
-  <span id="badge">Advantage+ on</span>
+  <div id="advantage-state-audience-section-header"><span id="badge">Advantage+ on</span></div>
   <div id="trig" role="button" tabindex="-1" onclick="openMenu()">
     <span role="heading">Advantage+ leads campaign</span>
     <span id="state">On</span>

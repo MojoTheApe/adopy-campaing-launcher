@@ -12228,10 +12228,17 @@ def _ensure_manual_audience(page: Page) -> bool | None:
     On the fourth it was On again by the age step. Checking here, right
     before the control that depends on it, is cheaper than working out why.
     """
-    before = _advantage_plus_audience_on(page)
+    # ACL-1313 (25.09): состояние читается по бейджу карточки Audience, а не
+    # по всей странице. `_advantage_plus_audience_on` видел «Advantage+ on» у
+    # Placements и кампанийный переключатель, отвечал «on» всегда и кликал
+    # впустую (162 записи still_on). Бейдж «off» или бейджа нет — ничего не
+    # трогаем: итог после возраста проверяет `verify_audience_advantage_off`.
+    before = _audience_badge_on(page)
+    badge = {True: "on", False: "off"}.get(before)
     if before is not True:
         _telemetry.record("advantage_plus_off", None,
-                          note="already_off" if before is False else "not_found")
+                          note="already_off" if before is False else "badge_not_found",
+                          diag={"badge": badge})
         return before
     flipped = _turn_off_advantage_plus_leads(page)
     picked = False
@@ -12250,10 +12257,11 @@ def _ensure_manual_audience(page: Page) -> bool | None:
             "[contains(normalize-space(.), 'Switch to original audience')]",
         )
     _sleep_h(0.8)
-    after = _advantage_plus_audience_on(page)
+    after = _audience_badge_on(page)
     _telemetry.record("advantage_plus_off", after is not True,
                       note="switched" if after is not True else "still_on",
-                      diag={"flipped_switch": flipped, "picked_off": picked})
+                      diag={"flipped_switch": flipped, "picked_off": picked,
+                            "badge": badge, "badge_after": {True: "on", False: "off"}.get(after)})
     return after
 
 
