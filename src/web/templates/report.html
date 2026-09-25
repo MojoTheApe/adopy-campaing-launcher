@@ -7745,26 +7745,16 @@ function amapMlPaint(block) {
   var line = ml.querySelector('.amap-ml-line');
   var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[inst]) || inst;
   var alive = !!(state && state.alive);
-  /* ACL-1311: токен команде выпускает тимлид; остальные вставляют готовый.
-     Вход по паролю у байера выбил бы всех, кто работает тем же логином. */
-  var admin = !!(state && state.team_admin);
   line.textContent = 'Multilogin ' + label + ': ';
   line.title = (state && (state.error || state.reason)) || '';
   var mark = document.createElement('b');
   mark.className = alive ? 'amap-ml-ok' : 'amap-ml-off';
   mark.textContent = !state ? 'checking…' : alive ? 'connected' :
-    state.reason === 'revoked' ? 'team token was replaced' :
-    state.reason === 'expired' ? 'team token expired' :
-    state.has_token ? 'token could not be verified' : 'not connected';
+    state.reason === 'expired' ? 'token expired' : state.has_token ? 'token could not be verified' : 'not connected';
   line.appendChild(mark);
   if (alive && state.email) line.appendChild(document.createTextNode(' · ' + state.email));
-  if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + amapMlDate(state.expires_at)));
-  if (!alive && state && state.next_step) line.appendChild(document.createTextNode(' — ' + state.next_step));
-  var open = ml.querySelector('.amap-ml-open');
-  open.hidden = !state || alive;
-  open.textContent = admin ? 'Connect Multilogin' : 'Paste team token';
-  var copy = ml.querySelector('.amap-ml-copy');
-  if (copy) copy.hidden = !(admin && alive);
+  if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
+  ml.querySelector('.amap-ml-open').hidden = !state || alive;
   var signin = ml.querySelector('.amap-ml-signin');
   if (alive && signin) signin.remove();
 }
@@ -7792,16 +7782,8 @@ function amapMlOpen(btn) {
   // A pending sign-in owns its form until its response; never detach its inputs.
   if (document.querySelector('.amap-ml-signin[data-busy]')) return;
   document.querySelectorAll('.amap-ml-signin').forEach(function (el) { el.remove(); });
-  var form = document.getElementById('amap-ml-signin-template').content.cloneNode(true);
-  var admin = !!(AMAP_ML_STATE[inst] && AMAP_ML_STATE[inst].team_admin);
-  if (!admin) {
-    /* Полей почты и пароля у байера нет вовсе, а не просто скрыто: сервер
-       такой вход всё равно отвергнет, а пустые поля — приглашение пробовать. */
-    form.querySelectorAll('.amap-ml-email, .amap-ml-pass, .amap-ml-connect').forEach(function (el) { el.remove(); });
-    form.querySelector('.amap-ml-token').placeholder = 'team token from your team lead';
-  }
-  block.querySelector('.amap-ml').appendChild(form);
-  block.querySelector(admin ? '.amap-ml-email' : '.amap-ml-token').focus();
+  block.querySelector('.amap-ml').appendChild(document.getElementById('amap-ml-signin-template').content.cloneNode(true));
+  block.querySelector('.amap-ml-email').focus();
 }
 function amapInstanceChanged(sel) {
   var block = amapMlBlock(sel), form = block.querySelector('.amap-ml-signin');
@@ -7863,7 +7845,7 @@ async function amapMlSubmit(btn, paste) {
       'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
   } catch (e) { amapMlSay(block, String(e.message || e), true); }
   finally {
-    if (pass) pass.value = '';
+    pass.value = '';
     delete form.dataset.busy;
     selector.disabled = false;
     form.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
@@ -7871,42 +7853,6 @@ async function amapMlSubmit(btn, paste) {
 }
 function amapMlSignin(btn) { return amapMlSubmit(btn, false); }
 function amapMlSaveToken(btn) { return amapMlSubmit(btn, true); }
-/* Срок токена — датой, а не ISO-строкой вида 2026-10-09T09:30:00+00:00. */
-function amapMlDate(iso) {
-  var d = new Date(iso);
-  if (isNaN(d.getTime())) return String(iso || '');
-  function two(n) { return (n < 10 ? '0' : '') + n; }
-  return two(d.getDate()) + '.' + two(d.getMonth() + 1) + '.' + d.getFullYear();
-}
-function amapMlClipboard(text) {
-  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
-  /* Запасной путь для браузера без Clipboard API: поле живёт одно мгновение
-     и удаляется сразу, чтобы токен не остался в разметке. */
-  var ta = document.createElement('textarea');
-  ta.value = text; ta.setAttribute('readonly', '');
-  ta.style.position = 'fixed'; ta.style.opacity = '0';
-  document.body.appendChild(ta); ta.select();
-  var ok = false;
-  try { ok = document.execCommand('copy'); } finally { ta.remove(); }
-  return ok ? Promise.resolve() : Promise.reject(new Error('The browser blocked the clipboard. Try again.'));
-}
-async function amapMlCopy(btn) {
-  var block = amapMlBlock(btn), inst = amapMlInstance(block);
-  btn.disabled = true;
-  try {
-    var r = await fetch('/multilogin-team-token', {
-      method: 'POST', credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({instance: inst})
-    });
-    var j = await r.json();
-    if (!r.ok || !j || !j.ok || !j.token) throw new Error((j && j.error) || 'Could not read the team token');
-    await amapMlClipboard(j.token);
-    var st = AMAP_ML_STATE[inst] || {};
-    amapMlSay(block, 'Team token copied. Send it to the team in a private message' +
-      (st.expires_at ? '; it works until ' + amapMlDate(st.expires_at) : '') + '.');
-  } catch (e) { amapMlSay(block, String(e.message || e), true); }
-  finally { btn.disabled = false; }
-}
 function amapMlBoot() {
   var wanted = {};
   document.querySelectorAll('.amap-ml').forEach(function (ml) { wanted[amapMlInstance(amapMlBlock(ml))] = 1; });
@@ -12347,7 +12293,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
   <div class="amap-ml-signin">
     <input type="email" class="amap-ml-email" placeholder="Multilogin email" autocomplete="username" size="18">
     <input type="password" class="amap-ml-pass" placeholder="password" autocomplete="current-password" size="14">
-    <button type="button" class="amap-btn amap-ml-connect" onclick="amapMlSignin(this)">Connect</button>
+    <button type="button" class="amap-btn" onclick="amapMlSignin(this)">Connect</button>
     <input type="password" class="amap-ml-token" placeholder="or paste automation token" size="22" autocomplete="off">
     <button type="button" class="amap-btn" onclick="amapMlSaveToken(this)">Save token</button>
   </div>

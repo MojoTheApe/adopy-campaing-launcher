@@ -21,7 +21,7 @@ def browser():
         b.close()
 
 
-def _page(browser, *, alive=False, token_saved=True, team_admin=True, status_extra=None):
+def _page(browser, *, alive=False, token_saved=True):
     report = (TPL / 'report.html').read_text(encoding='utf-8')
     styles = '\n'.join(re.findall(r'<style[^>]*>(.*?)</style>', report, re.S))
     script = report[report.index('var _mlxCache ='):report.index('\nfunction amapHint')]
@@ -39,8 +39,7 @@ def _page(browser, *, alive=False, token_saved=True, team_admin=True, status_ext
     html = f'<style>{styles}</style>{blocks}{shared}<script>var ACL_MLX_LABELS = {{A:"Inhouse",B:"Agency"}};{script}</script>'
     ctx = browser.new_context()
     page = ctx.new_page()
-    state = {'alive': {'A':alive,'B':False}, 'calls':[], 'token_saved':token_saved,
-             'team_admin': team_admin, 'status_extra': status_extra or {}}
+    state = {'alive': {'A':alive,'B':False}, 'calls':[], 'token_saved':token_saved}
     errors = []
     page.on('pageerror', lambda e: errors.append(str(e)))
     def route(r):
@@ -52,16 +51,11 @@ def _page(browser, *, alive=False, token_saved=True, team_admin=True, status_ext
         state['calls'].append((url.path, data))
         if url.path == '/multilogin-token-status':
             inst = parse_qs(url.query)['instance'][0]
-            # ACL-1311: роль приходит в каждом ответе о состоянии.
-            body = {'ok':True,'alive':state['alive'][inst],'has_token':state['alive'][inst],
-                    'team_admin':state['team_admin'], **state['status_extra']}
+            body = {'ok':True,'alive':state['alive'][inst],'has_token':state['alive'][inst]}
         elif url.path in ('/multilogin-signin','/multilogin-save-token'):
             saved = state['token_saved'] or url.path.endswith('save-token')
             state['alive'][data['instance']] = saved
             body = {'ok':True,'token_saved':saved,'token_error':'Workspace owner must issue the automation token'}
-        elif url.path == '/multilogin-team-token':
-            body = ({'ok':True,'instance':data['instance'],'token':'team-token-' + data['instance']}
-                    if state['team_admin'] else {'ok':False,'error':'Only the team lead'})
         elif url.path == '/multilogin-search':
             body = {'ok':True, 'profiles':[]}
         else:
@@ -173,102 +167,5 @@ def test_token_change_invalidates_every_search_query_for_that_instance(browser):
         assert [x[1]['search_text'] for x in calls] == ['X84', 'X85']
         assert all(x[1]['instance'] == 'B' for x in calls)
         assert not errors
-    finally:
-        ctx.close()
-
-
-# ── Team access (ACL-1311) ─────────────────────────────────────────────────
-#
-# Логин Multilogin у команды общий; вход по паролю выпускает новый токен и
-# выбивает остальных. Тимлид входит и копирует токен, байер вставляет готовый.
-
-def test_a_buyer_is_offered_only_the_team_token(browser):
-    ctx, p, s, errors = _page(browser, alive=False, team_admin=False)
-    try:
-        opener = p.locator('.amap-ml-open').first
-        assert opener.inner_text() == 'Paste team token'
-        opener.click()
-        form = p.locator('.amap-ml-signin')
-        assert form.locator('.amap-ml-email, .amap-ml-pass, .amap-ml-connect').count() == 0, (
-            'у байера остались поля входа по паролю'
-        )
-        assert form.locator('.amap-ml-token').get_attribute('placeholder') == 'team token from your team lead'
-        form.locator('.amap-ml-token').fill('team-token-A')
-        form.get_by_role('button', name='Save token').click()
-        p.wait_for_function("document.querySelectorAll('.amap-ml-open:not([hidden])').length === 0")
-        assert ('/multilogin-save-token', {'token': 'team-token-A', 'instance': 'A'}) in s['calls']
-        assert not any(path == '/multilogin-signin' for path, _ in s['calls'])
-        assert errors == []
-    finally:
-        ctx.close()
-
-
-def test_the_team_lead_signs_in_and_a_buyer_cannot_copy(browser):
-    ctx, p, s, errors = _page(browser, alive=False, team_admin=True)
-    try:
-        assert p.locator('.amap-ml-open').first.inner_text() == 'Connect Multilogin'
-        p.locator('.amap-ml-open').first.click()
-        assert p.locator('.amap-ml-signin .amap-ml-email').count() == 1
-    finally:
-        ctx.close()
-    ctx, p, s, errors = _page(browser, alive=True, team_admin=False)
-    try:
-        assert p.locator('.amap-ml-copy:visible').count() == 0, 'байеру предложено раздавать токен'
-    finally:
-        ctx.close()
-
-
-def test_the_team_lead_copies_the_token_and_it_does_not_stay_on_the_page(browser):
-    ctx, p, s, errors = _page(browser, alive=True, team_admin=True,
-                              status_extra={'expires_at': '2026-10-09T09:30:00+00:00'})
-    try:
-        # Страница открыта не по https и не на localhost, поэтому Clipboard API
-        # нет и работает запасной путь через execCommand — его и ловим.
-        p.evaluate("""() => {
-          window.__copied = null;
-          document.execCommand = function (cmd) {
-            if (cmd === 'copy') window.__copied = document.activeElement && document.activeElement.value;
-            return true;
-          };
-        }""")
-        copy = p.locator('.amap-ml-copy').first
-        assert copy.is_visible()
-        copy.click()
-        p.wait_for_function("window.__copied !== null")
-        assert p.evaluate("window.__copied") == 'team-token-A'
-        assert ('/multilogin-team-token', {'instance': 'A'}) in s['calls']
-        # Поле для копирования получает токен свойством `value`, а не атрибутом,
-        # поэтому в тексте страницы его не видно. Ищем по живым полям.
-        assert not p.evaluate(
-            "[...document.querySelectorAll('textarea, input')].some(e => e.value === 'team-token-A')"
-        ), 'поле с токеном осталось на странице'
-        assert 'team-token-A' not in p.content(), 'токен попал в разметку страницы'
-        msg = p.locator('.amap-msg').first.inner_text()
-        assert 'copied' in msg.lower() and '09.10.2026' in msg
-        assert errors == []
-    finally:
-        ctx.close()
-
-
-def test_a_replaced_token_says_so_and_what_to_do(browser):
-    ctx, p, s, errors = _page(browser, alive=False, team_admin=False, status_extra={
-        'has_token': True, 'reason': 'revoked',
-        'next_step': 'Ask your team lead for the current team token and paste it here.'})
-    try:
-        line = p.locator('.amap-ml-line').first.inner_text()
-        assert 'team token was replaced' in line
-        assert 'Ask your team lead' in line
-        assert 'expired' not in line
-    finally:
-        ctx.close()
-
-
-def test_the_expiry_is_a_date_not_a_timestamp(browser):
-    ctx, p, s, errors = _page(browser, alive=True, team_admin=True,
-                              status_extra={'expires_at': '2026-10-09T09:30:00+00:00'})
-    try:
-        line = p.locator('.amap-ml-line').first.inner_text()
-        assert 'until 09.10.2026' in line
-        assert 'T09:30' not in line
     finally:
         ctx.close()

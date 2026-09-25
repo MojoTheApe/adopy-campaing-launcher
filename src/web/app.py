@@ -3958,32 +3958,6 @@ async def build_upload(request: Request) -> Response:
     )
 
 
-def _mlx_team_admin() -> bool:
-    """Эта машина выдаёт команде токен Multilogin (ACL-1311).
-
-    Логин в Multilogin у команды общий — один на Inhouse, один на KLD. Вход по
-    паролю выпускает новый токен автоматизации, и прежние, судя по всему,
-    перестают работать: 24.09 оба токена на машине владельца отвечали 401 при
-    сроке ещё на две недели. Так что каждый байер, нажавший Connect, мог
-    выбить всех остальных. Выпускает токен один человек — тимлид, — а
-    остальные вставляют готовый.
-
-    Метка стоит в машинном `.env` тимлида. Имён в продукте нет: у другой
-    команды тимлид другой.
-    """
-    return (os.environ.get("ACL_MLX_TEAM_ADMIN") or "").strip().lower() in {"1", "true", "yes"}
-
-
-#: Что сказать человеку, чей токен перестал работать. Тимлид выпускает новый
-#: сам; байеру выпускать нельзя — он выбьет остальных, — ему нужен токен тимлида.
-_MLX_ASK_TEAM_LEAD = "Ask your team lead for the current team token and paste it here."
-_MLX_SIGN_IN_AGAIN = "Sign in again through Connect Multilogin to issue a new team token."
-
-
-def _mlx_next_step() -> str:
-    return _MLX_SIGN_IN_AGAIN if _mlx_team_admin() else _MLX_ASK_TEAM_LEAD
-
-
 @app.get("/multilogin-token-status")
 async def multilogin_token_status(instance: str = "A") -> JSONResponse:
     """Is the saved automation token alive? (token-first connect, no re-login)
@@ -4002,17 +3976,13 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
     instance = (instance or "A").strip().upper()
     if instance not in ("A", "B"):
         instance = "A"
-    # Роль нужна странице в каждом ответе: от неё зависит, предложить войти
-    # или вставить токен тимлида (ACL-1311).
-    base = {"ok": True, "team_admin": _mlx_team_admin()}
     env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
     token = (os.environ.get(env_key) or "").strip()
     if not token:
-        return JSONResponse({**base, "has_token": False, "alive": False})
+        return JSONResponse({"ok": True, "has_token": False, "alive": False})
 
     expires_at: str | None = None
     email: str | None = None
-    lives_on = False  # срок в самом токене ещё не вышел
     parts = token.split(".")
     if len(parts) == 3:
         try:
@@ -4024,10 +3994,8 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
                 from datetime import datetime, timezone
                 expires_at = datetime.fromtimestamp(exp, tz=timezone.utc).isoformat()
                 if exp < _time.time() + 60:
-                    return JSONResponse({**base, "has_token": True, "alive": False,
-                                         "reason": "expired", "expires_at": expires_at,
-                                         "next_step": _mlx_next_step()})
-                lives_on = True
+                    return JSONResponse({"ok": True, "has_token": True, "alive": False,
+                                         "reason": "expired", "expires_at": expires_at})
         except Exception:
             pass  # not a decodable JWT — let the API call decide
 
@@ -4038,46 +4006,13 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
             timeout=12,
         )
     except Exception as exc:
-        return JSONResponse({**base, "has_token": True, "alive": False,
+        return JSONResponse({"ok": True, "has_token": True, "alive": False,
                              "reason": f"network: {exc}", "expires_at": expires_at})
     if r.status_code == 401:
-        # Отказ при сроке, который ещё не вышел, — это не «истёк»: токен
-        # заменили новым входом или сменили пароль («Active automation tokens
-        # expire after the password is changed», справка Multilogin). Для
-        # человека это разное: «истёк» читается как «раз в месяц», а «заменён»
-        # лечится у тимлида, а не ожиданием.
-        return JSONResponse({**base, "has_token": True, "alive": False,
-                             "reason": "revoked" if lives_on else "expired",
-                             "expires_at": expires_at, "next_step": _mlx_next_step()})
-    return JSONResponse({**base, "has_token": True, "alive": r.status_code == 200,
+        return JSONResponse({"ok": True, "has_token": True, "alive": False,
+                             "reason": "expired", "expires_at": expires_at})
+    return JSONResponse({"ok": True, "has_token": True, "alive": r.status_code == 200,
                          "expires_at": expires_at, "email": email})
-
-
-@app.post("/multilogin-team-token")
-async def multilogin_team_token(request: Request) -> JSONResponse:
-    """Текущий токен команды — только на машине тимлида (ACL-1311).
-
-    POST, а не GET: к изменяющим запросам граница дешборда применяет ещё и
-    проверку Origin/Sec-Fetch-Site, а здесь отдаётся ключ ко всем профилям
-    команды. На машине байера маршрут отказывает и токена не называет.
-    """
-    # «Не кэшировать» ставит граница дешборда на каждый ответ (`_secure_headers`).
-    if not _mlx_team_admin():
-        return JSONResponse(
-            {"ok": False, "error": "Only the team lead's dashboard shares the team token."},
-            status_code=403,
-        )
-    try:
-        data = await request.json()
-    except Exception:
-        data = {}
-    instance = str((data or {}).get("instance") or "A").strip().upper()
-    if instance not in ("A", "B"):
-        instance = "A"
-    token = (os.environ.get(f"MULTILOGIN_AUTOMATION_TOKEN_{instance}") or "").strip()
-    if not token:
-        return JSONResponse({"ok": False, "error": "Sign in to Multilogin first."})
-    return JSONResponse({"ok": True, "instance": instance, "token": token})
 
 
 @app.post("/multilogin-search")
@@ -4127,7 +4062,7 @@ async def multilogin_search(request: Request) -> JSONResponse:
     if error:
         if error.startswith("HTTP 401"):
             return JSONResponse(
-                {"ok": False, "error": "The Multilogin token no longer works. " + _mlx_next_step()}
+                {"ok": False, "error": "The token has expired — sign in again through Connect"}
             )
         # Multilogin отвечает и HTML-страницей ошибки. Вывалить её в подпись
         # под полем — значит показать человеку разметку вместо причины.
@@ -4190,15 +4125,6 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     Credentials are used for a single API call and never persisted.
     If save_token is true, updates the token in machine-local settings.
     """
-    # ACL-1311: вход по паролю выпускает новый токен и выбивает остальных.
-    # На машине байера отказываем до всякого обращения к Multilogin — и
-    # старая открытая страница, и забытая панель в билдере упрутся сюда же.
-    if not _mlx_team_admin():
-        return JSONResponse({
-            "ok": False,
-            "error": ("On this computer, paste the team token from your team lead. "
-                      "Signing in here would issue a new token and disconnect everyone else."),
-        }, status_code=403)
     try:
         data = await request.json()
     except Exception:
