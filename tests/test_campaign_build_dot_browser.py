@@ -50,6 +50,10 @@ def _route_for(html, state):
             data = {'job_id': JOB}
         elif path.endswith('/progress'):
             state['progress_calls'] += 1
+            own = (state.get('by_job') or {}).get(path.split('/')[-2])
+            if own is not None:
+                r.fulfill(json=own)
+                return
             if state['progress'] is None:
                 r.fulfill(status=404, json={'error': 'Job not found.'})
                 return
@@ -260,3 +264,20 @@ def test_reduced_motion_shows_a_ring_instead_of_a_pulse(browser, html):
         assert span.evaluate('e => getComputedStyle(e).boxShadow') != 'none'
     finally:
         context.close()
+
+
+def test_same_named_campaigns_of_two_accounts_keep_their_own_dots(ui):
+    """D6: ключ точки — аккаунт и имя. Задание другого аккаунта с тем же
+    именем кампании (и свежее) не красит строку аккаунта Demo."""
+    p, state = ui
+    a, b = publish_demo(p)
+    state['by_job'] = {
+        JOB: progress('running', [camp(a, step='ad_copy', idle_s=5), camp(b)], current=a, idle_s=5),
+        'other-job': dict(progress('done', [camp(a, result=BLOCKED)]), job_id='other-job', account_label='Other'),
+    }
+    p.evaluate('([n]) => cbBuild.watch("other-job", "Other", [n])', [a])
+    p.evaluate('cbBuild.refresh()')
+    p.wait_for_timeout(500)
+    p.evaluate('cbBuild.refresh()')
+    expect(dot(p, a)).to_have_class('cbd-ind cbd-ind-build-run')
+    expect(dot(p, a)).to_have_attribute('title', 'Building: ad copy')
