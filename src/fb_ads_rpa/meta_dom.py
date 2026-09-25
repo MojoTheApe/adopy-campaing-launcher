@@ -2289,6 +2289,88 @@ def _click_website_via_js_row(page: Page) -> bool:
     return False
 
 
+_CONVERSION_MENU_OPEN_JS = r"""
+  () => {
+    // Открытое меню Conversion location — это заголовки групп «Multiple» /
+    // «Single» (запись рецепта: role=heading) или подпись «Send people to one
+    // location…». Текст «Website and instant forms» в счёт НЕ идёт: это
+    // значение закрытого триггера (25.09, 90a8987edad9 — меню закрыто, а
+    // старая проверка по этому тексту считала его открытым).
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const own = (el) => norm(Array.from(el.childNodes).filter(n => n.nodeType === 3)
+      .map(n => n.textContent).join('') || (el.childElementCount === 0 ? el.textContent : ''));
+    const shown = (el) => {
+      if (!el.offsetParent) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    };
+    const groups = ['single', 'multiple', 'único', 'única', 'múltiple', 'múltiples'];
+    for (const el of document.querySelectorAll('[role=heading], div, span')) {
+      const t = own(el);
+      if (!t || t.length > 80) continue;
+      if (groups.includes(t) && shown(el)) return true;
+      if ((t.startsWith('send people to one location') || t.startsWith('enviar personas a una ubicación'))
+          && shown(el)) return true;
+    }
+    return false;
+  }
+"""
+
+
+def _conversion_location_menu_open(page: Page) -> bool:
+    """Открыто ли сейчас меню Conversion location (без ожиданий)."""
+    for root in _roots(page):
+        try:
+            if root.evaluate(_CONVERSION_MENU_OPEN_JS):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _ensure_conversion_menu_open(page: Page, *, tries: int = 2) -> bool:
+    """Меню Conversion location открыто к следующему способу выбора Website.
+
+    25.09 (90a8987edad9, SA Investing; 19 полных отказов с 19.09): все восемь
+    способов `_pick_website_from_open_menu` работали по уже закрытому меню —
+    на снимке закрытый список «Website and instant forms», в page.html нет ни
+    одного role=radio. Первый же неудачный способ (или клик мимо) закрывает
+    меню, и остальные семь жмут пробел/мышь в пустоту. Поэтому перед каждым
+    способом меню проверяется и при необходимости открывается заново — только
+    когда оно закрыто: клик по открытому триггеру его бы закрыл.
+    """
+    for _ in range(max(1, tries)):
+        if _conversion_location_menu_open(page):
+            return True
+        dismiss_publish_draft_dialog(page)
+        if not click_conversion_location_dropdown(page):
+            return False
+        for _poll in range(8):
+            if _conversion_location_menu_open(page):
+                return True
+            _sleep_h(0.25)
+    return _conversion_location_menu_open(page)
+
+
+#: Сколько ждать, пока выбранное «Website» появится в триггере после способа.
+WEBSITE_VALUE_WAIT_S = 2.0
+
+
+def _website_value_shows(page: Page, timeout_s: float | None = None) -> bool:
+    """В триггере Conversion location стоит ровно «Website» (не «Website and
+    instant forms»): читаем показанное значение, а не ответ способа клика."""
+    wait = WEBSITE_VALUE_WAIT_S if timeout_s is None else timeout_s
+    deadline = time.monotonic() + max(0.0, wait)
+    while True:
+        if is_website_conversion_selected(page):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        _sleep_h(0.25)
+        # Под _sleep_h=0 в тестах цикл не должен крутиться вхолостую.
+        time.sleep(0.05)
+
+
 def _pick_website_from_open_menu(page: Page) -> bool:
     """Expand Single (if needed) then click Website — fully automatic.
 
@@ -2302,6 +2384,12 @@ def _pick_website_from_open_menu(page: Page) -> bool:
       2. Raw CDP mouse on radio / row
       3. Recorded golden path (Single heading → Website)
       4. Playwright mouse chain / force / JS / legacy keyboard
+
+    25.09: перед КАЖДЫМ способом меню проверяется и при надобности открывается
+    заново (`_ensure_conversion_menu_open`), а успех способа засчитывается
+    только по показанному значению «Website» в триггере. Строка телеметрии
+    `conversion_website_pick` — какой способ сработал и сколько раз меню
+    пришлось открывать.
     """
     if is_website_conversion_selected(page):
         return True
@@ -2309,43 +2397,58 @@ def _pick_website_from_open_menu(page: Page) -> bool:
     # Dismiss 'Publish draft items?' dialog that may be blocking the dropdown
     dismiss_publish_draft_dialog(page)
 
-    if not _is_website_option_visible(page):
-        _expand_conversion_location_single(page)
-        _wait_for_single_expanded(page, timeout_s=5.0)
+    methods = (
+        ("keyboard_focus", _click_website_via_keyboard_focus),
+        ("cdp", _click_website_via_cdp),
+        ("recorded_recipe", _pick_website_via_recorded_recipe),
+        ("mouse", _click_website_via_mouse),
+        ("force_locator", _click_website_via_force_locator),
+        ("js_row", _click_website_via_js_row),
+        ("keyboard", _click_website_via_keyboard),
+        ("aria_controls", _pick_website_from_aria_controls),
+    )
+    tried: list[str] = []
+    reopened = 0
+    menu_closed = 0
 
-    dismiss_publish_draft_dialog(page)
-    _scroll_website_option_into_view(page)
+    def _done(method: str | None, ok: bool) -> bool:
+        try:
+            _telemetry.record(
+                "conversion_website_pick", ok,
+                note=method or "not_selected",
+                diag={"tried": tried, "reopened": reopened, "menu_closed": menu_closed},
+            )
+        except Exception:
+            pass
+        return ok
 
-    if is_website_conversion_selected(page):
-        return True
+    for name, method in methods:
+        if is_website_conversion_selected(page):
+            return _done(tried[-1] if tried else "already", True)
+        was_open = _conversion_location_menu_open(page)
+        if not was_open:
+            menu_closed += 1
+            if not _ensure_conversion_menu_open(page):
+                # Меню не открыть — способ жал бы в пустоту; следующий
+                # способ снова попробует открыть.
+                tried.append(f"{name}:menu_closed")
+                continue
+            reopened += 1
+        dismiss_publish_draft_dialog(page)
+        if not _is_website_option_visible(page):
+            _expand_conversion_location_single(page)
+            _wait_for_single_expanded(page, timeout_s=5.0)
+        dismiss_publish_draft_dialog(page)
+        _scroll_website_option_into_view(page)
+        tried.append(name)
+        try:
+            method(page)
+        except Exception:
+            pass
+        if _website_value_shows(page):
+            return _done(name, True)
 
-    # 1) Keyboard — proven stable when CDP mouse drops events
-    if _click_website_via_keyboard_focus(page):
-        return True
-
-    # 2) Raw CDP Input.dispatchMouseEvent
-    dismiss_publish_draft_dialog(page)
-    if _click_website_via_cdp(page):
-        return True
-
-    # 3) Human-recorded recipe
-    if _pick_website_via_recorded_recipe(page):
-        return True
-
-    # 4) Playwright mouse / force / JS / arrow-nav
-    if _click_website_via_mouse(page):
-        return True
-    if _click_website_via_force_locator(page):
-        return True
-    if _click_website_via_js_row(page):
-        return True
-    if _click_website_via_keyboard(page):
-        return True
-    if _pick_website_from_aria_controls(page):
-        _sleep_h(0.5)
-        return is_website_conversion_selected(page)
-
-    return is_website_conversion_selected(page)
+    return _done(None, _website_value_shows(page, timeout_s=0))
 
 
 def conversion_menu_is_open(page: Page) -> bool:
