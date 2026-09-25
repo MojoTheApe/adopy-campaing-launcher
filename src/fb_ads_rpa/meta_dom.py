@@ -2720,25 +2720,15 @@ def _review_errors_visible(page: Page) -> bool:
 #: 5–7 с при трёх профилях (Playwright замораживает анимации Meta и кодирует
 #: PNG 3072×1467) — около 30 снимков, 2–3 минуты простоя на кампанию; владелец
 #: видел это как паузу после «All edits saved». Телеметрия пишется по-прежнему
-#: на каждом шаге; картинка — на отказе и на границах разделов.
+#: на каждом шаге; картинка — только на отказе. Оставленные было «границы
+#: разделов» (after_create, after_placements, …) и метки success_/before_
+#: давали ещё 12–16 снимков на кампанию — около минуты.
 #: Вернуть снимок на каждом шаге: FB_RPA_SHOT_ALL=1.
-_SHOT_KEEP = frozenset({
-    "after_create", "after_leads", "after_campaign_fields", "after_next_to_adset",
-    "after_targeting", "after_placements", "after_next_to_ad",
-    "after_ad_creative_upload", "after_ad_copy", "after_ad_level_summary",
-})
-
-
 def _shot_worth_a_picture(label: str) -> bool:
-    """Нужен ли PNG для удачного шага `label` (отказы снимаются всегда)."""
-    if os.environ.get("FB_RPA_SHOT_ALL", "").strip() in ("1", "true", "yes"):
-        return True
-    if not label.startswith("after_"):
-        return True
-    if label in _SHOT_KEEP:
-        return True
-    # Объявления 2 и 3: итог медиа и текста каждого — это граница, а не шаг.
-    return label.endswith("_creative_upload") or label.endswith("_copy")
+    """Нужен ли PNG для НЕ-отказного шага `label` (отказы снимаются всегда)."""
+    from src.fb_ads_rpa.page_capture import success_captures_enabled
+
+    return success_captures_enabled()
 
 
 def run_recorded_campaign_flow(
@@ -4291,7 +4281,7 @@ def ensure_account_placement_exclusions(page: Page, report: dict | None = None) 
     try:
         from src.fb_ads_rpa import page_capture as _pages
 
-        _pages.capture(page, step="account_controls_review", diag={"changed": changed})
+        _pages.capture_on_success(page, step="account_controls_review", diag={"changed": changed})
     except Exception:
         pass
     confirmed = None
@@ -6425,7 +6415,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             try:
                 from src.fb_ads_rpa import page_capture as _pages
 
-                _pages.capture(page, step="library_pick_selected",
+                _pages.capture_on_success(page, step="library_pick_selected",
                                diag={"tile": i, "file": filename, "picks": log,
                                      "fingerprint": _tile_fingerprint(tile)},
                                blocks={"library": _LIBRARY_DIALOG_JS})
@@ -6543,7 +6533,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             try:
                 from src.fb_ads_rpa import page_capture as _pages
 
-                _pages.capture(page, step="ad_media_ready", diag=detail,
+                _pages.capture_on_success(page, step="ad_media_ready", diag=detail,
                                blocks={"media": _AD_MEDIA_BLOCK_JS})
             except Exception:
                 pass
@@ -10874,7 +10864,7 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
         try:
             from src.fb_ads_rpa import page_capture as _pc
 
-            _pc.capture(page, step="targeting_and_groups",
+            _pc.capture_on_success(page, step="targeting_and_groups",
                         blocks={"groups": _GROUPS_BLOCK_JS})
         except Exception:
             pass
@@ -11164,7 +11154,7 @@ def _remove_stale_default_locations(page: Page, keep_text: str) -> None:
                     except Exception:
                         continue
             try:
-                from src.fb_ads_rpa.screenshots import capture as _capture
+                from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                 _capture(page, f"recorded_locations_remove_default_removed{removed_any}")
             except Exception:
@@ -11862,7 +11852,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                     except Exception:
                         pass
                     try:
-                        from src.fb_ads_rpa.screenshots import capture as _capture
+                        from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                         _capture(page, "recorded_locations_heading_found")
                     except Exception:
@@ -11963,7 +11953,7 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
                         if immediate_inp is not None:
                             break
                 try:
-                    from src.fb_ads_rpa.screenshots import capture as _capture
+                    from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                     _capture(page, f"recorded_locations_click_attempt{attempt + 1}_clicked{clicked}")
                 except Exception:
@@ -12148,6 +12138,15 @@ def _ensure_manual_audience(page: Page) -> bool | None:
         )
     _sleep_h(0.8)
     after = _advantage_plus_audience_on(page)
+    if after is True:
+        # Разметка до и после клика снималась на каждом прогоне (ACL-1313 —
+        # теперь только с FB_RPA_SHOT_ALL=1); отказу снимок остаётся.
+        try:
+            from src.fb_ads_rpa import page_capture as _pc
+
+            _pc.capture(page, step="advantage_plus_still_on")
+        except Exception:
+            pass
     _telemetry.record("advantage_plus_off", after is not True,
                       note="switched" if after is not True else "still_on",
                       diag={"flipped_switch": flipped, "picked_off": picked})
@@ -12239,7 +12238,7 @@ def _pick_advantage_plus_leads_off(page: Page) -> bool:
     try:
         from src.fb_ads_rpa import page_capture as _pc
 
-        _pc.capture(page, step="advantage_plus_before")
+        _pc.capture_on_success(page, step="advantage_plus_before")
     except Exception:
         pass
     # The control is the row itself: a `role=button` (325×36) that CONTAINS
@@ -12271,7 +12270,7 @@ def _pick_advantage_plus_leads_off(page: Page) -> bool:
     _sleep_h(0.8)
     # What opened is not known offline. Keep the page so the next run says.
     try:
-        _pc.capture(page, step="advantage_plus_control")
+        _pc.capture_on_success(page, step="advantage_plus_control")
     except Exception:
         pass
     # Only a real menu item. 16.09, run e79f678f1450 (Doc21 FX): the row
@@ -12616,7 +12615,7 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
                 _cdp_mouse_click(page, trigger_x, trigger_y)
                 _sleep_h(0.5)
                 try:
-                    from src.fb_ads_rpa.screenshots import capture as _capture
+                    from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                     _capture(page, f"recorded_age_value_click_{default_text.replace('+', 'p')}")
                 except Exception:
@@ -13039,7 +13038,7 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
                 pass
             if found:
                 try:
-                    from src.fb_ads_rpa.screenshots import capture as _capture
+                    from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                     _capture(page, f"recorded_age_poll_found_tick{tick}")
                 except Exception:
@@ -13080,7 +13079,7 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
                                 el.click(timeout=3000)
                                 _sleep_h(0.3)
                                 try:
-                                    from src.fb_ads_rpa.screenshots import capture as _capture
+                                    from src.fb_ads_rpa.screenshots import capture_on_success as _capture
 
                                     _capture(page, f"recorded_age_dropdown_open_idx{idx}")
                                 except Exception:

@@ -1173,7 +1173,13 @@ class AdsManagerFlow:
             raise last_exc
         pause_after_navigation()
         result.steps_completed.append("open_campaigns")
-        self._shot("01_campaigns", result)
+        # ACL-1313: удачный переход — без PNG (5–7 с при трёх профилях);
+        # вернуть: FB_RPA_SHOT_ALL=1.
+        from src.fb_ads_rpa.screenshots import capture_on_success
+
+        shot = capture_on_success(self.page, "01_campaigns")
+        if shot:
+            result.screenshot_paths.append(shot)
 
     def _start_create_wizard(self, result: RpaPublishResult) -> None:
         sels = self.cfg.get("selectors") or {}

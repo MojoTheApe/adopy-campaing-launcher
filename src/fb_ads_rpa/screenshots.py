@@ -99,3 +99,16 @@ def capture(page: Page, label: str, *, base_dir: str | Path = "output/rpa_screen
     if not _capture_via_cdp(page, path):
         log.warning("Screenshot skipped for %s (both paths failed)", label)
     return str(path)
+
+
+def capture_on_success(page: Page, label: str, *, base_dir: str | Path = "output/rpa_screenshots") -> str:
+    """PNG удачного шага — только при FB_RPA_SHOT_ALL=1, иначе "" без снимка.
+
+    ACL-1313: каждый PNG стоит 5–7 с при трёх профилях. Отказы снимаются
+    через `capture` как прежде.
+    """
+    from src.fb_ads_rpa.page_capture import success_captures_enabled
+
+    if not success_captures_enabled():
+        return ""
+    return capture(page, label, base_dir=base_dir)
