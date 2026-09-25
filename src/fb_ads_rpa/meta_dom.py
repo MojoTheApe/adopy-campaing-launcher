@@ -13771,67 +13771,80 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     return True
 
 
-def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
-    """Set audience age range dropdowns / inputs (min and max)."""
-    # Same reasoning as fill_audience_location: skip the fuzzy
-    # scroll_to_section heading match — the precise marker search a few
-    # lines below (exact "^Age$|^Edad$" match) already does its own
-    # scroll_into_view_if_needed on the correct element.
-    _sleep_h(0.3)
-    age_min_str = str(age_min)
-    age_max_str = str(age_max) if age_max < 65 else "65+"
-    age_label_re = re.compile(r"^Age$|^Edad$", re.I)
-    ok = False
+def _measure_age_trigger(root, value: str, tries: int = 3) -> dict | None:
+    """Пометить выпадашку возраста `value` и измерить её рамку; None — нет.
 
-    # Diagnostic (2026-07-25, DQ204 Test40): Locations' own mystery was
-    # eventually resolved in part by checking how many DOM nodes match its
-    # heading text at all (count==1 ruled out a duplicate-instance theory).
-    # That exact check was never done for Age — after 7 failed attempts and
-    # multiple runs where a screenshot proved the real dropdowns were on
-    # screen while every query found zero matches, it's worth confirming
-    # get_by_text(age_label_re).first isn't grabbing an unrelated "Age" text
-    # node elsewhere in the DOM (nav, filter, breadcrumb) ahead of the real
-    # Audience field in document order.
-    for root in _roots(page):
+    Между пометкой (`_mark_age_trigger`) и замером Meta может перерисовать
+    поле — помеченный узел исчезает, замер ждёт его до таймаута
+    (5e29e66da497, 25.09). Тогда помечаем заново, до `tries` раз.
+    """
+    for _ in range(tries):
+        if not _mark_age_trigger(root, value):
+            return None
+        el = root.locator("[data-acl-age-trigger]").first
         try:
-            age_locator = root.get_by_text(age_label_re)
-            match_count = age_locator.count()
-            with open("output/debug_age_match_count.txt", "a", encoding="utf-8") as f:
-                f.write(f"root={root} match_count={match_count}\n")
-            # Test42 found match_count=2 for the very first time this was
-            # checked — confirming a real duplicate-instance risk (exactly
-            # what ruling this out for Locations required back when). Dump
-            # each match's own ancestor context individually so we can see
-            # which index is the real Audience field and which is a decoy
-            # elsewhere in the DOM (nav/breadcrumb/summary card) that
-            # `.first` may have been silently grabbing all along.
-            for i in range(min(match_count, 5)):
-                try:
-                    el = age_locator.nth(i)
-                    ctx = el.locator("xpath=ancestor::*[4]")
-                    outer = ctx.evaluate("el => el.outerHTML")
-                    visible = el.is_visible()
-                    with open("output/debug_age_match_contexts.txt", "a", encoding="utf-8") as f:
-                        f.write(f"--- match[{i}] visible={visible} ---\n{outer[:2000]}\n\n")
-                except Exception as e2:
-                    with open("output/debug_age_match_contexts.txt", "a", encoding="utf-8") as f:
-                        f.write(f"--- match[{i}] ERROR {e2!r} ---\n\n")
+            if el.count() and el.is_visible():
+                el.scroll_into_view_if_needed(timeout=2000)
+                box = el.bounding_box(timeout=1500)
+                if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
+                    return box
         except Exception:
             pass
+        _sleep_h(0.5)
+    return None
 
-    # SOLVED (2026-07-25, DQ204 Test49): clicking the "Age" label kept
-    # timing out — Playwright's own retry log named the exact blocker:
-    # <div id="...">18</div> (a dynamic id) physically intercepts pointer
-    # events at the label's location. That "18" div (and presumably a
-    # sibling "65+" div) is not a decoy — it IS the real, already-live
-    # age-min/age-max trigger, just visually overlapping the "Age" label
-    # text. Click those two value elements directly instead of the label,
-    # via raw CDP (bypasses Playwright's own actionability/interception
-    # check, which is exactly what made every locator-based click here
-    # fail). Search broadly (not scoped to a specific ancestor depth of the
-    # "Age" marker) since this element may not even be a descendant of the
-    # row we were querying — matching the earlier finding that our
-    # select/combobox searches inside that row never found anything.
+
+#: Сводка свёрнутого поля Age: «18 - 65+», «35 – 65+».
+_AGE_SUMMARY_RE = r"^(?:1[3-9]|[2-5][0-9]|6[0-5])\+?\s*[-–—]\s*(?:1[3-9]|[2-5][0-9]|6[0-5])\+?$"
+
+
+def _open_collapsed_age_row(page: Page, wait_s: float = 6.0) -> bool:
+    """Свёрнутое поле Age («18 - 65+») — раскрыть; True — границы на экране.
+
+    Прогон 5e29e66da497 (CL_ml FX, 25.09): поле Age стояло сводкой
+    «18 - 65+» с карандашом справа; карандаш — безымянная иконка
+    (role=presentation), вся строка — `role=button aria-expanded=false`.
+    Раскрываем той же стрелкой строки, что Locations и Languages
+    (`_click_row_expander` — только своя строка, не выключенная и не
+    «Remove», ACL-1250), иначе кликом по значению (`_click_summary_row`).
+    Открытое поле не трогаем: признак свёрнутого — сводка ровно в одном
+    поле Age. Ждём, пока `_age_triggers_read` прочитает обе границы.
+    """
+    if len(_age_triggers_read(page)) == 2:
+        return True
+    try:
+        collapsed = page.evaluate(_SUMMARY_ROW_JS, ["Age|Edad", _AGE_SUMMARY_RE])
+    except Exception:
+        collapsed = None
+    if not collapsed:
+        return False
+    how = ("row" if _click_row_expander(page, "Age|Edad")
+           else "value" if _click_summary_row(page, "Age|Edad", _AGE_SUMMARY_RE) else "")
+    opened = False
+    if how:
+        deadline = time.monotonic() + wait_s
+        while True:
+            if len(_age_triggers_read(page)) == 2:
+                opened = True
+                break
+            if time.monotonic() >= deadline:
+                break
+            _sleep_h(0.4)
+    _telemetry.record("audience_age_row_opened", opened,
+                      note=how or "no_control", diag={"summary": collapsed.get("text")})
+    return opened
+
+
+def _age_boundaries_pass(page: Page, age_min_str: str, age_max_str: str) -> bool:
+    """Один обход двух выпадашек возраста (min, max); True — обе стоят.
+
+    Тело прежнего `_fill_audience_age_controls` без изменений по сути, кроме
+    двух мест: граница, которая уже стоит на нужном значении (по
+    `_age_triggers_read` в границах поля), не трогается — так повтор обхода
+    не ломает уже выставленный минимум; а выпадашка ищется и меряется
+    `_measure_age_trigger` с повтором, если Meta перерисовала поле между
+    пометкой и замером.
+    """
     for root in _roots(page):
         # Bug found live (2026-07-25, Test64): this session's test data
         # always has age_max=65, which trivially equals Meta's own default
@@ -13842,7 +13855,9 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
         # independently and only report success if BOTH are confirmed.
         boundary_results = []
         for default_text, target_val in (("18", age_min_str), ("65+", age_max_str)):
-            if target_val == default_text and _age_shows_value(page, default_text):
+            reading = _age_triggers_read(page)
+            pos = 0 if default_text == "18" else 1
+            if len(reading) == 2 and reading[pos] == target_val:
                 # Граница уже стоит как надо — открывать выпадашку незачем.
                 # 17.09 13:19 (CL_ml): клик по «65+» упал на прокрутке
                 # (TimeoutError), граница записалась как проваленная, и шаг
@@ -13854,22 +13869,14 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
                 # 17.09 15:21 (CR_ait Day): первым «18» на странице оказался
                 # час в поле Start time («18:20») — кликнули по часам, возраст
                 # остался 18. Берём значение только из поля Age.
-                if not _mark_age_trigger(root, default_text):
-                    boundary_results.append(False)
-                    continue
-                el = root.locator("[data-acl-age-trigger]").first
-                if not el.count() or not el.is_visible():
-                    boundary_results.append(False)
-                    continue
                 # Test50 bug: no scroll_into_view before computing the box —
                 # the resulting screenshot showed a totally unrelated section
-                # of the page (Custom audiences), meaning either the click
-                # coordinates were stale relative to actual scroll position,
-                # or this matched an unrelated "18"/"65+" text node elsewhere
-                # entirely. Force it into view first so the box is trustworthy.
-                el.scroll_into_view_if_needed(timeout=2000)
-                box = el.bounding_box(timeout=1500)
-                if not box or box.get("width", 0) <= 0:
+                # of the page (Custom audiences). `_measure_age_trigger`
+                # прокручивает к выпадашке и повторяет пометку, если Meta
+                # перерисовала поле (5e29e66da497: TimeoutError замера).
+                box = _measure_age_trigger(root, default_text)
+                if not box:
+                    boundary_results.append(False)
                     continue
                 trigger_x, trigger_y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
                 _cdp_mouse_click(page, trigger_x, trigger_y)
@@ -14113,6 +14120,83 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
             except Exception:
                 pass
             return True
+    return False
+
+
+def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
+    """Set audience age range dropdowns / inputs (min and max)."""
+    # Same reasoning as fill_audience_location: skip the fuzzy
+    # scroll_to_section heading match — the precise marker search a few
+    # lines below (exact "^Age$|^Edad$" match) already does its own
+    # scroll_into_view_if_needed on the correct element.
+    _sleep_h(0.3)
+    age_min_str = str(age_min)
+    age_max_str = str(age_max) if age_max < 65 else "65+"
+    age_label_re = re.compile(r"^Age$|^Edad$", re.I)
+    ok = False
+
+    # Diagnostic (2026-07-25, DQ204 Test40): Locations' own mystery was
+    # eventually resolved in part by checking how many DOM nodes match its
+    # heading text at all (count==1 ruled out a duplicate-instance theory).
+    # That exact check was never done for Age — after 7 failed attempts and
+    # multiple runs where a screenshot proved the real dropdowns were on
+    # screen while every query found zero matches, it's worth confirming
+    # get_by_text(age_label_re).first isn't grabbing an unrelated "Age" text
+    # node elsewhere in the DOM (nav, filter, breadcrumb) ahead of the real
+    # Audience field in document order.
+    for root in _roots(page):
+        try:
+            age_locator = root.get_by_text(age_label_re)
+            match_count = age_locator.count()
+            with open("output/debug_age_match_count.txt", "a", encoding="utf-8") as f:
+                f.write(f"root={root} match_count={match_count}\n")
+            # Test42 found match_count=2 for the very first time this was
+            # checked — confirming a real duplicate-instance risk (exactly
+            # what ruling this out for Locations required back when). Dump
+            # each match's own ancestor context individually so we can see
+            # which index is the real Audience field and which is a decoy
+            # elsewhere in the DOM (nav/breadcrumb/summary card) that
+            # `.first` may have been silently grabbing all along.
+            for i in range(min(match_count, 5)):
+                try:
+                    el = age_locator.nth(i)
+                    ctx = el.locator("xpath=ancestor::*[4]")
+                    outer = ctx.evaluate("el => el.outerHTML")
+                    visible = el.is_visible()
+                    with open("output/debug_age_match_contexts.txt", "a", encoding="utf-8") as f:
+                        f.write(f"--- match[{i}] visible={visible} ---\n{outer[:2000]}\n\n")
+                except Exception as e2:
+                    with open("output/debug_age_match_contexts.txt", "a", encoding="utf-8") as f:
+                        f.write(f"--- match[{i}] ERROR {e2!r} ---\n\n")
+        except Exception:
+            pass
+
+    # SOLVED (2026-07-25, DQ204 Test49): clicking the "Age" label kept
+    # timing out — Playwright's own retry log named the exact blocker:
+    # <div id="...">18</div> (a dynamic id) physically intercepts pointer
+    # events at the label's location. That "18" div (and presumably a
+    # sibling "65+" div) is not a decoy — it IS the real, already-live
+    # age-min/age-max trigger, just visually overlapping the "Age" label
+    # text. Click those two value elements directly instead of the label,
+    # via raw CDP (bypasses Playwright's own actionability/interception
+    # check, which is exactly what made every locator-based click here
+    # fail). Search broadly (not scoped to a specific ancestor depth of the
+    # "Age" marker) since this element may not even be a descendant of the
+    # row we were querying — matching the earlier finding that our
+    # select/combobox searches inside that row never found anything.
+    # Прогон 5e29e66da497 (25.09, CL_ml FX): первая граница «18» нашлась, но
+    # Meta перерисовала поле, и замер её рамки упал по таймауту. Дальше
+    # старый запасной путь «раскрыть строку» кликнул по заголовку ОТКРЫТОГО
+    # поля Age — и свернул его в сводку «18 - 65+», а 24 тика опроса
+    # select/combobox (разметки, которой у Meta давно нет) съели 4 минуты.
+    # Теперь: свёрнутое поле раскрывается своей строкой
+    # (`_open_collapsed_age_row`), обход границ повторяется один раз, и по
+    # заголовку открытого поля не кликаем никогда.
+    for attempt in range(2):
+        _open_collapsed_age_row(page)
+        if _age_boundaries_pass(page, age_min_str, age_max_str):
+            return True
+        _sleep_h(1.0)
 
     # Diagnostic (2026-07-25, DQ204 Test37): a fail screenshot showed real
     # "18 [v] 65+ [v]" controls visibly on screen, yet our select/combobox/
@@ -14175,135 +14259,11 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
         except Exception:
             continue
 
-    # If Age isn't already showing live dropdowns, try the same
-    # click-to-expand pattern that fixed Locations — the earlier single
-    # naive attempt (Test28) scrolled the page away instead of expanding,
-    # but it lacked the poll/retry discipline that made the Locations fix
-    # reliable (a single point-in-time check is not enough, per that same
-    # day's evidence). Only attempt this if Age genuinely isn't interactive
-    # yet — Test32 showed it sometimes already is, in which case don't risk
-    # an unnecessary click.
-    already_expanded = False
-    for root in _roots(page):
-        try:
-            marker = root.get_by_text(age_label_re).first
-            for depth in range(1, 10):
-                row = marker.locator(f"xpath=ancestor::*[{depth}]")
-                if row.locator("select, [role=combobox], [role=spinbutton]").count() >= 2:
-                    already_expanded = True
-                    break
-            break
-        except Exception:
-            continue
-
-    if not already_expanded:
-        for root in _roots(page):
-            try:
-                heading = root.get_by_text(age_label_re).first
-                heading.wait_for(state="visible", timeout=2000)
-                heading.scroll_into_view_if_needed(timeout=2000)
-                header_block = heading.locator("xpath=ancestor::*[2]")
-                click_row = heading.locator("xpath=ancestor::*[3]")
-                wide_row = heading.locator("xpath=ancestor::*[6]")
-                # First click wakes the row into a :hover-like state — live
-                # evidence 2026-07-25 (Test34 fail screenshot) shows this
-                # reveals a pencil/edit icon at the row's right edge, but
-                # doesn't open edit mode on its own (unlike Locations, where
-                # the same single click opened the editor directly). A
-                # second click specifically near where that icon renders is
-                # needed.
-                for candidate in (header_block, click_row):
-                    try:
-                        box = candidate.bounding_box(timeout=1500)
-                        if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
-                            _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-                            break
-                    except Exception:
-                        continue
-                _sleep_h(0.3)
-                try:
-                    wbox = wide_row.bounding_box(timeout=1500)
-                    if wbox and wbox.get("width", 0) > 0:
-                        _cdp_mouse_click(page, wbox["x"] + wbox["width"] - 20, wbox["y"] + 20)
-                except Exception:
-                    pass
-                break
-            except Exception:
-                continue
-        # Test35 fail screenshot showed Age genuinely reaching the live
-        # "18 [v] 65+ [v]" dropdown state (row highlighted blue) — but the
-        # select-count check below still found nothing at the time it ran,
-        # same class of "screenshot proves it but our check ran too early"
-        # timing gap the Locations fix hit before its own poll was widened.
-        # Test36's 24x200ms (4.8s) still missed it — log every single tick
-        # with a timestamp (append, not overwrite) instead of guessing at
-        # a longer duration blindly, so the exact moment it appears (if it
-        # ever does within this window) is visible after the run.
-        poll_start = time.time()
-        value_dumped = False
-        for tick in range(24):
-            _sleep_h(0.2)
-            found = False
-            match_count = 0
-            value_hits = 0
-            for root in _roots(page):
-                try:
-                    marker = root.get_by_text(age_label_re).first
-                    for depth in range(1, 10):
-                        row = marker.locator(f"xpath=ancestor::*[{depth}]")
-                        c = row.locator("select, [role=combobox], [role=spinbutton]").count()
-                        if c > match_count:
-                            match_count = c
-                        if c >= 2:
-                            found = True
-                        # Broader check (2026-07-25): the select/combobox/
-                        # spinbutton search above found nothing for a full
-                        # 9.6s window in Test37 despite a screenshot proving
-                        # "18"/"65+" controls were visible — they're likely
-                        # some other element type entirely (e.g. a plain
-                        # [role=button], matching several other custom
-                        # dropdown triggers elsewhere in this file). Look for
-                        # the exact value text directly and dump its real
-                        # tag/role/outerHTML the first time it's seen.
-                        if not value_dumped:
-                            try:
-                                for val_text in ("18", "65+", "65"):
-                                    el = row.get_by_text(re.compile(rf"^{re.escape(val_text)}$"), exact=True).first
-                                    if el.count() and el.is_visible():
-                                        value_hits += 1
-                                        info = el.evaluate(
-                                            "el => ({tag: el.tagName.toLowerCase(), role: el.getAttribute('role'), "
-                                            "cls: el.className, outer: el.outerHTML.slice(0,600), "
-                                            "parentOuter: el.parentElement ? el.parentElement.outerHTML.slice(0,800) : ''})"
-                                        )
-                                        with open("output/debug_age_value_elements.txt", "a", encoding="utf-8") as f:
-                                            f.write(
-                                                f"tick={tick} depth={depth} val={val_text!r} info={info}\n\n"
-                                            )
-                                        value_dumped = True
-                            except Exception:
-                                pass
-                        if found:
-                            break
-                    break
-                except Exception:
-                    continue
-            try:
-                with open("output/debug_age_poll_ticks.txt", "a", encoding="utf-8") as f:
-                    f.write(
-                        f"tick={tick} t={time.time() - poll_start:.2f}s "
-                        f"max_match_count={match_count} value_hits={value_hits} found={found}\n"
-                    )
-            except Exception:
-                pass
-            if found:
-                try:
-                    from src.fb_ads_rpa.screenshots import capture_on_success as _capture
-
-                    _capture(page, f"recorded_age_poll_found_tick{tick}")
-                except Exception:
-                    pass
-                break
+    # Прежний запасной путь «раскрыть строку Age» (клик по заголовку строки и
+    # по её правому краю, затем 24 тика опроса select/combobox) снят: на
+    # открытом поле заголовок — это кнопка aria-expanded=true, и клик по нему
+    # сворачивал поле (прогон 5e29e66da497). Свёрнутую строку раскрывает
+    # `_open_collapsed_age_row` до обхода границ.
 
     for root in _roots(page):
         try:
