@@ -4123,6 +4123,50 @@ PLACEMENTS_SUBITEM_JS = """
 требовать от неё клика бессмысленно; если нет — это честный отказ.
 """
 
+#: Пауза между подпунктами внутри одного вызова страницы (мс). Отдаёт
+#: управление React между кликами — как прежде это делал обратный путь
+#: Python↔браузер между отдельными `evaluate`, — и каждый следующий подпункт
+#: ищется заново уже по перерисованной разметке.
+PLACEMENTS_SUBITEM_PAUSE_MS = 120
+
+PLACEMENTS_SUBITEMS_BATCH_JS = (
+    "async ([items, pauseMs]) => {"
+    "  const one = " + PLACEMENTS_SUBITEM_JS.strip() + ";"
+    "  const out = [];"
+    "  for (const [label, want] of items) {"
+    "    let res;"
+    "    try { res = one([label, want]); }"
+    "    catch (e) { res = { ok: false, why: String(e).slice(0, 80) }; }"
+    "    out.push(res);"
+    "    await new Promise((r) => setTimeout(r, pauseMs));"
+    "  }"
+    "  return out;"
+    "}"
+)
+
+
+def _set_placement_subitems(page: Page, items: list[tuple[str, bool]]) -> list[dict]:
+    """Проставить подпункты одним вызовом страницы (ACL-1313).
+
+    Каждый подпункт — ровно `PLACEMENTS_SUBITEM_JS`, как прежде: найти по
+    словам и кликнуть в одном и том же JS, прочитать состояние. Прежде это
+    был отдельный `page.evaluate` на подпункт — до 18 обратных путей
+    Python↔браузер за заход, по 0,1–0,5 с каждый при трёх профилях. Ответ —
+    по одному словарю на пункт, в том же порядке.
+    """
+    if not items:
+        return []
+    try:
+        res = page.evaluate(
+            PLACEMENTS_SUBITEMS_BATCH_JS,
+            [[[label, bool(want)] for label, want in items], PLACEMENTS_SUBITEM_PAUSE_MS],
+        )
+    except Exception as exc:
+        return [{"ok": False, "why": str(exc)[:80]} for _ in items]
+    res = list(res or [])
+    res += [None] * (len(items) - len(res))
+    return [r or {"ok": False, "why": "пустой ответ"} for r in res[: len(items)]]
+
 _PLACEMENT_CATEGORIES = {
     # Пять категорий раздела Placement controls и то, чем они должны стать.
     # Порядок важен только для отчёта: снимаем и ставим по одной.
@@ -5327,7 +5371,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     report["expanded"] = {}
     report["subitems_seen"] = []
 
-    def _set(label: str, want_checked: bool) -> bool:
+    def _set_many(items: list[tuple[str, bool]]) -> set[str]:
         # Найдено И нажато одним вызовом: снятие галочки перекладывает
         # строки под ней, и координата, снятая отдельным шагом, к моменту
         # клика указывает уже на соседнюю.
@@ -5341,16 +5385,27 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # Недоступная галочка — не всегда беда: «Facebook Business Explore»
         # Meta держит выключенной и не даёт трогать. Если она уже в нужном
         # состоянии, требовать от неё клика бессмысленно.
-        try:
-            res = page.evaluate(
-                PLACEMENTS_SUBITEM_JS, [label, want_checked]
-            ) or {"ok": False, "why": "пустой ответ"}
-        except Exception as exc:
-            res = {"ok": False, "why": str(exc)[:80]}
-        if not res.get("ok"):
-            _dbg.append(f"подпункт[{label}]={res}")
-            report.setdefault("subitems_failed", {})[label] = res
-        return bool(res.get("ok"))
+        #
+        # ACL-1313: все подпункты захода — одним вызовом страницы
+        # (`_set_placement_subitems`), каждый тем же JS, что и прежде.
+        # Возвращает подписи, которые встали.
+        done: set[str] = set()
+        for (label, _want), res in zip(items, _set_placement_subitems(page, items)):
+            if not res.get("ok"):
+                _dbg.append(f"подпункт[{label}]={res}")
+                report.setdefault("subitems_failed", {})[label] = res
+            else:
+                done.add(label)
+        return done
+
+    def _pass(on_page: list[str]) -> None:
+        """Один заход по видимым подпунктам: сначала «включить», потом «выключить»."""
+        items = ([(x, True) for x in remaining_on if _label_on_page(x, on_page)]
+                 + [(x, False) for x in remaining_off if _label_on_page(x, on_page)])
+        done = _set_many(items)
+        for label, want in items:
+            if label in done:
+                (remaining_on if want else remaining_off).remove(label)
 
     # Категории ведут себя как гармошка: раскрытие следующей закрывает
     # предыдущую. Проверено живым прогоном 9 сентября — код раскрыл все три
@@ -5401,12 +5456,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # «Ads on Facebook Reels» осталась единственной причиной отказа
         # шага на прогоне пользователя.
         for _ in range(2):
-            for label in list(remaining_on):
-                if _label_on_page(label, here) and _set(label, True):
-                    remaining_on.remove(label)
-            for label in list(remaining_off):
-                if _label_on_page(label, here) and _set(label, False):
-                    remaining_off.remove(label)
+            _pass(here)
             if not [x for x in remaining_on + remaining_off if _label_on_page(x, here)]:
                 break
             _sleep_h(0.6)
@@ -5431,12 +5481,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                 continue
             here.extend(more)
             report["subitems_seen"].extend(x for x in more if not _label_on_page(x, report["subitems_seen"]))
-            for label in list(remaining_on):
-                if _label_on_page(label, more) and _set(label, True):
-                    remaining_on.remove(label)
-            for label in list(remaining_off):
-                if _label_on_page(label, more) and _set(label, False):
-                    remaining_off.remove(label)
+            _pass(more)
             _settle_visible(more)
 
     report["subitems_missing"] = remaining_on + remaining_off
@@ -7084,6 +7129,7 @@ def _clickable(page: Page, xpath: str):
 
 
 _MOUNT_FRACS = (0.4, 0.55, 0.7, 0.85, 0.3, 0.6, 1.0)
+_MOUNT_POLL_S = 0.15
 
 
 def _scroll_until_mounted(
@@ -7120,9 +7166,17 @@ def _scroll_until_mounted(
         try:
             if not page.evaluate(scroll_js, frac):
                 return False  # no scroll container — nothing to do
-            _sleep_h(settle_s)
-            if page.evaluate(present_js):
-                return True
+            # ACL-1313: не «подождать settle_s и посмотреть», а смотреть всё
+            # это время. Прокрутка — присваивание scrollTop, не событие ввода,
+            # так что человеческая пауза тут ничего не изображает; секция,
+            # смонтировавшаяся за 0,15 с, больше не ждёт остаток 0,9 с.
+            settle_until = time.time() + settle_s
+            while True:
+                time.sleep(_MOUNT_POLL_S)
+                if page.evaluate(present_js):
+                    return True
+                if time.time() >= settle_until:
+                    break
         except Exception:
             continue
     return False
@@ -7204,6 +7258,70 @@ def _creative_post_media_step(page: Page) -> bool:
 _WIZARD_ADVANCE_LABELS = ("Done", "Save", "Next", "Skip and continue", "Continue", "Skip")
 
 
+#: Кнопка «вперёд» мастера — одним вызовом страницы (ACL-1313).
+#:
+#: Было: по одному `_click_xpath` на каждую подпись из шести, и каждый —
+#: XPath `//*[...][normalize-space(.)='…']` по ВСЕМУ документу редактора
+#: (строковое значение каждого элемента). На шаге, где кнопка читается
+#: «Skip and continue», это четыре пустых прохода по DOM до нужного на
+#: каждом круге обхода. Теперь один проход: те же кандидаты
+#: (`[role=button]`, `button`, без `aria-disabled="true"`), та же нормализация
+#: пробелов, что у XPath `normalize-space`, тот же порядок подписей и та же
+#: самая маленькая видимая рамка; клик — тем же CDP-кликом.
+_WIZARD_FORWARD_JS = r"""
+(labels) => {
+  const norm = (s) => (s || '').replace(/[ \t\r\n]+/g, ' ').trim();
+  const shown = (e) => {
+    for (let n = e; n; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.display === 'none' || s.visibility === 'hidden') return false;
+    }
+    return true;
+  };
+  const cands = [...document.querySelectorAll('[role=button],button')]
+    .filter(e => e.getAttribute('aria-disabled') !== 'true');
+  for (const label of labels) {
+    let best = null, bestArea = Infinity;
+    for (const el of cands) {
+      if (norm(el.textContent) !== label || !shown(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) continue;
+      const area = r.width * r.height;
+      if (area < bestArea) { best = el; bestArea = area; }
+    }
+    if (!best) continue;
+    best.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const r = best.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) continue;
+    if (r.bottom < 0 || r.top > innerHeight) continue;
+    return { label: label, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }
+  return null;
+}
+"""
+
+#: Сколько после нажатия «вперёд» ждать следующего шага. Прежняя пауза
+#: 1,4 с сохранена как потолок; мастер, закрывшийся раньше, замечается
+#: опросом, и обход кончается сразу, а не через полторы секунды.
+_WIZARD_STEP_SETTLE_S = 1.4
+_WIZARD_CLOSE_POLL_S = 0.35
+
+
+def _press_wizard_forward(page: Page) -> str | None:
+    """Нажать кнопку «вперёд» мастера. Подпись нажатой или None."""
+    try:
+        pt = page.evaluate(_WIZARD_FORWARD_JS, list(_WIZARD_ADVANCE_LABELS))
+    except Exception:
+        return None
+    if not pt:
+        return None
+    try:
+        _cdp_mouse_click(page, pt["x"], pt["y"])
+    except Exception:
+        return None
+    return pt.get("label") or ""
+
+
 def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
     """Press the wizard forward until it closes. True when it is gone.
 
@@ -7218,23 +7336,19 @@ def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
     for _ in range(rounds):
         if not _creative_wizard_open(page):
             return True
-        advanced = False
-        for label in _WIZARD_ADVANCE_LABELS:
-            if _click_xpath(
-                page,
-                "//*[@role='button' or self::button]"
-                f"[normalize-space(.)='{label}' and not(@aria-disabled='true')]",
-            ):
-                advanced = True
-                break
-        if not advanced:
+        if _press_wizard_forward(page) is None:
             misses += 1
             if misses >= 4:
                 break
             _sleep_h(1.2)
             continue
         misses = 0
-        _sleep_h(1.4)
+        # Следующий шаг отрисовывается до 1,4 с; закрытие видно раньше.
+        settle_until = time.time() + _WIZARD_STEP_SETTLE_S
+        while time.time() < settle_until:
+            time.sleep(_WIZARD_CLOSE_POLL_S)   # опрос, не действие: без «человеческой» паузы
+            if not _creative_wizard_open(page):
+                return True
     return not _creative_wizard_open(page)
 
 
