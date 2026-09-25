@@ -8672,6 +8672,37 @@ def _repair_blocked_copy_editor(page: Page, ad_name: str, destination_url: str) 
     return not _review_errors_visible(page)
 
 
+def _back_on_the_ad(page: Page, ad_name: str, report: dict) -> None:
+    """Вернуть редактор на объявление перед второй попыткой текста.
+
+    ACL-1313, прогон 25.09 (GT FX, 5b2237, объявление 1): поля текста не
+    раскрылись, последний ход `_reveal_ad_copy_fields` — перезагрузка — открыл
+    редактор на уровне ad set (адрес `adsets/edit`, справа «Ad set name»), а
+    окно к тому же было свёрнуто. Вторая попытка искала поля там, где их нет.
+    Окно — развернуть, объявление — открыть в дереве по имени.
+    """
+    try:
+        from src.fb_ads_rpa.browser import ensure_editor_window
+
+        report["window_ok"] = bool(ensure_editor_window(page, "ad_copy_retry"))
+    except Exception as exc:
+        report["window_ok"] = f"error:{str(exc)[:40]}"
+    try:
+        on_adset = "/adsets/edit" in (page.url or "")
+    except Exception:
+        on_adset = False
+    if on_adset and ad_name:
+        opened = False
+        try:
+            opened = _open_tree_ad(page, ad_name)
+            _sleep_h(2.0)
+            _close_creative_setup_modal(page)
+        except Exception:
+            pass
+        report["reopened_ad"] = opened
+        _telemetry.record("ad_copy_reopen_ad", opened, diag={"ad": ad_name[:60]})
+
+
 def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
                   destination_url: str = "", report: dict | None = None) -> bool:
     """Написать текст объявления: лечим блокировку заранее, чиним один раз.
@@ -8683,6 +8714,15 @@ def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
     текст всё равно не встал — шаг отказывает сразу и называет объявление.
     """
     report = report if report is not None else {}
+    # ACL-1313 (5b2237): к тексту окно пришло свёрнутым — проверка окна стоит
+    # только на границах разделов, а в свёрнутое окно клики по координатам не
+    # попадают, и поля текста «не раскрываются». Проверяем и здесь.
+    try:
+        from src.fb_ads_rpa.browser import ensure_editor_window
+
+        ensure_editor_window(page, "ad_copy")
+    except Exception:
+        pass
     if _review_errors_visible(page):
         _telemetry.record("ad_copy_blocked", False, note="before_first_try")
         report["blocked_before"] = True
@@ -8693,6 +8733,8 @@ def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
         return True
     if not _review_errors_visible(page):
         # Не блокировка — обычная осечка ввода: одна честная вторая попытка.
+        if report.get("why") == "copy_fields_not_revealed":
+            _back_on_the_ad(page, ad_name, report)
         _await_creative_settled(page)
         report["retry"] = True
         return fill_ad_copy(page, title, body, report)
