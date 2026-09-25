@@ -3494,6 +3494,13 @@ def run_recorded_campaign_flow(
         _clear_blocking_overlays(page, "create_retry", editor=False)
         _click(page.get_by_role("button", name="Create", exact=True))
         _shot("after_create_retry")
+    else:
+        # Круги кончились на нажатом Create, а окна цели после него ещё не
+        # ждали: прежде сразу шли 10 с `OBJECTIVE_RADIO_LAST_WAIT_S` и отказ.
+        # Прогон 6eee2acfb2ae (25.09): окно пришло через ~13 с после
+        # лишней перезагрузки `_clear_blocking_overlays` — попытка пропала.
+        # Последнему Create — то же терпеливое ожидание, что и прочим.
+        _wait_objective_dialog(page)
 
     # New Meta UI sometimes shows a Guided/Manual choice before the objective
     # picker enables Campaign name — click Manual if present, best-effort

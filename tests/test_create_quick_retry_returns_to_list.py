@@ -198,3 +198,22 @@ def test_an_absent_objective_dialog_fails_after_one_bounded_wait(flow, monkeypat
     start = clock["now"]
     assert flow["run"]() == "objective_leads"
     assert clock["now"] - start <= dom.OBJECTIVE_RADIO_LAST_WAIT_S + 1
+
+
+def test_the_last_create_of_the_retry_loop_gets_its_own_wait(flow):
+    """6eee2acfb2ae (25.09): после второго Create окно цели пришло через ~13 с,
+    а поток ждал только 10 с `OBJECTIVE_RADIO_LAST_WAIT_S`. Теперь за
+    последним нажатием идёт ещё одно полное ожидание окна."""
+    flow["waits"][:] = [False, False, True]
+    flow["run"]()
+    ev = flow["events"]
+    waits = [i for i, e in enumerate(ev) if e == ("wait_dialog",)]
+    assert len(waits) == 3, ev
+    creates = [i for i, e in enumerate(ev) if e == ("create_button",)]
+    assert waits[-1] > creates[-1], "за последним Create окно цели не ждали"
+
+
+def test_no_extra_wait_when_the_dialog_came(flow):
+    flow["waits"][:] = [True]
+    flow["run"]()
+    assert flow["events"].count(("wait_dialog",)) == 1
