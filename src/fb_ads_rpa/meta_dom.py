@@ -6630,6 +6630,12 @@ def upload_ad_creative_with_retry(
             _telemetry.record("ad_creative_upload", True, note="media_already_on_ad",
                               diag={"file": Path(creative_path).name})
             return True
+        if _wizard_past_media(page):
+            _close_creative_setup_modal(page)
+            _telemetry.record("ad_creative_upload", True, note="media_already_on_ad_wizard_at_text",
+                              diag={"file": Path(creative_path).name,
+                                    "page_shows_media": _media_block_filled_now(page)})
+            return True
         why = ("same_file_already_uploaded_this_run"
                if upload_already_succeeded(creative_path)
                else "same_file_already_failed_this_run")
@@ -7815,6 +7821,38 @@ def _media_block_filled_now(page: Page) -> bool:
               if (visible.some(t => t.includes('Please specify the media'))) return false;
               return visible.some(t => t === 'Edit media' || t === 'Remove media'
                 || t === 'Change selections' || t === 'Customize media');
+            }"""
+        ))
+    except Exception:
+        return False
+
+
+def _wizard_past_media(page: Page) -> bool:
+    """Мастер «Set up your creative» уже на шаге Text — значит, медиа выбрано.
+
+    ACL-1313, прогон 25.09 (CL Day, 956d0d, 2-е объявление): Meta перенесла
+    ролик в новое объявление сама и открыла мастер сразу на Text, с зелёной
+    галочкой у Media. Проверка по странице объявления этого не видит — она
+    под модалкой, — и шаг записал «нет медиа». На Text мастер не пускает без
+    выбранного медиа, так что поле Primary text внутри открытого мастера —
+    достаточное доказательство.
+    """
+    if not _creative_wizard_open(page):
+        return False
+    try:
+        return bool(page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const leaves = (root) => [...root.querySelectorAll('*')]
+                .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
+                .map(e => norm(e.textContent));
+              // Подзаголовок шага Text мастера; на странице объявления его нет.
+              const atText = (ls) => ls.some(t => t.startsWith('Add multiple text options'))
+                && !ls.some(t => t.includes('Please specify the media'));
+              const dialogs = [...document.querySelectorAll('[role=dialog]')]
+                .filter(d => d.getBoundingClientRect().width > 0);
+              if (dialogs.length) return dialogs.some(d => atText(leaves(d)));
+              return atText(leaves(document));
             }"""
         ))
     except Exception:
