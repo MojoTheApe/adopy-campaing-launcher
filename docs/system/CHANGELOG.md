@@ -81,7 +81,9 @@ last country's disabled X still counts as its row; an already selected "Further
 limit" radio is not a failure; the last Create of the objective retry gets a full
 wait; the ad-set naming-template dialog is cancelled; `objective_wait` says what was
 loading; and a wait longer than 60 s wakes the tab and reloads it only when it is
-stuck (`stall_unstuck`).
+stuck (`stall_unstuck`, once per step, never on the second or third ad). Re-review:
+a window minimised mid-run keeps its real home, and a home that is itself off screen
+is replaced by a visible point.
 
 What does not ship. ACL-1311 (Multilogin Team access, PR #312) is reverted in the port
 until the two-machine token check.
