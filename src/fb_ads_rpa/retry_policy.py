@@ -26,11 +26,19 @@ MAX_CAMPAIGN_ATTEMPTS = 3
 #: сделала 9 Create за 23 минуты. Прочим шагам пауза не нужна.
 SLOW_META_STEPS = frozenset({"create", "objective_leads"})
 
+#: ACL-1313, 25.09: пауза 90 с × попытка была нужна, пока окно цели бросали
+#: через 75 с поверх крутящейся «Loading creation» и тут же жали Create снова.
+#: Теперь `_wait_objective_dialog` сам ждёт загрузку до 180 с, а
+#: `_create_took` повторяет промах за секунды — к отказу `objective_leads`
+#: Meta уже минуты не отвечала, и ещё 90–180 с простоя ничего не добавляют.
+#: 25 с — достаточно, чтобы список успел перерисоваться после перезагрузки.
+SLOW_META_BACKOFF_S = 25.0
+
 
 def backoff_s(step: str, attempt: int) -> float:
     """Пауза перед новой попыткой кампании после отказа на шаге `step`."""
     if (step or "").split(":", 1)[0].strip() in SLOW_META_STEPS:
-        return 90.0 * max(1, attempt)
+        return SLOW_META_BACKOFF_S * max(1, attempt)
     return 1.5
 
 # Every non-empty hard-failure string currently returned by

@@ -2503,25 +2503,76 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
     return "nothing"
 
 
+#: ACL-1313: сколько ждать окно цели, когда на экране НЕТ ни радио Leads, ни
+#: «Loading creation». Снимки after_create 25.09 (ce8077, 570e21): модалка
+#: «Loading creation» встаёт сразу после нажатия, а `_create_took` уже
+#: убедился, что радио или загрузка появились. Значит, пустой экран — это
+#: промежуток между концом загрузки и отрисовкой окна, а не сама загрузка.
+#: Порог выше медианы ВСЕГО перехода create→leads (18.6 с по 156 удачным
+#: переходам телеметрии, с учётом ~10 с накладных шага), то есть даже
+#: целиком «пустой» нормальный переход в него укладывается. Прежде без
+#: загрузки ждали 75 с и только потом перезагружали.
+OBJECTIVE_IDLE_S = 20.0
+
+#: Шаг опроса окна цели. Короткий, чтобы замечать загрузку/её конец.
+OBJECTIVE_POLL_S = 2.5
+
+#: Последнее ожидание радио Leads после всех повторов Create. Раньше
+#: `_click` делал пять заходов по 8 с (+8 с на накладку) — ~83 с на
+#: отсутствующее окно, после чего шаг всё равно падал.
+OBJECTIVE_RADIO_LAST_WAIT_S = 10.0
+
+
 def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
-                           loading_max_s: float = OBJECTIVE_LOADING_MAX_S) -> bool:
-    """Дождаться окна выбора цели; пока видна «Loading…», ждать до потолка."""
+                           idle_s: float = OBJECTIVE_IDLE_S,
+                           loading_max_s: float = OBJECTIVE_LOADING_MAX_S,
+                           poll_s: float = OBJECTIVE_POLL_S) -> bool:
+    """Дождаться окна выбора цели.
+
+    Пока видна «Loading…» — ждём до `loading_max_s` (сеть профиля рвётся —
+    сразу сдаёмся). Пока не видно ни радио, ни загрузки — ждём не дольше
+    `idle_s` подряд и не дольше `first_s` всего. Строка телеметрии
+    `objective_wait` говорит, сколько ждали и видели ли загрузку — по ней
+    потом подбирается `OBJECTIVE_IDLE_S`.
+    """
     radio = page.get_by_role("radio", name="Leads").first
     start = time.time()
+    last_busy = start
+    loading_polls = 0
+    outcome = "idle"
+    found = False
+    while True:
+        try:
+            radio.wait_for(state="visible", timeout=int(poll_s * 1000))
+            found, outcome = True, "radio"
+            break
+        except Exception:
+            pass
+        now = time.time()
+        if _loading_visible(page):
+            loading_polls += 1
+            last_busy = now
+            if _network_trouble(page):
+                outcome = "network_trouble"
+                break
+            if now - start >= loading_max_s:
+                outcome = "loading_ceiling"
+                break
+            continue
+        if now - start >= first_s:
+            outcome = "first_s"
+            break
+        if now - last_busy >= idle_s:
+            outcome = "idle"
+            break
     try:
-        radio.wait_for(state="visible", timeout=int(first_s * 1000))
-        return True
+        _telemetry.record("objective_wait", None, note=outcome,
+                          duration_s=time.time() - start,
+                          diag={"loading_polls": loading_polls,
+                                "idle_s": round(time.time() - last_busy, 1)})
     except Exception:
         pass
-    while time.time() - start < loading_max_s and _loading_visible(page):
-        if _network_trouble(page):
-            break
-        try:
-            radio.wait_for(state="visible", timeout=5000)
-            return True
-        except Exception:
-            continue
-    return False
+    return found
 
 
 def _all_edits_saved(page: Page) -> bool:
@@ -3001,7 +3052,11 @@ def run_recorded_campaign_flow(
         page.get_by_role("heading", name="Leads").first.click(timeout=5000)
     except Exception:
         pass
-    if not _click(page.get_by_role("radio", name="Leads")):
+    # ACL-1313: окна нет — одно ограниченное ожидание, а не пять заходов
+    # `_click` по 8+8 с (~83 с) ради того же отказа.
+    leads_radio = page.get_by_role("radio", name="Leads")
+    if (_first_visible(page, (leads_radio,), budget_s=OBJECTIVE_RADIO_LAST_WAIT_S) is None
+            or not _click(leads_radio)):
         _shot("fail_objective_leads")
         return "objective_leads"
     _shot("after_leads")
