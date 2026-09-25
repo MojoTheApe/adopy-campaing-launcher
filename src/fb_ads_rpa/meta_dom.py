@@ -7333,7 +7333,7 @@ def _cancel_site_links_modal(page: Page) -> bool:
         return False
     if found != "cancel":
         return False
-    clicked = _click_marked(page, '[data-acl-close="sitelinks"]')
+    clicked = _click_close_mark(page, '[data-acl-close="sitelinks"]')
     try:
         page.evaluate("() => document.querySelectorAll('[data-acl-close]')"
                       ".forEach(e => e.removeAttribute('data-acl-close'))")
@@ -9853,7 +9853,7 @@ _BANNER_TITLES = (
 )
 
 
-def _click_marked(page: Page, selector: str) -> bool:
+def _click_close_mark(page: Page, selector: str) -> bool:
     """Нажать помеченную кнопку: доверенным кликом, если центр открыт.
 
     Баннер бывает прикрыт модалкой «Loading…» (279ead, 25.09): тогда клик по
@@ -9914,7 +9914,7 @@ def _close_banners(page: Page, titles: tuple[str, ...] = _BANNER_TITLES, *, aymt
             break
         progress = False
         for i, name in enumerate(found):
-            if _click_marked(page, f'[data-acl-close="{i}"]'):
+            if _click_close_mark(page, f'[data-acl-close="{i}"]'):
                 progress = True
                 if name not in closed:
                     closed.append(name)
@@ -9977,7 +9977,7 @@ def _close_ad_blocker_modal(page: Page) -> str:
     except Exception:
         return ""
     if how in ("ok", "x"):
-        _click_marked(page, '[data-acl-close="adblock"]')
+        _click_close_mark(page, '[data-acl-close="adblock"]')
         _sleep_h(0.6)
         try:
             page.evaluate("() => document.querySelectorAll('[data-acl-close]')"
@@ -10045,7 +10045,7 @@ def _dismiss_advantage_banner(page: Page) -> list[str]:
         rec = page.locator('[aria-label="Close recommendation"]').first
         if rec.count() and rec.is_visible(timeout=300):
             rec.evaluate("el => el.setAttribute('data-acl-close', 'rec')")
-            if _click_marked(page, '[data-acl-close="rec"]'):
+            if _click_close_mark(page, '[data-acl-close="rec"]'):
                 closed.append("close_recommendation")
     except Exception:
         pass
