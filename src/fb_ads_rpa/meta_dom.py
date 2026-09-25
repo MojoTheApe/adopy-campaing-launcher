@@ -2446,12 +2446,40 @@ def _chrome_error_page(page: Page) -> str:
     return ""
 
 
-def _loading_visible(page: Page) -> bool:
+#: Спиннер маршрута вместо редактора (ACL-1313, 7364047ef03c/05, 24.09):
+#: `role=progressbar aria-valuetext="Loading" data-is-placeholder` внутри
+#: `[data-non-int-surface*="AdsPERouteLoadPlaceholder"]` — текста «Loading»
+#: на экране нет, и `_loading_visible` его не видел. Только маршрутный
+#: заполнитель: мелкие заполнители секций редактора живут подолгу, и считать
+#: их «зависшей загрузкой» значило бы перезагружать живой редактор.
+_ROUTE_PLACEHOLDER_SEL = '[data-non-int-surface*="AdsPERouteLoadPlaceholder"]'
+
+
+def _route_placeholder_visible(page: Page) -> bool:
+    """Виден ли маршрутный спиннер Meta на месте страницы."""
     try:
-        overlay = page.get_by_text(_LOADING_TEXT).first
-        return bool(overlay.count()) and overlay.is_visible(timeout=200)
+        return bool(page.evaluate(
+            """(sel) => [...document.querySelectorAll(sel)].some((e) => {
+                 const r = e.getBoundingClientRect();
+                 if (r.width <= 0 || r.height <= 0) return false;
+                 const s = getComputedStyle(e);
+                 return s.visibility !== 'hidden' && s.display !== 'none';
+               })""",
+            _ROUTE_PLACEHOLDER_SEL,
+        ))
     except Exception:
         return False
+
+
+def _loading_visible(page: Page) -> bool:
+    """Накладка «Loading…» или маршрутный спиннер — страница ещё грузится."""
+    try:
+        overlay = page.get_by_text(_LOADING_TEXT).first
+        if bool(overlay.count()) and overlay.is_visible(timeout=200):
+            return True
+    except Exception:
+        pass
+    return _route_placeholder_visible(page)
 
 
 #: ACL-1313, прогон 24.09: после Create Meta минутами крутит модалку
@@ -2809,11 +2837,17 @@ def run_recorded_campaign_flow(
         # и следующая попытка действия всё равно проверит заново.
         try:
             overlay = page.get_by_text(_LOADING_TEXT).first
-            if not overlay.count() or not overlay.is_visible(timeout=200):
+            if overlay.count() and overlay.is_visible(timeout=200):
+                overlay.wait_for(state="hidden", timeout=8000)
                 return
-            overlay.wait_for(state="hidden", timeout=8000)
         except Exception:
             pass
+        # ACL-1313: маршрутный спиннер без слова «Loading» — те же 8 секунд.
+        if _route_placeholder_visible(page):
+            try:
+                page.wait_for_selector(_ROUTE_PLACEHOLDER_SEL, state="hidden", timeout=8000)
+            except Exception:
+                pass
 
     def _click(loc, *, attempts: int = 5) -> bool:
         for _ in range(attempts):
@@ -3129,8 +3163,14 @@ def run_recorded_campaign_flow(
     _clear_blocking_overlays(page, "adset")
 
     if not _fill(page.get_by_placeholder("Enter your ad set name here..."), adset_name):
-        _shot("fail_adset_name")
-        return "adset_name"
+        # ACL-1313 (как у campaign_name): после Next вместо редактора ad
+        # set'а висел маршрутный спиннер, и поля имени не было вовсе.
+        # Перезагрузка — через `recover_stuck_page` в режиме редактора: только
+        # при зависшей загрузке и «All edits saved», поля кампании не теряем.
+        if not (recover_stuck_page(page, "adset_name", editor=True)
+                and _fill(page.get_by_placeholder("Enter your ad set name here..."), adset_name)):
+            _shot("fail_adset_name")
+            return "adset_name"
     # Reusing the same ad set name across runs makes Meta show a name-history
     # autocomplete dropdown under this field — confirmed live (2026-07-21)
     # covering the Conversion location control below it and blocking the next
