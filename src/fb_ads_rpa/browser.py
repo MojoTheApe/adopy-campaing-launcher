@@ -574,6 +574,17 @@ def _ensure_wide_window(context, page) -> None:
                 return 0.0, 0
 
         dpr_before, inner_before = _page_scale()
+        if id(context) in _OFFSCREEN:
+            # PR #314, ревью: окно, которое мы сами вывели из свёрнутого за
+            # край экрана (`_unminimize_before_attach` / `_restore_offscreen`),
+            # разворачивать нельзя — «развернуть» Chrome делает на мониторе
+            # человека, и окно профиля ложится поверх его работы (решение
+            # 19.09 — так не должно быть). Ширину добираем размером, не
+            # сдвигая окно с его места за краем.
+            _widen_parked_window(session, window_id, page, was_minimized,
+                                 state, bounds, dpr_before, inner_before, _page_scale)
+            _patch_window_geometry(session, page)
+            return
         if was_minimized:
             session.send(
                 "Browser.setWindowBounds",
@@ -665,6 +676,60 @@ def _ensure_wide_window(context, page) -> None:
 MIN_EDITOR_WIDTH = 1168
 
 
+def _widen_parked_window(session, window_id, page, was_minimized, state, bounds,
+                         dpr_before, inner_before, page_scale) -> None:
+    """Окно за краем экрана — шире размером, без «развернуть».
+
+    Место окна (left/top) не трогаем: оно стоит там, куда его увёл робот
+    (или куда велел `FB_RPA_WINDOW_LEFT/TOP`). Если страница уже не уже
+    `MIN_EDITOR_WIDTH` — ничего не делаем. Масштаб Mimic может упасть от
+    большего окна (17.09 06:51 S15) — тогда возвращаем прежнюю ширину.
+    """
+    if was_minimized:
+        session.send("Browser.setWindowBounds",
+                     {"windowId": window_id, "bounds": {"windowState": "normal"}})
+        time.sleep(0.6)
+        dpr_before, inner_before = page_scale()
+    width = int(bounds.get("width") or 0)
+    height = int(bounds.get("height") or 0)
+    after = dict(bounds)
+    note = "offscreen_wide_enough"
+    dpr_after, inner_after = dpr_before, inner_before
+    if inner_before and inner_before < MIN_EDITOR_WIDTH and width:
+        target = min(int(width * MIN_EDITOR_WIDTH / inner_before) + 40, 4000)
+        try:
+            session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": {
+                "width": target, "height": max(height, 900)}})
+            time.sleep(1.0)
+            after = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+        except Exception as exc:
+            log.debug("offscreen widen refused: %s", exc)
+        dpr_after, inner_after = page_scale()
+        note = None
+        if dpr_before and dpr_after and dpr_after < dpr_before * 0.85:
+            try:
+                session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": {
+                    "width": width, "height": height or 900}})
+                time.sleep(1.0)
+            except Exception:
+                pass
+            note = "reverted_scale_drop"
+            dpr_after, inner_after = page_scale()
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        _rt.record("window_resize", None if note else inner_after >= MIN_EDITOR_WIDTH,
+                   note=note, diag={
+            "before": {"width": width, "height": height, "state": state,
+                       "dpr": dpr_before, "inner": inner_before},
+            "target": "offscreen",
+            "after": {"width": after.get("width"), "height": after.get("height"),
+                      "state": after.get("windowState"), "dpr": dpr_after, "inner": inner_after},
+        })
+    except Exception:
+        pass
+
+
 #: Окна, которые робот вывел из свёрнутого состояния за край экрана:
 #: id контекста → (windowId, прежние left/top). Возвращаются в конце кампании.
 _OFFSCREEN: dict[int, dict] = {}
@@ -735,14 +800,30 @@ def put_window_back(page) -> None:
         return
     try:
         session = page.context.new_cdp_session(page)
-        bounds = {k: saved[k] for k in ("left", "top") if isinstance(saved.get(k), int)}
-        if bounds:
-            session.send("Browser.setWindowBounds", {"windowId": saved["window_id"], "bounds": bounds})
-            time.sleep(0.3)
-        session.send("Browser.setWindowBounds",
-                     {"windowId": saved["window_id"], "bounds": {"windowState": "minimized"}})
     except Exception as exc:
-        log.debug("put_window_back failed: %s", exc)
+        log.debug("put_window_back: no session: %s", exc)
+        return
+    wid = saved["window_id"]
+    # PR #314, ревью: координаты Chrome не принимает у развёрнутого (и
+    # свёрнутого) окна, а прежде отказ здесь уносил с собой и сворачивание —
+    # окно оставалось развёрнутым на экране человека. Поэтому три шага, и
+    # каждый сам по себе: обычное состояние → прежнее место → свернуть.
+    try:
+        session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "normal"}})
+        time.sleep(0.3)
+    except Exception as exc:
+        log.debug("put_window_back normal: %s", exc)
+    bounds = {k: saved[k] for k in ("left", "top") if isinstance(saved.get(k), int)}
+    if bounds:
+        try:
+            session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": bounds})
+            time.sleep(0.3)
+        except Exception as exc:
+            log.debug("put_window_back place: %s", exc)
+    try:
+        session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "minimized"}})
+    except Exception as exc:
+        log.debug("put_window_back minimize: %s", exc)
 
 
 def wake_page(page) -> dict:
