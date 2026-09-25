@@ -180,3 +180,65 @@ def test_the_recorded_flow_checks_the_audience_after_the_age():
     assert verify and age and min(age) < min(verify)
     body = ast.get_source_segment(src, fn)
     assert 'soft_fails.append("advantage_plus_audience")' in body
+
+
+# ── выключение до возраста: без бейджа «on» ничего не кликается (25.09) ────
+#
+# `_ensure_manual_audience` читал состояние по всей странице и видел «on» у
+# Placements / кампанийного переключателя — 162 записи still_on, каждая с
+# кликами впустую. Теперь он читает бейдж Audience и при «off» или без бейджа
+# не трогает ничего, оставляя строку телеметрии с прочитанным состоянием.
+
+def _spy_clicks(monkeypatch, *, flips_badge=False):
+    clicks: list[str] = []
+
+    def _turn_off(p):
+        clicks.append("switch")
+        if flips_badge:
+            p.evaluate(r"""() => { for (const el of document.querySelectorAll(
+                '#advantage-state-audience-section-header *'))
+              if (el.children.length === 0 && /Advantage\+ on/.test(el.textContent))
+                el.textContent = 'Advantage+ off'; }""")
+        return flips_badge
+
+    monkeypatch.setattr(md, "_turn_off_advantage_plus_leads", _turn_off)
+    monkeypatch.setattr(md, "_pick_advantage_plus_leads_off", lambda p: clicks.append("menu") or False)
+    monkeypatch.setattr(md, "_click_xpath", lambda p, xp, *a, **k: clicks.append("xpath") or False)
+    return clicks
+
+
+_CAMPAIGN_SWITCH_ON = ("<div><div>Advantage+ leads campaign</div>"
+                       "<div role='switch' aria-checked='true'>toggle</div></div>")
+
+
+def test_audience_off_with_placements_on_is_not_clicked(page, tmp_path, monkeypatch):
+    """Снимок 8587f7668f86/02 + кампанийный переключатель «On»: прежнее
+    чтение по странице отвечало «on» и кликало."""
+    clicks = _spy_clicks(monkeypatch)
+    page.set_content(_cards(AUDIENCE_OFF) + _CAMPAIGN_SWITCH_ON)
+    assert md._ensure_manual_audience(page) is False
+    assert clicks == []
+    row = _rows(tmp_path, "advantage_plus_off")[-1]
+    assert row["ok"] is None and row["note"] == "already_off"
+    assert row["diag"]["badge"] == "off"
+
+
+def test_no_audience_badge_means_no_clicks(page, tmp_path, monkeypatch):
+    """Карточки Audience нет, а «Advantage+ on» у Placements есть — не кликаем."""
+    clicks = _spy_clicks(monkeypatch)
+    _aud, place = BOTH_ON.strip().split("\n", 1)
+    page.set_content(f"<section><div>Placements</div>{place}</section>" + _CAMPAIGN_SWITCH_ON)
+    assert md._ensure_manual_audience(page) is None
+    assert clicks == []
+    row = _rows(tmp_path, "advantage_plus_off")[-1]
+    assert row["note"] == "badge_not_found" and row["diag"]["badge"] is None
+
+
+def test_audience_badge_on_is_still_switched_off(page, tmp_path, monkeypatch):
+    clicks = _spy_clicks(monkeypatch, flips_badge=True)
+    page.set_content(_cards(BOTH_ON))
+    assert md._ensure_manual_audience(page) is False
+    assert clicks == ["switch"]
+    row = _rows(tmp_path, "advantage_plus_off")[-1]
+    assert row["ok"] is True and row["note"] == "switched"
+    assert row["diag"]["badge"] == "on" and row["diag"]["badge_after"] == "off"

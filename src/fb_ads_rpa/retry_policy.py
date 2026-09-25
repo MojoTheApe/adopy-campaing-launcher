@@ -56,13 +56,17 @@ CAMPAIGN_RETRY_STEPS = frozenset(
 )
 
 # These stops preserve the current draft; replaying Create cannot fix them.
-NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small"})
+# account_blocked (ACL-1313, run ecce52f330b8): Meta shows "Verification
+# required to advertise" / "Account disabled" / "Start authentication (#3858385)"
+# — every replay hits the same wall, only a person in Meta can lift it.
+NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked"})
 
 
 # Stops and field failures that block publication and need review.
 BLOCKING_REVIEW_STEPS = frozenset(
     {
         "window_too_small",
+        "account_blocked",
         "conversion_event",
         "audience_age",
         "audience_location",

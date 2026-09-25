@@ -2269,6 +2269,11 @@ class AdsManagerFlow:
             result.success = not fail_step
             if fail_step:
                 result.error = f"Recorded flow failed at: {fail_step}"
+                # ACL-1313: остановку, которую повтор не лечит (account_blocked),
+                # человек должен понять из самой ошибки, без разбора телеметрии.
+                if fail_step.split(":", 1)[0] == "account_blocked":
+                    result.error += " - " + failure_policy.reason(fail_step)
+                    result.blocking_failures.append(fail_step)
 
             # Reaching the ad level is not the same as building a publishable
             # draft. An ad whose creative or destination step failed still

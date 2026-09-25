@@ -2289,6 +2289,88 @@ def _click_website_via_js_row(page: Page) -> bool:
     return False
 
 
+_CONVERSION_MENU_OPEN_JS = r"""
+  () => {
+    // Открытое меню Conversion location — это заголовки групп «Multiple» /
+    // «Single» (запись рецепта: role=heading) или подпись «Send people to one
+    // location…». Текст «Website and instant forms» в счёт НЕ идёт: это
+    // значение закрытого триггера (25.09, 90a8987edad9 — меню закрыто, а
+    // старая проверка по этому тексту считала его открытым).
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const own = (el) => norm(Array.from(el.childNodes).filter(n => n.nodeType === 3)
+      .map(n => n.textContent).join('') || (el.childElementCount === 0 ? el.textContent : ''));
+    const shown = (el) => {
+      if (!el.offsetParent) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    };
+    const groups = ['single', 'multiple', 'único', 'única', 'múltiple', 'múltiples'];
+    for (const el of document.querySelectorAll('[role=heading], div, span')) {
+      const t = own(el);
+      if (!t || t.length > 80) continue;
+      if (groups.includes(t) && shown(el)) return true;
+      if ((t.startsWith('send people to one location') || t.startsWith('enviar personas a una ubicación'))
+          && shown(el)) return true;
+    }
+    return false;
+  }
+"""
+
+
+def _conversion_location_menu_open(page: Page) -> bool:
+    """Открыто ли сейчас меню Conversion location (без ожиданий)."""
+    for root in _roots(page):
+        try:
+            if root.evaluate(_CONVERSION_MENU_OPEN_JS):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _ensure_conversion_menu_open(page: Page, *, tries: int = 2) -> bool:
+    """Меню Conversion location открыто к следующему способу выбора Website.
+
+    25.09 (90a8987edad9, SA Investing; 19 полных отказов с 19.09): все восемь
+    способов `_pick_website_from_open_menu` работали по уже закрытому меню —
+    на снимке закрытый список «Website and instant forms», в page.html нет ни
+    одного role=radio. Первый же неудачный способ (или клик мимо) закрывает
+    меню, и остальные семь жмут пробел/мышь в пустоту. Поэтому перед каждым
+    способом меню проверяется и при необходимости открывается заново — только
+    когда оно закрыто: клик по открытому триггеру его бы закрыл.
+    """
+    for _ in range(max(1, tries)):
+        if _conversion_location_menu_open(page):
+            return True
+        dismiss_publish_draft_dialog(page)
+        if not click_conversion_location_dropdown(page):
+            return False
+        for _poll in range(8):
+            if _conversion_location_menu_open(page):
+                return True
+            _sleep_h(0.25)
+    return _conversion_location_menu_open(page)
+
+
+#: Сколько ждать, пока выбранное «Website» появится в триггере после способа.
+WEBSITE_VALUE_WAIT_S = 2.0
+
+
+def _website_value_shows(page: Page, timeout_s: float | None = None) -> bool:
+    """В триггере Conversion location стоит ровно «Website» (не «Website and
+    instant forms»): читаем показанное значение, а не ответ способа клика."""
+    wait = WEBSITE_VALUE_WAIT_S if timeout_s is None else timeout_s
+    deadline = time.monotonic() + max(0.0, wait)
+    while True:
+        if is_website_conversion_selected(page):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        _sleep_h(0.25)
+        # Под _sleep_h=0 в тестах цикл не должен крутиться вхолостую.
+        time.sleep(0.05)
+
+
 def _pick_website_from_open_menu(page: Page) -> bool:
     """Expand Single (if needed) then click Website — fully automatic.
 
@@ -2302,6 +2384,12 @@ def _pick_website_from_open_menu(page: Page) -> bool:
       2. Raw CDP mouse on radio / row
       3. Recorded golden path (Single heading → Website)
       4. Playwright mouse chain / force / JS / legacy keyboard
+
+    25.09: перед КАЖДЫМ способом меню проверяется и при надобности открывается
+    заново (`_ensure_conversion_menu_open`), а успех способа засчитывается
+    только по показанному значению «Website» в триггере. Строка телеметрии
+    `conversion_website_pick` — какой способ сработал и сколько раз меню
+    пришлось открывать.
     """
     if is_website_conversion_selected(page):
         return True
@@ -2309,43 +2397,58 @@ def _pick_website_from_open_menu(page: Page) -> bool:
     # Dismiss 'Publish draft items?' dialog that may be blocking the dropdown
     dismiss_publish_draft_dialog(page)
 
-    if not _is_website_option_visible(page):
-        _expand_conversion_location_single(page)
-        _wait_for_single_expanded(page, timeout_s=5.0)
+    methods = (
+        ("keyboard_focus", _click_website_via_keyboard_focus),
+        ("cdp", _click_website_via_cdp),
+        ("recorded_recipe", _pick_website_via_recorded_recipe),
+        ("mouse", _click_website_via_mouse),
+        ("force_locator", _click_website_via_force_locator),
+        ("js_row", _click_website_via_js_row),
+        ("keyboard", _click_website_via_keyboard),
+        ("aria_controls", _pick_website_from_aria_controls),
+    )
+    tried: list[str] = []
+    reopened = 0
+    menu_closed = 0
 
-    dismiss_publish_draft_dialog(page)
-    _scroll_website_option_into_view(page)
+    def _done(method: str | None, ok: bool) -> bool:
+        try:
+            _telemetry.record(
+                "conversion_website_pick", ok,
+                note=method or "not_selected",
+                diag={"tried": tried, "reopened": reopened, "menu_closed": menu_closed},
+            )
+        except Exception:
+            pass
+        return ok
 
-    if is_website_conversion_selected(page):
-        return True
+    for name, method in methods:
+        if is_website_conversion_selected(page):
+            return _done(tried[-1] if tried else "already", True)
+        was_open = _conversion_location_menu_open(page)
+        if not was_open:
+            menu_closed += 1
+            if not _ensure_conversion_menu_open(page):
+                # Меню не открыть — способ жал бы в пустоту; следующий
+                # способ снова попробует открыть.
+                tried.append(f"{name}:menu_closed")
+                continue
+            reopened += 1
+        dismiss_publish_draft_dialog(page)
+        if not _is_website_option_visible(page):
+            _expand_conversion_location_single(page)
+            _wait_for_single_expanded(page, timeout_s=5.0)
+        dismiss_publish_draft_dialog(page)
+        _scroll_website_option_into_view(page)
+        tried.append(name)
+        try:
+            method(page)
+        except Exception:
+            pass
+        if _website_value_shows(page):
+            return _done(name, True)
 
-    # 1) Keyboard — proven stable when CDP mouse drops events
-    if _click_website_via_keyboard_focus(page):
-        return True
-
-    # 2) Raw CDP Input.dispatchMouseEvent
-    dismiss_publish_draft_dialog(page)
-    if _click_website_via_cdp(page):
-        return True
-
-    # 3) Human-recorded recipe
-    if _pick_website_via_recorded_recipe(page):
-        return True
-
-    # 4) Playwright mouse / force / JS / arrow-nav
-    if _click_website_via_mouse(page):
-        return True
-    if _click_website_via_force_locator(page):
-        return True
-    if _click_website_via_js_row(page):
-        return True
-    if _click_website_via_keyboard(page):
-        return True
-    if _pick_website_from_aria_controls(page):
-        _sleep_h(0.5)
-        return is_website_conversion_selected(page)
-
-    return is_website_conversion_selected(page)
+    return _done(None, _website_value_shows(page, timeout_s=0))
 
 
 def conversion_menu_is_open(page: Page) -> bool:
@@ -2700,20 +2803,153 @@ def _lead_terms_not_accepted(page: Page) -> bool:
         return False
 
 
+#: Ошибки проверки, которые чинит обход назначений / выбор «None» в Browser
+#: add-ons: объявление ссылается на лид-форму, которой нет.
+_LEAD_FORM_ERROR_RE = re.compile(r"must be a valid Lead Gen Data id|lead_gen_form", re.I)
+
+#: Уже записанные «прочие» ошибки проверки — одна строка телеметрии на текст.
+_OTHER_REVIEW_ERRORS_SEEN: set[str] = set()
+
+
 def _review_errors_visible(page: Page) -> bool:
-    """Meta показывает ошибку проверки на уровне объявления.
+    """Meta показывает ошибку проверки про лид-форму / назначение объявления.
 
     20.09 19:29 (CO_bnc Mix): пропуск обхода назначений оставил объявление с
     «Param call_to_action[value][lead_gen_form_id] must be a valid Lead Gen
     Data id» — ровно то, что обход и чинил. Если такая ошибка висит, обход
     делаем, сколько бы времени он ни стоил.
+
+    ACL-1313 (25.09): только ошибки лид-формы. Раньше True давало любое
+    «Review N error» — и «Review 1 error — Start authentication» (аккаунт
+    требует проверки, прогон ecce52f330b8 22.09) запускал бесполезную
+    починку Browser add-ons. Прочие ошибки проверки записываются отдельной
+    строкой `review_error_other` (`_report_other_review_errors`), а
+    блокировку аккаунта ловит `_account_blocked_text`.
     """
     try:
-        return page.get_by_text(
-            re.compile(r"Review \d+ error|must be a valid Lead Gen Data id", re.I)
-        ).first.is_visible(timeout=800)
+        if page.get_by_text(_LEAD_FORM_ERROR_RE).first.is_visible(timeout=800):
+            return True
     except Exception:
-        return False
+        pass
+    _report_other_review_errors(page)
+    return False
+
+
+_REVIEW_ERRORS_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const shown = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    };
+    const out = [];
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.children.length > 3) continue;
+      const t = norm(el.textContent);
+      if (!/^Review \d+ errors?\b/i.test(t) || t.length > 300 || !shown(el)) continue;
+      // Текст ошибки часто лежит рядом с заголовком «Review N error» —
+      // берём контейнер на пару уровней выше, но не больше 300 знаков.
+      let box = el, text = t;
+      for (let k = 0; k < 3 && box.parentElement; k++) {
+        const up = norm(box.parentElement.textContent);
+        if (up.length > 300) break;
+        box = box.parentElement; text = up;
+      }
+      if (!out.includes(text)) out.push(text);
+    }
+    return out;
+  }
+"""
+
+
+def _report_other_review_errors(page: Page) -> list[str]:
+    """Видимые «Review N error…», не относящиеся к лид-форме — в телеметрию.
+
+    Одна строка `review_error_other` на каждый новый текст: это не повод
+    для починки назначений, но человеку и разбору прогона их надо видеть.
+    """
+    found: list[str] = []
+    for root in _roots(page):
+        try:
+            found.extend(root.evaluate(_REVIEW_ERRORS_JS) or [])
+        except Exception:
+            continue
+    others = [t for t in found if not _LEAD_FORM_ERROR_RE.search(t)]
+    for text in others:
+        if text in _OTHER_REVIEW_ERRORS_SEEN:
+            continue
+        _OTHER_REVIEW_ERRORS_SEEN.add(text)
+        try:
+            _telemetry.record("review_error_other", None, note=text[:160],
+                              diag={"account_blocked": _account_blocked_match(text)})
+        except Exception:
+            pass
+    return others
+
+
+#: Признаки аккаунта, в котором Meta не даёт создавать рекламу. Ни повтор,
+#: ни починка тут не помогут — нужен человек в Meta.
+_ACCOUNT_BLOCKED_PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
+    ("verification_required", re.compile(r"Verification required to advertise", re.I)),
+    ("account_disabled", re.compile(r"Your ad account is disabled", re.I)),
+    ("account_disabled", re.compile(r"^(?:Ad )?account disabled$", re.I)),
+    ("start_authentication", re.compile(r"\bStart authentication\b", re.I)),
+    ("authentication_error", re.compile(r"#3858385\b")),
+)
+
+
+def _account_blocked_match(text: str) -> str | None:
+    """Вид блокировки по тексту или None."""
+    t = re.sub(r"\s+", " ", text or "").strip()
+    for kind, pat in _ACCOUNT_BLOCKED_PATTERNS:
+        if pat.search(t):
+            return kind
+    return None
+
+
+_ACCOUNT_BLOCKED_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const shown = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    };
+    const out = [];
+    for (const el of document.querySelectorAll('body *')) {
+      // Листья и мелкие узлы: подпись баннера, статус в колонке Delivery,
+      // кнопка «Start authentication», текст ошибки с кодом (#3858385).
+      if (el.children.length > 2) continue;
+      const t = norm(el.textContent);
+      if (!t || t.length > 300) continue;
+      if (!/verification required to advertise|account (is )?disabled|start authentication|3858385/i.test(t)) continue;
+      if (!shown(el)) continue;
+      out.push(t);
+    }
+    return out;
+  }
+"""
+
+
+def _account_blocked_text(page: Page) -> str | None:
+    """Видимый текст, по которому ясно: аккаунт заблокирован Meta.
+
+    Прогон ecce52f330b8 (22.09): красный баннер «Verification required to
+    advertise — Complete verification to remove restrictions…», у кампании в
+    колонке Delivery «Account disabled», кнопка Create серая. Прогон трижды
+    нажимал Create, дважды перезагружал страницу и через 5 минут упал на
+    `objective_leads`, а повтор кампании начал бы всё заново. В редакторе
+    объявления та же блокировка выглядит как «Review 1 error — Start
+    authentication» с кодом (#3858385).
+    """
+    for root in _roots(page):
+        try:
+            texts = root.evaluate(_ACCOUNT_BLOCKED_JS) or []
+        except Exception:
+            continue
+        for t in texts:
+            if _account_blocked_match(t):
+                return t
+    return None
 
 
 #: ACL-1313, прогон 25.09: снимок экрана после каждого удачного шага стоил
@@ -2855,7 +3091,7 @@ def run_recorded_campaign_flow(
     _telemetry.set_current_run(run_id, campaign_name)
     _shot_clock = {"t": time.time()}
 
-    def _shot(label: str, diag: dict | None = None) -> None:
+    def _shot(label: str, diag: dict | None = None, note: str | None = None) -> None:
         now = time.time()
         step, ok = _telemetry.normalise_step(label)
         # Причина отказа собирается здесь, в единственной точке, а не в сорока
@@ -2887,6 +3123,7 @@ def run_recorded_campaign_flow(
             campaign=campaign_name,
             duration_s=now - _shot_clock["t"],
             diag=diag,
+            note=note or "",
         )
         _shot_clock["t"] = now
         if ok is not False and not _shot_worth_a_picture(label):
@@ -2897,6 +3134,21 @@ def run_recorded_campaign_flow(
             _capture(page, f"recorded_{label}")
         except Exception:
             pass
+
+    def _stop_if_account_blocked(where: str) -> bool:
+        """Аккаунт заблокирован Meta — остановить кампанию (`account_blocked`).
+
+        Не повторяется (retry_policy.NON_RETRYABLE_FLOW_STEPS): повтор
+        кампании в заблокированном аккаунте снова упрётся в тот же баннер.
+        В телеметрии — найденный текст (note) и место проверки.
+        """
+        matched = _account_blocked_text(page)
+        if not matched:
+            return False
+        _shot("fail_account_blocked",
+              {"where": where, "kind": _account_blocked_match(matched), "matched": matched[:300]},
+              note=matched[:160])
+        return True
 
     # Dismiss any dismissible top banner (e.g. "We're evolving how we measure
     # results") before the very first click — confirmed live 2026-07-24 on a
@@ -2940,6 +3192,9 @@ def run_recorded_campaign_flow(
     # накопились черновики (CO_bnc 11, CR_ait 10). Пишем их число до Create,
     # чтобы связь была видна сразу, а не по снимкам.
     _telemetry.record("drafts_pending", None, diag={"count": _pending_drafts(page)})
+    # ACL-1313: заблокированный аккаунт (ecce52f330b8, 22.09) — не жать Create.
+    if _stop_if_account_blocked("campaigns_list"):
+        return "account_blocked"
     list_url = page.url
     if not _click(page.get_by_role("button", name="Create", exact=True)):
         if not (recover_stuck_page(page, "create", editor=False)
@@ -3547,6 +3802,8 @@ def run_recorded_campaign_flow(
         _shot("after_next_to_ad")
         if not ensure_editor_window(page, "ad"):
             return "window_too_small"
+        if _stop_if_account_blocked("ad_editor"):
+            return "account_blocked"
 
         if reached_ad_level:
             final_ad_name = ad_name or f"{campaign_name} Ad"
@@ -3597,6 +3854,8 @@ def run_recorded_campaign_flow(
                     ad_name=ad_name or f"{campaign_name} Ad",
                     destination_url=destination_url, report=copy_report)
                 if not ok_copy:
+                    if _stop_if_account_blocked("ad_copy"):
+                        return "account_blocked"
                     _shot("fail_ad_copy", copy_report)
                     # Объявление без текста называем прямо: по этой строке
                     # человек решает, публиковать ли кампанию.
@@ -3621,6 +3880,8 @@ def run_recorded_campaign_flow(
                 # объявлением — перезагрузить (в редакторе — только при «All
                 # edits saved»), иначе все следующие объявления падают подряд.
                 recover_stuck_page(page, f"{tag}_before", editor=True)
+                if _stop_if_account_blocked(f"{tag}_before"):
+                    return "account_blocked"
                 shells_before = _tree_new_ad_shells(page)
                 try:
                     created = create_additional_ad(page, adset_name)
@@ -12125,10 +12386,17 @@ def _ensure_manual_audience(page: Page) -> bool | None:
     On the fourth it was On again by the age step. Checking here, right
     before the control that depends on it, is cheaper than working out why.
     """
-    before = _advantage_plus_audience_on(page)
+    # ACL-1313 (25.09): состояние читается по бейджу карточки Audience, а не
+    # по всей странице. `_advantage_plus_audience_on` видел «Advantage+ on» у
+    # Placements и кампанийный переключатель, отвечал «on» всегда и кликал
+    # впустую (162 записи still_on). Бейдж «off» или бейджа нет — ничего не
+    # трогаем: итог после возраста проверяет `verify_audience_advantage_off`.
+    before = _audience_badge_on(page)
+    badge = {True: "on", False: "off"}.get(before)
     if before is not True:
         _telemetry.record("advantage_plus_off", None,
-                          note="already_off" if before is False else "not_found")
+                          note="already_off" if before is False else "badge_not_found",
+                          diag={"badge": badge})
         return before
     flipped = _turn_off_advantage_plus_leads(page)
     picked = False
@@ -12147,10 +12415,11 @@ def _ensure_manual_audience(page: Page) -> bool | None:
             "[contains(normalize-space(.), 'Switch to original audience')]",
         )
     _sleep_h(0.8)
-    after = _advantage_plus_audience_on(page)
+    after = _audience_badge_on(page)
     _telemetry.record("advantage_plus_off", after is not True,
                       note="switched" if after is not True else "still_on",
-                      diag={"flipped_switch": flipped, "picked_off": picked})
+                      diag={"flipped_switch": flipped, "picked_off": picked,
+                            "badge": badge, "badge_after": {True: "on", False: "off"}.get(after)})
     return after
 
 
@@ -13275,69 +13544,124 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
     if inp is None:
         return False
 
+    # 25.09 (SA, 20/20 прогонов): Meta сама ставит язык страны — «Arabic» без
+    # «(All)», — а мы всё равно печатали его в поиск. Уже выбранный язык в
+    # подсказках не показывается, кликать нечего, шаг отказывал при верном
+    # поле. Поэтому сначала читаем выбранные чипы: всё уже стоит — успех без
+    # единого нажатия.
+    wanted = [n.strip() for n in language_names if n.strip()]
+    present = _languages_selected(page, wanted)
+    if wanted and all(any(_language_chip_matches(p, w) for p in present) for w in wanted):
+        _telemetry.record("languages", None, note="already_selected", diag={"selected": present})
+        return True
+
     ok_any = False
     for name in language_names:
+        if any(_language_chip_matches(p, name) for p in present):
+            continue
         try:
             inp.click(timeout=3000)
             page.keyboard.type(name, delay=40)
             _sleep_h(1.2)
-            # Prefer the "(All)" variant over a blind first-match — per live
-            # user guidance (2026-07-25) watching the real suggestion list:
-            # Meta lists per-country language variants (e.g. "Spanish
-            # (Spain)", "Spanish (Mexico)") alongside a broader "Spanish
-            # (All)" entry, and the broad one is what's wanted here, same
-            # reasoning as _pick_country_suggestion's "(Country)" preference.
-            all_re = re.compile(rf"^{re.escape(name)}\s*\(all\)", re.I)
-            picked = False
-            for sel in ("[role=option]:visible", "li[role=option]"):
+            # Сначала «<язык> (All)» (живые подсказки 25.07: у Spanish есть
+            # «Spanish (Spain)», «Spanish (Mexico)» и широкий «Spanish (All)»),
+            # затем подсказка, чей текст ровно «<язык>» (у Arabic варианта
+            # «(All)» нет). Слепого клика по первой подсказке больше нет: он
+            # мог взять региональный вариант, а это другой, узкий таргетинг.
+            picked = _click_language_option(page, name)
+            if picked:
+                ok_any = True
+            else:
+                # Набранный текст не оставляем в поиске: открытая выпадашка
+                # перекрывает соседние поля. Escape нельзя — закрывает редактор.
                 try:
-                    opt = page.locator(sel).filter(has_text=all_re).first
-                    if opt.count() and opt.is_visible():
-                        opt.click(timeout=3000)
-                        _sleep_h(0.5)
-                        ok_any = True
-                        picked = True
-                        break
+                    inp.fill("", timeout=2000)
                 except Exception:
-                    continue
-            if not picked:
-                opt = page.locator("[role=option]:visible, li[role=option]").first
-                if opt.count() and opt.is_visible():
-                    opt.click(timeout=3000)
-                    _sleep_h(0.5)
-                    ok_any = True
+                    pass
             root, inp = _find_lang_input()
             if inp is None:
                 break
         except Exception:
             continue
     if not ok_any:
-        # 17.09 06:56 (S15): «Spanish (All)» уже стоял — Meta подставляет язык
-        # по стране, выбранный язык в подсказках не показывается, кликать
-        # нечего, и шаг отказывал при верном поле. Выбранный язык — успех.
+        # 17.09 06:56 (S15): язык мог появиться за время ввода (Meta подставляет
+        # по стране). Выбранный язык — успех.
         # Без Escape: в редакторе Ads Manager он закрывает сам редактор (17.09
         # 13:19, CR_ait Day — после шага языков на экране список ad set, и все
         # следующие шаги упали). Открытая выпадашка чтению выбранных не мешает.
-        present = _languages_selected(page)
-        wanted = [n.strip().lower() for n in language_names if n.strip()]
-        if wanted and all(any(p.lower().startswith(w) for p in present) for w in wanted):
+        present = _languages_selected(page, wanted)
+        if wanted and all(any(_language_chip_matches(p, w) for p in present) for w in wanted):
             _telemetry.record("languages", None, note="already_selected", diag={"selected": present})
             return True
     return ok_any
 
 
-def _languages_selected(page: Page) -> list[str]:
+def _language_key(text: str) -> str:
+    """Имя языка без регистра, лишних пробелов и хвоста «(All)»/«(…)»."""
+    t = re.sub(r"\s+", " ", (text or "")).strip().lower()
+    return re.sub(r"\s*\([^)]*\)$", "", t).strip()
+
+
+def _language_chip_matches(chip: str, wanted: str) -> bool:
+    """Чип «Arabic», «arabic», «Spanish (All)», «Spanish (Mexico)» — это
+    язык «Arabic»/«Spanish». Сравнение по имени целиком: «Arab» не «Arabic»."""
+    w = _language_key(wanted)
+    return bool(w) and _language_key(chip) == w
+
+
+def _click_language_option(page: Page, name: str) -> bool:
+    """Кликнуть подсказку «<name> (All)», иначе подсказку ровно «<name>».
+
+    Никаких других вариантов: региональный «Arabic (Egypt)» — чужой таргетинг,
+    лучше честный отказ шага, чем тихо суженная аудитория.
+    """
+    base = re.sub(r"\s+", " ", name).strip()
+    patterns = (
+        re.compile(rf"^\s*{re.escape(base)}\s*\((all|todos)\)\s*$", re.I),
+        re.compile(rf"^\s*{re.escape(base)}\s*$", re.I),
+    )
+    for pat in patterns:
+        for sel in ("[role=option]:visible", "li[role=option]"):
+            try:
+                opts = page.locator(sel)
+                for i in range(min(opts.count(), 30)):
+                    opt = opts.nth(i)
+                    try:
+                        text = opt.inner_text(timeout=1000)
+                    except Exception:
+                        continue
+                    # Подсказка может нести вторую строку («Language») —
+                    # сравниваем первую непустую.
+                    first = next((ln for ln in text.splitlines() if ln.strip()), "")
+                    if pat.match(first) and opt.is_visible():
+                        opt.click(timeout=3000)
+                        _sleep_h(0.5)
+                        return True
+            except Exception:
+                continue
+    return False
+
+
+def _languages_selected(page: Page, wanted: list[str] | None = None) -> list[str]:
     """Подписи уже выбранных языков в блоке Languages (например «Spanish (All)»).
 
     Поднимаемся от поля поиска языков, а не от подписи «Languages»: 17.09
     (CL_ml, CR_ait) «Spanish (All)» стоял, а подъём на 6 уровней от подписи до
     него не доставал — шаг отказывал при верном поле.
+
+    25.09 (SA): Meta ставит «Arabic» по стране — без «(All)» и без скобок
+    вообще, и форма «X (…)» такой чип не видела. Поэтому считается и чип,
+    текст которого — один из ``wanted`` (без регистра и лишних пробелов, с
+    необязательным хвостом «(All)»/«(…)»).
     """
+    keys = [_language_key(w) for w in (wanted or []) if _language_key(w)]
     try:
         return page.evaluate(
-            r"""() => {
+            r"""(keys) => {
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-              const looks = (t) => /\((All|Todos)\)$/.test(t) || /^[A-Z][a-z]+ \([^)]+\)$/.test(t);
+              const key = (t) => norm(t).toLowerCase().replace(/\s*\([^)]*\)$/, '').trim();
+              const looks = (t) => /\((All|Todos)\)$/.test(t) || /^[A-Z][a-z]+ \([^)]+\)$/.test(t)
+                || (t.length < 60 && keys.includes(key(t)));
               const inputs = [...document.querySelectorAll('input[placeholder]')]
                 .filter(i => /language|idioma/i.test(i.getAttribute('placeholder') || ''));
               for (const inp of inputs) {
@@ -13346,13 +13670,16 @@ def _languages_selected(page: Page) -> list[str]:
                   box = box.parentElement;
                   const found = [...box.querySelectorAll('*')]
                     .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
+                    // Своё поле ввода и выпадашка подсказок — не чипы.
+                    .filter(e => !e.closest('[role=option],[role=listbox]'))
                     .map(e => norm(e.textContent))
                     .filter(looks);
                   if (found.length) return found;
                 }
               }
               return [];
-            }"""
+            }""",
+            keys,
         ) or []
     except Exception:
         return []

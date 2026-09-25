@@ -69,8 +69,9 @@ def _geo_language_for_country(country_code: str) -> str:
     "Countries" sheet doesn't have an explicit language value for that row.
     """
     # Pass the base name only — fill_audience_languages() already searches
-    # for a "<name> (all)" suggestion first and falls back to the first
-    # match if there isn't one (confirmed live: Arabic has no such variant).
+    # for a "<name> (all)" suggestion first and falls back to the suggestion
+    # that is exactly "<name>" (confirmed live: Arabic has no such variant).
+    # Регионального варианта «<name> (Egypt)» шаг не берёт никогда (25.09).
     c = (country_code or "").strip().upper()
     if c in _GCC_ARABIC_COUNTRIES:
         return "Arabic"
