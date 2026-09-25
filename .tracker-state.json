@@ -193,7 +193,8 @@
     },
     "66e6ae6460ad16e293e9f6dbc5792cd1beb44d76f43a72e0dad3eb6cde3d6bbc": {
       "title": "Sentry shows only real campaign failures, and an agent picks them up",
-      "state": "creating"
+      "state": "created",
+      "issue": 318
     }
   },
   "delivery_workflow": {
