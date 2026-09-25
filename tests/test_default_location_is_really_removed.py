@@ -415,3 +415,42 @@ def test_the_expander_skips_remove_and_disabled_controls(page, monkeypatch):
     clicked = _record_clicks(page, monkeypatch)
     assert md._click_row_expander(page, "Locations") is True
     assert clicked["at"] == "arrow", clicked
+
+
+# ── последняя страна: Meta выключает и прячет её крестик (63710223de4c) ─────
+
+_DISABLE_LAST = """() => {
+  const orig = window.drop;
+  window.drop = (c) => {
+    orig(c);
+    const left = document.querySelectorAll('.grp');
+    if (left.length === 1) {
+      const x = left[0].querySelector('[role=button]');
+      x.outerHTML = '<button disabled style="display:none"><span>Close</span></button>';
+    }
+  };
+}"""
+
+
+def test_the_last_country_with_a_disabled_hidden_x_is_clean(page):
+    """25.09 12:02 GT FX: United States снята, у Guatemala крестик стал
+    `<button disabled>` нулевого размера — строки «не читались», и шаг
+    отказал при одной нужной стране."""
+    page.set_content(_CARD % {"us_click": "onclick=\"drop('United States')\""})
+    page.evaluate(_DISABLE_LAST)
+    assert md._clear_other_locations(page, "Guatemala") == []
+    assert page.evaluate("window.clicked") == ["United States"]
+
+
+def test_a_disabled_x_is_read_but_never_clicked(page):
+    page.set_content(_CARD % {"us_click": "onclick=\"drop('United States')\""})
+    page.evaluate("""() => {
+      const x = document.querySelector('.grp[data-c="United States"] [role=button]');
+      x.setAttribute('aria-disabled', 'true');
+      x.setAttribute('onclick', "window.clicked.push('disabled-us')");
+    }""")
+    rows = md._location_rows(page)
+    assert {r["name"]: bool(r.get("disabled")) for r in rows} == {"Guatemala": False, "United States": True}
+    left = md._clear_other_locations(page, "Guatemala")
+    assert left == ["United States"]
+    assert page.evaluate("window.clicked") == []

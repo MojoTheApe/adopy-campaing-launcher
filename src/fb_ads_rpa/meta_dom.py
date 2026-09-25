@@ -12435,10 +12435,22 @@ def _location_rows(page: Page) -> list[dict]:
               if (!card) return [];
               const searchBox = search.closest('[role=combobox]') || search.parentElement;
               const rows = [];
+              // 25.09 (прогон 63710223de4c, GT FX): когда страна осталась одна,
+              // Meta выключает её крестик (`<button disabled>Close`, Remove с
+              // aria-disabled=true) и прячет его — размер 0. Такой крестик —
+              // всё равно строка страны: читаем её с пометкой `disabled` (жать
+              // её нельзя и незачем), иначе единственная нужная страна
+              // выглядела как «строки не прочитаны».
+              const isOff = (b) => {
+                const own = b.closest('button, [role=button]') || b;
+                return !!(b.disabled || own.disabled || b.getAttribute('aria-disabled') === 'true'
+                  || own.getAttribute('aria-disabled') === 'true');
+              };
               const controls = [...card.querySelectorAll('[role=button], button, [aria-label]')].filter(b => {
                 if (searchBox && searchBox.contains(b)) return false;
                 const r = b.getBoundingClientRect();
-                if (r.width <= 0 || r.height <= 0 || r.width > 60 || r.height > 60) return false;
+                if (r.width > 60 || r.height > 60) return false;
+                if ((r.width <= 0 || r.height <= 0) && !isOff(b)) return false;
                 // Named controls only. An unnamed icon button here may be the
                 // card's collapse chevron or the search box's expander, and
                 // clicking either would be worse than leaving a default.
@@ -12458,7 +12470,15 @@ def _location_rows(page: Page) -> list[dict]:
                 }
                 if (!name) continue;
                 const r = b.getBoundingClientRect();
-                rows.push({ name, x: r.x + r.width / 2, y: r.y + r.height / 2 });
+                const entry = { name, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                if (isOff(b)) entry.disabled = true;
+                // Крестик и «Remove» одной страны — одна строка; включённый важнее.
+                const same = rows.find(o => o.name === name);
+                if (same) {
+                  if (same.disabled && !entry.disabled) { same.x = entry.x; same.y = entry.y; delete same.disabled; }
+                  continue;
+                }
+                rows.push(entry);
               }
               return rows;
             }
@@ -12936,7 +12956,13 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
         others = [r for r in rows if keep not in r["name"].lower()]
         if not others:
             return _done(page, opened_by_us, [])
-        target = others[0]
+        # Выключенный крестик не жмём никогда: лишняя страна с таким
+        # крестиком остаётся — это отказ шага с её именем
+        # (default_location_left), а не «строки не прочитаны».
+        enabled = [r for r in others if not r.get("disabled")]
+        if not enabled:
+            return _done(page, opened_by_us, [r["name"] for r in others])
+        target = enabled[0]
         # 21.09 18:44 (CR_ait IPO): строка стояла на y=3811 — далеко за окном, и
         # клик по её координатам уходил в пустоту. Прокручиваем к ней, берём
         # свежие координаты, затем наводим курсор: крестик, как и карандаш,
