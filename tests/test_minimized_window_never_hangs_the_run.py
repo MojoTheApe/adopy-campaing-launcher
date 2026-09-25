@@ -23,11 +23,33 @@ from src.fb_ads_rpa import browser as br  # noqa: E402
 from src.fb_ads_rpa import screenshots as shots  # noqa: E402
 
 
+class _ShotSession:
+    """CDP-сессия страницы: окно отвечает на Browser.*, снимок — считается."""
+
+    def __init__(self, page):
+        self.page = page
+
+    def send(self, method, params=None):
+        self.page.cdp_calls.append(method)
+        if method == "Browser.getWindowForTarget":
+            if self.page.window is None:
+                raise RuntimeError("Browser domain unavailable")
+            return {"windowId": 1, "bounds": {"windowState": self.page.window}}
+        if method == "Page.captureScreenshot":
+            return {"data": "cG5n"}
+        raise AssertionError(method)
+
+
 class _Page:
-    def __init__(self, visibility: str):
+    """`visibility` — что говорит документ; `window` — состояние окна
+    (None — Browser.getWindowForTarget не отвечает)."""
+
+    def __init__(self, visibility: str, window: str | None = "normal", playwright_ok: bool = True):
         self.visibility = visibility
+        self.window = window
+        self.playwright_ok = playwright_ok
         self.screenshot_calls = 0
-        self.cdp_calls = 0
+        self.cdp_calls: list[str] = []
 
     def evaluate(self, js, *a):
         assert "visibilityState" in js
@@ -35,6 +57,10 @@ class _Page:
 
     def screenshot(self, **kw):
         self.screenshot_calls += 1
+        if not self.playwright_ok:
+            # Пока Playwright ждал, человек свернул окно.
+            self.window = "minimized"
+            raise TimeoutError("Timeout 5000ms exceeded")
         Path(kw["path"]).write_bytes(b"png")
 
     @property
@@ -43,15 +69,48 @@ class _Page:
 
         class _Ctx:
             def new_cdp_session(self, _p):
-                page.cdp_calls += 1
-                raise AssertionError("CDP snapshot must not be attempted")
+                return _ShotSession(page)
         return _Ctx()
 
 
 def test_a_hidden_page_is_not_photographed_at_all(tmp_path):
-    page = _Page("hidden")
+    page = _Page("hidden", window=None)
     assert shots.capture(page, "01_campaigns", base_dir=tmp_path) == ""
-    assert page.screenshot_calls == 0 and page.cdp_calls == 0
+    assert page.screenshot_calls == 0
+    assert "Page.captureScreenshot" not in page.cdp_calls
+
+
+def test_a_minimized_window_is_skipped_although_the_document_says_visible(tmp_path):
+    """PR #314, ревью: эмуляция фокуса и скринкаст держат документ «visible»
+    и в свёрнутом окне — решает состояние окна."""
+    page = _Page("visible", window="minimized")
+    assert shots.capture(page, "01_campaigns", base_dir=tmp_path) == ""
+    assert page.screenshot_calls == 0
+    assert "Page.captureScreenshot" not in page.cdp_calls
+
+
+def test_no_cdp_snapshot_when_the_window_was_minimized_during_the_playwright_try(tmp_path):
+    page = _Page("visible", window="normal", playwright_ok=False)
+    shots.capture(page, "01_campaigns", base_dir=tmp_path)
+    assert page.screenshot_calls == 1
+    assert "Page.captureScreenshot" not in page.cdp_calls
+
+
+def test_no_cdp_snapshot_when_the_window_state_is_unknown(tmp_path):
+    page = _Page("visible", window=None)
+    page.screenshot = lambda **kw: (_ for _ in ()).throw(TimeoutError("fonts"))
+    shots.capture(page, "01_campaigns", base_dir=tmp_path)
+    assert "Browser.getWindowForTarget" in page.cdp_calls
+    assert "Page.captureScreenshot" not in page.cdp_calls
+
+
+def test_cdp_fallback_still_works_on_a_normal_window(tmp_path):
+    page = _Page("visible", window="normal")
+    page.playwright_ok = False
+    page.screenshot = lambda **kw: (_ for _ in ()).throw(TimeoutError("fonts"))
+    path = shots.capture(page, "01_campaigns", base_dir=tmp_path)
+    assert "Page.captureScreenshot" in page.cdp_calls
+    assert Path(path).read_bytes() == b"png"
 
 
 def test_a_visible_page_is_photographed_as_before(tmp_path):
