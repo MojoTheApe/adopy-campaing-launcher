@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.fb_ads_rpa import browser as br  # noqa: E402
 from src.fb_ads_rpa import meta_dom as md  # noqa: E402
+from tests.test_additional_ad_without_creative_has_no_text import flow  # noqa: E402,F401
 
 
 class _Clock:
@@ -151,4 +152,43 @@ def test_the_flow_click_and_fill_retries_are_watched():
                 if isinstance(n, ast.FunctionDef) and n.name == "run_recorded_campaign_flow")
     inner = {n.name: ast.get_source_segment(src, n) for n in flow.body if isinstance(n, ast.FunctionDef)}
     for name in ("_click", "_fill"):
-        assert "watch = _watch(loc)" in inner[name] and "watch.check()" in inner[name], name
+        assert "watch = _watch(where)" in inner[name] and "watch.check()" in inner[name], name
+
+
+# ── повторное ревью PR #314: ключ — шаг; на ad2+ только будим ────────────
+
+def test_the_watch_decides_editor_or_list_by_the_address(env):
+    """S3: не отвечающий редактор не перезагружается, даже когда сторож сам
+    определяет, где он, — по адресу `.../edit`."""
+    env.state["responsive"] = False
+    watch = md._StallWatch(env.page, "ad_name")
+    env.clock.now += md.STALL_BUDGET_S + 1
+    assert watch.check() == "unsaved_or_unknown"
+    assert "reload" not in env.ev
+    lst = SimpleNamespace(url="https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1")
+    watch = md._StallWatch(lst, "create")
+    env.clock.now += md.STALL_BUDGET_S + 1
+    assert watch.check() == "reloaded" and "reload" in env.ev
+
+
+def test_flow_watches_are_keyed_by_step_and_never_reload_an_additional_ad(flow, monkeypatch):
+    """Ключ сторожа — имя шага, а не `str(locator)` (у всех одинаковый
+    префикс URL кадра); на втором объявлении сторож только будит — иначе
+    перезагрузка открыла бы другое объявление, и имя ad2 легло бы в него."""
+    made: list[tuple[str, bool]] = []
+
+    class _Rec:
+        def __init__(self, page, where, *, budget_s=None, editor=None, reload=True):
+            made.append((where, reload))
+
+        def check(self):
+            return ""
+
+    monkeypatch.setattr(md, "_StallWatch", _Rec)
+    flow["fail_upload"] = set()
+    flow["run"]()
+    wheres = dict(made)
+    assert {"create", "campaign_name", "adset_name", "ad_name", "ad2_name"} <= set(wheres), made
+    assert wheres["ad_name"] is True and wheres["campaign_name"] is True
+    assert wheres["ad2_name"] is False, "на втором объявлении сторож не должен перезагружать"
+    assert all(not w.startswith("<Locator") for w in wheres)

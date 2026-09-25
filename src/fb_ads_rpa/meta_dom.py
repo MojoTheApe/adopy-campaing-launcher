@@ -2869,6 +2869,11 @@ def _pending_drafts(page: Page) -> int | None:
 #: ≥ 60 с (create, campaign_name, audience_age, placements, креатив).
 STALL_BUDGET_S = 60.0
 
+#: Шаги второго и дальше объявлений («ad2_name», «ad3_…»): там сторож только
+#: будит вкладку — перезагрузка открывает то объявление, какое сочтёт нужным
+#: Meta (повторное ревью PR #314, находка 1).
+_ADDITIONAL_AD_STEP = re.compile(r"^ad\d+_")
+
 #: Шаги, на которых `_unstick` уже перезагружал страницу в этом прогоне:
 #: не больше одной перезагрузки на шаг.
 _UNSTUCK_RELOADED: set[str] = set()
@@ -3431,17 +3436,17 @@ def run_recorded_campaign_flow(
             except Exception:
                 pass
 
-    def _watch(loc) -> _StallWatch:
-        try:
-            what = str(loc)[:80]
-        except Exception:
-            what = "locator"
-        return _StallWatch(page, what)
+    def _watch(where: str) -> _StallWatch:
+        # Ключ сторожа — имя шага от вызывающего (повторное ревью PR #314:
+        # `str(loc)[:80]` одинаков у всех локаторов — префикс URL кадра).
+        # На втором и дальше объявлениях — только разбудить: перезагрузка
+        # может открыть другое объявление, и имя/медиа лягут в него (c8d690e).
+        return _StallWatch(page, where, reload=not _ADDITIONAL_AD_STEP.match(where))
 
-    def _click(loc, *, attempts: int = 5) -> bool:
+    def _click(loc, *, where: str, attempts: int = 5) -> bool:
         # Повторы нажатия затянулись дольше STALL_BUDGET_S — вкладку будим
         # (и, если висит, перезагружаем) один раз, потом повторы идут дальше.
-        watch = _watch(loc)
+        watch = _watch(where)
         for _ in range(attempts):
             watch.check()
             _wait_loading()
@@ -3458,8 +3463,8 @@ def run_recorded_campaign_flow(
                 _sleep_h(0.6)
         return False
 
-    def _fill(loc, value: str, *, attempts: int = 5) -> bool:
-        watch = _watch(loc)
+    def _fill(loc, value: str, *, where: str, attempts: int = 5) -> bool:
+        watch = _watch(where)
         for _ in range(attempts):
             watch.check()
             _wait_loading()
@@ -3591,9 +3596,9 @@ def run_recorded_campaign_flow(
     if _stop_if_account_blocked("campaigns_list"):
         return "account_blocked"
     list_url = page.url
-    if not _click(page.get_by_role("button", name="Create", exact=True)):
+    if not _click(page.get_by_role("button", name="Create", exact=True), where="create"):
         if not (recover_stuck_page(page, "create", editor=False)
-                and _click(page.get_by_role("button", name="Create", exact=True))):
+                and _click(page.get_by_role("button", name="Create", exact=True), where="create")):
             return "create"
     _shot("after_create")
 
@@ -3621,7 +3626,7 @@ def run_recorded_campaign_flow(
         except Exception:
             pass
         _clear_blocking_overlays(page, "create_quick_retry", editor=False)
-        _click(page.get_by_role("button", name="Create", exact=True))
+        _click(page.get_by_role("button", name="Create", exact=True), where="create_quick_retry")
         _shot("after_create_quick_retry")
 
     # ACL-1233: окно выбора цели не появилось, а страница висит в «Loading…»
@@ -3649,7 +3654,7 @@ def run_recorded_campaign_flow(
         except Exception:
             pass
         _clear_blocking_overlays(page, "create_retry", editor=False)
-        _click(page.get_by_role("button", name="Create", exact=True))
+        _click(page.get_by_role("button", name="Create", exact=True), where="create_retry")
         _shot("after_create_retry")
     else:
         # Круги кончились на нажатом Create, а окна цели после него ещё не
@@ -3688,12 +3693,12 @@ def run_recorded_campaign_flow(
         radio_there = True
     except Exception:
         radio_there = False
-    if not radio_there or not _click(leads_radio):
+    if not radio_there or not _click(leads_radio, where="objective_leads"):
         _shot("fail_objective_leads")
         return "objective_leads"
     _shot("after_leads")
 
-    if not _click(page.get_by_role("button", name="Continue")):
+    if not _click(page.get_by_role("button", name="Continue"), where="objective_continue"):
         _shot("fail_objective_continue")
         return "objective_continue"
     _wait_loading()
@@ -3734,21 +3739,21 @@ def run_recorded_campaign_flow(
     name_field = page.get_by_placeholder("Enter your campaign name here")
     first_seen = _first_visible(page, (*onboarding_btns, name_field), budget_s=4.0)
     if first_seen is not None and first_seen is not name_field:
-        _click(first_seen, attempts=3)
+        _click(first_seen, attempts=3, where="onboarding_modal")
     _shot("after_onboarding_modal")
 
     def _late_onboarding_modal() -> bool:
         btn = _first_visible(page, onboarding_btns, budget_s=0.0)
-        return btn is not None and _click(btn, attempts=2)
+        return btn is not None and _click(btn, attempts=2, where="onboarding_modal")
 
-    if not (_fill(name_field, campaign_name)
-            or (_late_onboarding_modal() and _fill(name_field, campaign_name))):
+    if not (_fill(name_field, campaign_name, where="campaign_name")
+            or (_late_onboarding_modal() and _fill(name_field, campaign_name, where="campaign_name"))):
         # 20.09 01:12 (CL_ml TRDEZ, третий раз за сутки): после Continue
         # редактор не отрисовался — пустой экран с «Loading…», и поля имени
         # на странице нет вовсе. Вводить ещё нечего, поэтому перезагружаем
         # без оглядки на «All edits saved» и пробуем снова.
         if not (recover_stuck_page(page, "campaign_name", editor=False, force=True)
-                and _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name)):
+                and _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name, where="campaign_name")):
             _shot("fail_campaign_name")
             return "campaign_name"
     # Confirmed live 2026-07-28: _fill() returning True only means the type
@@ -3771,14 +3776,14 @@ def run_recorded_campaign_flow(
         page.get_by_role("textbox", name="Budget").click(timeout=3000)
     except Exception:
         pass
-    budget_ok = _fill(page.get_by_role("spinbutton", name="Budget"), budget)
+    budget_ok = _fill(page.get_by_role("spinbutton", name="Budget"), budget, where="budget")
     if not budget_ok:
-        budget_ok = _fill(page.get_by_role("textbox", name="Budget"), budget)
+        budget_ok = _fill(page.get_by_role("textbox", name="Budget"), budget, where="budget")
     if not budget_ok:
         # aria_snapshot evidence (2026-07-21) showed this input's accessible
         # name/placeholder is actually "Please enter amount", not "Budget" —
         # try that directly rather than the role+name guess above.
-        budget_ok = _fill(page.get_by_placeholder("Please enter amount"), budget)
+        budget_ok = _fill(page.get_by_placeholder("Please enter amount"), budget, where="budget")
     if not budget_ok:
         _shot("fail_daily_budget")
         return "daily_budget"
@@ -3794,11 +3799,11 @@ def run_recorded_campaign_flow(
         name_now = None
     if name_now is not None and name_now.strip() != campaign_name.strip():
         for _ in range(3):
-            if _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name):
+            if _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name, where="campaign_name"):
                 wait_editor_saved(page)
                 break
 
-    if not _click(page.get_by_role("button", name="Next")):
+    if not _click(page.get_by_role("button", name="Next"), where="next_to_adset"):
         _shot("fail_next_to_adset")
         return "next_to_adset"
     _wait_loading()
@@ -3807,13 +3812,13 @@ def run_recorded_campaign_flow(
         return "window_too_small"
     _clear_blocking_overlays(page, "adset")
 
-    if not _fill(page.get_by_placeholder("Enter your ad set name here..."), adset_name):
+    if not _fill(page.get_by_placeholder("Enter your ad set name here..."), adset_name, where="adset_name"):
         # ACL-1313 (как у campaign_name): после Next вместо редактора ad
         # set'а висел маршрутный спиннер, и поля имени не было вовсе.
         # Перезагрузка — через `recover_stuck_page` в режиме редактора: только
         # при зависшей загрузке и «All edits saved», поля кампании не теряем.
         if not (recover_stuck_page(page, "adset_name", editor=True)
-                and _fill(page.get_by_placeholder("Enter your ad set name here..."), adset_name)):
+                and _fill(page.get_by_placeholder("Enter your ad set name here..."), adset_name, where="adset_name")):
             _shot("fail_adset_name")
             return "adset_name"
     # Reusing the same ad set name across runs makes Meta show a name-history
@@ -4210,7 +4215,7 @@ def run_recorded_campaign_flow(
         ad_edit_url = ""
         reached_ad_level = False
         try:
-            if not _click(page.get_by_role("button", name="Next")):
+            if not _click(page.get_by_role("button", name="Next"), where="next_to_ad"):
                 _shot("fail_next_to_ad")
                 # HARD fail, not soft. Confirmed live 2026-07-29 (Test145,
                 # campaign B): the editor drawer closed mid-audience-setup,
@@ -4236,7 +4241,7 @@ def run_recorded_campaign_flow(
 
         if reached_ad_level:
             final_ad_name = ad_name or f"{campaign_name} Ad"
-            if not _fill(page.get_by_placeholder("Enter your ad name here..."), final_ad_name):
+            if not _fill(page.get_by_placeholder("Enter your ad name here..."), final_ad_name, where="ad_name"):
                 _shot("fail_ad_name")
                 ad_level_fails.append("ad_name")
             else:
@@ -4365,7 +4370,7 @@ def run_recorded_campaign_flow(
                     continue
 
                 extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
-                if not _fill(page.get_by_placeholder("Enter your ad name here..."), extra_name):
+                if not _fill(page.get_by_placeholder("Enter your ad name here..."), extra_name, where=f"{tag}_name"):
                     _shot(f"fail_{tag}_name")
                     ad_level_fails.append(f"{tag}_name")
                 else:
