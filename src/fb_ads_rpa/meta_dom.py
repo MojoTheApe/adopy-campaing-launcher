@@ -713,27 +713,47 @@ def _website_only_label(text: str) -> bool:
     return n in ("website", "sitio web")
 
 
-def scroll_to_section(page: Page, *labels: str) -> bool:
-    """Scroll main panel so a section heading/label is visible."""
-    for label in labels:
-        if not label.strip():
-            continue
-        pattern = re.compile(re.escape(label), re.I)
-        for root in _roots(page):
-            for getter in (
-                lambda: root.get_by_role("heading", name=pattern).first,
-                lambda: root.get_by_text(pattern).first,
-                lambda: root.get_by_label(pattern).first,
-            ):
-                try:
-                    loc = getter()
-                    loc.wait_for(state="visible", timeout=5000)
-                    loc.scroll_into_view_if_needed(timeout=5000)
-                    _sleep_h(0.3)
-                    return True
-                except Exception:
-                    pass
-    return False
+#: Сколько всего ждать появления раздела (все подписи, все фреймы вместе).
+#: Прежний вариант ждал 5 с КАЖДЫЙ способ поиска по очереди: `role=heading`
+#: с такой подписью у Meta нет, и каждая прокрутка к «Conversion location» /
+#: «Audience» / «Conversion event» платила 5 с за заголовок, которого нет,
+#: прежде чем найти текст (ACL-1313: 10–15 с на кампанию). Найденное
+#: возвращается сразу; 10 с — не меньше, чем прежний путь давал тексту
+#: (5 с на заголовок + 5 с на текст).
+SCROLL_SECTION_BUDGET_S = 10.0
+
+
+def scroll_to_section(page: Page, *labels: str, budget_s: float = SCROLL_SECTION_BUDGET_S) -> bool:
+    """Scroll main panel so a section heading/label is visible.
+
+    Опрос без ожиданий: на каждом круге по порядку — подпись, фрейм,
+    заголовок → текст → label; первый видимый прокручивается в окно. Порядок
+    предпочтения прежний, но отсутствующий заголовок больше не стоит 5 с.
+    """
+    patterns = [re.compile(re.escape(label), re.I) for label in labels if label.strip()]
+    if not patterns:
+        return False
+    deadline = time.time() + budget_s
+    while True:
+        for pattern in patterns:
+            for root in _roots(page):
+                for getter in (
+                    lambda: root.get_by_role("heading", name=pattern).first,
+                    lambda: root.get_by_text(pattern).first,
+                    lambda: root.get_by_label(pattern).first,
+                ):
+                    try:
+                        loc = getter()
+                        if not loc.is_visible():
+                            continue
+                        loc.scroll_into_view_if_needed(timeout=5000)
+                        _sleep_h(0.3)
+                        return True
+                    except Exception:
+                        pass
+        if time.time() >= deadline:
+            return False
+        time.sleep(0.25)
 
 
 def _conversion_location_display_value(page: Page) -> str:
