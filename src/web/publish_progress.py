@@ -8,8 +8,8 @@
   и время, когда он записан, — по нему видно, что сборка встала.
 
 Файл телеметрии общий и растёт без конца, поэтому читается только его хвост
-(`TAIL_BYTES`), и только строки этого задания: с именем его кампании и не
-старше самого задания. Разбора сверх `json.loads` строки здесь нет — опрос
+(`TAIL_BYTES`), и только строки этого задания: с именем его кампании, не
+старше самого задания и — когда строка его несёт — с номером задания. Разбора сверх `json.loads` строки здесь нет — опрос
 идёт раз в несколько секунд, пока сборка работает.
 
 Решение, какого цвета точка, принимает страница: сервер отдаёт факты
@@ -18,14 +18,32 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 #: Сколько секунд без нового шага у идущей кампании — уже «встала».
-#: Владелец назвал три минуты; самый долгий законный шаг — ожидание окна
-#: цели у Meta — укладывается в них.
+#: Владелец назвал три минуты — до площадок так и есть.
 STALL_AFTER_S = 180
+
+#: С площадок и дальше (креатив, медиа, назначение, текст) законный шаг идёт
+#: до ~6 минут: 25.09 — 370 с (ad_creative_reuse → ad_creative_upload),
+#: 356, 329, 321 с. На этом этапе «встала» — только после семи минут.
+SLOW_STALL_AFTER_S = 420
+
+#: Шаги, после которых кампания на медленном этапе. Этап, а не сам шаг:
+#: долго идёт шаг, который ещё не записан, а видна только строка перед ним
+#: (ad_name → креатив, advantage_plus_audience → площадки). Одно место.
+SLOW_STAGE_STEP = re.compile(
+    r"^(advantage_plus_audience|placements|devices_ios|next_to_ad"
+    r"|ad\d*_|library|creative|media|destination|copy)")
+
+
+def stall_after_for(steps: list[str]) -> int:
+    """Порог тишины для кампании по её шагам этого задания."""
+    return SLOW_STALL_AFTER_S if any(SLOW_STAGE_STEP.match(_base_step(s)) for s in steps) \
+        else STALL_AFTER_S
 
 #: Хвост файла телеметрии, который читается за один опрос. Одна кампания
 #: пишет сотню-другую строк по ~200 байт; полмегабайта покрывают несколько
@@ -150,14 +168,21 @@ def job_progress(
     fails: dict[str, dict[str, int]] = {}
     blocker: dict[str, str] = {}
     latest: datetime | None = None
+    job_id = str(job.get("job_id") or "")
+    steps_seen: dict[str, list[str]] = {}
     for row in tail_rows(path or _telemetry_path(), max_bytes) if wanted else []:
         name = str(row.get("campaign") or "")
         if name not in wanted:
+            continue
+        # Строка с номером другого задания — чужая, даже при том же имени
+        # кампании (одноимённые кампании разных аккаунтов, ACL-1315).
+        if row.get("job") and job_id and row.get("job") != job_id:
             continue
         ts = _parse_ts(row.get("ts"))
         if ts is None or (since is not None and ts < since):
             continue
         last[name] = row
+        steps_seen.setdefault(name, []).append(str(row.get("step") or ""))
         if latest is None or ts > latest:
             latest = ts
         if row.get("ok") is False:
@@ -189,6 +214,7 @@ def job_progress(
             "note": str(row.get("note") or "")[:200],
             "ts": row.get("ts") or "",
             "idle_s": round((now - ts).total_seconds(), 1) if ts else None,
+            "stall_after_s": stall_after_for(steps_seen.get(name, [])),
             "blocker": why,
         })
 
@@ -208,7 +234,8 @@ def job_progress(
         "status": status,
         "active": status in _ACTIVE,
         "errors": [str(e) for e in (job.get("errors") or [])],
-        "stall_after_s": STALL_AFTER_S,
+        # Порог — по этапу кампании, которая собирается сейчас.
+        "stall_after_s": stall_after_for(steps_seen.get(current, [])),
         "idle_s": idle_s,
         "current": current,
         "campaigns": campaigns,

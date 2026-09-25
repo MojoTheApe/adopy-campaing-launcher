@@ -187,3 +187,84 @@ def test_the_endpoint_answers_for_a_known_job(tmp_path, monkeypatch, registered_
 def test_an_unknown_job_is_404_not_running():
     r = asyncio.run(_get("/publish-jobs/gone-after-restart/progress"))
     assert r.status_code == 404
+
+
+# ── повторное ревью PR #314 (находки 4/5): свои строки и порог по этапу ──
+
+def test_rows_older_than_the_job_never_colour_a_campaign(tmp_path):
+    """D4: у кампании только вчерашние строки (вчерашний account_blocked) —
+    новая сборка не «нужен человек» и без шага."""
+    tele = _write(tmp_path / "t.jsonl", [
+        {"ts": _iso(-86400), "campaign": "CL_A", "step": "account_blocked", "ok": False},
+    ])
+    c = _by_name(pp.job_progress(_job(), path=tele, now=NOW))
+    assert c["CL_A"]["blocker"] == "" and c["CL_A"]["step"] == ""
+
+
+def test_rows_of_another_job_are_not_ours_even_with_the_same_name(tmp_path):
+    """Одноимённые кампании двух заданий (два аккаунта) — строка с номером
+    другого задания чужая; строка без номера (старый робот) — по имени."""
+    tele = _write(tmp_path / "t.jsonl", [
+        {"ts": _iso(-40), "campaign": "CL_A", "step": "account_blocked", "ok": False, "job": "job-2"},
+        {"ts": _iso(-30), "campaign": "CL_A", "step": "campaign_name", "ok": True, "job": "job-1"},
+        {"ts": _iso(-20), "campaign": "CL_B", "step": "create", "ok": True},
+        {"ts": _iso(-10), "campaign": "CL_A", "step": "ad_copy", "ok": True, "job": "job-2"},
+    ])
+    c = _by_name(pp.job_progress(_job(), path=tele, now=NOW))
+    assert c["CL_A"]["step"] == "campaign_name" and c["CL_A"]["blocker"] == ""
+    assert c["CL_B"]["step"] == "create"
+
+
+@pytest.mark.parametrize("last,limit", [
+    ("campaign_name", pp.STALL_AFTER_S), ("audience_age", pp.STALL_AFTER_S), ("targeting", pp.STALL_AFTER_S),
+    ("advantage_plus_audience", pp.SLOW_STALL_AFTER_S), ("placements", pp.SLOW_STALL_AFTER_S),
+    ("ad_name", pp.SLOW_STALL_AFTER_S), ("ad_creative_reuse", pp.SLOW_STALL_AFTER_S),
+    ("ad2_destination", pp.SLOW_STALL_AFTER_S),
+])
+def test_the_stall_threshold_follows_the_stage(tmp_path, last, limit):
+    """25.09: законные паузы на креативе — 370, 356, 329 с; до площадок — три минуты."""
+    tele = _write(tmp_path / "t.jsonl", [{"ts": _iso(-370), "campaign": "CL_A", "step": last, "ok": True}])
+    p = pp.job_progress(_job(), path=tele, now=NOW)
+    assert p["current"] == "CL_A" and p["stall_after_s"] == limit
+    assert _by_name(p)["CL_A"]["stall_after_s"] == limit
+    assert pp.SLOW_STALL_AFTER_S >= 420 > 370
+
+
+def test_telemetry_rows_carry_the_job_of_their_thread(tmp_path, monkeypatch):
+    from src.fb_ads_rpa import run_telemetry as rt
+
+    path = tmp_path / "rt.jsonl"
+    rt.clear_current_run()
+    try:
+        rt.set_current_job("job-7")
+        rt.set_current_run("run-1", "CL_A")
+        rt.record("campaign_name", True, path=path)
+    finally:
+        rt.clear_current_run()
+    row = json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+    assert row["job"] == "job-7" and row["run_id"] == "run-1" and row["campaign"] == "CL_A"
+
+
+def test_the_job_thread_names_its_job_before_the_robot_runs(monkeypatch):
+    from src.fb_ads_rpa import run_telemetry as rt
+
+    seen = {}
+    monkeypatch.setattr(pj, "use_rpa_publish", lambda: True)
+    monkeypatch.setattr(pj, "_run_rpa", lambda job_id, *a, **k: seen.update(job=rt.current_job_id()))
+    monkeypatch.setattr(pj, "keep_display_awake", lambda *a, **k: __import__("contextlib").nullcontext())
+    monkeypatch.setattr(pj, "_watch_screen_lock", lambda *a, **k: __import__("contextlib").nullcontext())
+    job_id = "acl-1315-thread"
+    with pj._jobs_lock:
+        pj._jobs[job_id] = {"job_id": job_id, "account_label": "Demo", "status": "pending",
+                            "results": [], "errors": [], "cancelled": False}
+    try:
+        import threading
+        t = threading.Thread(target=pj._run_job, args=(job_id, []),
+                             kwargs={"account_label": "Demo", "country": "", "via_multilogin": True,
+                                     "activate": False})
+        t.start()
+        t.join(30)
+    finally:
+        with pj._jobs_lock:
+            pj._jobs.pop(job_id, None)
+    assert seen.get("job") == job_id

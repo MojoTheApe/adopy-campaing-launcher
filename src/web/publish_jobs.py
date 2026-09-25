@@ -289,6 +289,14 @@ def _run_job(
         with _jobs_lock:
             _jobs[job_id]["status"] = "running"
             _jobs[job_id]["started_at"] = _now_iso()
+        # Каждая строка телеметрии этого потока несёт номер задания — по нему
+        # точка сборки берёт только свои строки (ACL-1315).
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+
+            _rt.set_current_job(job_id)
+        except Exception:
+            pass
 
         if activate or not use_rpa_publish():
             _fatal(job_id, "ACL safety gate: only draft-only RPA jobs are allowed")

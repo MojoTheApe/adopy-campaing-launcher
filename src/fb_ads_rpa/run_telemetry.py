@@ -304,9 +304,27 @@ def set_current_run(run_id: str = "", campaign: str = "") -> None:
     """
     old = _current_state()
     _current_var.set({
-        "run_id": run_id or old["run_id"],
-        "campaign": campaign or old["campaign"],
+        **old,
+        "run_id": run_id or old.get("run_id", ""),
+        "campaign": campaign or old.get("campaign", ""),
     })
+
+
+def set_current_job(job_id: str) -> None:
+    """Запомнить задание публикации дешборда, которое идёт в этом потоке.
+
+    ACL-1315, повторное ревью PR #314: точка сборки в билдере сопоставляла
+    строки телеметрии с кампанией только по имени — два задания с
+    одноимёнными кампаниями на разных аккаунтах получали шаги и блокеры друг
+    друга. Номер задания в строке (`job`) делает сопоставление точным.
+    """
+    state = dict(_current_state())
+    state["job"] = job_id or ""
+    _current_var.set(state)
+
+
+def current_job_id() -> str:
+    return _current_state().get("job") or ""
 
 
 def clear_current_run() -> None:
@@ -374,6 +392,9 @@ def record(
         campaign = campaign or current_campaign()
         if campaign:
             rec["campaign"] = campaign
+        job = current_job_id()
+        if job:
+            rec["job"] = job
         if duration_s is not None:
             rec["duration_s"] = round(duration_s, 1)
         if diag:
