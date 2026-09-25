@@ -12657,9 +12657,14 @@ def _age_triggers_read(page: Page) -> list[str]:
     162 из 162 возрастов 19–25.09 подтвердил только обход read_back_by_label.
     Поэтому каждая подпись проверяется отдельно, подписи частей поля границу
     не ставят, а ответ есть, только если значения нашлись ровно у одной.
+    Галочка «Use as a suggestion» — тоже часть поля (тест ACL-1313
+    test_audience_advantage_badge: без неё поле с галочкой не читалось).
     """
     js = "() => {" + _AUDIENCE_FIELD_DOM + r"""
-      const re = /^(Age|Edad)$/i, own = /\b(age|edad)\b/i;
+      const re = /^(Age|Edad)$/i;
+      // Части самого поля: «Minimum age», «Maximum age», «Include people …
+      // whose age is unknown» и галочка «Use as a suggestion» под границами.
+      const own = /\b(age|edad)\b|^(use as a suggestion|usar como sugerencia)/i;
       const readings = [];
       for (const label of leaves(document).filter(e => re.test(norm(e.textContent)))) {
         for (const box of boxesFrom(label, re, own)) {
