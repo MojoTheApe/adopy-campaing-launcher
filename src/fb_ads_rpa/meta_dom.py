@@ -2933,9 +2933,11 @@ def run_recorded_campaign_flow(
     except Exception:
         pass
 
-    for _ in range(3):
-        _dismiss_floating_banners(page)
+    # ACL-1313: окно «Turn off ad blocker», тост сети и баннеры — до Create.
+    _clear_blocking_overlays(page, "campaign", editor=False)
+    for _ in range(2):
         _sleep_h(0.4)
+        _dismiss_floating_banners(page)
     # 20.09 01:20: «Loading creation» без конца шло на аккаунтах, где
     # накопились черновики (CO_bnc 11, CR_ait 10). Пишем их число до Create,
     # чтобы связь была видна сразу, а не по снимкам.
@@ -2970,6 +2972,7 @@ def run_recorded_campaign_flow(
                 state="visible", timeout=30000)
         except Exception:
             pass
+        _clear_blocking_overlays(page, "create_quick_retry", editor=False)
         _click(page.get_by_role("button", name="Create", exact=True))
         _shot("after_create_quick_retry")
 
@@ -2988,13 +2991,16 @@ def run_recorded_campaign_flow(
         # Со списка увели (Audiences, 887b2d): перезагрузка открыла бы ту же
         # чужую страницу, где кнопки Create нет вовсе.
         _back_to_list()
-        if not recover_stuck_page(page, "objective", editor=False, force=True):
+        cleared = _clear_blocking_overlays(page, "objective", editor=False)
+        if ("network_trouble:reloaded" not in cleared
+                and not recover_stuck_page(page, "objective", editor=False, force=True)):
             break
         try:
             page.get_by_role("button", name="Create", exact=True).first.wait_for(
                 state="visible", timeout=30000)
         except Exception:
             pass
+        _clear_blocking_overlays(page, "create_retry", editor=False)
         _click(page.get_by_role("button", name="Create", exact=True))
         _shot("after_create_retry")
 
@@ -3120,6 +3126,7 @@ def run_recorded_campaign_flow(
     _shot("after_next_to_adset")
     if not ensure_editor_window(page, "adset"):
         return "window_too_small"
+    _clear_blocking_overlays(page, "adset")
 
     if not _fill(page.get_by_placeholder("Enter your ad set name here..."), adset_name):
         _shot("fail_adset_name")
@@ -3547,6 +3554,7 @@ def run_recorded_campaign_flow(
         _shot("after_next_to_ad")
         if not ensure_editor_window(page, "ad"):
             return "window_too_small"
+        _clear_blocking_overlays(page, "ad")
 
         if reached_ad_level:
             final_ad_name = ad_name or f"{campaign_name} Ad"
@@ -3664,6 +3672,7 @@ def run_recorded_campaign_flow(
 
                 if not ensure_editor_window(page, tag):
                     return "window_too_small"
+                _clear_blocking_overlays(page, tag)
 
                 extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
                 if not _fill(page.get_by_placeholder("Enter your ad name here..."), extra_name):
@@ -9650,7 +9659,8 @@ _BANNERS_JS = r"""
       const text = norm(b.textContent);
       if (FORBIDDEN.test(text)) return false;
       const label = norm(b.getAttribute('aria-label'));
-      return /^(Close|Cerrar)$/.test(text) || (!text && /^(Close|Dismiss|Cerrar)$/i.test(label));
+      return /^(Close|Cerrar)$/.test(text)
+        || ((!text || /^[\u00d7\u2715]$/.test(text)) && /^(Close|Dismiss|Cerrar)$/i.test(label));
     });
     // Контейнер баннера: ближайший предок заголовка с СОБСТВЕННЫМ крестиком —
     // ровно одним. Два крестика — это уже общий родитель нескольких карточек;
@@ -9790,6 +9800,107 @@ def _close_banners(page: Page, titles: tuple[str, ...] = _BANNER_TITLES, *, aymt
             break
         _sleep_h(0.5)
     return closed
+
+_AD_BLOCKER_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\s+/g, ' ').trim();
+    const shown = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const title = [...document.querySelectorAll('*')].find((e) =>
+      (e.children.length === 0 || e.getAttribute('role') === 'heading')
+      && /^Turn off ad blocker/i.test(norm(e.textContent)) && shown(e));
+    if (!title) return '';
+    const drawerClose = (b) => b.getAttribute('aria-label') === 'Close' && (() => {
+      const s = b.closest('[data-surface]');
+      return !!s && s.getAttribute('data-surface') === '/am/editor_drawer';
+    })();
+    const buttons = (box) => [...box.querySelectorAll('[role=button], button')]
+      .filter((b) => shown(b) && !drawerClose(b));
+    // Своё окно: ближайший role=dialog, иначе ближайший предок с кнопкой OK.
+    let box = title.closest('[role=dialog]');
+    if (!box) {
+      box = title;
+      for (let i = 0; i < 8 && box.parentElement; i++) {
+        box = box.parentElement;
+        if (buttons(box).some((b) => norm(b.textContent) === 'OK')) break;
+      }
+    }
+    const ok = buttons(box).find((b) => norm(b.textContent) === 'OK');
+    const x = ok ? null : buttons(box).find((b) => {
+      const t = norm(b.textContent);
+      return t === 'Close' || (!t && /^(Close|Dismiss)$/i.test(b.getAttribute('aria-label') || ''));
+    });
+    const btn = ok || x;
+    if (!btn) return 'no_button';
+    btn.setAttribute('data-acl-close', 'adblock');
+    return ok ? 'ok' : 'x';
+  }
+"""
+"""Окно «Turn off ad blocker»: пометить его OK (или крестик) для нажатия."""
+
+
+def _close_ad_blocker_modal(page: Page) -> str:
+    """Закрыть «Turn off ad blocker». Чем закрыли: "ok" / "x" / "" (окна нет).
+
+    279ead80503a, 25.09: после Create поверх списка встало это окно (и тост
+    «Your internet connection was lost»), под ним — вечная «Loading…». Meta
+    так говорит, что часть её запросов не проходит: сеть или прокси профиля.
+    """
+    try:
+        how = page.evaluate(_AD_BLOCKER_JS) or ""
+    except Exception:
+        return ""
+    if how in ("ok", "x"):
+        _click_marked(page, '[data-acl-close="adblock"]')
+        _sleep_h(0.6)
+        try:
+            page.evaluate("() => document.querySelectorAll('[data-acl-close]')"
+                          ".forEach(e => e.removeAttribute('data-acl-close'))")
+        except Exception:
+            pass
+    return how
+
+
+#: Тост «Your internet connection was lost. Some of your work may not be
+#: available.» — закрывается своим крестиком, как баннеры.
+_NETWORK_TOAST_TITLES = ("Your internet connection was lost",)
+
+
+def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True) -> list[str]:
+    """Убрать всё, что перекрывает клики: окно ad blocker, тост сети, баннеры.
+
+    Зовётся в начале каждого раздела (кампания, ad set, объявления) и перед
+    каждым Create. Возвращает, что закрыли, — это же уходит в телеметрию.
+
+    Окно «Turn off ad blocker» — отдельный случай (просьба владельца): его
+    закрываем OK или крестиком и перезагружаем страницу — на списке кампаний
+    всегда, в редакторе только при «All edits saved». В телеметрию —
+    `overlays_cleared` с пометкой `network_trouble`: это сигнал о сети или
+    прокси профиля, а не о разметке Meta.
+    """
+    closed: list[str] = []
+    trouble = _network_trouble(page)
+    how = _close_ad_blocker_modal(page)
+    if how:
+        closed.append(f"ad_blocker_modal:{how}")
+    closed += _close_banners(page, _BANNER_TITLES + _NETWORK_TOAST_TITLES)
+    if how or trouble:
+        reloaded = False
+        why = ""
+        if how or not editor:
+            if editor and not _all_edits_saved(page):
+                why = "unsaved_edits"
+            else:
+                _reload_editor(page)
+                reloaded = True
+        closed.append("network_trouble:" + ("reloaded" if reloaded else (why or "not_reloaded")))
+        _telemetry.record("overlays_cleared", None, note="network_trouble",
+                          diag={"where": where, "closed": closed, "reloaded": reloaded,
+                                "url": (page.url or "")[:160]})
+    elif closed:
+        _telemetry.record("overlays_cleared", None, note="closed",
+                          diag={"where": where, "closed": closed})
+    return closed
+
 
 def _dismiss_advantage_banner(page: Page) -> list[str]:
     """Закрыть рекомендацию Advantage+ после выбора Website — её крестиком.
