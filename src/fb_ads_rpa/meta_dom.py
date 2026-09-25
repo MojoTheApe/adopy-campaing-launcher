@@ -1780,6 +1780,7 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
             # from anywhere to anywhere, with the press ~8ms after the last
             # move — a shape no hand makes. Walk a few interpolated points
             # with a slight arc and human-ish gaps, then press.
+            _hit_mark(page, x, y)
             for px, py in _mouse_path(page, x, y):
                 session.send(
                     "Input.dispatchMouseEvent",
@@ -1787,6 +1788,25 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
                 )
                 time.sleep(_human_jitter(0.02, 0.5))
             _sleep_h(0.08)
+            if _hit_changed(page, x, y):
+                # ACL-1313, прогон 25.09 (GT 887b2d, 8814): путь курсора шёл
+                # через левое меню Ads Manager, меню раскрывалось на наведение
+                # поверх кнопки Create, и нажатие попадало в «Audiences» —
+                # страница уходила со списка кампаний. Уводим курсор вправо,
+                # ждём, пока меню свернётся, и подходим к цели справа.
+                away = (float(x) + 320.0, float(y))
+                for px, py in _mouse_path(page, *away):
+                    session.send("Input.dispatchMouseEvent",
+                                 {"type": "mouseMoved", "x": px, "y": py, "button": "none"})
+                    time.sleep(_human_jitter(0.02, 0.5))
+                _sleep_h(0.9)
+                for px, py in _mouse_path(page, x, y, start=away):
+                    session.send("Input.dispatchMouseEvent",
+                                 {"type": "mouseMoved", "x": px, "y": py, "button": "none"})
+                    time.sleep(_human_jitter(0.02, 0.5))
+                _sleep_h(0.08)
+                _telemetry.record("click_target_covered", not _hit_changed(page, x, y),
+                                  diag={"x": round(x), "y": round(y)})
             for typ, extra in (
                 ("mousePressed", {"button": "left", "buttons": 1, "clickCount": 1}),
                 ("mouseReleased", {"button": "left", "buttons": 0, "clickCount": 1}),
@@ -1810,24 +1830,64 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
     page.mouse.up()
 
 
-def _mouse_path(page: Page, x: float, y: float) -> list[tuple[float, float]]:
+#: Что лежит в точке клика до того, как курсор к ней пошёл. Сравнение —
+#: «тот же узел или его предок/потомок»: подсветка кнопки при наведении не
+#: считается подменой, а раскрывшееся поверх меню — считается.
+_HIT_MARK_JS = """([x, y]) => { window._rpa_hit_before = document.elementFromPoint(x, y); }"""
+_HIT_CHANGED_JS = """([x, y]) => {
+  const was = window._rpa_hit_before, now = document.elementFromPoint(x, y);
+  if (!was || !was.isConnected || !now) return false;
+  return !(now === was || was.contains(now) || now.contains(was));
+}"""
+
+
+def _hit_mark(page: Page, x: float, y: float) -> None:
+    try:
+        page.evaluate(_HIT_MARK_JS, [x, y])
+    except Exception:
+        pass
+
+
+def _hit_changed(page: Page, x: float, y: float) -> bool:
+    """Точку клика накрыло что-то другое, пока курсор шёл к ней."""
+    try:
+        return bool(page.evaluate(_HIT_CHANGED_JS, [x, y]))
+    except Exception:
+        return False
+
+
+#: Левая колонка навигации Ads Manager. Меню раскрывается на наведение и
+#: ложится поверх содержимого — путь курсора через неё опасен (ACL-1313).
+_NAV_RAIL_X = 72.0
+
+
+def _mouse_path(page: Page, x: float, y: float,
+                start: tuple[float, float] | None = None) -> list[tuple[float, float]]:
     """Interpolated points from the current pointer to (x, y), with an arc.
 
     Starts wherever the tracker last saw the pointer (installed by
     pacing._install_mouse_tracker); falls back to a point offset from the
     target so the first move is never a teleport from (0,0).
+
+    ACL-1313: запасная точка — справа от цели, а не слева: слева у Ads
+    Manager колонка меню, и путь через неё раскрывал меню поверх кнопки
+    (Create x≈120). Если курсор и так стоит в этой колонке, а цель — нет,
+    путь тоже начинаем справа.
     """
     import math
     import random
 
-    try:
-        last = page.evaluate("() => window._rpa_last_mouse || null")
-    except Exception:
-        last = None
-    if last and last.get("x", -1) >= 0:
-        sx, sy = float(last["x"]), float(last["y"])
+    if start is not None:
+        sx, sy = float(start[0]), float(start[1])
     else:
-        sx, sy = float(x) - random.uniform(120, 260), float(y) - random.uniform(60, 180)
+        try:
+            last = page.evaluate("() => window._rpa_last_mouse || null")
+        except Exception:
+            last = None
+        if last and last.get("x", -1) >= 0 and not (last["x"] < _NAV_RAIL_X <= x):
+            sx, sy = float(last["x"]), float(last["y"])
+        else:
+            sx, sy = float(x) + random.uniform(120, 260), float(y) + random.uniform(-60, 60)
 
     dist = math.hypot(x - sx, y - sy)
     steps = max(3, min(12, int(dist / 60) + 3))
@@ -2403,6 +2463,46 @@ def _loading_visible(page: Page) -> bool:
 OBJECTIVE_LOADING_MAX_S = 180.0
 
 
+#: Meta сама говорит, что сеть профиля рвётся или часть запросов не проходит:
+#: «Turn off ad blocker», «Your internet connection was lost» (279ead, 25.09).
+#: Ждать загрузку формы в таком состоянии бессмысленно.
+_NETWORK_TROUBLE = re.compile(r"Turn off ad blocker|internet connection was lost", re.I)
+
+
+def _network_trouble(page: Page) -> bool:
+    try:
+        return page.get_by_text(_NETWORK_TROUBLE).first.is_visible(timeout=300)
+    except Exception:
+        return False
+
+
+def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
+    """Отозвалась ли страница на Create: "ok" / "left_list" / "nothing".
+
+    ACL-1313: с 20.09 первый Create после загрузки открывал окно цели в 42%
+    случаев, остальные ждали 75–180 с и перезагрузку. На снимках 25.09 у
+    этих попыток не «долгая загрузка», а промах: открыта страница Audiences
+    или список без модалки. Проверяем за секунды, а не за минуты.
+    """
+    base = (list_url or "").split("?", 1)[0]
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            if page.get_by_role("radio", name="Leads").first.is_visible(timeout=300):
+                return "ok"
+        except Exception:
+            pass
+        if _loading_visible(page):
+            return "ok"
+        try:
+            if base and page.url.split("?", 1)[0] != base:
+                return "left_list"
+        except Exception:
+            pass
+        _sleep_h(0.5, 0.2)
+    return "nothing"
+
+
 def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
                            loading_max_s: float = OBJECTIVE_LOADING_MAX_S) -> bool:
     """Дождаться окна выбора цели; пока видна «Loading…», ждать до потолка."""
@@ -2414,6 +2514,8 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
     except Exception:
         pass
     while time.time() - start < loading_max_s and _loading_visible(page):
+        if _network_trouble(page):
+            break
         try:
             radio.wait_for(state="visible", timeout=5000)
             return True
@@ -2811,11 +2913,38 @@ def run_recorded_campaign_flow(
     # накопились черновики (CO_bnc 11, CR_ait 10). Пишем их число до Create,
     # чтобы связь была видна сразу, а не по снимкам.
     _telemetry.record("drafts_pending", None, diag={"count": _pending_drafts(page)})
+    list_url = page.url
     if not _click(page.get_by_role("button", name="Create", exact=True)):
         if not (recover_stuck_page(page, "create", editor=False)
                 and _click(page.get_by_role("button", name="Create", exact=True))):
             return "create"
     _shot("after_create")
+
+    def _back_to_list() -> None:
+        """Нажатие увело со списка кампаний — вернуться на него."""
+        try:
+            if list_url and page.url.split("?", 1)[0] != list_url.split("?", 1)[0]:
+                page.goto(list_url, wait_until="domcontentloaded", timeout=60000)
+                _sleep_h(3.0, 0.2)
+        except Exception:
+            pass
+
+    # ACL-1313: промах виден за секунды — повторяем нажатие сразу, без 75 с
+    # ожидания и перезагрузки. Два быстрых круга, дальше — прежний путь.
+    for _quick in range(2):
+        took = _create_took(page, list_url)
+        _telemetry.record("create_took", took == "ok", note=took)
+        if took == "ok":
+            break
+        if took == "left_list":
+            _back_to_list()
+        try:
+            page.get_by_role("button", name="Create", exact=True).first.wait_for(
+                state="visible", timeout=30000)
+        except Exception:
+            pass
+        _click(page.get_by_role("button", name="Create", exact=True))
+        _shot("after_create_quick_retry")
 
     # ACL-1233: окно выбора цели не появилось, а страница висит в «Loading…»
     # или стала страницей ошибки Chrome — перезагрузить список и нажать Create
@@ -2829,6 +2958,9 @@ def run_recorded_campaign_flow(
     for attempt in range(2):
         if _wait_objective_dialog(page):
             break
+        # Со списка увели (Audiences, 887b2d): перезагрузка открыла бы ту же
+        # чужую страницу, где кнопки Create нет вовсе.
+        _back_to_list()
         if not recover_stuck_page(page, "objective", editor=False, force=True):
             break
         try:
