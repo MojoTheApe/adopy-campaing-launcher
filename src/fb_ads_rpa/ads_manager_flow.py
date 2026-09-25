@@ -2282,7 +2282,7 @@ class AdsManagerFlow:
                 result.error = f"Recorded flow failed at: {fail_step}"
                 # ACL-1313: остановку, которую повтор не лечит (account_blocked),
                 # человек должен понять из самой ошибки, без разбора телеметрии.
-                if fail_step.split(":", 1)[0] == "account_blocked":
+                if fail_step.split(":", 1)[0] in ("account_blocked", "browser_closed"):
                     result.error += " - " + failure_policy.reason(fail_step)
                     result.blocking_failures.append(fail_step)
 

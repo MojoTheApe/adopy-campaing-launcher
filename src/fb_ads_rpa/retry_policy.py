@@ -67,7 +67,9 @@ CAMPAIGN_RETRY_STEPS = frozenset(
 # account_blocked (ACL-1313, run ecce52f330b8): Meta shows "Verification
 # required to advertise" / "Account disabled" / "Start authentication (#3858385)"
 # — every replay hits the same wall, only a person in Meta can lift it.
-NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked"})
+# browser_closed (25.09 20:59, GT Day 503b0c077db6): the profile's tab was
+# closed mid ad level — the draft is partial, and a replay would duplicate it.
+NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked", "browser_closed"})
 
 
 # Stops and field failures that block publication and need review.
@@ -75,6 +77,7 @@ BLOCKING_REVIEW_STEPS = frozenset(
     {
         "window_too_small",
         "account_blocked",
+        "browser_closed",
         "conversion_event",
         "audience_age",
         "audience_location",

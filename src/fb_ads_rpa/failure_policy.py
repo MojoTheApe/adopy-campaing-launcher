@@ -46,6 +46,12 @@ POLICY: dict[str, tuple[str, str]] = {
         "\"Account disabled\" or \"Start authentication\"); the campaign was stopped and "
         "will not be retried - complete the verification in Meta, then run it again",
     ),
+    "browser_closed": (
+        BLOCKING,
+        "the profile's browser tab was closed while the ads were being built; the "
+        "draft is incomplete and was not retried (a replay would duplicate it) - "
+        "check the draft in Ads Manager and finish or delete it",
+    ),
     "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
                          "restore a desktop-sized window before continuing the draft"),
     # ── Ad level ────────────────────────────────────────────────────────────
