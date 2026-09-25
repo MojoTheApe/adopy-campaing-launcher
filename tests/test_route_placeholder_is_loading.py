@@ -136,3 +136,20 @@ def test_the_adset_name_step_still_fails_when_the_reload_is_refused(flow, monkey
         lambda text, **kw: name_box if text == "Enter your ad set name here..." else plain)
     monkeypatch.setattr(md, "recover_stuck_page", lambda p, step, **kw: step == "objective")
     assert flow["run"]() == "adset_name"
+
+
+# ── objective_wait: что именно «грузилось» (E, 25.09) ─────────────────────
+
+def test_the_loading_kind_names_the_route_placeholder(page):
+    page.set_content(PLACEHOLDER)
+    assert md._loading_kind(page) == "route_placeholder"
+
+
+def test_the_loading_kind_carries_the_overlay_text(page):
+    page.set_content("<div role='dialog'><span>Loading creation…</span></div>")
+    assert md._loading_kind(page) == "text:Loading creation…"
+
+
+def test_nothing_loading_has_no_kind(page):
+    page.set_content("<div><span>Campaigns</span></div>")
+    assert md._loading_kind(page) == ""

@@ -2670,6 +2670,27 @@ def _loading_visible(page: Page) -> bool:
     return _route_placeholder_visible(page)
 
 
+def _loading_kind(page: Page) -> str:
+    """Что именно «грузится» — для телеметрии, не для решений.
+
+    `text:<надпись>` — накладка с текстом («Loading creation…»),
+    `route_placeholder` — маршрутный спиннер без текста, "" — ничего,
+    `unknown` — спросить не удалось. Потолок `loading_ceiling` (181 с) по
+    строке `objective_wait` иначе не разобрать: неизвестно, что крутилось.
+    """
+    try:
+        overlay = page.get_by_text(_LOADING_TEXT).first
+        if bool(overlay.count()) and overlay.is_visible(timeout=200):
+            text = re.sub(r"\s+", " ", overlay.inner_text(timeout=300) or "").strip()
+            return "text:" + text[:40]
+    except Exception:
+        return "unknown"
+    try:
+        return "route_placeholder" if _route_placeholder_visible(page) else ""
+    except Exception:
+        return "unknown"
+
+
 #: ACL-1313, прогон 24.09: после Create Meta минутами крутит модалку
 #: «Loading creation». Хвост удачных переходов — 55–79 с, ровно в наш порог
 #: 75 с; перезагрузка списка поверх крутящейся модалки выбрасывала начатую
@@ -2755,6 +2776,7 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
     start = time.time()
     last_busy = start
     loading_polls = 0
+    loading_kinds: dict[str, int] = {}
     outcome = "idle"
     found = False
     while True:
@@ -2768,6 +2790,8 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
         if _loading_visible(page):
             loading_polls += 1
             last_busy = now
+            kind = _loading_kind(page) or "gone"
+            loading_kinds[kind] = loading_kinds.get(kind, 0) + 1
             if _network_trouble(page):
                 outcome = "network_trouble"
                 break
@@ -2785,6 +2809,9 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
         _telemetry.record("objective_wait", None, note=outcome,
                           duration_s=time.time() - start,
                           diag={"loading_polls": loading_polls,
+                                # Что крутилось: надпись накладки или спиннер
+                                # маршрута, и сколько опросов каждое.
+                                "loading_kinds": loading_kinds,
                                 "idle_s": round(time.time() - last_busy, 1)})
     except Exception:
         pass

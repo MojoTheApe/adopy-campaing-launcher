@@ -223,3 +223,16 @@ def test_the_campaign_retry_after_an_ordinary_step_stays_quick(monkeypatch):
     result, sleeps = _publish_with_failures(monkeypatch, ["campaign_name"])
     assert sleeps == [1.5]
     assert result.success is True
+
+
+def test_objective_wait_says_what_was_loading(env, monkeypatch):
+    """25.09: потолок 181 с по строке objective_wait было не разобрать —
+    текстовая накладка это или спиннер маршрута."""
+    kinds = iter(["text:Loading creation…"] * 3 + ["route_placeholder"] * 100)
+    monkeypatch.setattr(md, "_loading_kind", lambda page: next(kinds))
+    env.state["loading_until"] = env.start + 60
+    radio = _Radio(env.clock, appears_at=env.start + 60)
+    assert md._wait_objective_dialog(_Page(radio)) is True
+    diag = env.rows[-1]["diag"]
+    assert diag["loading_kinds"]["text:Loading creation…"] == 3
+    assert diag["loading_kinds"]["route_placeholder"] == diag["loading_polls"] - 3
