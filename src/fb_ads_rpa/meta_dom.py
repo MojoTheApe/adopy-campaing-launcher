@@ -2773,6 +2773,9 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
     потом подбирается `OBJECTIVE_IDLE_S`.
     """
     radio = page.get_by_role("radio", name="Leads").first
+    # Долгое ожидание окна цели — только разбудить: перезагрузка поверх
+    # «Loading creation» выбрасывает начатую загрузку (ACL-1313, 24.09).
+    watch = _StallWatch(page, "objective_wait", editor=False, reload=False)
     start = time.time()
     last_busy = start
     loading_polls = 0
@@ -2786,6 +2789,7 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
             break
         except Exception:
             pass
+        watch.check()
         now = time.time()
         if _loading_visible(page):
             loading_polls += 1
@@ -2858,6 +2862,119 @@ def _pending_drafts(page: Page) -> int | None:
         return page.evaluate(_PENDING_DRAFTS_JS)
     except Exception:
         return None
+
+
+#: Сколько одно ожидание может тянуться, прежде чем страницу «растолкают»
+#: (`_StallWatch`). 25.09: в трёх прогонах перед шагами повторялись паузы
+#: ≥ 60 с (create, campaign_name, audience_age, placements, креатив).
+STALL_BUDGET_S = 60.0
+
+#: Шаги, на которых `_unstick` уже перезагружал страницу в этом прогоне:
+#: не больше одной перезагрузки на шаг.
+_UNSTUCK_RELOADED: set[str] = set()
+
+
+def _page_responsive(page: Page, timeout_s: float = 5.0) -> bool | None:
+    """Отвечает ли вкладка вообще. True — да, False — нет за `timeout_s`,
+    None — спросить не удалось (страница закрыта и т. п.).
+
+    `page.wait_for_function` — единственный вызов sync Playwright с
+    таймаутом, который соблюдает сам драйвер: если рендерер завис, ответ
+    придёт TimeoutError-ом через `timeout_s`, а не никогда (голый
+    `CDPSession.send` и `page.evaluate` таймаута не имеют — см.
+    screenshots.py). Ограничение: зависший процесс драйвера этим не поймать.
+    """
+    try:
+        page.wait_for_function("() => true", timeout=int(timeout_s * 1000))
+        return True
+    except Exception as exc:
+        if "timeout" in type(exc).__name__.lower() or "Timeout" in str(exc):
+            return False
+        return None
+
+
+def _on_editor(page: Page) -> bool:
+    """В редакторе (адрес `.../edit`) — или на списке кампаний."""
+    try:
+        return "/edit" in (page.url or "")
+    except Exception:
+        return True
+
+
+def _unstick(page: Page, where: str, *, editor: bool, waited_s: float = 0.0,
+             reload: bool = True) -> str:
+    """Ожидание затянулось: разбудить вкладку, а если не помогло — перезагрузить.
+
+    Просьба владельца (25.09): «если аккаунт подвис — перезагрузи или выведи
+    вперёд, цель — открыть как можно быстрее». Порядок осторожный:
+
+    1. `wake_page` — свёрнутое окно за край экрана, вкладку вперёд,
+       троттлинг Chrome снять заново. Кликов по Meta — никаких.
+    2. Перезагрузка — только если страница не отвечает или всё ещё висит
+       загрузка, не больше одной на шаг (`_UNSTUCK_RELOADED`) и только там,
+       где терять нечего: в редакторе — через `recover_stuck_page` (он сам
+       требует «All edits saved»); не отвечающий редактор не перезагружаем
+       вовсе — сохранённость правок на нём не проверить.
+
+    Возвращает, что сделали: "woke", "reloaded", "reload_refused",
+    "unsaved_or_unknown". Строка телеметрии `stall_unstuck`.
+    """
+    how = "woke"
+    woke: dict = {}
+    try:
+        from src.fb_ads_rpa.browser import wake_page
+
+        woke = wake_page(page)
+    except Exception as exc:
+        woke = {"error": str(exc)[:80]}
+    responsive = _page_responsive(page)
+    loading = None
+    if responsive:
+        try:
+            loading = _loading_visible(page)
+        except Exception:
+            loading = None
+    key = f"{_telemetry.current_run_id()}:{where}"
+    if reload and (responsive is False or loading) and key not in _UNSTUCK_RELOADED:
+        _UNSTUCK_RELOADED.add(key)
+        if responsive is False:
+            if editor:
+                how = "unsaved_or_unknown"
+            else:
+                _reload_editor(page)
+                how = "reloaded"
+        else:
+            how = "reloaded" if recover_stuck_page(page, where, editor=editor) else "reload_refused"
+    _telemetry.record("stall_unstuck", None, note=how,
+                      diag={"where": where[:80], "waited_s": round(waited_s, 1), "editor": editor,
+                            "responsive": responsive, "loading": loading, "woke": woke})
+    return how
+
+
+class _StallWatch:
+    """Сторож одного ожидания: переждали `budget_s` — один раз `_unstick`.
+
+    Зовётся из циклов, которые и так крутятся (повторы `_click`/`_fill`,
+    ожидание окна цели): `check()` дёшев, пока бюджет не вышел.
+    """
+
+    def __init__(self, page: Page, where: str, *, budget_s: float | None = None,
+                 editor: bool | None = None, reload: bool = True) -> None:
+        self.page, self.where = page, where
+        self.budget_s = STALL_BUDGET_S if budget_s is None else budget_s
+        self.editor, self.reload = editor, reload
+        self.start = time.time()
+        self.fired = ""
+
+    def check(self) -> str:
+        if self.fired:
+            return ""
+        waited = time.time() - self.start
+        if waited < self.budget_s:
+            return ""
+        editor = _on_editor(self.page) if self.editor is None else self.editor
+        self.fired = _unstick(self.page, self.where, editor=editor, waited_s=waited, reload=self.reload)
+        return self.fired
 
 
 def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = False) -> bool:
@@ -3314,8 +3431,19 @@ def run_recorded_campaign_flow(
             except Exception:
                 pass
 
+    def _watch(loc) -> _StallWatch:
+        try:
+            what = str(loc)[:80]
+        except Exception:
+            what = "locator"
+        return _StallWatch(page, what)
+
     def _click(loc, *, attempts: int = 5) -> bool:
+        # Повторы нажатия затянулись дольше STALL_BUDGET_S — вкладку будим
+        # (и, если висит, перезагружаем) один раз, потом повторы идут дальше.
+        watch = _watch(loc)
         for _ in range(attempts):
+            watch.check()
             _wait_loading()
             try:
                 loc.wait_for(state="visible", timeout=8000)
@@ -3331,7 +3459,9 @@ def run_recorded_campaign_flow(
         return False
 
     def _fill(loc, value: str, *, attempts: int = 5) -> bool:
+        watch = _watch(loc)
         for _ in range(attempts):
+            watch.check()
             _wait_loading()
             try:
                 loc.wait_for(state="visible", timeout=8000)
