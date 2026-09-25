@@ -2716,6 +2716,31 @@ def _review_errors_visible(page: Page) -> bool:
         return False
 
 
+#: ACL-1313, прогон 25.09: снимок экрана после каждого удачного шага стоил
+#: 5–7 с при трёх профилях (Playwright замораживает анимации Meta и кодирует
+#: PNG 3072×1467) — около 30 снимков, 2–3 минуты простоя на кампанию; владелец
+#: видел это как паузу после «All edits saved». Телеметрия пишется по-прежнему
+#: на каждом шаге; картинка — на отказе и на границах разделов.
+#: Вернуть снимок на каждом шаге: FB_RPA_SHOT_ALL=1.
+_SHOT_KEEP = frozenset({
+    "after_create", "after_leads", "after_campaign_fields", "after_next_to_adset",
+    "after_targeting", "after_placements", "after_next_to_ad",
+    "after_ad_creative_upload", "after_ad_copy", "after_ad_level_summary",
+})
+
+
+def _shot_worth_a_picture(label: str) -> bool:
+    """Нужен ли PNG для удачного шага `label` (отказы снимаются всегда)."""
+    if os.environ.get("FB_RPA_SHOT_ALL", "").strip() in ("1", "true", "yes"):
+        return True
+    if not label.startswith("after_"):
+        return True
+    if label in _SHOT_KEEP:
+        return True
+    # Объявления 2 и 3: итог медиа и текста каждого — это граница, а не шаг.
+    return label.endswith("_creative_upload") or label.endswith("_copy")
+
+
 def run_recorded_campaign_flow(
     page: Page,
     *,
@@ -2864,6 +2889,8 @@ def run_recorded_campaign_flow(
             diag=diag,
         )
         _shot_clock["t"] = now
+        if ok is not False and not _shot_worth_a_picture(label):
+            return
         try:
             from src.fb_ads_rpa.screenshots import capture as _capture
 
