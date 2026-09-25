@@ -1670,6 +1670,37 @@ def _type_human(page: Page, text: str) -> None:
 
     if not text:
         return
+    if "\n" in text and os.environ.get("FB_RPA_HUMAN_TYPING", "").strip() not in ("1", "true", "yes"):
+        # ACL-1313, прогон 24.09 (GT FX, 7364047ef03c): остаток текста уходил
+        # одной вставкой вместе с переносами строк. Каретка к этому моменту
+        # уже не в начале строки, редактор Meta (Draft.js) отдаёт такую
+        # вставку браузеру, и Chrome сам режет её на абзацы-копии, о которых
+        # редактор не знает: семь копий на семь переносов. Повтор их не
+        # стирал и дописывал текст поверх — «текст дважды». До ускорения
+        # 20.09 перенос был нажатием Enter (keyboard.type) — так и делаем:
+        # строка набирается быстрым путём, перенос — нажатием.
+        for n, line in enumerate(text.replace("\r\n", "\n").split("\n")):
+            if n:
+                page.keyboard.press("Enter")
+                time.sleep(_human_jitter(0.03, 0.3))
+            _type_human(page, line)
+        return
+    # 20.09, решение пользователя: набор по символу стоил ~45 минут на круге
+    # из восьми кампаний. Живые нажатия оставляем в начале строки — событий
+    # keydown достаточно, чтобы ввод не выглядел мгновенной вставкой, — а
+    # длинный остаток вставляем целиком. Прежнее поведение возвращает
+    # FB_RPA_HUMAN_TYPING=1.
+    lead = int(os.environ.get("FB_RPA_TYPING_LEAD", "8") or 8)
+    if os.environ.get("FB_RPA_HUMAN_TYPING", "").strip() not in ("1", "true", "yes") and len(text) > lead:
+        head, tail = text[:lead], text[lead:]
+        for ch in head:
+            if ch.isascii():
+                page.keyboard.type(ch, delay=random.uniform(25, 70))
+            else:
+                page.keyboard.insert_text(ch)
+        time.sleep(_human_jitter(0.08, 0.4))
+        page.keyboard.insert_text(tail)
+        return
     chunk = ""
     for ch in text:
         if ch.isascii():
@@ -1749,6 +1780,7 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
             # from anywhere to anywhere, with the press ~8ms after the last
             # move — a shape no hand makes. Walk a few interpolated points
             # with a slight arc and human-ish gaps, then press.
+            _hit_mark(page, x, y)
             for px, py in _mouse_path(page, x, y):
                 session.send(
                     "Input.dispatchMouseEvent",
@@ -1756,6 +1788,25 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
                 )
                 time.sleep(_human_jitter(0.02, 0.5))
             _sleep_h(0.08)
+            if _hit_changed(page, x, y):
+                # ACL-1313, прогон 25.09 (GT 887b2d, 8814): путь курсора шёл
+                # через левое меню Ads Manager, меню раскрывалось на наведение
+                # поверх кнопки Create, и нажатие попадало в «Audiences» —
+                # страница уходила со списка кампаний. Уводим курсор вправо,
+                # ждём, пока меню свернётся, и подходим к цели справа.
+                away = (float(x) + 320.0, float(y))
+                for px, py in _mouse_path(page, *away):
+                    session.send("Input.dispatchMouseEvent",
+                                 {"type": "mouseMoved", "x": px, "y": py, "button": "none"})
+                    time.sleep(_human_jitter(0.02, 0.5))
+                _sleep_h(0.9)
+                for px, py in _mouse_path(page, x, y, start=away):
+                    session.send("Input.dispatchMouseEvent",
+                                 {"type": "mouseMoved", "x": px, "y": py, "button": "none"})
+                    time.sleep(_human_jitter(0.02, 0.5))
+                _sleep_h(0.08)
+                _telemetry.record("click_target_covered", not _hit_changed(page, x, y),
+                                  diag={"x": round(x), "y": round(y)})
             for typ, extra in (
                 ("mousePressed", {"button": "left", "buttons": 1, "clickCount": 1}),
                 ("mouseReleased", {"button": "left", "buttons": 0, "clickCount": 1}),
@@ -1779,24 +1830,64 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
     page.mouse.up()
 
 
-def _mouse_path(page: Page, x: float, y: float) -> list[tuple[float, float]]:
+#: Что лежит в точке клика до того, как курсор к ней пошёл. Сравнение —
+#: «тот же узел или его предок/потомок»: подсветка кнопки при наведении не
+#: считается подменой, а раскрывшееся поверх меню — считается.
+_HIT_MARK_JS = """([x, y]) => { window._rpa_hit_before = document.elementFromPoint(x, y); }"""
+_HIT_CHANGED_JS = """([x, y]) => {
+  const was = window._rpa_hit_before, now = document.elementFromPoint(x, y);
+  if (!was || !was.isConnected || !now) return false;
+  return !(now === was || was.contains(now) || now.contains(was));
+}"""
+
+
+def _hit_mark(page: Page, x: float, y: float) -> None:
+    try:
+        page.evaluate(_HIT_MARK_JS, [x, y])
+    except Exception:
+        pass
+
+
+def _hit_changed(page: Page, x: float, y: float) -> bool:
+    """Точку клика накрыло что-то другое, пока курсор шёл к ней."""
+    try:
+        return bool(page.evaluate(_HIT_CHANGED_JS, [x, y]))
+    except Exception:
+        return False
+
+
+#: Левая колонка навигации Ads Manager. Меню раскрывается на наведение и
+#: ложится поверх содержимого — путь курсора через неё опасен (ACL-1313).
+_NAV_RAIL_X = 72.0
+
+
+def _mouse_path(page: Page, x: float, y: float,
+                start: tuple[float, float] | None = None) -> list[tuple[float, float]]:
     """Interpolated points from the current pointer to (x, y), with an arc.
 
     Starts wherever the tracker last saw the pointer (installed by
     pacing._install_mouse_tracker); falls back to a point offset from the
     target so the first move is never a teleport from (0,0).
+
+    ACL-1313: запасная точка — справа от цели, а не слева: слева у Ads
+    Manager колонка меню, и путь через неё раскрывал меню поверх кнопки
+    (Create x≈120). Если курсор и так стоит в этой колонке, а цель — нет,
+    путь тоже начинаем справа.
     """
     import math
     import random
 
-    try:
-        last = page.evaluate("() => window._rpa_last_mouse || null")
-    except Exception:
-        last = None
-    if last and last.get("x", -1) >= 0:
-        sx, sy = float(last["x"]), float(last["y"])
+    if start is not None:
+        sx, sy = float(start[0]), float(start[1])
     else:
-        sx, sy = float(x) - random.uniform(120, 260), float(y) - random.uniform(60, 180)
+        try:
+            last = page.evaluate("() => window._rpa_last_mouse || null")
+        except Exception:
+            last = None
+        if last and last.get("x", -1) >= 0 and not (last["x"] < _NAV_RAIL_X <= x):
+            sx, sy = float(last["x"]), float(last["y"])
+        else:
+            sx, sy = float(x) + random.uniform(120, 260), float(y) + random.uniform(-60, 60)
 
     dist = math.hypot(x - sx, y - sy)
     steps = max(3, min(12, int(dist / 60) + 3))
@@ -2198,6 +2289,88 @@ def _click_website_via_js_row(page: Page) -> bool:
     return False
 
 
+_CONVERSION_MENU_OPEN_JS = r"""
+  () => {
+    // Открытое меню Conversion location — это заголовки групп «Multiple» /
+    // «Single» (запись рецепта: role=heading) или подпись «Send people to one
+    // location…». Текст «Website and instant forms» в счёт НЕ идёт: это
+    // значение закрытого триггера (25.09, 90a8987edad9 — меню закрыто, а
+    // старая проверка по этому тексту считала его открытым).
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const own = (el) => norm(Array.from(el.childNodes).filter(n => n.nodeType === 3)
+      .map(n => n.textContent).join('') || (el.childElementCount === 0 ? el.textContent : ''));
+    const shown = (el) => {
+      if (!el.offsetParent) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    };
+    const groups = ['single', 'multiple', 'único', 'única', 'múltiple', 'múltiples'];
+    for (const el of document.querySelectorAll('[role=heading], div, span')) {
+      const t = own(el);
+      if (!t || t.length > 80) continue;
+      if (groups.includes(t) && shown(el)) return true;
+      if ((t.startsWith('send people to one location') || t.startsWith('enviar personas a una ubicación'))
+          && shown(el)) return true;
+    }
+    return false;
+  }
+"""
+
+
+def _conversion_location_menu_open(page: Page) -> bool:
+    """Открыто ли сейчас меню Conversion location (без ожиданий)."""
+    for root in _roots(page):
+        try:
+            if root.evaluate(_CONVERSION_MENU_OPEN_JS):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _ensure_conversion_menu_open(page: Page, *, tries: int = 2) -> bool:
+    """Меню Conversion location открыто к следующему способу выбора Website.
+
+    25.09 (90a8987edad9, SA Investing; 19 полных отказов с 19.09): все восемь
+    способов `_pick_website_from_open_menu` работали по уже закрытому меню —
+    на снимке закрытый список «Website and instant forms», в page.html нет ни
+    одного role=radio. Первый же неудачный способ (или клик мимо) закрывает
+    меню, и остальные семь жмут пробел/мышь в пустоту. Поэтому перед каждым
+    способом меню проверяется и при необходимости открывается заново — только
+    когда оно закрыто: клик по открытому триггеру его бы закрыл.
+    """
+    for _ in range(max(1, tries)):
+        if _conversion_location_menu_open(page):
+            return True
+        dismiss_publish_draft_dialog(page)
+        if not click_conversion_location_dropdown(page):
+            return False
+        for _poll in range(8):
+            if _conversion_location_menu_open(page):
+                return True
+            _sleep_h(0.25)
+    return _conversion_location_menu_open(page)
+
+
+#: Сколько ждать, пока выбранное «Website» появится в триггере после способа.
+WEBSITE_VALUE_WAIT_S = 2.0
+
+
+def _website_value_shows(page: Page, timeout_s: float | None = None) -> bool:
+    """В триггере Conversion location стоит ровно «Website» (не «Website and
+    instant forms»): читаем показанное значение, а не ответ способа клика."""
+    wait = WEBSITE_VALUE_WAIT_S if timeout_s is None else timeout_s
+    deadline = time.monotonic() + max(0.0, wait)
+    while True:
+        if is_website_conversion_selected(page):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        _sleep_h(0.25)
+        # Под _sleep_h=0 в тестах цикл не должен крутиться вхолостую.
+        time.sleep(0.05)
+
+
 def _pick_website_from_open_menu(page: Page) -> bool:
     """Expand Single (if needed) then click Website — fully automatic.
 
@@ -2211,6 +2384,12 @@ def _pick_website_from_open_menu(page: Page) -> bool:
       2. Raw CDP mouse on radio / row
       3. Recorded golden path (Single heading → Website)
       4. Playwright mouse chain / force / JS / legacy keyboard
+
+    25.09: перед КАЖДЫМ способом меню проверяется и при надобности открывается
+    заново (`_ensure_conversion_menu_open`), а успех способа засчитывается
+    только по показанному значению «Website» в триггере. Строка телеметрии
+    `conversion_website_pick` — какой способ сработал и сколько раз меню
+    пришлось открывать.
     """
     if is_website_conversion_selected(page):
         return True
@@ -2218,43 +2397,58 @@ def _pick_website_from_open_menu(page: Page) -> bool:
     # Dismiss 'Publish draft items?' dialog that may be blocking the dropdown
     dismiss_publish_draft_dialog(page)
 
-    if not _is_website_option_visible(page):
-        _expand_conversion_location_single(page)
-        _wait_for_single_expanded(page, timeout_s=5.0)
+    methods = (
+        ("keyboard_focus", _click_website_via_keyboard_focus),
+        ("cdp", _click_website_via_cdp),
+        ("recorded_recipe", _pick_website_via_recorded_recipe),
+        ("mouse", _click_website_via_mouse),
+        ("force_locator", _click_website_via_force_locator),
+        ("js_row", _click_website_via_js_row),
+        ("keyboard", _click_website_via_keyboard),
+        ("aria_controls", _pick_website_from_aria_controls),
+    )
+    tried: list[str] = []
+    reopened = 0
+    menu_closed = 0
 
-    dismiss_publish_draft_dialog(page)
-    _scroll_website_option_into_view(page)
+    def _done(method: str | None, ok: bool) -> bool:
+        try:
+            _telemetry.record(
+                "conversion_website_pick", ok,
+                note=method or "not_selected",
+                diag={"tried": tried, "reopened": reopened, "menu_closed": menu_closed},
+            )
+        except Exception:
+            pass
+        return ok
 
-    if is_website_conversion_selected(page):
-        return True
+    for name, method in methods:
+        if is_website_conversion_selected(page):
+            return _done(tried[-1] if tried else "already", True)
+        was_open = _conversion_location_menu_open(page)
+        if not was_open:
+            menu_closed += 1
+            if not _ensure_conversion_menu_open(page):
+                # Меню не открыть — способ жал бы в пустоту; следующий
+                # способ снова попробует открыть.
+                tried.append(f"{name}:menu_closed")
+                continue
+            reopened += 1
+        dismiss_publish_draft_dialog(page)
+        if not _is_website_option_visible(page):
+            _expand_conversion_location_single(page)
+            _wait_for_single_expanded(page, timeout_s=5.0)
+        dismiss_publish_draft_dialog(page)
+        _scroll_website_option_into_view(page)
+        tried.append(name)
+        try:
+            method(page)
+        except Exception:
+            pass
+        if _website_value_shows(page):
+            return _done(name, True)
 
-    # 1) Keyboard — proven stable when CDP mouse drops events
-    if _click_website_via_keyboard_focus(page):
-        return True
-
-    # 2) Raw CDP Input.dispatchMouseEvent
-    dismiss_publish_draft_dialog(page)
-    if _click_website_via_cdp(page):
-        return True
-
-    # 3) Human-recorded recipe
-    if _pick_website_via_recorded_recipe(page):
-        return True
-
-    # 4) Playwright mouse / force / JS / arrow-nav
-    if _click_website_via_mouse(page):
-        return True
-    if _click_website_via_force_locator(page):
-        return True
-    if _click_website_via_js_row(page):
-        return True
-    if _click_website_via_keyboard(page):
-        return True
-    if _pick_website_from_aria_controls(page):
-        _sleep_h(0.5)
-        return is_website_conversion_selected(page)
-
-    return is_website_conversion_selected(page)
+    return _done(None, _website_value_shows(page, timeout_s=0))
 
 
 def conversion_menu_is_open(page: Page) -> bool:
@@ -2316,6 +2510,471 @@ def conversion_event_menu_visible(page: Page) -> bool:
 def pick_website_conversion_option(page: Page) -> bool:
     """Pick Website from an already-open Conversion location menu."""
     return _pick_website_from_open_menu(page)
+
+
+#: Сколько «Loading…» может висеть, прежде чем считать страницу зависшей (ACL-1233).
+LOADING_STUCK_S = 20.0
+
+
+_ERROR_PAGE_JS = r"""
+  () => {
+    // 20.09 02:00 (скриншот пользователя, профиль KLD_BFL_S15): в адресной
+    // строке остался обычный адрес Meta, а во вкладке — «This site can't
+    // provide a secure connection / ERR_SSL_PROTOCOL_ERROR». По адресу такую
+    // страницу не узнать, узнаём по самой разметке Chrome.
+    if (!document.body) return '';
+    const shell = document.querySelector('#main-frame-error, .neterror, #error-information-popup-container');
+    const txt = document.body.innerText || '';
+    const code = txt.match(/ERR_[A-Z0-9_]+/);
+    if (code) return code[0];
+    if (shell || /can.t provide a secure connection|site can.t be reached|ERR_/i.test(txt.slice(0, 600))) {
+      return 'ERR_UNKNOWN';
+    }
+    return '';
+  }
+"""
+"""Страница ошибки Chrome вместо Ads Manager — её собственная разметка."""
+
+
+def _chrome_error_page(page: Page) -> str:
+    """Код ошибки, если во вкладке вместо Ads Manager — страница ошибки Chrome."""
+    try:
+        if (page.url or "").startswith("chrome-error://"):
+            got = page.evaluate("() => (document.body && document.body.innerText || '').match(/ERR_[A-Z_]+/)")
+            return (got or ["ERR_UNKNOWN"])[0] if isinstance(got, list) else "ERR_UNKNOWN"
+        # Адрес может остаться прежним (SSL-ошибка) — смотрим саму страницу.
+        return page.evaluate(_ERROR_PAGE_JS) or ""
+    except Exception:
+        pass
+    return ""
+
+
+def _loading_visible(page: Page) -> bool:
+    try:
+        overlay = page.get_by_text(_LOADING_TEXT).first
+        return bool(overlay.count()) and overlay.is_visible(timeout=200)
+    except Exception:
+        return False
+
+
+#: ACL-1313, прогон 24.09: после Create Meta минутами крутит модалку
+#: «Loading creation». Хвост удачных переходов — 55–79 с, ровно в наш порог
+#: 75 с; перезагрузка списка поверх крутящейся модалки выбрасывала начатую
+#: загрузку, и все пять отказов `objective_leads` того вечера — это цепочка
+#: «75 с → reload → Create → 75 с → reload». Пока модалка на экране, ждём
+#: дальше, до этого потолка.
+OBJECTIVE_LOADING_MAX_S = 180.0
+
+
+#: Meta сама говорит, что сеть профиля рвётся или часть запросов не проходит:
+#: «Turn off ad blocker», «Your internet connection was lost» (279ead, 25.09).
+#: Ждать загрузку формы в таком состоянии бессмысленно.
+_NETWORK_TROUBLE = re.compile(r"Turn off ad blocker|internet connection was lost", re.I)
+
+
+def _network_trouble(page: Page) -> bool:
+    try:
+        return page.get_by_text(_NETWORK_TROUBLE).first.is_visible(timeout=300)
+    except Exception:
+        return False
+
+
+def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
+    """Отозвалась ли страница на Create: "ok" / "left_list" / "nothing".
+
+    ACL-1313: с 20.09 первый Create после загрузки открывал окно цели в 42%
+    случаев, остальные ждали 75–180 с и перезагрузку. На снимках 25.09 у
+    этих попыток не «долгая загрузка», а промах: открыта страница Audiences
+    или список без модалки. Проверяем за секунды, а не за минуты.
+    """
+    base = (list_url or "").split("?", 1)[0]
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            if page.get_by_role("radio", name="Leads").first.is_visible(timeout=300):
+                return "ok"
+        except Exception:
+            pass
+        if _loading_visible(page):
+            return "ok"
+        try:
+            if base and page.url.split("?", 1)[0] != base:
+                return "left_list"
+        except Exception:
+            pass
+        _sleep_h(0.5, 0.2)
+    return "nothing"
+
+
+def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
+                           loading_max_s: float = OBJECTIVE_LOADING_MAX_S) -> bool:
+    """Дождаться окна выбора цели; пока видна «Loading…», ждать до потолка."""
+    radio = page.get_by_role("radio", name="Leads").first
+    start = time.time()
+    try:
+        radio.wait_for(state="visible", timeout=int(first_s * 1000))
+        return True
+    except Exception:
+        pass
+    while time.time() - start < loading_max_s and _loading_visible(page):
+        if _network_trouble(page):
+            break
+        try:
+            radio.wait_for(state="visible", timeout=5000)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _all_edits_saved(page: Page) -> bool:
+    try:
+        return page.get_by_text(re.compile(r"^All edits saved$", re.I)).first.is_visible(timeout=500)
+    except Exception:
+        return False
+
+
+def _component_failed(page: Page) -> bool:
+    """Блок редактора, который Meta не смогла загрузить.
+
+    20.09 00:35 (CO_bnc Mix): на месте панели плейсментов стояло «Error:
+    component failed to load — Something went wrong, please try reloading the
+    page», и подряд отказали placements и devices_ios. Meta сама просит
+    перезагрузить — это тот же случай, что и ACL-1233.
+    """
+    try:
+        return page.get_by_text(
+            re.compile(r"component failed to load", re.I)).first.is_visible(timeout=500)
+    except Exception:
+        return False
+
+
+_PENDING_DRAFTS_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const el = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && /^Review and publish( \(\d+\))?$/.test(norm(e.textContent)));
+    if (!el) return null;
+    const m = norm(el.textContent).match(/\((\d+)\)/);
+    return m ? Number(m[1]) : 0;
+  }
+"""
+"""Сколько черновиков ждёт публикации — число в кнопке «Review and publish»."""
+
+
+def _pending_drafts(page: Page) -> int | None:
+    try:
+        return page.evaluate(_PENDING_DRAFTS_JS)
+    except Exception:
+        return None
+
+
+def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = False) -> bool:
+    """Перезагрузить вкладку, если она зависла (ACL-1233). True — перезагрузили.
+
+    * Страница ошибки Chrome (ERR_SSL_PROTOCOL_ERROR, 19.09 CO_bnc Mix) —
+      перезагружаем всегда: живого редактора в ней уже нет.
+    * «Loading…», висящий дольше LOADING_STUCK_S: в редакторе — только при
+      «All edits saved», иначе потеряются несохранённые поля; на списке
+      кампаний (`editor=False`, шаг выбора цели) сохранять нечего.
+    """
+    err = _chrome_error_page(page)
+    reason = ""
+    if err:
+        reason = f"error_page:{err}"
+    elif _component_failed(page):
+        # Блок не загрузился: перезагружаем, но в редакторе — только когда
+        # всё сохранено, иначе потеряются уже заполненные поля.
+        if editor and not _all_edits_saved(page):
+            _telemetry.record("loading_modal_reload", False, note="unsaved_edits",
+                              diag={"where": where, "reason": "component_error"})
+            return False
+        reason = "component_error"
+    elif force and not editor:
+        # Список кампаний: окно цели не открылось, а видимого «Loading…» нет
+        # (19.09 CO_bnc Mix, 18:12). Терять на списке нечего — перезагружаем.
+        reason = "no_objective_dialog"
+    elif _loading_visible(page):
+        deadline = time.time() + LOADING_STUCK_S
+        while time.time() < deadline and _loading_visible(page):
+            _sleep_h(1.0, 0.1)
+        if not _loading_visible(page):
+            return False
+        if editor and not _all_edits_saved(page):
+            _telemetry.record("loading_modal_reload", False, note="unsaved_edits", diag={"where": where})
+            return False
+        reason = "loading_modal"
+    else:
+        return False
+    # Сначала разбудить: свёрнутое окно — из свёрнутого, вкладку — вперёд,
+    # троттлинг Chrome — снять заново (19.09 вечер: перезагрузка без этого
+    # снова упиралась в «Loading creation»).
+    woke = {}
+    try:
+        from src.fb_ads_rpa.browser import wake_page
+        woke = wake_page(page)
+    except Exception as exc:
+        woke = {"error": str(exc)[:80]}
+    try:
+        page.reload(timeout=60000, wait_until="domcontentloaded")
+        _sleep_h(4.0, 0.2)
+        try:
+            from src.fb_ads_rpa.browser import _disable_background_throttling
+            _disable_background_throttling(page.context, page)
+        except Exception:
+            pass
+        ok = not _chrome_error_page(page)
+    except Exception as exc:
+        # 20.09 00:55 (CO_bnc GMB, дважды): сам `reload` не уложился в минуту
+        # — Meta на этом профиле еле отвечает. Пробуем так, как это делает
+        # человек клавишей F5: изнутри страницы, не дожидаясь её загрузки.
+        reason += f" ({str(exc)[:60]})"
+        ok = False
+        try:
+            page.evaluate("() => { location.reload(); }")
+            _sleep_h(6.0, 0.2)
+            page.wait_for_selector("[role=button]", timeout=30000)
+            ok = not _chrome_error_page(page)
+            reason += " js_reload" + ("" if ok else "_failed")
+        except Exception as exc2:
+            reason += f" js_reload_failed ({str(exc2)[:40]})"
+    _telemetry.record("error_page_reload" if reason.startswith("error_page") else "loading_modal_reload",
+                      ok, note=reason, diag={"where": where, "url": (page.url or "")[:160], "woke": woke})
+    return ok
+
+
+_NAME_SUGGESTIONS_JS = r"""
+  () => {
+    const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 40 && r.height > 20; };
+    const open = [...document.querySelectorAll('[role="listbox"], [role="option"]')].filter(vis);
+    if (!open.length) return null;
+    const r = open[0].getBoundingClientRect();
+    return { count: open.length, x: r.x, y: r.y, w: r.width, h: r.height };
+  }
+"""
+"""Открытая подсказка истории имён — она накрывает блок под полем."""
+
+
+def _dismiss_name_suggestions(page: Page) -> bool:
+    """Закрыть подсказку истории имён под полем имени.
+
+    20.09 07:53, все три аккаунта разом: после ввода имени ad set'а Meta
+    показала список прежних ad set'ов с тем же именем, он накрыл «Conversion
+    location», и шаг падал. Клик по заголовку «Ad set name» её не убирал.
+    Escape здесь нельзя — он закрывает весь мастер. Поэтому кликаем заведомо
+    пустое место панели правее списка и проверяем, что подсказка ушла.
+    """
+    for _ in range(4):
+        try:
+            box = page.evaluate(_NAME_SUGGESTIONS_JS)
+        except Exception:
+            return True
+        if not box:
+            return True
+        try:
+            _cdp_mouse_click(page, box["x"] + box["w"] + 60, max(box["y"] - 30, 10))
+        except Exception:
+            pass
+        _sleep_h(0.6)
+    ok = False
+    try:
+        ok = not page.evaluate(_NAME_SUGGESTIONS_JS)
+    except Exception:
+        ok = True
+    _telemetry.record("name_suggestions", ok, note="dismissed" if ok else "still_open")
+    return ok
+
+
+def _lead_terms_not_accepted(page: Page) -> bool:
+    """Страница Facebook не приняла условия Lead Generation.
+
+    21.09 (CO_bnc, страница The Financial Observer India): Meta пишет «Terms of
+    Service Not Accepted — You can't run lead ads until your Facebook Page
+    accepts Facebook's Lead Generation Terms of Service». Редактор креатива при
+    этом не отрисовывается, и полей текста на странице нет вовсе. Починить это
+    роботом нельзя: условия принимает человек в Meta. Пишем отдельной меткой,
+    чтобы не искать причину заново по снимкам.
+    """
+    try:
+        return page.get_by_text(
+            re.compile(r"Terms of Service Not Accepted|Lead Generation Terms of Service", re.I)
+        ).first.is_visible(timeout=800)
+    except Exception:
+        return False
+
+
+#: Ошибки проверки, которые чинит обход назначений / выбор «None» в Browser
+#: add-ons: объявление ссылается на лид-форму, которой нет.
+_LEAD_FORM_ERROR_RE = re.compile(r"must be a valid Lead Gen Data id|lead_gen_form", re.I)
+
+#: Уже записанные «прочие» ошибки проверки — одна строка телеметрии на текст.
+_OTHER_REVIEW_ERRORS_SEEN: set[str] = set()
+
+
+def _review_errors_visible(page: Page) -> bool:
+    """Meta показывает ошибку проверки про лид-форму / назначение объявления.
+
+    20.09 19:29 (CO_bnc Mix): пропуск обхода назначений оставил объявление с
+    «Param call_to_action[value][lead_gen_form_id] must be a valid Lead Gen
+    Data id» — ровно то, что обход и чинил. Если такая ошибка висит, обход
+    делаем, сколько бы времени он ни стоил.
+
+    ACL-1313 (25.09): только ошибки лид-формы. Раньше True давало любое
+    «Review N error» — и «Review 1 error — Start authentication» (аккаунт
+    требует проверки, прогон ecce52f330b8 22.09) запускал бесполезную
+    починку Browser add-ons. Прочие ошибки проверки записываются отдельной
+    строкой `review_error_other` (`_report_other_review_errors`), а
+    блокировку аккаунта ловит `_account_blocked_text`.
+    """
+    try:
+        if page.get_by_text(_LEAD_FORM_ERROR_RE).first.is_visible(timeout=800):
+            return True
+    except Exception:
+        pass
+    _report_other_review_errors(page)
+    return False
+
+
+_REVIEW_ERRORS_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const shown = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    };
+    const out = [];
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.children.length > 3) continue;
+      const t = norm(el.textContent);
+      if (!/^Review \d+ errors?\b/i.test(t) || t.length > 300 || !shown(el)) continue;
+      // Текст ошибки часто лежит рядом с заголовком «Review N error» —
+      // берём контейнер на пару уровней выше, но не больше 300 знаков.
+      let box = el, text = t;
+      for (let k = 0; k < 3 && box.parentElement; k++) {
+        const up = norm(box.parentElement.textContent);
+        if (up.length > 300) break;
+        box = box.parentElement; text = up;
+      }
+      if (!out.includes(text)) out.push(text);
+    }
+    return out;
+  }
+"""
+
+
+def _report_other_review_errors(page: Page) -> list[str]:
+    """Видимые «Review N error…», не относящиеся к лид-форме — в телеметрию.
+
+    Одна строка `review_error_other` на каждый новый текст: это не повод
+    для починки назначений, но человеку и разбору прогона их надо видеть.
+    """
+    found: list[str] = []
+    for root in _roots(page):
+        try:
+            found.extend(root.evaluate(_REVIEW_ERRORS_JS) or [])
+        except Exception:
+            continue
+    others = [t for t in found if not _LEAD_FORM_ERROR_RE.search(t)]
+    for text in others:
+        if text in _OTHER_REVIEW_ERRORS_SEEN:
+            continue
+        _OTHER_REVIEW_ERRORS_SEEN.add(text)
+        try:
+            _telemetry.record("review_error_other", None, note=text[:160],
+                              diag={"account_blocked": _account_blocked_match(text)})
+        except Exception:
+            pass
+    return others
+
+
+#: Признаки аккаунта, в котором Meta не даёт создавать рекламу. Ни повтор,
+#: ни починка тут не помогут — нужен человек в Meta.
+_ACCOUNT_BLOCKED_PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
+    ("verification_required", re.compile(r"Verification required to advertise", re.I)),
+    ("account_disabled", re.compile(r"Your ad account is disabled", re.I)),
+    ("account_disabled", re.compile(r"^(?:Ad )?account disabled$", re.I)),
+    ("start_authentication", re.compile(r"\bStart authentication\b", re.I)),
+    ("authentication_error", re.compile(r"#3858385\b")),
+)
+
+
+def _account_blocked_match(text: str) -> str | None:
+    """Вид блокировки по тексту или None."""
+    t = re.sub(r"\s+", " ", text or "").strip()
+    for kind, pat in _ACCOUNT_BLOCKED_PATTERNS:
+        if pat.search(t):
+            return kind
+    return None
+
+
+_ACCOUNT_BLOCKED_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const shown = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    };
+    const out = [];
+    for (const el of document.querySelectorAll('body *')) {
+      // Листья и мелкие узлы: подпись баннера, статус в колонке Delivery,
+      // кнопка «Start authentication», текст ошибки с кодом (#3858385).
+      if (el.children.length > 2) continue;
+      const t = norm(el.textContent);
+      if (!t || t.length > 300) continue;
+      if (!/verification required to advertise|account (is )?disabled|start authentication|3858385/i.test(t)) continue;
+      if (!shown(el)) continue;
+      out.push(t);
+    }
+    return out;
+  }
+"""
+
+
+def _account_blocked_text(page: Page) -> str | None:
+    """Видимый текст, по которому ясно: аккаунт заблокирован Meta.
+
+    Прогон ecce52f330b8 (22.09): красный баннер «Verification required to
+    advertise — Complete verification to remove restrictions…», у кампании в
+    колонке Delivery «Account disabled», кнопка Create серая. Прогон трижды
+    нажимал Create, дважды перезагружал страницу и через 5 минут упал на
+    `objective_leads`, а повтор кампании начал бы всё заново. В редакторе
+    объявления та же блокировка выглядит как «Review 1 error — Start
+    authentication» с кодом (#3858385).
+    """
+    for root in _roots(page):
+        try:
+            texts = root.evaluate(_ACCOUNT_BLOCKED_JS) or []
+        except Exception:
+            continue
+        for t in texts:
+            if _account_blocked_match(t):
+                return t
+    return None
+
+
+#: ACL-1313, прогон 25.09: снимок экрана после каждого удачного шага стоил
+#: 5–7 с при трёх профилях (Playwright замораживает анимации Meta и кодирует
+#: PNG 3072×1467) — около 30 снимков, 2–3 минуты простоя на кампанию; владелец
+#: видел это как паузу после «All edits saved». Телеметрия пишется по-прежнему
+#: на каждом шаге; картинка — на отказе и на границах разделов.
+#: Вернуть снимок на каждом шаге: FB_RPA_SHOT_ALL=1.
+_SHOT_KEEP = frozenset({
+    "after_create", "after_leads", "after_campaign_fields", "after_next_to_adset",
+    "after_targeting", "after_placements", "after_next_to_ad",
+    "after_ad_creative_upload", "after_ad_copy", "after_ad_level_summary",
+})
+
+
+def _shot_worth_a_picture(label: str) -> bool:
+    """Нужен ли PNG для удачного шага `label` (отказы снимаются всегда)."""
+    if os.environ.get("FB_RPA_SHOT_ALL", "").strip() in ("1", "true", "yes"):
+        return True
+    if not label.startswith("after_"):
+        return True
+    if label in _SHOT_KEEP:
+        return True
+    # Объявления 2 и 3: итог медиа и текста каждого — это граница, а не шаг.
+    return label.endswith("_creative_upload") or label.endswith("_copy")
 
 
 def run_recorded_campaign_flow(
@@ -2432,7 +3091,7 @@ def run_recorded_campaign_flow(
     _telemetry.set_current_run(run_id, campaign_name)
     _shot_clock = {"t": time.time()}
 
-    def _shot(label: str, diag: dict | None = None) -> None:
+    def _shot(label: str, diag: dict | None = None, note: str | None = None) -> None:
         now = time.time()
         step, ok = _telemetry.normalise_step(label)
         # Причина отказа собирается здесь, в единственной точке, а не в сорока
@@ -2464,14 +3123,32 @@ def run_recorded_campaign_flow(
             campaign=campaign_name,
             duration_s=now - _shot_clock["t"],
             diag=diag,
+            note=note or "",
         )
         _shot_clock["t"] = now
+        if ok is not False and not _shot_worth_a_picture(label):
+            return
         try:
             from src.fb_ads_rpa.screenshots import capture as _capture
 
             _capture(page, f"recorded_{label}")
         except Exception:
             pass
+
+    def _stop_if_account_blocked(where: str) -> bool:
+        """Аккаунт заблокирован Meta — остановить кампанию (`account_blocked`).
+
+        Не повторяется (retry_policy.NON_RETRYABLE_FLOW_STEPS): повтор
+        кампании в заблокированном аккаунте снова упрётся в тот же баннер.
+        В телеметрии — найденный текст (note) и место проверки.
+        """
+        matched = _account_blocked_text(page)
+        if not matched:
+            return False
+        _shot("fail_account_blocked",
+              {"where": where, "kind": _account_blocked_match(matched), "matched": matched[:300]},
+              note=matched[:160])
+        return True
 
     # Dismiss any dismissible top banner (e.g. "We're evolving how we measure
     # results") before the very first click — confirmed live 2026-07-24 on a
@@ -2511,9 +3188,70 @@ def run_recorded_campaign_flow(
     for _ in range(3):
         _dismiss_floating_banners(page)
         _sleep_h(0.4)
+    # 20.09 01:20: «Loading creation» без конца шло на аккаунтах, где
+    # накопились черновики (CO_bnc 11, CR_ait 10). Пишем их число до Create,
+    # чтобы связь была видна сразу, а не по снимкам.
+    _telemetry.record("drafts_pending", None, diag={"count": _pending_drafts(page)})
+    # ACL-1313: заблокированный аккаунт (ecce52f330b8, 22.09) — не жать Create.
+    if _stop_if_account_blocked("campaigns_list"):
+        return "account_blocked"
+    list_url = page.url
     if not _click(page.get_by_role("button", name="Create", exact=True)):
-        return "create"
+        if not (recover_stuck_page(page, "create", editor=False)
+                and _click(page.get_by_role("button", name="Create", exact=True))):
+            return "create"
     _shot("after_create")
+
+    def _back_to_list() -> None:
+        """Нажатие увело со списка кампаний — вернуться на него."""
+        try:
+            if list_url and page.url.split("?", 1)[0] != list_url.split("?", 1)[0]:
+                page.goto(list_url, wait_until="domcontentloaded", timeout=60000)
+                _sleep_h(3.0, 0.2)
+        except Exception:
+            pass
+
+    # ACL-1313: промах виден за секунды — повторяем нажатие сразу, без 75 с
+    # ожидания и перезагрузки. Два быстрых круга, дальше — прежний путь.
+    for _quick in range(2):
+        took = _create_took(page, list_url)
+        _telemetry.record("create_took", took == "ok", note=took)
+        if took == "ok":
+            break
+        if took == "left_list":
+            _back_to_list()
+        try:
+            page.get_by_role("button", name="Create", exact=True).first.wait_for(
+                state="visible", timeout=30000)
+        except Exception:
+            pass
+        _click(page.get_by_role("button", name="Create", exact=True))
+        _shot("after_create_quick_retry")
+
+    # ACL-1233: окно выбора цели не появилось, а страница висит в «Loading…»
+    # или стала страницей ошибки Chrome — перезагрузить список и нажать Create
+    # ещё раз, вместо минут ожидания в каждой попытке клика (19.09: 10–12 мин).
+    # 19.09 вечер: одного раунда мало — Meta отвечала со второго-третьего
+    # раза. До двух раундов «разбудить → перезагрузить → Create».
+    # 20.09 02:05, замер по 80 удачным переходам за сутки: медиана 19 с, но
+    # 31 из 80 — дольше 25 с (до 151 с). Прежние 25 с обрывали нормальное
+    # ожидание в 40% случаев, и перезагрузка начинала отсчёт заново.
+    # ACL-1313: пока крутится «Loading creation», ждём её, а не перезагружаем.
+    for attempt in range(2):
+        if _wait_objective_dialog(page):
+            break
+        # Со списка увели (Audiences, 887b2d): перезагрузка открыла бы ту же
+        # чужую страницу, где кнопки Create нет вовсе.
+        _back_to_list()
+        if not recover_stuck_page(page, "objective", editor=False, force=True):
+            break
+        try:
+            page.get_by_role("button", name="Create", exact=True).first.wait_for(
+                state="visible", timeout=30000)
+        except Exception:
+            pass
+        _click(page.get_by_role("button", name="Create", exact=True))
+        _shot("after_create_retry")
 
     # New Meta UI sometimes shows a Guided/Manual choice before the objective
     # picker enables Campaign name — click Manual if present, best-effort
@@ -2575,8 +3313,14 @@ def run_recorded_campaign_flow(
     _shot("after_onboarding_modal")
 
     if not _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name):
-        _shot("fail_campaign_name")
-        return "campaign_name"
+        # 20.09 01:12 (CL_ml TRDEZ, третий раз за сутки): после Continue
+        # редактор не отрисовался — пустой экран с «Loading…», и поля имени
+        # на странице нет вовсе. Вводить ещё нечего, поэтому перезагружаем
+        # без оглядки на «All edits saved» и пробуем снова.
+        if not (recover_stuck_page(page, "campaign_name", editor=False, force=True)
+                and _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name)):
+            _shot("fail_campaign_name")
+            return "campaign_name"
     # Confirmed live 2026-07-28: _fill() returning True only means the type
     # succeeded, not that Meta's async autosave actually persisted it — a
     # campaign was seen to silently revert to the default "New Leads
@@ -2645,6 +3389,9 @@ def run_recorded_campaign_flow(
         page.get_by_text("Ad set name", exact=True).first.click(timeout=2000)
     except Exception:
         pass
+    # 20.09 07:53: клика по заголовку не хватило — список остался висеть и
+    # накрыл «Conversion location» на всех трёх аккаунтах разом.
+    _dismiss_name_suggestions(page)
     _shot("after_adset_name")
 
     if not click_conversion_location_dropdown(page):
@@ -2721,7 +3468,23 @@ def run_recorded_campaign_flow(
     try:
         scroll_to_section(page, "Audience")
         opened = False
-        for _ in range(5):
+
+        def _reach_dialog_open() -> bool:
+            """Окно «Reach your preferred audiences» уже открыто?
+
+            20.09 14:48 (SA_arc GMBL, пятый такой отказ за сутки): окно было
+            открыто, а шаг падал. Та же фраза есть и на странице за окном, и
+            клик уходил в перекрытую ссылку под ним — пять попыток подряд.
+            """
+            try:
+                return page.get_by_text(
+                    re.compile(r"Reach your preferred audiences", re.I)).first.is_visible(timeout=800)
+            except Exception:
+                return False
+
+        if _reach_dialog_open():
+            opened = True
+        for _ in range(0 if opened else 5):
             try:
                 el = page.get_by_text(
                     re.compile(r"further limit the reach of your ads", re.I)
@@ -2734,6 +3497,9 @@ def run_recorded_campaign_flow(
             except Exception:
                 # Not rendered/visible yet — nudge the page down and retry
                 # rather than assuming the text is simply absent.
+                if _reach_dialog_open():
+                    opened = True
+                    break
                 try:
                     page.mouse.wheel(0, 400)
                 except Exception:
@@ -2895,6 +3661,35 @@ def run_recorded_campaign_flow(
                 soft_fails.append("targeting_open")
             else:
                 any_added = paste_targeting_groups(page, targeting_label)
+                if not any_added:
+                    # 20.09 13:03: интересы вставлены и на снимке стоят, но Meta
+                    # рисует их дольше нашего ожидания, и шаг падал зря. Вместо
+                    # всё более длинных пауз перечитываем группы ещё раз позже —
+                    # к этому времени время уже прошло само.
+                    _sleep_h(6.0)
+                    groups = [g for g in re.split(r"\s+and\s+", targeting_label, flags=re.I) if g.strip()]
+                    terms = [t.strip() for t in (groups[-1] if groups else targeting_label).split(",") if t.strip()]
+                    late = _await_group_terms(page, terms, timeout_s=40.0)
+                    any_added = bool(late.get("hits"))
+                    probe = {}
+                    if not any_added:
+                        # 20.09 13:24: снимок, снятый за 48 с до этого чтения,
+                        # держал все пять интересов, а чтение видит пустую
+                        # группу. Замеряем, что именно видно живьём.
+                        try:
+                            probe = page.evaluate(_TARGETING_PROBE_JS) or {}
+                        except Exception as exc:
+                            probe = {"error": str(exc)[:80]}
+                        try:
+                            from src.fb_ads_rpa import page_capture as _pc
+                            _pc.capture(page, step="targeting_recheck_empty", diag=probe)
+                        except Exception:
+                            pass
+                    _telemetry.record("targeting_recheck", any_added,
+                                      note="late_hits" if any_added else "still_empty",
+                                      diag={"hits": (late.get("hits") or [])[:5],
+                                            "selected": (late.get("selected") or [])[:8],
+                                            "why": late.get("why", ""), "probe": probe})
                 _shot("after_targeting" if any_added else "fail_targeting_none_added")
                 if not any_added:
                     soft_fails.append("targeting_none_added")
@@ -2909,6 +3704,18 @@ def run_recorded_campaign_flow(
         # выглядели одинаково, то есть никак.
         _shot("skip_targeting", {"why": "в черновике нет интересов"})
 
+    # ACL-1313: Advantage+ audience — итог, а не действие. Проверяется после
+    # возраста, локации, языков и интересов. Включённая = возраст лишь
+    # «подсказка», и Meta показывает рекламу вне него. Возраст 18–65+ —
+    # не условие вовсе: там «on» ожидаем, проверять нечего.
+    if not (age_min == 18 and age_max >= 65):
+        try:
+            if not verify_audience_advantage_off(page):
+                _shot("fail_advantage_plus_audience")
+                soft_fails.append("advantage_plus_audience")
+        except Exception as exc:
+            soft_fails.append(f"advantage_plus_audience:{str(exc)[:60]}")
+
     # Placements: switch off Advantage+ automatic placements and set the
     # account's real manual configuration (confirmed live 2026-07-26 via
     # user screenshot) — real checkboxes, so this should be more reliable
@@ -2916,7 +3723,13 @@ def run_recorded_campaign_flow(
     # "don't stop the test" contract.
     try:
         placements_report: dict = {}
-        if not fill_placements(page, placements_report):
+        ok_placements = fill_placements(page, placements_report)
+        if not ok_placements and recover_stuck_page(page, "placements", editor=True):
+            # 20.09 00:35 CO_bnc Mix: панель плейсментов не загрузилась, и
+            # следом отказал iOS. После перезагрузки шаг делается заново.
+            placements_report = {}
+            ok_placements = fill_placements(page, placements_report)
+        if not ok_placements:
             # Отчёт кладётся рядом с отказом: пустое «placements ✗» стоило
             # пяти прогонов вслепую — шаг падал, а что именно не нашлось,
             # приходилось выяснять заново каждый раз.
@@ -2934,7 +3747,14 @@ def run_recorded_campaign_flow(
     # (no-op); only "iOS" needs an explicit switch.
     if (os_val or "All").strip().lower() == "ios":
         try:
-            if not select_devices_ios_only(page):
+            ok_ios = select_devices_ios_only(page)
+            if not ok_ios and recover_stuck_page(page, "devices_ios", editor=True):
+                # 20.09 01:37 CO_bnc Mix: раздел устройств не загрузился и за
+                # 25 с. Перезагрузка (при «All edits saved») и второй заход —
+                # так же, как с панелью плейсментов.
+                fill_placements(page, {})
+                ok_ios = select_devices_ios_only(page)
+            if not ok_ios:
                 _shot("fail_devices_ios")
                 soft_fails.append("devices_ios")
             else:
@@ -2982,6 +3802,8 @@ def run_recorded_campaign_flow(
         _shot("after_next_to_ad")
         if not ensure_editor_window(page, "ad"):
             return "window_too_small"
+        if _stop_if_account_blocked("ad_editor"):
+            return "account_blocked"
 
         if reached_ad_level:
             final_ad_name = ad_name or f"{campaign_name} Ad"
@@ -3008,18 +3830,11 @@ def run_recorded_campaign_flow(
                 _shot("fail_ad_creative_upload")
                 ad_level_fails.append(f"ad_creative_upload:{str(exc)[:60]}")
 
-        if reached_ad_level and creative_uploaded and (ad_title or ad_body):
-            try:
-                copy_report: dict = {}
-                if not fill_ad_copy(page, ad_title, ad_body, copy_report):
-                    _shot("fail_ad_copy", copy_report)
-                    ad_level_fails.append("ad_copy")
-                else:
-                    _shot("after_ad_copy")
-            except Exception as exc:
-                _shot("fail_ad_copy")
-                ad_level_fails.append(f"ad_copy:{str(exc)[:60]}")
-
+        # 21.09 11:17: порядок был имя → креатив → текст → назначение, и
+        # редактор креатива блокировался ошибкой «lead_gen_form_id» ещё до
+        # текста: Meta ставит в Browser add-ons «Instant form», а формы нет.
+        # Назначение (внутри него и выбор «None») теперь идёт ДО текста, и
+        # блокировке взяться неоткуда.
         if reached_ad_level and destination_url:
             try:
                 if not set_ad_destination_website(page, destination_url):
@@ -3031,6 +3846,28 @@ def run_recorded_campaign_flow(
                 _shot("fail_ad_destination")
                 ad_level_fails.append(f"ad_destination:{str(exc)[:60]}")
 
+        if reached_ad_level and creative_uploaded and (ad_title or ad_body):
+            try:
+                copy_report: dict = {}
+                ok_copy = write_ad_copy(
+                    page, ad_title, ad_body,
+                    ad_name=ad_name or f"{campaign_name} Ad",
+                    destination_url=destination_url, report=copy_report)
+                if not ok_copy:
+                    if _stop_if_account_blocked("ad_copy"):
+                        return "account_blocked"
+                    _shot("fail_ad_copy", copy_report)
+                    # Объявление без текста называем прямо: по этой строке
+                    # человек решает, публиковать ли кампанию.
+                    ad_level_fails.append(
+                        f"ad_copy:{ad_name or 'ad 1'} has no text"
+                        + (f" ({copy_report['why']})" if copy_report.get("why") else ""))
+                else:
+                    _shot("after_ad_copy")
+            except Exception as exc:
+                _shot("fail_ad_copy")
+                ad_level_fails.append(f"ad_copy:{str(exc)[:60]}")
+
         # Additional ads (2nd, 3rd, ...) in the same ad set — each one is a
         # fresh "Create ad" (create_additional_ad()) followed by the exact
         # same per-ad fill sequence used for the first ad above. Confirmed
@@ -3039,9 +3876,17 @@ def run_recorded_campaign_flow(
         if reached_ad_level and additional_ads:
             for i, extra in enumerate(additional_ads, start=2):
                 tag = f"ad{i}"
+                # ACL-1233: зависшая загрузка или страница ошибки Chrome перед
+                # объявлением — перезагрузить (в редакторе — только при «All
+                # edits saved»), иначе все следующие объявления падают подряд.
+                recover_stuck_page(page, f"{tag}_before", editor=True)
+                if _stop_if_account_blocked(f"{tag}_before"):
+                    return "account_blocked"
                 shells_before = _tree_new_ad_shells(page)
                 try:
                     created = create_additional_ad(page, adset_name)
+                    if not created and recover_stuck_page(page, f"{tag}_create", editor=True):
+                        created = create_additional_ad(page, adset_name)
                     if not created:
                         # A reported failure does not mean no ad was born:
                         # Meta names every fresh ad "New Leads Ad", so if
@@ -3089,6 +3934,7 @@ def run_recorded_campaign_flow(
                     _shot(f"after_{tag}_name")
 
                 extra_creative_path = extra.get("creative_path") or ""
+                no_creative = False
                 if extra_creative_path:
                     try:
                         if not upload_ad_creative_with_retry(
@@ -3096,26 +3942,16 @@ def run_recorded_campaign_flow(
                         ):
                             _shot(f"fail_{tag}_creative_upload")
                             ad_level_fails.append(f"{tag}_creative_upload")
+                            no_creative = True
                         else:
                             _shot(f"after_{tag}_creative_upload")
                     except Exception as exc:
                         _shot(f"fail_{tag}_creative_upload")
                         ad_level_fails.append(f"{tag}_creative_upload:{str(exc)[:60]}")
+                        no_creative = True
 
                 extra_title = extra.get("ad_title") or ""
                 extra_body = extra.get("ad_body") or ""
-                if extra_title or extra_body:
-                    try:
-                        copy_report = {}
-                        if not fill_ad_copy(page, extra_title, extra_body, copy_report):
-                            _shot(f"fail_{tag}_copy", copy_report)
-                            ad_level_fails.append(f"{tag}_copy")
-                        else:
-                            _shot(f"after_{tag}_copy")
-                    except Exception as exc:
-                        _shot(f"fail_{tag}_copy")
-                        ad_level_fails.append(f"{tag}_copy:{str(exc)[:60]}")
-
                 if destination_url:
                     try:
                         if not set_ad_destination_website(page, destination_url):
@@ -3127,6 +3963,28 @@ def run_recorded_campaign_flow(
                         _shot(f"fail_{tag}_destination")
                         ad_level_fails.append(f"{tag}_destination:{str(exc)[:60]}")
 
+                if (extra_title or extra_body) and no_creative:
+                    # ACL-1313 (SA Mix, da86e97cbf8b): без медиа Meta не рисует
+                    # поля текста вовсе — шаг текста лишь жёг минуты на поиск
+                    # полей и прятал настоящую причину. Называем её сразу.
+                    ad_level_fails.append(f"{tag}_copy:{extra_name or tag} has no text (no_creative)")
+                elif extra_title or extra_body:
+                    try:
+                        copy_report = {}
+                        ok_copy = write_ad_copy(
+                            page, extra_title, extra_body, ad_name=extra_name,
+                            destination_url=destination_url, report=copy_report)
+                        if not ok_copy:
+                            _shot(f"fail_{tag}_copy", copy_report)
+                            ad_level_fails.append(
+                                f"{tag}_copy:{extra_name or tag} has no text"
+                                + (f" ({copy_report['why']})" if copy_report.get("why") else ""))
+                        else:
+                            _shot(f"after_{tag}_copy")
+                    except Exception as exc:
+                        _shot(f"fail_{tag}_copy")
+                        ad_level_fails.append(f"{tag}_copy:{str(exc)[:60]}")
+
         # Final destination sweep over every ad of this campaign.
         # Confirmed live 2026-07-29 (Test143): an ad's Browser add-ons
         # radio can revert to "Instant form" AFTER its own in-flow check
@@ -3134,7 +3992,26 @@ def run_recorded_campaign_flow(
         # fill time, yet the post-run live verification found the
         # lead_gen_form_id error banner on it. Re-visit each ad once the
         # whole campaign is filled and re-fix anything that reverted.
-        if reached_ad_level and destination_url:
+        if reached_ad_level:
+            # ACL-1233: обход должен пройти и после зависшей страницы.
+            recover_stuck_page(page, "destination_sweep", editor=True)
+        # 20.09, решение пользователя: обход открывает каждое объявление
+        # заново и стоит около минуты на кампанию. Если назначение каждого
+        # объявления подтвердилось на своём шаге, обход пропускаем. Вернуть
+        # его целиком: FB_RPA_ALWAYS_SWEEP=1.
+        skip_sweep = (
+            reached_ad_level and destination_url
+            and not any("destination" in f for f in ad_level_fails)
+            and os.environ.get("FB_RPA_ALWAYS_SWEEP", "").strip() not in ("1", "true", "yes")
+            and not _review_errors_visible(page)
+            # 20.09 21:52: «Instant form» возвращался в Browser add-ons уже
+            # после успешной проверки шага — именно это обход и ловил.
+            and _browser_addon_none_checked(page) is not False
+        )
+        if skip_sweep:
+            _telemetry.record("destination_sweep_skipped", None,
+                              note="all_destinations_confirmed_in_flow")
+        if reached_ad_level and destination_url and not skip_sweep:
             sweep_names = [ad_name or f"{campaign_name} Ad"]
             for i, extra in enumerate(additional_ads or [], start=2):
                 sweep_names.append(extra.get("ad_name") or f"{campaign_name} Ad {i}")
@@ -4816,15 +5693,19 @@ def select_devices_ios_only(page: Page) -> bool:
     if not expanded:
         return False
 
-    for _ in range(15):
+    # 20.09 00:50 (CO_bnc GMB): раздел раскрыт, а внутри ещё крутилась
+    # загрузка — пустая рамка. Прежние три секунды ожидания её не
+    # перекрывали, и iOS молча не вставал. Ждём до 25 с.
+    for _ in range(60):
         present = page.evaluate(
             """() => [...document.querySelectorAll('[role=button]')].some(e =>
               e.offsetParent !== null && (e.textContent || '').trim() === 'All mobile devices')"""
         )
         if present:
             break
-        _sleep_h(0.2)
+        _sleep_h(0.4)
     else:
+        _telemetry.record("devices_ios", False, note="devices_panel_not_loaded")
         return False
 
     clicked = page.evaluate(
@@ -4919,21 +5800,15 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
     # as the "Create ad" menu-item click below already relies on) is the
     # right tool. The coordinate path is kept as a fallback in case Meta
     # renames these surfaces.
-    surface_clicked = False
-    try:
-        surface_clicked = bool(
-            page.evaluate(
-                """() => {
-                  const el = document.querySelector(
-                    '[data-surface*="editor_tree:adset"][data-surface*="campaign-structure-action-menu-item"]');
-                  if (!el) return false;
-                  el.click();
-                  return true;
-                }"""
-            )
-        )
-    except Exception:
-        surface_clicked = False
+    #
+    # 24.09 (снимки rpa_pages/7364047ef03c/05, 7d2ce3ab1161/05–08,
+    # d3e690189a6e/08): шаг стартовал на странице, где дерева ещё нет —
+    # `AdsPERouteLoadPlaceholder` после смены маршрута или сразу после
+    # перезагрузки (есть только шапка nav-header-*). Сначала ждём дерево.
+    click_point = None
+    tree_ready = _wait_tree_ready(page)
+    shells_before = _tree_new_ad_shells(page)
+    surface_clicked = _click_adset_action_menu(page) if tree_ready else False
     if surface_clicked:
         _sleep_h(0.6)
 
@@ -5021,6 +5896,11 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
           // Row rect for y: prefer the walked-up row, but if that ancestor
           // is tall it is a container rather than a row — use the bare text
           // leaf then, whose box is always the row's own line.
+          // 19.09 15:12 (CR_ait IPO, 302c/…): панель дерева была прокручена,
+          // строка ad set'а стояла у самого верха (y=23) под липкой шапкой —
+          // клик попадал в шапку, меню не открывалось, ad 2 не создавался.
+          // Для ad 3 та же строка стояла ниже (y=84) и всё сработало.
+          try { rows[1].scrollIntoView({block: 'center'}); } catch (e) {}
           let rowRect = rows[1].getBoundingClientRect();
           if (rowRect.height > 80) rowRect = candidates[1].getBoundingClientRect();
 
@@ -5064,7 +5944,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
 
     if not surface_clicked:
         if not click_point or not isinstance(click_point, dict) or "x" not in click_point:
-            _diag("no_click_point")
+            _diag("no_click_point" if tree_ready else "tree_not_ready")
             return False
 
         # A click with no prior hover dwell can land on the row's own (wider)
@@ -5076,20 +5956,18 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
         page.mouse.click(click_point["x"], click_point["y"])
         _sleep_h(0.6)
 
-    create_clicked = False
-    for _ in range(5):
-        create_clicked = page.evaluate(
-            """() => {
-              const el = document.querySelector(
-                '[data-surface="/am/editor_drawer/lib:campaign-structure-item-action-menu-create"]');
-              if (!el) return false;
-              el.click();
-              return true;
-            }"""
-        )
-        if create_clicked:
-            break
-        _sleep_h(0.3)
+    create_clicked = _click_create_menu_item(page)
+    if not create_clicked and surface_clicked:
+        # DOM-клик по «...» ад-сета заодно ВЫБИРАЕТ ад-сет: редактор уходит
+        # с объявления на ад-сет (d3e690189a6e 20:52: адрес ads/edit →
+        # adsets/edit&selected_adset_ids, снимок 09 — editor:ad_set), дерево
+        # перемонтируется и открытое меню пропадает. Ждём дерево и жмём ещё
+        # раз: ад-сет уже выбран, второй клик только открывает меню.
+        if _wait_tree_ready(page):
+            wait_editor_saved(page)
+            if _click_adset_action_menu(page):
+                _sleep_h(0.6)
+                create_clicked = _click_create_menu_item(page)
     if not create_clicked:
         # What DID the click open, if anything? Record the menu surfaces on
         # the page and what sits under the click point.
@@ -5100,7 +5978,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
                     .filter(e => e.offsetParent !== null)
                     .map(e => e.getAttribute('data-surface'))
                     .filter(s => s && s.indexOf('action-menu') !== -1);
-                  const under = document.elementFromPoint(pt.x, pt.y);
+                  const under = pt ? document.elementFromPoint(pt.x, pt.y) : null;
                   return {
                     menuSurfaces: [...new Set(surfaces)].slice(0, 10),
                     anyMenuOpen: !!document.querySelector('[role=menu],[role=menuitem]'),
@@ -5108,7 +5986,10 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
                                          '/' + (under.textContent || '').trim().slice(0, 40)) : null,
                   };
                 }""",
-                {"x": click_point["x"], "y": click_point["y"]},
+                # Без точки (путь через data-surface) probe падал KeyError 'x'
+                # и терял диагностику — 24.09 так дважды.
+                ({"x": click_point["x"], "y": click_point["y"]}
+                 if isinstance(click_point, dict) and "x" in click_point else None),
             )
         except Exception as exc:
             probe = {"probe_error": str(exc)[:80]}
@@ -5155,17 +6036,104 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
 
     # Readiness is the ad-name field specifically — that is what the caller
     # writes to next, so it is the only signal worth gating on.
+    #
+    # 24.09 (снимки 7d2ce3ab1161/04, d3e690189a6e/04): через 10 с после
+    # «Create ad» редактор стоит на АД-СЕТЕ (editor:ad_set), в дереве всё ещё
+    # одно объявление, поля имени нет. Заготовка «New Leads ad» появляется
+    # позже: с 19.09 после ad_name_field_not_visible вызывающий усыновлял её
+    # за 2–6 с в 86 случаях из 111. Ждём дольше и усыновляем сами — до
+    # перезагрузки в recover_stuck_page, которая эту заготовку и губила.
+    name_box = page.get_by_placeholder("Enter your ad name here...").first
+    deadline = time.time() + 45
+    adopted = False
+    while time.time() < deadline:
+        try:
+            if name_box.is_visible(timeout=500):
+                return True
+        except Exception:
+            pass
+        if not adopted and shells_before >= 0 and _tree_new_ad_shells(page) > shells_before:
+            adopted = _open_tree_ad(page, "New Leads Ad")
+            _close_creative_setup_modal(page)
+        _sleep_h(1.0, 0.1)
+    # Объявление к этому моменту уже создано — отказ здесь значит «поле
+    # имени не показалось», а не «ничего не случилось». Doc20 17.09:
+    # молчаливый False, повторный Create ad, два пустых объявления.
+    _diag("ad_name_field_not_visible", {"adopted_shell": adopted})
+    return False
+
+
+_TREE_READY_JS = r"""() => {
+  // Маршрут ещё грузится: вместо редактора один спиннер (снимки 24.09).
+  if (document.querySelector('[data-non-int-surface*="AdsPERouteLoadPlaceholder"]')) return false;
+  return !!document.querySelector(
+    '[data-surface*="editor_tree:adset"][data-surface*="campaign-structure-action-menu-item"]');
+}"""
+
+
+def _wait_tree_ready(page: Page, timeout_s: float = 30.0) -> bool:
+    """Левое дерево смонтировано и маршрут не в загрузке. False — не дождались.
+
+    Свёрнутое окно Chrome придерживает (7d2ce3ab1161 24.09: minimized=true,
+    спиннер маршрута 11 с подряд) — поэтому вкладку сначала будим.
+    """
     try:
-        page.get_by_placeholder("Enter your ad name here...").first.wait_for(
-            state="visible", timeout=10000
-        )
+        if page.evaluate(_TREE_READY_JS):
+            return True
     except Exception:
-        # Объявление к этому моменту уже создано — отказ здесь значит «поле
-        # имени не показалось», а не «ничего не случилось». Doc20 17.09:
-        # молчаливый False, повторный Create ad, два пустых объявления.
-        _diag("ad_name_field_not_visible")
+        pass
+    try:
+        from src.fb_ads_rpa.browser import wake_page
+
+        wake_page(page)
+    except Exception:
+        pass
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            if page.evaluate(_TREE_READY_JS):
+                _sleep_h(0.8)  # дать дереву дорисовать строки
+                return True
+        except Exception:
+            pass
+        _sleep_h(1.0, 0.1)
+    return False
+
+
+def _click_adset_action_menu(page: Page) -> bool:
+    """DOM-клик по скрытой кнопке «...» строки ад-сета (см. create_additional_ad)."""
+    try:
+        return bool(page.evaluate(
+            """() => {
+              const el = document.querySelector(
+                '[data-surface*="editor_tree:adset"][data-surface*="campaign-structure-action-menu-item"]');
+              if (!el) return false;
+              el.click();
+              return true;
+            }"""
+        ))
+    except Exception:
         return False
-    return True
+
+
+def _click_create_menu_item(page: Page, rounds: int = 5) -> bool:
+    """Пункт «Create ad» открытого меню строки; False — меню не открылось."""
+    for _ in range(rounds):
+        try:
+            if page.evaluate(
+                """() => {
+                  const el = document.querySelector(
+                    '[data-surface="/am/editor_drawer/lib:campaign-structure-item-action-menu-create"]');
+                  if (!el) return false;
+                  el.click();
+                  return true;
+                }"""
+            ):
+                return True
+        except Exception:
+            pass
+        _sleep_h(0.3)
+    return False
 
 
 def _creative_modal_open(page: Page) -> bool:
@@ -5181,14 +6149,8 @@ def _library_selected_count(page: Page) -> int | None:
     try:
         value = page.evaluate(
             r"""() => {
-              const dialogs = [...document.querySelectorAll('[role=dialog]')].filter(e =>
-                e.getBoundingClientRect().width > 0 && e.getBoundingClientRect().height > 0 &&
-                getComputedStyle(e).visibility === 'visible' &&
-                !e.closest('[hidden],[inert],[aria-hidden=true]'));
-              const dialog = dialogs[dialogs.length - 1];
-              if (!dialog) return null;
               let total = 0, found = false;
-              for (const el of dialog.querySelectorAll('*')) {
+              for (const el of document.querySelectorAll('*')) {
                 const r = el.getBoundingClientRect();
                 const style = getComputedStyle(el);
                 if (!r.width || !r.height || el.children.length ||
@@ -5218,7 +6180,7 @@ def _library_tiles(page: Page, filename: str):
     coordinates. An earlier coordinate-based attempt failed live: clicks
     landed on stale positions and the grid stayed at "0 selected".
     """
-    return page.locator('[role=dialog]:visible').last.get_by_text(filename, exact=True).locator(
+    return page.get_by_text(filename, exact=True).locator(
         "xpath=ancestor::*[@role='button'][1]"
     )
 
@@ -5285,30 +6247,16 @@ _LIBRARY_DIALOG_JS = (
 )
 """Верхний открытый диалог — сетка медиатеки, для снимка целиком."""
 
-_MEDIA_VISIBLE_JS = r"""(el) => {
-    if (!el || el.closest('[hidden],[inert],[aria-hidden="true"]')) return false;
-    const r = el.getBoundingClientRect(), s = getComputedStyle(el);
-    return r.width > 0 && r.height > 0 && s.visibility === 'visible' && s.display !== 'none';
-}"""
-
-_AD_MEDIA_BLOCK_JS = r"""(() => {
-    const visible = """ + _MEDIA_VISIBLE_JS + r""";
-    // Recorded ad_media_attached.html: the Media field owns a Remove media
-    // control and a placement list with per-group edit controls. Never grow
-    // an arbitrary text anchor into the whole document to find a thumbnail.
-    const controls = [...document.querySelectorAll(
-      '[data-surface$="/lib:ads-pacer-remove-all-button"]')]
-      .filter(el => visible(el) && !el.closest('[role=dialog]'));
-    if (controls.length !== 1) return null;
-    for (let el = controls[0].parentElement; el && el !== document.body; el = el.parentElement) {
-      const labels = [...el.querySelectorAll('label')].filter(visible);
-      if (labels.length > 1) return null;
-      if (labels.length === 1 && /^\*?\s*Media$/.test(labels[0].textContent.trim()) &&
-          el.querySelector('[role=list]')) return el;
-    }
-    return null;
-})()"""
-"""The recorded ad Media field, or null for an unknown/ambiguous layout."""
+_AD_MEDIA_BLOCK_JS = (
+    "(() => { const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();"
+    " const mark = [...document.querySelectorAll('*')].find(e => e.children.length === 0"
+    " && /^(Edit media|Change selections|Uploaded media|Customize media|Media)$/.test(norm(e.textContent))"
+    " && e.getBoundingClientRect().width > 0); if (!mark) return null; let el = mark;"
+    " for (let i = 0; i < 14 && el.parentElement; i++) { el = el.parentElement;"
+    " if (el.querySelector('img[src*=\"t15.5256-10\"], [src*=\"t15.5256-10\"]')) break; }"
+    " return el; })()"
+)
+"""Блок «Media» объявления, для снимка целиком."""
 
 _MEDIA_FINGERPRINT_JS = r"""
   (root) => {
@@ -5337,14 +6285,11 @@ _THUMB_ID_JS = r"""
     // строк размещения в блоке Media объявления — один и тот же идентификатор.
     const re = /\d{6,}_\d{10,}_\d{10,}_n/g;
     const out = new Set();
-    if (!scope) return [];
-    const root = scope;
+    const root = scope || document;
     const nodes = [root, ...root.querySelectorAll('img, [src], [style*="background-image"]')];
     for (const n of nodes) {
       if (!n || !n.getAttribute) continue;
-      const r = n.getBoundingClientRect(), s = getComputedStyle(n);
-      if (!r.width || !r.height || s.visibility !== 'visible' ||
-          n.closest('[hidden],[inert],[aria-hidden="true"]')) continue;
+      if (!scope && n.closest && n.closest('[role=dialog]')) continue;
       for (const v of [n.getAttribute('src'), n.getAttribute('style')]) {
         (String(v || '').match(re) || []).forEach(x => out.add(x));
       }
@@ -5352,7 +6297,7 @@ _THUMB_ID_JS = r"""
     return [...out];
   }
 """
-"""Visible thumbnail tokens inside an explicit scope; never the whole page."""
+"""Идентификаторы миниатюр видео — внутри элемента или по странице вне диалогов."""
 
 
 def _tile_thumb_ids(tile) -> list[str]:
@@ -5363,26 +6308,12 @@ def _tile_thumb_ids(tile) -> list[str]:
 
 
 def _ad_media_thumb_ids(page: Page) -> list[str]:
-    """Only the visible placement rows of the verified ad Media field."""
-    state = _ad_media_state(page, "")
-    return state.get("thumbs", []) if isinstance(state, dict) else []
-
-
-def _library_tile_ready(tile) -> bool:
-    """A selectable rendered video with a unique thumbnail and no warning.
-
-    The captured multi-select warning has no accessible explanation. Refuse
-    that tile instead of guessing whether its triangle means processing,
-    rejection, or merely a recommendation.
-    """
+    """Миниатюры видео в редакторе объявления (открытые диалоги не считаются)."""
     try:
-        return len(_tile_thumb_ids(tile)) == 1 and tile.evaluate(
-            "el => { const visible = " + _MEDIA_VISIBLE_JS + ";"
-            " return visible(el) && !el.closest('[aria-disabled=true],[disabled],[aria-busy=true]')"
-            " && ![...el.querySelectorAll('svg,[role=progressbar],[role=alert]')].some(visible); }"
-        ) is True
+        return list(page.evaluate("(js) => (new Function('return (' + js + ')'))()(null)",
+                                  _THUMB_ID_JS) or [])
     except Exception:
-        return False
+        return []
 
 
 def _tile_fingerprint(tile) -> list[str]:
@@ -5406,15 +6337,11 @@ def _ad_media_fingerprint(page: Page) -> list[str]:
 def _library_any_tile_marked(page: Page) -> bool | None:
     """Осталась ли в сетке хоть одна отмеченная плитка (None — сетку не прочесть)."""
     try:
-        value = page.evaluate(
+        return bool(page.evaluate(
             "() => { const d = " + _LIBRARY_DIALOG_JS + "; if (!d) return null;"
-            # The captured Account tab has aria-selected=true even when no
-            # media is selected. It must not make clean fallback impossible.
-            " return [...d.querySelectorAll('[data-test-decoration=\"selected\"],"
-            " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked')]"
-            " .some(el => !el.closest('[role=tab]')); }"
-        )
-        return value if isinstance(value, bool) else None
+            " return !!d.querySelector('[data-test-decoration=\"selected\"],"
+            " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked'); }"
+        ))
     except Exception:
         return None
 
@@ -5438,9 +6365,7 @@ def _library_undo_selection(page: Page, tiles, clicked: list[int], before: int) 
             return False
         if count == 0:
             break
-        try:
-            tiles.nth(i).click(timeout=3000)
-        except Exception:
+        if _click_library_tile(page, tiles.nth(i)):
             return False
         for _ in range(10):
             _sleep_h(0.3)
@@ -5489,6 +6414,45 @@ def _library_tile_shape(page: Page, filename: str) -> dict:
         return page.evaluate(js, filename)
     except Exception as exc:
         return {"error": type(exc).__name__}
+
+
+#: Точка клика по плитке: миниатюра, не подпись (29.07), и что в этой точке
+#: лежит на самом деле — сама плитка или что-то поверх неё.
+_TILE_POINT_JS = r"""el => { const r = el.getBoundingClientRect(); if (!r.width || !r.height) return null;
+  const x = r.x + r.width / 2, y = r.y + Math.min(r.height / 2, 48);
+  const hit = document.elementFromPoint(x, y);
+  return {x, y, ok: !!hit && (hit === el || el.contains(hit)), hit: hit ? hit.tagName : null}; }"""
+
+
+def _click_library_tile(page: Page, tile, *, before: int | None = None) -> str:
+    """Щёлкнуть плитку медиатеки. `""` — щёлкнули; иначе причина отказа.
+
+    ACL-1313, прогон 24.09 (SA Mix, da86e97cbf8b): копия в медиатеке нашлась,
+    а `tile.click` упал по таймауту — Playwright ждёт, пока плитка перестанет
+    двигаться, а виртуальная сетка под нагрузкой ему этого не даёт (то же
+    «not stable» записано здесь 04.08). Защита от повторной заливки после
+    этого оставила объявление без медиа. Тогда — настоящий CDP-клик по
+    точке, но только если в точке сама плитка и выбор ещё не сдвинулся:
+    второй клик по уже выбранной плитке снял бы выбор.
+    """
+    try:
+        tile.scroll_into_view_if_needed(timeout=3000)
+        tile.click(timeout=3000)
+        return ""
+    except Exception as exc:
+        first = type(exc).__name__
+    if before is not None:
+        now = _library_selected_count(page)
+        if (now is not None and now > before) or _library_tile_selected(tile):
+            return ""
+    try:
+        pt = tile.evaluate(_TILE_POINT_JS)
+    except Exception:
+        return first[:40]
+    if not pt or not pt.get("ok"):
+        return f"{first}+blocked:{(pt or {}).get('hit')}"[:40]
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    return ""
 
 
 def _library_tile_selected(tile) -> bool:
@@ -5655,9 +6619,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Без этого следующая попытка починки снова будет догадкой.
         _telemetry.record("ad_creative_reuse", None, note="not_in_library",
                           diag=_library_sight(page, filename))
-        clean = (before == 0 and _library_selected_count(page) == 0
-                 and _library_any_tile_marked(page) is False)
-        return REUSE_ABSENT if clean else REUSE_DIRTY
+        return REUSE_ABSENT if before == 0 else REUSE_DIRTY
 
     # Poll the counter for seconds, not milliseconds, before giving up on a
     # click. The old 0.5s check raced Meta's own render: the click HAD
@@ -5681,29 +6643,18 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     picked_thumbs: list[str] = []
     for i in range(min(available, _LIBRARY_MAX_PICKS)):
         try:
-            tile = tiles.nth(i)
-            if _library_tile_selected(tile):
-                if not _library_tile_ready(tile):
-                    _telemetry.record("ad_creative_reuse", False, note="selected_media_unverified")
-                    return REUSE_DIRTY
+            if _library_tile_selected(tiles.nth(i)):
                 log.append({"tile": i, "before": before, "already_selected": True, "took": True})
-                picked_fingerprint = _tile_fingerprint(tile)
-                picked_thumbs = _tile_thumb_ids(tile)
                 picked = True
                 break
         except Exception:
             continue
     for i in ([] if picked else range(min(available, _LIBRARY_MAX_PICKS))):
         note = {"tile": i, "before": before}
-        try:
-            tile = tiles.nth(i)
-            tile.scroll_into_view_if_needed(timeout=3000)
-            if not _library_tile_ready(tile):
-                log.append({**note, "skipped": "media_not_ready_or_unidentified"})
-                continue
-            tile.click(timeout=3000)
-        except Exception as exc:
-            note["click_error"] = f"{type(exc).__name__}"[:40]
+        tile = tiles.nth(i)
+        err = _click_library_tile(page, tile, before=before)
+        if err:
+            note["click_error"] = err
             log.append(note)
             continue
         clicked.append(i)
@@ -5757,8 +6708,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Кликали, но счётчик не двинулся. «Не двинулся» — это то, что мы
         # видим, а не то, что произошло: клик мог и зарегистрироваться, просто
         # позже. Поэтому не уходим молча, а снимаем за собой.
-        clean = (before == 0 and _library_selected_count(page) == 0
-                 and _library_any_tile_marked(page) is False) if not clicked else _library_undo_selection(page, tiles, clicked, before)
+        clean = (before == 0 and _library_selected_count(page) == 0) if not clicked else _library_undo_selection(page, tiles, clicked, before)
         sight = _library_sight(page, filename)
         if saved_page:
             sight["page"] = saved_page
@@ -5784,9 +6734,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
             return REUSE_DIRTY
         if count <= 1:
             break
-        try:
-            tiles.nth(i).click(timeout=3000)
-        except Exception:
+        if _click_library_tile(page, tiles.nth(i)):
             continue
         _sleep_h(0.8)
 
@@ -5818,8 +6766,20 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         _close_creative_setup_modal(page)
         _sleep_h(0.5)
         if "/ads/edit/" in page.url and _verify_ad_media_present(page):
-            right, detail = _verify_ad_media_is_the_file(page, filename, picked_thumbs)
-            detail["picked_thumbs"] = picked_thumbs[:5]
+            right, detail = _verify_ad_media_is_the_file(page, filename)
+            ad_thumbs = _ad_media_thumb_ids(page)
+            if picked_thumbs and ad_thumbs:
+                if set(picked_thumbs) & set(ad_thumbs):
+                    detail["thumb"] = "match"
+                else:
+                    # Миниатюра на объявлении не та, что у выбранной плитки:
+                    # прикрепилось другое видео, как бы ни совпало имя.
+                    right = False
+                    detail["why"] = "other_file_attached"
+                    detail["thumb"] = "mismatch"
+            else:
+                detail["thumb"] = "unconfirmed"
+            detail["thumbs"] = {"picked": picked_thumbs[:5], "ad": ad_thumbs[:5]}
             media_fp = _ad_media_fingerprint(page)
             detail["identity"] = {
                 "tile": picked_fingerprint[:10], "ad": media_fp[:10],
@@ -5848,7 +6808,6 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
                                blocks={"media": _AD_MEDIA_BLOCK_JS})
             except Exception:
                 pass
-            _telemetry.record("ad_creative_reuse", True, note="attached_from_library", diag=detail)
             return REUSE_ATTACHED
         # Мастер продвинулся, а медиа на объявлении нет. Выбор при этом
         # где-то остался, и снять его отсюда уже нечем: сетки на экране нет.
@@ -5864,8 +6823,7 @@ def _retreat(page: Page, tiles, clicked: list[int], before: int) -> str:
     написать `return False` — ровно та ошибка, которая стоила отключения всей
     возможности 24.08.
     """
-    clean = (before == 0 and _library_selected_count(page) == 0
-                 and _library_any_tile_marked(page) is False) if not clicked else _library_undo_selection(page, tiles, clicked, before)
+    clean = (before == 0 and _library_selected_count(page) == 0) if not clicked else _library_undo_selection(page, tiles, clicked, before)
     if not clean:
         return REUSE_DIRTY
     try:
@@ -5892,6 +6850,7 @@ def reuse_before_upload(page: Page, creative_path: str) -> bool | None:
         return None
     outcome = _try_reuse_library_media(page, Path(creative_path).name)
     if outcome == REUSE_ATTACHED:
+        _telemetry.record("ad_creative_reuse", True, note="attached_from_library")
         return True
     if outcome == REUSE_DIRTY:
         # Сетка осталась с нашим выбором. Загрузка поверх дала бы объявление
@@ -5951,9 +6910,20 @@ def upload_ad_creative_with_retry(
             attached = False
         if attached:
             return True
-        # A prior upload of this filename does not identify the media on
-        # this ad. Never override a failed library identity check with
-        # generic "Media is present" evidence.
+        # 17.09 04:30 (S15, 3-е объявление): медиа уже стояло — Meta перенесла
+        # ролик в новое объявление, мастер не открылся, и шаг объявил
+        # объявление пустым, хотя на экране «Uploaded media · 1 selected».
+        # Файл здесь тот же, что уже поднят в этом прогоне, — медиа на месте.
+        if _media_block_filled_now(page):
+            _telemetry.record("ad_creative_upload", True, note="media_already_on_ad",
+                              diag={"file": Path(creative_path).name})
+            return True
+        if _wizard_past_media(page):
+            _close_creative_setup_modal(page)
+            _telemetry.record("ad_creative_upload", True, note="media_already_on_ad_wizard_at_text",
+                              diag={"file": Path(creative_path).name,
+                                    "page_shows_media": _media_block_filled_now(page)})
+            return True
         why = ("same_file_already_uploaded_this_run"
                if upload_already_succeeded(creative_path)
                else "same_file_already_failed_this_run")
@@ -5964,17 +6934,12 @@ def upload_ad_creative_with_retry(
         return False
 
     for attempt in range(attempts):
-        _set_last_upload_diag({"file": Path(creative_path).name, "attempts": []})
         try:
             if upload_ad_creative(page, creative_type, creative_path, edit_url=edit_url):
                 remember_upload_succeeded(creative_path)
                 return True
         except Exception:
             pass
-        if last_upload_diag().get("reuse_unverified"):
-            # Preserve the dirty outcome through the outer retry layer.
-            # Neither generic media presence nor a second upload can fix it.
-            return False
         _close_creative_setup_modal(page)
         _sleep_h(0.8)
         if _verify_ad_media_present(page):
@@ -6713,15 +7678,11 @@ def upload_ad_creative(
     # stem finds nothing.
     verdict = reuse_before_upload(page, creative_path)
     if verdict is not None:
-        if not verdict:
-            _set_last_upload_diag({"file": Path(creative_path).name, "attempts": [],
-                                   "reuse_unverified": True})
         return verdict
     if reuse_only:
-        # The memo said this file already went up in this run, so a second
-        # upload is pointless (Meta refuses it) — the library was the only
-        # way, and it had no copy. Leave the ad as it was and say so; the
-        # caller records the refusal by name.
+        # Память прогона говорит, что файл уже уходил наверх: второй раз Meta
+        # его не берёт, медиатека была единственным путём, и копии там нет.
+        # Объявление оставляем как есть и называем причину.
         _close_creative_setup_modal(page)
         _telemetry.record("ad_creative_reuse", None, note="library_has_no_copy",
                           diag={"file": Path(creative_path).name})
@@ -6731,14 +7692,13 @@ def upload_ad_creative(
     # above types the filename into it; when reuse fails the filter STAYS,
     # and the freshly uploaded file lands in a grid that is still filtered
     # to a term matching nothing — measured live 2026-08-04: "No images
-    # match your search", 0 tiles, "0 selected", Next aria-disabled, so the
-    # wizard could never be advanced and the media never attached.
+    # match your search", 0 tiles, "0 selected", Next aria-disabled.
     try:
         search_box = page.get_by_placeholder(re.compile(r"Search media", re.I)).first
         if search_box.count() and (search_box.input_value(timeout=1500) or "").strip():
             handle = _focus_via_cdp_click(page, search_box)
             if handle is not None:
-                page.keyboard.press("Control+A")
+                page.keyboard.press("ControlOrMeta+A")
                 page.keyboard.press("Delete")
                 _sleep_h(1.2)
     except Exception:
@@ -6826,7 +7786,6 @@ def upload_ad_creative(
         decision = _reuse_upload_decision(page, Path(creative_path).name)
         if decision is not None:
             _diag["reused"] = decision
-            _diag["reuse_unverified"] = decision is False
             _set_last_upload_diag(_diag)
             return decision
 
@@ -7156,52 +8115,67 @@ def _media_block_filled_now(page: Page) -> bool:
         return False
 
 
+def _wizard_past_media(page: Page) -> bool:
+    """Мастер «Set up your creative» уже на шаге Text — значит, медиа выбрано.
+
+    ACL-1313, прогон 25.09 (CL Day, 956d0d, 2-е объявление): Meta перенесла
+    ролик в новое объявление сама и открыла мастер сразу на Text, с зелёной
+    галочкой у Media. Проверка по странице объявления этого не видит — она
+    под модалкой, — и шаг записал «нет медиа». На Text мастер не пускает без
+    выбранного медиа, так что поле Primary text внутри открытого мастера —
+    достаточное доказательство.
+    """
+    if not _creative_wizard_open(page):
+        return False
+    try:
+        return bool(page.evaluate(
+            r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              const leaves = (root) => [...root.querySelectorAll('*')]
+                .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
+                .map(e => norm(e.textContent));
+              // Подзаголовок шага Text мастера; на странице объявления его нет.
+              const atText = (ls) => ls.some(t => t.startsWith('Add multiple text options'))
+                && !ls.some(t => t.includes('Please specify the media'));
+              const dialogs = [...document.querySelectorAll('[role=dialog]')]
+                .filter(d => d.getBoundingClientRect().width > 0);
+              if (dialogs.length) return dialogs.some(d => atText(leaves(d)));
+              return atText(leaves(document));
+            }"""
+        ))
+    except Exception:
+        return False
+
+
 _AD_MEDIA_STATE_JS = r"""
-  (filename) => {
-    const root = """ + _AD_MEDIA_BLOCK_JS + r""";
-    if (!root) return {error: 'media_block_unavailable'};
-    const isVisible = """ + _MEDIA_VISIBLE_JS + r""";
-    const thumbIds = """ + _THUMB_ID_JS + r""";
+  (stem) => {
     const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-    const visible = [...root.querySelectorAll('*')]
-      .filter(e => isVisible(e) && e.children.length === 0)
+    const visible = [...document.querySelectorAll('*')]
+      .filter(e => e.offsetParent !== null && e.children.length === 0)
       .map(e => norm(e.textContent))
       .filter(Boolean);
     const low = visible.map(t => t.toLowerCase());
-    const want = norm(filename).toLowerCase();
-    const named = want ? low.filter(t => t === want) : [];
-    const processing = low.some(t => t.includes('processing') || t.includes('being processed')) ||
-      [...root.querySelectorAll('[role=progressbar],[aria-busy=true]')].some(isVisible);
+    const want = (stem || '').toLowerCase();
+    // Имя файла Meta показывает по-разному: «2012.mp4», «2012», иногда с
+    // суффиксом копии. Совпадением считаем вхождение основы имени.
+    const named = want ? low.filter(t => t.includes(want)) : [];
+    const processing = low.some(t => t.includes('processing') || t.includes('being processed'));
     const failed = low.some(t => t.includes("couldn't be processed") || t.includes('could not be processed')
       || t.includes('failed to process') || t.includes('processing failed')
-      || t.includes("media couldn't") || t.includes('upload failed') || t.includes('rejected'));
+      || t.includes("media couldn't") || t.includes('upload failed'));
     // Имена ДРУГИХ файлов рядом с медиа: нашего нет, а чужой есть — взяли не то.
-    const others = low.filter(t => /\.(mp4|mov|jpg|jpeg|png|gif|webm)\b/.test(t) && (!want || t !== want));
-    const lists = [...root.querySelectorAll('[role=list]')].filter(isVisible);
-    // In the recorded layout each direct listitem is a placement group.
-    // Nested listitems are wrappers, not additional assets.
-    const rows = lists.length === 1 ? [...lists[0].children]
-      .filter(el => el.getAttribute('role') === 'listitem' && isVisible(el)) : [];
-    const thumbs = [...new Set(rows.flatMap(thumbIds))];
-    const enabled = el => isVisible(el) &&
-      !el.closest('[aria-disabled=true],[disabled],[aria-busy=true]') &&
-      el.getAttribute('aria-busy') === 'false';
-    const remove = root.querySelector('[data-surface$="/lib:ads-pacer-remove-all-button"]');
-    const ready = !!remove && enabled(remove) && rows.length > 0 && rows.every(row => {
-      const edits = [...row.querySelectorAll('[data-surface$="/lib:pacer-item-button-edit"]')].filter(isVisible);
-      return thumbIds(row).length === 1 && edits.length === 1 && enabled(edits[0]);
-    }) && ![...root.querySelectorAll('[role=alert]')].some(isVisible);
-    return {named: named.slice(0, 5), others: others.slice(0, 5),
-            processing, failed, ready, thumbs};
+    const others = low.filter(t => /\.(mp4|mov|jpg|jpeg|png|gif|webm)\b/.test(t) && (!want || !t.includes(want)));
+    return { named: named.slice(0, 5), others: others.slice(0, 5),
+             processing: processing, failed: failed };
   }
 """
 """Что сейчас в медиа-блоке объявления: наше имя, чужие имена, обработка, ошибка."""
 
 
 def _ad_media_state(page: Page, filename: str) -> dict:
-    name = Path(filename or "").name.lower()
+    stem = Path(filename or "").stem.lower()
     try:
-        return page.evaluate(_AD_MEDIA_STATE_JS, name) or {}
+        return page.evaluate(_AD_MEDIA_STATE_JS, stem) or {}
     except Exception as exc:
         return {"error": str(exc)[:80]}
 
@@ -7209,9 +8183,7 @@ def _ad_media_state(page: Page, filename: str) -> dict:
 _MEDIA_PROCESSING_MAX_S = 180
 
 
-def _verify_ad_media_is_the_file(
-    page: Page, filename: str, picked_thumbs: list[str] | None = None,
-) -> tuple[bool, dict]:
+def _verify_ad_media_is_the_file(page: Page, filename: str) -> tuple[bool, dict]:
     """Прикрепился ли ИМЕННО наш файл и пригоден ли он (ACL-1171/1192).
 
     Проверка «медиа есть» пропускает две беды: прикрепилась чужая плитка
@@ -7222,14 +8194,6 @@ def _verify_ad_media_is_the_file(
     state: dict = {}
     while True:
         state = _ad_media_state(page, filename)
-        if (not isinstance(state, dict) or state.get("error")
-                or not isinstance(state.get("named"), list)
-                or not isinstance(state.get("others"), list)
-                or not isinstance(state.get("thumbs"), list)
-                or type(state.get("ready")) is not bool
-                or type(state.get("processing")) is not bool
-                or type(state.get("failed")) is not bool):
-            return False, {"state": state, "why": "media_state_unavailable"}
         if state.get("failed"):
             return False, {"state": state, "why": "processing_failed"}
         if not state.get("processing"):
@@ -7237,18 +8201,13 @@ def _verify_ad_media_is_the_file(
         if time.time() >= deadline:
             return False, {"state": state, "why": "still_processing"}
         _sleep_h(2.0)
+    if state.get("named"):
+        return True, {"state": state}
     if state.get("others"):
         return False, {"state": state, "why": "other_file_attached"}
-    selected = set(picked_thumbs or [])
-    attached = set(state["thumbs"])
-    if len(selected) != 1 or not attached:
-        return False, {"state": state, "why": "media_identity_unavailable"}
-    if attached != selected:
-        return False, {"state": state, "why": "other_file_attached"}
-    if not state["ready"]:
-        return False, {"state": state, "why": "media_not_ready"}
-    return True, {"state": state, "media_identity": next(iter(selected)),
-                  "identity_kind": "meta_video_thumbnail"}
+    # Имя видно не всегда — Meta подписывает не каждую плитку. Само наличие
+    # медиа уже проверено отдельно, поэтому это не отказ.
+    return True, {"state": state, "why": "name_not_shown"}
 
 
 def _verify_ad_media_present(page: Page) -> bool:
@@ -7360,8 +8319,21 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
         """
         return mark_ad_copy_field(page, "message_field", _AD_COPY_FIELDS["message_field"], "probe")
 
-    if _primary_text_visible():
-        return True
+    # 20.09 20:30 (SA_arc, CL_ml, CO_bnc подряд): после ускорения мы доходим
+    # до объявления раньше, чем Meta его дорисовывает, и поля текста «ещё не
+    # раскрыты» — за ними падали и текст, и назначение. Даём блоку успокоиться
+    # и ждём поле до 12 с, прежде чем трогать разметку.
+    # ACL-1281: заблокированный редактор ждать бессмысленно — полей текста на
+    # странице нет вовсе, пока висит ошибка Meta. Раньше мы честно отстаивали
+    # здесь 12 секунд, потом разворачивали блок, и только после этого шаг
+    # сообщал о неудаче: 22.09 на четырёх объявлениях так ушло 6–13 минут.
+    for i in range(24):
+        if _primary_text_visible():
+            return True
+        if i == 2 and _review_errors_visible(page):
+            _telemetry.record("ad_copy_fields", False, note="blocked_by_review_error")
+            return False
+        _sleep_h(0.5)
 
     # Mount the section before trying to un-hide it. Every fallback below
     # assumes #creativeEditorComponent is in the DOM and merely painted
@@ -7446,6 +8418,15 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
         _sleep_h(2.0)
     except Exception:
         time.sleep(5.0)
+
+    # ACL-1313: перезагрузка возвращает в Browser add-ons «Instant form», а с
+    # ней — ошибку Lead Gen и баннер условий, которые потом читались как
+    # «страница не приняла условия». Вернуть «None» сразу.
+    try:
+        if _browser_addon_none_checked(page) is False:
+            _telemetry.record("browser_addon_after_reload", _select_browser_addon_none(page))
+    except Exception:
+        pass
 
     for _ in range(10):
         if _primary_text_visible():
@@ -7691,6 +8672,40 @@ def mark_ad_copy_field(
         return False
 
 
+#: Draft.js держит в каждом блоке `[data-block="true"]` ровно одного ребёнка
+#: — обёртку листа. Всё, что лежит за ней, — абзацы, которые Chrome нарезал
+#: сам мимо редактора (ACL-1313, 24.09). React ими не управляет, поэтому
+#: удалить их безопасно; а `Ctrl+A` + `Backspace` их не трогает.
+_DRAFT_ORPHANS_JS = """(el, strip) => { let n = 0;
+  for (const b of el.querySelectorAll('[data-block="true"]'))
+    for (const x of [...b.children].slice(1)) { n++; if (strip) x.remove(); }
+  return n; }"""
+
+
+def _draft_orphans(handle, strip: bool = False) -> int:
+    """Сколько в поле абзацев-копий вне редактора; с `strip` — убрать их."""
+    try:
+        return int(handle.evaluate(_DRAFT_ORPHANS_JS, strip) or 0)
+    except Exception:
+        return -1
+
+
+def _is_draft_editor(handle) -> bool:
+    try:
+        return bool(handle.evaluate("el => !!el.querySelector('[data-contents]') || !!el.closest('[data-contents]')"))
+    except Exception:
+        return False
+
+
+def _insert_lines(page: Page, text: str) -> None:
+    """Вставить текст целиком, но переносы — нажатиями, а не внутри вставки."""
+    for n, line in enumerate(text.replace("\r\n", "\n").split("\n")):
+        if n:
+            page.keyboard.press("Enter")
+        if line:
+            page.keyboard.insert_text(line)
+
+
 def _handle_text(handle) -> str:
     try:
         return str(handle.evaluate(
@@ -7704,6 +8719,298 @@ def _copy_matches(seen: str, expected: str) -> bool:
     """Сравнение текста объявления без учёта пробелов, переносов и U+200B."""
     squash = lambda s: re.sub(r"[\s​﻿]+", "", s or "")
     return squash(seen) == squash(expected)
+
+
+def _await_creative_settled(page: Page, timeout_s: float = 20.0) -> bool:
+    """Дождаться, пока блок креатива перестанет перерисовываться.
+
+    20.09 02:45, разбор 16 отказов ввода текста за сутки: печатаем — поле
+    читается пустым, затем на заголовке число полей на странице падает с 5
+    до 1 и поле исчезает (`locator_count_zero`). Meta в этот момент
+    перерисовывает блок (обычно когда дообработалось видео) и стирает
+    набранное. Ждём двух одинаковых замеров подряд.
+    """
+    last = None
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            now = page.evaluate(
+                "() => document.querySelectorAll('[placeholder], [role=textbox]').length")
+        except Exception:
+            return False
+        if last is not None and now == last and now > 0:
+            return True
+        last = now
+        _sleep_h(1.0)
+    return False
+
+
+_TEXT_VARIATIONS_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+    const vis = (e) => e.getClientRects().length > 0;
+    const boxes = [...document.querySelectorAll('[role=checkbox], input[type=checkbox]')];
+    const on = boxes.filter(b => {
+      const state = b.getAttribute('aria-checked') || String(b.checked);
+      if (state !== 'true') return false;
+      let ctx = b.parentElement, txt = '';
+      for (let i = 0; i < 5 && ctx; i++, ctx = ctx.parentElement) {
+        const x = norm(ctx.textContent);
+        if (x.length > 8) { txt = x; break; }
+      }
+      return /check all text variations|text variations/i.test(txt);
+    });
+    const b = on.find(vis);
+    if (!b) return {found: boxes.length > 0, on: on.length, point: null};
+    b.scrollIntoView({block: 'center'});
+    const r = b.getBoundingClientRect();
+    return {found: true, on: on.length,
+            point: {x: r.x + r.width / 2, y: r.y + r.height / 2}};
+  }
+"""
+"""Галочка «Check all text variations» — сочинённые Meta варианты текста."""
+
+
+def disable_text_variations(page: Page) -> bool | None:
+    """Снять отметку со сгенерированных Meta вариантов текста.
+
+    21.09, решение пользователя: в объявлении включён Advantage+ creative, и
+    Meta подставляет собственные варианты основного текста рядом с нашим.
+    Снимаем «Check all text variations», чтобы в показ шёл только
+    утверждённый текст. None — галочки на странице нет (ничего и не надо).
+    """
+    try:
+        state = page.evaluate(_TEXT_VARIATIONS_JS) or {}
+    except Exception as exc:
+        _telemetry.record("text_variations_off", False, note=str(exc)[:60])
+        return False
+    if not state.get("point"):
+        # ACL-1313: молчаливый None прятал, что галочки на странице 24.09 не
+        # было вовсе — строка в телеметрии отличает «нечего снимать» от сбоя.
+        _telemetry.record("text_variations_off", None, note="label_not_found")
+        return None
+    _cdp_mouse_click(page, state["point"]["x"], state["point"]["y"])
+    _sleep_h(0.8)
+    try:
+        after = page.evaluate(_TEXT_VARIATIONS_JS) or {}
+    except Exception:
+        after = {}
+    ok = not after.get("point")
+    _telemetry.record("text_variations_off", ok,
+                      diag={"was_on": state.get("on"), "still_on": after.get("on")})
+    return ok
+
+
+_TEXT_GENERATION_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+    const vis = (e) => e.getClientRects().length > 0;
+    const leaf = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && /creative text generation/i.test(norm(e.textContent)));
+    if (!leaf) return {found: false};
+    // Раздел бывает свёрнут: сначала раскрываем его собственной створкой.
+    let box = leaf, collapsed = null;
+    for (let i = 0; i < 7 && box.parentElement; i++) {
+      box = box.parentElement;
+      const shut = [...box.querySelectorAll('[aria-expanded="false"]')].filter(vis);
+      if (shut.length) { collapsed = shut[0]; break; }
+    }
+    if (collapsed) {
+      collapsed.scrollIntoView({block: 'center'});
+      const r = collapsed.getBoundingClientRect();
+      return {found: true, expand: {x: r.x + r.width / 2, y: r.y + r.height / 2}};
+    }
+    // Раскрыт: ищем включённый переключатель внутри раздела.
+    let holder = leaf;
+    for (let i = 0; i < 7 && holder.parentElement; i++) {
+      holder = holder.parentElement;
+      const on = [...holder.querySelectorAll('[role=switch], input[type=checkbox], [role=checkbox]')]
+        .filter(e => vis(e) && (e.getAttribute('aria-checked') || String(e.checked)) === 'true');
+      if (on.length) {
+        const b = on[0];
+        b.scrollIntoView({block: 'center'});
+        const r = b.getBoundingClientRect();
+        return {found: true, on: on.length,
+                point: {x: r.x + r.width / 2, y: r.y + r.height / 2}};
+      }
+    }
+    return {found: true, on: 0, point: null};
+  }
+"""
+"""Раздел «Advantage+ creative text generation» и его переключатель."""
+
+
+def disable_text_generation(page: Page) -> bool | None:
+    """Выключить генерацию текста Meta в объявлении.
+
+    22.09, решение пользователя: рядом с нашим текстом Meta держит свои
+    варианты («Primary text (1 of 5)»), а снизу — раздел Advantage+ creative
+    text generation. Снятой галочки «Check all text variations» мало: сам
+    раздел остаётся включённым. Раскрываем его и выключаем. None — раздела на
+    странице нет, выключать нечего.
+    """
+    state = {}
+    for _ in range(3):
+        try:
+            state = page.evaluate(_TEXT_GENERATION_JS) or {}
+        except Exception as exc:
+            _telemetry.record("text_generation_off", False, note=str(exc)[:60])
+            return False
+        if not state.get("found"):
+            _telemetry.record("text_generation_off", None, note="label_not_found")
+            return None
+        if state.get("expand"):
+            _cdp_mouse_click(page, state["expand"]["x"], state["expand"]["y"])
+            _sleep_h(0.8)
+            continue
+        break
+    if not state.get("point"):
+        # Раздел есть, включённого переключателя не нашли — записываем как есть.
+        _telemetry.record("text_generation_off", None,
+                          note="no_switch", diag={"state": state})
+        return None
+    _cdp_mouse_click(page, state["point"]["x"], state["point"]["y"])
+    _sleep_h(0.9)
+    try:
+        after = page.evaluate(_TEXT_GENERATION_JS) or {}
+    except Exception:
+        after = {}
+    ok = not after.get("point")
+    _telemetry.record("text_generation_off", ok,
+                      diag={"was_on": state.get("on"), "still_on": after.get("on")})
+    return ok
+
+
+def _repair_blocked_copy_editor(page: Page, ad_name: str, destination_url: str) -> bool:
+    """Снять блокировку редактора креатива. Один раз, без второго круга.
+
+    Meta подставляет в Browser add-ons «Instant form (suggested)»: объявление
+    получает ошибку про Lead Gen форму, правая панель грузится бесконечно, а
+    редактор креатива не рисуется — полей текста на странице нет. Лечение:
+    поставить «None», убедиться, что встало, и открыть объявление заново.
+
+    Возвращает True, если после лечения поля текста появились. Дальше звать
+    нечего: 22.09 повторные круги давали те же 6–13 минут и тот же отказ.
+    """
+    if _lead_terms_not_accepted(page) and _browser_addon_none_checked(page) is not False:
+        # Чинить нечего: условия Lead Generation принимает человек в Meta.
+        _telemetry.record("lead_terms_not_accepted", False,
+                          note="page_must_accept_lead_terms")
+        return False
+    # ACL-1313, прогон 24.09 (GT Day, d3e690189a6e): после перезагрузки в
+    # `_reveal_ad_copy_fields` Meta снова ставит «Instant form», и баннер про
+    # условия Lead Generation относится к этой форме, а не к странице — у
+    # этой же страницы первое объявление прошло. Если «None» не стоит, баннер
+    # не приговор: ставим «None», как при любой другой блокировке.
+    try:
+        fixed = _select_browser_addon_none(page)
+        _sleep_h(1.5)
+        checked = _browser_addon_none_checked(page)
+        if not fixed or checked is not True:
+            # Блока Browser add-ons на странице может не оказаться вовсе:
+            # редактор висит на «Verifying your changes». Снимаем зависание
+            # перезагрузкой и чиним ещё раз — это часть одного лечения.
+            recover_stuck_page(page, "ad_copy_blocked", editor=True, force=True)
+            _sleep_h(3.0)
+            fixed = _select_browser_addon_none(page)
+            _sleep_h(1.5)
+            checked = _browser_addon_none_checked(page)
+        _telemetry.record("browser_addon_repair", bool(fixed) and checked is True,
+                          diag={"none_checked": checked})
+        if ad_name:
+            # После перезагрузки мы стоим на уровне ad set'а, а объявление
+            # закрыто: открываем его тем же обходом, что чинит назначения.
+            try:
+                verify_and_fix_ad_destinations(page, [ad_name], destination_url)
+                _sleep_h(2.0)
+            except Exception as exc:
+                _telemetry.record("ad_copy_blocked", False,
+                                  note=f"reopen_failed:{str(exc)[:40]}")
+                return False
+    except Exception as exc:
+        _telemetry.record("browser_addon_repair", False, note=str(exc)[:60])
+        return False
+    return not _review_errors_visible(page)
+
+
+def _back_on_the_ad(page: Page, ad_name: str, report: dict) -> None:
+    """Вернуть редактор на объявление перед второй попыткой текста.
+
+    ACL-1313, прогон 25.09 (GT FX, 5b2237, объявление 1): поля текста не
+    раскрылись, последний ход `_reveal_ad_copy_fields` — перезагрузка — открыл
+    редактор на уровне ad set (адрес `adsets/edit`, справа «Ad set name»), а
+    окно к тому же было свёрнуто. Вторая попытка искала поля там, где их нет.
+    Окно — развернуть, объявление — открыть в дереве по имени.
+    """
+    try:
+        from src.fb_ads_rpa.browser import ensure_editor_window
+
+        report["window_ok"] = bool(ensure_editor_window(page, "ad_copy_retry"))
+    except Exception as exc:
+        report["window_ok"] = f"error:{str(exc)[:40]}"
+    try:
+        on_adset = "/adsets/edit" in (page.url or "")
+    except Exception:
+        on_adset = False
+    if on_adset and ad_name:
+        opened = False
+        try:
+            opened = _open_tree_ad(page, ad_name)
+            _sleep_h(2.0)
+            _close_creative_setup_modal(page)
+        except Exception:
+            pass
+        report["reopened_ad"] = opened
+        _telemetry.record("ad_copy_reopen_ad", opened, diag={"ad": ad_name[:60]})
+
+
+def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
+                  destination_url: str = "", report: dict | None = None) -> bool:
+    """Написать текст объявления: лечим блокировку заранее, чиним один раз.
+
+    ACL-1281 (решение владельца 22.09). Прежний порядок — «пробуем, ждём поля,
+    разворачиваем блок, обнаруживаем ошибку Meta, чиним, пробуем всё заново» —
+    стоил 6–13 минут на объявление и всё равно часто кончался без текста.
+    Теперь блокировка проверяется до первой попытки, лечение одно, а если
+    текст всё равно не встал — шаг отказывает сразу и называет объявление.
+    """
+    report = report if report is not None else {}
+    # ACL-1313 (5b2237): к тексту окно пришло свёрнутым — проверка окна стоит
+    # только на границах разделов, а в свёрнутое окно клики по координатам не
+    # попадают, и поля текста «не раскрываются». Проверяем и здесь.
+    try:
+        from src.fb_ads_rpa.browser import ensure_editor_window
+
+        ensure_editor_window(page, "ad_copy")
+    except Exception:
+        pass
+    if _review_errors_visible(page):
+        _telemetry.record("ad_copy_blocked", False, note="before_first_try")
+        report["blocked_before"] = True
+        if not _repair_blocked_copy_editor(page, ad_name, destination_url):
+            report["why"] = "editor_blocked"
+            return False
+    if fill_ad_copy(page, title, body, report):
+        return True
+    if not _review_errors_visible(page):
+        # Не блокировка — обычная осечка ввода: одна честная вторая попытка.
+        if report.get("why") == "copy_fields_not_revealed":
+            _back_on_the_ad(page, ad_name, report)
+        _await_creative_settled(page)
+        report["retry"] = True
+        return fill_ad_copy(page, title, body, report)
+    if report.get("blocked_before"):
+        # Уже лечили в этом объявлении — второй круг тех же минут не стоит.
+        _telemetry.record("ad_copy_blocked", False, note="still_blocked_after_repair")
+        report["why"] = "editor_blocked_after_repair"
+        return False
+    _telemetry.record("ad_copy_blocked", False, note="review_error")
+    report["blocked_before"] = True
+    if not _repair_blocked_copy_editor(page, ad_name, destination_url):
+        report["why"] = "editor_blocked"
+        return False
+    report["retry"] = True
+    return fill_ad_copy(page, title, body, report)
 
 
 def fill_ad_copy(
@@ -7729,7 +9036,17 @@ def fill_ad_copy(
     report = report if report is not None else {}
     report.setdefault("attempts", [])
     if not _reveal_ad_copy_fields(page):
+        # 20.09 19:29 (CO_bnc Mix): в предпросмотре объявления текст стоял, а
+        # шаг отказал с пустым списком попыток — поля просто не раскрылись.
+        report["why"] = "copy_fields_not_revealed"
+        _telemetry.record("ad_copy_fields", False, note="not_revealed")
         return False
+    settled = _await_creative_settled(page)
+    report["settled"] = settled
+    # Сначала убираем варианты Meta, потом вводим свой текст: иначе наш текст
+    # соседствует с сочинёнными и в показ идёт что попало.
+    report["variations_off"] = disable_text_variations(page)
+    report["generation_off"] = disable_text_generation(page)
 
     def _click_via_cdp_handle(locator):
         return _focus_via_cdp_click(page, locator)
@@ -7758,16 +9075,53 @@ def fill_ad_copy(
         отдельных нажатий), поэтому она — запасной путь, когда нажатия
         потерялись.
         """
+        # 21.09 15:10 (скриншот пользователя): в поле лежал наш текст,
+        # повторённый подряд много раз, со склейкой посреди слова — каждая
+        # попытка ДОПИСЫВАЛА его к прежнему. Поле всегда чистим до ввода.
+        try:
+            handle.focus()
+            _draft_orphans(handle, strip=True)
+            page.keyboard.press("ControlOrMeta+A")
+            page.keyboard.press("Backspace")
+            _sleep_h(0.25)
+            left = _handle_text(handle)
+            # Корень редактора Draft.js не обнулять никогда: `textContent = ''`
+            # сносит узлы, которыми управляет React, и редактор ломается
+            # (ACL-1313). Для обычного поля — прежняя страховка.
+            if left.strip() and not _is_draft_editor(handle):
+                # Select-all не сработал (поле отдало фокус) — чистим начисто.
+                handle.evaluate(
+                    "el => { if ('value' in el) { el.value = ''; } else { el.textContent = ''; }"
+                    " el.dispatchEvent(new Event('input', {bubbles: true})); }")
+                _sleep_h(0.25)
+        except Exception:
+            pass
         _type_human(page, text)
         _sleep_h(0.4)
         if _handle_shows(handle, text):
             return True
-        report["attempts"].append({"stage": "typed_text_mismatch", "seen": _handle_text(handle)[:80]})
+        # 22.09 01:05 (скриншот пользователя, CR_ait IPO): дописывание
+        # потерянного хвоста задвоило текст — поле ещё дорисовывало вставку,
+        # чтение увидело только первую строку, и остаток дописался поверх уже
+        # пришедшего. Задвоенный текст хуже неполного, поэтому дописывания
+        # больше нет: ниже поле стирается и набирается заново целиком.
+        # 21.09 11:33 (CL_ml): «видим» выглядело правильным текстом, но шаг
+        # считал его несовпавшим — по обрезанной записи не понять, где
+        # разошлось. Пишем оба текста и их длины.
+        seen_now = _handle_text(handle)
+        report["attempts"].append({
+            "stage": "typed_text_mismatch",
+            "seen": seen_now[:120], "seen_len": len(seen_now),
+            "want": text[:120], "want_len": len(text),
+            "tail_seen": seen_now[-40:], "tail_want": text[-40:],
+            "orphans": _draft_orphans(handle),
+        })
         try:
             handle.focus()
+            _draft_orphans(handle, strip=True)
             page.keyboard.press("ControlOrMeta+A")
             page.keyboard.press("Backspace")
-            page.keyboard.insert_text(text)
+            _insert_lines(page, text)
         except Exception:
             return False
         _sleep_h(0.4)
@@ -9510,6 +10864,31 @@ def targeting_groups(targeting_label: str) -> list[str]:
     return groups
 
 
+_TARGETING_PROBE_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const isT = (i) => {
+      const b = norm((i.getAttribute('placeholder') || '') + ' ' + (i.getAttribute('aria-label') || '')).toLowerCase();
+      return ['add interests', 'interests, behaviors', 'interests or behaviours',
+              'interests or behaviors', 'demographics'].some(g => b.includes(g));
+    };
+    const vis = (e) => e.getClientRects().length > 0;
+    const ins = [...document.querySelectorAll('input, textarea')].filter(isT);
+    const out = ins.map((i) => {
+      const w = i.closest('[role="presentation"]');
+      const lis = w ? [...w.querySelectorAll('li')].filter(li => !li.querySelector('li')) : [];
+      return {visible: vis(i), wrapper: !!w, li: lis.length,
+              liVisible: lis.filter(vis).length,
+              sample: lis.slice(0, 4).map(li => norm(li.textContent).slice(0, 40))};
+    });
+    const body = norm(document.body.innerText || '').toLowerCase();
+    return {inputs: out, hasAdditional: body.includes('additional interests'),
+            hasCombined: body.includes('have been combined')};
+  }
+"""
+"""Что видно на месте детального таргетинга прямо сейчас."""
+
+
 _TARGETING_GROUP_JS = r"""
   (terms) => {
     const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -9524,18 +10903,29 @@ _TARGETING_GROUP_JS = r"""
               'interests or behaviors', 'añadir intereses', 'demographics', 'demografía']
         .some(g => blob.includes(g));
     };
+    // 20.09 12:30: пока открыт список подсказок Meta, в нём живёт свой ввод с
+    // тем же placeholder. Он и сбивал выбор группы: обёртка «своего» ввода
+    // содержала два поля, проверка 45 с возвращала «группа недоступна», а на
+    // снимке секундой позже стояли все пять интересов.
+    const inPopup = el => !!el.closest('[role=listbox], [role=dialog], [role=menu]');
     const inputs = [...document.querySelectorAll('input, textarea')]
-      .filter(inp => visible(inp) && isTargetingInput(inp));
+      .filter(inp => visible(inp) && isTargetingInput(inp) && !inPopup(inp));
     const last = inputs[inputs.length - 1];
     if (!last) return {found: false, why: 'targeting input unavailable'};
     // The recorded Meta block gives each group its own presentation wrapper.
     // An ancestor walk based only on input count can reach the entire page.
     const chosen = last.closest('[role="presentation"]');
-    if (!chosen || [...chosen.querySelectorAll('input, textarea')].filter(isTargetingInput).length !== 1)
-      return {found: false, why: 'targeting group unavailable'};
+    const ownInputs = chosen ? [...chosen.querySelectorAll('input, textarea')]
+      .filter(inp => isTargetingInput(inp) && !inPopup(inp)) : [];
+    if (!chosen || ownInputs.length !== 1)
+      return {found: false, why: 'targeting group unavailable', inputs: ownInputs.length};
     const skip = el => !visible(el) || !!el.closest(
       '[role=listbox], [role=option], [role=menu], [role=menuitem]');
-    const isClose = b => visible(b) &&
+    // 20.09 13:45: крестик у интереса Meta рисует только под курсором, и
+    // требование «кнопка видима» обнуляло список: замер в ту же секунду
+    // видел 19 интересов, проверка — ни одного. Наличия кнопки достаточно,
+    // видимость самой строки проверяется отдельно.
+    const isClose = b =>
       /^(close|remove|quitar|eliminar)$/i.test(norm(b.getAttribute('aria-label') || b.textContent));
     // Only leaf list items with their own removal control are selected chips.
     // Outer li elements also contain category headings and other chips.
@@ -9574,6 +10964,114 @@ def _group_has_terms(page: Page, terms: list[str]) -> dict:
         return {"found": False, "why": str(exc)[:80]}
 
 
+_SCROLL_TARGETING_INPUT_JS = r"""
+  () => {
+    const inputs = [...document.querySelectorAll('input, textarea')].filter(inp => {
+      const blob = ((inp.getAttribute('placeholder') || '') + ' ' + (inp.getAttribute('aria-label') || '')).toLowerCase();
+      return /add interests|interests, behaviors|interests or behaviou?rs|demographics|añadir intereses|demografía/.test(blob);
+    });
+    const last = inputs[inputs.length - 1];
+    if (last) last.scrollIntoView({block: 'center'});
+    return !!last;
+  }
+"""
+
+
+def _await_group_terms(page: Page, terms: list[str], *, timeout_s: float = 45.0) -> dict:
+    """Read the group until the pasted interests have been drawn.
+
+    20.09 07:00: 20 с хватало не всегда — на медленной Meta обе группы
+    CO_bnc и группа CR_ait читались пустыми (group_empty), хотя интересы
+    потом появлялись. Ждём 45 с.
+
+    Meta draws a pasted list in two passes: first the category header
+    ("Interests > Additional interests" with its own Close button), then the
+    interests under it. Reading once right after the paste saw only the header
+    and failed both campaigns of run 199fa985d531 (19.09) as `group_empty`,
+    although the snapshot three seconds later held all five chips.
+    """
+    import time as _time
+
+    # 19.09 13:02 (прогон 52a7a75ca5af): через 8 с плашек ещё не было, через 11 с
+    # — все пять. Ждём дольше и держим поле в кадре: список рисуется лениво.
+    def read() -> dict:
+        try:
+            page.evaluate(_SCROLL_TARGETING_INPUT_JS)
+        except Exception:
+            pass
+        return _group_has_terms(page, terms)
+
+    deadline = _time.monotonic() + timeout_s
+    own = read()
+    while (not own.get("found") or not own.get("hits")) and _time.monotonic() < deadline:
+        page.wait_for_timeout(700)
+        own = read()
+    if own.get("hits") and own.get("missing"):
+        # Interests arrive one by one; give the rest one more beat before
+        # reporting them as unrecognised.
+        page.wait_for_timeout(1000)
+        again = _group_has_terms(page, terms)
+        if again.get("found"):
+            own = again
+    return own
+
+
+_COMBINED_NOTICE_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+    const visible = (el) => !!el && el.getClientRects().length > 0;
+    const notice = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && visible(e)
+      && /^Some detailed targeting options have been combined$/i.test(norm(e.textContent)));
+    if (!notice) return { notice: false };
+    const buttons = [...document.querySelectorAll('[role="button"], button')].filter(b =>
+      visible(b) && /^Remove all$/i.test(norm(b.textContent)));
+    const b = buttons[0];
+    if (!b) return { notice: true, remove_all: false };
+    b.scrollIntoView({ block: 'center' });
+    const r = b.getBoundingClientRect();
+    return { notice: true, remove_all: true, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }
+"""
+
+
+def _remove_combined_targeting(page: Page) -> dict:
+    """Убрать объединённые Meta варианты детального таргетинга.
+
+    19.09 CR_ait Mix2 (c63db6f44f10): «Some detailed targeting options have been
+    combined — Before you can publish this ad set you need to update…». Без
+    этого ad set не опубликовать. Решение пользователя: такие варианты просто
+    убирать — кнопкой «Remove all» внизу уведомления.
+    """
+    try:
+        state = page.evaluate(_COMBINED_NOTICE_JS) or {}
+    except Exception as exc:
+        return {"notice": None, "error": str(exc)[:80]}
+    if not state.get("notice"):
+        return {"notice": False}
+    if not state.get("remove_all"):
+        try:
+            from src.fb_ads_rpa import page_capture as _pc
+
+            _pc.capture(page, step="targeting_combined_no_remove_all")
+        except Exception:
+            pass
+        _telemetry.record("targeting_combined", False, note="remove_all_not_found")
+        return state
+    _cdp_mouse_click(page, state["x"], state["y"])
+    gone = False
+    for _ in range(10):
+        _sleep_h(0.5)
+        try:
+            gone = not (page.evaluate(_COMBINED_NOTICE_JS) or {}).get("notice")
+        except Exception:
+            gone = False
+        if gone:
+            break
+    _telemetry.record("targeting_combined", gone, note="removed" if gone else "notice_still_shown")
+    return {**state, "cleared": gone}
+
+
 def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
     """Paste each AND group into its own field, pressing "Define further"
     between them. True only when every group went in.
@@ -9588,6 +11086,7 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
     groups = targeting_groups(targeting_label)
     if not groups:
         return False
+    unconfirmed: list[int] = []
     for index, group in enumerate(groups):
         if index > 0:
             if not click_define_further(page):
@@ -9605,7 +11104,7 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
         # Проверка на своей группе: paste_targeting_interests ищет термин по
         # всей странице, и интерес первой группы подтверждал вторую (ACL-1219).
         terms = [t.strip() for t in group.split(",") if t.strip()]
-        own = _group_has_terms(page, terms)
+        own = _await_group_terms(page, terms)
         if own.get("found") and own.get("hits") and own.get("missing"):
             # Meta может не распознать часть интересов — это не отказ, но
             # должно быть видно, какие именно не встали.
@@ -9614,7 +11113,9 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
         if not own.get("found") or not own.get("hits"):
             _telemetry.record("targeting", False, note="group_empty",
                               diag={"group": index + 1, "groups": len(groups),
-                                    "terms": terms[:5], "box": own.get("text", "")[:200]})
+                                    "terms": terms[:5], "box": own.get("text", "")[:200],
+                                    "why": own.get("why", ""), "found": own.get("found"),
+                                    "selected": (own.get("selected") or [])[:8]})
             try:
                 from src.fb_ads_rpa import page_capture as _pc
 
@@ -9622,7 +11123,13 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
                             blocks={"groups": _GROUPS_BLOCK_JS})
             except Exception:
                 pass
-            return False
+            # Живое дерево, 19.09: проверка группы на живой странице ошибается
+            # («пусто» при стоящих интересах — снимки 199fa985d531, 302c6ab20986),
+            # и отказ здесь стоил черновику всей следующей AND-группы. Вставка
+            # сама сверила, что термины на странице; группы добавляем дальше,
+            # а итог шага остаётся честным — неуспех.
+            unconfirmed.append(index + 1)
+            continue
     if len(groups) > 1:
         # Снимок заполненных AND-групп: по нему пишутся тесты разметки.
         try:
@@ -9632,7 +11139,11 @@ def paste_targeting_groups(page: Page, targeting_label: str) -> bool:
                         blocks={"groups": _GROUPS_BLOCK_JS})
         except Exception:
             pass
-    return True
+    # Объединённые Meta интересы блокируют публикацию — убираем их.
+    combined = _remove_combined_targeting(page)
+    if combined.get("notice") and not combined.get("cleared"):
+        return False
+    return not unconfirmed
 
 
 def paste_targeting_interests(page: Page, targeting_label: str) -> bool:
@@ -9949,10 +11460,25 @@ def _location_rows(page: Page) -> list[dict]:
               for (let i = 0; i < 12 && card; i++, card = card.parentElement) {
                 if (/^Locations/i.test(norm(card.textContent)) || /Ubicaciones/i.test(norm(card.textContent).slice(0, 40))) break;
               }
+              // 21.09 20:31 (SA_arc GMBL): блока, чей текст начинается словом
+              // «Locations», в этой разметке нет вовсе — поиск упирался в
+              // двенадцатый уровень, строки стран оставались в стороне, и
+              // список выходил пустым. Тогда ищем блок по самим строкам.
+              const hasRemove = (el) => !!el && [...el.querySelectorAll('[role=button], button, [aria-label]')].some(b => {
+                const label = norm(b.getAttribute('aria-label') || '') + ' ' + norm(b.textContent);
+                return /(close|remove|quitar|eliminar)/i.test(label);
+              });
+              if (!hasRemove(card)) {
+                let alt = search;
+                for (let i = 0; i < 20 && alt.parentElement; i++) {
+                  alt = alt.parentElement;
+                  if (hasRemove(alt)) { card = alt; break; }
+                }
+              }
               if (!card) return [];
               const searchBox = search.closest('[role=combobox]') || search.parentElement;
               const rows = [];
-              const controls = [...card.querySelectorAll('[role=button], button')].filter(b => {
+              const controls = [...card.querySelectorAll('[role=button], button, [aria-label]')].filter(b => {
                 if (searchBox && searchBox.contains(b)) return false;
                 const r = b.getBoundingClientRect();
                 if (r.width <= 0 || r.height <= 0 || r.width > 60 || r.height > 60) return false;
@@ -9965,7 +11491,12 @@ def _location_rows(page: Page) -> list[dict]:
               for (const b of controls) {
                 let row = b.parentElement, name = '';
                 for (let i = 0; i < 5 && row && row !== card; i++, row = row.parentElement) {
-                  const t = norm(row.textContent).replace(/\b(Close|Remove)\b/gi, '').trim();
+                  // 21.09 18:44 (CR_ait IPO): имя читалось как «United StatesClose» —
+                  // слово прилипает без пробела, и чистка по границе слова его не
+                  // убирала, поэтому строка не совпадала ни с одной страной.
+                  const t = norm(row.textContent)
+                    .replace(/\b(Close|Remove|Quitar|Eliminar)\b/gi, '')
+                    .replace(/(Close|Remove|Quitar|Eliminar)\s*$/i, '').trim();
                   if (t && t.length <= 80) { name = t; break; }
                 }
                 if (!name) continue;
@@ -9980,10 +11511,16 @@ def _location_rows(page: Page) -> list[dict]:
         return []
 
 
-# Shared DOM boundaries for collapsed audience fields and age readback. Never
-# broaden a field into the page merely because a matching number/button exists.
+# ── Поля аудитории: границы поля (ACL-1250) поверх живых запасных путей ─────
+#
+# Порт ACL-1284 (25.09, решение владельца): живые запасные пути 19–21.09
+# (наведение, стрелка строки, Enter, клик по значению, прокрутка к цели)
+# остаются, но каждый ищет свою цель только внутри поля самой подписи —
+# коробки от подписи вверх до первой чужой подписи поля или заголовка
+# (`fieldBoxes`, ACL-1250). Соседнее поле (Languages рядом с Locations),
+# крестик страны и бюджет рядом с возрастом в поиск не попадают.
 _AUDIENCE_FIELD_DOM = r"""
-  const norm = s => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+  const norm = s => (s || '').replace(/[\s​]+/g, ' ').trim();
   const visible = e => {
     const r = e.getBoundingClientRect(), s = getComputedStyle(e);
     return r.width > 0 && r.height > 0 && s.visibility !== 'hidden'
@@ -9992,10 +11529,17 @@ _AUDIENCE_FIELD_DOM = r"""
   const leaves = root => [...root.querySelectorAll('*')]
     .filter(e => e.children.length === 0 && visible(e));
   const fieldLabels = /^(Age|Edad|Locations|Ubicaciones|Languages|Idiomas|Gender|Género|Detailed targeting|Segmentación detallada|Placements|Ubicaciones de anuncios|Daily budget|Lifetime budget|Budget|Presupuesto|Start time|End time)$/i;
-  const fieldBoxes = pattern => {
+  const editName = /^(edit|editar|изменить|pencil)(\b|$)/i;
+  const removeName = /remove|delete|close|quitar|eliminar|удалить|закрыть/i;
+  const controlName = b => norm(b.getAttribute('aria-label') || b.textContent);
+  const disabled = b => b.disabled || b.getAttribute('aria-disabled') === 'true';
+  const fieldLabel = pattern => {
     const labels = leaves(document).filter(e => pattern.test(norm(e.textContent)));
-    if (labels.length !== 1) return [];
-    const label = labels[0], boxes = [];
+    return labels.length === 1 ? labels[0] : null;
+  };
+  const fieldBoxes = pattern => {
+    const label = fieldLabel(pattern), boxes = [];
+    if (!label) return boxes;
     for (let box = label.parentElement, depth = 0;
          box && box !== document.body && box !== document.documentElement && depth < 16;
          box = box.parentElement, depth++) {
@@ -10020,12 +11564,24 @@ _AUDIENCE_FIELD_DOM = r"""
     }
     return field;
   };
+  // 20.09 00:16 SA_arc GMBL: «All languages» стояла под нижней панелью
+  // редактора, клик по её координатам попал в Close — редактор закрылся.
+  // Сначала прокрутить к цели, потом убедиться, что в точке — она сама
+  // (или короткая строка-кнопка, внутри которой она лежит).
   const point = e => {
+    e.scrollIntoView({block: 'center'});
     const r = e.getBoundingClientRect();
     const x = r.x + r.width / 2, y = r.y + r.height / 2;
     const hit = document.elementFromPoint(x, y);
-    return hit && e.contains(hit) ? {x, y} : null;
+    if (!hit) return null;
+    if (e.contains(hit)) return {x, y};
+    return hit.contains(e) && norm(hit.textContent).length < 200 ? {x, y} : null;
   };
+"""
+"""Общие границы полей аудитории и чтения возраста.
+
+Поле никогда не расширяется на страницу только потому, что где-то рядом
+нашлось подходящее число или кнопка.
 """
 
 _LOCATION_SUMMARY_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
@@ -10035,6 +11591,7 @@ _LOCATION_SUMMARY_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
     .split(',').map(norm).filter(Boolean);
 }
 """
+"""Свёрнутая строка «Inclusion: Colombia» поля Locations — страны списком."""
 
 
 def _location_summary_countries(page: Page) -> list[str] | None:
@@ -10055,32 +11612,59 @@ def _only_wanted_in_summary(page: Page, keep_text: str) -> bool:
     if not got:
         return False
     keep = (keep_text or "").strip().lower()
+    # Ровно наша страна: «Chi» не равно «Chile» (ACL-1250).
     return len(got) == 1 and keep == got[0].strip().lower()
 
 
-_AUDIENCE_EDIT_JS = "([label, value]) => {" + _AUDIENCE_FIELD_DOM + r"""
+_AUDIENCE_PENCIL_JS = "([label, value]) => {" + _AUDIENCE_FIELD_DOM + r"""
   const field = summaryField(new RegExp('^(' + label + ')$', 'i'), new RegExp(value, 'i'));
   if (!field) return null;
   for (const box of field.boxes) {
-    const buttons = [...box.querySelectorAll('button, [role=button]')].filter(b => {
-      if (!visible(b)) return false;
-      const name = norm(b.getAttribute('aria-label') || b.textContent);
-      // Empty text does not make an explicitly named Remove control a pencil.
-      return /^(edit|editar|изменить|pencil)(\b|$)/i.test(name);
-    });
-    if (buttons.length > 1) return null;
-    if (buttons.some(b => b.disabled || b.getAttribute('aria-disabled') === 'true')) return null;
-    if (buttons.length === 1) return point(buttons[0]);
+    // Безымянная кнопка — не карандаш: рядом живёт «Remove Chile» (ACL-1250).
+    const buttons = [...box.querySelectorAll('button, [role=button]')]
+      .filter(b => visible(b) && editName.test(controlName(b)));
+    if (buttons.length > 1) return {stop: 'ambiguous'};
+    if (buttons.some(disabled)) return {stop: 'disabled'};
+    if (buttons.length === 1) return point(buttons[0]) || {stop: 'covered'};
   }
-  return point(field.summary);
+  return null;
 }
+"""
+"""Карандаш свёрнутого поля аудитории — только внутри самого поля.
+
+Ответ: координаты, `{stop: ...}` (карандаш есть, но жать его нельзя —
+два, выключен или закрыт; тогда ничего другого не жмём) или None (карандаша
+нет — можно пробовать стрелку, значение, Enter).
 """
 
 
-def _click_summary_row(page: Page, label: str, value_hint: str) -> bool:
-    """Open one identified field using its own edit button or summary value."""
+def _field_pencil(page: Page, label: str, value_hint: str) -> dict | None:
     try:
-        pt = page.evaluate(_AUDIENCE_EDIT_JS, [label, value_hint])
+        return page.evaluate(_AUDIENCE_PENCIL_JS, [label, value_hint])
+    except Exception:
+        return None
+
+
+_SUMMARY_ROW_JS = "([label, value]) => {" + _AUDIENCE_FIELD_DOM + r"""
+  const field = summaryField(new RegExp('^(' + label + ')$', 'i'), new RegExp(value, 'i'));
+  if (!field) return null;
+  const pt = point(field.summary);
+  return pt && {x: pt.x, y: pt.y, text: norm(field.summary.textContent).slice(0, 60)};
+}
+"""
+"""Координаты значения свёрнутого поля (одно значение в своём поле) — по ним и жать."""
+
+
+def _click_summary_row(page: Page, label: str, value_hint: str) -> bool:
+    """Открыть свёрнутую строку кликом по её значению.
+
+    18.09 08:23 (CL_ml Trading, CR_ait Day): у Meta два вида свёрнутого блока
+    аудитории. В одном у строки есть карандаш, в другом — ни одной кнопки,
+    только текст «Inclusion: Chile, United States» / «All languages», и
+    строка раскрывается кликом по самому тексту.
+    """
+    try:
+        pt = page.evaluate(_SUMMARY_ROW_JS, [label, value_hint])
     except Exception:
         return False
     if not pt:
@@ -10090,8 +11674,176 @@ def _click_summary_row(page: Page, label: str, value_hint: str) -> bool:
     return True
 
 
+_ROW_EXPANDER_JS = "(labelRe) => {" + _AUDIENCE_FIELD_DOM + r"""
+  const re = new RegExp('^(' + labelRe + ')$', 'i');
+  const label = fieldLabel(re);
+  if (!label) return null;
+  const boxes = fieldBoxes(re);
+  // 19.09 18:25 / 20.09 00:16 SA_arc: раскрывается вся строка — role=button
+  // aria-expanded=false на 10 уровней выше подписи. Только строка своего
+  // поля (не раздел с чужими подписями) и с коротким текстом.
+  const own = label.closest('[role="button"][aria-expanded="false"]');
+  if (own && boxes.includes(own) && norm(own.textContent).length < 200 && !disabled(own)) {
+    return point(label);
+  }
+  for (const box of boxes.slice(0, 6)) {
+    const exp = [...box.querySelectorAll('[aria-expanded="false"]')].filter(b =>
+      visible(b) && !b.contains(label) && !disabled(b) && !removeName.test(controlName(b))
+      && (label.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING));
+    if (exp.length) return point(exp[0]);
+  }
+  return null;
+}
+"""
+"""Стрелка свёрнутой строки аудитории — только внутри поля её подписи."""
+
+
+def _click_row_expander(page: Page, label_re: str) -> bool:
+    """Раскрыть свёрнутую строку аудитории её стрелкой.
+
+    19.09 15:00 (SA_arc GMBL, прогон 15479dc0955b): «Locations — Inclusion:
+    Saudi Arabia, United States», карандаша нет, клик по значению строку не
+    раскрывает; справа у строки — безымянная кнопка `aria-expanded="false"`.
+    """
+    try:
+        pt = page.evaluate(_ROW_EXPANDER_JS, label_re)
+    except Exception:
+        return False
+    if not pt:
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.8)
+    return True
+
+
+_ROW_CENTRE_JS = r"""
+  (labelRe) => {
+    const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+    const re = new RegExp('^(' + labelRe + ')$', 'i');
+    const label = [...document.querySelectorAll('*')].find(e =>
+      e.children.length === 0 && re.test(norm(e.textContent)) && e.getBoundingClientRect().width > 0);
+    if (!label) return null;
+    let row = label.closest('[role="button"]');
+    if (!row) {
+      row = label;
+      for (let i = 0; i < 10 && row.parentElement; i++) {
+        row = row.parentElement;
+        if (row.getBoundingClientRect().width > 300) break;
+      }
+    }
+    row.scrollIntoView({block: 'center'});
+    const r = row.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }
+"""
+"""Середина строки — туда наводят курсор, чтобы проявился её карандаш."""
+
+
+def _hover_row(page: Page, label_re: str) -> bool:
+    """Навести курсор на строку аудитории.
+
+    20.09 01:30 (SA_arc GMBL): карандаш правки у строки Locations Meta
+    рисует только под курсором — на скриншоте он есть (мышь стояла на
+    строке), а в разметке снимка его нет. Без наведения строку нечем
+    раскрыть, и страна остаётся неубранной.
+    """
+    try:
+        pt = page.evaluate(_ROW_CENTRE_JS, label_re)
+        if not pt:
+            return False
+        page.mouse.move(pt["x"], pt["y"])
+        _sleep_h(0.5)
+        return True
+    except Exception:
+        return False
+
+
+_FOCUS_ROW_BUTTON_JS = "(labelRe) => {" + _AUDIENCE_FIELD_DOM + r"""
+  const re = new RegExp('^(' + labelRe + ')$', 'i');
+  const label = fieldLabel(re);
+  if (!label) return false;
+  const row = label.closest('[role="button"]');
+  // Строка-кнопка своего поля, а не раздел с соседними полями (ACL-1250).
+  if (!row || !fieldBoxes(re).includes(row) || disabled(row)) return false;
+  row.scrollIntoView({block: 'center'});
+  if (!row.hasAttribute('tabindex')) row.setAttribute('tabindex', '-1');
+  row.focus();
+  return document.activeElement === row;
+}
+"""
+"""Фокус на строке-кнопке — её раскрывают с клавиатуры."""
+
+
+def _open_row_with_keyboard(page: Page, label_re: str) -> bool:
+    """Раскрыть строку аудитории клавишей.
+
+    20.09 05:39 (SA_arc GMBL, телеметрия locations_open=False/summary):
+    карандаш не показывается даже под курсором, клик по тексту строки её не
+    раскрывает. Но строка — настоящая кнопка (role=button), а кнопку можно
+    нажать с клавиатуры, минуя и наведение, и координаты.
+    """
+    try:
+        if not page.evaluate(_FOCUS_ROW_BUTTON_JS, label_re):
+            return False
+        page.keyboard.press("Enter")
+        _sleep_h(0.8)
+        return True
+    except Exception:
+        return False
+
+
 def _click_locations_edit(page: Page) -> bool:
-    return _click_summary_row(page, "Locations|Ubicaciones", r"^(Inclusion|Inclusión|Incluir)\s*:")
+    """Раскрыть карточку локаций её собственной кнопкой правки.
+
+    18.09 07:07 (CL_ml Day) и 07:09 (CO_bnc GMBL): в сводке стояло
+    «Inclusion: Chile, United States» — нужная страна добавлена, лишняя
+    осталась, а снять её нечем: у свёрнутой строки нет крестиков. Разметку
+    строк (`_location_rows`) в таком виде тоже не прочитать.
+    """
+    _hover_row(page, "Locations|Ubicaciones")
+    pt = _field_pencil(page, "Locations|Ubicaciones", r"^(Inclusion|Inclusión|Incluir)\s*:")
+    how = "pencil"
+    if pt and pt.get("stop"):
+        # Карандаш есть, но жать его нельзя: не ищем, чем ещё нажать (ACL-1250).
+        _telemetry.record("locations_open", False, note=f"pencil_{pt['stop']}")
+        return False
+    if pt:
+        _cdp_mouse_click(page, pt["x"], pt["y"])
+    elif _click_row_expander(page, "Locations|Ubicaciones"):
+        how = "expander"
+    elif _click_summary_row(page, "Locations|Ubicaciones", r"^(Inclusion|Inclusión|Incluir)\s*:"):
+        how = "summary"
+    else:
+        _telemetry.record("locations_open", False, note="nothing_to_click")
+        return False
+    # 20.09 02:35 (SA_arc Trading): строки читали через 0.8 с после клика — при
+    # сегодняшней медленной Meta карточка ещё не успевала раскрыться, и шаг
+    # падал с location_rows_not_read. Ждём её собственное поле поиска до 8 с.
+    opened = False
+    for _ in range(16):
+        try:
+            opened = bool(page.evaluate(
+                """() => [...document.querySelectorAll('input')].some(i =>
+                  /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''))"""))
+        except Exception:
+            opened = False
+        if opened:
+            break
+        _sleep_h(0.5)
+    if not opened and _open_row_with_keyboard(page, "Locations|Ubicaciones"):
+        how += "+enter"
+        for _ in range(12):
+            try:
+                opened = bool(page.evaluate(
+                    """() => [...document.querySelectorAll('input')].some(i =>
+                      /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''))"""))
+            except Exception:
+                opened = False
+            if opened:
+                break
+            _sleep_h(0.5)
+    _telemetry.record("locations_open", opened, note=how)
+    return True
 
 
 _LOCATIONS_COLLAPSE_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
@@ -10099,15 +11851,15 @@ _LOCATIONS_COLLAPSE_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
   if (!field) return null;
   for (const box of field.boxes) {
     const buttons = [...box.querySelectorAll('button[aria-expanded=true], [role=button][aria-expanded=true]')]
-      .filter(b => visible(b) && !b.disabled && b.getAttribute('aria-disabled') !== 'true'
-        && /^(edit|editar|collapse|contraer|свернуть)(\b|$)/i.test(
-          norm(b.getAttribute('aria-label') || b.textContent)));
+      .filter(b => visible(b) && !disabled(b)
+        && /^(edit|editar|collapse|contraer|свернуть)(\b|$)/i.test(controlName(b)));
     if (buttons.length > 1) return null;
     if (buttons.length === 1) return point(buttons[0]);
   }
   return null;
 }
 """
+"""Кнопка-створка раскрытой карточки локаций — только своя (ACL-1250)."""
 
 
 def _collapse_locations_card(page: Page) -> bool:
@@ -10136,44 +11888,42 @@ def _done(page: Page, opened_by_us: bool, result):
     return result
 
 
-def _uncheck_age_suggestion(page: Page) -> None:
-    """Снять «Use as a suggestion» — иначе Meta расширяет возраст сама.
+_SCROLL_LOCATION_ROW_JS = r"""
+  (name) => {
+    const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+    const clean = (s) => norm(s)
+      .replace(/\b(Close|Remove|Quitar|Eliminar)\b/gi, '')
+      .replace(/(Close|Remove|Quitar|Eliminar)\s*$/i, '').trim();
+    const wanted = clean(name).toLowerCase();
+    const ctrls = [...document.querySelectorAll('[role=button], button, [aria-label]')].filter(b => {
+      const label = norm(b.getAttribute('aria-label') || '') + ' ' + norm(b.textContent);
+      return /(close|remove|quitar|eliminar)/i.test(label);
+    });
+    for (const b of ctrls) {
+      let row = b.parentElement;
+      for (let i = 0; i < 5 && row; i++, row = row.parentElement) {
+        const t = clean(row.textContent);
+        if (t && t.length <= 80) {
+          if (t.toLowerCase() !== wanted) break;
+          b.scrollIntoView({block: 'center'});
+          const r = b.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0) return null;
+          return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+        }
+      }
+    }
+    return null;
+  }
+"""
+"""Прокрутить строку страны в окно и вернуть свежие координаты её крестика."""
 
-    Галочка живёт прямо под границами и по умолчанию включена, а с ней возраст
-    становится пожеланием: итог «Your suggestion 35–65+».
-    """
+
+def _scroll_location_row_into_view(page: Page, name: str) -> dict | None:
+    """Строка может стоять далеко за окном — клик по старым координатам мимо."""
     try:
-        page.evaluate(
-            """() => {
-              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-              const row = [...document.querySelectorAll('*')].find(e =>
-                norm(e.textContent).startsWith('Use as a suggestion') && e.offsetParent !== null);
-              if (!row) return;
-              let box = row;
-              for (let i = 0; i < 6 && box; i++) {
-                const cb = box.querySelector('input[type=checkbox]');
-                if (cb) {
-                  const aria = cb.getAttribute('aria-checked');
-                  const on = aria === 'true' ? true : aria === 'false' ? false : cb.checked;
-                  if (on) cb.click();
-                  return;
-                }
-                box = box.parentElement;
-              }
-            }"""
-        )
-        _sleep_h(0.3)
+        return page.evaluate(_SCROLL_LOCATION_ROW_JS, name)
     except Exception:
-        pass
-
-
-def _age_shows_value(page: Page, value: str) -> bool:
-    """Confirm a boundary only within a readable, complete Age field."""
-    return value in _age_triggers_read(page)
-
-
-def _click_languages_edit(page: Page) -> bool:
-    return _click_summary_row(page, "Languages|Idiomas", "^(All languages|Todos los idiomas)$")
+        return None
 
 
 def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
@@ -10223,6 +11973,18 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
         if not others:
             return _done(page, opened_by_us, [])
         target = others[0]
+        # 21.09 18:44 (CR_ait IPO): строка стояла на y=3811 — далеко за окном, и
+        # клик по её координатам уходил в пустоту. Прокручиваем к ней, берём
+        # свежие координаты, затем наводим курсор: крестик, как и карандаш,
+        # рисуется только под ним.
+        fresh = _scroll_location_row_into_view(page, target["name"])
+        if fresh:
+            target = {**target, **fresh}
+        try:
+            page.mouse.move(target["x"], target["y"])
+            _sleep_h(0.4)
+        except Exception:
+            pass
         _cdp_mouse_click(page, target["x"], target["y"])
         _sleep_h(0.9)
     rows = _location_rows(page)
@@ -10232,9 +11994,29 @@ def _clear_other_locations(page: Page, keep_text: str) -> list[str] | None:
     return _done(page, opened_by_us, [r["name"] for r in rows if keep not in r["name"].lower()])
 
 
+_LOCATION_SEARCH_JS = r"""
+  () => !![...document.querySelectorAll('input')].find(i =>
+    /search locations?|add locations?|buscar ubicaci|agregar ubicaci/i.test(i.getAttribute('placeholder') || ''))
+"""
+"""Поле поиска локаций на странице — значит, карточка раскрыта."""
+
+
 def _pick_country_and_clear_defaults(root, page: Page, search_term: str) -> bool:
     if not _pick_country_suggestion(root, page, search_term):
-        return False
+        # 20.09 15:04 (SA_arc GMBL): страна не добавилась, в карточке осталась
+        # одна United States — а её крестик Meta держит отключённым, пока
+        # страна единственная, так что убрать её нечем. Карточку к этому
+        # моменту уже раскрыли (Enter), поле поиска на месте: вводим страну
+        # ещё раз в него.
+        opened = _click_locations_edit(page)
+        try:
+            has_input = bool(page.evaluate(_LOCATION_SEARCH_JS))
+        except Exception:
+            has_input = False
+        if not (opened and has_input and _pick_country_suggestion(root, page, search_term)):
+            return False
+        _telemetry.record("audience_location", None, note="added_after_reopen",
+                          diag={"keep": search_term})
     # The old remover above can report success on the wrong ✕; this is the
     # check that decides. A default country left beside the target means the
     # campaign spends in two markets, so it fails the step instead of passing.
@@ -10616,10 +12398,17 @@ def _ensure_manual_audience(page: Page) -> bool | None:
     On the fourth it was On again by the age step. Checking here, right
     before the control that depends on it, is cheaper than working out why.
     """
-    before = _advantage_plus_audience_on(page)
+    # ACL-1313 (25.09): состояние читается по бейджу карточки Audience, а не
+    # по всей странице. `_advantage_plus_audience_on` видел «Advantage+ on» у
+    # Placements и кампанийный переключатель, отвечал «on» всегда и кликал
+    # впустую (162 записи still_on). Бейдж «off» или бейджа нет — ничего не
+    # трогаем: итог после возраста проверяет `verify_audience_advantage_off`.
+    before = _audience_badge_on(page)
+    badge = {True: "on", False: "off"}.get(before)
     if before is not True:
         _telemetry.record("advantage_plus_off", None,
-                          note="already_off" if before is False else "not_found")
+                          note="already_off" if before is False else "badge_not_found",
+                          diag={"badge": badge})
         return before
     flipped = _turn_off_advantage_plus_leads(page)
     picked = False
@@ -10638,11 +12427,66 @@ def _ensure_manual_audience(page: Page) -> bool | None:
             "[contains(normalize-space(.), 'Switch to original audience')]",
         )
     _sleep_h(0.8)
-    after = _advantage_plus_audience_on(page)
+    after = _audience_badge_on(page)
     _telemetry.record("advantage_plus_off", after is not True,
                       note="switched" if after is not True else "still_on",
-                      diag={"flipped_switch": flipped, "picked_off": picked})
+                      diag={"flipped_switch": flipped, "picked_off": picked,
+                            "badge": badge, "badge_after": {True: "on", False: "off"}.get(after)})
     return after
+
+
+def _audience_badge_on(page: Page) -> bool | None:
+    """Бейдж карточки Audience: True «on», False «off», None — карточки нет.
+
+    ACL-1313, раскладка 09.2026 (снимки b30c3b2b6be9/00, d3e690189a6e/04):
+    Advantage+ audience — не переключатель, а надпись в заголовке карточки
+    `#advantage-state-audience-section-header`, которую ставит сама Meta.
+    Такая же «Advantage+ on» стоит у Placements, поэтому поиск по всей
+    странице (`_advantage_plus_audience_on`) читал аудиторию как «on» и
+    после выключения (8587f7668f86/02).
+    """
+    js = r"""
+    () => {
+      const h = document.getElementById('advantage-state-audience-section-header');
+      if (!h) return null;
+      const t = (h.textContent || '').replace(/\s+/g, ' ').toLowerCase();
+      if (t.includes('advantage+ off')) return false;
+      if (t.includes('advantage+ on')) return true;
+      return null;
+    }
+    """
+    for root in _roots(page):
+        try:
+            got = root.evaluate(js)
+        except Exception:
+            continue
+        if got is not None:
+            return bool(got)
+    return None
+
+
+def verify_audience_advantage_off(page: Page) -> bool:
+    """Итог: карточка Audience читает «Advantage+ off». Звать ПОСЛЕ возраста.
+
+    Meta снимает Advantage+ audience сама, когда в аудитории появляется
+    жёсткое условие — возраст со снятой «Use as a suggestion»
+    (d3e690189a6e/04). До возраста «on» — норма, поэтому прежняя проверка
+    `advantage_plus_off` (до возраста) давала still_on во всех 346 записях.
+    Единственный наш рычаг здесь — та галочка: снять ещё раз и перечитать.
+    """
+    state = _audience_badge_on(page)
+    retried = state is True
+    if retried:
+        _uncheck_age_suggestion(page)
+        _sleep_h(0.8)
+        state = _audience_badge_on(page)
+    ok = state is False
+    _telemetry.record(
+        "advantage_plus_audience", ok,
+        note="off" if ok else ("still_on" if state else "badge_not_found"),
+        diag={"retried_suggestion": retried, "age": _age_triggers_read(page)},
+    )
+    return ok
 
 
 def _count_xpath(page: Page, xpath: str) -> int:
@@ -10772,6 +12616,49 @@ def _age_triggers_read(page: Page) -> list[str]:
     return readings[0] if len(readings) == 1 else []
 
 
+def _uncheck_age_suggestion(page: Page) -> None:
+    """Снять «Use as a suggestion» — иначе Meta расширяет возраст сама.
+
+    Галочка живёт прямо под границами и по умолчанию включена, а с ней возраст
+    становится пожеланием: итог «Your suggestion 35–65+».
+    """
+    try:
+        page.evaluate(
+            """() => {
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              const row = [...document.querySelectorAll('*')].find(e =>
+                norm(e.textContent).startsWith('Use as a suggestion') && e.offsetParent !== null);
+              if (!row) return;
+              let box = row;
+              for (let i = 0; i < 6 && box; i++) {
+                const cb = box.querySelector('input[type=checkbox]');
+                if (cb) {
+                  const aria = cb.getAttribute('aria-checked');
+                  const on = aria === 'true' ? true : aria === 'false' ? false : cb.checked;
+                  if (on) cb.click();
+                  return;
+                }
+                box = box.parentElement;
+              }
+            }"""
+        )
+        _sleep_h(0.3)
+    except Exception:
+        pass
+
+
+def _age_shows_value(page: Page, value: str) -> bool:
+    """Стоит ли граница возраста на `value` — только внутри своего поля Age.
+
+    18.09 06:15 (CL_ml Trading): на экране «35 – 65+», а старое чтение
+    отвечало «нет» (подъём на шесть уровней от подписи «Age» не доходил до
+    значений). Живой обход спрашивал `_mark_age_trigger`, но тот берёт любое
+    «35» в 400 px под подписью — и «35» бюджета подтверждало неверный возраст
+    (ACL-1250). `_age_triggers_read` поднимается до 16 уровней в границах поля.
+    """
+    return value in _age_triggers_read(page)
+
+
 def _age_boundary_shows(page: Page, value: str) -> bool:
     """В закрытой выпадашке возраста рядом с «Age» видно `value` (не в открытом списке)."""
     try:
@@ -10876,6 +12763,10 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     wanted = [str(age_min), str(age_max) if age_max < 65 else "65+"]
     seen = _age_triggers_read(page)
     if seen != wanted:
+        # 18.09 06:32 живой обход «read_back_by_label» (искать границы тем же
+        # поиском, что и клик) снят в порте ACL-1284: он подтверждал возраст
+        # числом из соседнего поля (ACL-1250). Пустое чтение 18.09 лечит
+        # `_age_triggers_read` в границах поля — он доходит до значений.
         _telemetry.record("audience_age", False,
                           note="read_back_mismatch" if seen else "read_back_unavailable",
                           diag={"wanted": wanted, "seen": seen})
@@ -11523,6 +13414,26 @@ def _fill_audience_age_controls(page: Page, age_min: int, age_max: int) -> bool:
     return False
 
 
+def _click_languages_edit(page: Page) -> bool:
+    """Раскрыть строку языков её собственной кнопкой правки.
+
+    17.09 23:04 (CR_ait Day): блок аудитории показан сводкой — «Languages: All
+    languages», поля поиска нет вовсе, а клик по центру строки его не открывал.
+    Справа у строки живёт карандаш — жать надо его.
+    """
+    _hover_row(page, "Languages|Idiomas")
+    value = "^(All languages|Todos los idiomas)$"
+    pt = _field_pencil(page, "Languages|Idiomas", value)
+    if pt and pt.get("stop"):
+        # Выключенный, закрытый или второй карандаш: ничего не жмём (ACL-1250).
+        return False
+    if not pt:
+        return _click_row_expander(page, "Languages|Idiomas") or _click_summary_row(page, "Languages|Idiomas", value)
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(0.6)
+    return True
+
+
 def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
     """Type language(s) into Audience → Languages and pick suggestions.
 
@@ -11591,69 +13502,124 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
     if inp is None:
         return False
 
+    # 25.09 (SA, 20/20 прогонов): Meta сама ставит язык страны — «Arabic» без
+    # «(All)», — а мы всё равно печатали его в поиск. Уже выбранный язык в
+    # подсказках не показывается, кликать нечего, шаг отказывал при верном
+    # поле. Поэтому сначала читаем выбранные чипы: всё уже стоит — успех без
+    # единого нажатия.
+    wanted = [n.strip() for n in language_names if n.strip()]
+    present = _languages_selected(page, wanted)
+    if wanted and all(any(_language_chip_matches(p, w) for p in present) for w in wanted):
+        _telemetry.record("languages", None, note="already_selected", diag={"selected": present})
+        return True
+
     ok_any = False
     for name in language_names:
+        if any(_language_chip_matches(p, name) for p in present):
+            continue
         try:
             inp.click(timeout=3000)
             page.keyboard.type(name, delay=40)
             _sleep_h(1.2)
-            # Prefer the "(All)" variant over a blind first-match — per live
-            # user guidance (2026-07-25) watching the real suggestion list:
-            # Meta lists per-country language variants (e.g. "Spanish
-            # (Spain)", "Spanish (Mexico)") alongside a broader "Spanish
-            # (All)" entry, and the broad one is what's wanted here, same
-            # reasoning as _pick_country_suggestion's "(Country)" preference.
-            all_re = re.compile(rf"^{re.escape(name)}\s*\(all\)", re.I)
-            picked = False
-            for sel in ("[role=option]:visible", "li[role=option]"):
+            # Сначала «<язык> (All)» (живые подсказки 25.07: у Spanish есть
+            # «Spanish (Spain)», «Spanish (Mexico)» и широкий «Spanish (All)»),
+            # затем подсказка, чей текст ровно «<язык>» (у Arabic варианта
+            # «(All)» нет). Слепого клика по первой подсказке больше нет: он
+            # мог взять региональный вариант, а это другой, узкий таргетинг.
+            picked = _click_language_option(page, name)
+            if picked:
+                ok_any = True
+            else:
+                # Набранный текст не оставляем в поиске: открытая выпадашка
+                # перекрывает соседние поля. Escape нельзя — закрывает редактор.
                 try:
-                    opt = page.locator(sel).filter(has_text=all_re).first
-                    if opt.count() and opt.is_visible():
-                        opt.click(timeout=3000)
-                        _sleep_h(0.5)
-                        ok_any = True
-                        picked = True
-                        break
+                    inp.fill("", timeout=2000)
                 except Exception:
-                    continue
-            if not picked:
-                opt = page.locator("[role=option]:visible, li[role=option]").first
-                if opt.count() and opt.is_visible():
-                    opt.click(timeout=3000)
-                    _sleep_h(0.5)
-                    ok_any = True
+                    pass
             root, inp = _find_lang_input()
             if inp is None:
                 break
         except Exception:
             continue
     if not ok_any:
-        # 17.09 06:56 (S15): «Spanish (All)» уже стоял — Meta подставляет язык
-        # по стране, выбранный язык в подсказках не показывается, кликать
-        # нечего, и шаг отказывал при верном поле. Выбранный язык — успех.
+        # 17.09 06:56 (S15): язык мог появиться за время ввода (Meta подставляет
+        # по стране). Выбранный язык — успех.
         # Без Escape: в редакторе Ads Manager он закрывает сам редактор (17.09
         # 13:19, CR_ait Day — после шага языков на экране список ad set, и все
         # следующие шаги упали). Открытая выпадашка чтению выбранных не мешает.
-        present = _languages_selected(page)
-        wanted = [n.strip().lower() for n in language_names if n.strip()]
-        if wanted and all(any(p.lower().startswith(w) for p in present) for w in wanted):
+        present = _languages_selected(page, wanted)
+        if wanted and all(any(_language_chip_matches(p, w) for p in present) for w in wanted):
             _telemetry.record("languages", None, note="already_selected", diag={"selected": present})
             return True
     return ok_any
 
 
-def _languages_selected(page: Page) -> list[str]:
+def _language_key(text: str) -> str:
+    """Имя языка без регистра, лишних пробелов и хвоста «(All)»/«(…)»."""
+    t = re.sub(r"\s+", " ", (text or "")).strip().lower()
+    return re.sub(r"\s*\([^)]*\)$", "", t).strip()
+
+
+def _language_chip_matches(chip: str, wanted: str) -> bool:
+    """Чип «Arabic», «arabic», «Spanish (All)», «Spanish (Mexico)» — это
+    язык «Arabic»/«Spanish». Сравнение по имени целиком: «Arab» не «Arabic»."""
+    w = _language_key(wanted)
+    return bool(w) and _language_key(chip) == w
+
+
+def _click_language_option(page: Page, name: str) -> bool:
+    """Кликнуть подсказку «<name> (All)», иначе подсказку ровно «<name>».
+
+    Никаких других вариантов: региональный «Arabic (Egypt)» — чужой таргетинг,
+    лучше честный отказ шага, чем тихо суженная аудитория.
+    """
+    base = re.sub(r"\s+", " ", name).strip()
+    patterns = (
+        re.compile(rf"^\s*{re.escape(base)}\s*\((all|todos)\)\s*$", re.I),
+        re.compile(rf"^\s*{re.escape(base)}\s*$", re.I),
+    )
+    for pat in patterns:
+        for sel in ("[role=option]:visible", "li[role=option]"):
+            try:
+                opts = page.locator(sel)
+                for i in range(min(opts.count(), 30)):
+                    opt = opts.nth(i)
+                    try:
+                        text = opt.inner_text(timeout=1000)
+                    except Exception:
+                        continue
+                    # Подсказка может нести вторую строку («Language») —
+                    # сравниваем первую непустую.
+                    first = next((ln for ln in text.splitlines() if ln.strip()), "")
+                    if pat.match(first) and opt.is_visible():
+                        opt.click(timeout=3000)
+                        _sleep_h(0.5)
+                        return True
+            except Exception:
+                continue
+    return False
+
+
+def _languages_selected(page: Page, wanted: list[str] | None = None) -> list[str]:
     """Подписи уже выбранных языков в блоке Languages (например «Spanish (All)»).
 
     Поднимаемся от поля поиска языков, а не от подписи «Languages»: 17.09
     (CL_ml, CR_ait) «Spanish (All)» стоял, а подъём на 6 уровней от подписи до
     него не доставал — шаг отказывал при верном поле.
+
+    25.09 (SA): Meta ставит «Arabic» по стране — без «(All)» и без скобок
+    вообще, и форма «X (…)» такой чип не видела. Поэтому считается и чип,
+    текст которого — один из ``wanted`` (без регистра и лишних пробелов, с
+    необязательным хвостом «(All)»/«(…)»).
     """
+    keys = [_language_key(w) for w in (wanted or []) if _language_key(w)]
     try:
         return page.evaluate(
-            r"""() => {
+            r"""(keys) => {
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-              const looks = (t) => /\((All|Todos)\)$/.test(t) || /^[A-Z][a-z]+ \([^)]+\)$/.test(t);
+              const key = (t) => norm(t).toLowerCase().replace(/\s*\([^)]*\)$/, '').trim();
+              const looks = (t) => /\((All|Todos)\)$/.test(t) || /^[A-Z][a-z]+ \([^)]+\)$/.test(t)
+                || (t.length < 60 && keys.includes(key(t)));
               const inputs = [...document.querySelectorAll('input[placeholder]')]
                 .filter(i => /language|idioma/i.test(i.getAttribute('placeholder') || ''));
               for (const inp of inputs) {
@@ -11662,13 +13628,16 @@ def _languages_selected(page: Page) -> list[str]:
                   box = box.parentElement;
                   const found = [...box.querySelectorAll('*')]
                     .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
+                    // Своё поле ввода и выпадашка подсказок — не чипы.
+                    .filter(e => !e.closest('[role=option],[role=listbox]'))
                     .map(e => norm(e.textContent))
                     .filter(looks);
                   if (found.length) return found;
                 }
               }
               return [];
-            }"""
+            }""",
+            keys,
         ) or []
     except Exception:
         return []

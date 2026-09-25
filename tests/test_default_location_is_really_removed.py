@@ -172,6 +172,7 @@ def test_a_collapsed_locations_card_is_opened_by_its_pencil(page, monkeypatch):
     assert md._click_locations_edit(page) is True
     assert page.evaluate("window.opened") is True
 
+
 def test_the_pencil_is_used_before_giving_up_on_unreadable_rows(page, monkeypatch):
     """Строки читаются только после раскрытия карточки."""
     opened = {"yes": False}
@@ -186,6 +187,7 @@ def test_the_pencil_is_used_before_giving_up_on_unreadable_rows(page, monkeypatc
     assert md._clear_other_locations(page, "Chile") == []
     assert opened["yes"] is True
 
+
 def test_a_row_without_a_pencil_is_opened_by_clicking_its_value(page, monkeypatch):
     """18.09 08:23 CL_ml Trading: у свёрнутой строки ни одной кнопки, только текст."""
     page.set_content(
@@ -199,6 +201,7 @@ def test_a_row_without_a_pencil_is_opened_by_clicking_its_value(page, monkeypatc
                             "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
     assert md._click_locations_edit(page) is True
     assert clicked["at"] == "val", clicked
+
 
 def test_the_value_click_is_not_used_when_a_pencil_exists(page, monkeypatch):
     page.set_content(
@@ -267,3 +270,107 @@ def test_nested_locations_text_keeps_its_own_edit_and_collapse_control(page):
     assert page.locator('button').get_attribute('aria-expanded') == 'true'
     assert md._collapse_locations_card(page) is True
     assert page.locator('button').get_attribute('aria-expanded') == 'false'
+
+
+def test_a_summary_row_with_only_an_expander_is_opened_by_it(page, monkeypatch):
+    """19.09 15:00 SA_arc GMBL: «Inclusion: Saudi Arabia, United States», ни
+    карандаша, клик по значению не раскрывает — справа безымянная стрелка."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0;width:600px'>"
+        "<div><span>Locations</span><span>​</span>"
+        "<div><span>Inclusion:</span><span id='val'>Saudi Arabia, United States</span></div>"
+        "<div role='button' aria-expanded='false' id='arrow' style='width:24px;height:24px'></div></div></div>")
+    clicked = {}
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: clicked.update(at=pg.evaluate(
+                            "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
+    assert md._click_locations_edit(page) is True
+    assert clicked["at"] == "arrow", clicked
+
+
+def _record_clicks(page, monkeypatch):
+    clicked = {}
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: clicked.update(at=pg.evaluate(
+                            "([x,y]) => { const e = document.elementFromPoint(x,y); "
+                            "return e && (e.closest('[id]') || {}).id; }", [x, y])))
+    return clicked
+
+
+def test_a_whole_row_button_deep_above_the_label_is_opened_after_scrolling(page, monkeypatch):
+    """20.09 00:16 SA_arc GMBL: вся строка — role=button aria-expanded=false
+    на 10 уровней выше подписи, и строка ниже края окна."""
+    deep = "<div>" * 9 + "<span>Locations</span><span>​</span>" + "</div>" * 9
+    page.set_content(
+        "<div style='height:2500px'></div>"
+        "<div role='button' aria-expanded='false' id='row'>" + deep
+        + "<div>Inclusion: Saudi Arabia, United States</div></div>"
+        "<div style='height:2500px'></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_locations_edit(page) is True
+    assert clicked["at"] == "row", clicked
+
+
+def test_a_row_hidden_under_the_editor_footer_is_never_clicked_through(page, monkeypatch):
+    """20.09 00:16 SA_arc GMBL: «All languages» под нижней панелью с Close —
+    клик по координатам закрыл редактор. Такую точку не жмём."""
+    page.set_content(
+        "<div style='position:fixed;left:0;right:0;top:0;bottom:0;z-index:5;background:#fff'>"
+        "<button id='close'>Close</button></div>"
+        "<div><div>Languages</div><div id='val'>All languages</div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_languages_edit(page) is False
+    assert "at" not in clicked, clicked
+
+
+def test_the_pencil_that_only_exists_under_the_cursor_is_found(page, monkeypatch):
+    """20.09 01:30 SA_arc GMBL: карандаш строки Meta рисует только под курсором."""
+    page.set_content(
+        "<style>#pen{display:none;width:24px;height:24px}"
+        "#row:hover #pen{display:block}</style>"
+        "<div id='row' style='width:600px'><div>Locations</div>"
+        "<div>Inclusion: Saudi Arabia, United States</div>"
+        "<div role='button' aria-label='Edit' id='pen'></div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_locations_edit(page) is True
+    assert clicked["at"] == "pen", clicked
+
+
+def test_a_row_far_below_the_window_is_scrolled_to_before_the_click(page, monkeypatch):
+    """21.09 18:44 CR_ait IPO: строка стояла на y=3811 — клик по её координатам
+    уходил в пустоту, и United States оставалась рядом с нужной страной.
+    Имя при этом читалось как «United StatesClose»."""
+    page.set_content(
+        "<div style='height:3600px'></div>"
+        "<div id='loc'><div>Locations</div>"
+        "<div class='grp' data-c='United States'><div>United States"
+        "<div role='button' style='display:inline-block;width:20px;height:20px'"
+        " onclick=\"window.clicked.push('us')\"><span>Close</span></div></div></div>"
+        "<div><div role='combobox'><input placeholder='Search locations'></div></div></div>"
+        "<script>window.clicked = [];</script>"
+    )
+    rows = md._location_rows(page)
+    assert [r["name"] for r in rows] == ["United States"], rows
+    assert rows[0]["y"] > 900, "строка должна лежать за окном"
+
+    fresh = md._scroll_location_row_into_view(page, "United States")
+    assert fresh and 0 < fresh["y"] < 900, fresh
+
+
+def test_the_card_is_found_by_its_rows_when_no_locations_heading_exists(page):
+    """21.09 20:31 SA_arc GMBL: блока, чей текст начинается словом «Locations»,
+    в разметке нет вовсе — поиск упирался в двенадцатый уровень, а строки стран
+    оставались в стороне, и список выходил пустым."""
+    page.set_content(
+        "<div id='outer'>"
+        "<div class='grp'><div>Saudi Arabia<div role='button'"
+        " style='display:inline-block;width:20px;height:20px'><span>Close</span></div></div></div>"
+        "<div class='grp'><div>United States<div role='button'"
+        " style='display:inline-block;width:20px;height:20px'><span>Close</span></div></div></div>"
+        "<div><div><div><div role='combobox'><input placeholder='Search locations'></div></div></div></div>"
+        "</div>"
+    )
+    names = [r["name"] for r in md._location_rows(page)]
+    assert names == ["Saudi Arabia", "United States"], names

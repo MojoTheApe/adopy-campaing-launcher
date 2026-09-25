@@ -446,7 +446,6 @@ def test_reading_the_tree_clicks_nothing():
     for forbidden in (".click(", ".fill(", ".press(", ".check(", ".select_option("):
         assert forbidden not in block, f"чтение дерева трогает страницу: {forbidden}"
 
-
 def test_no_ad_editor_is_ever_opened():
     """Проверено на DQ204 02.08: Meta портит Leads-объявление одним открытием
     редактора — предвыбирает «Instant form (suggested)» и автосохраняет, и

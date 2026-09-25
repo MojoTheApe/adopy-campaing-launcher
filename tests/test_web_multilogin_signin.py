@@ -49,6 +49,8 @@ def _signin(monkeypatch, *, token_response: _Response, saved: list) -> dict:
             return token_response
         return _Response(200, {"data": {}})
 
+    # Вход по паролю — дело машины тимлида (ACL-1311); эти тесты про неё.
+    monkeypatch.setenv("ACL_MLX_TEAM_ADMIN", "1")
     monkeypatch.setattr(requests, "post", fake_post)
     monkeypatch.setattr(requests, "get", fake_get)
     monkeypatch.setattr(
