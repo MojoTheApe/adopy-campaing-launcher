@@ -508,3 +508,11 @@ def test_the_publisher_does_not_wrap_a_profile_stop(monkeypatch):
     monkeypatch.setattr(rp, "get_mlx_attach_only", lambda: True)
     with pytest.raises(pt.ProfileStop):
         pub._ensure_browser("Facebook_1443")
+
+
+def test_the_new_single_screen_editor_stops_the_whole_account():
+    """Одно-экранный редактор Meta включён на весь кабинет: остальные кампании
+    задания этого аккаунта не начинаются (иначе каждая оставит полчерновика)."""
+    from src.fb_ads_rpa import profile_trouble as pt
+    assert "simple_create_layout" in pt.ACCOUNT_STOPS
+    assert "single-screen" in pt.message("simple_create_layout")

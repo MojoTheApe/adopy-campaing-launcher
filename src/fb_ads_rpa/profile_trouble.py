@@ -34,6 +34,7 @@ LOGGED_OUT = "profile_logged_out"
 NETWORK = "profile_network"
 RESTART_FAILED = "profile_restart_failed"
 OPEN_BY_HAND = "profile_open_by_hand"
+SIMPLE_CREATE = "simple_create_layout"
 
 #: Что сказать человеку — английский, это видно в дешборде.
 MESSAGES = {
@@ -47,6 +48,11 @@ MESSAGES = {
     # если Multilogin её ещё не сохранил, — робот такой профиль не трогает.
     OPEN_BY_HAND: "This Multilogin profile is open by hand. Close its window "
                   "(so Multilogin saves the session), then press Publish again.",
+    # ACL-1320, решение координатора 26.09: новый одно-экранный редактор Meta
+    # включается на весь кабинет — следующая кампания того же аккаунта упрётся
+    # в него же и оставит ещё один недособранный черновик. Останавливаем аккаунт.
+    SIMPLE_CREATE: "Meta opened its new single-screen campaign editor for this account; "
+                   "the robot does not support it yet (ACL-1327)",
 }
 
 #: Остановки, после которых остальные кампании задания этого аккаунта не
