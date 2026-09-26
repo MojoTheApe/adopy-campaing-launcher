@@ -368,6 +368,25 @@ class RpaPublisher:
         return self._conn.page
 
     @staticmethod
+    def _report_profile_stop(stop: "profile_trouble.ProfileStop", campaign_name: str,
+                             account: str, where: str) -> None:
+        """Остановка из-за профиля до кампании (подключение): строка
+        телеметрии и событие Sentry — как у остановки внутри кампании
+        (ревью PR #323, F7: open-by-hand чаще всего случается именно здесь)."""
+        try:
+            _telemetry.record(stop.code, False, campaign=campaign_name, note=where,
+                              diag={"detail": stop.detail, "message": profile_trouble.message(stop.code)})
+        except Exception:
+            pass
+        try:
+            from src.fb_ads_rpa import sentry_signal
+
+            sentry_signal.report_campaign_stop(stop.code, campaign=campaign_name,
+                                               account=account or "", attempt=1)
+        except Exception:
+            pass
+
+    @staticmethod
     def _profile_stop_result(campaign_name: str, stop: "profile_trouble.ProfileStop", *,
                              again: bool = False) -> RpaPublishResult:
         """Итог кампании, которую остановил профиль (ACL-1320): не собрана,
@@ -418,11 +437,7 @@ class RpaPublisher:
                 conn = self._ensure_browser(draft.account_label)
         except profile_trouble.ProfileStop as stop:
             self._account_stop = stop
-            try:
-                _telemetry.record(stop.code, False, campaign=campaign_name, note="attach",
-                                  diag={"detail": stop.detail, "message": profile_trouble.message(stop.code)})
-            except Exception:
-                pass
+            self._report_profile_stop(stop, campaign_name, draft.account_label, "attach")
             return self._profile_stop_result(campaign_name, stop)
         flow = self._flow(conn, draft.account_label)
         try:
@@ -441,6 +456,7 @@ class RpaPublisher:
                 conn = self._ensure_browser(draft.account_label)
             except profile_trouble.ProfileStop as stop:
                 self._account_stop = stop
+                self._report_profile_stop(stop, campaign_name, draft.account_label, "reattach")
                 return self._profile_stop_result(campaign_name, stop)
             except Exception as re_exc:
                 raise self._mlx_fallback_error(exc, re_exc) from re_exc

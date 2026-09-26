@@ -1056,7 +1056,18 @@ def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
                 if kind:
                     diag["why"], diag["detail"] = kind, detail
                     raise profile_trouble.ProfileStop(kind, detail) from exc
-                raise
+                if "timeout" not in type(exc).__name__.lower() and "Timeout" not in str(exc):
+                    raise
+                # Ревью PR #323 (F10): медленный переход сам по себе — не повод
+                # перезапускать профиль. Старая вкладка уже закрыта; новая
+                # отвечает — работаем в ней (раунд `_open_campaign` сам
+                # вернёт её на список и нажмёт Create).
+                if page_answers(new, 5.0) is False:
+                    diag["why"] = "meta_silent_in_new_tab"
+                    return None
+                diag["why"], diag["note"] = "", "goto_timeout_kept"
+                return new
+            profile_trouble.note_nav_ok(new)
             kind, detail = profile_trouble.classify_page(new, history=False)
             if kind:
                 diag["why"], diag["detail"] = kind, detail
@@ -1790,8 +1801,9 @@ def _record_profile_restart(entry: AccountMapEntry, profile_id: str, *, ok: bool
     try:
         from src.fb_ads_rpa import run_telemetry as rt
 
-        diag = {"where": where, "profile": (profile_id or "")[:8],
-                "workspace": (getattr(entry, "multilogin_instance", "") or "A")}
+        # Ревью PR #323 (F11): ни id профиля, ни его начала — вычиститель
+        # ловит только полный uuid; хватает рабочего пространства.
+        diag = {"where": where, "workspace": (getattr(entry, "multilogin_instance", "") or "A")}
         if error:
             diag["error"] = error
         rt.record("profile_restarted_unresponsive", ok, note=where, diag=diag)
@@ -2026,13 +2038,22 @@ class MultiloginAttachOnlyProvider:
                         profile_id)
             reused = None
             unresponsive = True
-            # У него был порт автоматизации — это профиль робота, не ручной.
-            _mark_robot_profile(profile_id, udd)
+        # Ревью PR #323 (F6): публикация цепляется по нестрогому поиску порта
+        # (старый DevToolsActivePort, общий 19222). Профилем робота считаем
+        # его только если порт слушает процесс именно этого профиля.
+        owned = self._owns_port(udd)
         if reused is not None:
             log.info("Attached to already-open Multilogin profile %s", profile_id)
-            _mark_robot_profile(profile_id, udd)
+            if owned:
+                _mark_robot_profile(profile_id, udd)
             return reused
         if unresponsive:
+            if not owned:
+                # Порт не доказан как порт этого профиля — окно могло быть
+                # открыто руками; останавливать его не вправе.
+                raise _open_by_hand(profile_id, account_label, "unowned_port")
+            # У него есть свой порт автоматизации — это профиль робота.
+            _mark_robot_profile(profile_id, udd)
             self._stop_profile(entry, account_label, profile_id, udd)
 
         # Manually (Quick) launched MLX profiles expose no CDP port, so we cannot
@@ -2052,12 +2073,35 @@ class MultiloginAttachOnlyProvider:
                 profile_id,
             )
 
-        started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
-                                          allow_restart=allow_restart, allow_kill=allow_kill)
-        conn = self._connect_started(started, profile_id)
-        if unresponsive:
-            _record_profile_restart(entry, profile_id, ok=True, where="attach")
+        if not unresponsive:
+            started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
+                                              allow_restart=allow_restart, allow_kill=allow_kill)
+            return self._connect_started(started, profile_id)
+        # Ревью PR #323 (F7): робот сам остановил не отвечавший профиль — не
+        # поднялся он, значит профиль мог остаться закрытым. Это та же
+        # остановка, что у `restart_unresponsive`: строка телеметрии и
+        # `profile_restart_failed` с текстом для человека.
+        try:
+            started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
+                                              allow_restart=allow_restart, allow_kill=allow_kill)
+            conn = self._connect_started(started, profile_id)
+        except profile_trouble.ProfileStop:
+            raise
+        except Exception as exc:
+            detail = f"{type(exc).__name__}: {str(exc)[:120]}"
+            _record_profile_restart(entry, profile_id, ok=False, where="attach", error=detail)
+            raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
+        _record_profile_restart(entry, profile_id, ok=True, where="attach")
         return conn
+
+    def _owns_port(self, udd: str) -> bool:
+        """Отладочный порт слушает процесс Mimic именно этого профиля (F6)."""
+        if not udd:
+            return False
+        try:
+            return self._direct._discover_owned_debug_port(udd) is not None
+        except Exception:
+            return False
 
     def _connect_started(self, started: Any, profile_id: str) -> BrowserConnection:
         ws = started.ws_endpoint or ""

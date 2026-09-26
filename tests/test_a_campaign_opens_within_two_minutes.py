@@ -308,6 +308,8 @@ def test_an_attached_profile_that_does_not_answer_is_restarted(monkeypatch):
 
     monkeypatch.setattr(provider._direct, "_try_attach_existing", attach)
     monkeypatch.setattr(provider._direct, "_profile_process_running", lambda *a: True)
+    # Порт слушает процесс именно этого профиля (ревью PR #323, F6).
+    monkeypatch.setattr(provider._direct, "_discover_owned_debug_port", lambda udd: 9222)
     monkeypatch.setattr(provider, "_stop_profile", lambda *a: ev.append(("stop",)))
     monkeypatch.setattr(provider, "_start_via_mlx_api", lambda *a, **kw: ev.append(("start",)) or "s")
     monkeypatch.setattr(provider, "_connect_started", lambda started, pid: SimpleNamespace(page="p"))
@@ -367,3 +369,84 @@ def test_the_publisher_restarts_through_its_provider_and_follows_the_page(monkey
     assert flow._restart_profile() == "restarted-page"
     assert calls == ["disconnect", ("entry", "FacebookDoc19")]
     assert pub._conn is new_conn
+
+
+def test_the_last_create_of_a_round_gets_a_real_window(env, monkeypatch):
+    """Ревью PR #323 (F2): два промаха подряд (нажатие увело со списка),
+    возврат на список по 20 с — раунд почти съеден, но окну цели после
+    последнего нажатия дают не меньше `CAMPAIGN_OPEN_AFTER_CREATE_S`."""
+    env.sc.took = "left_list"
+    monkeypatch.setattr(md, "_back_to_list", lambda p, u: env.clock.sleep(20))
+    env.run()
+    waits = [e for e in env.ev if e[0] == "wait"]
+    assert waits[0][2] >= md.CAMPAIGN_OPEN_AFTER_CREATE_S, waits[0]
+    assert all(w[2] <= w[3] for w in waits), "окно шире общего бюджета"
+
+
+def test_the_create_window_never_outgrows_the_budget(env, monkeypatch):
+    env.sc.took = "left_list"
+    monkeypatch.setattr(md, "CAMPAIGN_OPEN_BUDGET_S", 60.0)
+    monkeypatch.setattr(md, "_back_to_list", lambda p, u: env.clock.sleep(20))
+    env.run()
+    waits = [e for e in env.ev if e[0] == "wait"]
+    assert waits and waits[0][2] < md.CAMPAIGN_OPEN_AFTER_CREATE_S
+    assert env.clock.now - env.start <= 60.0 + md.OBJECTIVE_POLL_S + 10
+
+
+def test_a_tab_that_answers_the_long_probe_is_not_replaced(env, monkeypatch):
+    """Ревью PR #323 (F8): ожидание окна цели дважды не дождалось ответа
+    вкладки (`unresponsive`), но длинная проба перед свежей вкладкой
+    ответила — вкладку не закрываем, второй раунд идёт в ней."""
+    env.sc.wait_out = {"outcome": "unresponsive", "frozen": md.OBJECTIVE_FROZEN_POLLS}
+    probes: list = []
+    monkeypatch.setattr(md, "_page_responsive",
+                        lambda p, timeout_s=5.0: probes.append(timeout_s) or True)
+    env.sc.dialog_at = ("old", env.start + 60)
+    assert env.run() == ""
+    assert md.FROZEN_CONFIRM_S in probes
+    assert not [e for e in env.ev if e[0] == "fresh"], "занятую вкладку закрыли как зависшую"
+
+
+def test_a_tab_that_stays_silent_on_the_long_probe_is_replaced(env, monkeypatch):
+    env.sc.wait_out = {"outcome": "unresponsive", "frozen": md.OBJECTIVE_FROZEN_POLLS}
+    monkeypatch.setattr(md, "_page_responsive", lambda p, timeout_s=5.0: False)
+    env.sc.fresh = [_P("new")]
+    env.sc.dialog_at = ("new", env.start + 60)
+    assert env.run() == ""
+    assert [e for e in env.ev if e[0] == "fresh"]
+
+
+def test_the_budget_is_a_hard_ceiling(env, monkeypatch):
+    """Ревью PR #323 (F9): 120 с — потолок, а не пожелание. Медленные
+    нажатия (по 10 с), после каждого вкладка на миг не отвечает — раунды
+    короткие: ни одно нажатие не начинается, когда ждать его окно уже
+    некогда, и открытие не уходит за бюджет больше, чем на одно нажатие."""
+    starts: list = []
+
+    def press(p, where):
+        starts.append(env.clock.now - env.start)
+        env.clock.sleep(10)
+        return True
+
+    env.sc.took = "frozen"
+    # Без свежей вкладки: проверяется только потолок нажатий.
+    monkeypatch.setattr(md, "CAMPAIGN_OPEN_FRESH_TAB_ROUND", 99)
+    monkeypatch.setattr(md, "_page_responsive", lambda p, timeout_s=5.0: True)
+    got = md._open_campaign(_P("old"), LIST_URL, press=press, shot=lambda label: None)
+    assert got == "objective_leads"
+    assert len(starts) >= 4, starts
+    assert starts and all(t <= md.CAMPAIGN_OPEN_BUDGET_S - md.CAMPAIGN_OPEN_MIN_PRESS_S for t in starts), starts
+    assert env.clock.now - env.start <= md.CAMPAIGN_OPEN_BUDGET_S + 25 + md.OBJECTIVE_POLL_S
+
+
+def test_steps_inside_the_open_see_its_deadline(env, monkeypatch):
+    seen: list = []
+
+    def press(p, where):
+        seen.append(md._open_left())
+        return True
+
+    env.sc.dialog_at = ("old", env.start + 10)
+    md._open_campaign(_P("old"), LIST_URL, press=press, shot=lambda label: None)
+    assert seen and seen[0] <= md.CAMPAIGN_OPEN_BUDGET_S
+    assert md._open_left() == float("inf"), "срок открытия остался висеть после него"

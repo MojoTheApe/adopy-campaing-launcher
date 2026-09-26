@@ -1232,6 +1232,10 @@ class AdsManagerFlow:
                     log.warning("campaigns goto failed (%s/3): %s", attempt + 1, str(exc)[:80])
                     time.sleep(8.0)
             info["attempts"] = attempt + 1
+            if last_exc is None:
+                # Ревью PR #323 (F3): переход удался — прежние ошибки сети
+                # (разовый разрыв, вылеченный повтором) больше не в счёт.
+                profile_trouble.note_nav_ok(self.page)
             if last_exc is not None:
                 # ACL-1320: все три перехода упали с ошибкой сети профиля —
                 # это прокси, а не разовый разрыв (20.09 S15 лечился повтором).
@@ -1299,6 +1303,7 @@ class AdsManagerFlow:
             try:
                 self.page.reload(wait_until="domcontentloaded", timeout=self.nav_timeout)
                 reloaded = True
+                profile_trouble.note_nav_ok(self.page)
                 from src.fb_ads_rpa.browser import _disable_background_throttling, page_answers
 
                 if page_answers(self.page, 5.0):

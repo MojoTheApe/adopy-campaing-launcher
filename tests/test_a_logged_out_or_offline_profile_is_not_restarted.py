@@ -112,13 +112,20 @@ def test_a_visible_login_form_and_a_proxy_error_page_are_read_from_the_dom(chrom
         page.close()
 
 
-def test_a_recent_network_error_of_the_profile_counts_for_its_fresh_tabs():
+def test_network_history_counts_only_unresolved_repeated_errors_off_a_meta_page():
+    """Ревью PR #323 (F3): история — только вспомогательный признак."""
     ctx = SimpleNamespace()
-    old, new = SimpleNamespace(url=LIST_URL, context=ctx), SimpleNamespace(url=LIST_URL, context=ctx)
-    assert pt.classify_page(old, read_dom=False) == ("", "")
-    pt.note_net_error(old, "ERR_SOCKS_CONNECTION_FAILED")
-    assert pt.classify_page(new, read_dom=False) == (pt.NETWORK, "ERR_SOCKS_CONNECTION_FAILED")
-    assert pt.classify_page(new, history=False, read_dom=False) == ("", "")
+    blank = SimpleNamespace(url="about:blank", context=ctx)
+    meta = SimpleNamespace(url=LIST_URL, context=ctx)
+    pt.note_net_error(blank, "ERR_CONNECTION_RESET")
+    assert pt.classify_page(blank, read_dom=False) == ("", ""), "одна ошибка — ещё не сеть"
+    pt.note_net_error(blank, "ERR_SOCKS_CONNECTION_FAILED")
+    assert pt.classify_page(blank, read_dom=False) == (pt.NETWORK, "ERR_SOCKS_CONNECTION_FAILED")
+    assert pt.classify_page(meta, read_dom=False) == ("", ""),         "живая страница Ads Manager по одной истории названа сетью"
+    assert pt.classify_page(blank, history=False, read_dom=False) == ("", "")
+    pt.note_nav_ok(meta)
+    assert pt.recent_net_errors(blank) == []
+    assert pt.classify_page(blank, read_dom=False) == ("", ""), "удачный переход не обнулил историю"
 
 
 # ── Переход к списку кампаний ─────────────────────────────────────────────
@@ -187,7 +194,8 @@ def test_one_ssl_error_then_success_is_not_a_stop(goto_flow):
     page = _GotoPage([SSL])
     goto_flow.make(page)()
     assert goto_flow.ready == ["Campaign A"]
-    assert pt.recent_net_errors(page) == ["ERR_SSL_PROTOCOL_ERROR"]
+    # Ревью PR #323 (F3): повтор прошёл — ошибка вылечена и не в счёт.
+    assert pt.recent_net_errors(page) == []
 
 
 # ── Открытие кампании: диагноз до свежей вкладки ──────────────────────────
@@ -199,14 +207,28 @@ class _TP(_P):
         self.context = SimpleNamespace()
 
 
-def test_a_frozen_tab_after_a_proxy_error_is_a_network_stop_not_a_fresh_tab(env, monkeypatch):
-    page = _TP("old")
+def test_a_frozen_tab_on_a_chrome_error_page_is_a_network_stop_not_a_fresh_tab(env):
+    page = _TP("old", url="chrome-error://chromewebdata/")
     pt.note_net_error(page, "ERR_SOCKS_CONNECTION_FAILED")
     env.sc.frozen = {"old"}
     env.sc.fresh = [_P("new")]
     got = md._open_campaign(page, LIST_URL, press=lambda p, where: True, shot=lambda label: None)
     assert got == pt.NETWORK
     assert not [e for e in env.ev if e[0] == "fresh"], "свежую вкладку открыли на мёртвом прокси"
+
+
+def test_a_slow_meta_after_one_healed_network_error_is_not_an_account_stop(env):
+    """Ревью PR #323 (F3), сценарий ревьюера: ERR_CONNECTION_RESET от
+    повтора перехода, Meta просто медленная — свежая вкладка, не остановка."""
+    old = _TP("old")
+    pt.note_net_error(old, "ERR_CONNECTION_RESET")
+    pt.note_net_error(old, "ERR_CONNECTION_RESET")
+    env.sc.fresh = [_P("new")]
+    env.sc.dialog_at = ("new", env.start + 100)
+    got = md._open_campaign(old, LIST_URL, press=lambda p, w: env.clock.sleep(2) or True,
+                            shot=lambda *a, **k: None, on_new_page=lambda p: None)
+    assert got != pt.NETWORK
+    assert [e for e in env.ev if e[0] == "fresh"]
 
 
 def test_a_login_page_stops_before_create(env):
@@ -385,12 +407,14 @@ def test_a_fresh_tab_that_is_also_silent_is_diagnosed_before_the_restart(env, mo
     """Свежая вкладка тоже молчит, а сеть профиля за это время упала —
     перед «перезапускай профиль» диагноз: это сеть."""
     ctx = SimpleNamespace()
-    old, new = _TP("old"), _TP("new")
+    old, new = _TP("old"), _TP("new", url="about:blank")
     old.context = new.context = ctx
     env.sc.frozen = {"old", "new"}
 
     def fresh(p, url, **kw):
+        # Свежая вкладка так и не ушла с about:blank: переходы в ней падали.
         env.ev.append(("fresh", p.name, url))
+        pt.note_net_error(new, "ERR_SSL_PROTOCOL_ERROR")
         pt.note_net_error(new, "ERR_SSL_PROTOCOL_ERROR")
         return new
 
@@ -420,7 +444,12 @@ def test_network_errors_on_the_way_are_remembered(monkeypatch):
     monkeypatch.setattr(md, "_reload_editor", lambda p, *a: None)
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     assert md._recover_from_browser_error(other) is True
-    assert pt.recent_net_errors(other) == ["ERR_SSL_PROTOCOL_ERROR"]
+    assert pt.recent_net_errors(other) == [], "перезагрузка вылечила — ошибка не в счёт"
+
+    stuck = SimpleNamespace(url=LIST_URL, context=SimpleNamespace())
+    monkeypatch.setattr(md._telemetry, "browser_error", lambda p: "ERR_SSL_PROTOCOL_ERROR")
+    assert md._recover_from_browser_error(stuck) is False
+    assert pt.recent_net_errors(stuck) == ["ERR_SSL_PROTOCOL_ERROR"] * 2
 
 
 # ── Подключение к уже открытому профилю ───────────────────────────────────
@@ -516,3 +545,25 @@ def test_the_new_single_screen_editor_stops_the_whole_account():
     from src.fb_ads_rpa import profile_trouble as pt
     assert "simple_create_layout" in pt.ACCOUNT_STOPS
     assert "single-screen" in pt.message("simple_create_layout")
+
+
+def test_a_slow_navigation_in_a_fresh_tab_keeps_the_tab(monkeypatch):
+    """Ревью PR #323 (F10): переход в свежей вкладке упал по таймауту, а
+    вкладка отвечает — её и отдаём (не None → не перезапуск профиля)."""
+    class _New:
+        url = "about:blank"
+
+        def goto(self, url, **kw):
+            raise TimeoutError("Page.goto: Timeout 30000ms exceeded.")
+
+    new = _New()
+    old = SimpleNamespace(url=LIST_URL, close=lambda **kw: None,
+                          context=SimpleNamespace(browser=SimpleNamespace(is_connected=lambda: True)))
+    monkeypatch.setattr(br, "_open_tab_via_browser", lambda ctx, **kw: new)
+    monkeypatch.setattr(br, "page_answers", lambda p, t=5.0: True)
+    monkeypatch.setattr(br, "_disable_background_throttling", lambda c, p: None)
+    monkeypatch.setattr(br, "_keep_renderer_active", lambda c, p: None)
+    assert br.fresh_tab(old, LIST_URL) is new
+    answers = iter([True, False])
+    monkeypatch.setattr(br, "page_answers", lambda p, t=5.0: next(answers))
+    assert br.fresh_tab(old, LIST_URL) is None, "молчащую вкладку после таймаута отдали"

@@ -128,8 +128,33 @@ def test_a_profile_the_robot_started_becomes_its_own(mlx):
 def test_attaching_over_the_automation_port_makes_the_profile_the_robots(provider, monkeypatch):
     monkeypatch.setattr(provider.prov._direct, "_try_attach_existing",
                         lambda *a, **kw: SimpleNamespace(page="attached"))
+    monkeypatch.setattr(provider.prov._direct, "_discover_owned_debug_port", lambda udd: 9222)
     provider.prov.open(_entry(), "FacebookDoc19")
     assert br._robot_profile(PROFILE) is True
+
+
+def test_a_port_not_owned_by_the_profile_does_not_make_it_the_robots(provider, monkeypatch):
+    """Ревью PR #323 (F6): нестрогий поиск порта (старый DevToolsActivePort,
+    общий 19222) — не доказательство, что профиль поднимал робот."""
+    monkeypatch.setattr(provider.prov._direct, "_try_attach_existing",
+                        lambda *a, **kw: SimpleNamespace(page="attached"))
+    monkeypatch.setattr(provider.prov._direct, "_discover_owned_debug_port", lambda udd: None)
+    provider.prov.open(_entry(), "FacebookDoc19")
+    assert br._robot_profile(PROFILE) is False
+
+
+def test_an_unowned_silent_port_never_stops_the_profile(provider, monkeypatch):
+    def attach(*a, **kw):
+        raise br.ProfileUnresponsive("silent")
+
+    monkeypatch.setattr(provider.prov._direct, "_try_attach_existing", attach)
+    monkeypatch.setattr(provider.prov._direct, "_discover_owned_debug_port", lambda udd: None)
+    monkeypatch.setattr(provider.prov, "_start_via_mlx_api",
+                        lambda *a, **kw: provider.ev.append("start") or "started")
+    with pytest.raises(pt.ProfileStop) as stop:
+        provider.prov.open(_entry(), "FacebookDoc19")
+    assert stop.value.code == pt.OPEN_BY_HAND
+    assert provider.ev == []
 
 
 def test_the_publisher_ends_the_accounts_job_with_the_message(monkeypatch):
@@ -196,3 +221,62 @@ def test_a_robot_profile_reopened_by_hand_is_the_owners_window(provider, monkeyp
     pids["now"] = frozenset({101})
     provider.prov.open(_entry(), "Facebook_9943")
     assert provider.ev == ["start"], "свой же процесс робота без порта не перезапустили"
+
+
+# ── Ревью PR #323 (F7) ────────────────────────────────────────────────────
+
+def test_a_failed_restart_at_attach_is_profile_restart_failed(provider, monkeypatch):
+    """Робот остановил не отвечавший профиль при подключении, а поднять не
+    смог (15:40, ECONNREFUSED) — `profile_restart_failed` и строка телеметрии."""
+    def attach(*a, **kw):
+        raise br.ProfileUnresponsive("silent")
+
+    def start(*a, **kw):
+        raise RuntimeError("BrowserType.connect_over_cdp: connect ECONNREFUSED 127.0.0.1:56240")
+
+    monkeypatch.setattr(provider.prov._direct, "_try_attach_existing", attach)
+    monkeypatch.setattr(provider.prov._direct, "_discover_owned_debug_port", lambda udd: 9222)
+    monkeypatch.setattr(provider.prov, "_start_via_mlx_api", start)
+    rows: list = []
+    from src.fb_ads_rpa import run_telemetry as rt
+    monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append((step, ok, kw.get("note"))))
+    with pytest.raises(pt.ProfileStop) as stop:
+        provider.prov.open(_entry(), "Facebook_9943")
+    assert stop.value.code == pt.RESTART_FAILED
+    assert "ECONNREFUSED" in stop.value.detail
+    assert ("profile_restarted_unresponsive", False, "attach") in rows
+
+
+def test_an_attach_time_stop_reaches_sentry(monkeypatch):
+    from src.fb_ads_rpa import sentry_signal
+    from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft
+    from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+
+    sent: list = []
+    monkeypatch.setattr(sentry_signal, "report_campaign_stop",
+                        lambda step, **kw: sent.append((step, kw.get("campaign"))) or "")
+    pub = RpaPublisher.__new__(RpaPublisher)
+    pub.hand_off = pub.dry_run = False
+    pub.selectors_path = None
+    pub._conn = None
+    pub._built_at = None
+
+    def ensure(label):
+        raise pt.ProfileStop(pt.OPEN_BY_HAND, "no_automation_port")
+
+    monkeypatch.setattr(pub, "_ensure_browser", ensure)
+    draft = CampaignDraft("A", "MX", "Facebook_6540",
+                          ad_sets=[AdSetDraft("Set", ads=[AdDraft(ad_title="t", ad_body="b")])])
+    pub.publish_draft(draft)
+    assert sent == [(pt.OPEN_BY_HAND, "A")]
+
+
+def test_restart_telemetry_carries_no_part_of_the_profile_id(monkeypatch):
+    """Ревью PR #323 (F11): префикс uuid профиля вычиститель не ловит."""
+    from src.fb_ads_rpa import run_telemetry as rt
+
+    rows: list = []
+    monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append(kw))
+    br._record_profile_restart(_entry(), PROFILE, ok=False, where="attach", error="x")
+    text = repr(rows)
+    assert rows and PROFILE[:4] not in text and "profile" not in rows[0]["diag"]

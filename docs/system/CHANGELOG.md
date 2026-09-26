@@ -120,6 +120,19 @@ Facebook_1443, _6540, _9943; the build was pulled back to the released one):
   (`/adsmanager/manage/simple_create`) stops the campaign with `simple_create_layout`
   instead of failing later.
 
+Independent review of PR #323 (request-changes) addressed: a round no longer cuts a
+slow "Loading creation" (once loading was seen, only idle time after it or the budget
+ends the wait) and the last Create of a round gets at least 25 s; 120 s is a hard
+ceiling (steps inside the open read its deadline); `profile_network` is decided from
+facts of the current tab, and from history only with two unresolved errors after the
+last successful navigation off a normal Meta page; a busy tab is kept (5-s probe,
+consecutive failures, a 10-s confirmation before a fresh tab); a slow goto in a fresh
+tab keeps the tab; the tour is recognised by its own text and never inside the editor;
+after a failed name step only our name or "New Leads Ad" is accepted; the robot-profile
+mark needs a port owned by the profile's process; an attach-time restart failure is
+`profile_restart_failed`, attach-time stops reach Sentry; no profile-id prefix in
+telemetry.
+
 ## Sentry receives only real campaign failures — ACL-1318 (phase 1)
 
 Every telemetry row with `ok=False` used to become a Sentry event, so the list of
