@@ -3662,6 +3662,16 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
                 result = "profile_unresponsive"
                 break
             continue
+        if rounds == 1:
+            # ACL-1320: до первого Create — разбудить вкладку (троттлинг и
+            # заморозка Chrome сняты заново), но окно вперёд не выводить.
+            try:
+                from src.fb_ads_rpa.browser import wake_page_quietly
+
+                _telemetry.record("tab_woken", None, note="before_create",
+                                  diag=wake_page_quietly(page))
+            except Exception:
+                pass
         _clear_blocking_overlays(page, "create" if rounds == 1 else "create_retry", editor=False)
         where = "create" if rounds == 1 else "create_retry"
         if not press(page, where):

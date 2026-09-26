@@ -87,6 +87,7 @@ def env(monkeypatch):
         return sc.fresh.pop(0) if sc.fresh else None
 
     monkeypatch.setattr(br, "fresh_tab", fresh)
+    monkeypatch.setattr(br, "wake_page_quietly", lambda p: ev.append(("wake", p.name)) or {})
 
     def press(p, where):
         ev.append(("press", p.name, where))
@@ -153,7 +154,7 @@ def test_a_second_unanswered_probe_takes_the_fresh_tab_at_once(env):
     env.sc.wait_out = {"outcome": "unresponsive", "frozen": 2}
     env.sc.dialog_at = ("new", env.start)
     assert env.run() == ""
-    assert [e[0] for e in env.ev][:4] == ["press", "wait", "fresh", "press"]
+    assert [e[0] for e in env.ev if e[0] != "wake"][:4] == ["press", "wait", "fresh", "press"]
 
 
 def test_no_fresh_tab_means_the_profile_does_not_answer(env):

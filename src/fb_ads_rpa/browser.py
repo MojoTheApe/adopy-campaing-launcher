@@ -1020,6 +1020,38 @@ def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
             pass
 
 
+def wake_page_quietly(page) -> dict:
+    """Разбудить вкладку перед первым Create — не выводя окно вперёд (ACL-1320).
+
+    Прогон cf563b4ba594: первое нажатие Create шло во вкладку, которая с
+    прошлого прогона жила в фоне, и Chrome мог держать её придержанной или
+    замороженной. Будим так же, как `wake_page`, но без `bring_to_front`:
+    окно профиля по решению владельца (19.09) остаётся за краем экрана и не
+    должно всплывать поверх его работы. Свёрнутое окно — в обычное состояние
+    за краем экрана (`_restore_offscreen`), троттлинг и заморозка сняты
+    заново (`_disable_background_throttling`). Вызывать только для вкладки,
+    которая отвечает: CDP-сессия на зависшей висит (см. `fresh_tab`).
+    """
+    out: dict = {"minimized": None, "restored": False}
+    context = page.context
+    try:
+        session = context.new_cdp_session(page)
+        try:
+            bounds = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+        finally:
+            try:
+                session.detach()
+            except Exception:
+                pass
+        out["minimized"] = bounds.get("windowState") == "minimized"
+        if out["minimized"]:
+            out["restored"] = _restore_offscreen(context, page)
+    except Exception as exc:
+        out["error"] = str(exc)[:80]
+    _disable_background_throttling(context, page)
+    return out
+
+
 def ensure_editor_window(page, section: str) -> bool:
     """Check at section boundaries; recover once, then stop without replaying drafts."""
     from src.fb_ads_rpa import run_telemetry as rt
