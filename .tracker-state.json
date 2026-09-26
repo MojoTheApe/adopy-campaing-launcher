@@ -522,10 +522,10 @@
         "verdict": "approved",
         "reviewer": "independent subagent (Claude Opus 5.5)",
         "implementer": "ACL-1320/1324/1321/1325 implementation sessions",
-        "head_sha": "9d8e000c291bf35e2379cef015d2663b398bf68b",
+        "head_sha": "f70d7012bbb8d3a4466bf8d8b4c2b1fb30a12f60",
         "base_sha": "9332a1332037e26113cf41c6452f5715bffb8f16",
-        "tree_sha": "bb837baed4b874cafe17f33d524c7da0deaba6f3",
-        "report": "Prior approval chain for PR #328: 4bb9749 got request-changes with findings F1-F5. 5021d30 was approved once F1-F5 were fixed, leaving two non-blocking findings (N1, N2). 2582d0e was approved after N1 (the utime/protect guard against pruning the just-written folder) and N2 (a table directly under body is never the list region) were closed. This delta (2582d0e..9d8e000) is the single commit 9d8e000, whose parent is 2582d0e. It touches only .github/workflows/ci.yml, with 3 insertions and 1 deletion. It raises timeout-minutes on the Windows test job (runs-on: windows-latest) from 20 to 35 and adds a two-line explanatory comment. The workflow was parsed with PyYAML at both revisions: both parse, and a structural comparison shows that the only difference is jobs.test.timeout-minutes going from 20 to 35. The triggers, permissions, and the scope and admission jobs are identical, as are the test job's other keys (needs, if, matrix, steps). CI run 36274177557 on head 2582d0e supports the stated reason. test (3.11) ran from 21:48:38 to 22:08:54 and was cancelled at 20m16s. test (3.13) ran from 21:48:39 to 22:07:52 and succeeded in 19m13s, with pytest reporting 3342 passed and 2 skipped in 17m14s. ACL verification then failed as a consequence. A 35-minute cap gives reasonable headroom without masking hangs. One cosmetic nit: the comment says the suite passed 3300 tests, which is approximate against the actual 3342; this does not block. Verdict: approved.",
+        "tree_sha": "15a6c630fbf26d621f8b7b8e672c164c1deb46d4",
+        "report": "Prior chain: 4bb9749 got request-changes (F1-F5). 5021d30 was approved, 2582d0e was approved once N1/N2 were closed, and 9d8e000 was approved (CI timeout raised from 20 to 35 min). CI then failed on test (3.11) (CPython 3.11.9). b14b1bf added the _MARKUP_IN_TEXT/_ATTR_IN_TEXT stripping in handle_data and got request-changes (v5). An emulation of the 3.11.9 html.parser tag paths, which reproduces the CI failure exactly, showed that a section cut inside a tag with no following '>' still leaked attribute text, including a typed input value, because 3.11 flushes the unfinished tag as text when the parser is closed. This delta (b14b1bf..f70d701, a single commit whose parent is b14b1bf) adds exactly the requested _SectionScrubber.close() override: it discards unparsed buffered data that starts with '<' before the flush, matching the HTML5 behaviour of 3.13+. It also adds a parametrized test, test_a_section_cut_inside_a_tag_drops_the_unfinished_tag, with three end-of-input tails: an unterminated value=, an unterminated class=, and a '>' inside a value followed by bare attributes. Verification in a fresh detached worktree at f70d701: all four probe cases (the three above plus '<div aria-label=\"a > b\" class=\"x1n2onr6 x78' with no closing quote) come out clean under the 3.11 emulation, native 3.13.15 and native 3.14.3. The legitimate-text probes are unchanged from b14b1bf. The conversion_event_2026_09_09.html fixture scrubs clean everywhere, and the outputs from the 3.11 emulation, 3.13.15 and 3.14.3 are byte-identical to each other and to my earlier monkeypatch of the same override. The new test's tails pass under the emulation, and without the override the emulation again leaks '&lt;input   value=\"typed secret val', so the test will catch a regression on the 3.11 CI job. tests/test_sentry_page_snapshot.py passes on 3.14 (58 tests). The remaining minor, accepted trade-off from v5: escaped markup and quoted name=\"value\" pairs in visible page text are stripped. Verdict: approved.",
         "main_sha": "08c9364c0808ca51f6f64ac55c4d5d10e0ece602",
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "issues": [
@@ -534,7 +534,7 @@
           321,
           325
         ],
-        "recorded_at": "2026-09-26T22:15:41+00:00"
+        "recorded_at": "2026-09-26T22:50:49+00:00"
       }
     },
     "stage": {
