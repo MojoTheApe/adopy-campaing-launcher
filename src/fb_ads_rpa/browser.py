@@ -2062,11 +2062,25 @@ class MultiloginAttachOnlyProvider:
                 profile_id,
             )
 
-        started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
-                                          allow_restart=allow_restart, allow_kill=allow_kill)
-        conn = self._connect_started(started, profile_id)
-        if unresponsive:
-            _record_profile_restart(entry, profile_id, ok=True, where="attach")
+        if not unresponsive:
+            started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
+                                              allow_restart=allow_restart, allow_kill=allow_kill)
+            return self._connect_started(started, profile_id)
+        # Ревью PR #323 (F7): робот сам остановил не отвечавший профиль — не
+        # поднялся он, значит профиль мог остаться закрытым. Это та же
+        # остановка, что у `restart_unresponsive`: строка телеметрии и
+        # `profile_restart_failed` с текстом для человека.
+        try:
+            started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
+                                              allow_restart=allow_restart, allow_kill=allow_kill)
+            conn = self._connect_started(started, profile_id)
+        except profile_trouble.ProfileStop:
+            raise
+        except Exception as exc:
+            detail = f"{type(exc).__name__}: {str(exc)[:120]}"
+            _record_profile_restart(entry, profile_id, ok=False, where="attach", error=detail)
+            raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
+        _record_profile_restart(entry, profile_id, ok=True, where="attach")
         return conn
 
     def _owns_port(self, udd: str) -> bool:

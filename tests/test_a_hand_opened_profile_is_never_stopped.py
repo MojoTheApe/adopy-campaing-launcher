@@ -221,3 +221,51 @@ def test_a_robot_profile_reopened_by_hand_is_the_owners_window(provider, monkeyp
     pids["now"] = frozenset({101})
     provider.prov.open(_entry(), "Facebook_9943")
     assert provider.ev == ["start"], "свой же процесс робота без порта не перезапустили"
+
+
+# ── Ревью PR #323 (F7) ────────────────────────────────────────────────────
+
+def test_a_failed_restart_at_attach_is_profile_restart_failed(provider, monkeypatch):
+    """Робот остановил не отвечавший профиль при подключении, а поднять не
+    смог (15:40, ECONNREFUSED) — `profile_restart_failed` и строка телеметрии."""
+    def attach(*a, **kw):
+        raise br.ProfileUnresponsive("silent")
+
+    def start(*a, **kw):
+        raise RuntimeError("BrowserType.connect_over_cdp: connect ECONNREFUSED 127.0.0.1:56240")
+
+    monkeypatch.setattr(provider.prov._direct, "_try_attach_existing", attach)
+    monkeypatch.setattr(provider.prov._direct, "_discover_owned_debug_port", lambda udd: 9222)
+    monkeypatch.setattr(provider.prov, "_start_via_mlx_api", start)
+    rows: list = []
+    from src.fb_ads_rpa import run_telemetry as rt
+    monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append((step, ok, kw.get("note"))))
+    with pytest.raises(pt.ProfileStop) as stop:
+        provider.prov.open(_entry(), "Facebook_9943")
+    assert stop.value.code == pt.RESTART_FAILED
+    assert "ECONNREFUSED" in stop.value.detail
+    assert ("profile_restarted_unresponsive", False, "attach") in rows
+
+
+def test_an_attach_time_stop_reaches_sentry(monkeypatch):
+    from src.fb_ads_rpa import sentry_signal
+    from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft
+    from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+
+    sent: list = []
+    monkeypatch.setattr(sentry_signal, "report_campaign_stop",
+                        lambda step, **kw: sent.append((step, kw.get("campaign"))) or "")
+    pub = RpaPublisher.__new__(RpaPublisher)
+    pub.hand_off = pub.dry_run = False
+    pub.selectors_path = None
+    pub._conn = None
+    pub._built_at = None
+
+    def ensure(label):
+        raise pt.ProfileStop(pt.OPEN_BY_HAND, "no_automation_port")
+
+    monkeypatch.setattr(pub, "_ensure_browser", ensure)
+    draft = CampaignDraft("A", "MX", "Facebook_6540",
+                          ad_sets=[AdSetDraft("Set", ads=[AdDraft(ad_title="t", ad_body="b")])])
+    pub.publish_draft(draft)
+    assert sent == [(pt.OPEN_BY_HAND, "A")]
