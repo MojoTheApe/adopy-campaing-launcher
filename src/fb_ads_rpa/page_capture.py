@@ -201,9 +201,11 @@ def capture(
         except Exception:
             return ""
 
-        # ACL-1325: раздел упавшего шага — в память, для события Sentry. Сюда
-        # попадаем только после ответившего `inner_html` с таймаутом: страница
-        # жива, и ещё один `evaluate` не повиснет.
+        # ACL-1325: раздел упавшего шага — в память, для события Sentry. Что
+        # `inner_html` ответил, не значит, что ответит и следующий вызов:
+        # сюда приходят из `_stall_evidence`, с вкладки, у которой уже был
+        # stall. Поэтому снятие раздела ограничено по времени
+        # (SECTION_EVAL_TIMEOUT_S, ревью PR #328, F5).
         try:
             remember_section(page, step=step, run_id=run_id, campaign=campaign)
         except Exception:
@@ -307,6 +309,9 @@ SECTION_TEXT_MAX = 300
 SECTION_ATTR_MAX = 200
 #: Сколько разделов держать в памяти. Процесс дешборда живёт сутками.
 _SECTIONS_MAX = 16
+#: Сколько ждать страницу со снятием раздела. Не ответила — раздела нет, а
+#: поток публикации не висит в сборе улик (ревью PR #328, F5).
+SECTION_EVAL_TIMEOUT_S = 5.0
 
 _sections: "OrderedDict[tuple[str, str], dict[str, Any]]" = OrderedDict()
 _sections_lock = threading.Lock()
@@ -495,8 +500,29 @@ _SECTION_JS = r"""
 """
 
 
+def _eval_bounded(page, js: str, arg: Any, timeout_s: float = SECTION_EVAL_TIMEOUT_S) -> Any:
+    """`page.evaluate` с таймаутом, который соблюдает драйвер.
+
+    Тот же приём, что `meta_dom._eval_bounded` (ACL-1320): у голого
+    `page.evaluate` таймаута нет, а `wait_for_function` — есть. Функция
+    заворачивается в объект `{v: …}`, он всегда «истинен», и ожидание
+    кончается на первом же вычислении. Зависшая вкладка — TimeoutError через
+    `timeout_s`. Свой, а не из `meta_dom`: тот сам зовёт `capture`.
+    """
+    handle = page.wait_for_function(f"(arg) => ({{ v: ({js.strip()})(arg) }})", arg=arg,
+                                    timeout=int(timeout_s * 1000))
+    try:
+        got = handle.json_value()
+    finally:
+        try:
+            handle.dispose()
+        except Exception:
+            pass
+    return got.get("v") if isinstance(got, dict) else None
+
+
 def _snapshot_take(page, titles: tuple[str, ...]) -> list[dict[str, str]]:
-    parts = page.evaluate(_SECTION_JS, {
+    parts = _eval_bounded(page, _SECTION_JS, {
         "titles": list(titles),
         "sections": list(SECTION_TITLES),
         "keep": list(_KEEP_ATTRS),
@@ -515,7 +541,7 @@ def remember_section(page, *, step: str, run_id: str = "", campaign: str = "") -
     """Снять карточку упавшего шага и запомнить её до отправки события.
 
     Никогда не бросает. False — не снято (выключено настройкой, страница не
-    ответила, ничего не нашлось).
+    ответила за SECTION_EVAL_TIMEOUT_S, ничего не нашлось).
     """
     if not section_snapshots_enabled() or not step:
         return False

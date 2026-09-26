@@ -41,8 +41,10 @@ def _section_bytes() -> bytes:
     pc.forget_sections()
 
     class _Page:
-        def evaluate(self, _js, _arg):
-            return [{"name": "audience", "html": SUGGEST_FX}]
+        # Раздел снимается ограниченным вызовом (`wait_for_function`).
+        def wait_for_function(self, _expr, *, arg=None, timeout=None):
+            parts = [{"name": "audience", "html": SUGGEST_FX}]
+            return type("H", (), {"json_value": lambda _s: {"v": parts}, "dispose": lambda _s: None})()
 
     assert pc.remember_section(_Page(), step="pick_further_limit_radio", run_id="r1", campaign="CO_x")
     att = pc.section_attachment("further_limit_reach_radio", "r1",

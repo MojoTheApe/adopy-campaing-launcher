@@ -40,8 +40,11 @@ The attachment is built in `src/fb_ads_rpa/page_capture.py`:
    The copy is built by a bounded walk in the page that stops at the cap, so a huge
    list does not become a long task. Scripts, styles, svg, images and all attributes
    except `role`, `aria-*`, `data-surface`, `placeholder`, `type`, `checked`,
-   `disabled`, `id` are dropped in the page already. The raw copy is kept in process
-   memory only (16 entries), never on disk.
+   `disabled`, `id` are dropped in the page already. The page is asked with a 5 s bound
+   (`wait_for_function`, as `meta_dom._eval_bounded`): the call comes from stall
+   evidence on a tab that may hang, and a tab that does not answer gives no section
+   instead of a hung publish thread. The raw copy is kept in process memory only
+   (16 entries), never on disk.
 2. When the event is sent (`sentry_signal`), `scrub_section_html` rebuilds the markup
    from a whitelist and replaces: the run's campaign name, account label (whole and
    word by word), ad set and ad names → `<campaign>`, `<account>`, `<name>`; URLs →

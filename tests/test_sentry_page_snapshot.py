@@ -369,16 +369,32 @@ def test_nothing_is_taken_from_a_page_without_card_editor_list_or_dialog(page):
 
 # ── Вложение у события ──────────────────────────────────────────────────────
 
+class _Handle:
+    """Ответ `wait_for_function`: объект `{v: …}`, как у `_eval_bounded`."""
+
+    def __init__(self, value):
+        self.value = value
+
+    def json_value(self):
+        return {"v": self.value}
+
+    def dispose(self):
+        pass
+
+
 class _FakePage:
-    """Страница, которая отдаёт карточку как `_SECTION_JS` — без браузера."""
+    """Страница, которая отдаёт карточку как `_SECTION_JS` — без браузера.
+
+    Раздел снимается ограниченным вызовом (`wait_for_function` с таймаутом,
+    ревью PR #328, F5), поэтому и отвечает двойник на него."""
 
     def __init__(self, html: str, name: str = "audience"):
         self.parts = [{"name": name, "html": html}]
         self.calls = 0
 
-    def evaluate(self, _js, _arg):
+    def wait_for_function(self, _expr, *, arg=None, timeout=None):
         self.calls += 1
-        return self.parts
+        return _Handle(self.parts)
 
 
 @pytest.fixture
@@ -491,14 +507,8 @@ def test_a_failure_in_another_run_does_not_lend_its_section(events):
 
 # ── Чужой прогон и чужая кампания (ревью PR #328, F2) ───────────────────────
 
-class _SectionPage:
+class _SectionPage(_FakePage):
     """Страница, отдающая готовый раздел (как `_SECTION_JS`), — без браузера."""
-
-    def __init__(self, html: str):
-        self.html = html
-
-    def evaluate(self, _js, _arg):
-        return [{"name": "audience", "html": self.html}]
 
 
 _ALPHA = "Alpha Spring Promo"
@@ -650,6 +660,66 @@ def test_capture_of_a_failed_step_remembers_its_section(tmp_path, monkeypatch):
     assert pc.section_attachment("audience_location", "r9") is not None
     # Файлы снимка на диске — прежние; раздел для Sentry на диск не пишется.
     assert not list(tmp_path.rglob("section_*"))
+
+
+# ── Зависшая вкладка (ревью PR #328, F5) ────────────────────────────────────
+
+class _HungPage:
+    """Вкладка, у которой голый `evaluate` висит, а ограниченный вызов
+    честно кончается таймаутом через свой `timeout`."""
+
+    def __init__(self):
+        self.evaluate_calls = 0
+        self.timeouts: list = []
+
+    def evaluate(self, *_a, **_k):
+        import time
+
+        self.evaluate_calls += 1
+        time.sleep(1.5)  # «повисла»; дольше в тесте не ждём
+        return [{"name": "audience", "html": "<div>too late</div>"}]
+
+    def wait_for_function(self, _expr, *, arg=None, timeout=None):
+        from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
+        self.timeouts.append(timeout)
+        raise PlaywrightTimeout(f"Timeout {timeout}ms exceeded.")
+
+
+def test_a_hung_tab_gives_no_section_within_the_bound():
+    import time
+
+    hung = _HungPage()
+    started = time.monotonic()
+    assert pc.remember_section(hung, step="audience_location", run_id="r1", campaign=CAMPAIGN) is False
+    assert time.monotonic() - started < 1.0
+    assert hung.evaluate_calls == 0, "раздел снимался неограниченным evaluate"
+    assert hung.timeouts == [int(pc.SECTION_EVAL_TIMEOUT_S * 1000)] == [5000]
+    assert pc.section_attachment("audience_location", "r1", campaign=CAMPAIGN) is None
+
+
+def test_capture_on_a_tab_that_hangs_after_inner_html_does_not_hang(tmp_path, monkeypatch):
+    """`capture` из `_stall_evidence`: `inner_html` ответил, а вкладка повисла."""
+    import time
+
+    monkeypatch.setattr(pc, "get_runtime_workspace", lambda: tmp_path)
+    pc._taken.clear()
+
+    class _Page(_HungPage):
+        url = "https://x.example/p"
+
+        def locator(self, _sel):
+            return self
+
+        def inner_html(self, *, timeout):
+            return "<body>ok</body>"
+
+    page = _Page()
+    started = time.monotonic()
+    assert pc.capture(page, step="stall_objective_wait", run_id="r9", campaign=CAMPAIGN)
+    assert time.monotonic() - started < 1.0
+    assert page.evaluate_calls == 0
+    assert pc.section_attachment("stall_objective_wait", "r9", campaign=CAMPAIGN) is None
 
 
 # ── Настоящий SDK: вложение доходит до транспорта ───────────────────────────

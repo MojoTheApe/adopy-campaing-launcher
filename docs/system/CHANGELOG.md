@@ -17,7 +17,8 @@ digest goes to the owner's Claude chat.
   Review of PR #328: a failure on the campaigns list no longer sends the whole page —
   the open dialog, otherwise the list region, capped in the page (inside the
   Multilogin browser only; ids/URLs/contacts/tokens removed). A section never goes
-  with an event of another run or campaign; profile stops carry none.
+  with an event of another run or campaign; profile stops carry none. The page is asked
+  with a 5 s bound; a hung tab gives no section.
 - `scripts/sentry_triage.py`: new/regressed issues since a cursor, latest event and
   section per issue, grouped by `step:reason`, matched to tasks in
   `config/sentry_triage_map.json`, printed as JSON + markdown. Never writes to Sentry
