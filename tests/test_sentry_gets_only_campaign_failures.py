@@ -283,3 +283,79 @@ def test_a_helper_of_another_step_lends_no_reason(events):
     rt.record("campaign_name", False)
     sentry_signal.report_campaign_stop("campaign_name")
     assert [e["message"] for e in events] == ["campaign_name: silent"]
+
+
+# ── повторное ревью v3 PR #314 (находка 3) ────────────────────────────────
+
+def test_a_warning_of_the_final_result_is_not_sent(monkeypatch, events):
+    """Y3: предупреждения (черновик с ними публикуем) в Sentry не уходят."""
+    monkeypatch.setitem(failure_policy.POLICY, "test_only_warning",
+                        (failure_policy.WARNING, "test-only warning"))
+    from src.fb_ads_rpa import sentry_signal
+
+    sent = sentry_signal.report_blocking_failures(["audience_location", "test_only_warning"],
+                                                  campaign="C", account="FacebookDoc19")
+    assert len(sent) == 1
+    assert [e["tags"]["step"] for e in events] == ["audience_location"]
+
+
+def test_the_remembered_failures_are_bounded():
+    """Y9: память о последних отказах шагов не растёт без конца."""
+    rt.clear_current_run()
+    for i in range(rt._FAILURES_MAX + 50):
+        rt._remember_failure(f"run{i}", "placements", "not_found", None)
+    assert len(rt._FAILURES) <= rt._FAILURES_MAX
+
+
+def test_an_exception_that_ends_a_job_reaches_sentry(monkeypatch, events):
+    """Исключение, которым кончилась работа задания, отправляется со стеком
+    и через тот же вычиститель; тег аккаунта — короткий ярлык."""
+    import sentry_sdk
+
+    from src.web import publish_jobs as pj
+
+    captured = []
+
+    def capture_exception(exc, **kw):
+        captured.append(exc)
+        return "event-exc"
+
+    monkeypatch.setattr(sentry_sdk, "capture_exception", capture_exception)
+
+    class _Draft:
+        name, errors = "C", []
+
+    class _Publisher:
+        def __init__(self, **kw):
+            pass
+
+        def build_drafts(self, *a, **k):
+            return [_Draft()]
+
+        def publish_draft(self, draft):
+            raise RuntimeError("reattach failed act=123456789012")
+
+        def close(self, force=False):
+            pass
+
+    monkeypatch.setattr(pj, "RpaPublisher", _Publisher)
+    monkeypatch.setattr(pj, "_finish", lambda *a, **k: None)
+    job_id = "acl-1318-exc"
+    with pj._jobs_lock:
+        pj._jobs[job_id] = {"job_id": job_id, "status": "running", "results": [], "errors": [],
+                            "cancelled": False, "creative_notices": [], "done_count": 0}
+    try:
+        pj._run_rpa(job_id, [], account_label="FacebookDoc19 - Persona Name", country="SA", activate=False)
+    finally:
+        with pj._jobs_lock:
+            pj._jobs.pop(job_id, None)
+    assert len(captured) == 1 and "reattach failed" in str(captured[0])
+    # Событие исключения проходит тот же вычиститель, что и прочие.
+    event = acl_sentry._before_send({"exception": {"values": [{"value": str(captured[0])}]}}, {})
+    assert "123456789012" not in json.dumps(event)
+
+
+def test_the_account_tag_is_the_short_label():
+    assert acl_sentry.account_tag("FacebookDoc19 - Persona Name") == "FacebookDoc19"
+    assert acl_sentry.account_tag("FacebookDQ204 CR") == "FacebookDQ204"
+    assert acl_sentry.account_tag("") == ""

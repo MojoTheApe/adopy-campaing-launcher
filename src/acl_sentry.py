@@ -129,6 +129,36 @@ def init() -> bool:
     return True
 
 
+def report_job_exception(exc: BaseException, *, job: str = "", account: str = "") -> str:
+    """Исключение, которым кончилась работа задания публикации (ACL-1318).
+
+    Повторное ревью v3 PR #314: `publish_jobs._run_rpa` ловил такое
+    исключение (ошибка переподключения, падение вне шагов объявлений, ошибка
+    в нашем коде) и писал только «RPA error: …» в задание — до Sentry оно не
+    доходило, хотя это самая серьёзная остановка кампаний. Отправляем
+    `capture_exception` со стеком; всё событие проходит тот же вычиститель
+    `before_send`, что и остальные (адреса с `act=`, номера, пути).
+    """
+    if not init():
+        return ""
+    import sentry_sdk
+
+    with sentry_sdk.new_scope() as scope:
+        scope.set_tag("failure_kind", "job_exception")
+        if account:
+            scope.set_tag("account", account_tag(account))
+        if job:
+            scope.set_context("run", {"job": str(job).replace("-", "")})
+        return sentry_sdk.capture_exception(exc) or ""
+
+
+def account_tag(account: str) -> str:
+    """Тег аккаунта — только короткий ярлык (первое слово: «FacebookDoc19»),
+    без имени персоны после него (повторное ревью v3 PR #314)."""
+    parts = (account or "").strip().split()
+    return parts[0] if parts else ""
+
+
 def report_step_failure(
     step: str,
     why: str = "",

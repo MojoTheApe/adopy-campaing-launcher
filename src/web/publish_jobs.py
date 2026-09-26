@@ -529,6 +529,14 @@ def _run_rpa(
         else:
             with _jobs_lock:
                 _jobs[job_id]["errors"].append(f"RPA error: {e}")
+            # ACL-1318: исключение, которым кончилась кампания, — в Sentry, со
+            # стеком и через тот же вычиститель; отправка работу не роняет.
+            try:
+                from src import acl_sentry
+
+                acl_sentry.report_job_exception(e, job=job_id, account=account_label)
+            except Exception:
+                pass
     finally:
         # Disconnect CDP only; Multilogin window stays open for FB login check.
         publisher.close(force=False)

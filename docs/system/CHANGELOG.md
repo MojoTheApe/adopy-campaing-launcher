@@ -10,7 +10,9 @@ silent`) and real ones such as `ad2_copy: copy-fields-not-revealed` were buried.
 `src/fb_ads_rpa/sentry_signal.py` sends an event only for (a) a hard failure that ends
 a campaign attempt (one per attempt, `failure_kind=campaign_stop`) and (b) each
 blocking failure of a campaign's final result (`failure_policy.split`, one per failure,
-once per campaign, `failure_kind=blocking`). Exceptions are reported as before. Each
+once per campaign, `failure_kind=blocking`). An exception that ends a publish job's
+work (caught in `publish_jobs._run_rpa`) is sent with its stack through the same
+scrubber (`failure_kind=job_exception`); before this it reached no one. Each
 event is titled `step: reason`; the reason is the machine token inside the result text
 (`(copy_fields_not_revealed)`, `…:row_not_found`), else a known kind, else the reason
 the step's telemetry rows gave, or that of an explicitly listed helper step
