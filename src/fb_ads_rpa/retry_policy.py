@@ -78,8 +78,12 @@ CAMPAIGN_RETRY_STEPS = frozenset(
 # profile shows Facebook's login page or cannot reach Facebook through its
 # proxy — a replay, a fresh tab or a profile restart hits the same wall; a
 # person has to log in or fix the proxy.
+# simple_create_layout (ACL-1320): Meta opened its new single-screen campaign
+# editor (/adsmanager/manage/simple_create); the recorded flow does not know
+# it, and every replay would leave one more partial draft.
 NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked", "browser_closed",
-                                      "profile_logged_out", "profile_network"})
+                                      "profile_logged_out", "profile_network",
+                                      "simple_create_layout"})
 
 
 # Stops and field failures that block publication and need review.
@@ -96,6 +100,7 @@ BLOCKING_REVIEW_STEPS = frozenset(
         # ACL-1320: the profile is open by hand; the publisher stops the
         # account's job before any campaign instead of closing the window.
         "profile_open_by_hand",
+        "simple_create_layout",
         "conversion_event",
         "audience_age",
         "audience_location",

@@ -4334,9 +4334,18 @@ def run_recorded_campaign_flow(
     first_seen = _first_visible(page, (*onboarding_btns, name_field), budget_s=4.0)
     if first_seen is not None and first_seen is not name_field:
         _click(first_seen, attempts=3, where="onboarding_modal")
+    # ACL-1320: окно-экскурсия нового редактора — только своим крестиком.
+    _close_onboarding_tour(page, "onboarding_modal")
     _shot("after_onboarding_modal")
+    # ACL-1320: новый редактор Meta «в один экран» записанный поток не знает —
+    # остановка с понятной причиной сейчас, а не отказ где-то дальше.
+    if _simple_create_layout(page):
+        _shot("fail_simple_create_layout", note="simple_create")
+        return "simple_create_layout"
 
     def _late_onboarding_modal() -> bool:
+        if _close_onboarding_tour(page, "campaign_name"):
+            return True
         btn = _first_visible(page, onboarding_btns, budget_s=0.0)
         return btn is not None and _click(btn, attempts=2, where="onboarding_modal")
 
@@ -4346,6 +4355,9 @@ def run_recorded_campaign_flow(
         # редактор не отрисовался — пустой экран с «Loading…», и поля имени
         # на странице нет вовсе. Вводить ещё нечего, поэтому перезагружаем
         # без оглядки на «All edits saved» и пробуем снова.
+        if _simple_create_layout(page):
+            _shot("fail_simple_create_layout", note="simple_create")
+            return "simple_create_layout"
         if not (recover_stuck_page(page, "campaign_name", editor=False, force=True)
                 and _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name, where="campaign_name")):
             _shot("fail_campaign_name")
@@ -11701,6 +11713,113 @@ def _reopen_ad_after_reload(page: Page, ad_name: str) -> bool:
     return got is not None and got.strip().lower() == want
 
 
+#: ACL-1320, живой прогон 26.09 (Facebook_9943): поверх редактора кампании
+#: Meta показала окно-экскурсию «A streamlined way to create campaigns» —
+#: «Create your campaign in a single step…», счётчик «1 of 3», кнопка «Next»
+#: и крестик в шапке окна. Закрываем ТОЛЬКО его собственным крестиком, как
+#: окно ad blocker: «Next», «Get started», «Try it» не жмём никогда (они
+#: ведут экскурсию дальше или включают предлагаемое), и никогда — крестик
+#: самого редактора (`/am/editor_drawer`): он закрыл бы кампанию.
+_ONBOARDING_TITLES = (
+    r"streamlined way to create",
+    r"create your campaign in a single step",
+    r"new way to create",
+    r"take a (quick )?tour",
+)
+
+_ONBOARDING_JS = r"""() => {
+  const norm = (s) => (s || '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\s+/g, ' ').trim();
+  const shown = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const TITLES = new RegExp('(' + %TITLES% + ')', 'i');
+  const PAGER = /^\d+\s*of\s*\d+$/i;
+  const FORWARD = /^(next|get started|try it|continue|done|start|ok)$/i;
+  for (const d of document.querySelectorAll('[role=dialog]')) {
+    if (!shown(d)) continue;
+    // Сам редактор (поля имени) — не экскурсия, его не закрываем.
+    if (d.querySelector('input[placeholder^="Enter your campaign name"], input[placeholder^="Enter your ad set name"], input[placeholder^="Enter your ad name"]')) continue;
+    const own = (e) => e.closest('[role=dialog]') === d;
+    const leaves = [...d.querySelectorAll('*')].filter((e) => e.children.length === 0 && own(e) && shown(e));
+    const pager = leaves.some((e) => PAGER.test(norm(e.textContent)));
+    const heading = [...d.querySelectorAll('[role=heading], h1, h2, h3, h4')]
+      .filter((e) => own(e)).map((e) => norm(e.textContent)).find((t) => t) || '';
+    const text = norm(d.textContent).slice(0, 600);
+    if (!pager && !TITLES.test(heading) && !TITLES.test(text)) continue;
+    const title = (heading || text).slice(0, 80);
+    // Ищем только внутри этого окна и только его собственные кнопки
+    // (`own`): крестик редактора (`/am/editor_drawer`) вне окна сюда не
+    // попадает, даже когда окно нарисовано внутри редактора.
+    const safe = (b) => own(b) && shown(b) && !FORWARD.test(norm(b.textContent));
+    let x = [...d.querySelectorAll('[aria-label]')].find((b) =>
+      safe(b) && /^(close|dismiss)$/i.test(b.getAttribute('aria-label') || ''));
+    if (!x) {
+      // Крестик в шапке окна: кнопка без текста, с иконкой, сверху справа.
+      const r = d.getBoundingClientRect();
+      x = [...d.querySelectorAll('[role=button], button')].find((b) => {
+        if (!safe(b) || norm(b.textContent)) return false;
+        const br = b.getBoundingClientRect();
+        return br.top - r.top < 90 && br.left > r.left + r.width / 2 && !!b.querySelector('svg, i, img');
+      });
+    }
+    if (!x) return { state: 'no_close', title };
+    x.setAttribute('data-acl-close', 'onboarding');
+    return { state: 'marked', title };
+  }
+  return { state: 'absent' };
+}""".replace("%TITLES%", repr("|".join(_ONBOARDING_TITLES)))
+
+
+def _close_onboarding_tour(page: Page, where: str = "") -> str:
+    """Закрыть окно-экскурсию Meta его крестиком. Заголовок закрытого или "".
+
+    Строка телеметрии `overlays_cleared` с пометкой `onboarding_closed:<заголовок>`
+    (или `onboarding_no_close:<заголовок>`, если крестика не нашлось — тогда
+    окно не трогаем вовсе). Чтение разметки — ограниченное (`_eval_bounded`).
+    """
+    try:
+        got = _eval_bounded(page, _ONBOARDING_JS)
+    except Exception:
+        return ""
+    if not isinstance(got, dict) or got.get("state") in (None, "absent"):
+        return ""
+    title = str(got.get("title") or "")[:80]
+    if got.get("state") != "marked":
+        _telemetry.record("overlays_cleared", None, note=f"onboarding_no_close:{title}",
+                          diag={"where": where})
+        return ""
+    clicked = _click_close_mark(page, '[data-acl-close="onboarding"]')
+    _sleep_h(0.6)
+    try:
+        page.evaluate("() => document.querySelectorAll('[data-acl-close]')"
+                      ".forEach(e => e.removeAttribute('data-acl-close'))")
+    except Exception:
+        pass
+    if not clicked:
+        return ""
+    _telemetry.record("overlays_cleared", None, note=f"onboarding_closed:{title}",
+                      diag={"where": where, "closed": [f"onboarding_closed:{title}"]})
+    return title
+
+
+#: ACL-1320, живой прогон 26.09 (Facebook_9943, Facebook_1443): после Continue
+#: Meta открыла свой новый редактор «в один экран» (кампания, группа и
+#: объявление на одной странице), адрес `/adsmanager/manage/simple_create`.
+#: Записанный поток его не знает: кампании падали на `campaign_name` и
+#: `next_to_adset` после минут попыток. За всю историю прогонов такой адрес
+#: встречался только в этих отказах.
+_SIMPLE_CREATE_PATH = "/adsmanager/manage/simple_create"
+
+
+def _simple_create_layout(page: Page) -> bool:
+    """Открыт новый редактор Meta «в один экран» (по адресу, без обращения к вкладке)."""
+    try:
+        url = page.url
+    except Exception:
+        return False
+    if not isinstance(url, str):
+        return False
+    return _SIMPLE_CREATE_PATH in url.split("?", 1)[0]
+
+
 def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
                              ad_name: str = "") -> list[str]:
     """Убрать всё, что перекрывает клики: окно ad blocker, тост сети, баннеры.
@@ -11728,6 +11847,11 @@ def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
     how = _close_ad_blocker_modal(page)
     if how:
         closed.append(f"ad_blocker_modal:{how}")
+    # ACL-1320: окно-экскурсия Meta («1 of 3», «A streamlined way…») — своим
+    # крестиком; строку `overlays_cleared` пишет само закрытие.
+    tour = _close_onboarding_tour(page, where)
+    if tour:
+        closed.append(f"onboarding_closed:{tour}")
     closed += _close_banners(page, _BANNER_TITLES + _NETWORK_TOAST_TITLES)
     if editor and _cancel_naming_template_dialog(page):
         closed.append("naming_template_dialog")

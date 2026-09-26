@@ -85,6 +85,13 @@ POLICY: dict[str, tuple[str, str]] = {
         "profile through Multilogin failed; no draft was created - "
         + _profile.MESSAGES[_profile.RESTART_FAILED],
     ),
+    # ACL-1320: Meta's new single-screen editor (URL .../simple_create).
+    "simple_create_layout": (
+        BLOCKING,
+        "Meta opened its new single-screen campaign editor for this account; the robot "
+        "does not support it yet - the campaign was stopped and not retried; a partial "
+        "draft may be left in Ads Manager - check it and delete or finish it by hand",
+    ),
     "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
                          "restore a desktop-sized window before continuing the draft"),
     # ── Ad level ────────────────────────────────────────────────────────────

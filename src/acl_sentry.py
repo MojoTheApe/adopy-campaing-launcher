@@ -260,6 +260,7 @@ _REASONS = (
                        "err_connection", "proxy/network")),
     ("restart-failed", ("restart of unresponsive profile", "restarting the multilogin profile failed")),
     ("open-by-hand", ("open by hand", "profile_open_by_hand")),
+    ("simple-create", ("simple_create", "single-screen campaign editor")),
 )
 
 

@@ -56,6 +56,9 @@ _ACTIVE = frozenset({"pending", "queued", "running", "cancelling"})
 _BLOCKERS = {
     "account_blocked": "Account restricted by Meta — complete the verification in Ads Manager",
     "lead_terms_not_accepted": "Lead Generation terms are not accepted on the Page — accept them in Meta",
+    # ACL-1320: новый редактор Meta «в один экран».
+    "simple_create_layout": "Meta opened its new single-screen campaign editor for this account; "
+                            "the robot does not support it yet",
 }
 
 
