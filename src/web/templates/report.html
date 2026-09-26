@@ -7873,9 +7873,18 @@ async function amapAvailSave(box, names, hide) {
   }
   var ok = await amapAvailReload(box);
   if (ok && data.skipped && data.skipped.length) {
-    amapAvailMsg(amapAvailBox(), data.skipped.join(', ') + ' is placed in a country — take it out of the country first.', true);
+    amapAvailMsg(amapAvailBox(), amapPlacedMsg(data.skipped), true);
   }
   return ok;
+}
+
+// ACL-1319, финальное ревью PR #314: одно имя — «is placed in a country»,
+// несколько — «are placed in countries» (было «A, B is placed…»).
+function amapPlacedMsg(names) {
+  if (names.length === 1) {
+    return names[0] + ' is placed in a country — take it out of the country first.';
+  }
+  return names.join(', ') + ' are placed in countries — take them out of their countries first.';
 }
 
 async function amapAvailReload(box) {
