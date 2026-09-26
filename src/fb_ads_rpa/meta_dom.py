@@ -2852,7 +2852,7 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
         except Exception:
             pass
         frozen = _tab_frozen(page)
-        woke = watch.check(frozen=frozen)
+        woke = watch.check(frozen=True) if frozen else watch.check()
         now = time.time()
         if woke:
             grace_until = now + OBJECTIVE_AFTER_WAKE_S
@@ -2890,7 +2890,7 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
             outcome = "idle"
             break
     if out is not None:
-        out.update(outcome=outcome, frozen=frozen_polls, woke=watch.fired)
+        out.update(outcome=outcome, frozen=frozen_polls, woke=getattr(watch, "fired", ""))
     try:
         _telemetry.record("objective_wait", None, note=outcome,
                           duration_s=time.time() - start,
@@ -2900,7 +2900,7 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
                                 "loading_kinds": loading_kinds,
                                 "frozen_polls": frozen_polls,
                                 "slow_polls": slow_polls,
-                                "woke": watch.fired,
+                                "woke": getattr(watch, "fired", ""),
                                 "idle_s": round(time.time() - last_busy, 1)})
     except Exception:
         pass
@@ -3548,6 +3548,182 @@ def _page_gone(page: Page, exc: BaseException) -> bool:
     return False
 
 
+#: ACL-1320: жёсткий бюджет открытия кампании — от первого Create до окна
+#: цели. Прогон cf563b4ba594 (26.09, Doc19): первая кампания открывалась
+#: 19.2 / 16.3 / 1.3 мин в трёх прогонах на одном и том же процессе профиля.
+CAMPAIGN_OPEN_BUDGET_S = 120.0
+
+#: Один раунд «Create → окно цели», пока загрузки не видно. Раунд без окна
+#: кончается возвратом на список и новым нажатием, а не 75/180-секундным
+#: ожиданием. Пока Meta видимо грузит («Loading creation») на отвечающей
+#: вкладке, раунд ждёт до конца общего бюджета: перезагрузка поверх
+#: крутящейся загрузки выбрасывала её (ACL-1313, 24.09).
+CAMPAIGN_OPEN_ROUND_S = 45.0
+
+#: С какого раунда Create жмётся в свежей вкладке того же профиля.
+CAMPAIGN_OPEN_FRESH_TAB_ROUND = 3
+
+#: Сколько раз вкладка может не ответить на проверку живости за открытие,
+#: прежде чем её сменят на свежую, не дожидаясь третьего раунда.
+CAMPAIGN_OPEN_FROZEN_LIMIT = 2
+
+
+def _back_to_list(page: Page, list_url: str) -> None:
+    """Нажатие увело со списка кампаний — вернуться на него."""
+    try:
+        if list_url and page.url.split("?", 1)[0] != list_url.split("?", 1)[0]:
+            page.goto(list_url, wait_until="domcontentloaded", timeout=60000)
+            _sleep_h(3.0, 0.2)
+    except Exception:
+        pass
+
+
+def _open_list_again(page: Page, list_url: str, deadline: float) -> None:
+    """Новый раунд: список кампаний заново и видимая кнопка Create.
+
+    Всё ограничено `deadline` (конец раунда): переход — таймаутом драйвера,
+    кнопка — `wait_for`.
+    """
+    left_ms = lambda: max(int((deadline - time.time()) * 1000), 1000)  # noqa: E731
+    try:
+        page.goto(list_url, wait_until="domcontentloaded", timeout=min(30000, left_ms()))
+    except Exception:
+        pass
+    try:
+        page.get_by_role("button", name="Create", exact=True).first.wait_for(
+            state="visible", timeout=min(20000, left_ms()))
+    except Exception:
+        pass
+
+
+def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) -> str:
+    """Нажать Create и дождаться окна цели — не дольше `CAMPAIGN_OPEN_BUDGET_S`.
+
+    ACL-1320. Раунд: (раунд > 1 — список заново) → Create → быстрая проверка,
+    взялось ли нажатие (`_create_took`, промах повторяется на месте, как в
+    ACL-1313) → окно цели (`_wait_objective_dialog`) не дольше конца раунда,
+    а при видимой загрузке — до конца бюджета. На третьем раунде или после
+    второго «вкладка не ответила» — свежая вкладка того же профиля
+    (`browser.fresh_tab`, старая закрывается); не отвечает и она — профиль
+    целиком: "profile_unresponsive", и публикатор перезапускает профиль
+    через MLX API.
+
+    `press(page, where)` — нажатие Create, `shot(label)` — снимок/телеметрия
+    шага, `on_new_page(page)` — сообщить о свежей вкладке. Возвращает "" (окно
+    цели на экране), "create" (Create так и не нажалось), "objective_leads"
+    или "profile_unresponsive". Строка телеметрии `campaign_open_budget`.
+    """
+    start = time.time()
+    rounds = 0
+    frozen = 0
+    pressed = False
+    fresh = ""
+    quick_left = 2
+    outcome = ""
+    result = ""
+
+    def _left() -> float:
+        return CAMPAIGN_OPEN_BUDGET_S - (time.time() - start)
+
+    while _left() > 0:
+        rounds += 1
+        round_end = min(time.time() + CAMPAIGN_OPEN_ROUND_S, start + CAMPAIGN_OPEN_BUDGET_S)
+        if not fresh and (rounds >= CAMPAIGN_OPEN_FRESH_TAB_ROUND or frozen >= CAMPAIGN_OPEN_FROZEN_LIMIT):
+            new_page = None
+            try:
+                from src.fb_ads_rpa.browser import fresh_tab
+
+                new_page = fresh_tab(page, list_url)
+            except Exception:
+                new_page = None
+            if new_page is None:
+                fresh, result = "failed", "profile_unresponsive"
+                break
+            fresh, page, frozen = "ok", new_page, 0
+            if on_new_page is not None:
+                on_new_page(new_page)
+            round_end = min(time.time() + CAMPAIGN_OPEN_ROUND_S, start + CAMPAIGN_OPEN_BUDGET_S)
+        elif rounds > 1:
+            _open_list_again(page, list_url, round_end)
+        if _tab_frozen(page):
+            frozen += 1
+            outcome = "frozen"
+            if fresh == "ok":
+                result = "profile_unresponsive"
+                break
+            continue
+        _clear_blocking_overlays(page, "create" if rounds == 1 else "create_retry", editor=False)
+        where = "create" if rounds == 1 else "create_retry"
+        if not press(page, where):
+            outcome = "press_failed"
+            if _tab_frozen(page):
+                frozen += 1
+                if fresh == "ok":
+                    result = "profile_unresponsive"
+                    break
+            continue
+        pressed = True
+        shot("after_" + where)
+        took = "ok"
+        while True:
+            took = _create_took(page, list_url)
+            _telemetry.record("create_took", took == "ok", note=took)
+            if took in ("ok", "frozen") or quick_left <= 0:
+                break
+            # ACL-1313: промах виден за секунды — повторяем нажатие сразу.
+            # Не больше двух быстрых повторов за открытие; за последним
+            # сразу идёт ожидание окна цели, как и прежде.
+            quick_left -= 1
+            if took == "left_list":
+                _back_to_list(page, list_url)
+            try:
+                page.get_by_role("button", name="Create", exact=True).first.wait_for(
+                    state="visible", timeout=max(int(min(30.0, round_end - time.time()) * 1000), 1000))
+            except Exception:
+                pass
+            _clear_blocking_overlays(page, "create_quick_retry", editor=False)
+            press(page, "create_quick_retry")
+            shot("after_create_quick_retry")
+            if quick_left <= 0:
+                took = "ok"
+                break
+        if took == "frozen":
+            frozen += 1
+            outcome = "frozen"
+            if fresh == "ok":
+                result = "profile_unresponsive"
+                break
+            continue
+        out: dict = {}
+        if _wait_objective_dialog(page, first_s=max(round_end - time.time(), OBJECTIVE_POLL_S),
+                                  loading_max_s=max(_left(), OBJECTIVE_POLL_S), out=out):
+            outcome = "radio"
+            break
+        outcome = out.get("outcome") or "no_dialog"
+        # Каждый опрос, на который вкладка не ответила, — в счёт: ожидание,
+        # дважды не дождавшееся ответа (`unresponsive`), и есть «второе
+        # responsive:false» — свежая вкладка уже в следующем раунде.
+        frozen += int(out.get("frozen") or 0)
+        if outcome == "unresponsive":
+            frozen = max(frozen, CAMPAIGN_OPEN_FROZEN_LIMIT)
+            if fresh == "ok":
+                result = "profile_unresponsive"
+                break
+    else:
+        result = "objective_leads" if pressed else "create"
+    if outcome != "radio" and not result:
+        result = "objective_leads" if pressed else "create"
+    try:
+        _telemetry.record("campaign_open_budget", not result, note=result or "opened",
+                          duration_s=time.time() - start,
+                          diag={"rounds": rounds, "frozen": frozen, "fresh_tab": fresh,
+                                "pressed": pressed, "last": outcome,
+                                "budget_s": CAMPAIGN_OPEN_BUDGET_S})
+    except Exception:
+        pass
+    return result
+
+
 def run_recorded_campaign_flow(
     page: Page,
     *,
@@ -3568,6 +3744,7 @@ def run_recorded_campaign_flow(
     os_val: str = "All",
     additional_ads: list[dict[str, str]] | None = None,
     soft_fails_out: list[str] | None = None,
+    on_new_page=None,
 ) -> str:
     """Create -> Website -> ... -> Ad level, using the exact locators from a
     verified human Playwright codegen recording (2026-07-21) instead of the
@@ -3807,73 +3984,29 @@ def run_recorded_campaign_flow(
     if _stop_if_account_blocked("campaigns_list"):
         return "account_blocked"
     list_url = page.url
-    if not _click(page.get_by_role("button", name="Create", exact=True), where="create"):
-        if not (recover_stuck_page(page, "create", editor=False)
-                and _click(page.get_by_role("button", name="Create", exact=True), where="create")):
-            return "create"
-    _shot("after_create")
 
-    def _back_to_list() -> None:
-        """Нажатие увело со списка кампаний — вернуться на него."""
-        try:
-            if list_url and page.url.split("?", 1)[0] != list_url.split("?", 1)[0]:
-                page.goto(list_url, wait_until="domcontentloaded", timeout=60000)
-                _sleep_h(3.0, 0.2)
-        except Exception:
-            pass
+    def _adopt(new_page: Page) -> None:
+        # Свежая вкладка вместо зависшей (ACL-1320): дальше весь поток — в
+        # ней, и вызывающий (`AdsManagerFlow`, публикатор) узнаёт об этом.
+        nonlocal page
+        page = new_page
+        if on_new_page is not None:
+            try:
+                on_new_page(new_page)
+            except Exception:
+                pass
 
-    # ACL-1313: промах виден за секунды — повторяем нажатие сразу, без 75 с
-    # ожидания и перезагрузки. Два быстрых круга, дальше — прежний путь.
-    for _quick in range(2):
-        took = _create_took(page, list_url)
-        _telemetry.record("create_took", took == "ok", note=took)
-        if took == "ok":
-            break
-        if took == "left_list":
-            _back_to_list()
-        try:
-            page.get_by_role("button", name="Create", exact=True).first.wait_for(
-                state="visible", timeout=30000)
-        except Exception:
-            pass
-        _clear_blocking_overlays(page, "create_quick_retry", editor=False)
-        _click(page.get_by_role("button", name="Create", exact=True), where="create_quick_retry")
-        _shot("after_create_quick_retry")
-
-    # ACL-1233: окно выбора цели не появилось, а страница висит в «Loading…»
-    # или стала страницей ошибки Chrome — перезагрузить список и нажать Create
-    # ещё раз, вместо минут ожидания в каждой попытке клика (19.09: 10–12 мин).
-    # 19.09 вечер: одного раунда мало — Meta отвечала со второго-третьего
-    # раза. До двух раундов «разбудить → перезагрузить → Create».
-    # 20.09 02:05, замер по 80 удачным переходам за сутки: медиана 19 с, но
-    # 31 из 80 — дольше 25 с (до 151 с). Прежние 25 с обрывали нормальное
-    # ожидание в 40% случаев, и перезагрузка начинала отсчёт заново.
-    # ACL-1313: пока крутится «Loading creation», ждём её, а не перезагружаем.
-    for attempt in range(2):
-        if _wait_objective_dialog(page):
-            break
-        # Со списка увели (Audiences, 887b2d): перезагрузка открыла бы ту же
-        # чужую страницу, где кнопки Create нет вовсе.
-        _back_to_list()
-        cleared = _clear_blocking_overlays(page, "objective", editor=False)
-        if ("network_trouble:reloaded" not in cleared
-                and not recover_stuck_page(page, "objective", editor=False, force=True)):
-            break
-        try:
-            page.get_by_role("button", name="Create", exact=True).first.wait_for(
-                state="visible", timeout=30000)
-        except Exception:
-            pass
-        _clear_blocking_overlays(page, "create_retry", editor=False)
-        _click(page.get_by_role("button", name="Create", exact=True), where="create_retry")
-        _shot("after_create_retry")
-    else:
-        # Круги кончились на нажатом Create, а окна цели после него ещё не
-        # ждали: прежде сразу шли 10 с `OBJECTIVE_RADIO_LAST_WAIT_S` и отказ.
-        # Прогон 6eee2acfb2ae (25.09): окно пришло через ~13 с после
-        # лишней перезагрузки `_clear_blocking_overlays` — попытка пропала.
-        # Последнему Create — то же терпеливое ожидание, что и прочим.
-        _wait_objective_dialog(page)
+    # ACL-1320: Create и окно цели — под жёстким бюджетом `_open_campaign`
+    # (~45 с на раунд, ~2 мин всего; третий раунд — в свежей вкладке).
+    opened = _open_campaign(
+        page, list_url,
+        press=lambda p, where: _click(p.get_by_role("button", name="Create", exact=True), where=where),
+        shot=_shot, on_new_page=_adopt)
+    if opened == "profile_unresponsive":
+        _shot("fail_profile_unresponsive")
+        return "profile_unresponsive"
+    if opened == "create":
+        return "create"
 
     # New Meta UI sometimes shows a Guided/Manual choice before the objective
     # picker enables Campaign name — click Manual if present, best-effort

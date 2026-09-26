@@ -182,7 +182,9 @@ def test_flow_watches_are_keyed_by_step_and_never_reload_an_additional_ad(flow, 
         def __init__(self, page, where, *, budget_s=None, editor=None, reload=True):
             made.append((where, reload))
 
-        def check(self):
+        fired = ""
+
+        def check(self, *, frozen=False):
             return ""
 
     monkeypatch.setattr(md, "_StallWatch", _Rec)

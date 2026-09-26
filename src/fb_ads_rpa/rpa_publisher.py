@@ -315,6 +315,41 @@ class RpaPublisher:
                 pass
             self._entry = None
 
+    def _flow(self, conn: BrowserConnection, account_label: str) -> AdsManagerFlow:
+        """Поток кампании, который может сменить вкладку и перезапустить профиль."""
+        return AdsManagerFlow(
+            conn.page, selectors_path=self.selectors_path,
+            on_page_replaced=self._adopt_page,
+            restart_profile=lambda: self._restart_unresponsive_profile(account_label),
+        )
+
+    def _adopt_page(self, page: Any) -> None:
+        """Поток сменил зависшую вкладку на свежую (ACL-1320): соединение
+        дальше отдаёт её — и следующей кампании, и уборке в конце."""
+        if self._conn is not None and page is not None:
+            self._conn.page = page
+
+    def _restart_unresponsive_profile(self, account_label: str) -> Any:
+        """Перезапустить не отвечающий профиль через MLX API (ACL-1320).
+
+        Только у провайдера, который это умеет (`restart_unresponsive`,
+        attach-only по умолчанию): остановка и запуск идут через API
+        рабочего пространства профиля, простой браузер не открывается
+        никогда. Возвращает страницу нового соединения или None.
+        """
+        entry = self._entry
+        restart = getattr(self._provider, "restart_unresponsive", None)
+        if entry is None or restart is None:
+            return None
+        self._reset_browser(keep_browser_open=True)
+        try:
+            self._conn = restart(entry, account_label)
+        except Exception as exc:
+            log.warning("Restart of unresponsive profile %s failed: %s", account_label, exc)
+            self._conn = None
+            return None
+        return self._conn.page
+
     @serialized_browser(key=lambda self, draft: profile_key_for(draft.account_label))
     def publish_draft(self, draft: CampaignDraft) -> RpaPublishResult:
         if (draft.status or "").strip().upper() != "DRAFT":
@@ -344,7 +379,7 @@ class RpaPublisher:
                 info["provider"] = str(getattr(conn, "provider", "") or type(getattr(self, "_provider", None)).__name__)
         else:
             conn = self._ensure_browser(draft.account_label)
-        flow = AdsManagerFlow(conn.page, selectors_path=self.selectors_path)
+        flow = self._flow(conn, draft.account_label)
         try:
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
         except Exception as exc:
@@ -361,7 +396,7 @@ class RpaPublisher:
                 conn = self._ensure_browser(draft.account_label)
             except Exception as re_exc:
                 raise self._mlx_fallback_error(exc, re_exc) from re_exc
-            flow = AdsManagerFlow(conn.page, selectors_path=self.selectors_path)
+            flow = self._flow(conn, draft.account_label)
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
         if self.hand_off and result.publishable:
             result.error = "Draft ready — browser left open, Meta Publish was not clicked"

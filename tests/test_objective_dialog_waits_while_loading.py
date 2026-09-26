@@ -149,16 +149,23 @@ def test_the_quick_path_is_unchanged(env):
 
 
 def test_the_recorded_flow_waits_through_the_helper_before_reloading():
-    """`run_recorded_campaign_flow` ждёт окно цели через `_wait_objective_dialog`,
-    и только потом — `recover_stuck_page`."""
+    """`run_recorded_campaign_flow` открывает кампанию через `_open_campaign`
+    (ACL-1320), а тот ждёт окно цели через `_wait_objective_dialog` — и только
+    потом идёт на список заново (`_open_list_again`)."""
     tree = ast.parse((ROOT / "src/fb_ads_rpa/meta_dom.py").read_text(encoding="utf-8"))
-    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "run_recorded_campaign_flow")
-    calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
-    wait_lines = [c.lineno for c in calls if c.func.id == "_wait_objective_dialog"]
-    recover_lines = [c.lineno for c in calls if c.func.id == "recover_stuck_page"
-                     and c.args[1:2] and isinstance(c.args[1], ast.Constant) and c.args[1].value == "objective"]
-    assert wait_lines, "окно цели ждут не через _wait_objective_dialog"
-    assert recover_lines and min(wait_lines) < min(recover_lines)
+
+    def fn(name):
+        return next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+
+    def calls(node, name):
+        return [c.lineno for c in ast.walk(node)
+                if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == name]
+
+    assert calls(fn("run_recorded_campaign_flow"), "_open_campaign"), "кампанию открывают мимо бюджета"
+    opener = fn("_open_campaign")
+    assert calls(opener, "_wait_objective_dialog"), "окно цели ждут не через _wait_objective_dialog"
+    assert calls(opener, "_open_list_again")
+    assert not calls(opener, "recover_stuck_page"), "раунд без окна цели — список заново, не reload"
 
 
 # ── пауза перед новой попыткой кампании ───────────────────────────────────

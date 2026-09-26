@@ -127,14 +127,18 @@ def test_the_stall_guard_fires_at_once_on_a_frozen_tab(monkeypatch, rows):
 
 def test_the_flow_click_hands_a_frozen_tab_to_the_guard_within_its_budget(flow, monkeypatch):
     """`_click` не входит в `_wait_loading`/`wait_for` на зависшей вкладке, а
-    сторож срабатывает сразу — не на 108-й секунде, как в cf563b4ba594."""
+    сторож срабатывает сразу — не на 108-й секунде, как в cf563b4ba594.
+    Окно цели «открыто»; вкладка замирает на нажатии радио Leads."""
     fired: list[tuple] = []
+    monkeypatch.setattr(md, "_open_campaign", lambda *a, **k: "")
     monkeypatch.setattr(md, "_page_responsive", lambda p, timeout_s=5.0: False)
     monkeypatch.setattr(md, "_unstick",
                         lambda p, where, **kw: fired.append((where, kw["waited_s"])) or "woke")
-    flow["run"]()
+    loc = flow["page"].get_by_text.return_value
+    loc.wait_for.reset_mock()
+    assert flow["run"]() == "objective_leads"
     assert fired, "сторож не сработал на зависшей вкладке"
     where, waited = fired[0]
-    assert where.startswith("create") and waited < md.STALL_BUDGET_S
-    page = flow["page"]
-    assert not page.get_by_text.return_value.wait_for.called, "ждали кнопку на зависшей вкладке"
+    assert where == "objective_leads" and waited < md.STALL_BUDGET_S
+    # Единственное ожидание — ограниченная проверка радио до нажатия.
+    assert loc.wait_for.call_count <= 1

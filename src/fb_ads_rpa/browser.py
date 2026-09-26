@@ -888,6 +888,132 @@ def wake_page(page) -> dict:
     return out
 
 
+class ProfileUnresponsive(RuntimeError):
+    """Профиль не отвечает: ни его вкладка, ни свежая вкладка рядом (ACL-1320)."""
+
+
+def page_answers(page, timeout_s: float = 5.0) -> bool | None:
+    """Отвечает ли вкладка: True / False (не за `timeout_s`) / None (не спросить).
+
+    Та же проверка, что `meta_dom._page_responsive`: `wait_for_function` —
+    вызов, таймаут которого соблюдает драйвер, и `() => true` отвечает на
+    первом же вычислении, без кадров анимации.
+    """
+    try:
+        page.wait_for_function("() => true", timeout=int(timeout_s * 1000))
+        return True
+    except Exception as exc:
+        if "timeout" in type(exc).__name__.lower() or "Timeout" in str(exc):
+            return False
+        return None
+
+
+def _open_tab_via_browser(context, timeout_s: float = 10.0, *, like_url: str = ""):
+    """Новая фоновая вкладка через сессию самого браузера.
+
+    `_new_background_page` открывает вкладку через сессию первой вкладки
+    контекста — а это может быть та самая, что зависла. Сессия браузера
+    (`new_browser_cdp_session`) с рендерером не говорит вовсе. `background`
+    — чтобы окно профиля не поднималось поверх работы человека (решение
+    19.09). Вкладку узнаём как ту, которой не было в `context.pages` до.
+    `like_url` — адрес вкладки, рядом с которой открыть: по нему из списка
+    целей браузера берётся её контекст (у Multilogin он один, но так вкладка
+    точно попадёт в `context`). Сессию на самой вкладке не открываем:
+    `context.new_cdp_session` на вкладке с зависшим рендерером висел 197 с
+    (замер ACL-1320 на настоящем Chromium).
+    """
+    before = {id(p) for p in context.pages}
+    session = context.browser.new_browser_cdp_session()
+    try:
+        params: dict = {"url": "about:blank", "background": True}
+        if like_url:
+            infos = (session.send("Target.getTargets") or {}).get("targetInfos") or []
+            ids = {t.get("browserContextId") for t in infos
+                   if t.get("type") == "page" and t.get("url") == like_url and t.get("browserContextId")}
+            if len(ids) == 1:
+                params["browserContextId"] = ids.pop()
+        target = (session.send("Target.createTarget", params) or {}).get("targetId")
+    finally:
+        try:
+            session.detach()
+        except Exception:
+            pass
+    if not target:
+        return None
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        for candidate in list(context.pages):
+            if id(candidate) not in before:
+                return candidate
+        try:
+            context.wait_for_event("page", timeout=500)
+        except Exception:
+            pass
+    return None
+
+
+def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
+    """Свежая вкладка того же профиля вместо зависшей (ACL-1320).
+
+    Прогон cf563b4ba594 (26.09, Doc19): рендерер долгоживущей вкладки списка
+    кампаний не отвечал ~14 минут, и ни пробуждение, ни перезагрузка той же
+    вкладки не помогали. Новая вкладка — новый документ (и, как правило,
+    новый процесс рендерера) в том же профиле: те же куки, прокси и отпечаток
+    Multilogin. Никакого простого браузера.
+
+    Порядок: новая фоновая вкладка через сессию браузера (ни одной сессии на
+    зависшей) → она отвечает? → троттлинг снят, скринкаст, трекер мыши (как
+    при подключении) → старая закрыта (`page.close(run_before_unload=False)`
+    идёт через браузер, её рендерер не ждёт — и новая не делит с ней
+    процесс) → переход на
+    `url` → Meta в новой вкладке отвечает? Всё удалось — новая страница,
+    иначе None: профиль не отвечает целиком, решать вызывающему (перезапуск
+    профиля через MLX API).
+    """
+    from src.fb_ads_rpa import run_telemetry as rt
+
+    context = page.context
+    diag: dict = {"url": (url or "")[:160]}
+    new = None
+    try:
+        new = _open_tab_via_browser(context, like_url=page.url or "")
+        if new is None:
+            diag["why"] = "no_new_tab"
+            return None
+        if page_answers(new, 5.0) is False:
+            diag["why"] = "new_tab_silent"
+            return None
+        _disable_background_throttling(context, new)
+        _keep_renderer_active(context, new)
+        try:
+            from src.fb_ads_rpa.pacing import _install_mouse_tracker
+
+            _install_mouse_tracker(new)
+        except Exception:
+            pass
+        try:
+            page.close(run_before_unload=False)
+            diag["old_closed"] = True
+        except Exception as exc:
+            diag["old_closed"] = False
+            diag["close_error"] = str(exc)[:80]
+        if url:
+            new.goto(url, wait_until="domcontentloaded", timeout=int(goto_timeout_s * 1000))
+        if page_answers(new, 5.0) is False:
+            diag["why"] = "meta_silent_in_new_tab"
+            return None
+        diag["why"] = ""
+        return new
+    except Exception as exc:
+        diag["why"] = f"{type(exc).__name__}: {str(exc)[:80]}"
+        return None
+    finally:
+        try:
+            rt.record("fresh_tab", not diag.get("why"), note=diag.get("why") or "ok", diag=diag)
+        except Exception:
+            pass
+
+
 def ensure_editor_window(page, section: str) -> bool:
     """Check at section boundaries; recover once, then stop without replaying drafts."""
     from src.fb_ads_rpa import run_telemetry as rt
@@ -992,7 +1118,8 @@ def _unminimize_before_attach(browser) -> list[dict]:
     return done
 
 
-def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None, new_page: bool = False) -> BrowserConnection:
+def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None,
+                        new_page: bool = False, check_responsive: bool = False) -> BrowserConnection:
     ensure_playwright_browsers_path()
     # Prior failed attach may have left sync Playwright's loop running in-thread.
     _stop_thread_playwright()
@@ -1010,6 +1137,17 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
                 page = _new_background_page(context) or context.new_page()
             else:
                 page = context.pages[0] if context.pages else context.new_page()
+                # ACL-1320: к уже открытому профилю — сначала ограниченный
+                # вопрос «отвечает ли вкладка». Всё ниже (троттлинг, размер
+                # окна, скринкаст) — CDP-вызовы без таймаута, и на зависшей
+                # вкладке подключение висело бы вместе с ними. Не отвечает —
+                # свежая вкладка рядом; не отвечает и она — профиль целиком
+                # (`ProfileUnresponsive`, перезапуск через MLX API).
+                if check_responsive and page_answers(page, 5.0) is False:
+                    replacement = fresh_tab(page, page.url if (page.url or "").startswith("http") else "")
+                    if replacement is None:
+                        raise ProfileUnresponsive("the profile's tabs do not answer")
+                    page = replacement
         else:
             context = browser.new_context()
             prior = None
@@ -1356,7 +1494,8 @@ class MultiloginDirectCDPProvider:
         return self._profile_process_running(user_data_dir, profile_id)
 
     def _try_attach_existing(
-        self, profile_id: str, user_data_dir: str, *, strict_profile: bool = False, new_page: bool = False
+        self, profile_id: str, user_data_dir: str, *, strict_profile: bool = False, new_page: bool = False,
+        check_responsive: bool = False,
     ) -> "BrowserConnection | None":
         """Reuse an already-running Mimic for this profile (do not kill/restart)."""
         import logging
@@ -1379,9 +1518,14 @@ class MultiloginDirectCDPProvider:
                 debug_port=str(port),
                 ws_endpoint=None,
                 new_page=new_page,
+                # Только когда просили: чтение спенда цепляется без неё.
+                **({"check_responsive": True} if check_responsive else {}),
             )
             log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
             return conn
+        except ProfileUnresponsive:
+            # Вызывающий просил проверить живость — ему и решать (ACL-1320).
+            raise
         except Exception as exc:
             log.warning("Could not attach to running Mimic (%s)", exc)
             return None
@@ -1538,6 +1682,21 @@ class MultiloginDirectCDPProvider:
         self._profile_id_cache = None
 
 
+def _record_profile_restart(entry: AccountMapEntry, profile_id: str, *, ok: bool, where: str,
+                            error: str = "") -> None:
+    """Строка телеметрии `profile_restarted_unresponsive` (ACL-1320)."""
+    try:
+        from src.fb_ads_rpa import run_telemetry as rt
+
+        diag = {"where": where, "profile": (profile_id or "")[:8],
+                "workspace": (getattr(entry, "multilogin_instance", "") or "A")}
+        if error:
+            diag["error"] = error
+        rt.record("profile_restarted_unresponsive", ok, note=where, diag=diag)
+    except Exception:
+        pass
+
+
 class MultiloginAttachOnlyProvider:
     """Connect to Multilogin via MLX automation API when the user clicks Publish.
 
@@ -1672,11 +1831,24 @@ class MultiloginAttachOnlyProvider:
             )
         udd = str(user_data_dir) if user_data_dir is not None else ""
 
-        reused = (self._direct._try_attach_existing(profile_id, udd, strict_profile=not allow_restart)
-                  if udd else None)
+        unresponsive = False
+        try:
+            reused = (self._direct._try_attach_existing(profile_id, udd, strict_profile=not allow_restart,
+                                                        check_responsive=allow_restart)
+                      if udd else None)
+        except ProfileUnresponsive:
+            # ACL-1320: открытый профиль не отвечает — ни его вкладка, ни
+            # свежая. Ждать старую вкладку бессмысленно: останавливаем профиль
+            # через MLX API его же рабочего пространства и поднимаем заново.
+            log.warning("Profile %s is open but does not answer; restarting it through the MLX API",
+                        profile_id)
+            reused = None
+            unresponsive = True
         if reused is not None:
             log.info("Attached to already-open Multilogin profile %s", profile_id)
             return reused
+        if unresponsive:
+            self._stop_profile(entry, account_label, profile_id, udd)
 
         # Manually (Quick) launched MLX profiles expose no CDP port, so we cannot
         # attach. _start_via_mlx_api gracefully stops ONLY this profile via the MLX
@@ -1693,6 +1865,12 @@ class MultiloginAttachOnlyProvider:
 
         started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
                                           allow_restart=allow_restart, allow_kill=allow_kill)
+        conn = self._connect_started(started, profile_id)
+        if unresponsive:
+            _record_profile_restart(entry, profile_id, ok=True, where="attach")
+        return conn
+
+    def _connect_started(self, started: Any, profile_id: str) -> BrowserConnection:
         ws = started.ws_endpoint or ""
         if ws and not ws.startswith("/"):
             ws = f"/{ws}"
@@ -1708,6 +1886,56 @@ class MultiloginAttachOnlyProvider:
             debug_port=started.port,
             ws_endpoint=started.ws_endpoint,
         )
+
+    def _stop_profile(self, entry: AccountMapEntry, account_label: str, profile_id: str, udd: str) -> None:
+        """Остановить профиль через MLX API его рабочего пространства (ACL-1320).
+
+        Токен — по `entry.multilogin_instance` (A = Inhouse, B = KLD), как у
+        запуска. `start_profile` на уже запущенном с автоматизацией профиле
+        возвращает его старый порт — то есть тот же зависший браузер, —
+        поэтому сначала явная остановка. Не остановился через API — как и в
+        пути «открыт руками в MLX»: закрыть Mimic только этого профиля.
+        """
+        from src.meta_campaign_agent.multilogin_config import get_multilogin_instance
+        from src.meta_campaign_agent.multilogin_launcher import (
+            MultiloginLauncher,
+            MultiloginLauncherError,
+        )
+
+        folder_id = (entry.folder_id or "").strip() or _folder_id_from_profile_dir(udd)
+        launcher = MultiloginLauncher(get_multilogin_instance(entry.multilogin_instance))
+        try:
+            launcher.stop_profile(profile_id, folder_id=folder_id)
+            log.info("%s: unresponsive profile %s stopped through the MLX API", account_label, profile_id)
+        except MultiloginLauncherError as exc:
+            log.warning("%s: MLX stop failed (%s); closing Mimic of this profile only", account_label, exc)
+            if udd:
+                _kill_chrome_for_user_data_dir(udd, profile_id, mlx_only=True)
+        time.sleep(3)
+
+    def restart_unresponsive(self, entry: AccountMapEntry, account_label: str) -> BrowserConnection:
+        """Перезапустить профиль, который не отвечает (ACL-1320).
+
+        Зовёт публикатор, когда кампания не открылась и свежая вкладка не
+        помогла (`run_recorded_campaign_flow` → "profile_unresponsive").
+        Остановка и запуск — через MLX API со своим токеном рабочего
+        пространства, подключение — по новому порту. Простой браузер — никогда.
+        """
+        profile_id = entry.profile_id
+        if not profile_id:
+            raise RuntimeError(f"{account_label}: profile_id is required")
+        user_data_dir = _find_mlx_profile_dir(profile_id)
+        udd = str(user_data_dir) if user_data_dir is not None else ""
+        try:
+            self._stop_profile(entry, account_label, profile_id, udd)
+            started = self._start_via_mlx_api(entry, account_label, profile_id, udd)
+            conn = self._connect_started(started, profile_id)
+        except Exception as exc:
+            _record_profile_restart(entry, profile_id, ok=False, where="campaign_open",
+                                    error=f"{type(exc).__name__}: {str(exc)[:120]}")
+            raise
+        _record_profile_restart(entry, profile_id, ok=True, where="campaign_open")
+        return conn
 
     def close(self, entry: AccountMapEntry, *, keep_browser_open: bool = False) -> None:
         # Never stop the Multilogin profile — user keeps their window.

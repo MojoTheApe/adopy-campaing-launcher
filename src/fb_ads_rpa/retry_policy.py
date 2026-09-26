@@ -60,6 +60,11 @@ CAMPAIGN_RETRY_STEPS = frozenset(
         "further_limit_reach_radio",
         "further_limit_reach_continue",
         "next_to_ad",
+        # ACL-1320: кампания не открылась, потому что профиль не отвечает —
+        # ни вкладка, ни свежая вкладка рядом. До окна цели ничего не
+        # создано; публикатор перезапускает профиль через MLX API, и
+        # повтор кампании идёт уже в живом браузере.
+        "profile_unresponsive",
     }
 )
 

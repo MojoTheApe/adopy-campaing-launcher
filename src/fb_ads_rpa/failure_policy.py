@@ -52,6 +52,13 @@ POLICY: dict[str, tuple[str, str]] = {
         "draft is incomplete and was not retried (a replay would duplicate it) - "
         "check the draft in Ads Manager and finish or delete it",
     ),
+    "profile_unresponsive": (
+        BLOCKING,
+        "the Multilogin profile's browser did not answer while the campaign was being "
+        "opened (neither its tab nor a fresh one), and restarting the profile did not "
+        "help; no draft was created - close the profile in Multilogin and run the "
+        "campaign again",
+    ),
     "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
                          "restore a desktop-sized window before continuing the draft"),
     # ── Ad level ────────────────────────────────────────────────────────────

@@ -917,12 +917,30 @@ def _fill_ad_copy(page: Page, ad: AdDraft, selectors_cfg: dict[str, Any], timeou
 class AdsManagerFlow:
     """Navigate Ads Manager UI and create one campaign tree."""
 
-    def __init__(self, page: Page, *, selectors_path: str | None = None):
+    def __init__(self, page: Page, *, selectors_path: str | None = None,
+                 on_page_replaced=None, restart_profile=None):
         self.page = page
+        # ACL-1320: поток может сменить зависшую вкладку на свежую, а
+        # публикатор — перезапустить не отвечающий профиль. Оба сообщают
+        # новую страницу сюда, а `on_page_replaced` — дальше, владельцу
+        # соединения (`BrowserConnection.page`).
+        self._on_page_replaced = on_page_replaced
+        self._restart_profile = restart_profile
         self.cfg = load_selectors(selectors_path)
         timing = self.cfg.get("timing") or {}
         self.nav_timeout = int(timing.get("navigation_timeout_ms") or 90000)
         self.action_timeout = int(timing.get("action_timeout_ms") or 45000)
+
+    def _adopt_page(self, page: Page) -> None:
+        """Дальше работать в `page` — свежей вкладке или перезапущенном профиле."""
+        if page is None or page is self.page:
+            return
+        self.page = page
+        if self._on_page_replaced is not None:
+            try:
+                self._on_page_replaced(page)
+            except Exception:
+                pass
 
     def _variations_ranks(self) -> "StrategyRanks | None":
         cached = getattr(self, "_strategy_ranks", None)
@@ -2220,6 +2238,7 @@ class AdsManagerFlow:
             max_attempts = retry_policy.MAX_CAMPAIGN_ATTEMPTS
             fail_step = ""
             ad_soft_fails: list[str] = []
+            profile_restarted = False
             for attempt in range(1, max_attempts + 1):
                 # Only the surviving attempt's state matters — a retry rebuilds
                 # the campaign from scratch, so failures from the abandoned one
@@ -2246,6 +2265,7 @@ class AdsManagerFlow:
                         os_val=ad_set.os,
                         additional_ads=additional_ads,
                         soft_fails_out=ad_soft_fails,
+                        on_new_page=self._adopt_page,
                     )
                 finally:
                     try:
@@ -2263,6 +2283,26 @@ class AdsManagerFlow:
                     fail_step, campaign=draft.name,
                     account=draft.account_label or "", attempt=attempt,
                 )
+                if fail_step.split(":", 1)[0] == "profile_unresponsive":
+                    # ACL-1320: профиль не отвечает — перезапустить его через
+                    # MLX API (один раз на кампанию) и повторить кампанию в
+                    # живом браузере. Не вышло — повтор в том же мёртвом
+                    # профиле ничего не даст.
+                    new_page = None
+                    if not profile_restarted and self._restart_profile is not None:
+                        profile_restarted = True
+                        try:
+                            new_page = self._restart_profile()
+                        except Exception as exc:
+                            log.warning("profile restart failed: %s", exc)
+                            new_page = None
+                    result.steps_completed.append(
+                        "profile_restarted_unresponsive:" + ("ok" if new_page is not None else "failed"))
+                    if new_page is None:
+                        result.steps_completed.append(
+                            f"recorded_flow_retry_blocked:{fail_step}:no_restart")
+                        break
+                    self._adopt_page(new_page)
                 decision = retry_policy.disposition(fail_step)
                 if decision.action != retry_policy.RETRY_CAMPAIGN:
                     result.steps_completed.append(
@@ -2290,7 +2330,8 @@ class AdsManagerFlow:
                 result.error = f"Recorded flow failed at: {fail_step}"
                 # ACL-1313: остановку, которую повтор не лечит (account_blocked),
                 # человек должен понять из самой ошибки, без разбора телеметрии.
-                if fail_step.split(":", 1)[0] in ("account_blocked", "browser_closed"):
+                if fail_step.split(":", 1)[0] in ("account_blocked", "browser_closed",
+                                                  "profile_unresponsive"):
                     result.error += " - " + failure_policy.reason(fail_step)
                     result.blocking_failures.append(fail_step)
 
