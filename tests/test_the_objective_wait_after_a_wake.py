@@ -141,3 +141,26 @@ def test_without_any_loading_the_round_still_ends_at_first_s(env, monkeypatch):
     out: dict = {}
     assert md._wait_objective_dialog(_Page(radio), first_s=15, idle_s=30, loading_max_s=112, out=out) is False
     assert out["outcome"] == "first_s"
+
+
+def test_a_busy_tab_that_answers_between_long_tasks_is_not_unresponsive(env, monkeypatch):
+    """Ревью PR #323 (F8): «не ответила» — только подряд. Вкладка молчит
+    через раз (долгие задачи гидратации) — окно цели дожидаемся."""
+    calls = {"n": 0}
+
+    def responsive(p, timeout_s=5.0):
+        calls["n"] += 1
+        if calls["n"] % 2:
+            env.clock.sleep(timeout_s)
+            return False
+        return True
+
+    monkeypatch.setattr(md, "_page_responsive", responsive)
+    radio = _Radio(env.clock, appears_at=env.start + 40)
+    out: dict = {}
+    assert md._wait_objective_dialog(_Page(radio), first_s=75, idle_s=60, out=out) is True, out
+    assert out["frozen"] >= md.OBJECTIVE_FROZEN_POLLS
+
+
+def test_the_liveness_probe_gives_a_busy_tab_five_seconds():
+    assert md.LIVENESS_PROBE_S == 5.0

@@ -2853,6 +2853,7 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
     grace_until = start
     loading_polls = 0
     frozen_polls = 0
+    frozen_run = 0
     slow_polls = 0
     loading_kinds: dict[str, int] = {}
     outcome = "idle"
@@ -2878,11 +2879,15 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
             grace_until = now + OBJECTIVE_AFTER_WAKE_S
         if frozen:
             frozen_polls += 1
+            frozen_run += 1
             last_busy = now
-            if frozen_polls >= OBJECTIVE_FROZEN_POLLS:
+            # Ревью PR #323 (F8): только подряд — живая вкладка с одной
+            # длинной задачей между ответами зависшей не считается.
+            if frozen_run >= OBJECTIVE_FROZEN_POLLS:
                 outcome = "unresponsive"
                 break
             continue
+        frozen_run = 0
         if now - poll_start > OBJECTIVE_SLOW_POLL_FACTOR * poll_s:
             slow_polls += 1
             last_busy = now
@@ -3044,7 +3049,13 @@ def _pace(since: float, min_s: float) -> None:
 #: cf563b4ba594 (26.09) ~14 из 19 минут просидел в вызовах без таймаута
 #: (`locator.count()`, `is_visible`, `page.evaluate`, CDP `send`) на вкладке,
 #: которая не отвечала вовсе.
-LIVENESS_PROBE_S = 3.0
+#: Ревью PR #323 (F8): 3 с резали живую, но занятую вкладку (long task
+#: гидратации длинного списка на медленном профиле) — 5 с.
+LIVENESS_PROBE_S = 5.0
+
+#: Ревью PR #323 (F8): прежде чем закрыть вкладку как зависшую (свежая
+#: вкладка вместо неё), её спрашивают ещё раз, дольше.
+FROZEN_CONFIRM_S = 10.0
 
 
 def _tab_frozen(page: Page) -> bool:
@@ -3820,6 +3831,13 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
             break
         rounds += 1
         round_end = min(time.time() + CAMPAIGN_OPEN_ROUND_S, start + CAMPAIGN_OPEN_BUDGET_S)
+        if (not fresh and frozen >= CAMPAIGN_OPEN_FROZEN_LIMIT
+                and rounds < CAMPAIGN_OPEN_FRESH_TAB_ROUND
+                and _page_responsive(page, FROZEN_CONFIRM_S) is True):
+            # Ревью PR #323 (F8): длинная проба ответила — вкладка занята, а
+            # не зависла; её не закрываем, раунд идёт как обычно.
+            _telemetry.record("tab_frozen", None, note="confirm_answered", diag={"frozen": frozen})
+            frozen = 0
         if not fresh and (rounds >= CAMPAIGN_OPEN_FRESH_TAB_ROUND or frozen >= CAMPAIGN_OPEN_FROZEN_LIMIT):
             trouble = _profile_trouble(page)
             if trouble:
@@ -3857,6 +3875,9 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
                 result = "profile_unresponsive"
                 break
             continue
+        # Ревью PR #323 (F8): «не отвечает» считается подряд — ответила, счёт
+        # сначала.
+        frozen = 0
         if rounds == 1:
             # ACL-1320: до первого Create — разбудить вкладку (троттлинг и
             # заморозка Chrome сняты заново), но окно вперёд не выводить.

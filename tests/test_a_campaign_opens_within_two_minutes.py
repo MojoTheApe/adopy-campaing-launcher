@@ -391,3 +391,26 @@ def test_the_create_window_never_outgrows_the_budget(env, monkeypatch):
     waits = [e for e in env.ev if e[0] == "wait"]
     assert waits and waits[0][2] < md.CAMPAIGN_OPEN_AFTER_CREATE_S
     assert env.clock.now - env.start <= 60.0 + md.OBJECTIVE_POLL_S + 10
+
+
+def test_a_tab_that_answers_the_long_probe_is_not_replaced(env, monkeypatch):
+    """Ревью PR #323 (F8): ожидание окна цели дважды не дождалось ответа
+    вкладки (`unresponsive`), но длинная проба перед свежей вкладкой
+    ответила — вкладку не закрываем, второй раунд идёт в ней."""
+    env.sc.wait_out = {"outcome": "unresponsive", "frozen": md.OBJECTIVE_FROZEN_POLLS}
+    probes: list = []
+    monkeypatch.setattr(md, "_page_responsive",
+                        lambda p, timeout_s=5.0: probes.append(timeout_s) or True)
+    env.sc.dialog_at = ("old", env.start + 60)
+    assert env.run() == ""
+    assert md.FROZEN_CONFIRM_S in probes
+    assert not [e for e in env.ev if e[0] == "fresh"], "занятую вкладку закрыли как зависшую"
+
+
+def test_a_tab_that_stays_silent_on_the_long_probe_is_replaced(env, monkeypatch):
+    env.sc.wait_out = {"outcome": "unresponsive", "frozen": md.OBJECTIVE_FROZEN_POLLS}
+    monkeypatch.setattr(md, "_page_responsive", lambda p, timeout_s=5.0: False)
+    env.sc.fresh = [_P("new")]
+    env.sc.dialog_at = ("new", env.start + 60)
+    assert env.run() == ""
+    assert [e for e in env.ev if e[0] == "fresh"]
