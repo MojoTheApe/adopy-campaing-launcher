@@ -49,6 +49,29 @@ telemetry guard proves the journal is temporary before the first write; Home com
 the workbook's activity once per workbook revision, and "A, B is placed in a country"
 reads "A, B are placed in countries".
 
+After the live run of the candidate on 2026-09-26 15:21–15:57 UTC (new accounts
+Facebook_1443, _6540, _9943; the build was pulled back to the released one):
+
+- A stopped profile no longer spins the publish thread. On a gone tab every
+  Playwright call fails in milliseconds; the liveness probe answered "could not ask"
+  and the wait loops went round again with the GIL held until the dashboard stopped
+  answering. `page_liveness` now says "the tab is gone" (closed page, disconnected
+  browser, or a closed-connection error seen once), the objective wait and the campaign
+  opener end with `browser_closed` at once, and no poll round is shorter than its step.
+- A Facebook login page (`profile_logged_out`) and a broken proxy (`profile_network`:
+  `ERR_SOCKS_*`, `ERR_PROXY_*`, `ERR_TUNNEL_*`, `ERR_CONNECTION_*`,
+  `ERR_SSL_PROTOCOL_ERROR`, a Chrome error page, three failed navigations or a recent
+  network error of the same profile) are diagnosed before any fresh tab or restart and
+  stop the account's job with a message for the operator; a failed MLX restart is
+  `profile_restart_failed`. Only a genuinely unresponsive tab gets a fresh tab / restart.
+- A profile opened by hand (no automation port, not the robot's own Mimic process) is
+  never stopped: the job fails at once with `profile_open_by_hand` — "Close its window
+  (so Multilogin saves the session), then press Publish again."
+- Meta's onboarding tour ("A streamlined way to create campaigns", pager "1 of 3") is
+  closed by its own X only, never Next; Meta's new single-screen editor
+  (`/adsmanager/manage/simple_create`) stops the campaign with `simple_create_layout`
+  instead of failing later.
+
 ## Sentry receives only real campaign failures — ACL-1318 (phase 1)
 
 Every telemetry row with `ok=False` used to become a Sentry event, so the list of
