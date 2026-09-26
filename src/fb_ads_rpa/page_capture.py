@@ -815,6 +815,15 @@ class _SectionScrubber(HTMLParser):
     def unknown_decl(self, data):
         return
 
+    def close(self):
+        # Раздел обрезан посреди тега (SECTION_RAW_MAX_CHARS): Python 3.11 при
+        # закрытии отдаёт недописанный тег текстом — вместе с атрибутами и
+        # набранным в поле value. 3.13+ такой хвост отбрасывает, как велит
+        # HTML5; делаем так же на любой версии (ревью PR #328).
+        if self.rawdata.startswith("<"):
+            self.rawdata = ""
+        super().close()
+
     def result(self) -> str:
         while self._stack:
             self._out.append(f"</{self._stack.pop()}>")

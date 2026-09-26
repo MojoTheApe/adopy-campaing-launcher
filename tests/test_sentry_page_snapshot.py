@@ -788,3 +788,21 @@ def test_the_tail_of_a_torn_tag_never_carries_its_attributes():
     body = scrubber.result()
     assert not re.search(r"\s(class|style|href|src|value|onclick|data-testid)=", body)
     assert "Leads" in body
+
+
+@pytest.mark.parametrize("tail", [
+    '<input type="text" value="typed secret val',
+    '<div class="x1n2onr6 x78zum5 xdt5',
+    '<div aria-label="a > b" class=x1n2onr6 data-x=1',
+])
+def test_a_section_cut_inside_a_tag_drops_the_unfinished_tag(tail):
+    """Раздел обрезан посреди тега и `>` дальше нет. Python 3.11 отдал бы
+    недописанный тег текстом (атрибуты, набранное value); хвост отбрасывается
+    на любой версии — поймает регрессию на CI 3.11 (ревью PR #328)."""
+    scrubber = pc._SectionScrubber(None, {}, 200_000)
+    scrubber.feed('<div role="dialog"><span>Leads</span>' + tail)
+    scrubber.close()
+    body = scrubber.result()
+    assert "Leads" in body
+    assert "secret" not in body and "x1n2onr6" not in body
+    assert not re.search(r"\s(class|style|href|src|value|onclick|data-testid)=", body)
