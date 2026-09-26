@@ -3652,6 +3652,141 @@ def _pick_further_limit_radio(page: Page) -> bool:
     return False
 
 
+def _reach_dialog_open(page: Page) -> bool:
+    """Окно «Reach your preferred audiences» уже открыто?
+
+    20.09 14:48 (SA_arc GMBL, пятый такой отказ за сутки): окно было
+    открыто, а шаг падал. Та же фраза есть и на странице за окном, и
+    клик уходил в перекрытую ссылку под ним — пять попыток подряд.
+    """
+    try:
+        return page.get_by_text(
+            re.compile(r"Reach your preferred audiences", re.I)).first.is_visible(timeout=800)
+    except Exception:
+        return False
+
+
+_FURTHER_LIMIT_ROW_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+    const phrase = /^further limit the reach of your ads$/i;
+    const shown = (e) => {
+      for (let n = e; n; n = n.parentElement) {
+        const s = getComputedStyle(n);
+        if (s.display === 'none' || s.visibility === 'hidden') return false;
+      }
+      const r = e.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    };
+    const own = (e) => norm([...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join(' '));
+    document.querySelectorAll('[data-acl-further-limit]').forEach(e => e.removeAttribute('data-acl-further-limit'));
+    const rows = [];
+    for (const e of document.querySelectorAll('*')) {
+      if (!phrase.test(own(e)) || e.closest('[role=dialog]') || !shown(e)) continue;
+      // Строка-кнопка целиком — только эта фраза: не «Save audience» рядом,
+      // не раздел аудитории со всеми его кнопками (ACL-1250).
+      const ctl = e.closest('[role=button], [role=link], a, button');
+      if (ctl && !phrase.test(norm(ctl.textContent))) continue;
+      const row = ctl || e;
+      if (row.disabled || row.getAttribute('aria-disabled') === 'true') continue;
+      if (!rows.includes(row)) rows.push(row);
+    }
+    if (rows.length !== 1) return { found: rows.length };
+    const row = rows[0];
+    row.setAttribute('data-acl-further-limit', '1');
+    row.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const r = row.getBoundingClientRect();
+    const x = r.x + r.width / 2, y = r.y + r.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    return { found: 1, x, y, hit: !!hit && row.contains(hit),
+             surface: (row.getAttribute('data-surface') || '').split('/').pop(),
+             role: row.getAttribute('role') || row.tagName.toLowerCase() };
+  }
+"""
+"""Строка «Further limit the reach of your ads» (шестерёнка) — ровно одна,
+вне диалога; помечается `data-acl-further-limit`, прокручивается в центр."""
+
+
+def _further_limit_opened(page: Page, wait_s: float) -> bool:
+    """Открылся диалог «Reach your preferred audiences» — или выбор применился
+    сразу (на экране «Switch to recommended setup», 17.09)."""
+    # Опросы — числом, а не часами: в тестах потока `time` подменён
+    # поддельными часами без `monotonic`, а `_sleep_h` — пустышкой.
+    for i in range(int(wait_s / 0.3) + 1):
+        if i:
+            _sleep_h(0.3)
+        if _reach_dialog_open(page) or _audience_already_manual(page):
+            return True
+    return False
+
+
+def _open_further_limit(page: Page) -> bool:
+    """Открыть «Further limit the reach of your ads»; True — диалог на экране
+    (или аудитория уже в ручном режиме).
+
+    ACL-1324, прогоны ed5426c321d5 / 97fc8899a15c / 97370c743f44 (26.09,
+    Facebook_6540, CO_bnc_All_Video_FX): карточка Audience в раскладке
+    «Suggest an audience» — раскрытые «Include these custom audiences», под
+    ними строка-кнопка с шестерёнкой «Further limit the reach of your ads» и
+    справа «Save audience». Строка на экране, а клик Playwright по тексту
+    пять раз подряд падал по таймауту проверок действия (28–47 с) — диалог
+    так и не открылся. Теперь как везде в редакторе (`_click_xpath`): строка
+    ищется по разметке — `role=button`, весь текст которого эта фраза (не
+    «Save audience», не кнопки рекомендаций Advantage+), прокрутка и замер в
+    одном evaluate, доверенный CDP-клик в центр, проверка по самому окну.
+    Центр строки чем-то накрыт или окно не открылось — DOM-клик по самой
+    строке. Строки такой нет (старые раскладки со ссылкой) — прежний путь
+    по тексту. Ошибка Playwright и путь — в телеметрию.
+    """
+    if _further_limit_opened(page, 0):
+        return True
+    diag: dict = {}
+    try:
+        row = page.evaluate(_FURTHER_LIMIT_ROW_JS) or {}
+    except Exception as exc:
+        row = {"found": 0, "error": str(exc)[:120]}
+    diag["found"] = row.get("found", 0)
+    if row.get("found") == 1:
+        diag.update({"surface": row.get("surface", ""), "role": row.get("role", ""), "hit": bool(row.get("hit"))})
+        if row.get("hit"):
+            _cdp_mouse_click(page, row["x"], row["y"])
+            if _further_limit_opened(page, 3.0):
+                _telemetry.record("further_limit_row", True, note="cdp", diag=diag)
+                return True
+        try:
+            clicked = bool(page.evaluate(
+                "() => { const e = document.querySelector('[data-acl-further-limit]');"
+                " if (!e) return false; e.click(); return true; }"))
+        except Exception:
+            clicked = False
+        if clicked and _further_limit_opened(page, 3.0):
+            _telemetry.record("further_limit_row", True, note="dom", diag=diag)
+            return True
+    # Прежний путь (текст, прокрутка страницы между попытками) — только когда
+    # строки-кнопки нет вовсе. Две такие строки — неизвестно, какая наша:
+    # не жмём ни одну (ACL-1250).
+    for _ in range(3 if row.get("found") == 0 else 0):
+        try:
+            el = page.get_by_text(re.compile(r"further limit the reach of your ads", re.I)).first
+            el.scroll_into_view_if_needed(timeout=3000)
+            el.click(timeout=3000)
+            if _further_limit_opened(page, 2.0):
+                _telemetry.record("further_limit_row", True, note="text", diag=diag)
+                return True
+        except Exception as exc:
+            diag.setdefault("error", f"{type(exc).__name__}: {str(exc).splitlines()[0][:160] if str(exc) else ''}")
+            if _further_limit_opened(page, 0):
+                _telemetry.record("further_limit_row", True, note="text", diag=diag)
+                return True
+        try:
+            page.mouse.wheel(0, 400)
+        except Exception:
+            pass
+        _sleep_h(0.6)
+    _telemetry.record("further_limit_row", None, note="not_opened", diag=diag)
+    return False
+
+
 def _page_gone(page: Page, exc: BaseException) -> bool:
     """Исключение значит «вкладки/браузера больше нет» (закрыли окно профиля,
     Multilogin остановил профиль) — а не отказ шага на странице.
@@ -4518,44 +4653,9 @@ def run_recorded_campaign_flow(
     # screenshot to decide what (if anything) needs filling in here.
     try:
         scroll_to_section(page, "Audience")
-        opened = False
-
-        def _reach_dialog_open() -> bool:
-            """Окно «Reach your preferred audiences» уже открыто?
-
-            20.09 14:48 (SA_arc GMBL, пятый такой отказ за сутки): окно было
-            открыто, а шаг падал. Та же фраза есть и на странице за окном, и
-            клик уходил в перекрытую ссылку под ним — пять попыток подряд.
-            """
-            try:
-                return page.get_by_text(
-                    re.compile(r"Reach your preferred audiences", re.I)).first.is_visible(timeout=800)
-            except Exception:
-                return False
-
-        if _reach_dialog_open():
-            opened = True
-        for _ in range(0 if opened else 5):
-            try:
-                el = page.get_by_text(
-                    re.compile(r"further limit the reach of your ads", re.I)
-                ).first
-                el.scroll_into_view_if_needed(timeout=5000)
-                el.click(timeout=5000)
-                _sleep_h(0.6)
-                opened = True
-                break
-            except Exception:
-                # Not rendered/visible yet — nudge the page down and retry
-                # rather than assuming the text is simply absent.
-                if _reach_dialog_open():
-                    opened = True
-                    break
-                try:
-                    page.mouse.wheel(0, 400)
-                except Exception:
-                    pass
-                _sleep_h(0.6)
+        # ACL-1324: строка ищется по разметке и жмётся CDP-кликом
+        # (`_open_further_limit`), успех — только открытое окно.
+        opened = _open_further_limit(page)
         _shot("after_further_limit_reach" if opened else "fail_further_limit_reach_click")
         if not opened:
             return "further_limit_reach"
@@ -4566,10 +4666,13 @@ def run_recorded_campaign_flow(
         # ads" radio specifically (matches the same phrase as the link that
         # opened this modal, but scoped to the dialog so we don't re-match
         # the now-hidden link behind it), then Continue.
-        picked_radio = _pick_further_limit_radio(page)
-        _shot("after_pick_further_limit_radio" if picked_radio else "fail_pick_further_limit_radio")
-        if not picked_radio:
-            return "further_limit_reach_radio"
+        # Окна нет, а аудитория уже в ручном режиме («Switch to recommended
+        # setup», 17.09) — выбирать не из чего, дальше решает шаг Continue.
+        if _reach_dialog_open(page) or not _audience_already_manual(page):
+            picked_radio = _pick_further_limit_radio(page)
+            _shot("after_pick_further_limit_radio" if picked_radio else "fail_pick_further_limit_radio")
+            if not picked_radio:
+                return "further_limit_reach_radio"
 
         continued = False
         for root in _roots(page):
@@ -14634,18 +14737,34 @@ def verify_audience_advantage_off(page: Page) -> bool:
     (d3e690189a6e/04). До возраста «on» — норма, поэтому прежняя проверка
     `advantage_plus_off` (до возраста) давала still_on во всех 346 записях.
     Единственный наш рычаг здесь — та галочка: снять ещё раз и перечитать.
+
+    ACL-1324 (7cfdc772376d, 26.09): к этой проверке поле Age уже свёрнуто
+    в «35 - 65+ Your suggestion», галочки на экране нет, и повтор был
+    холостым. Теперь свёрнутое поле раскрывается своей строкой
+    (`_open_collapsed_age_row`), галочка снимается в его границах, бейдж
+    перечитывается несколько раз (Meta пересчитывает его после сохранения).
     """
     state = _audience_badge_on(page)
     retried = state is True
+    diag: dict = {"retried_suggestion": retried}
     if retried:
-        _uncheck_age_suggestion(page)
-        _sleep_h(0.8)
-        state = _audience_badge_on(page)
+        before = _age_suggestion_read(page)
+        diag["suggestion"] = before.get("checkbox")
+        diag["your_suggestion"] = bool(before.get("badge"))
+        if before.get("checkbox") is None:
+            diag["age_row_opened"] = _open_collapsed_age_row(page)
+        diag["unchecked"] = _uncheck_age_suggestion(page)
+        for _ in range(8):
+            _sleep_h(0.8)
+            state = _audience_badge_on(page)
+            if state is not True:
+                break
     ok = state is False
+    diag["age"] = _age_range_read(page)
     _telemetry.record(
         "advantage_plus_audience", ok,
         note="off" if ok else ("still_on" if state else "badge_not_found"),
-        diag={"retried_suggestion": retried, "age": _age_triggers_read(page)},
+        diag=diag,
     )
     return ok
 
@@ -14800,35 +14919,148 @@ def _age_triggers_read(page: Page) -> list[str]:
     return readings[0] if len(readings) == 1 else []
 
 
-def _uncheck_age_suggestion(page: Page) -> None:
+_AGE_SUGGESTION_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
+  const re = /^(Age|Edad)$/i;
+  const sugg = /^(use as a suggestion|usar como sugerencia)/i;
+  const own = /\b(age|edad)\b|^(use as a suggestion|usar como sugerencia)/i;
+  const badgeRe = /^(your suggestion|tu sugerencia)$/i;
+  const kinds = 'input[type=checkbox], [role=checkbox], [role=switch]';
+  // Подпись галочки: свой <label>, aria-labelledby или ближайший предок с
+  // одной-единственной галочкой (синтетика тестов: подпись рядом с input).
+  const named = (cb) => {
+    const lab = cb.closest('label');
+    if (lab && sugg.test(norm(lab.textContent))) return true;
+    for (const id of (cb.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean)) {
+      const el = document.getElementById(id);
+      if (el && sugg.test(norm(el.textContent))) return true;
+    }
+    let box = cb;
+    for (let i = 0; i < 4 && box.parentElement; i++) {
+      box = box.parentElement;
+      if (box.querySelectorAll(kinds).length > 1) return false;
+      if (sugg.test(norm(box.textContent))) return true;
+    }
+    return false;
+  };
+  document.querySelectorAll('[data-acl-age-suggestion]').forEach(e => e.removeAttribute('data-acl-age-suggestion'));
+  const found = [];
+  let badge = false;
+  for (const label of leaves(document).filter(e => re.test(norm(e.textContent)))) {
+    for (const box of boxesFrom(label, re, own)) {
+      if (leaves(box).some(e => badgeRe.test(norm(e.textContent)))) badge = true;
+      const cbs = [...box.querySelectorAll(kinds)].filter(cb => !cb.closest('[role=dialog]') && named(cb));
+      if (cbs.length) { cbs.forEach(cb => { if (!found.includes(cb)) found.push(cb); }); break; }
+    }
+  }
+  if (found.length !== 1) return { checkbox: null, badge, count: found.length };
+  const cb = found[0];
+  const aria = cb.getAttribute('aria-checked');
+  const checked = aria === 'true' ? true : aria === 'false' ? false : !!cb.checked;
+  cb.setAttribute('data-acl-age-suggestion', '1');
+  // Жать видимое: сам input бывает прозрачным слоем нулевого размера.
+  let target = cb;
+  if (cb.getBoundingClientRect().width <= 0) target = cb.closest('label') || cb.parentElement || cb;
+  const pt = checked ? point(target) : null;
+  return { checkbox: checked, badge, count: 1, x: pt && pt.x, y: pt && pt.y, hit: !!pt };
+}
+"""
+"""Галочка «Use as a suggestion» поля Age — только в границах самого поля.
+
+`checkbox`: True — стоит, False — снята, None — не найдена (или их две);
+`badge` — у свёрнутого поля видна метка «Your suggestion». Найденная галочка
+помечается `data-acl-age-suggestion`; для стоящей — точка клика (`x`, `y`).
+"""
+
+#: Сколько ждать появления галочки «Use as a suggestion», пока аудитория
+#: читает «Advantage+ on»: Meta дорисовывает её после «Verifying your edits».
+AGE_SUGGESTION_WAIT_S = 4.0
+
+
+def _age_suggestion_read(page: Page) -> dict:
+    try:
+        return page.evaluate(_AGE_SUGGESTION_JS) or {"checkbox": None, "badge": False}
+    except Exception:
+        return {"checkbox": None, "badge": False}
+
+
+def _uncheck_age_suggestion(page: Page) -> bool | None:
     """Снять «Use as a suggestion» — иначе Meta расширяет возраст сама.
 
     Галочка живёт прямо под границами и по умолчанию включена, а с ней возраст
     становится пожеланием: итог «Your suggestion 35–65+».
+
+    Ответ: True — галочка снята (или уже была снята), False — осталась,
+    None — галочки в поле Age нет.
+
+    ACL-1324, прогон 7cfdc772376d (26.09, Facebook_6540, CO_bnc GMB): возраст
+    35 выставился, а галочку сняли раньше, чем Meta её дорисовала, — и
+    повторная попытка в итоговой проверке шла по свёрнутому полю «35 - 65+
+    Your suggestion», где галочки нет вовсе. Итог: «Advantage+ on», возраст —
+    лишь пожелание. Теперь: пока бейдж аудитории «on», галочку ждём до
+    `AGE_SUGGESTION_WAIT_S`; ищем её только в поле Age; снимаем доверенным
+    кликом, затем — если не снялась — DOM-кликом по ней же; результат
+    перечитываем.
     """
-    try:
-        page.evaluate(
-            """() => {
-              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-              const row = [...document.querySelectorAll('*')].find(e =>
-                norm(e.textContent).startsWith('Use as a suggestion') && e.offsetParent !== null);
-              if (!row) return;
-              let box = row;
-              for (let i = 0; i < 6 && box; i++) {
-                const cb = box.querySelector('input[type=checkbox]');
-                if (cb) {
-                  const aria = cb.getAttribute('aria-checked');
-                  const on = aria === 'true' ? true : aria === 'false' ? false : cb.checked;
-                  if (on) cb.click();
-                  return;
-                }
-                box = box.parentElement;
-              }
-            }"""
-        )
+    # 18–65+ — не условие вовсе: галочки у такого поля нет, ждать нечего.
+    wait_s = (AGE_SUGGESTION_WAIT_S
+              if _audience_badge_on(page) is True and _age_range_read(page) != ["18", "65+"] else 0.0)
+    st = _age_suggestion_read(page)
+    for _ in range(int(wait_s / 0.4)):
+        if st.get("checkbox") is not None:
+            break
+        _sleep_h(0.4)
+        st = _age_suggestion_read(page)
+    if st.get("checkbox") is None:
+        return None
+    if st.get("checkbox") is False:
+        return True
+    how = ""
+    if st.get("hit"):
+        _cdp_mouse_click(page, st["x"], st["y"])
+        how = "cdp"
+        for _ in range(5):
+            _sleep_h(0.3)
+            if _age_suggestion_read(page).get("checkbox") is False:
+                break
+    if _age_suggestion_read(page).get("checkbox") is True:
+        try:
+            page.evaluate("() => { const e = document.querySelector('[data-acl-age-suggestion]');"
+                          " if (e) e.click(); }")
+            how = "dom"
+        except Exception:
+            pass
         _sleep_h(0.3)
+    left = _age_suggestion_read(page).get("checkbox")
+    _telemetry.record("age_suggestion_off", left is False, note=how or "no_click",
+                      diag={"checkbox_after": left})
+    return left is False
+
+
+_AGE_SUMMARY_READ_JS = "(value) => {" + _AUDIENCE_FIELD_DOM + r"""
+  const field = summaryField(/^(Age|Edad)$/i, new RegExp(value));
+  if (!field) return [];
+  return norm(field.summary.textContent).split(/\s*[-–—]\s*/).map(norm);
+}
+"""
+"""Границы из свёрнутой сводки поля Age («35 - 65+» → ["35", "65+"])."""
+
+
+def _age_range_read(page: Page) -> list[str]:
+    """Возраст как он стоит: границы открытого поля, иначе сводка свёрнутого.
+
+    ACL-1324: итоговая проверка (`verify_audience_advantage_off`) писала
+    `age: []` — к её моменту поле Age уже свёрнуто в «35 - 65+», а
+    `_age_triggers_read` читает только открытое поле (и должен: по нему
+    `_open_collapsed_age_row` понимает, открыто ли поле).
+    """
+    got = _age_triggers_read(page)
+    if got:
+        return got
+    try:
+        got = page.evaluate(_AGE_SUMMARY_READ_JS, _AGE_SUMMARY_RE) or []
     except Exception:
-        pass
+        got = []
+    return [str(v) for v in got] if len(got) == 2 else []
 
 
 def _age_shows_value(page: Page, value: str) -> bool:
@@ -14945,7 +15177,8 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     if not _fill_audience_age_controls(page, age_min, age_max):
         return False
     wanted = [str(age_min), str(age_max) if age_max < 65 else "65+"]
-    seen = _age_triggers_read(page)
+    # ACL-1324: поле могло уже свернуться в сводку «35 - 65+» — читаем и её.
+    seen = _age_range_read(page)
     if seen != wanted:
         # 18.09 06:32 живой обход «read_back_by_label» (искать границы тем же
         # поиском, что и клик) снят в порте ACL-1284: он подтверждал возраст
@@ -14961,7 +15194,7 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     # при закрытом списке; закрыть его — нажатием на его же выпадашку.
     if not _close_open_listboxes(page, "after_audience_age"):
         _telemetry.record("audience_age", False, note="listbox_left_open",
-                          diag={"wanted": wanted, "seen": _age_triggers_read(page)})
+                          diag={"wanted": wanted, "seen": _age_range_read(page)})
         return False
     return True
 
@@ -15681,6 +15914,18 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
     lang_label_re = re.compile(r"^Languages$|^Idiomas$", re.I)
 
     def _find_lang_input():
+        # ACL-1324 (7cfdc772376d): `placeholder="Search languages"` стоит и на
+        # обёртке-<span> токенайзера, и на самом <input role=combobox> внутри
+        # неё; `get_by_placeholder(...).first` брал обёртку, и очистка поля
+        # (`fill("")`) по ней падала. Сначала — настоящее поле ввода.
+        for root in _roots(page):
+            try:
+                real = root.locator(
+                    "input[placeholder*='anguage' i], input[placeholder*='dioma' i]").first
+                if real.count() and real.is_visible():
+                    return root, real
+            except Exception:
+                pass
         for root in _roots(page):
             for ph in lang_placeholders:
                 try:
@@ -15691,7 +15936,16 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
                     continue
         return None, None
 
+    wanted = [n.strip() for n in language_names if n.strip()]
     root, inp = _find_lang_input()
+    if inp is None:
+        # ACL-1324: свёрнутая сводка «Languages — Spanish (All)» — язык уже
+        # стоит, раскрывать поле незачем (карандаш ищется только у «All
+        # languages»).
+        present = _languages_read(page, wanted)
+        if wanted and all(any(_language_chip_matches(p, w) for p in present) for w in wanted):
+            _telemetry.record("languages", None, note="already_selected", diag={"selected": present})
+            return True
     if inp is None and _click_languages_edit(page):
         for _ in range(10):
             _sleep_h(0.2)
@@ -15750,7 +16004,15 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
             # затем подсказка, чей текст ровно «<язык>» (у Arabic варианта
             # «(All)» нет). Слепого клика по первой подсказке больше нет: он
             # мог взять региональный вариант, а это другой, узкий таргетинг.
+            # ACL-1324 (7cfdc772376d, 26.09): вкладка тормозила (tab_frozen
+            # минутой раньше), подсказки не успели за 1.2 с, и шаг отказал с
+            # пустым полем. Подсказки ждём до LANGUAGE_OPTIONS_WAIT_S.
             picked = _click_language_option(page, name)
+            for _ in range(int(LANGUAGE_OPTIONS_WAIT_S / 0.4)):
+                if picked:
+                    break
+                _sleep_h(0.4)
+                picked = _click_language_option(page, name)
             if picked:
                 ok_any = True
             else:
@@ -15776,6 +16038,10 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
             _telemetry.record("languages", None, note="already_selected", diag={"selected": present})
             return True
     return ok_any
+
+
+#: Сколько ждать подсказок языка после ввода (сверх первых 1.2 с).
+LANGUAGE_OPTIONS_WAIT_S = 5.0
 
 
 def _language_key(text: str) -> str:
@@ -15863,6 +16129,37 @@ def _languages_selected(page: Page, wanted: list[str] | None = None) -> list[str
             }""",
             keys,
         ) or []
+    except Exception:
+        return []
+
+
+_LANGUAGES_SUMMARY_JS = "(keys) => {" + _AUDIENCE_FIELD_DOM + r"""
+  const key = (t) => norm(t).toLowerCase().replace(/\s*\([^)]*\)$/, '').trim();
+  const looks = (t) => /\((All|Todos)\)$/.test(t) || /^[A-Z][a-z]+ \([^)]+\)$/.test(t)
+    || (t.length < 60 && keys.includes(key(t)));
+  const field = summaryField(/^(Languages|Idiomas)$/i, /^(?!(Languages|Idiomas)$)\S/i);
+  // Сводка — одно значение в поле: «Spanish (All)» или «Spanish (All), English (All)».
+  if (!field) return [];
+  const parts = norm(field.summary.textContent).split(/,\s*/).map(norm).filter(Boolean);
+  return parts.every(looks) ? parts : [];
+}
+"""
+"""Языки из свёрнутой сводки поля Languages; «All languages» — пусто."""
+
+
+def _languages_read(page: Page, wanted: list[str] | None = None) -> list[str]:
+    """Выбранные языки: чипы открытого поля, иначе сводка свёрнутого.
+
+    ACL-1324: к концу аудитории карточка сворачивается в сводку
+    («Languages — Spanish (All)», прогон 8c6496e50815), поля поиска нет, и
+    `_languages_selected` (он поднимается от поля поиска) видит пустоту.
+    """
+    got = _languages_selected(page, wanted)
+    if got:
+        return got
+    keys = [_language_key(w) for w in (wanted or []) if _language_key(w)]
+    try:
+        return [str(v) for v in (page.evaluate(_LANGUAGES_SUMMARY_JS, keys) or [])]
     except Exception:
         return []
 
