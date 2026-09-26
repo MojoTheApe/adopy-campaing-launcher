@@ -58,8 +58,17 @@ class _FrozenPage:
 
     @property
     def context(self):
-        self.unbounded.append("context")
-        raise _Unbounded("CDP session on a frozen tab")
+        # `page.context` и `browser.is_connected()` — локальные поля
+        # Playwright, без обращения к вкладке (ими `page_liveness` узнаёт
+        # отсоединённый браузер). Неограниченное — только CDP-сессия.
+        page = self
+
+        def _session(*a, **k):
+            page.unbounded.append("context")
+            raise _Unbounded("CDP session on a frozen tab")
+
+        return SimpleNamespace(browser=SimpleNamespace(is_connected=lambda: True),
+                               new_cdp_session=_session)
 
 
 @pytest.fixture

@@ -12,6 +12,7 @@ from typing import Any
 
 from playwright.sync_api import Frame, Page
 
+from src.fb_ads_rpa import page_liveness as _liveness
 from src.fb_ads_rpa import run_telemetry as _telemetry
 
 #: Порог, за которым Playwright отказывается передавать файл.
@@ -2740,7 +2741,8 @@ def _network_trouble(page: Page) -> bool:
 
 def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
     """Отозвалась ли страница на Create: "ok" / "left_list" / "nothing" /
-    "frozen" (вкладка не ответила на проверку живости, ACL-1320).
+    "frozen" (вкладка не ответила на проверку живости, ACL-1320) / "gone"
+    (вкладки больше нет).
 
     ACL-1313: с 20.09 первый Create после загрузки открывал окно цели в 42%
     случаев, остальные ждали 75–180 с и перезагрузку. На снимках 25.09 у
@@ -2750,6 +2752,10 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
     base = (list_url or "").split("?", 1)[0]
     deadline = time.time() + timeout_s
     while time.time() < deadline:
+        # ACL-1320: вкладки больше нет — "gone" сразу, не восемь секунд
+        # падающих за миллисекунды вызовов.
+        if _tab_gone(page):
+            return "gone"
         # ACL-1320: вкладка не отвечает — так и говорим ("frozen"), а не
         # висим в `is_visible` (его таймаут Playwright не соблюдает).
         if _tab_frozen(page):
@@ -2829,6 +2835,11 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
       «страница занята», пустым экраном он не считается.
 
     `out` (если передан) получает `outcome`, `frozen`, `woke`.
+
+    ACL-1320, живой прогон 26.09 15:51: вкладки больше нет (профиль
+    остановлен, браузер отсоединён) — сразу `gone`; и ни один круг опроса не
+    короче `poll_s` (`_pace`): на ушедшей вкладке все вызовы падали за
+    миллисекунды, и ожидание крутилось вхолостую с GIL в руках.
     """
     radio = page.get_by_role("radio", name="Leads").first
     # Долгое ожидание окна цели — только разбудить: перезагрузка поверх
@@ -2843,7 +2854,10 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
     loading_kinds: dict[str, int] = {}
     outcome = "idle"
     found = False
+    poll_start = None
     while True:
+        if poll_start is not None:
+            _pace(poll_start, poll_s)
         poll_start = time.time()
         try:
             radio.wait_for(state="visible", timeout=int(poll_s * 1000))
@@ -2851,6 +2865,9 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
             break
         except Exception:
             pass
+        if _tab_gone(page):
+            outcome = "gone"
+            break
         frozen = _tab_frozen(page)
         woke = watch.check(frozen=True) if frozen else watch.check()
         now = time.time()
@@ -2891,7 +2908,7 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
             break
     if out is not None:
         out.update(outcome=outcome, frozen=frozen_polls, woke=getattr(watch, "fired", ""))
-    if not found:
+    if not found and outcome != "gone":
         # ACL-1320: окна цели нет — доказательства, пока страница та же.
         _stall_evidence(page, "objective_wait", outcome=outcome,
                         responsive=False if outcome == "unresponsive" else None)
@@ -2982,14 +2999,36 @@ def _page_responsive(page: Page, timeout_s: float = 5.0) -> bool | None:
     придёт TimeoutError-ом через `timeout_s`, а не никогда (голый
     `CDPSession.send` и `page.evaluate` таймаута не имеют — см.
     screenshots.py). Ограничение: зависший процесс драйвера этим не поймать.
+
+    ACL-1320, живой прогон 26.09 15:51: на остановленном профиле этот вызов
+    падал за миллисекунды, и циклы ожидания крутились на нём с GIL в руках.
+    Теперь — `page_liveness.answers`: ушедшую вкладку (закрыта, браузер
+    отсоединён, вызов уже падал «закрыто») не спрашиваем вовсе, None сразу.
     """
-    try:
-        page.wait_for_function("() => true", timeout=int(timeout_s * 1000))
-        return True
-    except Exception as exc:
-        if "timeout" in type(exc).__name__.lower() or "Timeout" in str(exc):
-            return False
-        return None
+    return _liveness.answers(page, timeout_s)
+
+
+def _tab_gone(page: Page) -> bool:
+    """Вкладки больше нет — закрыта, браузер отсоединён, драйвер оборвался.
+
+    Мгновенно и без обращения к драйверу (`page_liveness.tab_gone`). Циклы
+    ожидания проверяют это первым делом: на ушедшей вкладке каждый вызов
+    Playwright падает за ~5 мс, и цикл без этой проверки крутился вхолостую
+    (ACL-1320, живой прогон 26.09).
+    """
+    return _liveness.tab_gone(page)
+
+
+def _pace(since: float, min_s: float) -> None:
+    """Круг опроса — не короче `min_s`: доспать остаток (ACL-1320).
+
+    Круг, в котором все вызовы упали сразу (страница ушла или ответила
+    ошибкой), иначе шёл бы на следующий без паузы — горячий цикл под GIL.
+    `time.sleep` отпускает GIL, и соседние потоки (дешборд) своё получают.
+    """
+    left = min_s - (time.time() - since)
+    if left > 0:
+        time.sleep(left)
 
 
 #: ACL-1320: сколько ждать ответа вкладки перед ожиданием, нажатием или
@@ -3055,8 +3094,13 @@ def _unstick(page: Page, where: str, *, editor: bool, waited_s: float = 0.0,
        вовсе — сохранённость правок на нём не проверить.
 
     Возвращает, что сделали: "woke", "reloaded", "reload_refused",
-    "unsaved_or_unknown". Строка телеметрии `stall_unstuck`.
+    "unsaved_or_unknown", "gone" (вкладки больше нет — будить и
+    перезагружать нечего, ACL-1320). Строка телеметрии `stall_unstuck`.
     """
+    if _tab_gone(page):
+        _telemetry.record("stall_unstuck", None, note="gone",
+                          diag={"where": where[:80], "waited_s": round(waited_s, 1), "editor": editor})
+        return "gone"
     how = "woke"
     woke: dict = {}
     # ACL-1320: сначала ограниченный вопрос, отвечает ли вкладка. `wake_page`
@@ -3653,6 +3697,10 @@ CAMPAIGN_OPEN_FRESH_TAB_ROUND = 3
 #: прежде чем её сменят на свежую, не дожидаясь третьего раунда.
 CAMPAIGN_OPEN_FROZEN_LIMIT = 2
 
+#: ACL-1320, живой прогон 26.09: раунд, в котором все вызовы упали сразу,
+#: не должен тут же начинать следующий — не короче стольких секунд.
+CAMPAIGN_OPEN_MIN_ROUND_S = 2.0
+
 
 def _back_to_list(page: Page, list_url: str) -> None:
     """Нажатие увело со списка кампаний — вернуться на него."""
@@ -3696,10 +3744,13 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
 
     `press(page, where)` — нажатие Create, `shot(label)` — снимок/телеметрия
     шага, `on_new_page(page)` — сообщить о свежей вкладке. Возвращает "" (окно
-    цели на экране), "create" (Create так и не нажалось), "objective_leads"
-    или "profile_unresponsive". Строка телеметрии `campaign_open_budget`.
+    цели на экране), "create" (Create так и не нажалось), "objective_leads",
+    "profile_unresponsive" или "browser_closed" (вкладки/браузера больше нет:
+    профиль остановили — ни свежей вкладки, ни перезапуска, живой прогон
+    26.09 15:51). Строка телеметрии `campaign_open_budget`.
     """
     start = time.time()
+    round_start = None
     rounds = 0
     frozen = 0
     pressed = False
@@ -3712,6 +3763,12 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
         return CAMPAIGN_OPEN_BUDGET_S - (time.time() - start)
 
     while _left() > 0:
+        if round_start is not None:
+            _pace(round_start, CAMPAIGN_OPEN_MIN_ROUND_S)
+        round_start = time.time()
+        if _tab_gone(page):
+            outcome, result = "gone", "browser_closed"
+            break
         rounds += 1
         round_end = min(time.time() + CAMPAIGN_OPEN_ROUND_S, start + CAMPAIGN_OPEN_BUDGET_S)
         if not fresh and (rounds >= CAMPAIGN_OPEN_FRESH_TAB_ROUND or frozen >= CAMPAIGN_OPEN_FROZEN_LIMIT):
@@ -3723,7 +3780,12 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
             except Exception:
                 new_page = None
             if new_page is None:
-                fresh, result = "failed", "profile_unresponsive"
+                # Браузер отсоединился (профиль остановили) — перезапускать
+                # нечего и незачем: это не зависание.
+                gone = _liveness.browser_gone(page)
+                fresh, result = "failed", ("browser_closed" if gone else "profile_unresponsive")
+                if gone:
+                    outcome = "gone"
                 break
             fresh, page, frozen = "ok", new_page, 0
             if on_new_page is not None:
@@ -3752,6 +3814,9 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
         where = "create" if rounds == 1 else "create_retry"
         if not press(page, where):
             outcome = "press_failed"
+            if _tab_gone(page):
+                outcome, result = "gone", "browser_closed"
+                break
             if _tab_frozen(page):
                 frozen += 1
                 if fresh == "ok":
@@ -3764,7 +3829,7 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
         while True:
             took = _create_took(page, list_url)
             _telemetry.record("create_took", took == "ok", note=took)
-            if took in ("ok", "frozen") or quick_left <= 0:
+            if took in ("ok", "frozen", "gone") or quick_left <= 0:
                 break
             # ACL-1313: промах виден за секунды — повторяем нажатие сразу.
             # Не больше двух быстрых повторов за открытие; за последним
@@ -3783,6 +3848,9 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
             if quick_left <= 0:
                 took = "ok"
                 break
+        if took == "gone":
+            outcome, result = "gone", "browser_closed"
+            break
         if took == "frozen":
             frozen += 1
             outcome = "frozen"
@@ -3796,6 +3864,9 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
             outcome = "radio"
             break
         outcome = out.get("outcome") or "no_dialog"
+        if outcome == "gone":
+            result = "browser_closed"
+            break
         # Каждый опрос, на который вкладка не ответила, — в счёт: ожидание,
         # дважды не дождавшееся ответа (`unresponsive`), и есть «второе
         # responsive:false» — свежая вкладка уже в следующем раунде.
@@ -3920,6 +3991,10 @@ def run_recorded_campaign_flow(
         # (и, если висит, перезагружаем) один раз, потом повторы идут дальше.
         watch = _watch(where)
         for _ in range(attempts):
+            # ACL-1320: вкладки больше нет — нажимать некуда, и все попытки
+            # упали бы за миллисекунды одна за другой.
+            if _tab_gone(page):
+                return False
             # ACL-1320: вкладка не отвечает — сторож действует сразу, не
             # дожидаясь бюджета, а попытка не лезет в вызовы без таймаута.
             if _tab_frozen(page):
@@ -3945,6 +4020,8 @@ def run_recorded_campaign_flow(
     def _fill(loc, value: str, *, where: str, attempts: int = 5) -> bool:
         watch = _watch(where)
         for _ in range(attempts):
+            if _tab_gone(page):
+                return False
             if _tab_frozen(page):
                 watch.check(frozen=True)
                 _sleep_h(0.6)
@@ -4112,6 +4189,11 @@ def run_recorded_campaign_flow(
     if opened == "profile_unresponsive":
         _shot("fail_profile_unresponsive")
         return "profile_unresponsive"
+    if opened == "browser_closed":
+        # ACL-1320, живой прогон 26.09 15:51: профиль остановили, пока ждали
+        # окно цели. Снимать нечего (вкладки нет), перезапускать — не нам.
+        _telemetry.record("browser_closed", False, note="campaign_open")
+        return "browser_closed"
     if opened == "create":
         return "create"
 

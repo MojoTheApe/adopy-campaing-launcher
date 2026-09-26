@@ -928,15 +928,12 @@ def page_answers(page, timeout_s: float = 5.0) -> bool | None:
 
     Та же проверка, что `meta_dom._page_responsive`: `wait_for_function` —
     вызов, таймаут которого соблюдает драйвер, и `() => true` отвечает на
-    первом же вычислении, без кадров анимации.
+    первом же вычислении, без кадров анимации. Ушедшую вкладку (закрыта,
+    браузер отсоединён) не спрашивает вовсе — `page_liveness.answers`.
     """
-    try:
-        page.wait_for_function("() => true", timeout=int(timeout_s * 1000))
-        return True
-    except Exception as exc:
-        if "timeout" in type(exc).__name__.lower() or "Timeout" in str(exc):
-            return False
-        return None
+    from src.fb_ads_rpa.page_liveness import answers
+
+    return answers(page, timeout_s)
 
 
 def _open_tab_via_browser(context, timeout_s: float = 10.0, *, like_url: str = ""):
@@ -976,10 +973,22 @@ def _open_tab_via_browser(context, timeout_s: float = 10.0, *, like_url: str = "
         for candidate in list(context.pages):
             if id(candidate) not in before:
                 return candidate
+        # ACL-1320: браузер отсоединился — `wait_for_event` падал бы сразу,
+        # и цикл крутился бы до `deadline` без паузы.
+        try:
+            if context.browser is not None and context.browser.is_connected() is False:
+                return None
+        except Exception:
+            return None
+        since = time.time()
         try:
             context.wait_for_event("page", timeout=500)
+            continue
         except Exception:
             pass
+        left = 0.5 - (time.time() - since)
+        if left > 0:
+            time.sleep(left)
     return None
 
 
@@ -1007,6 +1016,12 @@ def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
     diag: dict = {"url": (url or "")[:160]}
     new = None
     try:
+        from src.fb_ads_rpa.page_liveness import browser_gone
+
+        if browser_gone(page):
+            # ACL-1320: профиль остановлен — свежей вкладке взяться неоткуда.
+            diag["why"] = "browser_gone"
+            return None
         new = _open_tab_via_browser(context, like_url=page.url or "")
         if new is None:
             diag["why"] = "no_new_tab"
