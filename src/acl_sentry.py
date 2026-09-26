@@ -177,6 +177,7 @@ def report_step_failure(
     kind: str = "",
     group_step: str = "",
     attempt: int | None = None,
+    attachment: dict | None = None,
 ) -> str:
     """Сообщить об отказе шага. Возвращает номер события или пустую строку.
 
@@ -187,6 +188,8 @@ def report_step_failure(
     кампании кончилась) или `blocking` (черновик «не публиковать»),
     `group_step` — шаг для отпечатка без номера объявления (`ad2_copy` и
     `ad3_copy` — одна и та же поломка), `attempt` — номер попытки.
+    ACL-1325: `attachment` — вычищенный раздел страницы упавшего шага
+    (`page_capture.section_attachment`); скриншоты не прикладываются никогда.
 
     **Отпечаток задаётся вручную, и это важно.** Группировка Sentry хороша на
     исключениях со стеком, а у нас основная масса — отказы шагов: «placements
@@ -223,7 +226,35 @@ def report_step_failure(
             scope.set_context("failure", {"why": _scrub_deep(why)})
         if diag:
             scope.set_context("diag", _scrub_deep(diag))
+        if attachment:
+            _attach_section(scope, attachment)
         return sentry_sdk.capture_message(f"{step}: {reason}", level="error") or ""
+
+
+def _attach_section(scope, attachment: dict) -> None:
+    """Приложить вычищенный раздел страницы (ACL-1325).
+
+    `attachment` готовит `page_capture.section_attachment`: он уже вычищен и
+    ограничен по размеру — `before_send` вложения не видит, поэтому второй
+    потолок стоит здесь. Не приложилось — событие уходит без вложения, а не
+    пропадает.
+    """
+    try:
+        from src.fb_ads_rpa.page_capture import SECTION_MAX_BYTES
+
+        payload = attachment.get("bytes") or b""
+        if not isinstance(payload, (bytes, bytearray)) or not payload or len(payload) > SECTION_MAX_BYTES:
+            return
+        scope.add_attachment(
+            bytes=bytes(payload),
+            filename=str(attachment.get("filename") or "section.html"),
+            content_type=str(attachment.get("content_type") or "text/html"),
+        )
+        scope.set_tag("page_snapshot", "section")
+        if attachment.get("context"):
+            scope.set_context("page_snapshot", _scrub_deep(attachment["context"]))
+    except Exception:
+        pass
 
 
 #: Виды причин, по которым отказы стоит складывать вместе. Список ведётся

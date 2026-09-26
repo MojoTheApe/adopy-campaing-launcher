@@ -26,17 +26,31 @@
   бы как «вот вся страница», и по обрезку писали бы селектор, которого там нет.
 * **Старое подчищается.** Это ставится на машину каждого байера. Хранилище,
   которое только растёт, однажды кончится не вовремя.
+
+**Исключение из первого правила — раздел упавшего шага (ACL-1325).** Решение
+владельца 26.09: к событию Sentry о блокирующем отказе и об остановке кампании
+прикладывается вычищенная копия ОДНОГО раздела страницы — карточки, с которой
+работал шаг (Audience, Conversion, Ad creative …), не больше SECTION_MAX_BYTES.
+Не вся страница и никогда не скриншот (на скриншоте — имена кабинета, кампании
+и страницы). Вычистка здесь уже не «второй слой», а условие отправки, поэтому
+она устроена иначе, чем `scrub_html`: разметка пересобирается заново по белому
+списку тегов и атрибутов (`scrub_section_html`), а не чистится выражениями.
+Выключается машинной настройкой `ACL_SENTRY_PAGE_SNAPSHOT=0`.
 """
 from __future__ import annotations
 
+import html as _html
 import json
 import os
 import re
 import shutil
+import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from config.paths import get_runtime_workspace
 from src.fb_ads_rpa.run_telemetry import scrub
@@ -182,6 +196,14 @@ def capture(
         except Exception:
             return ""
 
+        # ACL-1325: раздел упавшего шага — в память, для события Sentry. Сюда
+        # попадаем только после ответившего `inner_html` с таймаутом: страница
+        # жива, и ещё один `evaluate` не повиснет.
+        try:
+            remember_section(page, step=step, run_id=run_id, campaign=campaign)
+        except Exception:
+            pass
+
         body, truncated = scrub_html(html)
         folder = _root() / _safe(key) / f"{_taken.get(key, 0):02d}_{_safe(step)}"
         folder.mkdir(parents=True, exist_ok=True)
@@ -242,3 +264,552 @@ def capture(
     except Exception:
         # Снимок — помощь при разборе, а не условие работы.
         return ""
+
+
+# ── Раздел упавшего шага для Sentry (ACL-1325) ──────────────────────────────
+#
+# Зачем. 26.09 новая раскладка карточки Audience («Suggest an audience») на
+# FacebookDoc6540 сломала «Further limit the reach» — и нашлась только потому,
+# что прогон шёл на машине владельца, где лежат снимки страниц. У байеров
+# событие Sentry несло шаг и причину, но не то, что было на экране; по тексту
+# «not found» новую раскладку не опознать. Раздел страницы отвечает на это.
+#
+# Как устроено:
+#
+# * в момент отказа (`capture` → `remember_section`) страница сама отдаёт
+#   карточку шага, уже без скриптов, стилей, svg и лишних атрибутов, — это
+#   дёшево и небольшое; разметка остаётся в памяти процесса (ограниченно);
+# * при отправке события (`sentry_signal`) она пересобирается вычистителем
+#   `scrub_section_html`, которому к этому времени известны имена кампании,
+#   кабинета, групп и объявлений, и прикладывается к событию файлом.
+#
+# Вычищенное уходит только в событие; на диск и в телеметрию ничего нового
+# не пишется.
+
+#: Машинная настройка. По умолчанию включено (решение владельца 26.09).
+SECTION_SETTING = "ACL_SENTRY_PAGE_SNAPSHOT"
+#: Потолок вложения. Карточки редактора на живых снимках 24–26.09 весят
+#: 4–85 КБ сырыми; после вычистки заметно меньше.
+SECTION_MAX_BYTES = 200_000
+#: Потолок того, что страница отдаёт из JS, — до вычистки.
+SECTION_RAW_MAX_CHARS = 1_500_000
+#: Потолки строки текста и значения атрибута.
+SECTION_TEXT_MAX = 300
+SECTION_ATTR_MAX = 200
+#: Сколько разделов держать в памяти. Процесс дешборда живёт сутками.
+_SECTIONS_MAX = 16
+
+_sections: "OrderedDict[tuple[str, str], dict[str, Any]]" = OrderedDict()
+_sections_lock = threading.Lock()
+
+
+def section_snapshots_enabled() -> bool:
+    """Прикладывать ли раздел страницы к событиям Sentry. По умолчанию — да."""
+    value = (os.environ.get(SECTION_SETTING) or "").strip().lower()
+    return value not in ("0", "false", "no", "off")
+
+
+#: Заголовки карточек редактора Ads Manager (role=heading, aria-level=3) —
+#: из живых снимков 24–26.09. Граница карточки — ближайший предок заголовка,
+#: в котором уже есть заголовок ДРУГОЙ карточки из этого списка.
+SECTION_TITLES: tuple[str, ...] = (
+    "campaign name", "campaign details", "special ad categories", "budget",
+    "ad set name", "conversion", "budget & schedule", "audience", "placements",
+    "dynamic creative", "live video ad", "ad transparency",
+    "brand safety and suitability", "campaign score",
+    "ad name", "partnership ad", "identity", "ad setup", "ad creative",
+    "destination", "creative testing", "languages", "tracking",
+)
+
+#: Шаг → какие карточки он трогает. Порядок важен: первое совпадение.
+#: `language` здесь — строка карточки Audience уровня группы; одноимённая
+#: карточка уровня объявления (переводы) к шагу `languages` не относится.
+_SECTION_OF_STEP: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
+    (re.compile(r"adset_name|ad_set_name"), ("ad set name",)),
+    (re.compile(r"destination|website_url|lead_form|instant_form"), ("destination",)),
+    (re.compile(r"conversion|pixel|dataset|lead_terms|website_pick"), ("conversion",)),
+    (re.compile(r"budget|schedule|bid_"), ("budget & schedule", "budget")),
+    (re.compile(r"audience|advantage_plus|further_limit|location|age|gender|language"
+                r"|targeting|interest|suggest"), ("audience",)),
+    (re.compile(r"placement|devices|ios"), ("placements",)),
+    (re.compile(r"identity|facebook_page|instagram"), ("identity",)),
+    (re.compile(r"copy|primary_text|headline|creative|media|upload|library|reuse"),
+     ("ad creative", "ad setup")),
+    (re.compile(r"^ad\d*_name$|^ad_name"), ("ad name",)),
+    (re.compile(r"campaign_name|objective|special_ad"),
+     ("campaign name", "campaign details", "special ad categories")),
+)
+
+
+def section_titles_for(step: str) -> tuple[str, ...]:
+    """Карточки, с которыми работает шаг. Пусто — шаг не узнан, берём запасной путь."""
+    name = (step or "").strip().lower()
+    for pattern, titles in _SECTION_OF_STEP:
+        if pattern.search(name):
+            return titles
+    return ()
+
+
+#: Атрибуты, которые переживают вычистку (плюс все aria-*). Всё остальное
+#: (class, style, href, src, value, data-* кроме data-surface, обработчики)
+#: снимается.
+_KEEP_ATTRS = ("role", "data-surface", "placeholder", "type", "checked", "disabled", "id")
+
+#: Окна, которые в Ads Manager открыты всегда и к шагу не относятся (панель
+#: уведомлений висела во всех снимках 24–26.09).
+_SKIP_DIALOGS = ("notifications",)
+
+_SECTION_JS = r"""
+(cfg) => {
+  const norm = s => (s || '').replace(/[\s\u200b]+/g, ' ').trim().toLowerCase();
+  const HSEL = '[role=heading], h1, h2, h3, h4';
+  const known = new Set(cfg.sections);
+  // Название карточки — весь текст заголовка или его первая строка: в
+  // раскладке «Suggest an audience» (26.09) внутри заголовка Audience ещё и
+  // кнопки «Explore audience opportunities», «More options».
+  const titleOf = (h) => {
+    const all = norm(h.textContent);
+    if (known.has(all)) return all;
+    const walk = document.createTreeWalker(h, NodeFilter.SHOW_TEXT);
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      const s = norm(n.nodeValue);
+      if (s) return known.has(s) ? s : '';
+    }
+    return '';
+  };
+  const heads = [];
+  const titles = new Map();
+  for (const h of document.querySelectorAll(HSEL)) {
+    const title = titleOf(h);
+    if (title) { heads.push(h); titles.set(h, title); }
+  }
+  const shown = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const cardOf = (h) => {
+    const mine = titles.get(h);
+    let box = h;
+    for (let p = h.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+      if (heads.some(x => x !== h && titles.get(x) !== mine && p.contains(x))) break;
+      box = p;
+    }
+    return box;
+  };
+  const keep = (name) => name.startsWith('aria-') || cfg.keep.includes(name);
+  const strip = (el) => {
+    const c = el.cloneNode(true);
+    c.querySelectorAll('script,style,svg,noscript,template,iframe,object,embed,canvas,link,meta,math')
+      .forEach(n => n.remove());
+    for (const n of [c, ...c.querySelectorAll('*')]) {
+      if (n.checked === true) n.setAttribute('checked', '');
+      for (const a of [...n.attributes]) if (!keep(a.name)) n.removeAttribute(a.name);
+    }
+    return c.outerHTML.slice(0, cfg.maxChars);
+  };
+  const parts = [];
+  const taken = new Set();
+  for (const title of cfg.titles) {
+    const h = heads.find(x => titles.get(x) === title && shown(x))
+           || heads.find(x => titles.get(x) === title);
+    if (!h) continue;
+    const card = cardOf(h);
+    if (taken.has(card)) continue;
+    taken.add(card);
+    parts.push({name: title, html: strip(card)});
+  }
+  if (!parts.length) {
+    // Шаг не узнан или его карточки нет: наименьший раздел редактора вокруг
+    // фокуса, потом сам редактор, потом страница — каждый под потолком.
+    let card = null;
+    for (let el = document.activeElement; el && el !== document.body; el = el.parentElement) {
+      const h = heads.find(x => el.contains(x));
+      if (h) { card = cardOf(h); break; }
+    }
+    if (card) parts.push({name: 'focused section', html: strip(card)});
+    else {
+      const drawer = document.querySelector('[data-surface="/am/editor_drawer"]');
+      parts.push({name: drawer ? 'editor' : 'page', html: strip(drawer || document.body)});
+    }
+  }
+  // Открытое окно (диалог «Reach your preferred audiences», мастер
+  // креатива) почти всегда и есть то, на чём шаг упал. Сам редактор окном
+  // не считается: в нём есть заголовки карточек.
+  for (const d of document.querySelectorAll('[role=dialog], [aria-modal=true]')) {
+    if (taken.has(d) || !shown(d) || heads.some(x => d.contains(x))) continue;
+    const dh = d.querySelector(HSEL);
+    if (dh && cfg.skipDialogs.includes(norm(dh.textContent))) continue;
+    taken.add(d);
+    parts.push({name: 'dialog', html: strip(d)});
+    if (parts.length >= 4) break;
+  }
+  return parts;
+}
+"""
+
+
+def _snapshot_take(page, titles: tuple[str, ...]) -> list[dict[str, str]]:
+    parts = page.evaluate(_SECTION_JS, {
+        "titles": list(titles),
+        "sections": list(SECTION_TITLES),
+        "keep": list(_KEEP_ATTRS),
+        "maxChars": SECTION_RAW_MAX_CHARS,
+        "skipDialogs": list(_SKIP_DIALOGS),
+    })
+    out: list[dict[str, str]] = []
+    for part in parts or []:
+        if isinstance(part, dict) and part.get("html"):
+            out.append({"name": str(part.get("name") or "section")[:40], "html": str(part["html"])})
+    return out
+
+
+def remember_section(page, *, step: str, run_id: str = "", campaign: str = "") -> bool:
+    """Снять карточку упавшего шага и запомнить её до отправки события.
+
+    Никогда не бросает. False — не снято (выключено настройкой, страница не
+    ответила, ничего не нашлось).
+    """
+    if not section_snapshots_enabled() or not step:
+        return False
+    try:
+        started = time.time()
+        parts = _snapshot_take(page, section_titles_for(step))
+        if not parts:
+            return False
+        entry = {
+            "step": step,
+            "campaign": campaign,
+            "parts": parts,
+            "took_s": round(time.time() - started, 2),
+        }
+        with _sections_lock:
+            _sections.pop((run_id or "", step), None)
+            _sections[(run_id or "", step)] = entry
+            while len(_sections) > _SECTIONS_MAX:
+                _sections.popitem(last=False)
+        return True
+    except Exception:
+        return False
+
+
+def _find_section(run_id: str, steps: Iterable[str]) -> dict[str, Any] | None:
+    with _sections_lock:
+        for step in steps:
+            found = _sections.get((run_id or "", step))
+            if found:
+                return found
+        # Сам шаг снимка не оставил (отказ без `_shot`, итог кампании):
+        # последний раздел этого прогона — с честной пометкой, чей он.
+        for (rid, _step), entry in reversed(_sections.items()):
+            if rid == (run_id or ""):
+                return entry
+    return None
+
+
+def forget_sections() -> None:
+    """Забыть снятые разделы (тесты)."""
+    with _sections_lock:
+        _sections.clear()
+
+
+# ── Вычистка раздела ────────────────────────────────────────────────────────
+
+#: Выкидываются вместе с содержимым.
+_DROP_TAGS = frozenset({
+    "script", "style", "svg", "noscript", "template", "iframe", "object", "embed",
+    "canvas", "link", "meta", "head", "title", "math", "base",
+})
+_VOID_TAGS = frozenset({
+    "area", "br", "col", "hr", "img", "input", "param", "source", "track", "wbr",
+})
+_ID_REF_ATTRS = frozenset({
+    "id", "aria-labelledby", "aria-describedby", "aria-controls", "aria-owns",
+    "aria-activedescendant", "aria-details", "aria-errormessage", "aria-flowto",
+})
+#: Служебные id рендера Meta: `js_1a`, `u_0_2f_Xy`, React `:r1f:` / `_r_1f_`.
+#: Они новые на каждой загрузке, и по ним ничего не найти; заменяются на
+#: сквозные `syn_N`, чтобы ссылки aria-labelledby остались связанными.
+_RENDER_ID = re.compile(r"^(?:js_|u_\d|:r|_r_)[\w:.-]{0,80}$")
+_TAG_NAME = re.compile(r"[a-z][a-z0-9-]{0,30}")
+
+_URL = re.compile(r"\b(?:https?://|www\.)[^\s\"'<>]{1,2048}", re.I)
+_ID_PARAM = re.compile(
+    r"\b(act|[a-z_]{1,40}_id|id)=[^&\s\"'<>,;]{1,256}", re.I)
+_PHONE = re.compile(r"(?<![\w<])\+?\d[\d ()./-]{7,22}\d(?![\w>])")
+_DIGITS = re.compile(r"\d{6,}")
+
+
+def _phone(match: re.Match[str]) -> str:
+    text = match.group(0)
+    return "<phone>" if sum(ch.isdigit() for ch in text) >= 9 else text
+
+
+def _names_pattern(names: Iterable[tuple[str, str]]) -> tuple[re.Pattern[str] | None, dict[str, str]]:
+    """Одно выражение на все известные имена, длинные раньше коротких."""
+    table: dict[str, str] = {}
+    for value, placeholder in names:
+        value = (value or "").strip()
+        if len(value) >= 3 and value.lower() not in table:
+            table[value.lower()] = placeholder
+    if not table:
+        return None, table
+    ordered = sorted(table, key=len, reverse=True)
+    pattern = re.compile(
+        r"(?<![A-Za-z0-9])(?:" + "|".join(re.escape(v) for v in ordered) + r")(?![A-Za-z0-9])",
+        re.I,
+    )
+    return pattern, table
+
+
+def private_names(campaign: str = "", account: str = "", names: Iterable[str] = ()) -> list[tuple[str, str]]:
+    """Имена этого прогона → заглушки. Кабинет — целиком и по словам
+    (`FacebookDoc19 Ivan Petrov`: ярлык и имя персоны)."""
+    out: list[tuple[str, str]] = []
+    if campaign:
+        out.append((campaign, "<campaign>"))
+    if account:
+        out.append((account, "<account>"))
+        for word in re.split(r"[\s()\[\],;|]+", account):
+            out.append((word, "<account>"))
+    for name in names or ():
+        if name:
+            out.append((str(name), "<name>"))
+    return out
+
+
+class _SectionScrubber(HTMLParser):
+    """Пересборка разметки по белому списку. Всё, чего нет в списке, — не едет."""
+
+    def __init__(self, names_re: re.Pattern[str] | None, names: dict[str, str], budget: int) -> None:
+        super().__init__(convert_charrefs=True)
+        self._names_re = names_re
+        self._names = names
+        self._budget = budget
+        self._out: list[str] = []
+        self._size = 0
+        self._stack: list[str] = []
+        self._drop_tag = ""
+        self._drop_depth = 0
+        self._ids: dict[str, str] = {}
+        self.truncated = False
+
+    # -- текст -------------------------------------------------------------
+    def _text(self, value: str, limit: int) -> str:
+        # Адреса и почта — раньше имён: имя внутри адреса почты заменилось
+        # бы по частям, а домен остался бы.
+        text = _URL.sub("<url>", value or "")
+        text = _EMAIL.sub("<email>", text)
+        if self._names_re is not None:
+            text = self._names_re.sub(lambda m: self._names.get(m.group(0).lower(), "<name>"), text)
+        text = scrub(text)
+        text = _ID_PARAM.sub(lambda m: m.group(1) + "=<hidden>", text)
+        text = _PHONE.sub(_phone, text)
+        text = _DIGITS.sub("<digits>", text)
+        if len(text) > limit:
+            text = text[:limit] + "…"
+        return text
+
+    def _render_id(self, value: str) -> str:
+        if not _RENDER_ID.match(value):
+            return value
+        if value not in self._ids:
+            self._ids[value] = f"syn_{len(self._ids) + 1}"
+        return self._ids[value]
+
+    def _attrs(self, attrs: list[tuple[str, str | None]]) -> str:
+        out = []
+        for name, value in attrs:
+            name = (name or "").lower()
+            if not (name.startswith("aria-") or name in _KEEP_ATTRS):
+                continue
+            if not _TAG_NAME.fullmatch(name):
+                continue
+            if value is None:
+                out.append(f" {name}")
+                continue
+            if name in _ID_REF_ATTRS:
+                value = " ".join(self._render_id(v) for v in value.split())
+            value = self._text(value, SECTION_ATTR_MAX)
+            out.append(f' {name}="{_html.escape(value, quote=True)}"')
+        return "".join(out)
+
+    # -- вывод -------------------------------------------------------------
+    def _emit(self, piece: str, opens: str = "") -> bool:
+        """Добавить кусок, если после него хватит места закрыть все теги
+        (включая `opens` — тег, который этот кусок открывает)."""
+        if self.truncated:
+            return False
+        closing = sum(len(t) + 3 for t in self._stack) + (len(opens) + 3 if opens else 0)
+        size = len(piece.encode("utf-8", "replace"))
+        if self._size + size + closing > self._budget:
+            self.truncated = True
+            return False
+        self._out.append(piece)
+        self._size += size
+        return True
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if self._drop_depth:
+            if tag == self._drop_tag:
+                self._drop_depth += 1
+            return
+        if tag in _DROP_TAGS:
+            self._drop_tag, self._drop_depth = tag, 1
+            return
+        if not _TAG_NAME.fullmatch(tag):
+            return
+        opens = "" if tag in _VOID_TAGS else tag
+        if self._emit(f"<{tag}{self._attrs(attrs)}>", opens) and opens:
+            self._stack.append(tag)
+
+    def handle_startendtag(self, tag, attrs):
+        tag = tag.lower()
+        if self._drop_depth or tag in _DROP_TAGS or not _TAG_NAME.fullmatch(tag):
+            return
+        piece = f"<{tag}{self._attrs(attrs)}>"
+        if tag not in _VOID_TAGS:
+            piece += f"</{tag}>"
+        self._emit(piece)
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        if self._drop_depth:
+            if tag == self._drop_tag:
+                self._drop_depth -= 1
+            return
+        if tag not in self._stack:
+            return
+        while self._stack:
+            top = self._stack.pop()
+            # Закрывающие теги уже учтены в `_emit` как «место на закрытие».
+            self._out.append(f"</{top}>")
+            self._size += len(top) + 3
+            if top == tag:
+                break
+
+    def handle_data(self, data):
+        if self._drop_depth or not data:
+            return
+        if not data.strip():
+            self._emit(" ")
+            return
+        self._emit(_html.escape(self._text(data, SECTION_TEXT_MAX), quote=False))
+
+    # Комментарии, doctype, инструкции обработки — не едут.
+    def handle_comment(self, data):
+        return
+
+    def handle_decl(self, decl):
+        return
+
+    def handle_pi(self, data):
+        return
+
+    def unknown_decl(self, data):
+        return
+
+    def result(self) -> str:
+        while self._stack:
+            self._out.append(f"</{self._stack.pop()}>")
+        return "".join(self._out)
+
+
+def scrub_section_html(
+    html: str,
+    *,
+    campaign: str = "",
+    account: str = "",
+    names: Iterable[str] = (),
+    max_bytes: int = SECTION_MAX_BYTES,
+) -> tuple[str, bool]:
+    """Вычистить раздел страницы для отправки. `(разметка, обрезано ли)`.
+
+    Пересобирает разметку заново, а не правит исходную: остаются только теги
+    (без script/style/svg/iframe…), атрибуты role/aria-*/data-surface/
+    placeholder/type/checked/disabled/id и текст. В тексте и значениях
+    атрибутов: имена кампании/кабинета/групп/объявлений → заглушки, адреса →
+    `<url>`, `act=`/`*_id=` → `<hidden>`, почта, телефоны, числа от шести
+    цифр, токены и uuid (`run_telemetry.scrub`); каждая строка — не длиннее
+    SECTION_TEXT_MAX. Служебные id рендера (`js_*`) → `syn_N`. Результат —
+    не больше `max_bytes` байт, с закрытыми тегами.
+    """
+    names_re, table = _names_pattern(private_names(campaign, account, names))
+    parser = _SectionScrubber(names_re, table, max(0, int(max_bytes)))
+    try:
+        parser.feed((html or "")[:SECTION_RAW_MAX_CHARS])
+        parser.close()
+    except Exception:
+        # Разбор не удался — не отправляем ничего, а не «что получилось».
+        return "", True
+    return parser.result(), parser.truncated or len(html or "") > SECTION_RAW_MAX_CHARS
+
+
+def section_attachment(
+    step: str,
+    run_id: str = "",
+    *,
+    campaign: str = "",
+    account: str = "",
+    names: Iterable[str] = (),
+    related: Iterable[str] = (),
+) -> dict[str, Any] | None:
+    """Вложение для события Sentry о шаге `step`: вычищенный раздел или None.
+
+    `{"filename", "bytes", "content_type", "context"}`. `context` — короткая
+    справка для самого события (какая карточка, с какого шага снята, размер,
+    обрезана ли), чтобы разбор видел это без скачивания файла.
+    """
+    if not section_snapshots_enabled():
+        return None
+    try:
+        related = list(related or ())
+        entry = _find_section(run_id, [step, *related])
+        if not entry:
+            return None
+        campaign = campaign or entry.get("campaign") or ""
+        names_list = list(names or ())
+        captured_at = str(entry.get("step") or "")
+        # Заголовок — до частей, чтобы бюджет частей считался от остатка.
+        head_room = 800
+        budget = SECTION_MAX_BYTES - head_room
+        chunks: list[str] = []
+        shown: list[str] = []
+        cut_any = False
+        for part in entry.get("parts") or []:
+            header = f"<!-- part: {_safe(part.get('name') or 'section')} -->\n"
+            room = budget - len(header.encode("utf-8")) - 1
+            if room <= 256:
+                cut_any = True
+                break
+            body, cut = scrub_section_html(part.get("html") or "", campaign=campaign,
+                                           account=account, names=names_list, max_bytes=room)
+            cut_any = cut_any or cut
+            if not body:
+                continue
+            chunk = header + body + "\n"
+            chunks.append(chunk)
+            shown.append(str(part.get("name") or "section"))
+            budget -= len(chunk.encode("utf-8"))
+        if not chunks:
+            return None
+        head = (
+            f"<!-- ACL section snapshot (ACL-1325) | step: {_safe(step)}"
+            f" | captured at step: {_safe(captured_at)}"
+            f" | parts: {', '.join(_safe(s) for s in shown)}"
+            f" | truncated: {'yes' if cut_any else 'no'}"
+            " | scrubbed (whitelisted tags/attributes; names, ids, urls, emails, phones replaced);"
+            " screenshots are never sent -->\n"
+        )
+        payload = (head + "".join(chunks)).encode("utf-8", "replace")
+        return {
+            "filename": f"section_{_safe(step)}.html",
+            "bytes": payload,
+            "content_type": "text/html",
+            "context": {
+                "parts": shown,
+                "captured_at_step": captured_at,
+                "same_step": captured_at == step or captured_at in related,
+                "bytes": len(payload),
+                "truncated": cut_any,
+            },
+        }
+    except Exception:
+        return None

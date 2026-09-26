@@ -2403,6 +2403,7 @@ class AdsManagerFlow:
                 sentry_signal.report_campaign_stop(
                     fail_step, campaign=draft.name,
                     account=draft.account_label or "", attempt=attempt,
+                    names=sentry_signal.draft_names(draft),
                 )
                 if fail_step.split(":", 1)[0] == "profile_unresponsive":
                     # ACL-1320: профиль не отвечает — перезапустить его через
@@ -2430,6 +2431,7 @@ class AdsManagerFlow:
                         sentry_signal.report_campaign_stop(
                             fail_step, campaign=draft.name,
                             account=draft.account_label or "", attempt=attempt,
+                            names=sentry_signal.draft_names(draft),
                         )
                     elif new_page is None:
                         result.steps_completed.append(
@@ -2484,6 +2486,7 @@ class AdsManagerFlow:
             # телеметрии в Sentry не уходят — см. `sentry_signal`.
             sentry_signal.report_blocking_failures(
                 ad_soft_fails, campaign=draft.name, account=draft.account_label or "",
+                names=sentry_signal.draft_names(draft),
             )
             return result
 
