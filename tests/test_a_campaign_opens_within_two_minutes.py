@@ -414,3 +414,39 @@ def test_a_tab_that_stays_silent_on_the_long_probe_is_replaced(env, monkeypatch)
     env.sc.dialog_at = ("new", env.start + 60)
     assert env.run() == ""
     assert [e for e in env.ev if e[0] == "fresh"]
+
+
+def test_the_budget_is_a_hard_ceiling(env, monkeypatch):
+    """Ревью PR #323 (F9): 120 с — потолок, а не пожелание. Медленные
+    нажатия (по 10 с), после каждого вкладка на миг не отвечает — раунды
+    короткие: ни одно нажатие не начинается, когда ждать его окно уже
+    некогда, и открытие не уходит за бюджет больше, чем на одно нажатие."""
+    starts: list = []
+
+    def press(p, where):
+        starts.append(env.clock.now - env.start)
+        env.clock.sleep(10)
+        return True
+
+    env.sc.took = "frozen"
+    # Без свежей вкладки: проверяется только потолок нажатий.
+    monkeypatch.setattr(md, "CAMPAIGN_OPEN_FRESH_TAB_ROUND", 99)
+    monkeypatch.setattr(md, "_page_responsive", lambda p, timeout_s=5.0: True)
+    got = md._open_campaign(_P("old"), LIST_URL, press=press, shot=lambda label: None)
+    assert got == "objective_leads"
+    assert len(starts) >= 4, starts
+    assert starts and all(t <= md.CAMPAIGN_OPEN_BUDGET_S - md.CAMPAIGN_OPEN_MIN_PRESS_S for t in starts), starts
+    assert env.clock.now - env.start <= md.CAMPAIGN_OPEN_BUDGET_S + 25 + md.OBJECTIVE_POLL_S
+
+
+def test_steps_inside_the_open_see_its_deadline(env, monkeypatch):
+    seen: list = []
+
+    def press(p, where):
+        seen.append(md._open_left())
+        return True
+
+    env.sc.dialog_at = ("old", env.start + 10)
+    md._open_campaign(_P("old"), LIST_URL, press=press, shot=lambda label: None)
+    assert seen and seen[0] <= md.CAMPAIGN_OPEN_BUDGET_S
+    assert md._open_left() == float("inf"), "срок открытия остался висеть после него"

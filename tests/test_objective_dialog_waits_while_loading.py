@@ -164,7 +164,10 @@ def test_the_recorded_flow_waits_through_the_helper_before_reloading():
                 if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == name]
 
     assert calls(fn("run_recorded_campaign_flow"), "_open_campaign"), "кампанию открывают мимо бюджета"
-    opener = fn("_open_campaign")
+    # Ревью PR #323 (F9): `_open_campaign` ставит срок потока, раунды — в
+    # `_open_campaign_rounds`.
+    assert calls(fn("_open_campaign"), "_open_campaign_rounds")
+    opener = fn("_open_campaign_rounds")
     assert calls(opener, "_wait_objective_dialog"), "окно цели ждут не через _wait_objective_dialog"
     assert calls(opener, "_open_list_again")
     assert not calls(opener, "recover_stuck_page"), "раунд без окна цели — список заново, не reload"

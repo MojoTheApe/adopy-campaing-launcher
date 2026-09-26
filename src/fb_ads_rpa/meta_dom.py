@@ -2751,7 +2751,8 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
     или список без модалки. Проверяем за секунды, а не за минуты.
     """
     base = (list_url or "").split("?", 1)[0]
-    deadline = time.time() + timeout_s
+    # Ревью PR #323 (F9): не дольше, чем осталось от бюджета открытия.
+    deadline = time.time() + max(0.5, min(timeout_s, _open_left()))
     while time.time() < deadline:
         # ACL-1320: вкладки больше нет — "gone" сразу, не восемь секунд
         # падающих за миллисекунды вызовов.
@@ -3728,11 +3729,31 @@ CAMPAIGN_OPEN_AFTER_CREATE_S = 25.0
 CAMPAIGN_OPEN_MIN_ROUND_S = 2.0
 
 
+#: Ревью PR #323 (F9): срок открытия кампании этого потока (`_open_campaign`)
+#: — его читают шаги внутри открытия (`_click`, возврат на список,
+#: `_create_took`), чтобы 120 с были потолком, а не пожеланием.
+_OPEN_BUDGET = threading.local()
+
+#: Не начинать нажатие Create, если до конца бюджета меньше стольких секунд:
+#: окно цели после него всё равно ждать было бы некогда.
+CAMPAIGN_OPEN_MIN_PRESS_S = 10.0
+
+#: Не открывать свежую вкладку, если до конца бюджета меньше стольких секунд.
+CAMPAIGN_OPEN_FRESH_TAB_MIN_S = 20.0
+
+
+def _open_left() -> float:
+    """Сколько секунд осталось от бюджета открытия кампании (∞ — вне открытия)."""
+    deadline = getattr(_OPEN_BUDGET, "deadline", None)
+    return float("inf") if deadline is None else deadline - time.time()
+
+
 def _back_to_list(page: Page, list_url: str) -> None:
     """Нажатие увело со списка кампаний — вернуться на него."""
     try:
         if list_url and page.url.split("?", 1)[0] != list_url.split("?", 1)[0]:
-            page.goto(list_url, wait_until="domcontentloaded", timeout=60000)
+            page.goto(list_url, wait_until="domcontentloaded",
+                      timeout=int(max(1.0, min(60.0, _open_left())) * 1000))
             _sleep_h(3.0, 0.2)
     except Exception:
         pass
@@ -3778,6 +3799,16 @@ def _profile_trouble(page: Page, *, read_dom: bool = True) -> str:
 
 
 def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) -> str:
+    """См. `_open_campaign_rounds`. Ревью PR #323 (F9): на время открытия
+    ставится срок потока (`_OPEN_BUDGET`) — его соблюдают и шаги внутри."""
+    _OPEN_BUDGET.deadline = time.time() + CAMPAIGN_OPEN_BUDGET_S
+    try:
+        return _open_campaign_rounds(page, list_url, press=press, shot=shot, on_new_page=on_new_page)
+    finally:
+        _OPEN_BUDGET.deadline = None
+
+
+def _open_campaign_rounds(page: Page, list_url: str, *, press, shot, on_new_page=None) -> str:
     """Нажать Create и дождаться окна цели — не дольше `CAMPAIGN_OPEN_BUDGET_S`.
 
     ACL-1320. Раунд: (раунд > 1 — список заново) → Create → быстрая проверка,
@@ -3843,11 +3874,16 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
             if trouble:
                 outcome, result = "trouble", trouble
                 break
+            if _left() < CAMPAIGN_OPEN_FRESH_TAB_MIN_S:
+                # Ревью PR #323 (F9): на свежую вкладку бюджета не осталось.
+                outcome = "budget"
+                break
             new_page = None
             try:
                 from src.fb_ads_rpa.browser import fresh_tab
 
-                new_page = fresh_tab(page, list_url)
+                new_page = fresh_tab(page, list_url,
+                                     goto_timeout_s=max(5.0, min(30.0, _left() - 15.0)))
             except _trouble.ProfileStop as stop:
                 # Свежая вкладка сама попала на вход или в ошибку сети.
                 outcome, result = "trouble", stop.code
@@ -3888,6 +3924,11 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
                                   diag=wake_page_quietly(page))
             except Exception:
                 pass
+        if _left() < CAMPAIGN_OPEN_MIN_PRESS_S:
+            # Ревью PR #323 (F9): нажатие, после которого окно цели ждать
+            # уже некогда, только растянуло бы открытие за потолок.
+            outcome = "budget"
+            break
         _clear_blocking_overlays(page, "create" if rounds == 1 else "create_retry", editor=False)
         where = "create" if rounds == 1 else "create_retry"
         if not press(page, where):
@@ -3907,7 +3948,7 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
         while True:
             took = _create_took(page, list_url)
             _telemetry.record("create_took", took == "ok", note=took)
-            if took in ("ok", "frozen", "gone") or quick_left <= 0:
+            if took in ("ok", "frozen", "gone") or quick_left <= 0 or _left() < CAMPAIGN_OPEN_MIN_PRESS_S:
                 break
             # ACL-1313: промах виден за секунды — повторяем нажатие сразу.
             # Не больше двух быстрых повторов за открытие; за последним
@@ -4078,6 +4119,10 @@ def run_recorded_campaign_flow(
             # упали бы за миллисекунды одна за другой.
             if _tab_gone(page):
                 return False
+            # Ревью PR #323 (F9): внутри открытия кампании — не дольше её
+            # бюджета (вне открытия `_open_left()` бесконечен).
+            if _open_left() <= 0:
+                return False
             # ACL-1320: вкладка не отвечает — сторож действует сразу, не
             # дожидаясь бюджета, а попытка не лезет в вызовы без таймаута.
             if _tab_frozen(page):
@@ -4088,7 +4133,7 @@ def run_recorded_campaign_flow(
             _wait_loading()
             watch.check()
             try:
-                loc.wait_for(state="visible", timeout=8000)
+                loc.wait_for(state="visible", timeout=int(max(0.5, min(8.0, _open_left())) * 1000))
                 loc.scroll_into_view_if_needed(timeout=3000)
                 box = loc.bounding_box(timeout=3000)
                 if box and box.get("width", 0) > 0:
