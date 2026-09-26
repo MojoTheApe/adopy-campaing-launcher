@@ -3736,6 +3736,7 @@ def _open_list_again(page: Page, list_url: str, deadline: float) -> None:
     left_ms = lambda: max(int((deadline - time.time()) * 1000), 1000)  # noqa: E731
     try:
         page.goto(list_url, wait_until="domcontentloaded", timeout=min(30000, left_ms()))
+        _trouble.note_nav_ok(page)
     except Exception as exc:
         # ACL-1320: ошибка сети профиля — в его память; редирект на вход
         # виден дальше по адресу вкладки.
@@ -8422,6 +8423,9 @@ def _recover_from_browser_error(page: Page, *, attempts: int = 2) -> bool:
     for _ in range(attempts):
         code = _telemetry.browser_error(page)
         if not code:
+            if seen:
+                # Ревью PR #323 (F3): перезагрузка убрала ошибку — разовый разрыв.
+                _trouble.note_nav_ok(page)
             return bool(seen)
         seen = code
         _telemetry.record("browser_error", None, note=code)
@@ -8430,7 +8434,11 @@ def _recover_from_browser_error(page: Page, *, attempts: int = 2) -> bool:
         _trouble.note_net_error(page, _trouble.net_code(code))
         _reload_editor(page)
         _sleep_h(1.0)
-    return bool(seen) and not _telemetry.browser_error(page)
+    recovered = bool(seen) and not _telemetry.browser_error(page)
+    if recovered:
+        # Ревью PR #323 (F3): перезагрузка убрала ошибку — это разовый разрыв.
+        _trouble.note_nav_ok(page)
+    return recovered
 
 
 def _reload_editor(page: Page, edit_url: str = "") -> None:

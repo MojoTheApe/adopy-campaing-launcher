@@ -1057,6 +1057,7 @@ def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
                     diag["why"], diag["detail"] = kind, detail
                     raise profile_trouble.ProfileStop(kind, detail) from exc
                 raise
+            profile_trouble.note_nav_ok(new)
             kind, detail = profile_trouble.classify_page(new, history=False)
             if kind:
                 diag["why"], diag["detail"] = kind, detail

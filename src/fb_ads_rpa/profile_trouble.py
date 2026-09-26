@@ -64,6 +64,11 @@ ACCOUNT_STOPS = frozenset(MESSAGES)
 #: «вкладка не отвечает» и перезапуск в 15:37:39).
 NET_ERROR_RECENT_S = 300.0
 
+#: Ревью PR #323 (F3): сколько неразрешённых ошибок сети (после последнего
+#: удачного перехода) нужно, чтобы по одной истории назвать сеть профиля.
+#: Одна ошибка, за которой последовал удачный повтор (20.09 S15), — не сеть.
+NET_ERRORS_FOR_HISTORY = 2
+
 _NET_CODE = re.compile(
     r"\b(ERR_(?:SOCKS_[A-Z_]+|PROXY_[A-Z_]+|TUNNEL_[A-Z_]+|CONNECTION_[A-Z_]+"
     r"|SSL_PROTOCOL_ERROR|TIMED_OUT|NAME_NOT_RESOLVED|INTERNET_DISCONNECTED"
@@ -78,6 +83,7 @@ _LOGIN_PATH = re.compile(r"(^|/)(login(page)?(\.php)?)(/|$)", re.I)
 _LOGIN_IN_TEXT = re.compile(r"https?://[a-z0-9.-]*facebook\.com/[^\s\"']*", re.I)
 
 _ATTR = "_acl_net_errors"
+_OK_ATTR = "_acl_nav_ok"
 
 
 class ProfileStop(RuntimeError):
@@ -169,16 +175,42 @@ def note_net_error(page, code: str) -> None:
         pass
 
 
+def note_nav_ok(page) -> None:
+    """Удачный переход профиля: ошибки сети до него больше не в счёт
+    (ревью PR #323, F3 — повтор, который прошёл, «лечит» разовый разрыв)."""
+    if page is None:
+        return
+    try:
+        setattr(_holder(page), _OK_ATTR, time.monotonic())
+    except Exception:
+        pass
+
+
 def recent_net_errors(page, within_s: float = NET_ERROR_RECENT_S) -> list[str]:
-    """Коды ошибок сети этого профиля за последние `within_s` секунд."""
+    """Коды неразрешённых ошибок сети этого профиля: за последние `within_s`
+    секунд и позже последнего удачного перехода (`note_nav_ok`)."""
     if page is None:
         return []
     try:
-        seen = vars(_holder(page)).get(_ATTR) or []
+        state = vars(_holder(page))
     except TypeError:
         return []
+    seen = state.get(_ATTR) or []
+    ok_at = state.get(_OK_ATTR)
+    ok_at = ok_at if isinstance(ok_at, (int, float)) else float("-inf")
     now = time.monotonic()
-    return [code for ts, code in seen if now - ts <= within_s]
+    return [code for ts, code in seen if now - ts <= within_s and ts > ok_at]
+
+
+def _meta_page(url: str) -> bool:
+    """Обычная страница Meta (Ads Manager / Business) — не вход, не ошибка."""
+    if not isinstance(url, str) or not url.startswith("https://"):
+        return False
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return (host == "facebook.com" or host.endswith(".facebook.com")) and not login_url(url)
 
 
 #: Разметка вкладки: форма входа Facebook или страница ошибки Chrome с кодом.
@@ -226,10 +258,12 @@ def classify_page(page, *, history: bool = True, read_dom: bool = True,
     По порядку, от дешёвого к дорогому:
     1. адрес (`page.url` — локальное поле, отвечает и зависшая вкладка):
        страница входа Facebook → LOGGED_OUT; `chrome-error://` → NETWORK;
-    2. `history`: недавняя ошибка сети этого профиля (упавший переход,
-       страница ошибки Chrome) → NETWORK;
-    3. `read_dom`: ограниченное чтение разметки — видимая форма входа →
-       LOGGED_OUT, страница ошибки Chrome с кодом сети → NETWORK.
+    2. `read_dom`: ограниченное чтение разметки — видимая форма входа →
+       LOGGED_OUT, страница ошибки Chrome с кодом сети → NETWORK;
+    3. `history` — только вспомогательный признак (ревью PR #323, F3): не
+       меньше `NET_ERRORS_FOR_HISTORY` ошибок сети после последнего удачного
+       перехода, и только если на вкладке сейчас НЕ обычная страница Meta.
+       Живая страница Ads Manager по одной истории сетью не называется.
 
     ("", "") — ни то ни другое: вкладка просто не отвечает.
     """
@@ -244,10 +278,6 @@ def classify_page(page, *, history: bool = True, read_dom: bool = True,
     if url.startswith("chrome-error://"):
         recent = recent_net_errors(page)
         return NETWORK, (recent[-1] if recent else "chrome_error_page")
-    if history:
-        recent = recent_net_errors(page)
-        if recent:
-            return NETWORK, recent[-1]
     if read_dom:
         seen = _read_page(page, timeout_s)
         if seen.get("login"):
@@ -256,4 +286,8 @@ def classify_page(page, *, history: bool = True, read_dom: bool = True,
         if code:
             note_net_error(page, code)
             return NETWORK, code
+    if history and not _meta_page(url):
+        recent = recent_net_errors(page)
+        if len(recent) >= NET_ERRORS_FOR_HISTORY:
+            return NETWORK, recent[-1]
     return "", ""
