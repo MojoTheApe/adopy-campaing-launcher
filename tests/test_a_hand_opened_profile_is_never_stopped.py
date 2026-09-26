@@ -39,7 +39,7 @@ MESSAGE = ("This Multilogin profile is open by hand. Close its window "
 
 @pytest.fixture
 def provider(monkeypatch):
-    monkeypatch.setattr(br, "_ROBOT_PROFILES", set())
+    monkeypatch.setattr(br, "_ROBOT_PROFILES", {})
     monkeypatch.setattr(br.time, "sleep", lambda s: None)
     monkeypatch.setattr(br, "_find_mlx_profile_dir", lambda pid: "C:/mlx/p")
     ev: list = []
@@ -102,7 +102,7 @@ def mlx(monkeypatch):
     fake = _Launcher()
     monkeypatch.setattr(cfg_mod, "get_multilogin_instance", lambda inst: SimpleNamespace(instance_id=inst))
     monkeypatch.setattr(launcher_mod, "MultiloginLauncher", lambda cfg: fake)
-    monkeypatch.setattr(br, "_ROBOT_PROFILES", set())
+    monkeypatch.setattr(br, "_ROBOT_PROFILES", {})
     monkeypatch.setattr(br.time, "sleep", lambda s: None)
     kills: list = []
     monkeypatch.setattr(br, "_kill_chrome_for_user_data_dir", lambda *a, **k: kills.append(a))
@@ -178,3 +178,21 @@ def test_the_dashboard_tells_the_buyer_to_close_the_window():
     assert "close its window first" in html
     src = (ROOT / "src" / "fb_ads_rpa" / "rpa_publisher.py").read_text(encoding="utf-8")
     assert "restarting the profile itself when it has no debug port" not in src
+
+
+def test_a_robot_profile_reopened_by_hand_is_the_owners_window(provider, monkeypatch):
+    """Робот поднимал профиль (процесс 101), тот умер, человек открыл его
+    руками (процесс 202) — это уже окно человека: не останавливаем."""
+    pids = {"now": frozenset({101})}
+    monkeypatch.setattr(br, "_profile_pids", lambda udd, pid: pids["now"])
+    br._mark_robot_profile(PROFILE, "C:/mlx/p")
+    monkeypatch.setattr(provider.prov, "_start_via_mlx_api",
+                        lambda *a, **kw: provider.ev.append("start") or "started")
+    pids["now"] = frozenset({202})
+    with pytest.raises(pt.ProfileStop) as stop:
+        provider.prov.open(_entry(), "Facebook_9943")
+    assert stop.value.code == pt.OPEN_BY_HAND
+    assert provider.ev == []
+    pids["now"] = frozenset({101})
+    provider.prov.open(_entry(), "Facebook_9943")
+    assert provider.ev == ["start"], "свой же процесс робота без порта не перезапустили"

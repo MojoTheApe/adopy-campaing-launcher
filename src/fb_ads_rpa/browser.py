@@ -1805,16 +1805,58 @@ def _record_profile_restart(entry: AccountMapEntry, profile_id: str, *, ok: bool
 #: поднять заново: профиль, открытый руками, может держать сессию Facebook,
 #: которую Multilogin ещё не сохранил (живой прогон 26.09 — владелец входил в
 #: новые аккаунты, пока робот останавливал их окна).
-_ROBOT_PROFILES: set[str] = set()
+#:
+#: Профиль → процессы Mimic, которые робот поднял или к которым цеплялся.
+#: Профиль робота мог умереть, а человек — открыть его заново руками: тогда
+#: процесс уже другой, и это окно человека (живой прогон 26.09 15:50:
+#: Facebook_9943 после неудачного перезапуска). Пустое множество — процессы
+#: прочитать не удалось; тогда решает само членство.
+_ROBOT_PROFILES: dict[str, frozenset[int]] = {}
 
 
-def _mark_robot_profile(profile_id: str) -> None:
+def _profile_pids(user_data_dir: str, profile_id: str) -> frozenset[int]:
+    """Главные процессы Mimic этого профиля (без `--type=`), пусто — не прочесть."""
+    try:
+        import psutil  # type: ignore
+    except Exception:
+        return frozenset()
+    udd = (user_data_dir or "").lower().replace("/", "\\").rstrip("\\")
+    # Как `_profile_process_running`: полный путь, его последняя часть (MLX
+    # укорачивает пути) и id профиля.
+    needles = [n for n in (udd, udd.rsplit("\\", 1)[-1], (profile_id or "").lower()) if n]
+    if not needles:
+        return frozenset()
+    found: set[int] = set()
+    try:
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                if "chrome" not in (proc.info.get("name") or "").lower():
+                    continue
+                cmd = " ".join(proc.info.get("cmdline") or []).lower().replace("/", "\\")
+                if "--type=" in cmd or not any(n in cmd for n in needles):
+                    continue
+                found.add(int(proc.info["pid"]))
+            except Exception:
+                continue
+    except Exception:
+        return frozenset()
+    return frozenset(found)
+
+
+def _mark_robot_profile(profile_id: str, user_data_dir: str = "") -> None:
     if profile_id:
-        _ROBOT_PROFILES.add(profile_id)
+        _ROBOT_PROFILES[profile_id] = _profile_pids(user_data_dir, profile_id)
 
 
-def _robot_profile(profile_id: str) -> bool:
-    return bool(profile_id) and profile_id in _ROBOT_PROFILES
+def _robot_profile(profile_id: str, user_data_dir: str = "") -> bool:
+    """Профиль робота — и работает всё тот же процесс, что робот поднимал."""
+    if not profile_id or profile_id not in _ROBOT_PROFILES:
+        return False
+    known = _ROBOT_PROFILES.get(profile_id) or frozenset()
+    if not known:
+        return True
+    now = _profile_pids(user_data_dir, profile_id)
+    return not now or bool(now & known)
 
 
 def _open_by_hand(profile_id: str, account_label: str, where: str) -> profile_trouble.ProfileStop:
@@ -1885,7 +1927,7 @@ class MultiloginAttachOnlyProvider:
                 )
                 if started.port:
                     self._api_started = True
-                    _mark_robot_profile(profile_id)
+                    _mark_robot_profile(profile_id, udd)
                     return started
                 last_exc = MultiloginLauncherError(
                     "MLX API did not return a CDP port after start"
@@ -1910,7 +1952,7 @@ class MultiloginAttachOnlyProvider:
                         f"{account_label}: profile is already running; no stop or restart was performed. "
                         "Close it in Multilogin Desktop before opening it with automation."
                     ) from exc
-                if lock_conflict and not _robot_profile(profile_id):
+                if lock_conflict and not _robot_profile(profile_id, udd):
                     # ACL-1320: MLX держит профиль, а робот его не поднимал —
                     # значит, открыт руками. Не останавливаем.
                     raise _open_by_hand(profile_id, account_label, "mlx_lock") from exc
@@ -1985,10 +2027,10 @@ class MultiloginAttachOnlyProvider:
             reused = None
             unresponsive = True
             # У него был порт автоматизации — это профиль робота, не ручной.
-            _mark_robot_profile(profile_id)
+            _mark_robot_profile(profile_id, udd)
         if reused is not None:
             log.info("Attached to already-open Multilogin profile %s", profile_id)
-            _mark_robot_profile(profile_id)
+            _mark_robot_profile(profile_id, udd)
             return reused
         if unresponsive:
             self._stop_profile(entry, account_label, profile_id, udd)
@@ -2002,7 +2044,7 @@ class MultiloginAttachOnlyProvider:
         elif self._direct._profile_process_running(udd or profile_id, profile_id):
             if not allow_restart:
                 raise RuntimeError(f"{account_label}: profile is already running; no restart was performed")
-            if not _robot_profile(profile_id):
+            if not _robot_profile(profile_id, udd):
                 raise _open_by_hand(profile_id, account_label, "no_automation_port")
             log.info(
                 "Profile %s (started by the robot earlier) has no CDP port. Will restart it via "
@@ -2073,9 +2115,9 @@ class MultiloginAttachOnlyProvider:
             raise RuntimeError(f"{account_label}: profile_id is required")
         # Публикатор зовёт это только для профиля, к которому робот был
         # подключён по порту автоматизации, — профиль робота.
-        _mark_robot_profile(profile_id)
         user_data_dir = _find_mlx_profile_dir(profile_id)
         udd = str(user_data_dir) if user_data_dir is not None else ""
+        _mark_robot_profile(profile_id, udd)
         try:
             self._stop_profile(entry, account_label, profile_id, udd)
             started = self._start_via_mlx_api(entry, account_label, profile_id, udd)
