@@ -495,6 +495,24 @@
           311
         ],
         "recorded_at": "2026-09-24T18:52:01+00:00"
+      },
+      "314": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "independent subagent (Claude Opus 5.5)",
+        "implementer": "ACL-1284 implementation subagents",
+        "head_sha": "715d65e5666aa7afab242046b25c1233a19e8cb2",
+        "base_sha": "723652e7ebe1631b2cc6f829a68b2e2b5270551e",
+        "tree_sha": "831cd544540aec718326efbcea215da5e501afb2",
+        "report": "Re-review v4 of PR #314 (delta 76c545e..715d65e incl. ACL-1319 merge 149dc6e): all 7 v3 findings fixed; targeted tests 456 + 144 passed; 54 mutations, 47 killed, all v3 survivors killed; live 6/6 publishable 2026-09-26 08:04-08:48 UTC. Remaining low/nit non-blocking findings (widened parked window recognition, second wrong-ad check test, name-step failure cascading to wrong_ad_open, CHANGELOG lag for v4 fixes and ACL-1319, Sentry job_exception tag tests, conftest comment, ACL-1319 per-render groupby) are carried to ACL-1320.",
+        "main_sha": "cfd8388f6ff25f8ccbbae3c56b09dfb34d22c504",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          284,
+          313,
+          315
+        ],
+        "recorded_at": "2026-09-26T09:32:11+00:00"
       }
     },
     "stage": {
