@@ -764,3 +764,27 @@ def test_a_table_directly_under_body_does_not_take_the_body(page):
     pc.remember_section(page, step="create", run_id="r1", campaign="X")
     att = pc.section_attachment("create", "r1", campaign="X")
     assert att is None or "Your profile" not in att["bytes"].decode()
+
+
+def test_markup_that_reaches_the_text_never_carries_its_attributes():
+    """Тег, дошедший до текста (экранированный на странице или не разобранный
+    старым парсером Python 3.11 — CI PR #328), вырезается целиком: его
+    `class`/`href`/`onclick` мимо белого списка не едут."""
+    html = ('<div role="dialog"><span>Pick an event</span>'
+            '&lt;div class="x1n2onr6" href="https://example.com/act=12345678" onclick="go()"&gt;'
+            '<b>Leads</b> &lt;/div&gt; a &lt; b</div>')
+    body, _cut = pc.scrub_section_html(html, campaign="", account="", names=())
+    assert not re.search(r"\s(class|style|href|src|value|onclick|data-testid)=", body)
+    assert "Pick an event" in body and "Leads" in body and "a &lt; b" in body
+
+
+def test_the_tail_of_a_torn_tag_never_carries_its_attributes():
+    """`>` внутри значения атрибута может разорвать тег, и хвост с атрибутами
+    придёт текстом — пары `имя="значение"` из текста вырезаются."""
+    scrubber = pc._SectionScrubber(None, {}, 200_000)
+    scrubber.handle_starttag("div", [("role", "dialog")])
+    scrubber.handle_data(' ad name" class="x1n2onr6" href="https://example.com/?act=1" data-testid=\'t\'> Leads')
+    scrubber.handle_endtag("div")
+    body = scrubber.result()
+    assert not re.search(r"\s(class|style|href|src|value|onclick|data-testid)=", body)
+    assert "Leads" in body

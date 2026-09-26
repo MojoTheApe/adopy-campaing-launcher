@@ -630,6 +630,15 @@ _ID_PARAM = re.compile(
     r"\b(act|[a-z_]{1,40}_id|id)=[^&\s\"'<>,;]{1,256}", re.I)
 _PHONE = re.compile(r"(?<![\w<])\+?\d[\d ()./-]{7,22}\d(?![\w>])")
 _DIGITS = re.compile(r"\d{6,}")
+#: Разметка, которая дошла до текста: экранированная на странице
+#: (`&lt;div class=…&gt;`) или тег, который парсер не разобрал и отдал текстом
+#: (старый `html.parser` в Python 3.11 — CI PR #328). Атрибуты такого тега
+#: мимо белого списка не едут: кусок вырезается целиком.
+_MARKUP_IN_TEXT = re.compile(r"</?[A-Za-z][^<>]*>?")
+#: Хвост разорванного тега: `>` внутри значения атрибута режет тег, и остаток
+#: (` x" class="y" href="…">`) приходит текстом. Пары `имя="значение"` в тексте
+#: вырезаются, как и сама разметка.
+_ATTR_IN_TEXT = re.compile(r"""(?<![\w-])[A-Za-z_:][\w:.-]*\s*=\s*(?:"[^"]*"|'[^']*')""")
 
 
 def _phone(match: re.Match[str]) -> str:
@@ -784,6 +793,10 @@ class _SectionScrubber(HTMLParser):
     def handle_data(self, data):
         if self._drop_depth or not data:
             return
+        if not data.strip():
+            self._emit(" ")
+            return
+        data = _ATTR_IN_TEXT.sub(" ", _MARKUP_IN_TEXT.sub(" ", data))
         if not data.strip():
             self._emit(" ")
             return
