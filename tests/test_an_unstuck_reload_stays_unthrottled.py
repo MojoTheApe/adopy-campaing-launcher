@@ -68,3 +68,19 @@ def test_a_tab_still_frozen_after_the_reload_gets_no_cdp_calls(env):
     env.state["alive_after"] = False
     assert md._unstick(env.page, "create", editor=False) == "reload_failed"
     assert "unthrottle" not in env.ev
+
+
+def test_a_frozen_tab_gets_no_cdp_session_from_the_guard(env):
+    """На вкладке, которая не отвечает, `wake_page` (CDP-сессия на ней самой)
+    не зовётся: `new_cdp_session` на зависшем рендерере висел 197 с."""
+    env.state["alive_after"] = False
+    md._unstick(env.page, "create", editor=False)
+    assert "wake" not in env.ev
+    assert md._unstick(env.page, "ad_name", editor=True) == "unsaved_or_unknown"
+    assert "wake" not in env.ev
+
+
+def test_a_live_tab_is_still_woken(env):
+    env.page.reloaded = True   # отвечает
+    assert md._unstick(env.page, "create", editor=False) == "woke"
+    assert env.ev == ["wake"]

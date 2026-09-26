@@ -3055,13 +3055,23 @@ def _unstick(page: Page, where: str, *, editor: bool, waited_s: float = 0.0,
     """
     how = "woke"
     woke: dict = {}
-    try:
-        from src.fb_ads_rpa.browser import wake_page
-
-        woke = wake_page(page)
-    except Exception as exc:
-        woke = {"error": str(exc)[:80]}
+    # ACL-1320: сначала ограниченный вопрос, отвечает ли вкладка. `wake_page`
+    # открывает CDP-сессию на самой вкладке, а на вкладке с зависшим
+    # рендерером `context.new_cdp_session` висел 197 с (замер на настоящем
+    # Chromium) — сторож, призванный размораживать, сам замерзал вместе с ней
+    # (cf563b4ba594: `stall_unstuck` на 108-й секунде, `create` — 301 с).
+    # Не отвечает — не будим: перезагрузка списка или свежая вкладка у
+    # `_open_campaign` делают это без сессии на ней.
     responsive = _page_responsive(page)
+    if responsive is False:
+        woke = {"skipped": "unresponsive"}
+    else:
+        try:
+            from src.fb_ads_rpa.browser import wake_page
+
+            woke = wake_page(page)
+        except Exception as exc:
+            woke = {"error": str(exc)[:80]}
     loading = None
     if responsive:
         try:
