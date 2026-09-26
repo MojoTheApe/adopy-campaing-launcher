@@ -518,38 +518,20 @@
       }
     },
     "stage": {
-      "pr": 307,
+      "pr": 314,
       "issues": [
-        303
+        284,
+        313,
+        315,
+        318,
+        319
       ],
-      "tree_sha": "6024920ae9a7bc5f76728c2ccb012d03420585ed",
-      "source_sha": "723652e7ebe1631b2cc6f829a68b2e2b5270551e",
-      "main_tree": "d96e75f09e7d833c916c674b9efea66b4bd654d6",
+      "tree_sha": "c5fec384dc5d611b3c7dc0d06639a855e11778b9",
+      "source_sha": "9332a1332037e26113cf41c6452f5715bffb8f16",
+      "main_tree": "6024920ae9a7bc5f76728c2ccb012d03420585ed",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-09-24T12:00:52+00:00",
-      "verification": {
-        "kind": "stage-verification",
-        "pr": 307,
-        "tree_sha": "6024920ae9a7bc5f76728c2ccb012d03420585ed",
-        "environment": "GitHub Actions on the stage branch, head 723652e",
-        "report": "Stage verification of ACL-1303 (the installer no longer asks about Multilogin; the connection is made in the dashboard).\n\nAll three workflows on stage head 723652e finished successfully:\n\n- CI: Classify and check project tooling, test (3.11), test (3.13) and the ACL verification aggregator, all green. The suite runs on Windows because that is the only OS ACL runs on.\n- Windows installer: Classify installer changes, Verify build inputs, then the full Build, install, repair and uninstall cycle, and the Installer verification aggregator. Green end to end, which is the check that matters most here: this change removes a whole wizard step, so the question was whether the installer still builds, installs, repairs and uninstalls with six steps instead of seven.\n- Delivery setup (draft adoption): green.\n\nOne procedural note recorded honestly. On the source PR the same two aggregator jobs first failed twice, three seconds each, with no steps and no logs. The cause was not the code: GitHub reported \"The job was not started because an Actions budget is preventing further use.\" The aggregators run last, so they were the jobs that hit the exhausted budget. Once the organisation's spending limit was raised, both passed without any change to the code, and the stage run above never hit it.\n\nWhat the change does, for the record: setup is six steps instead of seven, finishes without a Multilogin token and never writes one, and a re-run of setup leaves a token the dashboard saved untouched. The Readiness and Finish screens tell the person that Multilogin is connected in the dashboard by pressing Connect Multilogin on the Accounts screen.\n\nThe promoted content is unchanged: the tree SHA on stage (6024920a) is the same tree that was independently reviewed and approved on the working branch.",
-        "source_sha": "723652e7ebe1631b2cc6f829a68b2e2b5270551e",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "checks": [
-          "CI / Classify and check project tooling: success",
-          "CI / test (3.11) on windows-latest: success",
-          "CI / test (3.13) on windows-latest: success",
-          "CI / ACL verification: success",
-          "Windows installer / Classify installer changes: success",
-          "Windows installer / Verify build inputs: success",
-          "Windows installer / Build, install, repair, and uninstall: success",
-          "Windows installer / Installer verification: success",
-          "Delivery setup (draft adoption): success"
-        ]
-      },
-      "verified_at": "2026-09-24T12:16:30+00:00"
+      "state": "testing",
+      "recorded_at": "2026-09-26T10:17:37+00:00"
     },
     "tasks": {
       "248": {
