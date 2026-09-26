@@ -516,6 +516,25 @@
           319
         ],
         "recorded_at": "2026-09-26T09:38:43+00:00"
+      },
+      "328": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "independent subagent (Claude Opus 5.5)",
+        "implementer": "ACL-1320/1324/1321/1325 implementation sessions",
+        "head_sha": "2582d0e8084184b6ee33eeb9ccfd85ebf0b6c569",
+        "base_sha": "9332a1332037e26113cf41c6452f5715bffb8f16",
+        "tree_sha": "9292a40bb447198726381a4e41c1c66edac246e7",
+        "report": "PR #328 was previously approved at 5021d30 after F1-F5 were fixed (list-mode section capture without document.body and a 400k in-page cap; section attachment scoped to the same run and campaign; sentry_triage writes to disk only into an explicit --attachments-dir with bounded, name-restricted pruning; the further-limit row guard; a 5 s bounded snapshot evaluation). Of 22 mutations, 21 were killed; two non-blocking findings remained (N1, N2). This delta (5021d30..2582d0e: 19a11c8, 2582d0e) touches only scripts/sentry_triage.py, tests/test_sentry_triage.py and tests/test_sentry_page_snapshot.py, and it closes both findings. N1: after writing the section, _fetch_section calls os.utime(folder) inside the existing try/except OSError. A utime failure is therefore reported as save_error, does not raise, and prune_saved still runs. prune_saved(protect=folder) skips the just-written folder by comparing Path.resolve() values. A scratch check on Windows confirmed the match holds when the out_dir uses an 8.3 short name (EVGENI~1) and protect uses the long path; resolve on a folder that does not exist is also safe. Pruning stays bounded: at most keep+1 folders remain, and only when utime failed. N2: a new Chromium test puts a table directly under <body> and asserts the profile header is not captured. Tests pass: 71 in test_sentry_triage.py plus test_sentry_page_snapshot.py. Mutation checks: removing the region !== document.body guard (the old surviving M3) is now killed. Removing os.utime is killed, as is removing both utime and protect. Removing protect alone survives, as expected, because utime already makes the folder the newest; protect is defence in depth for the utime-failure case, which the scratch check verified directly. Nothing else changed. Verdict: approved.",
+        "main_sha": "08c9364c0808ca51f6f64ac55c4d5d10e0ece602",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          320,
+          324,
+          321,
+          325
+        ],
+        "recorded_at": "2026-09-26T21:52:59+00:00"
       }
     },
     "stage": {
