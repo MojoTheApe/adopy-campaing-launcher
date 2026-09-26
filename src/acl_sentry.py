@@ -129,7 +129,7 @@ def init() -> bool:
     return True
 
 
-def report_job_exception(exc: BaseException, *, job: str = "", account: str = "") -> str:
+def report_job_exception(exc: BaseException, *, job: str = "", account: str = "", phase: str = "") -> str:
     """Исключение, которым кончилась работа задания публикации (ACL-1318).
 
     Повторное ревью v3 PR #314: `publish_jobs._run_rpa` ловил такое
@@ -138,6 +138,9 @@ def report_job_exception(exc: BaseException, *, job: str = "", account: str = ""
     доходило, хотя это самая серьёзная остановка кампаний. Отправляем
     `capture_exception` со стеком; всё событие проходит тот же вычиститель
     `before_send`, что и остальные (адреса с `act=`, номера, пути).
+
+    `phase` — где кончилось задание: `build_drafts` (сборка черновиков) или
+    `publish` (работа браузера); тег `job_phase`.
     """
     if not init():
         return ""
@@ -145,6 +148,8 @@ def report_job_exception(exc: BaseException, *, job: str = "", account: str = ""
 
     with sentry_sdk.new_scope() as scope:
         scope.set_tag("failure_kind", "job_exception")
+        if phase:
+            scope.set_tag("job_phase", phase)
         if account:
             scope.set_tag("account", account_tag(account))
         if job:

@@ -468,6 +468,15 @@ def _run_rpa(
         )
     except Exception as e:
         _fatal(job_id, f"Failed to build campaign drafts: {e}")
+        # Финальное ревью PR #314 (d): исключение сборки черновиков кончает
+        # задание так же, как исключение публикации, — и тоже едет в Sentry
+        # со стеком (раньше — только строка в задании).
+        try:
+            from src import acl_sentry
+
+            acl_sentry.report_job_exception(e, job=job_id, account=account_label, phase="build_drafts")
+        except Exception:
+            pass
         with _jobs_lock:
             _active_publishers.pop(job_id, None)
         return
@@ -534,7 +543,7 @@ def _run_rpa(
             try:
                 from src import acl_sentry
 
-                acl_sentry.report_job_exception(e, job=job_id, account=account_label)
+                acl_sentry.report_job_exception(e, job=job_id, account=account_label, phase="publish")
             except Exception:
                 pass
     finally:
