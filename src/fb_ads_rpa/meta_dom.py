@@ -2789,11 +2789,27 @@ OBJECTIVE_POLL_S = 2.5
 #: отсутствующее окно, после чего шаг всё равно падал.
 OBJECTIVE_RADIO_LAST_WAIT_S = 10.0
 
+#: ACL-1320: сколько свежего ожидания дать окну цели после того, как сторож
+#: разбудил вкладку. Прогон cf563b4ba594 (26.09): сторож будил вкладку на
+#: 100-й секунде, а ожидание тут же сдавалось по `first_s` — разбуженной
+#: странице не давали ни секунды на то, ради чего её будили.
+OBJECTIVE_AFTER_WAKE_S = 18.0
+
+#: ACL-1320: опрос, занявший дольше стольких шагов опроса, — признак занятой
+#: страницы (вызовы шли, но медленно), а не пустого экрана.
+OBJECTIVE_SLOW_POLL_FACTOR = 3.0
+
+#: ACL-1320: после стольких «вкладка не ответила» подряд ожидание окна цели
+#: отдаёт решение вызывающему (`_open_campaign`: свежая вкладка, перезапуск
+#: профиля) вместо того, чтобы досиживать свои секунды.
+OBJECTIVE_FROZEN_POLLS = 2
+
 
 def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
                            idle_s: float = OBJECTIVE_IDLE_S,
                            loading_max_s: float = OBJECTIVE_LOADING_MAX_S,
-                           poll_s: float = OBJECTIVE_POLL_S) -> bool:
+                           poll_s: float = OBJECTIVE_POLL_S,
+                           out: dict | None = None) -> bool:
     """Дождаться окна выбора цели.
 
     Пока видна «Loading…» — ждём до `loading_max_s` (сеть профиля рвётся —
@@ -2801,6 +2817,18 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
     `idle_s` подряд и не дольше `first_s` всего. Строка телеметрии
     `objective_wait` говорит, сколько ждали и видели ли загрузку — по ней
     потом подбирается `OBJECTIVE_IDLE_S`.
+
+    ACL-1320:
+    * `loading_max_s` — жёсткий потолок и без загрузки (бюджет открытия
+      кампании у вызывающего);
+    * вкладка не ответила на проверку живости — это «занята», не «пусто»:
+      сторож будит её сразу, а после `OBJECTIVE_FROZEN_POLLS` таких опросов
+      ожидание кончается с `unresponsive` — решать вызывающему;
+    * после пробуждения сторожем — `OBJECTIVE_AFTER_WAKE_S` свежего ожидания;
+    * опрос, тянувшийся дольше `OBJECTIVE_SLOW_POLL_FACTOR × poll_s`, —
+      «страница занята», пустым экраном он не считается.
+
+    `out` (если передан) получает `outcome`, `frozen`, `woke`.
     """
     radio = page.get_by_role("radio", name="Leads").first
     # Долгое ожидание окна цели — только разбудить: перезагрузка поверх
@@ -2808,19 +2836,36 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
     watch = _StallWatch(page, "objective_wait", editor=False, reload=False)
     start = time.time()
     last_busy = start
+    grace_until = start
     loading_polls = 0
+    frozen_polls = 0
+    slow_polls = 0
     loading_kinds: dict[str, int] = {}
     outcome = "idle"
     found = False
     while True:
+        poll_start = time.time()
         try:
             radio.wait_for(state="visible", timeout=int(poll_s * 1000))
             found, outcome = True, "radio"
             break
         except Exception:
             pass
-        watch.check()
+        frozen = _tab_frozen(page)
+        woke = watch.check(frozen=frozen)
         now = time.time()
+        if woke:
+            grace_until = now + OBJECTIVE_AFTER_WAKE_S
+        if frozen:
+            frozen_polls += 1
+            last_busy = now
+            if frozen_polls >= OBJECTIVE_FROZEN_POLLS:
+                outcome = "unresponsive"
+                break
+            continue
+        if now - poll_start > OBJECTIVE_SLOW_POLL_FACTOR * poll_s:
+            slow_polls += 1
+            last_busy = now
         if _loading_visible(page):
             loading_polls += 1
             last_busy = now
@@ -2833,12 +2878,19 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
                 outcome = "loading_ceiling"
                 break
             continue
+        if now - start >= loading_max_s:
+            outcome = "budget"
+            break
+        if now < grace_until:
+            continue
         if now - start >= first_s:
             outcome = "first_s"
             break
         if now - last_busy >= idle_s:
             outcome = "idle"
             break
+    if out is not None:
+        out.update(outcome=outcome, frozen=frozen_polls, woke=watch.fired)
     try:
         _telemetry.record("objective_wait", None, note=outcome,
                           duration_s=time.time() - start,
@@ -2846,6 +2898,9 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
                                 # Что крутилось: надпись накладки или спиннер
                                 # маршрута, и сколько опросов каждое.
                                 "loading_kinds": loading_kinds,
+                                "frozen_polls": frozen_polls,
+                                "slow_polls": slow_polls,
+                                "woke": watch.fired,
                                 "idle_s": round(time.time() - last_busy, 1)})
     except Exception:
         pass
