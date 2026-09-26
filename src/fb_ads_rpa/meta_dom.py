@@ -4707,11 +4707,14 @@ def run_recorded_campaign_flow(
         if _stop_if_account_blocked("ad_editor"):
             return "account_blocked"
 
+        # С каким именем сверять открытое объявление перед текстом.
+        copy_ad_name = ad_name or f"{campaign_name} Ad"
         if reached_ad_level:
             final_ad_name = ad_name or f"{campaign_name} Ad"
             if not _fill(page.get_by_placeholder("Enter your ad name here..."), final_ad_name, where="ad_name"):
                 _shot("fail_ad_name")
                 ad_level_fails.append("ad_name")
+                copy_ad_name = _name_in_the_field(page)
             else:
                 _shot("after_ad_name")
 
@@ -4759,7 +4762,7 @@ def run_recorded_campaign_flow(
                 copy_report: dict = {}
                 ok_copy = write_ad_copy(
                     page, ad_title, ad_body,
-                    ad_name=ad_name or f"{campaign_name} Ad",
+                    ad_name=copy_ad_name,
                     destination_url=destination_url, report=copy_report)
                 if not ok_copy:
                     if _stop_if_account_blocked("ad_copy"):
@@ -4850,9 +4853,11 @@ def run_recorded_campaign_flow(
                     continue
 
                 extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
+                extra_copy_name = extra_name
                 if not _fill(page.get_by_placeholder("Enter your ad name here..."), extra_name, where=f"{tag}_name"):
                     _shot(f"fail_{tag}_name")
                     ad_level_fails.append(f"{tag}_name")
+                    extra_copy_name = _name_in_the_field(page)
                 else:
                     _shot(f"after_{tag}_name")
 
@@ -4901,7 +4906,7 @@ def run_recorded_campaign_flow(
                     try:
                         copy_report = {}
                         ok_copy = write_ad_copy(
-                            page, extra_title, extra_body, ad_name=extra_name,
+                            page, extra_title, extra_body, ad_name=extra_copy_name,
                             destination_url=destination_url, report=copy_report)
                         if not ok_copy:
                             _shot(f"fail_{tag}_copy", copy_report)
@@ -11512,6 +11517,19 @@ def _open_ad_name(page: Page) -> str | None:
         return page.get_by_placeholder("Enter your ad name here...").first.input_value(timeout=1500)
     except Exception:
         return None
+
+
+def _name_in_the_field(page: Page) -> str:
+    """Имя, с которым сверять объявление, когда своё имя вписать не удалось.
+
+    Финальное ревью PR #314 (c): шаг имени отказал — в поле осталось имя Meta
+    («New Leads Ad») или пусто, а текст сверялся с НАШИМ именем и падал ещё
+    и с `wrong_ad_open`: один отказ имени стоил объявлению и текста. Открыто
+    то самое объявление, чьё имя не встало, — сверяем с тем, что в поле
+    сейчас; не прочитать — с именем свежей заготовки Meta.
+    """
+    got = _open_ad_name(page)
+    return got if got is not None else "New Leads Ad"
 
 
 def _reopen_ad_after_reload(page: Page, ad_name: str) -> bool:
