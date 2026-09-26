@@ -13,6 +13,7 @@ from typing import Any
 from playwright.sync_api import Frame, Page
 
 from src.fb_ads_rpa import page_liveness as _liveness
+from src.fb_ads_rpa import profile_trouble as _trouble
 from src.fb_ads_rpa import run_telemetry as _telemetry
 
 #: Порог, за которым Playwright отказывается передавать файл.
@@ -3721,13 +3722,33 @@ def _open_list_again(page: Page, list_url: str, deadline: float) -> None:
     left_ms = lambda: max(int((deadline - time.time()) * 1000), 1000)  # noqa: E731
     try:
         page.goto(list_url, wait_until="domcontentloaded", timeout=min(30000, left_ms()))
-    except Exception:
-        pass
+    except Exception as exc:
+        # ACL-1320: ошибка сети профиля — в его память; редирект на вход
+        # виден дальше по адресу вкладки.
+        _trouble.note_net_error(page, _trouble.net_code(str(exc)))
     try:
         page.get_by_role("button", name="Create", exact=True).first.wait_for(
             state="visible", timeout=min(20000, left_ms()))
     except Exception:
         pass
+
+
+def _profile_trouble(page: Page, *, read_dom: bool = True) -> str:
+    """Диагноз перед свежей вкладкой или перезапуском профиля (ACL-1320).
+
+    Живой прогон 26.09 15:21–15:57: страницу входа Facebook и мёртвый прокси
+    робот принимал за зависшую вкладку и перезапускал профиль через MLX API
+    — раз за разом. Теперь сперва `profile_trouble.classify_page`: вход —
+    "profile_logged_out", сеть — "profile_network", иначе "" (вкладка
+    действительно не отвечает). Строка телеметрии `profile_trouble`.
+    """
+    code, detail = _trouble.classify_page(page, read_dom=read_dom)
+    if code:
+        try:
+            _telemetry.record("profile_trouble", None, note=code, diag={"detail": detail})
+        except Exception:
+            pass
+    return code
 
 
 def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) -> str:
@@ -3748,6 +3769,12 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
     "profile_unresponsive" или "browser_closed" (вкладки/браузера больше нет:
     профиль остановили — ни свежей вкладки, ни перезапуска, живой прогон
     26.09 15:51). Строка телеметрии `campaign_open_budget`.
+
+    Перед свежей вкладкой и перед "profile_unresponsive" — диагноз
+    (`_profile_trouble`): страница входа Facebook — "profile_logged_out",
+    сеть профиля — "profile_network"; ни свежей вкладки, ни перезапуска.
+    Адрес входа проверяется и в начале каждого раунда (он виден и у
+    зависшей вкладки).
     """
     start = time.time()
     round_start = None
@@ -3769,14 +3796,29 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
         if _tab_gone(page):
             outcome, result = "gone", "browser_closed"
             break
+        try:
+            on_login = _trouble.login_url(page.url or "")
+        except Exception:
+            on_login = False
+        if on_login:
+            outcome, result = "login", _profile_trouble(page, read_dom=False)
+            break
         rounds += 1
         round_end = min(time.time() + CAMPAIGN_OPEN_ROUND_S, start + CAMPAIGN_OPEN_BUDGET_S)
         if not fresh and (rounds >= CAMPAIGN_OPEN_FRESH_TAB_ROUND or frozen >= CAMPAIGN_OPEN_FROZEN_LIMIT):
+            trouble = _profile_trouble(page)
+            if trouble:
+                outcome, result = "trouble", trouble
+                break
             new_page = None
             try:
                 from src.fb_ads_rpa.browser import fresh_tab
 
                 new_page = fresh_tab(page, list_url)
+            except _trouble.ProfileStop as stop:
+                # Свежая вкладка сама попала на вход или в ошибку сети.
+                outcome, result = "trouble", stop.code
+                break
             except Exception:
                 new_page = None
             if new_page is None:
@@ -3880,6 +3922,9 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
         result = "objective_leads" if pressed else "create"
     if outcome != "radio" and not result:
         result = "objective_leads" if pressed else "create"
+    if result == "profile_unresponsive":
+        # Перед перезапуском профиля — диагноз: не вход ли это и не сеть ли.
+        result = _profile_trouble(page) or result
     try:
         _telemetry.record("campaign_open_budget", not result, note=result or "opened",
                           duration_s=time.time() - start,
@@ -4143,6 +4188,14 @@ def run_recorded_campaign_flow(
     # несохранённые поля.
     if _recover_from_browser_error(page):
         _shot("skip_browser_error_recovered")
+    elif _trouble.recent_net_errors(page, within_s=120):
+        # ACL-1320: ошибка сети была, а перезагрузки её не убрали — страница
+        # ошибки Chrome осталась. Это прокси профиля, а не разовый разрыв:
+        # остановка, не Create. Чтение разметки — ограниченное.
+        code, detail = _trouble.classify_page(page, history=False)
+        if code == _trouble.NETWORK:
+            _shot("fail_profile_network", note=detail)
+            return "profile_network"
 
     from src.fb_ads_rpa.browser import ensure_editor_window
 
@@ -4194,6 +4247,14 @@ def run_recorded_campaign_flow(
         # окно цели. Снимать нечего (вкладки нет), перезапускать — не нам.
         _telemetry.record("browser_closed", False, note="campaign_open")
         return "browser_closed"
+    # ACL-1320: вход в Facebook или сеть профиля — остановка аккаунта, не
+    # повод для свежей вкладки и перезапуска.
+    if opened == "profile_logged_out":
+        _shot("fail_profile_logged_out", note="login_page")
+        return "profile_logged_out"
+    if opened == "profile_network":
+        _shot("fail_profile_network", note=(_trouble.recent_net_errors(page) or ["network"])[-1])
+        return "profile_network"
     if opened == "create":
         return "create"
 
@@ -8336,6 +8397,9 @@ def _recover_from_browser_error(page: Page, *, attempts: int = 2) -> bool:
             return bool(seen)
         seen = code
         _telemetry.record("browser_error", None, note=code)
+        # ACL-1320: в память профиля — зависшая следом вкладка скорее без
+        # сети, чем зависла (`profile_trouble.classify_page`).
+        _trouble.note_net_error(page, _trouble.net_code(code))
         _reload_editor(page)
         _sleep_h(1.0)
     return bool(seen) and not _telemetry.browser_error(page)

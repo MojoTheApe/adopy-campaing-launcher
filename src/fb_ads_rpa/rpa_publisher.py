@@ -17,6 +17,7 @@ from src.fb_ads_rpa.config import get_browser_provider as get_browser_provider_n
 from src.fb_ads_rpa.draft import CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.operations import serialized_browser
 from src.fb_ads_rpa.enrich_draft import enrich_campaign_drafts
+from src.fb_ads_rpa import profile_trouble
 from src.fb_ads_rpa import run_telemetry as _telemetry
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
 
@@ -256,6 +257,10 @@ class RpaPublisher:
         except Exception as exc:
             err_str = str(exc)
             self._reset_browser(keep_browser_open=soft)
+            if isinstance(exc, profile_trouble.ProfileStop):
+                # ACL-1320: причина в профиле (вход, сеть, открыт руками) —
+                # её текст и есть сообщение; обходных путей нет.
+                raise
             if attach_only:
                 # The reason above is the one from the Multilogin automation
                 # API, and it is the whole message worth reading. A profile
@@ -302,6 +307,7 @@ class RpaPublisher:
         # Always leave Multilogin/Mimic open so the user can verify FB login.
         # force/cancel only stop RPA + disconnect CDP — never stop_profile.
         _ = force  # kept for call-site compat; must not close MLX window
+        self._account_stop = None
         if self._conn:
             try:
                 self._conn.close(keep_browser_open=True)
@@ -344,11 +350,33 @@ class RpaPublisher:
         self._reset_browser(keep_browser_open=True)
         try:
             self._conn = restart(entry, account_label)
+        except profile_trouble.ProfileStop:
+            self._conn = None
+            raise
         except Exception as exc:
+            # ACL-1320, живой прогон 26.09 15:40 (Facebook_9943): остановка
+            # прошла, подключение — `connect ECONNREFUSED`, и профиль остался
+            # закрытым, а итог говорил только «профиль не отвечает». Теперь
+            # это своя остановка с понятным текстом для человека.
             log.warning("Restart of unresponsive profile %s failed: %s", account_label, exc)
             self._conn = None
-            return None
+            raise profile_trouble.ProfileStop(
+                profile_trouble.RESTART_FAILED, f"{type(exc).__name__}: {str(exc)[:120]}") from exc
         return self._conn.page
+
+    @staticmethod
+    def _profile_stop_result(campaign_name: str, stop: "profile_trouble.ProfileStop", *,
+                             again: bool = False) -> RpaPublishResult:
+        """Итог кампании, которую остановил профиль (ACL-1320): не собрана,
+        блокирует, причина — текстом для человека."""
+        result = RpaPublishResult(campaign_name=campaign_name, success=False)
+        result.error = f"{stop.code}: {profile_trouble.message(stop.code)}"
+        if stop.detail and not again:
+            result.error += f" ({stop.detail})"
+        result.blocking_failures.append(stop.code)
+        result.steps_completed.append(
+            f"profile_stop:{stop.code}" + (":earlier_campaign" if again else ""))
+        return result
 
     @serialized_browser(key=lambda self, draft: profile_key_for(draft.account_label))
     def publish_draft(self, draft: CampaignDraft) -> RpaPublishResult:
@@ -373,12 +401,26 @@ class RpaPublisher:
             self._built_at = None
             _telemetry.record("job_phase", True, campaign=campaign_name, note="profile_queue",
                               duration_s=time.monotonic() - built_at)
-        if getattr(self, "_conn", None) is None:
-            with _telemetry.phase("browser_attach", campaign=campaign_name) as info:
+        # ACL-1320: профиль уже остановил задание (вход, сеть, открыт руками,
+        # не поднялся) — следующая кампания упрётся в то же, браузер не трогаем.
+        stopped = getattr(self, "_account_stop", None)
+        if stopped is not None:
+            return self._profile_stop_result(campaign_name, stopped, again=True)
+        try:
+            if getattr(self, "_conn", None) is None:
+                with _telemetry.phase("browser_attach", campaign=campaign_name) as info:
+                    conn = self._ensure_browser(draft.account_label)
+                    info["provider"] = str(getattr(conn, "provider", "") or type(getattr(self, "_provider", None)).__name__)
+            else:
                 conn = self._ensure_browser(draft.account_label)
-                info["provider"] = str(getattr(conn, "provider", "") or type(getattr(self, "_provider", None)).__name__)
-        else:
-            conn = self._ensure_browser(draft.account_label)
+        except profile_trouble.ProfileStop as stop:
+            self._account_stop = stop
+            try:
+                _telemetry.record(stop.code, False, campaign=campaign_name, note="attach",
+                                  diag={"detail": stop.detail, "message": profile_trouble.message(stop.code)})
+            except Exception:
+                pass
+            return self._profile_stop_result(campaign_name, stop)
         flow = self._flow(conn, draft.account_label)
         try:
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
@@ -394,10 +436,18 @@ class RpaPublisher:
             self._reset_browser(keep_browser_open=True)
             try:
                 conn = self._ensure_browser(draft.account_label)
+            except profile_trouble.ProfileStop as stop:
+                self._account_stop = stop
+                return self._profile_stop_result(campaign_name, stop)
             except Exception as re_exc:
                 raise self._mlx_fallback_error(exc, re_exc) from re_exc
             flow = self._flow(conn, draft.account_label)
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
+        for failure in result.blocking_failures or []:
+            code = str(failure).split(":", 1)[0]
+            if code in profile_trouble.ACCOUNT_STOPS:
+                self._account_stop = profile_trouble.ProfileStop(code)
+                break
         if self.hand_off and result.publishable:
             result.error = "Draft ready — browser left open, Meta Publish was not clicked"
         elif self.hand_off and result.success:

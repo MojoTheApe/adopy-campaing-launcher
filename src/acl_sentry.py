@@ -252,6 +252,13 @@ _REASONS = (
     # 25.09 20:23: «ad3_create:Page.evaluate: Target page, context or browser
     # has been clos» — текст исключения обрезан до 60 знаков, отсюда «clos».
     ("page-closed", ("has been clos", "target closed")),
+    # ACL-1320, живой прогон 26.09: профиль разлогинен или без сети. Эти
+    # стоят после `page-closed`, но до всего общего — у них свои тикеты.
+    ("logged-out", ("loginpage", "facebook.com/login", "login_page", "login_form",
+                    "log in to facebook")),
+    ("proxy-network", ("err_socks", "err_proxy", "err_tunnel", "err_ssl_protocol",
+                       "err_connection", "proxy/network")),
+    ("restart-failed", ("restart of unresponsive profile", "restarting the multilogin profile failed")),
 )
 
 

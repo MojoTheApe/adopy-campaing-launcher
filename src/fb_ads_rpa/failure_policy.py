@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import re
 
+from src.fb_ads_rpa import profile_trouble as _profile
+
 BLOCKING = "blocking"
 WARNING = "warning"
 
@@ -58,6 +60,24 @@ POLICY: dict[str, tuple[str, str]] = {
         "opened (neither its tab nor a fresh one), and restarting the profile did not "
         "help; no draft was created - close the profile in Multilogin and run the "
         "campaign again",
+    ),
+    # ACL-1320, живой прогон 26.09: причина в профиле, не в кампании —
+    # остановка всего задания аккаунта, без свежей вкладки и перезапуска.
+    _profile.LOGGED_OUT: (
+        BLOCKING,
+        "Facebook opened its login page in this profile, so no draft was created - "
+        + _profile.MESSAGES[_profile.LOGGED_OUT],
+    ),
+    _profile.NETWORK: (
+        BLOCKING,
+        "the profile could not reach Facebook (proxy/network error), so no draft was "
+        "created - " + _profile.MESSAGES[_profile.NETWORK],
+    ),
+    _profile.RESTART_FAILED: (
+        BLOCKING,
+        "the profile's browser stopped answering and the robot's restart of the "
+        "profile through Multilogin failed; no draft was created - "
+        + _profile.MESSAGES[_profile.RESTART_FAILED],
     ),
     "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
                          "restore a desktop-sized window before continuing the draft"),

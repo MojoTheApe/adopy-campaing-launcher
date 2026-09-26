@@ -59,6 +59,19 @@ _BLOCKERS = {
 }
 
 
+def _profile_blockers() -> dict[str, str]:
+    """ACL-1320: остановки из-за профиля (вход, сеть, перезапуск, открыт
+    руками) — тем же текстом, что и в итоге кампании."""
+    try:
+        from src.fb_ads_rpa import profile_trouble
+    except Exception:
+        return {}
+    return dict(profile_trouble.MESSAGES)
+
+
+_BLOCKERS.update(_profile_blockers())
+
+
 def _telemetry_path() -> Path:
     from src.fb_ads_rpa.run_telemetry import TELEMETRY_PATH
 

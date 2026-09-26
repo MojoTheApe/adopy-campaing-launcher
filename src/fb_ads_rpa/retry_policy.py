@@ -74,7 +74,12 @@ CAMPAIGN_RETRY_STEPS = frozenset(
 # — every replay hits the same wall, only a person in Meta can lift it.
 # browser_closed (25.09 20:59, GT Day 503b0c077db6): the profile's tab was
 # closed mid ad level — the draft is partial, and a replay would duplicate it.
-NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked", "browser_closed"})
+# profile_logged_out / profile_network (ACL-1320, live run 2026-09-26): the
+# profile shows Facebook's login page or cannot reach Facebook through its
+# proxy — a replay, a fresh tab or a profile restart hits the same wall; a
+# person has to log in or fix the proxy.
+NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked", "browser_closed",
+                                      "profile_logged_out", "profile_network"})
 
 
 # Stops and field failures that block publication and need review.
@@ -83,6 +88,11 @@ BLOCKING_REVIEW_STEPS = frozenset(
         "window_too_small",
         "account_blocked",
         "browser_closed",
+        # ACL-1320: profile-level stops. profile_restart_failed is decided by
+        # the flow's caller (the MLX restart), not returned by the flow.
+        "profile_logged_out",
+        "profile_network",
+        "profile_restart_failed",
         "conversion_event",
         "audience_age",
         "audience_location",

@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
+from src.fb_ads_rpa import profile_trouble
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 
 log = logging.getLogger(__name__)
@@ -1044,12 +1045,29 @@ def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
             diag["old_closed"] = False
             diag["close_error"] = str(exc)[:80]
         if url:
-            new.goto(url, wait_until="domcontentloaded", timeout=int(goto_timeout_s * 1000))
+            try:
+                new.goto(url, wait_until="domcontentloaded", timeout=int(goto_timeout_s * 1000))
+            except Exception as exc:
+                # ACL-1320: свежая вкладка упёрлась во вход Facebook или в
+                # сеть профиля — это не зависание, и перезапуск не поможет.
+                kind, detail = profile_trouble.classify_error(exc)
+                if kind == profile_trouble.NETWORK:
+                    profile_trouble.note_net_error(new, detail)
+                if kind:
+                    diag["why"], diag["detail"] = kind, detail
+                    raise profile_trouble.ProfileStop(kind, detail) from exc
+                raise
+            kind, detail = profile_trouble.classify_page(new, history=False)
+            if kind:
+                diag["why"], diag["detail"] = kind, detail
+                raise profile_trouble.ProfileStop(kind, detail)
         if page_answers(new, 5.0) is False:
             diag["why"] = "meta_silent_in_new_tab"
             return None
         diag["why"] = ""
         return new
+    except profile_trouble.ProfileStop:
+        raise
     except Exception as exc:
         diag["why"] = f"{type(exc).__name__}: {str(exc)[:80]}"
         return None
@@ -1222,6 +1240,12 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
                 # свежая вкладка рядом; не отвечает и она — профиль целиком
                 # (`ProfileUnresponsive`, перезапуск через MLX API).
                 if check_responsive and page_answers(page, 5.0) is False:
+                    # ACL-1320: не отвечает — сперва диагноз. Вход в Facebook
+                    # или сеть профиля — остановка аккаунта (ни свежей
+                    # вкладки, ни перезапуска профиля через MLX API).
+                    kind, detail = profile_trouble.classify_page(page)
+                    if kind:
+                        raise profile_trouble.ProfileStop(kind, detail)
                     replacement = fresh_tab(page, page.url if (page.url or "").startswith("http") else "")
                     if replacement is None:
                         raise ProfileUnresponsive("the profile's tabs do not answer")
@@ -1601,7 +1625,7 @@ class MultiloginDirectCDPProvider:
             )
             log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
             return conn
-        except ProfileUnresponsive:
+        except (ProfileUnresponsive, profile_trouble.ProfileStop):
             # Вызывающий просил проверить живость — ему и решать (ACL-1320).
             raise
         except Exception as exc:
