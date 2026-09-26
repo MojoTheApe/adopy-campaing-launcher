@@ -501,10 +501,10 @@
         "verdict": "approved",
         "reviewer": "independent subagent (Claude Opus 5.5)",
         "implementer": "ACL-1284 implementation subagents",
-        "head_sha": "715d65e5666aa7afab242046b25c1233a19e8cb2",
+        "head_sha": "b0c346ef45ad80750e8086703b0f1c04e3765f59",
         "base_sha": "723652e7ebe1631b2cc6f829a68b2e2b5270551e",
-        "tree_sha": "831cd544540aec718326efbcea215da5e501afb2",
-        "report": "Re-review v4 of PR #314 (delta 76c545e..715d65e incl. ACL-1319 merge 149dc6e): all 7 v3 findings fixed; targeted tests 456 + 144 passed; 54 mutations, 47 killed, all v3 survivors killed; live 6/6 publishable 2026-09-26 08:04-08:48 UTC. Remaining low/nit non-blocking findings (widened parked window recognition, second wrong-ad check test, name-step failure cascading to wrong_ad_open, CHANGELOG lag for v4 fixes and ACL-1319, Sentry job_exception tag tests, conftest comment, ACL-1319 per-render groupby) are carried to ACL-1320.",
+        "tree_sha": "c5fec384dc5d611b3c7dc0d06639a855e11778b9",
+        "report": "Review v4 approved head 715d65e. The only change from 715d65e to b0c346e is in tests/test_sentry_gets_only_campaign_failures.py: placeholder ids the secret scanner allows; no production code changed; every assert is the same; scrubber still catches the new ids; acl_scan_secrets exits 0; 42 passed; mutations give the same results on old and new test files.",
         "main_sha": "cfd8388f6ff25f8ccbbae3c56b09dfb34d22c504",
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "issues": [
@@ -514,7 +514,7 @@
           318,
           319
         ],
-        "recorded_at": "2026-09-26T09:32:59+00:00"
+        "recorded_at": "2026-09-26T09:38:43+00:00"
       }
     },
     "stage": {
