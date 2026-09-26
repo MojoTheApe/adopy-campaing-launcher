@@ -14632,7 +14632,10 @@ def _age_boundaries_pass(page: Page, age_min_str: str, age_max_str: str) -> bool
         # итоговому виду поля, а не отчёту по каждой границе.
         read_back = False
         if not (len(boundary_results) == 2 and all(boundary_results)):
-            read_back = _age_triggers_read(page) == [age_min_str, age_max_str]
+            # Итоговый вид поля засчитывается тоже только при закрытом списке
+            # (ревью v3 PR #314): открытый список накрывает соседние поля.
+            read_back = (_age_triggers_read(page) == [age_min_str, age_max_str]
+                         and _close_open_listboxes(page, "age_read_back"))
             if read_back:
                 try:
                     _telemetry.record("audience_age", None, note="read_back_ok",

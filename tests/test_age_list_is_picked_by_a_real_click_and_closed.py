@@ -45,7 +45,20 @@ _META_LIST = r"""
     if (!open) return;
     open.list.remove(); open.trigger.setAttribute('aria-expanded', 'false'); open = null;
   };
-  const pick = (v) => { valueOf(open.trigger).textContent = v; };
+  const pick = (v) => {
+    // misroute: значение уходит в соседнюю выпадашку (проверка «своей» кнопки).
+    const t = window.misroute ? triggers.find(x => x !== open.trigger) : open.trigger;
+    valueOf(t).textContent = v;
+  };
+  const cover = (el, name) => {
+    const r = el.getBoundingClientRect();
+    const c = document.createElement('div');
+    c.style.cssText = `position:fixed;left:${r.x - 2}px;top:${r.y - 2}px;width:${r.width + 4}px;`
+      + `height:${r.height + 4}px;z-index:99;background:rgba(0,0,0,.1)`;
+    c.addEventListener('click', () => { (window.coverClicks = window.coverClicks || []).push(name); });
+    document.body.appendChild(c);
+  };
+  window.__cover = cover;
   const show = (t) => {
     const list = document.createElement('div');
     list.setAttribute('role', 'listbox');
@@ -65,6 +78,9 @@ _META_LIST = r"""
     document.body.appendChild(list);
     t.setAttribute('aria-expanded', 'true');
     open = { list, trigger: t };
+    if (window.coverTriggerOnOpen) cover(t, 'trigger');
+    // coverOption: поверх пунктов списка встаёт чужой слой (подсказка Meta).
+    if (window.coverOption) cover(list, 'option');
     window.highlighted = null;
     list.addEventListener('scroll', () => {
       const first = [...list.children].find(r => r.offsetTop >= list.scrollTop);
@@ -193,3 +209,56 @@ def test_the_locations_step_starts_with_no_list_open(monkeypatch):
     body = ast.get_source_segment(src, flow)
     i = body.index('_close_open_listboxes(page, "before_audience_location")')
     assert i < body.index("fill_audience_location(page, country)")
+
+
+# ── повторное ревью v3 PR #314 (находка 6): защитные условия закрытия ──────
+
+def test_a_covered_trigger_is_not_clicked_and_the_list_stays_reported(page):
+    """L3: кнопку списка перекрыли — не жмём по перекрытию, отвечаем «открыт»."""
+    page.evaluate("window.coverTriggerOnOpen = true")
+    page.locator("[role=combobox]").first.click()
+    assert _listbox_open(page)
+    assert md._close_open_listboxes(page, "test") is False
+    assert page.evaluate("window.coverClicks || []") == []
+
+
+def test_a_search_input_combobox_is_never_clicked(page):
+    """L4: у поиска локаций свой список подсказок — поле ввода не трогаем."""
+    page.evaluate("""() => { const i = document.createElement('input');
+      i.setAttribute('role', 'combobox'); i.setAttribute('aria-expanded', 'true');
+      i.setAttribute('aria-haspopup', 'listbox'); i.placeholder = 'Search locations';
+      i.style.cssText = 'position:fixed;left:700px;top:40px;width:200px;height:30px';
+      i.addEventListener('click', () => { window.inputClicked = true; });
+      document.body.appendChild(i); }""")
+    assert md._close_open_listboxes(page, "test") is True
+    assert page.evaluate("window.inputClicked || false") is False
+
+
+def test_a_covered_option_is_not_picked(page):
+    """L5: пункты списка перекрыты — по перекрытию не жмём, граница не засчитана."""
+    page.evaluate("window.coverOption = '35'; window.coverTriggerOnOpen = false")
+    assert md._age_boundaries_pass(page, "35", "65+") is False
+    assert "option" not in page.evaluate("window.coverClicks || []")
+    assert md._age_triggers_read(page)[0] != "35"
+
+
+def test_a_boundary_with_its_list_left_open_does_not_count(page):
+    """L7: выбор стал, но список не закрылся и закрыть его нечем (кнопка
+    перекрыта) — ни граница, ни итоговый вид поля не засчитываются."""
+    page.evaluate("window.stubborn = true; window.coverTriggerOnOpen = true")
+    assert md._age_boundaries_pass(page, "35", "65+") is False
+    assert _listbox_open(page)
+
+
+def test_a_boundary_is_read_from_its_own_trigger(page):
+    """L8: значение попало в соседнюю выпадашку — граница «от» не засчитана."""
+    page.evaluate("window.misroute = true")
+    assert md._age_boundaries_pass(page, "35", "35") is False
+
+
+def test_a_visible_list_without_an_expanded_trigger_counts_as_open(page):
+    """L10: видимый список без раскрытой кнопки — всё равно открытый список."""
+    page.evaluate("""() => { const l = document.createElement('div'); l.setAttribute('role', 'listbox');
+      l.style.cssText = 'position:fixed;left:20px;top:40px;width:180px;height:100px';
+      l.textContent = 'something'; document.body.appendChild(l); }""")
+    assert md._close_open_listboxes(page, "test") is False
