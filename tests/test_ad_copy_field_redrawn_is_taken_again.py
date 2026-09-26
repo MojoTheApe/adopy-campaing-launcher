@@ -127,6 +127,64 @@ def test_the_error_page_after_the_reveal_reload_is_left(page, monkeypatch):
     assert ("facebook_error_page", True) in [r[:2] for r in page.rows]
 
 
+def test_a_second_error_page_is_a_failure_not_a_step_back(page, monkeypatch):
+    """PR #314, ревью v3 (C3): шаг назад по истории на ad2 открывал прежнее
+    объявление. Один переход по адресу; снова ошибка — отказ, назад не идём."""
+    page.set_content(_FB_ERROR)
+    moves = []
+    monkeypatch.setattr(page, "goto", lambda url, **kw: moves.append(("goto", url)))
+    monkeypatch.setattr(page, "go_back", lambda **kw: moves.append(("back",)))
+    assert md._recover_facebook_error_page(page, "test") is False
+    assert moves and all(m[0] == "goto" for m in moves), moves
+
+
+def test_the_error_page_is_recognised_by_its_text_too(page):
+    """C5: заголовок вкладки бывает и не «Facebook | Error»."""
+    page.set_content("<html><head><title>Ads Manager</title></head><body>"
+                     "<h2>Sorry, something went wrong.</h2><a href='#'>Go Back</a></body></html>")
+    assert md._facebook_error_page(page) is True
+
+
+# ── текст пишется только в своё объявление (ревью v3, находка 1) ──────────
+
+_NAMED = _PAGE.replace('<div id="creativeEditorComponent">',
+                       '<input placeholder="Enter your ad name here..." id="adname" value="%s">'
+                       '<div id="creativeEditorComponent">')
+
+
+def test_text_is_never_typed_into_another_ad(page, monkeypatch):
+    page.set_content(_NAMED % "Example Ad 1")
+    page.evaluate("window.redrawLimit = 0")
+    opened = []
+    monkeypatch.setattr(md, "_open_tree_ad", lambda p, name: opened.append(name) or True)
+    report = {"ad_name": "Example Ad 2"}
+    assert md.fill_ad_copy(page, "Short headline", "Body of the ad", report) is False
+    assert report["why"] == "wrong_ad_open"
+    assert opened == ["Example Ad 2"], "нужное объявление пытались открыть"
+    assert page.locator("#title").input_value() == "" and page.locator("#body").input_value() == ""
+    assert ("ad_copy_fields", False) in [r[:2] for r in page.rows]
+
+
+def test_the_right_ad_reopened_in_the_tree_gets_its_text(page, monkeypatch):
+    page.set_content(_NAMED % "Example Ad 1")
+    page.evaluate("window.redrawLimit = 0")
+    monkeypatch.setattr(md, "_open_tree_ad", lambda p, name: p.fill("#adname", name) or True)
+    report = {"ad_name": "Example Ad 2"}
+    assert md.fill_ad_copy(page, "Short headline", "Body of the ad", report) is True
+    assert page.locator("#title").input_value() == "Short headline"
+
+
+def test_write_ad_copy_hands_the_ad_name_to_the_guard(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(md, "_heal_failed_component", lambda *a, **k: False)
+    monkeypatch.setattr(md, "_review_errors_visible", lambda p: False)
+    monkeypatch.setattr(md, "fill_ad_copy", lambda p, t, b, report: seen.update(report) or True)
+    import src.fb_ads_rpa.browser as br
+    monkeypatch.setattr(br, "ensure_editor_window", lambda p, s: True)
+    assert md.write_ad_copy(object(), "t", "b", ad_name="Example Ad 2") is True
+    assert seen.get("ad_name") == "Example Ad 2"
+
+
 def test_a_normal_editor_is_not_an_error_page(page):
     assert md._facebook_error_page(page) is False
     assert md._recover_facebook_error_page(page, "test") is False

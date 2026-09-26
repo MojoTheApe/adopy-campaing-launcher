@@ -9299,8 +9299,11 @@ def _recover_facebook_error_page(page: Page, where: str) -> bool:
     25.09 20:22 (SA Mix f7d1cc, ad2): последний ход `_reveal_ad_copy_fields` —
     перезагрузка адреса `…ads/edit/standalone?…&ads_manager_write_regions=true#`
     — открыл «Sorry, something went wrong» (title «Facebook | Error»), и
-    вторая попытка текста искала поля на странице ошибки. Сначала тот же
-    адрес без хвоста `#…`, затем шаг назад в истории.
+    вторая попытка текста искала поля на странице ошибки. Один раз — тот же
+    адрес без хвоста `#…`. Шага назад по истории нет (PR #314, ревью v3):
+    на ad2/ad3 он открывает прежнее состояние редактора — первое объявление
+    или ad set, — и текст второго лёг бы туда. Какое объявление открыто
+    после перехода, проверяет `fill_ad_copy` (`_on_the_named_ad`).
     """
     if not _facebook_error_page(page):
         return False
@@ -9312,13 +9315,6 @@ def _recover_facebook_error_page(page: Page, where: str) -> bool:
         how = "goto"
     except Exception:
         pass
-    if _facebook_error_page(page):
-        try:
-            page.go_back(wait_until="domcontentloaded", timeout=30000)
-            _sleep_h(3.0)
-            how = "back"
-        except Exception:
-            pass
     ok = not _facebook_error_page(page)
     _telemetry.record("facebook_error_page", ok, note=how or "no_move", diag={"where": where})
     return ok
@@ -10030,6 +10026,8 @@ def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
     текст всё равно не встал — шаг отказывает сразу и называет объявление.
     """
     report = report if report is not None else {}
+    # Какое объявление пишем — `fill_ad_copy` сверяет его с открытым.
+    report["ad_name"] = ad_name
     # ACL-1313 (5b2237): к тексту окно пришло свёрнутым — проверка окна стоит
     # только на границах разделов, а в свёрнутое окно клики по координатам не
     # попадают, и поля текста «не раскрываются». Проверяем и здесь.
@@ -10072,6 +10070,23 @@ def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
     return fill_ad_copy(page, title, body, report)
 
 
+def _on_the_named_ad(page: Page, ad_name: str) -> bool:
+    """Открыто ли в редакторе объявление `ad_name`; если нет — открыть его.
+
+    PR #314, ревью v3: текст пишется после перезагрузок и переходов (раскрытие
+    полей, страница ошибки Facebook, лечение блока), а каждый из них может
+    открыть другое объявление. Поле имени читает другое имя — открываем нужное
+    в дереве (`_reopen_ad_after_reload`) и проверяем снова. Поле имени не
+    прочитать — не мешаем (прежнее поведение): судить не по чему.
+    """
+    if not ad_name:
+        return True
+    got = _open_ad_name(page)
+    if got is None or got.strip().lower() == ad_name.strip().lower():
+        return True
+    return _reopen_ad_after_reload(page, ad_name)
+
+
 def fill_ad_copy(
     page: Page, ad_title: str, ad_body: str, report: dict | None = None
 ) -> bool:
@@ -10094,11 +10109,24 @@ def fill_ad_copy(
     """
     report = report if report is not None else {}
     report.setdefault("attempts", [])
+    ad_name = str(report.get("ad_name") or "")
     if not _reveal_ad_copy_fields(page):
         # 20.09 19:29 (CO_bnc Mix): в предпросмотре объявления текст стоял, а
         # шаг отказал с пустым списком попыток — поля просто не раскрылись.
         report["why"] = "copy_fields_not_revealed"
         _telemetry.record("ad_copy_fields", False, note="not_revealed")
+        return False
+
+    def _wrong_ad() -> bool:
+        # Не то объявление — текст не пишем вовсе (PR #314, ревью v3).
+        if _on_the_named_ad(page, ad_name):
+            return False
+        report["why"] = "wrong_ad_open"
+        _telemetry.record("ad_copy_fields", False, note="wrong_ad_open",
+                          diag={"want": ad_name[:60], "open": (_open_ad_name(page) or "")[:60]})
+        return True
+
+    if _wrong_ad():
         return False
     settled = _await_creative_settled(page)
     report["settled"] = settled
@@ -10291,6 +10319,8 @@ def fill_ad_copy(
         if attempt == 0:
             _reveal_ad_copy_fields(page)
             _sleep_h(0.5)
+            if _wrong_ad():
+                return False
 
     return body_ok and title_ok
 
