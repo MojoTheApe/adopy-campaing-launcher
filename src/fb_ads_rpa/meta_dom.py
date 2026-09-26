@@ -3356,12 +3356,31 @@ def _pick_further_limit_radio(page: Page) -> bool:
     return False
 
 
-def _page_gone(exc: BaseException) -> bool:
+def _page_gone(page: Page, exc: BaseException) -> bool:
     """Исключение значит «вкладки/браузера больше нет» (закрыли окно профиля,
-    Multilogin остановил профиль) — а не отказ шага на странице."""
+    Multilogin остановил профиль) — а не отказ шага на странице.
+
+    Текста мало (PR #314, ревью v3): `TargetClosedError` «Target page, context
+    or browser has been closed» бывает и у ЖИВОЙ страницы — отсоединённая
+    CDP-сессия, закрытая соседняя вкладка. Ложная остановка стоила бы
+    оставшихся объявлений, поэтому страницу спрашиваем саму: `is_closed()`,
+    а если она говорит «открыта» — пробный `evaluate`.
+    """
     err = str(exc).lower()
-    return ("target page" in err or "has been closed" in err or "browser closed" in err
-            or type(exc).__name__ == "TargetClosedError")
+    if not ("target page" in err or "has been closed" in err or "browser closed" in err
+            or type(exc).__name__ == "TargetClosedError"):
+        return False
+    try:
+        if page.is_closed() is True:
+            return True
+    except Exception:
+        return True
+    try:
+        page.evaluate("1")
+    except Exception as probe:
+        low = str(probe).lower()
+        return "closed" in low or "target" in low
+    return False
 
 
 def run_recorded_campaign_flow(
@@ -4283,7 +4302,7 @@ def run_recorded_campaign_flow(
                     creative_uploaded = True
                     _shot("after_ad_creative_upload")
             except Exception as exc:
-                if _page_gone(exc):
+                if _page_gone(page, exc):
                     _browser_closed("ad_creative_upload", exc)
                     return "browser_closed"
                 _shot("fail_ad_creative_upload")
@@ -4302,7 +4321,7 @@ def run_recorded_campaign_flow(
                 else:
                     _shot("after_ad_destination")
             except Exception as exc:
-                if _page_gone(exc):
+                if _page_gone(page, exc):
                     _browser_closed("ad_destination", exc)
                     return "browser_closed"
                 _shot("fail_ad_destination")
@@ -4327,7 +4346,7 @@ def run_recorded_campaign_flow(
                 else:
                     _shot("after_ad_copy")
             except Exception as exc:
-                if _page_gone(exc):
+                if _page_gone(page, exc):
                     _browser_closed("ad_copy", exc)
                     return "browser_closed"
                 _shot("fail_ad_copy")
@@ -4384,7 +4403,7 @@ def run_recorded_campaign_flow(
                                           diag={"before": shells_before, "after": shells_after})
                         ad_level_fails.append(f"{tag}_extra_empty_ad")
                 except Exception as exc:
-                    if _page_gone(exc):
+                    if _page_gone(page, exc):
                         _browser_closed(f"{tag}_create", exc)
                         return "browser_closed"
                     _shot(f"fail_{tag}_create")
@@ -4423,7 +4442,7 @@ def run_recorded_campaign_flow(
                         else:
                             _shot(f"after_{tag}_creative_upload")
                     except Exception as exc:
-                        if _page_gone(exc):
+                        if _page_gone(page, exc):
                             _browser_closed(f"{tag}_creative_upload", exc)
                             return "browser_closed"
                         _shot(f"fail_{tag}_creative_upload")
@@ -4440,7 +4459,7 @@ def run_recorded_campaign_flow(
                         else:
                             _shot(f"after_{tag}_destination")
                     except Exception as exc:
-                        if _page_gone(exc):
+                        if _page_gone(page, exc):
                             _browser_closed(f"{tag}_destination", exc)
                             return "browser_closed"
                         _shot(f"fail_{tag}_destination")
@@ -4465,7 +4484,7 @@ def run_recorded_campaign_flow(
                         else:
                             _shot(f"after_{tag}_copy")
                     except Exception as exc:
-                        if _page_gone(exc):
+                        if _page_gone(page, exc):
                             _browser_closed(f"{tag}_copy", exc)
                             return "browser_closed"
                         _shot(f"fail_{tag}_copy")
@@ -4526,7 +4545,7 @@ def run_recorded_campaign_flow(
                     _telemetry.record("destination_sweep_cleared", None, diag={"cleared": cleared})
                 _shot("after_destination_sweep")
             except Exception as exc:
-                if _page_gone(exc):
+                if _page_gone(page, exc):
                     _browser_closed("destination_sweep", exc)
                     return "browser_closed"
                 ad_level_fails.append(f"destination_sweep:{str(exc)[:60]}")
