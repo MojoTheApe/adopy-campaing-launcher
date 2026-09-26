@@ -29,7 +29,7 @@ from src.fb_ads_rpa import run_telemetry as rt  # noqa: E402
 from src.fb_ads_rpa import sentry_signal  # noqa: E402
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft  # noqa: E402
 
-JOB = "eca0f22e-b310-49ab-ab75-db7b62245d91"
+JOB = "550e8400-e29b-41d4-a716-446655440000"
 
 #: Строки, которые 25.09 заполнили Sentry и отказом кампании не являются.
 #: Список закреплён: новая «диагностика» сюда добавляется осознанно.
@@ -134,7 +134,7 @@ def _publish(monkeypatch, attempts):
 
 def _diagnostics(campaign):
     for step, note in DIAGNOSTIC_ROWS:
-        rt.record(step, False, note=note, diag={"url": "https://x/?act=123456789012"})
+        rt.record(step, False, note=note, diag={"url": "https://x/?act=1234567890"})
     rt.record("ad_level_summary", True)
     return "", []
 
@@ -164,8 +164,8 @@ def _do_not_publish(campaign):
     # Шаг пишет две строки: первая с причиной, вторая — со снимком страницы.
     rt.record("audience_location", False, note="location_rows_not_read", diag={"keep": "Saudi Arabia"})
     rt.record("audience_location", False,
-              diag={"url": "https://adsmanager.facebook.com/x?act=123456789012&token=secret"})
-    rt.record("ad2_copy", False, diag={"fields": 0, "url": "https://x/?act=987654321098"})
+              diag={"url": "https://adsmanager.facebook.com/x?act=1234567890&token=secret"})
+    rt.record("ad2_copy", False, diag={"fields": 0, "url": "https://x/?act=1234567890123456"})
     rt.record("ad_level_summary", False, diag={"soft_fails": [COPY_FAIL]})
     return "", ["audience_location", COPY_FAIL]
 
@@ -333,7 +333,7 @@ def test_an_exception_that_ends_a_job_reaches_sentry(monkeypatch, events):
             return [_Draft()]
 
         def publish_draft(self, draft):
-            raise RuntimeError("reattach failed act=123456789012")
+            raise RuntimeError("reattach failed act=1234567890")
 
         def close(self, force=False):
             pass
@@ -352,7 +352,7 @@ def test_an_exception_that_ends_a_job_reaches_sentry(monkeypatch, events):
     assert len(captured) == 1 and "reattach failed" in str(captured[0])
     # Событие исключения проходит тот же вычиститель, что и прочие.
     event = acl_sentry._before_send({"exception": {"values": [{"value": str(captured[0])}]}}, {})
-    assert "123456789012" not in json.dumps(event)
+    assert "1234567890" not in json.dumps(event)
 
 
 def test_the_account_tag_is_the_short_label():
