@@ -206,3 +206,60 @@ def test_an_ordinary_dialog_is_not_a_tour(page):
     _set(page, other)
     assert md._close_onboarding_tour(page) == ""
     assert page.evaluate("window.clicks") == []
+
+
+# ── Ревью PR #323 (F4) ────────────────────────────────────────────────────
+
+def _editor_dialog(inner):
+    return ('<div role="dialog" style="position:fixed;left:0;top:0;width:1000px;height:700px">'
+            '<div role="button" aria-label="Close" onclick="log(\'editor_x\')" '
+            'style="position:absolute;right:8px;top:8px;width:24px;height:24px">' + _X_SVG + '</div>'
+            + inner + '</div>')
+
+
+def test_a_tour_nested_in_an_editor_dialog_closes_only_the_tour(page):
+    """Редактор — role=dialog без полей имени (ещё грузится), внутри —
+    экскурсия: закрывается крестик экскурсии, не редактора."""
+    tour = _TOUR.format(x_label='aria-label="Close"', svg=_X_SVG)
+    _set(page, _editor_dialog(tour + '<div>Loading...</div>'))
+    assert md._close_onboarding_tour(page) == "A streamlined way to create campaigns"
+    assert page.evaluate("window.clicks") == ["x"]
+
+
+def test_a_promo_line_in_an_editor_dialog_is_not_a_tour(page):
+    _set(page, _editor_dialog('<div>Try a new way to create campaigns with Advantage+</div>'))
+    assert md._close_onboarding_tour(page) == ""
+    assert page.evaluate("window.clicks") == []
+
+
+def test_a_dialog_holding_the_editor_drawer_is_never_touched(page):
+    inner = ('<div data-surface="/am/editor_drawer"><span>1 of 3</span>'
+             '<div role="heading">A streamlined way to create campaigns</div></div>')
+    _set(page, _editor_dialog(inner))
+    assert md._close_onboarding_tour(page) == ""
+    assert page.evaluate("window.clicks") == []
+
+
+def test_a_close_labelled_forward_button_is_never_taken(page):
+    """«Next» с aria-label Close (Meta так размечает кнопки-стрелки) — не крестик."""
+    tour = ('<div role="dialog" id="t" style="position:fixed;left:300px;top:150px;width:420px;height:220px">'
+            '<div role="heading">A streamlined way to create campaigns</div><span>1 of 3</span>'
+            '<div role="button" aria-label="Close" onclick="log(\'next\')">Next</div>'
+            '<div role="button" aria-label="Close" onclick="log(\'x\'); document.getElementById(\'t\').remove()"'
+            ' style="position:absolute;right:8px;top:8px;width:24px;height:24px">' + _X_SVG + '</div></div>')
+    _set(page, tour)
+    assert md._close_onboarding_tour(page) == "A streamlined way to create campaigns"
+    assert page.evaluate("window.clicks") == ["x"]
+
+
+def test_the_x_of_a_dialog_nested_in_the_tour_is_not_the_tours(page):
+    inner = ('<div role="dialog" style="position:absolute;left:10px;top:60px;width:200px;height:60px">'
+             '<div>Tip</div><div role="button" aria-label="Close" onclick="log(\'inner_x\')"'
+             ' style="width:20px;height:20px">' + _X_SVG + '</div></div>')
+    tour = ('<div role="dialog" id="t" style="position:fixed;left:300px;top:150px;width:420px;height:260px">'
+            + inner + '<div role="heading">A streamlined way to create campaigns</div><span>1 of 3</span>'
+            '<div role="button" aria-label="Close" onclick="log(\'x\'); document.getElementById(\'t\').remove()"'
+            ' style="position:absolute;right:8px;top:8px;width:24px;height:24px">' + _X_SVG + '</div></div>')
+    _set(page, tour)
+    assert md._close_onboarding_tour(page) == "A streamlined way to create campaigns"
+    assert page.evaluate("window.clicks") == ["x"]

@@ -11751,23 +11751,36 @@ _ONBOARDING_TITLES = (
     r"take a (quick )?tour",
 )
 
+#: Ревью PR #323 (F4): по собственному тексту окна (не заголовку) — только
+#: эти отличительные фразы экскурсии; «new way to create» бывает и в
+#: промо-строке самого редактора.
+_ONBOARDING_BODY = (
+    r"streamlined way to create",
+    r"create your campaign in a single step",
+)
+
 _ONBOARDING_JS = r"""() => {
   const norm = (s) => (s || '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\s+/g, ' ').trim();
   const shown = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const TITLES = new RegExp('(' + %TITLES% + ')', 'i');
+  const BODY = new RegExp('(' + %BODY% + ')', 'i');
   const PAGER = /^\d+\s*of\s*\d+$/i;
   const FORWARD = /^(next|get started|try it|continue|done|start|ok)$/i;
   for (const d of document.querySelectorAll('[role=dialog]')) {
     if (!shown(d)) continue;
-    // Сам редактор (поля имени) — не экскурсия, его не закрываем.
+    // Сам редактор (поля имени или панель редактора внутри) — не
+    // экскурсия, его не закрываем (ревью PR #323, F4).
     if (d.querySelector('input[placeholder^="Enter your campaign name"], input[placeholder^="Enter your ad set name"], input[placeholder^="Enter your ad name"]')) continue;
+    if (d.querySelector('[data-surface*="editor_drawer"]')) continue;
     const own = (e) => e.closest('[role=dialog]') === d;
     const leaves = [...d.querySelectorAll('*')].filter((e) => e.children.length === 0 && own(e) && shown(e));
     const pager = leaves.some((e) => PAGER.test(norm(e.textContent)));
     const heading = [...d.querySelectorAll('[role=heading], h1, h2, h3, h4')]
       .filter((e) => own(e)).map((e) => norm(e.textContent)).find((t) => t) || '';
-    const text = norm(d.textContent).slice(0, 600);
-    if (!pager && !TITLES.test(heading) && !TITLES.test(text)) continue;
+    // Только собственный текст окна: вложенное окно (экскурсия внутри
+    // редактора-диалога) не делает экскурсией внешнее.
+    const text = leaves.map((e) => norm(e.textContent)).join(' ').slice(0, 600);
+    if (!pager && !TITLES.test(heading) && !BODY.test(text)) continue;
     const title = (heading || text).slice(0, 80);
     // Ищем только внутри этого окна и только его собственные кнопки
     // (`own`): крестик редактора (`/am/editor_drawer`) вне окна сюда не
@@ -11789,7 +11802,8 @@ _ONBOARDING_JS = r"""() => {
     return { state: 'marked', title };
   }
   return { state: 'absent' };
-}""".replace("%TITLES%", repr("|".join(_ONBOARDING_TITLES)))
+}""".replace("%TITLES%", repr("|".join(_ONBOARDING_TITLES))).replace(
+    "%BODY%", repr("|".join(_ONBOARDING_BODY)))
 
 
 def _close_onboarding_tour(page: Page, where: str = "") -> str:
