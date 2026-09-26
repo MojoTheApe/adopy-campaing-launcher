@@ -9,6 +9,7 @@
 очереди, а список «Publish all» внизу ящика пишет «queued».
 """
 import os
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -263,8 +264,9 @@ def test_reduced_motion_shows_a_ring_instead_of_a_pulse(browser, html):
         show(page, state, progress('running', [camp(a, step='create'), camp(b)], current=a, idle_s=1))
         expect(dot(page, a)).to_have_class('cbd-ind cbd-ind-build-run')
         span = dot(page, a).locator('span')
-        assert span.evaluate('e => getComputedStyle(e).animationName') == 'none'
-        assert span.evaluate('e => getComputedStyle(e).boxShadow') != 'none'
+        # Ждущие проверки: узел мог уйти при перерисовке ящика (см. animation()).
+        expect(span).to_have_css('animation-name', 'none')
+        expect(span).not_to_have_css('box-shadow', 'none')
     finally:
         context.close()
 
@@ -304,8 +306,11 @@ def test_a_queued_job_shows_a_still_ring_with_its_place_in_line(ui):
         assert animation(p, name) == 'none', 'ждущее задание дышит, будто робот уже работает'
     span = dot(p, a).locator('span')
     # Не «потеряно»: у потерянного пустое кольцо, у ждущего — кольцо с точкой.
-    assert 'radial-gradient' in span.evaluate('e => getComputedStyle(e).backgroundImage')
-    assert span.evaluate('e => getComputedStyle(e).borderTopStyle') == 'solid'
+    # Ящик перерисовывается сам (repaintSoon): узел, найденный за миг до
+    # перерисовки, уже вне документа и отдаёт пустой стиль (CI 3.13, PR #328) —
+    # поэтому ждущие проверки expect, они перечитывают узел.
+    expect(span).to_have_css('background-image', re.compile('radial-gradient'))
+    expect(span).to_have_css('border-top-style', 'solid')
 
     show(p, state, queued([camp(a), camp(b)], reason='profile'))
     expect(dot(p, a)).to_have_attribute('title', 'Waiting for the Multilogin profile — another run is using it')
