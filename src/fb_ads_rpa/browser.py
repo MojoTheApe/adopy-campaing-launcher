@@ -829,6 +829,12 @@ def put_window_back(page) -> None:
     if window_home()[0] is not None:
         # Окно стоит там, где его попросили держать — не трогаем и не сворачиваем.
         return
+    # ACL-1320: CDP-сессия на вкладке с зависшим рендерером висела 197 с.
+    # Не отвечает — окно не трогаем (оно за краем экрана и никому не мешает;
+    # профиль всё равно перезапустят или сменят вкладку).
+    if page_answers(page, 3.0) is False:
+        log.info("put_window_back skipped: the tab does not answer")
+        return
     try:
         session = page.context.new_cdp_session(page)
     except Exception as exc:

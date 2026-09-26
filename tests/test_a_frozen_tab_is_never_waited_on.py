@@ -142,3 +142,40 @@ def test_the_flow_click_hands_a_frozen_tab_to_the_guard_within_its_budget(flow, 
     assert where == "objective_leads" and waited < md.STALL_BUDGET_S
     # Единственное ожидание — ограниченная проверка радио до нажатия.
     assert loc.wait_for.call_count <= 1
+
+
+def test_a_failed_step_on_a_frozen_tab_is_logged_without_touching_the_page(flow, monkeypatch):
+    """Отказ шага на вкладке, которая не отвечает: строка телеметрии — да,
+    контекст страницы, разметка и снимок (вызовы без таймаута) — нет."""
+    from src.fb_ads_rpa import page_capture, run_telemetry, screenshots
+
+    touched: list[str] = []
+    monkeypatch.setattr(md, "_open_campaign", lambda *a, **k: "profile_unresponsive")
+    monkeypatch.setattr(md, "_page_responsive", lambda p, timeout_s=5.0: False)
+    monkeypatch.setattr(run_telemetry, "page_context", lambda p, **k: touched.append("context") or {})
+    monkeypatch.setattr(page_capture, "capture", lambda *a, **k: touched.append("html") or "")
+    monkeypatch.setattr(screenshots, "capture", lambda *a, **k: touched.append("png") or "")
+    rows: list = []
+    real = run_telemetry.record
+    monkeypatch.setattr(run_telemetry, "record",
+                        lambda step, ok=None, **kw: rows.append((step, ok, kw.get("diag"))) or real(step, ok, **kw))
+    assert flow["run"]() == "profile_unresponsive"
+    assert touched == []
+    fail = [r for r in rows if r[0] == "profile_unresponsive"]
+    assert fail and fail[-1][1] is False and fail[-1][2]["tab_frozen"] is True
+
+
+def test_the_window_is_not_put_back_through_a_frozen_tab(monkeypatch):
+    from src.fb_ads_rpa import browser as br
+
+    class _Ctx:
+        def new_cdp_session(self, page):
+            raise AssertionError("CDP-сессия на зависшей вкладке")
+
+    page = _FrozenPage()
+    ctx = _Ctx()
+    monkeypatch.setattr(_FrozenPage, "context", property(lambda self: ctx))
+    monkeypatch.setitem(br._OFFSCREEN, id(ctx), {"window_id": 1, "left": 0, "top": 0})
+    monkeypatch.delenv("FB_RPA_WINDOW_LEFT", raising=False)
+    br.put_window_back(page)
+    assert page.probes, "о живости не спросили"

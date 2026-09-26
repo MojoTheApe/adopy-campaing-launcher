@@ -3890,18 +3890,27 @@ def run_recorded_campaign_flow(
     def _shot(label: str, diag: dict | None = None, note: str | None = None) -> None:
         now = time.time()
         step, ok = _telemetry.normalise_step(label)
+        # ACL-1320: снимок, разметка и контекст страницы — вызовы без
+        # таймаута (`page.title()`, `count()`, CDP-сессия снимка). На вкладке,
+        # которая не отвечает, отказ шага висел бы в собственном протоколе.
+        # Спрашиваем один раз, ограниченно, и тогда пишем только строку.
+        frozen = None
+        if ok is False or _shot_worth_a_picture(label):
+            frozen = _tab_frozen(page)
+            if frozen:
+                diag = {**(diag or {}), "tab_frozen": True}
         # Причина отказа собирается здесь, в единственной точке, а не в сорока
         # трёх местах вызова. Ни один из них её не передавал: у всех отказов
         # 9 сентября `diag` был пуст, и сказать про них было нечего — ни
         # человеку, ни будущему агенту. Собранное в одном месте не разойдётся
         # с вызовами, и новый шаг получит контекст, ничего для этого не делая.
-        if ok is False:
+        if ok is False and not frozen:
             diag = _telemetry.merge_diag(_telemetry.page_context(page), diag)
         # Разметка упавшего шага — на диск, рядом со скриншотом. По картинке
         # селектор не напишешь: на вопрос «почему не нашлась кнопка» отвечает
         # то, что было в DOM. Тот же снимок нужен стенду `acl-340`, без
         # которого `meta_dom` не покрыть тестами.
-        if ok is False:
+        if ok is False and not frozen:
             try:
                 from src.fb_ads_rpa import page_capture as _pages
 
@@ -3923,6 +3932,8 @@ def run_recorded_campaign_flow(
         )
         _shot_clock["t"] = now
         if ok is not False and not _shot_worth_a_picture(label):
+            return
+        if frozen:
             return
         try:
             from src.fb_ads_rpa.screenshots import capture as _capture
