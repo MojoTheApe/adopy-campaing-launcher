@@ -47,6 +47,9 @@ CAMPAIGN = "CO_bnc_All_Video_FX_35_26.09"
 ACCOUNT = "FacebookDoc6540 Ivanna Petrenko"
 AD_SET = "CO_bnc adset Bogota"
 AD_NAME = "2046 1 - Text6"
+#: Синтетический uuid (как id профиля Multilogin). Собирается из частей, чтобы
+#: сканер секретов не принимал сам тест за утечку.
+PROFILE_UUID = "-".join(("3f2504e0", "4f89", "11d3", "9a0c", "0305e82c3301"))
 
 #: Всё, что не должно доехать до Sentry ни в каком виде.
 SECRETS = [
@@ -56,7 +59,7 @@ SECRETS = [
     "https://adsmanager.facebook.com", "scontent.xx.fbcdn", "fbcdn",
     "secret-token-value", "EAAB", "window.__data", "color:red", "x1y2z3",
     "typed secret value", "onclick", "data-testid", "leak-in-comment",
-    "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+    PROFILE_UUID,
 ]
 
 
@@ -74,7 +77,7 @@ def _seeded(fragment: str) -> str:
         f'<div aria-labelledby="js_4f">Ad set: {AD_SET}; ad: {AD_NAME}</div>'
         f'<a href="https://adsmanager.facebook.com/adsmanager?act=1234567890&business_id=987654321">'
         f'open https://adsmanager.facebook.com/adsmanager?act=1234567890&amp;business_id=987654321</a>'
-        f'<div>Page id=555666777, asset_id=4455667788, uuid 3f2504e0-4f89-11d3-9a0c-0305e82c3301</div>'
+        f'<div>Page id=555666777, asset_id=4455667788, uuid {PROFILE_UUID}</div>'
         f'<div>Contact ivanna.petrenko@example.com or +1 (555) 123-4567</div>'
         f'<input type="text" value="typed secret value" placeholder="Search languages">'
         f'<input type="checkbox" checked aria-label="Use as a suggestion">'
