@@ -22,6 +22,20 @@ sys.path.insert(0, str(ROOT))
 from src.fb_ads_rpa import run_telemetry as rt  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _no_current_run():
+    """Каждый тест начинает без текущего прогона.
+
+    Тесты робота, которые гонят `run_recorded_campaign_flow` (например,
+    test_route_placeholder_is_loading, test_rpa_absent_elements_cost_no_time),
+    оставляют в процессе прогон «Example», и при полном прогоне записи здесь
+    получали чужую кампанию.
+    """
+    rt.clear_current_run()
+    yield
+    rt.clear_current_run()
+
+
 # ─────────────── разбор имени шага ───────────────
 
 

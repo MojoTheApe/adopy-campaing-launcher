@@ -129,6 +129,36 @@ def init() -> bool:
     return True
 
 
+def report_job_exception(exc: BaseException, *, job: str = "", account: str = "") -> str:
+    """Исключение, которым кончилась работа задания публикации (ACL-1318).
+
+    Повторное ревью v3 PR #314: `publish_jobs._run_rpa` ловил такое
+    исключение (ошибка переподключения, падение вне шагов объявлений, ошибка
+    в нашем коде) и писал только «RPA error: …» в задание — до Sentry оно не
+    доходило, хотя это самая серьёзная остановка кампаний. Отправляем
+    `capture_exception` со стеком; всё событие проходит тот же вычиститель
+    `before_send`, что и остальные (адреса с `act=`, номера, пути).
+    """
+    if not init():
+        return ""
+    import sentry_sdk
+
+    with sentry_sdk.new_scope() as scope:
+        scope.set_tag("failure_kind", "job_exception")
+        if account:
+            scope.set_tag("account", account_tag(account))
+        if job:
+            scope.set_context("run", {"job": str(job).replace("-", "")})
+        return sentry_sdk.capture_exception(exc) or ""
+
+
+def account_tag(account: str) -> str:
+    """Тег аккаунта — только короткий ярлык (первое слово: «FacebookDoc19»),
+    без имени персоны после него (повторное ревью v3 PR #314)."""
+    parts = (account or "").strip().split()
+    return parts[0] if parts else ""
+
+
 def report_step_failure(
     step: str,
     why: str = "",
@@ -137,8 +167,21 @@ def report_step_failure(
     campaign: str = "",
     account: str = "",
     diag: dict | None = None,
+    reason: str = "",
+    job: str = "",
+    kind: str = "",
+    group_step: str = "",
+    attempt: int | None = None,
 ) -> str:
     """Сообщить об отказе шага. Возвращает номер события или пустую строку.
+
+    ACL-1318: зовут это не на каждую строку телеметрии с `ok=False`, а только
+    на настоящие отказы кампании (`src/fb_ads_rpa/sentry_signal.py`). Отсюда
+    новые поля: `reason` — уже вычисленный вид причины (иначе он выводится из
+    `why`), `job` — задание дешборда, `kind` — `campaign_stop` (попытка
+    кампании кончилась) или `blocking` (черновик «не публиковать»),
+    `group_step` — шаг для отпечатка без номера объявления (`ad2_copy` и
+    `ad3_copy` — одна и та же поломка), `attempt` — номер попытки.
 
     **Отпечаток задаётся вручную, и это важно.** Группировка Sentry хороша на
     исключениях со стеком, а у нас основная масса — отказы шагов: «placements
@@ -151,15 +194,26 @@ def report_step_failure(
         return ""
     import sentry_sdk
 
-    reason = _reason_kind(why)
+    reason = reason or _reason_kind(why)
     with sentry_sdk.new_scope() as scope:
-        scope.fingerprint = ["acl-step", step, reason]
+        scope.fingerprint = ["acl-step", group_step or step, reason]
         scope.set_tag("step", step)
         scope.set_tag("reason", reason)
+        if kind:
+            scope.set_tag("failure_kind", kind)
         if account:
-            scope.set_tag("account", account)
-        if run_id:
-            scope.set_context("run", {"run_id": run_id, "campaign": campaign})
+            scope.set_tag("account", account_tag(account))
+        if run_id or campaign or job:
+            run_ctx = {"run_id": run_id, "campaign": campaign}
+            if job:
+                # Номер задания — наш собственный uuid4, не профиль и не
+                # кабинет, но вычиститель заменил бы его на `<uuid>` вместе с
+                # id профилей Multilogin. Без дефисов он под шаблон не попадает
+                # и остаётся сопоставимым с заданием в журнале дешборда.
+                run_ctx["job"] = str(job).replace("-", "")
+            if attempt is not None:
+                run_ctx["attempt"] = attempt
+            scope.set_context("run", run_ctx)
         if why:
             scope.set_context("failure", {"why": _scrub_deep(why)})
         if diag:
@@ -187,6 +241,12 @@ _REASONS = (
     ("file-chooser-lost", ("filechooser", "file_chooser", "set_files")),
     ("upload-never-started", ("progress: 0", "fed: false")),
     ("timeout", ("timeout", "timed out", "не дождал")),
+    # ACL-1318: так объявление без текста называет себя в итоге кампании
+    # («ad_copy:<имя объявления> has no text») — имя в вид не едет.
+    ("no-text", ("has no text",)),
+    # 25.09 20:23: «ad3_create:Page.evaluate: Target page, context or browser
+    # has been clos» — текст исключения обрезан до 60 знаков, отсюда «clos».
+    ("page-closed", ("has been clos", "target closed")),
 )
 
 
@@ -210,7 +270,14 @@ _REASONS = (
 _TOKEN_RE = re.compile(r"^[a-z]+(?:_[a-z]+){1,6}$")
 
 
-def _reason_kind(why: str) -> str:
+#: Метки, которые наш код сам пишет в итог кампании сразу после «шаг:» —
+#: только их текст отказа может целиком считаться меткой. Всё остальное после
+#: двоеточия — имя объявления или текст исключения (ревью v3 PR #314:
+#: «destination_sweep:summer_sale_ad» — имя, а не причина).
+_RESULT_TOKENS = frozenset({"not_the_new_ad_after_reload"})
+
+
+def _reason_kind(why: str, *, allow_token: bool = True) -> str:
     """Вид причины — то, по чему одинаковые отказы складываются в один тикет.
 
     Три исхода, и различать их важно:
@@ -229,9 +296,75 @@ def _reason_kind(why: str) -> str:
     for kind, needles in _REASONS:
         if any(n in lowered for n in needles):
             return kind
-    if _TOKEN_RE.match(lowered):
+    if allow_token and _TOKEN_RE.match(lowered):
         return lowered.replace("_", "-")
     return "other"
+
+
+#: Машинная метка в скобках в САМОМ КОНЦЕ текста отказа — так её ставит наш
+#: код (`f" ({why})"`): «ad2_copy:1962 - AR Text 1 has no text
+#: (copy_fields_not_revealed)». Скобки посреди текста — часть имени
+#: объявления («My (summer_sale) ad …»), и в причину они не идут (ревью v3).
+_EMBEDDED_TOKEN_RE = re.compile(r"\(([a-z]+(?:_[a-z]+){1,6})\)\s*$")
+
+
+def _explicit_token(text: str, *, from_result: bool = False) -> str:
+    """Устойчивая машинная метка внутри текста отказа, если она там есть.
+
+    Ищем в трёх местах, от самого явного к менее явному: метка в скобках,
+    кусок между двоеточиями (`destination_sweep:2292 - ES Text 5 Ait:row_not_found`)
+    и весь текст целиком. Метка — только буквы (см. `_TOKEN_RE`), так что ни
+    номер, ни имя кампании в неё не попадут.
+    """
+    text = (text or "").strip()
+    if not text:
+        return ""
+    found = _EMBEDDED_TOKEN_RE.findall(text)
+    if found:
+        return found[-1].replace("_", "-")
+    parts = text.split(":")
+    if not from_result:
+        # Строка телеметрии: note пишет сам шаг — метка может быть где угодно.
+        for part in reversed(parts):
+            part = part.strip().lower()
+            if _TOKEN_RE.match(part):
+                return part.replace("_", "-")
+        return ""
+    # Текст отказа из итога кампании: в нём имена объявлений. Метка — только
+    # последний кусок после «имя:» (`2292 - ES Text 5 Ait:row_not_found`), не
+    # сам текст целиком: «destination_sweep:summer_sale_ad» — это имя.
+    if len(parts) >= 2:
+        last = parts[-1].strip().lower()
+        if _TOKEN_RE.match(last):
+            return last.replace("_", "-")
+    return ""
+
+
+def failure_reason(failure: str, why: str = "") -> str:
+    """Вид причины для отказа из итога кампании (ACL-1318).
+
+    `failure` — строка из итога (`ad2_copy:… (copy_fields_not_revealed)`,
+    `audience_location`, `ad_copy:Timeout 30000ms exceeded`), `why` — чем
+    объяснила себя последняя строка телеметрии того же шага. Порядок —
+    от точного к общему: метка в самом отказе, узнанный вид его текста, метка
+    в телеметрии, узнанный вид там. `silent` — только когда не сказал ничего
+    ни итог, ни телеметрия: 25.09 заголовок `ad_level_summary: silent` висел
+    над отказом, у которого причина `copy_fields_not_revealed` была написана
+    прямо в тексте.
+    """
+    detail = (failure or "").split(":", 1)[1].strip() if ":" in (failure or "") else ""
+    why = (why or "").strip()
+    for text in (detail, why):
+        token = _explicit_token(text, from_result=text is detail)
+        if token:
+            return token
+        if text:
+            from_result = text is detail
+            kind = _reason_kind(text, allow_token=not from_result
+                                or text.strip().lower() in _RESULT_TOKENS)
+            if kind != "other":
+                return kind
+    return "other" if (detail or why) else "silent"
 
 
 def report_problem(text: str, *, context: dict | None = None) -> str:

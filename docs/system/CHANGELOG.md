@@ -1,5 +1,147 @@
 # System history
 
+## Sentry receives only real campaign failures — ACL-1318 (phase 1)
+
+Every telemetry row with `ok=False` used to become a Sentry event, so the list of
+issues was dominated by diagnostics that are not failures of a campaign
+(`advantage_plus_off: still-on`, `click_target_covered: silent`, `create_took`,
+`conversion_website_pick`, `locations_open`, per-attempt rows, `ad_level_summary:
+silent`) and real ones such as `ad2_copy: copy-fields-not-revealed` were buried. Now
+`src/fb_ads_rpa/sentry_signal.py` sends an event only for (a) a hard failure that ends
+a campaign attempt (one per attempt, `failure_kind=campaign_stop`) and (b) each
+blocking failure of a campaign's final result (`failure_policy.split`, one per failure,
+once per campaign, `failure_kind=blocking`). An exception that ends a publish job's
+work (caught in `publish_jobs._run_rpa`) is sent with its stack through the same
+scrubber (`failure_kind=job_exception`); before this it reached no one. Each
+event is titled `step: reason`; the reason is the machine token inside the result text
+(`(copy_fields_not_revealed)`, `…:row_not_found`), else a known kind, else the reason
+the step's telemetry rows gave, or that of an explicitly listed helper step
+(`conversion_website` ← `conversion_website_pick`, `adN_create` ←
+`create_additional_ad`). The fingerprint is step without the ad number + reason, so
+campaign names and numbers never split an issue. The event carries campaign, account
+label, run id, job id, attempt and the scrubbed diag of the step's last telemetry row.
+Everything else stays in local telemetry. Replaying the 25.09 telemetry: 77 events
+become 18.
+
+## Each campaign in the builder shows where its build is — ACL-1315
+
+While campaigns were being built, the only report was the job list at the bottom of
+the builder drawer, and after a dashboard restart it kept saying "running". Now every
+campaign sent to a publish job shows a dot in place of its readiness sign: grey and
+pulsing while it is built or waits for its turn, orange and pulsing when the build has
+been silent too long or has hit something only a person can fix (account restricted
+by Meta, Lead Generation terms not accepted, all retries used up), solid orange when
+the campaign was built with blocking errors or not built at all, green when the draft is
+ready ("Publish was not clicked"). A job the server no longer knows (404 after a restart) becomes an empty
+ring without a pulse — unknown, not running. Jobs are remembered in localStorage, so
+the dots come back after F5.
+
+The facts come from `GET /publish-jobs/{id}/progress` (`src/web/publish_progress.py`):
+the campaign's result, the robot's last step from the tail of `rpa_telemetry.jsonl`
+(512 KB read per poll) and how long the job has been silent; the page decides the
+colour. Rows count only for their own job: every telemetry row written by a job's
+thread carries the job id, rows of another job are skipped even when the campaign
+name is the same, and rows older than the job never colour a campaign. "Silent too
+long" is 3 minutes up to the audience step and 7 minutes from placements on, where a
+creative upload legitimately takes up to about six (25.09: 370, 356, 329 s). The dot
+key on the page is account + name, so same-named campaigns of two accounts do not mix.
+
+## The live robot ships: port of the live branch and ACL-1313 — ACL-1284
+
+The robot that has been building the test campaigns since 2026-09-17 ran from a
+separate branch (`local/live-2026-09-19`) on the owner's laptop, not from `main`.
+This port merges that branch, together with the ACL-1313 hardening
+(`codex/acl-1313-six-campaigns`), into a branch cut from `main`, so that buyers get the
+same robot the owner has been watching.
+
+What ships. The live robot's waiting and recovery: a stuck Meta load, a Chrome error
+page or an editor block that never rendered is reloaded and retried instead of
+failing the step; the objective dialog, the device section and the ad text field are
+waited for as long as Meta is visibly loading. The audience: collapsed Locations and
+Languages rows are opened by hover, their arrow, Enter on the row button or a click on
+the value, with the target scrolled into view first and never clicked through a panel
+that covers it; a country row far below the window is scrolled to before its Close is
+pressed; interest groups are re-read until Meta has drawn them. The ad level: the text
+is pasted whole, healed when the editor is blocked or loses its tail, and the
+destination is set before it; the ad-set row is found in the editor tree and Create no
+longer lands in the left menu. Pacing between actions is roughly halved
+(`FB_RPA_SLOW_PACING=1` restores it) and the profile window can live off screen or on a
+chosen monitor. ACL-1313 adds the fixes from the six test campaigns of 2026-09-24/25: a
+blocked ad account stops its campaign, banners are closed by their own X, a minimised
+profile window never hangs the run, a language Meta preselected counts, media Meta
+carried into the next ad is not "no media", and success-path screenshots are opt-in.
+The dashboard's period picker closes on Esc and on an outside click (`9c211c5`).
+
+The second merge of `codex/acl-1313-six-campaigns` (up to `c8d9d42`) added: a busy
+tab says why Publish does nothing (`c8d9d42`); a "Turn off ad blocker" modal or a
+"connection lost" toast is closed and the page reloaded (in the editor only with "All
+edits saved"); an editor block reading "component failed to load" is healed by a
+reload and the "Extensions / Site links" window is closed by its Cancel, never Save;
+Meta's route spinner (`AdsPERouteLoadPlaceholder`, no "Loading" text) counts as
+loading; a placements category that Meta collapses again is reopened; and media Meta
+already shows is confirmed on the ad itself whatever step the wizard is on
+(`c27ee46`). A blocked ad account (`account_blocked`) is never retried. Two
+environment variables: `FB_RPA_SHOT_ALL=1` brings back the success-path screenshots
+and page captures, and `FB_RPA_WINDOW_LEFT` / `FB_RPA_WINDOW_TOP` park the profile
+window at a chosen place (default: off the left edge of the screen). The live
+`read_back_by_label` bypass of the age read-back is removed (it confirmed the age by a
+number from a neighbouring field, ACL-1250); the Age reader treats "Use as a
+suggestion" as part of the Age field (`dbaa58d`). `enrich_draft` does not force a
+second library pull within 60 s of the previous one (`LIBRARY_FRESH_S`). Account spend
+reads a campaign's ads once the tree list has settled and captures the page when the
+links are ambiguous (`c0fd8e4`).
+
+Review of PR #314 fixed in the same port: a profile window parked off screen on
+attach is never maximised onto the owner's screen and is minimised again at the end,
+each step on its own; screenshots ask the window (not the document, which focus
+emulation keeps "visible") whether it is minimised and never call the unbounded CDP
+screenshot on one; a reload on the second or third ad reopens that ad before it is
+named; "Start authentication" stops the campaign only next to "Review N error" or the
+code #3858385; tests no longer write into the live telemetry journal. From the live
+runs of the candidate: a collapsed Age row is opened by its own row and an open Age
+field is never collapsed by the old header-click fallback (run `5e29e66da497`); the
+last country's disabled X still counts as its row; an already selected "Further
+limit" radio is not a failure; the last Create of the objective retry gets a full
+wait; the ad-set naming-template dialog is cancelled; `objective_wait` says what was
+loading; and a wait longer than 60 s wakes the tab and reloads it only when it is
+stuck (`stall_unstuck`, once per step, never on the second or third ad). Re-review:
+a window minimised mid-run keeps its real home, and a home that is itself off screen
+is replaced by a visible point.
+
+What does not ship. ACL-1311 (Multilogin Team access, PR #312) is reverted in the port
+until the two-machine token check.
+
+Owner decisions of 2026-09-25 this follows: one PR instead of four slices (PR #299 is
+absorbed); in `meta_dom.py` the live fallbacks are kept and the ACL-1250 / ACL-1225 /
+ACL-1226 guards from `main` are applied on top of them — every fallback looks for its
+target only inside the field its label belongs to, the country summary must match
+exactly, and the age is read inside the Age field; the media library is variant A
+(videos with the yellow triangle are accepted, decision of 2026-09-24) with two
+guarantees kept as tests: a different file is never "our creative", and processing
+that never ends is a failure; tag and release once `main` is green.
+
+Two things had to be adjusted to keep those decisions true on the live pages. The Age
+reader from ACL-1250 returned nothing on the live layout (two "Age" labels, and
+"Minimum age" / "Maximum age" labels between the label and the values); the live
+robot had never read it either — all 162 ages of 2026-09-19..25 were confirmed only by
+a bypass that the guard removes. It now tries each label on its own and treats labels
+that name a part of the same field as part of it (fixture cut from the 2026-09-24
+run). And three gaps in the live media path broke the first guarantee: a similar name
+("2012_story.mp4" for "2012.mp4") counted as ours, a tile selected before the robot
+arrived was never compared by thumbnail, and the outer upload retry turned a refusal
+about the ad's own media into success. The media tests written for the strict #238
+variant were rewritten for variant A; where the live code differs by design, the test
+says so.
+
+Approved by the owner on 2026-09-25 and fixed in the port as well: the library's
+Account tab (`aria-selected=true` whenever it is open) no longer counts as a selected
+tile — it made every undo after a pick that did not take look dirty, the likely cause
+of the live `library_pick_left_selection` refusals; a library grid that is not on
+screen reads as "unknown", so an undo after a click without a visible grid never
+allows an upload on top; and "Video rejected" on the ad's media is a failure
+(`media_rejected`). An unreadable Media state stays non-failing, since media presence
+is checked separately.
+
 ## Multilogin is connected in the dashboard, not in the installer — ACL-1303
 
 The wizard no longer mentions Multilogin at all. Setup is six steps instead of seven,

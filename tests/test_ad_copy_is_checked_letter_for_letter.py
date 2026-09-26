@@ -91,3 +91,102 @@ def test_a_field_that_never_shows_the_text_fails(page, monkeypatch):
 def test_whitespace_and_line_breaks_do_not_count():
     assert md._copy_matches("Line one\nLine two​", "Line one\n\nLine two")
     assert not md._copy_matches("★★★★☆.6k", "★★★★★ 4.6k")
+
+
+def test_meta_text_variations_are_switched_off_before_typing(browser, monkeypatch):
+    """21.09, решение пользователя: Advantage+ creative подставляет к нашему
+    тексту свои варианты, и в показ идёт что попало. Снимаем «Check all text
+    variations» до ввода."""
+    clicks = []
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click", lambda pg, x, y: (
+        clicks.append((x, y)),
+        pg.evaluate("([x,y]) => { const e = document.elementFromPoint(x,y); if (e) e.click(); }", [x, y]),
+    ))
+    ctx = browser.new_context()
+    page = ctx.new_page()
+    try:
+        page.set_content(
+            "<div><div role='checkbox' aria-checked='true' id='all'"
+            " style='width:18px;height:18px'></div>"
+            "<span>Check all text variations</span></div>"
+            "<script>document.getElementById('all').addEventListener('click',"
+            " () => document.getElementById('all').setAttribute('aria-checked','false'));</script>"
+        )
+        assert md.disable_text_variations(page) is True, "галочка должна сняться"
+        assert clicks, "кликов не было"
+        assert page.get_attribute("#all", "aria-checked") == "false"
+
+        page.set_content("<div>Ad without variations</div>")
+        assert md.disable_text_variations(page) is None
+    finally:
+        ctx.close()
+
+
+def test_a_second_attempt_replaces_the_text_instead_of_appending(page, monkeypatch):
+    """21.09, скриншот пользователя: в поле лежал наш текст, повторённый
+    подряд много раз, со склейкой посреди слова — каждая попытка дописывала
+    его к прежнему вместо замены."""
+    monkeypatch.setattr(md, "_type_human", lambda p, t: p.keyboard.insert_text(t))
+    page.evaluate("() => { document.getElementById('body').textContent = 'СТАРЫЙ ТЕКСТ'; }")
+    assert md.fill_ad_copy(page, "Заголовок", "Новый текст") is True
+    body = page.inner_text("#body").strip()
+    assert body == "Новый текст", body
+    assert "СТАРЫЙ" not in body
+
+
+def test_a_truncated_paste_is_retyped_whole_without_doubling(page, monkeypatch):
+    """22.09 01:05 (скриншот пользователя, CR_ait IPO): дописывание хвоста
+    задвоило текст — поле ещё дорисовывало вставку. Теперь поле стирается и
+    набирается заново, а задвоения быть не должно."""
+    full = "Primera linea del anuncio. Segunda linea. Empieza hoy."
+    tries = {"n": 0}
+
+    def lose_tail_once(p, t):
+        tries["n"] += 1
+        p.keyboard.insert_text(t[:-12] if (t == full and tries["n"] == 1) else t)
+
+    monkeypatch.setattr(md, "_type_human", lose_tail_once)
+    assert md.fill_ad_copy(page, "Заголовок", full) is True
+    body = page.inner_text("#body").strip()
+    assert body == full, body
+    assert body.count("Empieza hoy.") == 1, "текст не должен задваиваться"
+
+
+def test_meta_text_generation_is_expanded_and_switched_off(browser, monkeypatch):
+    """22.09, решение пользователя: снятой галочки «Check all text variations»
+    мало — сам раздел Advantage+ creative text generation остаётся включённым.
+    Раскрываем свёрнутый раздел и выключаем его."""
+    clicks = []
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click", lambda pg, x, y: (
+        clicks.append((x, y)),
+        pg.evaluate("([x,y]) => { const e = document.elementFromPoint(x,y); if (e) e.click(); }", [x, y]),
+    ))
+    ctx = browser.new_context(viewport={"width": 1280, "height": 800})
+    page = ctx.new_page()
+    try:
+        page.set_content(
+            "<div id='sec'><span>Advantage+ creative text generation</span>"
+            "<div role='button' aria-expanded='false' id='chev'"
+            " style='width:20px;height:20px'></div>"
+            "<div id='body' hidden><div role='switch' aria-checked='true' id='sw'"
+            " style='width:24px;height:24px'></div></div></div>"
+            "<script>"
+            "document.getElementById('chev').addEventListener('click', () => {"
+            " document.getElementById('chev').setAttribute('aria-expanded','true');"
+            " document.getElementById('body').removeAttribute('hidden'); });"
+            "document.getElementById('sw').addEventListener('click', () =>"
+            " document.getElementById('sw').setAttribute('aria-checked','false'));"
+            "</script>"
+        )
+        assert md.disable_text_generation(page) is True
+        assert page.get_attribute("#sw", "aria-checked") == "false"
+        assert page.get_attribute("#chev", "aria-expanded") == "true", "раздел должен раскрыться"
+
+        page.set_content("<div>Ad without generation block</div>")
+        assert md.disable_text_generation(page) is None
+    finally:
+        ctx.close()

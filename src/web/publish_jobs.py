@@ -61,6 +61,7 @@ def create_job(
     dry_run: bool = False,
     hand_off: bool = False,
     total: int | None = None,
+    campaign_names: list[str] | None = None,
 ) -> str:
     """Create a new publish job, store it, return its job_id."""
     if activate:
@@ -92,6 +93,9 @@ def create_job(
             "creative_notices": [],
             "errors": [],
             "total": total if total is not None else len(slots),
+            # Имена кампаний в порядке сборки: по ним ящик билдера находит
+            # строку кампании и ставит на неё точку состояния (ACL-1315).
+            "campaign_names": list(campaign_names or []),
             "done_count": 0,
             "cancel_requested": False,
         }
@@ -168,6 +172,7 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         snap["results"] = list(job["results"])
         snap["errors"] = list(job["errors"])
         snap["creative_notices"] = list(job.get("creative_notices", []))
+        snap["campaign_names"] = list(job.get("campaign_names", []))
         expected = int(snap.get("total") or 0)
         snap["publishable"] = (
             snap.get("status") == "done"
@@ -284,6 +289,14 @@ def _run_job(
         with _jobs_lock:
             _jobs[job_id]["status"] = "running"
             _jobs[job_id]["started_at"] = _now_iso()
+        # Каждая строка телеметрии этого потока несёт номер задания — по нему
+        # точка сборки берёт только свои строки (ACL-1315).
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+
+            _rt.set_current_job(job_id)
+        except Exception:
+            pass
 
         if activate or not use_rpa_publish():
             _fatal(job_id, "ACL safety gate: only draft-only RPA jobs are allowed")
@@ -461,6 +474,7 @@ def _run_rpa(
 
     with _jobs_lock:
         _jobs[job_id]["total"] = len(drafts)
+        _jobs[job_id]["campaign_names"] = [str(getattr(d, "name", "") or "") for d in drafts]
 
     if not drafts:
         _fatal(job_id, "No campaigns to publish.")
@@ -515,6 +529,14 @@ def _run_rpa(
         else:
             with _jobs_lock:
                 _jobs[job_id]["errors"].append(f"RPA error: {e}")
+            # ACL-1318: исключение, которым кончилась кампания, — в Sentry, со
+            # стеком и через тот же вычиститель; отправка работу не роняет.
+            try:
+                from src import acl_sentry
+
+                acl_sentry.report_job_exception(e, job=job_id, account=account_label)
+            except Exception:
+                pass
     finally:
         # Disconnect CDP only; Multilogin window stays open for FB login check.
         publisher.close(force=False)
@@ -541,13 +563,11 @@ def start_job(
     hand_off = True
     from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
 
-    total = len(
-        slots_to_campaign_drafts(
-            slots,
-            account_label=account_label,
-            country=country,
-            activate=False,
-        )
+    drafts = slots_to_campaign_drafts(
+        slots,
+        account_label=account_label,
+        country=country,
+        activate=False,
     )
     job_id = create_job(
         account_label, country, slots,
@@ -555,7 +575,8 @@ def start_job(
         activate=activate,
         dry_run=dry_run,
         hand_off=hand_off,
-        total=total,
+        total=len(drafts),
+        campaign_names=[str(getattr(d, "name", "") or "") for d in drafts],
     )
     t = threading.Thread(
         target=_run_job,

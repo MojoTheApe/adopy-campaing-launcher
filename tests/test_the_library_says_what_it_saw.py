@@ -41,7 +41,6 @@ def blind(monkeypatch):
     monkeypatch.setattr(md, "_library_search", lambda page, name: True)
     monkeypatch.setattr(md, "_library_selected_count", lambda page: 0)
     monkeypatch.setattr(md, "_library_any_tile_marked", lambda page: False)
-    monkeypatch.setattr(md, "_library_tile_ready", lambda tile: True)
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     said: list[dict] = []
     monkeypatch.setattr(md._telemetry, "record",
@@ -112,7 +111,6 @@ def test_the_grid_is_asked_more_than_once(monkeypatch):
     monkeypatch.setattr(md, "_library_search", lambda page, name: True)
     monkeypatch.setattr(md, "_library_selected_count", lambda page: 0)
     monkeypatch.setattr(md, "_library_any_tile_marked", lambda page: False)
-    monkeypatch.setattr(md, "_library_tile_ready", lambda tile: True)
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
 
@@ -205,9 +203,6 @@ def _wire(monkeypatch, grid):
     monkeypatch.setattr(md, "_library_tiles", lambda page, name: grid)
     monkeypatch.setattr(md, "_library_search", lambda page, name: True)
     monkeypatch.setattr(md, "_library_selected_count", count)
-    # This fixture exercises delayed selection/rollback; identity and tile
-    # usability are independently verified by recorded browser tests.
-    monkeypatch.setattr(md, "_library_tile_ready", lambda tile: True)
     monkeypatch.setattr(md, "_library_any_tile_marked", lambda page: bool(grid.selected))
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     monkeypatch.setattr(md._telemetry, "record",

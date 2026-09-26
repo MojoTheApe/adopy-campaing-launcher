@@ -133,7 +133,6 @@ class _Grid:
 def _wire(monkeypatch, grid):
     monkeypatch.setattr(md, "_library_tiles", lambda page, filename: grid)
     monkeypatch.setattr(md, "_library_search", lambda page, filename: True)
-    monkeypatch.setattr(md, "_library_tile_ready", lambda tile: True)
     monkeypatch.setattr(md, "_tile_thumb_ids", lambda tile: ["111111_2222222222_3333333333_n"])
     monkeypatch.setattr(md, "_library_selected_count", lambda page: 1)   # всегда 1: эксклюзивно
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
@@ -236,11 +235,18 @@ def test_media_already_on_the_ad_is_recognised_by_todays_labels():
         b.close()
 
 
-def test_unreadable_attachment_after_selection_stays_dirty(monkeypatch):
+def test_a_different_thumbnail_after_selection_stays_dirty(monkeypatch):
+    """Чужая миниатюра на объявлении после выбора — отказ без загрузки.
+
+    Порт ACL-1284, вариант A (решение владельца 24.09): раньше здесь стояло
+    «нечитаемое медиа после выбора — dirty» (строгая проверка #238). В живом
+    коде нечитаемое медиа отказом не является — наличие медиа проверено
+    отдельно, и сверка миниатюр пишет `thumb: unconfirmed`. Инвариант, который
+    остаётся: другой файл на объявлении — никогда не наш креатив.
+    """
     verify = md._verify_ad_media_is_the_file
     grid = _Grid()
     page = _wire(monkeypatch, grid)
     monkeypatch.setattr(md, "_verify_ad_media_is_the_file", verify)
-    # This page double has no DOM reader. A selected tile and generic media
-    # presence cannot make that missing identity safe for upload fallback.
+    monkeypatch.setattr(md, "_ad_media_thumb_ids", lambda page: ["999999_8888888888_7777777777_n"])
     assert md._try_reuse_library_media(page, "2012.mp4") == md.REUSE_DIRTY
