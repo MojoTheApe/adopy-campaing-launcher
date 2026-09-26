@@ -359,3 +359,45 @@ def test_the_account_tag_is_the_short_label():
     assert acl_sentry.account_tag("FacebookDoc19 - Persona Name") == "FacebookDoc19"
     assert acl_sentry.account_tag("FacebookDQ204 CR") == "FacebookDQ204"
     assert acl_sentry.account_tag("") == ""
+
+
+# ── повторное ревью v3 PR #314 (находка 4): отпечаток и тег аккаунта ───────
+
+@pytest.mark.parametrize("failure,why,reason", [
+    # Скобки посреди текста — часть имени объявления, не причина.
+    ("ad2_copy:My (summer_sale) ad has no text", "", "no-text"),
+    # Целиком «метка» после двоеточия — имя объявления.
+    ("destination_sweep:summer_sale_ad", "", "other"),
+    # Наша собственная метка после имени и двоеточия.
+    ("destination_sweep:2292 - ES Text 5 Ait:row_not_found", "", "row-not-found"),
+    ("ad2_copy:My (summer_sale) ad has no text (copy_fields_not_revealed)", "", "copy-fields-not-revealed"),
+])
+def test_an_ad_name_never_becomes_the_reason(failure, why, reason):
+    assert acl_sentry.failure_reason(failure, why) == reason
+
+
+@pytest.mark.parametrize("where", ["ad_copy", "ad3_create", "ad2_copy", "destination_sweep"])
+def test_browser_closed_has_one_reason_wherever_it_happened(where):
+    """browser_closed пишет note=page_closed, место — в diag: один тикет."""
+    rt.clear_current_run()
+    rt.set_current_run("runbc0001", "C")
+    rt.record("browser_closed", False, note="page_closed", diag={"where": where})
+    seen = rt.last_failure("browser_closed", "runbc0001") or {}
+    assert acl_sentry.failure_reason("browser_closed", seen.get("why", "")) == "page-closed"
+    rt.clear_current_run()
+
+
+def test_the_flow_writes_browser_closed_with_a_stable_note():
+    import inspect
+
+    from src.fb_ads_rpa import meta_dom as md
+
+    src = inspect.getsource(md.run_recorded_campaign_flow)
+    i = src.index("def _browser_closed(")
+    block = src[i:i + 1200]
+    assert 'note="page_closed"' in block and 'diag={"where": where' in block
+
+
+def test_the_account_tag_on_events_is_the_short_label(monkeypatch, events):
+    acl_sentry.report_step_failure("audience_age", "x", account="FacebookDoc19 - Persona Name")
+    assert events[-1]["tags"]["account"] == "FacebookDoc19"

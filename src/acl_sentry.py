@@ -202,7 +202,7 @@ def report_step_failure(
         if kind:
             scope.set_tag("failure_kind", kind)
         if account:
-            scope.set_tag("account", account)
+            scope.set_tag("account", account_tag(account))
         if run_id or campaign or job:
             run_ctx = {"run_id": run_id, "campaign": campaign}
             if job:
@@ -270,7 +270,14 @@ _REASONS = (
 _TOKEN_RE = re.compile(r"^[a-z]+(?:_[a-z]+){1,6}$")
 
 
-def _reason_kind(why: str) -> str:
+#: Метки, которые наш код сам пишет в итог кампании сразу после «шаг:» —
+#: только их текст отказа может целиком считаться меткой. Всё остальное после
+#: двоеточия — имя объявления или текст исключения (ревью v3 PR #314:
+#: «destination_sweep:summer_sale_ad» — имя, а не причина).
+_RESULT_TOKENS = frozenset({"not_the_new_ad_after_reload"})
+
+
+def _reason_kind(why: str, *, allow_token: bool = True) -> str:
     """Вид причины — то, по чему одинаковые отказы складываются в один тикет.
 
     Три исхода, и различать их важно:
@@ -289,17 +296,19 @@ def _reason_kind(why: str) -> str:
     for kind, needles in _REASONS:
         if any(n in lowered for n in needles):
             return kind
-    if _TOKEN_RE.match(lowered):
+    if allow_token and _TOKEN_RE.match(lowered):
         return lowered.replace("_", "-")
     return "other"
 
 
-#: Машинная метка в скобках в конце текста отказа:
-#: «ad2_copy:1962 - AR Text 1 has no text (copy_fields_not_revealed)».
-_EMBEDDED_TOKEN_RE = re.compile(r"\(([a-z]+(?:_[a-z]+){1,6})\)")
+#: Машинная метка в скобках в САМОМ КОНЦЕ текста отказа — так её ставит наш
+#: код (`f" ({why})"`): «ad2_copy:1962 - AR Text 1 has no text
+#: (copy_fields_not_revealed)». Скобки посреди текста — часть имени
+#: объявления («My (summer_sale) ad …»), и в причину они не идут (ревью v3).
+_EMBEDDED_TOKEN_RE = re.compile(r"\(([a-z]+(?:_[a-z]+){1,6})\)\s*$")
 
 
-def _explicit_token(text: str) -> str:
+def _explicit_token(text: str, *, from_result: bool = False) -> str:
     """Устойчивая машинная метка внутри текста отказа, если она там есть.
 
     Ищем в трёх местах, от самого явного к менее явному: метка в скобках,
@@ -313,10 +322,21 @@ def _explicit_token(text: str) -> str:
     found = _EMBEDDED_TOKEN_RE.findall(text)
     if found:
         return found[-1].replace("_", "-")
-    for part in reversed(text.split(":")):
-        part = part.strip().lower()
-        if _TOKEN_RE.match(part):
-            return part.replace("_", "-")
+    parts = text.split(":")
+    if not from_result:
+        # Строка телеметрии: note пишет сам шаг — метка может быть где угодно.
+        for part in reversed(parts):
+            part = part.strip().lower()
+            if _TOKEN_RE.match(part):
+                return part.replace("_", "-")
+        return ""
+    # Текст отказа из итога кампании: в нём имена объявлений. Метка — только
+    # последний кусок после «имя:» (`2292 - ES Text 5 Ait:row_not_found`), не
+    # сам текст целиком: «destination_sweep:summer_sale_ad» — это имя.
+    if len(parts) >= 2:
+        last = parts[-1].strip().lower()
+        if _TOKEN_RE.match(last):
+            return last.replace("_", "-")
     return ""
 
 
@@ -335,11 +355,13 @@ def failure_reason(failure: str, why: str = "") -> str:
     detail = (failure or "").split(":", 1)[1].strip() if ":" in (failure or "") else ""
     why = (why or "").strip()
     for text in (detail, why):
-        token = _explicit_token(text)
+        token = _explicit_token(text, from_result=text is detail)
         if token:
             return token
         if text:
-            kind = _reason_kind(text)
+            from_result = text is detail
+            kind = _reason_kind(text, allow_token=not from_result
+                                or text.strip().lower() in _RESULT_TOKENS)
             if kind != "other":
                 return kind
     return "other" if (detail or why) else "silent"

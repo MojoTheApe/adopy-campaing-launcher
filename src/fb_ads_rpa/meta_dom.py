@@ -4247,7 +4247,10 @@ def run_recorded_campaign_flow(
         # отказ ушёл мягкой строкой «ad3_create:Page.evaluate: Target page…»,
         # и поток шёл дальше по мёртвой странице. Теперь это остановка:
         # черновик частичный, повтор кампании наплодил бы дубли.
-        _telemetry.record("browser_closed", False, note=where, diag={"error": str(exc)[:160]})
+        # Причина одна и та же, где бы вкладку ни закрыли: note — устойчивая
+        # метка (один тикет в Sentry), место — в diag (ревью v3 PR #314).
+        _telemetry.record("browser_closed", False, note="page_closed",
+                          diag={"where": where, "error": str(exc)[:160]})
         if soft_fails_out is not None:
             soft_fails_out.extend(soft_fails)
             soft_fails_out.extend(ad_level_fails)
