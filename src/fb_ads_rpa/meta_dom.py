@@ -3075,14 +3075,46 @@ def _unstick(page: Page, where: str, *, editor: bool, waited_s: float = 0.0,
             if editor:
                 how = "unsaved_or_unknown"
             else:
-                _reload_editor(page)
-                how = "reloaded"
+                how = "reloaded" if _reload_awake(page, where) else "reload_failed"
         else:
             how = "reloaded" if recover_stuck_page(page, where, editor=editor) else "reload_refused"
     _telemetry.record("stall_unstuck", None, note=how,
                       diag={"where": where[:80], "waited_s": round(waited_s, 1), "editor": editor,
                             "responsive": responsive, "loading": loading, "woke": woke})
     return how
+
+
+def _reload_awake(page: Page, where: str) -> bool:
+    """Перезагрузить не отвечающую вкладку списка и снять троттлинг заново.
+
+    ACL-1320: `_unstick` перезагружал такую вкладку голым `page.reload`, и
+    перезагруженная страница оставалась без `_disable_background_throttling`
+    (фокус-эмуляция и активное состояние живут в документе и после
+    перезагрузки сбрасываются) — ровно то, от чего `recover_stuck_page` себя
+    бережёт. Сам `recover_stuck_page` здесь не годится: он начинает с чтения
+    страницы (`_chrome_error_page`), а она не отвечает. Поэтому: перезагрузка
+    с таймаутом, проверка живости (ограниченная), и только живой странице —
+    троттлинг по CDP (его вызовы таймаута не имеют).
+    """
+    note = "unresponsive"
+    ok = False
+    try:
+        page.reload(timeout=60000, wait_until="domcontentloaded")
+        ok = True
+    except Exception as exc:
+        note += f" ({str(exc)[:60]})"
+    _sleep_h(3.0, 0.2)
+    alive = _page_responsive(page, 5.0)
+    if alive:
+        try:
+            from src.fb_ads_rpa.browser import _disable_background_throttling
+
+            _disable_background_throttling(page.context, page)
+        except Exception:
+            pass
+    _telemetry.record("loading_modal_reload", ok and alive is not False, note=note,
+                      diag={"where": where[:80], "responsive_after": alive})
+    return ok and alive is not False
 
 
 class _StallWatch:

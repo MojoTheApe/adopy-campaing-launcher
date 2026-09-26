@@ -58,6 +58,7 @@ def env(monkeypatch):
 
     monkeypatch.setattr(md, "recover_stuck_page", recover)
     monkeypatch.setattr(md, "_reload_editor", lambda p, edit_url="": ev.append("reload"))
+    monkeypatch.setattr(md, "_reload_awake", lambda p, where: ev.append("reload") or True)
     page = SimpleNamespace(url="https://adsmanager.facebook.com/adsmanager/manage/adsets/edit?x=1")
     return SimpleNamespace(clock=clock, ev=ev, rows=rows, state=state, page=page)
 
