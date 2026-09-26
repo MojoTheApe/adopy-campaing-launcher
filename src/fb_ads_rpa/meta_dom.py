@@ -3700,17 +3700,23 @@ _FURTHER_LIMIT_ROW_JS = r"""
     const own = (e) => norm([...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join(' '));
     document.querySelectorAll('[data-acl-further-limit]').forEach(e => e.removeAttribute('data-acl-further-limit'));
     const rows = [];
+    let mixed = 0;
     for (const e of document.querySelectorAll('*')) {
       if (!phrase.test(own(e)) || e.closest('[role=dialog]') || !shown(e)) continue;
       // Строка-кнопка целиком — только эта фраза: не «Save audience» рядом,
-      // не раздел аудитории со всеми его кнопками (ACL-1250).
+      // не раздел аудитории со всеми его кнопками (ACL-1250). Кнопка, где
+      // фраза лежит вместе с «Save audience», — не наша строка, и по тексту
+      // внутри неё тоже не жмём (ревью PR #328, F4).
       const ctl = e.closest('[role=button], [role=link], a, button');
-      if (ctl && !phrase.test(norm(ctl.textContent))) continue;
+      if (ctl && !phrase.test(norm(ctl.textContent))) {
+        if (/save audience/i.test(norm(ctl.textContent))) mixed++;
+        continue;
+      }
       const row = ctl || e;
       if (row.disabled || row.getAttribute('aria-disabled') === 'true') continue;
       if (!rows.includes(row)) rows.push(row);
     }
-    if (rows.length !== 1) return { found: rows.length };
+    if (rows.length !== 1) return { found: rows.length, mixed };
     const row = rows[0];
     row.setAttribute('data-acl-further-limit', '1');
     row.scrollIntoView({ block: 'center', behavior: 'instant' });
@@ -3765,6 +3771,8 @@ def _open_further_limit(page: Page) -> bool:
     except Exception as exc:
         row = {"found": 0, "error": str(exc)[:120]}
     diag["found"] = row.get("found", 0)
+    if row.get("mixed"):
+        diag["mixed"] = row.get("mixed")
     if row.get("found") == 1:
         diag.update({"surface": row.get("surface", ""), "role": row.get("role", ""), "hit": bool(row.get("hit"))})
         if row.get("hit"):
@@ -3783,8 +3791,10 @@ def _open_further_limit(page: Page) -> bool:
             return True
     # Прежний путь (текст, прокрутка страницы между попытками) — только когда
     # строки-кнопки нет вовсе. Две такие строки — неизвестно, какая наша:
-    # не жмём ни одну (ACL-1250).
-    for _ in range(3 if row.get("found") == 0 else 0):
+    # не жмём ни одну (ACL-1250). Фраза внутри кнопки вместе с «Save
+    # audience» — тоже не жмём: нажатие такой кнопки сохранило бы аудиторию
+    # в кабинете (ревью PR #328, F4).
+    for _ in range(3 if row.get("found") == 0 and not row.get("mixed") else 0):
         try:
             el = page.get_by_text(re.compile(r"further limit the reach of your ads", re.I)).first
             el.scroll_into_view_if_needed(timeout=3000)

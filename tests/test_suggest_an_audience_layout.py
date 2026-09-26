@@ -197,6 +197,42 @@ def test_two_gear_rows_are_not_guessed_between(page):
     assert page.rows[-1]["diag"]["found"] == 2
 
 
+# Ревью PR #328 (F4): фраза лежит внутри одной большой кнопки вместе с «Save
+# audience», и центр этой кнопки приходится на «Save audience». Такая кнопка —
+# не строка шестерёнки: её нажатие создало бы в кабинете сохранённую
+# аудиторию. Разметка строк — из `suggest_fx` (те же data-surface), обёрнутых
+# в общую role=button.
+_MIXED_ROW = """
+<main style="width:640px">
+  <div role="heading" aria-level="3">Audience</div>
+  <div aria-busy="false" role="button" tabindex="0" id="big" style="display:flex;width:600px">
+    <div style="width:160px"><div role="presentation"><i></i></div>
+      <div>Further limit the reach of your ads</div></div>
+    <div id="save-aud" style="flex:1;text-align:center" aria-busy="false" role="button" tabindex="0"
+      data-surface="/am/editor_drawer/editor:ad_set/adset_targeting_static_extended_pgd_section/lib:mtc-save-audience-button">
+      <span><div><div><div>Save audience</div></div></div></span></div>
+  </div>
+</main>
+"""
+
+
+def test_the_phrase_inside_a_save_audience_button_is_not_the_gear_row(page):
+    page.set_content(_MIXED_ROW + _RIGHT_PANEL)
+    page.evaluate("""() => { window.clicked = [];
+        document.addEventListener('click', (e) => window.clicked.push(
+            e.target.closest('#save-aud') ? 'Save audience' : 'other'), true); }""")
+    # Центр большой кнопки — на «Save audience»: мутация без проверки попала бы туда.
+    assert page.evaluate("""() => { const r = document.getElementById('big').getBoundingClientRect();
+        return !!document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2).closest('#save-aud'); }""")
+    assert page.evaluate(md._FURTHER_LIMIT_ROW_JS)["found"] == 0
+    assert page.evaluate("document.querySelectorAll('[data-acl-further-limit]').length") == 0
+    assert md._open_further_limit(page) is False
+    assert _clicked(page) == []
+    row = page.rows[-1]
+    assert row["step"] == "further_limit_row" and row["note"] == "not_opened"
+    assert row["diag"]["found"] == 0 and row["diag"]["mixed"] == 1
+
+
 # ── после Further limit: возраст — условие, бейдж «Advantage+ off» ─────────
 
 # Meta: строка Age (кнопка aria-expanded=false) раскрывает поле с границами и
