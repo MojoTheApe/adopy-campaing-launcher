@@ -2833,7 +2833,9 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
       ожидание кончается с `unresponsive` — решать вызывающему;
     * после пробуждения сторожем — `OBJECTIVE_AFTER_WAKE_S` свежего ожидания;
     * опрос, тянувшийся дольше `OBJECTIVE_SLOW_POLL_FACTOR × poll_s`, —
-      «страница занята», пустым экраном он не считается.
+      «страница занята», пустым экраном он не считается;
+    * загрузку видели хоть раз — `first_s` больше не обрывает ожидание:
+      после конца загрузки ждём до `idle_s` пустого экрана (или потолка).
 
     `out` (если передан) получает `outcome`, `frozen`, `woke`.
 
@@ -2901,7 +2903,12 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
             break
         if now < grace_until:
             continue
-        if now - start >= first_s:
+        # Ревью PR #323 (F1): загрузку в этом ожидании видели — `first_s` уже
+        # не действует. Пустой экран между концом «Loading creation» и окном
+        # цели — нормальная фаза (хвост удачных переходов 55–79 с), и обрыв
+        # на ней вёл к возврату на список и лишнему Create. Дальше решают
+        # `idle_s` после загрузки и общий потолок `loading_max_s`.
+        if now - start >= first_s and not loading_polls:
             outcome = "first_s"
             break
         if now - last_busy >= idle_s:

@@ -138,7 +138,9 @@ def test_a_loading_modal_that_clears_without_the_dialog_ends_the_wait(env):
     env.state["loading_until"] = env.start + 90
     radio = _Radio(env.clock, appears_at=None)
     assert md._wait_objective_dialog(_Page(radio)) is False
-    assert env.clock.now - env.start < 100
+    # Ревью PR #323 (F1): после конца загрузки — ещё `OBJECTIVE_IDLE_S`
+    # пустого экрана (нормальная фаза перед окном цели), не больше.
+    assert env.clock.now - env.start < 90 + md.OBJECTIVE_IDLE_S + 2 * md.OBJECTIVE_POLL_S
 
 
 def test_the_quick_path_is_unchanged(env):

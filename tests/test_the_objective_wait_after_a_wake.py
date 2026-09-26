@@ -120,3 +120,24 @@ def test_the_ceiling_holds_without_a_loading_modal(env):
                                      loading_max_s=30, out=out) is False
     assert out["outcome"] == "budget"
     assert env.clock.now - env.start <= 30 + md.OBJECTIVE_POLL_S + 0.01
+
+
+def test_a_slow_load_then_a_short_blank_gap_is_not_cut_by_the_round(env, monkeypatch):
+    """Ревью PR #323 (F1): «Loading creation» 0–50 с, окно цели на 56-й с.
+    Раунд `_open_campaign` передаёт first_s≈37 — после загрузки его уже нет:
+    ждём пустой экран до `idle_s`, окно приходит."""
+    monkeypatch.setattr(md, "_loading_visible", lambda p: env.clock.now < env.start + 50)
+    monkeypatch.setattr(md, "_loading_kind", lambda p: "text:Loading creation")
+    monkeypatch.setattr(md, "_network_trouble", lambda p: False)
+    monkeypatch.setattr(md, "_stall_evidence", lambda *a, **k: {})
+    radio = _Radio(env.clock, appears_at=env.start + 56)
+    out: dict = {}
+    assert md._wait_objective_dialog(_Page(radio), first_s=37, loading_max_s=112, out=out) is True, out
+
+
+def test_without_any_loading_the_round_still_ends_at_first_s(env, monkeypatch):
+    monkeypatch.setattr(md, "_stall_evidence", lambda *a, **k: {})
+    radio = _Radio(env.clock, appears_at=None)
+    out: dict = {}
+    assert md._wait_objective_dialog(_Page(radio), first_s=15, idle_s=30, loading_max_s=112, out=out) is False
+    assert out["outcome"] == "first_s"
