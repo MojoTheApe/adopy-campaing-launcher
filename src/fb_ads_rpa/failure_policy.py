@@ -73,6 +73,12 @@ POLICY: dict[str, tuple[str, str]] = {
         "the profile could not reach Facebook (proxy/network error), so no draft was "
         "created - " + _profile.MESSAGES[_profile.NETWORK],
     ),
+    _profile.OPEN_BY_HAND: (
+        BLOCKING,
+        "the account's Multilogin profile was open by hand (without automation), and the "
+        "robot does not close such a window - it may hold a Facebook session Multilogin has "
+        "not saved yet; no draft was created - " + _profile.MESSAGES[_profile.OPEN_BY_HAND],
+    ),
     _profile.RESTART_FAILED: (
         BLOCKING,
         "the profile's browser stopped answering and the robot's restart of the "

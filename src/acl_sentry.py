@@ -259,6 +259,7 @@ _REASONS = (
     ("proxy-network", ("err_socks", "err_proxy", "err_tunnel", "err_ssl_protocol",
                        "err_connection", "proxy/network")),
     ("restart-failed", ("restart of unresponsive profile", "restarting the multilogin profile failed")),
+    ("open-by-hand", ("open by hand", "profile_open_by_hand")),
 )
 
 

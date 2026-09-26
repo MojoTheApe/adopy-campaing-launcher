@@ -1,0 +1,180 @@
+# -*- coding: utf-8 -*-
+"""Профиль, открытый руками, робот не останавливает (ACL-1320).
+
+Живой прогон 26.09 15:21–15:57 UTC (новые аккаунты): владелец входил в
+Facebook в только что открытых руками профилях, а робот на Publish видел
+«running but no CDP debug port», писал «locked (opened manually in MLX).
+Stopping it via MLX API and restarting with automation enabled…» и
+останавливал окно. Если Multilogin ещё не сохранил свежую сессию Facebook,
+она пропадала вместе с окном (так было и в выпущенной сборке).
+
+Теперь: профиль открыт руками (нет порта автоматизации, робот его не
+поднимал) — задание этого аккаунта сразу кончается `profile_open_by_hand` с
+текстом «This Multilogin profile is open by hand. Close its window (so
+Multilogin saves the session), then press Publish again.», окно не трогается.
+Перезапуск через MLX API остаётся только для профилей, которые робот сам
+поднимал раньше (или к которым цеплялся по порту автоматизации). Простой
+браузер — никогда.
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from src import acl_sentry  # noqa: E402
+from src.fb_ads_rpa import browser as br  # noqa: E402
+from src.fb_ads_rpa import failure_policy, retry_policy  # noqa: E402
+from src.fb_ads_rpa import profile_trouble as pt  # noqa: E402
+
+PROFILE = "550e8400-e29b-41d4-a716-446655440000"
+MESSAGE = ("This Multilogin profile is open by hand. Close its window "
+           "(so Multilogin saves the session), then press Publish again.")
+
+
+@pytest.fixture
+def provider(monkeypatch):
+    monkeypatch.setattr(br, "_ROBOT_PROFILES", set())
+    monkeypatch.setattr(br.time, "sleep", lambda s: None)
+    monkeypatch.setattr(br, "_find_mlx_profile_dir", lambda pid: "C:/mlx/p")
+    ev: list = []
+    prov = br.MultiloginAttachOnlyProvider()
+    monkeypatch.setattr(prov._direct, "_try_attach_existing", lambda *a, **kw: None)
+    monkeypatch.setattr(prov._direct, "_profile_process_running", lambda *a: True)
+    monkeypatch.setattr(prov, "_stop_profile", lambda *a: ev.append("stop"))
+    monkeypatch.setattr(br, "_kill_chrome_for_user_data_dir", lambda *a, **k: ev.append("kill"))
+    monkeypatch.setattr(prov, "_connect_started", lambda started, pid: SimpleNamespace(page="page"))
+    return SimpleNamespace(prov=prov, ev=ev)
+
+
+def _entry():
+    return SimpleNamespace(profile_id=PROFILE, folder_id="f-1", multilogin_instance="A")
+
+
+def test_a_hand_opened_profile_fails_fast_and_is_not_stopped(provider, monkeypatch):
+    monkeypatch.setattr(provider.prov, "_start_via_mlx_api",
+                        lambda *a, **kw: provider.ev.append("start") or "started")
+    with pytest.raises(pt.ProfileStop) as stop:
+        provider.prov.open(_entry(), "Facebook_6540")
+    assert stop.value.code == pt.OPEN_BY_HAND
+    assert MESSAGE in str(stop.value)
+    assert provider.ev == [], "окно, открытое руками, остановили или подняли заново"
+
+
+def test_a_profile_the_robot_started_earlier_is_still_restarted(provider, monkeypatch):
+    br._mark_robot_profile(PROFILE)
+    monkeypatch.setattr(provider.prov, "_start_via_mlx_api",
+                        lambda *a, **kw: provider.ev.append("start") or "started")
+    conn = provider.prov.open(_entry(), "Facebook_6540")
+    assert conn.page == "page"
+    assert provider.ev == ["start"]
+
+
+class _Launcher:
+    """MLX отвечает «профиль занят» — как на окно, открытое руками."""
+
+    def __init__(self):
+        self.stops = 0
+        self.starts = 0
+
+    def start_profile(self, folder_id, profile_id, *, headless=False):
+        from src.meta_campaign_agent.multilogin_launcher import MultiloginLauncherError, StartedProfile
+
+        self.starts += 1
+        if self.starts == 1:
+            raise MultiloginLauncherError("Start profile failed HTTP 400: browser process is running")
+        return StartedProfile(profile_id=profile_id, folder_id=folder_id, port="58906")
+
+    def stop_profile(self, profile_id, folder_id=None):
+        self.stops += 1
+
+
+@pytest.fixture
+def mlx(monkeypatch):
+    import src.meta_campaign_agent.multilogin_config as cfg_mod
+    import src.meta_campaign_agent.multilogin_launcher as launcher_mod
+
+    fake = _Launcher()
+    monkeypatch.setattr(cfg_mod, "get_multilogin_instance", lambda inst: SimpleNamespace(instance_id=inst))
+    monkeypatch.setattr(launcher_mod, "MultiloginLauncher", lambda cfg: fake)
+    monkeypatch.setattr(br, "_ROBOT_PROFILES", set())
+    monkeypatch.setattr(br.time, "sleep", lambda s: None)
+    kills: list = []
+    monkeypatch.setattr(br, "_kill_chrome_for_user_data_dir", lambda *a, **k: kills.append(a))
+    return SimpleNamespace(fake=fake, kills=kills)
+
+
+def test_an_mlx_lock_on_a_hand_opened_profile_is_not_broken(mlx):
+    """Процесс не виден, а MLX говорит «browser process is running» — тоже
+    окно, открытое руками: ни stop через API, ни kill."""
+    with pytest.raises(pt.ProfileStop) as stop:
+        br.MultiloginAttachOnlyProvider()._start_via_mlx_api(_entry(), "Facebook_9943", PROFILE, "C:/mlx/p")
+    assert stop.value.code == pt.OPEN_BY_HAND
+    assert mlx.fake.stops == 0 and mlx.kills == []
+
+
+def test_a_profile_the_robot_started_becomes_its_own(mlx):
+    mlx.fake.starts = 1   # следующий старт удачный
+    started = br.MultiloginAttachOnlyProvider()._start_via_mlx_api(_entry(), "Facebook_9943", PROFILE, "C:/mlx/p")
+    assert started.port == "58906"
+    assert br._robot_profile(PROFILE) is True
+
+
+def test_attaching_over_the_automation_port_makes_the_profile_the_robots(provider, monkeypatch):
+    monkeypatch.setattr(provider.prov._direct, "_try_attach_existing",
+                        lambda *a, **kw: SimpleNamespace(page="attached"))
+    provider.prov.open(_entry(), "FacebookDoc19")
+    assert br._robot_profile(PROFILE) is True
+
+
+def test_the_publisher_ends_the_accounts_job_with_the_message(monkeypatch):
+    from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft
+    from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+
+    pub = RpaPublisher.__new__(RpaPublisher)
+    pub.hand_off = pub.dry_run = False
+    pub.selectors_path = None
+    pub._conn = None
+    pub._built_at = None
+    opened: list = []
+
+    def ensure(label):
+        opened.append(label)
+        raise pt.ProfileStop(pt.OPEN_BY_HAND, "no_automation_port")
+
+    monkeypatch.setattr(pub, "_ensure_browser", ensure)
+    drafts = [CampaignDraft(n, "MX", "Facebook_6540",
+                            ad_sets=[AdSetDraft("Set", ads=[AdDraft(ad_title="t", ad_body="b")])])
+              for n in ("A", "B")]
+    results = [pub.publish_draft(d) for d in drafts]
+    assert opened == ["Facebook_6540"]
+    for got in results:
+        assert got.success is False
+        assert got.blocking_failures == [pt.OPEN_BY_HAND]
+        assert MESSAGE in got.error
+
+
+def test_open_by_hand_is_a_blocking_stop_with_the_message():
+    assert pt.MESSAGES[pt.OPEN_BY_HAND] == MESSAGE
+    assert pt.OPEN_BY_HAND in pt.ACCOUNT_STOPS
+    assert retry_policy.disposition(pt.OPEN_BY_HAND).action == retry_policy.BLOCK_AND_REVIEW
+    assert pt.OPEN_BY_HAND in retry_policy.BLOCKING_REVIEW_STEPS
+    assert failure_policy.severity(pt.OPEN_BY_HAND) == failure_policy.BLOCKING
+    assert MESSAGE in failure_policy.reason(pt.OPEN_BY_HAND)
+    assert acl_sentry._reason_kind(str(pt.ProfileStop(pt.OPEN_BY_HAND))) == "open-by-hand"
+
+
+def test_the_dashboard_tells_the_buyer_to_close_the_window():
+    from src.web import publish_progress
+
+    assert publish_progress._BLOCKERS[pt.OPEN_BY_HAND] == MESSAGE
+    html = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    assert "the window may restart" not in html
+    assert "close its window first" in html
+    src = (ROOT / "src" / "fb_ads_rpa" / "rpa_publisher.py").read_text(encoding="utf-8")
+    assert "restarting the profile itself when it has no debug port" not in src

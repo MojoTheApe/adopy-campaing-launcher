@@ -93,6 +93,9 @@ BLOCKING_REVIEW_STEPS = frozenset(
         "profile_logged_out",
         "profile_network",
         "profile_restart_failed",
+        # ACL-1320: the profile is open by hand; the publisher stops the
+        # account's job before any campaign instead of closing the window.
+        "profile_open_by_hand",
         "conversion_event",
         "audience_age",
         "audience_location",

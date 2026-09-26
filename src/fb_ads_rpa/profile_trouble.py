@@ -33,6 +33,7 @@ from urllib.parse import urlsplit
 LOGGED_OUT = "profile_logged_out"
 NETWORK = "profile_network"
 RESTART_FAILED = "profile_restart_failed"
+OPEN_BY_HAND = "profile_open_by_hand"
 
 #: Что сказать человеку — английский, это видно в дешборде.
 MESSAGES = {
@@ -41,6 +42,11 @@ MESSAGES = {
     RESTART_FAILED: "Restarting the Multilogin profile failed, so it may be closed now — "
                     "open it in Multilogin, check that it loads Ads Manager, close it, "
                     "then publish again",
+    # ACL-1320: профиль открыт руками (без порта автоматизации). Остановка
+    # через MLX API могла потерять только что созданную сессию Facebook,
+    # если Multilogin её ещё не сохранил, — робот такой профиль не трогает.
+    OPEN_BY_HAND: "This Multilogin profile is open by hand. Close its window "
+                  "(so Multilogin saves the session), then press Publish again.",
 }
 
 #: Остановки, после которых остальные кампании задания этого аккаунта не
@@ -69,8 +75,8 @@ _ATTR = "_acl_net_errors"
 
 
 class ProfileStop(RuntimeError):
-    """Остановка на весь аккаунт: профиль разлогинен, без сети или не
-    поднялся после перезапуска. `code` — имя отказа для политик."""
+    """Остановка на весь аккаунт: профиль разлогинен, без сети, открыт руками
+    или не поднялся после перезапуска. `code` — имя отказа для политик."""
 
     def __init__(self, code: str, detail: str = "") -> None:
         self.code = code

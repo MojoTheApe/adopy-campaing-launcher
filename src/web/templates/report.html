@@ -11288,7 +11288,8 @@ window.cbPublish = function(form) {
     + 'Country: <strong>' + aclEscHtml(country) + '</strong><br>'
     + 'Campaigns: <strong>' + campCount + '</strong><br><br>'
     + '<span style="color:var(--muted);font-size:0.85rem">The RPA attaches to the Multilogin profile through MLX automation '
-    + '(no need to open the profile first; if it is open by hand the window may restart).</span><br>'
+    + '(no need to open the profile first; if it is open by hand, close its window first — '
+    + 'the robot will not close it for you).</span><br>'
     // Заблокированный экран останавливает страницу так же, как свёрнутое
     // окно, только сильнее: система уходит на защищённый рабочий стол, и
     // загрузка встаёт. 10 сентября так вышло 42 минуты на файл, который

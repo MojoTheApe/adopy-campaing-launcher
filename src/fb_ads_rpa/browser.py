@@ -1799,13 +1799,46 @@ def _record_profile_restart(entry: AccountMapEntry, profile_id: str, *, ok: bool
         pass
 
 
+#: ACL-1320: профили, которые робот в этом процессе сам поднял через MLX API
+#: или к которым цеплялся по порту автоматизации (его даёт только запуск с
+#: автоматизацией). Только такой профиль без порта робот вправе остановить и
+#: поднять заново: профиль, открытый руками, может держать сессию Facebook,
+#: которую Multilogin ещё не сохранил (живой прогон 26.09 — владелец входил в
+#: новые аккаунты, пока робот останавливал их окна).
+_ROBOT_PROFILES: set[str] = set()
+
+
+def _mark_robot_profile(profile_id: str) -> None:
+    if profile_id:
+        _ROBOT_PROFILES.add(profile_id)
+
+
+def _robot_profile(profile_id: str) -> bool:
+    return bool(profile_id) and profile_id in _ROBOT_PROFILES
+
+
+def _open_by_hand(profile_id: str, account_label: str, where: str) -> profile_trouble.ProfileStop:
+    """Профиль открыт руками — не останавливаем, говорим человеку (ACL-1320)."""
+    log.warning(
+        "%s: profile %s is open by hand (no automation port) - not stopping it; "
+        "the job stops with %s (%s)", account_label, profile_id, profile_trouble.OPEN_BY_HAND, where)
+    return profile_trouble.ProfileStop(profile_trouble.OPEN_BY_HAND, where)
+
+
 class MultiloginAttachOnlyProvider:
     """Connect to Multilogin via MLX automation API when the user clicks Publish.
 
     Does NOT fall back to vanilla Playwright Chromium or DirectCDP relaunch.
     MLX exposes CDP only when the profile is started with automation_type=playwright;
-    a profile opened manually in MLX Desktop has no debug port. In that case we close
-    the manual Mimic window locally and restart the same profile through the MLX API.
+    a profile opened manually in MLX Desktop has no debug port.
+
+    ACL-1320 (live run 2026-09-26): such a hand-opened window is never stopped -
+    stopping it can lose a Facebook session the owner has just created and
+    Multilogin has not saved yet. The job fails fast with
+    `profile_open_by_hand` ("close its window, then press Publish again").
+    Only a profile the robot itself started (or attached to over its
+    automation port) in this process is stopped and restarted through the
+    MLX API when it has no debug port.
     """
 
     def __init__(self) -> None:
@@ -1852,6 +1885,7 @@ class MultiloginAttachOnlyProvider:
                 )
                 if started.port:
                     self._api_started = True
+                    _mark_robot_profile(profile_id)
                     return started
                 last_exc = MultiloginLauncherError(
                     "MLX API did not return a CDP port after start"
@@ -1876,13 +1910,17 @@ class MultiloginAttachOnlyProvider:
                         f"{account_label}: profile is already running; no stop or restart was performed. "
                         "Close it in Multilogin Desktop before opening it with automation."
                     ) from exc
+                if lock_conflict and not _robot_profile(profile_id):
+                    # ACL-1320: MLX держит профиль, а робот его не поднимал —
+                    # значит, открыт руками. Не останавливаем.
+                    raise _open_by_hand(profile_id, account_label, "mlx_lock") from exc
                 if attempt < 2 and lock_conflict:
                     # Gracefully stop ONLY this profile via MLX API. This releases MLX
                     # Desktop's lock, preserves the profile's cookies/login, and does
                     # NOT touch any of the user's other open profiles.
                     log.warning(
-                        "Profile %s is locked (opened manually in MLX). Stopping it via "
-                        "MLX API and restarting with automation enabled…",
+                        "Profile %s (started by the robot earlier) is locked without automation. "
+                        "Stopping it via MLX API and restarting with automation enabled…",
                         profile_id,
                     )
                     try:
@@ -1946,21 +1984,28 @@ class MultiloginAttachOnlyProvider:
                         profile_id)
             reused = None
             unresponsive = True
+            # У него был порт автоматизации — это профиль робота, не ручной.
+            _mark_robot_profile(profile_id)
         if reused is not None:
             log.info("Attached to already-open Multilogin profile %s", profile_id)
+            _mark_robot_profile(profile_id)
             return reused
         if unresponsive:
             self._stop_profile(entry, account_label, profile_id, udd)
 
         # Manually (Quick) launched MLX profiles expose no CDP port, so we cannot
-        # attach. _start_via_mlx_api gracefully stops ONLY this profile via the MLX
-        # API (releasing MLX's lock, keeping cookies) and restarts it with automation
-        # enabled. It does NOT kill other open profiles.
-        if self._direct._profile_process_running(udd or profile_id, profile_id):
+        # attach. ACL-1320: such a window is NOT stopped any more - it may hold a
+        # Facebook session the owner has just created and Multilogin has not saved
+        # yet; the job stops with `profile_open_by_hand`. Only a profile the robot
+        # started itself earlier is restarted through the MLX API here (graceful
+        # stop of ONLY this profile, cookies kept, other profiles untouched).
+        elif self._direct._profile_process_running(udd or profile_id, profile_id):
             if not allow_restart:
                 raise RuntimeError(f"{account_label}: profile is already running; no restart was performed")
+            if not _robot_profile(profile_id):
+                raise _open_by_hand(profile_id, account_label, "no_automation_port")
             log.info(
-                "Profile %s is open in MLX manual mode (no CDP). Will restart it via "
+                "Profile %s (started by the robot earlier) has no CDP port. Will restart it via "
                 "MLX automation API (other profiles untouched).",
                 profile_id,
             )
@@ -2026,6 +2071,9 @@ class MultiloginAttachOnlyProvider:
         profile_id = entry.profile_id
         if not profile_id:
             raise RuntimeError(f"{account_label}: profile_id is required")
+        # Публикатор зовёт это только для профиля, к которому робот был
+        # подключён по порту автоматизации, — профиль робота.
+        _mark_robot_profile(profile_id)
         user_data_dir = _find_mlx_profile_dir(profile_id)
         udd = str(user_data_dir) if user_data_dir is not None else ""
         try:

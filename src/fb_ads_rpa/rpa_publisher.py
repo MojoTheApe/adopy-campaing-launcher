@@ -266,10 +266,13 @@ class RpaPublisher:
                 # API, and it is the whole message worth reading. A profile
                 # left open in MLX Desktop is no longer a reason to do
                 # anything: that path restarts it by itself.
+                # ACL-1320: профиль, открытый руками, робот больше не
+                # перезапускает (это `profile_open_by_hand` выше) — хвост
+                # сообщения не обещает того, чего не будет.
                 raise RuntimeError(
                     f"{exc} "
                     "(MLX attach-only: RPA connects through the Multilogin automation API "
-                    "on Publish, restarting the profile itself when it has no debug port.)"
+                    "on Publish.)"
                 ) from exc
             if "401" in err_str or "Authorization" in err_str or "authorization" in err_str:
                 log.warning("MLX API returned 401 (token expired). Trying DirectCDP.")
