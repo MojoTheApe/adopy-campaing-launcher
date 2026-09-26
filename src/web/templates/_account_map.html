@@ -137,28 +137,5 @@
     </div></div>
     {% endif %}
 
-    {# Свободные аккаунты: настроены и подключены, но не размещены ни в одной
-       стране. Сюда же падают аккаунты закрытой страны — связь снимается,
-       аккаунт остаётся. #}
-    <details class="amap-country amap-available" {% if amap.available %}open{% endif %}>
-      <summary>
-        Available accounts
-        <span class="amap-sum"><span><b>{{ amap.available | length }}</b> not placed</span></span>
-      </summary>
-      {% if amap.available %}
-      <table>
-        <thead><tr><th>Account</th><th>Ad Asset</th></tr></thead>
-        <tbody>
-        {% for r in amap.available %}
-          <tr>
-            <td class="amap-acc">{{ r.account }}</td>
-            <td>{% if r.assets %}<span class="amap-tags">{% for a in r.assets %}<span class="amap-tag">{{ a }}</span>{% endfor %}</span>{% else %}<span class="nodata">—</span>{% endif %}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="amap-empty">Every configured account is placed in a country.</div>
-      {% endif %}
-    </details>
+    {% include "_account_map_available.html" %}
   </div>
