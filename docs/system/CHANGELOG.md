@@ -1,5 +1,54 @@
 # System history
 
+## A campaign opens within two minutes, even when its tab freezes — ACL-1320
+
+Run `cf563b4ba594` (2026-09-26, FacebookDoc19): the first campaign opened in 19.2,
+16.3 and 1.3 minutes in three runs on the same profile process. For about 14 of the
+19 minutes the campaigns-list tab did not answer at all, and the robot sat in calls
+that have no effective timeout — `locator.count()`, `is_visible(timeout)` (Playwright
+ignores that timeout), `page.evaluate`, CDP `send` — while the stall guard, checked
+only at the start of an attempt, fired at 108 s and 224 s instead of 60 s. The
+workspace hypothesis (a profile running from the inactive Multilogin workspace) was
+ruled out by the log: the cause is a frozen renderer of a long-lived tab.
+
+- Opening a campaign has a hard budget (`meta_dom._open_campaign`): about 45 s per
+  round while nothing is visibly loading, 120 s in total. A round without the
+  objective dialog goes back to the list and presses Create again (no more 75/180-s
+  rounds and no reload on this path); while "Loading creation" is visibly spinning on
+  a tab that answers, the round may use the rest of the budget. On the third round,
+  or after the second "tab did not answer", Create is pressed in a fresh tab of the
+  same profile (the frozen tab is closed); if the fresh tab does not answer either, the
+  campaign stops with `profile_unresponsive`, and the publisher restarts the profile
+  once through the MLX API with the token of its own workspace (A = Inhouse, B = KLD)
+  and retries the campaign. Attaching to an already-open profile checks its tab first
+  and does the same. Never a plain browser. Telemetry: `campaign_open_budget`,
+  `fresh_tab`, `profile_restarted_unresponsive`.
+- Every wait on the list asks first, with a driver-enforced 3-s timeout, whether the
+  tab answers (`_tab_frozen`); page reads go through `_eval_bounded`. A frozen tab
+  hands over to the stall guard at once, and the guard itself, the step log, the
+  screenshot and the window put-back never open a CDP session on a frozen tab
+  (measured on real Chromium: `new_cdp_session` on a hung renderer blocked 197 s).
+- The objective wait gives a woken tab 18 s of fresh time, counts a slow poll as a
+  busy page rather than an empty one, and hands a tab that twice did not answer back
+  to the budget.
+- The campaigns list must show a visible Create and no route spinner within 30 s of
+  the goto, else it is reloaded once (`campaigns_list_ready`); the tab is woken before
+  the first Create without bringing the window forward — it stays parked off screen
+  (decision of 2026-09-19); the guard's reload re-applies the throttling fix.
+- A stall leaves evidence: a PNG (bounded Playwright path only), a page capture and
+  the tab's `JSHeapUsedSize` / `Nodes`, at most four per run (`stall_evidence`).
+
+Carried from the final review of PR #314: a parked window that was later widened is
+still recognised as our parking (the spot is remembered), so its off-screen place is
+never taken for its home; the second wrong-ad check after re-reveal and the
+"name field unreadable → still type" path are pinned by tests; a failed ad-name step
+no longer also fails that ad's copy with `wrong_ad_open` (the copy is checked against
+the name actually in the field); an exception from building a job's drafts reaches
+Sentry like one from publishing, and the `job_exception` tags are tested; the test
+telemetry guard proves the journal is temporary before the first write; Home computes
+the workbook's activity once per workbook revision, and "A, B is placed in a country"
+reads "A, B are placed in countries".
+
 ## Sentry receives only real campaign failures — ACL-1318 (phase 1)
 
 Every telemetry row with `ok=False` used to become a Sentry event, so the list of
@@ -105,8 +154,9 @@ limit" radio is not a failure; the last Create of the objective retry gets a ful
 wait; the ad-set naming-template dialog is cancelled; `objective_wait` says what was
 loading; and a wait longer than 60 s wakes the tab and reloads it only when it is
 stuck (`stall_unstuck`, once per step, never on the second or third ad). Re-review:
-a window minimised mid-run keeps its real home, and a home that is itself off screen
-is replaced by a visible point.
+a window minimised mid-run keeps its real home, and a home that is exactly our
+parking spot is replaced by a visible point (0, 0); any other off-screen position is
+taken for a monitor to the left or above and kept.
 
 What does not ship. ACL-1311 (Multilogin Team access, PR #312) is reverted in the port
 until the two-machine token check.
