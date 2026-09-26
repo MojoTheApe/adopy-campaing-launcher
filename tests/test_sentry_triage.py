@@ -328,3 +328,27 @@ def test_the_known_failures_map_parses_and_matches():
     assert st.known_task("further_limit_reach_radio", "timeout", rows)["task"] == "ACL-1324"
     assert st.known_task("profile_network", "proxy-network", rows)["task"] == "ACL-1320"
     assert st.known_task("ad_copy", "copy-fields-not-revealed", rows) is None
+
+
+def test_a_resaved_old_issue_survives_pruning(tmp_path, monkeypatch):
+    """Вернувшийся старый тикет перезаписывается в свою старую папку: перезапись
+    файла на NTFS не двигает время папки, и без явного `utime` чистка тут же
+    удаляла бы только что записанный раздел (повторное ревью PR #328, N1)."""
+    import os
+    import time
+
+    save = tmp_path / "att"
+    now = time.time()
+    for i in range(st.KEEP_SAVED_ISSUES):
+        f = save / f"sentry_issue_{900 + i}"
+        f.mkdir(parents=True)
+        (f / "section_x.html").write_text("x", encoding="utf-8")
+        os.utime(f, (now - 100 + i, now - 100 + i))
+    old = save / "sentry_issue_101"
+    old.mkdir()
+    (old / "section_further_limit_reach_radio.html").write_text("old", encoding="utf-8")
+    os.utime(old, (now - 7200, now - 7200))
+    digest = _run(tmp_path, _world(), "--attachments-dir", str(save), monkeypatch=monkeypatch)
+    att = next(g for g in digest["groups"] if g["step"] == "further_limit_reach_radio")["issues"][0]["attachment"]
+    assert Path(att["saved"]).is_file(), "the digest points at a file pruning just deleted"
+    assert len([d for d in save.iterdir() if d.name.startswith("sentry_issue_")]) == st.KEEP_SAVED_ISSUES

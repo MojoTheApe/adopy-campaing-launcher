@@ -428,18 +428,23 @@ def _fetch_section(client: SentryClient, project: str, event_id: str, issue_id: 
                 folder.mkdir(parents=True, exist_ok=True)
                 target = folder / safe
                 target.write_bytes(body)
+                # Перезапись файла на NTFS не двигает время папки — двигаем
+                # сами, иначе вернувшийся старый тикет считался бы старейшим.
+                os.utime(folder)
                 found["saved"] = str(target)
             except OSError as exc:
                 found["save_error"] = type(exc).__name__
-            prune_saved(out_dir)
+            prune_saved(out_dir, protect=folder)
         return found
     return None
 
 
-def prune_saved(out_dir: Path, keep: int = KEEP_SAVED_ISSUES) -> int:
+def prune_saved(out_dir: Path, keep: int = KEEP_SAVED_ISSUES,
+                protect: Path | None = None) -> int:
     """Оставить в `out_dir` последние `keep` папок тикетов. Возвращает, сколько
     убрано. Трогает только папки `sentry_issue_*` и файлы `section_*.html` в
-    них; папка, где лежит что-то ещё, остаётся на месте."""
+    них; папка, где лежит что-то ещё, остаётся на месте. Папка `protect`
+    (только что записанная) не убирается никогда."""
     try:
         folders = sorted((d for d in out_dir.iterdir() if d.is_dir() and _ISSUE_DIR_RE.match(d.name)),
                          key=lambda d: d.stat().st_mtime)
@@ -447,6 +452,8 @@ def prune_saved(out_dir: Path, keep: int = KEEP_SAVED_ISSUES) -> int:
         return 0
     removed = 0
     for old in folders[: max(0, len(folders) - keep)]:
+        if protect is not None and old.resolve() == Path(protect).resolve():
+            continue
         try:
             for f in old.glob("section_*.html"):
                 f.unlink()
