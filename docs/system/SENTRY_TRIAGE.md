@@ -30,7 +30,15 @@ The attachment is built in `src/fb_ads_rpa/page_capture.py`:
    returns the card the step works on — Audience, Conversion, Placements, Destination,
    Ad creative + Ad setup, … (`section_titles_for(step)`), plus an open dialog (e.g.
    "Reach your preferred audiences"). Unknown step → the editor section around the
-   focus, then the editor, capped. Scripts, styles, svg, images and all attributes
+   focus, then the editor, capped. Outside the editor (the campaigns list: `create`,
+   `objective_*`, `stall_*`) → the open dialog if there is one, otherwise the list
+   region (`[role=main]` / the table container: toolbar + table), capped in the page
+   at 400 000 characters. Never the whole page (`document.body`), never a screenshot.
+   Owner clarification 2026-09-26: only what is inside the Multilogin browser is
+   captured (work accounts in a closed environment), so other campaign names in the
+   list may stay; ids, URLs, contacts, tokens and uuids are always removed (step 2).
+   The copy is built by a bounded walk in the page that stops at the cap, so a huge
+   list does not become a long task. Scripts, styles, svg, images and all attributes
    except `role`, `aria-*`, `data-surface`, `placeholder`, `type`, `checked`,
    `disabled`, `id` are dropped in the page already. The raw copy is kept in process
    memory only (16 entries), never on disk.

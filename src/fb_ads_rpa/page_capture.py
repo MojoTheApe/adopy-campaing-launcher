@@ -31,11 +31,16 @@
 владельца 26.09: к событию Sentry о блокирующем отказе и об остановке кампании
 прикладывается вычищенная копия ОДНОГО раздела страницы — карточки, с которой
 работал шаг (Audience, Conversion, Ad creative …), не больше SECTION_MAX_BYTES.
-Не вся страница и никогда не скриншот (на скриншоте — имена кабинета, кампании
-и страницы). Вычистка здесь уже не «второй слой», а условие отправки, поэтому
-она устроена иначе, чем `scrub_html`: разметка пересобирается заново по белому
-списку тегов и атрибутов (`scrub_section_html`), а не чистится выражениями.
-Выключается машинной настройкой `ACL_SENTRY_PAGE_SNAPSHOT=0`.
+Шаг вне редактора (список кампаний: create, objective*, stall_*) — открытое
+окно, а без него область списка (`[role=main]` / контейнер таблицы) под своим
+потолком SECTION_LIST_RAW_MAX_CHARS. Никогда не вся страница (`document.body`)
+и никогда не скриншот. Уточнение владельца 26.09: снимается только то, что
+внутри браузера Multilogin (рабочие аккаунты, закрытая среда) — имена других
+кампаний списка остаться могут; id, адреса, контакты, токены и uuid
+вычищаются всегда. Вычистка здесь уже не «второй слой», а условие отправки,
+поэтому она устроена иначе, чем `scrub_html`: разметка пересобирается заново
+по белому списку тегов и атрибутов (`scrub_section_html`), а не чистится
+выражениями. Выключается машинной настройкой `ACL_SENTRY_PAGE_SNAPSHOT=0`.
 """
 from __future__ import annotations
 
@@ -293,6 +298,10 @@ SECTION_SETTING = "ACL_SENTRY_PAGE_SNAPSHOT"
 SECTION_MAX_BYTES = 200_000
 #: Потолок того, что страница отдаёт из JS, — до вычистки.
 SECTION_RAW_MAX_CHARS = 1_500_000
+#: Потолок области списка кампаний (шаги вне редактора: create, objective*,
+#: stall_*). Список бывает на тысячи строк; обход в странице кончается на
+#: этом потолке, а после вычистки файл всё равно не больше SECTION_MAX_BYTES.
+SECTION_LIST_RAW_MAX_CHARS = 400_000
 #: Потолки строки текста и значения атрибута.
 SECTION_TEXT_MAX = 300
 SECTION_ATTR_MAX = 200
@@ -394,15 +403,40 @@ _SECTION_JS = r"""
     return box;
   };
   const keep = (name) => name.startsWith('aria-') || cfg.keep.includes(name);
-  const strip = (el) => {
-    const c = el.cloneNode(true);
-    c.querySelectorAll('script,style,svg,noscript,template,iframe,object,embed,canvas,link,meta,math')
-      .forEach(n => n.remove());
-    for (const n of [c, ...c.querySelectorAll('*')]) {
-      if (n.checked === true) n.setAttribute('checked', '');
-      for (const a of [...n.attributes]) if (!keep(a.name)) n.removeAttribute(a.name);
-    }
-    return c.outerHTML.slice(0, cfg.maxChars);
+  const DROP = new Set(['script', 'style', 'svg', 'noscript', 'template', 'iframe', 'object',
+                        'embed', 'canvas', 'link', 'meta', 'math']);
+  const VOID = new Set(['area', 'br', 'col', 'hr', 'img', 'input', 'param', 'source', 'track', 'wbr']);
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Копия узла под потолком `max` символов. Обход останавливается, как только
+  // потолок набран: список кампаний на тысячи строк не превращается в долгую
+  // задачу на и без того медленной вкладке (ревью PR #328, F1/F5). Раньше —
+  // `cloneNode(true)` всего узла и обход всех атрибутов, а потолок — после.
+  // Незакрытые на обрыве теги закроет вычиститель (`scrub_section_html`).
+  const strip = (root, max) => {
+    const out = [];
+    let size = 0, full = false;
+    const put = (s) => {
+      if (size + s.length > max) { full = true; return false; }
+      out.push(s); size += s.length; return true;
+    };
+    const walk = (n) => {
+      if (full) return;
+      if (n.nodeType === 3) { put(esc(n.nodeValue || '')); return; }
+      if (n.nodeType !== 1) return;
+      const tag = n.tagName.toLowerCase();
+      if (DROP.has(tag)) return;
+      let open = '<' + tag;
+      for (const a of n.attributes) {
+        if (a.name === 'checked' || !keep(a.name)) continue;
+        open += ' ' + a.name + '="' + esc(a.value).replace(/"/g, '&quot;') + '"';
+      }
+      if (n.checked === true || n.hasAttribute('checked')) open += ' checked';
+      if (!put(open + '>') || VOID.has(tag)) return;
+      for (let c = n.firstChild; c && !full; c = c.nextSibling) walk(c);
+      put('</' + tag + '>');
+    };
+    walk(root);
+    return out.join('');
   };
   const parts = [];
   const taken = new Set();
@@ -413,21 +447,24 @@ _SECTION_JS = r"""
     const card = cardOf(h);
     if (taken.has(card)) continue;
     taken.add(card);
-    parts.push({name: title, html: strip(card)});
+    parts.push({name: title, html: strip(card, cfg.maxChars)});
   }
+  let listMode = false;
   if (!parts.length) {
     // Шаг не узнан или его карточки нет: наименьший раздел редактора вокруг
-    // фокуса, потом сам редактор, потом страница — каждый под потолком.
+    // фокуса, потом сам редактор — каждый под потолком. Вне редактора (список
+    // кампаний: create, objective*, stall_*) — открытое окно, а без него
+    // область списка ниже. Всю страницу (`document.body`) не берём никогда
+    // (ревью PR #328, F1).
     let card = null;
     for (let el = document.activeElement; el && el !== document.body; el = el.parentElement) {
       const h = heads.find(x => el.contains(x));
       if (h) { card = cardOf(h); break; }
     }
-    if (card) parts.push({name: 'focused section', html: strip(card)});
-    else {
-      const drawer = document.querySelector('[data-surface="/am/editor_drawer"]');
-      parts.push({name: drawer ? 'editor' : 'page', html: strip(drawer || document.body)});
-    }
+    const drawer = document.querySelector('[data-surface="/am/editor_drawer"]');
+    if (card) parts.push({name: 'focused section', html: strip(card, cfg.maxChars)});
+    else if (drawer) parts.push({name: 'editor', html: strip(drawer, cfg.maxChars)});
+    else listMode = true;
   }
   // Открытое окно (диалог «Reach your preferred audiences», мастер
   // креатива) почти всегда и есть то, на чём шаг упал. Сам редактор окном
@@ -437,8 +474,21 @@ _SECTION_JS = r"""
     const dh = d.querySelector(HSEL);
     if (dh && cfg.skipDialogs.includes(norm(dh.textContent))) continue;
     taken.add(d);
-    parts.push({name: 'dialog', html: strip(d)});
+    parts.push({name: 'dialog', html: strip(d, cfg.maxChars)});
     if (parts.length >= 4) break;
+  }
+  if (listMode && !parts.length) {
+    // Список кампаний без окна: основная область (панель действий + таблица),
+    // а не страница целиком — шапка профиля и меню кабинета сюда не входят.
+    const region = [...document.querySelectorAll('[role=main], main')].find(shown)
+      || (() => {
+        const table = [...document.querySelectorAll('[role=grid], [role=treegrid], [role=table], table')]
+          .find(shown);
+        return table ? (table.parentElement || table) : null;
+      })();
+    if (region && region !== document.body && region !== document.documentElement) {
+      parts.push({name: 'campaigns list', html: strip(region, cfg.listMaxChars)});
+    }
   }
   return parts;
 }
@@ -451,6 +501,7 @@ def _snapshot_take(page, titles: tuple[str, ...]) -> list[dict[str, str]]:
         "sections": list(SECTION_TITLES),
         "keep": list(_KEEP_ATTRS),
         "maxChars": SECTION_RAW_MAX_CHARS,
+        "listMaxChars": SECTION_LIST_RAW_MAX_CHARS,
         "skipDialogs": list(_SKIP_DIALOGS),
     })
     out: list[dict[str, str]] = []

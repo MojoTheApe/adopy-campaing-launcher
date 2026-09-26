@@ -274,6 +274,99 @@ def test_an_unknown_step_falls_back_to_the_editor_under_the_cap(page):
     assert "PLACEMENTS BODY" in att["bytes"].decode("utf-8")
 
 
+# Список кампаний (ревью PR #328, F1): кампания не открылась — шаги `create`,
+# `objective_*`, `stall_*` снимают список, где карточек шага нет. Раньше
+# запасной путь отдавал весь `document.body`. Уточнение владельца 26.09:
+# внутри браузера Multilogin снимать можно, имена других кампаний остаются, а
+# id, адреса, почта и токены — нет.
+_LIST_ROW = (
+    '<tr><td><a href="https://adsmanager.facebook.com/adsmanager/manage/campaigns'
+    '?act=1234567890&amp;selected_campaign_ids=120212345678901">{name}</a></td>'
+    '<td>Draft</td><td>act=1234567890 campaign_id=120212345678901</td></tr>'
+)
+_LIST_PAGE = """
+<div role="banner">
+  <div role="button" aria-label="Your profile, Ivan Sidorenko">Ivan Sidorenko</div>
+  <div role="combobox" aria-label="Ad account">Acme Clinics LLC (Doc19)</div>
+</div>
+<div role="main">
+  <div role="toolbar"><div role="button">Create</div><div role="button">Duplicate</div></div>
+  <table role="table"><tbody>{rows}</tbody></table>
+  <div>Support: ivanna.petrenko@example.com, +1 (555) 123-4567,
+       access_token=EAABsecrettokenvalue, uuid {uuid}</div>
+</div>
+{dialog}
+"""
+_OBJECTIVE_DIALOG = """
+<div role="dialog" aria-label="Create new campaign">
+  <div role="heading" aria-level="2">Create new campaign</div>
+  <span role="radio" aria-checked="false">Leads</span>
+  <span role="radio" aria-checked="false">Sales</span>
+</div>
+"""
+
+
+def _list_page(rows: int = 3, dialog: str = "") -> str:
+    names = ["Other client Zeta Dental Promo", "Acme Clinics Spring Leads 2026", "Beta Launch"]
+    body = "".join(_LIST_ROW.format(name=names[i % 3] + ("" if i < 3 else f" {i}")) for i in range(rows))
+    return _LIST_PAGE.format(rows=body, uuid=PROFILE_UUID, dialog=dialog)
+
+
+@pytest.mark.parametrize("step", ["stall_objective_wait", "create", "objective_leads"])
+def test_a_campaigns_list_failure_takes_the_list_region_not_the_whole_page(page, step):
+    page.set_content(_list_page())
+    assert pc.remember_section(page, step=step, run_id="r1", campaign="Beta Launch")
+    att = sentry_signal._section("objective_leads", "r1", campaign="Beta Launch",
+                                 account="FacebookDoc19", names=[])
+    assert att is not None
+    assert att["context"]["parts"] == ["campaigns list"]
+    body = att["bytes"].decode("utf-8")
+    # Таблица списка на месте — по ней видно, что было на экране.
+    assert 'role="table"' in body and "Duplicate" in body
+    assert "Zeta Dental Promo" in body and "&lt;campaign&gt;" in body
+    # Шапка профиля вне области списка — не едет.
+    assert "Your profile" not in body and "Ad account" not in body
+    # Номера, адреса, почта, телефон, токены и uuid — вычищены.
+    lowered = body.lower()
+    for leaked in ("1234567890", "120212345678901", "https://", "adsmanager.facebook.com",
+                   "ivanna.petrenko@example.com", "123-4567", "eaabsecrettokenvalue", PROFILE_UUID):
+        assert leaked.lower() not in lowered, leaked
+    assert "act=&lt;hidden&gt;" in body
+    assert "href=" not in body
+    assert not re.search(r"\d{6,}", body)
+    assert _balanced(body)
+
+
+def test_an_open_dialog_on_the_campaigns_list_is_taken_alone(page):
+    page.set_content(_list_page(dialog=_OBJECTIVE_DIALOG))
+    assert pc.remember_section(page, step="stall_objective_wait", run_id="r1", campaign="Beta Launch")
+    att = pc.section_attachment("objective_leads", "r1", campaign="Beta Launch")
+    assert att["context"]["parts"] == ["dialog"]
+    body = att["bytes"].decode("utf-8")
+    assert "Create new campaign" in body and "Leads" in body
+    assert "Zeta Dental Promo" not in body and "Your profile" not in body
+
+
+def test_a_huge_campaigns_list_is_capped_in_the_page_and_in_the_file(page):
+    page.set_content(_list_page(rows=6000))
+    assert pc.remember_section(page, step="create", run_id="r1", campaign="Beta Launch")
+    entry = pc._find_section("r1", ["create"])
+    (part,) = entry["parts"]
+    # Обход в странице кончился на потолке, а не после копии всего списка.
+    assert len(part["html"]) <= pc.SECTION_LIST_RAW_MAX_CHARS
+    att = pc.section_attachment("create", "r1", campaign="Beta Launch")
+    assert len(att["bytes"]) <= pc.SECTION_MAX_BYTES
+    assert att["context"]["truncated"] is True
+    assert _balanced(att["bytes"].decode("utf-8"))
+
+
+def test_nothing_is_taken_from_a_page_without_card_editor_list_or_dialog(page):
+    page.set_content('<div role="banner"><div aria-label="Your profile, Ivan Sidorenko">Ivan</div></div>'
+                     '<div>Loading…</div>')
+    assert pc.remember_section(page, step="create", run_id="r1", campaign="Beta Launch") is False
+    assert pc.section_attachment("create", "r1", campaign="Beta Launch") is None
+
+
 # ── Вложение у события ──────────────────────────────────────────────────────
 
 class _FakePage:
