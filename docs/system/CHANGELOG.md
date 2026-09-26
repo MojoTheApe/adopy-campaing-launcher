@@ -1,5 +1,31 @@
 # System history
 
+## "Publish all" runs only as many profiles at once as the machine's memory allows — ACL-1321
+
+On the owner's laptop three Multilogin profiles with Ads Manager already used 85–89 %
+of the memory and made every step 1.2–2.7× slower (2026-09-25/26); "Publish all" with
+six accounts started all six. Owner decision 2026-09-26: the dashboard decides from
+free memory, with a floor of one, a ceiling, and a per-machine override.
+
+- Publish jobs now take a place from a profile queue (`src/web/profile_slots.py`)
+  before the profile lock. Before each start: nothing running — start (floor);
+  `ACL_MAX_PARALLEL_PROFILES=N` in the machine `.env` — exactly N at once, memory not
+  asked; otherwise at most `ACL_MAX_PARALLEL_CEILING` (4) and only while free physical
+  memory ≥ `ACL_PROFILE_MEMORY_GB` (1.5) + `ACL_MEMORY_RESERVE_GB` (1.5). A profile
+  started less than 90 s ago is counted as not yet using its memory; an unreadable
+  memory probe allows two. Settings are read at every decision (no restart).
+- Waiting jobs are `queued`, start in submission order, and re-check when a job ends,
+  when a job is cancelled, and every 2 s (memory can free up without a job ending). A
+  job whose profile is busy waits for its profile without holding a place, and takes
+  it first when it frees. Cancelling a queued job ends it at once.
+- Telemetry: one `job_phase` row `slot_queue` per job — wait time, the memory reading
+  and the decision that let it start, and why it had to wait. `GET /publish-jobs/slots`
+  shows the current mode, what runs, what waits and the next decision.
+- Dashboard: a queued campaign shows a still grey ring with a dot ("Waiting for a free
+  slot (N ahead)" / "Waiting for the Multilogin profile"), the Publish-all list shows
+  each unfinished account ("queued — waiting for a free slot (N ahead)" / "building
+  the draft"), and the account panel shows "queued" with a Stop button.
+
 ## A campaign opens within two minutes, even when its tab freezes — ACL-1320
 
 Run `cf563b4ba594` (2026-09-26, FacebookDoc19): the first campaign opened in 19.2,
