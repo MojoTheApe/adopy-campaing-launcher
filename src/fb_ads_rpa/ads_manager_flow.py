@@ -914,6 +914,11 @@ def _fill_ad_copy(page: Page, ad: AdDraft, selectors_cfg: dict[str, Any], timeou
             pass
 
 
+#: ACL-1320: сколько ждать готовый список кампаний (видимая Create, нет
+#: маршрутного спиннера) после перехода, прежде чем перезагрузить его.
+CAMPAIGNS_READY_S = 30.0
+
+
 class AdsManagerFlow:
     """Navigate Ads Manager UI and create one campaign tree."""
 
@@ -1196,6 +1201,7 @@ class AdsManagerFlow:
             if last_exc is not None:
                 raise last_exc
             pause_after_navigation()
+        self._ensure_campaigns_ready(draft.name)
         result.steps_completed.append("open_campaigns")
         # ACL-1313: удачный переход — без PNG (5–7 с при трёх профилях);
         # вернуть: FB_RPA_SHOT_ALL=1.
@@ -1204,6 +1210,67 @@ class AdsManagerFlow:
         shot = capture_on_success(self.page, "01_campaigns")
         if shot:
             result.screenshot_paths.append(shot)
+
+    def _campaigns_not_ready(self, timeout_s: float) -> str:
+        """Почему список кампаний не готов к Create: "" — готов.
+
+        Оба ожидания — с таймаутом драйвера: видимая кнопка Create и нет
+        маршрутного спиннера Meta на месте страницы.
+        """
+        from src.fb_ads_rpa.meta_dom import _ROUTE_PLACEHOLDER_SEL
+
+        deadline = time.time() + timeout_s
+
+        def left_ms() -> int:
+            return max(int((deadline - time.time()) * 1000), 500)
+
+        try:
+            self.page.get_by_role("button", name="Create", exact=True).first.wait_for(
+                state="visible", timeout=left_ms())
+        except Exception:
+            return "no_create"
+        try:
+            self.page.wait_for_selector(_ROUTE_PLACEHOLDER_SEL, state="hidden", timeout=left_ms())
+        except Exception:
+            return "route_placeholder"
+        return ""
+
+    def _ensure_campaigns_ready(self, campaign: str) -> bool:
+        """Список кампаний готов к Create — иначе одна перезагрузка (ACL-1320).
+
+        `domcontentloaded` — это ещё не список: в прогоне cf563b4ba594 первое
+        нажатие Create шло в страницу, которая минутами не дорисовывалась, и
+        дальше робот ждал уже окно цели. Ждём до `CAMPAIGNS_READY_S` видимую
+        Create без маршрутного спиннера; нет — перезагрузка (троттлинг после
+        неё снимается заново) и ещё одно такое же ожидание. Не готов и после
+        этого — идём дальше: у `_open_campaign` свой бюджет и свежая вкладка.
+        Строка телеметрии `campaigns_list_ready`.
+        """
+        started = time.time()
+        first = self._campaigns_not_ready(CAMPAIGNS_READY_S)
+        final = first
+        reloaded = False
+        if first:
+            try:
+                self.page.reload(wait_until="domcontentloaded", timeout=self.nav_timeout)
+                reloaded = True
+                from src.fb_ads_rpa.browser import _disable_background_throttling, page_answers
+
+                if page_answers(self.page, 5.0):
+                    _disable_background_throttling(self.page.context, self.page)
+            except Exception as exc:
+                log.warning("campaigns list reload failed: %s", str(exc)[:80])
+            final = self._campaigns_not_ready(CAMPAIGNS_READY_S)
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+
+            _rt.record("campaigns_list_ready", not final, campaign=campaign,
+                       note=final or ("after_reload" if reloaded else "ready"),
+                       duration_s=time.time() - started,
+                       diag={"first": first, "reloaded": reloaded})
+        except Exception:
+            pass
+        return not final
 
     def _start_create_wizard(self, result: RpaPublishResult) -> None:
         sels = self.cfg.get("selectors") or {}
