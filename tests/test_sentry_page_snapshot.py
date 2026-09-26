@@ -754,3 +754,13 @@ def test_the_attachment_reaches_the_sentry_transport(monkeypatch):
     event = next(i for i in items if i.headers.get("type") == "event").payload.json
     assert event["tags"]["page_snapshot"] == "section"
     assert CAMPAIGN not in json.dumps(event.get("contexts", {}).get("page_snapshot", {}))
+
+
+def test_a_table_directly_under_body_does_not_take_the_body(page):
+    """Таблица прямо под <body>: «контейнер таблицы» — это сам body, и его брать
+    нельзя — ушла бы вся страница (повторное ревью PR #328, N2)."""
+    page.set_content('<div aria-label="Your profile, Ivan Sidorenko">Ivan</div>'
+                     '<table role="table"><tr><td>Zeta</td></tr></table>')
+    pc.remember_section(page, step="create", run_id="r1", campaign="X")
+    att = pc.section_attachment("create", "r1", campaign="X")
+    assert att is None or "Your profile" not in att["bytes"].decode()
