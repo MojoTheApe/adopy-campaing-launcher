@@ -250,3 +250,22 @@ def test_widening_is_rolled_back_when_the_mimic_scale_drops(monkeypatch):
         assert win.width == 1368, "ширина не откатилась после падения масштаба"
     finally:
         br._OFFSCREEN.clear()
+
+
+def test_a_window_on_a_monitor_to_the_left_keeps_its_place(monkeypatch):
+    """Ревью v3 PR #314: отрицательные координаты — законный монитор слева;
+    парковкой считается только наша формула left == -(width + 400)."""
+    win = _Window(state="minimized", left=-1820, top=120, width=1400)
+    conn = _attach(monkeypatch, win)
+    try:
+        br.put_window_back(conn.page)
+        assert win.state == "minimized" and (win.left, win.top) == (-1820, 120)
+    finally:
+        br._OFFSCREEN.clear()
+
+
+def test_the_park_formula_is_what_counts():
+    assert br._home_point({"left": -1776, "top": 0, "width": 1376}) == {"left": 0, "top": 0}
+    assert br._home_point({"left": -1779, "top": 3, "width": 1376}) == {"left": 0, "top": 0}
+    assert br._home_point({"left": -1920, "top": 0, "width": 1400}) == {"left": -1920, "top": 0}
+    assert br._home_point({"left": 100, "top": 50, "width": 1400}) == {"left": 100, "top": 50}

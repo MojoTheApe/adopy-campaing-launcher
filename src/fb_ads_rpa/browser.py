@@ -760,18 +760,29 @@ def window_home() -> tuple[int | None, int | None]:
 def _home_point(bounds: dict) -> dict:
     """Куда вернуть окно в конце кампании: его прежние left/top.
 
-    Окно, целиком стоящее за левым или верхним краем (left + width ≤ 0,
-    top + height ≤ 0), — не дом, а наша же парковка (свёрнутое посреди
-    прогона или оставленное прошлым прогоном: 25.09 14:05 `was: {left:
-    -1776}`). Такое возвращаем в видимую точку (0, 0), иначе из панели задач
-    окно разворачивалось бы за экраном.
+    Окно, стоящее ровно на НАШЕЙ парковке (`left == -(width + 400)`, `top == 0`
+    — формула `_restore_offscreen` / `_unminimize_before_attach`), — не дом:
+    оно свёрнуто посреди прогона или осталось от прошлого (25.09 14:05
+    `was: {left: -1776}` при ширине 1376). Такое возвращаем в видимую точку
+    (0, 0), иначе из панели задач окно разворачивалось бы за экраном.
+
+    Любое другое отрицательное положение — законный монитор слева или сверху
+    от основного (ревью v3 PR #314): окно человека там и остаётся.
     """
     left, top = bounds.get("left"), bounds.get("top")
     width = int(bounds.get("width") or 0)
-    height = int(bounds.get("height") or 0)
-    if isinstance(left, int) and isinstance(top, int) and (left + width <= 0 or top + height <= 0):
+    if isinstance(left, int) and isinstance(top, int) and _parked_by_us(left, top, width):
         return {"left": 0, "top": 0}
     return {"left": left, "top": top}
+
+
+#: Допуск на округление координат окна при масштабе экрана, px.
+_PARK_TOLERANCE = 8
+
+
+def _parked_by_us(left: int, top: int, width: int) -> bool:
+    """Стоит ли окно там, куда его уводит наша парковка по умолчанию."""
+    return abs(left + width + 400) <= _PARK_TOLERANCE and abs(top) <= _PARK_TOLERANCE
 
 
 def _restore_offscreen(context, page) -> bool:
